@@ -1,0 +1,8 @@
+Vantelia/.env
+Vantelia/.env.*
+Vantelia/node_modules/
+Vantelia/__pycache__/
+Vantelia/*.pyc
+Vantelia/.git/
+Vantelia/.git-inner-backup/
+.git-inner-backup/
