@@ -23,7 +23,7 @@ from llama_index.core import (
 )
 from llama_index.llms.openai import OpenAI
 from llama_index.embeddings.openai import OpenAIEmbedding
-
+from llama_index.core.settings import Settings
 from datetime import datetime, timedelta
 import httpx  # pip install httpx
 
@@ -101,7 +101,7 @@ def cargar_indice(cliente_id: str) -> VectorStoreIndex:
         )
     
     # Configurar modelo
-    Settings.llm = OpenAI(model="gpt-4o-mini", temperature=0.1)
+    Settings.llm = OpenAI(model="gpt-4o-mini",temperature=0.1)
     Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
     
     # Intentar cargar índice guardado (más rápido)
