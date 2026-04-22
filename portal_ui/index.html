@@ -1,0 +1,1782 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vantelia Portal</title>
+  <link rel="icon" type="image/png" href="/brand-assets/favicon.png" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Poppins:wght@400;500;600;700&display=swap');
+    :root {
+      color-scheme: dark;
+      --bg: #000b29;
+      --panel: rgba(5, 14, 38, 0.88);
+      --panel-strong: rgba(9, 22, 54, 0.96);
+      --text: #f0f4f8;
+      --soft: #b8c0cc;
+      --line: rgba(184, 192, 204, 0.14);
+      --accent: #00b1d9;
+      --accent-2: #007ea0;
+      --accent-soft: rgba(0, 177, 217, 0.14);
+      --danger: #ff7b86;
+      --danger-soft: rgba(196, 69, 54, 0.16);
+      --success-soft: rgba(0, 177, 217, 0.12);
+      --shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+      --radius: 24px;
+      --radius-sm: 16px;
+      --font-title: "Montserrat", "Segoe UI", sans-serif;
+      --font: "Poppins", "Segoe UI", sans-serif;
+      --maxw: 1320px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        linear-gradient(180deg, rgba(0, 11, 41, 0.88), rgba(0, 11, 41, 0.96)),
+        radial-gradient(circle at top left, rgba(0, 177, 217, 0.14), transparent 26%),
+        radial-gradient(circle at top right, rgba(184, 192, 204, 0.1), transparent 24%),
+        url("/brand-assets/Fondo_Web.png") center top / cover fixed no-repeat;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    .page {
+      width: min(var(--maxw), calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 24px 0 40px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 0 0;
+    }
+
+    .brand {
+      display: grid;
+      gap: 10px;
+    }
+
+    .brand-mark {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .brand-logo {
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+      filter: drop-shadow(0 0 24px rgba(0, 177, 217, 0.26));
+      flex: 0 0 auto;
+    }
+
+    .brand-copy {
+      display: grid;
+      gap: 6px;
+    }
+
+    .brand-kicker {
+      display: inline-flex;
+      width: fit-content;
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: rgba(0, 177, 217, 0.08);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 1.8rem;
+      line-height: 1;
+      font-family: var(--font-title);
+    }
+
+    .brand p {
+      margin: 0;
+      color: var(--soft);
+      line-height: 1.6;
+      max-width: 760px;
+    }
+
+    .top-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .sidebar {
+      display: grid;
+      gap: 18px;
+      position: sticky;
+      top: 18px;
+    }
+
+    .block {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .block h2,
+    .block h3 {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+
+    .muted {
+      color: var(--soft);
+      line-height: 1.6;
+      font-size: 0.96rem;
+    }
+
+    label {
+      display: grid;
+      gap: 8px;
+      font-weight: 700;
+    }
+
+    input,
+    select {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(7, 18, 45, 0.92);
+      padding: 12px 14px;
+      color: var(--text);
+      outline: none;
+    }
+
+    input:focus,
+    select:focus {
+      border-color: rgba(0, 177, 217, 0.45);
+      box-shadow: 0 0 0 4px rgba(0, 177, 217, 0.12);
+    }
+
+    button {
+      border: 0;
+      border-radius: 16px;
+      padding: 12px 16px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.16s ease, opacity 0.16s ease;
+    }
+
+    button:hover { transform: translateY(-1px); }
+    button.primary { color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+    button.secondary { color: var(--text); background: rgba(184, 192, 204, 0.12); }
+    button.ghost { color: var(--text); background: transparent; border: 1px solid var(--line); }
+    button.danger { color: var(--danger); background: var(--danger-soft); }
+    button.small { padding: 10px 12px; border-radius: 14px; font-size: 0.93rem; }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .role-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: fit-content;
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 0.88rem;
+      font-weight: 800;
+    }
+
+    .status {
+      min-height: 22px;
+      color: var(--soft);
+      font-size: 0.95rem;
+    }
+
+    .status.error { color: var(--danger); }
+    .status.success { color: var(--accent); }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .main {
+      display: grid;
+      gap: 18px;
+    }
+
+    .hero {
+      padding: 22px 24px;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .hero h2 {
+      margin: 0;
+      font-size: 2rem;
+      line-height: 1.04;
+      font-family: var(--font-title);
+    }
+
+    .hero-chip {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(0, 177, 217, 0.14);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .hero p {
+      margin: 10px 0 0;
+      color: var(--soft);
+      line-height: 1.65;
+      max-width: 880px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stat {
+      padding: 18px;
+      border-radius: 20px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .stat strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 1.75rem;
+    }
+
+    .stat span {
+      color: var(--soft);
+      font-size: 0.95rem;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      padding: 18px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .segmented {
+      display: inline-flex;
+      gap: 8px;
+      padding: 6px;
+      border-radius: 18px;
+      background: rgba(184, 192, 204, 0.08);
+    }
+
+    .segmented button {
+      background: transparent;
+      color: var(--soft);
+      padding: 10px 14px;
+      border-radius: 14px;
+    }
+
+    .segmented button.active {
+      color: var(--text);
+      background: var(--panel-strong);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+    }
+
+    .booking-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .booking-card {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 18px;
+      background: var(--panel-strong);
+      display: grid;
+      gap: 14px;
+    }
+
+    .booking-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .booking-title {
+      display: grid;
+      gap: 6px;
+    }
+
+    .booking-title strong {
+      font-size: 1.04rem;
+    }
+
+    .pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: fit-content;
+      border-radius: 999px;
+      padding: 7px 11px;
+      background: var(--success-soft);
+      color: var(--accent);
+      font-weight: 800;
+      font-size: 0.83rem;
+    }
+
+    .pill.alt {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .pill.danger {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    .booking-meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 16px;
+    }
+
+    .meta-box {
+      display: grid;
+      gap: 4px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(184, 192, 204, 0.07);
+    }
+
+    .meta-label {
+      color: var(--soft);
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
+    .meta-value {
+      font-weight: 800;
+      line-height: 1.4;
+    }
+
+    .booking-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .empty {
+      padding: 30px 18px;
+      border: 1px dashed rgba(184, 192, 204, 0.24);
+      border-radius: 20px;
+      color: var(--soft);
+      text-align: center;
+      line-height: 1.7;
+    }
+
+    .pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .user-create {
+      display: grid;
+      gap: 10px;
+    }
+
+    .admin-menu {
+      display: inline-flex;
+      gap: 8px;
+      padding: 6px;
+      border-radius: 18px;
+      background: rgba(184, 192, 204, 0.08);
+    }
+
+    .admin-menu button {
+      background: transparent;
+      color: var(--soft);
+      padding: 10px 14px;
+      border-radius: 14px;
+    }
+
+    .admin-menu button.active {
+      color: var(--text);
+      background: var(--panel-strong);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+    }
+
+    .admin-view {
+      display: grid;
+      gap: 16px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .toolbar-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .toolbar-filters label {
+      min-width: 180px;
+      font-size: 0.9rem;
+    }
+
+    .inline-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      color: var(--soft);
+    }
+
+    .inline-check input {
+      width: auto;
+    }
+
+    .subcard {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 16px;
+      background: var(--panel-strong);
+      display: grid;
+      gap: 14px;
+    }
+
+    .users-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .user-card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(184, 192, 204, 0.06);
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .user-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .user-title {
+      display: grid;
+      gap: 5px;
+    }
+
+    .user-title strong {
+      font-size: 1rem;
+    }
+
+    .user-meta {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .action-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .action-row select {
+      max-width: 240px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .sidebar-stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .contact-card {
+      display: grid;
+      gap: 8px;
+    }
+
+    .link-btn {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--accent);
+      font-weight: 800;
+      text-align: left;
+    }
+
+    .link-btn:hover {
+      transform: none;
+      opacity: 0.9;
+    }
+
+    .support-note {
+      font-size: 0.9rem;
+      line-height: 1.55;
+    }
+
+    .feedback-box {
+      display: none;
+      padding: 12px 14px;
+      border-radius: 14px;
+      font-size: 0.92rem;
+      line-height: 1.55;
+      border: 1px solid rgba(0, 177, 217, 0.2);
+      background: rgba(0, 177, 217, 0.12);
+      color: var(--text);
+    }
+
+    .feedback-box.visible {
+      display: block;
+    }
+
+    .feedback-box.error {
+      border-color: rgba(196, 69, 54, 0.24);
+      background: rgba(196, 69, 54, 0.14);
+      color: #ffd7db;
+    }
+
+    .feedback-box.success {
+      border-color: rgba(0, 177, 217, 0.24);
+      background: rgba(0, 177, 217, 0.12);
+    }
+
+    .helper-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    @media (max-width: 1160px) {
+      .shell,
+      .layout,
+      .stats {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: static;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .page {
+        width: min(var(--maxw), calc(100vw - 20px));
+        padding-top: 16px;
+      }
+
+      .topbar,
+      .hero,
+      .panel-header,
+      .booking-top {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .booking-meta {
+        grid-template-columns: 1fr;
+      }
+
+      .user-meta {
+        grid-template-columns: 1fr;
+      }
+
+      .segmented {
+        width: 100%;
+      }
+
+      .segmented button {
+        flex: 1 1 0;
+      }
+
+      .admin-menu {
+        width: 100%;
+      }
+
+      .admin-menu button {
+        flex: 1 1 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <section class="brand">
+        <div class="brand-mark">
+          <img class="brand-logo" src="/brand-assets/Logo_1_sin_resplandor.png" alt="Vantelia" />
+          <div class="brand-copy">
+            <span class="brand-kicker">Client OS</span>
+            <h1>Vantelia Portal</h1>
+            <p>El espacio profesional donde cada cliente puede ver, cambiar y cancelar sus citas sin entrar en procesos tecnicos ni depender del calendario bruto.</p>
+          </div>
+        </div>
+      </section>
+      <div class="top-actions">
+        <a href="__MARKETING_SITE_URL__" target="_blank" rel="noreferrer"><button class="ghost small" type="button">Ir a vantelia.es</button></a>
+      </div>
+    </header>
+
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="sidebar-stack" id="authGuestStack">
+          <section class="card block" id="loginCard">
+            <div class="role-pill">Acceso seguro</div>
+            <h2>Inicia sesion</h2>
+            <div class="muted">Admin entra aqui para operar clientes y cada empresa entra con su propio acceso para gestionar reservas.</div>
+            <label>
+              Email
+              <input id="email" type="email" placeholder="tu@empresa.com" />
+            </label>
+            <label>
+              Contrasena
+              <input id="password" type="password" placeholder="Tu contrasena" />
+            </label>
+            <button id="loginBtn" class="primary" type="button">Entrar al portal</button>
+            <div class="helper-actions">
+              <button id="showForgotBtn" class="secondary small" type="button">He olvidado mi contrasena</button>
+            </div>
+            <div class="muted support-note">Si no puedes entrar, te enviaremos un enlace de recuperacion al correo del usuario.</div>
+          </section>
+
+          <section class="card block hidden" id="forgotCard">
+            <div class="role-pill">Recuperacion</div>
+            <h2>Recuperar acceso</h2>
+            <div class="muted">Introduce tu correo y te enviaremos un enlace seguro para crear una nueva contrasena.</div>
+            <label>
+              Email
+              <input id="forgotEmail" type="email" placeholder="tu@empresa.com" />
+            </label>
+          <div class="row">
+            <button id="forgotSubmitBtn" class="primary small" type="button">Enviar enlace</button>
+            <button id="backToLoginBtn" class="ghost small" type="button">Volver</button>
+          </div>
+          <div id="forgotFeedback" class="feedback-box" aria-live="polite"></div>
+          <div class="muted support-note">Si sigue fallando, escribe a __SUPPORT_EMAIL__.</div>
+        </section>
+
+          <section class="card block hidden" id="resetCard">
+            <div class="role-pill">Nueva contrasena</div>
+            <h2>Restablecer contrasena</h2>
+            <div class="muted">Define una nueva contrasena para tu cuenta del portal. El enlace del correo solo funciona durante un tiempo limitado.</div>
+            <label>
+              Nueva contrasena
+              <input id="resetPassword" type="password" placeholder="Minimo 8 caracteres" />
+            </label>
+            <label>
+              Repite la nueva contrasena
+              <input id="resetPasswordConfirm" type="password" placeholder="Repite la contrasena" />
+            </label>
+            <div class="row">
+              <button id="resetSubmitBtn" class="primary small" type="button">Guardar nueva contrasena</button>
+              <button id="resetBackBtn" class="ghost small" type="button">Volver al acceso</button>
+            </div>
+          </section>
+        </div>
+
+        <div class="sidebar-stack hidden" id="authUserStack">
+          <section class="card block hidden" id="sessionCard">
+            <div class="role-pill" id="rolePill">Sesion</div>
+            <div>
+              <strong id="userName">-</strong>
+              <div class="muted" id="userEmail">-</div>
+            </div>
+            <div class="row">
+              <button id="refreshBtn" class="secondary small" type="button">Actualizar</button>
+              <button id="changePasswordShortcutBtn" class="secondary small" type="button">Cambiar contrasena</button>
+              <button id="openAdminBtn" class="ghost small" type="button">Abrir admin</button>
+              <button id="logoutBtn" class="danger small" type="button">Salir</button>
+            </div>
+          </section>
+
+          <section class="card block" id="statusCard">
+            <h3>Estado</h3>
+            <div class="status" id="status">Sin sesion activa.</div>
+          </section>
+
+          <section class="card block hidden" id="contactBlock">
+            <h3>Contacto y soporte</h3>
+            <div class="contact-card">
+              <div class="muted">Si prefieres resolver una incidencia fuera del portal, aqui veras los datos de contacto del negocio.</div>
+              <div class="muted" id="contactInfo">Aun no hay una reserva seleccionada.</div>
+            </div>
+          </section>
+
+          <section class="card block hidden" id="securityBlock">
+            <h3>Seguridad</h3>
+            <div class="muted">Puedes cambiar tu contrasena sin depender del admin.</div>
+            <div class="stack">
+              <label>
+                Contrasena actual
+                <input id="changeCurrentPassword" type="password" placeholder="Tu contrasena actual" />
+              </label>
+              <label>
+                Nueva contrasena
+                <input id="changeNewPassword" type="password" placeholder="Nueva contrasena" />
+              </label>
+              <label>
+                Repite la nueva contrasena
+                <input id="changeNewPasswordConfirm" type="password" placeholder="Repite la nueva contrasena" />
+              </label>
+              <button id="changePasswordBtn" class="secondary small" type="button">Actualizar contrasena</button>
+            </div>
+          </section>
+        </div>
+      </aside>
+
+      <main class="main">
+        <section class="card hero">
+          <div>
+            <div class="hero-chip">Experiencia Vantelia 2.0</div>
+            <h2 id="heroTitle">Tu agenda, clara y operable</h2>
+            <p id="heroText">Entra al portal para ver tus proximas citas, revisar el historial y actuar en un clic cuando necesites cambiar o cancelar una reserva.</p>
+          </div>
+        </section>
+
+        <section class="stats hidden" id="statsGrid">
+          <article class="stat"><strong id="stat1">-</strong><span id="stat1Label">Reservas</span></article>
+          <article class="stat"><strong id="stat2">-</strong><span id="stat2Label">Activas</span></article>
+          <article class="stat"><strong id="stat3">-</strong><span id="stat3Label">Historial</span></article>
+          <article class="stat"><strong id="stat4">-</strong><span id="stat4Label">Empresa</span></article>
+        </section>
+
+        <div class="layout hidden" id="portalContent">
+          <section class="card panel">
+            <div class="panel-header">
+              <div>
+                <h3 id="mainPanelTitle">Tus citas</h3>
+                <div class="muted" id="mainPanelText">Las proximas citas se ven primero. Las ya pasadas no se borran: se archivan como historial para mantener trazabilidad.</div>
+              </div>
+              <div class="row">
+                <div class="admin-menu hidden" id="adminMenu">
+                  <button data-admin-view="bookings" class="active" type="button">Reservas</button>
+                  <button data-admin-view="users" type="button">Usuarios</button>
+                </div>
+                <div class="segmented" id="scopeSwitch">
+                  <button data-scope="upcoming" class="active" type="button">Proximas</button>
+                  <button data-scope="history" type="button">Historial</button>
+                  <button data-scope="all" type="button">Todo</button>
+                </div>
+                <select id="statusFilter">
+                  <option value="">Todos los estados</option>
+                  <option value="confirmed">Confirmadas</option>
+                  <option value="pending_review">Pendientes</option>
+                  <option value="completed">Completadas</option>
+                  <option value="cancelled">Canceladas</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="muted">Panel operativo para revisar reservas, detectar incidencias y actuar rapido.</div>
+
+            <section class="admin-view" id="bookingView">
+              <div id="bookingList" class="booking-grid">
+                <div class="empty">Inicia sesion para ver reservas.</div>
+              </div>
+
+              <div class="pagination hidden" id="pagination">
+                <div class="muted" id="paginationText">-</div>
+                <div class="row">
+                  <button id="prevPageBtn" class="ghost small" type="button">Anterior</button>
+                  <button id="nextPageBtn" class="ghost small" type="button">Siguiente</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="admin-view hidden" id="usersView">
+              <div class="subcard">
+                <div>
+                  <strong>Nuevo usuario</strong>
+                  <div class="muted">Crea accesos para administracion o para cada cliente desde un formulario mas ordenado.</div>
+                </div>
+                <div class="grid">
+                  <label>
+                    Nombre visible
+                    <input id="newUserName" type="text" placeholder="Clinica Saga" />
+                  </label>
+                  <label>
+                    Email
+                    <input id="newUserEmail" type="email" placeholder="equipo@cliente.com" />
+                  </label>
+                </div>
+                <div class="grid">
+                  <label>
+                    Contrasena inicial
+                    <input id="newUserPassword" type="password" placeholder="Minimo 8 caracteres" />
+                  </label>
+                  <label>
+                    Rol
+                    <select id="newUserRole">
+                      <option value="client">Cliente</option>
+                      <option value="admin">Administrador</option>
+                    </select>
+                  </label>
+                </div>
+                <label>
+                  Cliente ID
+                  <select id="newUserClientId">
+                    <option value="">Selecciona un cliente</option>
+                  </select>
+                </label>
+                <div class="row">
+                  <button id="createUserBtn" class="primary" type="button">Crear usuario</button>
+                </div>
+              </div>
+
+              <div class="subcard">
+                <div class="toolbar">
+                  <div>
+                    <strong>Usuarios del portal</strong>
+                    <div class="muted">Gestiona admins y cuentas cliente desde un menu de acciones por usuario.</div>
+                  </div>
+                  <div class="toolbar-filters">
+                    <label>
+                      Rol
+                      <select id="userRoleFilter">
+                        <option value="">Todos</option>
+                        <option value="admin">Administradores</option>
+                        <option value="client">Clientes</option>
+                      </select>
+                    </label>
+                    <label>
+                      Cliente
+                      <select id="userClientFilter">
+                        <option value="">Todos</option>
+                      </select>
+                    </label>
+                    <label class="inline-check">
+                      <input id="userIncludeInactive" type="checkbox" checked />
+                      Incluir inactivos
+                    </label>
+                    <button id="refreshUsersBtn" class="secondary small" type="button">Actualizar</button>
+                  </div>
+                </div>
+                <div id="usersList" class="users-grid">
+                  <div class="empty">Inicia sesion como admin para gestionar usuarios.</div>
+                </div>
+              </div>
+            </section>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+
+    const state = {
+      user: null,
+      scope: "upcoming",
+      status: "",
+      limit: 8,
+      offset: 0,
+      total: 0,
+      items: [],
+      users: [],
+      clients: [],
+      adminView: "bookings",
+      forgotCooldownSeconds: 0,
+      forgotCooldownTimer: null,
+      authView: urlParams.get("reset_token") ? "reset" : "login",
+      resetToken: (urlParams.get("reset_token") || "").trim(),
+    };
+
+    const el = {
+      authGuestStack: document.getElementById("authGuestStack"),
+      authUserStack: document.getElementById("authUserStack"),
+      loginCard: document.getElementById("loginCard"),
+      forgotCard: document.getElementById("forgotCard"),
+      resetCard: document.getElementById("resetCard"),
+      sessionCard: document.getElementById("sessionCard"),
+      statusCard: document.getElementById("statusCard"),
+      rolePill: document.getElementById("rolePill"),
+      userName: document.getElementById("userName"),
+      userEmail: document.getElementById("userEmail"),
+      email: document.getElementById("email"),
+      password: document.getElementById("password"),
+      loginBtn: document.getElementById("loginBtn"),
+      showForgotBtn: document.getElementById("showForgotBtn"),
+      forgotEmail: document.getElementById("forgotEmail"),
+      forgotSubmitBtn: document.getElementById("forgotSubmitBtn"),
+      forgotFeedback: document.getElementById("forgotFeedback"),
+      backToLoginBtn: document.getElementById("backToLoginBtn"),
+      resetPassword: document.getElementById("resetPassword"),
+      resetPasswordConfirm: document.getElementById("resetPasswordConfirm"),
+      resetSubmitBtn: document.getElementById("resetSubmitBtn"),
+      resetBackBtn: document.getElementById("resetBackBtn"),
+      refreshBtn: document.getElementById("refreshBtn"),
+      changePasswordShortcutBtn: document.getElementById("changePasswordShortcutBtn"),
+      openAdminBtn: document.getElementById("openAdminBtn"),
+      logoutBtn: document.getElementById("logoutBtn"),
+      statusBox: document.getElementById("status"),
+      heroTitle: document.getElementById("heroTitle"),
+      heroText: document.getElementById("heroText"),
+      mainPanelTitle: document.getElementById("mainPanelTitle"),
+      mainPanelText: document.getElementById("mainPanelText"),
+      statsGrid: document.getElementById("statsGrid"),
+      stat1: document.getElementById("stat1"),
+      stat1Label: document.getElementById("stat1Label"),
+      stat2: document.getElementById("stat2"),
+      stat2Label: document.getElementById("stat2Label"),
+      stat3: document.getElementById("stat3"),
+      stat3Label: document.getElementById("stat3Label"),
+      stat4: document.getElementById("stat4"),
+      stat4Label: document.getElementById("stat4Label"),
+      portalContent: document.getElementById("portalContent"),
+      adminMenu: document.getElementById("adminMenu"),
+      adminMenuButtons: document.querySelectorAll("#adminMenu button[data-admin-view]"),
+      scopeButtons: document.querySelectorAll("#scopeSwitch button[data-scope]"),
+      statusFilter: document.getElementById("statusFilter"),
+      bookingView: document.getElementById("bookingView"),
+      usersView: document.getElementById("usersView"),
+      bookingList: document.getElementById("bookingList"),
+      pagination: document.getElementById("pagination"),
+      paginationText: document.getElementById("paginationText"),
+      prevPageBtn: document.getElementById("prevPageBtn"),
+      nextPageBtn: document.getElementById("nextPageBtn"),
+      contactBlock: document.getElementById("contactBlock"),
+      contactInfo: document.getElementById("contactInfo"),
+      securityBlock: document.getElementById("securityBlock"),
+      changeCurrentPassword: document.getElementById("changeCurrentPassword"),
+      changeNewPassword: document.getElementById("changeNewPassword"),
+      changeNewPasswordConfirm: document.getElementById("changeNewPasswordConfirm"),
+      changePasswordBtn: document.getElementById("changePasswordBtn"),
+      newUserName: document.getElementById("newUserName"),
+      newUserEmail: document.getElementById("newUserEmail"),
+      newUserPassword: document.getElementById("newUserPassword"),
+      newUserClientId: document.getElementById("newUserClientId"),
+      newUserRole: document.getElementById("newUserRole"),
+      createUserBtn: document.getElementById("createUserBtn"),
+      userRoleFilter: document.getElementById("userRoleFilter"),
+      userClientFilter: document.getElementById("userClientFilter"),
+      userIncludeInactive: document.getElementById("userIncludeInactive"),
+      refreshUsersBtn: document.getElementById("refreshUsersBtn"),
+      usersList: document.getElementById("usersList"),
+    };
+
+    function setStatus(message, kind = "info") {
+      el.statusBox.className = `status ${kind}`;
+      el.statusBox.textContent = message;
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: {
+          "Accept": "application/json",
+          ...(options.headers || {}),
+        },
+      });
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (error) {
+        data = null;
+      }
+      if (!response.ok) {
+        throw new Error(data?.detail || data?.message || "No se pudo completar la solicitud.");
+      }
+      return data;
+    }
+
+    function setAuthView(view) {
+      state.authView = view;
+      el.loginCard.classList.toggle("hidden", view !== "login");
+      el.forgotCard.classList.toggle("hidden", view !== "forgot");
+      el.resetCard.classList.toggle("hidden", view !== "reset");
+    }
+
+    function setForgotFeedback(message, kind = "success") {
+      if (!message) {
+        el.forgotFeedback.className = "feedback-box";
+        el.forgotFeedback.textContent = "";
+        return;
+      }
+      el.forgotFeedback.className = `feedback-box visible ${kind}`;
+      el.forgotFeedback.textContent = message;
+    }
+
+    function renderForgotSubmitButton() {
+      if (state.forgotCooldownSeconds > 0) {
+        el.forgotSubmitBtn.disabled = true;
+        el.forgotSubmitBtn.textContent = `Reenviar en ${state.forgotCooldownSeconds}s`;
+        return;
+      }
+      el.forgotSubmitBtn.disabled = false;
+      el.forgotSubmitBtn.textContent = "Enviar enlace";
+    }
+
+    function startForgotCooldown(seconds) {
+      const nextSeconds = Math.max(0, Number(seconds || 0));
+      state.forgotCooldownSeconds = nextSeconds;
+      if (state.forgotCooldownTimer) {
+        window.clearInterval(state.forgotCooldownTimer);
+        state.forgotCooldownTimer = null;
+      }
+      renderForgotSubmitButton();
+      if (!nextSeconds) return;
+
+      state.forgotCooldownTimer = window.setInterval(() => {
+        state.forgotCooldownSeconds = Math.max(0, state.forgotCooldownSeconds - 1);
+        renderForgotSubmitButton();
+        if (state.forgotCooldownSeconds <= 0 && state.forgotCooldownTimer) {
+          window.clearInterval(state.forgotCooldownTimer);
+          state.forgotCooldownTimer = null;
+        }
+      }, 1000);
+    }
+
+    function setAdminView(view) {
+      state.adminView = view === "users" ? "users" : "bookings";
+      el.adminMenuButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.adminView === state.adminView);
+      });
+      el.bookingView.classList.toggle("hidden", state.adminView !== "bookings");
+      el.usersView.classList.toggle("hidden", state.adminView !== "users");
+      el.scopeButtons.forEach((button) => {
+        button.closest(".segmented").classList.toggle("hidden", state.adminView !== "bookings");
+      });
+      el.statusFilter.classList.toggle("hidden", state.adminView !== "bookings");
+      if (state.user?.role === "admin") {
+        if (state.adminView === "users") {
+          el.mainPanelTitle.textContent = "Usuarios del portal";
+          el.mainPanelText.textContent = "Administra accesos internos y cuentas cliente con acciones claras por usuario.";
+        } else {
+          el.mainPanelTitle.textContent = "Reservas";
+          el.mainPanelText.textContent = "Panel operativo para revisar reservas, detectar incidencias y actuar rapido.";
+        }
+      }
+    }
+
+    function clearResetTokenFromUrl() {
+      const nextUrl = `${window.location.pathname}${window.location.hash || ""}`;
+      window.history.replaceState({}, "", nextUrl);
+      state.resetToken = "";
+    }
+
+    function openSecurityPanel() {
+      if (!state.user) return;
+      el.securityBlock.scrollIntoView({ behavior: "smooth", block: "start" });
+      el.changeCurrentPassword.focus();
+      setStatus("Aqui puedes cambiar tu contrasena actual.", "info");
+    }
+
+    function readMatchingPasswords(firstValue, secondValue, emptyMessage, mismatchMessage) {
+      const left = String(firstValue || "").trim();
+      const right = String(secondValue || "").trim();
+      if (!left || !right) {
+        throw new Error(emptyMessage);
+      }
+      if (left.length < 8) {
+        throw new Error("La nueva contrasena debe tener al menos 8 caracteres.");
+      }
+      if (left !== right) {
+        throw new Error(mismatchMessage);
+      }
+      return left;
+    }
+
+    function setScope(scope) {
+      state.scope = scope;
+      state.offset = 0;
+      el.scopeButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.scope === scope);
+      });
+    }
+
+    function populateClientSelect(select, includeEmptyLabel) {
+      if (!select) return;
+      const currentValue = select.value;
+      select.innerHTML = "";
+      if (includeEmptyLabel) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = includeEmptyLabel;
+        select.appendChild(option);
+      }
+      state.clients.forEach((client) => {
+        const option = document.createElement("option");
+        option.value = client.cliente_id;
+        option.textContent = `${client.nombre} (${client.cliente_id})`;
+        select.appendChild(option);
+      });
+      if ([...select.options].some((option) => option.value === currentValue)) {
+        select.value = currentValue;
+      }
+    }
+
+    function toggleClientFieldByRole() {
+      const isClientRole = (el.newUserRole.value || "client") === "client";
+      el.newUserClientId.disabled = !isClientRole;
+      if (!isClientRole) {
+        el.newUserClientId.value = "";
+      }
+    }
+
+    function renderShell() {
+      const user = state.user;
+      const isAuthed = Boolean(user);
+      el.authGuestStack.classList.toggle("hidden", isAuthed);
+      el.authUserStack.classList.toggle("hidden", !isAuthed);
+      setAuthView(state.authView);
+      el.loginCard.classList.toggle("hidden", isAuthed || state.authView !== "login");
+      el.forgotCard.classList.toggle("hidden", isAuthed || state.authView !== "forgot");
+      el.resetCard.classList.toggle("hidden", isAuthed || state.authView !== "reset");
+      el.sessionCard.classList.toggle("hidden", !isAuthed);
+      el.statusCard.classList.toggle("hidden", !isAuthed);
+      el.statsGrid.classList.toggle("hidden", !isAuthed);
+      el.portalContent.classList.toggle("hidden", !isAuthed);
+      el.securityBlock.classList.toggle("hidden", !isAuthed);
+      el.adminMenu.classList.add("hidden");
+
+      if (!user) {
+        setAdminView("bookings");
+        if (state.authView === "forgot") {
+          el.heroTitle.textContent = "Recupera tu acceso";
+          el.heroText.textContent = "Te enviaremos un enlace seguro para definir una nueva contrasena sin depender de soporte manual.";
+        } else if (state.authView === "reset") {
+          el.heroTitle.textContent = "Crea una nueva contrasena";
+          el.heroText.textContent = "Si has llegado desde el correo de recuperacion, aqui puedes guardar una nueva contrasena y volver a entrar al portal.";
+        } else {
+          el.heroTitle.textContent = "Tu agenda, clara y operable";
+          el.heroText.textContent = "Entra al portal para ver tus proximas citas, revisar el historial y actuar en un clic cuando necesites cambiar o cancelar una reserva.";
+        }
+        el.contactBlock.classList.add("hidden");
+        return;
+      }
+
+      const isAdmin = user.role === "admin";
+      el.rolePill.textContent = isAdmin ? "Administrador" : "Cliente";
+      el.userName.textContent = user.display_name;
+      el.userEmail.textContent = user.email;
+      el.openAdminBtn.classList.toggle("hidden", !isAdmin);
+      el.contactBlock.classList.remove("hidden");
+      setAuthView("login");
+
+      if (isAdmin) {
+        el.adminMenu.classList.remove("hidden");
+        setAdminView(state.adminView);
+        el.heroTitle.textContent = "Centro de operaciones de Vantelia";
+        el.heroText.textContent = "Gestiona accesos, revisa reservas y acompana al cliente desde un portal mas cercano a producto SaaS que a herramienta interna improvisada.";
+        if (state.adminView === "users") {
+          el.mainPanelTitle.textContent = "Usuarios del portal";
+          el.mainPanelText.textContent = "Administra accesos internos y cuentas cliente con acciones claras por usuario.";
+        } else {
+          el.mainPanelTitle.textContent = "Reservas";
+          el.mainPanelText.textContent = "Panel operativo para revisar reservas, detectar incidencias y actuar rapido.";
+        }
+      } else {
+        setAdminView("bookings");
+        el.heroTitle.textContent = `Portal de ${user.display_name}`;
+        el.heroText.textContent = "Desde aqui puedes ver tus proximas citas, consultar el historial y cambiar o cancelar una reserva sin depender de mensajes manuales.";
+        el.mainPanelTitle.textContent = "Tus citas";
+        el.mainPanelText.textContent = "Las proximas citas se ven primero. Las ya pasadas no se borran: se archivan como historial para mantener trazabilidad.";
+      }
+    }
+
+    function renderStats(stats) {
+      if (!state.user) return;
+      if (state.user.role === "admin") {
+        el.stat1.textContent = String(stats.total_bookings || 0);
+        el.stat1Label.textContent = "Reservas";
+        el.stat2.textContent = String(stats.pending_review || 0);
+        el.stat2Label.textContent = "Pendientes";
+        el.stat3.textContent = String(stats.active_users || 0);
+        el.stat3Label.textContent = "Usuarios";
+        el.stat4.textContent = String(stats.client_users || 0);
+        el.stat4Label.textContent = "Clientes con acceso";
+      } else {
+        el.stat1.textContent = String(stats.total_bookings || 0);
+        el.stat1Label.textContent = "Reservas totales";
+        el.stat2.textContent = String(stats.upcoming || 0);
+        el.stat2Label.textContent = "Proximas";
+        el.stat3.textContent = String(stats.history || 0);
+        el.stat3Label.textContent = "Archivadas";
+        el.stat4.textContent = stats.empresa || state.user.cliente_id || "-";
+        el.stat4Label.textContent = "Empresa";
+      }
+    }
+
+    function formatDateTimeLabel(value) {
+      if (!value) return "Sin actividad";
+      return value.replace("T", " ").replace("Z", " UTC");
+    }
+
+    function roleLabel(role) {
+      return role === "admin" ? "Administrador" : "Cliente";
+    }
+
+    function renderUsers(response) {
+      state.users = response.items || [];
+      if (!state.users.length) {
+        el.usersList.innerHTML = '<div class="empty">No hay usuarios para este filtro.</div>';
+        return;
+      }
+
+      el.usersList.innerHTML = "";
+      state.users.forEach((managedUser) => {
+        const card = document.createElement("article");
+        card.className = "user-card";
+        const clientLabel = managedUser.cliente_id || "Global";
+        const statusClass = managedUser.is_active ? "pill" : "pill danger";
+        const statusLabel = managedUser.is_active ? "Activo" : "Inactivo";
+        const availableActions = managedUser.is_active
+          ? `
+              <option value="">Selecciona accion</option>
+              <option value="reset">Enviar reset por correo</option>
+              <option value="deactivate">Desactivar usuario</option>
+              <option value="delete">Eliminar usuario</option>
+            `
+          : `
+              <option value="">Selecciona accion</option>
+              <option value="activate">Activar usuario</option>
+              <option value="delete">Eliminar usuario</option>
+            `;
+        card.innerHTML = `
+          <div class="user-top">
+            <div class="user-title">
+              <strong>${managedUser.display_name}</strong>
+              <span class="muted">${managedUser.email}</span>
+            </div>
+            <div class="pills">
+              <span class="pill alt">${roleLabel(managedUser.role)}</span>
+              <span class="${statusClass}">${statusLabel}</span>
+            </div>
+          </div>
+          <div class="user-meta">
+            <div class="meta-box">
+              <span class="meta-label">Cliente</span>
+              <span class="meta-value">${clientLabel}</span>
+            </div>
+            <div class="meta-box">
+              <span class="meta-label">Ultimo login</span>
+              <span class="meta-value">${formatDateTimeLabel(managedUser.last_login_at)}</span>
+            </div>
+            <div class="meta-box">
+              <span class="meta-label">Alta</span>
+              <span class="meta-value">${formatDateTimeLabel(managedUser.created_at)}</span>
+            </div>
+            <div class="meta-box">
+              <span class="meta-label">ID</span>
+              <span class="meta-value">${managedUser.user_id}</span>
+            </div>
+          </div>
+          <div class="action-row">
+            <select data-user-action="${managedUser.user_id}">
+              ${availableActions}
+            </select>
+            <button class="secondary small" type="button" data-run-user-action="${managedUser.user_id}">Aplicar accion</button>
+          </div>
+        `;
+        el.usersList.appendChild(card);
+      });
+
+      el.usersList.querySelectorAll("button[data-run-user-action]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const userId = button.dataset.runUserAction;
+          const select = el.usersList.querySelector(`select[data-user-action="${userId}"]`);
+          const action = select?.value || "";
+          if (!action) {
+            setStatus("Selecciona primero una accion para ese usuario.", "error");
+            return;
+          }
+          try {
+            let successMessage = "";
+            if (action === "delete" && !window.confirm("Seguro que quieres eliminar este usuario?")) {
+              return;
+            }
+            if (action === "deactivate" && !window.confirm("Seguro que quieres desactivar este usuario?")) {
+              return;
+            }
+            if (action === "activate") {
+              const result = await api(`/auth/users/${encodeURIComponent(userId)}/activate`, { method: "POST" });
+              successMessage = result.message;
+            } else if (action === "deactivate") {
+              const result = await api(`/auth/users/${encodeURIComponent(userId)}/deactivate`, { method: "POST" });
+              successMessage = result.message;
+            } else if (action === "reset") {
+              const result = await api(`/auth/users/${encodeURIComponent(userId)}/reset-link`, { method: "POST" });
+              successMessage = result.message;
+            } else if (action === "delete") {
+              const result = await api(`/auth/users/${encodeURIComponent(userId)}`, { method: "DELETE" });
+              successMessage = result.message;
+            }
+            await loadDashboard();
+            setStatus(successMessage || "Accion ejecutada correctamente.", "success");
+          } catch (error) {
+            setStatus(error.message, "error");
+          }
+        });
+      });
+    }
+
+    function updateContactCard(items) {
+      const first = items.find((item) => item.contact_email || item.contact_phone);
+      if (!first) {
+        el.contactInfo.textContent = "No hay datos de contacto visibles todavia.";
+        return;
+      }
+      const lines = [];
+      if (first.contact_email) lines.push(`Email: ${first.contact_email}`);
+      if (first.contact_phone) lines.push(`Telefono: ${first.contact_phone}`);
+      el.contactInfo.textContent = lines.join(" | ");
+    }
+
+    function formatDateLabel(item) {
+      return `${item.fecha} - ${item.hora}${item.timezone ? ` (${item.timezone})` : ""}`;
+    }
+
+    function pillClass(status) {
+      if (status === "cancelled") return "pill danger";
+      if (status === "completed") return "pill alt";
+      if (status === "pending_review") return "pill alt";
+      return "pill";
+    }
+
+    function renderBookings(response) {
+      state.items = response.items || [];
+      state.total = response.total || 0;
+      state.limit = response.limit || state.limit;
+      state.offset = response.offset || 0;
+
+      updateContactCard(state.items);
+
+      if (!state.items.length) {
+        el.bookingList.innerHTML = `<div class="empty">No hay citas para este filtro. Si buscas algo pasado, prueba la vista de historial.</div>`;
+      } else {
+        el.bookingList.innerHTML = "";
+        state.items.forEach((booking) => {
+          const card = document.createElement("article");
+          card.className = "booking-card";
+          const canCancel = booking.can_cancel;
+          const canReschedule = booking.can_reschedule;
+          card.innerHTML = `
+            <div class="booking-top">
+              <div class="booking-title">
+                <strong>${booking.servicio || "Consulta"}</strong>
+                <span class="muted">${booking.empresa}</span>
+              </div>
+              <div class="pills">
+                <span class="${pillClass(booking.estado)}">${booking.estado}</span>
+                <span class="pill alt">${booking.provider_name}</span>
+              </div>
+            </div>
+
+            <div class="booking-meta">
+              <div class="meta-box">
+                <span class="meta-label">Fecha y hora</span>
+                <span class="meta-value">${formatDateLabel(booking)}</span>
+              </div>
+              <div class="meta-box">
+                <span class="meta-label">Cliente</span>
+                <span class="meta-value">${booking.nombre}<br />${booking.email}</span>
+              </div>
+            </div>
+
+            <div class="booking-actions">
+              <button class="secondary small" type="button" data-action="manage" data-url="${booking.manage_url || ""}">Gestionar</button>
+              <button class="ghost small" type="button" data-action="provider" data-url="${booking.provider_booking_url || ""}">Abrir proveedor</button>
+              <button class="danger small" type="button" data-action="cancel" data-id="${booking.booking_id}" ${canCancel ? "" : "disabled"}>Cancelar</button>
+              <button class="secondary small" type="button" data-action="reschedule" data-id="${booking.booking_id}" data-fecha="${booking.fecha}" data-hora="${booking.hora}" ${canReschedule ? "" : "disabled"}>Reprogramar</button>
+            </div>
+          `;
+          el.bookingList.appendChild(card);
+        });
+      }
+
+      const shownFrom = state.total ? state.offset + 1 : 0;
+      const shownTo = Math.min(state.offset + state.limit, state.total);
+      el.pagination.classList.toggle("hidden", state.total <= state.limit);
+      el.paginationText.textContent = `Mostrando ${shownFrom}-${shownTo} de ${state.total} citas`;
+      el.prevPageBtn.disabled = state.offset <= 0;
+      el.nextPageBtn.disabled = state.offset + state.limit >= state.total;
+
+      el.bookingList.querySelectorAll("button[data-action]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const action = button.dataset.action;
+          const bookingId = button.dataset.id;
+          const url = button.dataset.url;
+          try {
+            if (action === "manage") {
+              if (!url) throw new Error("Esta reserva no tiene enlace de gestion.");
+              window.open(url, "_blank", "noopener,noreferrer");
+              return;
+            }
+            if (action === "provider") {
+              if (!url) throw new Error("Esta reserva no tiene enlace del proveedor.");
+              window.open(url, "_blank", "noopener,noreferrer");
+              return;
+            }
+            if (action === "cancel") {
+              if (!window.confirm("Seguro que quieres cancelar esta cita?")) return;
+              await api(`/auth/bookings/${encodeURIComponent(bookingId)}/cancel`, { method: "POST" });
+              setStatus("Cita cancelada correctamente.", "success");
+              await loadDashboard();
+              return;
+            }
+            if (action === "reschedule") {
+              const nuevaFecha = window.prompt("Nueva fecha (YYYY-MM-DD)", button.dataset.fecha || "");
+              if (!nuevaFecha) return;
+              const nuevaHora = window.prompt("Nueva hora (HH:MM)", button.dataset.hora || "");
+              if (!nuevaHora) return;
+              await api(`/auth/bookings/${encodeURIComponent(bookingId)}/reschedule`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ fecha: nuevaFecha.trim(), hora: nuevaHora.trim() }),
+              });
+              setStatus("Cita reprogramada correctamente.", "success");
+              await loadDashboard();
+            }
+          } catch (error) {
+            setStatus(error.message, "error");
+          }
+        });
+      });
+    }
+
+    async function loadBookings() {
+      const params = new URLSearchParams();
+      params.set("scope", state.scope);
+      params.set("limit", String(state.limit));
+      params.set("offset", String(state.offset));
+      if (state.status) params.set("estado", state.status);
+      const payload = await api(`/auth/bookings?${params.toString()}`);
+      renderBookings(payload);
+    }
+
+    async function loadClients() {
+      if (state.user?.role !== "admin") return;
+      const clients = await api("/auth/clientes");
+      state.clients = clients || [];
+      populateClientSelect(el.newUserClientId, "Selecciona un cliente");
+      populateClientSelect(el.userClientFilter, "Todos");
+    }
+
+    async function loadUsers() {
+      if (state.user?.role !== "admin") return;
+      const params = new URLSearchParams();
+      const selectedRole = el.userRoleFilter.value.trim();
+      const selectedClient = el.userClientFilter.value.trim();
+      if (selectedRole) params.set("role", selectedRole);
+      if (selectedClient) params.set("cliente_id", selectedClient);
+      params.set("include_inactive", el.userIncludeInactive.checked ? "true" : "false");
+      const payload = await api(`/auth/users?${params.toString()}`);
+      renderUsers(payload);
+    }
+
+    async function loadDashboard() {
+      const payload = await api("/auth/dashboard");
+      state.user = payload.user;
+      renderShell();
+      renderStats(payload.stats || {});
+      if (state.user.role === "admin") {
+        await loadClients();
+        if (state.adminView === "users") {
+          await loadUsers();
+        } else {
+          await loadBookings();
+        }
+      } else {
+        await loadBookings();
+      }
+      setStatus(`Sesion activa como ${payload.user.display_name}.`, "success");
+    }
+
+    async function login() {
+      setStatus("Iniciando sesion...", "info");
+      await api("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: el.email.value.trim(),
+          password: el.password.value,
+        }),
+      });
+      el.password.value = "";
+      await loadDashboard();
+    }
+
+    async function sendPasswordReset() {
+      if (state.forgotCooldownSeconds > 0) return;
+      setStatus("Enviando enlace de recuperacion...", "info");
+      setForgotFeedback("Estamos comprobando la solicitud...", "success");
+      const response = await api("/auth/password/forgot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: el.forgotEmail.value.trim(),
+        }),
+      });
+      el.forgotEmail.value = "";
+      setForgotFeedback(
+        response.message || "Si el correo esta registrado, se te enviara un enlace de recuperacion.",
+        "success"
+      );
+      startForgotCooldown(response.retry_after_seconds || 0);
+      setStatus("Solicitud de recuperacion enviada.", "success");
+    }
+
+    async function submitPasswordReset() {
+      if (!state.resetToken) {
+        throw new Error("Falta el token de recuperacion en la URL.");
+      }
+      const newPassword = readMatchingPasswords(
+        el.resetPassword.value,
+        el.resetPasswordConfirm.value,
+        "Escribe y confirma la nueva contrasena.",
+        "Las contrasenas nuevas no coinciden."
+      );
+      setStatus("Guardando nueva contrasena...", "info");
+      await api("/auth/password/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: state.resetToken,
+          new_password: newPassword,
+        }),
+      });
+      el.resetPassword.value = "";
+      el.resetPasswordConfirm.value = "";
+      clearResetTokenFromUrl();
+      setAuthView("login");
+      setStatus("Contrasena restablecida. Ya puedes iniciar sesion con la nueva clave.", "success");
+    }
+
+    async function logout() {
+      await api("/auth/logout", { method: "POST" });
+      state.user = null;
+      state.items = [];
+      el.changeCurrentPassword.value = "";
+      el.changeNewPassword.value = "";
+      el.changeNewPasswordConfirm.value = "";
+      renderShell();
+      el.bookingList.innerHTML = `<div class="empty">Inicia sesion para ver reservas.</div>`;
+      setStatus("Sesion cerrada.", "info");
+    }
+
+    async function changePassword() {
+      const newPassword = readMatchingPasswords(
+        el.changeNewPassword.value,
+        el.changeNewPasswordConfirm.value,
+        "Escribe y confirma la nueva contrasena.",
+        "Las nuevas contrasenas no coinciden."
+      );
+      if (!el.changeCurrentPassword.value.trim()) {
+        throw new Error("Escribe tu contrasena actual.");
+      }
+      setStatus("Actualizando contrasena...", "info");
+      const result = await api("/auth/password/change", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          current_password: el.changeCurrentPassword.value,
+          new_password: newPassword,
+        }),
+      });
+      el.changeCurrentPassword.value = "";
+      el.changeNewPassword.value = "";
+      el.changeNewPasswordConfirm.value = "";
+      setStatus(result.message || "Contrasena actualizada correctamente.", "success");
+    }
+
+    async function createClientUser() {
+      const role = el.newUserRole.value.trim() || "client";
+      if (role === "client" && !el.newUserClientId.value.trim()) {
+        throw new Error("Selecciona el cliente al que pertenece este usuario.");
+      }
+      await api("/auth/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          display_name: el.newUserName.value.trim(),
+          email: el.newUserEmail.value.trim(),
+          password: el.newUserPassword.value,
+          cliente_id: el.newUserClientId.value.trim(),
+          role,
+        }),
+      });
+      el.newUserName.value = "";
+      el.newUserEmail.value = "";
+      el.newUserPassword.value = "";
+      el.newUserClientId.value = "";
+      el.newUserRole.value = "client";
+      toggleClientFieldByRole();
+      await loadDashboard();
+      setStatus("Usuario creado correctamente.", "success");
+    }
+
+    el.loginBtn.addEventListener("click", () => login().catch((error) => setStatus(error.message, "error")));
+    el.showForgotBtn.addEventListener("click", () => {
+      setAuthView("forgot");
+      setForgotFeedback("");
+      setStatus("Introduce tu correo y te enviaremos un enlace de recuperacion.", "info");
+    });
+    el.forgotSubmitBtn.addEventListener("click", () =>
+      sendPasswordReset().catch((error) => {
+        setForgotFeedback(error.message, "error");
+        setStatus(error.message, "error");
+      })
+    );
+    el.backToLoginBtn.addEventListener("click", () => {
+      setAuthView("login");
+      setForgotFeedback("");
+      setStatus("Vuelve a iniciar sesion cuando quieras.", "info");
+    });
+    el.resetSubmitBtn.addEventListener("click", () => submitPasswordReset().catch((error) => setStatus(error.message, "error")));
+    el.resetBackBtn.addEventListener("click", () => {
+      clearResetTokenFromUrl();
+      setAuthView("login");
+      setStatus("Ya puedes iniciar sesion de nuevo.", "info");
+    });
+    el.refreshBtn.addEventListener("click", () => loadDashboard().catch((error) => setStatus(error.message, "error")));
+    el.changePasswordShortcutBtn.addEventListener("click", () => openSecurityPanel());
+    el.logoutBtn.addEventListener("click", () => logout().catch((error) => setStatus(error.message, "error")));
+    el.openAdminBtn.addEventListener("click", () => window.open("/dashboard", "_blank", "noopener,noreferrer"));
+    el.changePasswordBtn.addEventListener("click", () => changePassword().catch((error) => setStatus(error.message, "error")));
+    el.createUserBtn.addEventListener("click", () => createClientUser().catch((error) => setStatus(error.message, "error")));
+    el.newUserRole.addEventListener("change", () => toggleClientFieldByRole());
+    el.refreshUsersBtn.addEventListener("click", () => loadUsers().catch((error) => setStatus(error.message, "error")));
+    el.userRoleFilter.addEventListener("change", () => loadUsers().catch((error) => setStatus(error.message, "error")));
+    el.userClientFilter.addEventListener("change", () => loadUsers().catch((error) => setStatus(error.message, "error")));
+    el.userIncludeInactive.addEventListener("change", () => loadUsers().catch((error) => setStatus(error.message, "error")));
+    el.adminMenuButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        setAdminView(button.dataset.adminView);
+        if (button.dataset.adminView === "users") {
+          loadUsers().catch((error) => setStatus(error.message, "error"));
+        } else {
+          loadBookings().catch((error) => setStatus(error.message, "error"));
+        }
+      });
+    });
+    el.statusFilter.addEventListener("change", () => {
+      state.status = el.statusFilter.value.trim();
+      state.offset = 0;
+      loadBookings().catch((error) => setStatus(error.message, "error"));
+    });
+    el.prevPageBtn.addEventListener("click", () => {
+      state.offset = Math.max(0, state.offset - state.limit);
+      loadBookings().catch((error) => setStatus(error.message, "error"));
+    });
+    el.nextPageBtn.addEventListener("click", () => {
+      state.offset += state.limit;
+      loadBookings().catch((error) => setStatus(error.message, "error"));
+    });
+    el.scopeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        setScope(button.dataset.scope);
+        loadBookings().catch((error) => setStatus(error.message, "error"));
+      });
+    });
+
+    toggleClientFieldByRole();
+    renderForgotSubmitButton();
+
+    api("/auth/me")
+      .then(() => loadDashboard())
+      .catch(() => {
+        renderShell();
+        if (state.authView === "reset") {
+          setStatus("Define tu nueva contrasena para recuperar el acceso.", "info");
+        }
+      });
+  </script>
+</body>
+</html>

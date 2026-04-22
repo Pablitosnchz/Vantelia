@@ -1,34 +1,71 @@
-import { WIDGET_CONFIG, sessionId, scrollMsgs } from './utils.js';
-import { mostrarFormulario } from './form.js';
+import {
+  WIDGET_CONFIG,
+  escapeHtml,
+  fetchJson,
+  getSessionId,
+  humanizeErrorMessage,
+  scrollMsgs,
+  setSessionId,
+} from "./utils.js";
+import { mostrarFormulario } from "./form.js";
+
+let sending = false;
+
+function formatInline(text) {
+  return text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
 
 export function formatMessage(text) {
-  text = text.replace(/ - \*\*/g, '\n- **');
-  text = text.replace(/ - /g, '\n- ');
-  let lines = text.split('\n'), html = '', enLista = false;
-  lines.forEach(line => {
-    line = line.trim();
-    if (!line) return;
-    line = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    if (line.startsWith('- ') || line.startsWith('• ')) {
-      if (!enLista) { html += '<div style="background:#f0f7ff;border-radius:12px;padding:12px 14px;margin:8px 0;border-left:3px solid #2E86AB">'; enLista = true; }
-      let c = line.replace(/^[-•]\s*/, '');
-      c = c.replace(/(\d+€[^\s]*|Desde \d+€|Consultar precio|\d+% de descuento)/g, '<span style="color:#2E86AB;font-weight:600">$1</span>');
-      html += `<div style="padding:6px 0;border-bottom:1px solid #e8f0f8;display:flex;align-items:center;gap:6px"><span style="color:#2E86AB">💎</span><span>${c}</span></div>`;
-    } else {
-      if (enLista) { html += '</div>'; enLista = false; }
-      html += `<p style="margin:6px 0">${line}</p>`;
+  const safeText = escapeHtml(text || "");
+  const lines = safeText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (!lines.length) {
+    return "<p>No hay contenido disponible.</p>";
+  }
+
+  let html = "";
+  let listItems = [];
+
+  const flushList = () => {
+    if (!listItems.length) return;
+    html += '<ul class="ia-rich-list">';
+    listItems.forEach((item) => {
+      html += `<li>${formatInline(item)}</li>`;
+    });
+    html += "</ul>";
+    listItems = [];
+  };
+
+  lines.forEach((line) => {
+    if (/^[-*•]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
+      listItems.push(line.replace(/^([-*•]|\d+\.)\s+/, ""));
+      return;
     }
+
+    flushList();
+    html += `<p>${formatInline(line)}</p>`;
   });
-  if (enLista) html += '</div>';
+
+  flushList();
   return html;
 }
 
 export function agregarMensaje(texto, tipo) {
   const msgs = document.getElementById("ia-w-msgs");
+  if (!msgs) return null;
+
   const div = document.createElement("div");
   div.className = `ia-msg ${tipo}`;
-  if (tipo === "bot") div.innerHTML = formatMessage(texto);
-  else div.textContent = texto;
+
+  if (tipo === "bot") {
+    div.innerHTML = formatMessage(texto);
+  } else {
+    div.textContent = texto;
+  }
+
   msgs.appendChild(div);
   scrollMsgs();
   return div;
@@ -36,6 +73,8 @@ export function agregarMensaje(texto, tipo) {
 
 export function mostrarTyping() {
   const msgs = document.getElementById("ia-w-msgs");
+  if (!msgs || document.getElementById("ia-w-typing")) return;
+
   const div = document.createElement("div");
   div.className = "ia-msg typing";
   div.id = "ia-w-typing";
@@ -45,34 +84,57 @@ export function mostrarTyping() {
 }
 
 export function ocultarTyping() {
-  const el = document.getElementById("ia-w-typing");
-  if (el) el.remove();
+  document.getElementById("ia-w-typing")?.remove();
 }
 
 export async function enviarMensaje() {
+  if (sending) return;
+
   const input = document.getElementById("ia-w-input");
   const sendBtn = document.getElementById("ia-w-send");
+  if (!input || !sendBtn) return;
+
   const texto = input.value.trim();
   if (!texto) return;
+
+  sending = true;
   input.value = "";
+  input.disabled = true;
   sendBtn.disabled = true;
   agregarMensaje(texto, "user");
   mostrarTyping();
+
   try {
-    const res = await fetch(`${WIDGET_CONFIG.apiUrl}/chat`, {
+    const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cliente_id: WIDGET_CONFIG.clienteId, mensaje: texto, session_id: sessionId }),
+      body: JSON.stringify({
+        cliente_id: WIDGET_CONFIG.clienteId,
+        mensaje: texto,
+        session_id: getSessionId(),
+      }),
     });
+
+    setSessionId(data.session_id);
     ocultarTyping();
-    if (!res.ok) throw new Error();
-    const data = await res.json();
     agregarMensaje(data.respuesta, "bot");
-    if (data.mostrar_formulario) mostrarFormulario();
-  } catch {
+
+    if (data.mostrar_formulario && WIDGET_CONFIG.bookingEnabled) {
+      mostrarFormulario();
+    }
+  } catch (error) {
     ocultarTyping();
-    agregarMensaje("⚠️ Error de conexión. Intenta de nuevo.", "bot");
+    agregarMensaje(
+      humanizeErrorMessage(
+        error,
+        "No se ha podido enviar el mensaje. Intentalo de nuevo en unos segundos."
+      ),
+      "bot"
+    );
+  } finally {
+    sending = false;
+    input.disabled = false;
+    sendBtn.disabled = false;
+    input.focus();
   }
-  sendBtn.disabled = false;
-  input.focus();
 }

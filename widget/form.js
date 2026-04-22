@@ -1,393 +1,266 @@
-import { WIDGET_CONFIG, scrollMsgs } from './utils.js';
-import { agregarMensaje } from './chat.js';
+import { agregarMensaje } from "./chat.js";
+import {
+  escapeHtml,
+  fetchJson,
+  formatLocalDate,
+  humanizeErrorMessage,
+  scrollMsgs,
+  WIDGET_CONFIG,
+} from "./utils.js";
 
-let citaData = { nombre: "", email: "", telefono: "", servicio: "", fecha: "", hora: "", notas: "" };
+const MAX_WIDGET_BOOKING_DAYS = 60;
+
+let citaData = {};
 let currentStep = 0;
+let services = [];
 let slotsDisponibles = [];
 
-// ======= VALIDACIONES =======
+function bringFormIntoView(form, behavior = "smooth") {
+  const msgs = document.getElementById("ia-w-msgs");
+  if (!form || !msgs) return;
+
+  window.requestAnimationFrame(() => {
+    const top = Math.max(0, form.offsetTop - 8);
+    msgs.scrollTo({ top, behavior });
+  });
+}
+
+function resetState() {
+  citaData = {
+    nombre: "",
+    email: "",
+    telefono: "",
+    servicio: "",
+    fecha: "",
+    hora: "",
+    notas: "",
+  };
+  currentStep = 0;
+  services = [];
+  slotsDisponibles = [];
+}
+
 const validaciones = {
-  nombre: (v) => {
-    if (!v) return "El nombre es obligatorio";
-    if (v.length < 3) return "Mínimo 3 caracteres";
-    if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s'-]+$/.test(v)) return "Solo letras y espacios";
-    return null;
+  nombre(valor) {
+    if (!valor) return "El nombre es obligatorio.";
+    if (valor.length < 3) return "Escribe al menos 3 caracteres.";
+    if (!/^[\p{L}\s'-]+$/u.test(valor)) {
+      return "Usa solo letras, espacios o apostrofes.";
+    }
+    return "";
   },
-  email: (v) => {
-    if (!v) return "El email es obligatorio";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) return "Email no válido (ej: tu@email.com)";
-    return null;
+  email(valor) {
+    if (!valor) return "El email es obligatorio.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(valor)) return "El email no es valido.";
+    return "";
   },
-  telefono: (v) => {
-    if (!v) return "El teléfono es obligatorio";
-    const limpio = v.replace(/[\s\-\(\)\.]/g, "");
-    if (!/^\+?\d{9,15}$/.test(limpio)) return "Teléfono no válido (mín. 9 dígitos)";
-    return null;
+  telefono(valor) {
+    if (!valor) return "El telefono es obligatorio.";
+    const limpio = valor.replace(/[\s\-().]/g, "");
+    if (!/^\+?\d{9,15}$/.test(limpio)) return "Introduce un telefono valido.";
+    return "";
   },
-  fecha: (v) => {
-    if (!v) return "Selecciona una fecha";
-    const sel = new Date(v + "T00:00");
-    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-    if (sel < hoy) return "La fecha no puede ser pasada";
-    if (sel.getDay() === 0) return "No hay servicio los domingos";
-    return null;
+  fecha(valor) {
+    if (!valor) return "Selecciona una fecha.";
+    return "";
   },
-  hora: (v) => {
-    if (!v) return "Selecciona un horario";
-    return null;
+  hora(valor) {
+    if (!valor) return "Selecciona un horario.";
+    return "";
   },
 };
 
-function mostrarError(inputId, mensaje) {
-  limpiarError(inputId);
+function setFieldError(inputId, message) {
   const input = document.getElementById(inputId);
   if (!input) return;
-  input.style.borderColor = "#ef4444";
-  input.style.background = "#fef2f2";
-  const err = document.createElement("div");
-  err.className = "ia-field-error";
-  err.id = `${inputId}-error`;
-  err.innerHTML = `⚠️ ${mensaje}`;
-  err.style.cssText = "color:#ef4444;font-size:12px;margin:4px 0 8px 4px;display:block;animation:ia-fade-in 0.2s ease;";
-  input.parentNode.insertBefore(err, input.nextSibling);
+
+  clearFieldError(inputId);
+  input.classList.add("ia-invalid");
+
+  const error = document.createElement("div");
+  error.className = "ia-field-error";
+  error.id = `${inputId}-error`;
+  error.textContent = message;
+  input.insertAdjacentElement("afterend", error);
 }
 
-function limpiarError(inputId) {
+function clearFieldError(inputId) {
   const input = document.getElementById(inputId);
-  if (input) { input.style.borderColor = ""; input.style.background = ""; }
-  const err = document.getElementById(`${inputId}-error`);
-  if (err) err.remove();
+  input?.classList.remove("ia-invalid");
+  document.getElementById(`${inputId}-error`)?.remove();
 }
 
-function validarCampo(inputId, tipo) {
+function validateField(inputId, validatorName) {
   const input = document.getElementById(inputId);
   if (!input) return false;
-  const error = validaciones[tipo](input.value.trim());
-  if (error) { mostrarError(inputId, error); return false; }
-  limpiarError(inputId);
-  input.style.borderColor = "#22c55e";
-  input.style.background = "#f0fdf4";
+
+  const value = input.value.trim();
+  const error = validaciones[validatorName](value);
+  if (error) {
+    setFieldError(inputId, error);
+    return false;
+  }
+
+  clearFieldError(inputId);
   return true;
 }
 
-let SERVICIOS = [];
-
 async function cargarServicios() {
-  try {
-    const res = await fetch(`${WIDGET_CONFIG.apiUrl}/servicios/${WIDGET_CONFIG.clienteId}`);
-    const data = await res.json();
-    SERVICIOS = [
-      { value: "", label: "Selecciona un servicio..." },
-      ...data.servicios.map(s => ({ value: s.id, label: s.nombre }))
-    ];
-  } catch {
-    SERVICIOS = [{ value: "", label: "No se pudieron cargar los servicios" }];
+  const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/servicios/${WIDGET_CONFIG.clienteId}`);
+  services = Array.isArray(data.servicios) ? data.servicios : [];
+
+  if (!services.length) {
+    services = [{ id: "consulta_general", nombre: "Consulta general" }];
   }
 }
 
-// ======= FORMULARIO PRINCIPAL =======
-export async function mostrarFormulario() {
-  const msgs = document.getElementById("ia-w-msgs");
+function fillServiceOptions(select) {
+  if (!select) return;
 
-  // Evitar duplicar formulario
-  if (document.getElementById("ia-form-cita")) {
-    agregarMensaje("Ya tienes un formulario abierto más arriba 👆", "bot");
-    scrollMsgs();
-    return;
-  }
-
-    // Cargar servicios del info.txt
-  await cargarServicios();
-
-  const form = document.createElement("div");
-  form.className = "ia-form-card";
-  form.id = "ia-form-cita";
-
-  const serviciosHTML = SERVICIOS.map(s =>
-    `<option value="${s.value}">${s.label}</option>`
-  ).join("");
-
-  form.innerHTML = `
-    <div class="ia-form-header">
-      <h4>📅 Reservar Cita</h4>
-      <p>Completa los datos en 4 sencillos pasos</p>
-    </div>
-    <div class="ia-form-progress">
-      <div class="ia-form-step-dot active" data-step="0"></div>
-      <div class="ia-form-step-dot" data-step="1"></div>
-      <div class="ia-form-step-dot" data-step="2"></div>
-      <div class="ia-form-step-dot" data-step="3"></div>
-    </div>
-    <div class="ia-form-body">
-
-      <!-- STEP 0: Datos personales -->
-      <div class="ia-form-step active" data-step="0">
-        <label class="ia-form-label">👤 Nombre completo <span style="color:#ef4444">*</span></label>
-        <input type="text" id="ia-f-nombre" placeholder="Ej: María García López" maxlength="60" autocomplete="name" />
-
-        <label class="ia-form-label">📧 Email <span style="color:#ef4444">*</span></label>
-        <input type="email" id="ia-f-email" placeholder="tu@email.com" maxlength="80" autocomplete="email" />
-
-        <label class="ia-form-label">📱 Teléfono <span style="color:#ef4444">*</span></label>
-        <input type="tel" id="ia-f-tel" placeholder="+34 600 000 000" maxlength="20" autocomplete="tel" />
-
-        <div class="ia-form-actions">
-          <button class="ia-form-btn primary" id="ia-f-next0">Siguiente →</button>
-        </div>
-      </div>
-
-      <!-- STEP 1: Servicio -->
-      <div class="ia-form-step" data-step="1">
-        <label class="ia-form-label">🏥 ¿Qué servicio necesitas? <span style="color:#ef4444">*</span></label>
-        <select id="ia-f-servicio">${serviciosHTML}</select>
-
-        <div id="ia-f-notas-wrap" style="display:none;">
-          <label class="ia-form-label">📝 Cuéntanos más (opcional)</label>
-          <textarea id="ia-f-notas" placeholder="Describe brevemente tu consulta..." 
-            style="width:100%;padding:14px 16px;border:1.5px solid #e0e4ea;border-radius:14px;font-size:14px;
-            font-family:inherit;background:#fafbfc;resize:vertical;min-height:80px;max-height:140px;
-            outline:none;transition:all 0.2s;" maxlength="500"></textarea>
-          <div style="text-align:right;font-size:11px;color:#aaa;margin-top:2px;">
-            <span id="ia-f-notas-count">0</span>/500
-          </div>
-        </div>
-
-        <div class="ia-form-actions">
-          <button class="ia-form-btn secondary" id="ia-f-back0">← Atrás</button>
-          <button class="ia-form-btn primary" id="ia-f-next1">Siguiente →</button>
-        </div>
-      </div>
-
-      <!-- STEP 2: Fecha y hora -->
-      <div class="ia-form-step" data-step="2">
-        <label class="ia-form-label">📆 Selecciona fecha <span style="color:#ef4444">*</span></label>
-        <input type="date" id="ia-f-fecha" />
-
-        <div id="ia-fecha-error-wrap"></div>
-
-        <label class="ia-form-label">🕐 Horarios disponibles</label>
-        <div id="ia-time-slots">
-          <p style="color:#aaa;font-size:14px;text-align:center;padding:24px 0;">
-            ☝️ Selecciona una fecha para ver horarios
-          </p>
-        </div>
-
-        <div class="ia-form-actions">
-          <button class="ia-form-btn secondary" id="ia-f-back1">← Atrás</button>
-          <button class="ia-form-btn primary" id="ia-f-next2" disabled>Siguiente →</button>
-        </div>
-      </div>
-
-      <!-- STEP 3: Confirmación -->
-      <div class="ia-form-step" data-step="3">
-        <label class="ia-form-label">✅ Confirma tu cita</label>
-        <div class="ia-resumen" id="ia-resumen"></div>
-
-        <div class="ia-form-actions">
-          <button class="ia-form-btn secondary" id="ia-f-back2">← Atrás</button>
-          <button class="ia-form-btn primary" id="ia-f-confirm">Confirmar Cita ✓</button>
-        </div>
-      </div>
-
-    </div>
-  `;
-  msgs.appendChild(form);
-  scrollMsgs();
-
-  // ======= SETUP FECHA MIN =======
-  const hoy = new Date();
-  const manana = new Date(hoy);
-  manana.setDate(manana.getDate() + 1);
-  document.getElementById("ia-f-fecha").setAttribute("min", manana.toISOString().split("T")[0]);
-
-  // Max 60 días adelante
-  const maxFecha = new Date(hoy);
-  maxFecha.setDate(maxFecha.getDate() + 60);
-  document.getElementById("ia-f-fecha").setAttribute("max", maxFecha.toISOString().split("T")[0]);
-
-  // ======= VALIDACIÓN EN TIEMPO REAL =======
-  document.getElementById("ia-f-nombre").addEventListener("blur", () => validarCampo("ia-f-nombre", "nombre"));
-  document.getElementById("ia-f-email").addEventListener("blur", () => validarCampo("ia-f-email", "email"));
-  document.getElementById("ia-f-tel").addEventListener("blur", () => validarCampo("ia-f-tel", "telefono"));
-
-  // Limpiar error al escribir
-  ["ia-f-nombre", "ia-f-email", "ia-f-tel"].forEach(id => {
-    document.getElementById(id).addEventListener("input", () => limpiarError(id));
+  select.innerHTML = "";
+  services.forEach((service) => {
+    const option = document.createElement("option");
+    option.value = service.id;
+    option.textContent = service.nombre;
+    select.appendChild(option);
   });
-
-  // Formatear teléfono
-  document.getElementById("ia-f-tel").addEventListener("input", (e) => {
-    let val = e.target.value.replace(/[^\d+\s\-()]/g, "");
-    e.target.value = val;
-  });
-
-  // ======= STEP 0 → 1 =======
-  document.getElementById("ia-f-next0").onclick = () => {
-    const v1 = validarCampo("ia-f-nombre", "nombre");
-    const v2 = validarCampo("ia-f-email", "email");
-    const v3 = validarCampo("ia-f-tel", "telefono");
-    if (!v1 || !v2 || !v3) return;
-    citaData.nombre = document.getElementById("ia-f-nombre").value.trim();
-    citaData.email = document.getElementById("ia-f-email").value.trim();
-    citaData.telefono = document.getElementById("ia-f-tel").value.trim();
-    irAStep(1);
-  };
-
-  // ======= STEP 1: SERVICIO =======
-  document.getElementById("ia-f-servicio").onchange = (e) => {
-    const wrap = document.getElementById("ia-f-notas-wrap");
-    wrap.style.display = e.target.value ? "block" : "none";
-  };
-
-  document.getElementById("ia-f-notas")?.addEventListener("input", (e) => {
-    document.getElementById("ia-f-notas-count").textContent = e.target.value.length;
-  });
-
-  document.getElementById("ia-f-next1").onclick = () => {
-    const serv = document.getElementById("ia-f-servicio").value;
-    if (!serv) {
-      document.getElementById("ia-f-servicio").style.borderColor = "#ef4444";
-      return;
-    }
-    document.getElementById("ia-f-servicio").style.borderColor = "#22c55e";
-    citaData.servicio = SERVICIOS.find(s => s.value === serv)?.label || serv;
-    citaData.notas = document.getElementById("ia-f-notas")?.value.trim() || "";
-    irAStep(2);
-  };
-
-  // ======= STEP 2: FECHA =======
-  document.getElementById("ia-f-fecha").onchange = async (e) => {
-    const fecha = e.target.value;
-    if (!fecha) return;
-
-    const errorFecha = validaciones.fecha(fecha);
-    const errorWrap = document.getElementById("ia-fecha-error-wrap");
-    if (errorFecha) {
-      errorWrap.innerHTML = `<div style="color:#ef4444;font-size:12px;margin:-8px 0 10px 4px;">⚠️ ${errorFecha}</div>`;
-      document.getElementById("ia-f-fecha").style.borderColor = "#ef4444";
-      return;
-    }
-    errorWrap.innerHTML = "";
-    document.getElementById("ia-f-fecha").style.borderColor = "#22c55e";
-
-    citaData.fecha = fecha;
-    citaData.hora = "";
-    document.getElementById("ia-f-next2").disabled = true;
-    await cargarSlots(fecha);
-  };
-
-  document.getElementById("ia-f-next2").onclick = () => {
-    if (!citaData.hora) return;
-    renderResumen();
-    irAStep(3);
-  };
-
-
-  document.getElementById("ia-f-confirm").onclick = confirmarCita;
-
-  // ======= BOTONES ATRÁS =======
-  document.getElementById("ia-f-back0").onclick = () => irAStep(0);
-  document.getElementById("ia-f-back1").onclick = () => irAStep(1);
-  document.getElementById("ia-f-back2").onclick = () => irAStep(2);
-
-  currentStep = 0;
 }
 
-// ======= NAVEGACIÓN =======
-function irAStep(step) {
+function toggleStep(step) {
   currentStep = step;
   const form = document.getElementById("ia-form-cita");
-  form.querySelectorAll(".ia-form-step").forEach(s => s.classList.remove("active"));
-  form.querySelectorAll(".ia-form-step-dot").forEach((d, i) => {
-    d.classList.remove("active", "done");
-    if (i < step) d.classList.add("done");
-    if (i === step) d.classList.add("active");
+  if (!form) return;
+  const formBody = form.querySelector(".ia-form-body");
+
+  form.querySelectorAll(".ia-form-step").forEach((section) => {
+    section.classList.remove("active");
   });
-  form.querySelector(`.ia-form-step[data-step="${step}"]`).classList.add("active");
+  form.querySelectorAll(".ia-form-step-dot").forEach((dot, index) => {
+    dot.classList.remove("active", "done");
+    if (index < step) dot.classList.add("done");
+    if (index === step) dot.classList.add("active");
+  });
+
+  form.querySelector(`.ia-form-step[data-step="${step}"]`)?.classList.add("active");
+  if (formBody) formBody.scrollTop = 0;
+  bringFormIntoView(form);
   scrollMsgs();
 }
 
-// ======= SLOTS =======
 async function cargarSlots(fecha) {
   const container = document.getElementById("ia-time-slots");
-  container.innerHTML = `<div class="ia-loading-slots"><div class="ia-spinner"></div>Consultando disponibilidad...</div>`;
-  try {
-    const res = await fetch(`${WIDGET_CONFIG.apiUrl}/disponibilidad?cliente_id=${WIDGET_CONFIG.clienteId}&fecha=${fecha}`);
-    if (!res.ok) throw new Error();
-    const data = await res.json();
-    slotsDisponibles = data.slots || [];
-    renderSlots();
-  } catch {
-    slotsDisponibles = generarSlotsFallback();
-    renderSlots();
-  }
-}
+  const nextButton = document.getElementById("ia-f-next2");
+  if (!container || !nextButton) return;
 
-function generarSlotsFallback() {
-  const slots = [];
-  for (let h = 9; h <= 19; h++) {
-    slots.push({ hora: `${String(h).padStart(2, "0")}:00`, disponible: Math.random() > 0.2 });
-    if (h < 19) slots.push({ hora: `${String(h).padStart(2, "0")}:30`, disponible: Math.random() > 0.25 });
+  nextButton.disabled = true;
+  container.innerHTML =
+    '<div class="ia-loading-slots"><span class="ia-spinner"></span><div>Consultando disponibilidad...</div></div>';
+
+  try {
+    const data = await fetchJson(
+      `${WIDGET_CONFIG.apiUrl}/disponibilidad?cliente_id=${encodeURIComponent(WIDGET_CONFIG.clienteId)}&fecha=${encodeURIComponent(fecha)}`
+    );
+    slotsDisponibles = Array.isArray(data.slots) ? data.slots : [];
+    renderSlots();
+  } catch (error) {
+    slotsDisponibles = [];
+    container.innerHTML = `<div class="ia-slot-error">${escapeHtml(
+      humanizeErrorMessage(error, "No se ha podido cargar la disponibilidad.")
+    )}</div>`;
   }
-  return slots;
 }
 
 function renderSlots() {
   const container = document.getElementById("ia-time-slots");
-  if (slotsDisponibles.length === 0) {
-    container.innerHTML = '<p style="color:#ef4444;font-size:14px;text-align:center;padding:24px 0;">😔 No hay horarios disponibles este día. Prueba otra fecha.</p>';
+  const nextButton = document.getElementById("ia-f-next2");
+  if (!container || !nextButton) return;
+
+  container.innerHTML = "";
+
+  if (!slotsDisponibles.length) {
+    container.innerHTML = '<div class="ia-empty-slots">No hay horarios disponibles para este dia.</div>';
     return;
   }
 
-  const disponibles = slotsDisponibles.filter(s => s.disponible).length;
-  let html = `<div style="font-size:12px;color:#888;margin-bottom:8px;text-align:center;">
-    ${disponibles} horario${disponibles !== 1 ? "s" : ""} disponible${disponibles !== 1 ? "s" : ""}
-  </div>`;
-  html += '<div class="ia-time-grid">';
-  slotsDisponibles.forEach(slot => {
-    const cls = slot.disponible ? "" : "disabled";
-    const statusTxt = slot.disponible
-      ? '<span class="ia-slot-status" style="color:#22c55e;">Libre</span>'
-      : '<span class="ia-slot-status" style="color:#ef4444;">Ocupado</span>';
-    html += `<div class="ia-time-slot ${cls}" data-hora="${slot.hora}">${slot.hora}${statusTxt}</div>`;
-  });
-  html += '</div>';
-  container.innerHTML = html;
+  const availableCount = slotsDisponibles.filter((slot) => slot.disponible).length;
+  if (!availableCount) {
+    container.innerHTML = '<div class="ia-empty-slots">Todos los horarios de este dia estan ocupados.</div>';
+    return;
+  }
 
-  container.querySelectorAll(".ia-time-slot:not(.disabled)").forEach(el => {
-    el.onclick = () => {
-      container.querySelectorAll(".ia-time-slot").forEach(s => s.classList.remove("selected"));
-      el.classList.add("selected");
-      citaData.hora = el.dataset.hora;
-      document.getElementById("ia-f-next2").disabled = false;
-    };
+  const info = document.createElement("div");
+  info.className = "ia-empty-slots";
+  info.textContent = `${availableCount} horario${availableCount === 1 ? "" : "s"} disponible${availableCount === 1 ? "" : "s"}`;
+  container.appendChild(info);
+
+  const grid = document.createElement("div");
+  grid.className = "ia-time-grid";
+
+  slotsDisponibles.forEach((slot) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `ia-time-slot${slot.disponible ? "" : " disabled"}`;
+    button.disabled = !slot.disponible;
+    button.dataset.hora = slot.hora;
+    button.innerHTML = `${escapeHtml(slot.hora)}<small>${slot.disponible ? "Libre" : "Ocupado"}</small>`;
+
+    if (slot.disponible) {
+      button.addEventListener("click", () => {
+        grid.querySelectorAll(".ia-time-slot").forEach((item) => item.classList.remove("selected"));
+        button.classList.add("selected");
+        citaData.hora = slot.hora;
+        nextButton.disabled = false;
+      });
+    }
+
+    grid.appendChild(button);
   });
+
+  container.appendChild(grid);
 }
 
-// ======= RESUMEN =======
 function renderResumen() {
-  const fechaFormateada = new Date(citaData.fecha + "T00:00").toLocaleDateString("es-ES", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric"
+  const resumen = document.getElementById("ia-resumen");
+  if (!resumen) return;
+
+  const selectedDate = new Date(`${citaData.fecha}T12:00:00`);
+  const formattedDate = selectedDate.toLocaleDateString("es-ES", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
   });
-  document.getElementById("ia-resumen").innerHTML = `
-    <div class="ia-resumen-row"><span>👤 Nombre</span><span>${citaData.nombre}</span></div>
-    <div class="ia-resumen-row"><span>📧 Email</span><span>${citaData.email}</span></div>
-    <div class="ia-resumen-row"><span>📱 Teléfono</span><span>${citaData.telefono}</span></div>
-    <div class="ia-resumen-row"><span>🏥 Servicio</span><span>${citaData.servicio}</span></div>
-    <div class="ia-resumen-row"><span>📆 Fecha</span><span style="text-transform:capitalize">${fechaFormateada}</span></div>
-    <div class="ia-resumen-row"><span>🕐 Hora</span><span>${citaData.hora}h</span></div>
-    ${citaData.notas ? `<div class="ia-resumen-row" style="flex-direction:column;gap:4px;"><span>📝 Notas</span><span style="font-weight:400;font-size:13px;color:#666;">${citaData.notas}</span></div>` : ""}
+
+  resumen.innerHTML = `
+    <div class="ia-resumen-row"><span>Nombre</span><span>${escapeHtml(citaData.nombre)}</span></div>
+    <div class="ia-resumen-row"><span>Email</span><span>${escapeHtml(citaData.email)}</span></div>
+    <div class="ia-resumen-row"><span>Telefono</span><span>${escapeHtml(citaData.telefono)}</span></div>
+    <div class="ia-resumen-row"><span>Servicio</span><span>${escapeHtml(citaData.servicio)}</span></div>
+    <div class="ia-resumen-row"><span>Fecha</span><span>${escapeHtml(formattedDate)}</span></div>
+    <div class="ia-resumen-row"><span>Hora</span><span>${escapeHtml(citaData.hora)}</span></div>
+    ${
+      citaData.notas
+        ? `<div class="ia-resumen-row"><span>Notas</span><span>${escapeHtml(citaData.notas)}</span></div>`
+        : ""
+    }
   `;
 }
 
-// ======= CONFIRMAR =======
+function fallbackContacto() {
+  const contacto = [WIDGET_CONFIG.contactPhone, WIDGET_CONFIG.contactEmail].filter(Boolean);
+  if (!contacto.length) return "";
+  return ` Tambien puedes contactar directamente por ${contacto.join(" / ")}.`;
+}
+
 async function confirmarCita() {
-  const btn = document.getElementById("ia-f-confirm");
-  btn.disabled = true;
-  btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:8px;"><span class="ia-spinner" style="width:18px;height:18px;border-width:2px;margin:0;"></span> Reservando...</span>';
+  const confirmButton = document.getElementById("ia-f-confirm");
+  if (!confirmButton) return;
+
+  confirmButton.disabled = true;
+  confirmButton.innerHTML = '<span class="ia-spinner"></span>';
 
   try {
-    const res = await fetch(`${WIDGET_CONFIG.apiUrl}/agendar`, {
+    const response = await fetchJson(`${WIDGET_CONFIG.apiUrl}/agendar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -401,27 +274,215 @@ async function confirmarCita() {
         notas: citaData.notas,
       }),
     });
-    if (!res.ok) throw new Error();
 
     const form = document.getElementById("ia-form-cita");
+    if (!form) return;
+
+    const title = response.estado === "pending_review" ? "Solicitud recibida" : "Solicitud registrada";
+    const manageButton = response.manage_url
+      ? `<a class="ia-form-btn secondary" href="${escapeHtml(response.manage_url)}" target="_blank" rel="noreferrer">Gestionar cita</a>`
+      : "";
+    const providerButton = response.provider_booking_url
+      ? `<a class="ia-form-btn secondary" href="${escapeHtml(response.provider_booking_url)}" target="_blank" rel="noreferrer">Abrir proveedor</a>`
+      : "";
     form.innerHTML = `
       <div class="ia-form-success">
-        <div class="ia-check">✓</div>
-        <h4>¡Cita Confirmada!</h4>
-        <p style="margin-bottom:12px;">Te hemos enviado confirmación a<br/><strong>${citaData.email}</strong></p>
-        <div style="background:#f0fdf4;border-radius:12px;padding:14px;text-align:left;font-size:13px;color:#333;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-            <span>📆 ${new Date(citaData.fecha + "T00:00").toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" })}</span>
-            <span>🕐 ${citaData.hora}h</span>
-          </div>
-          <div>${citaData.servicio}</div>
+        <div class="ia-check">${response.estado === "pending_review" ? "!" : "OK"}</div>
+        <h4>${escapeHtml(title)}</h4>
+        <p>${escapeHtml(response.mensaje)}</p>
+        <p><strong>ID:</strong> ${escapeHtml(response.booking_id)}</p>
+        <div class="ia-form-actions">
+          ${manageButton}
+          ${providerButton}
         </div>
       </div>
     `;
-    agregarMensaje("¡Perfecto! Tu cita ha quedado reservada. Te enviaremos un recordatorio por email. 😊", "bot");
-  } catch {
-    btn.disabled = false;
-    btn.textContent = "Confirmar Cita ✓";
-    agregarMensaje("⚠️ Error al reservar. Por favor, inténtalo de nuevo.", "bot");
+    agregarMensaje(response.mensaje, "bot");
+  } catch (error) {
+    confirmButton.disabled = false;
+    confirmButton.textContent = "Confirmar solicitud";
+    agregarMensaje(
+      `${humanizeErrorMessage(
+        error,
+        "No se ha podido registrar la solicitud."
+      )}.${fallbackContacto()}`.trim(),
+      "bot"
+    );
   }
+}
+
+export async function mostrarFormulario() {
+  if (!WIDGET_CONFIG.bookingEnabled) {
+    agregarMensaje("La reserva online no esta habilitada para este cliente.", "bot");
+    return;
+  }
+
+  if (document.getElementById("ia-form-cita")) {
+    agregarMensaje("Ya tienes un formulario de solicitud abierto en la conversacion.", "bot");
+    return;
+  }
+
+  resetState();
+
+  try {
+    await cargarServicios();
+  } catch (error) {
+    agregarMensaje(
+      humanizeErrorMessage(error, "No se ha podido cargar el formulario de reserva.") + fallbackContacto(),
+      "bot"
+    );
+    return;
+  }
+
+  const msgs = document.getElementById("ia-w-msgs");
+  if (!msgs) return;
+
+  const form = document.createElement("div");
+  form.className = "ia-form-card";
+  form.id = "ia-form-cita";
+  form.innerHTML = `
+    <div class="ia-form-header">
+      <h4>Solicitar cita</h4>
+      <p>Recogemos tus datos para que el equipo pueda confirmar la solicitud.</p>
+    </div>
+    <div class="ia-form-progress">
+      <div class="ia-form-step-dot active"></div>
+      <div class="ia-form-step-dot"></div>
+      <div class="ia-form-step-dot"></div>
+      <div class="ia-form-step-dot"></div>
+    </div>
+    <div class="ia-form-body">
+      <div class="ia-form-step active" data-step="0">
+        <label class="ia-form-label" for="ia-f-nombre">Nombre completo</label>
+        <input id="ia-f-nombre" type="text" autocomplete="name" maxlength="80" />
+
+        <label class="ia-form-label" for="ia-f-email">Email</label>
+        <input id="ia-f-email" type="email" autocomplete="email" maxlength="120" />
+
+        <label class="ia-form-label" for="ia-f-tel">Telefono</label>
+        <input id="ia-f-tel" type="tel" autocomplete="tel" maxlength="30" />
+
+        <div class="ia-form-actions">
+          <button id="ia-f-next0" class="ia-form-btn primary" type="button">Siguiente</button>
+        </div>
+      </div>
+
+      <div class="ia-form-step" data-step="1">
+        <label class="ia-form-label" for="ia-f-servicio">Servicio</label>
+        <select id="ia-f-servicio"></select>
+
+        <label class="ia-form-label" for="ia-f-notas">Notas adicionales</label>
+        <textarea id="ia-f-notas" rows="4" maxlength="500" placeholder="Cuentanos un poco mas sobre la consulta"></textarea>
+
+        <p class="ia-form-note">Tus datos se usaran solo para gestionar esta solicitud.</p>
+
+        <div class="ia-form-actions">
+          <button id="ia-f-back0" class="ia-form-btn secondary" type="button">Atras</button>
+          <button id="ia-f-next1" class="ia-form-btn primary" type="button">Siguiente</button>
+        </div>
+      </div>
+
+      <div class="ia-form-step" data-step="2">
+        <label class="ia-form-label" for="ia-f-fecha">Fecha</label>
+        <input id="ia-f-fecha" type="date" />
+
+        <label class="ia-form-label">Horarios disponibles</label>
+        <div id="ia-time-slots"></div>
+
+        <div class="ia-form-actions">
+          <button id="ia-f-back1" class="ia-form-btn secondary" type="button">Atras</button>
+          <button id="ia-f-next2" class="ia-form-btn primary" type="button" disabled>Siguiente</button>
+        </div>
+      </div>
+
+      <div class="ia-form-step" data-step="3">
+        <label class="ia-form-label">Resumen de la solicitud</label>
+        <div id="ia-resumen" class="ia-resumen"></div>
+
+        <div class="ia-form-actions">
+          <button id="ia-f-back2" class="ia-form-btn secondary" type="button">Atras</button>
+          <button id="ia-f-confirm" class="ia-form-btn primary" type="button">Confirmar solicitud</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  msgs.appendChild(form);
+  bringFormIntoView(form, "auto");
+
+  const serviceSelect = document.getElementById("ia-f-servicio");
+  fillServiceOptions(serviceSelect);
+  citaData.servicio = serviceSelect?.options[0]?.textContent || "Consulta general";
+
+  const dateInput = document.getElementById("ia-f-fecha");
+  const today = new Date();
+  dateInput.min = formatLocalDate(today);
+
+  const maxDate = new Date();
+  maxDate.setDate(maxDate.getDate() + MAX_WIDGET_BOOKING_DAYS);
+  dateInput.max = formatLocalDate(maxDate);
+
+  ["ia-f-nombre", "ia-f-email", "ia-f-tel", "ia-f-servicio", "ia-f-fecha"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("input", () => clearFieldError(id));
+    document.getElementById(id)?.addEventListener("change", () => clearFieldError(id));
+  });
+
+  document.getElementById("ia-f-next0")?.addEventListener("click", () => {
+    const isValid =
+      validateField("ia-f-nombre", "nombre") &&
+      validateField("ia-f-email", "email") &&
+      validateField("ia-f-tel", "telefono");
+
+    if (!isValid) return;
+
+    citaData.nombre = document.getElementById("ia-f-nombre").value.trim();
+    citaData.email = document.getElementById("ia-f-email").value.trim();
+    citaData.telefono = document.getElementById("ia-f-tel").value.trim();
+    toggleStep(1);
+  });
+
+  document.getElementById("ia-f-next1")?.addEventListener("click", () => {
+    const selectedOption = serviceSelect?.options[serviceSelect.selectedIndex];
+    if (!selectedOption) {
+      setFieldError("ia-f-servicio", "Selecciona un servicio.");
+      return;
+    }
+
+    clearFieldError("ia-f-servicio");
+    citaData.servicio = selectedOption.textContent || "Consulta general";
+    citaData.notas = document.getElementById("ia-f-notas").value.trim();
+    toggleStep(2);
+  });
+
+  dateInput?.addEventListener("change", async (event) => {
+    const fecha = event.target.value;
+    const error = validaciones.fecha(fecha);
+    if (error) {
+      setFieldError("ia-f-fecha", error);
+      return;
+    }
+
+    clearFieldError("ia-f-fecha");
+    citaData.fecha = fecha;
+    citaData.hora = "";
+    await cargarSlots(fecha);
+  });
+
+  document.getElementById("ia-f-next2")?.addEventListener("click", () => {
+    const error = validaciones.hora(citaData.hora);
+    if (error) {
+      agregarMensaje(error, "bot");
+      return;
+    }
+
+    renderResumen();
+    toggleStep(3);
+  });
+
+  document.getElementById("ia-f-confirm")?.addEventListener("click", confirmarCita);
+  document.getElementById("ia-f-back0")?.addEventListener("click", () => toggleStep(0));
+  document.getElementById("ia-f-back1")?.addEventListener("click", () => toggleStep(1));
+  document.getElementById("ia-f-back2")?.addEventListener("click", () => toggleStep(2));
+
+  scrollMsgs();
 }

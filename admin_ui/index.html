@@ -1,0 +1,1924 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vantelia Admin</title>
+  <link rel="icon" type="image/png" href="/brand-assets/favicon.png" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Poppins:wght@400;500;600;700&display=swap');
+    :root {
+      color-scheme: dark;
+      --bg: #000b29;
+      --panel: rgba(5, 14, 38, 0.88);
+      --panel-strong: rgba(9, 22, 54, 0.96);
+      --text: #f0f4f8;
+      --soft: #b8c0cc;
+      --line: rgba(184, 192, 204, 0.14);
+      --accent: #00b1d9;
+      --accent-dark: #007ea0;
+      --accent-soft: rgba(0, 177, 217, 0.14);
+      --shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+      --radius: 22px;
+      --radius-sm: 14px;
+      --font-title: "Montserrat", "Segoe UI", sans-serif;
+      --font: "Poppins", "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        linear-gradient(180deg, rgba(0, 11, 41, 0.88), rgba(0, 11, 41, 0.96)),
+        radial-gradient(circle at top right, rgba(0, 177, 217, 0.18), transparent 24%),
+        radial-gradient(circle at top left, rgba(184, 192, 204, 0.1), transparent 28%),
+        url("/brand-assets/Fondo_Web.png") center top / cover fixed no-repeat;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: rgba(3, 9, 25, 0.78);
+      backdrop-filter: blur(18px);
+      padding: 22px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .brand {
+      padding: 4px 4px 0;
+      display: grid;
+      gap: 12px;
+    }
+
+    .brand-mark {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-logo {
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+      filter: drop-shadow(0 0 24px rgba(0, 177, 217, 0.24));
+      flex: 0 0 auto;
+    }
+
+    .brand-copy {
+      display: grid;
+      gap: 6px;
+    }
+
+    .brand-kicker {
+      display: inline-flex;
+      width: fit-content;
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: rgba(0, 177, 217, 0.08);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 1.55rem;
+      line-height: 1.02;
+      font-family: var(--font-title);
+    }
+
+    .brand p {
+      margin: 0;
+      color: var(--soft);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    .brand-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .brand-links a {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent);
+      opacity: 0.88;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .login {
+      padding: 16px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .stats {
+      padding: 16px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .stat {
+      background: var(--accent-soft);
+      border-radius: 16px;
+      padding: 12px;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 1.15rem;
+      margin-bottom: 4px;
+    }
+
+    .clients {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .clients-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 4px;
+    }
+
+    .clients-list {
+      overflow: auto;
+      display: grid;
+      gap: 8px;
+      padding-right: 4px;
+    }
+
+    .client-item {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: var(--panel-strong);
+      border: 1px solid var(--line);
+      cursor: pointer;
+      transition: transform 0.16s ease, border-color 0.16s ease;
+    }
+
+    .client-item:hover,
+    .client-item.active {
+      transform: translateY(-1px);
+      border-color: rgba(0, 177, 217, 0.38);
+    }
+
+    .client-item strong,
+    .client-item span {
+      display: block;
+    }
+
+    .client-item span {
+      margin-top: 4px;
+      color: var(--soft);
+      font-size: 13px;
+    }
+
+    .main {
+      padding: 24px;
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+
+    .hero {
+      padding: 22px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .hero h2 {
+      margin: 0;
+      font-size: 1.8rem;
+      font-family: var(--font-title);
+    }
+
+    .hero p {
+      margin: 8px 0 0;
+      color: var(--soft);
+      line-height: 1.55;
+      max-width: 900px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .panel {
+      padding: 18px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .booking-settings {
+      display: none;
+    }
+
+    .account-card,
+    .security-card {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .account-chip {
+      display: inline-flex;
+      width: fit-content;
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: rgba(0, 177, 217, 0.08);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .account-identity {
+      display: grid;
+      gap: 4px;
+    }
+
+    .account-identity strong {
+      font-size: 1.05rem;
+    }
+
+    .account-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .support-note {
+      color: var(--soft);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .hero-chip {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(0, 177, 217, 0.14);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 800;
+      background: rgba(0, 177, 217, 0.14);
+      color: var(--accent);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    label {
+      display: grid;
+      gap: 7px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: rgba(7, 18, 45, 0.92);
+      color: var(--text);
+      padding: 12px 14px;
+      font: inherit;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: rgba(0, 177, 217, 0.46);
+      box-shadow: 0 0 0 4px rgba(0, 177, 217, 0.14);
+    }
+
+    .field-note {
+      margin-top: -2px;
+      color: var(--soft);
+      font-size: 12px;
+      line-height: 1.45;
+      font-weight: 500;
+    }
+
+    .inline-check {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .inline-check input {
+      width: auto;
+      transform: scale(1.1);
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      color: #fff;
+      padding: 11px 16px;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: rgba(184, 192, 204, 0.12);
+      color: var(--text);
+    }
+
+    button.ghost {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--text);
+    }
+
+    button.danger {
+      background: rgba(180, 35, 24, 0.14);
+      color: #ffd7db;
+    }
+
+    button.small {
+      padding: 10px 12px;
+      border-radius: 14px;
+      font-size: 13px;
+    }
+
+    .status {
+      padding: 14px 16px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.5;
+      border: 1px solid rgba(0, 177, 217, 0.16);
+      background: rgba(0, 177, 217, 0.1);
+      color: var(--text);
+      display: none;
+    }
+
+    .status.error {
+      display: block;
+      background: rgba(180, 35, 24, 0.14);
+      border-color: rgba(180, 35, 24, 0.22);
+    }
+
+    .status.success,
+    .status.info {
+      display: block;
+    }
+
+    .snippet {
+      min-height: 110px;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      background: #020817;
+      color: #eff7ff;
+    }
+
+    .express-panel {
+      background:
+        radial-gradient(circle at top right, rgba(0, 177, 217, 0.12), transparent 32%),
+        linear-gradient(180deg, rgba(8, 18, 46, 0.96), rgba(4, 12, 33, 0.92));
+    }
+
+    .muted {
+      color: var(--soft);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 16px;
+    }
+
+    .subcard {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 16px;
+      background: var(--panel-strong);
+      display: grid;
+      gap: 14px;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .users-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .user-card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(184, 192, 204, 0.06);
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .user-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .user-title {
+      display: grid;
+      gap: 5px;
+    }
+
+    .user-title strong {
+      font-size: 1rem;
+    }
+
+    .pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .pill.alt {
+      background: rgba(184, 192, 204, 0.14);
+      color: #d7e0ea;
+    }
+
+    .pill.danger {
+      background: rgba(180, 35, 24, 0.16);
+      color: #ffd7db;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .meta-box {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.02);
+      display: grid;
+      gap: 6px;
+    }
+
+    .meta-label {
+      color: var(--soft);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .meta-value {
+      font-size: 14px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+
+    .action-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .action-row select {
+      max-width: 240px;
+    }
+
+    .empty {
+      border: 1px dashed var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      color: var(--soft);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    @media (max-width: 1180px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+    }
+
+    @media (max-width: 860px) {
+      .main,
+      .sidebar {
+        padding: 16px;
+      }
+
+      .grid,
+      .grid-3,
+      .split,
+      .meta-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <section class="brand">
+        <div class="brand-mark">
+          <img class="brand-logo" src="/brand-assets/Logo_1_sin_resplandor.png" alt="Vantelia" />
+          <div class="brand-copy">
+            <span class="brand-kicker">Control Center</span>
+            <h1>Vantelia Admin</h1>
+            <p>Operativa central para clientes, demos y despliegue comercial del ecosistema.</p>
+          </div>
+        </div>
+        <div class="brand-links">
+          <a href="https://vantelia.es" target="_blank" rel="noreferrer">vantelia.es</a>
+          <a href="/acceso" target="_blank" rel="noreferrer">Acceso portal</a>
+        </div>
+      </section>
+
+      <section class="card account-card">
+        <div class="account-chip">Administrador</div>
+        <div class="account-identity">
+          <strong id="sessionName">-</strong>
+          <span class="muted" id="sessionEmail">-</span>
+        </div>
+        <div class="account-actions">
+          <button id="refreshSessionBtn" class="secondary small" type="button">Actualizar</button>
+          <button id="focusSecurityBtn" class="ghost small" type="button">Cambiar contrasena</button>
+          <button id="logoutBtn" class="danger small" type="button">Salir</button>
+        </div>
+        <div class="support-note">El acceso ya queda separado en `/acceso`. Desde aqui trabajas directamente con la sesion activa del administrador.</div>
+      </section>
+
+      <section class="card security-card" id="securityCard">
+        <strong>Seguridad</strong>
+        <label>
+          Contrasena actual
+          <input id="currentPassword" type="password" placeholder="Tu contrasena actual" />
+        </label>
+        <label>
+          Nueva contrasena
+          <input id="newPassword" type="password" placeholder="Nueva contrasena" />
+        </label>
+        <label>
+          Repite la nueva contrasena
+          <input id="confirmPassword" type="password" placeholder="Repite la nueva contrasena" />
+        </label>
+        <button id="changePasswordBtn" class="secondary small" type="button">Actualizar contrasena</button>
+      </section>
+
+      <section class="card stats">
+        <strong>Estado general</strong>
+        <div class="stat-grid">
+          <div class="stat"><strong id="statVersion">-</strong><span>Version</span></div>
+          <div class="stat"><strong id="statClients">-</strong><span>Clientes</span></div>
+          <div class="stat"><strong id="statSessions">-</strong><span>Sesiones</span></div>
+          <div class="stat"><strong id="statIndexes">-</strong><span>Indices</span></div>
+        </div>
+      </section>
+
+      <section class="card clients">
+        <div class="clients-header">
+          <strong>Clientes</strong>
+          <button id="newClientBtn" class="secondary" type="button">Nuevo</button>
+        </div>
+        <div id="clientsList" class="clients-list"></div>
+      </section>
+    </aside>
+
+    <main class="main">
+      <section class="card hero">
+        <div>
+          <div class="hero-chip">Vantelia 2.0</div>
+          <h2>Alta y mantenimiento rapido de clientes</h2>
+          <p>Crea clientes, personaliza su marca, gestiona accesos y deja lista una demo vendible con una operativa mucho mas limpia para tu agencia.</p>
+        </div>
+        <div class="actions">
+          <button id="saveBtn" type="button">Guardar cliente</button>
+          <button id="reindexBtn" class="secondary" type="button">Reindexar</button>
+          <button id="copySnippetBtn" class="ghost" type="button">Copiar snippet</button>
+          <button id="openDemoBtn" class="ghost" type="button">Abrir demo</button>
+        </div>
+      </section>
+
+      <div id="status" class="status"></div>
+
+      <section class="card panel express-panel">
+        <strong>Alta express desde web corporativa</strong>
+
+        <div class="grid">
+          <label>
+            URL de la empresa
+            <input id="expressWebsiteUrl" type="text" placeholder="https://www.empresa.com" />
+          </label>
+
+          <label>
+            Nombre del bot
+            <input id="expressBotName" type="text" value="Clara" />
+          </label>
+        </div>
+
+        <div class="grid-3">
+          <label>
+            Tono
+            <select id="expressTone">
+              <option>Profesional y cercano</option>
+              <option>Muy formal</option>
+              <option>Calido y empatico</option>
+              <option>Directo y resolutivo</option>
+            </select>
+          </label>
+
+          <label>
+            Idioma
+            <select id="expressLanguage">
+              <option>Español</option>
+              <option>Inglés</option>
+              <option>Francés</option>
+              <option>Portugués</option>
+            </select>
+          </label>
+
+          <label>
+            Maximo de paginas
+            <input id="expressMaxPages" type="number" min="1" max="30" value="12" />
+          </label>
+        </div>
+
+        <label class="inline-check">
+          <input id="expressAutoSave" type="checkbox" checked />
+          Guardar y reindexar automaticamente en un clic
+        </label>
+
+        <div class="actions">
+          <button id="expressGenerateBtn" type="button">Generar y guardar cliente en un clic</button>
+        </div>
+
+        <div class="muted">
+          Este flujo raspa la web, detecta contenido publico relevante y genera un `info.txt`
+          estructurado para que la IA entienda la empresa, sus servicios, procesos, objeciones y contexto comercial.
+          Si dejas activa la opcion de auto-guardado, el cliente queda creado, indexado y listo para instalar.
+        </div>
+      </section>
+
+      <section class="card panel">
+        <strong>Control de usuarios</strong>
+
+        <div class="subcard">
+          <div>
+            <strong>Nuevo usuario</strong>
+            <div class="muted">Crea administradores o cuentas cliente desde el propio dashboard, sin volver a la pantalla de acceso.</div>
+          </div>
+          <div class="grid">
+            <label>
+              Nombre visible
+              <input id="newUserName" type="text" placeholder="Clinica Saga" />
+            </label>
+            <label>
+              Email
+              <input id="newUserEmail" type="email" placeholder="equipo@cliente.com" />
+            </label>
+          </div>
+          <div class="grid">
+            <label>
+              Contrasena inicial
+              <input id="newUserPassword" type="password" placeholder="Minimo 8 caracteres" />
+            </label>
+            <label>
+              Rol
+              <select id="newUserRole">
+                <option value="client">Cliente</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            Cliente ID
+            <select id="newUserClientId">
+              <option value="">Selecciona un cliente</option>
+            </select>
+          </label>
+          <div class="actions">
+            <button id="createUserBtn" type="button">Crear usuario</button>
+          </div>
+        </div>
+
+        <div class="subcard">
+          <div class="toolbar">
+            <div>
+              <strong>Usuarios del portal</strong>
+              <div class="muted">Administra admins y cuentas cliente con acciones claras por usuario.</div>
+            </div>
+            <div class="toolbar-filters">
+              <label>
+                Rol
+                <select id="userRoleFilter">
+                  <option value="">Todos</option>
+                  <option value="admin">Administradores</option>
+                  <option value="client">Clientes</option>
+                </select>
+              </label>
+              <label>
+                Cliente
+                <select id="userClientFilter">
+                  <option value="">Todos</option>
+                </select>
+              </label>
+              <label class="inline-check">
+                <input id="userIncludeInactive" type="checkbox" checked />
+                Incluir inactivos
+              </label>
+              <button id="refreshUsersBtn" class="secondary small" type="button">Actualizar</button>
+            </div>
+          </div>
+          <div id="usersList" class="users-grid">
+            <div class="empty">Todavia no hay usuarios cargados.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="split">
+        <section class="card panel">
+          <strong>Configuracion del cliente</strong>
+
+          <div class="grid">
+            <label>
+              Cliente ID
+              <input id="clienteId" type="text" placeholder="clinica_saga" />
+              <span class="field-note">Se usa en la URL del widget, carpeta `data/` y configuracion interna.</span>
+            </label>
+
+            <label>
+              Nombre comercial
+              <input id="nombre" type="text" placeholder="Clinica Saga" />
+            </label>
+          </div>
+
+          <div class="grid-3">
+            <label>
+              Icono corto
+              <input id="icono" type="text" maxlength="12" placeholder="CS" />
+            </label>
+
+            <label>
+              Color principal
+              <input id="color" type="text" placeholder="#00b1d9" />
+            </label>
+
+            <label>
+              Branding
+              <input id="brandingText" type="text" placeholder="Powered by Vantelia" />
+            </label>
+          </div>
+
+          <label>
+            Mensaje de bienvenida
+            <textarea id="bienvenida"></textarea>
+          </label>
+
+          <label>
+            Prompt extra
+            <textarea id="promptExtra"></textarea>
+            <span class="field-note">Instrucciones internas del cerebro: tono, limites, forma de derivar, etc.</span>
+          </label>
+
+          <div class="grid">
+            <label>
+              Email de contacto
+              <input id="contactoEmail" type="text" placeholder="info@empresa.com" />
+            </label>
+
+            <label>
+              Telefono de contacto
+              <input id="contactoTelefono" type="text" placeholder="+34 600000000" />
+            </label>
+          </div>
+
+          <label>
+            Allowed origins
+            <textarea id="allowedOrigins" placeholder="https://empresa.com&#10;https://www.empresa.com"></textarea>
+            <span class="field-note">Un dominio por linea. Puedes poner directamente los dominios donde se insertara el chatbox.</span>
+          </label>
+        </section>
+
+        <section class="card panel">
+          <strong>Snippet y demo</strong>
+
+          <div class="booking-settings" aria-hidden="true">
+            <label class="inline-check">
+              <input id="bookingEnabled" type="checkbox" checked />
+              Reserva online activa
+            </label>
+
+            <div class="grid-3">
+              <label>
+                Proveedor real
+                <select id="bookingProvider">
+                  <option value="internal">Interno / manual</option>
+                  <option value="google_calendar">Google Calendar</option>
+                  <option value="calendly">Calendly</option>
+                </select>
+              </label>
+
+              <label>
+                Timezone
+                <input id="bookingTimezone" type="text" value="Europe/Madrid" />
+              </label>
+
+              <label>
+                Slot minutos
+                <input id="bookingSlotMinutes" type="number" value="30" min="5" max="240" />
+              </label>
+
+              <label>
+                Dias cerrados
+                <input id="bookingClosedWeekdays" type="text" value="6" />
+                <span class="field-note">Usa numeros: 0 lunes, 6 domingo.</span>
+              </label>
+            </div>
+
+            <div class="grid">
+              <label>
+                Inicio jornada
+                <input id="bookingDayStart" type="text" value="09:00" />
+              </label>
+
+              <label>
+                Fin jornada
+                <input id="bookingDayEnd" type="text" value="18:00" />
+              </label>
+            </div>
+
+            <div class="grid">
+              <label>
+                Webhook env
+                <input id="bookingWebhookEnv" type="text" placeholder="WEBHOOK_DEFAULT" />
+              </label>
+
+              <label>
+                Webhook URL
+                <input id="bookingWebhookUrl" type="text" placeholder="https://hook.example.com" />
+              </label>
+            </div>
+
+            <label>
+              Calendly user env
+              <input id="bookingCalendlyUserEnv" type="text" placeholder="CALENDLY_USER_URI_CLINICA_SAGA" />
+              <span class="field-note">Nombre de la variable de entorno donde guardas el user URI de Calendly para consultar ocupacion real.</span>
+            </label>
+
+            <div class="grid">
+              <label>
+                Calendly event type env
+                <input id="bookingCalendlyEventTypeEnv" type="text" placeholder="CALENDLY_EVENT_TYPE_URI_CLINICA_SAGA" />
+              </label>
+
+              <label>
+                Calendly location kind
+                <input id="bookingCalendlyLocationKind" type="text" placeholder="zoom_conference" />
+              </label>
+            </div>
+
+            <label>
+              Calendly location value
+              <input id="bookingCalendlyLocationValue" type="text" placeholder="Solo si la localizacion requiere un valor adicional" />
+            </label>
+
+            <div class="grid">
+              <label>
+                Google Calendar ID directo
+                <input id="bookingGoogleCalendarId" type="text" placeholder="tu_calendario@group.calendar.google.com" />
+                <span class="field-note">Modo facil: pegalo aqui y no hace falta usar una variable de entorno.</span>
+              </label>
+
+              <label>
+                Google Calendar ID env
+                <input id="bookingGoogleCalendarIdEnv" type="text" placeholder="GOOGLE_CALENDAR_ID_CLINICA_SAGA" />
+              </label>
+            </div>
+
+            <div class="grid">
+              <label>
+                Google service account env
+                <input id="bookingGoogleServiceAccountEnv" type="text" placeholder="GOOGLE_SERVICE_ACCOUNT_JSON_CLINICA_SAGA" />
+                <span class="field-note">Modo avanzado por variable de entorno.</span>
+              </label>
+            </div>
+
+            <label>
+              Google service account JSON
+              <textarea id="bookingGoogleServiceAccountJson" placeholder='Pega aqui el JSON completo de la service account de Google'></textarea>
+              <span class="field-note">Modo facil: al guardar, Vantelia lo validara y lo guardara en el servidor automaticamente.</span>
+            </label>
+
+            <input id="bookingGoogleServiceAccountPath" type="hidden" />
+
+            <label>
+              Mensaje de exito
+              <textarea id="bookingSuccessMessage"></textarea>
+            </label>
+          </div>
+
+          <label class="inline-check">
+            <input id="reindexAfterSave" type="checkbox" checked />
+            Reindexar automaticamente al guardar
+          </label>
+
+          <label>
+            Snippet de instalacion
+            <textarea id="installSnippet" class="snippet" readonly></textarea>
+          </label>
+
+          <label>
+            URL de demo compartible
+            <input id="demoUrl" type="text" readonly />
+          </label>
+
+          <div class="actions">
+            <button id="copyDemoBtn" class="ghost" type="button">Copiar demo</button>
+            <button id="openDemoInlineBtn" class="secondary" type="button">Abrir demo en otra pestaña</button>
+          </div>
+
+          <div class="muted">
+            Flujo recomendado: `auto_onboarding.py` -> pegar `info.txt` aqui -> guardar -> revisar demo -> copiar snippet -> instalar en la web del cliente.
+          </div>
+        </section>
+      </section>
+
+      <section class="card panel">
+        <strong>Cerebro del cliente: info.txt</strong>
+        <label>
+          Contenido RAG
+          <textarea id="infoTxt" style="min-height: 520px;" placeholder="Pega aqui el info.txt generado para la empresa"></textarea>
+        </label>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const state = {
+      currentClientId: "",
+      currentUser: null,
+      clients: [],
+      users: [],
+    };
+
+    const elements = {
+      status: document.getElementById("status"),
+      sessionName: document.getElementById("sessionName"),
+      sessionEmail: document.getElementById("sessionEmail"),
+      securityCard: document.getElementById("securityCard"),
+      currentPassword: document.getElementById("currentPassword"),
+      newPassword: document.getElementById("newPassword"),
+      confirmPassword: document.getElementById("confirmPassword"),
+      clientsList: document.getElementById("clientsList"),
+      installSnippet: document.getElementById("installSnippet"),
+      demoUrl: document.getElementById("demoUrl"),
+      statVersion: document.getElementById("statVersion"),
+      statClients: document.getElementById("statClients"),
+      statSessions: document.getElementById("statSessions"),
+      statIndexes: document.getElementById("statIndexes"),
+      expressWebsiteUrl: document.getElementById("expressWebsiteUrl"),
+      expressBotName: document.getElementById("expressBotName"),
+      expressTone: document.getElementById("expressTone"),
+      expressLanguage: document.getElementById("expressLanguage"),
+      expressMaxPages: document.getElementById("expressMaxPages"),
+      expressAutoSave: document.getElementById("expressAutoSave"),
+      clienteId: document.getElementById("clienteId"),
+      nombre: document.getElementById("nombre"),
+      icono: document.getElementById("icono"),
+      color: document.getElementById("color"),
+      brandingText: document.getElementById("brandingText"),
+      bienvenida: document.getElementById("bienvenida"),
+      promptExtra: document.getElementById("promptExtra"),
+      contactoEmail: document.getElementById("contactoEmail"),
+      contactoTelefono: document.getElementById("contactoTelefono"),
+      allowedOrigins: document.getElementById("allowedOrigins"),
+      bookingEnabled: document.getElementById("bookingEnabled"),
+      bookingProvider: document.getElementById("bookingProvider"),
+      bookingTimezone: document.getElementById("bookingTimezone"),
+      bookingSlotMinutes: document.getElementById("bookingSlotMinutes"),
+      bookingClosedWeekdays: document.getElementById("bookingClosedWeekdays"),
+      bookingDayStart: document.getElementById("bookingDayStart"),
+      bookingDayEnd: document.getElementById("bookingDayEnd"),
+      bookingWebhookEnv: document.getElementById("bookingWebhookEnv"),
+      bookingWebhookUrl: document.getElementById("bookingWebhookUrl"),
+      bookingCalendlyUserEnv: document.getElementById("bookingCalendlyUserEnv"),
+      bookingCalendlyEventTypeEnv: document.getElementById("bookingCalendlyEventTypeEnv"),
+      bookingCalendlyLocationKind: document.getElementById("bookingCalendlyLocationKind"),
+      bookingCalendlyLocationValue: document.getElementById("bookingCalendlyLocationValue"),
+      bookingGoogleCalendarId: document.getElementById("bookingGoogleCalendarId"),
+      bookingGoogleCalendarIdEnv: document.getElementById("bookingGoogleCalendarIdEnv"),
+      bookingGoogleServiceAccountPath: document.getElementById("bookingGoogleServiceAccountPath"),
+      bookingGoogleServiceAccountEnv: document.getElementById("bookingGoogleServiceAccountEnv"),
+      bookingGoogleServiceAccountJson: document.getElementById("bookingGoogleServiceAccountJson"),
+      bookingSuccessMessage: document.getElementById("bookingSuccessMessage"),
+      newUserName: document.getElementById("newUserName"),
+      newUserEmail: document.getElementById("newUserEmail"),
+      newUserPassword: document.getElementById("newUserPassword"),
+      newUserRole: document.getElementById("newUserRole"),
+      newUserClientId: document.getElementById("newUserClientId"),
+      userRoleFilter: document.getElementById("userRoleFilter"),
+      userClientFilter: document.getElementById("userClientFilter"),
+      userIncludeInactive: document.getElementById("userIncludeInactive"),
+      usersList: document.getElementById("usersList"),
+      reindexAfterSave: document.getElementById("reindexAfterSave"),
+      infoTxt: document.getElementById("infoTxt"),
+    };
+
+    function showStatus(message, type = "info") {
+      elements.status.className = `status ${type}`;
+      elements.status.textContent = message;
+    }
+
+    function clearStatus() {
+      elements.status.className = "status";
+      elements.status.textContent = "";
+    }
+
+    function formatApiDetail(detail) {
+      if (!detail) return "No se pudo completar la solicitud.";
+
+      if (typeof detail === "string") {
+        return detail;
+      }
+
+      if (Array.isArray(detail)) {
+        return detail
+          .map((item) => {
+            if (typeof item === "string") return item;
+            if (item?.msg) {
+              const path = Array.isArray(item.loc) ? item.loc.join(" > ") : "";
+              return path ? `${path}: ${item.msg}` : item.msg;
+            }
+            try {
+              return JSON.stringify(item);
+            } catch (error) {
+              return String(item);
+            }
+          })
+          .join(" | ");
+      }
+
+      if (typeof detail === "object") {
+        if (detail.message && typeof detail.message === "string") {
+          return detail.message;
+        }
+        try {
+          return JSON.stringify(detail);
+        } catch (error) {
+          return String(detail);
+        }
+      }
+
+      return String(detail);
+    }
+
+    async function api(path, options = {}) {
+      const headers = {
+        "Accept": "application/json",
+        ...(options.headers || {}),
+      };
+
+      const response = await fetch(path, {
+        ...options,
+        headers,
+      });
+
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (error) {
+        data = null;
+      }
+
+      if (!response.ok) {
+        throw new Error(formatApiDetail(data?.detail) || "No se pudo completar la solicitud.");
+      }
+
+      return data;
+    }
+
+    function readMatchingPasswords(currentPassword, newPassword, confirmPassword) {
+      if (!currentPassword.trim()) {
+        throw new Error("Escribe tu contrasena actual.");
+      }
+      if (!newPassword || !confirmPassword) {
+        throw new Error("Escribe y confirma la nueva contrasena.");
+      }
+      if (newPassword !== confirmPassword) {
+        throw new Error("Las nuevas contrasenas no coinciden.");
+      }
+      return newPassword;
+    }
+
+    function populateClientSelect(select, includeEmptyLabel) {
+      if (!select) return;
+      const currentValue = select.value;
+      select.innerHTML = "";
+      if (includeEmptyLabel) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = includeEmptyLabel;
+        select.appendChild(option);
+      }
+      state.clients.forEach((client) => {
+        const option = document.createElement("option");
+        option.value = client.cliente_id;
+        option.textContent = `${client.nombre} (${client.cliente_id})`;
+        select.appendChild(option);
+      });
+      if ([...select.options].some((option) => option.value === currentValue)) {
+        select.value = currentValue;
+      }
+    }
+
+    function toggleClientFieldByRole() {
+      const isClientRole = (elements.newUserRole.value || "client") === "client";
+      elements.newUserClientId.disabled = !isClientRole;
+      if (!isClientRole) {
+        elements.newUserClientId.value = "";
+      }
+    }
+
+    function formatDateTimeLabel(value) {
+      if (!value) return "Sin actividad";
+      return value.replace("T", " ").replace("Z", " UTC");
+    }
+
+    function roleLabel(role) {
+      return role === "admin" ? "Administrador" : "Cliente";
+    }
+
+    function renderCurrentUser() {
+      const user = state.currentUser;
+      elements.sessionName.textContent = user?.display_name || "Administrador";
+      elements.sessionEmail.textContent = user?.email || "-";
+    }
+
+    function payloadFromForm() {
+      return {
+        nombre: elements.nombre.value.trim(),
+        icono: elements.icono.value.trim() || "AI",
+        color: elements.color.value.trim() || "#00b1d9",
+        bienvenida: elements.bienvenida.value.trim(),
+        prompt_extra: elements.promptExtra.value.trim(),
+        allowed_origins: elements.allowedOrigins.value
+          .split(/\n|,/)
+          .map((item) => item.trim())
+          .filter(Boolean),
+        contacto_email: elements.contactoEmail.value.trim(),
+        contacto_telefono: elements.contactoTelefono.value.trim(),
+        branding_text: elements.brandingText.value.trim() || "Powered by Vantelia",
+        booking_enabled: elements.bookingEnabled.checked,
+        booking_provider: elements.bookingProvider.value,
+        booking_timezone: elements.bookingTimezone.value.trim() || "Europe/Madrid",
+        booking_slot_minutes: Number(elements.bookingSlotMinutes.value || 30),
+        booking_day_start: elements.bookingDayStart.value.trim() || "09:00",
+        booking_day_end: elements.bookingDayEnd.value.trim() || "18:00",
+        booking_closed_weekdays: elements.bookingClosedWeekdays.value
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .map((item) => Number(item)),
+        booking_webhook_env: elements.bookingWebhookEnv.value.trim(),
+        booking_webhook_url: elements.bookingWebhookUrl.value.trim(),
+        booking_calendly_user_env: elements.bookingCalendlyUserEnv.value.trim(),
+        booking_calendly_event_type_env: elements.bookingCalendlyEventTypeEnv.value.trim(),
+        booking_calendly_location_kind: elements.bookingCalendlyLocationKind.value.trim(),
+        booking_calendly_location_value: elements.bookingCalendlyLocationValue.value.trim(),
+        booking_google_calendar_id: elements.bookingGoogleCalendarId.value.trim(),
+        booking_google_calendar_id_env: elements.bookingGoogleCalendarIdEnv.value.trim(),
+        booking_google_service_account_path: elements.bookingGoogleServiceAccountPath.value.trim(),
+        booking_google_service_account_env: elements.bookingGoogleServiceAccountEnv.value.trim(),
+        booking_google_service_account_json: elements.bookingGoogleServiceAccountJson.value.trim(),
+        booking_success_message: elements.bookingSuccessMessage.value.trim(),
+        info_txt: elements.infoTxt.value,
+        reindex_after_save: elements.reindexAfterSave.checked,
+      };
+    }
+
+    function fillForm(detail) {
+      const cfg = detail.config;
+      state.currentClientId = detail.cliente_id;
+      elements.clienteId.value = detail.cliente_id;
+      elements.nombre.value = cfg.nombre || "";
+      elements.icono.value = cfg.icono || "AI";
+      elements.color.value = cfg.color || "#00b1d9";
+      elements.brandingText.value = cfg.branding_text || "Powered by Vantelia";
+      elements.bienvenida.value = cfg.bienvenida || "";
+      elements.promptExtra.value = cfg.prompt_extra || "";
+      elements.contactoEmail.value = cfg.contacto_email || "";
+      elements.contactoTelefono.value = cfg.contacto_telefono || "";
+      elements.allowedOrigins.value = (cfg.allowed_origins || []).join("\n");
+      elements.bookingEnabled.checked = Boolean(cfg.booking_enabled);
+      elements.bookingProvider.value = cfg.booking_provider || "internal";
+      elements.bookingTimezone.value = cfg.booking_timezone || "Europe/Madrid";
+      elements.bookingSlotMinutes.value = String(cfg.booking_slot_minutes || 30);
+      elements.bookingClosedWeekdays.value = (cfg.booking_closed_weekdays || []).join(",");
+      elements.bookingDayStart.value = cfg.booking_day_start || "09:00";
+      elements.bookingDayEnd.value = cfg.booking_day_end || "18:00";
+      elements.bookingWebhookEnv.value = cfg.booking_webhook_env || "";
+      elements.bookingWebhookUrl.value = cfg.booking_webhook_url || "";
+      elements.bookingCalendlyUserEnv.value = cfg.booking_calendly_user_env || "";
+      elements.bookingCalendlyEventTypeEnv.value = cfg.booking_calendly_event_type_env || "";
+      elements.bookingCalendlyLocationKind.value = cfg.booking_calendly_location_kind || "";
+      elements.bookingCalendlyLocationValue.value = cfg.booking_calendly_location_value || "";
+      elements.bookingGoogleCalendarId.value = cfg.booking_google_calendar_id || "";
+      elements.bookingGoogleCalendarIdEnv.value = cfg.booking_google_calendar_id_env || "";
+      elements.bookingGoogleServiceAccountPath.value = cfg.booking_google_service_account_path || "";
+      elements.bookingGoogleServiceAccountEnv.value = cfg.booking_google_service_account_env || "";
+      elements.bookingGoogleServiceAccountJson.value = "";
+      elements.bookingSuccessMessage.value = cfg.booking_success_message || "";
+      elements.infoTxt.value = cfg.info_txt || "";
+      elements.reindexAfterSave.checked = true;
+      elements.installSnippet.value = detail.install_snippet || "";
+      elements.demoUrl.value = detail.demo_url || "";
+
+      document.querySelectorAll(".client-item").forEach((item) => {
+        item.classList.toggle("active", item.dataset.id === detail.cliente_id);
+      });
+    }
+
+    async function loadStats() {
+      const stats = await api("/admin/stats");
+      elements.statVersion.textContent = stats.version || "-";
+      elements.statSessions.textContent = String(stats.sesiones_activas ?? "-");
+      elements.statIndexes.textContent = String((stats.indices_cargados || []).length);
+    }
+
+    async function loadClients(selectedId = state.currentClientId) {
+      const clients = await api("/admin/clientes");
+      state.clients = clients || [];
+      elements.clientsList.innerHTML = "";
+      elements.statClients.textContent = String(state.clients.length);
+      populateClientSelect(elements.newUserClientId, "Selecciona un cliente");
+      populateClientSelect(elements.userClientFilter, "Todos");
+
+      state.clients.forEach((client) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `client-item${client.cliente_id === selectedId ? " active" : ""}`;
+        button.dataset.id = client.cliente_id;
+        button.innerHTML = `
+          <strong>${client.nombre}</strong>
+          <span>${client.cliente_id}</span>
+          <span>${client.allowed_origins.length} origenes permitidos</span>
+        `;
+        button.addEventListener("click", () => loadClientDetail(client.cliente_id));
+        elements.clientsList.appendChild(button);
+      });
+    }
+
+    async function loadClientDetail(clienteId) {
+      clearStatus();
+      const detail = await api(`/admin/clientes/${encodeURIComponent(clienteId)}`);
+      fillForm(detail);
+    }
+
+    function renderUsers(response) {
+      state.users = response.items || [];
+      if (!state.users.length) {
+        elements.usersList.innerHTML = '<div class="empty">No hay usuarios para este filtro.</div>';
+        return;
+      }
+
+      elements.usersList.innerHTML = "";
+      state.users.forEach((managedUser) => {
+        const card = document.createElement("article");
+        card.className = "user-card";
+        const clientLabel = managedUser.cliente_id || "Global";
+        const statusClass = managedUser.is_active ? "pill" : "pill danger";
+        const statusLabel = managedUser.is_active ? "Activo" : "Inactivo";
+        const availableActions = managedUser.is_active
+          ? `
+              <option value="">Selecciona accion</option>
+              <option value="reset">Enviar reset por correo</option>
+              <option value="deactivate">Desactivar usuario</option>
+              <option value="delete">Eliminar usuario</option>
+            `
+          : `
+              <option value="">Selecciona accion</option>
+              <option value="activate">Activar usuario</option>
+              <option value="delete">Eliminar usuario</option>
+            `;
+        card.innerHTML = `
+          <div class="user-top">
+            <div class="user-title">
+              <strong>${managedUser.display_name}</strong>
+              <span class="muted">${managedUser.email}</span>
+            </div>
+            <div class="pills">
+              <span class="pill alt">${roleLabel(managedUser.role)}</span>
+              <span class="${statusClass}">${statusLabel}</span>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div class="meta-box">
+              <span class="meta-label">Cliente</span>
+              <span class="meta-value">${clientLabel}</span>
+            </div>
+            <div class="meta-box">
+              <span class="meta-label">Ultimo login</span>
+              <span class="meta-value">${formatDateTimeLabel(managedUser.last_login_at)}</span>
+            </div>
+            <div class="meta-box">
+              <span class="meta-label">Alta</span>
+              <span class="meta-value">${formatDateTimeLabel(managedUser.created_at)}</span>
+            </div>
+            <div class="meta-box">
+              <span class="meta-label">ID</span>
+              <span class="meta-value">${managedUser.user_id}</span>
+            </div>
+          </div>
+          <div class="action-row">
+            <select data-user-action="${managedUser.user_id}">
+              ${availableActions}
+            </select>
+            <button class="secondary small" type="button" data-run-user-action="${managedUser.user_id}">Aplicar accion</button>
+          </div>
+        `;
+        elements.usersList.appendChild(card);
+      });
+
+      elements.usersList.querySelectorAll("button[data-run-user-action]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const userId = button.dataset.runUserAction;
+          const select = elements.usersList.querySelector(`select[data-user-action="${userId}"]`);
+          const action = select?.value || "";
+          if (!action) {
+            showStatus("Selecciona primero una accion para ese usuario.", "error");
+            return;
+          }
+          try {
+            let successMessage = "";
+            if (action === "delete" && !window.confirm("Seguro que quieres eliminar este usuario?")) {
+              return;
+            }
+            if (action === "deactivate" && !window.confirm("Seguro que quieres desactivar este usuario?")) {
+              return;
+            }
+            if (action === "activate") {
+              const result = await api(`/auth/users/${encodeURIComponent(userId)}/activate`, { method: "POST" });
+              successMessage = result.message;
+            } else if (action === "deactivate") {
+              const result = await api(`/auth/users/${encodeURIComponent(userId)}/deactivate`, { method: "POST" });
+              successMessage = result.message;
+            } else if (action === "reset") {
+              const result = await api(`/auth/users/${encodeURIComponent(userId)}/reset-link`, { method: "POST" });
+              successMessage = result.message;
+            } else if (action === "delete") {
+              const result = await api(`/auth/users/${encodeURIComponent(userId)}`, { method: "DELETE" });
+              successMessage = result.message;
+            }
+            await loadManagedUsers();
+            showStatus(successMessage || "Accion ejecutada correctamente.", "success");
+          } catch (error) {
+            showStatus(error.message, "error");
+          }
+        });
+      });
+    }
+
+    async function loadManagedUsers() {
+      const params = new URLSearchParams();
+      const selectedRole = elements.userRoleFilter.value.trim();
+      const selectedClient = elements.userClientFilter.value.trim();
+      if (selectedRole) params.set("role", selectedRole);
+      if (selectedClient) params.set("cliente_id", selectedClient);
+      params.set("include_inactive", elements.userIncludeInactive.checked ? "true" : "false");
+      const payload = await api(`/auth/users?${params.toString()}`);
+      renderUsers(payload);
+    }
+
+    async function loadCurrentUser() {
+      state.currentUser = await api("/auth/me");
+      renderCurrentUser();
+    }
+
+    function renderBookings(bookings) {
+      if (!bookings.length) {
+        elements.bookingsTableBody.innerHTML = '<tr><td colspan="6" class="muted">No hay reservas para este filtro.</td></tr>';
+        return;
+      }
+
+      elements.bookingsTableBody.innerHTML = "";
+      bookings.forEach((booking) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>
+            <div class="booking-meta">
+              <strong>${booking.empresa}</strong>
+              <span>${booking.cliente_id}</span>
+            </div>
+          </td>
+          <td>
+            <div class="booking-meta">
+              <strong>${booking.nombre}</strong>
+              <span>${booking.servicio || "Consulta"}</span>
+              <span>${booking.fecha} ${booking.hora}</span>
+              <span>${booking.email}</span>
+            </div>
+          </td>
+          <td>
+            <div class="booking-meta">
+              <span class="pill">${booking.estado}</span>
+              <span>${booking.provider_status || "-"}</span>
+            </div>
+          </td>
+          <td>
+            <div class="booking-meta">
+              <strong>${booking.provider_name}</strong>
+              <span>${booking.provider_booking_id || "-"}</span>
+            </div>
+          </td>
+          <td>
+            <div class="booking-meta">
+              <span>${booking.customer_email_status || "-"}</span>
+              <span>${booking.confirmation_email_sent_at || "Sin confirmacion"}</span>
+              <span>${booking.reminder_24h_sent_at || "Sin recordatorio 24h"}</span>
+            </div>
+          </td>
+          <td>
+            <div class="booking-actions">
+              <button class="secondary" type="button" data-action="resend" data-id="${booking.booking_id}">Reenviar email</button>
+              <button class="secondary" type="button" data-action="reschedule" data-id="${booking.booking_id}" data-fecha="${booking.fecha}" data-hora="${booking.hora}">Reprogramar</button>
+              <button class="ghost" type="button" data-action="open" data-url="${booking.manage_url || ""}">Abrir gestion</button>
+              <button class="secondary" type="button" data-action="provider" data-url="${booking.provider_booking_url || ""}">Proveedor</button>
+              <button class="secondary" type="button" data-action="cancel" data-id="${booking.booking_id}">Cancelar</button>
+            </div>
+          </td>
+        `;
+        elements.bookingsTableBody.appendChild(row);
+      });
+
+      elements.bookingsTableBody.querySelectorAll("button[data-action]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const action = button.dataset.action;
+          const bookingId = button.dataset.id;
+          const targetUrl = button.dataset.url;
+          try {
+            if (action === "open") {
+              if (!targetUrl) throw new Error("Esta reserva no tiene URL de gestion.");
+              window.open(targetUrl, "_blank", "noopener,noreferrer");
+              return;
+            }
+            if (action === "provider") {
+              if (!targetUrl) throw new Error("Esta reserva no tiene URL del proveedor.");
+              window.open(targetUrl, "_blank", "noopener,noreferrer");
+              return;
+            }
+            if (action === "resend") {
+              await api(`/admin/bookings/${encodeURIComponent(bookingId)}/resend-email`, { method: "POST" });
+              showStatus("Correo reenviado correctamente.", "success");
+              await loadBookings();
+              return;
+            }
+            if (action === "reschedule") {
+              const fechaActual = button.dataset.fecha || "";
+              const horaActual = button.dataset.hora || "";
+              const nuevaFecha = window.prompt("Nueva fecha (YYYY-MM-DD)", fechaActual);
+              if (!nuevaFecha) return;
+              const nuevaHora = window.prompt("Nueva hora (HH:MM)", horaActual);
+              if (!nuevaHora) return;
+              await api(`/admin/bookings/${encodeURIComponent(bookingId)}/reschedule`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ fecha: nuevaFecha.trim(), hora: nuevaHora.trim() }),
+              });
+              showStatus("Cita reprogramada correctamente.", "success");
+              await loadBookings();
+              return;
+            }
+            if (action === "cancel") {
+              if (!window.confirm("¿Seguro que quieres cancelar esta cita?")) return;
+              await api(`/admin/bookings/${encodeURIComponent(bookingId)}/cancel`, { method: "POST" });
+              showStatus("Cita cancelada correctamente.", "success");
+              await loadBookings();
+            }
+          } catch (error) {
+            showStatus(error.message, "error");
+          }
+        });
+      });
+    }
+
+    async function loadBookings(clienteId = state.currentClientId) {
+      return clienteId;
+    }
+
+    async function connect() {
+      showStatus("Conectando con el panel admin...", "info");
+      await loadCurrentUser();
+      await loadStats();
+      await loadClients();
+      await loadManagedUsers();
+      if (!state.currentClientId && state.clients.length) {
+        await loadClientDetail(state.clients[0].cliente_id);
+      }
+      showStatus(`Sesion activa como ${state.currentUser.display_name}.`, "success");
+    }
+
+    async function changePassword() {
+      const newPassword = readMatchingPasswords(
+        elements.currentPassword.value,
+        elements.newPassword.value,
+        elements.confirmPassword.value,
+      );
+      showStatus("Actualizando contrasena...", "info");
+      const result = await api("/auth/password/change", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          current_password: elements.currentPassword.value,
+          new_password: newPassword,
+        }),
+      });
+      elements.currentPassword.value = "";
+      elements.newPassword.value = "";
+      elements.confirmPassword.value = "";
+      showStatus(result.message || "Contrasena actualizada correctamente.", "success");
+    }
+
+    async function logout() {
+      await api("/auth/logout", { method: "POST" });
+      window.location.href = "/acceso";
+    }
+
+    async function createManagedUser() {
+      const role = elements.newUserRole.value.trim() || "client";
+      if (role === "client" && !elements.newUserClientId.value.trim()) {
+        throw new Error("Selecciona el cliente al que pertenece este usuario.");
+      }
+      await api("/auth/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          display_name: elements.newUserName.value.trim(),
+          email: elements.newUserEmail.value.trim(),
+          password: elements.newUserPassword.value,
+          cliente_id: elements.newUserClientId.value.trim(),
+          role,
+        }),
+      });
+      elements.newUserName.value = "";
+      elements.newUserEmail.value = "";
+      elements.newUserPassword.value = "";
+      elements.newUserClientId.value = "";
+      elements.newUserRole.value = "client";
+      toggleClientFieldByRole();
+      await loadManagedUsers();
+      showStatus("Usuario creado correctamente.", "success");
+    }
+
+    async function altaExpress() {
+      const clienteId = elements.clienteId.value.trim() || prompt("Cliente ID para el alta express");
+      if (!clienteId) {
+        throw new Error("Indica un cliente ID antes de lanzar el alta express.");
+      }
+
+      const websiteUrl = elements.expressWebsiteUrl.value.trim();
+      if (!websiteUrl) {
+        throw new Error("Indica la URL de la empresa.");
+      }
+
+      showStatus("Analizando la web y generando el cerebro del cliente...", "info");
+      const detail = await api("/admin/alta-express", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          website_url: websiteUrl,
+          cliente_id: clienteId,
+          nombre_bot: elements.expressBotName.value.trim() || "Clara",
+          tono: elements.expressTone.value,
+          idioma: elements.expressLanguage.value,
+          max_paginas: Number(elements.expressMaxPages.value || 12),
+          color: elements.color.value.trim() || "#00b1d9",
+          booking_enabled: elements.bookingEnabled.checked,
+          booking_timezone: elements.bookingTimezone.value.trim() || "Europe/Madrid",
+          auto_save: elements.expressAutoSave.checked,
+          reindex_after_save: elements.expressAutoSave.checked,
+        }),
+      });
+
+      fillForm(detail);
+      elements.expressWebsiteUrl.value = detail.normalized_url || websiteUrl;
+      state.currentClientId = detail.cliente_id;
+
+      if (detail.saved) {
+        await Promise.all([loadStats(), loadClients(detail.cliente_id), loadClientDetail(detail.cliente_id)]);
+
+        if (detail.reindexed) {
+          showStatus(
+            `Alta express completada. Cliente creado, info.txt guardado, indice reindexado y snippet listo. Se han analizado ${detail.links_found} paginas de ${detail.detected_business_name}.`,
+            "success"
+          );
+        } else if (detail.reindex_error) {
+          showStatus(
+            `Cliente creado y guardado, pero la reindexacion automatica fallo: ${detail.reindex_error}`,
+            "error"
+          );
+        } else {
+          showStatus(
+            `Cliente creado y guardado correctamente. Se han analizado ${detail.links_found} paginas de ${detail.detected_business_name}.`,
+            "success"
+          );
+        }
+        return;
+      }
+
+      showStatus(
+        `Alta express completada. Se han analizado ${detail.links_found} paginas y se ha generado el info.txt de ${detail.detected_business_name}. Revisa y guarda.`,
+        "success"
+      );
+    }
+
+    async function createClient() {
+      const rawId = prompt("Nuevo cliente ID (ejemplo: clinica_saga)");
+      if (!rawId) return;
+      const clienteId = rawId.trim();
+      const detail = await api(`/admin/template/${encodeURIComponent(clienteId)}`);
+      fillForm(detail);
+      showStatus("Plantilla creada. Completa los datos y guarda el cliente.", "info");
+    }
+
+    async function saveClient() {
+      const clienteId = elements.clienteId.value.trim();
+      if (!clienteId) {
+        throw new Error("Indica un cliente ID antes de guardar.");
+      }
+
+      showStatus("Guardando cliente y actualizando cerebro...", "info");
+      const response = await api(`/admin/clientes/${encodeURIComponent(clienteId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payloadFromForm()),
+      });
+
+      elements.installSnippet.value = response.install_snippet || "";
+      elements.demoUrl.value = response.demo_url || "";
+      state.currentClientId = clienteId;
+      await Promise.all([loadStats(), loadClients(clienteId), loadClientDetail(clienteId)]);
+
+      if (response.reindexed) {
+        showStatus("Cliente guardado y reindexado correctamente.", "success");
+      } else if (response.reindex_error) {
+        showStatus(`Cliente guardado, pero la reindexacion automatica fallo: ${response.reindex_error}`, "error");
+      } else {
+        showStatus("Cliente guardado correctamente.", "success");
+      }
+    }
+
+    async function reindexCurrentClient() {
+      const clienteId = elements.clienteId.value.trim();
+      if (!clienteId) {
+        throw new Error("No hay cliente seleccionado.");
+      }
+
+      showStatus("Reindexando cerebro del cliente...", "info");
+      await api(`/admin/reindex/${encodeURIComponent(clienteId)}`, { method: "POST" });
+      await loadStats();
+      showStatus("Indice reindexado correctamente.", "success");
+    }
+
+    async function copySnippet() {
+      const snippet = elements.installSnippet.value.trim();
+      if (!snippet) {
+        throw new Error("No hay snippet disponible todavia.");
+      }
+
+      await navigator.clipboard.writeText(snippet);
+      showStatus("Snippet copiado al portapapeles.", "success");
+    }
+
+    async function copyDemoUrl() {
+      const demoUrl = elements.demoUrl.value.trim();
+      if (!demoUrl) {
+        throw new Error("No hay URL de demo disponible todavia.");
+      }
+
+      await navigator.clipboard.writeText(demoUrl);
+      showStatus("URL de demo copiada al portapapeles.", "success");
+    }
+
+    function openDemo() {
+      const demoUrl = elements.demoUrl.value.trim();
+      if (!demoUrl) {
+        throw new Error("No hay URL de demo disponible todavia.");
+      }
+
+      window.open(demoUrl, "_blank", "noopener,noreferrer");
+      showStatus("Demo abierta en una nueva pestaña.", "info");
+    }
+
+    document.getElementById("refreshSessionBtn").addEventListener("click", async () => {
+      try {
+        await connect();
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+
+    document.getElementById("focusSecurityBtn").addEventListener("click", () => {
+      elements.securityCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      elements.currentPassword.focus();
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", async () => {
+      try {
+        await logout();
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+
+    document.getElementById("newClientBtn").addEventListener("click", async () => {
+      try {
+        await createClient();
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+
+    document.getElementById("expressGenerateBtn").addEventListener("click", async () => {
+      try {
+        await altaExpress();
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+
+    document.getElementById("saveBtn").addEventListener("click", async () => {
+      try {
+        await saveClient();
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+
+    document.getElementById("reindexBtn").addEventListener("click", async () => {
+      try {
+        await reindexCurrentClient();
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+
+    document.getElementById("copySnippetBtn").addEventListener("click", async () => {
+      try {
+        await copySnippet();
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+
+    document.getElementById("copyDemoBtn").addEventListener("click", async () => {
+      try {
+        await copyDemoUrl();
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+
+    document.getElementById("openDemoBtn").addEventListener("click", () => {
+      try {
+        openDemo();
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+
+    document.getElementById("openDemoInlineBtn").addEventListener("click", () => {
+      try {
+        openDemo();
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+
+    document.getElementById("changePasswordBtn").addEventListener("click", async () => {
+      try {
+        await changePassword();
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+
+    document.getElementById("createUserBtn").addEventListener("click", async () => {
+      try {
+        await createManagedUser();
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+
+    elements.newUserRole.addEventListener("change", () => toggleClientFieldByRole());
+    document.getElementById("refreshUsersBtn").addEventListener("click", () => loadManagedUsers().catch((error) => showStatus(error.message, "error")));
+    elements.userRoleFilter.addEventListener("change", () => loadManagedUsers().catch((error) => showStatus(error.message, "error")));
+    elements.userClientFilter.addEventListener("change", () => loadManagedUsers().catch((error) => showStatus(error.message, "error")));
+    elements.userIncludeInactive.addEventListener("change", () => loadManagedUsers().catch((error) => showStatus(error.message, "error")));
+
+    toggleClientFieldByRole();
+    connect().catch((error) => showStatus(error.message, "error"));
+  </script>
+</body>
+</html>

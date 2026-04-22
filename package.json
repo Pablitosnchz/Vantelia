@@ -1,4 +1,11 @@
 {
+  "name": "vantelia-widget",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "npm run build:widget",
+    "build:widget": "esbuild widget/widget.js --bundle --minify --format=iife --target=es2018 --outfile=widget/widget.min.js"
+  },
   "dependencies": {
     "esbuild": "^0.28.0"
   }

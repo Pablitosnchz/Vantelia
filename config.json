@@ -1,18 +1,67 @@
 {
   "Clinica_Saga": {
-    "nombre": "Clínica Saga",
-    "icono": "⚕️",
+    "nombre": "Clinica Saga",
+    "icono": "CS",
     "color": "#2E86AB",
-    "webhook": "https://hook.eu1.make.com/z63enh2umj60yrsezlxan0fukp4k1l93",
-    "prompt_extra": "Eres Clara, recepcionista amable y profesional. Tutea al cliente.",
-    "bienvenida": "¡Hola! Soy Clara, asistente de Clínica Saga. ¿En qué puedo ayudarte? 😊"
+    "bienvenida": "Hola, soy Clara, la asistente de Clinica Saga. En que puedo ayudarte hoy?",
+    "prompt_extra": "Habla con tono cercano y profesional. Si falta informacion, deriva al equipo humano sin inventar nada.",
+    "allowed_origins": [
+      "https://clinicasaga.es",
+      "https://www.clinicasaga.es",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:5500",
+      "http://localhost:8000"
+    ],
+    "contacto": {
+      "email": "info@clinicasaga.es",
+      "telefono": "+34 916770442"
+    },
+    "branding": {
+      "powered_by": "Powered by Vantelia"
+    },
+    "booking": {
+      "enabled": true,
+      "timezone": "Europe/Madrid",
+      "slot_minutes": 30,
+      "day_start": "17:00",
+      "day_end": "21:00",
+      "closed_weekdays": [6],
+      "webhook_env": "WEBHOOK_DEFAULT",
+      "success_message": "Tu cita ha quedado registrada correctamente. Nuestro equipo revisara la solicitud y te contactara si necesita ajustar algo."
+    }
   },
   "demo": {
     "nombre": "Agencia IA Demo",
-    "icono": "🤖",
-    "color": "#6C63FF",
-    "webhook": "https://hook.eu1.make.com/otro-webhook",
-    "prompt_extra": "Eres un asistente demo que muestra las capacidades de la agencia.",
-    "bienvenida": "¡Hola! Soy el asistente demo. Pregúntame lo que quieras sobre nuestros servicios."
+    "icono": "AI",
+    "color": "#00b1d9",
+    "bienvenida": "Hola, soy el asistente demo de la agencia. Puedo resolver dudas y recoger solicitudes de contacto.",
+    "prompt_extra": "Explica con claridad el servicio y mantente siempre dentro del contexto de la demo.",
+    "allowed_origins": [
+      "https://vantelia.es",
+      "https://www.vantelia.es",
+      "https://app.vantelia.es",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:5500",
+      "http://localhost:8000"
+    ],
+    "contacto": {
+      "email": "hola@vantelia.com",
+      "telefono": "+34 600000000"
+    },
+    "branding": {
+      "powered_by": "Powered by Vantelia"
+    },
+    "booking": {
+      "enabled": true,
+      "timezone": "Europe/Madrid",
+      "slot_minutes": 30,
+      "day_start": "09:00",
+      "day_end": "18:00",
+      "closed_weekdays": [6],
+      "webhook_env": "WEBHOOK_DEFAULT",
+      "success_message": "La solicitud demo ha quedado registrada correctamente."
+    }
   }
 }

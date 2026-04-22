@@ -1,0 +1,10 @@
+.git
+.git-inner-backup
+.venv
+__pycache__
+*.pyc
+node_modules
+service_account
+storage/*
+!storage/.gitkeep
+.env

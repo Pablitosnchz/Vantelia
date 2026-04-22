@@ -1,66 +1,177 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web de Prueba - Clínica Saga</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 40px 20px;
-            background: #f5f5f5;
-        }
-        .hero {
-            background: linear-gradient(135deg, #2E86AB, #1a5276);
-            color: white;
-            padding: 60px 40px;
-            border-radius: 20px;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .hero h1 { font-size: 2.5em; margin-bottom: 10px; }
-        .card {
-            background: white;
-            padding: 30px;
-            border-radius: 16px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            margin-bottom: 20px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vantelia Widget Demo</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef4f8;
+      --panel: rgba(255, 255, 255, 0.86);
+      --text: #153046;
+      --text-soft: #4c6477;
+      --border: rgba(21, 48, 70, 0.08);
+      --shadow: 0 24px 44px rgba(18, 35, 53, 0.08);
+      --accent: #2e86ab;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(46, 134, 171, 0.18), transparent 30%),
+        linear-gradient(180deg, #f7fbff, var(--bg));
+      color: var(--text);
+    }
+
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 56px 24px 120px;
+    }
+
+    .hero,
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .hero {
+      margin-bottom: 20px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 6px 12px;
+      background: rgba(46, 134, 171, 0.1);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2 {
+      margin: 0 0 12px;
+    }
+
+    h1 {
+      font-size: clamp(2.3rem, 4vw, 4rem);
+      line-height: 1;
+      max-width: 780px;
+    }
+
+    p {
+      color: var(--text-soft);
+      line-height: 1.65;
+    }
+
+    .hero-grid,
+    .grid {
+      display: grid;
+      gap: 20px;
+    }
+
+    .hero-grid {
+      grid-template-columns: 1.4fr 1fr;
+      align-items: start;
+    }
+
+    .grid {
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      margin-top: 20px;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+      line-height: 1.8;
+      color: var(--text-soft);
+    }
+
+    pre {
+      margin: 0;
+      overflow: auto;
+      padding: 16px;
+      border-radius: 18px;
+      background: #102131;
+      color: #eff7ff;
+      font-size: 13px;
+    }
+
+    @media (max-width: 780px) {
+      .hero-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </head>
 <body>
+  <main>
+    <section class="hero">
+      <div class="hero-grid">
+        <div>
+          <span class="eyebrow">Demo v1.0</span>
+          <h1>Chatbox embebido multiempresa listo para instalar en web corporativa</h1>
+          <p>
+            Esta pagina sirve para validar el flujo completo de Vantelia:
+            carga del widget, respuestas con RAG, apertura de formulario,
+            disponibilidad y registro profesional de solicitudes.
+          </p>
+        </div>
 
-    <div class="hero">
-        <h1>⚕️ Clínica Saga</h1>
-        <p>Tu clínica de confianza</p>
-    </div>
+        <div class="card">
+          <h2>Checklist rapido</h2>
+          <ul>
+            <li>Pregunta por servicios, precios y horarios.</li>
+            <li>Pide una cita para abrir el formulario guiado.</li>
+            <li>Prueba varios horarios para validar bloqueos.</li>
+            <li>Comprueba la UX en escritorio y movil.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
 
-    <div class="card">
-        <h2>Nuestros Servicios</h2>
-        <p>Esta es una web de ejemplo para probar el widget de IA.</p>
-        <p>Mira la esquina inferior derecha → ahí está el chatbot 💬</p>
-    </div>
+    <section class="grid">
+      <article class="card">
+        <h2>Snippet de instalacion</h2>
+        <pre><code>&lt;script
+  src="http://localhost:8000/widget/widget.min.js"
+  data-api="http://localhost:8000"
+  data-client="Clinica_Saga"
+  data-position="right"&gt;&lt;/script&gt;</code></pre>
+      </article>
 
-    <div class="card">
-        <h2>Prueba estas preguntas:</h2>
+      <article class="card">
+        <h2>Buenas practicas</h2>
         <ul>
-            <li>"¿Qué servicios ofrecéis?"</li>
-            <li>"¿Cuánto cuesta una limpieza dental?"</li>
-            <li>"Quiero agendar una cita"</li>
-            <li>"¿Cuál es vuestro horario?"</li>
+          <li>Define `allowed_origins` por cliente en `config.json`.</li>
+          <li>Indexa la carpeta `data/cliente/` despues del onboarding.</li>
+          <li>Configura un webhook para integrar el lead con CRM o Make.</li>
+          <li>Usa HTTPS en produccion para el script y el backend.</li>
         </ul>
-    </div>
+      </article>
+    </section>
+  </main>
 
-    <!-- ======================================= -->
-    <!-- 🤖 WIDGET IA - SOLO ESTAS 3 LÍNEAS     -->
-    <!-- ======================================= -->
-    <script>
-        window.IA_WIDGET_API = "http://localhost:8000";
-        window.IA_WIDGET_CLIENTE = "Clinica_Saga";
-    </script>
-    <script src="./widget.min.js"></script>
-
+  <script
+    src="http://localhost:8000/widget/widget.min.js"
+    data-api="http://localhost:8000"
+    data-client="Clinica_Saga"
+    data-position="right"
+  ></script>
 </body>
 </html>

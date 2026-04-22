@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vantelia Acceso</title>
+  <link rel="icon" type="image/png" href="/brand-assets/favicon.png" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Poppins:wght@400;500;600;700&display=swap');
+    :root {
+      color-scheme: dark;
+      --bg: #000b29;
+      --panel: rgba(5, 14, 38, 0.9);
+      --panel-strong: rgba(9, 22, 54, 0.96);
+      --text: #f0f4f8;
+      --soft: #b8c0cc;
+      --line: rgba(184, 192, 204, 0.14);
+      --accent: #00b1d9;
+      --accent-2: #007ea0;
+      --accent-soft: rgba(0, 177, 217, 0.14);
+      --danger: #ff7b86;
+      --danger-soft: rgba(196, 69, 54, 0.14);
+      --shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+      --radius: 26px;
+      --radius-sm: 16px;
+      --font-title: "Montserrat", "Segoe UI", sans-serif;
+      --font: "Poppins", "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        linear-gradient(180deg, rgba(0, 11, 41, 0.88), rgba(0, 11, 41, 0.96)),
+        radial-gradient(circle at top left, rgba(0, 177, 217, 0.16), transparent 28%),
+        radial-gradient(circle at top right, rgba(184, 192, 204, 0.1), transparent 26%),
+        url("/brand-assets/Fondo_Web.png") center top / cover fixed no-repeat;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .page {
+      min-height: 100vh;
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0 40px;
+      display: grid;
+      gap: 24px;
+      align-content: start;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .brand {
+      display: grid;
+      gap: 12px;
+    }
+
+    .brand-mark {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .brand-logo {
+      width: 68px;
+      height: 68px;
+      object-fit: contain;
+      filter: drop-shadow(0 0 24px rgba(0, 177, 217, 0.26));
+      flex: 0 0 auto;
+    }
+
+    .brand-copy {
+      display: grid;
+      gap: 6px;
+    }
+
+    .brand-kicker {
+      display: inline-flex;
+      width: fit-content;
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: rgba(0, 177, 217, 0.08);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 1.9rem;
+      line-height: 1;
+      font-family: var(--font-title);
+    }
+
+    .brand p {
+      margin: 0;
+      color: var(--soft);
+      line-height: 1.6;
+      max-width: 720px;
+    }
+
+    .ghost-link {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 11px 16px;
+      background: transparent;
+      color: var(--text);
+      font-weight: 800;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(340px, 420px);
+      gap: 22px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .story {
+      padding: 28px;
+      display: grid;
+      gap: 18px;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top right, rgba(0, 177, 217, 0.12), transparent 34%),
+        linear-gradient(180deg, rgba(8, 18, 46, 0.98), rgba(4, 12, 33, 0.9));
+    }
+
+    .story-chip {
+      display: inline-flex;
+      width: fit-content;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .story h2 {
+      margin: 0;
+      font-size: 2.3rem;
+      line-height: 1.03;
+      font-family: var(--font-title);
+    }
+
+    .story p {
+      margin: 0;
+      color: var(--soft);
+      line-height: 1.7;
+    }
+
+    .feature-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .feature {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.02);
+      display: grid;
+      gap: 6px;
+    }
+
+    .feature strong {
+      font-size: 1rem;
+    }
+
+    .card {
+      padding: 22px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .pill {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 0.88rem;
+      font-weight: 800;
+    }
+
+    h2, h3 {
+      margin: 0;
+    }
+
+    .muted {
+      color: var(--soft);
+      line-height: 1.65;
+    }
+
+    label {
+      display: grid;
+      gap: 8px;
+      font-weight: 700;
+    }
+
+    input {
+      width: 100%;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(7, 18, 45, 0.92);
+      padding: 13px 14px;
+      color: var(--text);
+      outline: none;
+    }
+
+    input:focus {
+      border-color: rgba(0, 177, 217, 0.45);
+      box-shadow: 0 0 0 4px rgba(0, 177, 217, 0.12);
+    }
+
+    button {
+      border: 0;
+      border-radius: 16px;
+      padding: 12px 16px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.16s ease, opacity 0.16s ease;
+    }
+
+    button:hover { transform: translateY(-1px); }
+    button.primary { color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+    button.secondary { color: var(--text); background: rgba(184, 192, 204, 0.12); }
+    button.ghost { color: var(--text); background: transparent; border: 1px solid var(--line); }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .status {
+      min-height: 22px;
+      font-size: 0.95rem;
+      color: var(--soft);
+    }
+
+    .status.error { color: var(--danger); }
+    .status.success { color: var(--accent); }
+
+    .feedback {
+      display: none;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(0, 177, 217, 0.2);
+      background: rgba(0, 177, 217, 0.12);
+      line-height: 1.55;
+      font-size: 0.92rem;
+    }
+
+    .feedback.visible { display: block; }
+    .feedback.error {
+      border-color: rgba(196, 69, 54, 0.22);
+      background: var(--danger-soft);
+      color: #ffd7db;
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 980px) {
+      .hero {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        width: min(1180px, calc(100vw - 20px));
+        padding-top: 18px;
+      }
+
+      .topbar,
+      .row {
+        align-items: stretch;
+      }
+
+      .topbar,
+      .brand-mark {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .row button,
+      .topbar a {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <section class="brand">
+        <div class="brand-mark">
+          <img class="brand-logo" src="/brand-assets/Logo_1_sin_resplandor.png" alt="Vantelia" />
+          <div class="brand-copy">
+            <span class="brand-kicker">Secure Access</span>
+            <h1>Acceso Vantelia</h1>
+            <p>Una sola puerta de entrada para administracion y clientes. Desde aqui inicias sesion o recuperas tu contrasena, y despues te llevamos al panel correcto.</p>
+          </div>
+        </div>
+      </section>
+      <a class="ghost-link" href="__MARKETING_SITE_URL__" target="_blank" rel="noreferrer">Ir a vantelia.es</a>
+    </header>
+
+    <section class="hero">
+      <article class="panel story">
+        <span class="story-chip">Flujo limpio</span>
+        <h2>Login separado, paneles claros.</h2>
+        <p>El acceso se queda solo para autenticacion. Cuando entras, cada usuario aterriza directamente en su espacio: clientes al portal y administradores al dashboard operativo.</p>
+        <div class="feature-list">
+          <div class="feature">
+            <strong>Admins</strong>
+            <span class="muted">Dashboard con clientes, alta express, snippet, demo, estado general y control completo de usuarios.</span>
+          </div>
+          <div class="feature">
+            <strong>Clientes</strong>
+            <span class="muted">Portal centrado en sus citas, cambios de reserva, historial y seguridad de la cuenta.</span>
+          </div>
+          <div class="feature">
+            <strong>Recuperacion segura</strong>
+            <span class="muted">Si el correo esta registrado, recibiras un enlace temporal para definir una nueva contrasena.</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel card">
+        <div class="pill" id="cardPill">Acceso seguro</div>
+        <h2 id="cardTitle">Inicia sesion</h2>
+        <div class="muted" id="cardText">Usa tu email y contrasena del portal. Te redirigiremos automaticamente al panel de cliente o al dashboard admin.</div>
+
+        <section id="loginView">
+          <label>
+            Email
+            <input id="email" type="email" placeholder="tu@empresa.com" />
+          </label>
+          <label>
+            Contrasena
+            <input id="password" type="password" placeholder="Tu contrasena" />
+          </label>
+          <div class="row">
+            <button id="loginBtn" class="primary" type="button">Entrar</button>
+            <button id="showForgotBtn" class="secondary" type="button">He olvidado mi contrasena</button>
+          </div>
+        </section>
+
+        <section id="forgotView" class="hidden">
+          <label>
+            Email
+            <input id="forgotEmail" type="email" placeholder="tu@empresa.com" />
+          </label>
+          <div class="row">
+            <button id="forgotBtn" class="primary" type="button">Enviar enlace</button>
+            <button id="backToLoginBtn" class="ghost" type="button">Volver</button>
+          </div>
+          <div id="forgotFeedback" class="feedback"></div>
+        </section>
+
+        <section id="resetView" class="hidden">
+          <label>
+            Nueva contrasena
+            <input id="resetPassword" type="password" placeholder="Minimo 8 caracteres" />
+          </label>
+          <label>
+            Repite la nueva contrasena
+            <input id="resetPasswordConfirm" type="password" placeholder="Repite la contrasena" />
+          </label>
+          <div class="row">
+            <button id="resetBtn" class="primary" type="button">Guardar nueva contrasena</button>
+            <button id="resetBackBtn" class="ghost" type="button">Volver al acceso</button>
+          </div>
+        </section>
+
+        <div id="status" class="status" aria-live="polite"></div>
+        <div class="muted">Si sigue fallando, escribe a __SUPPORT_EMAIL__.</div>
+      </article>
+    </section>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+
+    const state = {
+      view: urlParams.get("reset_token") ? "reset" : "login",
+      resetToken: (urlParams.get("reset_token") || "").trim(),
+      forgotCooldownSeconds: 0,
+      forgotCooldownTimer: null,
+    };
+
+    const el = {
+      cardPill: document.getElementById("cardPill"),
+      cardTitle: document.getElementById("cardTitle"),
+      cardText: document.getElementById("cardText"),
+      loginView: document.getElementById("loginView"),
+      forgotView: document.getElementById("forgotView"),
+      resetView: document.getElementById("resetView"),
+      email: document.getElementById("email"),
+      password: document.getElementById("password"),
+      forgotEmail: document.getElementById("forgotEmail"),
+      resetPassword: document.getElementById("resetPassword"),
+      resetPasswordConfirm: document.getElementById("resetPasswordConfirm"),
+      loginBtn: document.getElementById("loginBtn"),
+      showForgotBtn: document.getElementById("showForgotBtn"),
+      forgotBtn: document.getElementById("forgotBtn"),
+      backToLoginBtn: document.getElementById("backToLoginBtn"),
+      resetBtn: document.getElementById("resetBtn"),
+      resetBackBtn: document.getElementById("resetBackBtn"),
+      forgotFeedback: document.getElementById("forgotFeedback"),
+      status: document.getElementById("status"),
+    };
+
+    function setStatus(message, type = "info") {
+      el.status.className = `status ${type}`;
+      el.status.textContent = message;
+    }
+
+    function setForgotFeedback(message, type = "success") {
+      if (!message) {
+        el.forgotFeedback.className = "feedback";
+        el.forgotFeedback.textContent = "";
+        return;
+      }
+      el.forgotFeedback.className = `feedback visible ${type}`;
+      el.forgotFeedback.textContent = message;
+    }
+
+    function renderForgotButton() {
+      if (state.forgotCooldownSeconds > 0) {
+        el.forgotBtn.disabled = true;
+        el.forgotBtn.textContent = `Reenviar en ${state.forgotCooldownSeconds}s`;
+        return;
+      }
+      el.forgotBtn.disabled = false;
+      el.forgotBtn.textContent = "Enviar enlace";
+    }
+
+    function startForgotCooldown(seconds) {
+      state.forgotCooldownSeconds = Math.max(0, Number(seconds || 0));
+      if (state.forgotCooldownTimer) {
+        window.clearInterval(state.forgotCooldownTimer);
+        state.forgotCooldownTimer = null;
+      }
+      renderForgotButton();
+      if (!state.forgotCooldownSeconds) return;
+      state.forgotCooldownTimer = window.setInterval(() => {
+        state.forgotCooldownSeconds = Math.max(0, state.forgotCooldownSeconds - 1);
+        renderForgotButton();
+        if (!state.forgotCooldownSeconds && state.forgotCooldownTimer) {
+          window.clearInterval(state.forgotCooldownTimer);
+          state.forgotCooldownTimer = null;
+        }
+      }, 1000);
+    }
+
+    function setView(view) {
+      state.view = view;
+      el.loginView.classList.toggle("hidden", view !== "login");
+      el.forgotView.classList.toggle("hidden", view !== "forgot");
+      el.resetView.classList.toggle("hidden", view !== "reset");
+
+      if (view === "forgot") {
+        el.cardPill.textContent = "Recuperacion";
+        el.cardTitle.textContent = "Recuperar acceso";
+        el.cardText.textContent = "Introduce tu correo y te enviaremos un enlace seguro para crear una nueva contrasena.";
+      } else if (view === "reset") {
+        el.cardPill.textContent = "Nueva contrasena";
+        el.cardTitle.textContent = "Restablecer contrasena";
+        el.cardText.textContent = "Guarda una nueva contrasena para volver a entrar al portal con normalidad.";
+      } else {
+        el.cardPill.textContent = "Acceso seguro";
+        el.cardTitle.textContent = "Inicia sesion";
+        el.cardText.textContent = "Usa tu email y contrasena del portal. Te redirigiremos automaticamente al panel de cliente o al dashboard admin.";
+      }
+    }
+
+    function formatApiDetail(detail) {
+      if (!detail) return "No se pudo completar la solicitud.";
+      if (typeof detail === "string") return detail;
+      if (Array.isArray(detail)) {
+        return detail.map((item) => item?.msg || item).join(" | ");
+      }
+      if (typeof detail === "object" && detail.message) return detail.message;
+      try {
+        return JSON.stringify(detail);
+      } catch (error) {
+        return String(detail);
+      }
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: {
+          Accept: "application/json",
+          ...(options.headers || {}),
+        },
+      });
+
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (error) {
+        data = null;
+      }
+
+      if (!response.ok) {
+        throw new Error(formatApiDetail(data?.detail));
+      }
+
+      return data;
+    }
+
+    function readMatchingPasswords(a, b) {
+      if (!a || !b) throw new Error("Escribe y confirma la nueva contrasena.");
+      if (a !== b) throw new Error("Las contrasenas no coinciden.");
+      return a;
+    }
+
+    function clearResetTokenFromUrl() {
+      state.resetToken = "";
+      const cleanUrl = `${window.location.pathname}`;
+      window.history.replaceState({}, "", cleanUrl);
+    }
+
+    async function login() {
+      setStatus("Iniciando sesion...", "info");
+      const payload = await api("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: el.email.value.trim(),
+          password: el.password.value,
+        }),
+      });
+      el.password.value = "";
+      const nextUrl = payload.redirect_to || "/portal";
+      window.location.href = nextUrl;
+    }
+
+    async function sendReset() {
+      if (state.forgotCooldownSeconds > 0) return;
+      setStatus("Enviando enlace de recuperacion...", "info");
+      setForgotFeedback("Estamos comprobando la solicitud...", "success");
+      const payload = await api("/auth/password/forgot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: el.forgotEmail.value.trim() }),
+      });
+      el.forgotEmail.value = "";
+      setForgotFeedback(payload.message || "Si el correo esta registrado, se te enviara un enlace de recuperacion.", "success");
+      startForgotCooldown(payload.retry_after_seconds || 0);
+      setStatus("Solicitud enviada.", "success");
+    }
+
+    async function submitNewPassword() {
+      if (!state.resetToken) {
+        throw new Error("Falta el token de recuperacion en la URL.");
+      }
+      const newPassword = readMatchingPasswords(el.resetPassword.value, el.resetPasswordConfirm.value);
+      setStatus("Guardando nueva contrasena...", "info");
+      await api("/auth/password/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: state.resetToken,
+          new_password: newPassword,
+        }),
+      });
+      el.resetPassword.value = "";
+      el.resetPasswordConfirm.value = "";
+      clearResetTokenFromUrl();
+      setView("login");
+      setStatus("Contrasena actualizada. Ya puedes iniciar sesion.", "success");
+    }
+
+    el.loginBtn.addEventListener("click", () => login().catch((error) => setStatus(error.message, "error")));
+    el.showForgotBtn.addEventListener("click", () => {
+      setView("forgot");
+      setForgotFeedback("");
+      setStatus("Introduce tu correo y te enviaremos un enlace de recuperacion.", "info");
+    });
+    el.backToLoginBtn.addEventListener("click", () => {
+      setView("login");
+      setForgotFeedback("");
+      setStatus("Vuelve a iniciar sesion cuando quieras.", "info");
+    });
+    el.forgotBtn.addEventListener("click", () => sendReset().catch((error) => {
+      setForgotFeedback(error.message, "error");
+      setStatus(error.message, "error");
+    }));
+    el.resetBtn.addEventListener("click", () => submitNewPassword().catch((error) => setStatus(error.message, "error")));
+    el.resetBackBtn.addEventListener("click", () => {
+      clearResetTokenFromUrl();
+      setView("login");
+      setStatus("Ya puedes iniciar sesion de nuevo.", "info");
+    });
+
+    setView(state.view);
+    renderForgotButton();
+
+    if (state.view === "reset") {
+      setStatus("Define tu nueva contrasena para recuperar el acceso.", "info");
+    }
+  </script>
+</body>
+</html>

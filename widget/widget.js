@@ -1,18 +1,36 @@
-import { WIDGET_CONFIG } from './utils.js';
-import { inyectarEstilos } from './styles.js';
-import { construirWidget } from './ui.js';
+import { inyectarEstilos } from "./styles.js";
+import { construirWidget } from "./ui.js";
+import { applyPublicConfig, fetchJson, WIDGET_CONFIG } from "./utils.js";
 
 async function init() {
-  let config;
+  let config = {
+    nombre: "Asistente virtual",
+    icono: "AI",
+    color: "#1F6FEB",
+    bienvenida: "Hola, soy tu asistente virtual. En que puedo ayudarte?",
+    booking_enabled: false,
+    branding_text: "Powered by Vantelia",
+    contact_email: "",
+    contact_phone: "",
+  };
+
   try {
-    const res = await fetch(`${WIDGET_CONFIG.apiUrl}/cliente/${WIDGET_CONFIG.clienteId}`);
-    config = await res.json();
-  } catch {
-    config = { nombre: "Clínica Saga", icono: "⚕️", color: "#2E86AB", bienvenida: "¡Hola! Soy Clara, asistente de Clínica Saga. ¿En qué puedo ayudarte? 😊" };
+    config = await fetchJson(`${WIDGET_CONFIG.apiUrl}/cliente/${WIDGET_CONFIG.clienteId}`);
+  } catch (error) {
+    console.warn("No se pudo cargar la configuracion publica del widget.", error);
   }
-  inyectarEstilos(config.color || "#2E86AB");
+
+  applyPublicConfig(config);
+  inyectarEstilos(config.color || "#1F6FEB");
   construirWidget(config);
+
+  if (window.IA_WIDGET_OPEN_ON_LOAD) {
+    document.getElementById("ia-w-btn")?.click();
+  }
 }
 
-if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
-else init();
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init, { once: true });
+} else {
+  init();
+}

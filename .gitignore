@@ -3,4 +3,13 @@
 node_modules/
 __pycache__/
 *.pyc
+.venv/
+service_account/
+storage/vantelia.db
+storage/*.db
+storage/*.db-shm
+storage/*.db-wal
+storage/*/
+.streamlit/
 .git-inner-backup/
+.pytest_cache/

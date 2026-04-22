@@ -1,0 +1,67 @@
+===== INFORMACION DE AGENCIA IA DEMO =====
+
+DATOS GENERALES:
+- Nombre: Agencia IA Demo
+- Tipo de negocio: Agencia de automatizacion e inteligencia artificial
+- Descripcion: Agencia orientada a implantar asistentes conversacionales, automatizaciones y chatboxes embebidos para empresas.
+- Eslogan: Automatiza conversaciones, capta leads y escala soporte.
+
+CONTACTO Y UBICACION:
+- Direccion: No especificado en la demo
+- Ciudad: Madrid
+- Telefono: +34 600000000
+- Email: hola@vantelia.com
+- Web: No especificado en la demo
+- Instagram: No especificado en la demo
+- Facebook: No especificado en la demo
+- Google Maps: No especificado en la demo
+
+HORARIOS:
+- Lunes a Viernes: 09:00 a 18:00
+- Sabados: Cerrado
+- Domingos: Cerrado
+- Notas: La demo sirve para validar el flujo del widget y la reserva.
+
+SERVICIOS Y PRECIOS:
+- Automatizacion:
+  - Servicio: Automatizaciones de procesos
+  - Precio: A medida
+  - Detalle: Integraciones entre CRM, formularios, email y herramientas internas.
+- Asistentes IA:
+  - Servicio: Chatbox embebido para web
+  - Precio: A medida
+  - Detalle: Widget instalable por script con RAG y captacion de leads.
+- Consultoria:
+  - Servicio: Auditoria de flujos y oportunidades IA
+  - Precio: A medida
+  - Detalle: Analisis inicial para identificar automatizaciones rentables.
+
+EQUIPO PROFESIONAL:
+- Equipo Vantelia - Consultoria IA - Especialistas en asistentes y automatizacion
+
+PREGUNTAS FRECUENTES:
+P: Que ofrece esta demo?
+R: Permite probar un chatbox embebido multiempresa con flujo de preguntas, reserva y captura de leads.
+
+P: El widget se puede instalar en una web corporativa?
+R: Si. Se instala mediante un script y se conecta al backend configurado para cada cliente.
+
+PREGUNTAS SUGERIDAS PARA REVISION HUMANA:
+P: Cual es el modelo de precios final?
+R: No especificado en la demo.
+
+POLITICAS:
+- Citas/Reservas: Solicitud sujeta a revision manual.
+- Metodos de pago: No especificado en la demo.
+- Cancelaciones: No especificado en la demo.
+- Garantias: No especificado en la demo.
+
+DIFERENCIACION:
+- Ventajas competitivas: Instalacion simple, configuracion por cliente, onboarding automatico y backend con control de origen.
+- Certificaciones/Premios: No especificado en la demo.
+
+CONFIGURACION DEL ASISTENTE:
+- Nombre del bot: Demo
+- Tono: Profesional y resolutivo
+- Idioma: Espanol
+- Instrucciones: Mantenerse dentro del contexto de la demo y explicar el valor del producto sin inventar detalles no definidos.
