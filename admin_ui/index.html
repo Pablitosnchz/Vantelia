@@ -225,65 +225,6 @@
       margin-bottom: 4px;
     }
 
-    .clients {
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      min-height: 0;
-      overflow: hidden;
-    }
-
-    .clients-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      padding: 4px;
-    }
-
-    .clients-list {
-      overflow: auto;
-      display: grid;
-      gap: 8px;
-      padding-right: 4px;
-    }
-
-    .sidebar-search {
-      padding: 0 4px;
-    }
-
-    .sidebar-search input {
-      padding: 10px 12px;
-      font-size: 13px;
-    }
-
-    .client-item {
-      padding: 12px 14px;
-      border-radius: 8px;
-      background: var(--panel-strong);
-      border: 1px solid var(--line);
-      cursor: pointer;
-      transition: transform 0.16s ease, border-color 0.16s ease;
-    }
-
-    .client-item:hover,
-    .client-item.active {
-      transform: translateY(-1px);
-      border-color: rgba(0, 177, 217, 0.38);
-    }
-
-    .client-item strong,
-    .client-item span {
-      display: block;
-    }
-
-    .client-item span {
-      margin-top: 4px;
-      color: var(--soft);
-      font-size: 13px;
-    }
-
     .main {
       padding: 24px clamp(18px, 3vw, 34px);
       display: grid;
@@ -397,6 +338,22 @@
     .client-directory {
       display: grid;
       gap: 8px;
+    }
+
+    .client-directory-toolbar {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .client-directory-toolbar label {
+      flex: 1 1 260px;
+    }
+
+    .client-directory-toolbar button {
+      flex: 0 0 auto;
     }
 
     .client-list-row {
@@ -909,6 +866,220 @@
       min-width: 170px;
     }
 
+    .guided-editor {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .guided-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .guided-toolbar input {
+      flex: 1 1 280px;
+    }
+
+    .token-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .token {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 177, 217, 0.28);
+      background: rgba(0, 177, 217, 0.1);
+      color: var(--text);
+      font-size: 13px;
+      min-width: 0;
+    }
+
+    .token span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 320px;
+    }
+
+    .token button {
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .weekday-checks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .weekday-checks .inline-check {
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(2, 8, 23, 0.72);
+      backdrop-filter: blur(12px);
+      z-index: 50;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-card {
+      width: min(980px, 100%);
+      max-height: calc(100vh - 48px);
+      overflow: auto;
+      padding: 20px;
+      border-radius: 20px;
+      border: 1px solid rgba(0, 177, 217, 0.18);
+      background:
+        radial-gradient(circle at top right, rgba(0, 177, 217, 0.12), transparent 30%),
+        linear-gradient(180deg, rgba(8, 18, 46, 0.98), rgba(4, 12, 33, 0.96));
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.34);
+      display: grid;
+      gap: 18px;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .modal-header h3,
+    .modal-header p {
+      margin: 0;
+    }
+
+    .summary-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .summary-item {
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      display: grid;
+      gap: 6px;
+    }
+
+    .summary-item span {
+      color: var(--soft);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .summary-item strong {
+      font-size: 14px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+
+    .modal-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .slot-status {
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--soft);
+      font-size: 13px;
+    }
+
+    .slot-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+      gap: 10px;
+    }
+
+    .slot-grid button {
+      width: 100%;
+      background: rgba(184, 192, 204, 0.1);
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
+    .slot-grid button.selected {
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      border-color: transparent;
+    }
+
+    .timeline-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .timeline-dot {
+      width: 12px;
+      height: 12px;
+      margin-top: 6px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 5px rgba(0, 177, 217, 0.14);
+    }
+
+    .timeline-card {
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      display: grid;
+      gap: 8px;
+    }
+
+    .timeline-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .timeline-date {
+      color: var(--soft);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
     @media (max-width: 1180px) {
       .app {
         grid-template-columns: 1fr;
@@ -941,7 +1112,9 @@
       .grid-3,
       .split,
       .client-summary,
-      .meta-grid {
+      .meta-grid,
+      .summary-strip,
+      .modal-grid {
         grid-template-columns: 1fr;
       }
 
@@ -953,6 +1126,10 @@
       .client-list-main {
         align-items: flex-start;
         flex-direction: column;
+      }
+
+      .modal-overlay {
+        padding: 12px;
       }
     }
   </style>
@@ -1022,16 +1199,6 @@
         </div>
       </section>
 
-      <section class="card clients">
-        <div class="clients-header">
-          <strong>Clientes</strong>
-          <button id="newClientBtn" class="secondary" type="button">Nuevo</button>
-        </div>
-        <label class="sidebar-search">
-          <input id="clientSearch" type="search" placeholder="Buscar cliente..." />
-        </label>
-        <div id="clientsList" class="clients-list"></div>
-      </section>
     </aside>
 
     <main class="main">
@@ -1235,7 +1402,7 @@
                   <th>Cliente</th>
                   <th>Cita</th>
                   <th>Estado</th>
-                  <th>Proveedor</th>
+                  <th>Agenda</th>
                   <th>Emails</th>
                   <th>Acciones</th>
                 </tr>
@@ -1269,6 +1436,13 @@
             <h2>Listado de clientes</h2>
             <p id="clientCountLabel">Cargando clientes...</p>
           </div>
+        </div>
+        <div class="client-directory-toolbar">
+          <label>
+            Buscar cliente
+            <input id="clientSearch" type="search" placeholder="Nombre, ID, email, telefono..." />
+          </label>
+          <button id="newClientBtn" class="secondary" type="button">Nuevo cliente</button>
         </div>
         <div id="clientDirectory" class="client-directory">
           <div class="empty"><span class="loading-inline"><span class="loading-dot"></span>Cargando clientes...</span></div>
@@ -1367,18 +1541,27 @@
             </label>
           </div>
 
-          <label>
-            Allowed origins
-            <textarea id="allowedOrigins" placeholder="https://empresa.com&#10;https://www.empresa.com"></textarea>
-            <span class="field-note">Un dominio por linea. Puedes poner directamente los dominios donde se insertara el chatbox.</span>
-          </label>
+          <section class="guided-editor">
+            <div>
+              <strong>Allowed origins</strong>
+              <div class="field-note">Anade solo los dominios donde se insertara el chatbox. Se guardan normalizados y puedes quitarlos sin editar texto libre.</div>
+            </div>
+            <div class="guided-toolbar">
+              <input id="allowedOriginInput" type="url" placeholder="https://empresa.com" />
+              <button id="addAllowedOriginBtn" class="secondary small" type="button">Anadir dominio</button>
+            </div>
+            <div id="allowedOriginsList" class="token-list">
+              <div class="empty">Todavia no hay dominios autorizados.</div>
+            </div>
+            <textarea id="allowedOrigins" hidden placeholder="https://empresa.com&#10;https://www.empresa.com"></textarea>
+          </section>
         </section>
 
         <section class="client-tab-panel" data-client-panel="booking">
           <div class="section-header">
             <div>
               <h2>Reservas</h2>
-              <p>Activa agenda online y define proveedor, disponibilidad, Calendly o Google Calendar.</p>
+              <p>Activa agenda online y define disponibilidad. Todas las citas se gestionan dentro de Vantelia.</p>
             </div>
           </div>
 
@@ -1387,20 +1570,12 @@
               <input id="bookingEnabled" type="checkbox" checked />
               Reserva online activa
             </label>
+            <input id="bookingProvider" type="hidden" value="internal" />
 
             <div class="grid-3">
               <label>
-                Proveedor real
-                <select id="bookingProvider">
-                  <option value="internal">Interno / manual</option>
-                  <option value="google_calendar">Google Calendar</option>
-                  <option value="calendly">Calendly</option>
-                </select>
-              </label>
-
-              <label>
                 Timezone
-                <input id="bookingTimezone" type="text" value="Europe/Madrid" />
+                <input id="bookingTimezone" type="text" list="bookingTimezoneOptions" value="Europe/Madrid" />
               </label>
 
               <label>
@@ -1408,22 +1583,41 @@
                 <input id="bookingSlotMinutes" type="number" value="30" min="5" max="240" />
               </label>
 
-              <label>
-                Dias cerrados
-                <input id="bookingClosedWeekdays" type="text" value="6" />
-                <span class="field-note">Usa numeros: 0 lunes, 6 domingo.</span>
-              </label>
+              <div>
+                <span>Dias cerrados</span>
+                <div class="field-note">Marca los dias en los que el cliente no ofrece reservas online.</div>
+              </div>
+            </div>
+
+            <datalist id="bookingTimezoneOptions">
+              <option value="Europe/Madrid"></option>
+              <option value="Europe/Lisbon"></option>
+              <option value="Europe/London"></option>
+              <option value="Europe/Paris"></option>
+              <option value="America/New_York"></option>
+              <option value="America/Mexico_City"></option>
+              <option value="America/Bogota"></option>
+            </datalist>
+
+            <div class="weekday-checks" id="bookingClosedWeekdaysGroup">
+              <label class="inline-check"><input type="checkbox" value="0" /> Lun</label>
+              <label class="inline-check"><input type="checkbox" value="1" /> Mar</label>
+              <label class="inline-check"><input type="checkbox" value="2" /> Mie</label>
+              <label class="inline-check"><input type="checkbox" value="3" /> Jue</label>
+              <label class="inline-check"><input type="checkbox" value="4" /> Vie</label>
+              <label class="inline-check"><input type="checkbox" value="5" /> Sab</label>
+              <label class="inline-check"><input type="checkbox" value="6" /> Dom</label>
             </div>
 
             <div class="grid">
               <label>
                 Inicio jornada
-                <input id="bookingDayStart" type="text" value="09:00" />
+                <input id="bookingDayStart" type="time" value="09:00" />
               </label>
 
               <label>
                 Fin jornada
-                <input id="bookingDayEnd" type="text" value="18:00" />
+                <input id="bookingDayEnd" type="time" value="18:00" />
               </label>
             </div>
 
@@ -1438,58 +1632,6 @@
                 <input id="bookingWebhookUrl" type="text" placeholder="https://hook.example.com" />
               </label>
             </div>
-
-            <label>
-              Calendly user env
-              <input id="bookingCalendlyUserEnv" type="text" placeholder="CALENDLY_USER_URI_CLINICA_SAGA" />
-              <span class="field-note">Nombre de la variable de entorno donde guardas el user URI de Calendly para consultar ocupacion real.</span>
-            </label>
-
-            <div class="grid">
-              <label>
-                Calendly event type env
-                <input id="bookingCalendlyEventTypeEnv" type="text" placeholder="CALENDLY_EVENT_TYPE_URI_CLINICA_SAGA" />
-              </label>
-
-              <label>
-                Calendly location kind
-                <input id="bookingCalendlyLocationKind" type="text" placeholder="zoom_conference" />
-              </label>
-            </div>
-
-            <label>
-              Calendly location value
-              <input id="bookingCalendlyLocationValue" type="text" placeholder="Solo si la localizacion requiere un valor adicional" />
-            </label>
-
-            <div class="grid">
-              <label>
-                Google Calendar ID directo
-                <input id="bookingGoogleCalendarId" type="text" placeholder="tu_calendario@group.calendar.google.com" />
-                <span class="field-note">Modo facil: pegalo aqui y no hace falta usar una variable de entorno.</span>
-              </label>
-
-              <label>
-                Google Calendar ID env
-                <input id="bookingGoogleCalendarIdEnv" type="text" placeholder="GOOGLE_CALENDAR_ID_CLINICA_SAGA" />
-              </label>
-            </div>
-
-            <div class="grid">
-              <label>
-                Google service account env
-                <input id="bookingGoogleServiceAccountEnv" type="text" placeholder="GOOGLE_SERVICE_ACCOUNT_JSON_CLINICA_SAGA" />
-                <span class="field-note">Modo avanzado por variable de entorno.</span>
-              </label>
-            </div>
-
-            <label>
-              Google service account JSON
-              <textarea id="bookingGoogleServiceAccountJson" placeholder='Pega aqui el JSON completo de la service account de Google'></textarea>
-              <span class="field-note">Modo facil: al guardar, Vantelia lo validara y lo guardara en el servidor automaticamente.</span>
-            </label>
-
-            <input id="bookingGoogleServiceAccountPath" type="hidden" />
 
             <label>
               Mensaje de exito
@@ -1574,6 +1716,48 @@
     </main>
   </div>
 
+  <div id="bookingModalOverlay" class="modal-overlay" aria-hidden="true">
+    <section id="bookingRescheduleModal" class="modal-card" hidden>
+      <div class="modal-header">
+        <div>
+          <h3>Reprogramar cita</h3>
+          <p class="muted">Selecciona una nueva fecha y uno de los horarios disponibles reales del cliente.</p>
+        </div>
+        <button id="closeRescheduleModalBtn" class="ghost small" type="button">Cerrar</button>
+      </div>
+      <div id="bookingRescheduleSummary" class="summary-strip"></div>
+      <div class="modal-grid">
+        <label>
+          Nueva fecha
+          <input id="bookingRescheduleDate" type="date" />
+        </label>
+        <label>
+          Hora seleccionada
+          <input id="bookingRescheduleTime" type="time" readonly />
+        </label>
+      </div>
+      <div id="bookingRescheduleStatus" class="slot-status">Selecciona una fecha para cargar la disponibilidad.</div>
+      <div id="bookingRescheduleSlots" class="slot-grid"></div>
+      <div class="actions">
+        <button id="saveRescheduleModalBtn" type="button">Guardar nuevo horario</button>
+      </div>
+    </section>
+
+    <section id="bookingTimelineModal" class="modal-card" hidden>
+      <div class="modal-header">
+        <div>
+          <h3>Timeline de la cita</h3>
+          <p class="muted">Auditoria completa de cambios, correos y acciones realizadas sobre la reserva.</p>
+        </div>
+        <button id="closeTimelineModalBtn" class="ghost small" type="button">Cerrar</button>
+      </div>
+      <div id="bookingTimelineSummary" class="summary-strip"></div>
+      <div id="bookingTimelineList" class="timeline-list">
+        <div class="empty">Selecciona una cita para cargar su auditoria.</div>
+      </div>
+    </section>
+  </div>
+
   <script>
     const state = {
       activeView: "clients",
@@ -1581,6 +1765,10 @@
       currentUser: null,
       clients: [],
       users: [],
+      bookings: [],
+      bookingModalMode: "",
+      activeBookingId: "",
+      rescheduleSelectedTime: "",
     };
 
     const elements = {
@@ -1596,7 +1784,6 @@
       newPassword: document.getElementById("newPassword"),
       confirmPassword: document.getElementById("confirmPassword"),
       clientSearch: document.getElementById("clientSearch"),
-      clientsList: document.getElementById("clientsList"),
       clientDirectory: document.getElementById("clientDirectory"),
       clientCountLabel: document.getElementById("clientCountLabel"),
       selectedClientSummary: document.getElementById("selectedClientSummary"),
@@ -1621,25 +1808,19 @@
       promptExtra: document.getElementById("promptExtra"),
       contactoEmail: document.getElementById("contactoEmail"),
       contactoTelefono: document.getElementById("contactoTelefono"),
+      allowedOriginInput: document.getElementById("allowedOriginInput"),
+      addAllowedOriginBtn: document.getElementById("addAllowedOriginBtn"),
+      allowedOriginsList: document.getElementById("allowedOriginsList"),
       allowedOrigins: document.getElementById("allowedOrigins"),
       bookingEnabled: document.getElementById("bookingEnabled"),
       bookingProvider: document.getElementById("bookingProvider"),
       bookingTimezone: document.getElementById("bookingTimezone"),
       bookingSlotMinutes: document.getElementById("bookingSlotMinutes"),
-      bookingClosedWeekdays: document.getElementById("bookingClosedWeekdays"),
+      bookingClosedWeekdaysGroup: document.getElementById("bookingClosedWeekdaysGroup"),
       bookingDayStart: document.getElementById("bookingDayStart"),
       bookingDayEnd: document.getElementById("bookingDayEnd"),
       bookingWebhookEnv: document.getElementById("bookingWebhookEnv"),
       bookingWebhookUrl: document.getElementById("bookingWebhookUrl"),
-      bookingCalendlyUserEnv: document.getElementById("bookingCalendlyUserEnv"),
-      bookingCalendlyEventTypeEnv: document.getElementById("bookingCalendlyEventTypeEnv"),
-      bookingCalendlyLocationKind: document.getElementById("bookingCalendlyLocationKind"),
-      bookingCalendlyLocationValue: document.getElementById("bookingCalendlyLocationValue"),
-      bookingGoogleCalendarId: document.getElementById("bookingGoogleCalendarId"),
-      bookingGoogleCalendarIdEnv: document.getElementById("bookingGoogleCalendarIdEnv"),
-      bookingGoogleServiceAccountPath: document.getElementById("bookingGoogleServiceAccountPath"),
-      bookingGoogleServiceAccountEnv: document.getElementById("bookingGoogleServiceAccountEnv"),
-      bookingGoogleServiceAccountJson: document.getElementById("bookingGoogleServiceAccountJson"),
       bookingSuccessMessage: document.getElementById("bookingSuccessMessage"),
       newUserName: document.getElementById("newUserName"),
       newUserEmail: document.getElementById("newUserEmail"),
@@ -1657,6 +1838,19 @@
       bookingDateTo: document.getElementById("bookingDateTo"),
       bookingLimit: document.getElementById("bookingLimit"),
       bookingsTableBody: document.getElementById("bookingsTableBody"),
+      bookingModalOverlay: document.getElementById("bookingModalOverlay"),
+      bookingRescheduleModal: document.getElementById("bookingRescheduleModal"),
+      bookingTimelineModal: document.getElementById("bookingTimelineModal"),
+      bookingRescheduleSummary: document.getElementById("bookingRescheduleSummary"),
+      bookingTimelineSummary: document.getElementById("bookingTimelineSummary"),
+      bookingRescheduleDate: document.getElementById("bookingRescheduleDate"),
+      bookingRescheduleTime: document.getElementById("bookingRescheduleTime"),
+      bookingRescheduleStatus: document.getElementById("bookingRescheduleStatus"),
+      bookingRescheduleSlots: document.getElementById("bookingRescheduleSlots"),
+      saveRescheduleModalBtn: document.getElementById("saveRescheduleModalBtn"),
+      closeRescheduleModalBtn: document.getElementById("closeRescheduleModalBtn"),
+      closeTimelineModalBtn: document.getElementById("closeTimelineModalBtn"),
+      bookingTimelineList: document.getElementById("bookingTimelineList"),
       reindexAfterSave: document.getElementById("reindexAfterSave"),
       infoTxt: document.getElementById("infoTxt"),
     };
@@ -1839,6 +2033,241 @@
       return `${(size / (1024 * 1024)).toFixed(1)} MB`;
     }
 
+    function normalizeOriginValue(value) {
+      const trimmed = String(value || "").trim();
+      if (!trimmed) return "";
+      try {
+        const url = new URL(trimmed.startsWith("http") ? trimmed : `https://${trimmed}`);
+        return url.origin;
+      } catch (error) {
+        throw new Error("Escribe un dominio valido, por ejemplo https://empresa.com");
+      }
+    }
+
+    function allowedOriginsValues() {
+      return elements.allowedOrigins.value
+        .split(/\n|,/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    function renderAllowedOriginsEditor() {
+      const items = allowedOriginsValues();
+      elements.allowedOriginsList.innerHTML = "";
+      if (!items.length) {
+        elements.allowedOriginsList.innerHTML = '<div class="empty">Todavia no hay dominios autorizados.</div>';
+        return;
+      }
+      items.forEach((origin) => {
+        const token = document.createElement("div");
+        token.className = "token";
+        token.innerHTML = `
+          <span>${escapeHtml(origin)}</span>
+          <button class="ghost small" type="button" data-remove-origin="${escapeHtml(origin)}">Quitar</button>
+        `;
+        elements.allowedOriginsList.appendChild(token);
+      });
+      elements.allowedOriginsList.querySelectorAll("button[data-remove-origin]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const nextItems = allowedOriginsValues().filter((origin) => origin !== button.dataset.removeOrigin);
+          elements.allowedOrigins.value = nextItems.join("\n");
+          renderAllowedOriginsEditor();
+        });
+      });
+    }
+
+    function addAllowedOriginFromInput() {
+      const normalized = normalizeOriginValue(elements.allowedOriginInput.value);
+      const nextItems = Array.from(new Set([...allowedOriginsValues(), normalized]));
+      elements.allowedOrigins.value = nextItems.join("\n");
+      elements.allowedOriginInput.value = "";
+      renderAllowedOriginsEditor();
+    }
+
+    function collectClosedWeekdays() {
+      return Array.from(elements.bookingClosedWeekdaysGroup.querySelectorAll("input[type='checkbox']:checked"))
+        .map((checkbox) => Number(checkbox.value))
+        .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+        .sort((left, right) => left - right);
+    }
+
+    function fillClosedWeekdays(days) {
+      const selected = new Set((days || []).map((day) => Number(day)));
+      elements.bookingClosedWeekdaysGroup.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+        checkbox.checked = selected.has(Number(checkbox.value));
+      });
+    }
+
+    function getBookingById(bookingId) {
+      return state.bookings.find((booking) => booking.booking_id === bookingId) || null;
+    }
+
+    function formatBookingSummaryStrip(booking) {
+      if (!booking) return "";
+      return `
+        <div class="summary-item">
+          <span>Cliente</span>
+          <strong>${escapeHtml(booking.empresa || "-")}<br />${escapeHtml(booking.cliente_id || "-")}</strong>
+        </div>
+        <div class="summary-item">
+          <span>Asistente</span>
+          <strong>${escapeHtml(booking.nombre || "-")}<br />${escapeHtml(booking.email || "-")}</strong>
+        </div>
+        <div class="summary-item">
+          <span>Servicio</span>
+          <strong>${escapeHtml(booking.servicio || "Consulta")}</strong>
+        </div>
+        <div class="summary-item">
+          <span>Horario actual</span>
+          <strong>${escapeHtml(`${booking.fecha || "-"} ${booking.hora || ""}`.trim())}</strong>
+        </div>
+      `;
+    }
+
+    function closeBookingModal() {
+      state.bookingModalMode = "";
+      state.activeBookingId = "";
+      state.rescheduleSelectedTime = "";
+      elements.bookingModalOverlay.classList.remove("active");
+      elements.bookingModalOverlay.setAttribute("aria-hidden", "true");
+      elements.bookingRescheduleModal.hidden = true;
+      elements.bookingTimelineModal.hidden = true;
+      elements.bookingRescheduleTime.value = "";
+      elements.bookingRescheduleSlots.innerHTML = "";
+      elements.bookingRescheduleStatus.textContent = "Selecciona una fecha para cargar la disponibilidad.";
+    }
+
+    function setSelectedAdminRescheduleSlot(button, hour) {
+      state.rescheduleSelectedTime = hour;
+      elements.bookingRescheduleTime.value = hour;
+      elements.bookingRescheduleSlots.querySelectorAll("button").forEach((item) => item.classList.remove("selected"));
+      button.classList.add("selected");
+    }
+
+    function isCurrentAdminSlot(booking, date, hour) {
+      return Boolean(booking && booking.fecha === date && booking.hora === hour);
+    }
+
+    async function loadAdminRescheduleSlots() {
+      const booking = getBookingById(state.activeBookingId);
+      const selectedDate = elements.bookingRescheduleDate.value.trim();
+      elements.bookingRescheduleSlots.innerHTML = "";
+      if (!booking || !selectedDate) {
+        elements.bookingRescheduleStatus.textContent = "Selecciona una fecha para cargar la disponibilidad.";
+        return;
+      }
+      elements.bookingRescheduleStatus.textContent = "Consultando disponibilidad real...";
+      const params = new URLSearchParams({
+        cliente_id: booking.cliente_id,
+        fecha: selectedDate,
+      });
+      const response = await api(`/disponibilidad?${params.toString()}`);
+      const slots = Array.isArray(response.slots) ? response.slots : [];
+      let selectedVisible = false;
+      let availableCount = 0;
+      slots.forEach((slot) => {
+        const hour = String(slot.hora || "");
+        const isCurrent = isCurrentAdminSlot(booking, selectedDate, hour);
+        const enabled = Boolean(slot.disponible) || isCurrent;
+        if (enabled) availableCount += 1;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = hour;
+        button.disabled = !enabled;
+        if (hour === state.rescheduleSelectedTime) {
+          button.classList.add("selected");
+          selectedVisible = true;
+        }
+        button.addEventListener("click", () => setSelectedAdminRescheduleSlot(button, hour));
+        elements.bookingRescheduleSlots.appendChild(button);
+      });
+      elements.bookingRescheduleStatus.textContent = availableCount
+        ? `${availableCount} horarios listos para reservar`
+        : "No hay horarios disponibles para este dia.";
+      if (!selectedVisible) {
+        state.rescheduleSelectedTime = "";
+        elements.bookingRescheduleTime.value = "";
+      }
+    }
+
+    function openRescheduleModal(bookingId) {
+      const booking = getBookingById(bookingId);
+      if (!booking) throw new Error("No se ha encontrado la cita seleccionada.");
+      state.bookingModalMode = "reschedule";
+      state.activeBookingId = bookingId;
+      state.rescheduleSelectedTime = booking.hora || "";
+      elements.bookingModalOverlay.classList.add("active");
+      elements.bookingModalOverlay.setAttribute("aria-hidden", "false");
+      elements.bookingTimelineModal.hidden = true;
+      elements.bookingRescheduleModal.hidden = false;
+      elements.bookingRescheduleSummary.innerHTML = formatBookingSummaryStrip(booking);
+      elements.bookingRescheduleDate.value = booking.fecha || "";
+      elements.bookingRescheduleTime.value = booking.hora || "";
+      loadAdminRescheduleSlots().catch((error) => {
+        elements.bookingRescheduleStatus.textContent = error.message;
+        showStatus(error.message, "error");
+      });
+    }
+
+    function renderTimeline(items) {
+      if (!items.length) {
+        elements.bookingTimelineList.innerHTML = '<div class="empty">Todavia no hay movimientos registrados para esta cita.</div>';
+        return;
+      }
+      elements.bookingTimelineList.innerHTML = "";
+      items.forEach((item) => {
+        const row = document.createElement("article");
+        row.className = "timeline-item";
+        row.innerHTML = `
+          <div class="timeline-dot"></div>
+          <div class="timeline-card">
+            <div class="timeline-meta">
+              <strong>${escapeHtml(item.title || "Movimiento")}</strong>
+              <span class="pill alt">${escapeHtml(item.source || item.actor || "Sistema")}</span>
+              <span class="timeline-date">${escapeHtml(formatDateTimeLabel(item.created_at))}</span>
+            </div>
+            <div>${escapeHtml(item.detail || "Sin detalle adicional.")}</div>
+          </div>
+        `;
+        elements.bookingTimelineList.appendChild(row);
+      });
+    }
+
+    async function openTimelineModal(bookingId) {
+      const booking = getBookingById(bookingId);
+      if (!booking) throw new Error("No se ha encontrado la cita seleccionada.");
+      state.bookingModalMode = "timeline";
+      state.activeBookingId = bookingId;
+      elements.bookingModalOverlay.classList.add("active");
+      elements.bookingModalOverlay.setAttribute("aria-hidden", "false");
+      elements.bookingRescheduleModal.hidden = true;
+      elements.bookingTimelineModal.hidden = false;
+      elements.bookingTimelineSummary.innerHTML = formatBookingSummaryStrip(booking);
+      elements.bookingTimelineList.innerHTML = '<div class="empty"><span class="loading-inline"><span class="loading-dot"></span>Cargando timeline...</span></div>';
+      const response = await api(`/admin/bookings/${encodeURIComponent(bookingId)}/timeline`);
+      renderTimeline(response.items || []);
+    }
+
+    async function submitAdminReschedule() {
+      const booking = getBookingById(state.activeBookingId);
+      if (!booking) {
+        throw new Error("No se ha encontrado la cita seleccionada.");
+      }
+      const date = elements.bookingRescheduleDate.value.trim();
+      const hour = state.rescheduleSelectedTime || elements.bookingRescheduleTime.value.trim();
+      if (!date || !hour) {
+        throw new Error("Selecciona fecha y horario antes de guardar.");
+      }
+      await api(`/admin/bookings/${encodeURIComponent(booking.booking_id)}/reschedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fecha: date, hora: hour }),
+      });
+      closeBookingModal();
+      showStatus("Cita reprogramada correctamente.", "success");
+      await loadBookings();
+    }
+
     function getVisibleClients() {
       const search = elements.clientSearch.value.trim().toLowerCase();
       return state.clients.filter((client) => {
@@ -1931,33 +2360,8 @@
 
     function renderClientList(selectedId = state.currentClientId) {
       const visibleClients = getVisibleClients();
-      elements.clientsList.innerHTML = "";
       renderClientDirectory(selectedId, visibleClients);
       renderSelectedClientSummary();
-
-      if (!visibleClients.length) {
-        elements.clientsList.innerHTML = '<div class="empty">No hay clientes para esta busqueda.</div>';
-        return;
-      }
-
-      visibleClients.forEach((client) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = `client-item${client.cliente_id === selectedId ? " active" : ""}`;
-        button.dataset.id = client.cliente_id;
-        const clientName = escapeHtml(client.nombre);
-        const clientId = escapeHtml(client.cliente_id);
-        const originsCount = Array.isArray(client.allowed_origins) ? client.allowed_origins.length : 0;
-        button.innerHTML = `
-          <strong>${clientName}</strong>
-          <span>${clientId}</span>
-          <span>${originsCount} origenes permitidos</span>
-        `;
-        button.addEventListener("click", () => {
-          openClientSection(client.cliente_id, "profile").catch((error) => showStatus(error.message, "error"));
-        });
-        elements.clientsList.appendChild(button);
-      });
     }
 
     function renderCurrentUser() {
@@ -1967,41 +2371,41 @@
     }
 
     function payloadFromForm() {
+      let nextOrigins = allowedOriginsValues();
+      if (elements.allowedOriginInput.value.trim()) {
+        nextOrigins = Array.from(new Set([...nextOrigins, normalizeOriginValue(elements.allowedOriginInput.value)]));
+        elements.allowedOrigins.value = nextOrigins.join("\n");
+        elements.allowedOriginInput.value = "";
+        renderAllowedOriginsEditor();
+      }
       return {
         nombre: elements.nombre.value.trim(),
         icono: elements.icono.value.trim() || "AI",
         color: elements.color.value.trim() || "#00b1d9",
         bienvenida: elements.bienvenida.value.trim(),
         prompt_extra: elements.promptExtra.value.trim(),
-        allowed_origins: elements.allowedOrigins.value
-          .split(/\n|,/)
-          .map((item) => item.trim())
-          .filter(Boolean),
+        allowed_origins: nextOrigins,
         contacto_email: elements.contactoEmail.value.trim(),
         contacto_telefono: elements.contactoTelefono.value.trim(),
         branding_text: elements.brandingText.value.trim() || "Powered by Vantelia",
         booking_enabled: elements.bookingEnabled.checked,
-        booking_provider: elements.bookingProvider.value,
+        booking_provider: "internal",
         booking_timezone: elements.bookingTimezone.value.trim() || "Europe/Madrid",
         booking_slot_minutes: Number(elements.bookingSlotMinutes.value || 30),
         booking_day_start: elements.bookingDayStart.value.trim() || "09:00",
         booking_day_end: elements.bookingDayEnd.value.trim() || "18:00",
-        booking_closed_weekdays: elements.bookingClosedWeekdays.value
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean)
-          .map((item) => Number(item)),
+        booking_closed_weekdays: collectClosedWeekdays(),
         booking_webhook_env: elements.bookingWebhookEnv.value.trim(),
         booking_webhook_url: elements.bookingWebhookUrl.value.trim(),
-        booking_calendly_user_env: elements.bookingCalendlyUserEnv.value.trim(),
-        booking_calendly_event_type_env: elements.bookingCalendlyEventTypeEnv.value.trim(),
-        booking_calendly_location_kind: elements.bookingCalendlyLocationKind.value.trim(),
-        booking_calendly_location_value: elements.bookingCalendlyLocationValue.value.trim(),
-        booking_google_calendar_id: elements.bookingGoogleCalendarId.value.trim(),
-        booking_google_calendar_id_env: elements.bookingGoogleCalendarIdEnv.value.trim(),
-        booking_google_service_account_path: elements.bookingGoogleServiceAccountPath.value.trim(),
-        booking_google_service_account_env: elements.bookingGoogleServiceAccountEnv.value.trim(),
-        booking_google_service_account_json: elements.bookingGoogleServiceAccountJson.value.trim(),
+        booking_calendly_user_env: "",
+        booking_calendly_event_type_env: "",
+        booking_calendly_location_kind: "",
+        booking_calendly_location_value: "",
+        booking_google_calendar_id: "",
+        booking_google_calendar_id_env: "",
+        booking_google_service_account_path: "",
+        booking_google_service_account_env: "",
+        booking_google_service_account_json: "",
         booking_success_message: elements.bookingSuccessMessage.value.trim(),
         info_txt: elements.infoTxt.value,
         reindex_after_save: elements.reindexAfterSave.checked,
@@ -2021,24 +2425,16 @@
       elements.contactoEmail.value = cfg.contacto_email || "";
       elements.contactoTelefono.value = cfg.contacto_telefono || "";
       elements.allowedOrigins.value = (cfg.allowed_origins || []).join("\n");
+      renderAllowedOriginsEditor();
       elements.bookingEnabled.checked = Boolean(cfg.booking_enabled);
-      elements.bookingProvider.value = cfg.booking_provider || "internal";
+      elements.bookingProvider.value = "internal";
       elements.bookingTimezone.value = cfg.booking_timezone || "Europe/Madrid";
       elements.bookingSlotMinutes.value = String(cfg.booking_slot_minutes || 30);
-      elements.bookingClosedWeekdays.value = (cfg.booking_closed_weekdays || []).join(",");
+      fillClosedWeekdays(cfg.booking_closed_weekdays || []);
       elements.bookingDayStart.value = cfg.booking_day_start || "09:00";
       elements.bookingDayEnd.value = cfg.booking_day_end || "18:00";
       elements.bookingWebhookEnv.value = cfg.booking_webhook_env || "";
       elements.bookingWebhookUrl.value = cfg.booking_webhook_url || "";
-      elements.bookingCalendlyUserEnv.value = cfg.booking_calendly_user_env || "";
-      elements.bookingCalendlyEventTypeEnv.value = cfg.booking_calendly_event_type_env || "";
-      elements.bookingCalendlyLocationKind.value = cfg.booking_calendly_location_kind || "";
-      elements.bookingCalendlyLocationValue.value = cfg.booking_calendly_location_value || "";
-      elements.bookingGoogleCalendarId.value = cfg.booking_google_calendar_id || "";
-      elements.bookingGoogleCalendarIdEnv.value = cfg.booking_google_calendar_id_env || "";
-      elements.bookingGoogleServiceAccountPath.value = cfg.booking_google_service_account_path || "";
-      elements.bookingGoogleServiceAccountEnv.value = cfg.booking_google_service_account_env || "";
-      elements.bookingGoogleServiceAccountJson.value = "";
       elements.bookingSuccessMessage.value = cfg.booking_success_message || "";
       elements.infoTxt.value = cfg.info_txt || "";
       elements.reindexAfterSave.checked = true;
@@ -2048,9 +2444,6 @@
         elements.bookingClientFilter.value = detail.cliente_id;
       }
 
-      document.querySelectorAll(".client-item").forEach((item) => {
-        item.classList.toggle("active", item.dataset.id === detail.cliente_id);
-      });
       renderClientList(detail.cliente_id);
     }
 
@@ -2062,7 +2455,6 @@
     }
 
     async function loadClients(selectedId = state.currentClientId) {
-      elements.clientsList.innerHTML = '<div class="empty"><span class="loading-inline"><span class="loading-dot"></span>Cargando clientes...</span></div>';
       elements.clientDirectory.innerHTML = '<div class="empty"><span class="loading-inline"><span class="loading-dot"></span>Cargando clientes...</span></div>';
       elements.clientCountLabel.textContent = "Cargando clientes...";
       const clients = await api("/admin/clientes");
@@ -2205,6 +2597,7 @@
     }
 
     function renderBookings(bookings) {
+      state.bookings = bookings || [];
       if (!bookings.length) {
         elements.bookingsTableBody.innerHTML = '<tr><td colspan="6" class="muted">No hay reservas para este filtro.</td></tr>';
         return;
@@ -2222,14 +2615,13 @@
         const email = escapeHtml(booking.email || "-");
         const estado = escapeHtml(booking.estado || "-");
         const providerStatus = escapeHtml(booking.provider_status || "-");
-        const providerName = escapeHtml(booking.provider_name || "-");
-        const providerBookingId = escapeHtml(booking.provider_booking_id || "-");
+        const providerName = "Interna Vantelia";
+        const providerBookingId = escapeHtml(booking.booking_id || "-");
         const customerEmailStatus = escapeHtml(booking.customer_email_status || "-");
         const confirmationEmailSentAt = escapeHtml(booking.confirmation_email_sent_at || "Sin confirmacion");
         const reminder24hSentAt = escapeHtml(booking.reminder_24h_sent_at || "Sin recordatorio 24h");
         const bookingId = escapeHtml(booking.booking_id || "");
         const manageUrl = escapeHtml(booking.manage_url || "");
-        const providerBookingUrl = escapeHtml(booking.provider_booking_url || "");
         row.innerHTML = `
           <td>
             <div class="booking-meta">
@@ -2267,9 +2659,9 @@
           <td>
             <div class="booking-actions">
               <button class="secondary" type="button" data-action="resend" data-id="${bookingId}">Reenviar email</button>
-              <button class="secondary" type="button" data-action="reschedule" data-id="${bookingId}" data-fecha="${fecha}" data-hora="${hora}">Reprogramar</button>
+              <button class="secondary" type="button" data-action="reschedule" data-id="${bookingId}">Reprogramar</button>
+              <button class="ghost" type="button" data-action="timeline" data-id="${bookingId}">Timeline</button>
               <button class="ghost" type="button" data-action="open" data-url="${manageUrl}">Abrir gestion</button>
-              <button class="secondary" type="button" data-action="provider" data-url="${providerBookingUrl}">Proveedor</button>
               <button class="secondary" type="button" data-action="cancel" data-id="${bookingId}">Cancelar</button>
             </div>
           </td>
@@ -2288,11 +2680,6 @@
               window.open(targetUrl, "_blank", "noopener,noreferrer");
               return;
             }
-            if (action === "provider") {
-              if (!targetUrl) throw new Error("Esta reserva no tiene URL del proveedor.");
-              window.open(targetUrl, "_blank", "noopener,noreferrer");
-              return;
-            }
             if (action === "resend") {
               await api(`/admin/bookings/${encodeURIComponent(bookingId)}/resend-email`, { method: "POST" });
               showStatus("Correo reenviado correctamente.", "success");
@@ -2300,19 +2687,11 @@
               return;
             }
             if (action === "reschedule") {
-              const fechaActual = button.dataset.fecha || "";
-              const horaActual = button.dataset.hora || "";
-              const nuevaFecha = window.prompt("Nueva fecha (YYYY-MM-DD)", fechaActual);
-              if (!nuevaFecha) return;
-              const nuevaHora = window.prompt("Nueva hora (HH:MM)", horaActual);
-              if (!nuevaHora) return;
-              await api(`/admin/bookings/${encodeURIComponent(bookingId)}/reschedule`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ fecha: nuevaFecha.trim(), hora: nuevaHora.trim() }),
-              });
-              showStatus("Cita reprogramada correctamente.", "success");
-              await loadBookings();
+              openRescheduleModal(bookingId);
+              return;
+            }
+            if (action === "timeline") {
+              await openTimelineModal(bookingId);
               return;
             }
             if (action === "cancel") {
@@ -2330,6 +2709,7 @@
 
     async function loadBookings(clienteId = elements.bookingClientFilter.value.trim()) {
       elements.bookingsTableBody.innerHTML = '<tr><td colspan="6"><span class="loading-inline"><span class="loading-dot"></span>Cargando reservas...</span></td></tr>';
+      closeBookingModal();
       const params = new URLSearchParams();
       const selectedClient = clienteId || "";
       const selectedStatus = elements.bookingStatusFilter.value.trim();
@@ -2669,6 +3049,22 @@
       }
     });
 
+    elements.addAllowedOriginBtn.addEventListener("click", () => {
+      try {
+        addAllowedOriginFromInput();
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+    elements.allowedOriginInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      try {
+        addAllowedOriginFromInput();
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
     elements.clientSearch.addEventListener("input", () => renderClientList());
     elements.newUserRole.addEventListener("change", () => toggleClientFieldByRole());
     document.getElementById("refreshUsersBtn").addEventListener("click", () => {
@@ -2692,6 +3088,27 @@
       withButtonLoading(document.getElementById("runRemindersBtn"), "Ejecutando...", () => runBookingReminders())
         .catch((error) => showStatus(error.message, "error"));
     });
+    elements.closeRescheduleModalBtn.addEventListener("click", () => closeBookingModal());
+    elements.closeTimelineModalBtn.addEventListener("click", () => closeBookingModal());
+    elements.bookingRescheduleDate.addEventListener("change", () => {
+      state.rescheduleSelectedTime = "";
+      elements.bookingRescheduleTime.value = "";
+      loadAdminRescheduleSlots().catch((error) => showStatus(error.message, "error"));
+    });
+    elements.saveRescheduleModalBtn.addEventListener("click", () => {
+      withButtonLoading(elements.saveRescheduleModalBtn, "Guardando...", () => submitAdminReschedule())
+        .catch((error) => showStatus(error.message, "error"));
+    });
+    elements.bookingModalOverlay.addEventListener("click", (event) => {
+      if (event.target === elements.bookingModalOverlay) {
+        closeBookingModal();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.bookingModalMode) {
+        closeBookingModal();
+      }
+    });
     elements.navButtons.forEach((button) => {
       button.addEventListener("click", () => setView(button.dataset.navView));
     });
@@ -2699,6 +3116,7 @@
       button.addEventListener("click", () => setClientTab(button.dataset.clientTab));
     });
 
+    renderAllowedOriginsEditor();
     toggleClientFieldByRole();
     setClientTab("profile");
     setView("clients");

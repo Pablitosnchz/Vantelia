@@ -21,12 +21,12 @@
       --danger: #ff7b86;
       --danger-soft: rgba(196, 69, 54, 0.16);
       --success-soft: rgba(0, 177, 217, 0.12);
-      --shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
-      --radius: 24px;
-      --radius-sm: 16px;
+      --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+      --radius: 8px;
+      --radius-sm: 8px;
       --font-title: "Montserrat", "Segoe UI", sans-serif;
       --font: "Poppins", "Segoe UI", sans-serif;
-      --maxw: 1320px;
+      --maxw: 100%;
     }
 
     * { box-sizing: border-box; }
@@ -50,24 +50,36 @@
 
     button,
     input,
-    select {
+    select,
+    textarea {
       font: inherit;
     }
 
     .page {
-      width: min(var(--maxw), calc(100vw - 32px));
-      margin: 0 auto;
-      padding: 24px 0 40px;
+      width: 100%;
+      min-height: 100vh;
+      margin: 0;
+      padding: 0;
       display: grid;
-      gap: 18px;
+      grid-template-columns: 304px minmax(0, 1fr);
+      grid-template-rows: auto 1fr;
+      align-items: start;
     }
 
     .topbar {
+      grid-column: 1;
+      grid-row: 1;
       display: flex;
+      flex-direction: column;
       justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      padding: 10px 0 0;
+      align-items: stretch;
+      gap: 18px;
+      min-height: 190px;
+      padding: 20px 16px 12px;
+      border-right: 1px solid var(--line);
+      background: rgba(3, 8, 22, 0.93);
+      backdrop-filter: blur(16px);
+      z-index: 4;
     }
 
     .brand {
@@ -109,7 +121,7 @@
 
     .brand h1 {
       margin: 0;
-      font-size: 1.8rem;
+      font-size: 1.5rem;
       line-height: 1;
       font-family: var(--font-title);
     }
@@ -117,15 +129,16 @@
     .brand p {
       margin: 0;
       color: var(--soft);
-      line-height: 1.6;
-      max-width: 760px;
+      line-height: 1.5;
+      max-width: none;
+      font-size: 0.88rem;
     }
 
     .top-actions {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      justify-content: flex-end;
+      justify-content: flex-start;
     }
 
     .card {
@@ -136,23 +149,25 @@
     }
 
     .shell {
-      display: grid;
-      grid-template-columns: 320px minmax(0, 1fr);
-      gap: 18px;
-      align-items: start;
+      display: contents;
     }
 
     .sidebar {
-      display: grid;
-      gap: 18px;
-      position: sticky;
-      top: 18px;
+      grid-column: 1;
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 0 16px 20px;
+      border-right: 1px solid var(--line);
+      background: rgba(3, 8, 22, 0.93);
+      backdrop-filter: blur(16px);
     }
 
     .block {
-      padding: 18px;
+      padding: 14px;
       display: grid;
-      gap: 14px;
+      gap: 12px;
     }
 
     .block h2,
@@ -174,7 +189,8 @@
     }
 
     input,
-    select {
+    select,
+    textarea {
       width: 100%;
       border-radius: 14px;
       border: 1px solid var(--line);
@@ -185,9 +201,16 @@
     }
 
     input:focus,
-    select:focus {
+    select:focus,
+    textarea:focus {
       border-color: rgba(0, 177, 217, 0.45);
       box-shadow: 0 0 0 4px rgba(0, 177, 217, 0.12);
+    }
+
+    textarea {
+      min-height: 92px;
+      resize: vertical;
+      line-height: 1.5;
     }
 
     button {
@@ -212,6 +235,12 @@
       flex-wrap: wrap;
       gap: 10px;
       align-items: center;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
     }
 
     .role-pill {
@@ -241,12 +270,16 @@
     }
 
     .main {
+      grid-column: 2;
+      grid-row: 1 / span 2;
       display: grid;
-      gap: 18px;
+      gap: 16px;
+      min-width: 0;
+      padding: 20px clamp(18px, 2.4vw, 34px) 34px;
     }
 
     .hero {
-      padding: 22px 24px;
+      padding: 16px 18px;
       display: flex;
       justify-content: space-between;
       gap: 16px;
@@ -255,7 +288,7 @@
 
     .hero h2 {
       margin: 0;
-      font-size: 2rem;
+      font-size: 1.5rem;
       line-height: 1.04;
       font-family: var(--font-title);
     }
@@ -277,9 +310,9 @@
     }
 
     .hero p {
-      margin: 10px 0 0;
+      margin: 8px 0 0;
       color: var(--soft);
-      line-height: 1.65;
+      line-height: 1.5;
       max-width: 880px;
     }
 
@@ -290,8 +323,8 @@
     }
 
     .stat {
-      padding: 18px;
-      border-radius: 20px;
+      padding: 14px;
+      border-radius: 8px;
       background: var(--panel);
       border: 1px solid var(--line);
       box-shadow: var(--shadow);
@@ -315,10 +348,81 @@
       align-items: start;
     }
 
-    .panel {
-      padding: 18px;
+    .side-nav {
       display: grid;
-      gap: 16px;
+      gap: 7px;
+      padding: 4px 0;
+    }
+
+    .nav-button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: flex-start;
+      border-radius: 8px;
+      padding: 10px 11px;
+      background: transparent;
+      color: var(--soft);
+      border: 1px solid transparent;
+      box-shadow: none;
+      text-align: left;
+    }
+
+    .nav-button:hover,
+    .nav-button.active {
+      color: var(--text);
+      background: rgba(184, 192, 204, 0.1);
+      border-color: var(--line);
+      transform: none;
+    }
+
+    .nav-icon {
+      width: 28px;
+      height: 28px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 8px;
+      color: var(--accent);
+      background: rgba(0, 177, 217, 0.1);
+      font-size: 12px;
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
+
+    .nav-text {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .nav-text strong,
+    .nav-text span {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .nav-text strong {
+      font-size: 13px;
+      line-height: 1.2;
+    }
+
+    .nav-text span {
+      color: var(--soft);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .nav-button-inline {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    .panel {
+      padding: 16px;
+      display: grid;
+      gap: 14px;
     }
 
     .panel-header {
@@ -355,13 +459,34 @@
       gap: 14px;
     }
 
+    .booking-toolbar {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) repeat(2, minmax(150px, 0.34fr)) auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .quick-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
     .booking-card {
       border: 1px solid var(--line);
-      border-radius: 20px;
-      padding: 18px;
+      border-radius: 8px;
+      padding: 14px;
       background: var(--panel-strong);
       display: grid;
       gap: 14px;
+    }
+
+    .booking-card.primary-booking {
+      border-color: rgba(0, 177, 217, 0.34);
+      background:
+        linear-gradient(135deg, rgba(0, 177, 217, 0.1), transparent 46%),
+        var(--panel-strong);
     }
 
     .booking-top {
@@ -372,9 +497,43 @@
       flex-wrap: wrap;
     }
 
+    .booking-heading {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      min-width: 0;
+    }
+
+    .booking-date-tile {
+      min-width: 76px;
+      border: 1px solid rgba(0, 177, 217, 0.28);
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+      background: rgba(0, 177, 217, 0.12);
+    }
+
+    .booking-date-tile strong,
+    .booking-date-tile span {
+      display: block;
+    }
+
+    .booking-date-tile strong {
+      font-size: 1.65rem;
+      line-height: 1;
+    }
+
+    .booking-date-tile span {
+      color: var(--soft);
+      font-size: 0.78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
     .booking-title {
       display: grid;
       gap: 6px;
+      min-width: 0;
     }
 
     .booking-title strong {
@@ -419,8 +578,8 @@
     .meta-box {
       display: grid;
       gap: 4px;
-      padding: 12px 14px;
-      border-radius: 16px;
+      padding: 10px 12px;
+      border-radius: 8px;
       background: rgba(184, 192, 204, 0.07);
     }
 
@@ -441,12 +600,212 @@
       gap: 10px;
     }
 
+    .calendar-panel {
+      display: grid;
+      gap: 14px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(7, 18, 45, 0.72);
+    }
+
+    .calendar-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .calendar-title {
+      display: grid;
+      gap: 2px;
+    }
+
+    .calendar-title strong {
+      font-size: 1.08rem;
+    }
+
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .calendar-weekday,
+    .calendar-day {
+      border-radius: 8px;
+      min-width: 0;
+    }
+
+    .calendar-weekday {
+      color: var(--soft);
+      font-size: 0.78rem;
+      font-weight: 800;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .calendar-day {
+      min-height: 132px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      background: rgba(184, 192, 204, 0.05);
+      display: grid;
+      align-content: start;
+      gap: 8px;
+      cursor: pointer;
+      transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+    }
+
+    .calendar-day.outside {
+      opacity: 0.38;
+    }
+
+    .calendar-day:hover,
+    .calendar-day.selected {
+      border-color: rgba(0, 177, 217, 0.42);
+      background: rgba(0, 177, 217, 0.09);
+      transform: translateY(-1px);
+    }
+
+    .calendar-day.today {
+      border-color: rgba(0, 177, 217, 0.5);
+      box-shadow: inset 0 0 0 1px rgba(0, 177, 217, 0.18);
+    }
+
+    .calendar-day.closed {
+      background: rgba(255, 123, 134, 0.08);
+      border-color: rgba(255, 123, 134, 0.24);
+    }
+
+    .calendar-day.blocked {
+      background: rgba(255, 205, 86, 0.08);
+      border-color: rgba(255, 205, 86, 0.24);
+    }
+
+    .calendar-number {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      color: var(--soft);
+      font-weight: 800;
+      font-size: 0.86rem;
+    }
+
+    .calendar-count {
+      color: var(--accent);
+    }
+
+    .calendar-event {
+      width: 100%;
+      min-height: 34px;
+      padding: 7px 8px;
+      border-radius: 12px;
+      background: rgba(0, 177, 217, 0.13);
+      color: var(--text);
+      text-align: left;
+      font-size: 0.78rem;
+      line-height: 1.25;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .calendar-event.cancelled {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    .calendar-event.closed,
+    .calendar-event.block {
+      font-weight: 800;
+    }
+
+    .calendar-event.closed {
+      background: rgba(255, 123, 134, 0.16);
+      color: var(--danger);
+    }
+
+    .calendar-event.block {
+      background: rgba(255, 205, 86, 0.16);
+      color: #ffd166;
+    }
+
+    .day-agenda {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid rgba(0, 177, 217, 0.22);
+      border-radius: 8px;
+      background:
+        linear-gradient(135deg, rgba(0, 177, 217, 0.08), transparent 52%),
+        rgba(184, 192, 204, 0.05);
+    }
+
+    .day-agenda-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .day-agenda-title {
+      display: grid;
+      gap: 4px;
+    }
+
+    .day-agenda-title strong {
+      font-size: 1.06rem;
+    }
+
+    .day-agenda-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .day-agenda-item {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(5, 14, 38, 0.64);
+    }
+
+    .day-agenda-time {
+      font-weight: 800;
+      color: var(--accent);
+    }
+
+    .day-agenda-main {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .day-agenda-main strong,
+    .day-agenda-main span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .day-agenda-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
     .reschedule-panel {
       display: grid;
       gap: 14px;
       padding: 18px;
       border: 1px solid var(--line);
-      border-radius: 20px;
+      border-radius: 8px;
       background: rgba(7, 18, 45, 0.72);
     }
 
@@ -490,7 +849,7 @@
     .empty {
       padding: 30px 18px;
       border: 1px dashed rgba(184, 192, 204, 0.24);
-      border-radius: 20px;
+      border-radius: 8px;
       color: var(--soft);
       text-align: center;
       line-height: 1.7;
@@ -569,11 +928,274 @@
 
     .subcard {
       border: 1px solid var(--line);
-      border-radius: 20px;
+      border-radius: 8px;
       padding: 16px;
       background: var(--panel-strong);
       display: grid;
       gap: 14px;
+    }
+
+    .service-check-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .service-check-grid .inline-check {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(7, 18, 45, 0.72);
+      color: var(--text);
+      justify-content: flex-start;
+    }
+
+    .service-check-grid .inline-check.is-disabled {
+      opacity: 0.55;
+    }
+
+    .team-shell {
+      display: grid;
+      grid-template-columns: minmax(280px, 0.82fr) minmax(0, 1.18fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    #employeeEditorCard {
+      align-self: start;
+    }
+
+    .employee-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(184, 192, 204, 0.06);
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+      cursor: pointer;
+      transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+    }
+
+    .employee-card:hover,
+    .employee-card.active {
+      border-color: rgba(0, 177, 217, 0.38);
+      background: rgba(0, 177, 217, 0.08);
+      transform: translateY(-1px);
+    }
+
+    .employee-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .employee-name {
+      display: grid;
+      gap: 4px;
+    }
+
+    .employee-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
+      margin-top: 4px;
+    }
+
+    .employee-stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .employee-stat {
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(184, 192, 204, 0.08);
+      display: grid;
+      gap: 4px;
+    }
+
+    .employee-stat span {
+      color: var(--soft);
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+
+    .employee-stat strong {
+      font-size: 1.02rem;
+    }
+
+    .template-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .message-template-card {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(184, 192, 204, 0.05);
+    }
+
+    .message-template-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .message-template-head strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 1rem;
+    }
+
+    .template-toggle {
+      min-height: 42px;
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(184, 192, 204, 0.08);
+      color: var(--text);
+    }
+
+    .today-layout {
+      display: grid;
+      gap: 14px;
+    }
+
+    .today-menu-card {
+      display: grid;
+      gap: 12px;
+    }
+
+    .today-menu-head {
+      display: grid;
+      gap: 8px;
+    }
+
+    .today-menu-list {
+      display: grid;
+      gap: 10px;
+      max-height: 620px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .today-menu-item {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .today-menu-item strong {
+      font-size: 0.94rem;
+      line-height: 1.35;
+    }
+
+    .today-menu-item .muted {
+      font-size: 0.83rem;
+      line-height: 1.45;
+    }
+
+    .today-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .today-summary-card {
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(135deg, rgba(0, 177, 217, 0.08), transparent 52%),
+        rgba(184, 192, 204, 0.04);
+      display: grid;
+      gap: 8px;
+    }
+
+    .today-summary-card strong {
+      font-size: 1.55rem;
+      line-height: 1;
+    }
+
+    .today-columns {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+      gap: 14px;
+    }
+
+    .today-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .today-booking-card {
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      display: grid;
+      gap: 10px;
+    }
+
+    .today-booking-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .today-chip {
+      display: inline-flex;
+      width: fit-content;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 177, 217, 0.26);
+      background: rgba(0, 177, 217, 0.12);
+      color: var(--accent);
+      font-size: 0.78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .template-preview-shell {
+      display: grid;
+      gap: 12px;
+    }
+
+    .template-preview-card {
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      display: grid;
+      gap: 10px;
+    }
+
+    .template-preview-html {
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: #f5f8fb;
+      color: #102033;
+    }
+
+    .template-preview-html > div {
+      min-height: 120px;
     }
 
     .users-grid {
@@ -583,7 +1205,7 @@
 
     .user-card {
       border: 1px solid var(--line);
-      border-radius: 18px;
+      border-radius: 8px;
       background: rgba(184, 192, 204, 0.06);
       padding: 16px;
       display: grid;
@@ -691,21 +1313,38 @@
     }
 
     @media (max-width: 1160px) {
-      .shell,
-      .layout,
+      .page,
       .stats {
         grid-template-columns: 1fr;
       }
 
-      .sidebar {
+      .topbar {
+        grid-column: 1;
+        grid-row: auto;
+        min-height: 0;
         position: static;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .sidebar {
+        grid-column: 1;
+        grid-row: auto;
+        position: static;
+        max-height: none;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .main {
+        grid-column: 1;
+        grid-row: auto;
       }
     }
 
     @media (max-width: 760px) {
       .page {
-        width: min(var(--maxw), calc(100vw - 20px));
-        padding-top: 16px;
+        width: 100%;
       }
 
       .topbar,
@@ -717,8 +1356,36 @@
       }
 
       .booking-meta,
-      .reschedule-grid {
+      .grid,
+      .booking-toolbar,
+      .team-shell,
+      .service-check-grid,
+      .reschedule-grid,
+      .today-summary-grid,
+      .today-columns {
         grid-template-columns: 1fr;
+      }
+
+      .calendar-grid {
+        gap: 6px;
+      }
+
+      .calendar-day {
+        min-height: 96px;
+        padding: 8px;
+      }
+
+      .calendar-event {
+        font-size: 0.72rem;
+        padding: 6px;
+      }
+
+      .day-agenda-item {
+        grid-template-columns: 1fr;
+      }
+
+      .day-agenda-actions {
+        justify-content: flex-start;
       }
 
       .user-meta {
@@ -739,6 +1406,10 @@
 
       .admin-menu button {
         flex: 1 1 0;
+      }
+
+      .main {
+        padding: 16px 10px 28px;
       }
     }
   </style>
@@ -819,6 +1490,41 @@
         </div>
 
         <div class="sidebar-stack hidden" id="authUserStack">
+          <nav class="card block side-nav" aria-label="Menu del portal">
+            <button class="nav-button active" type="button" data-scroll-target="portalContent">
+              <span class="nav-icon">CI</span>
+              <span class="nav-text"><strong>Calendario</strong><span>Citas y reservas</span></span>
+            </button>
+            <button class="nav-button" type="button" data-scroll-target="todayBlock">
+              <span class="nav-icon">HD</span>
+              <span class="nav-text"><strong>Citas del dia</strong><span id="todayOverviewIntro">Cargando la agenda de hoy...</span></span>
+            </button>
+            <button class="nav-button" type="button" data-scroll-target="teamBlock">
+              <span class="nav-icon">PR</span>
+              <span class="nav-text"><strong>Profesionales</strong><span>Equipo, horarios y agenda</span></span>
+            </button>
+            <button class="nav-button" type="button" data-scroll-target="accountBlock">
+              <span class="nav-icon">CU</span>
+              <span class="nav-text"><strong>Cuenta</strong><span>Datos del acceso</span></span>
+            </button>
+            <button class="nav-button" type="button" data-scroll-target="scheduleBlock">
+              <span class="nav-icon">HO</span>
+              <span class="nav-text"><strong>Horario</strong><span>Agenda general o por profesional</span></span>
+            </button>
+            <button class="nav-button" type="button" data-scroll-target="blocksBlock">
+              <span class="nav-icon">BL</span>
+              <span class="nav-text"><strong>Bloqueo Agenda</strong><span>Bloqueos generales o por profesional</span></span>
+            </button>
+            <button class="nav-button" type="button" data-scroll-target="messagesBlock">
+              <span class="nav-icon">MS</span>
+              <span class="nav-text"><strong>Mensajes</strong><span>Plantillas y recordatorios</span></span>
+            </button>
+            <button class="nav-button" type="button" data-scroll-target="securityBlock">
+              <span class="nav-icon">SE</span>
+              <span class="nav-text"><strong>Seguridad</strong><span>Cambiar contrasena</span></span>
+            </button>
+          </nav>
+
           <section class="card block hidden" id="sessionCard">
             <div class="role-pill" id="rolePill">Sesion</div>
             <div>
@@ -841,30 +1547,11 @@
           <section class="card block hidden" id="contactBlock">
             <h3>Contacto y soporte</h3>
             <div class="contact-card">
-              <div class="muted">Si prefieres resolver una incidencia fuera del portal, aqui veras los datos de contacto del negocio.</div>
-              <div class="muted" id="contactInfo">Aun no hay una reserva seleccionada.</div>
+              <div class="muted">Ante cualquier duda o incidente aqui tienes nuestros datos de contacto de Vantelia.</div>
+              <div class="muted" id="contactInfo">Email: __SUPPORT_EMAIL__</div>
             </div>
           </section>
 
-          <section class="card block hidden" id="securityBlock">
-            <h3>Seguridad</h3>
-            <div class="muted">Puedes cambiar tu contrasena sin depender del admin.</div>
-            <div class="stack">
-              <label>
-                Contrasena actual
-                <input id="changeCurrentPassword" type="password" placeholder="Tu contrasena actual" />
-              </label>
-              <label>
-                Nueva contrasena
-                <input id="changeNewPassword" type="password" placeholder="Nueva contrasena" />
-              </label>
-              <label>
-                Repite la nueva contrasena
-                <input id="changeNewPasswordConfirm" type="password" placeholder="Repite la nueva contrasena" />
-              </label>
-              <button id="changePasswordBtn" class="secondary small" type="button">Actualizar contrasena</button>
-            </div>
-          </section>
         </div>
       </aside>
 
@@ -884,33 +1571,97 @@
           <article class="stat"><strong id="stat4">-</strong><span id="stat4Label">Empresa</span></article>
         </section>
 
+        <section class="card panel hidden" id="todayBlock">
+          <div class="panel-header">
+            <div>
+              <h3>Citas del dia</h3>
+              <div class="muted" id="todayPageIntro">Cargando la agenda de hoy...</div>
+            </div>
+            <label>
+              Agenda
+              <select id="todayAgendaFilter">
+                <option value="">Todas</option>
+                <option value="general">Agenda general</option>
+              </select>
+            </label>
+          </div>
+          <div id="todayBookingsList" class="today-menu-list">
+            <div class="empty">Todavia no se ha cargado la agenda de hoy.</div>
+          </div>
+        </section>
+
         <div class="layout hidden" id="portalContent">
           <section class="card panel">
             <div class="panel-header">
               <div>
                 <h3 id="mainPanelTitle">Tus citas</h3>
-                <div class="muted" id="mainPanelText">Las proximas citas se ven primero. Las ya pasadas no se borran: se archivan como historial para mantener trazabilidad.</div>
+                <div class="muted" id="mainPanelText">Usa el calendario, la busqueda y los filtros para localizar cualquier cita por dia, cliente o estado.</div>
               </div>
               <div class="row">
-                <div class="segmented" id="scopeSwitch">
-                  <button data-scope="upcoming" class="active" type="button">Proximas</button>
-                  <button data-scope="history" type="button">Historial</button>
-                  <button data-scope="all" type="button">Todo</button>
-                </div>
+                <button id="toggleCalendarBtn" class="secondary small hidden" type="button">Calendario</button>
+                <select id="employeeFilter">
+                  <option value="">Todos los profesionales</option>
+                </select>
                 <select id="statusFilter">
                   <option value="">Todos los estados</option>
                   <option value="confirmed">Confirmadas</option>
-                  <option value="pending_review">Pendientes</option>
                   <option value="completed">Completadas</option>
                   <option value="cancelled">Canceladas</option>
                 </select>
               </div>
             </div>
 
-            <div class="muted">Panel operativo para revisar reservas, detectar incidencias y actuar rapido.</div>
+            <div class="booking-toolbar">
+              <label>
+                Buscar
+                <input id="bookingSearch" type="search" placeholder="Nombre, email, servicio, ID..." />
+              </label>
+              <label>
+                Desde
+                <input id="bookingDateFrom" type="date" />
+              </label>
+              <label>
+                Hasta
+                <input id="bookingDateTo" type="date" />
+              </label>
+              <button id="clearBookingFiltersBtn" class="ghost small" type="button">Limpiar</button>
+            </div>
+            <div class="quick-actions">
+              <button id="todayBookingsBtn" class="secondary small" type="button">Hoy</button>
+              <button id="tomorrowBookingsBtn" class="secondary small" type="button">Manana</button>
+              <button id="weekBookingsBtn" class="secondary small" type="button">Esta semana</button>
+              <button id="upcomingBookingsBtn" class="ghost small" type="button">Proximas activas</button>
+            </div>
 
             <section class="admin-view" id="bookingView">
-              <div id="bookingList" class="booking-grid">
+              <section id="calendarPanel" class="calendar-panel">
+                <div class="calendar-head">
+                  <div class="calendar-title">
+                    <strong id="calendarMonthLabel">Calendario</strong>
+                    <span class="muted">Vista mensual de citas gestionadas por Vantelia.</span>
+                  </div>
+                  <div class="row">
+                    <button id="prevCalendarMonthBtn" class="ghost small" type="button">Anterior</button>
+                    <button id="nextCalendarMonthBtn" class="ghost small" type="button">Siguiente</button>
+                  </div>
+                </div>
+                <div id="calendarGrid" class="calendar-grid"></div>
+              </section>
+
+              <section id="dayAgenda" class="day-agenda hidden">
+                <div class="day-agenda-head">
+                  <div class="day-agenda-title">
+                    <strong id="dayAgendaDate">Agenda del dia</strong>
+                    <span class="muted" id="dayAgendaMeta">Selecciona un dia del calendario para ver sus citas.</span>
+                  </div>
+                  <button id="clearDayAgendaBtn" class="ghost small" type="button">Quitar seleccion</button>
+                </div>
+                <div id="dayAgendaList" class="day-agenda-list">
+                  <div class="empty">Selecciona un dia del calendario para ver sus citas.</div>
+                </div>
+              </section>
+
+              <div id="bookingList" class="booking-grid hidden">
                 <div class="empty">Inicia sesion para ver reservas.</div>
               </div>
 
@@ -949,6 +1700,376 @@
             </section>
           </section>
         </div>
+
+        <section class="card panel hidden" id="teamBlock">
+          <div class="panel-header">
+            <div>
+              <h3>Profesionales</h3>
+              <div class="muted">Aqui solo gestionas tu equipo: altas, nombre, rol, color y estado. Los horarios y bloqueos se configuran en la seccion Horario.</div>
+            </div>
+            <button id="newEmployeeBtn" class="primary small" type="button">Nuevo profesional</button>
+          </div>
+
+          <div class="team-shell">
+            <div class="subcard">
+              <div class="panel-header">
+                <div>
+                  <h3>Equipo activo</h3>
+                  <div class="muted">Selecciona un profesional para editar su ficha o crea uno nuevo.</div>
+                </div>
+              </div>
+              <div id="employeesList" class="users-grid">
+                <div class="empty">Todavia no se ha cargado el equipo.</div>
+              </div>
+            </div>
+
+            <div id="employeeEditorCard" class="subcard hidden">
+              <div class="panel-header">
+                <div>
+                  <h3 id="employeeEditorTitle">Profesional</h3>
+                  <div class="muted" id="employeeEditorMeta">Selecciona una persona del equipo o crea una nueva.</div>
+                </div>
+                <button id="closeEmployeeEditorBtn" class="ghost small" type="button">Cerrar</button>
+              </div>
+
+              <div class="grid">
+                <label>
+                  Nombre
+                  <input id="employeeName" type="text" maxlength="120" placeholder="Dra. Marta Ruiz" />
+                </label>
+                <label>
+                  Rol
+                  <input id="employeeRole" type="text" maxlength="80" placeholder="Odontologia, ventas, sala 1..." />
+                </label>
+                <label>
+                  Color
+                  <input id="employeeColor" type="color" value="#00b1d9" />
+                </label>
+                <label class="inline-check">
+                  <input id="employeeActive" type="checkbox" checked />
+                  Profesional activo
+                </label>
+              </div>
+
+              <div class="subcard">
+                <div class="panel-header">
+                  <div>
+                    <h3>Servicios asignados</h3>
+                    <div class="muted" id="employeeServicesMeta">Este profesional puede atender todos los servicios.</div>
+                  </div>
+                </div>
+                <label class="inline-check">
+                  <input id="employeeAllServices" type="checkbox" checked />
+                  Todos los servicios
+                </label>
+                <div id="employeeServicesList" class="service-check-grid">
+                  <div class="empty">Cargando servicios disponibles...</div>
+                </div>
+              </div>
+
+              <div class="row">
+                <button id="saveEmployeeBtn" class="primary small" type="button">Guardar profesional</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card panel hidden" id="accountBlock">
+          <div class="panel-header">
+            <div>
+              <h3>Cuenta</h3>
+              <div class="muted">Actualiza los datos del acceso que usas para entrar al portal.</div>
+            </div>
+          </div>
+          <div class="reschedule-grid">
+            <label>
+              Nombre visible
+              <input id="accountDisplayName" type="text" maxlength="120" />
+            </label>
+            <label>
+              Email de acceso
+              <input id="accountEmail" type="email" maxlength="120" />
+            </label>
+            <label>
+              Empresa
+              <input id="accountCompany" type="text" readonly />
+            </label>
+          </div>
+          <div class="booking-meta">
+            <div class="meta-box">
+              <span class="meta-label">Rol</span>
+              <span class="meta-value" id="accountRole">-</span>
+            </div>
+            <div class="meta-box">
+              <span class="meta-label">Ultimo acceso</span>
+              <span class="meta-value" id="accountLastLogin">-</span>
+            </div>
+          </div>
+          <div class="row">
+            <button id="saveAccountBtn" class="primary small" type="button">Guardar datos</button>
+          </div>
+        </section>
+
+        <section class="card panel hidden" id="scheduleBlock">
+          <div class="panel-header">
+            <div>
+              <h3>Horario</h3>
+              <div class="muted">Configura el horario de la agenda general o de un profesional concreto desde el mismo editor.</div>
+            </div>
+            <button id="exportBookingsBtn" class="secondary small" type="button">Exportar CSV</button>
+          </div>
+
+          <div class="subcard">
+            <div class="panel-header">
+              <div>
+                <h3>Editor de horario</h3>
+                <div class="muted" id="scheduleTargetMeta">Selecciona que agenda quieres configurar.</div>
+              </div>
+            </div>
+            <label>
+              Agenda
+              <select id="scheduleTargetSelect">
+                <option value="general">Agenda general</option>
+              </select>
+            </label>
+            <label class="inline-check" id="scheduleEnabledWrap">
+              <input id="scheduleEnabled" type="checkbox" />
+              Reserva online activa
+            </label>
+            <div class="reschedule-grid">
+              <label>
+                Inicio del dia
+                <input id="scheduleDayStart" type="time" />
+              </label>
+              <label>
+                Fin del dia
+                <input id="scheduleDayEnd" type="time" />
+              </label>
+              <label>
+                Duracion de cita
+                <input id="scheduleSlotMinutes" type="number" min="5" max="240" step="5" />
+              </label>
+            </div>
+            <label>
+              Zona horaria
+              <input id="scheduleTimezone" type="text" maxlength="80" />
+            </label>
+            <div class="stack">
+              <strong>Dias cerrados</strong>
+              <div class="row" id="closedWeekdaysGroup">
+                <label class="inline-check"><input type="checkbox" value="0" /> Lun</label>
+                <label class="inline-check"><input type="checkbox" value="1" /> Mar</label>
+                <label class="inline-check"><input type="checkbox" value="2" /> Mie</label>
+                <label class="inline-check"><input type="checkbox" value="3" /> Jue</label>
+                <label class="inline-check"><input type="checkbox" value="4" /> Vie</label>
+                <label class="inline-check"><input type="checkbox" value="5" /> Sab</label>
+                <label class="inline-check"><input type="checkbox" value="6" /> Dom</label>
+              </div>
+            </div>
+            <div class="row">
+              <button id="saveScheduleBtn" class="primary small" type="button">Guardar horario</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card panel hidden" id="blocksBlock">
+          <div class="panel-header">
+            <div>
+              <h3>Bloqueo Agenda</h3>
+              <div class="muted">Aplica bloqueos a la agenda general o a un profesional concreto desde un unico formulario.</div>
+            </div>
+          </div>
+
+          <div class="subcard">
+            <div class="panel-header">
+              <div>
+                <h3>Editor de bloqueos</h3>
+                <div class="muted" id="blockTargetMeta">Selecciona donde quieres aplicar el bloqueo.</div>
+              </div>
+            </div>
+            <label>
+              Agenda
+              <select id="blockTargetSelect">
+                <option value="general">Agenda general</option>
+              </select>
+            </label>
+            <div class="reschedule-grid">
+              <label>
+                Tipo
+                <select id="blockMode">
+                  <option value="single">1 dia</option>
+                  <option value="range">Intervalo</option>
+                </select>
+              </label>
+              <label>
+                Desde
+                <input id="blockDateStart" type="date" />
+              </label>
+              <label class="hidden" id="blockDateEndWrap">
+                Hasta
+                <input id="blockDateEnd" type="date" />
+              </label>
+              <label>
+                Desde
+                <input id="blockStart" type="time" />
+              </label>
+              <label>
+                Hasta
+                <input id="blockEnd" type="time" />
+              </label>
+            </div>
+            <label>
+              Motivo
+              <input id="blockReason" type="text" maxlength="160" placeholder="Vacaciones, festivo, reunion..." />
+            </label>
+            <div class="row">
+              <button id="addBlockBtn" class="secondary small" type="button">Crear bloqueo</button>
+            </div>
+            <div id="blocksList" class="users-grid"></div>
+          </div>
+        </section>
+
+        <section class="card panel hidden" id="messagesBlock">
+          <div class="panel-header">
+            <div>
+              <h3>Mensajes</h3>
+              <div class="muted">Activa o desactiva mensajes y recordatorios, y deja plantillas mas profesionales para cada cambio de cita.</div>
+            </div>
+          </div>
+          <div class="subcard">
+            <h3>Plantillas al cliente final</h3>
+            <div class="muted">El enlace para gestionar la cita se anade automaticamente en cada correo, junto con la fecha, la hora y los datos de contacto.</div>
+            <div class="template-list">
+              <article class="message-template-card">
+                <div class="message-template-head">
+                  <div>
+                    <strong>Confirmacion</strong>
+                    <div class="muted">Se envia cuando la cita queda confirmada.</div>
+                  </div>
+                  <label class="inline-check template-toggle">
+                    <input id="templateConfirmedEnabled" type="checkbox" />
+                    Activo
+                  </label>
+                </div>
+                <textarea id="templateConfirmed" maxlength="500"></textarea>
+              </article>
+              <article class="message-template-card">
+                <div class="message-template-head">
+                  <div>
+                    <strong>Recordatorio 24h</strong>
+                    <div class="muted">Se envia el dia anterior de la cita.</div>
+                  </div>
+                  <label class="inline-check template-toggle">
+                    <input id="templateReminder24hEnabled" type="checkbox" />
+                    Activo
+                  </label>
+                </div>
+                <textarea id="templateReminder24h" maxlength="500"></textarea>
+              </article>
+              <article class="message-template-card">
+                <div class="message-template-head">
+                  <div>
+                    <strong>Recordatorio 2h</strong>
+                    <div class="muted">Se envia poco antes de la cita.</div>
+                  </div>
+                  <label class="inline-check template-toggle">
+                    <input id="templateReminder2hEnabled" type="checkbox" />
+                    Activo
+                  </label>
+                </div>
+                <textarea id="templateReminder2h" maxlength="500"></textarea>
+              </article>
+              <article class="message-template-card">
+                <div class="message-template-head">
+                  <div>
+                    <strong>Cancelacion</strong>
+                    <div class="muted">Se envia cuando la cita se cancela.</div>
+                  </div>
+                  <label class="inline-check template-toggle">
+                    <input id="templateCancelledEnabled" type="checkbox" />
+                    Activo
+                  </label>
+                </div>
+                <textarea id="templateCancelled" maxlength="500"></textarea>
+              </article>
+              <article class="message-template-card">
+                <div class="message-template-head">
+                  <div>
+                    <strong>Reprogramacion</strong>
+                    <div class="muted">Se envia cuando la cita cambia de fecha u hora.</div>
+                  </div>
+                  <label class="inline-check template-toggle">
+                    <input id="templateRescheduledEnabled" type="checkbox" />
+                    Activo
+                  </label>
+                </div>
+                <textarea id="templateRescheduled" maxlength="500"></textarea>
+              </article>
+            </div>
+            <div class="row">
+              <button id="saveTemplatesBtn" class="primary small" type="button">Guardar plantillas</button>
+            </div>
+          </div>
+
+          <div class="subcard">
+            <div class="panel-header">
+              <div>
+                <h3>Preview y prueba</h3>
+                <div class="muted">Previsualiza cualquier plantilla con un ejemplo realista y manda una prueba a tu correo antes de guardarla o activarla.</div>
+              </div>
+            </div>
+            <div class="grid">
+              <label>
+                Plantilla
+                <select id="templatePreviewKind">
+                  <option value="confirmed">Confirmacion</option>
+                  <option value="reminder_24h">Recordatorio 24h</option>
+                  <option value="reminder_2h">Recordatorio 2h</option>
+                  <option value="cancelled">Cancelacion</option>
+                  <option value="rescheduled">Reprogramacion</option>
+                </select>
+              </label>
+              <label>
+                Email para prueba
+                <input id="templateTestEmail" type="email" maxlength="120" placeholder="tu@empresa.com" />
+              </label>
+            </div>
+            <div class="row">
+              <button id="previewTemplateBtn" class="secondary small" type="button">Previsualizar</button>
+              <button id="sendTemplateTestBtn" class="ghost small" type="button">Enviar prueba</button>
+            </div>
+            <div id="templatePreviewMeta" class="slot-status">Selecciona una plantilla para ver el asunto, el texto y el correo HTML antes de enviarlo.</div>
+            <div id="templatePreviewPanel" class="template-preview-shell">
+              <div class="empty">Todavia no has generado una previsualizacion.</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card panel hidden" id="securityBlock">
+          <div class="panel-header">
+            <div>
+              <h3>Seguridad</h3>
+              <div class="muted">Actualiza la contrasena del portal cuando necesites reforzar el acceso.</div>
+            </div>
+          </div>
+          <div class="reschedule-grid">
+            <label>
+              Contrasena actual
+              <input id="changeCurrentPassword" type="password" placeholder="Tu contrasena actual" />
+            </label>
+            <label>
+              Nueva contrasena
+              <input id="changeNewPassword" type="password" placeholder="Nueva contrasena" />
+            </label>
+            <label>
+              Repite la nueva contrasena
+              <input id="changeNewPasswordConfirm" type="password" placeholder="Repite la nueva contrasena" />
+            </label>
+          </div>
+          <div class="row">
+            <button id="changePasswordBtn" class="secondary small" type="button">Actualizar contrasena</button>
+          </div>
+        </section>
       </main>
     </div>
   </div>
@@ -960,15 +2081,37 @@
       user: null,
       scope: "upcoming",
       status: "",
+      query: "",
+      dateFrom: "",
+      dateTo: "",
       limit: 8,
       offset: 0,
       total: 0,
       items: [],
+      activePortalView: "citas",
+      calendarOpen: true,
+      calendarDate: new Date(),
+      calendarItems: [],
+      selectedCalendarDate: "",
+      schedule: null,
+      employees: [],
+      selectedEmployeeId: "",
+      employeeDraftMode: false,
+      employeeEditorOpen: false,
+      employeeServiceDraftIds: [],
+      services: [],
+      todayAgendaFilter: "",
+      scheduleTarget: "general",
+      blockTarget: "general",
+      employeeFilter: "",
+      dashboard: null,
+      searchTimer: null,
       forgotCooldownSeconds: 0,
       forgotCooldownTimer: null,
       authView: urlParams.get("reset_token") ? "reset" : "login",
       resetToken: (urlParams.get("reset_token") || "").trim(),
       rescheduleBookingId: "",
+      rescheduleEmployeeId: "",
       rescheduleOriginalDate: "",
       rescheduleOriginalTime: "",
       rescheduleSelectedTime: "",
@@ -1015,9 +2158,97 @@
       stat3Label: document.getElementById("stat3Label"),
       stat4: document.getElementById("stat4"),
       stat4Label: document.getElementById("stat4Label"),
+      todayBlock: document.getElementById("todayBlock"),
       portalContent: document.getElementById("portalContent"),
-      scopeButtons: document.querySelectorAll("#scopeSwitch button[data-scope]"),
+      todayOverviewIntro: document.getElementById("todayOverviewIntro"),
+      todayPageIntro: document.getElementById("todayPageIntro"),
+      todayAgendaFilter: document.getElementById("todayAgendaFilter"),
+      todayBookingsList: document.getElementById("todayBookingsList"),
+      teamBlock: document.getElementById("teamBlock"),
+      employeesList: document.getElementById("employeesList"),
+      newEmployeeBtn: document.getElementById("newEmployeeBtn"),
+      employeeEditorCard: document.getElementById("employeeEditorCard"),
+      employeeEditorTitle: document.getElementById("employeeEditorTitle"),
+      employeeEditorMeta: document.getElementById("employeeEditorMeta"),
+      closeEmployeeEditorBtn: document.getElementById("closeEmployeeEditorBtn"),
+      employeeName: document.getElementById("employeeName"),
+      employeeRole: document.getElementById("employeeRole"),
+      employeeColor: document.getElementById("employeeColor"),
+      employeeActive: document.getElementById("employeeActive"),
+      employeeServicesMeta: document.getElementById("employeeServicesMeta"),
+      employeeAllServices: document.getElementById("employeeAllServices"),
+      employeeServicesList: document.getElementById("employeeServicesList"),
+      saveEmployeeBtn: document.getElementById("saveEmployeeBtn"),
+      accountBlock: document.getElementById("accountBlock"),
+      accountDisplayName: document.getElementById("accountDisplayName"),
+      accountEmail: document.getElementById("accountEmail"),
+      accountCompany: document.getElementById("accountCompany"),
+      accountRole: document.getElementById("accountRole"),
+      accountLastLogin: document.getElementById("accountLastLogin"),
+      saveAccountBtn: document.getElementById("saveAccountBtn"),
+      scheduleBlock: document.getElementById("scheduleBlock"),
+      blocksBlock: document.getElementById("blocksBlock"),
+      messagesBlock: document.getElementById("messagesBlock"),
+      scheduleTargetSelect: document.getElementById("scheduleTargetSelect"),
+      scheduleTargetMeta: document.getElementById("scheduleTargetMeta"),
+      scheduleEnabledWrap: document.getElementById("scheduleEnabledWrap"),
+      scheduleEnabled: document.getElementById("scheduleEnabled"),
+      scheduleDayStart: document.getElementById("scheduleDayStart"),
+      scheduleDayEnd: document.getElementById("scheduleDayEnd"),
+      scheduleSlotMinutes: document.getElementById("scheduleSlotMinutes"),
+      scheduleTimezone: document.getElementById("scheduleTimezone"),
+      closedWeekdaysGroup: document.getElementById("closedWeekdaysGroup"),
+      saveScheduleBtn: document.getElementById("saveScheduleBtn"),
+      templateConfirmedEnabled: document.getElementById("templateConfirmedEnabled"),
+      templateConfirmed: document.getElementById("templateConfirmed"),
+      templateReminder24hEnabled: document.getElementById("templateReminder24hEnabled"),
+      templateReminder24h: document.getElementById("templateReminder24h"),
+      templateReminder2hEnabled: document.getElementById("templateReminder2hEnabled"),
+      templateReminder2h: document.getElementById("templateReminder2h"),
+      templateCancelledEnabled: document.getElementById("templateCancelledEnabled"),
+      templateCancelled: document.getElementById("templateCancelled"),
+      templateRescheduledEnabled: document.getElementById("templateRescheduledEnabled"),
+      templateRescheduled: document.getElementById("templateRescheduled"),
+      templatePreviewKind: document.getElementById("templatePreviewKind"),
+      templateTestEmail: document.getElementById("templateTestEmail"),
+      previewTemplateBtn: document.getElementById("previewTemplateBtn"),
+      sendTemplateTestBtn: document.getElementById("sendTemplateTestBtn"),
+      templatePreviewMeta: document.getElementById("templatePreviewMeta"),
+      templatePreviewPanel: document.getElementById("templatePreviewPanel"),
+      saveTemplatesBtn: document.getElementById("saveTemplatesBtn"),
+      blockMode: document.getElementById("blockMode"),
+      blockDateStart: document.getElementById("blockDateStart"),
+      blockDateEndWrap: document.getElementById("blockDateEndWrap"),
+      blockDateEnd: document.getElementById("blockDateEnd"),
+      blockStart: document.getElementById("blockStart"),
+      blockEnd: document.getElementById("blockEnd"),
+      blockReason: document.getElementById("blockReason"),
+      blockTargetSelect: document.getElementById("blockTargetSelect"),
+      blockTargetMeta: document.getElementById("blockTargetMeta"),
+      addBlockBtn: document.getElementById("addBlockBtn"),
+      blocksList: document.getElementById("blocksList"),
+      exportBookingsBtn: document.getElementById("exportBookingsBtn"),
+      employeeFilter: document.getElementById("employeeFilter"),
       statusFilter: document.getElementById("statusFilter"),
+      bookingSearch: document.getElementById("bookingSearch"),
+      bookingDateFrom: document.getElementById("bookingDateFrom"),
+      bookingDateTo: document.getElementById("bookingDateTo"),
+      clearBookingFiltersBtn: document.getElementById("clearBookingFiltersBtn"),
+      todayBookingsBtn: document.getElementById("todayBookingsBtn"),
+      tomorrowBookingsBtn: document.getElementById("tomorrowBookingsBtn"),
+      weekBookingsBtn: document.getElementById("weekBookingsBtn"),
+      upcomingBookingsBtn: document.getElementById("upcomingBookingsBtn"),
+      toggleCalendarBtn: document.getElementById("toggleCalendarBtn"),
+      calendarPanel: document.getElementById("calendarPanel"),
+      calendarMonthLabel: document.getElementById("calendarMonthLabel"),
+      prevCalendarMonthBtn: document.getElementById("prevCalendarMonthBtn"),
+      nextCalendarMonthBtn: document.getElementById("nextCalendarMonthBtn"),
+      calendarGrid: document.getElementById("calendarGrid"),
+      dayAgenda: document.getElementById("dayAgenda"),
+      dayAgendaDate: document.getElementById("dayAgendaDate"),
+      dayAgendaMeta: document.getElementById("dayAgendaMeta"),
+      dayAgendaList: document.getElementById("dayAgendaList"),
+      clearDayAgendaBtn: document.getElementById("clearDayAgendaBtn"),
       bookingView: document.getElementById("bookingView"),
       bookingList: document.getElementById("bookingList"),
       pagination: document.getElementById("pagination"),
@@ -1130,9 +2361,696 @@
 
     function openSecurityPanel() {
       if (!state.user) return;
-      el.securityBlock.scrollIntoView({ behavior: "smooth", block: "start" });
+      setPortalView("seguridad");
       el.changeCurrentPassword.focus();
       setStatus("Aqui puedes cambiar tu contrasena actual.", "info");
+    }
+
+    function syncBlockDateMode() {
+      const isRange = el.blockMode.value === "range";
+      el.blockDateEndWrap.classList.toggle("hidden", !isRange);
+      if (!el.blockDateStart.value) {
+        el.blockDateStart.value = toDateInputValue(new Date());
+      }
+      if (!el.blockDateEnd.value) {
+        el.blockDateEnd.value = el.blockDateStart.value;
+      }
+      if (!isRange) {
+        el.blockDateEnd.value = el.blockDateStart.value;
+      }
+    }
+
+    function renderScheduleTargetOptions() {
+      el.scheduleTargetSelect.innerHTML = '<option value="general">Agenda general</option>';
+      state.employees
+        .filter((employee) => !employee.is_default)
+        .forEach((employee) => {
+          const option = document.createElement("option");
+          option.value = `employee:${employee.employee_id}`;
+          option.textContent = employee.role_label
+            ? `${employee.name} - ${employee.role_label}`
+            : employee.name;
+          el.scheduleTargetSelect.appendChild(option);
+        });
+      const availableValues = ["general", ...state.employees.filter((employee) => !employee.is_default).map((employee) => `employee:${employee.employee_id}`)];
+      if (!availableValues.includes(state.scheduleTarget)) state.scheduleTarget = "general";
+      el.scheduleTargetSelect.value = state.scheduleTarget;
+    }
+
+    function renderBlockTargetOptions() {
+      el.blockTargetSelect.innerHTML = '<option value="general">Agenda general</option>';
+      state.employees
+        .filter((employee) => !employee.is_default)
+        .forEach((employee) => {
+          const option = document.createElement("option");
+          option.value = `employee:${employee.employee_id}`;
+          option.textContent = employee.role_label
+            ? `${employee.name} - ${employee.role_label}`
+            : employee.name;
+          el.blockTargetSelect.appendChild(option);
+        });
+      const availableValues = ["general", ...state.employees.filter((employee) => !employee.is_default).map((employee) => `employee:${employee.employee_id}`)];
+      if (!availableValues.includes(state.blockTarget)) state.blockTarget = "general";
+      el.blockTargetSelect.value = state.blockTarget;
+    }
+
+    function selectedScheduleTargetEmployee() {
+      if (!state.scheduleTarget.startsWith("employee:")) return null;
+      const employeeId = state.scheduleTarget.slice("employee:".length);
+      return state.employees.find((employee) => employee.employee_id === employeeId && !employee.is_default) || null;
+    }
+
+    function selectedBlockTargetEmployee() {
+      if (!state.blockTarget.startsWith("employee:")) return null;
+      const employeeId = state.blockTarget.slice("employee:".length);
+      return state.employees.find((employee) => employee.employee_id === employeeId && !employee.is_default) || null;
+    }
+
+    function blocksForCurrentTarget() {
+      const employee = selectedBlockTargetEmployee();
+      const blocks = employee ? (employee.blocks || []) : (state.schedule?.blocks || []);
+      return [...blocks].sort((left, right) =>
+        `${left.fecha || ""} ${left.hora_inicio || ""} ${left.hora_fin || ""} ${left.motivo || ""}`.localeCompare(
+          `${right.fecha || ""} ${right.hora_inicio || ""} ${right.hora_fin || ""} ${right.motivo || ""}`
+        )
+      );
+    }
+
+    function nextDateKey(dateKey) {
+      const date = new Date(`${dateKey}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return "";
+      return toDateInputValue(addDays(date, 1));
+    }
+
+    function groupedBlocksForCurrentTarget() {
+      const groups = [];
+      blocksForCurrentTarget().forEach((block) => {
+        const blockDate = String(block.fecha || "");
+        const blockIds = [String(block.block_id || "")].filter(Boolean);
+        const signature = `${block.hora_inicio || ""}|${block.hora_fin || ""}|${block.motivo || ""}`;
+        const lastGroup = groups[groups.length - 1];
+        if (
+          lastGroup
+          && lastGroup.signature === signature
+          && nextDateKey(lastGroup.fecha_fin) === blockDate
+        ) {
+          lastGroup.fecha_fin = blockDate;
+          lastGroup.total_dias += 1;
+          lastGroup.block_ids.push(...blockIds);
+          return;
+        }
+        groups.push({
+          signature,
+          fecha_inicio: blockDate,
+          fecha_fin: blockDate,
+          hora_inicio: block.hora_inicio || "",
+          hora_fin: block.hora_fin || "",
+          motivo: block.motivo || "",
+          total_dias: 1,
+          block_ids: blockIds,
+        });
+      });
+      return groups;
+    }
+
+    async function deleteBlocksForCurrentTarget(blockIds) {
+      const employee = selectedBlockTargetEmployee();
+      const ids = Array.isArray(blockIds) ? blockIds.filter(Boolean) : [blockIds].filter(Boolean);
+      if (!ids.length) return;
+      const message = ids.length === 1
+        ? "Seguro que quieres eliminar este bloqueo?"
+        : `Seguro que quieres eliminar este intervalo de ${ids.length} bloqueos?`;
+      if (!window.confirm(message)) return;
+      await Promise.all(ids.map((blockId) => api(
+        employee
+          ? `/auth/employees/${encodeURIComponent(employee.employee_id)}/blocks/${encodeURIComponent(blockId)}`
+          : `/auth/schedule/blocks/${encodeURIComponent(blockId)}`,
+        { method: "DELETE" }
+      )));
+      setStatus(ids.length === 1 ? "Bloqueo eliminado correctamente." : "Intervalo eliminado correctamente.", "success");
+      await loadSchedule();
+      await loadEmployees();
+      await loadBookings();
+    }
+
+    function renderUnifiedBlocksEditor() {
+      const employee = selectedBlockTargetEmployee();
+      const isGeneral = !employee;
+      const groupedBlocks = groupedBlocksForCurrentTarget();
+      el.blockTargetMeta.textContent = isGeneral
+        ? "Los bloqueos creados aqui afectan a la agenda general."
+        : `Los bloqueos creados aqui afectan solo a ${employee.name}.`;
+      el.addBlockBtn.textContent = isGeneral ? "Crear bloqueo" : "Crear bloqueo del profesional";
+      if (!el.blockDateStart.value) {
+        el.blockDateStart.value = toDateInputValue(new Date());
+      }
+      if (!el.blockDateEnd.value) {
+        el.blockDateEnd.value = el.blockDateStart.value;
+      }
+      const startFallback = isGeneral ? (state.schedule?.day_start || "09:00") : (employee?.day_start || "09:00");
+      const endFallback = isGeneral ? (state.schedule?.day_end || "18:00") : (employee?.day_end || "18:00");
+      if (!el.blockStart.value) el.blockStart.value = startFallback;
+      if (!el.blockEnd.value) el.blockEnd.value = endFallback;
+      el.blocksList.innerHTML = "";
+
+      if (!groupedBlocks.length) {
+        el.blocksList.innerHTML = `<div class="empty">${isGeneral ? "No hay bloqueos futuros registrados." : "No hay bloqueos futuros para este profesional."}</div>`;
+        return;
+      }
+
+      groupedBlocks.forEach((group) => {
+        const isRange = group.fecha_inicio && group.fecha_fin && group.fecha_inicio !== group.fecha_fin;
+        const title = isRange
+          ? `Del ${dateLongLabel(group.fecha_inicio)} al ${dateLongLabel(group.fecha_fin)}`
+          : dateLongLabel(group.fecha_inicio || "");
+        const summary = isRange
+          ? `${group.hora_inicio || "--:--"} - ${group.hora_fin || "--:--"} | ${group.total_dias} dias bloqueados`
+          : `${group.hora_inicio || "--:--"} - ${group.hora_fin || "--:--"} | Dia bloqueado`;
+        const card = document.createElement("article");
+        card.className = "user-card";
+        card.innerHTML = `
+          <div class="user-top">
+            <div class="user-title">
+              <strong>${escapeHtml(title)}</strong>
+              <span class="muted">${escapeHtml(summary)}</span>
+            </div>
+            <button class="danger small" type="button" data-block-ids="${escapeHtml(group.block_ids.join(","))}">Eliminar</button>
+          </div>
+          <div class="muted">${escapeHtml(group.motivo || "Sin motivo indicado")}</div>
+        `;
+        el.blocksList.appendChild(card);
+      });
+
+      el.blocksList.querySelectorAll("button[data-block-ids]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const blockIds = String(button.dataset.blockIds || "")
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+          deleteBlocksForCurrentTarget(blockIds).catch((error) => setStatus(error.message, "error"));
+        });
+      });
+    }
+
+    function renderUnifiedScheduleEditor() {
+      const employee = selectedScheduleTargetEmployee();
+      const isGeneral = !employee;
+      const closedDays = new Set(((isGeneral ? state.schedule?.closed_weekdays : employee?.closed_weekdays) || []).map((day) => String(day)));
+      el.scheduleTargetMeta.textContent = isGeneral
+        ? "Estas editando la Agenda general. Este horario se usa como base del sistema."
+        : `Estas editando el horario de ${employee.name}.`;
+      el.scheduleEnabledWrap.classList.toggle("hidden", !isGeneral);
+      el.scheduleEnabled.checked = isGeneral ? Boolean(state.schedule?.enabled) : Boolean(state.schedule?.enabled);
+      el.scheduleTimezone.value = isGeneral
+        ? (state.schedule?.timezone || "Europe/Madrid")
+        : (employee?.timezone || "Europe/Madrid");
+      el.scheduleSlotMinutes.value = String(isGeneral ? (state.schedule?.slot_minutes || 30) : (employee?.slot_minutes || 30));
+      el.scheduleDayStart.value = isGeneral ? (state.schedule?.day_start || "09:00") : (employee?.day_start || "09:00");
+      el.scheduleDayEnd.value = isGeneral ? (state.schedule?.day_end || "18:00") : (employee?.day_end || "18:00");
+      el.closedWeekdaysGroup.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+        checkbox.checked = closedDays.has(checkbox.value);
+      });
+      el.saveScheduleBtn.textContent = isGeneral ? "Guardar horario" : "Guardar horario del profesional";
+    }
+
+    function setPortalView(view) {
+      if (!state.user) return;
+      const normalizedView = String(view || "").trim().toLowerCase();
+      const nextView = ["citas", "hoy", "profesionales", "cuenta", "horario", "bloqueos", "mensajes", "seguridad"].includes(normalizedView)
+        ? normalizedView
+        : "citas";
+      state.activePortalView = nextView;
+      const viewTargets = {
+        citas: el.portalContent,
+        hoy: el.todayBlock,
+        profesionales: el.teamBlock,
+        cuenta: el.accountBlock,
+        horario: el.scheduleBlock,
+        bloqueos: el.blocksBlock,
+        mensajes: el.messagesBlock,
+        seguridad: el.securityBlock,
+      };
+      Object.entries(viewTargets).forEach(([key, target]) => {
+        target.classList.toggle("hidden", key !== nextView);
+      });
+      document.querySelectorAll(".nav-button[data-scroll-target]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.scrollTarget === viewTargets[nextView].id);
+      });
+      viewTargets[nextView].scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function renderAccountForm(user) {
+      if (!user) return;
+      el.accountDisplayName.value = user.display_name || "";
+      el.accountEmail.value = user.email || "";
+      el.accountCompany.value = user.cliente_id || "Vantelia";
+      el.accountRole.textContent = user.role === "admin" ? "Administrador" : "Cliente";
+      el.accountLastLogin.textContent = formatDateTimeLabel(user.last_login_at);
+    }
+
+    function selectedEmployee() {
+      return state.employees.find((employee) => employee.employee_id === state.selectedEmployeeId) || null;
+    }
+
+    function defaultEmployee() {
+      return state.employees.find((employee) => employee.is_default) || null;
+    }
+
+    function employeeServicesSummary(employee) {
+      if (!employee || employee.allows_all_services || !Array.isArray(employee.service_ids) || !employee.service_ids.length) {
+        return "Todos los servicios";
+      }
+      if (employee.service_ids.length === 1) return "1 servicio asignado";
+      return `${employee.service_ids.length} servicios asignados`;
+    }
+
+    function renderEmployeeFilterOptions() {
+      const previous = state.employeeFilter;
+      el.employeeFilter.innerHTML = '<option value="">Todos los profesionales</option>';
+      state.employees
+        .filter((employee) => employee.is_active)
+        .forEach((employee) => {
+          const option = document.createElement("option");
+          option.value = employee.employee_id;
+          option.textContent = employee.role_label
+            ? `${employee.name} - ${employee.role_label}`
+            : employee.name;
+          option.selected = employee.employee_id === previous;
+          el.employeeFilter.appendChild(option);
+        });
+      if (previous && !state.employees.some((employee) => employee.employee_id === previous && employee.is_active)) {
+        state.employeeFilter = "";
+      }
+      el.employeeFilter.value = state.employeeFilter;
+    }
+
+    function renderTodayAgendaFilterOptions() {
+      const previous = state.todayAgendaFilter;
+      el.todayAgendaFilter.innerHTML = '<option value="">Todas</option><option value="general">Agenda general</option>';
+      state.employees
+        .filter((employee) => employee.is_active && !employee.is_default)
+        .forEach((employee) => {
+          const option = document.createElement("option");
+          option.value = `employee:${employee.employee_id}`;
+          option.textContent = employee.role_label
+            ? `${employee.name} - ${employee.role_label}`
+            : employee.name;
+          el.todayAgendaFilter.appendChild(option);
+        });
+      const validValues = new Set(["", "general", ...state.employees.filter((employee) => employee.is_active && !employee.is_default).map((employee) => `employee:${employee.employee_id}`)]);
+      state.todayAgendaFilter = validValues.has(previous) ? previous : "";
+      el.todayAgendaFilter.value = state.todayAgendaFilter;
+    }
+
+    function updateEmployeeServicesMeta() {
+      const allServices = Boolean(el.employeeAllServices.checked);
+      const selectedCount = el.employeeServicesList.querySelectorAll("input[type='checkbox']:checked").length;
+      if (!state.services.length) {
+        el.employeeServicesMeta.textContent = "No se han detectado servicios en la configuracion del cliente.";
+        return;
+      }
+      el.employeeServicesMeta.textContent = allServices
+        ? "Este profesional puede atender todos los servicios."
+        : (selectedCount === 1 ? "Este profesional puede atender 1 servicio concreto." : `Este profesional puede atender ${selectedCount} servicios concretos.`);
+    }
+
+    function renderEmployeeServicesEditor(employee) {
+      const assignedIds = new Set(Array.isArray(employee?.service_ids) ? employee.service_ids : []);
+      const allowsAllServices = !employee || employee.allows_all_services || !assignedIds.size;
+      state.employeeServiceDraftIds = allowsAllServices ? [] : Array.from(assignedIds);
+      el.employeeAllServices.checked = allowsAllServices;
+      el.employeeServicesList.innerHTML = "";
+
+      if (!state.services.length) {
+        el.employeeServicesList.innerHTML = '<div class="empty">No hay servicios detectados para asignar.</div>';
+        updateEmployeeServicesMeta();
+        return;
+      }
+
+      state.services.forEach((service) => {
+        const label = document.createElement("label");
+        label.className = `inline-check${allowsAllServices ? " is-disabled" : ""}`;
+        label.innerHTML = `
+          <input type="checkbox" value="${escapeHtml(service.id || "")}" ${allowsAllServices || assignedIds.has(service.id) ? "checked" : ""} ${allowsAllServices ? "disabled" : ""} />
+          ${escapeHtml(service.nombre || service.id || "Servicio")}
+        `;
+        el.employeeServicesList.appendChild(label);
+      });
+      updateEmployeeServicesMeta();
+    }
+
+    function renderEmployeeEditor(employee) {
+      el.employeeEditorTitle.textContent = employee ? employee.name : "Nuevo profesional";
+      el.employeeEditorMeta.textContent = employee
+        ? `${employee.role_label || "Agenda profesional"} | ${employee.bookings_today || 0} hoy | ${employee.bookings_upcoming || 0} proximas | ${employeeServicesSummary(employee)}`
+        : "Crea un profesional y despues configura su agenda desde Horario.";
+
+      el.employeeName.value = employee?.name || "";
+      el.employeeRole.value = employee?.is_default ? "Agenda General" : (employee?.role_label || "");
+      el.employeeColor.value = employee?.color || "#00b1d9";
+      el.employeeActive.checked = employee ? Boolean(employee.is_active) : true;
+      el.employeeActive.disabled = Boolean(employee?.is_default);
+      el.employeeRole.disabled = Boolean(employee?.is_default);
+      renderEmployeeServicesEditor(employee);
+    }
+
+    function renderEmployees(response) {
+      state.employees = Array.isArray(response?.items) ? response.items : [];
+      if (!state.selectedEmployeeId || !state.employees.some((employee) => employee.employee_id === state.selectedEmployeeId)) {
+        state.selectedEmployeeId = state.employees[0]?.employee_id || "";
+        if (!state.employeeDraftMode) {
+          state.selectedEmployeeId = state.employees[0]?.employee_id || "";
+        }
+      }
+      renderEmployeeFilterOptions();
+      renderTodayAgendaFilterOptions();
+      renderScheduleTargetOptions();
+      renderBlockTargetOptions();
+      el.employeesList.innerHTML = "";
+      if (!state.employees.length) {
+        el.employeesList.innerHTML = '<div class="empty">Todavia no hay profesionales configurados.</div>';
+      } else {
+        state.employees.forEach((employee) => {
+          const card = document.createElement("article");
+          card.className = `employee-card${employee.employee_id === state.selectedEmployeeId && !state.employeeDraftMode ? " active" : ""}`;
+          card.innerHTML = `
+            <div class="employee-top">
+              <div class="employee-name">
+                <strong>${escapeHtml(employee.name || "-")}</strong>
+                <span class="muted">${escapeHtml(employee.role_label || "Agenda profesional")}</span>
+              </div>
+              <div class="employee-color" style="background:${escapeHtml(employee.color || "#00b1d9")}"></div>
+            </div>
+            <div class="row">
+              <span class="${employee.is_active ? "pill" : "pill danger"}">${employee.is_active ? "Activo" : "Inactivo"}</span>
+              ${employee.is_default ? '<span class="pill alt">Principal</span>' : ""}
+              <span class="pill alt">${escapeHtml(employeeServicesSummary(employee))}</span>
+            </div>
+          `;
+          card.addEventListener("click", () => {
+            state.selectedEmployeeId = employee.employee_id;
+            state.employeeDraftMode = false;
+            state.employeeEditorOpen = true;
+            renderEmployees({ items: state.employees });
+          });
+          el.employeesList.appendChild(card);
+        });
+      }
+
+      const employee = state.employeeDraftMode ? null : selectedEmployee();
+      el.employeeEditorCard.classList.toggle("hidden", !state.employeeEditorOpen);
+      renderEmployeeEditor(employee);
+      if (state.dashboard) renderTodayOverview(state.dashboard);
+      renderUnifiedScheduleEditor();
+      renderUnifiedBlocksEditor();
+    }
+
+    function startNewEmployeeDraft() {
+      state.employeeDraftMode = true;
+      state.selectedEmployeeId = "";
+      state.employeeEditorOpen = true;
+      renderEmployees({ items: state.employees });
+      el.employeeName.focus();
+      setStatus("Rellena los datos del nuevo profesional y guarda cuando lo tengas listo.", "info");
+    }
+
+    function collectEmployeePayload() {
+      const baseSchedule = state.schedule || {};
+      const selected = selectedEmployee();
+      const source = selected || {};
+      if (!el.employeeName.value.trim()) {
+        throw new Error("Indica el nombre del profesional.");
+      }
+      const serviceIds = el.employeeAllServices.checked
+        ? []
+        : Array.from(el.employeeServicesList.querySelectorAll("input[type='checkbox']:checked"))
+          .map((checkbox) => checkbox.value.trim())
+          .filter(Boolean);
+      if (!el.employeeAllServices.checked && state.services.length && !serviceIds.length) {
+        throw new Error("Selecciona al menos un servicio o marca todos los servicios.");
+      }
+      return {
+        name: el.employeeName.value.trim(),
+        role_label: selectedEmployee()?.is_default && !state.employeeDraftMode ? "Agenda General" : el.employeeRole.value.trim(),
+        color: el.employeeColor.value || "#00b1d9",
+        is_active: el.employeeActive.checked,
+        timezone: source.timezone || baseSchedule.timezone || "Europe/Madrid",
+        slot_minutes: Number(source.slot_minutes || baseSchedule.slot_minutes || 30),
+        day_start: source.day_start || baseSchedule.day_start || "09:00",
+        day_end: source.day_end || baseSchedule.day_end || "18:00",
+        closed_weekdays: Array.isArray(source.closed_weekdays) ? source.closed_weekdays : (baseSchedule.closed_weekdays || []),
+        service_ids: serviceIds,
+      };
+    }
+
+    async function loadServices() {
+      const response = await api("/auth/services");
+      state.services = Array.isArray(response?.items) ? response.items : [];
+      renderEmployeeServicesEditor(state.employeeDraftMode ? null : selectedEmployee());
+    }
+
+    async function loadEmployees() {
+      const response = await api("/auth/employees");
+      renderEmployees(response);
+    }
+
+    async function saveEmployee() {
+      const payload = collectEmployeePayload();
+      const employee = state.employeeDraftMode ? null : selectedEmployee();
+      setStatus(employee ? "Guardando profesional..." : "Creando profesional...", "info");
+      const response = await api(
+        employee
+          ? `/auth/employees/${encodeURIComponent(employee.employee_id)}`
+          : "/auth/employees",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+      state.selectedEmployeeId = response.employee_id || "";
+      state.employeeDraftMode = false;
+      state.employeeEditorOpen = true;
+      await loadEmployees();
+      await loadBookings();
+      setStatus(employee ? "Profesional actualizado correctamente." : "Profesional creado correctamente.", "success");
+    }
+
+    function renderSchedule(schedule) {
+      state.schedule = schedule || null;
+      const templates = schedule?.message_templates || {};
+      const templateEnabled = schedule?.message_template_enabled || {};
+      el.templateConfirmedEnabled.checked = templateEnabled.confirmed !== false;
+      el.templateConfirmed.value = templates.confirmed || "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.";
+      el.templateReminder24hEnabled.checked = templateEnabled.reminder_24h !== false;
+      el.templateReminder24h.value = templates.reminder_24h || "Te recordamos que manana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.";
+      el.templateReminder2hEnabled.checked = templateEnabled.reminder_2h !== false;
+      el.templateReminder2h.value = templates.reminder_2h || "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.";
+      el.templateCancelledEnabled.checked = templateEnabled.cancelled !== false;
+      el.templateCancelled.value = templates.cancelled || "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.";
+      el.templateRescheduledEnabled.checked = templateEnabled.rescheduled !== false;
+      el.templateRescheduled.value = templates.rescheduled || "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla.";
+
+      if (!el.blockDateStart.value) {
+        el.blockDateStart.value = toDateInputValue(new Date());
+      }
+      if (!el.blockDateEnd.value) el.blockDateEnd.value = el.blockDateStart.value;
+      syncBlockDateMode();
+      renderUnifiedScheduleEditor();
+      renderUnifiedBlocksEditor();
+    }
+
+    async function loadSchedule() {
+      const schedule = await api("/auth/schedule");
+      renderSchedule(schedule);
+    }
+
+    function collectSchedulePayload() {
+      const slotMinutes = Number(el.scheduleSlotMinutes.value);
+      if (!Number.isFinite(slotMinutes) || slotMinutes < 5 || slotMinutes > 240) {
+        throw new Error("La duracion debe estar entre 5 y 240 minutos.");
+      }
+      if (!el.scheduleDayStart.value || !el.scheduleDayEnd.value) {
+        throw new Error("Indica hora de inicio y fin del dia.");
+      }
+      if (el.scheduleDayStart.value >= el.scheduleDayEnd.value) {
+        throw new Error("La hora de fin debe ser posterior a la de inicio.");
+      }
+      const closedWeekdays = Array.from(el.closedWeekdaysGroup.querySelectorAll("input[type='checkbox']:checked"))
+        .map((checkbox) => Number(checkbox.value))
+        .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6);
+      return {
+        enabled: el.scheduleEnabled.checked,
+        timezone: el.scheduleTimezone.value.trim() || "Europe/Madrid",
+        slot_minutes: slotMinutes,
+        day_start: el.scheduleDayStart.value,
+        day_end: el.scheduleDayEnd.value,
+        closed_weekdays: closedWeekdays,
+        message_templates: {
+          confirmed: el.templateConfirmed.value.trim(),
+          reminder_24h: el.templateReminder24h.value.trim(),
+          reminder_2h: el.templateReminder2h.value.trim(),
+          cancelled: el.templateCancelled.value.trim(),
+          rescheduled: el.templateRescheduled.value.trim(),
+        },
+        message_template_enabled: {
+          confirmed: el.templateConfirmedEnabled.checked,
+          reminder_24h: el.templateReminder24hEnabled.checked,
+          reminder_2h: el.templateReminder2hEnabled.checked,
+          cancelled: el.templateCancelledEnabled.checked,
+          rescheduled: el.templateRescheduledEnabled.checked,
+        },
+      };
+    }
+
+    function collectTemplatePreviewPayload() {
+      return {
+        kind: el.templatePreviewKind.value,
+        target_email: el.templateTestEmail.value.trim() || undefined,
+        schedule: collectSchedulePayload(),
+      };
+    }
+
+    function renderTemplatePreview(preview) {
+      el.templatePreviewMeta.textContent = `${preview.enabled ? "Plantilla activa" : "Plantilla desactivada"}. Asunto: ${preview.subject}`;
+      el.templatePreviewPanel.innerHTML = `
+        <article class="template-preview-card">
+          <strong>Asunto</strong>
+          <div>${escapeHtml(preview.subject || "-")}</div>
+        </article>
+        <article class="template-preview-card">
+          <strong>Texto plano</strong>
+          <div>${escapeHtml(preview.text_body || "").replace(/\n/g, "<br />")}</div>
+        </article>
+        <article class="template-preview-card">
+          <strong>Correo HTML</strong>
+          <div class="template-preview-html"><div>${preview.html_body || ""}</div></div>
+        </article>
+      `;
+    }
+
+    async function previewMessageTemplate() {
+      el.templatePreviewMeta.textContent = "Generando previsualizacion...";
+      const preview = await api("/auth/schedule/message-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(collectTemplatePreviewPayload()),
+      });
+      renderTemplatePreview(preview);
+      setStatus("Previsualizacion generada correctamente.", "success");
+    }
+
+    async function sendTemplateTestMessage() {
+      const targetEmail = el.templateTestEmail.value.trim();
+      if (!targetEmail) {
+        throw new Error("Indica un email para enviar la prueba.");
+      }
+      await api("/auth/schedule/message-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(collectTemplatePreviewPayload()),
+      });
+      setStatus(`Correo de prueba enviado a ${targetEmail}.`, "success");
+    }
+
+    async function saveSchedule(successMessage = "Horario actualizado correctamente.") {
+      const targetEmployee = selectedScheduleTargetEmployee();
+      if (!targetEmployee) {
+        setStatus("Guardando horario...", "info");
+        const schedule = await api("/auth/schedule", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(collectSchedulePayload()),
+        });
+        renderSchedule(schedule);
+        await loadBookings();
+        setStatus(successMessage, "success");
+        return;
+      }
+
+      const payload = {
+        name: targetEmployee.name,
+        role_label: targetEmployee.role_label || "",
+        color: targetEmployee.color || "#00b1d9",
+        is_active: targetEmployee.is_active !== false,
+        timezone: el.scheduleTimezone.value.trim() || "Europe/Madrid",
+        slot_minutes: Number(el.scheduleSlotMinutes.value),
+        day_start: el.scheduleDayStart.value,
+        day_end: el.scheduleDayEnd.value,
+        closed_weekdays: Array.from(el.closedWeekdaysGroup.querySelectorAll("input[type='checkbox']:checked"))
+          .map((checkbox) => Number(checkbox.value))
+          .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6),
+      };
+      setStatus("Guardando horario del profesional...", "info");
+      await api(`/auth/employees/${encodeURIComponent(targetEmployee.employee_id)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      await loadEmployees();
+      await loadBookings();
+      renderUnifiedScheduleEditor();
+      setStatus("Horario del profesional actualizado correctamente.", "success");
+    }
+
+    async function addScheduleBlock() {
+      const targetEmployee = selectedBlockTargetEmployee();
+      const dateFrom = el.blockDateStart.value;
+      const isRange = el.blockMode.value === "range";
+      const dateTo = isRange ? el.blockDateEnd.value : dateFrom;
+      if (!dateFrom || !dateTo || !el.blockStart.value || !el.blockEnd.value) {
+        throw new Error("Indica el dia o intervalo y la hora de inicio y fin del bloqueo.");
+      }
+      if (dateTo < dateFrom) {
+        throw new Error("La fecha final del bloqueo debe ser igual o posterior a la inicial.");
+      }
+      if (el.blockStart.value >= el.blockEnd.value) {
+        throw new Error("La hora de fin del bloqueo debe ser posterior a la de inicio.");
+      }
+      setStatus(targetEmployee ? "Creando bloqueo del profesional..." : "Creando bloqueo de agenda...", "info");
+      const result = await api(
+        targetEmployee
+          ? `/auth/employees/${encodeURIComponent(targetEmployee.employee_id)}/blocks`
+          : "/auth/schedule/blocks",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fecha: dateFrom,
+            fecha_fin: dateTo,
+            hora_inicio: el.blockStart.value,
+            hora_fin: el.blockEnd.value,
+            motivo: el.blockReason.value.trim(),
+          }),
+        }
+      );
+      el.blockReason.value = "";
+      await loadSchedule();
+      await loadEmployees();
+      await loadBookings();
+      if (!result?.created_count && result?.skipped_count) {
+        setStatus("Ese bloqueo ya existia en todas las fechas seleccionadas.", "success");
+        return;
+      }
+      const createdCount = Number(result?.created_count || 0);
+      const skippedCount = Number(result?.skipped_count || 0);
+      const baseMessage = createdCount === 1
+        ? (targetEmployee ? "Bloqueo del profesional creado correctamente." : "Bloqueo creado correctamente.")
+        : (targetEmployee ? `Se han creado ${createdCount} bloqueos del profesional correctamente.` : `Se han creado ${createdCount} bloqueos correctamente.`);
+      const skippedMessage = skippedCount ? ` ${skippedCount} ya existian.` : "";
+      setStatus(`${baseMessage}${skippedMessage}`, "success");
+      renderUnifiedBlocksEditor();
+    }
+
+    function exportBookings() {
+      const params = new URLSearchParams();
+      if (state.dateFrom) params.set("date_from", state.dateFrom);
+      if (state.dateTo) params.set("date_to", state.dateTo);
+      if (state.status) params.set("estado", state.status);
+      if (state.query) params.set("q", state.query);
+      if (state.employeeFilter) params.set("employee_id", state.employeeFilter);
+      const suffix = params.toString();
+      window.location.href = `/auth/bookings/export${suffix ? `?${suffix}` : ""}`;
     }
 
     function readMatchingPasswords(firstValue, secondValue, emptyMessage, mismatchMessage) {
@@ -1153,9 +3071,6 @@
     function setScope(scope) {
       state.scope = scope;
       state.offset = 0;
-      el.scopeButtons.forEach((button) => {
-        button.classList.toggle("active", button.dataset.scope === scope);
-      });
     }
 
     function renderShell() {
@@ -1170,8 +3085,14 @@
       el.sessionCard.classList.toggle("hidden", !isAuthed);
       el.statusCard.classList.toggle("hidden", !isAuthed);
       el.statsGrid.classList.toggle("hidden", !isAuthed);
-      el.portalContent.classList.toggle("hidden", !isAuthed);
-      el.securityBlock.classList.toggle("hidden", !isAuthed);
+      el.todayBlock.classList.toggle("hidden", true);
+      el.portalContent.classList.toggle("hidden", true);
+      el.teamBlock.classList.toggle("hidden", true);
+      el.accountBlock.classList.toggle("hidden", true);
+      el.scheduleBlock.classList.toggle("hidden", true);
+      el.blocksBlock.classList.toggle("hidden", true);
+      el.messagesBlock.classList.toggle("hidden", true);
+      el.securityBlock.classList.toggle("hidden", true);
 
       if (!user) {
         if (state.authView === "forgot") {
@@ -1192,6 +3113,8 @@
       el.rolePill.textContent = isAdmin ? "Administrador" : "Cliente";
       el.userName.textContent = user.display_name;
       el.userEmail.textContent = user.email;
+      el.templateTestEmail.value = user.email || "";
+      renderAccountForm(user);
       el.openAdminBtn.classList.toggle("hidden", !isAdmin);
       el.contactBlock.classList.remove("hidden");
       setAuthView("login");
@@ -1202,11 +3125,13 @@
         el.heroTitle.textContent = "Centro de operaciones de Vantelia";
         el.heroText.textContent = "El portal queda reservado para clientes. Usa el dashboard admin para operar clientes, usuarios, reservas, demos e instalacion.";
       } else {
-        el.portalContent.classList.remove("hidden");
+        state.calendarOpen = true;
+        el.calendarPanel.classList.remove("hidden");
+        setPortalView(state.activePortalView);
         el.heroTitle.textContent = `Portal de ${user.display_name}`;
         el.heroText.textContent = "Desde aqui puedes ver tus proximas citas, consultar el historial y cambiar o cancelar una reserva sin depender de mensajes manuales.";
         el.mainPanelTitle.textContent = "Tus citas";
-        el.mainPanelText.textContent = "Las proximas citas se ven primero. Las ya pasadas no se borran: se archivan como historial para mantener trazabilidad.";
+        el.mainPanelText.textContent = "Usa el calendario, la busqueda y los filtros para localizar cualquier cita por dia, cliente o estado.";
       }
     }
 
@@ -1233,6 +3158,79 @@
       }
     }
 
+    function renderTodayOverview(payload) {
+      const allTodayItems = Array.isArray(payload?.bookings_today) ? payload.bookings_today : [];
+      const generalEmployee = defaultEmployee();
+      const todayItems = allTodayItems.filter((booking) => {
+        if (!state.todayAgendaFilter) return true;
+        if (state.todayAgendaFilter === "general") {
+          return (booking.employee_id || "") === (generalEmployee?.employee_id || "");
+        }
+        if (state.todayAgendaFilter.startsWith("employee:")) {
+          return (booking.employee_id || "") === state.todayAgendaFilter.slice("employee:".length);
+        }
+        return true;
+      });
+      const introSuffix = state.todayAgendaFilter === "general"
+        ? " en la agenda general"
+        : (state.todayAgendaFilter.startsWith("employee:")
+          ? (() => {
+            const employeeId = state.todayAgendaFilter.slice("employee:".length);
+            const employee = state.employees.find((item) => item.employee_id === employeeId) || null;
+            return employee ? ` para ${employee.name}` : "";
+          })()
+          : "");
+      const introText = todayItems.length
+        ? `Tienes ${todayItems.length} cita${todayItems.length === 1 ? "" : "s"} programada${todayItems.length === 1 ? "" : "s"} para hoy${introSuffix}.`
+        : `No hay citas para hoy${introSuffix}. La lista se ira llenando en cuanto entren nuevas reservas.`;
+      el.todayOverviewIntro.textContent = introText;
+      el.todayPageIntro.textContent = introText;
+
+      if (!todayItems.length) {
+        el.todayBookingsList.innerHTML = '<div class="empty">No hay citas previstas para hoy.</div>';
+      } else {
+        el.todayBookingsList.innerHTML = "";
+        todayItems.forEach((booking) => {
+          const card = document.createElement("article");
+          card.className = "today-menu-item";
+          card.innerHTML = `
+            <div class="today-booking-top">
+              <div>
+                <div class="today-chip">${escapeHtml(booking.hora || "--:--")}</div>
+                <strong>${escapeHtml(booking.nombre || "-")}</strong>
+                <div class="muted">${escapeHtml(booking.employee_name || "Agenda principal")} | ${escapeHtml(booking.servicio || "Consulta")} | ${escapeHtml(booking.email || "-")}</div>
+              </div>
+              <span class="${pillClass(booking.estado)}">${escapeHtml(booking.estado || "-")}</span>
+            </div>
+            <div class="row">
+              <button class="secondary small" type="button" data-today-action="manage" data-url="${escapeHtml(booking.manage_url || "")}">Gestionar</button>
+              <button class="secondary small" type="button" data-today-action="reschedule" data-id="${escapeHtml(booking.booking_id || "")}" data-employee-id="${escapeHtml(booking.employee_id || "")}" data-fecha="${escapeHtml(booking.fecha || "")}" data-hora="${escapeHtml(booking.hora || "")}" data-label="${escapeHtml(`${booking.employee_name || "Agenda principal"} - ${booking.servicio || "Consulta"} - ${formatDateLabel(booking)}`)}" ${booking.can_reschedule ? "" : "disabled"}>Reprogramar</button>
+            </div>
+          `;
+          el.todayBookingsList.appendChild(card);
+        });
+        el.todayBookingsList.querySelectorAll("button[data-today-action]").forEach((button) => {
+          button.addEventListener("click", () => {
+            if (button.dataset.todayAction === "manage") {
+              if (!button.dataset.url) {
+                setStatus("Esta reserva no tiene enlace de gestion.", "error");
+                return;
+              }
+              window.open(button.dataset.url, "_blank", "noopener,noreferrer");
+              return;
+            }
+            openReschedulePanel(
+              button.dataset.id || "",
+              button.dataset.employeeId || "",
+              button.dataset.fecha || "",
+              button.dataset.hora || "",
+              button.dataset.label || ""
+            );
+          });
+        });
+      }
+    }
+
     function formatDateTimeLabel(value) {
       if (!value) return "Sin actividad";
       return value.replace("T", " ").replace("Z", " UTC");
@@ -1241,17 +3239,115 @@
     function updateContactCard(items) {
       const first = items.find((item) => item.contact_email || item.contact_phone);
       if (!first) {
-        el.contactInfo.textContent = "No hay datos de contacto visibles todavia.";
+        el.contactInfo.textContent = "Email: __SUPPORT_EMAIL__";
         return;
       }
       const lines = [];
-      if (first.contact_email) lines.push(`Email: ${first.contact_email}`);
+      lines.push(`Email: ${first.contact_email || "__SUPPORT_EMAIL__"}`);
       if (first.contact_phone) lines.push(`Telefono: ${first.contact_phone}`);
       el.contactInfo.textContent = lines.join(" | ");
     }
 
     function formatDateLabel(item) {
       return `${item.fecha} - ${item.hora}${item.timezone ? ` (${item.timezone})` : ""}`;
+    }
+
+    function formatShortDateParts(item) {
+      const date = new Date(`${item.fecha}T${item.hora || "00:00"}:00`);
+      if (Number.isNaN(date.getTime())) {
+        return { day: "--", month: "---", time: item.hora || "--:--" };
+      }
+      return {
+        day: date.toLocaleDateString("es-ES", { day: "2-digit" }),
+        month: date.toLocaleDateString("es-ES", { month: "short" }).replace(".", ""),
+        time: item.hora || date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
+      };
+    }
+
+    function toDateInputValue(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    function monthBounds(date) {
+      const start = new Date(date.getFullYear(), date.getMonth(), 1);
+      const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+      return { start: toDateInputValue(start), end: toDateInputValue(end) };
+    }
+
+    function visibleCalendarBounds(date) {
+      const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+      const firstOffset = (monthStart.getDay() + 6) % 7;
+      const gridStart = new Date(monthStart);
+      gridStart.setDate(monthStart.getDate() - firstOffset);
+      const gridEnd = new Date(gridStart);
+      gridEnd.setDate(gridStart.getDate() + 41);
+      return { start: toDateInputValue(gridStart), end: toDateInputValue(gridEnd) };
+    }
+
+    function monthLabel(date) {
+      const text = date.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+
+    function dateLongLabel(dateKey) {
+      const date = new Date(`${dateKey}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return dateKey || "Dia seleccionado";
+      const text = date.toLocaleDateString("es-ES", {
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      });
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+
+    function addDays(date, days) {
+      const next = new Date(date);
+      next.setDate(next.getDate() + days);
+      return next;
+    }
+
+    function portalWeekday(date) {
+      return (date.getDay() + 6) % 7;
+    }
+
+    function scheduleInfoForDate(dateKey) {
+      const date = new Date(`${dateKey}T00:00:00`);
+      const employee = state.employeeFilter
+        ? state.employees.find((item) => item.employee_id === state.employeeFilter) || null
+        : null;
+      const closedDays = new Set(
+        (employee?.closed_weekdays || state.schedule?.closed_weekdays || []).map((day) => Number(day))
+      );
+      const isClosed = !Number.isNaN(date.getTime()) && closedDays.has(portalWeekday(date));
+      const globalBlocks = (state.schedule?.blocks || [])
+        .filter((block) => block.fecha === dateKey)
+        .map((block) => ({ ...block, scope_label: "Bloqueo general" }));
+      const employeeBlocks = employee
+        ? (employee.blocks || [])
+          .filter((block) => block.fecha === dateKey)
+          .map((block) => ({ ...block, scope_label: `Bloqueo de ${employee.name || "profesional"}` }))
+        : [];
+      const blocks = [...globalBlocks, ...employeeBlocks]
+        .sort((left, right) => String(left.hora_inicio || "").localeCompare(String(right.hora_inicio || "")));
+      return { isClosed, blocks };
+    }
+
+    async function cancelBooking(bookingId) {
+      if (!bookingId) throw new Error("No se ha podido identificar la cita.");
+      const reason = window.prompt("Motivo de cancelacion para enviar al cliente (opcional):", "");
+      if (reason === null) return false;
+      await api(`/auth/bookings/${encodeURIComponent(bookingId)}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo: reason.trim() }),
+      });
+      setStatus("Cita cancelada correctamente.", "success");
+      await loadDashboard();
+      return true;
     }
 
     function pillClass(status) {
@@ -1263,6 +3359,7 @@
 
     function clearReschedulePanel() {
       state.rescheduleBookingId = "";
+      state.rescheduleEmployeeId = "";
       state.rescheduleOriginalDate = "";
       state.rescheduleOriginalTime = "";
       state.rescheduleSelectedTime = "";
@@ -1304,6 +3401,9 @@
         cliente_id: state.user.cliente_id,
         fecha,
       });
+      if (state.rescheduleEmployeeId) {
+        params.set("employee_id", state.rescheduleEmployeeId);
+      }
       const data = await api(`/disponibilidad?${params.toString()}`);
       const slots = Array.isArray(data.slots) ? data.slots : [];
       const availableCount = slots.filter((slot) => slot.disponible || isOriginalRescheduleSlot(fecha, slot.hora)).length;
@@ -1334,8 +3434,9 @@
       }
     }
 
-    function openReschedulePanel(bookingId, fecha, hora, label) {
+    function openReschedulePanel(bookingId, employeeId, fecha, hora, label) {
       state.rescheduleBookingId = bookingId;
+      state.rescheduleEmployeeId = employeeId || "";
       state.rescheduleOriginalDate = fecha;
       state.rescheduleOriginalTime = hora;
       state.rescheduleSelectedTime = hora;
@@ -1365,7 +3466,11 @@
         await api(`/auth/bookings/${encodeURIComponent(state.rescheduleBookingId)}/reschedule`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fecha, hora }),
+          body: JSON.stringify({
+            fecha,
+            hora,
+            employee_id: state.rescheduleEmployeeId || "",
+          }),
         });
         setStatus("Cita reprogramada correctamente.", "success");
         clearReschedulePanel();
@@ -1375,6 +3480,291 @@
       }
     }
 
+    function setCalendarOpen(open) {
+      state.calendarOpen = true;
+      el.calendarPanel.classList.remove("hidden");
+      if (el.toggleCalendarBtn) {
+        el.toggleCalendarBtn.textContent = "Calendario";
+      }
+      if (state.calendarOpen) {
+        loadCalendarBookings().catch((error) => setStatus(error.message, "error"));
+      }
+    }
+
+    function itemsForCalendarDate(dateKey) {
+      return state.calendarItems
+        .filter((item) => item.fecha === dateKey)
+        .sort((left, right) => String(left.hora || "").localeCompare(String(right.hora || "")));
+    }
+
+    function renderSelectedDayAgenda() {
+      if (!state.selectedCalendarDate) {
+        el.dayAgenda.classList.add("hidden");
+        el.bookingList.classList.remove("hidden");
+        el.dayAgendaDate.textContent = "Agenda del dia";
+        el.dayAgendaMeta.textContent = "Selecciona un dia del calendario para ver sus citas.";
+        el.dayAgendaList.innerHTML = '<div class="empty">Selecciona un dia del calendario para ver sus citas.</div>';
+        el.pagination.classList.toggle("hidden", state.total <= state.limit);
+        return;
+      }
+
+      const dateKey = state.selectedCalendarDate;
+      const dayItems = itemsForCalendarDate(dateKey);
+      const scheduleInfo = scheduleInfoForDate(dateKey);
+      const summaryParts = [];
+      if (dayItems.length) summaryParts.push(`${dayItems.length} cita${dayItems.length === 1 ? "" : "s"}`);
+      if (scheduleInfo.isClosed) summaryParts.push("dia cerrado");
+      if (scheduleInfo.blocks.length) summaryParts.push(`${scheduleInfo.blocks.length} bloqueo${scheduleInfo.blocks.length === 1 ? "" : "s"}`);
+
+      el.dayAgenda.classList.remove("hidden");
+      el.bookingList.classList.add("hidden");
+      el.pagination.classList.add("hidden");
+      el.dayAgendaDate.textContent = dateLongLabel(dateKey);
+      el.dayAgendaMeta.textContent = summaryParts.length
+        ? summaryParts.join(" | ")
+        : "No hay citas registradas para esta fecha.";
+      el.dayAgendaList.innerHTML = "";
+
+      if (scheduleInfo.isClosed) {
+        const closedItem = document.createElement("article");
+        closedItem.className = "day-agenda-item";
+        closedItem.innerHTML = `
+          <div class="day-agenda-time">Todo el dia</div>
+          <div class="day-agenda-main">
+            <strong>Agenda cerrada</strong>
+            <span>Este dia esta marcado como no disponible en el horario.</span>
+          </div>
+          <div class="day-agenda-actions"></div>
+        `;
+        el.dayAgendaList.appendChild(closedItem);
+      }
+
+      scheduleInfo.blocks.forEach((block) => {
+        const blockItem = document.createElement("article");
+        blockItem.className = "day-agenda-item";
+        blockItem.innerHTML = `
+          <div class="day-agenda-time">${escapeHtml(block.hora_inicio || "--:--")}</div>
+          <div class="day-agenda-main">
+            <strong>${escapeHtml(block.scope_label || "Bloqueo de agenda")}</strong>
+            <span>${escapeHtml((block.hora_inicio || "--:--") + " - " + (block.hora_fin || "--:--"))}${block.motivo ? ` | ${escapeHtml(block.motivo)}` : ""}</span>
+          </div>
+          <div class="day-agenda-actions"></div>
+        `;
+        el.dayAgendaList.appendChild(blockItem);
+      });
+
+      dayItems.forEach((booking) => {
+        const bookingId = escapeHtml(booking.booking_id || "");
+        const employeeId = escapeHtml(booking.employee_id || "");
+        const employeeName = booking.employee_name || "Agenda principal";
+        const manageUrl = escapeHtml(booking.manage_url || "");
+        const fecha = escapeHtml(booking.fecha || "");
+        const hora = escapeHtml(booking.hora || "");
+        const label = escapeHtml(`${employeeName} - ${booking.servicio || "Consulta"} - ${formatDateLabel(booking)}`);
+        const item = document.createElement("article");
+        item.className = "day-agenda-item";
+        item.innerHTML = `
+          <div class="day-agenda-time">${escapeHtml(booking.hora || "--:--")}</div>
+          <div class="day-agenda-main">
+            <strong>${escapeHtml(booking.nombre || booking.servicio || "Consulta")}</strong>
+            <span>${escapeHtml(employeeName)} | ${escapeHtml(booking.servicio || "Consulta")} | ${escapeHtml(booking.email || "-")} | ${escapeHtml(booking.estado || "-")}</span>
+          </div>
+          <div class="day-agenda-actions">
+            <button class="secondary small" type="button" data-day-action="manage" data-url="${manageUrl}">Gestionar</button>
+            <button class="danger small" type="button" data-day-action="cancel" data-id="${bookingId}" ${booking.can_cancel ? "" : "disabled"}>Cancelar</button>
+            <button class="secondary small" type="button" data-day-action="reschedule" data-id="${bookingId}" data-employee-id="${employeeId}" data-fecha="${fecha}" data-hora="${hora}" data-label="${label}" ${booking.can_reschedule ? "" : "disabled"}>Reprogramar</button>
+          </div>
+        `;
+        el.dayAgendaList.appendChild(item);
+      });
+
+      if (!dayItems.length && !scheduleInfo.isClosed && !scheduleInfo.blocks.length) {
+        el.dayAgendaList.innerHTML = '<div class="empty">No hay citas registradas para este dia.</div>';
+        return;
+      }
+
+      el.dayAgendaList.querySelectorAll("button[data-day-action]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const action = button.dataset.dayAction;
+          const bookingId = button.dataset.id || "";
+          const url = button.dataset.url || "";
+          try {
+            if (action === "manage") {
+              if (!url) throw new Error("Esta reserva no tiene enlace de gestion.");
+              window.open(url, "_blank", "noopener,noreferrer");
+              return;
+            }
+            if (action === "cancel") {
+              await cancelBooking(bookingId);
+              return;
+            }
+            if (action === "reschedule") {
+              openReschedulePanel(
+                bookingId,
+                button.dataset.employeeId || "",
+                button.dataset.fecha || "",
+                button.dataset.hora || "",
+                button.dataset.label || ""
+              );
+            }
+          } catch (error) {
+            setStatus(error.message, "error");
+          }
+        });
+      });
+    }
+
+    function applyDayFilter(dateKey) {
+      state.dateFrom = dateKey;
+      state.dateTo = dateKey;
+      state.scope = "all";
+      state.offset = 0;
+      el.bookingDateFrom.value = dateKey;
+      el.bookingDateTo.value = dateKey;
+      setScope("all");
+      clearReschedulePanel();
+      loadBookings().catch((error) => setStatus(error.message, "error"));
+    }
+
+    function selectCalendarDay(dateKey) {
+      state.selectedCalendarDate = dateKey;
+      renderCalendar(state.calendarItems);
+      renderSelectedDayAgenda();
+      applyDayFilter(dateKey);
+    }
+
+    function clearSelectedCalendarDay() {
+      state.selectedCalendarDate = "";
+      renderCalendar(state.calendarItems);
+      renderSelectedDayAgenda();
+    }
+
+    function renderCalendar(items) {
+      const activeMonth = new Date(state.calendarDate.getFullYear(), state.calendarDate.getMonth(), 1);
+      const todayKey = toDateInputValue(new Date());
+      const monthStart = new Date(activeMonth);
+      const firstOffset = (monthStart.getDay() + 6) % 7;
+      const gridStart = new Date(monthStart);
+      gridStart.setDate(monthStart.getDate() - firstOffset);
+      const month = activeMonth.getMonth();
+      const itemsByDate = new Map();
+
+      items.forEach((item) => {
+        const key = item.fecha || "";
+        if (!key) return;
+        if (!itemsByDate.has(key)) itemsByDate.set(key, []);
+        itemsByDate.get(key).push(item);
+      });
+
+      el.calendarMonthLabel.textContent = monthLabel(activeMonth);
+      el.calendarGrid.innerHTML = "";
+      ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"].forEach((label) => {
+        const weekday = document.createElement("div");
+        weekday.className = "calendar-weekday";
+        weekday.textContent = label;
+        el.calendarGrid.appendChild(weekday);
+      });
+
+      for (let index = 0; index < 42; index += 1) {
+        const day = new Date(gridStart);
+        day.setDate(gridStart.getDate() + index);
+        const key = toDateInputValue(day);
+        const dayItems = itemsByDate.get(key) || [];
+        const scheduleInfo = scheduleInfoForDate(key);
+        const cell = document.createElement("div");
+        cell.className = `calendar-day${day.getMonth() !== month ? " outside" : ""}${key === todayKey ? " today" : ""}${key === state.selectedCalendarDate ? " selected" : ""}${scheduleInfo.isClosed ? " closed" : ""}${scheduleInfo.blocks.length ? " blocked" : ""}`;
+        cell.tabIndex = 0;
+        cell.setAttribute("role", "button");
+        cell.setAttribute(
+          "aria-label",
+          `${dateLongLabel(key)}, ${dayItems.length} cita${dayItems.length === 1 ? "" : "s"}${scheduleInfo.isClosed ? ", dia cerrado" : ""}${scheduleInfo.blocks.length ? `, ${scheduleInfo.blocks.length} bloqueo${scheduleInfo.blocks.length === 1 ? "" : "s"}` : ""}`
+        );
+        cell.innerHTML = `
+          <div class="calendar-number">
+            <span>${day.getDate()}</span>
+            ${dayItems.length ? `<span class="calendar-count">${dayItems.length}</span>` : ""}
+          </div>
+        `;
+        cell.addEventListener("click", () => selectCalendarDay(key));
+        cell.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            selectCalendarDay(key);
+          }
+        });
+
+        let visibleMarkers = 0;
+        if (scheduleInfo.isClosed) {
+          const closedEvent = document.createElement("button");
+          closedEvent.type = "button";
+          closedEvent.className = "calendar-event closed";
+          closedEvent.textContent = "Cerrado";
+          closedEvent.addEventListener("click", (event) => {
+            event.stopPropagation();
+            selectCalendarDay(key);
+          });
+          cell.appendChild(closedEvent);
+          visibleMarkers += 1;
+        }
+
+        scheduleInfo.blocks.slice(0, Math.max(0, 3 - visibleMarkers)).forEach((block) => {
+          const blockEvent = document.createElement("button");
+          blockEvent.type = "button";
+          blockEvent.className = "calendar-event block";
+          const blockLabel = block.motivo ? String(block.motivo).trim() : "Bloqueado";
+          blockEvent.textContent = `${block.hora_inicio || "--:--"} ${blockLabel}`;
+          blockEvent.title = `${block.hora_inicio || "--:--"} - ${block.hora_fin || "--:--"}${block.motivo ? ` | ${block.motivo}` : ""}`;
+          blockEvent.addEventListener("click", (event) => {
+            event.stopPropagation();
+            selectCalendarDay(key);
+          });
+          cell.appendChild(blockEvent);
+          visibleMarkers += 1;
+        });
+
+        dayItems.slice(0, Math.max(0, 3 - visibleMarkers)).forEach((booking) => {
+          const event = document.createElement("button");
+          event.type = "button";
+          event.className = `calendar-event${booking.estado === "cancelled" ? " cancelled" : ""}`;
+          event.textContent = `${booking.hora || "--:--"} ${booking.servicio || "Consulta"}`;
+          event.addEventListener("click", (event) => {
+            event.stopPropagation();
+            selectCalendarDay(booking.fecha || key);
+          });
+          cell.appendChild(event);
+          visibleMarkers += 1;
+        });
+
+        const hiddenMarkers = dayItems.length + scheduleInfo.blocks.length + (scheduleInfo.isClosed ? 1 : 0) - visibleMarkers;
+        if (hiddenMarkers > 0) {
+          const more = document.createElement("div");
+          more.className = "muted";
+          more.textContent = `+${hiddenMarkers} mas`;
+          cell.appendChild(more);
+        }
+
+        el.calendarGrid.appendChild(cell);
+      }
+    }
+
+    async function loadCalendarBookings() {
+      const bounds = visibleCalendarBounds(state.calendarDate);
+      const params = new URLSearchParams({
+        scope: "all",
+        limit: "100",
+        offset: "0",
+        date_from: bounds.start,
+        date_to: bounds.end,
+      });
+      if (state.status) params.set("estado", state.status);
+      if (state.query) params.set("q", state.query);
+      if (state.employeeFilter) params.set("employee_id", state.employeeFilter);
+      const payload = await api(`/auth/bookings?${params.toString()}`);
+      state.calendarItems = payload.items || [];
+      renderCalendar(state.calendarItems);
+      renderSelectedDayAgenda();
+    }
+
     function renderBookings(response) {
       state.items = response.items || [];
       state.total = response.total || 0;
@@ -1382,6 +3772,7 @@
       state.offset = response.offset || 0;
 
       updateContactCard(state.items);
+      el.bookingList.classList.toggle("hidden", Boolean(state.selectedCalendarDate));
 
       if (!state.items.length) {
         el.bookingList.innerHTML = `<div class="empty">No hay citas para este filtro. Si buscas algo pasado, prueba la vista de historial.</div>`;
@@ -1389,31 +3780,41 @@
         el.bookingList.innerHTML = "";
         state.items.forEach((booking) => {
           const card = document.createElement("article");
-          card.className = "booking-card";
+          card.className = `booking-card${booking.can_cancel || booking.can_reschedule ? " primary-booking" : ""}`;
           const canCancel = booking.can_cancel;
           const canReschedule = booking.can_reschedule;
           const servicio = escapeHtml(booking.servicio || "Consulta");
           const empresa = escapeHtml(booking.empresa || "-");
           const estado = escapeHtml(booking.estado || "-");
-          const providerName = escapeHtml(booking.provider_name || "-");
           const fechaLabel = escapeHtml(formatDateLabel(booking));
+          const dateParts = formatShortDateParts(booking);
+          const day = escapeHtml(dateParts.day);
+          const month = escapeHtml(dateParts.month);
+          const time = escapeHtml(dateParts.time);
           const nombre = escapeHtml(booking.nombre || "-");
           const email = escapeHtml(booking.email || "-");
+          const employeeId = escapeHtml(booking.employee_id || "");
+          const employeeName = escapeHtml(booking.employee_name || "Agenda principal");
           const manageUrl = escapeHtml(booking.manage_url || "");
-          const providerBookingUrl = escapeHtml(booking.provider_booking_url || "");
           const bookingId = escapeHtml(booking.booking_id || "");
           const fecha = escapeHtml(booking.fecha || "");
           const hora = escapeHtml(booking.hora || "");
-          const bookingLabel = escapeHtml(`${booking.servicio || "Consulta"} - ${formatDateLabel(booking)}`);
+          const bookingLabel = escapeHtml(`${booking.employee_name || "Agenda principal"} - ${booking.servicio || "Consulta"} - ${formatDateLabel(booking)}`);
           card.innerHTML = `
             <div class="booking-top">
-              <div class="booking-title">
-                <strong>${servicio}</strong>
-                <span class="muted">${empresa}</span>
+              <div class="booking-heading">
+                <div class="booking-date-tile">
+                  <strong>${day}</strong>
+                  <span>${month}</span>
+                  <span>${time}</span>
+                </div>
+                <div class="booking-title">
+                  <strong>${servicio}</strong>
+                  <span class="muted">${empresa}</span>
+                </div>
               </div>
               <div class="pills">
                 <span class="${pillClass(booking.estado)}">${estado}</span>
-                <span class="pill alt">${providerName}</span>
               </div>
             </div>
 
@@ -1426,13 +3827,24 @@
                 <span class="meta-label">Cliente</span>
                 <span class="meta-value">${nombre}<br />${email}</span>
               </div>
+              <div class="meta-box">
+                <span class="meta-label">Gestion</span>
+                <span class="meta-value">Agenda interna Vantelia</span>
+              </div>
+              <div class="meta-box">
+                <span class="meta-label">Profesional</span>
+                <span class="meta-value">${employeeName}</span>
+              </div>
+              <div class="meta-box">
+                <span class="meta-label">ID</span>
+                <span class="meta-value">${bookingId}</span>
+              </div>
             </div>
 
             <div class="booking-actions">
               <button class="secondary small" type="button" data-action="manage" data-url="${manageUrl}">Gestionar</button>
-              <button class="ghost small" type="button" data-action="provider" data-url="${providerBookingUrl}">Abrir proveedor</button>
               <button class="danger small" type="button" data-action="cancel" data-id="${bookingId}" ${canCancel ? "" : "disabled"}>Cancelar</button>
-              <button class="secondary small" type="button" data-action="reschedule" data-id="${bookingId}" data-fecha="${fecha}" data-hora="${hora}" data-label="${bookingLabel}" ${canReschedule ? "" : "disabled"}>Reprogramar</button>
+              <button class="secondary small" type="button" data-action="reschedule" data-id="${bookingId}" data-employee-id="${employeeId}" data-fecha="${fecha}" data-hora="${hora}" data-label="${bookingLabel}" ${canReschedule ? "" : "disabled"}>Reprogramar</button>
             </div>
           `;
           el.bookingList.appendChild(card);
@@ -1457,20 +3869,18 @@
               window.open(url, "_blank", "noopener,noreferrer");
               return;
             }
-            if (action === "provider") {
-              if (!url) throw new Error("Esta reserva no tiene enlace del proveedor.");
-              window.open(url, "_blank", "noopener,noreferrer");
-              return;
-            }
             if (action === "cancel") {
-              if (!window.confirm("Seguro que quieres cancelar esta cita?")) return;
-              await api(`/auth/bookings/${encodeURIComponent(bookingId)}/cancel`, { method: "POST" });
-              setStatus("Cita cancelada correctamente.", "success");
-              await loadDashboard();
+              await cancelBooking(bookingId);
               return;
             }
             if (action === "reschedule") {
-              openReschedulePanel(bookingId, button.dataset.fecha || "", button.dataset.hora || "", button.dataset.label || "");
+              openReschedulePanel(
+                bookingId,
+                button.dataset.employeeId || "",
+                button.dataset.fecha || "",
+                button.dataset.hora || "",
+                button.dataset.label || ""
+              );
             }
           } catch (error) {
             setStatus(error.message, "error");
@@ -1485,16 +3895,82 @@
       params.set("limit", String(state.limit));
       params.set("offset", String(state.offset));
       if (state.status) params.set("estado", state.status);
+      if (state.query) params.set("q", state.query);
+      if (state.dateFrom) params.set("date_from", state.dateFrom);
+      if (state.dateTo) params.set("date_to", state.dateTo);
+      if (state.employeeFilter) params.set("employee_id", state.employeeFilter);
       const payload = await api(`/auth/bookings?${params.toString()}`);
       renderBookings(payload);
+      if (state.calendarOpen) {
+        await loadCalendarBookings();
+      }
+    }
+
+    function syncFilterInputs() {
+      el.statusFilter.value = state.status;
+      el.employeeFilter.value = state.employeeFilter;
+      el.bookingSearch.value = state.query;
+      el.bookingDateFrom.value = state.dateFrom;
+      el.bookingDateTo.value = state.dateTo;
+    }
+
+    function applyBookingFilters({
+      scope = state.scope,
+      status = state.status,
+      dateFrom = state.dateFrom,
+      dateTo = state.dateTo,
+      query = state.query,
+      employeeId = state.employeeFilter,
+    } = {}) {
+      state.scope = scope;
+      state.status = status;
+      state.dateFrom = dateFrom;
+      state.dateTo = dateTo;
+      state.query = query;
+      state.employeeFilter = employeeId;
+      state.offset = 0;
+      setScope(scope);
+      syncFilterInputs();
+      clearReschedulePanel();
+      loadBookings().catch((error) => setStatus(error.message, "error"));
+    }
+
+    function applySingleDayFilter(date) {
+      const dateKey = toDateInputValue(date);
+      state.calendarDate = new Date(date.getFullYear(), date.getMonth(), 1);
+      if (!state.calendarOpen) {
+        setCalendarOpen(true);
+      }
+      state.selectedCalendarDate = dateKey;
+      renderSelectedDayAgenda();
+      applyBookingFilters({ scope: "all", dateFrom: dateKey, dateTo: dateKey });
+    }
+
+    function applyWeekFilter() {
+      const today = new Date();
+      const weekEnd = addDays(today, 6);
+      if (!state.calendarOpen) {
+        setCalendarOpen(true);
+      }
+      state.calendarDate = new Date(today.getFullYear(), today.getMonth(), 1);
+      applyBookingFilters({
+        scope: "all",
+        dateFrom: toDateInputValue(today),
+        dateTo: toDateInputValue(weekEnd),
+      });
     }
 
     async function loadDashboard() {
       const payload = await api("/auth/dashboard");
+      state.dashboard = payload;
       state.user = payload.user;
       renderShell();
       renderStats(payload.stats || {});
+      renderTodayOverview(payload);
       if (state.user.role !== "admin") {
+        await loadServices();
+        await loadSchedule();
+        await loadEmployees();
         await loadBookings();
       }
       setStatus(`Sesion activa como ${payload.user.display_name}.`, "success");
@@ -1564,11 +4040,15 @@
       await api("/auth/logout", { method: "POST" });
       state.user = null;
       state.items = [];
+      state.calendarItems = [];
+      state.selectedCalendarDate = "";
+      state.schedule = null;
       el.changeCurrentPassword.value = "";
       el.changeNewPassword.value = "";
       el.changeNewPasswordConfirm.value = "";
       clearReschedulePanel();
       renderShell();
+      state.calendarOpen = true;
       el.bookingList.innerHTML = `<div class="empty">Inicia sesion para ver reservas.</div>`;
       setStatus("Sesion cerrada.", "info");
     }
@@ -1596,6 +4076,27 @@
       el.changeNewPassword.value = "";
       el.changeNewPasswordConfirm.value = "";
       setStatus(result.message || "Contrasena actualizada correctamente.", "success");
+    }
+
+    async function saveAccount() {
+      const displayName = el.accountDisplayName.value.trim();
+      const email = el.accountEmail.value.trim();
+      if (displayName.length < 2) {
+        throw new Error("El nombre debe tener al menos 2 caracteres.");
+      }
+      if (!email) {
+        throw new Error("Escribe un email de acceso.");
+      }
+      setStatus("Guardando datos de cuenta...", "info");
+      const updatedUser = await api("/auth/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ display_name: displayName, email }),
+      });
+      state.user = updatedUser;
+      renderShell();
+      setPortalView("cuenta");
+      setStatus("Datos de cuenta actualizados correctamente.", "success");
     }
 
     el.loginBtn.addEventListener("click", () => login().catch((error) => setStatus(error.message, "error")));
@@ -1626,11 +4127,130 @@
     el.logoutBtn.addEventListener("click", () => logout().catch((error) => setStatus(error.message, "error")));
     el.openAdminBtn.addEventListener("click", () => window.open("/dashboard", "_blank", "noopener,noreferrer"));
     el.changePasswordBtn.addEventListener("click", () => changePassword().catch((error) => setStatus(error.message, "error")));
+    el.saveAccountBtn.addEventListener("click", () => saveAccount().catch((error) => setStatus(error.message, "error")));
+    document.querySelectorAll(".nav-button[data-scroll-target]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const targetToView = {
+          portalContent: "citas",
+          todayBlock: "hoy",
+          teamBlock: "profesionales",
+          accountBlock: "cuenta",
+          scheduleBlock: "horario",
+          blocksBlock: "bloqueos",
+          messagesBlock: "mensajes",
+          securityBlock: "seguridad",
+        };
+        setPortalView(targetToView[button.dataset.scrollTarget] || "citas");
+      });
+    });
+    el.saveScheduleBtn.addEventListener("click", () => saveSchedule().catch((error) => setStatus(error.message, "error")));
+    el.scheduleTargetSelect.addEventListener("change", () => {
+      state.scheduleTarget = el.scheduleTargetSelect.value;
+      renderUnifiedScheduleEditor();
+    });
+    el.saveTemplatesBtn.addEventListener("click", () =>
+      saveSchedule("Plantillas actualizadas correctamente.").catch((error) => setStatus(error.message, "error"))
+    );
+    el.previewTemplateBtn.addEventListener("click", () =>
+      previewMessageTemplate().catch((error) => setStatus(error.message, "error"))
+    );
+    el.sendTemplateTestBtn.addEventListener("click", () =>
+      sendTemplateTestMessage().catch((error) => setStatus(error.message, "error"))
+    );
+    el.blockMode.addEventListener("change", () => syncBlockDateMode());
+    el.blockDateStart.addEventListener("change", () => syncBlockDateMode());
+    el.addBlockBtn.addEventListener("click", () => addScheduleBlock().catch((error) => setStatus(error.message, "error")));
+    el.blockTargetSelect.addEventListener("change", () => {
+      state.blockTarget = el.blockTargetSelect.value;
+      renderUnifiedBlocksEditor();
+    });
+    el.employeeAllServices.addEventListener("change", () => {
+      const enableSpecificSelection = !el.employeeAllServices.checked;
+      const draftIds = enableSpecificSelection
+        ? (state.employeeServiceDraftIds.length
+          ? state.employeeServiceDraftIds
+          : state.services.map((service) => service.id))
+        : Array.from(el.employeeServicesList.querySelectorAll("input[type='checkbox']:checked"))
+          .map((checkbox) => checkbox.value.trim())
+          .filter(Boolean);
+      if (!enableSpecificSelection) {
+        state.employeeServiceDraftIds = draftIds;
+      }
+      el.employeeServicesList.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+        checkbox.disabled = !enableSpecificSelection;
+        checkbox.checked = enableSpecificSelection
+          ? draftIds.includes(checkbox.value)
+          : true;
+        checkbox.closest(".inline-check")?.classList.toggle("is-disabled", !enableSpecificSelection);
+      });
+      updateEmployeeServicesMeta();
+    });
+    el.employeeServicesList.addEventListener("change", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || target.type !== "checkbox") return;
+      state.employeeServiceDraftIds = Array.from(el.employeeServicesList.querySelectorAll("input[type='checkbox']:checked"))
+        .map((checkbox) => checkbox.value.trim())
+        .filter(Boolean);
+      updateEmployeeServicesMeta();
+    });
+    el.newEmployeeBtn.addEventListener("click", () => startNewEmployeeDraft());
+    el.closeEmployeeEditorBtn.addEventListener("click", () => {
+      state.employeeDraftMode = false;
+      state.employeeEditorOpen = false;
+      renderEmployees({ items: state.employees });
+    });
+    el.saveEmployeeBtn.addEventListener("click", () => saveEmployee().catch((error) => setStatus(error.message, "error")));
+    el.exportBookingsBtn.addEventListener("click", () => exportBookings());
+    el.todayAgendaFilter.addEventListener("change", () => {
+      state.todayAgendaFilter = el.todayAgendaFilter.value.trim();
+      renderTodayOverview(state.dashboard);
+    });
+    el.employeeFilter.addEventListener("change", () => {
+      applyBookingFilters({ employeeId: el.employeeFilter.value.trim() });
+    });
     el.statusFilter.addEventListener("change", () => {
-      state.status = el.statusFilter.value.trim();
+      applyBookingFilters({ status: el.statusFilter.value.trim() });
+    });
+    el.bookingSearch.addEventListener("input", () => {
+      state.query = el.bookingSearch.value.trim();
       state.offset = 0;
       clearReschedulePanel();
-      loadBookings().catch((error) => setStatus(error.message, "error"));
+      if (state.searchTimer) window.clearTimeout(state.searchTimer);
+      state.searchTimer = window.setTimeout(() => {
+        loadBookings().catch((error) => setStatus(error.message, "error"));
+      }, 220);
+    });
+    el.bookingDateFrom.addEventListener("change", () => {
+      applyBookingFilters({ dateFrom: el.bookingDateFrom.value });
+    });
+    el.bookingDateTo.addEventListener("change", () => {
+      applyBookingFilters({ dateTo: el.bookingDateTo.value });
+    });
+    el.clearBookingFiltersBtn.addEventListener("click", () => {
+      clearSelectedCalendarDay();
+      applyBookingFilters({ scope: "upcoming", status: "", dateFrom: "", dateTo: "", query: "", employeeId: "" });
+    });
+    el.todayBookingsBtn.addEventListener("click", () => applySingleDayFilter(new Date()));
+    el.tomorrowBookingsBtn.addEventListener("click", () => applySingleDayFilter(addDays(new Date(), 1)));
+    el.weekBookingsBtn.addEventListener("click", () => applyWeekFilter());
+    el.upcomingBookingsBtn.addEventListener("click", () => {
+      clearSelectedCalendarDay();
+      applyBookingFilters({ scope: "upcoming", status: "", dateFrom: "", dateTo: "", query: "" });
+    });
+    el.toggleCalendarBtn.addEventListener("click", () => setCalendarOpen(!state.calendarOpen));
+    el.clearDayAgendaBtn.addEventListener("click", () => {
+      clearSelectedCalendarDay();
+      applyBookingFilters({ scope: "upcoming", status: state.status, dateFrom: "", dateTo: "", query: state.query });
+    });
+    el.prevCalendarMonthBtn.addEventListener("click", () => {
+      state.calendarDate = new Date(state.calendarDate.getFullYear(), state.calendarDate.getMonth() - 1, 1);
+      clearSelectedCalendarDay();
+      loadCalendarBookings().catch((error) => setStatus(error.message, "error"));
+    });
+    el.nextCalendarMonthBtn.addEventListener("click", () => {
+      state.calendarDate = new Date(state.calendarDate.getFullYear(), state.calendarDate.getMonth() + 1, 1);
+      clearSelectedCalendarDay();
+      loadCalendarBookings().catch((error) => setStatus(error.message, "error"));
     });
     el.prevPageBtn.addEventListener("click", () => {
       state.offset = Math.max(0, state.offset - state.limit);
@@ -1652,14 +4272,8 @@
     });
     el.confirmRescheduleBtn.addEventListener("click", () => submitReschedule().catch((error) => setStatus(error.message, "error")));
     el.cancelRescheduleBtn.addEventListener("click", () => clearReschedulePanel());
-    el.scopeButtons.forEach((button) => {
-      button.addEventListener("click", () => {
-        setScope(button.dataset.scope);
-        clearReschedulePanel();
-        loadBookings().catch((error) => setStatus(error.message, "error"));
-      });
-    });
 
+    syncBlockDateMode();
     renderForgotSubmitButton();
 
     api("/auth/me")

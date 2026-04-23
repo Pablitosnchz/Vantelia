@@ -13,6 +13,7 @@ const MAX_WIDGET_BOOKING_DAYS = 60;
 let citaData = {};
 let currentStep = 0;
 let services = [];
+let employees = [];
 let slotsDisponibles = [];
 
 function bringFormIntoView(form, behavior = "smooth") {
@@ -31,12 +32,15 @@ function resetState() {
     email: "",
     telefono: "",
     servicio: "",
+    employeeId: "",
+    employeeName: "",
     fecha: "",
     hora: "",
     notas: "",
   };
   currentStep = 0;
   services = [];
+  employees = [];
   slotsDisponibles = [];
 }
 
@@ -114,16 +118,67 @@ async function cargarServicios() {
   }
 }
 
+async function cargarProfesionales() {
+  const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/profesionales/${WIDGET_CONFIG.clienteId}`);
+  employees = Array.isArray(data.items) ? data.items : [];
+  if (!employees.length) {
+    throw new Error("No hay profesionales disponibles para reservar en este momento.");
+  }
+}
+
 function fillServiceOptions(select) {
   if (!select) return;
 
+  const selectedEmployee = employees.find((employee) => employee.employee_id === citaData.employeeId);
+  const allowedServiceIds = Array.isArray(selectedEmployee?.service_ids) ? selectedEmployee.service_ids : [];
+  const scopedServices = selectedEmployee && !selectedEmployee.allows_all_services && allowedServiceIds.length
+    ? services.filter((service) => allowedServiceIds.includes(service.id))
+    : services;
+
   select.innerHTML = "";
-  services.forEach((service) => {
+  select.disabled = false;
+
+  if (!scopedServices.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No hay servicios disponibles";
+    option.selected = true;
+    select.appendChild(option);
+    select.disabled = true;
+    return;
+  }
+
+  scopedServices.forEach((service) => {
     const option = document.createElement("option");
     option.value = service.id;
     option.textContent = service.nombre;
     select.appendChild(option);
   });
+}
+
+function fillEmployeeOptions(select, wrap) {
+  if (!select || !wrap) return;
+
+  if (employees.length <= 1) {
+    wrap.classList.add("hidden");
+    const first = employees[0];
+    citaData.employeeId = first?.employee_id || "";
+    citaData.employeeName = first?.name || "";
+    return;
+  }
+
+  wrap.classList.remove("hidden");
+  select.innerHTML = '<option value="">Aleatorio</option>';
+  employees.forEach((employee) => {
+    const option = document.createElement("option");
+    option.value = employee.employee_id;
+    option.textContent = employee.role_label
+      ? `${employee.name} - ${employee.role_label}`
+      : employee.name;
+    select.appendChild(option);
+  });
+  citaData.employeeId = "";
+  citaData.employeeName = "Aleatorio";
 }
 
 function toggleStep(step) {
@@ -157,9 +212,13 @@ async function cargarSlots(fecha) {
     '<div class="ia-loading-slots"><span class="ia-spinner"></span><div>Consultando disponibilidad...</div></div>';
 
   try {
-    const data = await fetchJson(
-      `${WIDGET_CONFIG.apiUrl}/disponibilidad?cliente_id=${encodeURIComponent(WIDGET_CONFIG.clienteId)}&fecha=${encodeURIComponent(fecha)}`
-    );
+    const params = new URLSearchParams({
+      cliente_id: WIDGET_CONFIG.clienteId,
+      fecha,
+    });
+    if (citaData.employeeId) params.set("employee_id", citaData.employeeId);
+    if (citaData.servicio) params.set("servicio", citaData.servicio);
+    const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/disponibilidad?${params.toString()}`);
     slotsDisponibles = Array.isArray(data.slots) ? data.slots : [];
     renderSlots();
   } catch (error) {
@@ -235,6 +294,11 @@ function renderResumen() {
     <div class="ia-resumen-row"><span>Nombre</span><span>${escapeHtml(citaData.nombre)}</span></div>
     <div class="ia-resumen-row"><span>Email</span><span>${escapeHtml(citaData.email)}</span></div>
     <div class="ia-resumen-row"><span>Telefono</span><span>${escapeHtml(citaData.telefono)}</span></div>
+    ${
+      citaData.employeeName
+        ? `<div class="ia-resumen-row"><span>Profesional</span><span>${escapeHtml(citaData.employeeName)}</span></div>`
+        : ""
+    }
     <div class="ia-resumen-row"><span>Servicio</span><span>${escapeHtml(citaData.servicio)}</span></div>
     <div class="ia-resumen-row"><span>Fecha</span><span>${escapeHtml(formattedDate)}</span></div>
     <div class="ia-resumen-row"><span>Hora</span><span>${escapeHtml(citaData.hora)}</span></div>
@@ -269,6 +333,7 @@ async function confirmarCita() {
         email: citaData.email,
         telefono: citaData.telefono,
         servicio: citaData.servicio,
+        employee_id: citaData.employeeId,
         fecha: citaData.fecha,
         hora: citaData.hora,
         notas: citaData.notas,
@@ -326,6 +391,7 @@ export async function mostrarFormulario() {
 
   try {
     await cargarServicios();
+    await cargarProfesionales();
   } catch (error) {
     agregarMensaje(
       humanizeErrorMessage(error, "No se ha podido cargar el formulario de reserva.") + fallbackContacto(),
@@ -368,6 +434,11 @@ export async function mostrarFormulario() {
       </div>
 
       <div class="ia-form-step" data-step="1">
+        <div id="ia-f-employee-wrap" class="hidden">
+          <label class="ia-form-label" for="ia-f-employee">Profesional</label>
+          <select id="ia-f-employee"></select>
+        </div>
+
         <label class="ia-form-label" for="ia-f-servicio">Servicio</label>
         <select id="ia-f-servicio"></select>
 
@@ -411,8 +482,13 @@ export async function mostrarFormulario() {
   bringFormIntoView(form, "auto");
 
   const serviceSelect = document.getElementById("ia-f-servicio");
+  const employeeSelect = document.getElementById("ia-f-employee");
+  const employeeWrap = document.getElementById("ia-f-employee-wrap");
+  fillEmployeeOptions(employeeSelect, employeeWrap);
   fillServiceOptions(serviceSelect);
-  citaData.servicio = serviceSelect?.options[0]?.textContent || "Consulta general";
+  citaData.servicio = serviceSelect && !serviceSelect.disabled
+    ? (serviceSelect.options[0]?.textContent || "Consulta general")
+    : "";
 
   const dateInput = document.getElementById("ia-f-fecha");
   const today = new Date();
@@ -422,7 +498,7 @@ export async function mostrarFormulario() {
   maxDate.setDate(maxDate.getDate() + MAX_WIDGET_BOOKING_DAYS);
   dateInput.max = formatLocalDate(maxDate);
 
-  ["ia-f-nombre", "ia-f-email", "ia-f-tel", "ia-f-servicio", "ia-f-fecha"].forEach((id) => {
+  ["ia-f-nombre", "ia-f-email", "ia-f-tel", "ia-f-servicio", "ia-f-fecha", "ia-f-employee"].forEach((id) => {
     document.getElementById(id)?.addEventListener("input", () => clearFieldError(id));
     document.getElementById(id)?.addEventListener("change", () => clearFieldError(id));
   });
@@ -442,9 +518,21 @@ export async function mostrarFormulario() {
   });
 
   document.getElementById("ia-f-next1")?.addEventListener("click", () => {
+    if (employees.length > 1) {
+      const selectedEmployee = employees.find((employee) => employee.employee_id === employeeSelect?.value);
+      clearFieldError("ia-f-employee");
+      citaData.employeeId = selectedEmployee?.employee_id || "";
+      citaData.employeeName = selectedEmployee?.name || "Aleatorio";
+    }
+
     const selectedOption = serviceSelect?.options[serviceSelect.selectedIndex];
-    if (!selectedOption) {
-      setFieldError("ia-f-servicio", "Selecciona un servicio.");
+    if (!selectedOption || serviceSelect?.disabled) {
+      setFieldError(
+        "ia-f-servicio",
+        citaData.employeeId
+          ? "Este profesional no tiene servicios disponibles."
+          : "No hay servicios disponibles para esta solicitud."
+      );
       return;
     }
 
@@ -452,6 +540,22 @@ export async function mostrarFormulario() {
     citaData.servicio = selectedOption.textContent || "Consulta general";
     citaData.notas = document.getElementById("ia-f-notas").value.trim();
     toggleStep(2);
+  });
+
+  employeeSelect?.addEventListener("change", () => {
+    const selectedEmployee = employees.find((employee) => employee.employee_id === employeeSelect.value);
+    citaData.employeeId = selectedEmployee?.employee_id || "";
+    citaData.employeeName = selectedEmployee?.name || "Aleatorio";
+    fillServiceOptions(serviceSelect);
+    citaData.servicio = serviceSelect && !serviceSelect.disabled
+      ? (serviceSelect.options[serviceSelect.selectedIndex]?.textContent || "")
+      : "";
+    citaData.fecha = "";
+    citaData.hora = "";
+    if (dateInput) dateInput.value = "";
+    const slots = document.getElementById("ia-time-slots");
+    if (slots) slots.innerHTML = "";
+    document.getElementById("ia-f-next2")?.setAttribute("disabled", "disabled");
   });
 
   dateInput?.addEventListener("change", async (event) => {
@@ -466,6 +570,11 @@ export async function mostrarFormulario() {
     citaData.fecha = fecha;
     citaData.hora = "";
     await cargarSlots(fecha);
+  });
+
+  serviceSelect?.addEventListener("change", () => {
+    const selectedOption = serviceSelect.options[serviceSelect.selectedIndex];
+    citaData.servicio = selectedOption?.textContent || "";
   });
 
   document.getElementById("ia-f-next2")?.addEventListener("click", () => {

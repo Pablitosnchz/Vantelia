@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import copy
+import csv
 import hashlib
 import json
 import logging
@@ -12,10 +14,11 @@ import sqlite3
 import smtplib
 import threading
 import time
-from html import escape
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
+from html import escape
+from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import quote, urlparse
@@ -25,8 +28,6 @@ from dotenv import load_dotenv
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from google.auth.transport.requests import Request as GoogleAuthRequest
-from google.oauth2 import service_account
 from llama_index.core import (
     Settings,
     SimpleDirectoryReader,
@@ -48,7 +49,6 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 STORAGE_DIR = BASE_DIR / "storage"
-PROVIDER_SECRETS_DIR = STORAGE_DIR / "provider_secrets"
 WIDGET_DIR = BASE_DIR / "widget"
 ADMIN_UI_DIR = BASE_DIR / "admin_ui"
 ACCESS_UI_DIR = BASE_DIR / "access_ui"
@@ -83,7 +83,6 @@ logging.basicConfig(
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "").strip()
 WEBHOOK_DEFAULT = os.getenv("WEBHOOK_DEFAULT", "").strip()
-CALENDLY_API_TOKEN = os.getenv("CALENDLY_API_TOKEN", "").strip()
 RAW_EXTRA_CORS_ORIGINS = os.getenv("EXTRA_CORS_ORIGINS", "")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "").strip().rstrip("/")
 SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
@@ -97,7 +96,7 @@ SMTP_STARTTLS = os.getenv("SMTP_STARTTLS", "true").strip().lower() in {"1", "tru
 REMINDER_24H_HOURS = int(os.getenv("REMINDER_24H_HOURS", "24"))
 REMINDER_2H_HOURS = int(os.getenv("REMINDER_2H_HOURS", "2"))
 REMINDER_RUN_INTERVAL_MINUTES = int(os.getenv("REMINDER_RUN_INTERVAL_MINUTES", "30"))
-BOOKING_AUTO_COMPLETE_HOURS = int(os.getenv("BOOKING_AUTO_COMPLETE_HOURS", "6"))
+BOOKING_AUTO_COMPLETE_HOURS = int(os.getenv("BOOKING_AUTO_COMPLETE_HOURS", "24"))
 PASSWORD_RESET_TOKEN_HOURS = int(os.getenv("PASSWORD_RESET_TOKEN_HOURS", "2"))
 PASSWORD_RESET_RESEND_SECONDS = int(os.getenv("PASSWORD_RESET_RESEND_SECONDS", "60"))
 PORTAL_COOKIE_NAME = os.getenv("PORTAL_COOKIE_NAME", "vantelia_portal_session").strip() or "vantelia_portal_session"
@@ -110,6 +109,37 @@ MARKETING_SITE_URL = os.getenv("MARKETING_SITE_URL", "https://vantelia.es").stri
 PORTAL_SUPPORT_EMAIL = (
     os.getenv("PORTAL_SUPPORT_EMAIL", "").strip() or SMTP_REPLY_TO or SMTP_FROM_EMAIL or "soporte@vantelia.es"
 )
+
+DEFAULT_MESSAGE_TEMPLATES = {
+    "confirmed": (
+        "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla "
+        "si necesitas hacer algun cambio."
+    ),
+    "reminder_24h": (
+        "Te recordamos que manana tienes una cita programada. Si necesitas revisarla o ajustarla, "
+        "puedes hacerlo desde tu enlace de gestion."
+    ),
+    "reminder_2h": (
+        "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla "
+        "si lo necesitas."
+    ),
+    "cancelled": (
+        "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si "
+        "necesitas revisarla."
+    ),
+    "rescheduled": (
+        "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal "
+        "si necesitas volver a modificarla."
+    ),
+}
+
+DEFAULT_MESSAGE_TEMPLATE_ENABLED = {
+    "confirmed": True,
+    "reminder_24h": True,
+    "reminder_2h": True,
+    "cancelled": True,
+    "rescheduled": True,
+}
 
 
 @dataclass
@@ -167,6 +197,36 @@ def _normalize_optional_http_url(raw_url: str) -> str:
         raise RuntimeError(f"URL HTTP invalida en la configuracion: {raw_url}")
 
     return value
+
+
+def _normalize_message_templates(raw_templates: Any) -> Dict[str, str]:
+    templates = dict(DEFAULT_MESSAGE_TEMPLATES)
+    if isinstance(raw_templates, dict):
+        for key in DEFAULT_MESSAGE_TEMPLATES:
+            raw_value = raw_templates.get(key, "")
+            if isinstance(raw_value, dict):
+                raw_value = raw_value.get("body", raw_value.get("message", ""))
+            value = _sanitize_text(raw_value, allow_multiline=True)
+            if value:
+                templates[key] = value[:500]
+    return templates
+
+
+def _normalize_message_template_enabled(
+    raw_enabled: Any,
+    raw_templates: Any = None,
+) -> Dict[str, bool]:
+    enabled = dict(DEFAULT_MESSAGE_TEMPLATE_ENABLED)
+    if isinstance(raw_enabled, dict):
+        for key in DEFAULT_MESSAGE_TEMPLATE_ENABLED:
+            if key in raw_enabled:
+                enabled[key] = bool(raw_enabled.get(key))
+    if isinstance(raw_templates, dict):
+        for key in DEFAULT_MESSAGE_TEMPLATE_ENABLED:
+            nested_value = raw_templates.get(key)
+            if isinstance(nested_value, dict) and "enabled" in nested_value:
+                enabled[key] = bool(nested_value.get("enabled"))
+    return enabled
 
 
 def _sanitize_text(value: str, *, allow_multiline: bool = False) -> str:
@@ -243,28 +303,28 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
             "day_start": _sanitize_text(booking.get("day_start", "09:00")) or "09:00",
             "day_end": _sanitize_text(booking.get("day_end", "18:00")) or "18:00",
             "closed_weekdays": booking.get("closed_weekdays", [0]),
-            "provider": _sanitize_text(booking.get("provider", "internal")) or "internal",
+            "provider": "internal",
             "webhook_env": _sanitize_text(booking.get("webhook_env", "")),
             "webhook_url": _normalize_optional_http_url(booking.get("webhook_url", "")),
-            "calendly_user_env": _sanitize_text(booking.get("calendly_user_env", "")),
-            "calendly_event_type_env": _sanitize_text(booking.get("calendly_event_type_env", "")),
-            "calendly_location_kind": _sanitize_text(booking.get("calendly_location_kind", "")),
-            "calendly_location_value": _sanitize_text(
-                booking.get("calendly_location_value", ""),
-                allow_multiline=True,
-            ),
-            "google_calendar_id": _sanitize_text(booking.get("google_calendar_id", "")),
-            "google_calendar_id_env": _sanitize_text(booking.get("google_calendar_id_env", "")),
-            "google_service_account_path": _sanitize_text(
-                booking.get("google_service_account_path", "")
-            ),
-            "google_service_account_env": _sanitize_text(booking.get("google_service_account_env", "")),
+            "calendly_user_env": "",
+            "calendly_event_type_env": "",
+            "calendly_location_kind": "",
+            "calendly_location_value": "",
+            "google_calendar_id": "",
+            "google_calendar_id_env": "",
+            "google_service_account_path": "",
+            "google_service_account_env": "",
             "success_message": _sanitize_text(
                 booking.get(
                     "success_message",
                     "Tu solicitud de cita ha quedado registrada correctamente.",
                 ),
                 allow_multiline=True,
+            ),
+            "message_templates": _normalize_message_templates(booking.get("message_templates", {})),
+            "message_template_enabled": _normalize_message_template_enabled(
+                booking.get("message_template_enabled", {}),
+                booking.get("message_templates", {}),
             ),
         },
     }
@@ -292,22 +352,27 @@ def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
             "day_start": config.get("booking", {}).get("day_start", "09:00"),
             "day_end": config.get("booking", {}).get("day_end", "18:00"),
             "closed_weekdays": list(config.get("booking", {}).get("closed_weekdays", [0])),
-            "provider": config.get("booking", {}).get("provider", "internal"),
+            "provider": "internal",
             "webhook_env": config.get("booking", {}).get("webhook_env", ""),
             "webhook_url": config.get("booking", {}).get("webhook_url", ""),
-            "calendly_user_env": config.get("booking", {}).get("calendly_user_env", ""),
-            "calendly_event_type_env": config.get("booking", {}).get("calendly_event_type_env", ""),
-            "calendly_location_kind": config.get("booking", {}).get("calendly_location_kind", ""),
-            "calendly_location_value": config.get("booking", {}).get("calendly_location_value", ""),
-            "google_calendar_id": config.get("booking", {}).get("google_calendar_id", ""),
-            "google_calendar_id_env": config.get("booking", {}).get("google_calendar_id_env", ""),
-            "google_service_account_path": config.get("booking", {}).get(
-                "google_service_account_path", ""
-            ),
-            "google_service_account_env": config.get("booking", {}).get("google_service_account_env", ""),
+            "calendly_user_env": "",
+            "calendly_event_type_env": "",
+            "calendly_location_kind": "",
+            "calendly_location_value": "",
+            "google_calendar_id": "",
+            "google_calendar_id_env": "",
+            "google_service_account_path": "",
+            "google_service_account_env": "",
             "success_message": config.get("booking", {}).get(
                 "success_message",
                 "Tu solicitud de cita ha quedado registrada correctamente.",
+            ),
+            "message_templates": _normalize_message_templates(
+                config.get("booking", {}).get("message_templates", {})
+            ),
+            "message_template_enabled": _normalize_message_template_enabled(
+                config.get("booking", {}).get("message_template_enabled", {}),
+                config.get("booking", {}).get("message_templates", {}),
             ),
         },
     }
@@ -332,11 +397,151 @@ def _update_runtime_configs(next_configs: Dict[str, Dict[str, Any]]) -> None:
 
 def _ensure_runtime_directories() -> None:
     STORAGE_DIR.mkdir(exist_ok=True)
-    PROVIDER_SECRETS_DIR.mkdir(exist_ok=True)
     WIDGET_DIR.mkdir(exist_ok=True)
     ADMIN_UI_DIR.mkdir(exist_ok=True)
     ACCESS_UI_DIR.mkdir(exist_ok=True)
     PORTAL_UI_DIR.mkdir(exist_ok=True)
+
+
+EMPLOYEE_COLOR_PALETTE = [
+    "#00b1d9",
+    "#2e86ab",
+    "#4caf50",
+    "#ff8a65",
+    "#f4b400",
+    "#8e7dff",
+]
+DEFAULT_EMPLOYEE_ROLE_LABEL = "Agenda General"
+
+
+def _normalize_employee_color(value: str, fallback: str = "#00b1d9") -> str:
+    candidate = _sanitize_text(value) or fallback
+    if not re.match(r"^#[0-9A-Fa-f]{6}$", candidate):
+        return fallback
+    return candidate
+
+
+def _normalize_closed_weekdays_list(values: Any) -> List[int]:
+    normalized: List[int] = []
+    for value in values or []:
+        try:
+            day = int(value)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= day <= 6 and day not in normalized:
+            normalized.append(day)
+    return sorted(normalized)
+
+
+def _employee_closed_weekdays_from_row(row: sqlite3.Row) -> List[int]:
+    try:
+        return _normalize_closed_weekdays_list(json.loads(row["closed_weekdays_json"] or "[]"))
+    except json.JSONDecodeError:
+        return []
+
+
+def _normalize_service_id(value: str) -> str:
+    return re.sub(r"[^a-z0-9_]+", "_", _sanitize_text(value).lower()).strip("_")
+
+
+def _service_map_for_client(cliente_id: str) -> Dict[str, Dict[str, str]]:
+    return {
+        str(service["id"]): service
+        for service in _extract_services_from_info(cliente_id)
+        if isinstance(service, dict) and service.get("id") and service.get("nombre")
+    }
+
+
+def _normalize_service_ids_for_client(cliente_id: str, values: Any) -> List[str]:
+    service_map = _service_map_for_client(cliente_id)
+    normalized: List[str] = []
+    for value in values or []:
+        service_id = _normalize_service_id(str(value))
+        if service_id and service_id in service_map and service_id not in normalized:
+            normalized.append(service_id)
+    return normalized
+
+
+def _employee_service_ids_from_row(row: sqlite3.Row, cliente_id: str = "") -> List[str]:
+    if not row:
+        return []
+    target_client_id = cliente_id or str(row["cliente_id"] or "")
+    try:
+        raw_values = json.loads(row["service_ids_json"] or "[]")
+    except json.JSONDecodeError:
+        return []
+    return _normalize_service_ids_for_client(target_client_id, raw_values)
+
+
+def _employee_defaults_for_client(cliente_id: str) -> Dict[str, Any]:
+    config = CONFIG_CLIENTES.get(cliente_id, {})
+    booking = config.get("booking", {})
+    return {
+        "timezone": booking.get("timezone", DEFAULT_TIMEZONE),
+        "slot_minutes": int(booking.get("slot_minutes", 30)),
+        "day_start": booking.get("day_start", "09:00"),
+        "day_end": booking.get("day_end", "18:00"),
+        "closed_weekdays": _normalize_closed_weekdays_list(booking.get("closed_weekdays", [])),
+    }
+
+
+def _default_employee_name(cliente_id: str) -> str:
+    config = CONFIG_CLIENTES.get(cliente_id, {})
+    company = _sanitize_text(config.get("nombre", cliente_id))
+    return f"Agenda general {company}".strip()
+
+
+def _ensure_default_employees_for_all_clients() -> None:
+    with sqlite3.connect(DB_PATH) as connection:
+        connection.row_factory = sqlite3.Row
+        now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        for index, cliente_id in enumerate(CONFIG_CLIENTES.keys()):
+            row = connection.execute(
+                "SELECT * FROM employees WHERE cliente_id = ? AND is_default = 1 LIMIT 1",
+                (cliente_id,),
+            ).fetchone()
+            defaults = _employee_defaults_for_client(cliente_id)
+            if not row:
+                employee_id = f"emp_{secrets.token_urlsafe(8)}"
+                connection.execute(
+                    """
+                    INSERT INTO employees (
+                        id, cliente_id, name, role_label, color, is_active, is_default,
+                        timezone, slot_minutes, day_start, day_end, closed_weekdays_json, service_ids_json,
+                        created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        employee_id,
+                        cliente_id,
+                        _default_employee_name(cliente_id),
+                        DEFAULT_EMPLOYEE_ROLE_LABEL,
+                        EMPLOYEE_COLOR_PALETTE[index % len(EMPLOYEE_COLOR_PALETTE)],
+                        1,
+                        1,
+                        defaults["timezone"],
+                        defaults["slot_minutes"],
+                        defaults["day_start"],
+                        defaults["day_end"],
+                        json.dumps(defaults["closed_weekdays"]),
+                        "[]",
+                        now_iso,
+                        now_iso,
+                    ),
+                )
+                row = connection.execute("SELECT * FROM employees WHERE id = ?", (employee_id,)).fetchone()
+            if row:
+                connection.execute(
+                    """
+                    UPDATE bookings
+                    SET employee_id = ?, employee_name = ?
+                    WHERE cliente_id = ?
+                      AND (employee_id = '' OR employee_name = '')
+                    """,
+                    (row["id"], row["name"], cliente_id),
+                )
+        connection.commit()
 
 
 def _init_database() -> None:
@@ -348,6 +553,8 @@ def _init_database() -> None:
             CREATE TABLE IF NOT EXISTS bookings (
                 id TEXT PRIMARY KEY,
                 cliente_id TEXT NOT NULL,
+                employee_id TEXT NOT NULL DEFAULT '',
+                employee_name TEXT NOT NULL DEFAULT '',
                 nombre TEXT NOT NULL,
                 email TEXT NOT NULL,
                 telefono TEXT,
@@ -385,6 +592,10 @@ def _init_database() -> None:
             connection.execute(
                 "ALTER TABLE bookings ADD COLUMN provider_name TEXT NOT NULL DEFAULT 'internal'"
             )
+        if "employee_id" not in columns:
+            connection.execute("ALTER TABLE bookings ADD COLUMN employee_id TEXT NOT NULL DEFAULT ''")
+        if "employee_name" not in columns:
+            connection.execute("ALTER TABLE bookings ADD COLUMN employee_name TEXT NOT NULL DEFAULT ''")
         if "provider_booking_id" not in columns:
             connection.execute(
                 "ALTER TABLE bookings ADD COLUMN provider_booking_id TEXT NOT NULL DEFAULT ''"
@@ -434,16 +645,56 @@ def _init_database() -> None:
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_bookings_lookup
-            ON bookings(cliente_id, booking_date, booking_time, status)
+            ON bookings(cliente_id, employee_id, booking_date, booking_time, status)
+            """
+        )
+        connection.execute("DROP INDEX IF EXISTS idx_bookings_unique_slot")
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_unique_slot
+            ON bookings(cliente_id, employee_id, booking_date, booking_time)
+            WHERE status IN ('confirmed', 'pending_review')
             """
         )
         connection.execute(
             """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_unique_slot
-            ON bookings(cliente_id, booking_date, booking_time)
-            WHERE status IN ('confirmed', 'pending_review')
+            CREATE TABLE IF NOT EXISTS employees (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                role_label TEXT NOT NULL DEFAULT '',
+                color TEXT NOT NULL DEFAULT '#00b1d9',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                is_default INTEGER NOT NULL DEFAULT 0,
+                timezone TEXT NOT NULL DEFAULT '',
+                slot_minutes INTEGER NOT NULL DEFAULT 30,
+                day_start TEXT NOT NULL DEFAULT '09:00',
+                day_end TEXT NOT NULL DEFAULT '18:00',
+                closed_weekdays_json TEXT NOT NULL DEFAULT '[]',
+                service_ids_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT ''
+            )
             """
         )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_employees_lookup
+            ON employees(cliente_id, is_active, name)
+            """
+        )
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_default
+            ON employees(cliente_id, is_default)
+            WHERE is_default = 1
+            """
+        )
+        employee_columns = {
+            row[1]: row for row in connection.execute("PRAGMA table_info(employees)").fetchall()
+        }
+        if "service_ids_json" not in employee_columns:
+            connection.execute("ALTER TABLE employees ADD COLUMN service_ids_json TEXT NOT NULL DEFAULT '[]'")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS booking_audit (
@@ -462,6 +713,31 @@ def _init_database() -> None:
             ON booking_audit(booking_id, created_at)
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agenda_blocks (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                employee_id TEXT NOT NULL DEFAULT '',
+                block_date TEXT NOT NULL,
+                start_time TEXT NOT NULL,
+                end_time TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_agenda_blocks_lookup
+            ON agenda_blocks(cliente_id, employee_id, block_date, start_time)
+            """
+        )
+        agenda_columns = {
+            row[1]: row for row in connection.execute("PRAGMA table_info(agenda_blocks)").fetchall()
+        }
+        if "employee_id" not in agenda_columns:
+            connection.execute("ALTER TABLE agenda_blocks ADD COLUMN employee_id TEXT NOT NULL DEFAULT ''")
         connection.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_manage_token
@@ -528,6 +804,7 @@ def _init_database() -> None:
             """
         )
         connection.commit()
+    _ensure_default_employees_for_all_clients()
 
 
 def _get_db_connection() -> sqlite3.Connection:
@@ -556,7 +833,7 @@ def _validate_single_client_runtime(cliente_id: str, config: Dict[str, Any]) -> 
             not isinstance(day, int) or day < 0 or day > 6 for day in booking_cfg["closed_weekdays"]
         ):
             raise RuntimeError(f"closed_weekdays invalido para {cliente_id}")
-        if provider not in {"internal", "calendly", "google_calendar"}:
+        if provider != "internal":
             raise RuntimeError(f"provider invalido para {cliente_id}")
 
 
@@ -629,6 +906,12 @@ def _booking_reminder_worker() -> None:
     )
     while not booking_reminder_stop.is_set():
         try:
+            auto_confirmed = _auto_confirm_pending_bookings()
+            if auto_confirmed:
+                logger.info(
+                    "Citas pendientes confirmadas automaticamente: %s",
+                    auto_confirmed,
+                )
             auto_completed = _auto_complete_past_bookings()
             if auto_completed:
                 logger.info(
@@ -724,6 +1007,7 @@ class DatosCita(BaseModel):
     email: EmailStr
     telefono: str = Field(default="", max_length=30)
     servicio: str = Field(default="", max_length=120)
+    employee_id: str = Field(default="", max_length=80)
     fecha: str = Field(min_length=10, max_length=10)
     hora: str = Field(min_length=5, max_length=5)
     notas: str = Field(default="", max_length=500)
@@ -754,6 +1038,7 @@ class SlotDisponibilidad(BaseModel):
 class RespuestaDisponibilidad(BaseModel):
     fecha: str
     timezone: str
+    employee_id: str = ""
     slots: List[SlotDisponibilidad]
 
 
@@ -762,6 +1047,8 @@ class RespuestaAgendado(BaseModel):
     booking_id: str
     estado: str
     mensaje: str
+    employee_id: str = ""
+    employee_name: str = ""
     provider_name: str = "internal"
     provider_booking_id: str = ""
     provider_booking_url: str = ""
@@ -772,10 +1059,13 @@ class BookingDetailPublic(BaseModel):
     booking_id: str
     cliente_id: str
     empresa: str
+    employee_id: str = ""
+    employee_name: str = ""
     nombre: str
     email: str
     telefono: str
     servicio: str
+    notas: str = ""
     fecha: str
     hora: str
     timezone: str
@@ -785,6 +1075,7 @@ class BookingDetailPublic(BaseModel):
     manage_url: str = ""
     contact_email: str = ""
     contact_phone: str = ""
+    available_services: List[Dict[str, str]] = Field(default_factory=list)
 
 
 class BookingActionResponse(BaseModel):
@@ -792,19 +1083,39 @@ class BookingActionResponse(BaseModel):
     booking_id: str
     estado: str
     mensaje: str
+    employee_id: str = ""
+    employee_name: str = ""
     manage_url: str = ""
     provider_booking_url: str = ""
 
 
 class BookingReschedulePayload(BaseModel):
+    employee_id: str = Field(default="", max_length=80)
     fecha: str = Field(min_length=10, max_length=10)
     hora: str = Field(min_length=5, max_length=5)
+
+
+class BookingCancelPayload(BaseModel):
+    motivo: str = Field(default="", max_length=500)
+
+
+class BookingUpdatePayload(BaseModel):
+    nombre: str = Field(min_length=2, max_length=80)
+    email: EmailStr
+    telefono: str = Field(default="", max_length=30)
+    servicio: str = Field(default="", max_length=120)
+    employee_id: str = Field(default="", max_length=80)
+    fecha: str = Field(min_length=10, max_length=10)
+    hora: str = Field(min_length=5, max_length=5)
+    notas: str = Field(default="", max_length=500)
 
 
 class AdminBookingResumen(BaseModel):
     booking_id: str
     cliente_id: str
     empresa: str
+    employee_id: str = ""
+    employee_name: str = ""
     nombre: str
     email: str
     telefono: str
@@ -891,9 +1202,65 @@ class AuthPasswordResetPayload(BaseModel):
     new_password: str = Field(min_length=8, max_length=200)
 
 
+class AuthProfileUpdatePayload(BaseModel):
+    display_name: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+
+
+class PortalScheduleUpdatePayload(BaseModel):
+    enabled: bool = True
+    timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
+    slot_minutes: int = Field(default=30, ge=5, le=240)
+    day_start: str = Field(default="09:00", min_length=5, max_length=5)
+    day_end: str = Field(default="18:00", min_length=5, max_length=5)
+    closed_weekdays: List[int] = Field(default_factory=list)
+    message_templates: Dict[str, str] = Field(default_factory=dict)
+    message_template_enabled: Dict[str, bool] = Field(default_factory=dict)
+
+
+class PortalAgendaBlockPayload(BaseModel):
+    fecha: str = Field(min_length=10, max_length=10)
+    fecha_fin: str = Field(default="", max_length=10)
+    hora_inicio: str = Field(min_length=5, max_length=5)
+    hora_fin: str = Field(min_length=5, max_length=5)
+    motivo: str = Field(default="", max_length=160)
+
+
+class PortalAgendaBlock(BaseModel):
+    block_id: str
+    employee_id: str = ""
+    fecha: str
+    hora_inicio: str
+    hora_fin: str
+    motivo: str = ""
+    created_at: str = ""
+
+
+class PortalSchedulePublic(BaseModel):
+    enabled: bool
+    timezone: str
+    slot_minutes: int
+    day_start: str
+    day_end: str
+    closed_weekdays: List[int]
+    message_templates: Dict[str, str]
+    message_template_enabled: Dict[str, bool]
+    blocks: List[PortalAgendaBlock]
+
+
+class PortalAgendaBlockCreateResponse(BaseModel):
+    items: List[PortalAgendaBlock]
+    created_count: int
+    skipped_count: int
+    date_from: str
+    date_to: str
+
+
 class PortalBookingSummary(BaseModel):
     booking_id: str
     empresa: str
+    employee_id: str = ""
+    employee_name: str = ""
     nombre: str
     email: str
     servicio: str
@@ -919,10 +1286,79 @@ class PortalBookingsResponse(BaseModel):
     scope: str
 
 
+class PortalEmployeePayload(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    role_label: str = Field(default="", max_length=80)
+    color: str = Field(default="#00b1d9", min_length=7, max_length=7)
+    is_active: bool = True
+    timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
+    slot_minutes: int = Field(default=30, ge=5, le=240)
+    day_start: str = Field(default="09:00", min_length=5, max_length=5)
+    day_end: str = Field(default="18:00", min_length=5, max_length=5)
+    closed_weekdays: List[int] = Field(default_factory=list)
+    service_ids: List[str] = Field(default_factory=list)
+
+
+class PortalEmployeePublic(BaseModel):
+    employee_id: str
+    cliente_id: str
+    name: str
+    role_label: str = ""
+    color: str = "#00b1d9"
+    is_active: bool = True
+    is_default: bool = False
+    timezone: str = DEFAULT_TIMEZONE
+    slot_minutes: int = 30
+    day_start: str = "09:00"
+    day_end: str = "18:00"
+    closed_weekdays: List[int] = Field(default_factory=list)
+    service_ids: List[str] = Field(default_factory=list)
+    allows_all_services: bool = True
+    bookings_today: int = 0
+    bookings_upcoming: int = 0
+    blocks: List[PortalAgendaBlock] = Field(default_factory=list)
+
+
+class PortalEmployeesResponse(BaseModel):
+    items: List[PortalEmployeePublic]
+
+
 class PortalDashboardResponse(BaseModel):
     user: AuthUserPublic
     stats: Dict[str, Any]
     bookings_upcoming: List[PortalBookingSummary]
+    bookings_today: List[PortalBookingSummary] = Field(default_factory=list)
+    today_blocks: List[PortalAgendaBlock] = Field(default_factory=list)
+
+
+class PortalMessagePreviewPayload(BaseModel):
+    kind: str = Field(min_length=3, max_length=40)
+    schedule: PortalScheduleUpdatePayload
+    target_email: Optional[EmailStr] = None
+
+
+class PortalMessagePreviewResponse(BaseModel):
+    kind: str
+    subject: str
+    text_body: str
+    html_body: str
+    target_email: str = ""
+    enabled: bool
+
+
+class BookingAuditEntry(BaseModel):
+    audit_id: int
+    booking_id: str
+    event_type: str
+    title: str
+    detail: str = ""
+    created_at: str
+    source: str = ""
+    actor: str = ""
+
+
+class BookingAuditResponse(BaseModel):
+    items: List[BookingAuditEntry]
 
 
 class PortalCreateUserPayload(BaseModel):
@@ -1034,6 +1470,134 @@ class AdminAltaExpressResponse(BaseModel):
     widget_script_url: str
     api_base_url: str
     demo_url: str
+
+
+def _list_employee_rows(cliente_id: str, *, include_inactive: bool = True) -> List[sqlite3.Row]:
+    clauses = ["cliente_id = ?"]
+    params: List[Any] = [cliente_id]
+    if not include_inactive:
+        clauses.append("is_active = 1")
+    sql = (
+        "SELECT * FROM employees WHERE "
+        + " AND ".join(clauses)
+        + " ORDER BY is_default DESC, is_active DESC, name COLLATE NOCASE ASC"
+    )
+    with _get_db_connection() as connection:
+        return connection.execute(sql, tuple(params)).fetchall()
+
+
+def _list_public_employee_rows(cliente_id: str, *, include_inactive: bool = False) -> List[sqlite3.Row]:
+    return [
+        row
+        for row in _list_employee_rows(cliente_id, include_inactive=include_inactive)
+        if not bool(row["is_default"])
+    ]
+
+
+def _get_employee_row(employee_id: str, *, cliente_id: str = "") -> Optional[sqlite3.Row]:
+    clauses = ["id = ?"]
+    params: List[Any] = [employee_id]
+    if cliente_id:
+        clauses.append("cliente_id = ?")
+        params.append(cliente_id)
+    with _get_db_connection() as connection:
+        return connection.execute(
+            "SELECT * FROM employees WHERE " + " AND ".join(clauses) + " LIMIT 1",
+            tuple(params),
+        ).fetchone()
+
+
+def _default_employee_row(cliente_id: str) -> sqlite3.Row:
+    with _get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM employees WHERE cliente_id = ? AND is_default = 1 LIMIT 1",
+            (cliente_id,),
+        ).fetchone()
+        if row:
+            return row
+        row = connection.execute(
+            "SELECT * FROM employees WHERE cliente_id = ? ORDER BY is_active DESC, name COLLATE NOCASE ASC LIMIT 1",
+            (cliente_id,),
+        ).fetchone()
+        if row:
+            return row
+    raise HTTPException(status_code=404, detail="No hay profesionales configurados para este cliente.")
+
+
+def _resolve_employee_for_booking(
+    cliente_id: str,
+    employee_id: str = "",
+    *,
+    require_active: bool = True,
+) -> sqlite3.Row:
+    row = _get_employee_row(employee_id, cliente_id=cliente_id) if employee_id else None
+    if row is None:
+        row = _default_employee_row(cliente_id)
+    if require_active and not bool(row["is_active"]):
+        raise HTTPException(status_code=409, detail="El profesional seleccionado no esta activo.")
+    return row
+
+
+def _public_services_for_booking(cliente_id: str, employee_id: str = "") -> List[Dict[str, str]]:
+    if employee_id:
+        employee_row = _get_employee_row(employee_id, cliente_id=cliente_id)
+        return _services_for_employee(cliente_id, employee_row)
+
+    public_rows = _list_public_employee_rows(cliente_id, include_inactive=False)
+    if not public_rows:
+        return []
+
+    all_services = _extract_services_from_info(cliente_id)
+    if any(not _employee_service_ids_from_row(row, cliente_id) for row in public_rows):
+        return all_services
+
+    allowed_ids = {
+        service_id
+        for row in public_rows
+        for service_id in _employee_service_ids_from_row(row, cliente_id)
+    }
+    return [service for service in all_services if str(service.get("id") or "") in allowed_ids]
+
+
+def _employee_schedule_from_row(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "timezone": row["timezone"] or DEFAULT_TIMEZONE,
+        "slot_minutes": int(row["slot_minutes"] or 30),
+        "day_start": row["day_start"] or "09:00",
+        "day_end": row["day_end"] or "18:00",
+        "closed_weekdays": _employee_closed_weekdays_from_row(row),
+    }
+
+
+def _employee_booking_counters(cliente_id: str, employee_id: str) -> Dict[str, int]:
+    employee_row = _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
+    timezone_name = _employee_schedule_from_row(employee_row)["timezone"]
+    today = datetime.now(ZoneInfo(timezone_name)).date().isoformat()
+    now_iso = _utc_now_iso()
+    with _get_db_connection() as connection:
+        today_count = connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM bookings
+            WHERE cliente_id = ?
+              AND employee_id = ?
+              AND booking_date = ?
+              AND status IN ('confirmed', 'pending_review')
+            """,
+            (cliente_id, employee_id, today),
+        ).fetchone()[0]
+        upcoming_count = connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM bookings
+            WHERE cliente_id = ?
+              AND employee_id = ?
+              AND status IN ('confirmed', 'pending_review')
+              AND (start_at = '' OR start_at >= ?)
+            """,
+            (cliente_id, employee_id, now_iso),
+        ).fetchone()[0]
+    return {"today": int(today_count), "upcoming": int(upcoming_count)}
 
 
 def _utc_now() -> datetime:
@@ -1163,6 +1727,31 @@ def _update_user_password(user_id: str, new_password: str) -> None:
             (_hash_secret(new_password), user_id),
         )
         connection.commit()
+
+
+def _update_user_profile(user_id: str, *, email: str, display_name: str) -> sqlite3.Row:
+    email_norm = _normalize_email(email)
+    clean_name = _sanitize_text(display_name)
+    if len(clean_name) < 2:
+        raise HTTPException(status_code=400, detail="El nombre debe tener al menos 2 caracteres.")
+
+    with _get_db_connection() as connection:
+        existing = connection.execute(
+            "SELECT id FROM users WHERE email = ? AND id <> ?",
+            (email_norm, user_id),
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail="Ese email ya esta en uso por otro usuario.")
+
+        connection.execute(
+            "UPDATE users SET email = ?, display_name = ? WHERE id = ?",
+            (email_norm, clean_name, user_id),
+        )
+        connection.commit()
+        updated = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not updated:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+        return updated
 
 
 def _create_user(*, email: str, password: str, role: str, display_name: str, cliente_id: str = "") -> sqlite3.Row:
@@ -1530,21 +2119,17 @@ def _client_payload_from_config(config: Dict[str, Any], info_txt: str) -> AdminC
         booking_day_start=config.get("booking", {}).get("day_start", "09:00"),
         booking_day_end=config.get("booking", {}).get("day_end", "18:00"),
         booking_closed_weekdays=list(config.get("booking", {}).get("closed_weekdays", [6])),
-        booking_provider=config.get("booking", {}).get("provider", "internal"),
+        booking_provider="internal",
         booking_webhook_env=config.get("booking", {}).get("webhook_env", ""),
         booking_webhook_url=config.get("booking", {}).get("webhook_url", ""),
-        booking_calendly_user_env=config.get("booking", {}).get("calendly_user_env", ""),
-        booking_calendly_event_type_env=config.get("booking", {}).get("calendly_event_type_env", ""),
-        booking_calendly_location_kind=config.get("booking", {}).get("calendly_location_kind", ""),
-        booking_calendly_location_value=config.get("booking", {}).get("calendly_location_value", ""),
-        booking_google_calendar_id=config.get("booking", {}).get("google_calendar_id", ""),
-        booking_google_calendar_id_env=config.get("booking", {}).get("google_calendar_id_env", ""),
-        booking_google_service_account_path=config.get("booking", {}).get(
-            "google_service_account_path", ""
-        ),
-        booking_google_service_account_env=config.get("booking", {}).get(
-            "google_service_account_env", ""
-        ),
+        booking_calendly_user_env="",
+        booking_calendly_event_type_env="",
+        booking_calendly_location_kind="",
+        booking_calendly_location_value="",
+        booking_google_calendar_id="",
+        booking_google_calendar_id_env="",
+        booking_google_service_account_path="",
+        booking_google_service_account_env="",
         booking_google_service_account_json="",
         booking_success_message=config.get("booking", {}).get(
             "success_message",
@@ -1556,6 +2141,7 @@ def _client_payload_from_config(config: Dict[str, Any], info_txt: str) -> AdminC
 
 
 def _config_from_admin_payload(cliente_id: str, payload: AdminClientePayload) -> Dict[str, Any]:
+    existing_booking = CONFIG_CLIENTES.get(cliente_id, {}).get("booking", {})
     return _normalize_client_config(
         cliente_id,
         {
@@ -1577,18 +2163,20 @@ def _config_from_admin_payload(cliente_id: str, payload: AdminClientePayload) ->
                 "day_start": payload.booking_day_start,
                 "day_end": payload.booking_day_end,
                 "closed_weekdays": payload.booking_closed_weekdays,
-                "provider": payload.booking_provider,
+                "provider": "internal",
                 "webhook_env": payload.booking_webhook_env,
                 "webhook_url": payload.booking_webhook_url,
-                "calendly_user_env": payload.booking_calendly_user_env,
-                "calendly_event_type_env": payload.booking_calendly_event_type_env,
-                "calendly_location_kind": payload.booking_calendly_location_kind,
-                "calendly_location_value": payload.booking_calendly_location_value,
-                "google_calendar_id": payload.booking_google_calendar_id,
-                "google_calendar_id_env": payload.booking_google_calendar_id_env,
-                "google_service_account_path": payload.booking_google_service_account_path,
-                "google_service_account_env": payload.booking_google_service_account_env,
+                "calendly_user_env": "",
+                "calendly_event_type_env": "",
+                "calendly_location_kind": "",
+                "calendly_location_value": "",
+                "google_calendar_id": "",
+                "google_calendar_id_env": "",
+                "google_service_account_path": "",
+                "google_service_account_env": "",
                 "success_message": payload.booking_success_message,
+                "message_templates": existing_booking.get("message_templates", {}),
+                "message_template_enabled": existing_booking.get("message_template_enabled", {}),
             },
         },
     )
@@ -1605,42 +2193,431 @@ def _persist_configs_to_disk(configs: Dict[str, Dict[str, Any]]) -> None:
     )
 
 
-def _provider_secret_file(cliente_id: str, slug: str) -> Path:
-    filename = f"{cliente_id}_{slug}.json"
-    path = PROVIDER_SECRETS_DIR / filename
-    _ensure_path_within(PROVIDER_SECRETS_DIR, path)
-    return path
+def _serialize_agenda_block(row: sqlite3.Row) -> PortalAgendaBlock:
+    return PortalAgendaBlock(
+        block_id=row["id"],
+        employee_id=row["employee_id"] or "",
+        fecha=row["block_date"],
+        hora_inicio=row["start_time"],
+        hora_fin=row["end_time"],
+        motivo=row["reason"] or "",
+        created_at=row["created_at"] or "",
+    )
 
 
-def _persist_google_service_account_secret(cliente_id: str, raw_json: str) -> str:
-    if not raw_json.strip():
-        return ""
+def _list_agenda_blocks(
+    cliente_id: str,
+    *,
+    employee_id: Optional[str] = None,
+    include_general: bool = False,
+    date_from: str = "",
+    date_to: str = "",
+) -> List[sqlite3.Row]:
+    clauses = ["cliente_id = ?"]
+    params: List[Any] = [cliente_id]
+    if employee_id is None:
+        pass
+    elif employee_id:
+        if include_general:
+            clauses.append("(employee_id = ? OR employee_id = '')")
+        else:
+            clauses.append("employee_id = ?")
+        params.append(employee_id)
+    else:
+        clauses.append("employee_id = ''")
+    if date_from:
+        clauses.append("block_date >= ?")
+        params.append(date_from)
+    if date_to:
+        clauses.append("block_date <= ?")
+        params.append(date_to)
+    sql = (
+        "SELECT * FROM agenda_blocks WHERE "
+        + " AND ".join(clauses)
+        + " ORDER BY block_date ASC, start_time ASC"
+    )
+    with _get_db_connection() as connection:
+        return connection.execute(sql, tuple(params)).fetchall()
 
-    try:
-        parsed = json.loads(raw_json)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("El JSON de la service account de Google no es valido.") from exc
 
-    if not isinstance(parsed, dict) or parsed.get("type") != "service_account":
-        raise RuntimeError("El JSON pegado no parece una service account valida de Google.")
+def _agenda_block_date_range(date_from: str, date_to: str = "") -> List[str]:
+    start_date = _parse_date(date_from).date()
+    end_date = _parse_date(date_to or date_from).date()
+    if end_date < start_date:
+        raise HTTPException(status_code=400, detail="La fecha final no puede ser anterior a la inicial.")
+    total_days = (end_date - start_date).days + 1
+    if total_days > 366:
+        raise HTTPException(status_code=400, detail="El intervalo de bloqueo no puede superar 366 dias.")
+    return [(start_date + timedelta(days=offset)).isoformat() for offset in range(total_days)]
 
-    target_path = _provider_secret_file(cliente_id, "google_service_account")
-    target_path.write_text(json.dumps(parsed, ensure_ascii=False), encoding="utf-8")
-    return str(target_path)
+
+def _create_agenda_blocks(
+    cliente_id: str,
+    data: PortalAgendaBlockPayload,
+    *,
+    employee_id: str = "",
+) -> Tuple[List[sqlite3.Row], int, str, str]:
+    selected_days = _agenda_block_date_range(data.fecha, data.fecha_fin)
+    start_time = _parse_time(data.hora_inicio).strftime("%H:%M")
+    end_time = _parse_time(data.hora_fin).strftime("%H:%M")
+    if start_time >= end_time:
+        raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio.")
+    if employee_id:
+        _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
+    conflicts: List[sqlite3.Row] = []
+    for selected_day in selected_days:
+        conflicts.extend(
+            _booking_conflicts_for_block(
+                cliente_id,
+                selected_day,
+                start_time,
+                end_time,
+                employee_id=employee_id,
+            )
+        )
+    if conflicts:
+        raise HTTPException(
+            status_code=409,
+            detail=_booking_conflict_message(
+                conflicts,
+                "Hay citas activas dentro del intervalo solicitado. Cancelalas o reprogramalas antes de bloquear la agenda.",
+            ),
+        )
+
+    created_at = _utc_now_iso()
+    reason = _sanitize_text(data.motivo)
+    created_rows: List[sqlite3.Row] = []
+    skipped_count = 0
+    with _get_db_connection() as connection:
+        for selected_day in selected_days:
+            existing = connection.execute(
+                """
+                SELECT *
+                FROM agenda_blocks
+                WHERE cliente_id = ?
+                  AND employee_id = ?
+                  AND block_date = ?
+                  AND start_time = ?
+                  AND end_time = ?
+                LIMIT 1
+                """,
+                (cliente_id, employee_id, selected_day, start_time, end_time),
+            ).fetchone()
+            if existing:
+                skipped_count += 1
+                continue
+
+            block_id = f"blk_{secrets.token_urlsafe(10)}"
+            connection.execute(
+                """
+                INSERT INTO agenda_blocks (id, cliente_id, employee_id, block_date, start_time, end_time, reason, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    block_id,
+                    cliente_id,
+                    employee_id,
+                    selected_day,
+                    start_time,
+                    end_time,
+                    reason,
+                    created_at,
+                ),
+            )
+            row = connection.execute("SELECT * FROM agenda_blocks WHERE id = ?", (block_id,)).fetchone()
+            if row:
+                created_rows.append(row)
+        connection.commit()
+    return created_rows, skipped_count, selected_days[0], selected_days[-1]
+
+
+def _delete_agenda_block(cliente_id: str, block_id: str, *, employee_id: Optional[str] = None) -> None:
+    with _get_db_connection() as connection:
+        clauses = ["id = ?", "cliente_id = ?"]
+        params: List[Any] = [block_id, cliente_id]
+        if employee_id is None:
+            pass
+        elif employee_id:
+            clauses.append("employee_id = ?")
+            params.append(employee_id)
+        else:
+            clauses.append("employee_id = ''")
+        row = connection.execute(
+            "SELECT id FROM agenda_blocks WHERE " + " AND ".join(clauses),
+            tuple(params),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Bloqueo no encontrado.")
+        connection.execute("DELETE FROM agenda_blocks WHERE id = ?", (block_id,))
+        connection.commit()
+
+
+def _portal_schedule_from_config(cliente_id: str) -> PortalSchedulePublic:
+    config = _get_client_config(cliente_id)
+    booking = config["booking"]
+    today = _utc_now().date().isoformat()
+    future_limit = (_utc_now() + timedelta(days=180)).date().isoformat()
+    return PortalSchedulePublic(
+        enabled=bool(booking.get("enabled", False)),
+        timezone=booking.get("timezone", DEFAULT_TIMEZONE),
+        slot_minutes=int(booking.get("slot_minutes", 30)),
+        day_start=booking.get("day_start", "09:00"),
+        day_end=booking.get("day_end", "18:00"),
+        closed_weekdays=list(booking.get("closed_weekdays", [])),
+        message_templates=_normalize_message_templates(booking.get("message_templates", {})),
+        message_template_enabled=_normalize_message_template_enabled(
+            booking.get("message_template_enabled", {}),
+            booking.get("message_templates", {}),
+        ),
+        blocks=[
+            _serialize_agenda_block(row)
+            for row in _list_agenda_blocks(cliente_id, employee_id="", date_from=today, date_to=future_limit)
+        ],
+    )
+
+
+def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) -> PortalSchedulePublic:
+    start = _parse_time(data.day_start).strftime("%H:%M")
+    end = _parse_time(data.day_end).strftime("%H:%M")
+    if start >= end:
+        raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio.")
+    closed_weekdays = sorted({int(day) for day in data.closed_weekdays if 0 <= int(day) <= 6})
+    if len(closed_weekdays) != len(set(data.closed_weekdays)):
+        closed_weekdays = sorted(set(closed_weekdays))
+
+    next_configs = copy.deepcopy(CONFIG_CLIENTES)
+    config = next_configs.get(cliente_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Cliente no configurado")
+    previous_closed_weekdays = {
+        int(day)
+        for day in config.get("booking", {}).get("closed_weekdays", [])
+        if isinstance(day, int) and 0 <= day <= 6
+    }
+    newly_closed_weekdays = set(closed_weekdays) - previous_closed_weekdays
+    if newly_closed_weekdays:
+        conflicts = _booking_conflicts_for_closed_weekdays(cliente_id, newly_closed_weekdays)
+        if conflicts:
+            raise HTTPException(
+                status_code=409,
+                detail=_booking_conflict_message(
+                    conflicts,
+                    "Hay citas activas en los dias que quieres cerrar. Cancelalas o reprogramalas antes de guardar.",
+                ),
+            )
+    booking = dict(config.get("booking", {}))
+    booking.update(
+        {
+            "enabled": bool(data.enabled),
+            "timezone": _sanitize_text(data.timezone) or DEFAULT_TIMEZONE,
+            "slot_minutes": int(data.slot_minutes),
+            "day_start": start,
+            "day_end": end,
+            "closed_weekdays": closed_weekdays,
+            "message_templates": _normalize_message_templates(data.message_templates),
+            "message_template_enabled": _normalize_message_template_enabled(
+                data.message_template_enabled,
+                data.message_templates,
+            ),
+        }
+    )
+    config["booking"] = booking
+    _validate_single_client_runtime(cliente_id, config)
+    _persist_configs_to_disk(next_configs)
+    _update_runtime_configs(next_configs)
+    return _portal_schedule_from_config(cliente_id)
+
+
+def _serialize_portal_employee(row: sqlite3.Row) -> PortalEmployeePublic:
+    counters = _employee_booking_counters(row["cliente_id"], row["id"])
+    today = _utc_now().date().isoformat()
+    future_limit = (_utc_now() + timedelta(days=180)).date().isoformat()
+    schedule = _employee_schedule_from_row(row)
+    is_default = bool(row["is_default"])
+    service_ids = _employee_service_ids_from_row(row)
+    return PortalEmployeePublic(
+        employee_id=row["id"],
+        cliente_id=row["cliente_id"],
+        name=row["name"],
+        role_label=DEFAULT_EMPLOYEE_ROLE_LABEL if is_default else (row["role_label"] or ""),
+        color=_normalize_employee_color(row["color"] or "#00b1d9"),
+        is_active=bool(row["is_active"]),
+        is_default=is_default,
+        timezone=schedule["timezone"],
+        slot_minutes=schedule["slot_minutes"],
+        day_start=schedule["day_start"],
+        day_end=schedule["day_end"],
+        closed_weekdays=schedule["closed_weekdays"],
+        service_ids=service_ids,
+        allows_all_services=not service_ids,
+        bookings_today=counters["today"],
+        bookings_upcoming=counters["upcoming"],
+        blocks=[
+            _serialize_agenda_block(block)
+            for block in _list_agenda_blocks(
+                row["cliente_id"],
+                employee_id=row["id"],
+                date_from=today,
+                date_to=future_limit,
+            )
+        ],
+    )
+
+
+def _portal_employees_for_client(cliente_id: str) -> PortalEmployeesResponse:
+    return PortalEmployeesResponse(
+        items=[_serialize_portal_employee(row) for row in _list_employee_rows(cliente_id)]
+    )
+
+
+def _validate_employee_payload(cliente_id: str, data: PortalEmployeePayload) -> Dict[str, Any]:
+    defaults = _employee_defaults_for_client(cliente_id)
+    start = _parse_time(data.day_start).strftime("%H:%M")
+    end = _parse_time(data.day_end).strftime("%H:%M")
+    if start >= end:
+        raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio.")
+    closed_weekdays = _normalize_closed_weekdays_list(data.closed_weekdays)
+    service_ids = _normalize_service_ids_for_client(cliente_id, data.service_ids)
+    return {
+        "name": _sanitize_text(data.name),
+        "role_label": _sanitize_text(data.role_label),
+        "color": _normalize_employee_color(data.color, "#00b1d9"),
+        "is_active": bool(data.is_active),
+        "timezone": _sanitize_text(data.timezone) or defaults["timezone"],
+        "slot_minutes": int(data.slot_minutes),
+        "day_start": start,
+        "day_end": end,
+        "closed_weekdays_json": json.dumps(closed_weekdays),
+        "closed_weekdays": closed_weekdays,
+        "service_ids_json": json.dumps(service_ids),
+        "service_ids": service_ids,
+    }
+
+
+def _create_portal_employee(cliente_id: str, data: PortalEmployeePayload) -> PortalEmployeePublic:
+    payload = _validate_employee_payload(cliente_id, data)
+    created_at = _utc_now_iso()
+    employee_id = f"emp_{secrets.token_urlsafe(8)}"
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO employees (
+                id, cliente_id, name, role_label, color, is_active, is_default,
+                timezone, slot_minutes, day_start, day_end, closed_weekdays_json, service_ids_json,
+                created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                employee_id,
+                cliente_id,
+                payload["name"],
+                payload["role_label"],
+                payload["color"],
+                1 if payload["is_active"] else 0,
+                payload["timezone"],
+                payload["slot_minutes"],
+                payload["day_start"],
+                payload["day_end"],
+                payload["closed_weekdays_json"],
+                payload["service_ids_json"],
+                created_at,
+                created_at,
+            ),
+        )
+        connection.commit()
+    row = _get_employee_row(employee_id, cliente_id=cliente_id)
+    if not row:
+        raise HTTPException(status_code=500, detail="No se ha podido crear el profesional.")
+    return _serialize_portal_employee(row)
+
+
+def _active_future_bookings_for_employee(cliente_id: str, employee_id: str) -> int:
+    with _get_db_connection() as connection:
+        return int(
+            connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM bookings
+                WHERE cliente_id = ?
+                  AND employee_id = ?
+                  AND status IN ('confirmed', 'pending_review')
+                  AND (start_at = '' OR start_at >= ?)
+                """,
+                (cliente_id, employee_id, _utc_now_iso()),
+            ).fetchone()[0]
+        )
+
+
+def _update_portal_employee(cliente_id: str, employee_id: str, data: PortalEmployeePayload) -> PortalEmployeePublic:
+    row = _get_employee_row(employee_id, cliente_id=cliente_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Profesional no encontrado.")
+    payload = _validate_employee_payload(cliente_id, data)
+    if row["is_default"]:
+        payload["role_label"] = DEFAULT_EMPLOYEE_ROLE_LABEL
+    if row["is_default"] and not payload["is_active"]:
+        raise HTTPException(status_code=409, detail="La agenda principal no se puede desactivar.")
+    if not payload["is_active"] and _active_future_bookings_for_employee(cliente_id, employee_id):
+        raise HTTPException(
+            status_code=409,
+            detail="Este profesional tiene citas futuras activas. Reasignalas o reprogramalas antes de desactivarlo.",
+        )
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            UPDATE employees
+            SET name = ?, role_label = ?, color = ?, is_active = ?, timezone = ?,
+                slot_minutes = ?, day_start = ?, day_end = ?, closed_weekdays_json = ?, service_ids_json = ?, updated_at = ?
+            WHERE id = ? AND cliente_id = ?
+            """,
+            (
+                payload["name"],
+                payload["role_label"],
+                payload["color"],
+                1 if payload["is_active"] else 0,
+                payload["timezone"],
+                payload["slot_minutes"],
+                payload["day_start"],
+                payload["day_end"],
+                payload["closed_weekdays_json"],
+                payload["service_ids_json"],
+                _utc_now_iso(),
+                employee_id,
+                cliente_id,
+            ),
+        )
+        connection.execute(
+            """
+            UPDATE bookings
+            SET employee_name = ?
+            WHERE cliente_id = ? AND employee_id = ?
+            """,
+            (payload["name"], cliente_id, employee_id),
+        )
+        connection.commit()
+    refreshed = _get_employee_row(employee_id, cliente_id=cliente_id)
+    if not refreshed:
+        raise HTTPException(status_code=404, detail="Profesional no encontrado.")
+    return _serialize_portal_employee(refreshed)
 
 
 def _prepare_admin_payload(cliente_id: str, payload: AdminClientePayload) -> AdminClientePayload:
-    updates: Dict[str, Any] = {}
-
-    if payload.booking_google_service_account_json.strip():
-        updates["booking_google_service_account_path"] = _persist_google_service_account_secret(
-            cliente_id, payload.booking_google_service_account_json
-        )
-
-    if updates:
-        return payload.model_copy(update=updates)
-
-    return payload
+    _ = cliente_id
+    return payload.model_copy(
+        update={
+            "booking_provider": "internal",
+            "booking_calendly_user_env": "",
+            "booking_calendly_event_type_env": "",
+            "booking_calendly_location_kind": "",
+            "booking_calendly_location_value": "",
+            "booking_google_calendar_id": "",
+            "booking_google_calendar_id_env": "",
+            "booking_google_service_account_path": "",
+            "booking_google_service_account_env": "",
+            "booking_google_service_account_json": "",
+        }
+    )
 
 
 def _save_admin_client_payload(
@@ -2385,6 +3362,16 @@ def _assert_admin_can_manage_user(current_user: sqlite3.Row, target_user: sqlite
         )
 
 
+def _portal_client_id_or_403(user: sqlite3.Row) -> str:
+    if user["role"] == "admin":
+        raise HTTPException(status_code=403, detail="Usa el panel admin para configurar clientes.")
+    cliente_id = user["cliente_id"] or ""
+    if not cliente_id:
+        raise HTTPException(status_code=403, detail="Tu usuario no tiene cliente asociado.")
+    _get_client_config(cliente_id)
+    return cliente_id
+
+
 def _require_admin_token(
     request: Request,
     authorization: Optional[str] = Header(default=None),
@@ -2547,60 +3534,67 @@ def _parse_time(time_text: str) -> datetime:
 
 
 def _get_booking_provider(config: Dict[str, Any]) -> str:
-    return _sanitize_text(config.get("booking", {}).get("provider", "internal")) or "internal"
+    _ = config
+    return "internal"
 
 
-def _env_value(env_name: str) -> str:
-    env_key = _sanitize_text(env_name)
-    if not env_key:
-        return ""
-    return os.getenv(env_key, "").strip()
+def _normalize_message_kind(kind: str) -> str:
+    normalized = _sanitize_text(kind).lower()
+    if normalized not in DEFAULT_MESSAGE_TEMPLATES:
+        raise HTTPException(status_code=400, detail="Tipo de plantilla no valido.")
+    return normalized
 
 
-def _resolve_direct_or_env(value: str, env_name: str) -> str:
-    direct_value = str(value or "").strip()
-    if direct_value:
-        return direct_value
-    return _env_value(env_name)
+def _sample_booking_preview_slot(schedule: PortalScheduleUpdatePayload) -> Tuple[str, str]:
+    timezone_name = _sanitize_text(schedule.timezone) or DEFAULT_TIMEZONE
+    today = datetime.now(ZoneInfo(timezone_name)).date()
+    closed_days = {
+        int(day)
+        for day in schedule.closed_weekdays
+        if isinstance(day, int) and 0 <= int(day) <= 6
+    }
+    for offset in range(1, 15):
+        candidate = today + timedelta(days=offset)
+        if candidate.weekday() not in closed_days:
+            return candidate.isoformat(), schedule.day_start
+    fallback = today + timedelta(days=1)
+    return fallback.isoformat(), schedule.day_start
 
 
-def _load_json_secret_from_source(raw_value: str) -> Dict[str, Any]:
-    if not raw_value:
-        raise RuntimeError("No se ha encontrado ninguna credencial JSON configurada.")
-
-    candidate_path = Path(raw_value)
-    if candidate_path.exists():
-        return json.loads(candidate_path.read_text(encoding="utf-8"))
-
-    return json.loads(raw_value)
-
-
-def _google_calendar_error_detail(response: httpx.Response) -> str:
-    try:
-        payload = response.json()
-    except ValueError:
-        return response.text.strip() or f"HTTP {response.status_code}"
-
-    error = payload.get("error")
-    if isinstance(error, dict):
-        message = str(error.get("message", "")).strip()
-        errors = error.get("errors")
-        if isinstance(errors, list) and errors:
-            first = errors[0]
-            if isinstance(first, dict):
-                reason = str(first.get("reason", "")).strip()
-                if reason and message:
-                    return f"{reason}: {message}"
-        if message:
-            return message
-
-    return response.text.strip() or f"HTTP {response.status_code}"
+def _booking_preview_context(
+    cliente_id: str,
+    schedule: PortalScheduleUpdatePayload,
+    request: Optional[Request] = None,
+) -> Tuple[Dict[str, Any], Dict[str, Any], str]:
+    config = _get_client_config(cliente_id)
+    message_templates = _normalize_message_templates(schedule.message_templates)
+    message_enabled = _normalize_message_template_enabled(
+        schedule.message_template_enabled,
+        schedule.message_templates,
+    )
+    fecha, hora = _sample_booking_preview_slot(schedule)
+    booking_row = {
+        "cliente_id": cliente_id,
+        "servicio": "Revision profesional",
+        "booking_date": fecha,
+        "booking_time": hora,
+        "timezone": _sanitize_text(schedule.timezone) or DEFAULT_TIMEZONE,
+        "email": config.get("contacto", {}).get("email", ""),
+    }
+    manage_url = _build_booking_manage_url("preview-demo-link", request)
+    return booking_row, {
+        "message_templates": message_templates,
+        "message_template_enabled": message_enabled,
+        "contact_email": config.get("contacto", {}).get("email", ""),
+        "contact_phone": config.get("contacto", {}).get("telefono", ""),
+        "company_name": config["nombre"],
+    }, manage_url
 
 
 def _booking_email_subject(
     status_key: str,
     company_name: str,
-    booking_row: sqlite3.Row,
+    booking_row: Any,
 ) -> str:
     service_name = booking_row["servicio"] or "tu cita"
     if status_key == "received":
@@ -2628,18 +3622,29 @@ def _booking_datetime_display(booking_row: sqlite3.Row) -> str:
 
 
 def _booking_email_bodies(
-    booking_row: sqlite3.Row,
+    booking_row: Any,
     company_name: str,
     status_key: str,
     manage_url: str,
     contact_email: str,
     contact_phone: str,
+    message_templates: Optional[Dict[str, str]] = None,
+    extra_message: str = "",
 ) -> Tuple[str, str]:
     service_name = booking_row["servicio"] or "Consulta"
     when_text = _booking_datetime_display(booking_row)
     manage_line = f"\nGestiona tu cita aqui: {manage_url}\n" if manage_url else ""
     manage_html = (
-        f'<p><a href="{escape(manage_url)}">Gestionar cita</a></p>' if manage_url else ""
+        (
+            f'<p style="margin:20px 0;">'
+            f'<a href="{escape(manage_url)}" '
+            f'style="display:inline-block;padding:12px 18px;border-radius:12px;'
+            f'background:#0b6b8a;color:#ffffff;text-decoration:none;font-weight:700;">'
+            f'Gestionar cita'
+            f"</a></p>"
+        )
+        if manage_url
+        else ""
     )
     contact_lines = []
     if contact_phone:
@@ -2651,13 +3656,24 @@ def _booking_email_bodies(
 
     intro_map = {
         "received": "Hemos recibido tu solicitud de cita y la estamos revisando.",
-        "confirmed": "Tu cita ha quedado confirmada correctamente.",
-        "cancelled": "Tu cita ha sido cancelada.",
-        "rescheduled": "Tu cita ha sido reprogramada correctamente.",
-        "reminder_24h": "Te recordamos que manana tienes una cita programada.",
-        "reminder_2h": "Te recordamos que tu cita empieza en breve.",
+        "confirmed": DEFAULT_MESSAGE_TEMPLATES["confirmed"],
+        "cancelled": DEFAULT_MESSAGE_TEMPLATES["cancelled"],
+        "rescheduled": DEFAULT_MESSAGE_TEMPLATES["rescheduled"],
+        "reminder_24h": DEFAULT_MESSAGE_TEMPLATES["reminder_24h"],
+        "reminder_2h": DEFAULT_MESSAGE_TEMPLATES["reminder_2h"],
     }
+    templates = _normalize_message_templates(message_templates or {})
+    intro_map.update(
+        {
+            "confirmed": templates["confirmed"],
+            "cancelled": templates["cancelled"],
+            "rescheduled": templates["rescheduled"],
+            "reminder_24h": templates["reminder_24h"],
+            "reminder_2h": templates["reminder_2h"],
+        }
+    )
     intro = intro_map.get(status_key, intro_map["confirmed"])
+    extra_message_clean = _sanitize_text(extra_message, allow_multiline=True)
 
     text_body = (
         f"{intro}\n\n"
@@ -2667,12 +3683,18 @@ def _booking_email_bodies(
         f"Zona horaria: {booking_row['timezone']}\n"
         f"{manage_line}"
     )
+    if extra_message_clean and status_key == "cancelled":
+        text_body += f"\nMotivo de cancelacion:\n{extra_message_clean}\n"
     if contact_text:
         text_body += f"\nContacto:\n{contact_text}\n"
 
     html_body = (
-        f"<p>{escape(intro)}</p>"
-        f"<ul>"
+        f'<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;'
+        f'padding:24px;background:#f5f8fb;color:#102033;">'
+        f'<div style="background:#ffffff;border:1px solid #d8e2ee;border-radius:18px;'
+        f'padding:24px 24px 12px;">'
+        f'<p style="margin:0 0 16px;line-height:1.6;">{escape(intro)}</p>'
+        f'<ul style="margin:0 0 12px;padding-left:20px;line-height:1.8;">'
         f"<li><strong>Empresa:</strong> {escape(company_name)}</li>"
         f"<li><strong>Servicio:</strong> {escape(service_name)}</li>"
         f"<li><strong>Fecha y hora:</strong> {escape(when_text)}</li>"
@@ -2680,13 +3702,55 @@ def _booking_email_bodies(
         f"</ul>"
         f"{manage_html}"
     )
+    if extra_message_clean and status_key == "cancelled":
+        extra_message_html = escape(extra_message_clean).replace("\n", "<br>")
+        html_body += (
+            f'<p style="line-height:1.6;"><strong>Motivo de cancelacion:</strong><br>{extra_message_html}</p>'
+        )
     if contact_html:
-        html_body += f"<p>Si necesitas ayuda, puedes escribirnos por:</p><ul>{contact_html}</ul>"
+        html_body += (
+            f'<p style="margin-top:18px;">Si necesitas ayuda, puedes escribirnos por:</p>'
+            f'<ul style="line-height:1.8;">{contact_html}</ul>'
+        )
+    html_body += "</div></div>"
 
     return text_body.strip(), html_body
 
 
-def _send_booking_email(booking_row: sqlite3.Row, status_key: str, request: Optional[Request] = None) -> None:
+def _booking_message_preview(
+    cliente_id: str,
+    payload: PortalMessagePreviewPayload,
+    request: Optional[Request] = None,
+) -> PortalMessagePreviewResponse:
+    kind = _normalize_message_kind(payload.kind)
+    booking_row, context, manage_url = _booking_preview_context(cliente_id, payload.schedule, request)
+    subject = _booking_email_subject(kind, context["company_name"], booking_row)
+    text_body, html_body = _booking_email_bodies(
+        booking_row,
+        context["company_name"],
+        kind,
+        manage_url,
+        context["contact_email"],
+        context["contact_phone"],
+        context["message_templates"],
+    )
+    return PortalMessagePreviewResponse(
+        kind=kind,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        target_email=str(payload.target_email or ""),
+        enabled=bool(context["message_template_enabled"].get(kind, True)),
+    )
+
+
+def _send_booking_email(
+    booking_row: sqlite3.Row,
+    status_key: str,
+    request: Optional[Request] = None,
+    *,
+    extra_message: str = "",
+) -> None:
     config = _get_client_config(booking_row["cliente_id"])
     company_name = config["nombre"]
     manage_url = _booking_row_manage_url(booking_row, request)
@@ -2700,8 +3764,18 @@ def _send_booking_email(booking_row: sqlite3.Row, status_key: str, request: Opti
         manage_url,
         contact_email,
         contact_phone,
+        config.get("booking", {}).get("message_templates", {}),
+        extra_message,
     )
     _send_email_message(booking_row["email"], subject, text_body, html_body)
+
+
+def _booking_email_enabled(config: Dict[str, Any], kind: str) -> bool:
+    enabled_map = _normalize_message_template_enabled(
+        config.get("booking", {}).get("message_template_enabled", {}),
+        config.get("booking", {}).get("message_templates", {}),
+    )
+    return enabled_map.get(kind, True)
 
 
 def _mark_booking_email_result(
@@ -2720,11 +3794,18 @@ def _mark_booking_email_result(
     _update_booking_record(booking_id, **updates)
 
 
-def _booking_start_end(cliente_id: str, fecha: str, hora: str) -> Tuple[datetime, datetime]:
-    config = _get_client_config(cliente_id)
-    tzinfo = ZoneInfo(config["booking"]["timezone"])
+def _booking_start_end(
+    cliente_id: str,
+    fecha: str,
+    hora: str,
+    *,
+    employee_id: str = "",
+) -> Tuple[datetime, datetime]:
+    employee_row = _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
+    schedule = _employee_schedule_from_row(employee_row)
+    tzinfo = ZoneInfo(schedule["timezone"])
     start_local = datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M").replace(tzinfo=tzinfo)
-    end_local = start_local + timedelta(minutes=int(config["booking"]["slot_minutes"]))
+    end_local = start_local + timedelta(minutes=int(schedule["slot_minutes"]))
     return start_local, end_local
 
 
@@ -2735,13 +3816,16 @@ def _generate_manage_token() -> str:
 def _build_booking_manage_url(
     manage_token: str,
     request: Optional[Request] = None,
+    *,
+    viewer: str = "customer",
 ) -> str:
     if not manage_token:
         return ""
     base_url = _preferred_public_base_url(request)
     if not base_url:
         return ""
-    return f"{base_url}/booking/manage/{manage_token}"
+    suffix = "?viewer=client" if viewer == "client" else ""
+    return f"{base_url}/booking/manage/{manage_token}{suffix}"
 
 
 def _record_booking_audit(
@@ -2767,6 +3851,137 @@ def _record_booking_audit(
         connection.commit()
 
 
+def _list_booking_audit_rows(booking_id: str, *, limit: int = 80) -> List[sqlite3.Row]:
+    with _get_db_connection() as connection:
+        return connection.execute(
+            """
+            SELECT id, booking_id, cliente_id, event_type, payload_json, created_at
+            FROM booking_audit
+            WHERE booking_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (booking_id, max(1, min(limit, 200))),
+        ).fetchall()
+
+
+def _booking_audit_source_label(source: str) -> str:
+    normalized = _sanitize_text(source).lower()
+    labels = {
+        "admin": "Admin Vantelia",
+        "portal": "Portal cliente",
+        "customer": "Cliente final",
+        "system": "Sistema",
+    }
+    return labels.get(normalized, normalized.replace("_", " ").title() if normalized else "")
+
+
+def _booking_email_kind_label(kind: str) -> str:
+    labels = {
+        "received": "Solicitud recibida",
+        "confirmed": "Confirmacion",
+        "cancelled": "Cancelacion",
+        "rescheduled": "Reprogramacion",
+        "reminder_24h": "Recordatorio 24h",
+        "reminder_2h": "Recordatorio 2h",
+    }
+    normalized = _sanitize_text(kind).lower()
+    return labels.get(normalized, normalized.replace("_", " ").title() if normalized else "Email")
+
+
+def _booking_audit_datetime_label(fecha: str, hora: str) -> str:
+    if not fecha:
+        return ""
+    return _booking_datetime_display({"booking_date": fecha, "booking_time": hora})
+
+
+def _booking_audit_entry_from_row(row: sqlite3.Row) -> BookingAuditEntry:
+    try:
+        payload = json.loads(row["payload_json"] or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+
+    event_type = str(row["event_type"] or "")
+    source = _booking_audit_source_label(str(payload.get("source", "")))
+    actor = source
+    role_value = _sanitize_text(payload.get("role", "")).lower()
+    if not actor and role_value == "admin":
+        actor = "Administrador"
+    elif not actor and role_value == "client":
+        actor = "Cuenta cliente"
+    if not actor and event_type in {"booking_confirmed", "booking_completed"}:
+        actor = "Sistema"
+
+    title = "Movimiento de cita"
+    detail = ""
+
+    if event_type == "booking_created":
+        title = "Cita creada"
+        status_value = _sanitize_text(payload.get("status", ""))
+        provider_name = _sanitize_text(payload.get("provider_name", ""))
+        parts = []
+        if status_value:
+            parts.append(f"Estado inicial: {status_value}.")
+        if provider_name:
+            parts.append(f"Proveedor: {provider_name}.")
+        detail = " ".join(parts)
+    elif event_type == "booking_rescheduled":
+        title = "Cita reprogramada"
+        date_label = _booking_audit_datetime_label(
+            _sanitize_text(payload.get("fecha", "")),
+            _sanitize_text(payload.get("hora", "")),
+        )
+        detail = f"Nuevo horario: {date_label}." if date_label else "Se ha actualizado la fecha u hora."
+    elif event_type == "booking_updated":
+        title = "Datos del asistente actualizados"
+        date_label = _booking_audit_datetime_label(
+            _sanitize_text(payload.get("fecha", "")),
+            _sanitize_text(payload.get("hora", "")),
+        )
+        detail = (
+            f"Se mantuvo el horario en {date_label} y se guardaron cambios en los datos."
+            if date_label
+            else "Se han guardado cambios en los datos de la cita."
+        )
+    elif event_type == "booking_cancelled":
+        title = "Cita cancelada"
+        reason = _sanitize_text(payload.get("reason", ""), allow_multiline=True)
+        detail = "La cita ha quedado cancelada."
+        if reason:
+            detail += f" Motivo: {reason}"
+    elif event_type == "booking_confirmed":
+        title = "Cita confirmada"
+        detail = "La cita paso a estado confirmado."
+    elif event_type == "booking_completed":
+        title = "Cita completada"
+        detail = "La cita se marco como completada al superar su hora de fin."
+    elif event_type == "booking_email_sent":
+        title = "Email enviado"
+        detail = f"Se envio la plantilla: {_booking_email_kind_label(str(payload.get('kind', '')))}."
+    elif event_type == "booking_email_skipped":
+        title = "Email omitido"
+        reason = _sanitize_text(payload.get("reason", ""))
+        detail = f"No se envio la plantilla {_booking_email_kind_label(str(payload.get('kind', '')))}."
+        if reason:
+            detail += f" Motivo: {reason}."
+    elif event_type == "booking_email_failed":
+        title = "Email fallido"
+        detail = f"Fallo el envio de {_booking_email_kind_label(str(payload.get('kind', '')))}."
+
+    return BookingAuditEntry(
+        audit_id=int(row["id"]),
+        booking_id=str(row["booking_id"]),
+        event_type=event_type,
+        title=title,
+        detail=detail.strip(),
+        created_at=str(row["created_at"]),
+        source=source,
+        actor=actor,
+    )
+
+
 def _get_booking_row_by_id(booking_id: str) -> Optional[sqlite3.Row]:
     with _get_db_connection() as connection:
         return connection.execute("SELECT * FROM bookings WHERE id = ?", (booking_id,)).fetchone()
@@ -2790,8 +4005,13 @@ def _update_booking_record(booking_id: str, **updates: Any) -> None:
         connection.commit()
 
 
-def _booking_row_manage_url(row: sqlite3.Row, request: Optional[Request] = None) -> str:
-    return _build_booking_manage_url(row["manage_token"], request)
+def _booking_row_manage_url(
+    row: sqlite3.Row,
+    request: Optional[Request] = None,
+    *,
+    viewer: str = "customer",
+) -> str:
+    return _build_booking_manage_url(row["manage_token"], request, viewer=viewer)
 
 
 def _serialize_booking_row(row: sqlite3.Row, request: Optional[Request] = None) -> Dict[str, Any]:
@@ -2800,10 +4020,13 @@ def _serialize_booking_row(row: sqlite3.Row, request: Optional[Request] = None) 
         "booking_id": row["id"],
         "cliente_id": row["cliente_id"],
         "empresa": config["nombre"],
+        "employee_id": row["employee_id"] or "",
+        "employee_name": row["employee_name"] or "",
         "nombre": row["nombre"],
         "email": row["email"],
         "telefono": row["telefono"] or "",
         "servicio": row["servicio"] or "",
+        "notas": row["notas"] or "",
         "fecha": row["booking_date"],
         "hora": row["booking_time"],
         "timezone": row["timezone"] or config["booking"]["timezone"],
@@ -2832,311 +4055,6 @@ def _to_utc_iso(dt_value: datetime) -> str:
     return dt_value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _calendly_headers() -> Dict[str, str]:
-    if not CALENDLY_API_TOKEN:
-        raise RuntimeError("CALENDLY_API_TOKEN no esta configurado en el backend.")
-    return {
-        "Authorization": f"Bearer {CALENDLY_API_TOKEN}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-
-
-def _google_calendar_access_token(
-    service_account_path: str,
-    service_account_env: str,
-) -> str:
-    raw_value = _resolve_direct_or_env(service_account_path, service_account_env)
-    if not raw_value:
-        raise RuntimeError(
-            "Falta configurar la service account de Google. Puedes pegar el JSON en el panel admin o indicar una variable de entorno."
-        )
-
-    service_account_info = _load_json_secret_from_source(raw_value)
-    credentials = service_account.Credentials.from_service_account_info(
-        service_account_info,
-        scopes=["https://www.googleapis.com/auth/calendar"],
-    )
-    credentials.refresh(GoogleAuthRequest())
-    if not credentials.token:
-        raise RuntimeError("No se ha podido obtener un access token de Google Calendar.")
-    return credentials.token
-
-
-async def _calendly_available_slots(cliente_id: str, fecha: str) -> List[str]:
-    config = _get_client_config(cliente_id)
-    booking_cfg = config["booking"]
-    event_type_uri = _env_value(booking_cfg.get("calendly_event_type_env", ""))
-    if not event_type_uri:
-        raise RuntimeError(
-            f"Falta configurar el event type de Calendly para {cliente_id}."
-        )
-
-    start_local = datetime.strptime(fecha, "%Y-%m-%d").replace(
-        tzinfo=ZoneInfo(booking_cfg["timezone"])
-    )
-    end_local = start_local + timedelta(days=1)
-
-    async with httpx.AsyncClient(timeout=12.0) as client:
-        response = await client.get(
-            "https://api.calendly.com/event_type_available_times",
-            headers=_calendly_headers(),
-            params={
-                "event_type": event_type_uri,
-                "start_time": _to_utc_iso(start_local),
-                "end_time": _to_utc_iso(end_local),
-            },
-        )
-        response.raise_for_status()
-
-    collection = response.json().get("collection", [])
-    slots: Set[str] = set()
-    tzinfo = ZoneInfo(booking_cfg["timezone"])
-    for item in collection:
-        raw_start = item.get("start_time")
-        if not raw_start:
-            continue
-        start_dt = datetime.fromisoformat(raw_start.replace("Z", "+00:00")).astimezone(tzinfo)
-        if start_dt.strftime("%Y-%m-%d") == fecha:
-            slots.add(start_dt.strftime("%H:%M"))
-
-    return sorted(slots)
-
-
-async def _create_calendly_booking(
-    cliente_id: str,
-    booking_payload: Dict[str, Any],
-) -> ProviderBookingResult:
-    config = _get_client_config(cliente_id)
-    booking_cfg = config["booking"]
-    event_type_uri = _env_value(booking_cfg.get("calendly_event_type_env", ""))
-    if not event_type_uri:
-        raise RuntimeError(
-            f"Falta configurar el event type de Calendly para {cliente_id}."
-        )
-
-    start_local, _ = _booking_start_end(
-        cliente_id,
-        booking_payload["fecha"],
-        booking_payload["hora"],
-    )
-    request_body: Dict[str, Any] = {
-        "event_type": event_type_uri,
-        "start_time": _to_utc_iso(start_local),
-        "invitee": {
-            "name": booking_payload["nombre"],
-            "email": booking_payload["email"],
-            "timezone": booking_cfg["timezone"],
-        },
-        "tracking": {
-            "utm_source": "vantelia_widget",
-            "utm_campaign": cliente_id,
-        },
-    }
-
-    if booking_cfg.get("calendly_location_kind"):
-        request_body["location"] = {
-            "kind": booking_cfg["calendly_location_kind"],
-        }
-        if booking_cfg.get("calendly_location_value"):
-            request_body["location"]["location"] = booking_cfg["calendly_location_value"]
-
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.post(
-            "https://api.calendly.com/invitees",
-            headers=_calendly_headers(),
-            json=request_body,
-        )
-        response.raise_for_status()
-        payload = response.json()
-
-    event_uri = payload.get("event", "")
-    cancel_url = payload.get("cancel_url", "") or payload.get("reschedule_url", "")
-    provider_booking_id = event_uri.rsplit("/", 1)[-1] if event_uri else ""
-    return ProviderBookingResult(
-        success=True,
-        status=payload.get("status", "confirmed"),
-        provider_name="calendly",
-        provider_booking_id=provider_booking_id,
-        provider_booking_url=cancel_url,
-        message="Reserva confirmada en Calendly.",
-    )
-
-
-async def _create_google_calendar_booking(
-    cliente_id: str,
-    booking_payload: Dict[str, Any],
-) -> ProviderBookingResult:
-    config = _get_client_config(cliente_id)
-    booking_cfg = config["booking"]
-    calendar_id = _resolve_direct_or_env(
-        booking_cfg.get("google_calendar_id", ""),
-        booking_cfg.get("google_calendar_id_env", ""),
-    )
-    if not calendar_id:
-        raise RuntimeError(
-            f"Falta configurar el calendar ID de Google para {cliente_id}. Puedes indicarlo directamente en el panel admin."
-        )
-
-    token = _google_calendar_access_token(
-        booking_cfg.get("google_service_account_path", ""),
-        booking_cfg.get("google_service_account_env", ""),
-    )
-    start_local, end_local = _booking_start_end(
-        cliente_id,
-        booking_payload["fecha"],
-        booking_payload["hora"],
-    )
-
-    description_parts = [
-        f"Reserva creada desde Vantelia para {config['nombre']}.",
-        f"Cliente: {booking_payload['nombre']}",
-        f"Email: {booking_payload['email']}",
-    ]
-    if booking_payload.get("telefono"):
-        description_parts.append(f"Telefono: {booking_payload['telefono']}")
-    if booking_payload.get("servicio"):
-        description_parts.append(f"Servicio: {booking_payload['servicio']}")
-    if booking_payload.get("notas"):
-        description_parts.append(f"Notas:\n{booking_payload['notas']}")
-
-    summary = booking_payload.get("servicio") or f"Cita con {booking_payload['nombre']}"
-    event_body = {
-        "summary": f"{config['nombre']} - {summary}",
-        "description": "\n\n".join(description_parts),
-        "start": {
-            "dateTime": start_local.isoformat(),
-            "timeZone": booking_cfg["timezone"],
-        },
-        "end": {
-            "dateTime": end_local.isoformat(),
-            "timeZone": booking_cfg["timezone"],
-        },
-        "extendedProperties": {
-            "private": {
-                "source": "vantelia_widget",
-                "cliente_id": cliente_id,
-            }
-        },
-    }
-
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.post(
-            f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-            json=event_body,
-        )
-        if response.is_error:
-            detail = _google_calendar_error_detail(response)
-            raise RuntimeError(
-                f"Google Calendar ha rechazado la cita ({response.status_code}). Detalle: {detail}"
-            )
-        payload = response.json()
-
-    return ProviderBookingResult(
-        success=True,
-        status=payload.get("status", "confirmed"),
-        provider_name="google_calendar",
-        provider_booking_id=payload.get("id", ""),
-        provider_booking_url=payload.get("htmlLink", ""),
-        message="Reserva confirmada en Google Calendar.",
-    )
-
-
-async def _cancel_google_calendar_booking(cliente_id: str, booking_row: sqlite3.Row) -> None:
-    config = _get_client_config(cliente_id)
-    booking_cfg = config["booking"]
-    calendar_id = _resolve_direct_or_env(
-        booking_cfg.get("google_calendar_id", ""),
-        booking_cfg.get("google_calendar_id_env", ""),
-    )
-    event_id = booking_row["provider_booking_id"]
-    if not calendar_id or not event_id:
-        return
-
-    token = _google_calendar_access_token(
-        booking_cfg.get("google_service_account_path", ""),
-        booking_cfg.get("google_service_account_env", ""),
-    )
-
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.delete(
-            f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{event_id}",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/json",
-            },
-        )
-        if response.status_code not in {200, 204, 404, 410} and response.is_error:
-            detail = _google_calendar_error_detail(response)
-            raise RuntimeError(
-                f"Google Calendar no ha podido cancelar la cita ({response.status_code}). Detalle: {detail}"
-            )
-
-
-async def _reschedule_google_calendar_booking(
-    cliente_id: str,
-    booking_row: sqlite3.Row,
-    *,
-    fecha: str,
-    hora: str,
-) -> ProviderBookingResult:
-    config = _get_client_config(cliente_id)
-    booking_cfg = config["booking"]
-    calendar_id = _resolve_direct_or_env(
-        booking_cfg.get("google_calendar_id", ""),
-        booking_cfg.get("google_calendar_id_env", ""),
-    )
-    event_id = booking_row["provider_booking_id"]
-    if not calendar_id or not event_id:
-        raise RuntimeError("No se ha encontrado el evento de Google Calendar que hay que reprogramar.")
-
-    token = _google_calendar_access_token(
-        booking_cfg.get("google_service_account_path", ""),
-        booking_cfg.get("google_service_account_env", ""),
-    )
-    start_local, end_local = _booking_start_end(cliente_id, fecha, hora)
-
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.patch(
-            f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{event_id}",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-            json={
-                "start": {
-                    "dateTime": start_local.isoformat(),
-                    "timeZone": booking_cfg["timezone"],
-                },
-                "end": {
-                    "dateTime": end_local.isoformat(),
-                    "timeZone": booking_cfg["timezone"],
-                },
-            },
-        )
-        if response.is_error:
-            detail = _google_calendar_error_detail(response)
-            raise RuntimeError(
-                f"Google Calendar no ha podido reprogramar la cita ({response.status_code}). Detalle: {detail}"
-            )
-        payload = response.json()
-
-    return ProviderBookingResult(
-        success=True,
-        status=payload.get("status", "confirmed"),
-        provider_name="google_calendar",
-        provider_booking_id=payload.get("id", event_id),
-        provider_booking_url=payload.get("htmlLink", booking_row["provider_booking_url"] or ""),
-        message="Reserva reprogramada en Google Calendar.",
-    )
-
-
 def _validate_booking_window(cliente_id: str, selected_day: datetime) -> None:
     config = _get_client_config(cliente_id)
     timezone_name = config["booking"]["timezone"]
@@ -3153,13 +4071,13 @@ def _validate_booking_window(cliente_id: str, selected_day: datetime) -> None:
         )
 
 
-def _build_slots_for_day(cliente_id: str, fecha: str) -> List[str]:
+def _build_slots_for_day(cliente_id: str, fecha: str, *, employee_id: str = "") -> List[str]:
     config = _get_client_config(cliente_id)
-    booking_cfg = config["booking"]
-
-    if not booking_cfg["enabled"]:
+    if not config["booking"]["enabled"]:
         return []
 
+    employee_row = _resolve_employee_for_booking(cliente_id, employee_id)
+    booking_cfg = _employee_schedule_from_row(employee_row)
     selected_day = _parse_date(fecha)
     _validate_booking_window(cliente_id, selected_day)
     if selected_day.weekday() in booking_cfg["closed_weekdays"]:
@@ -3181,94 +4099,161 @@ def _build_slots_for_day(cliente_id: str, fecha: str) -> List[str]:
     return slots
 
 
-async def _available_slots_for_day(cliente_id: str, fecha: str) -> List[str]:
-    config = _get_client_config(cliente_id)
-    provider = _get_booking_provider(config)
-
-    if provider == "calendly":
-        return await _calendly_available_slots(cliente_id, fecha)
-
-    return _build_slots_for_day(cliente_id, fecha)
+async def _available_slots_for_day(cliente_id: str, fecha: str, *, employee_id: str = "") -> List[str]:
+    return _build_slots_for_day(cliente_id, fecha, employee_id=employee_id)
 
 
-def _booked_slots(cliente_id: str, fecha: str, *, exclude_booking_id: str = "") -> Set[str]:
+def _booked_slots(
+    cliente_id: str,
+    fecha: str,
+    *,
+    employee_id: str = "",
+    exclude_booking_id: str = "",
+) -> Set[str]:
     with _get_db_connection() as connection:
+        clauses = [
+            "cliente_id = ?",
+            "booking_date = ?",
+            "status IN ('confirmed', 'pending_review')",
+        ]
+        params: List[Any] = [cliente_id, fecha]
+        if employee_id:
+            clauses.append("employee_id = ?")
+            params.append(employee_id)
         if exclude_booking_id:
-            rows = connection.execute(
-                """
-                SELECT booking_time
-                FROM bookings
-                WHERE cliente_id = ?
-                  AND booking_date = ?
-                  AND status IN ('confirmed', 'pending_review')
-                  AND id <> ?
-                """,
-                (cliente_id, fecha, exclude_booking_id),
-            ).fetchall()
-        else:
-            rows = connection.execute(
-                """
-                SELECT booking_time
-                FROM bookings
-                WHERE cliente_id = ?
-                  AND booking_date = ?
-                  AND status IN ('confirmed', 'pending_review')
-                """,
-                (cliente_id, fecha),
-            ).fetchall()
+            clauses.append("id <> ?")
+            params.append(exclude_booking_id)
+        rows = connection.execute(
+            "SELECT booking_time FROM bookings WHERE " + " AND ".join(clauses),
+            tuple(params),
+        ).fetchall()
 
     occupied = {row["booking_time"] for row in rows}
 
-    if CALENDLY_API_TOKEN:
-        occupied.update(_booked_slots_from_calendly(cliente_id, fecha))
-
     return occupied
 
 
-def _booked_slots_from_calendly(cliente_id: str, fecha: str) -> Set[str]:
-    config = _get_client_config(cliente_id)
-    booking_cfg = config["booking"]
-    calendly_user_env = booking_cfg.get("calendly_user_env", "")
-    calendly_user_uri = os.getenv(calendly_user_env, "").strip() if calendly_user_env else ""
+def _active_booking_rows_for_day(cliente_id: str, fecha: str, *, employee_id: str = "") -> List[sqlite3.Row]:
+    with _get_db_connection() as connection:
+        clauses = [
+            "cliente_id = ?",
+            "booking_date = ?",
+            "status IN ('confirmed', 'pending_review')",
+        ]
+        params: List[Any] = [cliente_id, fecha]
+        if employee_id:
+            clauses.append("employee_id = ?")
+            params.append(employee_id)
+        return connection.execute(
+            "SELECT * FROM bookings WHERE " + " AND ".join(clauses) + " ORDER BY booking_time ASC",
+            tuple(params),
+        ).fetchall()
 
-    if not calendly_user_uri:
-        return set()
 
-    timezone_name = booking_cfg["timezone"]
+def _booking_conflict_message(rows: List[sqlite3.Row], prefix: str) -> str:
+    examples = ", ".join(
+        f"{row['booking_date']} {row['booking_time']} ({row['nombre'] or row['email'] or row['id']})"
+        for row in rows[:3]
+    )
+    suffix = f" Citas afectadas: {examples}." if examples else ""
+    if len(rows) > 3:
+        suffix += f" Y {len(rows) - 3} mas."
+    return f"{prefix}{suffix}"
+
+
+def _booking_conflicts_for_block(
+    cliente_id: str,
+    fecha: str,
+    start_time: str,
+    end_time: str,
+    *,
+    employee_id: str = "",
+) -> List[sqlite3.Row]:
+    timezone_name = (
+        _employee_schedule_from_row(_resolve_employee_for_booking(cliente_id, employee_id, require_active=False))["timezone"]
+        if employee_id
+        else _get_client_config(cliente_id)["booking"]["timezone"]
+    )
     tzinfo = ZoneInfo(timezone_name)
-    start_of_day = datetime.strptime(fecha, "%Y-%m-%d").replace(tzinfo=tzinfo)
-    end_of_day = start_of_day + timedelta(days=1)
-
-    occupied: Set[str] = set()
-
-    try:
-        response = httpx.get(
-            "https://api.calendly.com/scheduled_events",
-            headers={"Authorization": f"Bearer {CALENDLY_API_TOKEN}"},
-            params={
-                "user": calendly_user_uri,
-                "min_start_time": start_of_day.astimezone(ZoneInfo("UTC")).isoformat(),
-                "max_start_time": end_of_day.astimezone(ZoneInfo("UTC")).isoformat(),
-                "status": "active",
-            },
-            timeout=10.0,
+    block_start = datetime.strptime(f"{fecha} {start_time}", "%Y-%m-%d %H:%M").replace(tzinfo=tzinfo)
+    block_end = datetime.strptime(f"{fecha} {end_time}", "%Y-%m-%d %H:%M").replace(tzinfo=tzinfo)
+    conflicts: List[sqlite3.Row] = []
+    for row in _active_booking_rows_for_day(cliente_id, fecha, employee_id=employee_id):
+        booking_start, booking_end = _booking_start_end(
+            cliente_id,
+            row["booking_date"],
+            row["booking_time"],
+            employee_id=row["employee_id"] or employee_id,
         )
-        response.raise_for_status()
-        for event in response.json().get("collection", []):
-            start_time = event.get("start_time")
-            if not start_time:
-                continue
-            event_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00")).astimezone(tzinfo)
-            occupied.add(event_dt.strftime("%H:%M"))
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Calendly no disponible para %s: %s", cliente_id, exc)
-
-    return occupied
+        if booking_start < block_end and booking_end > block_start:
+            conflicts.append(row)
+    return conflicts
 
 
-async def _booking_slot_available(cliente_id: str, fecha: str, hora: str) -> bool:
-    return hora in await _available_slots_for_day(cliente_id, fecha) and hora not in _booked_slots(
-        cliente_id, fecha
+def _booking_conflicts_for_closed_weekdays(
+    cliente_id: str,
+    weekdays: Set[int],
+    *,
+    employee_id: str = "",
+) -> List[sqlite3.Row]:
+    if not weekdays:
+        return []
+    today = _utc_now().date().isoformat()
+    with _get_db_connection() as connection:
+        clauses = [
+            "cliente_id = ?",
+            "booking_date >= ?",
+            "status IN ('confirmed', 'pending_review')",
+        ]
+        params: List[Any] = [cliente_id, today]
+        if employee_id:
+            clauses.append("employee_id = ?")
+            params.append(employee_id)
+        rows = connection.execute(
+            "SELECT * FROM bookings WHERE " + " AND ".join(clauses) + " ORDER BY booking_date ASC, booking_time ASC",
+            tuple(params),
+        ).fetchall()
+    conflicts: List[sqlite3.Row] = []
+    for row in rows:
+        try:
+            weekday = datetime.strptime(row["booking_date"], "%Y-%m-%d").weekday()
+        except ValueError:
+            continue
+        if weekday in weekdays:
+            conflicts.append(row)
+    return conflicts
+
+
+def _blocked_slots(cliente_id: str, fecha: str, *, employee_id: str = "") -> Set[str]:
+    available_slots = _build_slots_for_day(cliente_id, fecha, employee_id=employee_id)
+    if not available_slots:
+        return set()
+    employee_row = _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
+    slot_minutes = int(_employee_schedule_from_row(employee_row)["slot_minutes"])
+    blocked: Set[str] = set()
+    rows = _list_agenda_blocks(
+        cliente_id,
+        employee_id=employee_id or "",
+        include_general=bool(employee_id),
+        date_from=fecha,
+        date_to=fecha,
+    )
+    for row in rows:
+        block_start = _parse_time(row["start_time"])
+        block_end = _parse_time(row["end_time"])
+        for slot in available_slots:
+            slot_start = _parse_time(slot)
+            slot_end = slot_start + timedelta(minutes=slot_minutes)
+            if slot_start < block_end and slot_end > block_start:
+                blocked.add(slot)
+    return blocked
+
+
+async def _booking_slot_available(cliente_id: str, fecha: str, hora: str, *, employee_id: str = "") -> bool:
+    return (
+        hora in await _available_slots_for_day(cliente_id, fecha, employee_id=employee_id)
+        and hora not in _booked_slots(cliente_id, fecha, employee_id=employee_id)
+        and hora not in _blocked_slots(cliente_id, fecha, employee_id=employee_id)
     )
 
 
@@ -3277,24 +4262,25 @@ async def _booking_slot_available_for_reschedule(
     fecha: str,
     hora: str,
     *,
+    employee_id: str = "",
     exclude_booking_id: str,
 ) -> bool:
-    return hora in await _available_slots_for_day(cliente_id, fecha) and hora not in _booked_slots(
+    booked = _booked_slots(
         cliente_id,
         fecha,
+        employee_id=employee_id,
         exclude_booking_id=exclude_booking_id,
+    )
+    return (
+        hora in await _available_slots_for_day(cliente_id, fecha, employee_id=employee_id)
+        and hora not in booked
+        and hora not in _blocked_slots(cliente_id, fecha, employee_id=employee_id)
     )
 
 
 async def _cancel_provider_booking(booking_row: sqlite3.Row) -> None:
-    provider_name = booking_row["provider_name"]
-    if provider_name == "google_calendar":
-        await _cancel_google_calendar_booking(booking_row["cliente_id"], booking_row)
-        return
-    if provider_name == "calendly":
-        raise RuntimeError(
-            "Las citas de Calendly deben cancelarse desde la URL del proveedor o desde Calendly."
-        )
+    _ = booking_row
+    return None
 
 
 async def _reschedule_provider_booking(
@@ -3303,25 +4289,13 @@ async def _reschedule_provider_booking(
     fecha: str,
     hora: str,
 ) -> ProviderBookingResult:
-    provider_name = booking_row["provider_name"]
-    if provider_name == "google_calendar":
-        return await _reschedule_google_calendar_booking(
-            booking_row["cliente_id"],
-            booking_row,
-            fecha=fecha,
-            hora=hora,
-        )
-    if provider_name == "calendly":
-        raise RuntimeError(
-            "Las citas de Calendly deben reprogramarse desde la URL del proveedor o desde Calendly."
-        )
-
+    _ = (fecha, hora)
     return ProviderBookingResult(
         success=True,
         status="confirmed",
-        provider_name=provider_name or "internal",
-        provider_booking_id=booking_row["provider_booking_id"] or "",
-        provider_booking_url=booking_row["provider_booking_url"] or "",
+        provider_name="internal",
+        provider_booking_id="",
+        provider_booking_url="",
         message="Reserva reprogramada internamente.",
     )
 
@@ -3331,7 +4305,7 @@ def _store_booking(record: Dict[str, Any]) -> None:
         connection.execute(
             """
             INSERT INTO bookings (
-                id, cliente_id, nombre, email, telefono, servicio,
+                id, cliente_id, employee_id, employee_name, nombre, email, telefono, servicio,
                 booking_date, booking_time, notas, status,
                 provider_name, provider_status, provider_booking_id, provider_booking_url,
                 manage_token, timezone, start_at, end_at,
@@ -3340,11 +4314,13 @@ def _store_booking(record: Dict[str, Any]) -> None:
                 customer_email_status, customer_email_last_error,
                 source, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record["id"],
                 record["cliente_id"],
+                record["employee_id"],
+                record["employee_name"],
                 record["nombre"],
                 record["email"],
                 record["telefono"],
@@ -3420,10 +4396,13 @@ def _booking_public_detail_from_row(
         booking_id=data["booking_id"],
         cliente_id=data["cliente_id"],
         empresa=data["empresa"],
+        employee_id=data["employee_id"],
+        employee_name=data["employee_name"],
         nombre=data["nombre"],
         email=data["email"],
         telefono=data["telefono"],
         servicio=data["servicio"],
+        notas=data["notas"],
         fecha=data["fecha"],
         hora=data["hora"],
         timezone=data["timezone"],
@@ -3433,6 +4412,10 @@ def _booking_public_detail_from_row(
         manage_url=data["manage_url"],
         contact_email=data["contact_email"],
         contact_phone=data["contact_phone"],
+        available_services=_services_for_employee(
+            data["cliente_id"],
+            _get_employee_row(data["employee_id"], cliente_id=data["cliente_id"]) if data["employee_id"] else None,
+        ),
     )
 
 
@@ -3445,6 +4428,8 @@ def _booking_admin_summary_from_row(
         booking_id=data["booking_id"],
         cliente_id=data["cliente_id"],
         empresa=data["empresa"],
+        employee_id=data["employee_id"],
+        employee_name=data["employee_name"],
         nombre=data["nombre"],
         email=data["email"],
         telefono=data["telefono"],
@@ -3481,6 +4466,8 @@ def _portal_booking_summary_from_row(
     return PortalBookingSummary(
         booking_id=data["booking_id"],
         empresa=data["empresa"],
+        employee_id=data["employee_id"],
+        employee_name=data["employee_name"],
         nombre=data["nombre"],
         email=data["email"],
         servicio=data["servicio"],
@@ -3490,7 +4477,7 @@ def _portal_booking_summary_from_row(
         estado=data["estado"],
         provider_name=data["provider_name"],
         provider_booking_url=data["provider_booking_url"],
-        manage_url=data["manage_url"],
+        manage_url=_booking_row_manage_url(row, request, viewer="client"),
         contact_email=data["contact_email"],
         contact_phone=data["contact_phone"],
         start_at=data["start_at"],
@@ -3502,6 +4489,7 @@ def _portal_booking_summary_from_row(
 def _list_booking_rows(
     *,
     cliente_id: str = "",
+    employee_id: str = "",
     status_filter: str = "",
     search: str = "",
     date_from: str = "",
@@ -3516,6 +4504,9 @@ def _list_booking_rows(
     if cliente_id:
         clauses.append("cliente_id = ?")
         params.append(cliente_id)
+    if employee_id:
+        clauses.append("employee_id = ?")
+        params.append(employee_id)
     if status_filter:
         clauses.append("status = ?")
         params.append(status_filter)
@@ -3530,10 +4521,10 @@ def _list_booking_rows(
         clauses.append(
             "("
             "id LIKE ? OR cliente_id LIKE ? OR nombre LIKE ? OR email LIKE ? OR telefono LIKE ? "
-            "OR servicio LIKE ? OR provider_booking_id LIKE ?"
+            "OR servicio LIKE ? OR provider_booking_id LIKE ? OR employee_name LIKE ?"
             ")"
         )
-        params.extend([like_search] * 7)
+        params.extend([like_search] * 8)
     now_iso = _utc_now_iso()
     if scope == "upcoming":
         clauses.append(
@@ -3555,11 +4546,17 @@ def _list_booking_rows(
         sql += " WHERE " + " AND ".join(clauses)
     count_sql = sql.replace("SELECT *", "SELECT COUNT(*)", 1)
     if scope == "upcoming":
-        sql += " ORDER BY CASE WHEN start_at = '' THEN created_at ELSE start_at END ASC"
+        sql += (
+            " ORDER BY booking_date ASC, booking_time ASC, "
+            "CASE WHEN start_at = '' THEN created_at ELSE start_at END ASC"
+        )
     elif scope == "history":
-        sql += " ORDER BY CASE WHEN start_at = '' THEN created_at ELSE start_at END DESC"
+        sql += (
+            " ORDER BY booking_date DESC, booking_time DESC, "
+            "CASE WHEN start_at = '' THEN created_at ELSE start_at END DESC"
+        )
     else:
-        sql += " ORDER BY created_at DESC"
+        sql += " ORDER BY booking_date ASC, booking_time ASC, created_at ASC"
     sql += " LIMIT ? OFFSET ?"
     params.extend([limit, offset])
     with _get_db_connection() as connection:
@@ -3575,6 +4572,15 @@ def _portal_stats_for_user(user: sqlite3.Row) -> Dict[str, Any]:
             pending = connection.execute(
                 "SELECT COUNT(*) FROM bookings WHERE status = 'pending_review'"
             ).fetchone()[0]
+            upcoming = connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM bookings
+                WHERE status = 'confirmed'
+                  AND (start_at = '' OR start_at >= ?)
+                """,
+                (_utc_now_iso(),),
+            ).fetchone()[0]
             total_users = connection.execute("SELECT COUNT(*) FROM users WHERE is_active = 1").fetchone()[0]
             client_users = connection.execute(
                 "SELECT COUNT(*) FROM users WHERE role = 'client' AND is_active = 1"
@@ -3582,6 +4588,7 @@ def _portal_stats_for_user(user: sqlite3.Row) -> Dict[str, Any]:
             return {
                 "total_bookings": total_bookings,
                 "pending_review": pending,
+                "upcoming": upcoming,
                 "active_users": total_users,
                 "client_users": client_users,
             }
@@ -3620,6 +4627,26 @@ def _portal_stats_for_user(user: sqlite3.Row) -> Dict[str, Any]:
         }
 
 
+def _portal_today_dashboard(
+    cliente_id: str,
+    request: Optional[Request] = None,
+) -> Tuple[List[PortalBookingSummary], List[PortalAgendaBlock]]:
+    today = datetime.now(ZoneInfo(_get_client_config(cliente_id)["booking"]["timezone"])).date().isoformat()
+    rows, _ = _list_booking_rows(
+        cliente_id=cliente_id,
+        date_from=today,
+        date_to=today,
+        limit=30,
+        scope="all",
+    )
+    today_bookings = [_portal_booking_summary_from_row(row, request) for row in rows]
+    blocks = [
+        _serialize_agenda_block(row)
+        for row in _list_agenda_blocks(cliente_id, date_from=today, date_to=today)
+    ]
+    return today_bookings, blocks
+
+
 def _load_booking_or_404(booking_id: str) -> sqlite3.Row:
     row = _get_booking_row_by_id(booking_id)
     if not row:
@@ -3634,23 +4661,178 @@ def _load_booking_by_token_or_404(manage_token: str) -> sqlite3.Row:
     return row
 
 
-def _booking_manage_page(booking: BookingDetailPublic) -> str:
+def _booking_update_payload_from_reschedule(row: sqlite3.Row, data: BookingReschedulePayload) -> BookingUpdatePayload:
+    return BookingUpdatePayload(
+        nombre=row["nombre"],
+        email=row["email"],
+        telefono=row["telefono"] or "",
+        servicio=row["servicio"] or "",
+        employee_id=data.employee_id or (row["employee_id"] or ""),
+        fecha=data.fecha,
+        hora=data.hora,
+        notas=row["notas"] or "",
+    )
+
+
+async def _update_booking_details(
+    booking_row: sqlite3.Row,
+    data: BookingUpdatePayload,
+    request: Request,
+    *,
+    source: str,
+    audit_payload: Optional[Dict[str, Any]] = None,
+) -> BookingActionResponse:
+    if booking_row["status"] == "cancelled":
+        raise HTTPException(status_code=409, detail="No se puede modificar una cita cancelada.")
+    if booking_row["status"] == "completed":
+        raise HTTPException(status_code=409, detail="No se puede modificar una cita completada.")
+
+    booking_date_dt = _parse_date(data.fecha)
+    _validate_booking_window(booking_row["cliente_id"], booking_date_dt)
+    booking_date = booking_date_dt.strftime("%Y-%m-%d")
+    booking_time = _parse_time(data.hora).strftime("%H:%M")
+    target_employee = _resolve_employee_for_booking(
+        booking_row["cliente_id"],
+        data.employee_id or (booking_row["employee_id"] or ""),
+        require_active=False,
+    )
+    if not _service_name_allowed_for_employee(booking_row["cliente_id"], target_employee, data.servicio):
+        raise HTTPException(
+            status_code=400,
+            detail="El servicio seleccionado no esta disponible para ese profesional.",
+        )
+    employee_changed = (target_employee["id"] or "") != (booking_row["employee_id"] or "")
+    slot_changed = (
+        booking_date != booking_row["booking_date"]
+        or booking_time != booking_row["booking_time"]
+        or employee_changed
+    )
+
+    if slot_changed and not await _booking_slot_available_for_reschedule(
+        booking_row["cliente_id"],
+        booking_date,
+        booking_time,
+        employee_id=target_employee["id"],
+        exclude_booking_id=booking_row["id"],
+    ):
+        raise HTTPException(status_code=409, detail="Ese horario ya no esta disponible. Elige otro tramo.")
+
+    start_local, end_local = _booking_start_end(
+        booking_row["cliente_id"],
+        booking_date,
+        booking_time,
+        employee_id=target_employee["id"],
+    )
+    provider_result = (
+        await _reschedule_provider_booking(booking_row, fecha=booking_date, hora=booking_time)
+        if slot_changed
+        else ProviderBookingResult(
+            success=True,
+            status=booking_row["provider_status"] or "confirmed",
+            provider_name=booking_row["provider_name"] or "internal",
+            provider_booking_id=booking_row["provider_booking_id"] or "",
+            provider_booking_url=booking_row["provider_booking_url"] or "",
+            message="Reserva actualizada internamente.",
+        )
+    )
+
+    updates: Dict[str, Any] = {
+        "nombre": _sanitize_text(data.nombre),
+        "email": str(data.email),
+        "telefono": _sanitize_text(data.telefono),
+        "servicio": _sanitize_text(data.servicio),
+        "notas": _sanitize_text(data.notas, allow_multiline=True),
+        "employee_id": target_employee["id"],
+        "employee_name": target_employee["name"],
+        "booking_date": booking_date,
+        "booking_time": booking_time,
+        "start_at": _to_utc_iso(start_local),
+        "end_at": _to_utc_iso(end_local),
+        "status": "confirmed",
+        "provider_status": provider_result.status,
+        "provider_booking_id": provider_result.provider_booking_id,
+        "provider_booking_url": provider_result.provider_booking_url,
+    }
+    if slot_changed:
+        updates.update(
+            {
+                "rescheduled_at": _utc_now_iso(),
+                "reminder_24h_sent_at": "",
+                "reminder_2h_sent_at": "",
+            }
+        )
+
+    _update_booking_record(booking_row["id"], **updates)
+    event_type = "booking_rescheduled" if slot_changed else "booking_updated"
+    _record_booking_audit(
+        booking_row["id"],
+        booking_row["cliente_id"],
+        event_type,
+        {
+            "source": source,
+            "fecha": booking_date,
+            "hora": booking_time,
+            "employee_id": target_employee["id"],
+            "employee_name": target_employee["name"],
+            **(audit_payload or {}),
+        },
+    )
+    refreshed = _load_booking_or_404(booking_row["id"])
+    try:
+        await _send_booking_email_by_kind(refreshed, "rescheduled" if slot_changed else "confirmed", request)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("No se ha podido enviar el email de actualizacion %s: %s", refreshed["id"], exc)
+
+    return BookingActionResponse(
+        ok=True,
+        booking_id=refreshed["id"],
+        estado=refreshed["status"],
+        mensaje="La cita se ha actualizado correctamente.",
+        employee_id=refreshed["employee_id"] or "",
+        employee_name=refreshed["employee_name"] or "",
+        manage_url=_booking_row_manage_url(refreshed, request),
+        provider_booking_url=refreshed["provider_booking_url"] or "",
+    )
+
+
+def _booking_manage_page(booking: BookingDetailPublic, *, viewer: str = "customer") -> str:
     serialized = json.dumps(booking.model_dump(), ensure_ascii=False)
     logo_url = escape(_brand_asset_public_path("Logo_1_sin_resplandor.png"))
     favicon_url = escape(_brand_asset_public_path("favicon.png"))
     fondo_url = escape(_brand_asset_public_path("Fondo_Web.png"))
     provider_note = ""
-    if booking.provider_name == "calendly" and booking.provider_booking_url:
-        provider_note = (
-            f'<p>Esta cita se gestiona en Calendly. '
-            f'<a href="{escape(booking.provider_booking_url)}" target="_blank" rel="noreferrer">Abrir gestion externa</a></p>'
-        )
+    is_client_viewer = viewer == "client"
+    company_name = escape(booking.empresa)
+    page_title = "Gestionar cita | Vantelia" if is_client_viewer else f"Gestionar cita | {company_name}"
+    hero_logo_html = f'<img src="{logo_url}" alt="Vantelia" />' if is_client_viewer else ""
+    hero_title = "Gestionar cita" if is_client_viewer else f"Gestiona tu cita con {company_name}"
+    hero_subtitle = company_name if is_client_viewer else "Consulta los detalles y gestiona la reserva de forma sencilla."
+    action_intro = (
+        "Elige la accion que necesitas sobre la cita de tu cliente. Puedes cambiar la fecha, actualizar los datos del asistente o cancelarla. El email del asistente no se puede modificar desde este enlace."
+        if is_client_viewer
+        else "Elige la accion que necesitas. Puedes cambiar la fecha, actualizar los datos del asistente o cancelar la reserva. El email del asistente no se puede modificar desde este enlace."
+    )
+    cancel_helper = (
+        "Quieres cancelar esta cita?"
+        if is_client_viewer
+        else "Si ya no vais a asistir, puedes cancelar la reserva desde aqui. Si prefieres otra fecha, usa antes la seccion de cambio de horario."
+    )
+    cancel_card_copy = (
+        "Confirma la cancelacion si finalmente no se va a atender esta cita."
+        if is_client_viewer
+        else "Confirma la cancelacion si ya no vais a asistir."
+    )
+    back_button_html = (
+        '<a class="button-link secondary" href="/portal">Volver al panel</a>'
+        if is_client_viewer
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Gestionar cita | Vantelia</title>
+  <title>{page_title}</title>
   <link rel="icon" type="image/png" href="{favicon_url}" />
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Poppins:wght@400;500;600;700&display=swap');
@@ -3686,52 +4868,102 @@ def _booking_manage_page(booking: BookingDetailPublic) -> str:
     .field {{ background:rgba(8,20,48,.92); border:1px solid rgba(184,192,204,.14); border-radius:8px; padding:12px; }}
     .field strong {{ display:block; font-size:12px; text-transform:uppercase; color:#8dcfe0; margin-bottom:6px; }}
     .actions {{ display:flex; gap:12px; flex-wrap:wrap; margin-top:20px; }}
-    button {{ border:none; border-radius:8px; padding:12px 18px; font-weight:700; cursor:pointer; font-family:var(--font-body); }}
+    button, .button-link {{ border:none; border-radius:8px; padding:12px 18px; font-weight:700; cursor:pointer; font-family:var(--font-body); }}
+    .button-link {{ display:inline-block; text-decoration:none; box-sizing:border-box; }}
     .primary {{ background:linear-gradient(135deg, var(--accent), #008bad); color:#fff; }}
     .secondary {{ background:rgba(184,192,204,.12); color:var(--ink); }}
     .danger {{ background:var(--danger); color:#fff; }}
     .panel {{ margin-top:24px; padding-top:20px; border-top:1px solid rgba(184,192,204,.14); }}
     .status {{ margin-top:16px; min-height:22px; font-weight:600; }}
-    input {{ width:100%; box-sizing:border-box; border:1px solid rgba(184,192,204,.16); border-radius:8px; padding:12px; font-family:var(--font-body); background:rgba(8,20,48,.92); color:var(--ink); }}
+    label {{ display:grid; gap:8px; font-weight:700; }}
+    input, select, textarea {{ width:100%; box-sizing:border-box; border:1px solid rgba(184,192,204,.16); border-radius:8px; padding:12px; font-family:var(--font-body); background:rgba(8,20,48,.92); color:var(--ink); outline:none; }}
+    textarea {{ min-height:92px; resize:vertical; line-height:1.5; }}
+    input:focus, select:focus, textarea:focus {{ border-color:rgba(0,177,217,.46); box-shadow:0 0 0 4px rgba(0,177,217,.12); }}
     .slot-grid {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(96px, 1fr)); gap:10px; margin-top:12px; }}
     .slot-grid button {{ background:rgba(184,192,204,.12); color:var(--ink); }}
     .slot-grid button.selected {{ background:linear-gradient(135deg, var(--accent), #008bad); color:#fff; }}
     .slot-grid button:disabled {{ cursor:not-allowed; opacity:.45; }}
     .notice {{ border:1px solid var(--line); border-radius:8px; padding:12px; color:var(--soft); background:rgba(255,255,255,.03); }}
-    @media (max-width: 720px) {{ .grid {{ grid-template-columns:1fr; }} body {{ padding:16px; }} }}
+    input[readonly] {{ opacity:.82; cursor:not-allowed; }}
+    .action-chooser {{ display:grid; gap:14px; margin:22px 0 6px; }}
+    .action-chooser-grid {{ display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px; }}
+    .action-card {{ border:1px solid var(--line); border-radius:8px; background:rgba(8,20,48,.92); padding:16px; text-align:left; color:var(--ink); }}
+    .action-card.active {{ border-color:rgba(0,177,217,.48); background:rgba(0,177,217,.12); box-shadow:0 0 0 1px rgba(0,177,217,.18) inset; }}
+    .action-card strong {{ display:block; margin-bottom:6px; font-size:1rem; }}
+    .action-card span {{ color:var(--soft); line-height:1.6; font-weight:500; }}
+    .section-card {{ margin-top:18px; padding:18px; border:1px solid var(--line); border-radius:8px; background:rgba(255,255,255,.03); }}
+    .section-card {{ display:none; }}
+    .section-card.active {{ display:block; }}
+    .section-card h2 {{ margin:0 0 6px; font-size:1.1rem; font-family:var(--font-title); }}
+    .section-card .muted {{ margin-bottom:8px; }}
+    .danger-note {{ border-left:3px solid rgba(180,35,24,.65); padding-left:12px; }}
+    .hidden {{ display:none !important; }}
+    @media (max-width: 720px) {{ .grid, .action-chooser-grid {{ grid-template-columns:1fr; }} body {{ padding:16px; }} }}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
       <div class="hero">
-        <img src="{logo_url}" alt="Vantelia" />
+        {hero_logo_html}
         <div>
-          <h1>Gestionar cita</h1>
-          <div class="muted">{escape(booking.empresa)}</div>
+          <h1>{hero_title}</h1>
+          <div class="muted">{hero_subtitle}</div>
         </div>
       </div>
       <div class="grid">
-        <div class="field"><strong>Nombre</strong>{escape(booking.nombre)}</div>
-        <div class="field"><strong>Email</strong>{escape(booking.email)}</div>
-        <div class="field"><strong>Servicio</strong>{escape(booking.servicio or "Consulta")}</div>
         <div class="field"><strong>Estado</strong>{escape(booking.estado)}</div>
-        <div class="field"><strong>Fecha</strong>{escape(booking.fecha)}</div>
-        <div class="field"><strong>Hora</strong>{escape(booking.hora)} ({escape(booking.timezone)})</div>
+        <div class="field"><strong>Zona horaria</strong>{escape(booking.timezone)}</div>
       </div>
       {provider_note}
+      <div class="action-chooser">
+        <strong>Que quieres hacer con esta cita?</strong>
+        <div class="muted">{action_intro}</div>
+        <div class="action-chooser-grid">
+          <button class="action-card" type="button" data-panel-target="schedule-section">
+            <strong>Cambiar fecha u hora</strong>
+            <span>Consulta disponibilidad y mueve la cita a otro tramo si sigue libre.</span>
+          </button>
+          <button class="action-card" type="button" data-panel-target="details-section">
+            <strong>Cambiar datos del asistente</strong>
+            <span>Actualiza nombre, telefono, servicio o notas de la persona asistente.</span>
+          </button>
+          <button class="action-card" type="button" data-panel-target="cancel-section">
+            <strong>Cancelar cita</strong>
+            <span>{cancel_card_copy}</span>
+          </button>
+        </div>
+      </div>
       <div class="panel" id="reschedule-panel">
-        <strong>Cambiar cita</strong>
-        <p class="muted">Elige una fecha y selecciona uno de los horarios disponibles. Asi evitamos proponer tramos ya ocupados.</p>
+        <div class="section-card" id="details-section">
+          <h2>Cambiar datos del asistente</h2>
+          <p class="muted">Actualiza los datos de la persona que asistira a la cita. El email se mantiene bloqueado por seguridad.</p>
+        <div class="grid">
+          <label>Nombre<input id="booking-name" type="text" maxlength="80" /></label>
+          <label>Email<input id="booking-email" type="email" maxlength="120" readonly /></label>
+          <label>Telefono<input id="booking-phone" type="text" maxlength="30" /></label>
+          <label>Servicio<select id="booking-service"></select></label>
+        </div>
+        <label>Notas<textarea id="booking-notes" maxlength="500"></textarea></label>
+        </div>
+        <div class="section-card" id="schedule-section">
+          <h2>Cambiar fecha u hora</h2>
+          <p class="muted">Selecciona un nuevo horario. El cambio solo se guardara si el tramo sigue disponible.</p>
         <div class="grid">
           <label>Fecha<input id="reschedule-date" type="date" /></label>
-          <label>Hora seleccionada<input id="reschedule-time" type="time" step="1800" readonly /></label>
+          <label>Hora seleccionada<select id="reschedule-time"></select></label>
         </div>
         <div id="slot-status" class="notice">Selecciona una fecha para cargar disponibilidad.</div>
         <div id="slot-grid" class="slot-grid"></div>
+        </div>
+        <div class="section-card" id="cancel-section">
+          <h2>Cancelar cita</h2>
+          <p class="muted danger-note">{cancel_helper}</p>
+        </div>
         <div class="actions">
-          <button class="primary" id="reschedule-btn" type="button">Guardar nuevo horario</button>
+          <button class="primary" id="save-btn" type="button">Guardar cambios</button>
           <button class="danger" id="cancel-btn" type="button">Cancelar cita</button>
+          {back_button_html}
         </div>
       </div>
       <div class="status" id="status"></div>
@@ -3740,19 +4972,99 @@ def _booking_manage_page(booking: BookingDetailPublic) -> str:
   <script>
     const BOOKING = {serialized};
     const statusEl = document.getElementById("status");
+    const actionChooser = document.querySelector(".action-chooser");
     const reschedulePanel = document.getElementById("reschedule-panel");
+    const saveBtn = document.getElementById("save-btn");
+    const cancelBtn = document.getElementById("cancel-btn");
+    const serviceSelect = document.getElementById("booking-service");
     const slotStatus = document.getElementById("slot-status");
     const slotGrid = document.getElementById("slot-grid");
-    if (BOOKING.provider_name === "calendly" || BOOKING.estado === "cancelled") {{
+    const sectionCards = Array.from(document.querySelectorAll(".section-card"));
+    const chooserButtons = Array.from(document.querySelectorAll("[data-panel-target]"));
+    if (BOOKING.estado === "cancelled" || BOOKING.estado === "completed") {{
+      if (actionChooser) actionChooser.style.display = "none";
       reschedulePanel.style.display = "none";
+      statusEl.textContent = BOOKING.estado === "cancelled"
+        ? "Esta cita ya esta cancelada y no admite cambios desde este enlace."
+        : "Esta cita ya esta completada y no admite cambios desde este enlace.";
     }}
+    function openPanel(panelId) {{
+      sectionCards.forEach((section) => {{
+        section.classList.toggle("active", section.id === panelId);
+      }});
+      chooserButtons.forEach((button) => {{
+        button.classList.toggle("active", button.dataset.panelTarget === panelId);
+      }});
+      if (saveBtn) saveBtn.classList.toggle("hidden", panelId === "cancel-section");
+      if (cancelBtn) cancelBtn.classList.toggle("hidden", panelId !== "cancel-section");
+    }}
+    chooserButtons.forEach((button) => {{
+      button.addEventListener("click", () => openPanel(button.dataset.panelTarget || "details-section"));
+    }});
+    document.getElementById("booking-name").value = BOOKING.nombre || "";
+    document.getElementById("booking-email").value = BOOKING.email || "";
+    document.getElementById("booking-phone").value = BOOKING.telefono || "";
+    document.getElementById("booking-notes").value = BOOKING.notas || "";
     document.getElementById("reschedule-date").value = BOOKING.fecha;
     document.getElementById("reschedule-time").value = BOOKING.hora;
 
-    function selectSlot(button, hora) {{
-      document.querySelectorAll("#slot-grid button").forEach((item) => item.classList.remove("selected"));
-      button.classList.add("selected");
-      document.getElementById("reschedule-time").value = hora;
+    function renderServiceOptions() {{
+      const services = Array.isArray(BOOKING.available_services) ? BOOKING.available_services : [];
+      const currentService = String(BOOKING.servicio || "").trim();
+      serviceSelect.innerHTML = "";
+
+      const seen = new Set();
+      services.forEach((service) => {{
+        const value = String(service?.nombre || "").trim();
+        if (!value || seen.has(value)) return;
+        seen.add(value);
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        option.selected = value === currentService;
+        serviceSelect.appendChild(option);
+      }});
+
+      if (!seen.size || (currentService && !seen.has(currentService))) {{
+        const fallback = document.createElement("option");
+        fallback.value = currentService || "Consulta";
+        fallback.textContent = currentService || "Consulta";
+        fallback.selected = true;
+        serviceSelect.appendChild(fallback);
+      }}
+    }}
+
+    function setTimeOptions(slots, fecha) {{
+      const timeSelect = document.getElementById("reschedule-time");
+      const previousValue = timeSelect.value || (fecha === BOOKING.fecha ? BOOKING.hora : "");
+      const available = slots
+        .filter((slot) => slot.disponible || (fecha === BOOKING.fecha && slot.hora === BOOKING.hora))
+        .map((slot) => String(slot.hora || ""))
+        .filter(Boolean);
+      if (fecha === BOOKING.fecha && BOOKING.hora && !available.includes(BOOKING.hora)) {{
+        available.unshift(BOOKING.hora);
+      }}
+
+      timeSelect.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = available.length ? "Elige una hora" : "Sin horarios disponibles";
+      placeholder.disabled = true;
+      placeholder.selected = !available.includes(previousValue);
+      timeSelect.appendChild(placeholder);
+
+      available.forEach((hora) => {{
+        const option = document.createElement("option");
+        option.value = hora;
+        option.textContent = hora;
+        option.selected = hora === previousValue;
+        timeSelect.appendChild(option);
+      }});
+      timeSelect.disabled = !available.length;
+      if (!available.includes(previousValue)) {{
+        timeSelect.value = "";
+      }}
+      return available.length;
     }}
 
     async function loadSlots() {{
@@ -3764,25 +5076,14 @@ def _booking_manage_page(booking: BookingDetailPublic) -> str:
       }}
       slotStatus.textContent = "Consultando disponibilidad...";
       try {{
-        const response = await fetch(`/disponibilidad?cliente_id=${{encodeURIComponent(BOOKING.cliente_id)}}&fecha=${{encodeURIComponent(fecha)}}`, {{
+        const response = await fetch(`/disponibilidad?cliente_id=${{encodeURIComponent(BOOKING.cliente_id)}}&employee_id=${{encodeURIComponent(BOOKING.employee_id || "")}}&fecha=${{encodeURIComponent(fecha)}}`, {{
           headers: {{ "Accept": "application/json" }},
         }});
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || "No se pudo cargar la disponibilidad.");
         const slots = Array.isArray(data.slots) ? data.slots : [];
-        const available = slots.filter((slot) => slot.disponible);
-        slotStatus.textContent = available.length ? `${{available.length}} horarios disponibles` : "No hay horarios disponibles para esta fecha.";
-        slots.forEach((slot) => {{
-          const button = document.createElement("button");
-          button.type = "button";
-          button.textContent = slot.hora;
-          button.disabled = !slot.disponible;
-          if (slot.hora === document.getElementById("reschedule-time").value) {{
-            button.classList.add("selected");
-          }}
-          button.addEventListener("click", () => selectSlot(button, slot.hora));
-          slotGrid.appendChild(button);
-        }});
+        const availableCount = setTimeOptions(slots, fecha);
+        slotStatus.textContent = availableCount ? `${{availableCount}} horarios disponibles` : "No hay horarios disponibles para esta fecha.";
       }} catch (error) {{
         slotStatus.textContent = error.message;
       }}
@@ -3807,17 +5108,31 @@ def _booking_manage_page(booking: BookingDetailPublic) -> str:
       catch (error) {{ statusEl.textContent = error.message; }}
     }});
 
-    document.getElementById("reschedule-btn")?.addEventListener("click", async () => {{
+    document.getElementById("save-btn")?.addEventListener("click", async () => {{
       const fecha = document.getElementById("reschedule-date").value;
       const hora = document.getElementById("reschedule-time").value;
-      if (!fecha || !hora) {{
+      const scheduleSection = document.getElementById("schedule-section");
+      const isScheduleOpen = scheduleSection?.classList.contains("active");
+      const payload = {{
+        nombre: document.getElementById("booking-name").value.trim(),
+        email: BOOKING.email || "",
+        telefono: document.getElementById("booking-phone").value.trim(),
+        servicio: serviceSelect.value.trim(),
+        employee_id: BOOKING.employee_id || "",
+        fecha: isScheduleOpen ? fecha : BOOKING.fecha,
+        hora: isScheduleOpen ? hora : BOOKING.hora,
+        notas: document.getElementById("booking-notes").value.trim(),
+      }};
+      if (isScheduleOpen && (!fecha || !hora)) {{
         statusEl.textContent = "Elige una fecha y una hora.";
         return;
       }}
-      try {{ await action(window.location.pathname + "/reschedule", {{ fecha, hora }}); }}
+      try {{ await action(window.location.pathname + "/update", payload); }}
       catch (error) {{ statusEl.textContent = error.message; }}
     }});
     document.getElementById("reschedule-date")?.addEventListener("change", loadSlots);
+    renderServiceOptions();
+    openPanel("details-section");
     loadSlots();
   </script>
 </body>
@@ -3830,8 +5145,27 @@ async def _send_booking_email_by_kind(
     request: Optional[Request] = None,
     *,
     sent_column: str = "",
+    extra_message: str = "",
+    respect_enabled: bool = True,
 ) -> None:
-    _send_booking_email(booking_row, kind, request)
+    if respect_enabled:
+        config = _get_client_config(booking_row["cliente_id"])
+        if not _booking_email_enabled(config, kind):
+            if sent_column:
+                _mark_booking_email_result(
+                    booking_row["id"],
+                    status=f"disabled:{kind}",
+                    sent_column=sent_column,
+                    error="",
+                )
+            _record_booking_audit(
+                booking_row["id"],
+                booking_row["cliente_id"],
+                "booking_email_skipped",
+                {"kind": kind, "reason": "disabled"},
+            )
+            return
+    _send_booking_email(booking_row, kind, request, extra_message=extra_message)
     _mark_booking_email_result(
         booking_row["id"],
         status=kind,
@@ -3842,7 +5176,7 @@ async def _send_booking_email_by_kind(
         booking_row["id"],
         booking_row["cliente_id"],
         "booking_email_sent",
-        {"kind": kind},
+        {"kind": kind, "extra_message": bool(extra_message)},
     )
 
 
@@ -3866,7 +5200,7 @@ def _auto_complete_past_bookings() -> int:
             """
             SELECT id, cliente_id
             FROM bookings
-            WHERE status = 'confirmed'
+            WHERE status IN ('confirmed', 'pending_review')
               AND end_at <> ''
               AND end_at <= ?
             """,
@@ -3895,8 +5229,50 @@ def _auto_complete_past_bookings() -> int:
     return completed
 
 
+def _auto_confirm_pending_bookings() -> int:
+    confirmed_at = _utc_now_iso()
+    confirmed = 0
+    with _get_db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT id, cliente_id
+            FROM bookings
+            WHERE status = 'pending_review'
+              AND (end_at = '' OR end_at > ?)
+            """,
+            (confirmed_at,),
+        ).fetchall()
+        for row in rows:
+            connection.execute(
+                """
+                UPDATE bookings
+                SET status = 'confirmed',
+                    confirmed_at = CASE WHEN confirmed_at = '' THEN ? ELSE confirmed_at END
+                WHERE id = ?
+                """,
+                (confirmed_at, row["id"]),
+            )
+            connection.execute(
+                """
+                INSERT INTO booking_audit (booking_id, cliente_id, event_type, payload_json, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row["cliente_id"],
+                    "booking_confirmed",
+                    json.dumps({"source": "automation", "reason": "auto_confirm_pending_review"}, ensure_ascii=False),
+                    confirmed_at,
+                ),
+            )
+            confirmed += 1
+        connection.commit()
+    return confirmed
+
+
 async def _run_booking_reminders(request: Optional[Request] = None) -> AdminReminderRunResult:
     now_utc = _utc_now()
+    _auto_confirm_pending_bookings()
     rows, _ = _list_booking_rows(limit=500)
     processed = 0
     sent_24h = 0
@@ -3951,15 +5327,7 @@ async def _create_provider_booking(
     cliente_id: str,
     booking_payload: Dict[str, Any],
 ) -> ProviderBookingResult:
-    config = _get_client_config(cliente_id)
-    provider = _get_booking_provider(config)
-
-    if provider == "calendly":
-        return await _create_calendly_booking(cliente_id, booking_payload)
-
-    if provider == "google_calendar":
-        return await _create_google_calendar_booking(cliente_id, booking_payload)
-
+    _ = (cliente_id, booking_payload)
     return ProviderBookingResult(
         success=True,
         status="internal",
@@ -4001,7 +5369,7 @@ def _extract_services_from_info(cliente_id: str) -> List[Dict[str, str]]:
         else:
             continue
 
-        service_id = re.sub(r"[^a-z0-9_]+", "_", nombre.lower()).strip("_")
+        service_id = _normalize_service_id(nombre)
         if service_id:
             servicios.append({"id": service_id, "nombre": nombre})
 
@@ -4010,6 +5378,90 @@ def _extract_services_from_info(cliente_id: str) -> List[Dict[str, str]]:
         unique[servicio["id"]] = servicio
 
     return list(unique.values())
+
+
+def _services_for_employee(cliente_id: str, employee_row: Optional[sqlite3.Row]) -> List[Dict[str, str]]:
+    services = _extract_services_from_info(cliente_id)
+    if not employee_row:
+        return services
+    service_ids = _employee_service_ids_from_row(employee_row, cliente_id)
+    if not service_ids:
+        return services
+    allowed = set(service_ids)
+    return [service for service in services if str(service.get("id") or "") in allowed]
+
+
+def _service_name_allowed_for_employee(cliente_id: str, employee_row: sqlite3.Row, service_name: str) -> bool:
+    normalized_name = _sanitize_text(service_name)
+    if not normalized_name:
+        return True
+    allowed_services = _services_for_employee(cliente_id, employee_row)
+    if not allowed_services:
+        return not _extract_services_from_info(cliente_id)
+    return any(_sanitize_text(service.get("nombre")) == normalized_name for service in allowed_services)
+
+
+async def _public_slot_sets_for_day(
+    cliente_id: str,
+    fecha: str,
+    *,
+    servicio: str = "",
+) -> Tuple[Set[str], Set[str]]:
+    all_slots: Set[str] = set()
+    available_slots: Set[str] = set()
+    for employee_row in _list_public_employee_rows(cliente_id, include_inactive=False):
+        if servicio and not _service_name_allowed_for_employee(cliente_id, employee_row, servicio):
+            continue
+        employee_slots = await _available_slots_for_day(cliente_id, fecha, employee_id=employee_row["id"])
+        occupied = _booked_slots(cliente_id, fecha, employee_id=employee_row["id"])
+        occupied.update(_blocked_slots(cliente_id, fecha, employee_id=employee_row["id"]))
+        all_slots.update(employee_slots)
+        available_slots.update(slot for slot in employee_slots if slot not in occupied)
+    return all_slots, available_slots
+
+
+async def _resolve_public_booking_employee(
+    cliente_id: str,
+    fecha: str,
+    hora: str,
+    *,
+    employee_id: str = "",
+    servicio: str = "",
+) -> sqlite3.Row:
+    if employee_id:
+        employee_row = _resolve_employee_for_booking(cliente_id, employee_id)
+        if bool(employee_row["is_default"]):
+            raise HTTPException(status_code=400, detail="La agenda general no se puede seleccionar desde el formulario.")
+        if servicio and not _service_name_allowed_for_employee(cliente_id, employee_row, servicio):
+            raise HTTPException(
+                status_code=400,
+                detail="El servicio seleccionado no esta disponible para ese profesional.",
+            )
+        return employee_row
+
+    candidates = [
+        row
+        for row in _list_public_employee_rows(cliente_id, include_inactive=False)
+        if not servicio or _service_name_allowed_for_employee(cliente_id, row, servicio)
+    ]
+    if not candidates:
+        raise HTTPException(
+            status_code=409,
+            detail="No hay profesionales disponibles para ese servicio en este momento.",
+        )
+
+    available_candidates: List[sqlite3.Row] = []
+    for row in candidates:
+        if await _booking_slot_available(cliente_id, fecha, hora, employee_id=row["id"]):
+            available_candidates.append(row)
+
+    if not available_candidates:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ese horario ya no esta disponible. Elige otro tramo.",
+        )
+
+    return secrets.choice(available_candidates)
 
 
 @app.get("/")
@@ -4126,17 +5578,38 @@ async def auth_me(user: sqlite3.Row = Depends(_require_authenticated_portal_user
     return _serialize_auth_user(user)
 
 
+@app.post("/auth/profile", response_model=AuthUserPublic)
+async def auth_update_profile(
+    data: AuthProfileUpdatePayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> AuthUserPublic:
+    updated = _update_user_profile(
+        user["id"],
+        email=str(data.email),
+        display_name=data.display_name,
+    )
+    return _serialize_auth_user(updated)
+
+
 @app.get("/auth/dashboard", response_model=PortalDashboardResponse)
 async def auth_dashboard_data(
     request: Request,
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> PortalDashboardResponse:
+    _auto_confirm_pending_bookings()
+    _auto_complete_past_bookings()
     cliente_id = "" if user["role"] == "admin" else user["cliente_id"]
     bookings, _ = _list_booking_rows(cliente_id=cliente_id, limit=6, scope="upcoming")
+    today_bookings: List[PortalBookingSummary] = []
+    today_blocks: List[PortalAgendaBlock] = []
+    if cliente_id:
+        today_bookings, today_blocks = _portal_today_dashboard(cliente_id, request)
     return PortalDashboardResponse(
         user=_serialize_auth_user(user),
         stats=_portal_stats_for_user(user),
         bookings_upcoming=[_portal_booking_summary_from_row(row, request) for row in bookings],
+        bookings_today=today_bookings,
+        today_blocks=today_blocks,
     )
 
 
@@ -4144,18 +5617,28 @@ async def auth_dashboard_data(
 async def auth_bookings(
     request: Request,
     estado: str = "",
+    employee_id: str = "",
     scope: str = "all",
+    q: str = "",
+    date_from: str = "",
+    date_to: str = "",
     limit: int = 20,
     offset: int = 0,
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> PortalBookingsResponse:
+    _auto_confirm_pending_bookings()
+    _auto_complete_past_bookings()
     cliente_id = "" if user["role"] == "admin" else user["cliente_id"]
     normalized_scope = scope.strip().lower() or "all"
     if normalized_scope not in {"all", "upcoming", "history"}:
         raise HTTPException(status_code=400, detail="Scope invalido.")
     rows, total = _list_booking_rows(
         cliente_id=cliente_id,
+        employee_id=employee_id.strip(),
         status_filter=estado.strip(),
+        search=q.strip(),
+        date_from=date_from.strip(),
+        date_to=date_to.strip(),
         limit=max(1, min(limit, 100)),
         offset=max(0, offset),
         scope=normalized_scope,
@@ -4169,10 +5652,185 @@ async def auth_bookings(
     )
 
 
+@app.get("/auth/bookings/export")
+async def auth_export_bookings(
+    date_from: str = "",
+    date_to: str = "",
+    estado: str = "",
+    employee_id: str = "",
+    q: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> Response:
+    cliente_id = "" if user["role"] == "admin" else user["cliente_id"]
+    rows, _ = _list_booking_rows(
+        cliente_id=cliente_id,
+        employee_id=employee_id.strip(),
+        status_filter=estado.strip(),
+        search=q.strip(),
+        date_from=date_from.strip(),
+        date_to=date_to.strip(),
+        limit=5000,
+        scope="all",
+    )
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["ID", "Fecha", "Hora", "Profesional", "Estado", "Nombre", "Email", "Telefono", "Servicio", "Notas"])
+    for row in rows:
+        writer.writerow(
+            [
+                row["id"],
+                row["booking_date"],
+                row["booking_time"],
+                row["employee_name"] or "",
+                row["status"],
+                row["nombre"],
+                row["email"],
+                row["telefono"] or "",
+                row["servicio"] or "",
+                row["notas"] or "",
+            ]
+        )
+    filename = f"citas_{date_from or 'inicio'}_{date_to or 'fin'}.csv"
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/auth/schedule", response_model=PortalSchedulePublic)
+async def auth_schedule(
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PortalSchedulePublic:
+    return _portal_schedule_from_config(_portal_client_id_or_403(user))
+
+
+@app.post("/auth/schedule", response_model=PortalSchedulePublic)
+async def auth_update_schedule(
+    data: PortalScheduleUpdatePayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PortalSchedulePublic:
+    return _update_client_schedule(_portal_client_id_or_403(user), data)
+
+
+@app.post("/auth/schedule/message-preview", response_model=PortalMessagePreviewResponse)
+async def auth_schedule_message_preview(
+    data: PortalMessagePreviewPayload,
+    request: Request,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PortalMessagePreviewResponse:
+    return _booking_message_preview(_portal_client_id_or_403(user), data, request)
+
+
+@app.post("/auth/schedule/message-test", response_model=AuthSimpleResponse)
+async def auth_schedule_message_test(
+    data: PortalMessagePreviewPayload,
+    request: Request,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> AuthSimpleResponse:
+    cliente_id = _portal_client_id_or_403(user)
+    preview = _booking_message_preview(cliente_id, data, request)
+    target_email = str(data.target_email or user["email"] or "").strip()
+    if not target_email:
+        raise HTTPException(status_code=400, detail="Indica un email donde enviar la prueba.")
+    _send_email_message(target_email, preview.subject, preview.text_body, preview.html_body)
+    return AuthSimpleResponse(ok=True, message=f"Correo de prueba enviado a {target_email}.")
+
+
+@app.post("/auth/schedule/blocks", response_model=PortalAgendaBlockCreateResponse)
+async def auth_create_schedule_block(
+    data: PortalAgendaBlockPayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PortalAgendaBlockCreateResponse:
+    rows, skipped_count, date_from, date_to = _create_agenda_blocks(_portal_client_id_or_403(user), data)
+    return PortalAgendaBlockCreateResponse(
+        items=[_serialize_agenda_block(row) for row in rows],
+        created_count=len(rows),
+        skipped_count=skipped_count,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+@app.delete("/auth/schedule/blocks/{block_id}", response_model=AuthSimpleResponse)
+async def auth_delete_schedule_block(
+    block_id: str,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> AuthSimpleResponse:
+    _delete_agenda_block(_portal_client_id_or_403(user), block_id, employee_id="")
+    return AuthSimpleResponse(ok=True, message="Bloqueo eliminado correctamente.")
+
+
+@app.get("/auth/employees", response_model=PortalEmployeesResponse)
+async def auth_list_employees(
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PortalEmployeesResponse:
+    return _portal_employees_for_client(_portal_client_id_or_403(user))
+
+
+@app.get("/auth/services")
+async def auth_list_services(
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> Dict[str, List[Dict[str, str]]]:
+    return {"items": _extract_services_from_info(_portal_client_id_or_403(user))}
+
+
+@app.post("/auth/employees", response_model=PortalEmployeePublic)
+async def auth_create_employee(
+    data: PortalEmployeePayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PortalEmployeePublic:
+    return _create_portal_employee(_portal_client_id_or_403(user), data)
+
+
+@app.post("/auth/employees/{employee_id}", response_model=PortalEmployeePublic)
+async def auth_update_employee(
+    employee_id: str,
+    data: PortalEmployeePayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PortalEmployeePublic:
+    return _update_portal_employee(_portal_client_id_or_403(user), employee_id, data)
+
+
+@app.post("/auth/employees/{employee_id}/blocks", response_model=PortalAgendaBlockCreateResponse)
+async def auth_create_employee_blocks(
+    employee_id: str,
+    data: PortalAgendaBlockPayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PortalAgendaBlockCreateResponse:
+    cliente_id = _portal_client_id_or_403(user)
+    _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
+    rows, skipped_count, date_from, date_to = _create_agenda_blocks(
+        cliente_id,
+        data,
+        employee_id=employee_id,
+    )
+    return PortalAgendaBlockCreateResponse(
+        items=[_serialize_agenda_block(row) for row in rows],
+        created_count=len(rows),
+        skipped_count=skipped_count,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+@app.delete("/auth/employees/{employee_id}/blocks/{block_id}", response_model=AuthSimpleResponse)
+async def auth_delete_employee_block(
+    employee_id: str,
+    block_id: str,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> AuthSimpleResponse:
+    cliente_id = _portal_client_id_or_403(user)
+    _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
+    _delete_agenda_block(cliente_id, block_id, employee_id=employee_id)
+    return AuthSimpleResponse(ok=True, message="Bloqueo del profesional eliminado correctamente.")
+
+
 @app.post("/auth/bookings/{booking_id}/cancel", response_model=BookingActionResponse)
 async def auth_cancel_booking(
     booking_id: str,
     request: Request,
+    data: Optional[BookingCancelPayload] = None,
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> BookingActionResponse:
     booking_row = _load_booking_or_404(booking_id)
@@ -4189,6 +5847,7 @@ async def auth_cancel_booking(
             provider_booking_url=booking_row["provider_booking_url"] or "",
         )
 
+    cancel_reason = _sanitize_text((data.motivo if data else ""), allow_multiline=True)
     await _cancel_provider_booking(booking_row)
     _update_booking_record(
         booking_id,
@@ -4200,11 +5859,22 @@ async def auth_cancel_booking(
         booking_id,
         booking_row["cliente_id"],
         "booking_cancelled",
-        {"source": "portal", "role": user["role"], "user_id": user["id"]},
+        {
+            "source": "portal",
+            "role": user["role"],
+            "user_id": user["id"],
+            "reason": cancel_reason,
+            "reason_sent_to_customer": bool(cancel_reason),
+        },
     )
     refreshed = _load_booking_or_404(booking_id)
     try:
-        await _send_booking_email_by_kind(refreshed, "cancelled", request)
+        await _send_booking_email_by_kind(
+            refreshed,
+            "cancelled",
+            request,
+            extra_message=cancel_reason,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.error("No se ha podido enviar el email de cancelacion %s: %s", refreshed["id"], exc)
     return BookingActionResponse(
@@ -4217,6 +5887,17 @@ async def auth_cancel_booking(
     )
 
 
+@app.get("/auth/bookings/{booking_id}/timeline", response_model=BookingAuditResponse)
+async def auth_booking_timeline(
+    booking_id: str,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> BookingAuditResponse:
+    booking_row = _load_booking_or_404(booking_id)
+    if user["role"] != "admin" and booking_row["cliente_id"] != user["cliente_id"]:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
+    return BookingAuditResponse(items=[_booking_audit_entry_from_row(row) for row in _list_booking_audit_rows(booking_id)])
+
+
 @app.post("/auth/bookings/{booking_id}/reschedule", response_model=BookingActionResponse)
 async def auth_reschedule_booking(
     booking_id: str,
@@ -4227,48 +5908,31 @@ async def auth_reschedule_booking(
     booking_row = _load_booking_or_404(booking_id)
     if user["role"] != "admin" and booking_row["cliente_id"] != user["cliente_id"]:
         raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
-    if booking_row["status"] == "cancelled":
-        raise HTTPException(status_code=409, detail="No se puede reprogramar una cita cancelada.")
-    if not await _booking_slot_available_for_reschedule(
-        booking_row["cliente_id"],
-        data.fecha,
-        data.hora,
-        exclude_booking_id=booking_row["id"],
-    ):
-        raise HTTPException(status_code=409, detail="Ese horario ya no esta disponible. Elige otro tramo.")
+    return await _update_booking_details(
+        booking_row,
+        _booking_update_payload_from_reschedule(booking_row, data),
+        request,
+        source="portal",
+        audit_payload={"role": user["role"], "user_id": user["id"]},
+    )
 
-    provider_result = await _reschedule_provider_booking(booking_row, fecha=data.fecha, hora=data.hora)
-    start_local, end_local = _booking_start_end(booking_row["cliente_id"], data.fecha, data.hora)
-    _update_booking_record(
-        booking_id,
-        booking_date=data.fecha,
-        booking_time=data.hora,
-        start_at=_to_utc_iso(start_local),
-        end_at=_to_utc_iso(end_local),
-        rescheduled_at=_utc_now_iso(),
-        status="confirmed",
-        provider_status=provider_result.status,
-        provider_booking_id=provider_result.provider_booking_id,
-        provider_booking_url=provider_result.provider_booking_url,
-    )
-    _record_booking_audit(
-        booking_id,
-        booking_row["cliente_id"],
-        "booking_rescheduled",
-        {"source": "portal", "role": user["role"], "user_id": user["id"], "fecha": data.fecha, "hora": data.hora},
-    )
-    refreshed = _load_booking_or_404(booking_id)
-    try:
-        await _send_booking_email_by_kind(refreshed, "rescheduled", request)
-    except Exception as exc:  # noqa: BLE001
-        logger.error("No se ha podido enviar el email de reprogramacion %s: %s", refreshed["id"], exc)
-    return BookingActionResponse(
-        ok=True,
-        booking_id=booking_id,
-        estado="confirmed",
-        mensaje="La cita ha sido reprogramada correctamente.",
-        manage_url=_booking_row_manage_url(refreshed, request),
-        provider_booking_url=refreshed["provider_booking_url"] or "",
+
+@app.post("/auth/bookings/{booking_id}/update", response_model=BookingActionResponse)
+async def auth_update_booking(
+    booking_id: str,
+    data: BookingUpdatePayload,
+    request: Request,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> BookingActionResponse:
+    booking_row = _load_booking_or_404(booking_id)
+    if user["role"] != "admin" and booking_row["cliente_id"] != user["cliente_id"]:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
+    return await _update_booking_details(
+        booking_row,
+        data,
+        request,
+        source="portal",
+        audit_payload={"role": user["role"], "user_id": user["id"]},
     )
 
 
@@ -4557,6 +6221,7 @@ async def admin_alta_express(
     response_model=List[AdminClienteResumen],
 )
 async def admin_clientes() -> List[AdminClienteResumen]:
+    _auto_confirm_pending_bookings()
     summaries: List[AdminClienteResumen] = []
     booking_counts: Dict[str, Dict[str, int]] = {}
     with _get_db_connection() as connection:
@@ -4653,6 +6318,8 @@ async def admin_bookings(
     fecha_hasta: str = "",
     limit: int = 100,
 ) -> List[AdminBookingResumen]:
+    _auto_confirm_pending_bookings()
+    _auto_complete_past_bookings()
     rows, _ = _list_booking_rows(
         cliente_id=cliente_id.strip(),
         status_filter=estado.strip(),
@@ -4716,53 +6383,11 @@ async def admin_reschedule_booking(
     request: Request,
 ) -> BookingActionResponse:
     booking_row = _load_booking_or_404(booking_id)
-    if booking_row["status"] == "cancelled":
-        raise HTTPException(status_code=409, detail="No se puede reprogramar una cita cancelada.")
-
-    if not await _booking_slot_available_for_reschedule(
-        booking_row["cliente_id"],
-        data.fecha,
-        data.hora,
-        exclude_booking_id=booking_row["id"],
-    ):
-        raise HTTPException(status_code=409, detail="Ese horario ya no esta disponible. Elige otro tramo.")
-
-    provider_result = await _reschedule_provider_booking(
+    return await _update_booking_details(
         booking_row,
-        fecha=data.fecha,
-        hora=data.hora,
-    )
-    start_local, end_local = _booking_start_end(booking_row["cliente_id"], data.fecha, data.hora)
-    _update_booking_record(
-        booking_id,
-        booking_date=data.fecha,
-        booking_time=data.hora,
-        start_at=_to_utc_iso(start_local),
-        end_at=_to_utc_iso(end_local),
-        rescheduled_at=_utc_now_iso(),
-        status="confirmed",
-        provider_status=provider_result.status,
-        provider_booking_id=provider_result.provider_booking_id,
-        provider_booking_url=provider_result.provider_booking_url,
-    )
-    _record_booking_audit(
-        booking_id,
-        booking_row["cliente_id"],
-        "booking_rescheduled",
-        {"source": "admin", "fecha": data.fecha, "hora": data.hora},
-    )
-    refreshed = _load_booking_or_404(booking_id)
-    try:
-        await _send_booking_email_by_kind(refreshed, "rescheduled", request)
-    except Exception as exc:  # noqa: BLE001
-        logger.error("No se ha podido enviar el email de reprogramacion %s: %s", refreshed["id"], exc)
-    return BookingActionResponse(
-        ok=True,
-        booking_id=booking_id,
-        estado="confirmed",
-        mensaje="La cita ha sido reprogramada.",
-        manage_url=_booking_row_manage_url(refreshed, request),
-        provider_booking_url=refreshed["provider_booking_url"] or "",
+        _booking_update_payload_from_reschedule(booking_row, data),
+        request,
+        source="admin",
     )
 
 
@@ -4776,7 +6401,7 @@ async def admin_resend_booking_email(booking_id: str, request: Request) -> Booki
     kind = "received" if booking_row["status"] == "pending_review" else "confirmed"
     if booking_row["status"] == "cancelled":
         kind = "cancelled"
-    await _send_booking_email_by_kind(booking_row, kind, request)
+    await _send_booking_email_by_kind(booking_row, kind, request, respect_enabled=False)
     return BookingActionResponse(
         ok=True,
         booking_id=booking_id,
@@ -4785,6 +6410,16 @@ async def admin_resend_booking_email(booking_id: str, request: Request) -> Booki
         manage_url=_booking_row_manage_url(booking_row, request),
         provider_booking_url=booking_row["provider_booking_url"] or "",
     )
+
+
+@app.get(
+    "/admin/bookings/{booking_id}/timeline",
+    dependencies=[Depends(_require_admin_token)],
+    response_model=BookingAuditResponse,
+)
+async def admin_booking_timeline(booking_id: str) -> BookingAuditResponse:
+    _load_booking_or_404(booking_id)
+    return BookingAuditResponse(items=[_booking_audit_entry_from_row(row) for row in _list_booking_audit_rows(booking_id)])
 
 
 @app.post(
@@ -4800,7 +6435,10 @@ async def admin_run_booking_reminders(request: Request) -> AdminReminderRunResul
 async def booking_manage_page(manage_token: str, request: Request) -> HTMLResponse:
     booking_row = _load_booking_by_token_or_404(manage_token)
     booking = _booking_public_detail_from_row(booking_row, request)
-    return HTMLResponse(_booking_manage_page(booking))
+    viewer = str(request.query_params.get("viewer", "customer")).strip().lower()
+    if viewer not in {"customer", "client"}:
+        viewer = "customer"
+    return HTMLResponse(_booking_manage_page(booking, viewer=viewer))
 
 
 @app.get("/booking/manage/{manage_token}/data", response_model=BookingDetailPublic)
@@ -4856,53 +6494,27 @@ async def booking_manage_reschedule(
     request: Request,
 ) -> BookingActionResponse:
     booking_row = _load_booking_by_token_or_404(manage_token)
-    if booking_row["status"] == "cancelled":
-        raise HTTPException(status_code=409, detail="No se puede reprogramar una cita cancelada.")
-    if not await _booking_slot_available_for_reschedule(
-        booking_row["cliente_id"],
-        data.fecha,
-        data.hora,
-        exclude_booking_id=booking_row["id"],
-    ):
-        raise HTTPException(status_code=409, detail="Ese horario ya no esta disponible. Elige otro tramo.")
-
-    provider_result = await _reschedule_provider_booking(
+    return await _update_booking_details(
         booking_row,
-        fecha=data.fecha,
-        hora=data.hora,
+        _booking_update_payload_from_reschedule(booking_row, data),
+        request,
+        source="customer",
     )
-    start_local, end_local = _booking_start_end(booking_row["cliente_id"], data.fecha, data.hora)
-    rescheduled_at = _utc_now_iso()
-    _update_booking_record(
-        booking_row["id"],
-        booking_date=data.fecha,
-        booking_time=data.hora,
-        start_at=_to_utc_iso(start_local),
-        end_at=_to_utc_iso(end_local),
-        rescheduled_at=rescheduled_at,
-        status="confirmed",
-        provider_status=provider_result.status,
-        provider_booking_id=provider_result.provider_booking_id,
-        provider_booking_url=provider_result.provider_booking_url,
-    )
-    _record_booking_audit(
-        booking_row["id"],
-        booking_row["cliente_id"],
-        "booking_rescheduled",
-        {"source": "customer", "fecha": data.fecha, "hora": data.hora},
-    )
-    refreshed = _load_booking_by_token_or_404(manage_token)
-    try:
-        await _send_booking_email_by_kind(refreshed, "rescheduled", request)
-    except Exception as exc:  # noqa: BLE001
-        logger.error("No se ha podido enviar el email de reprogramacion %s: %s", refreshed["id"], exc)
-    return BookingActionResponse(
-        ok=True,
-        booking_id=refreshed["id"],
-        estado="confirmed",
-        mensaje="Tu cita ha sido reprogramada correctamente.",
-        manage_url=_booking_row_manage_url(refreshed, request),
-        provider_booking_url=refreshed["provider_booking_url"] or "",
+
+
+@app.post("/booking/manage/{manage_token}/update", response_model=BookingActionResponse)
+async def booking_manage_update(
+    manage_token: str,
+    data: BookingUpdatePayload,
+    request: Request,
+) -> BookingActionResponse:
+    booking_row = _load_booking_by_token_or_404(manage_token)
+    protected_payload = data.model_copy(update={"email": booking_row["email"]})
+    return await _update_booking_details(
+        booking_row,
+        protected_payload,
+        request,
+        source="customer",
     )
 
 
@@ -4925,6 +6537,26 @@ async def info_cliente(cliente_id: str, request: Request) -> ConfigPublicaClient
         contact_email=contacto.get("email", ""),
         contact_phone=contacto.get("telefono", ""),
     )
+
+
+@app.get("/profesionales/{cliente_id}")
+async def public_employees(cliente_id: str, request: Request) -> Dict[str, List[Dict[str, Any]]]:
+    _assert_valid_client_id(cliente_id)
+    _enforce_allowed_origin(request, cliente_id)
+    return {
+        "items": [
+            {
+                "employee_id": row["id"],
+                "name": row["name"],
+                "role_label": row["role_label"] or "",
+                "color": _normalize_employee_color(row["color"] or "#00b1d9"),
+                "is_default": bool(row["is_default"]),
+                "service_ids": _employee_service_ids_from_row(row, cliente_id),
+                "allows_all_services": not _employee_service_ids_from_row(row, cliente_id),
+            }
+            for row in _list_public_employee_rows(cliente_id, include_inactive=False)
+        ]
+    }
 
 
 @app.post("/chat", response_model=RespuestaChat)
@@ -4992,7 +6624,13 @@ async def chat(data: MensajeChat, request: Request) -> RespuestaChat:
 
 
 @app.get("/disponibilidad", response_model=RespuestaDisponibilidad)
-async def disponibilidad(cliente_id: str, fecha: str, request: Request) -> RespuestaDisponibilidad:
+async def disponibilidad(
+    cliente_id: str,
+    fecha: str,
+    request: Request,
+    employee_id: str = "",
+    servicio: str = "",
+) -> RespuestaDisponibilidad:
     _assert_valid_client_id(cliente_id)
     _enforce_allowed_origin(request, cliente_id)
     config = _get_client_config(cliente_id)
@@ -5004,7 +6642,23 @@ async def disponibilidad(cliente_id: str, fecha: str, request: Request) -> Respu
     _validate_booking_window(cliente_id, selected_day)
 
     try:
-        slots = await _available_slots_for_day(cliente_id, fecha)
+        if employee_id:
+            employee_row = _resolve_employee_for_booking(cliente_id, employee_id)
+            slots = await _available_slots_for_day(cliente_id, fecha, employee_id=employee_row["id"])
+            occupied = _booked_slots(cliente_id, fecha, employee_id=employee_row["id"])
+            occupied.update(_blocked_slots(cliente_id, fecha, employee_id=employee_row["id"]))
+            return RespuestaDisponibilidad(
+                fecha=fecha,
+                timezone=employee_row["timezone"] or config["booking"]["timezone"],
+                employee_id=employee_row["id"],
+                slots=[SlotDisponibilidad(hora=hora, disponible=hora not in occupied) for hora in slots],
+            )
+
+        all_slots, available_slots = await _public_slot_sets_for_day(
+            cliente_id,
+            fecha,
+            servicio=_sanitize_text(servicio),
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except httpx.HTTPError as exc:
@@ -5013,12 +6667,15 @@ async def disponibilidad(cliente_id: str, fecha: str, request: Request) -> Respu
             status_code=502,
             detail="No se ha podido consultar la disponibilidad del proveedor de calendario.",
         ) from exc
-    occupied = _booked_slots(cliente_id, fecha)
 
     return RespuestaDisponibilidad(
         fecha=fecha,
         timezone=config["booking"]["timezone"],
-        slots=[SlotDisponibilidad(hora=hora, disponible=hora not in occupied) for hora in slots],
+        employee_id="",
+        slots=[
+            SlotDisponibilidad(hora=hora, disponible=hora in available_slots)
+            for hora in sorted(all_slots)
+        ],
     )
 
 
@@ -5042,24 +6699,32 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
     telefono = _sanitize_text(data.telefono)
     servicio = _sanitize_text(data.servicio)
     notas = _sanitize_text(data.notas, allow_multiline=True)
-
-    if not await _booking_slot_available(data.cliente_id, booking_date, booking_time):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Ese horario ya no esta disponible. Elige otro tramo.",
-        )
+    employee_row = await _resolve_public_booking_employee(
+        data.cliente_id,
+        booking_date,
+        booking_time,
+        employee_id=data.employee_id,
+        servicio=servicio,
+    )
 
     booking_id = f"bk_{secrets.token_urlsafe(10)}"
     manage_token = _generate_manage_token()
     created_at = _utc_now_iso()
     provider = _get_booking_provider(config)
-    start_local, end_local = _booking_start_end(data.cliente_id, booking_date, booking_time)
-    booking_timezone = config["booking"]["timezone"]
+    start_local, end_local = _booking_start_end(
+        data.cliente_id,
+        booking_date,
+        booking_time,
+        employee_id=employee_row["id"],
+    )
+    booking_timezone = employee_row["timezone"] or config["booking"]["timezone"]
 
     booking_payload = {
         "booking_id": booking_id,
         "cliente_id": data.cliente_id,
         "empresa": config["nombre"],
+        "employee_id": employee_row["id"],
+        "employee_name": employee_row["name"],
         "nombre": nombre,
         "email": str(data.email),
         "telefono": telefono,
@@ -5075,6 +6740,8 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
         "booking_id": booking_id,
         "cliente_id": data.cliente_id,
         "empresa": config["nombre"],
+        "employee_id": employee_row["id"],
+        "employee_name": employee_row["name"],
         "nombre": nombre,
         "email": str(data.email),
         "telefono": telefono,
@@ -5110,12 +6777,14 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
     provider_status = provider_result.status
 
     if provider == "internal":
-        booking_status = "confirmed" if delivered else "pending_review"
+        booking_status = "confirmed"
         provider_status = webhook_status
 
     record = {
         "id": booking_id,
         "cliente_id": data.cliente_id,
+        "employee_id": employee_row["id"],
+        "employee_name": employee_row["name"],
         "nombre": nombre,
         "email": str(data.email),
         "telefono": telefono,
@@ -5159,27 +6828,21 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
             "status": booking_status,
             "provider_name": provider_result.provider_name,
             "provider_status": provider_status,
+            "employee_id": employee_row["id"],
+            "employee_name": employee_row["name"],
         },
     )
 
     booking_row = _get_booking_row_by_id(booking_id)
     if booking_row:
-        email_status_key = "received" if booking_status == "pending_review" else "confirmed"
+        email_status_key = "confirmed"
         try:
-            _send_booking_email(booking_row, email_status_key, request)
-            _mark_booking_email_result(
-                booking_id,
-                status=email_status_key,
+            await _send_booking_email_by_kind(
+                booking_row,
+                email_status_key,
+                request,
                 sent_column="confirmation_email_sent_at",
-                error="",
             )
-            _record_booking_audit(
-                booking_id,
-                data.cliente_id,
-                "booking_email_sent",
-                {"kind": email_status_key},
-            )
-            booking_row = _get_booking_row_by_id(booking_id)
         except Exception as exc:  # noqa: BLE001
             logger.error("No se ha podido enviar el email de booking %s: %s", booking_id, exc)
             _mark_booking_email_result(
@@ -5194,27 +6857,13 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
                 {"kind": email_status_key, "error": str(exc)},
             )
 
-    if provider == "internal" and not delivered:
-        payload = RespuestaAgendado(
-            ok=True,
-            booking_id=booking_id,
-            estado="pending_review",
-            mensaje=(
-                "La solicitud se ha guardado correctamente y nuestro equipo la revisara manualmente "
-                "antes de confirmarla."
-            ),
-            provider_name=provider_result.provider_name,
-            provider_booking_id=provider_result.provider_booking_id,
-            provider_booking_url=provider_result.provider_booking_url,
-            manage_url=_build_booking_manage_url(manage_token, request),
-        )
-        return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=payload.model_dump())
-
     return RespuestaAgendado(
         ok=True,
         booking_id=booking_id,
-        estado="confirmed" if provider != "internal" else booking_status,
+        estado=booking_status,
         mensaje=config["booking"]["success_message"],
+        employee_id=employee_row["id"],
+        employee_name=employee_row["name"],
         provider_name=provider_result.provider_name,
         provider_booking_id=provider_result.provider_booking_id,
         provider_booking_url=provider_result.provider_booking_url,
@@ -5223,10 +6872,10 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
 
 
 @app.get("/servicios/{cliente_id}")
-async def servicios(cliente_id: str, request: Request) -> Dict[str, List[Dict[str, str]]]:
+async def servicios(cliente_id: str, request: Request, employee_id: str = "") -> Dict[str, List[Dict[str, str]]]:
     _assert_valid_client_id(cliente_id)
     _enforce_allowed_origin(request, cliente_id)
-    return {"servicios": _extract_services_from_info(cliente_id)}
+    return {"servicios": _public_services_for_booking(cliente_id, employee_id)}
 
 
 @app.post("/admin/reindex/{cliente_id}", dependencies=[Depends(_require_admin_token)])
@@ -5242,6 +6891,7 @@ async def reindexar(cliente_id: str) -> Dict[str, str]:
 @app.get("/admin/stats", dependencies=[Depends(_require_admin_token)])
 async def estadisticas() -> Dict[str, Any]:
     _cleanup_sessions(force=True)
+    _auto_complete_past_bookings()
     with _get_db_connection() as connection:
         rows = connection.execute(
             """
