@@ -199,12 +199,13 @@
       transition: transform 0.16s ease, opacity 0.16s ease;
     }
 
-    button:hover { transform: translateY(-1px); }
+    button:not(:disabled):hover { transform: translateY(-1px); }
     button.primary { color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
     button.secondary { color: var(--text); background: rgba(184, 192, 204, 0.12); }
     button.ghost { color: var(--text); background: transparent; border: 1px solid var(--line); }
     button.danger { color: var(--danger); background: var(--danger-soft); }
     button.small { padding: 10px 12px; border-radius: 14px; font-size: 0.93rem; }
+    button:disabled { cursor: not-allowed; opacity: 0.58; }
 
     .row {
       display: flex;
@@ -440,6 +441,52 @@
       gap: 10px;
     }
 
+    .reschedule-panel {
+      display: grid;
+      gap: 14px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(7, 18, 45, 0.72);
+    }
+
+    .reschedule-grid {
+      display: grid;
+      grid-template-columns: minmax(160px, 0.7fr) minmax(160px, 0.7fr) minmax(0, 1.4fr);
+      gap: 12px;
+      align-items: end;
+    }
+
+    .slot-status {
+      min-height: 46px;
+      display: flex;
+      align-items: center;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      color: var(--soft);
+      background: rgba(184, 192, 204, 0.06);
+    }
+
+    .slot-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+      gap: 10px;
+    }
+
+    .slot-grid button {
+      min-height: 42px;
+      border-radius: 14px;
+      color: var(--text);
+      background: rgba(184, 192, 204, 0.1);
+    }
+
+    .slot-grid button.selected {
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 10px 26px rgba(0, 177, 217, 0.2);
+    }
+
     .empty {
       padding: 30px 18px;
       border: 1px dashed rgba(184, 192, 204, 0.24);
@@ -669,7 +716,8 @@
         align-items: flex-start;
       }
 
-      .booking-meta {
+      .booking-meta,
+      .reschedule-grid {
         grid-template-columns: 1fr;
       }
 
@@ -844,10 +892,6 @@
                 <div class="muted" id="mainPanelText">Las proximas citas se ven primero. Las ya pasadas no se borran: se archivan como historial para mantener trazabilidad.</div>
               </div>
               <div class="row">
-                <div class="admin-menu hidden" id="adminMenu">
-                  <button data-admin-view="bookings" class="active" type="button">Reservas</button>
-                  <button data-admin-view="users" type="button">Usuarios</button>
-                </div>
                 <div class="segmented" id="scopeSwitch">
                   <button data-scope="upcoming" class="active" type="button">Proximas</button>
                   <button data-scope="history" type="button">Historial</button>
@@ -877,78 +921,29 @@
                   <button id="nextPageBtn" class="ghost small" type="button">Siguiente</button>
                 </div>
               </div>
-            </section>
 
-            <section class="admin-view hidden" id="usersView">
-              <div class="subcard">
-                <div>
-                  <strong>Nuevo usuario</strong>
-                  <div class="muted">Crea accesos para administracion o para cada cliente desde un formulario mas ordenado.</div>
-                </div>
-                <div class="grid">
-                  <label>
-                    Nombre visible
-                    <input id="newUserName" type="text" placeholder="Clinica Saga" />
-                  </label>
-                  <label>
-                    Email
-                    <input id="newUserEmail" type="email" placeholder="equipo@cliente.com" />
-                  </label>
-                </div>
-                <div class="grid">
-                  <label>
-                    Contrasena inicial
-                    <input id="newUserPassword" type="password" placeholder="Minimo 8 caracteres" />
-                  </label>
-                  <label>
-                    Rol
-                    <select id="newUserRole">
-                      <option value="client">Cliente</option>
-                      <option value="admin">Administrador</option>
-                    </select>
-                  </label>
-                </div>
-                <label>
-                  Cliente ID
-                  <select id="newUserClientId">
-                    <option value="">Selecciona un cliente</option>
-                  </select>
-                </label>
-                <div class="row">
-                  <button id="createUserBtn" class="primary" type="button">Crear usuario</button>
-                </div>
-              </div>
-
-              <div class="subcard">
-                <div class="toolbar">
+              <div class="reschedule-panel hidden" id="reschedulePanel">
+                <div class="panel-header">
                   <div>
-                    <strong>Usuarios del portal</strong>
-                    <div class="muted">Gestiona admins y cuentas cliente desde un menu de acciones por usuario.</div>
+                    <h3>Reprogramar cita</h3>
+                    <div class="muted" id="rescheduleBookingLabel">-</div>
                   </div>
-                  <div class="toolbar-filters">
-                    <label>
-                      Rol
-                      <select id="userRoleFilter">
-                        <option value="">Todos</option>
-                        <option value="admin">Administradores</option>
-                        <option value="client">Clientes</option>
-                      </select>
-                    </label>
-                    <label>
-                      Cliente
-                      <select id="userClientFilter">
-                        <option value="">Todos</option>
-                      </select>
-                    </label>
-                    <label class="inline-check">
-                      <input id="userIncludeInactive" type="checkbox" checked />
-                      Incluir inactivos
-                    </label>
-                    <button id="refreshUsersBtn" class="secondary small" type="button">Actualizar</button>
-                  </div>
+                  <button id="cancelRescheduleBtn" class="ghost small" type="button">Cerrar</button>
                 </div>
-                <div id="usersList" class="users-grid">
-                  <div class="empty">Inicia sesion como admin para gestionar usuarios.</div>
+                <div class="reschedule-grid">
+                  <label>
+                    Fecha
+                    <input id="rescheduleDate" type="date" />
+                  </label>
+                  <label>
+                    Hora
+                    <input id="rescheduleTime" type="time" readonly />
+                  </label>
+                  <div id="rescheduleSlotStatus" class="slot-status">Selecciona una fecha.</div>
+                </div>
+                <div id="rescheduleSlots" class="slot-grid"></div>
+                <div class="row">
+                  <button id="confirmRescheduleBtn" class="primary small" type="button">Guardar nuevo horario</button>
                 </div>
               </div>
             </section>
@@ -969,13 +964,14 @@
       offset: 0,
       total: 0,
       items: [],
-      users: [],
-      clients: [],
-      adminView: "bookings",
       forgotCooldownSeconds: 0,
       forgotCooldownTimer: null,
       authView: urlParams.get("reset_token") ? "reset" : "login",
       resetToken: (urlParams.get("reset_token") || "").trim(),
+      rescheduleBookingId: "",
+      rescheduleOriginalDate: "",
+      rescheduleOriginalTime: "",
+      rescheduleSelectedTime: "",
     };
 
     const el = {
@@ -1020,17 +1016,22 @@
       stat4: document.getElementById("stat4"),
       stat4Label: document.getElementById("stat4Label"),
       portalContent: document.getElementById("portalContent"),
-      adminMenu: document.getElementById("adminMenu"),
-      adminMenuButtons: document.querySelectorAll("#adminMenu button[data-admin-view]"),
       scopeButtons: document.querySelectorAll("#scopeSwitch button[data-scope]"),
       statusFilter: document.getElementById("statusFilter"),
       bookingView: document.getElementById("bookingView"),
-      usersView: document.getElementById("usersView"),
       bookingList: document.getElementById("bookingList"),
       pagination: document.getElementById("pagination"),
       paginationText: document.getElementById("paginationText"),
       prevPageBtn: document.getElementById("prevPageBtn"),
       nextPageBtn: document.getElementById("nextPageBtn"),
+      reschedulePanel: document.getElementById("reschedulePanel"),
+      rescheduleBookingLabel: document.getElementById("rescheduleBookingLabel"),
+      rescheduleDate: document.getElementById("rescheduleDate"),
+      rescheduleTime: document.getElementById("rescheduleTime"),
+      rescheduleSlotStatus: document.getElementById("rescheduleSlotStatus"),
+      rescheduleSlots: document.getElementById("rescheduleSlots"),
+      confirmRescheduleBtn: document.getElementById("confirmRescheduleBtn"),
+      cancelRescheduleBtn: document.getElementById("cancelRescheduleBtn"),
       contactBlock: document.getElementById("contactBlock"),
       contactInfo: document.getElementById("contactInfo"),
       securityBlock: document.getElementById("securityBlock"),
@@ -1038,22 +1039,20 @@
       changeNewPassword: document.getElementById("changeNewPassword"),
       changeNewPasswordConfirm: document.getElementById("changeNewPasswordConfirm"),
       changePasswordBtn: document.getElementById("changePasswordBtn"),
-      newUserName: document.getElementById("newUserName"),
-      newUserEmail: document.getElementById("newUserEmail"),
-      newUserPassword: document.getElementById("newUserPassword"),
-      newUserClientId: document.getElementById("newUserClientId"),
-      newUserRole: document.getElementById("newUserRole"),
-      createUserBtn: document.getElementById("createUserBtn"),
-      userRoleFilter: document.getElementById("userRoleFilter"),
-      userClientFilter: document.getElementById("userClientFilter"),
-      userIncludeInactive: document.getElementById("userIncludeInactive"),
-      refreshUsersBtn: document.getElementById("refreshUsersBtn"),
-      usersList: document.getElementById("usersList"),
     };
 
     function setStatus(message, kind = "info") {
       el.statusBox.className = `status ${kind}`;
       el.statusBox.textContent = message;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
     }
 
     async function api(path, options = {}) {
@@ -1123,28 +1122,6 @@
       }, 1000);
     }
 
-    function setAdminView(view) {
-      state.adminView = view === "users" ? "users" : "bookings";
-      el.adminMenuButtons.forEach((button) => {
-        button.classList.toggle("active", button.dataset.adminView === state.adminView);
-      });
-      el.bookingView.classList.toggle("hidden", state.adminView !== "bookings");
-      el.usersView.classList.toggle("hidden", state.adminView !== "users");
-      el.scopeButtons.forEach((button) => {
-        button.closest(".segmented").classList.toggle("hidden", state.adminView !== "bookings");
-      });
-      el.statusFilter.classList.toggle("hidden", state.adminView !== "bookings");
-      if (state.user?.role === "admin") {
-        if (state.adminView === "users") {
-          el.mainPanelTitle.textContent = "Usuarios del portal";
-          el.mainPanelText.textContent = "Administra accesos internos y cuentas cliente con acciones claras por usuario.";
-        } else {
-          el.mainPanelTitle.textContent = "Reservas";
-          el.mainPanelText.textContent = "Panel operativo para revisar reservas, detectar incidencias y actuar rapido.";
-        }
-      }
-    }
-
     function clearResetTokenFromUrl() {
       const nextUrl = `${window.location.pathname}${window.location.hash || ""}`;
       window.history.replaceState({}, "", nextUrl);
@@ -1181,35 +1158,6 @@
       });
     }
 
-    function populateClientSelect(select, includeEmptyLabel) {
-      if (!select) return;
-      const currentValue = select.value;
-      select.innerHTML = "";
-      if (includeEmptyLabel) {
-        const option = document.createElement("option");
-        option.value = "";
-        option.textContent = includeEmptyLabel;
-        select.appendChild(option);
-      }
-      state.clients.forEach((client) => {
-        const option = document.createElement("option");
-        option.value = client.cliente_id;
-        option.textContent = `${client.nombre} (${client.cliente_id})`;
-        select.appendChild(option);
-      });
-      if ([...select.options].some((option) => option.value === currentValue)) {
-        select.value = currentValue;
-      }
-    }
-
-    function toggleClientFieldByRole() {
-      const isClientRole = (el.newUserRole.value || "client") === "client";
-      el.newUserClientId.disabled = !isClientRole;
-      if (!isClientRole) {
-        el.newUserClientId.value = "";
-      }
-    }
-
     function renderShell() {
       const user = state.user;
       const isAuthed = Boolean(user);
@@ -1224,10 +1172,8 @@
       el.statsGrid.classList.toggle("hidden", !isAuthed);
       el.portalContent.classList.toggle("hidden", !isAuthed);
       el.securityBlock.classList.toggle("hidden", !isAuthed);
-      el.adminMenu.classList.add("hidden");
 
       if (!user) {
-        setAdminView("bookings");
         if (state.authView === "forgot") {
           el.heroTitle.textContent = "Recupera tu acceso";
           el.heroText.textContent = "Te enviaremos un enlace seguro para definir una nueva contrasena sin depender de soporte manual.";
@@ -1251,19 +1197,12 @@
       setAuthView("login");
 
       if (isAdmin) {
-        el.adminMenu.classList.remove("hidden");
-        setAdminView(state.adminView);
+        el.portalContent.classList.add("hidden");
+        el.contactBlock.classList.add("hidden");
         el.heroTitle.textContent = "Centro de operaciones de Vantelia";
-        el.heroText.textContent = "Gestiona accesos, revisa reservas y acompana al cliente desde un portal mas cercano a producto SaaS que a herramienta interna improvisada.";
-        if (state.adminView === "users") {
-          el.mainPanelTitle.textContent = "Usuarios del portal";
-          el.mainPanelText.textContent = "Administra accesos internos y cuentas cliente con acciones claras por usuario.";
-        } else {
-          el.mainPanelTitle.textContent = "Reservas";
-          el.mainPanelText.textContent = "Panel operativo para revisar reservas, detectar incidencias y actuar rapido.";
-        }
+        el.heroText.textContent = "El portal queda reservado para clientes. Usa el dashboard admin para operar clientes, usuarios, reservas, demos e instalacion.";
       } else {
-        setAdminView("bookings");
+        el.portalContent.classList.remove("hidden");
         el.heroTitle.textContent = `Portal de ${user.display_name}`;
         el.heroText.textContent = "Desde aqui puedes ver tus proximas citas, consultar el historial y cambiar o cancelar una reserva sin depender de mensajes manuales.";
         el.mainPanelTitle.textContent = "Tus citas";
@@ -1299,114 +1238,6 @@
       return value.replace("T", " ").replace("Z", " UTC");
     }
 
-    function roleLabel(role) {
-      return role === "admin" ? "Administrador" : "Cliente";
-    }
-
-    function renderUsers(response) {
-      state.users = response.items || [];
-      if (!state.users.length) {
-        el.usersList.innerHTML = '<div class="empty">No hay usuarios para este filtro.</div>';
-        return;
-      }
-
-      el.usersList.innerHTML = "";
-      state.users.forEach((managedUser) => {
-        const card = document.createElement("article");
-        card.className = "user-card";
-        const clientLabel = managedUser.cliente_id || "Global";
-        const statusClass = managedUser.is_active ? "pill" : "pill danger";
-        const statusLabel = managedUser.is_active ? "Activo" : "Inactivo";
-        const availableActions = managedUser.is_active
-          ? `
-              <option value="">Selecciona accion</option>
-              <option value="reset">Enviar reset por correo</option>
-              <option value="deactivate">Desactivar usuario</option>
-              <option value="delete">Eliminar usuario</option>
-            `
-          : `
-              <option value="">Selecciona accion</option>
-              <option value="activate">Activar usuario</option>
-              <option value="delete">Eliminar usuario</option>
-            `;
-        card.innerHTML = `
-          <div class="user-top">
-            <div class="user-title">
-              <strong>${managedUser.display_name}</strong>
-              <span class="muted">${managedUser.email}</span>
-            </div>
-            <div class="pills">
-              <span class="pill alt">${roleLabel(managedUser.role)}</span>
-              <span class="${statusClass}">${statusLabel}</span>
-            </div>
-          </div>
-          <div class="user-meta">
-            <div class="meta-box">
-              <span class="meta-label">Cliente</span>
-              <span class="meta-value">${clientLabel}</span>
-            </div>
-            <div class="meta-box">
-              <span class="meta-label">Ultimo login</span>
-              <span class="meta-value">${formatDateTimeLabel(managedUser.last_login_at)}</span>
-            </div>
-            <div class="meta-box">
-              <span class="meta-label">Alta</span>
-              <span class="meta-value">${formatDateTimeLabel(managedUser.created_at)}</span>
-            </div>
-            <div class="meta-box">
-              <span class="meta-label">ID</span>
-              <span class="meta-value">${managedUser.user_id}</span>
-            </div>
-          </div>
-          <div class="action-row">
-            <select data-user-action="${managedUser.user_id}">
-              ${availableActions}
-            </select>
-            <button class="secondary small" type="button" data-run-user-action="${managedUser.user_id}">Aplicar accion</button>
-          </div>
-        `;
-        el.usersList.appendChild(card);
-      });
-
-      el.usersList.querySelectorAll("button[data-run-user-action]").forEach((button) => {
-        button.addEventListener("click", async () => {
-          const userId = button.dataset.runUserAction;
-          const select = el.usersList.querySelector(`select[data-user-action="${userId}"]`);
-          const action = select?.value || "";
-          if (!action) {
-            setStatus("Selecciona primero una accion para ese usuario.", "error");
-            return;
-          }
-          try {
-            let successMessage = "";
-            if (action === "delete" && !window.confirm("Seguro que quieres eliminar este usuario?")) {
-              return;
-            }
-            if (action === "deactivate" && !window.confirm("Seguro que quieres desactivar este usuario?")) {
-              return;
-            }
-            if (action === "activate") {
-              const result = await api(`/auth/users/${encodeURIComponent(userId)}/activate`, { method: "POST" });
-              successMessage = result.message;
-            } else if (action === "deactivate") {
-              const result = await api(`/auth/users/${encodeURIComponent(userId)}/deactivate`, { method: "POST" });
-              successMessage = result.message;
-            } else if (action === "reset") {
-              const result = await api(`/auth/users/${encodeURIComponent(userId)}/reset-link`, { method: "POST" });
-              successMessage = result.message;
-            } else if (action === "delete") {
-              const result = await api(`/auth/users/${encodeURIComponent(userId)}`, { method: "DELETE" });
-              successMessage = result.message;
-            }
-            await loadDashboard();
-            setStatus(successMessage || "Accion ejecutada correctamente.", "success");
-          } catch (error) {
-            setStatus(error.message, "error");
-          }
-        });
-      });
-    }
-
     function updateContactCard(items) {
       const first = items.find((item) => item.contact_email || item.contact_phone);
       if (!first) {
@@ -1430,6 +1261,120 @@
       return "pill";
     }
 
+    function clearReschedulePanel() {
+      state.rescheduleBookingId = "";
+      state.rescheduleOriginalDate = "";
+      state.rescheduleOriginalTime = "";
+      state.rescheduleSelectedTime = "";
+      el.rescheduleDate.value = "";
+      el.rescheduleTime.value = "";
+      el.rescheduleBookingLabel.textContent = "-";
+      el.rescheduleSlotStatus.textContent = "Selecciona una fecha.";
+      el.rescheduleSlots.innerHTML = "";
+      el.reschedulePanel.classList.add("hidden");
+      el.confirmRescheduleBtn.disabled = false;
+    }
+
+    function setSelectedRescheduleSlot(button, hora) {
+      state.rescheduleSelectedTime = hora;
+      el.rescheduleTime.value = hora;
+      el.rescheduleSlots.querySelectorAll("button").forEach((item) => item.classList.remove("selected"));
+      button.classList.add("selected");
+    }
+
+    function isOriginalRescheduleSlot(fecha, hora) {
+      return fecha === state.rescheduleOriginalDate && hora === state.rescheduleOriginalTime;
+    }
+
+    async function loadRescheduleSlots() {
+      const fecha = el.rescheduleDate.value;
+      el.rescheduleSlots.innerHTML = "";
+      if (!fecha) {
+        state.rescheduleSelectedTime = "";
+        el.rescheduleTime.value = "";
+        el.rescheduleSlotStatus.textContent = "Selecciona una fecha.";
+        return;
+      }
+      if (!state.user?.cliente_id) {
+        throw new Error("No se ha podido identificar el cliente de esta sesion.");
+      }
+
+      el.rescheduleSlotStatus.textContent = "Consultando disponibilidad...";
+      const params = new URLSearchParams({
+        cliente_id: state.user.cliente_id,
+        fecha,
+      });
+      const data = await api(`/disponibilidad?${params.toString()}`);
+      const slots = Array.isArray(data.slots) ? data.slots : [];
+      const availableCount = slots.filter((slot) => slot.disponible || isOriginalRescheduleSlot(fecha, slot.hora)).length;
+      el.rescheduleSlotStatus.textContent = availableCount
+        ? `${availableCount} horarios disponibles`
+        : "No hay horarios disponibles para esta fecha.";
+
+      let selectedStillVisible = false;
+      slots.forEach((slot) => {
+        const hora = String(slot.hora || "");
+        const isOriginal = isOriginalRescheduleSlot(fecha, hora);
+        const isAvailable = Boolean(slot.disponible) || isOriginal;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = hora;
+        button.disabled = !isAvailable;
+        if (hora === state.rescheduleSelectedTime) {
+          button.classList.add("selected");
+          selectedStillVisible = true;
+        }
+        button.addEventListener("click", () => setSelectedRescheduleSlot(button, hora));
+        el.rescheduleSlots.appendChild(button);
+      });
+
+      if (!selectedStillVisible) {
+        state.rescheduleSelectedTime = "";
+        el.rescheduleTime.value = "";
+      }
+    }
+
+    function openReschedulePanel(bookingId, fecha, hora, label) {
+      state.rescheduleBookingId = bookingId;
+      state.rescheduleOriginalDate = fecha;
+      state.rescheduleOriginalTime = hora;
+      state.rescheduleSelectedTime = hora;
+      el.rescheduleDate.value = fecha;
+      el.rescheduleTime.value = hora;
+      el.rescheduleBookingLabel.textContent = label || bookingId;
+      el.reschedulePanel.classList.remove("hidden");
+      el.reschedulePanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      loadRescheduleSlots().catch((error) => {
+        el.rescheduleSlotStatus.textContent = error.message;
+        setStatus(error.message, "error");
+      });
+    }
+
+    async function submitReschedule() {
+      if (!state.rescheduleBookingId) {
+        throw new Error("Selecciona primero una cita.");
+      }
+      const fecha = el.rescheduleDate.value.trim();
+      const hora = state.rescheduleSelectedTime || el.rescheduleTime.value.trim();
+      if (!fecha || !hora) {
+        throw new Error("Selecciona fecha y horario disponible.");
+      }
+
+      el.confirmRescheduleBtn.disabled = true;
+      try {
+        await api(`/auth/bookings/${encodeURIComponent(state.rescheduleBookingId)}/reschedule`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fecha, hora }),
+        });
+        setStatus("Cita reprogramada correctamente.", "success");
+        clearReschedulePanel();
+        await loadDashboard();
+      } finally {
+        el.confirmRescheduleBtn.disabled = false;
+      }
+    }
+
     function renderBookings(response) {
       state.items = response.items || [];
       state.total = response.total || 0;
@@ -1447,34 +1392,47 @@
           card.className = "booking-card";
           const canCancel = booking.can_cancel;
           const canReschedule = booking.can_reschedule;
+          const servicio = escapeHtml(booking.servicio || "Consulta");
+          const empresa = escapeHtml(booking.empresa || "-");
+          const estado = escapeHtml(booking.estado || "-");
+          const providerName = escapeHtml(booking.provider_name || "-");
+          const fechaLabel = escapeHtml(formatDateLabel(booking));
+          const nombre = escapeHtml(booking.nombre || "-");
+          const email = escapeHtml(booking.email || "-");
+          const manageUrl = escapeHtml(booking.manage_url || "");
+          const providerBookingUrl = escapeHtml(booking.provider_booking_url || "");
+          const bookingId = escapeHtml(booking.booking_id || "");
+          const fecha = escapeHtml(booking.fecha || "");
+          const hora = escapeHtml(booking.hora || "");
+          const bookingLabel = escapeHtml(`${booking.servicio || "Consulta"} - ${formatDateLabel(booking)}`);
           card.innerHTML = `
             <div class="booking-top">
               <div class="booking-title">
-                <strong>${booking.servicio || "Consulta"}</strong>
-                <span class="muted">${booking.empresa}</span>
+                <strong>${servicio}</strong>
+                <span class="muted">${empresa}</span>
               </div>
               <div class="pills">
-                <span class="${pillClass(booking.estado)}">${booking.estado}</span>
-                <span class="pill alt">${booking.provider_name}</span>
+                <span class="${pillClass(booking.estado)}">${estado}</span>
+                <span class="pill alt">${providerName}</span>
               </div>
             </div>
 
             <div class="booking-meta">
               <div class="meta-box">
                 <span class="meta-label">Fecha y hora</span>
-                <span class="meta-value">${formatDateLabel(booking)}</span>
+                <span class="meta-value">${fechaLabel}</span>
               </div>
               <div class="meta-box">
                 <span class="meta-label">Cliente</span>
-                <span class="meta-value">${booking.nombre}<br />${booking.email}</span>
+                <span class="meta-value">${nombre}<br />${email}</span>
               </div>
             </div>
 
             <div class="booking-actions">
-              <button class="secondary small" type="button" data-action="manage" data-url="${booking.manage_url || ""}">Gestionar</button>
-              <button class="ghost small" type="button" data-action="provider" data-url="${booking.provider_booking_url || ""}">Abrir proveedor</button>
-              <button class="danger small" type="button" data-action="cancel" data-id="${booking.booking_id}" ${canCancel ? "" : "disabled"}>Cancelar</button>
-              <button class="secondary small" type="button" data-action="reschedule" data-id="${booking.booking_id}" data-fecha="${booking.fecha}" data-hora="${booking.hora}" ${canReschedule ? "" : "disabled"}>Reprogramar</button>
+              <button class="secondary small" type="button" data-action="manage" data-url="${manageUrl}">Gestionar</button>
+              <button class="ghost small" type="button" data-action="provider" data-url="${providerBookingUrl}">Abrir proveedor</button>
+              <button class="danger small" type="button" data-action="cancel" data-id="${bookingId}" ${canCancel ? "" : "disabled"}>Cancelar</button>
+              <button class="secondary small" type="button" data-action="reschedule" data-id="${bookingId}" data-fecha="${fecha}" data-hora="${hora}" data-label="${bookingLabel}" ${canReschedule ? "" : "disabled"}>Reprogramar</button>
             </div>
           `;
           el.bookingList.appendChild(card);
@@ -1512,17 +1470,7 @@
               return;
             }
             if (action === "reschedule") {
-              const nuevaFecha = window.prompt("Nueva fecha (YYYY-MM-DD)", button.dataset.fecha || "");
-              if (!nuevaFecha) return;
-              const nuevaHora = window.prompt("Nueva hora (HH:MM)", button.dataset.hora || "");
-              if (!nuevaHora) return;
-              await api(`/auth/bookings/${encodeURIComponent(bookingId)}/reschedule`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ fecha: nuevaFecha.trim(), hora: nuevaHora.trim() }),
-              });
-              setStatus("Cita reprogramada correctamente.", "success");
-              await loadDashboard();
+              openReschedulePanel(bookingId, button.dataset.fecha || "", button.dataset.hora || "", button.dataset.label || "");
             }
           } catch (error) {
             setStatus(error.message, "error");
@@ -1541,39 +1489,12 @@
       renderBookings(payload);
     }
 
-    async function loadClients() {
-      if (state.user?.role !== "admin") return;
-      const clients = await api("/auth/clientes");
-      state.clients = clients || [];
-      populateClientSelect(el.newUserClientId, "Selecciona un cliente");
-      populateClientSelect(el.userClientFilter, "Todos");
-    }
-
-    async function loadUsers() {
-      if (state.user?.role !== "admin") return;
-      const params = new URLSearchParams();
-      const selectedRole = el.userRoleFilter.value.trim();
-      const selectedClient = el.userClientFilter.value.trim();
-      if (selectedRole) params.set("role", selectedRole);
-      if (selectedClient) params.set("cliente_id", selectedClient);
-      params.set("include_inactive", el.userIncludeInactive.checked ? "true" : "false");
-      const payload = await api(`/auth/users?${params.toString()}`);
-      renderUsers(payload);
-    }
-
     async function loadDashboard() {
       const payload = await api("/auth/dashboard");
       state.user = payload.user;
       renderShell();
       renderStats(payload.stats || {});
-      if (state.user.role === "admin") {
-        await loadClients();
-        if (state.adminView === "users") {
-          await loadUsers();
-        } else {
-          await loadBookings();
-        }
-      } else {
+      if (state.user.role !== "admin") {
         await loadBookings();
       }
       setStatus(`Sesion activa como ${payload.user.display_name}.`, "success");
@@ -1646,6 +1567,7 @@
       el.changeCurrentPassword.value = "";
       el.changeNewPassword.value = "";
       el.changeNewPasswordConfirm.value = "";
+      clearReschedulePanel();
       renderShell();
       el.bookingList.innerHTML = `<div class="empty">Inicia sesion para ver reservas.</div>`;
       setStatus("Sesion cerrada.", "info");
@@ -1676,32 +1598,6 @@
       setStatus(result.message || "Contrasena actualizada correctamente.", "success");
     }
 
-    async function createClientUser() {
-      const role = el.newUserRole.value.trim() || "client";
-      if (role === "client" && !el.newUserClientId.value.trim()) {
-        throw new Error("Selecciona el cliente al que pertenece este usuario.");
-      }
-      await api("/auth/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          display_name: el.newUserName.value.trim(),
-          email: el.newUserEmail.value.trim(),
-          password: el.newUserPassword.value,
-          cliente_id: el.newUserClientId.value.trim(),
-          role,
-        }),
-      });
-      el.newUserName.value = "";
-      el.newUserEmail.value = "";
-      el.newUserPassword.value = "";
-      el.newUserClientId.value = "";
-      el.newUserRole.value = "client";
-      toggleClientFieldByRole();
-      await loadDashboard();
-      setStatus("Usuario creado correctamente.", "success");
-    }
-
     el.loginBtn.addEventListener("click", () => login().catch((error) => setStatus(error.message, "error")));
     el.showForgotBtn.addEventListener("click", () => {
       setAuthView("forgot");
@@ -1730,43 +1626,40 @@
     el.logoutBtn.addEventListener("click", () => logout().catch((error) => setStatus(error.message, "error")));
     el.openAdminBtn.addEventListener("click", () => window.open("/dashboard", "_blank", "noopener,noreferrer"));
     el.changePasswordBtn.addEventListener("click", () => changePassword().catch((error) => setStatus(error.message, "error")));
-    el.createUserBtn.addEventListener("click", () => createClientUser().catch((error) => setStatus(error.message, "error")));
-    el.newUserRole.addEventListener("change", () => toggleClientFieldByRole());
-    el.refreshUsersBtn.addEventListener("click", () => loadUsers().catch((error) => setStatus(error.message, "error")));
-    el.userRoleFilter.addEventListener("change", () => loadUsers().catch((error) => setStatus(error.message, "error")));
-    el.userClientFilter.addEventListener("change", () => loadUsers().catch((error) => setStatus(error.message, "error")));
-    el.userIncludeInactive.addEventListener("change", () => loadUsers().catch((error) => setStatus(error.message, "error")));
-    el.adminMenuButtons.forEach((button) => {
-      button.addEventListener("click", () => {
-        setAdminView(button.dataset.adminView);
-        if (button.dataset.adminView === "users") {
-          loadUsers().catch((error) => setStatus(error.message, "error"));
-        } else {
-          loadBookings().catch((error) => setStatus(error.message, "error"));
-        }
-      });
-    });
     el.statusFilter.addEventListener("change", () => {
       state.status = el.statusFilter.value.trim();
       state.offset = 0;
+      clearReschedulePanel();
       loadBookings().catch((error) => setStatus(error.message, "error"));
     });
     el.prevPageBtn.addEventListener("click", () => {
       state.offset = Math.max(0, state.offset - state.limit);
+      clearReschedulePanel();
       loadBookings().catch((error) => setStatus(error.message, "error"));
     });
     el.nextPageBtn.addEventListener("click", () => {
       state.offset += state.limit;
+      clearReschedulePanel();
       loadBookings().catch((error) => setStatus(error.message, "error"));
     });
+    el.rescheduleDate.addEventListener("change", () => {
+      state.rescheduleSelectedTime = "";
+      el.rescheduleTime.value = "";
+      loadRescheduleSlots().catch((error) => {
+        el.rescheduleSlotStatus.textContent = error.message;
+        setStatus(error.message, "error");
+      });
+    });
+    el.confirmRescheduleBtn.addEventListener("click", () => submitReschedule().catch((error) => setStatus(error.message, "error")));
+    el.cancelRescheduleBtn.addEventListener("click", () => clearReschedulePanel());
     el.scopeButtons.forEach((button) => {
       button.addEventListener("click", () => {
         setScope(button.dataset.scope);
+        clearReschedulePanel();
         loadBookings().catch((error) => setStatus(error.message, "error"));
       });
     });
 
-    toggleClientFieldByRole();
     renderForgotSubmitButton();
 
     api("/auth/me")

@@ -973,8 +973,18 @@ class AdminClienteResumen(BaseModel):
     cliente_id: str
     nombre: str
     booking_enabled: bool
+    booking_provider: str = "internal"
+    booking_timezone: str = DEFAULT_TIMEZONE
+    booking_day_start: str = "09:00"
+    booking_day_end: str = "18:00"
     allowed_origins: List[str]
+    contacto_email: str = ""
+    contacto_telefono: str = ""
+    branding_text: str = ""
     has_info_file: bool
+    info_file_size: int = 0
+    bookings_total: int = 0
+    bookings_pending: int = 0
 
 
 class AdminClienteDetalle(BaseModel):
@@ -1728,6 +1738,7 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
     powered_by = escape(config.get("branding", {}).get("powered_by", "Powered by Vantelia"))
     script_url = escape(assets["widget_script_url"])
     api_base_url = escape(assets["api_base_url"])
+    install_snippet = escape(assets["install_snippet"])
     cliente_safe = escape(cliente_id)
     logo_url = escape(_brand_asset_public_path("Logo_1_sin_resplandor.png"))
     favicon_url = escape(_brand_asset_public_path("favicon.png"))
@@ -1980,6 +1991,17 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
       color: #d9f8ff;
     }}
 
+    pre {{
+      overflow: auto;
+      white-space: pre-wrap;
+      background: rgba(2, 8, 23, 0.82);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      color: #d9f8ff;
+      line-height: 1.5;
+    }}
+
     @media (max-width: 900px) {{
       .grid {{
         grid-template-columns: 1fr;
@@ -1998,28 +2020,29 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
         <div class="hero-brand">
           <img src="{logo_url}" alt="Vantelia" />
           <div class="hero-copy">
-            <span class="eyebrow">Demo privada de chatbox para cliente</span>
+            <span class="eyebrow">Validacion previa a instalacion</span>
             <h1>{nombre}</h1>
             <p>{bienvenida}</p>
           </div>
         </div>
         <div class="hero-actions">
-          <button type="button" id="openChatBtn">Abrir demo del chat</button>
+          <button type="button" id="openChatBtn">Probar chat</button>
           <a href="{escape(assets["api_base_url"])}/dashboard" target="_blank" rel="noreferrer">Abrir panel admin</a>
         </div>
       </section>
 
       <section class="grid">
         <article class="card">
-          <h2>Como usar esta demo</h2>
+          <h2>Checklist de validacion</h2>
           <p>
-            Esta pagina sirve para validar el comportamiento del asistente antes de instalarlo en la web final.
-            El chat se abre abajo a la derecha y ya esta conectado al cerebro de <strong>{nombre}</strong>.
+            Usa esta pagina como control final antes de instalar el widget en la web del cliente.
+            El chat esta conectado al cerebro de <strong>{nombre}</strong> y sirve para validar respuestas, tono y reserva online.
           </p>
           <div class="list">
-            <span>1. Prueba preguntas reales sobre servicios, precios, horarios y proceso comercial.</span>
-            <span>2. Comprueba si deriva correctamente a contacto humano o a solicitud de cita.</span>
-            <span>3. Si detectas respuestas flojas, vuelve al panel, edita el cerebro y reindexa.</span>
+            <span>1. Prueba servicios, precios, horarios, objeciones y dudas frecuentes.</span>
+            <span>2. Comprueba que no inventa datos y que deriva a humano cuando toca.</span>
+            <span>3. Lanza una solicitud de cita y revisa emails, estado y enlace de gestion.</span>
+            <span>4. Si algo falla, vuelve al panel, ajusta info.txt, guarda y reindexa.</span>
           </div>
         </article>
 
@@ -2033,6 +2056,16 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
             <span>Marca visible: {powered_by}</span>
           </div>
         </aside>
+      </section>
+
+      <section class="card">
+        <h2>Snippet de instalacion</h2>
+        <p>Pega este bloque antes de cerrar el <code>body</code> de la web final cuando la demo este validada.</p>
+        <pre><code id="snippetCode">{install_snippet}</code></pre>
+        <div class="hero-actions">
+          <button type="button" id="copySnippetBtn">Copiar snippet</button>
+          <a href="{escape(assets["demo_url"])}" target="_blank" rel="noreferrer">Abrir esta demo</a>
+        </div>
       </section>
 
       <div class="footer">
@@ -2074,6 +2107,10 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
     }}
 
     document.getElementById("openChatBtn")?.addEventListener("click", openDemoChat);
+    document.getElementById("copySnippetBtn")?.addEventListener("click", async function () {{
+      await navigator.clipboard.writeText(document.getElementById("snippetCode")?.textContent || "");
+      this.textContent = "Snippet copiado";
+    }});
     window.addEventListener("load", function () {{
       window.setTimeout(openDemoChat, 300);
     }});
@@ -3466,6 +3503,9 @@ def _list_booking_rows(
     *,
     cliente_id: str = "",
     status_filter: str = "",
+    search: str = "",
+    date_from: str = "",
+    date_to: str = "",
     limit: int = 100,
     offset: int = 0,
     scope: str = "all",
@@ -3479,6 +3519,21 @@ def _list_booking_rows(
     if status_filter:
         clauses.append("status = ?")
         params.append(status_filter)
+    if date_from:
+        clauses.append("booking_date >= ?")
+        params.append(date_from)
+    if date_to:
+        clauses.append("booking_date <= ?")
+        params.append(date_to)
+    if search:
+        like_search = f"%{search}%"
+        clauses.append(
+            "("
+            "id LIKE ? OR cliente_id LIKE ? OR nombre LIKE ? OR email LIKE ? OR telefono LIKE ? "
+            "OR servicio LIKE ? OR provider_booking_id LIKE ?"
+            ")"
+        )
+        params.extend([like_search] * 7)
     now_iso = _utc_now_iso()
     if scope == "upcoming":
         clauses.append(
@@ -3621,23 +3676,28 @@ def _booking_manage_page(booking: BookingDetailPublic) -> str:
       padding:24px;
       color:var(--ink);
     }}
-    .wrap {{ max-width:820px; margin:0 auto; }}
-    .card {{ background:var(--panel); border:1px solid var(--line); border-radius:24px; padding:28px; box-shadow:var(--shadow); backdrop-filter: blur(18px); }}
+    .wrap {{ max-width:980px; margin:0 auto; }}
+    .card {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:28px; box-shadow:var(--shadow); backdrop-filter: blur(18px); }}
     .hero {{ display:flex; align-items:center; gap:16px; margin-bottom:18px; }}
     .hero img {{ width:68px; height:68px; object-fit:contain; filter: drop-shadow(0 0 22px rgba(0,177,217,.3)); }}
     h1 {{ margin:0 0 8px; font-size:30px; font-family:var(--font-title); }}
     .muted {{ color:var(--soft); }}
     .grid {{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:20px 0; }}
-    .field {{ background:rgba(8,20,48,.92); border:1px solid rgba(184,192,204,.14); border-radius:16px; padding:12px; }}
+    .field {{ background:rgba(8,20,48,.92); border:1px solid rgba(184,192,204,.14); border-radius:8px; padding:12px; }}
     .field strong {{ display:block; font-size:12px; text-transform:uppercase; color:#8dcfe0; margin-bottom:6px; }}
     .actions {{ display:flex; gap:12px; flex-wrap:wrap; margin-top:20px; }}
-    button {{ border:none; border-radius:999px; padding:12px 18px; font-weight:700; cursor:pointer; font-family:var(--font-body); }}
+    button {{ border:none; border-radius:8px; padding:12px 18px; font-weight:700; cursor:pointer; font-family:var(--font-body); }}
     .primary {{ background:linear-gradient(135deg, var(--accent), #008bad); color:#fff; }}
     .secondary {{ background:rgba(184,192,204,.12); color:var(--ink); }}
     .danger {{ background:var(--danger); color:#fff; }}
     .panel {{ margin-top:24px; padding-top:20px; border-top:1px solid rgba(184,192,204,.14); }}
     .status {{ margin-top:16px; min-height:22px; font-weight:600; }}
-    input {{ width:100%; box-sizing:border-box; border:1px solid rgba(184,192,204,.16); border-radius:14px; padding:12px; font-family:var(--font-body); background:rgba(8,20,48,.92); color:var(--ink); }}
+    input {{ width:100%; box-sizing:border-box; border:1px solid rgba(184,192,204,.16); border-radius:8px; padding:12px; font-family:var(--font-body); background:rgba(8,20,48,.92); color:var(--ink); }}
+    .slot-grid {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(96px, 1fr)); gap:10px; margin-top:12px; }}
+    .slot-grid button {{ background:rgba(184,192,204,.12); color:var(--ink); }}
+    .slot-grid button.selected {{ background:linear-gradient(135deg, var(--accent), #008bad); color:#fff; }}
+    .slot-grid button:disabled {{ cursor:not-allowed; opacity:.45; }}
+    .notice {{ border:1px solid var(--line); border-radius:8px; padding:12px; color:var(--soft); background:rgba(255,255,255,.03); }}
     @media (max-width: 720px) {{ .grid {{ grid-template-columns:1fr; }} body {{ padding:16px; }} }}
   </style>
 </head>
@@ -3662,10 +3722,13 @@ def _booking_manage_page(booking: BookingDetailPublic) -> str:
       {provider_note}
       <div class="panel" id="reschedule-panel">
         <strong>Cambiar cita</strong>
+        <p class="muted">Elige una fecha y selecciona uno de los horarios disponibles. Asi evitamos proponer tramos ya ocupados.</p>
         <div class="grid">
           <label>Fecha<input id="reschedule-date" type="date" /></label>
-          <label>Hora<input id="reschedule-time" type="time" step="1800" /></label>
+          <label>Hora seleccionada<input id="reschedule-time" type="time" step="1800" readonly /></label>
         </div>
+        <div id="slot-status" class="notice">Selecciona una fecha para cargar disponibilidad.</div>
+        <div id="slot-grid" class="slot-grid"></div>
         <div class="actions">
           <button class="primary" id="reschedule-btn" type="button">Guardar nuevo horario</button>
           <button class="danger" id="cancel-btn" type="button">Cancelar cita</button>
@@ -3678,11 +3741,52 @@ def _booking_manage_page(booking: BookingDetailPublic) -> str:
     const BOOKING = {serialized};
     const statusEl = document.getElementById("status");
     const reschedulePanel = document.getElementById("reschedule-panel");
+    const slotStatus = document.getElementById("slot-status");
+    const slotGrid = document.getElementById("slot-grid");
     if (BOOKING.provider_name === "calendly" || BOOKING.estado === "cancelled") {{
       reschedulePanel.style.display = "none";
     }}
     document.getElementById("reschedule-date").value = BOOKING.fecha;
     document.getElementById("reschedule-time").value = BOOKING.hora;
+
+    function selectSlot(button, hora) {{
+      document.querySelectorAll("#slot-grid button").forEach((item) => item.classList.remove("selected"));
+      button.classList.add("selected");
+      document.getElementById("reschedule-time").value = hora;
+    }}
+
+    async function loadSlots() {{
+      const fecha = document.getElementById("reschedule-date").value;
+      slotGrid.innerHTML = "";
+      if (!fecha) {{
+        slotStatus.textContent = "Selecciona una fecha para cargar disponibilidad.";
+        return;
+      }}
+      slotStatus.textContent = "Consultando disponibilidad...";
+      try {{
+        const response = await fetch(`/disponibilidad?cliente_id=${{encodeURIComponent(BOOKING.cliente_id)}}&fecha=${{encodeURIComponent(fecha)}}`, {{
+          headers: {{ "Accept": "application/json" }},
+        }});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "No se pudo cargar la disponibilidad.");
+        const slots = Array.isArray(data.slots) ? data.slots : [];
+        const available = slots.filter((slot) => slot.disponible);
+        slotStatus.textContent = available.length ? `${{available.length}} horarios disponibles` : "No hay horarios disponibles para esta fecha.";
+        slots.forEach((slot) => {{
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = slot.hora;
+          button.disabled = !slot.disponible;
+          if (slot.hora === document.getElementById("reschedule-time").value) {{
+            button.classList.add("selected");
+          }}
+          button.addEventListener("click", () => selectSlot(button, slot.hora));
+          slotGrid.appendChild(button);
+        }});
+      }} catch (error) {{
+        slotStatus.textContent = error.message;
+      }}
+    }}
 
     async function action(url, body) {{
       statusEl.textContent = "Procesando...";
@@ -3713,6 +3817,8 @@ def _booking_manage_page(booking: BookingDetailPublic) -> str:
       try {{ await action(window.location.pathname + "/reschedule", {{ fecha, hora }}); }}
       catch (error) {{ statusEl.textContent = error.message; }}
     }});
+    document.getElementById("reschedule-date")?.addEventListener("change", loadSlots);
+    loadSlots();
   </script>
 </body>
 </html>"""
@@ -4452,14 +4558,48 @@ async def admin_alta_express(
 )
 async def admin_clientes() -> List[AdminClienteResumen]:
     summaries: List[AdminClienteResumen] = []
+    booking_counts: Dict[str, Dict[str, int]] = {}
+    with _get_db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT cliente_id,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN status IN ('confirmed', 'pending_review') THEN 1 ELSE 0 END) AS pending
+            FROM bookings
+            GROUP BY cliente_id
+            """
+        ).fetchall()
+        booking_counts = {
+            row["cliente_id"]: {
+                "total": int(row["total"] or 0),
+                "pending": int(row["pending"] or 0),
+            }
+            for row in rows
+        }
+
     for cliente_id, config in sorted(CONFIG_CLIENTES.items(), key=lambda item: item[0].lower()):
+        booking_cfg = config.get("booking", {})
+        contacto = config.get("contacto", {})
+        branding = config.get("branding", {})
+        info_path = _client_info_path(cliente_id)
+        client_counts = booking_counts.get(cliente_id, {})
         summaries.append(
             AdminClienteResumen(
                 cliente_id=cliente_id,
                 nombre=config["nombre"],
-                booking_enabled=bool(config["booking"]["enabled"]),
+                booking_enabled=bool(booking_cfg.get("enabled")),
+                booking_provider=str(booking_cfg.get("provider", "internal")),
+                booking_timezone=str(booking_cfg.get("timezone", DEFAULT_TIMEZONE)),
+                booking_day_start=str(booking_cfg.get("day_start", "09:00")),
+                booking_day_end=str(booking_cfg.get("day_end", "18:00")),
                 allowed_origins=list(config.get("allowed_origins", [])),
-                has_info_file=_client_info_path(cliente_id).exists(),
+                contacto_email=str(contacto.get("email", "")),
+                contacto_telefono=str(contacto.get("telefono", "")),
+                branding_text=str(branding.get("powered_by", "")),
+                has_info_file=info_path.exists(),
+                info_file_size=(info_path.stat().st_size if info_path.exists() else 0),
+                bookings_total=int(client_counts.get("total", 0)),
+                bookings_pending=int(client_counts.get("pending", 0)),
             )
         )
     return summaries
@@ -4508,11 +4648,17 @@ async def admin_bookings(
     request: Request,
     cliente_id: str = "",
     estado: str = "",
+    q: str = "",
+    fecha_desde: str = "",
+    fecha_hasta: str = "",
     limit: int = 100,
 ) -> List[AdminBookingResumen]:
     rows, _ = _list_booking_rows(
         cliente_id=cliente_id.strip(),
         status_filter=estado.strip(),
+        search=q.strip(),
+        date_from=fecha_desde.strip(),
+        date_to=fecha_hasta.strip(),
         limit=max(1, min(limit, 500)),
     )
     return [_booking_admin_summary_from_row(row, request) for row in rows]

@@ -18,9 +18,9 @@
       --accent: #00b1d9;
       --accent-dark: #007ea0;
       --accent-soft: rgba(0, 177, 217, 0.14);
-      --shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
-      --radius: 22px;
-      --radius-sm: 14px;
+      --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+      --radius: 8px;
+      --radius-sm: 8px;
       --font-title: "Montserrat", "Segoe UI", sans-serif;
       --font: "Poppins", "Segoe UI", sans-serif;
     }
@@ -34,26 +34,28 @@
       font-family: var(--font);
       color: var(--text);
       background:
-        linear-gradient(180deg, rgba(0, 11, 41, 0.88), rgba(0, 11, 41, 0.96)),
-        radial-gradient(circle at top right, rgba(0, 177, 217, 0.18), transparent 24%),
-        radial-gradient(circle at top left, rgba(184, 192, 204, 0.1), transparent 28%),
+        linear-gradient(180deg, rgba(2, 9, 27, 0.9), rgba(4, 10, 24, 0.97)),
         url("/brand-assets/Fondo_Web.png") center top / cover fixed no-repeat;
     }
 
     .app {
       min-height: 100vh;
       display: grid;
-      grid-template-columns: 320px minmax(0, 1fr);
+      grid-template-columns: 292px minmax(0, 1fr);
     }
 
     .sidebar {
       border-right: 1px solid var(--line);
-      background: rgba(3, 9, 25, 0.78);
-      backdrop-filter: blur(18px);
-      padding: 22px 18px;
+      background: rgba(3, 8, 22, 0.93);
+      backdrop-filter: blur(16px);
+      padding: 20px 16px;
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 14px;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      overflow: auto;
     }
 
     .brand {
@@ -108,6 +110,71 @@
       font-size: 14px;
     }
 
+    .side-nav {
+      display: grid;
+      gap: 7px;
+      padding: 8px 0;
+    }
+
+    .nav-button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: flex-start;
+      border-radius: 8px;
+      padding: 11px 12px;
+      background: transparent;
+      color: var(--soft);
+      border: 1px solid transparent;
+      box-shadow: none;
+      text-align: left;
+    }
+
+    .nav-button:hover,
+    .nav-button.active {
+      color: var(--text);
+      background: rgba(184, 192, 204, 0.1);
+      border-color: var(--line);
+    }
+
+    .nav-icon {
+      width: 28px;
+      height: 28px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 8px;
+      color: var(--accent);
+      background: rgba(0, 177, 217, 0.1);
+      font-size: 12px;
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
+
+    .nav-text {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .nav-text strong,
+    .nav-text span {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .nav-text strong {
+      font-size: 13px;
+      line-height: 1.2;
+    }
+
+    .nav-text span {
+      color: var(--soft);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
     .brand-links {
       display: flex;
       flex-wrap: wrap;
@@ -148,7 +215,7 @@
 
     .stat {
       background: var(--accent-soft);
-      border-radius: 16px;
+      border-radius: 8px;
       padding: 12px;
     }
 
@@ -182,9 +249,18 @@
       padding-right: 4px;
     }
 
+    .sidebar-search {
+      padding: 0 4px;
+    }
+
+    .sidebar-search input {
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
     .client-item {
       padding: 12px 14px;
-      border-radius: 14px;
+      border-radius: 8px;
       background: var(--panel-strong);
       border: 1px solid var(--line);
       cursor: pointer;
@@ -209,10 +285,46 @@
     }
 
     .main {
-      padding: 24px;
+      padding: 24px clamp(18px, 3vw, 34px);
       display: grid;
       gap: 18px;
       align-content: start;
+      min-width: 0;
+    }
+
+    .dashboard-view {
+      display: none;
+      gap: 18px;
+      align-content: start;
+    }
+
+    .dashboard-view.active {
+      display: grid;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .section-header h2,
+    .section-header p {
+      margin: 0;
+    }
+
+    .section-header h2 {
+      font-family: var(--font-title);
+      font-size: 1.35rem;
+    }
+
+    .section-header p {
+      color: var(--soft);
+      line-height: 1.5;
+      max-width: 760px;
+      font-size: 14px;
     }
 
     .hero {
@@ -249,7 +361,120 @@
     }
 
     .booking-settings {
+      display: grid;
+      gap: 16px;
+    }
+
+    .client-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .client-tabs button {
+      background: rgba(184, 192, 204, 0.1);
+      color: var(--soft);
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+
+    .client-tabs button.active {
+      background: rgba(0, 177, 217, 0.14);
+      color: var(--text);
+      border-color: rgba(0, 177, 217, 0.35);
+    }
+
+    .client-tab-panel {
       display: none;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .client-tab-panel.active {
+      display: grid;
+    }
+
+    .client-directory {
+      display: grid;
+      gap: 8px;
+    }
+
+    .client-list-row {
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-strong);
+      overflow: hidden;
+    }
+
+    .client-list-row.active {
+      border-color: rgba(0, 177, 217, 0.46);
+      box-shadow: 0 0 0 1px rgba(0, 177, 217, 0.14);
+    }
+
+    .client-list-main {
+      width: 100%;
+      padding: 13px 14px;
+      border-radius: 0;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      min-width: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .client-list-name {
+      min-width: 0;
+      display: grid;
+      gap: 4px;
+    }
+
+    .client-list-name strong,
+    .client-list-name span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .client-list-name span,
+    .client-list-meta {
+      color: var(--soft);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .client-summary {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) repeat(4, minmax(120px, 0.7fr));
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(184, 192, 204, 0.04);
+    }
+
+    .client-summary-block {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .client-summary-block span {
+      color: var(--soft);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .client-summary-block strong {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.98rem;
     }
 
     .account-card,
@@ -388,13 +613,18 @@
 
     button {
       border: 0;
-      border-radius: 999px;
+      border-radius: 8px;
       background: linear-gradient(135deg, var(--accent), var(--accent-dark));
       color: #fff;
       padding: 11px 16px;
       font: inherit;
       font-weight: 800;
       cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: wait;
+      opacity: 0.68;
     }
 
     button.secondary {
@@ -415,13 +645,13 @@
 
     button.small {
       padding: 10px 12px;
-      border-radius: 14px;
+      border-radius: 8px;
       font-size: 13px;
     }
 
     .status {
       padding: 14px 16px;
-      border-radius: 16px;
+      border-radius: 8px;
       font-size: 14px;
       line-height: 1.5;
       border: 1px solid rgba(0, 177, 217, 0.16);
@@ -469,7 +699,7 @@
 
     .subcard {
       border: 1px solid var(--line);
-      border-radius: 20px;
+      border-radius: 8px;
       padding: 16px;
       background: var(--panel-strong);
       display: grid;
@@ -498,7 +728,7 @@
 
     .user-card {
       border: 1px solid var(--line);
-      border-radius: 18px;
+      border-radius: 8px;
       background: rgba(184, 192, 204, 0.06);
       padding: 16px;
       display: grid;
@@ -547,7 +777,7 @@
 
     .meta-box {
       border: 1px solid var(--line);
-      border-radius: 16px;
+      border-radius: 8px;
       padding: 12px;
       background: rgba(255, 255, 255, 0.02);
       display: grid;
@@ -580,10 +810,103 @@
 
     .empty {
       border: 1px dashed var(--line);
-      border-radius: 18px;
+      border-radius: 8px;
       padding: 18px;
       color: var(--soft);
       background: rgba(255, 255, 255, 0.02);
+    }
+
+    .loading-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--soft);
+    }
+
+    .loading-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 0 rgba(0, 177, 217, 0.34);
+      animation: pulse-dot 1.1s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0% { box-shadow: 0 0 0 0 rgba(0, 177, 217, 0.34); }
+      70% { box-shadow: 0 0 0 8px rgba(0, 177, 217, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(0, 177, 217, 0); }
+    }
+
+    .table-shell {
+      width: 100%;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(2, 8, 23, 0.56);
+    }
+
+    table {
+      width: 100%;
+      min-width: 980px;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 14px;
+      vertical-align: top;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      font-size: 13px;
+    }
+
+    th {
+      color: var(--soft);
+      background: rgba(184, 192, 204, 0.06);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .booking-meta {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .booking-meta span {
+      color: var(--soft);
+      word-break: break-word;
+    }
+
+    .booking-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-width: 220px;
+    }
+
+    .booking-actions button {
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+
+    .filters-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 12px;
+    }
+
+    .filters-row label {
+      min-width: 170px;
     }
 
     @media (max-width: 1180px) {
@@ -592,9 +915,20 @@
       }
 
       .sidebar {
+        position: static;
+        height: auto;
         border-right: 0;
         border-bottom: 1px solid var(--line);
       }
+
+      .side-nav {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .nav-text span {
+        display: none;
+      }
+
     }
 
     @media (max-width: 860px) {
@@ -606,6 +940,7 @@
       .grid,
       .grid-3,
       .split,
+      .client-summary,
       .meta-grid {
         grid-template-columns: 1fr;
       }
@@ -613,6 +948,11 @@
       .hero {
         flex-direction: column;
         align-items: flex-start;
+      }
+
+      .client-list-main {
+        align-items: flex-start;
+        flex-direction: column;
       }
     }
   </style>
@@ -635,6 +975,29 @@
         </div>
       </section>
 
+      <nav class="side-nav" aria-label="Navegacion del dashboard">
+        <button class="nav-button" type="button" data-nav-view="express">
+          <span class="nav-icon">AE</span>
+          <span class="nav-text"><strong>Alta express</strong><span>Crear desde una web</span></span>
+        </button>
+        <button class="nav-button active" type="button" data-nav-view="clients">
+          <span class="nav-icon">CL</span>
+          <span class="nav-text"><strong>Clientes</strong><span>Marca, widget e info.txt</span></span>
+        </button>
+        <button class="nav-button" type="button" data-nav-view="bookings">
+          <span class="nav-icon">RS</span>
+          <span class="nav-text"><strong>Reservas</strong><span>Citas y recordatorios</span></span>
+        </button>
+        <button class="nav-button" type="button" data-nav-view="users">
+          <span class="nav-icon">US</span>
+          <span class="nav-text"><strong>Usuarios</strong><span>Accesos del portal</span></span>
+        </button>
+        <button class="nav-button" type="button" data-nav-view="security">
+          <span class="nav-icon">SG</span>
+          <span class="nav-text"><strong>Seguridad</strong><span>Sesion y contrasena</span></span>
+        </button>
+      </nav>
+
       <section class="card account-card">
         <div class="account-chip">Administrador</div>
         <div class="account-identity">
@@ -647,23 +1010,6 @@
           <button id="logoutBtn" class="danger small" type="button">Salir</button>
         </div>
         <div class="support-note">El acceso ya queda separado en `/acceso`. Desde aqui trabajas directamente con la sesion activa del administrador.</div>
-      </section>
-
-      <section class="card security-card" id="securityCard">
-        <strong>Seguridad</strong>
-        <label>
-          Contrasena actual
-          <input id="currentPassword" type="password" placeholder="Tu contrasena actual" />
-        </label>
-        <label>
-          Nueva contrasena
-          <input id="newPassword" type="password" placeholder="Nueva contrasena" />
-        </label>
-        <label>
-          Repite la nueva contrasena
-          <input id="confirmPassword" type="password" placeholder="Repite la nueva contrasena" />
-        </label>
-        <button id="changePasswordBtn" class="secondary small" type="button">Actualizar contrasena</button>
       </section>
 
       <section class="card stats">
@@ -681,29 +1027,24 @@
           <strong>Clientes</strong>
           <button id="newClientBtn" class="secondary" type="button">Nuevo</button>
         </div>
+        <label class="sidebar-search">
+          <input id="clientSearch" type="search" placeholder="Buscar cliente..." />
+        </label>
         <div id="clientsList" class="clients-list"></div>
       </section>
     </aside>
 
     <main class="main">
-      <section class="card hero">
-        <div>
-          <div class="hero-chip">Vantelia 2.0</div>
-          <h2>Alta y mantenimiento rapido de clientes</h2>
-          <p>Crea clientes, personaliza su marca, gestiona accesos y deja lista una demo vendible con una operativa mucho mas limpia para tu agencia.</p>
-        </div>
-        <div class="actions">
-          <button id="saveBtn" type="button">Guardar cliente</button>
-          <button id="reindexBtn" class="secondary" type="button">Reindexar</button>
-          <button id="copySnippetBtn" class="ghost" type="button">Copiar snippet</button>
-          <button id="openDemoBtn" class="ghost" type="button">Abrir demo</button>
-        </div>
-      </section>
-
       <div id="status" class="status"></div>
 
+      <section class="dashboard-view" data-view="express">
       <section class="card panel express-panel">
-        <strong>Alta express desde web corporativa</strong>
+        <div class="section-header">
+          <div>
+            <h2>Alta express</h2>
+            <p>Crea un cliente desde su web corporativa, genera el info.txt y deja preparada la demo.</p>
+          </div>
+        </div>
 
         <div class="grid">
           <label>
@@ -759,7 +1100,9 @@
           Si dejas activa la opcion de auto-guardado, el cliente queda creado, indexado y listo para instalar.
         </div>
       </section>
+      </section>
 
+      <section class="dashboard-view" data-view="users">
       <section class="card panel">
         <strong>Control de usuarios</strong>
 
@@ -835,10 +1178,141 @@
           </div>
         </div>
       </section>
+      </section>
 
-      <section class="split">
+      <section class="dashboard-view" data-view="bookings">
         <section class="card panel">
-          <strong>Configuracion del cliente</strong>
+          <div class="section-header">
+            <div>
+              <h2>Reservas</h2>
+              <p>Panel operativo para revisar citas, proveedores, correos y acciones de gestion.</p>
+            </div>
+            <div class="actions">
+              <button id="refreshBookingsBtn" class="secondary" type="button">Actualizar</button>
+              <button id="runRemindersBtn" class="ghost" type="button">Ejecutar recordatorios</button>
+            </div>
+          </div>
+
+          <div class="filters-row">
+            <label>
+              Buscar
+              <input id="bookingSearch" type="search" placeholder="Nombre, email, servicio, ID..." />
+            </label>
+            <label>
+              Cliente
+              <select id="bookingClientFilter">
+                <option value="">Todos</option>
+              </select>
+            </label>
+            <label>
+              Estado
+              <select id="bookingStatusFilter">
+                <option value="">Todos</option>
+                <option value="confirmed">Confirmadas</option>
+                <option value="pending_review">Pendientes</option>
+                <option value="cancelled">Canceladas</option>
+                <option value="completed">Completadas</option>
+              </select>
+            </label>
+            <label>
+              Desde
+              <input id="bookingDateFrom" type="date" />
+            </label>
+            <label>
+              Hasta
+              <input id="bookingDateTo" type="date" />
+            </label>
+            <label>
+              Limite
+              <input id="bookingLimit" type="number" min="1" max="500" value="100" />
+            </label>
+          </div>
+
+          <div class="table-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Cita</th>
+                  <th>Estado</th>
+                  <th>Proveedor</th>
+                  <th>Emails</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="bookingsTableBody">
+                <tr><td colspan="6" class="muted">Todavia no hay reservas cargadas.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section class="dashboard-view active" data-view="clients">
+      <section class="card hero">
+        <div>
+          <div class="hero-chip">Cliente activo</div>
+          <h2>Clientes</h2>
+          <p>Centro operativo para configurar marca, widget, dominios, demo, snippet e info.txt del cliente seleccionado.</p>
+        </div>
+        <div class="actions">
+          <button id="saveBtn" type="button">Guardar cliente</button>
+          <button id="reindexBtn" class="secondary" type="button">Reindexar</button>
+          <button id="copySnippetBtn" class="ghost" type="button">Copiar snippet</button>
+          <button id="openDemoBtn" class="ghost" type="button">Abrir demo</button>
+        </div>
+      </section>
+
+      <section class="card panel">
+        <div class="section-header">
+          <div>
+            <h2>Listado de clientes</h2>
+            <p id="clientCountLabel">Cargando clientes...</p>
+          </div>
+        </div>
+        <div id="clientDirectory" class="client-directory">
+          <div class="empty"><span class="loading-inline"><span class="loading-dot"></span>Cargando clientes...</span></div>
+        </div>
+      </section>
+
+      <section class="card panel">
+        <div id="selectedClientSummary" class="client-summary">
+          <div class="client-summary-block">
+            <span>Cliente seleccionado</span>
+            <strong>Selecciona un cliente para ver y editar su informacion.</strong>
+          </div>
+          <div class="client-summary-block">
+            <span>Reservas</span>
+            <strong>-</strong>
+          </div>
+          <div class="client-summary-block">
+            <span>Agenda</span>
+            <strong>-</strong>
+          </div>
+          <div class="client-summary-block">
+            <span>Dominios</span>
+            <strong>-</strong>
+          </div>
+          <div class="client-summary-block">
+            <span>Info.txt</span>
+            <strong>-</strong>
+          </div>
+        </div>
+
+        <div class="client-tabs" aria-label="Secciones del cliente">
+          <button class="active" type="button" data-client-tab="profile">Perfil</button>
+          <button type="button" data-client-tab="booking">Reservas</button>
+          <button type="button" data-client-tab="install">Instalacion</button>
+          <button type="button" data-client-tab="brain">Info.txt</button>
+        </div>
+
+        <section class="client-tab-panel active" data-client-panel="profile">
+          <div class="section-header">
+            <div>
+              <h2>Perfil del cliente</h2>
+              <p>Datos visibles del widget, contacto humano, tono base y dominios autorizados.</p>
+            </div>
+          </div>
 
           <div class="grid">
             <label>
@@ -900,10 +1374,15 @@
           </label>
         </section>
 
-        <section class="card panel">
-          <strong>Snippet y demo</strong>
+        <section class="client-tab-panel" data-client-panel="booking">
+          <div class="section-header">
+            <div>
+              <h2>Reservas</h2>
+              <p>Activa agenda online y define proveedor, disponibilidad, Calendly o Google Calendar.</p>
+            </div>
+          </div>
 
-          <div class="booking-settings" aria-hidden="true">
+          <div class="booking-settings">
             <label class="inline-check">
               <input id="bookingEnabled" type="checkbox" checked />
               Reserva online activa
@@ -1017,6 +1496,15 @@
               <textarea id="bookingSuccessMessage"></textarea>
             </label>
           </div>
+        </section>
+
+        <section class="client-tab-panel" data-client-panel="install">
+          <div class="section-header">
+            <div>
+              <h2>Instalacion y demo</h2>
+              <p>Snippet para insertar en la web final y demo compartible para validar antes de publicar.</p>
+            </div>
+          </div>
 
           <label class="inline-check">
             <input id="reindexAfterSave" type="checkbox" checked />
@@ -1042,20 +1530,53 @@
             Flujo recomendado: `auto_onboarding.py` -> pegar `info.txt` aqui -> guardar -> revisar demo -> copiar snippet -> instalar en la web del cliente.
           </div>
         </section>
+
+        <section class="client-tab-panel" data-client-panel="brain">
+          <div class="section-header">
+            <div>
+              <h2>Cerebro del cliente</h2>
+              <p>Contenido RAG que usa el asistente para responder con contexto del negocio.</p>
+            </div>
+          </div>
+          <label>
+            Contenido RAG
+            <textarea id="infoTxt" style="min-height: 520px;" placeholder="Pega aqui el info.txt generado para la empresa"></textarea>
+          </label>
+        </section>
+      </section>
       </section>
 
-      <section class="card panel">
-        <strong>Cerebro del cliente: info.txt</strong>
-        <label>
-          Contenido RAG
-          <textarea id="infoTxt" style="min-height: 520px;" placeholder="Pega aqui el info.txt generado para la empresa"></textarea>
-        </label>
+      <section class="dashboard-view" data-view="security">
+        <section class="card panel security-card" id="securityCard">
+          <div class="section-header">
+            <div>
+              <h2>Seguridad</h2>
+              <p>Actualiza la contrasena de la cuenta administradora y verifica la sesion activa.</p>
+            </div>
+          </div>
+          <label>
+            Contrasena actual
+            <input id="currentPassword" type="password" placeholder="Tu contrasena actual" />
+          </label>
+          <label>
+            Nueva contrasena
+            <input id="newPassword" type="password" placeholder="Nueva contrasena" />
+          </label>
+          <label>
+            Repite la nueva contrasena
+            <input id="confirmPassword" type="password" placeholder="Repite la nueva contrasena" />
+          </label>
+          <div class="actions">
+            <button id="changePasswordBtn" class="secondary" type="button">Actualizar contrasena</button>
+          </div>
+        </section>
       </section>
     </main>
   </div>
 
   <script>
     const state = {
+      activeView: "clients",
       currentClientId: "",
       currentUser: null,
       clients: [],
@@ -1064,13 +1585,21 @@
 
     const elements = {
       status: document.getElementById("status"),
+      navButtons: document.querySelectorAll("[data-nav-view]"),
+      views: document.querySelectorAll(".dashboard-view"),
+      clientTabButtons: document.querySelectorAll("[data-client-tab]"),
+      clientTabPanels: document.querySelectorAll("[data-client-panel]"),
       sessionName: document.getElementById("sessionName"),
       sessionEmail: document.getElementById("sessionEmail"),
       securityCard: document.getElementById("securityCard"),
       currentPassword: document.getElementById("currentPassword"),
       newPassword: document.getElementById("newPassword"),
       confirmPassword: document.getElementById("confirmPassword"),
+      clientSearch: document.getElementById("clientSearch"),
       clientsList: document.getElementById("clientsList"),
+      clientDirectory: document.getElementById("clientDirectory"),
+      clientCountLabel: document.getElementById("clientCountLabel"),
+      selectedClientSummary: document.getElementById("selectedClientSummary"),
       installSnippet: document.getElementById("installSnippet"),
       demoUrl: document.getElementById("demoUrl"),
       statVersion: document.getElementById("statVersion"),
@@ -1121,6 +1650,13 @@
       userClientFilter: document.getElementById("userClientFilter"),
       userIncludeInactive: document.getElementById("userIncludeInactive"),
       usersList: document.getElementById("usersList"),
+      bookingSearch: document.getElementById("bookingSearch"),
+      bookingClientFilter: document.getElementById("bookingClientFilter"),
+      bookingStatusFilter: document.getElementById("bookingStatusFilter"),
+      bookingDateFrom: document.getElementById("bookingDateFrom"),
+      bookingDateTo: document.getElementById("bookingDateTo"),
+      bookingLimit: document.getElementById("bookingLimit"),
+      bookingsTableBody: document.getElementById("bookingsTableBody"),
       reindexAfterSave: document.getElementById("reindexAfterSave"),
       infoTxt: document.getElementById("infoTxt"),
     };
@@ -1133,6 +1669,52 @@
     function clearStatus() {
       elements.status.className = "status";
       elements.status.textContent = "";
+    }
+
+    async function withButtonLoading(button, loadingText, task) {
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = loadingText;
+      try {
+        return await task();
+      } finally {
+        button.textContent = originalText;
+        button.disabled = false;
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function setView(view) {
+      const nextView = view || "clients";
+      state.activeView = nextView;
+      elements.views.forEach((section) => {
+        section.classList.toggle("active", section.dataset.view === nextView);
+      });
+      elements.navButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.navView === nextView);
+      });
+
+      if (nextView === "bookings") {
+        loadBookings().catch((error) => showStatus(error.message, "error"));
+      }
+    }
+
+    function setClientTab(tab) {
+      const nextTab = tab || "profile";
+      elements.clientTabButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.clientTab === nextTab);
+      });
+      elements.clientTabPanels.forEach((panel) => {
+        panel.classList.toggle("active", panel.dataset.clientPanel === nextTab);
+      });
     }
 
     function formatApiDetail(detail) {
@@ -1249,6 +1831,135 @@
       return role === "admin" ? "Administrador" : "Cliente";
     }
 
+    function formatFileSize(bytes) {
+      const size = Number(bytes || 0);
+      if (size <= 0) return "Sin archivo";
+      if (size < 1024) return `${size} B`;
+      if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+      return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function getVisibleClients() {
+      const search = elements.clientSearch.value.trim().toLowerCase();
+      return state.clients.filter((client) => {
+        const haystack = [
+          client.nombre,
+          client.cliente_id,
+          client.contacto_email,
+          client.contacto_telefono,
+          client.booking_provider,
+          client.booking_timezone,
+        ].join(" ").toLowerCase();
+        return !search || haystack.includes(search);
+      });
+    }
+
+    async function openClientSection(clienteId, tab = "profile") {
+      setView("clients");
+      setClientTab(tab);
+      await loadClientDetail(clienteId);
+    }
+
+    function openClientBookings(clienteId) {
+      if (elements.bookingClientFilter) {
+        elements.bookingClientFilter.value = clienteId;
+      }
+      setView("bookings");
+    }
+
+    function renderSelectedClientSummary() {
+      const client = state.clients.find((item) => item.cliente_id === state.currentClientId);
+      if (!client) {
+        elements.selectedClientSummary.innerHTML = `
+          <div class="client-summary-block"><span>Cliente seleccionado</span><strong>Selecciona un cliente para ver y editar su informacion.</strong></div>
+          <div class="client-summary-block"><span>Reservas</span><strong>-</strong></div>
+          <div class="client-summary-block"><span>Agenda</span><strong>-</strong></div>
+          <div class="client-summary-block"><span>Dominios</span><strong>-</strong></div>
+          <div class="client-summary-block"><span>Info.txt</span><strong>-</strong></div>
+        `;
+        return;
+      }
+
+      const bookingStatus = client.booking_enabled ? "Activa" : "Inactiva";
+      const bookingProvider = client.booking_provider || "internal";
+      const originsCount = Array.isArray(client.allowed_origins) ? client.allowed_origins.length : 0;
+      elements.selectedClientSummary.innerHTML = `
+        <div class="client-summary-block"><span>Cliente seleccionado</span><strong>${escapeHtml(client.nombre)} (${escapeHtml(client.cliente_id)})</strong></div>
+        <div class="client-summary-block"><span>Reservas</span><strong>${Number(client.bookings_total || 0)} total / ${Number(client.bookings_pending || 0)} activas</strong></div>
+        <div class="client-summary-block"><span>Agenda</span><strong>${escapeHtml(bookingStatus)} · ${escapeHtml(bookingProvider)}</strong></div>
+        <div class="client-summary-block"><span>Dominios</span><strong>${originsCount} permitidos</strong></div>
+        <div class="client-summary-block"><span>Info.txt</span><strong>${client.has_info_file ? formatFileSize(client.info_file_size) : "Pendiente"}</strong></div>
+      `;
+    }
+
+    function renderClientDirectory(selectedId, visibleClients) {
+      elements.clientCountLabel.textContent = `${visibleClients.length} de ${state.clients.length} clientes visibles`;
+      elements.clientDirectory.innerHTML = "";
+      if (!visibleClients.length) {
+        elements.clientDirectory.innerHTML = '<div class="empty">No hay clientes que coincidan con la busqueda.</div>';
+        return;
+      }
+
+      visibleClients.forEach((client) => {
+        const row = document.createElement("article");
+        row.className = `client-list-row${client.cliente_id === selectedId ? " active" : ""}`;
+        const clientName = escapeHtml(client.nombre || "-");
+        const clientId = escapeHtml(client.cliente_id || "-");
+        const bookingStatus = client.booking_enabled ? "Reservas ON" : "Reservas OFF";
+        row.innerHTML = `
+          <button class="client-list-main" type="button" data-client-action="profile">
+            <span class="client-list-name">
+              <strong>${clientName}</strong>
+              <span>${clientId}</span>
+            </span>
+            <span class="client-list-meta">${bookingStatus}</span>
+          </button>
+        `;
+        row.querySelectorAll("button[data-client-action]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const action = button.dataset.clientAction;
+            if (action === "bookings-view") {
+              openClientBookings(client.cliente_id);
+              return;
+            }
+            openClientSection(client.cliente_id, action).catch((error) => showStatus(error.message, "error"));
+          });
+        });
+        elements.clientDirectory.appendChild(row);
+      });
+    }
+
+    function renderClientList(selectedId = state.currentClientId) {
+      const visibleClients = getVisibleClients();
+      elements.clientsList.innerHTML = "";
+      renderClientDirectory(selectedId, visibleClients);
+      renderSelectedClientSummary();
+
+      if (!visibleClients.length) {
+        elements.clientsList.innerHTML = '<div class="empty">No hay clientes para esta busqueda.</div>';
+        return;
+      }
+
+      visibleClients.forEach((client) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `client-item${client.cliente_id === selectedId ? " active" : ""}`;
+        button.dataset.id = client.cliente_id;
+        const clientName = escapeHtml(client.nombre);
+        const clientId = escapeHtml(client.cliente_id);
+        const originsCount = Array.isArray(client.allowed_origins) ? client.allowed_origins.length : 0;
+        button.innerHTML = `
+          <strong>${clientName}</strong>
+          <span>${clientId}</span>
+          <span>${originsCount} origenes permitidos</span>
+        `;
+        button.addEventListener("click", () => {
+          openClientSection(client.cliente_id, "profile").catch((error) => showStatus(error.message, "error"));
+        });
+        elements.clientsList.appendChild(button);
+      });
+    }
+
     function renderCurrentUser() {
       const user = state.currentUser;
       elements.sessionName.textContent = user?.display_name || "Administrador";
@@ -1333,10 +2044,14 @@
       elements.reindexAfterSave.checked = true;
       elements.installSnippet.value = detail.install_snippet || "";
       elements.demoUrl.value = detail.demo_url || "";
+      if (elements.bookingClientFilter) {
+        elements.bookingClientFilter.value = detail.cliente_id;
+      }
 
       document.querySelectorAll(".client-item").forEach((item) => {
         item.classList.toggle("active", item.dataset.id === detail.cliente_id);
       });
+      renderClientList(detail.cliente_id);
     }
 
     async function loadStats() {
@@ -1347,26 +2062,16 @@
     }
 
     async function loadClients(selectedId = state.currentClientId) {
+      elements.clientsList.innerHTML = '<div class="empty"><span class="loading-inline"><span class="loading-dot"></span>Cargando clientes...</span></div>';
+      elements.clientDirectory.innerHTML = '<div class="empty"><span class="loading-inline"><span class="loading-dot"></span>Cargando clientes...</span></div>';
+      elements.clientCountLabel.textContent = "Cargando clientes...";
       const clients = await api("/admin/clientes");
       state.clients = clients || [];
-      elements.clientsList.innerHTML = "";
       elements.statClients.textContent = String(state.clients.length);
       populateClientSelect(elements.newUserClientId, "Selecciona un cliente");
       populateClientSelect(elements.userClientFilter, "Todos");
-
-      state.clients.forEach((client) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = `client-item${client.cliente_id === selectedId ? " active" : ""}`;
-        button.dataset.id = client.cliente_id;
-        button.innerHTML = `
-          <strong>${client.nombre}</strong>
-          <span>${client.cliente_id}</span>
-          <span>${client.allowed_origins.length} origenes permitidos</span>
-        `;
-        button.addEventListener("click", () => loadClientDetail(client.cliente_id));
-        elements.clientsList.appendChild(button);
-      });
+      populateClientSelect(elements.bookingClientFilter, "Todos");
+      renderClientList(selectedId);
     }
 
     async function loadClientDetail(clienteId) {
@@ -1386,9 +2091,12 @@
       state.users.forEach((managedUser) => {
         const card = document.createElement("article");
         card.className = "user-card";
-        const clientLabel = managedUser.cliente_id || "Global";
+        const displayName = escapeHtml(managedUser.display_name || "-");
+        const email = escapeHtml(managedUser.email || "-");
+        const clientLabel = escapeHtml(managedUser.cliente_id || "Global");
         const statusClass = managedUser.is_active ? "pill" : "pill danger";
         const statusLabel = managedUser.is_active ? "Activo" : "Inactivo";
+        const userId = escapeHtml(managedUser.user_id || "");
         const availableActions = managedUser.is_active
           ? `
               <option value="">Selecciona accion</option>
@@ -1404,11 +2112,11 @@
         card.innerHTML = `
           <div class="user-top">
             <div class="user-title">
-              <strong>${managedUser.display_name}</strong>
-              <span class="muted">${managedUser.email}</span>
+              <strong>${displayName}</strong>
+              <span class="muted">${email}</span>
             </div>
             <div class="pills">
-              <span class="pill alt">${roleLabel(managedUser.role)}</span>
+              <span class="pill alt">${escapeHtml(roleLabel(managedUser.role))}</span>
               <span class="${statusClass}">${statusLabel}</span>
             </div>
           </div>
@@ -1419,22 +2127,22 @@
             </div>
             <div class="meta-box">
               <span class="meta-label">Ultimo login</span>
-              <span class="meta-value">${formatDateTimeLabel(managedUser.last_login_at)}</span>
+              <span class="meta-value">${escapeHtml(formatDateTimeLabel(managedUser.last_login_at))}</span>
             </div>
             <div class="meta-box">
               <span class="meta-label">Alta</span>
-              <span class="meta-value">${formatDateTimeLabel(managedUser.created_at)}</span>
+              <span class="meta-value">${escapeHtml(formatDateTimeLabel(managedUser.created_at))}</span>
             </div>
             <div class="meta-box">
               <span class="meta-label">ID</span>
-              <span class="meta-value">${managedUser.user_id}</span>
+              <span class="meta-value">${userId}</span>
             </div>
           </div>
           <div class="action-row">
-            <select data-user-action="${managedUser.user_id}">
+            <select data-user-action="${userId}">
               ${availableActions}
             </select>
-            <button class="secondary small" type="button" data-run-user-action="${managedUser.user_id}">Aplicar accion</button>
+            <button class="secondary small" type="button" data-run-user-action="${userId}">Aplicar accion</button>
           </div>
         `;
         elements.usersList.appendChild(card);
@@ -1480,6 +2188,7 @@
     }
 
     async function loadManagedUsers() {
+      elements.usersList.innerHTML = '<div class="empty"><span class="loading-inline"><span class="loading-dot"></span>Cargando usuarios...</span></div>';
       const params = new URLSearchParams();
       const selectedRole = elements.userRoleFilter.value.trim();
       const selectedClient = elements.userClientFilter.value.trim();
@@ -1504,47 +2213,64 @@
       elements.bookingsTableBody.innerHTML = "";
       bookings.forEach((booking) => {
         const row = document.createElement("tr");
+        const empresa = escapeHtml(booking.empresa || "-");
+        const clienteId = escapeHtml(booking.cliente_id || "-");
+        const nombre = escapeHtml(booking.nombre || "-");
+        const servicio = escapeHtml(booking.servicio || "Consulta");
+        const fecha = escapeHtml(booking.fecha || "-");
+        const hora = escapeHtml(booking.hora || "-");
+        const email = escapeHtml(booking.email || "-");
+        const estado = escapeHtml(booking.estado || "-");
+        const providerStatus = escapeHtml(booking.provider_status || "-");
+        const providerName = escapeHtml(booking.provider_name || "-");
+        const providerBookingId = escapeHtml(booking.provider_booking_id || "-");
+        const customerEmailStatus = escapeHtml(booking.customer_email_status || "-");
+        const confirmationEmailSentAt = escapeHtml(booking.confirmation_email_sent_at || "Sin confirmacion");
+        const reminder24hSentAt = escapeHtml(booking.reminder_24h_sent_at || "Sin recordatorio 24h");
+        const bookingId = escapeHtml(booking.booking_id || "");
+        const manageUrl = escapeHtml(booking.manage_url || "");
+        const providerBookingUrl = escapeHtml(booking.provider_booking_url || "");
         row.innerHTML = `
           <td>
             <div class="booking-meta">
-              <strong>${booking.empresa}</strong>
-              <span>${booking.cliente_id}</span>
+              <strong>${empresa}</strong>
+              <span>${clienteId}</span>
             </div>
           </td>
           <td>
             <div class="booking-meta">
-              <strong>${booking.nombre}</strong>
-              <span>${booking.servicio || "Consulta"}</span>
-              <span>${booking.fecha} ${booking.hora}</span>
-              <span>${booking.email}</span>
+              <strong>${nombre}</strong>
+              <span>${servicio}</span>
+              <span>${fecha} ${hora}</span>
+              <span>${email}</span>
             </div>
           </td>
           <td>
             <div class="booking-meta">
-              <span class="pill">${booking.estado}</span>
-              <span>${booking.provider_status || "-"}</span>
+              <span class="pill">${estado}</span>
+              <span>${providerStatus}</span>
             </div>
           </td>
           <td>
             <div class="booking-meta">
-              <strong>${booking.provider_name}</strong>
-              <span>${booking.provider_booking_id || "-"}</span>
+              <strong>${providerName}</strong>
+              <span>${providerBookingId}</span>
             </div>
           </td>
           <td>
             <div class="booking-meta">
-              <span>${booking.customer_email_status || "-"}</span>
-              <span>${booking.confirmation_email_sent_at || "Sin confirmacion"}</span>
-              <span>${booking.reminder_24h_sent_at || "Sin recordatorio 24h"}</span>
+              <span>${customerEmailStatus}</span>
+              <span>${confirmationEmailSentAt}</span>
+              <span>${reminder24hSentAt}</span>
             </div>
           </td>
           <td>
             <div class="booking-actions">
-              <button class="secondary" type="button" data-action="resend" data-id="${booking.booking_id}">Reenviar email</button>
-              <button class="secondary" type="button" data-action="reschedule" data-id="${booking.booking_id}" data-fecha="${booking.fecha}" data-hora="${booking.hora}">Reprogramar</button>
-              <button class="ghost" type="button" data-action="open" data-url="${booking.manage_url || ""}">Abrir gestion</button>
-              <button class="secondary" type="button" data-action="provider" data-url="${booking.provider_booking_url || ""}">Proveedor</button>
-              <button class="secondary" type="button" data-action="cancel" data-id="${booking.booking_id}">Cancelar</button>
+              <button class="secondary" type="button" data-action="resend" data-id="${bookingId}">Reenviar email</button>
+              <button class="secondary" type="button" data-action="reschedule" data-id="${bookingId}" data-fecha="${fecha}" data-hora="${hora}">Reprogramar</button>
+              <button class="ghost" type="button" data-action="open" data-url="${manageUrl}">Abrir gestion</button>
+              <button class="secondary" type="button" data-action="provider" data-url="${providerBookingUrl}">Proveedor</button>
+              <button class="secondary" type="button" data-action="cancel" data-id="${bookingId}">Cancelar</button>
             </div>
           </td>
         `;
@@ -1602,8 +2328,30 @@
       });
     }
 
-    async function loadBookings(clienteId = state.currentClientId) {
-      return clienteId;
+    async function loadBookings(clienteId = elements.bookingClientFilter.value.trim()) {
+      elements.bookingsTableBody.innerHTML = '<tr><td colspan="6"><span class="loading-inline"><span class="loading-dot"></span>Cargando reservas...</span></td></tr>';
+      const params = new URLSearchParams();
+      const selectedClient = clienteId || "";
+      const selectedStatus = elements.bookingStatusFilter.value.trim();
+      const selectedSearch = elements.bookingSearch.value.trim();
+      const selectedDateFrom = elements.bookingDateFrom.value.trim();
+      const selectedDateTo = elements.bookingDateTo.value.trim();
+      const limit = Number(elements.bookingLimit.value || 100);
+      if (selectedClient) params.set("cliente_id", selectedClient);
+      if (selectedStatus) params.set("estado", selectedStatus);
+      if (selectedSearch) params.set("q", selectedSearch);
+      if (selectedDateFrom) params.set("fecha_desde", selectedDateFrom);
+      if (selectedDateTo) params.set("fecha_hasta", selectedDateTo);
+      params.set("limit", String(Math.max(1, Math.min(limit, 500))));
+      const bookings = await api(`/admin/bookings?${params.toString()}`);
+      renderBookings(bookings || []);
+    }
+
+    async function runBookingReminders() {
+      showStatus("Ejecutando recordatorios pendientes...", "info");
+      const result = await api("/admin/bookings/reminders/run", { method: "POST" });
+      await loadBookings();
+      showStatus(`Recordatorios procesados: ${result.processed || 0}. Enviados 24h: ${result.sent_24h || 0}. Enviados 2h: ${result.sent_2h || 0}. Fallidos: ${result.failed || 0}.`, "success");
     }
 
     async function connect() {
@@ -1615,6 +2363,7 @@
       if (!state.currentClientId && state.clients.length) {
         await loadClientDetail(state.clients[0].cliente_id);
       }
+      await loadBookings();
       showStatus(`Sesion activa como ${state.currentUser.display_name}.`, "success");
     }
 
@@ -1810,16 +2559,24 @@
       showStatus("Demo abierta en una nueva pestaña.", "info");
     }
 
+    let bookingFilterTimer = null;
+    function scheduleBookingsReload() {
+      window.clearTimeout(bookingFilterTimer);
+      bookingFilterTimer = window.setTimeout(() => {
+        loadBookings().catch((error) => showStatus(error.message, "error"));
+      }, 250);
+    }
+
     document.getElementById("refreshSessionBtn").addEventListener("click", async () => {
       try {
-        await connect();
+        await withButtonLoading(document.getElementById("refreshSessionBtn"), "Actualizando...", () => connect());
       } catch (error) {
         showStatus(error.message, "error");
       }
     });
 
     document.getElementById("focusSecurityBtn").addEventListener("click", () => {
-      elements.securityCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      setView("security");
       elements.currentPassword.focus();
     });
 
@@ -1833,7 +2590,8 @@
 
     document.getElementById("newClientBtn").addEventListener("click", async () => {
       try {
-        await createClient();
+        setView("clients");
+        await withButtonLoading(document.getElementById("newClientBtn"), "Creando...", () => createClient());
       } catch (error) {
         showStatus(error.message, "error");
       }
@@ -1841,7 +2599,7 @@
 
     document.getElementById("expressGenerateBtn").addEventListener("click", async () => {
       try {
-        await altaExpress();
+        await withButtonLoading(document.getElementById("expressGenerateBtn"), "Generando...", () => altaExpress());
       } catch (error) {
         showStatus(error.message, "error");
       }
@@ -1849,7 +2607,7 @@
 
     document.getElementById("saveBtn").addEventListener("click", async () => {
       try {
-        await saveClient();
+        await withButtonLoading(document.getElementById("saveBtn"), "Guardando...", () => saveClient());
       } catch (error) {
         showStatus(error.message, "error");
       }
@@ -1857,7 +2615,7 @@
 
     document.getElementById("reindexBtn").addEventListener("click", async () => {
       try {
-        await reindexCurrentClient();
+        await withButtonLoading(document.getElementById("reindexBtn"), "Reindexando...", () => reindexCurrentClient());
       } catch (error) {
         showStatus(error.message, "error");
       }
@@ -1865,7 +2623,7 @@
 
     document.getElementById("copySnippetBtn").addEventListener("click", async () => {
       try {
-        await copySnippet();
+        await withButtonLoading(document.getElementById("copySnippetBtn"), "Copiando...", () => copySnippet());
       } catch (error) {
         showStatus(error.message, "error");
       }
@@ -1873,7 +2631,7 @@
 
     document.getElementById("copyDemoBtn").addEventListener("click", async () => {
       try {
-        await copyDemoUrl();
+        await withButtonLoading(document.getElementById("copyDemoBtn"), "Copiando...", () => copyDemoUrl());
       } catch (error) {
         showStatus(error.message, "error");
       }
@@ -1897,7 +2655,7 @@
 
     document.getElementById("changePasswordBtn").addEventListener("click", async () => {
       try {
-        await changePassword();
+        await withButtonLoading(document.getElementById("changePasswordBtn"), "Actualizando...", () => changePassword());
       } catch (error) {
         showStatus(error.message, "error");
       }
@@ -1905,19 +2663,45 @@
 
     document.getElementById("createUserBtn").addEventListener("click", async () => {
       try {
-        await createManagedUser();
+        await withButtonLoading(document.getElementById("createUserBtn"), "Creando...", () => createManagedUser());
       } catch (error) {
         showStatus(error.message, "error");
       }
     });
 
+    elements.clientSearch.addEventListener("input", () => renderClientList());
     elements.newUserRole.addEventListener("change", () => toggleClientFieldByRole());
-    document.getElementById("refreshUsersBtn").addEventListener("click", () => loadManagedUsers().catch((error) => showStatus(error.message, "error")));
+    document.getElementById("refreshUsersBtn").addEventListener("click", () => {
+      withButtonLoading(document.getElementById("refreshUsersBtn"), "Actualizando...", () => loadManagedUsers())
+        .catch((error) => showStatus(error.message, "error"));
+    });
     elements.userRoleFilter.addEventListener("change", () => loadManagedUsers().catch((error) => showStatus(error.message, "error")));
     elements.userClientFilter.addEventListener("change", () => loadManagedUsers().catch((error) => showStatus(error.message, "error")));
     elements.userIncludeInactive.addEventListener("change", () => loadManagedUsers().catch((error) => showStatus(error.message, "error")));
+    elements.bookingSearch.addEventListener("input", () => scheduleBookingsReload());
+    elements.bookingClientFilter.addEventListener("change", () => loadBookings().catch((error) => showStatus(error.message, "error")));
+    elements.bookingStatusFilter.addEventListener("change", () => loadBookings().catch((error) => showStatus(error.message, "error")));
+    elements.bookingDateFrom.addEventListener("change", () => loadBookings().catch((error) => showStatus(error.message, "error")));
+    elements.bookingDateTo.addEventListener("change", () => loadBookings().catch((error) => showStatus(error.message, "error")));
+    elements.bookingLimit.addEventListener("change", () => loadBookings().catch((error) => showStatus(error.message, "error")));
+    document.getElementById("refreshBookingsBtn").addEventListener("click", () => {
+      withButtonLoading(document.getElementById("refreshBookingsBtn"), "Actualizando...", () => loadBookings())
+        .catch((error) => showStatus(error.message, "error"));
+    });
+    document.getElementById("runRemindersBtn").addEventListener("click", () => {
+      withButtonLoading(document.getElementById("runRemindersBtn"), "Ejecutando...", () => runBookingReminders())
+        .catch((error) => showStatus(error.message, "error"));
+    });
+    elements.navButtons.forEach((button) => {
+      button.addEventListener("click", () => setView(button.dataset.navView));
+    });
+    elements.clientTabButtons.forEach((button) => {
+      button.addEventListener("click", () => setClientTab(button.dataset.clientTab));
+    });
 
     toggleClientFieldByRole();
+    setClientTab("profile");
+    setView("clients");
     connect().catch((error) => showStatus(error.message, "error"));
   </script>
 </body>
