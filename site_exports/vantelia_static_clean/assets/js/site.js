@@ -15,11 +15,18 @@
     return config[key] || fallback;
   }
 
+  function getCurrentNavPage() {
+    if (document.body.dataset.page === "post") {
+      return "noticias";
+    }
+    return document.body.dataset.page || "";
+  }
+
   function renderHeader() {
     const container = document.querySelector("[data-site-header]");
     if (!container) return;
 
-    const currentPage = document.body.dataset.page;
+    const currentPage = getCurrentNavPage();
     const navItems = (data.nav || [])
       .map((item) => {
         const isActive = item.page === currentPage ? " aria-current=\"page\"" : "";
@@ -36,10 +43,15 @@
           <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">
             Menu
           </button>
-          <nav id="site-nav" class="site-nav">
-            ${navItems}
-            <a class="button button--ghost button--small" href="${getConfigValue("clientPortalUrl", "#")}">Acceso clientes</a>
-          </nav>
+          <div class="site-nav-wrap">
+            <nav id="site-nav" class="site-nav">
+              ${navItems}
+            </nav>
+            <div class="site-actions">
+              <a class="site-link" href="${getConfigValue("clientPortalUrl", "#")}">Portal</a>
+              <a class="button button--small" href="/consultas/">Solicitar auditoria</a>
+            </div>
+          </div>
         </div>
       </header>
     `;
@@ -50,28 +62,46 @@
     if (!container) return;
 
     const email = getConfigValue("contactEmail", "hola@vantelia.com");
+    const leadEmail = getConfigValue("leadEmail", email);
     const phone = getConfigValue("phone", "+34 912 345 678");
 
     container.innerHTML = `
       <footer class="site-footer">
         <div class="shell footer-grid">
-          <div class="footer-card footer-card--brand">
+          <div class="footer-col footer-col--brand">
             <img class="footer-logo" src="/assets/img/logo-letra.png" alt="Vantelia">
             <p>${data.tagLine || ""}</p>
           </div>
-          <div class="footer-card">
-            <p class="eyebrow">Contacto</p>
-            <a href="mailto:${email}">${email}</a>
-            <a href="tel:${phone.replace(/\s+/g, "")}">${phone}</a>
+          <div class="footer-col">
+            <p class="eyebrow">Servicios</p>
+            <div class="footer-list">
+              <span>SEO y contenido orientado a demanda</span>
+              <span>Paid media y optimizacion de conversion</span>
+              <span>Automatizacion comercial y agentes IA</span>
+              <span>Analitica, reporting y direccion de crecimiento</span>
+            </div>
           </div>
-          <div class="footer-card">
-            <p class="eyebrow">Accesos</p>
-            <a href="/consultas/">Consulta gratuita</a>
-            <a href="${getConfigValue("clientPortalUrl", "#")}">Portal de clientes</a>
+          <div class="footer-col">
+            <p class="eyebrow">Explorar</p>
+            <div class="footer-list">
+              <a href="/servicios/">Servicios</a>
+              <a href="/testimonios/">Resultados y enfoque</a>
+              <a href="/noticias/">Insights</a>
+              <a href="/consultas/">Consulta gratuita</a>
+            </div>
+          </div>
+          <div class="footer-col">
+            <p class="eyebrow">Contacto</p>
+            <div class="footer-list">
+              <a href="mailto:${leadEmail}">${leadEmail}</a>
+              <a href="mailto:${email}">${email}</a>
+              <a href="tel:${phone.replace(/\s+/g, "")}">${phone}</a>
+              <a href="${getConfigValue("clientPortalUrl", "#")}">Acceso clientes</a>
+            </div>
           </div>
         </div>
         <div class="shell footer-bottom">
-          <span>(c) <span data-current-year></span> Vantelia. All rights reserved.</span>
+          <span>&copy; <span data-current-year></span> Vantelia. Marketing, automatizacion e inteligencia artificial.</span>
         </div>
       </footer>
     `;
@@ -79,73 +109,12 @@
 
   function wireNavigation() {
     const toggle = document.querySelector(".nav-toggle");
-    const nav = document.querySelector(".site-nav");
-    if (!toggle || !nav) return;
+    const navWrap = document.querySelector(".site-nav-wrap");
+    if (!toggle || !navWrap) return;
 
     toggle.addEventListener("click", function () {
-      const isOpen = nav.classList.toggle("is-open");
+      const isOpen = navWrap.classList.toggle("is-open");
       toggle.setAttribute("aria-expanded", String(isOpen));
-    });
-  }
-
-  function renderServiceGrids() {
-    document.querySelectorAll("[data-service-grid]").forEach((container) => {
-      container.innerHTML = (data.serviceCards || [])
-        .map(
-          (service, index) => `
-            <article class="card">
-              <span class="card-index">0${index + 1}</span>
-              <h3>${service.title}</h3>
-              <p>${service.text}</p>
-            </article>
-          `
-        )
-        .join("");
-    });
-  }
-
-  function renderWorkflow() {
-    document.querySelectorAll("[data-workflow]").forEach((container) => {
-      container.innerHTML = (data.workflow || [])
-        .map(
-          (step, index) => `
-            <li class="timeline__item">
-              <span class="timeline__step">0${index + 1}</span>
-              <p>${step}</p>
-            </li>
-          `
-        )
-        .join("");
-    });
-  }
-
-  function renderTrust() {
-    document.querySelectorAll("[data-trust-grid]").forEach((container) => {
-      container.innerHTML = (data.trustHighlights || [])
-        .map(
-          (item) => `
-            <article class="card card--soft">
-              <h3>${item.title}</h3>
-              <p>${item.text}</p>
-            </article>
-          `
-        )
-        .join("");
-    });
-  }
-
-  function renderStats() {
-    document.querySelectorAll("[data-stat-grid]").forEach((container) => {
-      container.innerHTML = (data.stats || [])
-        .map(
-          (item) => `
-            <article class="stat">
-              <strong>${item.value}</strong>
-              <span>${item.label}</span>
-            </article>
-          `
-        )
-        .join("");
     });
   }
 
@@ -164,6 +133,7 @@
                 <span>${formatDate(post.date)}</span>
                 <span>${post.readingTime}</span>
               </div>
+              <a class="post-card__cta" href="${post.slug}">Leer insight</a>
             </article>
           `
         )
@@ -173,16 +143,20 @@
 
   function renderFaqs() {
     document.querySelectorAll("[data-faqs]").forEach((container) => {
-      container.innerHTML = (data.faqs || [])
-        .map(
-          (faq) => `
-            <details class="faq">
-              <summary>${faq.question}</summary>
-              <p>${faq.answer}</p>
-            </details>
-          `
-        )
-        .join("");
+      container.innerHTML = `
+        <div class="faq-list">
+          ${(data.faqs || [])
+            .map(
+              (faq) => `
+                <details class="faq">
+                  <summary>${faq.question}</summary>
+                  <p>${faq.answer}</p>
+                </details>
+              `
+            )
+            .join("")}
+        </div>
+      `;
     });
   }
 
@@ -234,8 +208,8 @@
       }
 
       const targetEmail = getConfigValue("leadEmail", getConfigValue("contactEmail", "hola@vantelia.com"));
-      const subject = encodeURIComponent("Consulta desde la web de Vantelia");
-      const body = encodeURIComponent(`Nombre: ${name}\nCorreo: ${email}\n\nMensaje:\n${message}`);
+      const subject = encodeURIComponent("Solicitud de auditoria desde Vantelia");
+      const body = encodeURIComponent(`Nombre: ${name}\nCorreo: ${email}\n\nContexto:\n${message}`);
       window.location.href = `mailto:${targetEmail}?subject=${subject}&body=${body}`;
       showFormMessage(form, "Hemos preparado el correo para que puedas enviarlo desde tu dispositivo.", false);
     });
@@ -286,10 +260,6 @@
   function init() {
     renderHeader();
     renderFooter();
-    renderServiceGrids();
-    renderWorkflow();
-    renderTrust();
-    renderStats();
     renderPosts();
     renderFaqs();
     renderCurrentYear();
