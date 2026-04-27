@@ -172,6 +172,59 @@ main {
   object-fit: cover;
 }
 
+.hero__image,
+.hero__ambient {
+  position: absolute;
+  inset: 0;
+}
+
+.hero__image {
+  background:
+    radial-gradient(circle at 68% 60%, rgba(0, 214, 255, 0.12), transparent 14%),
+    url("/assets/img/fondo-web.png") center/cover no-repeat;
+  transform-origin: 68% 60%;
+  animation: heroImageLoop 18s ease-in-out infinite;
+}
+
+.hero__ambient {
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.hero__ambient--pulse {
+  background:
+    radial-gradient(circle at 68% 60%, rgba(128, 244, 255, 0.42), transparent 0),
+    radial-gradient(circle at 68% 60%, rgba(0, 184, 255, 0.2), transparent 12%);
+  filter: blur(18px);
+  animation: heroPulseLoop 9s ease-in-out infinite;
+}
+
+.hero__ambient--sweep {
+  background:
+    linear-gradient(
+      112deg,
+      transparent 0%,
+      transparent 34%,
+      rgba(124, 244, 255, 0.08) 45%,
+      rgba(124, 244, 255, 0.16) 50%,
+      rgba(124, 244, 255, 0.08) 55%,
+      transparent 66%,
+      transparent 100%
+    );
+  transform: translateX(-12%);
+  opacity: 0;
+  animation: heroSweepLoop 18s linear infinite;
+}
+
+.hero__ambient--mesh {
+  background:
+    radial-gradient(circle at 72% 78%, rgba(0, 194, 215, 0.18), transparent 18%),
+    radial-gradient(circle at 82% 74%, rgba(120, 241, 255, 0.14), transparent 10%),
+    linear-gradient(180deg, transparent 54%, rgba(0, 194, 215, 0.08) 100%);
+  filter: blur(12px);
+  animation: heroMeshLoop 14s ease-in-out infinite;
+}
+
 .hero__overlay {
   background:
     radial-gradient(circle at 20% 20%, rgba(0, 194, 215, 0.22), transparent 32%),
@@ -556,6 +609,82 @@ textarea {
   font-size: 0.95rem;
 }
 
+@keyframes heroImageLoop {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+    filter: saturate(1) brightness(1);
+  }
+
+  50% {
+    transform: scale(1.026) translate3d(-0.4%, 0.3%, 0);
+    filter: saturate(1.06) brightness(1.03);
+  }
+
+  100% {
+    transform: scale(1) translate3d(0, 0, 0);
+    filter: saturate(1) brightness(1);
+  }
+}
+
+@keyframes heroPulseLoop {
+  0% {
+    opacity: 0.32;
+    transform: scale(0.96);
+  }
+
+  50% {
+    opacity: 0.62;
+    transform: scale(1.06);
+  }
+
+  100% {
+    opacity: 0.32;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes heroSweepLoop {
+  0% {
+    opacity: 0;
+    transform: translateX(-14%);
+  }
+
+  12% {
+    opacity: 0.1;
+  }
+
+  50% {
+    opacity: 0.22;
+    transform: translateX(6%);
+  }
+
+  88% {
+    opacity: 0.1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(-14%);
+  }
+}
+
+@keyframes heroMeshLoop {
+  0% {
+    opacity: 0.34;
+    transform: translate3d(0, 0, 0);
+  }
+
+  50% {
+    opacity: 0.52;
+    transform: translate3d(0.6%, -0.5%, 0);
+  }
+
+  100% {
+    opacity: 0.34;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
 @media (max-width: 1080px) {
   .card-grid,
   .pill-grid,
@@ -604,6 +733,10 @@ textarea {
 
   .hero__content {
     padding-top: 120px;
+  }
+
+  .hero__image {
+    background-position: 64% center;
   }
 
   .card-grid,
