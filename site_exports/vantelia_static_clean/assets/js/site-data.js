@@ -1,7 +1,7 @@
 window.VANTELIA_DATA = {
   siteName: "Vantelia",
   tagLine:
-    "Agencia de marketing, automatizacion e inteligencia artificial orientada a demanda cualificada, conversion y crecimiento sostenible.",
+    "Consultoria y ejecucion de marketing, SEO, automatizacion e inteligencia artificial para empresas que necesitan demanda cualificada, conversion y un sistema comercial mas solido.",
   nav: [
     { label: "Inicio", href: "/", page: "home" },
     { label: "Servicios", href: "/servicios/", page: "servicios" },
