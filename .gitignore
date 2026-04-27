@@ -13,3 +13,5 @@ storage/*/
 .streamlit/
 .git-inner-backup/
 .pytest_cache/
+site_exports/vantelia_public_clone/
+site_exports/*_hostinger_upload.zip
