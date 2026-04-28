@@ -13,22 +13,31 @@ RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 RewriteCond %{HTTP_HOST} !^www\. [NC]
 RewriteRule ^ https://www.%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 
-# ── Redirecciones páginas antiguas → secciones del home ───
-# Deben ir ANTES del trailing-slash rule para resolverse en un solo salto.
-RewriteRule ^servicios/?$                          https://www.vantelia.es/#servicios  [R=301,L]
-RewriteRule ^testimonios/?$                        https://www.vantelia.es/#testimonios [R=301,L]
-RewriteRule ^nosotros/?$                           https://www.vantelia.es/#nosotros   [R=301,L]
-RewriteRule ^noticias/?$                           https://www.vantelia.es/            [R=301,L]
-RewriteRule ^seo-para-empresas-b2b/?$              https://www.vantelia.es/#servicios  [R=301,L]
-RewriteRule ^consultoria-ia-para-empresas/?$       https://www.vantelia.es/#servicios  [R=301,L]
-RewriteRule ^automatizacion-con-ia-para-empresas/? https://www.vantelia.es/#servicios  [R=301,L]
+# ── Redirecciones legacy (URLs antiguas eliminadas) ──────
+RewriteRule ^testimonios(?:/index\.html)?/?$       https://www.vantelia.es/resultados/  [R=301,L]
+RewriteRule ^noticias(?:/index\.html)?/?$          https://www.vantelia.es/             [R=301,L]
+RewriteRule ^seo-para-empresas-b2b(?:/index\.html)?/?$              https://www.vantelia.es/servicios/ [R=301,L]
+RewriteRule ^consultoria-ia-para-empresas(?:/index\.html)?/?$       https://www.vantelia.es/servicios/ [R=301,L]
+RewriteRule ^automatizacion-con-ia-para-empresas(?:/index\.html)?/?$ https://www.vantelia.es/servicios/ [R=301,L]
+RewriteRule ^innovaciones-en-ia-para-transformar-tu-marketing-digital(?:/index\.html)?/?$ https://www.vantelia.es/ [R=301,L]
+RewriteRule ^tendencias-en-ia-y-marketing-digital-para-2024(?:/index\.html)?/?$           https://www.vantelia.es/ [R=301,L]
+
+# ── WebP serving (si navegador soporta WebP, servir .webp en lugar de .png/.jpg) ──
+<IfModule mod_rewrite.c>
+  RewriteCond %{HTTP_ACCEPT} image/webp
+  RewriteCond %{REQUEST_FILENAME} (.*)\.(png|jpe?g)$
+  RewriteCond %1\.webp -f
+  RewriteRule (.+)\.(png|jpe?g)$ $1.webp [T=image/webp,E=accept:1,L]
+</IfModule>
+<IfModule mod_headers.c>
+  Header append Vary Accept env=REDIRECT_accept
+</IfModule>
 
 # ── Trailing-slash enforcement para directorios activos ───
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteCond %{REQUEST_URI} !/$
 RewriteRule ^ %{REQUEST_URI}/ [R=301,L]
 
-# ── Redirecciones legacy ──────────────────────────────────
 Redirect 301 /contacto  /consultas/
 Redirect 301 /contacto/ /consultas/
 

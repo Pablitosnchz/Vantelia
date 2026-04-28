@@ -5,7 +5,8 @@
       "Bash(claude plugin *)",
       "PowerShell(Get-ChildItem *)",
       "Bash(xargs wc *)",
-      "PowerShell(& \"e:\\\\Vantelia\\\\scripts\\\\deploy-ftp.ps1\")"
+      "PowerShell(& \"e:\\\\Vantelia\\\\scripts\\\\deploy-ftp.ps1\")",
+      "PowerShell(python \"e:\\\\Vantelia\\\\scripts\\\\fix-favicon.py\")"
     ]
   }
 }

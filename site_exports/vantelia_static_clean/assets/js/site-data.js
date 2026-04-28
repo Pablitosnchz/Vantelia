@@ -3,32 +3,15 @@ window.VANTELIA_DATA = {
   tagLine:
     "Consultoria y ejecucion de marketing, SEO, automatizacion e inteligencia artificial para empresas que necesitan demanda cualificada, conversion y un sistema comercial mas solido.",
   nav: [
-    { label: "Inicio", href: "/", page: "home" },
-    { label: "Servicios", href: "/servicios/", page: "servicios" },
-    { label: "Resultados", href: "/testimonios/", page: "testimonios" },
-    { label: "Insights", href: "/noticias/", page: "noticias" },
-    { label: "Consultas", href: "/consultas/", page: "consultas" }
+    { label: "Inicio",     href: "/",            page: "home"      },
+    { label: "Servicios",  href: "/servicios/",  page: ""          },
+    { label: "Plataforma", href: "/plataforma/", page: ""          },
+    { label: "Resultados", href: "/resultados/", page: ""          },
+    { label: "Nosotros",   href: "/nosotros/",   page: ""          },
+    { label: "FAQ",        href: "/faq/",        page: ""          },
+    { label: "Consultas",  href: "/consultas/",  page: "consultas" }
   ],
-  posts: [
-    {
-      title: "Innovaciones en IA para transformar tu marketing digital",
-      slug: "/innovaciones-en-ia-para-transformar-tu-marketing-digital/",
-      date: "2024-05-08",
-      readingTime: "4 min",
-      category: "IA aplicada",
-      excerpt:
-        "Como convertir inteligencia artificial, scoring, automatizacion y analitica en una ventaja operativa real para marketing y ventas."
-    },
-    {
-      title: "Tendencias en IA y marketing digital para 2024",
-      slug: "/tendencias-en-ia-y-marketing-digital-para-2024/",
-      date: "2024-05-08",
-      readingTime: "4 min",
-      category: "Estrategia digital",
-      excerpt:
-        "Las tendencias que ya estan impactando captacion, conversion, personalizacion y velocidad de respuesta en equipos comerciales."
-    }
-  ],
+  posts: [],
   faqs: [
     {
       question: "Que incluye una auditoria inicial con Vantelia?",
