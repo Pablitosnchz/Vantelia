@@ -84,9 +84,9 @@
           <div class="footer-col">
             <p class="eyebrow">Explorar</p>
             <div class="footer-list">
-              <a href="/servicios/">Servicios</a>
-              <a href="/testimonios/">Resultados y enfoque</a>
-              <a href="/noticias/">Insights</a>
+              <a href="/#servicios">Servicios</a>
+              <a href="/#resultados">Resultados</a>
+              <a href="/#plataforma">Plataforma</a>
               <a href="/consultas/">Consulta gratuita</a>
             </div>
           </div>

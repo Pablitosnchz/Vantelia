@@ -3,12 +3,10 @@ window.VANTELIA_DATA = {
   tagLine:
     "Consultoria y ejecucion de marketing, SEO, automatizacion e inteligencia artificial para empresas que necesitan demanda cualificada, conversion y un sistema comercial mas solido.",
   nav: [
-    { label: "Inicio", href: "/", page: "home" },
-    { label: "Nosotros", href: "/nosotros/", page: "nosotros" },
-    { label: "Servicios", href: "/servicios/", page: "servicios" },
-    { label: "Resultados", href: "/testimonios/", page: "testimonios" },
-    { label: "Insights", href: "/noticias/", page: "noticias" },
-    { label: "Consultas", href: "/consultas/", page: "consultas" }
+    { label: "Inicio",    href: "/",           page: "home"     },
+    { label: "Servicios", href: "/#servicios",  page: ""         },
+    { label: "Resultados",href: "/#resultados", page: ""         },
+    { label: "Consultas", href: "/consultas/",  page: "consultas"}
   ],
   posts: [
     {
