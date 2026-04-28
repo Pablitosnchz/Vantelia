@@ -6,27 +6,35 @@
   <title>Vantelia Portal</title>
   <link rel="icon" type="image/png" href="/brand-assets/favicon.png" />
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Poppins:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
     :root {
       color-scheme: dark;
-      --bg: #000b29;
-      --panel: rgba(5, 14, 38, 0.88);
-      --panel-strong: rgba(9, 22, 54, 0.96);
-      --text: #f0f4f8;
-      --soft: #b8c0cc;
-      --line: rgba(184, 192, 204, 0.14);
-      --accent: #00b1d9;
-      --accent-2: #007ea0;
-      --accent-soft: rgba(0, 177, 217, 0.14);
-      --danger: #ff7b86;
-      --danger-soft: rgba(196, 69, 54, 0.16);
-      --success-soft: rgba(0, 177, 217, 0.12);
-      --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
-      --radius: 8px;
-      --radius-sm: 8px;
-      --font-title: "Montserrat", "Segoe UI", sans-serif;
-      --font: "Poppins", "Segoe UI", sans-serif;
-      --maxw: 100%;
+      --bg:            #0B132B;
+      --bg-2:          #091028;
+      --panel:         rgba(8, 16, 42, 0.88);
+      --panel-strong:  rgba(6, 12, 32, 0.96);
+      --text:          #F0F4F8;
+      --soft:          #8fa3b4;
+      --soft-2:        #637c8e;
+      --line:          rgba(255, 255, 255, 0.08);
+      --line-strong:   rgba(0, 209, 255, 0.22);
+      --accent:        #00D1FF;
+      --accent-2:      #00F5D4;
+      --accent-dark:   #0099bb;
+      --accent-soft:   rgba(0, 209, 255, 0.12);
+      --accent-soft-2: rgba(0, 245, 212, 0.10);
+      --danger:        #ff7b86;
+      --danger-soft:   rgba(255, 123, 134, 0.14);
+      --success:       #22c55e;
+      --success-soft:  rgba(34, 197, 94, 0.12);
+      --shadow:        0 20px 50px rgba(0, 0, 0, 0.32);
+      --shadow-sm:     0 8px 24px rgba(0, 0, 0, 0.22);
+      --radius:        14px;
+      --radius-lg:     20px;
+      --radius-sm:     10px;
+      --font-title:    "Space Grotesk", "Segoe UI", sans-serif;
+      --font:          "Inter", "Segoe UI", sans-serif;
+      --maxw:          100%;
     }
 
     * { box-sizing: border-box; }
@@ -37,10 +45,10 @@
       font-family: var(--font);
       color: var(--text);
       background:
-        linear-gradient(180deg, rgba(0, 11, 41, 0.88), rgba(0, 11, 41, 0.96)),
-        radial-gradient(circle at top left, rgba(0, 177, 217, 0.14), transparent 26%),
-        radial-gradient(circle at top right, rgba(184, 192, 204, 0.1), transparent 24%),
-        url("/brand-assets/Fondo_Web.png") center top / cover fixed no-repeat;
+        radial-gradient(ellipse at 14% 12%, rgba(0, 209, 255, 0.07), transparent 30%),
+        radial-gradient(ellipse at 85% 85%, rgba(0, 245, 212, 0.05), transparent 28%),
+        linear-gradient(180deg, #0e1b3e 0%, #0B132B 50%, #07101f 100%);
+      overflow-x: hidden;
     }
 
     a {
@@ -97,7 +105,7 @@
       width: 64px;
       height: 64px;
       object-fit: contain;
-      filter: drop-shadow(0 0 24px rgba(0, 177, 217, 0.26));
+      filter: drop-shadow(0 0 24px rgba(0, 209, 255, 0.26));
       flex: 0 0 auto;
     }
 
@@ -111,7 +119,7 @@
       width: fit-content;
       padding: 7px 11px;
       border-radius: 999px;
-      background: rgba(0, 177, 217, 0.08);
+      background: rgba(0, 209, 255, 0.08);
       color: var(--accent);
       font-size: 12px;
       font-weight: 700;
@@ -160,8 +168,8 @@
       gap: 14px;
       padding: 0 16px 20px;
       border-right: 1px solid var(--line);
-      background: rgba(3, 8, 22, 0.93);
-      backdrop-filter: blur(16px);
+      background: rgba(5, 10, 26, 0.94);
+      backdrop-filter: blur(20px) saturate(1.4);
     }
 
     .block {
@@ -203,8 +211,8 @@
     input:focus,
     select:focus,
     textarea:focus {
-      border-color: rgba(0, 177, 217, 0.45);
-      box-shadow: 0 0 0 4px rgba(0, 177, 217, 0.12);
+      border-color: rgba(0, 209, 255, 0.45);
+      box-shadow: 0 0 0 4px rgba(0, 209, 255, 0.12);
     }
 
     textarea {
@@ -222,13 +230,28 @@
       transition: transform 0.16s ease, opacity 0.16s ease;
     }
 
-    button:not(:disabled):hover { transform: translateY(-1px); }
-    button.primary { color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
-    button.secondary { color: var(--text); background: rgba(184, 192, 204, 0.12); }
-    button.ghost { color: var(--text); background: transparent; border: 1px solid var(--line); }
-    button.danger { color: var(--danger); background: var(--danger-soft); }
-    button.small { padding: 10px 12px; border-radius: 14px; font-size: 0.93rem; }
-    button:disabled { cursor: not-allowed; opacity: 0.58; }
+    button {
+      font-family: var(--font-title);
+      font-weight: 700;
+      font-size: 0.88rem;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #04101c;
+      box-shadow: 0 6px 20px rgba(0, 209, 255, 0.22);
+      transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease;
+    }
+    button:not(:disabled):hover {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+      box-shadow: 0 10px 28px rgba(0, 209, 255, 0.30);
+    }
+    button.primary { color: #04101c; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+    button.secondary { color: var(--text); background: rgba(255, 255, 255, 0.07); box-shadow: none; border: 1px solid var(--line); }
+    button.secondary:not(:disabled):hover { background: rgba(255, 255, 255, 0.12); box-shadow: none; filter: none; }
+    button.ghost { color: var(--text); background: transparent; border: 1px solid var(--line); box-shadow: none; }
+    button.ghost:not(:disabled):hover { border-color: rgba(0, 209, 255, 0.35); color: var(--accent); background: rgba(0, 209, 255, 0.08); box-shadow: none; filter: none; }
+    button.danger { color: var(--danger); background: rgba(255, 123, 134, 0.12); box-shadow: none; border: 1px solid rgba(255, 123, 134, 0.20); }
+    button.small { padding: 9px 14px; border-radius: var(--radius-sm); font-size: 0.85rem; }
+    button:disabled { cursor: not-allowed; opacity: 0.52; }
 
     .row {
       display: flex;
@@ -301,7 +324,7 @@
       margin-bottom: 10px;
       padding: 8px 12px;
       border-radius: 999px;
-      background: rgba(0, 177, 217, 0.14);
+      background: rgba(0, 209, 255, 0.14);
       color: var(--accent);
       font-size: 12px;
       font-weight: 700;
@@ -324,7 +347,7 @@
 
     .stat {
       padding: 14px;
-      border-radius: 8px;
+      border-radius: var(--radius);
       background: var(--panel);
       border: 1px solid var(--line);
       box-shadow: var(--shadow);
@@ -339,6 +362,146 @@
     .stat span {
       color: var(--soft);
       font-size: 0.95rem;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric-card {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(7, 18, 45, 0.48);
+      display: grid;
+      gap: 5px;
+      min-height: 128px;
+    }
+
+    .metric-card span,
+    .metric-card small {
+      color: var(--soft);
+      line-height: 1.35;
+    }
+
+    .metric-card strong {
+      font-size: 2rem;
+      line-height: 1;
+    }
+
+    .insight-panel {
+      margin-top: 14px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(184, 192, 204, 0.08);
+      display: grid;
+      gap: 6px;
+    }
+
+    .conversation-layout {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.88fr) minmax(0, 1.12fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .conversation-toolbar {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) minmax(160px, 220px) auto;
+      gap: 12px;
+      align-items: end;
+      margin-bottom: 14px;
+    }
+
+    .conversation-list,
+    .conversation-messages {
+      display: grid;
+      gap: 10px;
+    }
+
+    .conversation-list {
+      max-height: min(680px, 70vh);
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .conversation-item,
+    .conversation-detail,
+    .conversation-message {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(7, 18, 45, 0.48);
+    }
+
+    .conversation-item {
+      width: 100%;
+      color: var(--text);
+      text-align: left;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .conversation-item.active {
+      border-color: rgba(0, 209, 255, 0.55);
+      background: rgba(0, 209, 255, 0.1);
+    }
+
+    .conversation-item strong,
+    .conversation-detail-head strong {
+      display: block;
+    }
+
+    .conversation-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .conversation-tag {
+      border-radius: 999px;
+      padding: 5px 8px;
+      background: rgba(0, 209, 255, 0.12);
+      color: var(--accent);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .conversation-detail {
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      min-height: 320px;
+      position: sticky;
+      top: 18px;
+    }
+
+    .conversation-message {
+      padding: 11px 12px;
+      display: grid;
+      gap: 5px;
+    }
+
+    .conversation-message.assistant {
+      border-color: rgba(0, 209, 255, 0.24);
+      background: rgba(0, 209, 255, 0.07);
+    }
+
+    .conversation-message.user {
+      border-color: rgba(184, 192, 204, 0.2);
+    }
+
+    .conversation-message small {
+      color: var(--soft);
+    }
+
+    .conversation-message-body {
+      max-height: 260px;
+      overflow: auto;
+      white-space: normal;
     }
 
     .layout {
@@ -360,7 +523,7 @@
       align-items: center;
       gap: 10px;
       justify-content: flex-start;
-      border-radius: 8px;
+      border-radius: var(--radius);
       padding: 10px 11px;
       background: transparent;
       color: var(--soft);
@@ -372,7 +535,7 @@
     .nav-button:hover,
     .nav-button.active {
       color: var(--text);
-      background: rgba(184, 192, 204, 0.1);
+      background: rgba(255, 255, 255, 0.06);
       border-color: var(--line);
       transform: none;
     }
@@ -382,9 +545,9 @@
       height: 28px;
       display: inline-grid;
       place-items: center;
-      border-radius: 8px;
+      border-radius: var(--radius);
       color: var(--accent);
-      background: rgba(0, 177, 217, 0.1);
+      background: rgba(0, 209, 255, 0.1);
       font-size: 12px;
       font-weight: 800;
       flex: 0 0 auto;
@@ -475,7 +638,7 @@
 
     .booking-card {
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius);
       padding: 14px;
       background: var(--panel-strong);
       display: grid;
@@ -483,9 +646,9 @@
     }
 
     .booking-card.primary-booking {
-      border-color: rgba(0, 177, 217, 0.34);
+      border-color: rgba(0, 209, 255, 0.34);
       background:
-        linear-gradient(135deg, rgba(0, 177, 217, 0.1), transparent 46%),
+        linear-gradient(135deg, rgba(0, 209, 255, 0.1), transparent 46%),
         var(--panel-strong);
     }
 
@@ -506,11 +669,11 @@
 
     .booking-date-tile {
       min-width: 76px;
-      border: 1px solid rgba(0, 177, 217, 0.28);
-      border-radius: 8px;
+      border: 1px solid rgba(0, 209, 255, 0.28);
+      border-radius: var(--radius);
       padding: 10px;
       text-align: center;
-      background: rgba(0, 177, 217, 0.12);
+      background: rgba(0, 209, 255, 0.12);
     }
 
     .booking-date-tile strong,
@@ -579,7 +742,7 @@
       display: grid;
       gap: 4px;
       padding: 10px 12px;
-      border-radius: 8px;
+      border-radius: var(--radius);
       background: rgba(184, 192, 204, 0.07);
     }
 
@@ -605,7 +768,7 @@
       gap: 14px;
       padding: 16px;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius);
       background: rgba(7, 18, 45, 0.72);
     }
 
@@ -634,7 +797,7 @@
 
     .calendar-weekday,
     .calendar-day {
-      border-radius: 8px;
+      border-radius: var(--radius);
       min-width: 0;
     }
 
@@ -664,14 +827,14 @@
 
     .calendar-day:hover,
     .calendar-day.selected {
-      border-color: rgba(0, 177, 217, 0.42);
-      background: rgba(0, 177, 217, 0.09);
+      border-color: rgba(0, 209, 255, 0.42);
+      background: rgba(0, 209, 255, 0.09);
       transform: translateY(-1px);
     }
 
     .calendar-day.today {
-      border-color: rgba(0, 177, 217, 0.5);
-      box-shadow: inset 0 0 0 1px rgba(0, 177, 217, 0.18);
+      border-color: rgba(0, 209, 255, 0.5);
+      box-shadow: inset 0 0 0 1px rgba(0, 209, 255, 0.18);
     }
 
     .calendar-day.closed {
@@ -702,7 +865,7 @@
       min-height: 34px;
       padding: 7px 8px;
       border-radius: 12px;
-      background: rgba(0, 177, 217, 0.13);
+      background: rgba(0, 209, 255, 0.13);
       color: var(--text);
       text-align: left;
       font-size: 0.78rem;
@@ -735,10 +898,10 @@
       display: grid;
       gap: 12px;
       padding: 16px;
-      border: 1px solid rgba(0, 177, 217, 0.22);
-      border-radius: 8px;
+      border: 1px solid rgba(0, 209, 255, 0.22);
+      border-radius: var(--radius);
       background:
-        linear-gradient(135deg, rgba(0, 177, 217, 0.08), transparent 52%),
+        linear-gradient(135deg, rgba(0, 209, 255, 0.08), transparent 52%),
         rgba(184, 192, 204, 0.05);
     }
 
@@ -771,7 +934,7 @@
       align-items: center;
       padding: 12px;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius);
       background: rgba(5, 14, 38, 0.64);
     }
 
@@ -805,7 +968,7 @@
       gap: 14px;
       padding: 18px;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius);
       background: rgba(7, 18, 45, 0.72);
     }
 
@@ -837,19 +1000,19 @@
       min-height: 42px;
       border-radius: 14px;
       color: var(--text);
-      background: rgba(184, 192, 204, 0.1);
+      background: rgba(255, 255, 255, 0.06);
     }
 
     .slot-grid button.selected {
       color: #fff;
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      box-shadow: 0 10px 26px rgba(0, 177, 217, 0.2);
+      box-shadow: 0 10px 26px rgba(0, 209, 255, 0.2);
     }
 
     .empty {
       padding: 30px 18px;
       border: 1px dashed rgba(184, 192, 204, 0.24);
-      border-radius: 8px;
+      border-radius: var(--radius);
       color: var(--soft);
       text-align: center;
       line-height: 1.7;
@@ -928,7 +1091,7 @@
 
     .subcard {
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius);
       padding: 16px;
       background: var(--panel-strong);
       display: grid;
@@ -968,7 +1131,7 @@
 
     .employee-card {
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius);
       background: rgba(184, 192, 204, 0.06);
       padding: 14px;
       display: grid;
@@ -979,8 +1142,8 @@
 
     .employee-card:hover,
     .employee-card.active {
-      border-color: rgba(0, 177, 217, 0.38);
-      background: rgba(0, 177, 217, 0.08);
+      border-color: rgba(0, 209, 255, 0.38);
+      background: rgba(0, 209, 255, 0.08);
       transform: translateY(-1px);
     }
 
@@ -1013,7 +1176,7 @@
 
     .employee-stat {
       padding: 10px 12px;
-      border-radius: 8px;
+      border-radius: var(--radius);
       background: rgba(184, 192, 204, 0.08);
       display: grid;
       gap: 4px;
@@ -1039,7 +1202,7 @@
       gap: 12px;
       padding: 16px;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius);
       background: rgba(184, 192, 204, 0.05);
     }
 
@@ -1116,10 +1279,10 @@
 
     .today-summary-card {
       padding: 16px;
-      border-radius: 8px;
+      border-radius: var(--radius);
       border: 1px solid var(--line);
       background:
-        linear-gradient(135deg, rgba(0, 177, 217, 0.08), transparent 52%),
+        linear-gradient(135deg, rgba(0, 209, 255, 0.08), transparent 52%),
         rgba(184, 192, 204, 0.04);
       display: grid;
       gap: 8px;
@@ -1143,7 +1306,7 @@
 
     .today-booking-card {
       padding: 14px;
-      border-radius: 8px;
+      border-radius: var(--radius);
       border: 1px solid var(--line);
       background: rgba(255, 255, 255, 0.03);
       display: grid;
@@ -1163,8 +1326,8 @@
       width: fit-content;
       padding: 6px 10px;
       border-radius: 999px;
-      border: 1px solid rgba(0, 177, 217, 0.26);
-      background: rgba(0, 177, 217, 0.12);
+      border: 1px solid rgba(0, 209, 255, 0.26);
+      background: rgba(0, 209, 255, 0.12);
       color: var(--accent);
       font-size: 0.78rem;
       font-weight: 800;
@@ -1179,15 +1342,92 @@
 
     .template-preview-card {
       padding: 14px;
-      border-radius: 8px;
+      border-radius: var(--radius);
       border: 1px solid var(--line);
       background: rgba(255, 255, 255, 0.03);
       display: grid;
       gap: 10px;
     }
 
+    .ai-editor-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .ai-preview-card {
+      display: grid;
+      gap: 12px;
+    }
+
+    .ai-widget-mock {
+      display: grid;
+      gap: 12px;
+      padding: 18px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(0, 209, 255, 0.2);
+      background:
+        linear-gradient(135deg, rgba(0, 209, 255, 0.08), transparent 52%),
+        rgba(7, 18, 45, 0.72);
+    }
+
+    .ai-widget-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .ai-widget-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      display: inline-grid;
+      place-items: center;
+      background: rgba(0, 209, 255, 0.14);
+      color: var(--accent);
+      font-weight: 800;
+      font-size: 0.92rem;
+      letter-spacing: 0.04em;
+    }
+
+    .ai-widget-title {
+      display: grid;
+      gap: 2px;
+    }
+
+    .ai-widget-title strong {
+      font-size: 1rem;
+    }
+
+    .ai-widget-bubble {
+      width: fit-content;
+      max-width: 100%;
+      padding: 12px 14px;
+      border-radius: 18px 18px 18px 6px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--line);
+      line-height: 1.55;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .ai-widget-footer {
+      color: var(--soft);
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+
+    .brain-textarea {
+      min-height: 420px;
+      font-family: "Consolas", "SFMono-Regular", "Monaco", monospace;
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
+
     .template-preview-html {
-      border-radius: 8px;
+      border-radius: var(--radius);
       overflow: hidden;
       border: 1px solid var(--line);
       background: #f5f8fb;
@@ -1205,7 +1445,7 @@
 
     .user-card {
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius);
       background: rgba(184, 192, 204, 0.06);
       padding: 16px;
       display: grid;
@@ -1286,8 +1526,8 @@
       border-radius: 14px;
       font-size: 0.92rem;
       line-height: 1.55;
-      border: 1px solid rgba(0, 177, 217, 0.2);
-      background: rgba(0, 177, 217, 0.12);
+      border: 1px solid rgba(0, 209, 255, 0.2);
+      background: rgba(0, 209, 255, 0.12);
       color: var(--text);
     }
 
@@ -1302,8 +1542,8 @@
     }
 
     .feedback-box.success {
-      border-color: rgba(0, 177, 217, 0.24);
-      background: rgba(0, 177, 217, 0.12);
+      border-color: rgba(0, 209, 255, 0.24);
+      background: rgba(0, 209, 255, 0.12);
     }
 
     .helper-actions {
@@ -1314,7 +1554,9 @@
 
     @media (max-width: 1160px) {
       .page,
-      .stats {
+      .stats,
+      .metric-grid,
+      .conversation-layout {
         grid-template-columns: 1fr;
       }
 
@@ -1357,8 +1599,12 @@
 
       .booking-meta,
       .grid,
+      .metric-grid,
+      .conversation-layout,
+      .conversation-toolbar,
       .booking-toolbar,
       .team-shell,
+      .ai-editor-grid,
       .service-check-grid,
       .reschedule-grid,
       .today-summary-grid,
@@ -1499,13 +1745,13 @@
               <span class="nav-icon">HD</span>
               <span class="nav-text"><strong>Citas del dia</strong><span id="todayOverviewIntro">Cargando la agenda de hoy...</span></span>
             </button>
+            <button class="nav-button" type="button" data-scroll-target="metricsBlock">
+              <span class="nav-icon">MT</span>
+              <span class="nav-text"><strong>Metricas</strong><span>Resultados y actividad IA</span></span>
+            </button>
             <button class="nav-button" type="button" data-scroll-target="teamBlock">
               <span class="nav-icon">PR</span>
               <span class="nav-text"><strong>Profesionales</strong><span>Equipo, horarios y agenda</span></span>
-            </button>
-            <button class="nav-button" type="button" data-scroll-target="accountBlock">
-              <span class="nav-icon">CU</span>
-              <span class="nav-text"><strong>Cuenta</strong><span>Datos del acceso</span></span>
             </button>
             <button class="nav-button" type="button" data-scroll-target="scheduleBlock">
               <span class="nav-icon">HO</span>
@@ -1519,9 +1765,21 @@
               <span class="nav-icon">MS</span>
               <span class="nav-text"><strong>Mensajes</strong><span>Plantillas y recordatorios</span></span>
             </button>
+            <button class="nav-button" type="button" data-scroll-target="aiBlock">
+              <span class="nav-icon">IA</span>
+              <span class="nav-text"><strong>IA</strong><span>Bienvenida, tono e identidad</span></span>
+            </button>
+            <button class="nav-button" type="button" data-scroll-target="accountBlock">
+              <span class="nav-icon">CU</span>
+              <span class="nav-text"><strong>Cuenta</strong><span>Datos del acceso</span></span>
+            </button>
             <button class="nav-button" type="button" data-scroll-target="securityBlock">
               <span class="nav-icon">SE</span>
               <span class="nav-text"><strong>Seguridad</strong><span>Cambiar contrasena</span></span>
+            </button>
+            <button class="nav-button" type="button" data-scroll-target="conversationsBlock">
+              <span class="nav-icon">CV</span>
+              <span class="nav-text"><strong>Conversaciones</strong><span>Chats guardados del asistente</span></span>
             </button>
           </nav>
 
@@ -1569,6 +1827,82 @@
           <article class="stat"><strong id="stat2">-</strong><span id="stat2Label">Activas</span></article>
           <article class="stat"><strong id="stat3">-</strong><span id="stat3Label">Historial</span></article>
           <article class="stat"><strong id="stat4">-</strong><span id="stat4Label">Empresa</span></article>
+        </section>
+
+        <section class="card panel hidden" id="metricsBlock">
+          <div class="panel-header">
+            <div>
+              <h3>Dashboard de metricas</h3>
+              <div class="muted">Vista rapida del rendimiento de reservas y actividad del asistente IA.</div>
+            </div>
+            <button id="refreshMetricsBtn" class="secondary small" type="button">Actualizar</button>
+          </div>
+          <div class="metric-grid">
+            <article class="metric-card"><span>Conversaciones IA</span><strong id="metricChats">-</strong><small>Sesiones recientes guardadas</small></article>
+            <article class="metric-card"><span>Mensajes</span><strong id="metricMessages">-</strong><small>Interacciones registradas</small></article>
+            <article class="metric-card"><span>Intenciones IA</span><strong id="metricIntents">-</strong><small>Diagnostico, recomendacion, agenda...</small></article>
+            <article class="metric-card"><span>Citas proximas</span><strong id="metricUpcoming">-</strong><small>Reservas activas por atender</small></article>
+            <article class="metric-card"><span>Reservas totales</span><strong id="metricBookings">-</strong><small>Historico del cliente</small></article>
+            <article class="metric-card"><span>Archivadas</span><strong id="metricHistory">-</strong><small>Completadas o historicas</small></article>
+          </div>
+          <div class="insight-panel">
+            <strong>Resumen operativo</strong>
+            <div id="metricsSummary" class="muted">Cargando actividad del portal...</div>
+          </div>
+        </section>
+
+        <section class="card panel hidden" id="conversationsBlock">
+          <div class="panel-header">
+            <div>
+              <h3>Conversaciones del asistente</h3>
+              <div class="muted">Revisa que preguntan los visitantes, que intencion tienen y como responde la IA.</div>
+            </div>
+            <button id="refreshConversationsBtn" class="secondary small" type="button">Actualizar</button>
+          </div>
+          <div class="conversation-toolbar">
+            <label>
+              Buscar
+              <input id="conversationSearch" type="search" placeholder="Texto, origen, sesion..." />
+            </label>
+            <label>
+              Intencion
+              <select id="conversationIntentFilter">
+                <option value="">Todas</option>
+                <option value="booking">Agenda</option>
+                <option value="recomendador">Recomendacion</option>
+                <option value="estimador">Estimacion</option>
+                <option value="comparador">Comparacion</option>
+                <option value="diagnostico">Diagnostico</option>
+              </select>
+            </label>
+            <button id="clearConversationFiltersBtn" class="ghost small" type="button">Limpiar</button>
+          </div>
+          <div class="conversation-layout">
+            <div>
+              <div id="conversationList" class="conversation-list">
+                <div class="empty">Todavia no se han cargado conversaciones.</div>
+              </div>
+              <div class="pagination" id="conversationPagination">
+                <div class="muted" id="conversationPaginationText">-</div>
+                <div class="row">
+                  <button id="loadMoreConversationsBtn" class="secondary small" type="button">Cargar mas</button>
+                </div>
+              </div>
+            </div>
+            <div class="conversation-detail">
+              <div class="conversation-detail-head">
+                <strong id="conversationDetailTitle">Selecciona una conversacion</strong>
+                <span id="conversationDetailMeta" class="muted">Aqui veras el historial completo del chat.</span>
+              </div>
+              <div id="conversationMessages" class="conversation-messages">
+                <div class="empty">Selecciona una conversacion para revisar sus mensajes.</div>
+              </div>
+              <div class="row hidden" id="conversationDetailActions">
+                <button id="showMoreMessagesBtn" class="secondary small" type="button">Ver mas mensajes</button>
+                <button id="collapseMessagesBtn" class="ghost small" type="button">Contraer</button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section class="card panel hidden" id="todayBlock">
@@ -2045,6 +2379,80 @@
           </div>
         </section>
 
+        <section class="card panel hidden" id="aiBlock">
+          <div class="panel-header">
+            <div>
+              <h3>IA</h3>
+              <div class="muted">Ajusta como se presenta tu asistente, que mensaje lanza al abrirse y que instrucciones internas debe respetar en cada conversacion. Aqui tambien puedes editar el contenido base del cerebro.</div>
+            </div>
+          </div>
+
+          <div class="ai-editor-grid">
+            <div class="subcard">
+              <div class="panel-header">
+                <div>
+                  <h3>Editor del asistente</h3>
+                  <div class="muted">Estos cambios se aplican al widget de tu web y al comportamiento base del asistente.</div>
+                </div>
+              </div>
+              <div class="grid">
+                <label>
+                  Icono corto
+                  <input id="aiIcono" type="text" maxlength="12" placeholder="AI" />
+                </label>
+              </div>
+              <label>
+                Mensaje de bienvenida
+                <textarea id="aiWelcome" maxlength="400" placeholder="Hola, soy tu asistente virtual. En que puedo ayudarte hoy?"></textarea>
+              </label>
+              <label>
+                Instrucciones internas para la IA
+                <textarea id="aiPromptExtra" maxlength="2000" placeholder="Ejemplo: responde con tono cercano, no inventes precios, deriva a humano cuando detectes urgencia o peticiones especiales."></textarea>
+              </label>
+              <div class="row">
+                <button id="saveAiConfigBtn" class="primary small" type="button">Guardar configuracion IA</button>
+              </div>
+            </div>
+
+            <div class="subcard ai-preview-card">
+              <div class="panel-header">
+                <div>
+                  <h3>Preview rapido</h3>
+                  <div class="muted">Asi vera el usuario la cabecera y el primer mensaje del widget.</div>
+                </div>
+              </div>
+              <div class="ai-widget-mock">
+                <div class="ai-widget-head">
+                  <div class="ai-widget-avatar" id="aiPreviewIcon">AI</div>
+                  <div class="ai-widget-title">
+                    <strong id="aiPreviewName">Asistente virtual</strong>
+                    <span class="muted">Asistente oficial</span>
+                  </div>
+                </div>
+                <div class="ai-widget-bubble" id="aiPreviewWelcome">Hola, soy tu asistente virtual. En que puedo ayudarte hoy?</div>
+              </div>
+              <div class="slot-status" id="aiPreviewPromptSummary">Las instrucciones internas no se muestran al usuario, pero afectan al tono, enfoque y limites de respuesta.</div>
+            </div>
+          </div>
+
+          <div class="subcard">
+            <div class="panel-header">
+              <div>
+                <h3>Cerebro base</h3>
+                <div class="muted">Edita el `info.txt` que usa la IA para entender tu negocio. Al guardar, el portal reindexa automaticamente para aplicar los cambios.</div>
+              </div>
+            </div>
+            <label>
+              Contenido del cerebro
+              <textarea id="brainInfoTxt" class="brain-textarea" maxlength="120000" placeholder="Pega aqui el contenido del cerebro o editalo directamente."></textarea>
+            </label>
+            <div class="row">
+              <button id="saveBrainBtn" class="secondary small" type="button">Guardar cerebro y reindexar</button>
+            </div>
+            <div class="slot-status" id="brainStatus">Todavia no se ha cargado el cerebro.</div>
+          </div>
+        </section>
+
         <section class="card panel hidden" id="securityBlock">
           <div class="panel-header">
             <div>
@@ -2079,6 +2487,7 @@
 
     const state = {
       user: null,
+      portalAdminClientId: (urlParams.get("cliente_id") || "").trim(),
       scope: "upcoming",
       status: "",
       query: "",
@@ -2094,12 +2503,23 @@
       calendarItems: [],
       selectedCalendarDate: "",
       schedule: null,
+      aiConfig: null,
+      brainInfo: null,
       employees: [],
       selectedEmployeeId: "",
       employeeDraftMode: false,
       employeeEditorOpen: false,
       employeeServiceDraftIds: [],
       services: [],
+      chats: [],
+      selectedChatSessionId: "",
+      chatOffset: 0,
+      chatLimit: 30,
+      chatHasMore: false,
+      chatQuery: "",
+      chatIntent: "",
+      chatDetailMessages: [],
+      chatVisibleMessages: 10,
       todayAgendaFilter: "",
       scheduleTarget: "general",
       blockTarget: "general",
@@ -2116,6 +2536,30 @@
       rescheduleOriginalTime: "",
       rescheduleSelectedTime: "",
     };
+
+    function isPortalAdminClientView() {
+      return Boolean(state.portalAdminClientId) && state.user?.role === "admin";
+    }
+
+    function withClientScope(path) {
+      const rawPath = String(path || "");
+      if (!state.portalAdminClientId) return rawPath;
+      const scopedPrefixes = [
+        "/auth/dashboard",
+        "/auth/bookings",
+        "/auth/schedule",
+        "/auth/ai-config",
+        "/auth/brain",
+        "/auth/chats",
+        "/auth/employees",
+        "/auth/services",
+      ];
+      if (!scopedPrefixes.some((prefix) => rawPath.startsWith(prefix))) {
+        return rawPath;
+      }
+      const separator = rawPath.includes("?") ? "&" : "?";
+      return `${rawPath}${separator}cliente_id=${encodeURIComponent(state.portalAdminClientId)}`;
+    }
 
     const el = {
       authGuestStack: document.getElementById("authGuestStack"),
@@ -2158,6 +2602,30 @@
       stat3Label: document.getElementById("stat3Label"),
       stat4: document.getElementById("stat4"),
       stat4Label: document.getElementById("stat4Label"),
+      metricsBlock: document.getElementById("metricsBlock"),
+      metricChats: document.getElementById("metricChats"),
+      metricMessages: document.getElementById("metricMessages"),
+      metricIntents: document.getElementById("metricIntents"),
+      metricUpcoming: document.getElementById("metricUpcoming"),
+      metricBookings: document.getElementById("metricBookings"),
+      metricHistory: document.getElementById("metricHistory"),
+      metricsSummary: document.getElementById("metricsSummary"),
+      refreshMetricsBtn: document.getElementById("refreshMetricsBtn"),
+      conversationsBlock: document.getElementById("conversationsBlock"),
+      conversationSearch: document.getElementById("conversationSearch"),
+      conversationIntentFilter: document.getElementById("conversationIntentFilter"),
+      clearConversationFiltersBtn: document.getElementById("clearConversationFiltersBtn"),
+      conversationList: document.getElementById("conversationList"),
+      conversationPagination: document.getElementById("conversationPagination"),
+      conversationPaginationText: document.getElementById("conversationPaginationText"),
+      loadMoreConversationsBtn: document.getElementById("loadMoreConversationsBtn"),
+      conversationDetailTitle: document.getElementById("conversationDetailTitle"),
+      conversationDetailMeta: document.getElementById("conversationDetailMeta"),
+      conversationMessages: document.getElementById("conversationMessages"),
+      conversationDetailActions: document.getElementById("conversationDetailActions"),
+      showMoreMessagesBtn: document.getElementById("showMoreMessagesBtn"),
+      collapseMessagesBtn: document.getElementById("collapseMessagesBtn"),
+      refreshConversationsBtn: document.getElementById("refreshConversationsBtn"),
       todayBlock: document.getElementById("todayBlock"),
       portalContent: document.getElementById("portalContent"),
       todayOverviewIntro: document.getElementById("todayOverviewIntro"),
@@ -2189,6 +2657,7 @@
       scheduleBlock: document.getElementById("scheduleBlock"),
       blocksBlock: document.getElementById("blocksBlock"),
       messagesBlock: document.getElementById("messagesBlock"),
+      aiBlock: document.getElementById("aiBlock"),
       scheduleTargetSelect: document.getElementById("scheduleTargetSelect"),
       scheduleTargetMeta: document.getElementById("scheduleTargetMeta"),
       scheduleEnabledWrap: document.getElementById("scheduleEnabledWrap"),
@@ -2216,6 +2685,17 @@
       templatePreviewMeta: document.getElementById("templatePreviewMeta"),
       templatePreviewPanel: document.getElementById("templatePreviewPanel"),
       saveTemplatesBtn: document.getElementById("saveTemplatesBtn"),
+      aiIcono: document.getElementById("aiIcono"),
+      aiWelcome: document.getElementById("aiWelcome"),
+      aiPromptExtra: document.getElementById("aiPromptExtra"),
+      saveAiConfigBtn: document.getElementById("saveAiConfigBtn"),
+      aiPreviewIcon: document.getElementById("aiPreviewIcon"),
+      aiPreviewName: document.getElementById("aiPreviewName"),
+      aiPreviewWelcome: document.getElementById("aiPreviewWelcome"),
+      aiPreviewPromptSummary: document.getElementById("aiPreviewPromptSummary"),
+      brainInfoTxt: document.getElementById("brainInfoTxt"),
+      saveBrainBtn: document.getElementById("saveBrainBtn"),
+      brainStatus: document.getElementById("brainStatus"),
       blockMode: document.getElementById("blockMode"),
       blockDateStart: document.getElementById("blockDateStart"),
       blockDateEndWrap: document.getElementById("blockDateEndWrap"),
@@ -2287,7 +2767,7 @@
     }
 
     async function api(path, options = {}) {
-      const response = await fetch(path, {
+      const response = await fetch(withClientScope(path), {
         ...options,
         headers: {
           "Accept": "application/json",
@@ -2576,18 +3056,24 @@
     function setPortalView(view) {
       if (!state.user) return;
       const normalizedView = String(view || "").trim().toLowerCase();
-      const nextView = ["citas", "hoy", "profesionales", "cuenta", "horario", "bloqueos", "mensajes", "seguridad"].includes(normalizedView)
+      const allowedViews = isPortalAdminClientView()
+        ? ["citas", "hoy", "metricas", "conversaciones", "profesionales", "horario", "bloqueos", "mensajes", "ia"]
+        : ["citas", "hoy", "metricas", "conversaciones", "profesionales", "cuenta", "horario", "bloqueos", "mensajes", "ia", "seguridad"];
+      const nextView = allowedViews.includes(normalizedView)
         ? normalizedView
         : "citas";
       state.activePortalView = nextView;
       const viewTargets = {
         citas: el.portalContent,
         hoy: el.todayBlock,
+        metricas: el.metricsBlock,
+        conversaciones: el.conversationsBlock,
         profesionales: el.teamBlock,
         cuenta: el.accountBlock,
         horario: el.scheduleBlock,
         bloqueos: el.blocksBlock,
         mensajes: el.messagesBlock,
+        ia: el.aiBlock,
         seguridad: el.securityBlock,
       };
       Object.entries(viewTargets).forEach(([key, target]) => {
@@ -2606,6 +3092,101 @@
       el.accountCompany.value = user.cliente_id || "Vantelia";
       el.accountRole.textContent = user.role === "admin" ? "Administrador" : "Cliente";
       el.accountLastLogin.textContent = formatDateTimeLabel(user.last_login_at);
+    }
+
+    function aiAssistantName() {
+      return state.aiConfig?.nombre || state.dashboard?.stats?.empresa || state.user?.cliente_id || "Asistente virtual";
+    }
+
+    function renderAiPreview(config = {}) {
+      const icono = String(config.icono || el.aiIcono.value || "AI").trim() || "AI";
+      const bienvenida = String(config.bienvenida || el.aiWelcome.value || "Hola, soy tu asistente virtual. En que puedo ayudarte hoy?").trim()
+        || "Hola, soy tu asistente virtual. En que puedo ayudarte hoy?";
+      const promptExtra = String(config.prompt_extra || el.aiPromptExtra.value || "").trim();
+      el.aiPreviewIcon.textContent = icono.slice(0, 12);
+      el.aiPreviewName.textContent = aiAssistantName();
+      el.aiPreviewWelcome.textContent = bienvenida;
+      el.aiPreviewPromptSummary.textContent = promptExtra
+        ? `Instrucciones activas: ${promptExtra.length > 180 ? `${promptExtra.slice(0, 180)}...` : promptExtra}`
+        : "Las instrucciones internas no se muestran al usuario, pero afectan al tono, enfoque y limites de respuesta.";
+    }
+
+    function renderAiConfig(config) {
+      state.aiConfig = config || null;
+      el.aiIcono.value = config?.icono || "AI";
+      el.aiWelcome.value = config?.bienvenida || "Hola, soy tu asistente virtual. En que puedo ayudarte hoy?";
+      el.aiPromptExtra.value = config?.prompt_extra || "";
+      renderAiPreview(config || {});
+    }
+
+    async function loadAiConfig() {
+      const config = await api("/auth/ai-config");
+      renderAiConfig(config);
+    }
+
+    function collectAiConfigPayload() {
+      const icono = el.aiIcono.value.trim() || "AI";
+      const bienvenida = el.aiWelcome.value.trim();
+      const promptExtra = el.aiPromptExtra.value.trim();
+      if (!bienvenida || bienvenida.length < 5) {
+        throw new Error("La bienvenida debe tener al menos 5 caracteres.");
+      }
+      return {
+        icono: icono.slice(0, 12),
+        bienvenida,
+        prompt_extra: promptExtra,
+      };
+    }
+
+    async function saveAiConfig() {
+      setStatus("Guardando configuracion de IA...", "info");
+      const config = await api("/auth/ai-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(collectAiConfigPayload()),
+      });
+      renderAiConfig(config);
+      setPortalView("ia");
+      setStatus("Configuracion de IA actualizada correctamente.", "success");
+    }
+
+    function renderBrainInfo(payload) {
+      state.brainInfo = payload || null;
+      el.brainInfoTxt.value = payload?.info_txt || "";
+      if (payload?.reindex_error) {
+        el.brainStatus.textContent = `Guardado completado, pero el reindexado ha fallado: ${payload.reindex_error}`;
+        return;
+      }
+      if (payload?.reindexed) {
+        el.brainStatus.textContent = "Cerebro guardado y reindexado correctamente.";
+        return;
+      }
+      el.brainStatus.textContent = "Cerebro cargado. Puedes editarlo y guardar cuando quieras.";
+    }
+
+    async function loadBrainInfo() {
+      const payload = await api("/auth/brain");
+      renderBrainInfo(payload);
+    }
+
+    async function saveBrainInfo() {
+      const infoTxt = el.brainInfoTxt.value.trim();
+      if (!infoTxt) {
+        throw new Error("El cerebro no puede quedarse vacio.");
+      }
+      setStatus("Guardando cerebro y reindexando...", "info");
+      const payload = await api("/auth/brain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ info_txt: infoTxt }),
+      });
+      renderBrainInfo(payload);
+      setPortalView("ia");
+      if (payload.reindex_error) {
+        setStatus(`Cerebro guardado, pero el reindexado ha fallado: ${payload.reindex_error}`, "error");
+        return;
+      }
+      setStatus("Cerebro actualizado y reindexado correctamente.", "success");
     }
 
     function selectedEmployee() {
@@ -3049,6 +3630,7 @@
       if (state.status) params.set("estado", state.status);
       if (state.query) params.set("q", state.query);
       if (state.employeeFilter) params.set("employee_id", state.employeeFilter);
+      if (state.portalAdminClientId) params.set("cliente_id", state.portalAdminClientId);
       const suffix = params.toString();
       window.location.href = `/auth/bookings/export${suffix ? `?${suffix}` : ""}`;
     }
@@ -3092,6 +3674,7 @@
       el.scheduleBlock.classList.toggle("hidden", true);
       el.blocksBlock.classList.toggle("hidden", true);
       el.messagesBlock.classList.toggle("hidden", true);
+      el.aiBlock.classList.toggle("hidden", true);
       el.securityBlock.classList.toggle("hidden", true);
 
       if (!user) {
@@ -3110,16 +3693,23 @@
       }
 
       const isAdmin = user.role === "admin";
-      el.rolePill.textContent = isAdmin ? "Administrador" : "Cliente";
-      el.userName.textContent = user.display_name;
+      const adminClientView = isPortalAdminClientView();
+      el.rolePill.textContent = adminClientView ? "Admin modo cliente" : (isAdmin ? "Administrador" : "Cliente");
+      el.userName.textContent = adminClientView
+        ? (state.dashboard?.stats?.empresa || state.portalAdminClientId || user.display_name)
+        : user.display_name;
       el.userEmail.textContent = user.email;
       el.templateTestEmail.value = user.email || "";
       renderAccountForm(user);
+      if (state.aiConfig) renderAiPreview(state.aiConfig);
       el.openAdminBtn.classList.toggle("hidden", !isAdmin);
+      el.changePasswordShortcutBtn.classList.toggle("hidden", adminClientView);
+      document.querySelector('[data-scroll-target="accountBlock"]')?.classList.toggle("hidden", adminClientView);
+      document.querySelector('[data-scroll-target="securityBlock"]')?.classList.toggle("hidden", adminClientView);
       el.contactBlock.classList.remove("hidden");
       setAuthView("login");
 
-      if (isAdmin) {
+      if (isAdmin && !adminClientView) {
         el.portalContent.classList.add("hidden");
         el.contactBlock.classList.add("hidden");
         el.heroTitle.textContent = "Centro de operaciones de Vantelia";
@@ -3128,8 +3718,13 @@
         state.calendarOpen = true;
         el.calendarPanel.classList.remove("hidden");
         setPortalView(state.activePortalView);
-        el.heroTitle.textContent = `Portal de ${user.display_name}`;
-        el.heroText.textContent = "Desde aqui puedes ver tus proximas citas, consultar el historial y cambiar o cancelar una reserva sin depender de mensajes manuales.";
+        const targetName = adminClientView
+          ? (state.dashboard?.stats?.empresa || state.portalAdminClientId || user.display_name)
+          : user.display_name;
+        el.heroTitle.textContent = `Portal de ${targetName}`;
+        el.heroText.textContent = adminClientView
+          ? "Estas viendo el portal del cliente con permisos de administrador. Puedes revisar y operar su configuracion sin cambiar de sesion."
+          : "Desde aqui puedes ver tus proximas citas, consultar el historial y cambiar o cancelar una reserva sin depender de mensajes manuales.";
         el.mainPanelTitle.textContent = "Tus citas";
         el.mainPanelText.textContent = "Usa el calendario, la busqueda y los filtros para localizar cualquier cita por dia, cliente o estado.";
       }
@@ -3137,7 +3732,7 @@
 
     function renderStats(stats) {
       if (!state.user) return;
-      if (state.user.role === "admin") {
+      if (state.user.role === "admin" && !isPortalAdminClientView()) {
         el.stat1.textContent = String(stats.total_bookings || 0);
         el.stat1Label.textContent = "Reservas";
         el.stat2.textContent = String(stats.pending_review || 0);
@@ -3156,6 +3751,179 @@
         el.stat4.textContent = stats.empresa || state.user.cliente_id || "-";
         el.stat4Label.textContent = "Empresa";
       }
+    }
+
+    function intentLabel(intent) {
+      const labels = {
+        diagnostico: "Diagnostico",
+        recomendador: "Recomendacion",
+        estimador: "Estimacion",
+        comparador: "Comparacion",
+        booking: "Agenda",
+      };
+      return labels[intent] || intent || "General";
+    }
+
+    function renderMetrics() {
+      const stats = state.dashboard?.stats || {};
+      const chats = filteredChats();
+      const totalMessages = chats.reduce((total, chat) => total + Number(chat.message_count || 0), 0);
+      const intentSet = new Set();
+      chats.forEach((chat) => {
+        (chat.intents || []).forEach((intent) => {
+          if (intent) intentSet.add(intent);
+        });
+      });
+      el.metricChats.textContent = String(chats.length || 0);
+      el.metricMessages.textContent = String(totalMessages || 0);
+      el.metricIntents.textContent = String(intentSet.size || 0);
+      el.metricUpcoming.textContent = String(stats.upcoming || 0);
+      el.metricBookings.textContent = String(stats.total_bookings || 0);
+      el.metricHistory.textContent = String(stats.history || 0);
+
+      const hotIntentLabels = Array.from(intentSet).slice(0, 4).map(intentLabel);
+      const parts = [];
+      parts.push(`${chats.length || 0} conversacion${chats.length === 1 ? "" : "es"} guardada${chats.length === 1 ? "" : "s"}`);
+      parts.push(`${totalMessages || 0} mensaje${totalMessages === 1 ? "" : "s"} registrado${totalMessages === 1 ? "" : "s"}`);
+      parts.push(`${stats.upcoming || 0} cita${Number(stats.upcoming || 0) === 1 ? "" : "s"} proxima${Number(stats.upcoming || 0) === 1 ? "" : "s"}`);
+      if (hotIntentLabels.length) {
+        parts.push(`intenciones detectadas: ${hotIntentLabels.join(", ")}`);
+      }
+      el.metricsSummary.textContent = parts.join(" | ");
+    }
+
+    function filteredChats() {
+      const query = String(state.chatQuery || "").trim().toLowerCase();
+      const intent = String(state.chatIntent || "").trim();
+      return (Array.isArray(state.chats) ? state.chats : []).filter((chat) => {
+        const intents = Array.isArray(chat.intents) ? chat.intents : [];
+        if (intent && !intents.includes(intent)) return false;
+        if (!query) return true;
+        const haystack = [
+          chat.session_id,
+          chat.origin,
+          chat.last_message,
+          chat.started_at,
+          chat.last_message_at,
+          intents.join(" "),
+        ].join(" ").toLowerCase();
+        return haystack.includes(query);
+      });
+    }
+
+    function renderConversationList() {
+      const chats = filteredChats();
+      if (!chats.length) {
+        el.conversationList.innerHTML = '<div class="empty">No hay conversaciones que coincidan con estos filtros.</div>';
+        el.conversationDetailTitle.textContent = "Sin conversaciones";
+        el.conversationDetailMeta.textContent = "Cuando el asistente reciba chats, apareceran aqui.";
+        if (!state.selectedChatSessionId) {
+          el.conversationMessages.innerHTML = '<div class="empty">No hay mensajes para mostrar.</div>';
+        }
+        renderMetrics();
+        renderConversationPagination(chats.length);
+        return;
+      }
+
+      el.conversationList.innerHTML = "";
+      chats.forEach((chat) => {
+        const button = document.createElement("button");
+        button.className = `conversation-item${chat.session_id === state.selectedChatSessionId ? " active" : ""}`;
+        button.type = "button";
+        const tags = (chat.intents || []).slice(0, 3).map((intent) => (
+          `<span class="conversation-tag">${escapeHtml(intentLabel(intent))}</span>`
+        )).join("");
+        const lastMessage = String(chat.last_message || "Sin ultimo mensaje registrado.");
+        button.innerHTML = `
+          <div>
+            <strong>${escapeHtml(formatDateTimeLabel(chat.last_message_at))}</strong>
+            <span class="muted">${escapeHtml(chat.message_count || 0)} mensajes | ${escapeHtml(chat.origin || "Origen no disponible")}</span>
+          </div>
+          <div class="muted">${escapeHtml(lastMessage.length > 120 ? `${lastMessage.slice(0, 120)}...` : lastMessage)}</div>
+          <div class="conversation-tags">${tags || '<span class="conversation-tag">General</span>'}</div>
+        `;
+        button.addEventListener("click", () => {
+          loadChatDetail(chat.session_id).catch((error) => setStatus(error.message, "error"));
+        });
+        el.conversationList.appendChild(button);
+      });
+      renderConversationPagination(chats.length);
+      renderMetrics();
+    }
+
+    function renderConversationPagination(visibleCount) {
+      const loadedCount = Array.isArray(state.chats) ? state.chats.length : 0;
+      el.conversationPaginationText.textContent = `${visibleCount} visibles | ${loadedCount} cargadas`;
+      el.loadMoreConversationsBtn.disabled = !state.chatHasMore;
+      el.loadMoreConversationsBtn.textContent = state.chatHasMore ? "Cargar mas" : "No hay mas";
+      el.conversationPagination.classList.toggle("hidden", loadedCount === 0 && !state.chatHasMore);
+    }
+
+    function renderConversationMessages() {
+      const messages = state.chatDetailMessages || [];
+      const visibleMessages = messages.slice(0, state.chatVisibleMessages);
+      if (!messages.length) {
+        el.conversationMessages.innerHTML = '<div class="empty">Esta conversacion no tiene mensajes guardados.</div>';
+      } else {
+        el.conversationMessages.innerHTML = "";
+        visibleMessages.forEach((message) => {
+          const item = document.createElement("article");
+          const role = message.role === "assistant" ? "assistant" : "user";
+          const content = String(message.content || "");
+          item.className = `conversation-message ${role}`;
+          item.innerHTML = `
+            <small>${role === "assistant" ? "IA" : "Usuario"} | ${escapeHtml(formatDateTimeLabel(message.created_at))}${message.intent ? ` | ${escapeHtml(intentLabel(message.intent))}` : ""}</small>
+            <div class="conversation-message-body">${escapeHtml(content).replace(/\n/g, "<br />")}</div>
+          `;
+          el.conversationMessages.appendChild(item);
+        });
+      }
+      const hasHiddenMessages = messages.length > state.chatVisibleMessages;
+      el.conversationDetailActions.classList.toggle("hidden", messages.length <= 10);
+      el.showMoreMessagesBtn.classList.toggle("hidden", !hasHiddenMessages);
+      el.collapseMessagesBtn.classList.toggle("hidden", state.chatVisibleMessages <= 10);
+      el.showMoreMessagesBtn.textContent = hasHiddenMessages
+        ? `Ver mas mensajes (${messages.length - state.chatVisibleMessages} pendientes)`
+        : "Ver mas mensajes";
+    }
+
+    function renderConversationDetail(payload) {
+      const session = payload?.session || {};
+      const messages = Array.isArray(payload?.messages) ? payload.messages : [];
+      state.selectedChatSessionId = session.session_id || "";
+      state.chatDetailMessages = messages;
+      state.chatVisibleMessages = 10;
+      el.conversationDetailTitle.textContent = session.session_id
+        ? `Conversacion ${session.session_id}`
+        : "Conversacion";
+      el.conversationDetailMeta.textContent = `${formatDateTimeLabel(session.started_at)} | ${messages.length} mensaje${messages.length === 1 ? "" : "s"}`;
+      renderConversationMessages();
+      renderConversationList();
+    }
+
+    async function loadChats(options = {}) {
+      const append = Boolean(options.append);
+      const offset = append ? state.chatOffset : 0;
+      const chats = await api(`/auth/chats?limit=${state.chatLimit}&offset=${offset}`);
+      const nextChats = Array.isArray(chats) ? chats : [];
+      state.chats = append ? [...state.chats, ...nextChats] : nextChats;
+      state.chatOffset = state.chats.length;
+      state.chatHasMore = nextChats.length === state.chatLimit;
+      if (!state.selectedChatSessionId && state.chats.length) {
+        state.selectedChatSessionId = state.chats[0].session_id;
+      }
+      renderConversationList();
+      if (!append && state.selectedChatSessionId) {
+        await loadChatDetail(state.selectedChatSessionId, { keepStatus: true });
+      }
+    }
+
+    async function loadChatDetail(sessionId, options = {}) {
+      if (!sessionId) return;
+      if (!options.keepStatus) setStatus("Cargando conversacion...", "info");
+      const detail = await api(`/auth/chats/${encodeURIComponent(sessionId)}`);
+      renderConversationDetail(detail);
+      if (!options.keepStatus) setStatus("Conversacion cargada correctamente.", "success");
     }
 
     function renderTodayOverview(payload) {
@@ -3964,21 +4732,29 @@
       const payload = await api("/auth/dashboard");
       state.dashboard = payload;
       state.user = payload.user;
+      if (state.user?.role === "admin" && !state.portalAdminClientId) {
+        window.location.href = "/dashboard";
+        return;
+      }
       renderShell();
       renderStats(payload.stats || {});
       renderTodayOverview(payload);
-      if (state.user.role !== "admin") {
-        await loadServices();
-        await loadSchedule();
-        await loadEmployees();
-        await loadBookings();
-      }
-      setStatus(`Sesion activa como ${payload.user.display_name}.`, "success");
+      await loadAiConfig();
+      await loadBrainInfo();
+      await loadServices();
+      await loadSchedule();
+      await loadEmployees();
+      await loadBookings();
+      await loadChats();
+      const sessionLabel = isPortalAdminClientView()
+        ? `${payload.user.display_name} en modo portal cliente`
+        : payload.user.display_name;
+      setStatus(`Sesion activa como ${sessionLabel}.`, "success");
     }
 
     async function login() {
       setStatus("Iniciando sesion...", "info");
-      await api("/auth/login", {
+      const payload = await api("/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -3987,7 +4763,8 @@
         }),
       });
       el.password.value = "";
-      await loadDashboard();
+      const nextUrl = payload.redirect_to || "/portal";
+      window.location.href = nextUrl;
     }
 
     async function sendPasswordReset() {
@@ -4041,8 +4818,16 @@
       state.user = null;
       state.items = [];
       state.calendarItems = [];
+      state.chats = [];
+      state.selectedChatSessionId = "";
+      state.chatOffset = 0;
+      state.chatHasMore = false;
+      state.chatDetailMessages = [];
+      state.chatVisibleMessages = 10;
       state.selectedCalendarDate = "";
       state.schedule = null;
+      state.aiConfig = null;
+      state.brainInfo = null;
       el.changeCurrentPassword.value = "";
       el.changeNewPassword.value = "";
       el.changeNewPasswordConfirm.value = "";
@@ -4050,6 +4835,9 @@
       renderShell();
       state.calendarOpen = true;
       el.bookingList.innerHTML = `<div class="empty">Inicia sesion para ver reservas.</div>`;
+      el.conversationList.innerHTML = `<div class="empty">Inicia sesion para ver conversaciones.</div>`;
+      el.conversationMessages.innerHTML = `<div class="empty">Inicia sesion para ver mensajes.</div>`;
+      renderConversationPagination(0);
       setStatus("Sesion cerrada.", "info");
     }
 
@@ -4128,16 +4916,54 @@
     el.openAdminBtn.addEventListener("click", () => window.open("/dashboard", "_blank", "noopener,noreferrer"));
     el.changePasswordBtn.addEventListener("click", () => changePassword().catch((error) => setStatus(error.message, "error")));
     el.saveAccountBtn.addEventListener("click", () => saveAccount().catch((error) => setStatus(error.message, "error")));
+    el.refreshMetricsBtn.addEventListener("click", () => loadDashboard().catch((error) => setStatus(error.message, "error")));
+    el.refreshConversationsBtn.addEventListener("click", () => {
+      state.selectedChatSessionId = "";
+      state.chatDetailMessages = [];
+      loadChats().catch((error) => setStatus(error.message, "error"));
+    });
+    el.conversationSearch.addEventListener("input", () => {
+      state.chatQuery = el.conversationSearch.value.trim();
+      renderConversationList();
+    });
+    el.conversationIntentFilter.addEventListener("change", () => {
+      state.chatIntent = el.conversationIntentFilter.value.trim();
+      renderConversationList();
+    });
+    el.clearConversationFiltersBtn.addEventListener("click", () => {
+      state.chatQuery = "";
+      state.chatIntent = "";
+      el.conversationSearch.value = "";
+      el.conversationIntentFilter.value = "";
+      renderConversationList();
+    });
+    el.loadMoreConversationsBtn.addEventListener("click", () =>
+      loadChats({ append: true }).catch((error) => setStatus(error.message, "error"))
+    );
+    el.showMoreMessagesBtn.addEventListener("click", () => {
+      state.chatVisibleMessages = Math.min(
+        state.chatDetailMessages.length,
+        state.chatVisibleMessages + 10
+      );
+      renderConversationMessages();
+    });
+    el.collapseMessagesBtn.addEventListener("click", () => {
+      state.chatVisibleMessages = 10;
+      renderConversationMessages();
+    });
     document.querySelectorAll(".nav-button[data-scroll-target]").forEach((button) => {
       button.addEventListener("click", () => {
         const targetToView = {
           portalContent: "citas",
           todayBlock: "hoy",
+          metricsBlock: "metricas",
+          conversationsBlock: "conversaciones",
           teamBlock: "profesionales",
           accountBlock: "cuenta",
           scheduleBlock: "horario",
           blocksBlock: "bloqueos",
           messagesBlock: "mensajes",
+          aiBlock: "ia",
           securityBlock: "seguridad",
         };
         setPortalView(targetToView[button.dataset.scrollTarget] || "citas");
@@ -4151,6 +4977,11 @@
     el.saveTemplatesBtn.addEventListener("click", () =>
       saveSchedule("Plantillas actualizadas correctamente.").catch((error) => setStatus(error.message, "error"))
     );
+    el.saveAiConfigBtn.addEventListener("click", () => saveAiConfig().catch((error) => setStatus(error.message, "error")));
+    el.saveBrainBtn.addEventListener("click", () => saveBrainInfo().catch((error) => setStatus(error.message, "error")));
+    [el.aiIcono, el.aiWelcome, el.aiPromptExtra].forEach((field) => {
+      field.addEventListener("input", () => renderAiPreview());
+    });
     el.previewTemplateBtn.addEventListener("click", () =>
       previewMessageTemplate().catch((error) => setStatus(error.message, "error"))
     );

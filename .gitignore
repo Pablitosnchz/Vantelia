@@ -13,3 +13,4 @@ storage/*/
 .streamlit/
 .git-inner-backup/
 .pytest_cache/
+backups/

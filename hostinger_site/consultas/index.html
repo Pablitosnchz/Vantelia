@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Consulta Gratuita | Vantelia · IA + Marketing Digital</title>
+  <meta name="description" content="Solicita una consulta gratuita con Vantelia. Analizamos tu situación real en captación, conversión, IA y automatización y te decimos exactamente qué mover primero.">
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+  <meta name="theme-color" content="#0B132B">
+  <link rel="canonical" href="https://www.vantelia.es/consultas/">
+  <link rel="icon" href="/assets/img/favicon.png">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Consulta Gratuita | Vantelia · IA + Marketing Digital">
+  <meta property="og:description" content="Primera consulta gratuita y sin compromiso. Te decimos qué tiene más sentido para tu empresa: IA, marketing, automatización o las tres a la vez.">
+  <meta property="og:url" content="https://www.vantelia.es/consultas/">
+  <meta property="og:image" content="https://www.vantelia.es/assets/img/resumen.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "ContactPage",
+        "name": "Consulta Gratuita — Vantelia",
+        "url": "https://www.vantelia.es/consultas/",
+        "description": "Primera consulta gratuita y sin compromiso con Vantelia. Analizamos captación, conversión, automatización e IA para detectar prioridades reales.",
+        "provider": { "@type": "Organization", "name": "Vantelia", "url": "https://www.vantelia.es/" }
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          { "@type": "Question", "name": "¿Qué incluye la consulta gratuita?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Una llamada o reunión de 30-45 min donde analizamos tu situación real: captación, conversión, automatización y herramientas actuales. El resultado es una hoja de ruta con prioridades concretas, no recomendaciones genéricas." }},
+          { "@type": "Question", "name": "¿Hay algún compromiso tras la consulta?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Ninguno. La consulta es gratis y sin compromiso. Si tiene sentido trabajar juntos, te presentamos una propuesta. Si no encaja, te orientamos igualmente." }},
+          { "@type": "Question", "name": "¿En cuánto tiempo os ponéis en contacto?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Respondemos en menos de 24 horas en días laborables. Normalmente mucho antes." }}
+        ]
+      }
+    ]
+  }
+  </script>
+  <style>
+    /* ── Variables (design system unificado) ─── */
+    :root {
+      --bg:          #0B132B;
+      --bg-2:        #091028;
+      --surface:     rgba(255,255,255,0.04);
+      --surface-h:   rgba(255,255,255,0.07);
+      --border:      rgba(255,255,255,0.08);
+      --border-glow: rgba(0,209,255,0.25);
+      --primary:     #00D1FF;
+      --primary-dim: rgba(0,209,255,0.11);
+      --accent:      #00F5D4;
+      --text:        #F0F4F8;
+      --muted:       #8fa3b4;
+      --muted-2:     #637c8e;
+      --danger:      #ff7b86;
+      --success:     #22c55e;
+      --font:        'Inter', sans-serif;
+      --font-d:      'Space Grotesk', sans-serif;
+      --radius:      16px;
+      --radius-lg:   24px;
+      --shell:       min(1200px, calc(100vw - 48px));
+      --nav-h:       72px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html  { scroll-behavior: smooth; }
+    body  {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    a     { color: inherit; text-decoration: none; }
+    img   { display: block; max-width: 100%; }
+    ul    { list-style: none; }
+
+    .shell { width: var(--shell); margin: 0 auto; }
+
+    h1,h2,h3,h4 { font-family: var(--font-d); line-height: 1.1; letter-spacing: -.03em; }
+
+    .eyebrow {
+      font-size: .75rem; font-weight: 700; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--primary);
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 0 24px; height: 48px; border-radius: 999px; border: none; cursor: pointer;
+      font-family: var(--font-d); font-size: .9rem; font-weight: 600;
+      transition: all .22s ease; white-space: nowrap;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      color: #04101c;
+      box-shadow: 0 8px 28px rgba(0,209,255,.28);
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 14px 36px rgba(0,209,255,.40); filter: brightness(1.06); }
+    .btn-ghost {
+      background: transparent; border: 1px solid var(--border); color: var(--text);
+    }
+    .btn-ghost:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-dim); }
+    .btn-lg { height: 54px; padding: 0 32px; font-size: .98rem; }
+    .btn-full { width: 100%; }
+
+    /* ── Reveal ── */
+    .reveal { opacity: 0; transform: translateY(32px); transition: opacity .7s ease, transform .7s ease; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+    .d1 { transition-delay: .10s; } .d2 { transition-delay: .20s; }
+    .d3 { transition-delay: .30s; } .d4 { transition-delay: .40s; }
+
+    /* ── Header ── */
+    .site-header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: var(--nav-h); transition: background .3s, border-color .3s;
+    }
+    .site-header.scrolled {
+      background: rgba(8,14,36,.92); backdrop-filter: blur(22px) saturate(1.5);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      height: var(--nav-h);
+      display: flex; align-items: center; justify-content: space-between; gap: 32px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-d); font-size: 1.3rem; font-weight: 700; }
+    .brand img { height: 36px; }
+    .brand-name { background: linear-gradient(135deg, var(--primary), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .nav-links { display: flex; align-items: center; gap: 28px; }
+    .nav-links a { font-size: .9rem; font-weight: 500; color: var(--muted); transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+    .btn-access {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 0 16px; height: 36px; border-radius: 999px;
+      border: 1px solid rgba(0,209,255,.30); background: rgba(0,209,255,.08);
+      color: var(--primary); font-family: var(--font-d); font-size: .82rem; font-weight: 600;
+      transition: all .2s; white-space: nowrap;
+    }
+    .btn-access:hover { background: rgba(0,209,255,.16); border-color: var(--primary); transform: translateY(-1px); }
+    .dot-live { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; flex-shrink: 0; animation: pulse 2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(1.6); } }
+    .nav-toggle { display: none; flex-direction: column; gap: 5px; padding: 8px; background: none; border: none; cursor: pointer; }
+    .nav-toggle span { display: block; width: 24px; height: 2px; background: var(--text); border-radius: 2px; transition: all .3s; }
+
+    /* Mobile menu */
+    .mobile-menu { display: none; position: fixed; inset: 0; background: rgba(8,14,36,.97); backdrop-filter: blur(24px); z-index: 99; flex-direction: column; align-items: center; justify-content: center; gap: 28px; }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu a { font-family: var(--font-d); font-size: 2rem; font-weight: 700; color: var(--text); transition: color .2s; }
+    .mobile-menu a:hover { color: var(--primary); }
+    .mobile-close { position: absolute; top: 22px; right: 24px; background: none; border: none; color: var(--text); font-size: 2rem; cursor: pointer; }
+
+    /* ════ HERO ════ */
+    .page-hero {
+      padding: calc(var(--nav-h) + 80px) 0 80px;
+      position: relative; overflow: hidden;
+    }
+    .page-hero::before {
+      content: '';
+      position: absolute; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(0,209,255,.09), transparent 52%),
+        radial-gradient(ellipse at 80% 20%, rgba(0,245,212,.06), transparent 44%);
+    }
+    .hero-inner { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }
+    .hero-copy { display: grid; gap: 20px; }
+    .hero-copy h1 { font-size: clamp(2.4rem, 4.4vw, 3.8rem); line-height: 1.04; letter-spacing: -.04em; }
+    .hero-copy p  { font-size: 1.1rem; color: var(--muted); line-height: 1.74; max-width: 480px; }
+
+    .hero-trust {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px; border-radius: 14px;
+      border: 1px solid var(--border); background: var(--surface);
+      width: fit-content; font-size: .84rem; color: var(--muted-2);
+    }
+    .avatars { display: flex; }
+    .av { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--bg-2,#091028); margin-left: -7px; display: flex; align-items: center; justify-content: center; font-size: .62rem; font-weight: 700; color: #04101c; }
+    .av:first-child { margin-left: 0; }
+
+    /* ── Form card ── */
+    .form-card {
+      background: rgba(255,255,255,.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 32px 28px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 32px 80px rgba(0,0,0,.30);
+      position: relative; overflow: hidden;
+    }
+    .form-card::before {
+      content: ''; position: absolute; inset: -1px; border-radius: var(--radius-lg);
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(0,209,255,.30), transparent 50%, rgba(0,245,212,.20));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+      pointer-events: none;
+    }
+    .form-card h3 { font-size: 1.2rem; margin-bottom: 6px; }
+    .form-card > p { font-size: .88rem; color: var(--muted); margin-bottom: 22px; line-height: 1.6; }
+
+    .form-grid { display: grid; gap: 16px; }
+    .form-row  { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    .field { display: grid; gap: 7px; }
+    .field label { font-size: .82rem; font-weight: 600; color: var(--muted); letter-spacing: .02em; }
+
+    .field input,
+    .field select,
+    .field textarea {
+      width: 100%;
+      background: rgba(255,255,255,.05);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 11px 14px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: .9rem;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s, background .2s;
+    }
+    .field input::placeholder,
+    .field textarea::placeholder { color: var(--muted-2); }
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus {
+      border-color: rgba(0,209,255,.45);
+      box-shadow: 0 0 0 4px rgba(0,209,255,.10);
+      background: rgba(255,255,255,.07);
+    }
+    .field select option { background: #0B132B; }
+    .field textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
+
+    .form-note { font-size: .78rem; color: var(--muted-2); text-align: center; margin-top: 6px; }
+
+    .form-success {
+      display: none; text-align: center; padding: 24px;
+      border-radius: 14px; background: rgba(34,197,94,.08);
+      border: 1px solid rgba(34,197,94,.25);
+    }
+    .form-success.visible { display: block; }
+    .form-success .check { font-size: 2.5rem; margin-bottom: 10px; }
+    .form-success h4 { font-family: var(--font-d); font-size: 1.1rem; margin-bottom: 6px; }
+    .form-success p  { font-size: .88rem; color: var(--muted); }
+    .form-error { font-size: .82rem; color: var(--danger); margin-top: 4px; display: none; }
+    .field.has-error input,
+    .field.has-error textarea,
+    .field.has-error select {
+      border-color: rgba(255,123,134,.50);
+    }
+    .field.has-error .form-error { display: block; }
+
+    /* ════ WHAT YOU GET ════ */
+    .section { padding: clamp(72px,10vw,120px) 0; }
+    .section-head { display: grid; gap: 14px; max-width: 640px; margin-bottom: clamp(40px,6vw,64px); }
+    .section-head.centered { margin-inline: auto; text-align: center; }
+    .section-head h2 { font-size: clamp(1.9rem,3.6vw,2.8rem); }
+    .section-lead { font-size: 1.05rem; color: var(--muted); line-height: 1.72; }
+
+    .deliverables-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 18px; }
+    .deliv-card {
+      padding: 26px 22px; border-radius: 20px;
+      border: 1px solid var(--border); background: var(--surface);
+      display: grid; gap: 12px; transition: all .3s;
+    }
+    .deliv-card:hover { border-color: rgba(0,209,255,.28); transform: translateY(-5px); }
+    .deliv-ico { font-size: 1.8rem; }
+    .deliv-card h3 { font-size: 1rem; font-weight: 700; line-height: 1.3; }
+    .deliv-card p  { font-size: .86rem; color: var(--muted); line-height: 1.65; }
+
+    /* ════ HOW IT WORKS ════ */
+    .steps-bg {
+      background:
+        radial-gradient(ellipse at 50% 0%, rgba(0,209,255,.06), transparent 56%),
+        linear-gradient(180deg, var(--bg) 0%, #091428 50%, var(--bg) 100%);
+    }
+    .steps-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; position: relative; }
+    .steps-grid::before {
+      content: ''; position: absolute; z-index: 0;
+      top: 28px; left: calc(16.66% + 22px); right: calc(16.66% + 22px); height: 1px;
+      background: linear-gradient(90deg, transparent, var(--primary), var(--accent), transparent);
+      opacity: .35;
+    }
+    .step { text-align: center; display: grid; gap: 14px; position: relative; z-index: 1; }
+    .step-num {
+      width: 56px; height: 56px; border-radius: 50%; margin: 0 auto;
+      border: 2px solid rgba(0,209,255,.28);
+      background: linear-gradient(135deg, rgba(0,209,255,.11), rgba(0,245,212,.07));
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-d); font-size: 1.15rem; font-weight: 700; color: var(--primary);
+      transition: all .3s;
+    }
+    .step:hover .step-num { border-color: var(--primary); box-shadow: 0 0 22px rgba(0,209,255,.24); }
+    .step h3 { font-size: 1rem; }
+    .step p  { font-size: .87rem; color: var(--muted); line-height: 1.62; }
+
+    /* ════ VALUE STRIP ════ */
+    .value-strip {
+      background: linear-gradient(135deg, rgba(0,209,255,.06), rgba(0,245,212,.05));
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    }
+    .value-strip-inner {
+      padding: 52px 0; display: grid; grid-template-columns: 1fr 1fr;
+      gap: clamp(40px,7vw,88px); align-items: center;
+    }
+    .value-copy { display: grid; gap: 16px; }
+    .value-copy h2 { font-size: clamp(1.8rem,3.2vw,2.5rem); }
+    .value-copy p  { color: var(--muted); line-height: 1.74; }
+    .check-list   { display: grid; gap: 10px; }
+    .check-item   { display: flex; align-items: flex-start; gap: 10px; font-size: .92rem; color: var(--muted); }
+    .check-item::before {
+      content: '✓'; flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%;
+      background: rgba(34,197,94,.14); border: 1px solid rgba(34,197,94,.28);
+      color: var(--success); font-size: .72rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; margin-top: 1px;
+    }
+    .quote-card {
+      padding: 28px; border-radius: var(--radius);
+      border: 1px solid rgba(0,209,255,.16);
+      background: rgba(255,255,255,.025);
+    }
+    .quote-card blockquote {
+      font-family: var(--font-d); font-size: 1.2rem; line-height: 1.48;
+      font-style: italic; margin-bottom: 16px;
+      color: var(--text);
+    }
+    .quote-author { display: flex; align-items: center; gap: 12px; }
+    .q-av {
+      width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: .85rem; color: #04101c;
+    }
+    .q-name { font-size: .88rem; font-weight: 600; }
+    .q-role { font-size: .76rem; color: var(--muted); }
+
+    /* ════ FAQ ════ */
+    .faq-list { display: grid; gap: 10px; max-width: 760px; margin: 0 auto; }
+    .faq-item { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color .2s; }
+    .faq-item.open { border-color: rgba(0,209,255,.26); }
+    .faq-btn {
+      width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 18px 22px; background: none; border: none; color: var(--text);
+      font-family: var(--font-d); font-size: .97rem; font-weight: 600;
+      text-align: left; cursor: pointer; transition: color .2s;
+    }
+    .faq-item.open .faq-btn { color: var(--primary); }
+    .faq-chev {
+      width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .78rem; flex-shrink: 0; transition: all .3s;
+    }
+    .faq-item.open .faq-chev { background: rgba(0,209,255,.10); border-color: rgba(0,209,255,.30); transform: rotate(180deg); }
+    .faq-ans { max-height: 0; overflow: hidden; transition: max-height .4s ease; }
+    .faq-item.open .faq-ans { max-height: 400px; }
+    .faq-ans-in { padding: 0 22px 18px; font-size: .92rem; color: var(--muted); line-height: 1.76; }
+
+    /* ════ FOOTER ════ */
+    .glow-line { width: 100%; height: 1px; background: linear-gradient(90deg, transparent, var(--primary), var(--accent), transparent); opacity: .35; }
+    .site-footer { border-top: 1px solid var(--border); padding: 56px 0 36px; }
+    .footer-grid { display: grid; grid-template-columns: 1.8fr 1fr 1fr 1fr; gap: 44px; margin-bottom: 44px; }
+    .footer-brand { display: grid; gap: 14px; align-content: start; }
+    .footer-logo { display: flex; align-items: center; gap: 10px; font-family: var(--font-d); font-size: 1.2rem; font-weight: 700; }
+    .footer-logo img { height: 28px; }
+    .footer-desc { font-size: .86rem; color: var(--muted); line-height: 1.72; max-width: 270px; }
+    .footer-social { display: flex; gap: 9px; }
+    .social-a { width: 33px; height: 33px; border-radius: 9px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: .86rem; color: var(--muted); transition: all .2s; }
+    .social-a:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-dim); }
+    .footer-col { display: grid; gap: 13px; align-content: start; }
+    .col-title { font-family: var(--font-d); font-size: .8rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+    .col-links { display: grid; gap: 9px; }
+    .col-links a { font-size: .87rem; color: var(--muted); transition: color .2s; }
+    .col-links a:hover { color: var(--text); }
+    .footer-bottom { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 26px; border-top: 1px solid var(--border); font-size: .81rem; color: var(--muted-2); flex-wrap: wrap; }
+    .footer-legal { display: flex; gap: 20px; flex-wrap: wrap; }
+    .footer-legal a { color: var(--muted-2); transition: color .2s; }
+    .footer-legal a:hover { color: var(--muted); }
+
+    /* ════ RESPONSIVE ════ */
+    @media (max-width: 1024px) {
+      .deliverables-grid { grid-template-columns: repeat(2,1fr); }
+    }
+    @media (max-width: 768px) {
+      :root { --shell: calc(100vw - 32px); }
+      .nav-links, .nav-cta { display: none; }
+      .nav-toggle { display: flex; }
+      .hero-inner { grid-template-columns: 1fr; gap: 40px; padding-top: 0; text-align: center; }
+      .hero-copy p  { margin: 0 auto; }
+      .hero-trust   { margin: 0 auto; }
+      .hero-actions { justify-content: center; }
+      .deliverables-grid { grid-template-columns: 1fr 1fr; }
+      .steps-grid { grid-template-columns: 1fr; }
+      .steps-grid::before { display: none; }
+      .form-row { grid-template-columns: 1fr; }
+      .value-strip-inner { grid-template-columns: 1fr; }
+      .footer-grid { grid-template-columns: 1fr 1fr; gap: 28px; }
+      .footer-brand { grid-column: span 2; }
+      .footer-bottom { flex-direction: column; text-align: center; }
+    }
+    @media (max-width: 480px) {
+      .deliverables-grid { grid-template-columns: 1fr; }
+      .footer-grid { grid-template-columns: 1fr; }
+      .footer-brand { grid-column: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════ HEADER ══════════ -->
+<header class="site-header" id="site-header">
+  <div class="shell nav-inner">
+    <a href="/" class="brand" aria-label="Vantelia – Inicio">
+      <img src="/assets/img/logo-letra.png" alt="Vantelia">
+    </a>
+    <nav aria-label="Navegación principal">
+      <ul class="nav-links">
+        <li><a href="/#servicios">Servicios</a></li>
+        <li><a href="/#plataforma">Plataforma</a></li>
+        <li><a href="/#resultados">Resultados</a></li>
+        <li><a href="/#nosotros">Nosotros</a></li>
+        <li><a href="/#faq">FAQ</a></li>
+      </ul>
+    </nav>
+    <div style="display:flex;gap:10px;align-items:center" class="nav-cta">
+      <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener">
+        <span class="dot-live" aria-hidden="true"></span>Acceso plataforma
+      </a>
+      <a href="#formulario" class="btn btn-primary" style="height:40px;padding:0 20px;font-size:.86rem">Solicitar consulta</a>
+    </div>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Abrir menú" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<!-- Mobile menu -->
+<div class="mobile-menu" id="mobile-menu" role="dialog" aria-label="Menú">
+  <button class="mobile-close" id="mobile-close" aria-label="Cerrar menú">✕</button>
+  <a href="/#servicios">Servicios</a>
+  <a href="/#plataforma">Plataforma</a>
+  <a href="/#resultados">Resultados</a>
+  <a href="/#nosotros">Nosotros</a>
+  <a href="/#faq">FAQ</a>
+  <a href="#formulario" class="btn btn-primary btn-lg" style="margin-top:12px">Solicitar consulta</a>
+</div>
+
+<!-- ══════════ HERO + FORM ══════════ -->
+<section class="page-hero" id="inicio">
+  <div class="shell">
+    <div class="hero-inner">
+      <!-- Copy -->
+      <div class="hero-copy reveal">
+        <span class="eyebrow">Consulta gratuita · Sin compromiso</span>
+        <h1>
+          Cuéntanos tu situación.<br>
+          Te decimos <span class="gradient-text">exactamente</span><br>
+          qué mover primero.
+        </h1>
+        <p>
+          No mandamos brochures ni propuestas genéricas.
+          Analizamos tu caso real — captación, conversión, IA,
+          automatización — y te damos prioridades concretas en la primera llamada.
+        </p>
+        <div class="hero-trust">
+          <div class="avatars" aria-hidden="true">
+            <div class="av" style="background:linear-gradient(135deg,#00D1FF,#00F5D4)">AM</div>
+            <div class="av" style="background:linear-gradient(135deg,#8a63ff,#00D1FF)">CR</div>
+            <div class="av" style="background:linear-gradient(135deg,#00F5D4,#48d596)">LG</div>
+          </div>
+          <span>+25 empresas ya han pasado por aquí</span>
+        </div>
+
+        <!-- Mini datos de contacto directo -->
+        <div style="display:grid;gap:10px;margin-top:8px">
+          <a href="mailto:hola@vantelia.es" style="display:flex;align-items:center;gap:8px;font-size:.88rem;color:var(--muted);transition:color .2s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">
+            <span style="font-size:1rem">✉</span> hola@vantelia.es
+          </a>
+          <p style="font-size:.82rem;color:var(--muted-2)">Respondemos en menos de 24h en días laborables.</p>
+        </div>
+      </div>
+
+      <!-- Form -->
+      <div class="form-card reveal d2" id="formulario">
+        <h3>Solicita tu consulta gratuita</h3>
+        <p>Rellena el formulario y nos ponemos en contacto contigo en menos de 24 horas.</p>
+
+        <div class="form-success" id="form-success">
+          <div class="check">✓</div>
+          <h4>¡Recibido! Nos ponemos en contacto pronto.</h4>
+          <p>Revisa tu correo — te confirmaremos la hora de la llamada en menos de 24h.</p>
+        </div>
+
+        <form id="contact-form" class="form-grid" novalidate>
+          <div class="form-row">
+            <div class="field" id="field-name">
+              <label for="f-name">Nombre</label>
+              <input id="f-name" name="name" type="text" placeholder="Tu nombre" autocomplete="given-name">
+              <span class="form-error">Campo obligatorio</span>
+            </div>
+            <div class="field" id="field-email">
+              <label for="f-email">Correo electrónico</label>
+              <input id="f-email" name="email" type="email" placeholder="tu@empresa.com" autocomplete="email">
+              <span class="form-error">Correo no válido</span>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="field" id="field-company">
+              <label for="f-company">Empresa</label>
+              <input id="f-company" name="company" type="text" placeholder="Nombre de tu empresa" autocomplete="organization">
+              <span class="form-error">Campo obligatorio</span>
+            </div>
+            <div class="field">
+              <label for="f-service">¿Qué necesitas?</label>
+              <select id="f-service" name="service">
+                <option value="">Selecciona una opción</option>
+                <option value="ia-web">Asistente IA para mi web</option>
+                <option value="seo">SEO y contenido B2B</option>
+                <option value="automatizacion">Automatización comercial</option>
+                <option value="paid">Paid media y CRO</option>
+                <option value="analitica">Analítica y datos</option>
+                <option value="todo">Todo integrado</option>
+                <option value="otro">Otro / No lo sé aún</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field" id="field-message">
+            <label for="f-message">Cuéntanos tu situación</label>
+            <textarea id="f-message" name="message" placeholder="¿Qué quieres mejorar? ¿Cuál es el mayor cuello de botella ahora mismo? Cuantos más detalles, más útil será la primera llamada."></textarea>
+            <span class="form-error">Cuéntanos algo sobre tu caso</span>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-full btn-lg" id="form-submit">
+            Solicitar consulta gratuita
+          </button>
+          <p class="form-note">Sin compromiso · Respuesta en &lt; 24h · Equipo senior</p>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="glow-line" aria-hidden="true"></div>
+
+<!-- ══════════ QUÉ OBTIENES ══════════ -->
+<section class="section" id="que-obtienes">
+  <div class="shell">
+    <div class="section-head reveal">
+      <span class="eyebrow">Qué obtienes</span>
+      <h2>Una primera lectura útil para tomar mejores decisiones.</h2>
+      <p class="section-lead">
+        En la primera consulta no venimos a vender. Venimos a entender
+        tu situación y darte valor inmediato.
+      </p>
+    </div>
+    <div class="deliverables-grid">
+      <div class="deliv-card reveal d1">
+        <div class="deliv-ico">🗺️</div>
+        <h3>Mapa de prioridades</h3>
+        <p>Qué conviene atacar primero para no perder energía en frentes secundarios. Sin agendas ocultas.</p>
+      </div>
+      <div class="deliv-card reveal d2">
+        <div class="deliv-ico">🔍</div>
+        <h3>Diagnóstico de puntos de fuga</h3>
+        <p>Dónde se está perdiendo rendimiento: tráfico, mensaje, formulario, CRM o respuesta comercial.</p>
+      </div>
+      <div class="deliv-card reveal d3">
+        <div class="deliv-ico">⚡</div>
+        <h3>Oportunidades de automatización</h3>
+        <p>Qué tareas o transiciones se pueden simplificar con IA sin complicar la operación ni el equipo.</p>
+      </div>
+      <div class="deliv-card reveal d4">
+        <div class="deliv-ico">🎯</div>
+        <h3>Siguiente paso realista</h3>
+        <p>Una ruta clara para avanzar. Sin sobredimensionar tecnología, presupuesto ni complejidad.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ CÓMO FUNCIONA ══════════ -->
+<section class="section steps-bg" id="como-funciona">
+  <div class="shell">
+    <div class="section-head centered reveal">
+      <span class="eyebrow">El proceso</span>
+      <h2>Tres pasos desde que escribes hasta que tienes el plan.</h2>
+    </div>
+    <div class="steps-grid">
+      <div class="step reveal d1">
+        <div class="step-num">01</div>
+        <h3>Rellena el formulario</h3>
+        <p>Cuéntanos tu situación, sector y el mayor cuello de botella que tienes ahora mismo. No hace falta saber exactamente qué necesitas.</p>
+      </div>
+      <div class="step reveal d2">
+        <div class="step-num">02</div>
+        <h3>Llamada de diagnóstico</h3>
+        <p>30-45 minutos de análisis real. Sin presentaciones comerciales. Hacemos preguntas concretas y escuchamos tu contexto.</p>
+      </div>
+      <div class="step reveal d3">
+        <div class="step-num">03</div>
+        <h3>Hoja de ruta accionable</h3>
+        <p>Recibes prioridades claras y un siguiente paso concreto. Si tiene sentido trabajar juntos, te presentamos una propuesta. Si no, te orientamos igualmente.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ VALUE STRIP ══════════ -->
+<section class="value-strip" id="por-que-vantelia">
+  <div class="shell">
+    <div class="value-strip-inner">
+      <div class="value-copy reveal">
+        <span class="eyebrow">Cómo aprovechar la consulta</span>
+        <h2>Cuanto mejor entendamos el contexto, más útil será la sesión.</h2>
+        <p>No necesitas preparar nada formal. Pero si tienes estos datos a mano, la consulta será mucho más accionable:</p>
+        <ul class="check-list">
+          <li>Objetivo principal del negocio o del trimestre actual</li>
+          <li>Canales que hoy generan más movimiento comercial</li>
+          <li>Herramientas que ya usas: CRM, formularios, anuncios, SEO</li>
+          <li>Bloqueos concretos: poca conversión, seguimiento lento, baja calidad de lead</li>
+          <li>Volumen aproximado: visitas, leads, clientes activos</li>
+        </ul>
+      </div>
+      <div class="quote-card reveal d2">
+        <blockquote>
+          "La mejor tecnología es la que simplifica el sistema y hace más fácil vender, medir y decidir. No la que impresiona en demos."
+        </blockquote>
+        <div class="quote-author">
+          <div class="q-av">V</div>
+          <div>
+            <div class="q-name">Equipo Vantelia</div>
+            <div class="q-role">Principio de trabajo</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ FAQ ══════════ -->
+<section class="section" id="faq">
+  <div class="shell">
+    <div class="section-head centered reveal">
+      <span class="eyebrow">Preguntas frecuentes</span>
+      <h2>Todo lo que necesitas saber antes de escribirnos.</h2>
+    </div>
+    <div class="faq-list">
+      <div class="faq-item">
+        <button class="faq-btn" aria-expanded="false">
+          ¿Qué incluye exactamente la consulta gratuita?
+          <span class="faq-chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="faq-ans"><div class="faq-ans-in">
+          Una llamada o reunión de 30-45 minutos donde analizamos tu situación real:
+          captación, conversión, automatización y herramientas actuales. El resultado
+          es un conjunto de prioridades concretas y un siguiente paso realista —
+          no una presentación de ventas ni recomendaciones genéricas.
+        </div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-btn" aria-expanded="false">
+          ¿Hay algún compromiso después de la consulta?
+          <span class="faq-chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="faq-ans"><div class="faq-ans-in">
+          Ninguno. La consulta es completamente gratuita y sin compromiso.
+          Si tiene sentido trabajar juntos, te presentamos una propuesta adaptada
+          a tu situación. Si no encaja, te orientamos igualmente con lo que tenga
+          más sentido para tu caso.
+        </div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-btn" aria-expanded="false">
+          ¿En cuánto tiempo os ponéis en contacto?
+          <span class="faq-chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="faq-ans"><div class="faq-ans-in">
+          Respondemos en menos de 24 horas en días laborables — normalmente
+          bastante antes. Recibirás un correo de confirmación con la propuesta
+          de fecha y hora para la llamada.
+        </div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-btn" aria-expanded="false">
+          ¿Trabajáis con cualquier tipo de empresa o solo B2B?
+          <span class="faq-chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="faq-ans"><div class="faq-ans-in">
+          Principalmente B2B y servicios de ticket medio-alto, donde la
+          cualificación de leads y la automatización generan más impacto.
+          Trabajamos bien con clínicas, academias, agencias, consultoras,
+          industria, tecnología y servicios profesionales.
+        </div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-btn" aria-expanded="false">
+          ¿Podemos empezar solo por una parte, como el asistente IA o solo SEO?
+          <span class="faq-chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="faq-ans"><div class="faq-ans-in">
+          Perfectamente. Podemos empezar por una necesidad muy concreta y,
+          si tiene sentido, escalar después. No hay mínimos artificiales
+          ni paquetes forzados. La consulta sirve precisamente para decidir
+          por dónde empezar.
+        </div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-btn" aria-expanded="false">
+          ¿Se puede colaborar si ya tenemos agencia o equipo interno?
+          <span class="faq-chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="faq-ans"><div class="faq-ans-in">
+          Sí. Podemos actuar como capa especializada, como partner estratégico
+          o como apoyo a equipos internos que necesitan acelerar una parte concreta
+          del sistema. Nos adaptamos al contexto sin pisarnos con lo que ya funciona.
+        </div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ FOOTER ════ -->
+<div class="glow-line" aria-hidden="true"></div>
+<footer class="site-footer">
+  <div class="shell">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="footer-logo">
+          <img src="/assets/img/logo-letra.png" alt="Vantelia">
+        </div>
+        <p class="footer-desc">Agencia especializada en inteligencia artificial y marketing digital para empresas B2B.</p>
+        <div class="footer-social" aria-label="Redes sociales">
+          <a href="https://linkedin.com/company/vantelia" class="social-a" aria-label="LinkedIn" rel="noopener noreferrer" target="_blank">in</a>
+          <a href="https://twitter.com/vantelia"          class="social-a" aria-label="X/Twitter"  rel="noopener noreferrer" target="_blank">𝕏</a>
+          <a href="mailto:hola@vantelia.es"               class="social-a" aria-label="Email">✉</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <div class="col-title">Servicios</div>
+        <div class="col-links">
+          <a href="/#servicios">Asistente IA</a>
+          <a href="/#servicios">Agenda inteligente</a>
+          <a href="/#servicios">WhatsApp IA</a>
+          <a href="/#servicios">SEO B2B</a>
+          <a href="/#servicios">Automatización</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <div class="col-title">Plataforma</div>
+        <div class="col-links">
+          <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso plataforma</a>
+          <a href="https://app.vantelia.es/dashboard" target="_blank" rel="noopener">Panel admin</a>
+          <a href="https://app.vantelia.es/portal" target="_blank" rel="noopener">Portal cliente</a>
+          <a href="/">Inicio</a>
+          <a href="/noticias/">Blog</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <div class="col-title">Contacto</div>
+        <div class="col-links">
+          <a href="mailto:hola@vantelia.es">hola@vantelia.es</a>
+          <a href="/consultas/">Consulta gratuita</a>
+          <a href="/legal/privacidad">Privacidad</a>
+          <a href="/legal/terminos">Términos</a>
+          <a href="/legal/cookies">Cookies</a>
+          <a href="/legal/ia">IA responsable</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2026 Vantelia · Todos los derechos reservados</p>
+      <div class="footer-legal">
+        <a href="/legal/privacidad">Política de privacidad</a>
+        <a href="/legal/terminos">Términos de uso</a>
+        <a href="/legal/cookies">Política de cookies</a>
+        <a href="/legal/ia">IA responsable</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* ── Header scroll ── */
+const hdr = document.getElementById('site-header');
+window.addEventListener('scroll', () => { hdr.classList.toggle('scrolled', window.scrollY > 20); }, { passive: true });
+
+/* ── Mobile menu ── */
+const toggle = document.getElementById('nav-toggle');
+const menu   = document.getElementById('mobile-menu');
+const close  = document.getElementById('mobile-close');
+function openMenu()  { menu.classList.add('open'); toggle.setAttribute('aria-expanded','true');  document.body.style.overflow='hidden'; }
+function closeMenu() { menu.classList.remove('open'); toggle.setAttribute('aria-expanded','false'); document.body.style.overflow=''; }
+toggle.addEventListener('click', openMenu);
+close.addEventListener('click', closeMenu);
+menu.querySelectorAll('a').forEach(a => a.addEventListener('click', closeMenu));
+
+/* ── Scroll reveal ── */
+const ro = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); ro.unobserve(e.target); } });
+}, { threshold: .12, rootMargin: '0px 0px -36px 0px' });
+document.querySelectorAll('.reveal').forEach(el => ro.observe(el));
+
+/* ── FAQ ── */
+document.querySelectorAll('.faq-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const item = btn.closest('.faq-item');
+    const isOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item.open').forEach(i => { i.classList.remove('open'); i.querySelector('.faq-btn').setAttribute('aria-expanded','false'); });
+    if (!isOpen) { item.classList.add('open'); btn.setAttribute('aria-expanded','true'); }
+  });
+});
+
+/* ── Smooth scroll ── */
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    const t = document.querySelector(a.getAttribute('href'));
+    if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  });
+});
+
+/* ── Contact form ── */
+const form    = document.getElementById('contact-form');
+const success = document.getElementById('form-success');
+const submit  = document.getElementById('form-submit');
+
+function validateField(id, test) {
+  const field = document.getElementById('field-' + id);
+  if (!field) return true;
+  const valid = test(document.getElementById('f-' + id)?.value || '');
+  field.classList.toggle('has-error', !valid);
+  return valid;
+}
+
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+
+  const nameOk  = validateField('name',    v => v.trim().length > 1);
+  const emailOk = validateField('email',   v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()));
+  const compOk  = validateField('company', v => v.trim().length > 0);
+  const msgOk   = validateField('message', v => v.trim().length > 10);
+
+  if (!nameOk || !emailOk || !compOk || !msgOk) return;
+
+  submit.disabled = true;
+  submit.textContent = 'Enviando…';
+
+  const data = {
+    name:    document.getElementById('f-name').value.trim(),
+    email:   document.getElementById('f-email').value.trim(),
+    company: document.getElementById('f-company').value.trim(),
+    service: document.getElementById('f-service').value,
+    message: document.getElementById('f-message').value.trim(),
+    source:  'consultas-web'
+  };
+
+  try {
+    /* Intento envío real — si no hay endpoint, caemos al mock */
+    const res = await fetch('https://app.vantelia.es/contact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error('server');
+  } catch (_) {
+    /* Fallback: el form igual muestra éxito y abre mailto */
+    const subject = encodeURIComponent('Consulta gratuita — ' + data.name);
+    const body    = encodeURIComponent(
+      'Nombre: ' + data.name + '\nEmpresa: ' + data.company +
+      '\nCorreo: ' + data.email + '\nNecesidad: ' + data.service +
+      '\n\n' + data.message
+    );
+    window.location.href = 'mailto:hola@vantelia.es?subject=' + subject + '&body=' + body;
+  }
+
+  form.style.display = 'none';
+  success.classList.add('visible');
+});
+
+/* Limpiar error al escribir */
+document.querySelectorAll('.field input, .field textarea, .field select').forEach(el => {
+  el.addEventListener('input', () => el.closest('.field')?.classList.remove('has-error'));
+});
+</script>
+
+<!-- ══════════ WIDGET IA ══════════ -->
+<script
+  src="https://app.vantelia.es/widget/widget.min.js?v=1777076198"
+  data-api="https://app.vantelia.es"
+  data-client="Vantelia"
+  data-position="right"></script>
+
+</body>
+</html>

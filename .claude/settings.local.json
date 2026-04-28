@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(cd \"e:\\\\Vantelia\"; powershell -ExecutionPolicy Bypass -File .\\\\deploy\\\\deploy.ps1)",
+      "Bash(claude plugin *)",
+      "PowerShell(Get-ChildItem *)",
+      "Bash(xargs wc *)",
+      "PowerShell(& \"e:\\\\Vantelia\\\\scripts\\\\deploy-ftp.ps1\")"
+    ]
+  }
+}

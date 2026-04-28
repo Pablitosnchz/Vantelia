@@ -162,7 +162,7 @@ New-Item -ItemType Directory -Path $StageProjectPath -Force | Out-Null
 
 Invoke-RobocopyChecked -Source $ProjectRoot -Destination $StageProjectPath -ExtraArguments @(
     "/E",
-    "/XD", ".git", ".git-inner-backup", ".venv", "node_modules", "storage", "data", "__pycache__", "Identidad Visual", "service_account",
+    "/XD", ".git", ".git-inner-backup", ".venv", ".pytest_cache", "node_modules", "storage", "data", "backups", "__pycache__", "Identidad Visual", "service_account",
     "/XF", ".env", "config.json"
 )
 

@@ -15,6 +15,10 @@ function formatInline(text) {
   return text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
 }
 
+function formatListInline(text) {
+  return text.replace(/\*\*(.+?)\*\*/g, "$1");
+}
+
 export function formatMessage(text) {
   const safeText = escapeHtml(text || "");
   const lines = safeText
@@ -33,7 +37,9 @@ export function formatMessage(text) {
     if (!listItems.length) return;
     html += '<ul class="ia-rich-list">';
     listItems.forEach((item) => {
-      html += `<li>${formatInline(item)}</li>`;
+      const cleanItem = item.trim();
+      const isHeading = /:$/.test(cleanItem) && !cleanItem.slice(0, -1).includes(":");
+      html += `<li class="${isHeading ? "ia-list-heading" : ""}">${formatListInline(cleanItem)}</li>`;
     });
     html += "</ul>";
     listItems = [];
@@ -71,6 +77,38 @@ export function agregarMensaje(texto, tipo) {
   return div;
 }
 
+export function agregarAccionesIniciales() {
+  const msgs = document.getElementById("ia-w-msgs");
+  if (!msgs || document.getElementById("ia-w-start-actions")) return null;
+
+  const div = document.createElement("div");
+  div.className = "ia-msg bot ia-action-card";
+  div.id = "ia-w-start-actions";
+  div.innerHTML = `
+    <p><strong>¿Qué quieres hacer ahora?</strong></p>
+    <p>Puedo ayudarte a resolver dudas, comparar opciones, estimar precio o encontrar la mejor recomendación antes de hablar con el equipo.</p>
+    <div class="ia-action-grid">
+      <button type="button" data-quick-message="Quiero agendar una cita">Agendar cita</button>
+      <button type="button" data-quick-message="Muestrame las preguntas frecuentes principales">Preguntas frecuentes</button>
+      <button type="button" data-quick-message="Quiero informacion sobre productos disponibles">Informacion productos</button>
+      <button type="button" data-quick-message="Recomiendame el producto que mejor encaja con mi caso">Recomendar producto</button>
+      <button type="button" data-quick-message="Quiero comparar productos, servicios o tratamientos antes de decidir">Comparar productos</button>
+      <button type="button" data-quick-message="Ayudame a estimar precio, tiempo o alcance aproximado">Estimar precio</button>
+    </div>
+  `;
+
+  div.querySelectorAll("button[data-quick-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const message = button.getAttribute("data-quick-message") || "";
+      enviarMensaje(message);
+    });
+  });
+
+  msgs.appendChild(div);
+  scrollMsgs();
+  return div;
+}
+
 export function mostrarTyping() {
   const msgs = document.getElementById("ia-w-msgs");
   if (!msgs || document.getElementById("ia-w-typing")) return;
@@ -87,14 +125,15 @@ export function ocultarTyping() {
   document.getElementById("ia-w-typing")?.remove();
 }
 
-export async function enviarMensaje() {
+export async function enviarMensaje(textoForzado = "") {
   if (sending) return;
 
   const input = document.getElementById("ia-w-input");
   const sendBtn = document.getElementById("ia-w-send");
   if (!input || !sendBtn) return;
 
-  const texto = input.value.trim();
+  const forcedText = typeof textoForzado === "string" ? textoForzado : "";
+  const texto = (forcedText || input.value).trim();
   if (!texto) return;
 
   sending = true;

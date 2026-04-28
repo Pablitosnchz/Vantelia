@@ -6,25 +6,31 @@
   <title>Vantelia Acceso</title>
   <link rel="icon" type="image/png" href="/brand-assets/favicon.png" />
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Poppins:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
     :root {
       color-scheme: dark;
-      --bg: #000b29;
-      --panel: rgba(5, 14, 38, 0.9);
-      --panel-strong: rgba(9, 22, 54, 0.96);
-      --text: #f0f4f8;
-      --soft: #b8c0cc;
-      --line: rgba(184, 192, 204, 0.14);
-      --accent: #00b1d9;
-      --accent-2: #007ea0;
-      --accent-soft: rgba(0, 177, 217, 0.14);
-      --danger: #ff7b86;
-      --danger-soft: rgba(196, 69, 54, 0.14);
-      --shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
-      --radius: 26px;
-      --radius-sm: 16px;
-      --font-title: "Montserrat", "Segoe UI", sans-serif;
-      --font: "Poppins", "Segoe UI", sans-serif;
+      --bg:            #0B132B;
+      --bg-2:          #091028;
+      --panel:         rgba(8, 16, 42, 0.88);
+      --panel-strong:  rgba(6, 12, 32, 0.96);
+      --text:          #F0F4F8;
+      --soft:          #8fa3b4;
+      --soft-2:        #637c8e;
+      --line:          rgba(255, 255, 255, 0.08);
+      --line-strong:   rgba(0, 209, 255, 0.22);
+      --accent:        #00D1FF;
+      --accent-2:      #00F5D4;
+      --accent-dark:   #0099bb;
+      --accent-soft:   rgba(0, 209, 255, 0.12);
+      --accent-soft-2: rgba(0, 245, 212, 0.10);
+      --danger:        #ff7b86;
+      --danger-soft:   rgba(255, 123, 134, 0.14);
+      --success:       #22c55e;
+      --shadow:        0 28px 80px rgba(0, 0, 0, 0.38);
+      --radius:        22px;
+      --radius-sm:     14px;
+      --font-title:    "Space Grotesk", "Segoe UI", sans-serif;
+      --font:          "Inter", "Segoe UI", sans-serif;
     }
 
     * { box-sizing: border-box; }
@@ -35,10 +41,10 @@
       font-family: var(--font);
       color: var(--text);
       background:
-        linear-gradient(180deg, rgba(0, 11, 41, 0.88), rgba(0, 11, 41, 0.96)),
-        radial-gradient(circle at top left, rgba(0, 177, 217, 0.16), transparent 28%),
-        radial-gradient(circle at top right, rgba(184, 192, 204, 0.1), transparent 26%),
-        url("/brand-assets/Fondo_Web.png") center top / cover fixed no-repeat;
+        radial-gradient(ellipse at 14% 12%, rgba(0, 209, 255, 0.08), transparent 32%),
+        radial-gradient(ellipse at 85% 85%, rgba(0, 245, 212, 0.05), transparent 28%),
+        linear-gradient(160deg, #0e1b3e 0%, #0B132B 52%, #07101f 100%);
+      overflow-x: hidden;
     }
 
     a {
@@ -83,7 +89,7 @@
       width: 68px;
       height: 68px;
       object-fit: contain;
-      filter: drop-shadow(0 0 24px rgba(0, 177, 217, 0.26));
+      filter: drop-shadow(0 0 24px rgba(0, 209, 255, 0.26));
       flex: 0 0 auto;
     }
 
@@ -97,7 +103,7 @@
       width: fit-content;
       padding: 7px 11px;
       border-radius: 999px;
-      background: rgba(0, 177, 217, 0.08);
+      background: rgba(0, 209, 255, 0.08);
       color: var(--accent);
       font-size: 12px;
       font-weight: 700;
@@ -148,8 +154,10 @@
       gap: 18px;
       min-height: 100%;
       background:
-        radial-gradient(circle at top right, rgba(0, 177, 217, 0.12), transparent 34%),
-        linear-gradient(180deg, rgba(8, 18, 46, 0.98), rgba(4, 12, 33, 0.9));
+        radial-gradient(ellipse at top right, rgba(0, 209, 255, 0.12), transparent 40%),
+        radial-gradient(ellipse at bottom left, rgba(0, 245, 212, 0.07), transparent 38%),
+        linear-gradient(160deg, rgba(10, 19, 48, 0.98) 0%, rgba(6, 12, 32, 0.94) 100%);
+      border-radius: inherit;
     }
 
     .story-chip {
@@ -232,7 +240,7 @@
 
     input {
       width: 100%;
-      border-radius: 16px;
+      border-radius: var(--radius-sm);
       border: 1px solid var(--line);
       background: rgba(7, 18, 45, 0.92);
       padding: 13px 14px;
@@ -241,23 +249,35 @@
     }
 
     input:focus {
-      border-color: rgba(0, 177, 217, 0.45);
-      box-shadow: 0 0 0 4px rgba(0, 177, 217, 0.12);
+      border-color: rgba(0, 209, 255, 0.45);
+      box-shadow: 0 0 0 4px rgba(0, 209, 255, 0.12);
     }
 
     button {
       border: 0;
-      border-radius: 16px;
-      padding: 12px 16px;
-      font-weight: 800;
+      border-radius: var(--radius-sm);
+      padding: 12px 20px;
+      font-family: var(--font-title);
+      font-weight: 700;
+      font-size: 0.92rem;
       cursor: pointer;
-      transition: transform 0.16s ease, opacity 0.16s ease;
+      transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #04101c;
+      box-shadow: 0 6px 22px rgba(0, 209, 255, 0.24);
     }
 
-    button:hover { transform: translateY(-1px); }
-    button.primary { color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
-    button.secondary { color: var(--text); background: rgba(184, 192, 204, 0.12); }
-    button.ghost { color: var(--text); background: transparent; border: 1px solid var(--line); }
+    button:not(:disabled):hover {
+      transform: translateY(-2px);
+      filter: brightness(1.07);
+      box-shadow: 0 12px 32px rgba(0, 209, 255, 0.34);
+    }
+    button:disabled { opacity: 0.52; cursor: not-allowed; }
+    button.primary { color: #04101c; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+    button.secondary { color: var(--text); background: rgba(255,255,255,.07); box-shadow: none; border: 1px solid var(--line); }
+    button.secondary:not(:disabled):hover { background: rgba(255,255,255,.12); box-shadow: none; filter: none; }
+    button.ghost { color: var(--text); background: transparent; border: 1px solid var(--line); box-shadow: none; }
+    button.ghost:not(:disabled):hover { border-color: rgba(0,209,255,.35); color: var(--accent); background: rgba(0,209,255,.08); box-shadow: none; filter: none; }
 
     .row {
       display: flex;
@@ -279,8 +299,8 @@
       display: none;
       padding: 12px 14px;
       border-radius: 14px;
-      border: 1px solid rgba(0, 177, 217, 0.2);
-      background: rgba(0, 177, 217, 0.12);
+      border: 1px solid rgba(0, 209, 255, 0.2);
+      background: rgba(0, 209, 255, 0.12);
       line-height: 1.55;
       font-size: 0.92rem;
     }

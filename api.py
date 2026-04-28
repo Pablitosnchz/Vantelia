@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import csv
+import hmac
 import hashlib
 import json
 import logging
@@ -47,17 +48,18 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-STORAGE_DIR = BASE_DIR / "storage"
+load_dotenv(BASE_DIR / ".env")
+
+DATA_DIR = Path(os.getenv("VANTELIA_DATA_DIR", str(BASE_DIR / "data"))).resolve()
+STORAGE_DIR = Path(os.getenv("VANTELIA_STORAGE_DIR", str(BASE_DIR / "storage"))).resolve()
 WIDGET_DIR = BASE_DIR / "widget"
 ADMIN_UI_DIR = BASE_DIR / "admin_ui"
 ACCESS_UI_DIR = BASE_DIR / "access_ui"
 PORTAL_UI_DIR = BASE_DIR / "portal_ui"
 BRAND_DIR = BASE_DIR / "brand_assets"
-CONFIG_PATH = BASE_DIR / "config.json"
+LEGAL_DIR = BASE_DIR / "docs" / "legal"
+CONFIG_PATH = Path(os.getenv("VANTELIA_CONFIG_PATH", str(BASE_DIR / "config.json"))).resolve()
 DB_PATH = STORAGE_DIR / "vantelia.db"
-
-load_dotenv(BASE_DIR / ".env")
 
 BOOKING_SENTINEL = "[MOSTRAR_FORMULARIO]"
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{12,128}$")
@@ -83,6 +85,12 @@ logging.basicConfig(
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "").strip()
 WEBHOOK_DEFAULT = os.getenv("WEBHOOK_DEFAULT", "").strip()
+WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "").strip()
+WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "").strip()
+WHATSAPP_APP_SECRET = os.getenv("WHATSAPP_APP_SECRET", "").strip()
+WHATSAPP_API_VERSION = os.getenv("WHATSAPP_API_VERSION", "v22.0").strip() or "v22.0"
+WHATSAPP_DEFAULT_CLIENT_ID = os.getenv("WHATSAPP_DEFAULT_CLIENT_ID", "").strip()
+WHATSAPP_PHONE_CLIENT_MAP = os.getenv("WHATSAPP_PHONE_CLIENT_MAP", "").strip()
 RAW_EXTRA_CORS_ORIGINS = os.getenv("EXTRA_CORS_ORIGINS", "")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "").strip().rstrip("/")
 SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
@@ -168,6 +176,7 @@ last_cleanup_run = 0.0
 state_lock = threading.RLock()
 booking_reminder_stop = threading.Event()
 booking_reminder_thread: Optional[threading.Thread] = None
+STARTED_AT = datetime.now(timezone.utc)
 
 
 def _normalize_origin_value(origin: str) -> str:
@@ -296,6 +305,18 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
             )
             or "Powered by Vantelia"
         },
+        "whatsapp": {
+            "enabled": bool(payload.get("whatsapp", {}).get("enabled", False)),
+            "phone_number_id": _sanitize_text(
+                str(payload.get("whatsapp", {}).get("phone_number_id", ""))
+            )[:120],
+            "access_token_env": _sanitize_text(
+                str(payload.get("whatsapp", {}).get("access_token_env", ""))
+            )[:120],
+            "verify_token_env": _sanitize_text(
+                str(payload.get("whatsapp", {}).get("verify_token_env", ""))
+            )[:120],
+        },
         "booking": {
             "enabled": bool(booking.get("enabled", False)),
             "timezone": _sanitize_text(booking.get("timezone", DEFAULT_TIMEZONE)) or DEFAULT_TIMEZONE,
@@ -344,6 +365,12 @@ def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
         },
         "branding": {
             "powered_by": config.get("branding", {}).get("powered_by", "Powered by Vantelia"),
+        },
+        "whatsapp": {
+            "enabled": bool(config.get("whatsapp", {}).get("enabled", False)),
+            "phone_number_id": config.get("whatsapp", {}).get("phone_number_id", ""),
+            "access_token_env": config.get("whatsapp", {}).get("access_token_env", ""),
+            "verify_token_env": config.get("whatsapp", {}).get("verify_token_env", ""),
         },
         "booking": {
             "enabled": bool(config.get("booking", {}).get("enabled", False)),
@@ -753,6 +780,62 @@ def _init_database() -> None:
         )
         connection.execute(
             """
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                origin TEXT NOT NULL DEFAULT '',
+                user_agent TEXT NOT NULL DEFAULT '',
+                started_at TEXT NOT NULL,
+                last_message_at TEXT NOT NULL,
+                message_count INTEGER NOT NULL DEFAULT 0,
+                intents_json TEXT NOT NULL DEFAULT '[]'
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_chat_sessions_lookup
+            ON chat_sessions(cliente_id, last_message_at)
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                cliente_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                intent TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_chat_messages_session
+            ON chat_messages(session_id, id)
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS whatsapp_inbound_messages (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                phone_number_id TEXT NOT NULL,
+                from_number TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_whatsapp_inbound_lookup
+            ON whatsapp_inbound_messages(cliente_id, created_at)
+            """
+        )
+        connection.execute(
+            """
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
                 email TEXT NOT NULL UNIQUE,
@@ -816,8 +899,11 @@ def _get_db_connection() -> sqlite3.Connection:
 def _validate_single_client_runtime(cliente_id: str, config: Dict[str, Any]) -> None:
     booking_cfg = config["booking"]
     provider = booking_cfg.get("provider", "internal")
+    whatsapp_cfg = config.get("whatsapp", {})
     if not re.match(r"^#[0-9A-Fa-f]{6}$", str(config.get("color", ""))):
         raise RuntimeError(f"color invalido para {cliente_id}. Usa formato #RRGGBB.")
+    if whatsapp_cfg.get("enabled") and not str(whatsapp_cfg.get("phone_number_id", "")).strip():
+        raise RuntimeError(f"whatsapp.phone_number_id requerido para {cliente_id} si WhatsApp esta activo")
     if booking_cfg["enabled"]:
         try:
             ZoneInfo(booking_cfg["timezone"])
@@ -892,6 +978,89 @@ async def favicon() -> FileResponse:
         if candidate.exists():
             return FileResponse(candidate)
     raise HTTPException(status_code=404, detail="Favicon no encontrado.")
+
+
+LEGAL_DOCUMENTS = {
+    "privacidad": "Politica de privacidad",
+    "terminos": "Terminos de uso",
+    "cookies": "Politica de cookies",
+    "ia": "Aviso sobre IA",
+}
+
+
+def _render_legal_markdown(content: str) -> str:
+    html_parts: List[str] = []
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("# "):
+            html_parts.append(f"<h1>{escape(line[2:].strip())}</h1>")
+        elif line.startswith("## "):
+            html_parts.append(f"<h2>{escape(line[3:].strip())}</h2>")
+        elif line.startswith("- "):
+            html_parts.append(f"<p class=\"bullet\">{escape(line[2:].strip())}</p>")
+        else:
+            html_parts.append(f"<p>{escape(line)}</p>")
+    return "\n".join(html_parts)
+
+
+def _legal_page_html(slug: str, title: str, content: str) -> str:
+    nav = " ".join(
+        f'<a class="{"active" if key == slug else ""}" href="/legal/{key}">{escape(label)}</a>'
+        for key, label in LEGAL_DOCUMENTS.items()
+    )
+    return f"""<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{escape(title)} - Vantelia</title>
+  <style>
+    :root {{ color-scheme: light; --ink: #111827; --muted: #667085; --line: #d8dee8; --brand: #00a3c7; }}
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; font-family: Inter, Arial, sans-serif; color: var(--ink); background: #f7f9fc; line-height: 1.65; }}
+    header {{ background: #101828; color: white; padding: 28px clamp(18px, 5vw, 56px); }}
+    header strong {{ display: block; font-size: 20px; }}
+    nav {{ display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }}
+    nav a {{ color: white; border: 1px solid rgba(255,255,255,.22); border-radius: 6px; padding: 8px 10px; text-decoration: none; font-size: 14px; }}
+    nav a.active {{ background: var(--brand); border-color: var(--brand); }}
+    main {{ max-width: 920px; margin: 0 auto; padding: 34px clamp(18px, 5vw, 56px) 54px; background: white; min-height: calc(100vh - 130px); }}
+    h1 {{ margin: 0 0 16px; font-size: clamp(30px, 5vw, 48px); line-height: 1.05; }}
+    h2 {{ margin: 30px 0 8px; font-size: 20px; }}
+    p {{ margin: 8px 0; }}
+    .bullet::before {{ content: "- "; color: var(--brand); font-weight: 700; }}
+    .notice {{ border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: 6px; padding: 12px 14px; color: var(--muted); background: #fbfdff; }}
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Vantelia</strong>
+    <nav>{nav}</nav>
+  </header>
+  <main>
+    <div class="notice">Plantilla operativa inicial. Revisar con asesoria legal antes de publicarla como version definitiva.</div>
+    {_render_legal_markdown(content)}
+  </main>
+</body>
+</html>"""
+
+
+@app.get("/legal", include_in_schema=False)
+async def legal_index() -> RedirectResponse:
+    return RedirectResponse("/legal/privacidad", status_code=302)
+
+
+@app.get("/legal/{documento}", include_in_schema=False)
+async def legal_document(documento: str) -> HTMLResponse:
+    slug = documento.strip().lower()
+    title = LEGAL_DOCUMENTS.get(slug)
+    if not title:
+        raise HTTPException(status_code=404, detail="Documento legal no encontrado.")
+    path = LEGAL_DIR / f"{slug}.md"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Documento legal no configurado.")
+    return HTMLResponse(_legal_page_html(slug, title, path.read_text(encoding="utf-8")))
 
 
 def _booking_reminder_worker() -> None:
@@ -1017,6 +1186,35 @@ class RespuestaChat(BaseModel):
     respuesta: str
     mostrar_formulario: bool
     session_id: str
+
+
+class WhatsAppWebhookStatus(BaseModel):
+    status: str
+    processed: int = 0
+
+
+class ChatSessionSummary(BaseModel):
+    session_id: str
+    cliente_id: str
+    origin: str = ""
+    started_at: str
+    last_message_at: str
+    message_count: int
+    intents: List[str] = Field(default_factory=list)
+    last_message: str = ""
+
+
+class ChatMessagePublic(BaseModel):
+    message_id: int
+    role: str
+    content: str
+    intent: str = ""
+    created_at: str
+
+
+class ChatSessionDetail(BaseModel):
+    session: ChatSessionSummary
+    messages: List[ChatMessagePublic]
 
 
 class ConfigPublicaCliente(BaseModel):
@@ -1207,6 +1405,29 @@ class AuthProfileUpdatePayload(BaseModel):
     email: EmailStr
 
 
+class PortalAiConfigPayload(BaseModel):
+    icono: str = Field(default="AI", max_length=12)
+    bienvenida: str = Field(min_length=5, max_length=400)
+    prompt_extra: str = Field(default="", max_length=2000)
+
+
+class PortalAiConfigPublic(BaseModel):
+    nombre: str
+    icono: str
+    bienvenida: str
+    prompt_extra: str
+
+
+class PortalBrainPayload(BaseModel):
+    info_txt: str = Field(default="", max_length=120000)
+
+
+class PortalBrainPublic(BaseModel):
+    info_txt: str
+    reindexed: bool = False
+    reindex_error: str = ""
+
+
 class PortalScheduleUpdatePayload(BaseModel):
     enabled: bool = True
     timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
@@ -1379,6 +1600,10 @@ class AdminClientePayload(BaseModel):
     contacto_email: str = Field(default="", max_length=120)
     contacto_telefono: str = Field(default="", max_length=40)
     branding_text: str = Field(default="Powered by Vantelia", max_length=120)
+    whatsapp_enabled: bool = False
+    whatsapp_phone_number_id: str = Field(default="", max_length=120)
+    whatsapp_access_token_env: str = Field(default="", max_length=120)
+    whatsapp_verify_token_env: str = Field(default="", max_length=120)
     booking_enabled: bool = True
     booking_timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
     booking_slot_minutes: int = Field(default=30, ge=5, le=240)
@@ -1417,6 +1642,8 @@ class AdminClienteResumen(BaseModel):
     contacto_email: str = ""
     contacto_telefono: str = ""
     branding_text: str = ""
+    whatsapp_enabled: bool = False
+    whatsapp_phone_number_id: str = ""
     has_info_file: bool
     info_file_size: int = 0
     bookings_total: int = 0
@@ -2113,6 +2340,10 @@ def _client_payload_from_config(config: Dict[str, Any], info_txt: str) -> AdminC
         contacto_email=config.get("contacto", {}).get("email", ""),
         contacto_telefono=config.get("contacto", {}).get("telefono", ""),
         branding_text=config.get("branding", {}).get("powered_by", "Powered by Vantelia"),
+        whatsapp_enabled=bool(config.get("whatsapp", {}).get("enabled", False)),
+        whatsapp_phone_number_id=config.get("whatsapp", {}).get("phone_number_id", ""),
+        whatsapp_access_token_env=config.get("whatsapp", {}).get("access_token_env", ""),
+        whatsapp_verify_token_env=config.get("whatsapp", {}).get("verify_token_env", ""),
         booking_enabled=bool(config.get("booking", {}).get("enabled", False)),
         booking_timezone=config.get("booking", {}).get("timezone", DEFAULT_TIMEZONE),
         booking_slot_minutes=int(config.get("booking", {}).get("slot_minutes", 30)),
@@ -2156,6 +2387,12 @@ def _config_from_admin_payload(cliente_id: str, payload: AdminClientePayload) ->
                 "telefono": payload.contacto_telefono,
             },
             "branding": {"powered_by": payload.branding_text},
+            "whatsapp": {
+                "enabled": payload.whatsapp_enabled,
+                "phone_number_id": payload.whatsapp_phone_number_id,
+                "access_token_env": payload.whatsapp_access_token_env,
+                "verify_token_env": payload.whatsapp_verify_token_env,
+            },
             "booking": {
                 "enabled": payload.booking_enabled,
                 "timezone": payload.booking_timezone,
@@ -2373,6 +2610,64 @@ def _portal_schedule_from_config(cliente_id: str) -> PortalSchedulePublic:
             _serialize_agenda_block(row)
             for row in _list_agenda_blocks(cliente_id, employee_id="", date_from=today, date_to=future_limit)
         ],
+    )
+
+
+def _portal_ai_config_from_client_config(cliente_id: str) -> PortalAiConfigPublic:
+    config = _get_client_config(cliente_id)
+    return PortalAiConfigPublic(
+        nombre=config.get("nombre", cliente_id),
+        icono=config.get("icono", "AI"),
+        bienvenida=config.get("bienvenida", ""),
+        prompt_extra=config.get("prompt_extra", ""),
+    )
+
+
+def _update_portal_ai_config(cliente_id: str, data: PortalAiConfigPayload) -> PortalAiConfigPublic:
+    next_configs = copy.deepcopy(CONFIG_CLIENTES)
+    config = next_configs.get(cliente_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Cliente no configurado")
+
+    config["icono"] = _sanitize_text(data.icono)[:12] or "AI"
+    config["bienvenida"] = _sanitize_text(data.bienvenida, allow_multiline=True)[:400]
+    config["prompt_extra"] = _sanitize_text(data.prompt_extra, allow_multiline=True)[:2000]
+
+    _validate_single_client_runtime(cliente_id, config)
+    _persist_configs_to_disk(next_configs)
+    _update_runtime_configs(next_configs)
+    return _portal_ai_config_from_client_config(cliente_id)
+
+
+def _portal_brain_for_client(cliente_id: str) -> PortalBrainPublic:
+    return PortalBrainPublic(
+        info_txt=_read_info_txt(cliente_id),
+        reindexed=False,
+        reindex_error="",
+    )
+
+
+def _update_portal_brain(cliente_id: str, data: PortalBrainPayload) -> PortalBrainPublic:
+    info_txt = str(data.info_txt or "").strip()
+    if not info_txt:
+        raise HTTPException(status_code=400, detail="El contenido del cerebro no puede estar vacio.")
+
+    _write_info_txt(cliente_id, info_txt)
+    _invalidate_client_runtime(cliente_id)
+
+    reindexed = False
+    reindex_error = ""
+    try:
+        cargar_indice(cliente_id)
+        reindexed = True
+    except Exception as exc:  # noqa: BLE001
+        reindex_error = str(exc)
+        logger.warning("No se pudo reindexar automaticamente %s desde el portal: %s", cliente_id, exc)
+
+    return PortalBrainPublic(
+        info_txt=_read_info_txt(cliente_id),
+        reindexed=reindexed,
+        reindex_error=reindex_error,
     )
 
 
@@ -3362,14 +3657,20 @@ def _assert_admin_can_manage_user(current_user: sqlite3.Row, target_user: sqlite
         )
 
 
-def _portal_client_id_or_403(user: sqlite3.Row) -> str:
+def _portal_client_id_or_403(user: sqlite3.Row, cliente_id: str = "") -> str:
+    requested_client_id = str(cliente_id or "").strip()
     if user["role"] == "admin":
-        raise HTTPException(status_code=403, detail="Usa el panel admin para configurar clientes.")
-    cliente_id = user["cliente_id"] or ""
-    if not cliente_id:
+        if not requested_client_id:
+            raise HTTPException(status_code=403, detail="Indica el cliente que quieres abrir en el portal.")
+        _get_client_config(requested_client_id)
+        return requested_client_id
+    user_client_id = user["cliente_id"] or ""
+    if not user_client_id:
         raise HTTPException(status_code=403, detail="Tu usuario no tiene cliente asociado.")
-    _get_client_config(cliente_id)
-    return cliente_id
+    if requested_client_id and requested_client_id != user_client_id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a ese cliente.")
+    _get_client_config(user_client_id)
+    return user_client_id
 
 
 def _require_admin_token(
@@ -3429,6 +3730,9 @@ Reglas obligatorias:
 7. Si el usuario pide ver el formulario, reservar, pedir cita, escoger hora o iniciar una solicitud de cita, debes anadir {BOOKING_SENTINEL}.
 8. No anadas {BOOKING_SENTINEL} en consultas informativas normales.
 9. Responde con tono profesional, claro y breve.
+10. Puedes actuar como diagnostico inteligente, recomendador de servicios, estimador o comparador cuando el usuario lo pida.
+11. En diagnosticos, estimaciones y comparativas, haz preguntas si faltan datos y evita conclusiones absolutas.
+12. En recomendaciones, usa solo servicios, precios, condiciones y politicas presentes en la base documental.
 """.strip()
 
 
@@ -3445,6 +3749,263 @@ BOOKING_INTENT_PATTERNS = [
 def _message_requests_booking_form(message: str) -> bool:
     normalized = " ".join(str(message or "").lower().split())
     return any(pattern.search(normalized) for pattern in BOOKING_INTENT_PATTERNS)
+
+
+COMMERCIAL_INTENT_LABELS = {
+    "diagnostico": "diagnostico inteligente",
+    "recomendador": "recomendador de servicios",
+    "estimador": "calculadora o estimador",
+    "comparador": "comparador de opciones",
+    "booking": "agenda",
+}
+
+
+COMMERCIAL_INTENT_PATTERNS: Dict[str, List[re.Pattern[str]]] = {
+    "diagnostico": [
+        re.compile(pattern, re.IGNORECASE)
+        for pattern in [
+            r"\b(diagnostico|diagnóstico|test|orientame|oriÃ©ntame|evaluacion|evaluaciÃ³n)\b",
+            r"\b(que necesito|qu[eé] necesito|analiza mi caso|mi caso)\b",
+        ]
+    ],
+    "recomendador": [
+        re.compile(pattern, re.IGNORECASE)
+        for pattern in [
+            r"\b(recomienda|recomiendame|recomi[eé]ndame|recomendacion|recomendaciÃ³n)\b",
+            r"\b(que servicio|qu[eé] servicio|mejor opcion|mejor opciÃ³n|cual me conviene|cu[aá]l me conviene)\b",
+        ]
+    ],
+    "estimador": [
+        re.compile(pattern, re.IGNORECASE)
+        for pattern in [
+            r"\b(calcula|calculadora|estimacion|estimaciÃ³n|estimar|presupuesto|precio|coste|cuanto cuesta|cu[aá]nto cuesta)\b",
+            r"\b(rango de precio|desde cuanto|desde cu[aá]nto|aproximado)\b",
+        ]
+    ],
+    "comparador": [
+        re.compile(pattern, re.IGNORECASE)
+        for pattern in [
+            r"\b(compara|comparar|comparador|diferencia|diferencias|versus| vs )\b",
+            r"\b(entre .+ y .+|mejor .+ o .+)\b",
+        ]
+    ],
+}
+
+
+COMMERCIAL_INTENT_INSTRUCTIONS = {
+    "diagnostico": (
+        "Modo diagnostico inteligente: orienta al usuario con 3-5 preguntas breves si faltan datos. "
+        "Despues entrega una recomendacion prudente, explica por que encaja y ofrece siguiente paso. "
+        "No diagnostiques temas medicos, legales o financieros de forma concluyente; deriva a revision humana."
+    ),
+    "recomendador": (
+        "Modo recomendador de servicios: identifica objetivo, urgencia, presupuesto aproximado y contexto. "
+        "Recomienda solo servicios presentes en la base documental, da alternativas y termina con una accion clara."
+    ),
+    "estimador": (
+        "Modo calculadora o estimador: pide las variables necesarias para estimar. "
+        "Si hay precios documentados, usa rangos o condiciones verificadas. Si no los hay, dilo y calcula solo una orientacion cualitativa."
+    ),
+    "comparador": (
+        "Modo comparador de opciones: compara en tabla o bullets criterios como objetivo, plazo, coste, dificultad, encaje y siguiente paso. "
+        "No inventes diferencias si la base documental no las respalda."
+    ),
+}
+
+
+def _detect_commercial_intent(message: str) -> str:
+    normalized = f" {' '.join(str(message or '').lower().split())} "
+    if _message_requests_booking_form(normalized):
+        return "booking"
+    for intent, patterns in COMMERCIAL_INTENT_PATTERNS.items():
+        if any(pattern.search(normalized) for pattern in patterns):
+            return intent
+    return ""
+
+
+def _build_intent_enhanced_message(message: str, intent: str) -> str:
+    instruction = COMMERCIAL_INTENT_INSTRUCTIONS.get(intent)
+    if not instruction:
+        return message
+    return f"{instruction}\n\nMensaje del usuario: {message}"
+
+
+def _safe_json_list(raw_value: str) -> List[str]:
+    try:
+        parsed = json.loads(raw_value or "[]")
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(item) for item in parsed if str(item).strip()]
+
+
+def _ensure_chat_session_record(
+    session_id: str,
+    cliente_id: str,
+    request: Request,
+    *,
+    origin_override: str = "",
+    user_agent_override: str = "",
+) -> None:
+    now_iso = _utc_now_iso()
+    origin = origin_override or _request_origin(request)
+    user_agent = user_agent_override or _sanitize_text(request.headers.get("user-agent", ""), allow_multiline=False)[:500]
+    with _get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT id FROM chat_sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+        if row:
+            return
+        connection.execute(
+            """
+            INSERT INTO chat_sessions (
+                id, cliente_id, origin, user_agent, started_at, last_message_at, message_count, intents_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 0, '[]')
+            """,
+            (session_id, cliente_id, origin, user_agent, now_iso, now_iso),
+        )
+        connection.commit()
+
+
+def _record_chat_message(
+    *,
+    session_id: str,
+    cliente_id: str,
+    role: str,
+    content: str,
+    intent: str = "",
+) -> None:
+    cleaned_content = _sanitize_text(content, allow_multiline=True)
+    if not cleaned_content:
+        return
+    now_iso = _utc_now_iso()
+    normalized_intent = str(intent or "").strip()
+    with _get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT intents_json FROM chat_sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+        intents = _safe_json_list(row["intents_json"] if row else "[]")
+        if normalized_intent and normalized_intent not in intents:
+            intents.append(normalized_intent)
+        connection.execute(
+            """
+            INSERT INTO chat_messages (session_id, cliente_id, role, content, intent, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (session_id, cliente_id, role, cleaned_content, normalized_intent, now_iso),
+        )
+        connection.execute(
+            """
+            UPDATE chat_sessions
+            SET last_message_at = ?,
+                message_count = message_count + 1,
+                intents_json = ?
+            WHERE id = ?
+            """,
+            (now_iso, json.dumps(intents, ensure_ascii=False), session_id),
+        )
+        connection.commit()
+
+
+def _chat_session_summary_from_row(row: sqlite3.Row) -> ChatSessionSummary:
+    return ChatSessionSummary(
+        session_id=row["id"],
+        cliente_id=row["cliente_id"],
+        origin=row["origin"] or "",
+        started_at=row["started_at"],
+        last_message_at=row["last_message_at"],
+        message_count=int(row["message_count"] or 0),
+        intents=_safe_json_list(row["intents_json"] or "[]"),
+        last_message=row["last_message"] or "",
+    )
+
+
+def _chat_message_from_row(row: sqlite3.Row) -> ChatMessagePublic:
+    return ChatMessagePublic(
+        message_id=int(row["id"]),
+        role=row["role"],
+        content=row["content"],
+        intent=row["intent"] or "",
+        created_at=row["created_at"],
+    )
+
+
+def _list_chat_session_rows(
+    *,
+    cliente_id: str = "",
+    limit: int = 50,
+    offset: int = 0,
+) -> List[sqlite3.Row]:
+    clauses = []
+    params: List[Any] = []
+    if cliente_id:
+        clauses.append("s.cliente_id = ?")
+        params.append(cliente_id)
+    where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    params.extend([max(1, min(limit, 200)), max(0, offset)])
+    with _get_db_connection() as connection:
+        return connection.execute(
+            f"""
+            SELECT s.*,
+                   COALESCE((
+                       SELECT m.content
+                       FROM chat_messages m
+                       WHERE m.session_id = s.id
+                       ORDER BY m.id DESC
+                       LIMIT 1
+                   ), '') AS last_message
+            FROM chat_sessions s
+            {where_sql}
+            ORDER BY s.last_message_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            params,
+        ).fetchall()
+
+
+def _load_chat_session_or_404(session_id: str, *, cliente_id: str = "") -> sqlite3.Row:
+    clauses = ["s.id = ?"]
+    params: List[Any] = [session_id]
+    if cliente_id:
+        clauses.append("s.cliente_id = ?")
+        params.append(cliente_id)
+    with _get_db_connection() as connection:
+        row = connection.execute(
+            f"""
+            SELECT s.*,
+                   COALESCE((
+                       SELECT m.content
+                       FROM chat_messages m
+                       WHERE m.session_id = s.id
+                       ORDER BY m.id DESC
+                       LIMIT 1
+                   ), '') AS last_message
+            FROM chat_sessions s
+            WHERE {' AND '.join(clauses)}
+            LIMIT 1
+            """,
+            params,
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Conversacion no encontrada.")
+    return row
+
+
+def _load_chat_message_rows(session_id: str) -> List[sqlite3.Row]:
+    with _get_db_connection() as connection:
+        return connection.execute(
+            """
+            SELECT *
+            FROM chat_messages
+            WHERE session_id = ?
+            ORDER BY id ASC
+            """,
+            (session_id,),
+        ).fetchall()
 
 
 def cargar_indice(cliente_id: str) -> VectorStoreIndex:
@@ -4565,9 +5126,9 @@ def _list_booking_rows(
         return rows, total
 
 
-def _portal_stats_for_user(user: sqlite3.Row) -> Dict[str, Any]:
+def _portal_stats_for_user(user: sqlite3.Row, cliente_id_override: str = "") -> Dict[str, Any]:
     with _get_db_connection() as connection:
-        if user["role"] == "admin":
+        if user["role"] == "admin" and not cliente_id_override:
             total_bookings = connection.execute("SELECT COUNT(*) FROM bookings").fetchone()[0]
             pending = connection.execute(
                 "SELECT COUNT(*) FROM bookings WHERE status = 'pending_review'"
@@ -4593,9 +5154,10 @@ def _portal_stats_for_user(user: sqlite3.Row) -> Dict[str, Any]:
                 "client_users": client_users,
             }
 
+        target_client_id = cliente_id_override or (user["cliente_id"] or "")
         total_bookings = connection.execute(
             "SELECT COUNT(*) FROM bookings WHERE cliente_id = ?",
-            (user["cliente_id"],),
+            (target_client_id,),
         ).fetchone()[0]
         upcoming = connection.execute(
             """
@@ -4605,7 +5167,7 @@ def _portal_stats_for_user(user: sqlite3.Row) -> Dict[str, Any]:
               AND status IN ('confirmed', 'pending_review')
               AND (start_at = '' OR start_at >= ?)
             """,
-            (user["cliente_id"], _utc_now_iso()),
+            (target_client_id, _utc_now_iso()),
         ).fetchone()[0]
         history = connection.execute(
             """
@@ -4617,13 +5179,13 @@ def _portal_stats_for_user(user: sqlite3.Row) -> Dict[str, Any]:
                 OR (start_at <> '' AND start_at < ?)
               )
             """,
-            (user["cliente_id"], _utc_now_iso()),
+            (target_client_id, _utc_now_iso()),
         ).fetchone()[0]
         return {
             "total_bookings": total_bookings,
             "upcoming": upcoming,
             "history": history,
-            "empresa": _get_client_config(user["cliente_id"])["nombre"] if user["cliente_id"] else "",
+            "empresa": _get_client_config(target_client_id)["nombre"] if target_client_id else "",
         }
 
 
@@ -5594,19 +6156,20 @@ async def auth_update_profile(
 @app.get("/auth/dashboard", response_model=PortalDashboardResponse)
 async def auth_dashboard_data(
     request: Request,
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> PortalDashboardResponse:
     _auto_confirm_pending_bookings()
     _auto_complete_past_bookings()
-    cliente_id = "" if user["role"] == "admin" else user["cliente_id"]
-    bookings, _ = _list_booking_rows(cliente_id=cliente_id, limit=6, scope="upcoming")
+    target_client_id = _portal_client_id_or_403(user, cliente_id) if (user["role"] != "admin" or cliente_id) else ""
+    bookings, _ = _list_booking_rows(cliente_id=target_client_id, limit=6, scope="upcoming")
     today_bookings: List[PortalBookingSummary] = []
     today_blocks: List[PortalAgendaBlock] = []
-    if cliente_id:
-        today_bookings, today_blocks = _portal_today_dashboard(cliente_id, request)
+    if target_client_id:
+        today_bookings, today_blocks = _portal_today_dashboard(target_client_id, request)
     return PortalDashboardResponse(
         user=_serialize_auth_user(user),
-        stats=_portal_stats_for_user(user),
+        stats=_portal_stats_for_user(user, target_client_id),
         bookings_upcoming=[_portal_booking_summary_from_row(row, request) for row in bookings],
         bookings_today=today_bookings,
         today_blocks=today_blocks,
@@ -5616,6 +6179,7 @@ async def auth_dashboard_data(
 @app.get("/auth/bookings", response_model=PortalBookingsResponse)
 async def auth_bookings(
     request: Request,
+    cliente_id: str = "",
     estado: str = "",
     employee_id: str = "",
     scope: str = "all",
@@ -5628,12 +6192,12 @@ async def auth_bookings(
 ) -> PortalBookingsResponse:
     _auto_confirm_pending_bookings()
     _auto_complete_past_bookings()
-    cliente_id = "" if user["role"] == "admin" else user["cliente_id"]
+    target_client_id = _portal_client_id_or_403(user, cliente_id) if (user["role"] != "admin" or cliente_id) else ""
     normalized_scope = scope.strip().lower() or "all"
     if normalized_scope not in {"all", "upcoming", "history"}:
         raise HTTPException(status_code=400, detail="Scope invalido.")
     rows, total = _list_booking_rows(
-        cliente_id=cliente_id,
+        cliente_id=target_client_id,
         employee_id=employee_id.strip(),
         status_filter=estado.strip(),
         search=q.strip(),
@@ -5654,6 +6218,7 @@ async def auth_bookings(
 
 @app.get("/auth/bookings/export")
 async def auth_export_bookings(
+    cliente_id: str = "",
     date_from: str = "",
     date_to: str = "",
     estado: str = "",
@@ -5661,9 +6226,9 @@ async def auth_export_bookings(
     q: str = "",
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> Response:
-    cliente_id = "" if user["role"] == "admin" else user["cliente_id"]
+    target_client_id = _portal_client_id_or_403(user, cliente_id) if (user["role"] != "admin" or cliente_id) else ""
     rows, _ = _list_booking_rows(
-        cliente_id=cliente_id,
+        cliente_id=target_client_id,
         employee_id=employee_id.strip(),
         status_filter=estado.strip(),
         search=q.strip(),
@@ -5698,38 +6263,108 @@ async def auth_export_bookings(
     )
 
 
+@app.get("/auth/chats", response_model=List[ChatSessionSummary])
+async def auth_chats(
+    cliente_id: str = "",
+    limit: int = 50,
+    offset: int = 0,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> List[ChatSessionSummary]:
+    target_client_id = _portal_client_id_or_403(user, cliente_id) if (user["role"] != "admin" or cliente_id) else ""
+    return [
+        _chat_session_summary_from_row(row)
+        for row in _list_chat_session_rows(
+            cliente_id=target_client_id,
+            limit=limit,
+            offset=offset,
+        )
+    ]
+
+
+@app.get("/auth/chats/{session_id}", response_model=ChatSessionDetail)
+async def auth_chat_detail(
+    session_id: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> ChatSessionDetail:
+    target_client_id = _portal_client_id_or_403(user, cliente_id) if (user["role"] != "admin" or cliente_id) else ""
+    session_row = _load_chat_session_or_404(session_id, cliente_id=target_client_id)
+    return ChatSessionDetail(
+        session=_chat_session_summary_from_row(session_row),
+        messages=[_chat_message_from_row(row) for row in _load_chat_message_rows(session_id)],
+    )
+
+
 @app.get("/auth/schedule", response_model=PortalSchedulePublic)
 async def auth_schedule(
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> PortalSchedulePublic:
-    return _portal_schedule_from_config(_portal_client_id_or_403(user))
+    return _portal_schedule_from_config(_portal_client_id_or_403(user, cliente_id))
+
+
+@app.get("/auth/ai-config", response_model=PortalAiConfigPublic)
+async def auth_ai_config(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PortalAiConfigPublic:
+    return _portal_ai_config_from_client_config(_portal_client_id_or_403(user, cliente_id))
+
+
+@app.post("/auth/ai-config", response_model=PortalAiConfigPublic)
+async def auth_update_ai_config(
+    data: PortalAiConfigPayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PortalAiConfigPublic:
+    return _update_portal_ai_config(_portal_client_id_or_403(user, cliente_id), data)
+
+
+@app.get("/auth/brain", response_model=PortalBrainPublic)
+async def auth_brain(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PortalBrainPublic:
+    return _portal_brain_for_client(_portal_client_id_or_403(user, cliente_id))
+
+
+@app.post("/auth/brain", response_model=PortalBrainPublic)
+async def auth_update_brain(
+    data: PortalBrainPayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PortalBrainPublic:
+    return _update_portal_brain(_portal_client_id_or_403(user, cliente_id), data)
 
 
 @app.post("/auth/schedule", response_model=PortalSchedulePublic)
 async def auth_update_schedule(
     data: PortalScheduleUpdatePayload,
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> PortalSchedulePublic:
-    return _update_client_schedule(_portal_client_id_or_403(user), data)
+    return _update_client_schedule(_portal_client_id_or_403(user, cliente_id), data)
 
 
 @app.post("/auth/schedule/message-preview", response_model=PortalMessagePreviewResponse)
 async def auth_schedule_message_preview(
     data: PortalMessagePreviewPayload,
     request: Request,
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> PortalMessagePreviewResponse:
-    return _booking_message_preview(_portal_client_id_or_403(user), data, request)
+    return _booking_message_preview(_portal_client_id_or_403(user, cliente_id), data, request)
 
 
 @app.post("/auth/schedule/message-test", response_model=AuthSimpleResponse)
 async def auth_schedule_message_test(
     data: PortalMessagePreviewPayload,
     request: Request,
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> AuthSimpleResponse:
-    cliente_id = _portal_client_id_or_403(user)
-    preview = _booking_message_preview(cliente_id, data, request)
+    target_client_id = _portal_client_id_or_403(user, cliente_id)
+    preview = _booking_message_preview(target_client_id, data, request)
     target_email = str(data.target_email or user["email"] or "").strip()
     if not target_email:
         raise HTTPException(status_code=400, detail="Indica un email donde enviar la prueba.")
@@ -5740,9 +6375,10 @@ async def auth_schedule_message_test(
 @app.post("/auth/schedule/blocks", response_model=PortalAgendaBlockCreateResponse)
 async def auth_create_schedule_block(
     data: PortalAgendaBlockPayload,
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> PortalAgendaBlockCreateResponse:
-    rows, skipped_count, date_from, date_to = _create_agenda_blocks(_portal_client_id_or_403(user), data)
+    rows, skipped_count, date_from, date_to = _create_agenda_blocks(_portal_client_id_or_403(user, cliente_id), data)
     return PortalAgendaBlockCreateResponse(
         items=[_serialize_agenda_block(row) for row in rows],
         created_count=len(rows),
@@ -5755,53 +6391,59 @@ async def auth_create_schedule_block(
 @app.delete("/auth/schedule/blocks/{block_id}", response_model=AuthSimpleResponse)
 async def auth_delete_schedule_block(
     block_id: str,
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> AuthSimpleResponse:
-    _delete_agenda_block(_portal_client_id_or_403(user), block_id, employee_id="")
+    _delete_agenda_block(_portal_client_id_or_403(user, cliente_id), block_id, employee_id="")
     return AuthSimpleResponse(ok=True, message="Bloqueo eliminado correctamente.")
 
 
 @app.get("/auth/employees", response_model=PortalEmployeesResponse)
 async def auth_list_employees(
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> PortalEmployeesResponse:
-    return _portal_employees_for_client(_portal_client_id_or_403(user))
+    return _portal_employees_for_client(_portal_client_id_or_403(user, cliente_id))
 
 
 @app.get("/auth/services")
 async def auth_list_services(
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> Dict[str, List[Dict[str, str]]]:
-    return {"items": _extract_services_from_info(_portal_client_id_or_403(user))}
+    return {"items": _extract_services_from_info(_portal_client_id_or_403(user, cliente_id))}
 
 
 @app.post("/auth/employees", response_model=PortalEmployeePublic)
 async def auth_create_employee(
     data: PortalEmployeePayload,
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> PortalEmployeePublic:
-    return _create_portal_employee(_portal_client_id_or_403(user), data)
+    return _create_portal_employee(_portal_client_id_or_403(user, cliente_id), data)
 
 
 @app.post("/auth/employees/{employee_id}", response_model=PortalEmployeePublic)
 async def auth_update_employee(
     employee_id: str,
     data: PortalEmployeePayload,
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> PortalEmployeePublic:
-    return _update_portal_employee(_portal_client_id_or_403(user), employee_id, data)
+    return _update_portal_employee(_portal_client_id_or_403(user, cliente_id), employee_id, data)
 
 
 @app.post("/auth/employees/{employee_id}/blocks", response_model=PortalAgendaBlockCreateResponse)
 async def auth_create_employee_blocks(
     employee_id: str,
     data: PortalAgendaBlockPayload,
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> PortalAgendaBlockCreateResponse:
-    cliente_id = _portal_client_id_or_403(user)
-    _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
+    target_client_id = _portal_client_id_or_403(user, cliente_id)
+    _resolve_employee_for_booking(target_client_id, employee_id, require_active=False)
     rows, skipped_count, date_from, date_to = _create_agenda_blocks(
-        cliente_id,
+        target_client_id,
         data,
         employee_id=employee_id,
     )
@@ -5818,11 +6460,12 @@ async def auth_create_employee_blocks(
 async def auth_delete_employee_block(
     employee_id: str,
     block_id: str,
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> AuthSimpleResponse:
-    cliente_id = _portal_client_id_or_403(user)
-    _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
-    _delete_agenda_block(cliente_id, block_id, employee_id=employee_id)
+    target_client_id = _portal_client_id_or_403(user, cliente_id)
+    _resolve_employee_for_booking(target_client_id, employee_id, require_active=False)
+    _delete_agenda_block(target_client_id, block_id, employee_id=employee_id)
     return AuthSimpleResponse(ok=True, message="Bloqueo del profesional eliminado correctamente.")
 
 
@@ -6081,13 +6724,17 @@ async def access_entry(
 
 @app.get("/portal", include_in_schema=False)
 async def portal_entry(
+    request: Request,
     portal_session: Optional[str] = Cookie(default=None, alias=PORTAL_COOKIE_NAME),
 ) -> Response:
     user = _get_authenticated_portal_user_or_none(portal_session)
     if not user:
         return RedirectResponse("/acceso")
-    if user["role"] == "admin":
+    requested_client_id = str(request.query_params.get("cliente_id", "")).strip()
+    if user["role"] == "admin" and not requested_client_id:
         return RedirectResponse("/dashboard")
+    if user["role"] == "admin" and requested_client_id:
+        _get_client_config(requested_client_id)
 
     index_path = PORTAL_UI_DIR / "index.html"
     if not index_path.exists():
@@ -6124,11 +6771,35 @@ async def demo_cliente(cliente_id: str, request: Request) -> HTMLResponse:
 
 @app.get("/health")
 async def healthcheck() -> Dict[str, Any]:
+    checks: Dict[str, str] = {
+        "config": "ok" if CONFIG_PATH.exists() else "missing",
+        "data_dir": "ok" if DATA_DIR.exists() else "missing",
+        "storage_dir": "ok" if STORAGE_DIR.exists() else "missing",
+        "database": "unknown",
+        "widget_bundle": "ok" if (WIDGET_DIR / "widget.min.js").exists() else "missing",
+    }
+    try:
+        with _get_db_connection() as connection:
+            connection.execute("SELECT 1").fetchone()
+            checks["database"] = "ok"
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Healthcheck database failed: %s", exc)
+        checks["database"] = "error"
+
+    critical_checks = ["config", "data_dir", "storage_dir", "database"]
+    overall_status = "ok" if all(checks.get(name) == "ok" for name in critical_checks) else "degraded"
     return {
-        "status": "ok",
+        "status": overall_status,
         "version": app.version,
         "openai_configured": bool(OPENAI_API_KEY),
         "clientes_configurados": len(CONFIG_CLIENTES),
+        "checks": checks,
+        "runtime": {
+            "started_at": STARTED_AT.isoformat(),
+            "uptime_seconds": int((datetime.now(timezone.utc) - STARTED_AT).total_seconds()),
+            "data_dir": str(DATA_DIR),
+            "storage_dir": str(STORAGE_DIR),
+        },
     }
 
 
@@ -6244,6 +6915,7 @@ async def admin_clientes() -> List[AdminClienteResumen]:
 
     for cliente_id, config in sorted(CONFIG_CLIENTES.items(), key=lambda item: item[0].lower()):
         booking_cfg = config.get("booking", {})
+        whatsapp_cfg = config.get("whatsapp", {})
         contacto = config.get("contacto", {})
         branding = config.get("branding", {})
         info_path = _client_info_path(cliente_id)
@@ -6261,6 +6933,8 @@ async def admin_clientes() -> List[AdminClienteResumen]:
                 contacto_email=str(contacto.get("email", "")),
                 contacto_telefono=str(contacto.get("telefono", "")),
                 branding_text=str(branding.get("powered_by", "")),
+                whatsapp_enabled=bool(whatsapp_cfg.get("enabled", False)),
+                whatsapp_phone_number_id=str(whatsapp_cfg.get("phone_number_id", "")),
                 has_info_file=info_path.exists(),
                 info_file_size=(info_path.stat().st_size if info_path.exists() else 0),
                 bookings_total=int(client_counts.get("total", 0)),
@@ -6422,6 +7096,43 @@ async def admin_booking_timeline(booking_id: str) -> BookingAuditResponse:
     return BookingAuditResponse(items=[_booking_audit_entry_from_row(row) for row in _list_booking_audit_rows(booking_id)])
 
 
+@app.get(
+    "/admin/chats",
+    dependencies=[Depends(_require_admin_token)],
+    response_model=List[ChatSessionSummary],
+)
+async def admin_chats(
+    cliente_id: str = "",
+    limit: int = 50,
+    offset: int = 0,
+) -> List[ChatSessionSummary]:
+    if cliente_id:
+        _get_client_config(cliente_id)
+    return [
+        _chat_session_summary_from_row(row)
+        for row in _list_chat_session_rows(
+            cliente_id=cliente_id.strip(),
+            limit=limit,
+            offset=offset,
+        )
+    ]
+
+
+@app.get(
+    "/admin/chats/{session_id}",
+    dependencies=[Depends(_require_admin_token)],
+    response_model=ChatSessionDetail,
+)
+async def admin_chat_detail(session_id: str, cliente_id: str = "") -> ChatSessionDetail:
+    if cliente_id:
+        _get_client_config(cliente_id)
+    session_row = _load_chat_session_or_404(session_id, cliente_id=cliente_id.strip())
+    return ChatSessionDetail(
+        session=_chat_session_summary_from_row(session_row),
+        messages=[_chat_message_from_row(row) for row in _load_chat_message_rows(session_id)],
+    )
+
+
 @app.post(
     "/admin/bookings/reminders/run",
     dependencies=[Depends(_require_admin_token)],
@@ -6573,48 +7284,12 @@ async def chat(data: MensajeChat, request: Request) -> RespuestaChat:
         raise HTTPException(status_code=400, detail="El mensaje no puede estar vacio.")
 
     session_id = _normalize_session_id(data.session_id)
-    session = _get_or_create_session(session_id, data.cliente_id)
-    with state_lock:
-        session.last_seen = time.time()
-        session.message_count += 1
-
-    if session.message_count > MAX_MESSAGES_PER_SESSION:
-        return RespuestaChat(
-            respuesta="Has alcanzado el limite temporal de mensajes. Si quieres, puedo derivarte al equipo humano.",
-            mostrar_formulario=_get_client_config(data.cliente_id)["booking"]["enabled"],
-            session_id=session_id,
-        )
-
-    client_config = _get_client_config(data.cliente_id)
-    booking_enabled = bool(client_config["booking"]["enabled"])
-    if booking_enabled and _message_requests_booking_form(message):
-        return RespuestaChat(
-            respuesta="Te muestro el formulario de solicitud de cita para que puedas elegir servicio, fecha y hora.",
-            mostrar_formulario=True,
-            session_id=session_id,
-        )
-
     try:
-        response = session.engine.chat(message)
-        raw_text = response.response.strip()
-        mostrar_formulario = BOOKING_SENTINEL in raw_text
-        clean_text = raw_text.replace(BOOKING_SENTINEL, "").strip()
-        if booking_enabled and not mostrar_formulario and _message_requests_booking_form(message):
-            mostrar_formulario = True
-            if not clean_text:
-                clean_text = "Te muestro el formulario de solicitud de cita para continuar."
-
-        logger.info(
-            "Chat %s [%s] %s",
-            data.cliente_id,
-            session_id,
-            message[:120],
-        )
-
-        return RespuestaChat(
-            respuesta=clean_text or "No tengo una respuesta valida en este momento.",
-            mostrar_formulario=mostrar_formulario and booking_enabled,
+        return await _process_chat_message(
+            cliente_id=data.cliente_id,
+            message=message,
             session_id=session_id,
+            request=request,
         )
     except HTTPException:
         raise
@@ -6876,6 +7551,379 @@ async def servicios(cliente_id: str, request: Request, employee_id: str = "") ->
     _assert_valid_client_id(cliente_id)
     _enforce_allowed_origin(request, cliente_id)
     return {"servicios": _public_services_for_booking(cliente_id, employee_id)}
+
+
+async def _process_chat_message(
+    *,
+    cliente_id: str,
+    message: str,
+    session_id: str,
+    request: Request,
+    origin_override: str = "",
+    user_agent_override: str = "",
+) -> RespuestaChat:
+    commercial_intent = _detect_commercial_intent(message)
+    _ensure_chat_session_record(
+        session_id,
+        cliente_id,
+        request,
+        origin_override=origin_override,
+        user_agent_override=user_agent_override,
+    )
+    _record_chat_message(
+        session_id=session_id,
+        cliente_id=cliente_id,
+        role="user",
+        content=message,
+        intent=commercial_intent,
+    )
+    client_config = _get_client_config(cliente_id)
+    booking_enabled = bool(client_config["booking"]["enabled"])
+    if booking_enabled and _message_requests_booking_form(message):
+        booking_response = RespuestaChat(
+            respuesta="Te muestro el formulario de solicitud de cita para que puedas elegir servicio, fecha y hora.",
+            mostrar_formulario=True,
+            session_id=session_id,
+        )
+        _record_chat_message(
+            session_id=session_id,
+            cliente_id=cliente_id,
+            role="assistant",
+            content=booking_response.respuesta,
+            intent=commercial_intent,
+        )
+        return booking_response
+
+    session = _get_or_create_session(session_id, cliente_id)
+    with state_lock:
+        session.last_seen = time.time()
+        session.message_count += 1
+
+    if session.message_count > MAX_MESSAGES_PER_SESSION:
+        limit_response = RespuestaChat(
+            respuesta="Has alcanzado el limite temporal de mensajes. Si quieres, puedo derivarte al equipo humano.",
+            mostrar_formulario=booking_enabled,
+            session_id=session_id,
+        )
+        _record_chat_message(
+            session_id=session_id,
+            cliente_id=cliente_id,
+            role="assistant",
+            content=limit_response.respuesta,
+            intent=commercial_intent,
+        )
+        return limit_response
+
+    response = session.engine.chat(_build_intent_enhanced_message(message, commercial_intent))
+    raw_text = response.response.strip()
+    mostrar_formulario = BOOKING_SENTINEL in raw_text
+    clean_text = raw_text.replace(BOOKING_SENTINEL, "").strip()
+    if booking_enabled and not mostrar_formulario and _message_requests_booking_form(message):
+        mostrar_formulario = True
+        if not clean_text:
+            clean_text = "Te muestro el formulario de solicitud de cita para continuar."
+
+    logger.info(
+        "Chat %s [%s] %s",
+        cliente_id,
+        session_id,
+        message[:120],
+    )
+
+    chat_response = RespuestaChat(
+        respuesta=clean_text or "No tengo una respuesta valida en este momento.",
+        mostrar_formulario=mostrar_formulario and booking_enabled,
+        session_id=session_id,
+    )
+    _record_chat_message(
+        session_id=session_id,
+        cliente_id=cliente_id,
+        role="assistant",
+        content=chat_response.respuesta,
+        intent=commercial_intent,
+    )
+    return chat_response
+
+
+def _whatsapp_env_value(env_name: str, fallback: str = "") -> str:
+    return os.getenv(str(env_name or "").strip(), "").strip() if env_name else fallback.strip()
+
+
+def _whatsapp_phone_client_map() -> Dict[str, str]:
+    mapping: Dict[str, str] = {}
+    for item in WHATSAPP_PHONE_CLIENT_MAP.split(","):
+        if ":" not in item:
+            continue
+        phone_number_id, cliente_id = item.split(":", 1)
+        phone_number_id = phone_number_id.strip()
+        cliente_id = cliente_id.strip()
+        if phone_number_id and cliente_id:
+            mapping[phone_number_id] = cliente_id
+    with state_lock:
+        for cliente_id, config in CONFIG_CLIENTES.items():
+            whatsapp_cfg = config.get("whatsapp", {})
+            phone_number_id = str(whatsapp_cfg.get("phone_number_id", "")).strip()
+            if whatsapp_cfg.get("enabled") and phone_number_id:
+                mapping[phone_number_id] = cliente_id
+    return mapping
+
+
+def _resolve_whatsapp_client_id(phone_number_id: str, forced_cliente_id: str = "") -> str:
+    if forced_cliente_id:
+        _assert_valid_client_id(forced_cliente_id)
+        config = _get_client_config(forced_cliente_id)
+        if not config.get("whatsapp", {}).get("enabled", False):
+            raise HTTPException(status_code=404, detail="WhatsApp no esta activo para este cliente.")
+        return forced_cliente_id
+
+    mapping = _whatsapp_phone_client_map()
+    cliente_id = mapping.get(str(phone_number_id or "").strip()) or WHATSAPP_DEFAULT_CLIENT_ID
+    if not cliente_id:
+        raise HTTPException(status_code=404, detail="No se pudo asociar este numero de WhatsApp a un cliente.")
+    _assert_valid_client_id(cliente_id)
+    config = _get_client_config(cliente_id)
+    if not config.get("whatsapp", {}).get("enabled", False):
+        raise HTTPException(status_code=404, detail="WhatsApp no esta activo para este cliente.")
+    return cliente_id
+
+
+def _whatsapp_verify_token_for_client(cliente_id: str = "") -> str:
+    if cliente_id:
+        config = _get_client_config(cliente_id)
+        configured_env = str(config.get("whatsapp", {}).get("verify_token_env", "")).strip()
+        configured_token = _whatsapp_env_value(configured_env)
+        if configured_token:
+            return configured_token
+    return WHATSAPP_VERIFY_TOKEN
+
+
+def _whatsapp_access_token_for_client(cliente_id: str) -> str:
+    config = _get_client_config(cliente_id)
+    configured_env = str(config.get("whatsapp", {}).get("access_token_env", "")).strip()
+    return _whatsapp_env_value(configured_env, WHATSAPP_ACCESS_TOKEN)
+
+
+def _whatsapp_session_id(cliente_id: str, from_number: str) -> str:
+    digest = hashlib.sha256(f"{cliente_id}:{from_number}".encode("utf-8")).hexdigest()
+    return f"wa_{digest[:40]}"
+
+
+def _whatsapp_public_booking_text(cliente_id: str, request: Request) -> str:
+    config = _get_client_config(cliente_id)
+    first_origin = next((origin for origin in config.get("allowed_origins", []) if origin), "")
+    base_url = first_origin or _preferred_public_base_url(request)
+    if not base_url:
+        return "Para completar la cita, dime el servicio, dia y hora que prefieres y el equipo humano lo revisara."
+    return f"Para completar la cita con formulario, entra aqui: {base_url.rstrip('/')}"
+
+
+def _whatsapp_chunks(text: str, *, max_length: int = 3500) -> List[str]:
+    cleaned = _sanitize_text(text, allow_multiline=True)
+    if not cleaned:
+        return ["Ahora mismo no tengo una respuesta valida."]
+    chunks: List[str] = []
+    while cleaned:
+        if len(cleaned) <= max_length:
+            chunks.append(cleaned)
+            break
+        split_at = cleaned.rfind("\n", 0, max_length)
+        if split_at < 800:
+            split_at = cleaned.rfind(" ", 0, max_length)
+        if split_at < 800:
+            split_at = max_length
+        chunks.append(cleaned[:split_at].strip())
+        cleaned = cleaned[split_at:].strip()
+    return chunks
+
+
+def _mark_whatsapp_message_if_new(
+    *,
+    message_id: str,
+    cliente_id: str,
+    phone_number_id: str,
+    from_number: str,
+) -> bool:
+    cleaned_message_id = _sanitize_text(message_id)[:160]
+    if not cleaned_message_id:
+        return True
+    with _get_db_connection() as connection:
+        existing = connection.execute(
+            "SELECT id FROM whatsapp_inbound_messages WHERE id = ?",
+            (cleaned_message_id,),
+        ).fetchone()
+        if existing:
+            return False
+        connection.execute(
+            """
+            INSERT INTO whatsapp_inbound_messages (id, cliente_id, phone_number_id, from_number, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                cleaned_message_id,
+                cliente_id,
+                _sanitize_text(phone_number_id)[:120],
+                _sanitize_text(from_number)[:80],
+                _utc_now_iso(),
+            ),
+        )
+        connection.commit()
+        return True
+
+
+def _verify_whatsapp_signature(raw_body: bytes, signature_header: str) -> None:
+    if not WHATSAPP_APP_SECRET:
+        return
+    expected = "sha256=" + hmac.new(
+        WHATSAPP_APP_SECRET.encode("utf-8"),
+        raw_body,
+        hashlib.sha256,
+    ).hexdigest()
+    if not signature_header or not hmac.compare_digest(expected, signature_header):
+        raise HTTPException(status_code=403, detail="Firma de WhatsApp invalida.")
+
+
+async def _send_whatsapp_text(
+    *,
+    cliente_id: str,
+    phone_number_id: str,
+    to_number: str,
+    text: str,
+) -> bool:
+    access_token = _whatsapp_access_token_for_client(cliente_id)
+    if not access_token:
+        logger.warning("WhatsApp sin token configurado para %s; respuesta no enviada.", cliente_id)
+        return False
+
+    url = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{phone_number_id}/messages"
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+    delivered = True
+    async with httpx.AsyncClient(timeout=20) as client:
+        for chunk in _whatsapp_chunks(text):
+            payload = {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": to_number,
+                "type": "text",
+                "text": {"preview_url": True, "body": chunk},
+            }
+            response = await client.post(url, headers=headers, json=payload)
+            if response.status_code >= 300:
+                delivered = False
+                logger.error(
+                    "Error enviando WhatsApp a %s (%s): %s",
+                    cliente_id,
+                    response.status_code,
+                    response.text[:500],
+                )
+    return delivered
+
+
+async def _handle_whatsapp_webhook(
+    request: Request,
+    *,
+    forced_cliente_id: str = "",
+) -> WhatsAppWebhookStatus:
+    raw_body = await request.body()
+    _verify_whatsapp_signature(raw_body, request.headers.get("x-hub-signature-256", ""))
+    try:
+        payload = json.loads(raw_body.decode("utf-8") or "{}")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Payload de WhatsApp invalido.") from exc
+
+    processed = 0
+    entries = payload.get("entry", []) if isinstance(payload, dict) else []
+    for entry in entries:
+        for change in entry.get("changes", []):
+            value = change.get("value", {}) if isinstance(change, dict) else {}
+            metadata = value.get("metadata", {}) if isinstance(value, dict) else {}
+            phone_number_id = str(metadata.get("phone_number_id", "")).strip()
+            messages = value.get("messages", []) if isinstance(value, dict) else []
+            if not messages:
+                continue
+            cliente_id = _resolve_whatsapp_client_id(phone_number_id, forced_cliente_id)
+            for message_payload in messages:
+                from_number = str(message_payload.get("from", "")).strip()
+                message_id = str(message_payload.get("id", "")).strip()
+                if not from_number:
+                    continue
+                if not _mark_whatsapp_message_if_new(
+                    message_id=message_id,
+                    cliente_id=cliente_id,
+                    phone_number_id=phone_number_id,
+                    from_number=from_number,
+                ):
+                    continue
+
+                message_type = str(message_payload.get("type", "")).strip()
+                if message_type == "text":
+                    incoming_text = str(message_payload.get("text", {}).get("body", "")).strip()
+                else:
+                    incoming_text = (
+                        "El usuario ha enviado un mensaje que no es texto. "
+                        "Responde de forma breve indicando que puede ayudarte si escribe su consulta."
+                    )
+
+                try:
+                    chat_response = await _process_chat_message(
+                        cliente_id=cliente_id,
+                        message=incoming_text,
+                        session_id=_whatsapp_session_id(cliente_id, from_number),
+                        request=request,
+                        origin_override=f"whatsapp:{from_number}",
+                        user_agent_override="WhatsApp Cloud API",
+                    )
+                    response_text = chat_response.respuesta
+                    if chat_response.mostrar_formulario:
+                        response_text = f"{response_text}\n\n{_whatsapp_public_booking_text(cliente_id, request)}"
+                    await _send_whatsapp_text(
+                        cliente_id=cliente_id,
+                        phone_number_id=phone_number_id,
+                        to_number=from_number,
+                        text=response_text,
+                    )
+                    processed += 1
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("Error procesando WhatsApp para %s: %s", cliente_id, exc)
+                    await _send_whatsapp_text(
+                        cliente_id=cliente_id,
+                        phone_number_id=phone_number_id,
+                        to_number=from_number,
+                        text="Ahora mismo no he podido procesar tu mensaje. Intentalo de nuevo en unos minutos.",
+                    )
+    return WhatsAppWebhookStatus(status="ok", processed=processed)
+
+
+def _verify_whatsapp_webhook_challenge(request: Request, cliente_id: str = "") -> Response:
+    params = request.query_params
+    mode = params.get("hub.mode", "")
+    token = params.get("hub.verify_token", "")
+    challenge = params.get("hub.challenge", "")
+    expected_token = _whatsapp_verify_token_for_client(cliente_id)
+    if mode == "subscribe" and expected_token and hmac.compare_digest(token, expected_token):
+        return Response(content=challenge, media_type="text/plain")
+    raise HTTPException(status_code=403, detail="Verificacion de WhatsApp rechazada.")
+
+
+@app.get("/whatsapp/webhook", include_in_schema=False)
+async def whatsapp_webhook_verify(request: Request) -> Response:
+    return _verify_whatsapp_webhook_challenge(request)
+
+
+@app.post("/whatsapp/webhook", response_model=WhatsAppWebhookStatus)
+async def whatsapp_webhook(request: Request) -> WhatsAppWebhookStatus:
+    return await _handle_whatsapp_webhook(request)
+
+
+@app.get("/whatsapp/webhook/{cliente_id}", include_in_schema=False)
+async def whatsapp_client_webhook_verify(cliente_id: str, request: Request) -> Response:
+    _assert_valid_client_id(cliente_id)
+    return _verify_whatsapp_webhook_challenge(request, cliente_id)
+
+
+@app.post("/whatsapp/webhook/{cliente_id}", response_model=WhatsAppWebhookStatus)
+async def whatsapp_client_webhook(cliente_id: str, request: Request) -> WhatsAppWebhookStatus:
+    _assert_valid_client_id(cliente_id)
+    return await _handle_whatsapp_webhook(request, forced_cliente_id=cliente_id)
 
 
 @app.post("/admin/reindex/{cliente_id}", dependencies=[Depends(_require_admin_token)])

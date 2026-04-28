@@ -36,15 +36,16 @@ export function inyectarEstilos(color) {
       --ia-color: ${color};
       --ia-color-dark: ${colorDark};
       --ia-color-soft: ${colorSoft};
+      --ia-color-soft-strong: ${colorSoftStrong};
       --ia-surface: #ffffff;
       --ia-surface-muted: #f4f7fb;
-      --ia-text: #142235;
-      --ia-text-soft: #5d6b82;
-      --ia-border: #d7e0ea;
-      --ia-shadow: 0 24px 60px rgba(9, 20, 40, 0.18);
-      --ia-radius-xl: 24px;
-      --ia-radius-lg: 18px;
-      --ia-font: "Avenir Next", "Nunito Sans", "Segoe UI", sans-serif;
+      --ia-text: #0e1c2e;
+      --ia-text-soft: #5a6b7e;
+      --ia-border: #dce5ef;
+      --ia-shadow: 0 28px 64px rgba(8, 18, 38, 0.20), 0 2px 8px rgba(8, 18, 38, 0.10);
+      --ia-radius-xl: 22px;
+      --ia-radius-lg: 16px;
+      --ia-font: "Inter", "Segoe UI", system-ui, sans-serif;
     }
 
     #ia-w-container,
@@ -73,17 +74,17 @@ export function inyectarEstilos(color) {
       position: fixed;
       right: 24px;
       bottom: 24px;
-      width: 66px;
-      height: 66px;
+      width: 60px;
+      height: 60px;
       border: 0;
       border-radius: 999px;
       background:
-        radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.24), transparent 38%),
+        radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.28), transparent 42%),
         linear-gradient(135deg, var(--ia-color), var(--ia-color-dark));
       color: #fff;
       cursor: pointer;
-      box-shadow: 0 18px 38px rgba(11, 24, 49, 0.24);
-      transition: transform 0.18s ease, box-shadow 0.18s ease;
+      box-shadow: 0 10px 32px rgba(11, 24, 49, 0.22), 0 0 0 1px rgba(255,255,255,0.06);
+      transition: transform 0.20s ease, box-shadow 0.20s ease, filter 0.20s ease;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -98,8 +99,9 @@ export function inyectarEstilos(color) {
     }
 
     #ia-w-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 22px 42px rgba(11, 24, 49, 0.28);
+      transform: translateY(-2px) scale(1.04);
+      box-shadow: 0 16px 40px rgba(11, 24, 49, 0.30), 0 0 0 1px rgba(255,255,255,0.10);
+      filter: brightness(1.08);
     }
 
     #ia-w-btn.abierto {
@@ -243,7 +245,7 @@ export function inyectarEstilos(color) {
     }
 
     .ia-msg p + p {
-      margin-top: 8px;
+      margin-top: 12px;
     }
 
     .ia-msg.bot {
@@ -269,12 +271,49 @@ export function inyectarEstilos(color) {
     }
 
     .ia-rich-list {
-      margin: 0;
-      padding-left: 18px;
+      margin: 2px 0 0;
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .ia-rich-list li {
+      position: relative;
+      padding-left: 15px;
+    }
+
+    .ia-rich-list li::before {
+      content: "";
+      position: absolute;
+      left: 1px;
+      top: 0.72em;
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: var(--ia-color);
+      opacity: 0.72;
     }
 
     .ia-rich-list li + li {
-      margin-top: 6px;
+      margin-top: 9px;
+    }
+
+    .ia-rich-list .ia-list-heading {
+      margin-top: 14px;
+      padding-left: 0;
+      padding-top: 10px;
+      border-top: 1px solid rgba(20, 34, 53, 0.08);
+      color: var(--ia-text);
+      font-weight: 700;
+    }
+
+    .ia-rich-list .ia-list-heading::before {
+      display: none;
+    }
+
+    .ia-rich-list .ia-list-heading:first-child {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
     }
 
     .ia-dots {
@@ -285,10 +324,11 @@ export function inyectarEstilos(color) {
     }
 
     .ia-dots span {
-      width: 8px;
-      height: 8px;
+      width: 7px;
+      height: 7px;
       border-radius: 999px;
-      background: rgba(20, 34, 53, 0.45);
+      background: var(--ia-color);
+      opacity: 0.55;
       animation: ia-dot-pulse 1.1s infinite ease-in-out;
     }
 
@@ -298,6 +338,46 @@ export function inyectarEstilos(color) {
 
     .ia-dots span:nth-child(3) {
       animation-delay: 0.36s;
+    }
+
+    .ia-action-card {
+      max-width: 96%;
+    }
+
+    .ia-action-card p {
+      color: var(--ia-text);
+    }
+
+    .ia-action-card p + .ia-action-grid {
+      margin-top: 10px;
+    }
+
+    .ia-action-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .ia-action-grid button {
+      min-width: 0;
+      border: 1px solid var(--ia-border);
+      border-radius: 12px;
+      background: #fbfcfe;
+      color: var(--ia-text);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.25;
+      padding: 10px 11px;
+      text-align: left;
+      transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+    }
+
+    .ia-action-grid button:hover {
+      border-color: var(--ia-color);
+      background: var(--ia-color-soft);
+      transform: translateY(-1px);
     }
 
     #ia-w-input-area {
@@ -331,29 +411,30 @@ export function inyectarEstilos(color) {
     }
 
     #ia-w-send {
-      min-width: 86px;
-      height: 42px;
+      min-width: 82px;
+      height: 40px;
       border: 0;
       border-radius: 999px;
       background: linear-gradient(135deg, var(--ia-color), var(--ia-color-dark));
       color: #fff;
+      font-family: var(--ia-font);
       font-size: 13px;
-      font-weight: 800;
+      font-weight: 700;
       cursor: pointer;
       padding: 0 16px;
+      transition: transform 0.16s ease, filter 0.16s ease, box-shadow 0.16s ease;
+      box-shadow: 0 4px 16px rgba(11, 24, 49, 0.18);
+    }
+
+    #ia-w-send:not(:disabled):hover {
+      transform: translateY(-1px);
+      filter: brightness(1.08);
+      box-shadow: 0 8px 22px rgba(11, 24, 49, 0.24);
     }
 
     #ia-w-send:disabled {
-      opacity: 0.55;
+      opacity: 0.50;
       cursor: not-allowed;
-    }
-
-    #ia-w-powered {
-      padding: 6px 12px 10px;
-      font-size: 11px;
-      text-align: center;
-      color: var(--ia-text-soft);
-      background: rgba(255, 255, 255, 0.96);
     }
 
     .ia-form-card {

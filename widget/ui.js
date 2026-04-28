@@ -1,4 +1,4 @@
-import { agregarMensaje, enviarMensaje } from "./chat.js";
+import { agregarAccionesIniciales, agregarMensaje, enviarMensaje } from "./chat.js";
 import { escapeHtml, scrollMsgs, WIDGET_CONFIG } from "./utils.js";
 
 let abierto = false;
@@ -84,12 +84,12 @@ export function construirWidget(cfg) {
         />
         <button id="ia-w-send" type="button" aria-label="Enviar mensaje">Enviar</button>
       </div>
-      <div id="ia-w-powered">${escapeHtml(cfg.branding_text || "Powered by Vantelia")}</div>
     </section>
   `;
 
   document.body.appendChild(container);
   agregarMensaje(cfg.bienvenida || "Hola, en que puedo ayudarte hoy?", "bot");
+  agregarAccionesIniciales();
 
   document.getElementById("ia-w-btn")?.addEventListener("click", () => toggleChat());
   document.getElementById("ia-w-close")?.addEventListener("click", () => toggleChat(false));

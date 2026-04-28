@@ -6,6 +6,8 @@ Sistema SaaS de chatbox embebible multiempresa pensado para instalarlo en webs c
 
 - Backend FastAPI con RAG por cliente.
 - Widget embebible por `script` con UI responsive.
+- Modos comerciales de IA: diagnostico inteligente, recomendador, estimador y comparador de opciones.
+- Guardado de conversaciones por cliente con endpoints admin y portal.
 - Flujo de solicitud de cita con disponibilidad real y persistencia en SQLite.
 - Correos transaccionales de cita, enlaces de gestion, cancelacion/reprogramacion y recordatorios.
 - Control de origen por cliente, portal con login por sesiones y endpoints admin protegidos por token o sesion.
@@ -57,6 +59,10 @@ streamlit run auto_onboarding.py
 ## Endpoints principales
 
 - `GET /health`
+- `GET /legal/privacidad`
+- `GET /legal/terminos`
+- `GET /legal/cookies`
+- `GET /legal/ia`
 - `GET /acceso`
 - `GET /portal`
 - `GET /cliente/{cliente_id}`
@@ -65,6 +71,8 @@ streamlit run auto_onboarding.py
 - `POST /auth/password/change`
 - `POST /auth/password/forgot`
 - `POST /auth/password/reset`
+- `GET /auth/chats`
+- `GET /auth/chats/{session_id}`
 - `POST /chat`
 - `GET /disponibilidad`
 - `POST /agendar`
@@ -72,6 +80,10 @@ streamlit run auto_onboarding.py
 - `POST /booking/manage/{manage_token}/cancel`
 - `POST /booking/manage/{manage_token}/reschedule`
 - `GET /servicios/{cliente_id}`
+- `GET /whatsapp/webhook`
+- `POST /whatsapp/webhook`
+- `GET /whatsapp/webhook/{cliente_id}`
+- `POST /whatsapp/webhook/{cliente_id}`
 
 ## Endpoints admin
 
@@ -85,6 +97,8 @@ Requieren `Authorization: Bearer <ADMIN_API_TOKEN>` o sesion admin del portal.
 - `GET /admin/clientes/{cliente_id}`
 - `PUT /admin/clientes/{cliente_id}`
 - `GET /admin/bookings`
+- `GET /admin/chats`
+- `GET /admin/chats/{session_id}`
 - `POST /admin/bookings/{booking_id}/cancel`
 - `POST /admin/bookings/{booking_id}/reschedule`
 - `POST /admin/bookings/{booking_id}/resend-email`
@@ -103,8 +117,24 @@ El alta express usa la `OPENAI_API_KEY` configurada en el backend para generar e
 
 Manual recomendado para operacion diaria:
 
+- [Resumen de Funcionalidades](/e:/Vantelia/docs/Funcionalidades.md:1)
 - [Manual de Administracion](/e:/Vantelia/docs/MANUAL_ADMIN.md:1)
 - [Manual de Google Calendar](/e:/Vantelia/docs/MANUAL_GOOGLE_CALENDAR.md:1)
+- [Operacion minima antes de vender agresivamente](/e:/Vantelia/docs/OPERACION_PRODUCCION.md:1)
+
+Comprobaciones minimas antes de desplegar:
+
+```powershell
+python -m pytest
+npm run build
+python -m py_compile api.py auto_onboarding.py onboarding_utils.py
+```
+
+Backup local:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\backup.ps1
+```
 
 ## Notas de despliegue
 
@@ -116,6 +146,8 @@ Manual recomendado para operacion diaria:
 - Booking real soportado por cliente:
   `internal` para flujo manual, `google_calendar` para crear eventos reales en Google Calendar y `calendly` para crear reservas reales en Calendly.
 - Para correos y enlaces de gestion, configura tambien `APP_BASE_URL` y SMTP en `.env`.
+- WhatsApp Cloud API reutiliza la misma IA, RAG y guardado de conversaciones que el widget. Activa el canal por cliente desde Admin > IA > WhatsApp y configura en Meta el webhook `https://app.vantelia.es/whatsapp/webhook` o `https://app.vantelia.es/whatsapp/webhook/{cliente_id}`.
+- Para WhatsApp, define `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_ACCESS_TOKEN` y opcionalmente `WHATSAPP_APP_SECRET`. Si cada cliente usa un token distinto, guarda el nombre de la variable de entorno en el campo `Env token acceso`.
 - Si vas a enviar desde `info@vantelia.es` y responder desde `soporte@vantelia.es`, deja listos `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_REPLY_TO` y `PORTAL_SUPPORT_EMAIL`.
 - Si quieres recordatorios automaticos, ajusta `REMINDER_RUN_INTERVAL_MINUTES`, `REMINDER_24H_HOURS` y `REMINDER_2H_HOURS`.
 - Para cerrar citas ya pasadas sin borrarlas, ajusta `BOOKING_AUTO_COMPLETE_HOURS`.
