@@ -1,0 +1,923 @@
+(()=>{function J(e){let t=String(e||"").replace("#","").trim();return/^[0-9a-fA-F]{6}$/.test(t)?{r:parseInt(t.slice(0,2),16),g:parseInt(t.slice(2,4),16),b:parseInt(t.slice(4,6),16)}:{r:31,g:111,b:235}}function pe(e,t=.18){let{r:a,g:i,b:o}=J(e),n=s=>Math.max(0,Math.round(s*(1-t)));return`rgb(${n(a)}, ${n(i)}, ${n(o)})`}function Y(e,t=.12){let{r:a,g:i,b:o}=J(e);return`rgba(${a}, ${i}, ${o}, ${t})`}function K(e){var n;(n=document.getElementById("ia-w-style"))==null||n.remove();let t=pe(e,.2),a=Y(e,.12),i=Y(e,.2),o=document.createElement("style");o.id="ia-w-style",o.textContent=`
+    :root {
+      --ia-color: ${e};
+      --ia-color-dark: ${t};
+      --ia-color-soft: ${a};
+      --ia-surface: #ffffff;
+      --ia-surface-muted: #f4f7fb;
+      --ia-text: #142235;
+      --ia-text-soft: #5d6b82;
+      --ia-border: #d7e0ea;
+      --ia-shadow: 0 24px 60px rgba(9, 20, 40, 0.18);
+      --ia-radius-xl: 24px;
+      --ia-radius-lg: 18px;
+      --ia-font: "Avenir Next", "Nunito Sans", "Segoe UI", sans-serif;
+    }
+
+    #ia-w-container,
+    #ia-w-container * {
+      box-sizing: border-box;
+      font-family: var(--ia-font);
+    }
+
+    #ia-w-container {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      z-index: 2147483000;
+      color: var(--ia-text);
+    }
+
+    #ia-w-container.ia-left,
+    #ia-w-container.ia-left #ia-w-chat,
+    #ia-w-container.ia-left #ia-w-badge,
+    #ia-w-container.ia-left #ia-w-btn {
+      right: auto;
+      left: 24px;
+    }
+
+    #ia-w-btn {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      width: 66px;
+      height: 66px;
+      border: 0;
+      border-radius: 999px;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.24), transparent 38%),
+        linear-gradient(135deg, var(--ia-color), var(--ia-color-dark));
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 18px 38px rgba(11, 24, 49, 0.24);
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    #ia-w-btn svg,
+    #ia-w-close svg {
+      width: 24px;
+      height: 24px;
+      fill: currentColor;
+    }
+
+    #ia-w-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 22px 42px rgba(11, 24, 49, 0.28);
+    }
+
+    #ia-w-btn.abierto {
+      transform: rotate(90deg);
+    }
+
+    #ia-w-badge {
+      position: fixed;
+      right: 24px;
+      bottom: 100px;
+      max-width: 280px;
+      background: rgba(255, 255, 255, 0.96);
+      color: var(--ia-text);
+      padding: 13px 15px;
+      border-radius: 18px 18px 6px 18px;
+      border: 1px solid rgba(20, 34, 53, 0.08);
+      box-shadow: 0 14px 30px rgba(9, 20, 40, 0.12);
+      backdrop-filter: blur(16px);
+      font-size: 14px;
+      line-height: 1.45;
+      cursor: pointer;
+      animation: ia-fade-in 0.25s ease;
+    }
+
+    #ia-w-chat {
+      position: fixed;
+      right: 24px;
+      bottom: 100px;
+      width: min(392px, calc(100vw - 36px));
+      height: min(760px, calc(100vh - 112px));
+      background: var(--ia-surface);
+      border: 1px solid rgba(20, 34, 53, 0.08);
+      border-radius: var(--ia-radius-xl);
+      box-shadow: var(--ia-shadow);
+      overflow: hidden;
+      display: none;
+      flex-direction: column;
+      animation: ia-fade-in 0.2s ease;
+    }
+
+    #ia-w-chat.visible {
+      display: flex;
+    }
+
+    #ia-w-header {
+      background:
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.16), transparent 28%),
+        linear-gradient(135deg, var(--ia-color-dark), var(--ia-color));
+      color: #fff;
+      padding: 16px 16px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    #ia-w-header-info {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    #ia-w-header-info p {
+      margin: 0;
+    }
+
+    #ia-w-header-info p:first-child {
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    #ia-w-header-info p:last-child {
+      font-size: 12px;
+      opacity: 0.86;
+    }
+
+    .ia-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.16);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      flex-shrink: 0;
+    }
+
+    #ia-w-close {
+      width: 34px;
+      height: 34px;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+      color: #fff;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    #ia-w-msgs {
+      flex: 1;
+      padding: 14px;
+      background:
+        radial-gradient(circle at top left, ${a}, transparent 36%),
+        linear-gradient(180deg, #f9fbfe, #f4f7fb 38%, #f9fbfe);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      scroll-padding-bottom: 20px;
+    }
+
+    #ia-w-msgs::-webkit-scrollbar {
+      width: 7px;
+    }
+
+    #ia-w-msgs::-webkit-scrollbar-thumb {
+      background: rgba(20, 34, 53, 0.16);
+      border-radius: 999px;
+    }
+
+    .ia-msg {
+      max-width: 88%;
+      padding: 11px 13px;
+      border-radius: 18px;
+      line-height: 1.48;
+      font-size: 13px;
+      word-break: break-word;
+      animation: ia-fade-in 0.18s ease;
+    }
+
+    .ia-msg p {
+      margin: 0;
+    }
+
+    .ia-msg p + p {
+      margin-top: 12px;
+    }
+
+    .ia-msg.bot {
+      align-self: flex-start;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid rgba(20, 34, 53, 0.08);
+      border-bottom-left-radius: 6px;
+      box-shadow: 0 6px 18px rgba(9, 20, 40, 0.06);
+    }
+
+    .ia-msg.user {
+      align-self: flex-end;
+      background: linear-gradient(135deg, var(--ia-color), var(--ia-color-dark));
+      color: #fff;
+      border-bottom-right-radius: 6px;
+    }
+
+    .ia-msg.typing {
+      align-self: flex-start;
+      background: #fff;
+      border: 1px solid rgba(20, 34, 53, 0.08);
+      border-bottom-left-radius: 6px;
+    }
+
+    .ia-rich-list {
+      margin: 2px 0 0;
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .ia-rich-list li {
+      position: relative;
+      padding-left: 15px;
+    }
+
+    .ia-rich-list li::before {
+      content: "";
+      position: absolute;
+      left: 1px;
+      top: 0.72em;
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: var(--ia-color);
+      opacity: 0.72;
+    }
+
+    .ia-rich-list li + li {
+      margin-top: 9px;
+    }
+
+    .ia-rich-list .ia-list-heading {
+      margin-top: 14px;
+      padding-left: 0;
+      padding-top: 10px;
+      border-top: 1px solid rgba(20, 34, 53, 0.08);
+      color: var(--ia-text);
+      font-weight: 700;
+    }
+
+    .ia-rich-list .ia-list-heading::before {
+      display: none;
+    }
+
+    .ia-rich-list .ia-list-heading:first-child {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .ia-dots {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      min-height: 12px;
+    }
+
+    .ia-dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(20, 34, 53, 0.45);
+      animation: ia-dot-pulse 1.1s infinite ease-in-out;
+    }
+
+    .ia-dots span:nth-child(2) {
+      animation-delay: 0.18s;
+    }
+
+    .ia-dots span:nth-child(3) {
+      animation-delay: 0.36s;
+    }
+
+    .ia-action-card {
+      max-width: 96%;
+    }
+
+    .ia-action-card p {
+      color: var(--ia-text);
+    }
+
+    .ia-action-card p + .ia-action-grid {
+      margin-top: 10px;
+    }
+
+    .ia-action-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .ia-action-grid button {
+      min-width: 0;
+      border: 1px solid var(--ia-border);
+      border-radius: 12px;
+      background: #fbfcfe;
+      color: var(--ia-text);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.25;
+      padding: 10px 11px;
+      text-align: left;
+      transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+    }
+
+    .ia-action-grid button:hover {
+      border-color: var(--ia-color);
+      background: var(--ia-color-soft);
+      transform: translateY(-1px);
+    }
+
+    #ia-w-input-area {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 12px 14px;
+      border-top: 1px solid rgba(20, 34, 53, 0.08);
+      background: rgba(255, 255, 255, 0.96);
+    }
+
+    #ia-w-input {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid var(--ia-border);
+      background: #fbfcfe;
+      border-radius: 999px;
+      padding: 11px 14px;
+      font-size: 13px;
+      color: var(--ia-text);
+      outline: none;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    #ia-w-input:focus,
+    .ia-form-card input:focus,
+    .ia-form-card select:focus,
+    .ia-form-card textarea:focus {
+      border-color: var(--ia-color);
+      box-shadow: 0 0 0 4px ${i};
+    }
+
+    #ia-w-send {
+      min-width: 86px;
+      height: 42px;
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--ia-color), var(--ia-color-dark));
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      padding: 0 16px;
+    }
+
+    #ia-w-send:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .ia-form-card {
+      width: 100%;
+      align-self: stretch;
+      background: #fff;
+      border: 1px solid rgba(20, 34, 53, 0.08);
+      border-radius: var(--ia-radius-lg);
+      overflow: hidden;
+      box-shadow: 0 10px 28px rgba(9, 20, 40, 0.08);
+      min-height: min(500px, calc(100vh - 260px));
+      max-height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .ia-form-header {
+      padding: 14px 16px 12px;
+      background:
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.15), transparent 28%),
+        linear-gradient(135deg, var(--ia-color), var(--ia-color-dark));
+      color: #fff;
+      text-align: center;
+    }
+
+    .ia-form-header h4 {
+      margin: 0 0 4px;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .ia-form-header p {
+      margin: 0;
+      font-size: 11px;
+      opacity: 0.9;
+    }
+
+    .ia-form-progress {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 16px 0;
+    }
+
+    .ia-form-step-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: #dbe3ef;
+      transition: transform 0.18s ease, background 0.18s ease;
+    }
+
+    .ia-form-step-dot.active {
+      background: var(--ia-color);
+      transform: scale(1.25);
+    }
+
+    .ia-form-step-dot.done {
+      background: #18a957;
+    }
+
+    .ia-form-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    .ia-form-step {
+      display: none;
+      flex-direction: column;
+      gap: 9px;
+      min-height: 100%;
+      min-width: 0;
+    }
+
+    .ia-form-step.active {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .ia-form-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--ia-text);
+      margin-top: 2px;
+    }
+
+    .ia-form-card input,
+    .ia-form-card select,
+    .ia-form-card textarea {
+      width: 100%;
+      border: 1px solid var(--ia-border);
+      border-radius: 14px;
+      background: #fbfcfe;
+      color: var(--ia-text);
+      padding: 11px 13px;
+      outline: none;
+      font-size: 13px;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .ia-form-card textarea {
+      resize: vertical;
+      min-height: 86px;
+    }
+
+    .ia-invalid {
+      border-color: #b42318 !important;
+    }
+
+    .ia-field-error {
+      color: #b42318;
+      font-size: 12px;
+      margin-top: -4px;
+      margin-bottom: 2px;
+    }
+
+    .ia-form-note {
+      margin: 2px 0 0;
+      font-size: 12px;
+      color: var(--ia-text-soft);
+      line-height: 1.45;
+    }
+
+    .ia-time-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 2px;
+    }
+
+    .ia-time-slot {
+      border: 1px solid var(--ia-border);
+      border-radius: 14px;
+      background: #fbfcfe;
+      padding: 11px 8px;
+      font-size: 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+    }
+
+    .ia-time-slot:hover {
+      border-color: var(--ia-color);
+      background: var(--ia-color-soft);
+      transform: translateY(-1px);
+    }
+
+    .ia-time-slot.selected {
+      color: #fff;
+      border-color: var(--ia-color-dark);
+      background: linear-gradient(135deg, var(--ia-color), var(--ia-color-dark));
+    }
+
+    .ia-time-slot.disabled,
+    .ia-time-slot.disabled:hover {
+      opacity: 0.45;
+      cursor: not-allowed;
+      background: #eef2f7;
+      border-color: #dbe3ef;
+      transform: none;
+    }
+
+    .ia-time-slot small {
+      display: block;
+      margin-top: 4px;
+      font-size: 11px;
+    }
+
+    .ia-form-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: auto;
+      padding-top: 12px;
+      position: sticky;
+      bottom: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0), #fff 34%);
+      padding-bottom: 2px;
+    }
+
+    .ia-form-btn {
+      flex: 1;
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .ia-form-btn.primary {
+      color: #fff;
+      background: linear-gradient(135deg, var(--ia-color), var(--ia-color-dark));
+    }
+
+    .ia-form-btn.secondary {
+      color: var(--ia-text);
+      background: #eef2f7;
+    }
+
+    .ia-form-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .ia-loading-slots,
+    .ia-empty-slots,
+    .ia-slot-error {
+      padding: 18px 0 6px;
+      font-size: 13px;
+      text-align: center;
+      color: var(--ia-text-soft);
+    }
+
+    .ia-slot-error {
+      color: #b42318;
+    }
+
+    .ia-spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(20, 34, 53, 0.14);
+      border-top-color: var(--ia-color);
+      border-radius: 999px;
+      display: inline-block;
+      animation: ia-spin 0.8s linear infinite;
+    }
+
+    .ia-resumen {
+      border: 1px solid rgba(20, 34, 53, 0.08);
+      border-radius: 16px;
+      background: #f8fbff;
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .ia-resumen-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+    }
+
+    .ia-resumen-row span:first-child {
+      color: var(--ia-text-soft);
+    }
+
+    .ia-resumen-row span:last-child {
+      color: var(--ia-text);
+      font-weight: 800;
+      text-align: right;
+    }
+
+    .ia-form-success {
+      text-align: center;
+      padding: 20px 18px;
+    }
+
+    .ia-check {
+      width: 58px;
+      height: 58px;
+      margin: 0 auto 14px;
+      border-radius: 999px;
+      background: #18a957;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
+    @keyframes ia-fade-in {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes ia-dot-pulse {
+      0%, 80%, 100% {
+        opacity: 0.35;
+        transform: scale(0.75);
+      }
+      40% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes ia-spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #ia-w-btn,
+      .ia-msg,
+      #ia-w-chat,
+      #ia-w-badge,
+      .ia-dots span,
+      .ia-spinner,
+      .ia-time-slot {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+
+    @media (max-width: 640px) {
+      #ia-w-btn {
+        right: 14px;
+        bottom: 14px;
+        width: 58px;
+        height: 58px;
+      }
+
+      #ia-w-chat {
+        right: 10px;
+        left: 10px;
+        bottom: 80px;
+        width: auto;
+        height: min(82vh, 720px);
+        border-radius: 22px;
+      }
+
+      #ia-w-badge {
+        right: 14px;
+        left: 14px;
+        bottom: 86px;
+        max-width: none;
+      }
+
+      #ia-w-header {
+        padding: 14px;
+      }
+
+      #ia-w-msgs {
+        padding: 12px;
+        gap: 10px;
+      }
+
+      #ia-w-input-area {
+        padding: 10px 12px;
+        gap: 8px;
+      }
+
+      #ia-w-send {
+        min-width: 78px;
+      }
+
+      .ia-form-card {
+        min-height: min(520px, calc(100vh - 220px));
+        max-height: 100%;
+      }
+
+      .ia-form-body {
+        padding: 12px;
+      }
+
+      .ia-time-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .ia-resumen-row {
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .ia-resumen-row span:last-child {
+        text-align: left;
+      }
+
+      .ia-form-actions {
+        flex-direction: column;
+      }
+    }
+  `,document.head.appendChild(o)}var y=document.currentScript,A=(y==null?void 0:y.dataset)||{},B=new Map;function T(e){return String(e||"").replace(/\/+$/,"")}function me(){try{let e="__ia_widget_test__";return window.localStorage.setItem(e,"1"),window.localStorage.removeItem(e),window.localStorage}catch(e){return{getItem(t){return B.has(t)?B.get(t):null},setItem(t,a){B.set(t,String(a))},removeItem(t){B.delete(t)}}}}function fe(){let e=window.IA_WIDGET_API||A.api;return e?T(e):y!=null&&y.src?T(new URL(y.src,window.location.href).origin):T(window.location.origin)}function ue(){return String(window.IA_WIDGET_CLIENTE||A.client||"demo").trim()}var S=me(),d={apiUrl:fe(),clienteId:ue(),position:A.position==="left"?"left":"right",bookingEnabled:!1,brandingText:"Powered by Vantelia",contactEmail:"",contactPhone:""},C=`ia_session_${d.clienteId}`,N=S.getItem(C)||ge();S.setItem(C,N);function ge(){var t;return(t=window.crypto)!=null&&t.randomUUID?`s_${window.crypto.randomUUID().replace(/-/g,"")}`:`s_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`}function V(){return N}function Q(e){e&&(N=e,S.setItem(C,e))}function Z(e={}){d.bookingEnabled=!!e.booking_enabled,d.brandingText=e.branding_text||d.brandingText,d.contactEmail=e.contact_email||"",d.contactPhone=e.contact_phone||""}function p(e){return String(e!=null?e:"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")}function b(){let e=document.getElementById("ia-w-msgs");e&&window.requestAnimationFrame(()=>{e.scrollTop=e.scrollHeight})}function E(e,t){let a=String((e==null?void 0:e.message)||"").trim();return a?a.includes("Failed to fetch")||a.includes("NetworkError")?"No se ha podido conectar con el asistente. Revisa la conexion o la URL del API.":a.includes("Dominio no autorizado")?"Este dominio no esta autorizado para usar el widget de este cliente.":a.includes("verificar el dominio de origen")?"El servidor no ha podido validar el dominio desde el que se carga el widget.":a.includes("limite temporal")?"Has realizado demasiadas solicitudes seguidas. Espera unos segundos y vuelve a intentarlo.":a.includes("ya no esta disponible")||a.includes("acaba de ser reservado")?"Ese horario acaba de dejar de estar disponible. Elige otro tramo.":a.includes("OPENAI_API_KEY")?"El asistente no esta disponible porque el backend no tiene configurada la clave de OpenAI.":a||t||"No se pudo completar la solicitud.":t||"No se pudo completar la solicitud."}function M(e){let t=e.getFullYear(),a=String(e.getMonth()+1).padStart(2,"0"),i=String(e.getDate()).padStart(2,"0");return`${t}-${a}-${i}`}async function x(e,t={}){let a=new AbortController,i=Number(t.timeoutMs||15e3),o=window.setTimeout(()=>a.abort(),i);try{let n=await fetch(e,{...t,headers:{Accept:"application/json",...t.headers||{}},signal:a.signal}),s=null,c="";try{c=await n.text(),s=c?JSON.parse(c):null}catch(v){s=null}if(!n.ok){let v=(s==null?void 0:s.detail)||(c?`Error ${n.status}: ${c.slice(0,240)}`:`Error ${n.status}.`);throw new Error(v)}return s}catch(n){throw(n==null?void 0:n.name)==="AbortError"?new Error("La solicitud ha tardado demasiado en responder."):n}finally{window.clearTimeout(o)}}var be=60,r={},ee=0,k=[],g=[],$=[];function te(e,t="smooth"){let a=document.getElementById("ia-w-msgs");!e||!a||window.requestAnimationFrame(()=>{let i=Math.max(0,e.offsetTop-8);a.scrollTo({top:i,behavior:t})})}function xe(){r={nombre:"",email:"",telefono:"",servicio:"",employeeId:"",employeeName:"",fecha:"",hora:"",notas:""},ee=0,k=[],g=[],$=[]}var H={nombre(e){return e?e.length<3?"Escribe al menos 3 caracteres.":/^[\p{L}\s'-]+$/u.test(e)?"":"Usa solo letras, espacios o apostrofes.":"El nombre es obligatorio."},email(e){return e?/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e)?"":"El email no es valido.":"El email es obligatorio."},telefono(e){if(!e)return"El telefono es obligatorio.";let t=e.replace(/[\s\-().]/g,"");return/^\+?\d{9,15}$/.test(t)?"":"Introduce un telefono valido."},fecha(e){return e?"":"Selecciona una fecha."},hora(e){return e?"":"Selecciona un horario."}};function z(e,t){let a=document.getElementById(e);if(!a)return;w(e),a.classList.add("ia-invalid");let i=document.createElement("div");i.className="ia-field-error",i.id=`${e}-error`,i.textContent=t,a.insertAdjacentElement("afterend",i)}function w(e){var a;let t=document.getElementById(e);t==null||t.classList.remove("ia-invalid"),(a=document.getElementById(`${e}-error`))==null||a.remove()}function D(e,t){let a=document.getElementById(e);if(!a)return!1;let i=a.value.trim(),o=H[t](i);return o?(z(e,o),!1):(w(e),!0)}async function he(){let e=await x(`${d.apiUrl}/servicios/${d.clienteId}`);k=Array.isArray(e.servicios)?e.servicios:[],k.length||(k=[{id:"consulta_general",nombre:"Consulta general"}])}async function ve(){let e=await x(`${d.apiUrl}/profesionales/${d.clienteId}`);if(g=Array.isArray(e.items)?e.items:[],!g.length)throw new Error("No hay profesionales disponibles para reservar en este momento.")}function X(e){if(!e)return;let t=g.find(o=>o.employee_id===r.employeeId),a=Array.isArray(t==null?void 0:t.service_ids)?t.service_ids:[],i=t&&!t.allows_all_services&&a.length?k.filter(o=>a.includes(o.id)):k;if(e.innerHTML="",e.disabled=!1,!i.length){let o=document.createElement("option");o.value="",o.textContent="No hay servicios disponibles",o.selected=!0,e.appendChild(o),e.disabled=!0;return}i.forEach(o=>{let n=document.createElement("option");n.value=o.id,n.textContent=o.nombre,e.appendChild(n)})}function ye(e,t){if(!(!e||!t)){if(g.length<=1){t.classList.add("hidden");let a=g[0];r.employeeId=(a==null?void 0:a.employee_id)||"",r.employeeName=(a==null?void 0:a.name)||"";return}t.classList.remove("hidden"),e.innerHTML='<option value="">Aleatorio</option>',g.forEach(a=>{let i=document.createElement("option");i.value=a.employee_id,i.textContent=a.role_label?`${a.name} - ${a.role_label}`:a.name,e.appendChild(i)}),r.employeeId="",r.employeeName="Aleatorio"}}function I(e){var i;ee=e;let t=document.getElementById("ia-form-cita");if(!t)return;let a=t.querySelector(".ia-form-body");t.querySelectorAll(".ia-form-step").forEach(o=>{o.classList.remove("active")}),t.querySelectorAll(".ia-form-step-dot").forEach((o,n)=>{o.classList.remove("active","done"),n<e&&o.classList.add("done"),n===e&&o.classList.add("active")}),(i=t.querySelector(`.ia-form-step[data-step="${e}"]`))==null||i.classList.add("active"),a&&(a.scrollTop=0),te(t),b()}async function we(e){let t=document.getElementById("ia-time-slots"),a=document.getElementById("ia-f-next2");if(!(!t||!a)){a.disabled=!0,t.innerHTML='<div class="ia-loading-slots"><span class="ia-spinner"></span><div>Consultando disponibilidad...</div></div>';try{let i=new URLSearchParams({cliente_id:d.clienteId,fecha:e});r.employeeId&&i.set("employee_id",r.employeeId),r.servicio&&i.set("servicio",r.servicio);let o=await x(`${d.apiUrl}/disponibilidad?${i.toString()}`);$=Array.isArray(o.slots)?o.slots:[],Ee()}catch(i){$=[],t.innerHTML=`<div class="ia-slot-error">${p(E(i,"No se ha podido cargar la disponibilidad."))}</div>`}}}function Ee(){let e=document.getElementById("ia-time-slots"),t=document.getElementById("ia-f-next2");if(!e||!t)return;if(e.innerHTML="",!$.length){e.innerHTML='<div class="ia-empty-slots">No hay horarios disponibles para este dia.</div>';return}let a=$.filter(n=>n.disponible).length;if(!a){e.innerHTML='<div class="ia-empty-slots">Todos los horarios de este dia estan ocupados.</div>';return}let i=document.createElement("div");i.className="ia-empty-slots",i.textContent=`${a} horario${a===1?"":"s"} disponible${a===1?"":"s"}`,e.appendChild(i);let o=document.createElement("div");o.className="ia-time-grid",$.forEach(n=>{let s=document.createElement("button");s.type="button",s.className=`ia-time-slot${n.disponible?"":" disabled"}`,s.disabled=!n.disponible,s.dataset.hora=n.hora,s.innerHTML=`${p(n.hora)}<small>${n.disponible?"Libre":"Ocupado"}</small>`,n.disponible&&s.addEventListener("click",()=>{o.querySelectorAll(".ia-time-slot").forEach(c=>c.classList.remove("selected")),s.classList.add("selected"),r.hora=n.hora,t.disabled=!1}),o.appendChild(s)}),e.appendChild(o)}function Ie(){let e=document.getElementById("ia-resumen");if(!e)return;let a=new Date(`${r.fecha}T12:00:00`).toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long",year:"numeric"});e.innerHTML=`
+    <div class="ia-resumen-row"><span>Nombre</span><span>${p(r.nombre)}</span></div>
+    <div class="ia-resumen-row"><span>Email</span><span>${p(r.email)}</span></div>
+    <div class="ia-resumen-row"><span>Telefono</span><span>${p(r.telefono)}</span></div>
+    ${r.employeeName?`<div class="ia-resumen-row"><span>Profesional</span><span>${p(r.employeeName)}</span></div>`:""}
+    <div class="ia-resumen-row"><span>Servicio</span><span>${p(r.servicio)}</span></div>
+    <div class="ia-resumen-row"><span>Fecha</span><span>${p(a)}</span></div>
+    <div class="ia-resumen-row"><span>Hora</span><span>${p(r.hora)}</span></div>
+    ${r.notas?`<div class="ia-resumen-row"><span>Notas</span><span>${p(r.notas)}</span></div>`:""}
+  `}function ae(){let e=[d.contactPhone,d.contactEmail].filter(Boolean);return e.length?` Tambien puedes contactar directamente por ${e.join(" / ")}.`:""}async function ke(){let e=document.getElementById("ia-f-confirm");if(e){e.disabled=!0,e.innerHTML='<span class="ia-spinner"></span>';try{let t=await x(`${d.apiUrl}/agendar`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({cliente_id:d.clienteId,nombre:r.nombre,email:r.email,telefono:r.telefono,servicio:r.servicio,employee_id:r.employeeId,fecha:r.fecha,hora:r.hora,notas:r.notas})}),a=document.getElementById("ia-form-cita");if(!a)return;let i=t.estado==="pending_review"?"Solicitud recibida":"Solicitud registrada",o=t.manage_url?`<a class="ia-form-btn secondary" href="${p(t.manage_url)}" target="_blank" rel="noreferrer">Gestionar cita</a>`:"",n=t.provider_booking_url?`<a class="ia-form-btn secondary" href="${p(t.provider_booking_url)}" target="_blank" rel="noreferrer">Abrir proveedor</a>`:"";a.innerHTML=`
+      <div class="ia-form-success">
+        <div class="ia-check">${t.estado==="pending_review"?"!":"OK"}</div>
+        <h4>${p(i)}</h4>
+        <p>${p(t.mensaje)}</p>
+        <p><strong>ID:</strong> ${p(t.booking_id)}</p>
+        <div class="ia-form-actions">
+          ${o}
+          ${n}
+        </div>
+      </div>
+    `,f(t.mensaje,"bot")}catch(t){e.disabled=!1,e.textContent="Confirmar solicitud",f(`${E(t,"No se ha podido registrar la solicitud.")}.${ae()}`.trim(),"bot")}}}async function ie(){var v,q,O,F,P,U,G,W;if(!d.bookingEnabled){f("La reserva online no esta habilitada para este cliente.","bot");return}if(document.getElementById("ia-form-cita")){f("Ya tienes un formulario de solicitud abierto en la conversacion.","bot");return}xe();try{await he(),await ve()}catch(l){f(E(l,"No se ha podido cargar el formulario de reserva.")+ae(),"bot");return}let e=document.getElementById("ia-w-msgs");if(!e)return;let t=document.createElement("div");t.className="ia-form-card",t.id="ia-form-cita",t.innerHTML=`
+    <div class="ia-form-header">
+      <h4>Solicitar cita</h4>
+      <p>Recogemos tus datos para que el equipo pueda confirmar la solicitud.</p>
+    </div>
+    <div class="ia-form-progress">
+      <div class="ia-form-step-dot active"></div>
+      <div class="ia-form-step-dot"></div>
+      <div class="ia-form-step-dot"></div>
+      <div class="ia-form-step-dot"></div>
+    </div>
+    <div class="ia-form-body">
+      <div class="ia-form-step active" data-step="0">
+        <label class="ia-form-label" for="ia-f-nombre">Nombre completo</label>
+        <input id="ia-f-nombre" type="text" autocomplete="name" maxlength="80" />
+
+        <label class="ia-form-label" for="ia-f-email">Email</label>
+        <input id="ia-f-email" type="email" autocomplete="email" maxlength="120" />
+
+        <label class="ia-form-label" for="ia-f-tel">Telefono</label>
+        <input id="ia-f-tel" type="tel" autocomplete="tel" maxlength="30" />
+
+        <div class="ia-form-actions">
+          <button id="ia-f-next0" class="ia-form-btn primary" type="button">Siguiente</button>
+        </div>
+      </div>
+
+      <div class="ia-form-step" data-step="1">
+        <div id="ia-f-employee-wrap" class="hidden">
+          <label class="ia-form-label" for="ia-f-employee">Profesional</label>
+          <select id="ia-f-employee"></select>
+        </div>
+
+        <label class="ia-form-label" for="ia-f-servicio">Servicio</label>
+        <select id="ia-f-servicio"></select>
+
+        <label class="ia-form-label" for="ia-f-notas">Notas adicionales</label>
+        <textarea id="ia-f-notas" rows="4" maxlength="500" placeholder="Cuentanos un poco mas sobre la consulta"></textarea>
+
+        <p class="ia-form-note">Tus datos se usaran solo para gestionar esta solicitud.</p>
+
+        <div class="ia-form-actions">
+          <button id="ia-f-back0" class="ia-form-btn secondary" type="button">Atras</button>
+          <button id="ia-f-next1" class="ia-form-btn primary" type="button">Siguiente</button>
+        </div>
+      </div>
+
+      <div class="ia-form-step" data-step="2">
+        <label class="ia-form-label" for="ia-f-fecha">Fecha</label>
+        <input id="ia-f-fecha" type="date" />
+
+        <label class="ia-form-label">Horarios disponibles</label>
+        <div id="ia-time-slots"></div>
+
+        <div class="ia-form-actions">
+          <button id="ia-f-back1" class="ia-form-btn secondary" type="button">Atras</button>
+          <button id="ia-f-next2" class="ia-form-btn primary" type="button" disabled>Siguiente</button>
+        </div>
+      </div>
+
+      <div class="ia-form-step" data-step="3">
+        <label class="ia-form-label">Resumen de la solicitud</label>
+        <div id="ia-resumen" class="ia-resumen"></div>
+
+        <div class="ia-form-actions">
+          <button id="ia-f-back2" class="ia-form-btn secondary" type="button">Atras</button>
+          <button id="ia-f-confirm" class="ia-form-btn primary" type="button">Confirmar solicitud</button>
+        </div>
+      </div>
+    </div>
+  `,e.appendChild(t),te(t,"auto");let a=document.getElementById("ia-f-servicio"),i=document.getElementById("ia-f-employee"),o=document.getElementById("ia-f-employee-wrap");ye(i,o),X(a),r.servicio=a&&!a.disabled?((v=a.options[0])==null?void 0:v.textContent)||"Consulta general":"";let n=document.getElementById("ia-f-fecha"),s=new Date;n.min=M(s);let c=new Date;c.setDate(c.getDate()+be),n.max=M(c),["ia-f-nombre","ia-f-email","ia-f-tel","ia-f-servicio","ia-f-fecha","ia-f-employee"].forEach(l=>{var m,u;(m=document.getElementById(l))==null||m.addEventListener("input",()=>w(l)),(u=document.getElementById(l))==null||u.addEventListener("change",()=>w(l))}),(q=document.getElementById("ia-f-next0"))==null||q.addEventListener("click",()=>{D("ia-f-nombre","nombre")&&D("ia-f-email","email")&&D("ia-f-tel","telefono")&&(r.nombre=document.getElementById("ia-f-nombre").value.trim(),r.email=document.getElementById("ia-f-email").value.trim(),r.telefono=document.getElementById("ia-f-tel").value.trim(),I(1))}),(O=document.getElementById("ia-f-next1"))==null||O.addEventListener("click",()=>{if(g.length>1){let m=g.find(u=>u.employee_id===(i==null?void 0:i.value));w("ia-f-employee"),r.employeeId=(m==null?void 0:m.employee_id)||"",r.employeeName=(m==null?void 0:m.name)||"Aleatorio"}let l=a==null?void 0:a.options[a.selectedIndex];if(!l||a!=null&&a.disabled){z("ia-f-servicio",r.employeeId?"Este profesional no tiene servicios disponibles.":"No hay servicios disponibles para esta solicitud.");return}w("ia-f-servicio"),r.servicio=l.textContent||"Consulta general",r.notas=document.getElementById("ia-f-notas").value.trim(),I(2)}),i==null||i.addEventListener("change",()=>{var u,R;let l=g.find(ce=>ce.employee_id===i.value);r.employeeId=(l==null?void 0:l.employee_id)||"",r.employeeName=(l==null?void 0:l.name)||"Aleatorio",X(a),r.servicio=a&&!a.disabled&&((u=a.options[a.selectedIndex])==null?void 0:u.textContent)||"",r.fecha="",r.hora="",n&&(n.value="");let m=document.getElementById("ia-time-slots");m&&(m.innerHTML=""),(R=document.getElementById("ia-f-next2"))==null||R.setAttribute("disabled","disabled")}),n==null||n.addEventListener("change",async l=>{let m=l.target.value,u=H.fecha(m);if(u){z("ia-f-fecha",u);return}w("ia-f-fecha"),r.fecha=m,r.hora="",await we(m)}),a==null||a.addEventListener("change",()=>{let l=a.options[a.selectedIndex];r.servicio=(l==null?void 0:l.textContent)||""}),(F=document.getElementById("ia-f-next2"))==null||F.addEventListener("click",()=>{let l=H.hora(r.hora);if(l){f(l,"bot");return}Ie(),I(3)}),(P=document.getElementById("ia-f-confirm"))==null||P.addEventListener("click",ke),(U=document.getElementById("ia-f-back0"))==null||U.addEventListener("click",()=>I(0)),(G=document.getElementById("ia-f-back1"))==null||G.addEventListener("click",()=>I(1)),(W=document.getElementById("ia-f-back2"))==null||W.addEventListener("click",()=>I(2)),b()}var j=!1;function $e(e){return e.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")}function Be(e){return e.replace(/\*\*(.+?)\*\*/g,"$1")}function Le(e){let a=p(e||"").split(`
+`).map(s=>s.trim()).filter(Boolean);if(!a.length)return"<p>No hay contenido disponible.</p>";let i="",o=[],n=()=>{o.length&&(i+='<ul class="ia-rich-list">',o.forEach(s=>{let c=s.trim(),v=/:$/.test(c)&&!c.slice(0,-1).includes(":");i+=`<li class="${v?"ia-list-heading":""}">${Be(c)}</li>`}),i+="</ul>",o=[])};return a.forEach(s=>{if(/^[-*•]\s+/.test(s)||/^\d+\.\s+/.test(s)){o.push(s.replace(/^([-*•]|\d+\.)\s+/,""));return}n(),i+=`<p>${$e(s)}</p>`}),n(),i}function f(e,t){let a=document.getElementById("ia-w-msgs");if(!a)return null;let i=document.createElement("div");return i.className=`ia-msg ${t}`,t==="bot"?i.innerHTML=Le(e):i.textContent=e,a.appendChild(i),b(),i}function ne(){let e=document.getElementById("ia-w-msgs");if(!e||document.getElementById("ia-w-start-actions"))return null;let t=document.createElement("div");return t.className="ia-msg bot ia-action-card",t.id="ia-w-start-actions",t.innerHTML=`
+    <p><strong>\xBFQu\xE9 quieres hacer ahora?</strong></p>
+    <p>Puedo ayudarte a resolver dudas, comparar opciones, estimar precio o encontrar la mejor recomendaci\xF3n antes de hablar con el equipo.</p>
+    <div class="ia-action-grid">
+      <button type="button" data-quick-message="Quiero agendar una cita">Agendar cita</button>
+      <button type="button" data-quick-message="Muestrame las preguntas frecuentes principales">Preguntas frecuentes</button>
+      <button type="button" data-quick-message="Quiero informacion sobre productos disponibles">Informacion productos</button>
+      <button type="button" data-quick-message="Recomiendame el producto que mejor encaja con mi caso">Recomendar producto</button>
+      <button type="button" data-quick-message="Quiero comparar productos, servicios o tratamientos antes de decidir">Comparar productos</button>
+      <button type="button" data-quick-message="Ayudame a estimar precio, tiempo o alcance aproximado">Estimar precio</button>
+    </div>
+  `,t.querySelectorAll("button[data-quick-message]").forEach(a=>{a.addEventListener("click",()=>{let i=a.getAttribute("data-quick-message")||"";L(i)})}),e.appendChild(t),b(),t}function _e(){let e=document.getElementById("ia-w-msgs");if(!e||document.getElementById("ia-w-typing"))return;let t=document.createElement("div");t.className="ia-msg typing",t.id="ia-w-typing",t.innerHTML='<div class="ia-dots"><span></span><span></span><span></span></div>',e.appendChild(t),b()}function oe(){var e;(e=document.getElementById("ia-w-typing"))==null||e.remove()}async function L(e=""){if(j)return;let t=document.getElementById("ia-w-input"),a=document.getElementById("ia-w-send");if(!t||!a)return;let o=((typeof e=="string"?e:"")||t.value).trim();if(o){j=!0,t.value="",t.disabled=!0,a.disabled=!0,f(o,"user"),_e();try{let n=await x(`${d.apiUrl}/chat`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({cliente_id:d.clienteId,mensaje:o,session_id:V()})});Q(n.session_id),oe(),f(n.respuesta,"bot"),n.mostrar_formulario&&d.bookingEnabled&&ie()}catch(n){oe(),f(E(n,"No se ha podido enviar el mensaje. Intentalo de nuevo en unos segundos."),"bot")}finally{j=!1,t.disabled=!1,a.disabled=!1,t.focus()}}}var h=!1;function re(){return`
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M4 6.5A3.5 3.5 0 0 1 7.5 3h9A3.5 3.5 0 0 1 20 6.5v6A3.5 3.5 0 0 1 16.5 16H9l-4.1 3.4c-.66.55-1.65.08-1.65-.78V6.5Z" />
+    </svg>
+  `}function se(){return`
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6L19 6.4 17.6 5 12 10.6 6.4 5Z" />
+    </svg>
+  `}function Te(e){h=e;let t=document.getElementById("ia-w-chat"),a=document.getElementById("ia-w-btn"),i=document.getElementById("ia-w-badge");!t||!a||(t.classList.toggle("visible",h),a.innerHTML=h?se():re(),a.setAttribute("aria-expanded",h?"true":"false"),a.classList.toggle("abierto",h),i&&(i.style.display="none"),h&&window.setTimeout(()=>{var o;(o=document.getElementById("ia-w-input"))==null||o.focus(),b()},120))}function _(e){Te(typeof e=="boolean"?e:!h)}function de(e){var a,i,o,n,s;if(document.getElementById("ia-w-container"))return;let t=document.createElement("div");t.id="ia-w-container",t.className=d.position==="left"?"ia-left":"ia-right",t.innerHTML=`
+    <div id="ia-w-badge">${p(e.bienvenida||"Necesitas ayuda?")}</div>
+    <button
+      id="ia-w-btn"
+      type="button"
+      aria-label="Abrir chat"
+      aria-controls="ia-w-chat"
+      aria-expanded="false"
+    >${re()}</button>
+    <section id="ia-w-chat" aria-label="Chat con asistente virtual">
+      <header id="ia-w-header">
+        <div id="ia-w-header-info">
+          <span class="ia-avatar" aria-hidden="true">${p(e.icono||"AI")}</span>
+          <div>
+            <p>${p(e.nombre||"Asistente virtual")}</p>
+            <p>Asistente oficial</p>
+          </div>
+        </div>
+        <button id="ia-w-close" type="button" aria-label="Cerrar chat">${se()}</button>
+      </header>
+      <div id="ia-w-msgs" role="log" aria-live="polite" aria-atomic="false"></div>
+      <div id="ia-w-input-area">
+        <input
+          id="ia-w-input"
+          type="text"
+          placeholder="Escribe tu mensaje..."
+          autocomplete="off"
+          maxlength="500"
+        />
+        <button id="ia-w-send" type="button" aria-label="Enviar mensaje">Enviar</button>
+      </div>
+    </section>
+  `,document.body.appendChild(t),f(e.bienvenida||"Hola, en que puedo ayudarte hoy?","bot"),ne(),(a=document.getElementById("ia-w-btn"))==null||a.addEventListener("click",()=>_()),(i=document.getElementById("ia-w-close"))==null||i.addEventListener("click",()=>_(!1)),(o=document.getElementById("ia-w-send"))==null||o.addEventListener("click",L),(n=document.getElementById("ia-w-input"))==null||n.addEventListener("keydown",c=>{c.key==="Enter"&&!c.shiftKey&&(c.preventDefault(),L())}),(s=document.getElementById("ia-w-badge"))==null||s.addEventListener("click",()=>_(!0)),document.addEventListener("keydown",c=>{c.key==="Escape"&&h&&_(!1)}),window.setTimeout(()=>{let c=document.getElementById("ia-w-badge");c&&!h&&(c.style.display="none")},9e3)}async function le(){var t;let e={nombre:"Asistente virtual",icono:"AI",color:"#1F6FEB",bienvenida:"Hola, soy tu asistente virtual. En que puedo ayudarte?",booking_enabled:!1,branding_text:"Powered by Vantelia",contact_email:"",contact_phone:""};try{e=await x(`${d.apiUrl}/cliente/${d.clienteId}`)}catch(a){console.warn("No se pudo cargar la configuracion publica del widget.",a)}Z(e),K(e.color||"#1F6FEB"),de(e),window.IA_WIDGET_OPEN_ON_LOAD&&((t=document.getElementById("ia-w-btn"))==null||t.click())}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",le,{once:!0}):le();})();
