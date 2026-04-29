@@ -57,7 +57,6 @@ FOOTER = """<footer class="site-footer" aria-label="Pie de página">
     <div class="footer-grid">
       <div class="footer-brand">
         <div class="footer-logo">
-          <img src="/assets/img/logo-letra.png" alt="Vantelia · IA y Marketing Digital" width="125" height="30" loading="lazy" decoding="async">
           <span class="brand-name">Vantelia</span>
         </div>
         <p class="footer-desc">
@@ -66,7 +65,7 @@ FOOTER = """<footer class="site-footer" aria-label="Pie de página">
         </p>
         <div class="footer-social" aria-label="Redes sociales">
           <a href="https://linkedin.com/company/vantelia" class="social-a" aria-label="LinkedIn" rel="noopener noreferrer" target="_blank">in</a>
-          <a href="mailto:info@vantelia.es" class="social-a" aria-label="Email">✉</a>
+          <a href="/consultas/" class="social-a" aria-label="Solicitar consulta">✉</a>
         </div>
       </div>
       <div class="footer-col">
@@ -83,7 +82,7 @@ FOOTER = """<footer class="site-footer" aria-label="Pie de página">
         <div class="col-links">
           <a href="/nosotros/">Nosotros</a>
           <a href="/faq/">Preguntas frecuentes</a>
-          <a href="mailto:info@vantelia.es">info@vantelia.es</a>
+          <a href="/consultas/">Solicitar consulta</a>
         </div>
       </div>
       <div class="footer-col">
@@ -203,7 +202,7 @@ PRIVACIDAD = f"""
 <h2 id="responsable">1. Responsable del tratamiento</h2>
 <p>Vantelia (en adelante, <strong>"Vantelia"</strong>, <strong>"nosotros"</strong>) es responsable del tratamiento de los datos personales recogidos a través de <a href="https://www.vantelia.es">www.vantelia.es</a>, de la plataforma <a href="https://app.vantelia.es">app.vantelia.es</a> y del widget de IA conversacional embebido en webs de nuestros clientes.</p>
 <ul>
-  <li><strong>Email de contacto:</strong> <a href="mailto:info@vantelia.es">info@vantelia.es</a></li>
+  <li><strong>Email de contacto:</strong> <a href="/consultas/">Solicitar consulta</a></li>
   <li><strong>Email del Delegado de Protección de Datos:</strong> <a href="mailto:dpo@vantelia.es">dpo@vantelia.es</a></li>
   <li><strong>Ámbito territorial:</strong> España y Espacio Económico Europeo</li>
 </ul>
@@ -338,7 +337,7 @@ TERMINOS = f"""
 </nav>
 
 <h2 id="identificacion">1. Identificación</h2>
-<p>Los presentes términos regulan el uso de los servicios prestados por <strong>Vantelia</strong>, accesibles a través de <a href="https://www.vantelia.es">www.vantelia.es</a> y <a href="https://app.vantelia.es">app.vantelia.es</a>. Datos de contacto: <a href="mailto:info@vantelia.es">info@vantelia.es</a>.</p>
+<p>Los presentes términos regulan el uso de los servicios prestados por <strong>Vantelia</strong>, accesibles a través de <a href="https://www.vantelia.es">www.vantelia.es</a> y <a href="https://app.vantelia.es">app.vantelia.es</a>. Datos de contacto: <a href="/consultas/">Solicitar consulta</a>.</p>
 
 <h2 id="objeto">2. Objeto y aceptación</h2>
 <p>Estos términos regulan la relación entre Vantelia y el usuario que accede al sitio web, contrata cualquier servicio o utiliza la plataforma. El uso del servicio implica la aceptación de estos términos y de la <a href="/legal/privacidad/">política de privacidad</a>.</p>
@@ -557,7 +556,7 @@ IA_RESPONSABLE = f"""
 </ul>
 
 <h2 id="contacto">10. Contacto</h2>
-<p>Para consultas sobre IA responsable: <a href="mailto:dpo@vantelia.es">dpo@vantelia.es</a> o <a href="mailto:info@vantelia.es">info@vantelia.es</a>.</p>
+<p>Para consultas sobre IA responsable: <a href="mailto:dpo@vantelia.es">dpo@vantelia.es</a> o <a href="/consultas/">Solicitar consulta</a>.</p>
 """
 
 PAGES = {
