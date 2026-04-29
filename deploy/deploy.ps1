@@ -163,7 +163,7 @@ New-Item -ItemType Directory -Path $StageProjectPath -Force | Out-Null
 Invoke-RobocopyChecked -Source $ProjectRoot -Destination $StageProjectPath -ExtraArguments @(
     "/E",
     "/XD", ".git", ".git-inner-backup", ".venv", ".pytest_cache", "node_modules", "storage", "data", "backups", "__pycache__", "Identidad Visual", "service_account", "site_exports",
-    "/XF", ".env", "config.json"
+    "/XF", ".env", ".env.ftp", "env.ftp", "config.json"
 )
 
 $tarArgs = @(
@@ -249,7 +249,7 @@ rm -f "$ARCHIVE_PATH"
 '@
 
 Write-Step "Actualizando el VPS y reconstruyendo Docker"
-$remoteScript | & ssh.exe @sshArgsBase $ServerHost "bash -s -- '$RemoteBase' '$RemoteProject' '$ArchiveName'"
+($remoteScript -replace "`r`n", "`n") | & ssh.exe @sshArgsBase $ServerHost "bash -s -- '$RemoteBase' '$RemoteProject' '$ArchiveName'"
 if ($LASTEXITCODE -ne 0) {
     throw "La actualizacion remota ha fallado."
 }

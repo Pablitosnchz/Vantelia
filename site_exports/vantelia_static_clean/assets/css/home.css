@@ -219,8 +219,18 @@
       display: flex; align-items: center; overflow: hidden;
     }
     #particles { position: absolute; inset: 0; z-index: 0; }
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(3, 9, 20, .86) 0%, rgba(3, 9, 20, .58) 42%, rgba(3, 9, 20, .14) 72%, transparent 100%),
+        radial-gradient(ellipse at 20% 52%, rgba(0, 209, 255, .13), transparent 48%);
+    }
     .hero-bg {
-      position: absolute; inset: 0; z-index: 1;
+      position: absolute; inset: 0; z-index: 0;
       background:
         linear-gradient(160deg, rgba(10,18,38,.88) 0%, rgba(8,14,30,.9) 100%),
         radial-gradient(ellipse at 18% 45%, rgba(0,209,255,.12), transparent 50%),
@@ -233,7 +243,21 @@
       align-items: center; gap: 60px;
       padding: calc(var(--nav-h) + 72px) 0 100px;
     }
-    .hero-copy { display: grid; gap: 22px; }
+    .hero-copy {
+      position: relative;
+      z-index: 4;
+      display: grid;
+      gap: 22px;
+    }
+    .hero-copy .hero-badge,
+    .hero-copy h1,
+    .hero-copy .hero-lead,
+    .hero-copy .hero-actions,
+    .hero-copy .hero-trust {
+      opacity: 1;
+      transform: none;
+      animation: none;
+    }
 
     .hero-badge {
       display: inline-flex; align-items: center; gap: 8px;
@@ -258,9 +282,17 @@
       font-size: clamp(3rem,5.6vw,5.2rem);
       line-height: 1.0; letter-spacing: -.045em;
       animation: fadeUp .7s ease .35s both;
+      color: #ffffff !important;
+      -webkit-text-fill-color: #ffffff !important;
+      text-shadow: 0 14px 38px rgba(0,0,0,.62);
+    }
+    .hero h1 .gradient-text {
+      -webkit-text-fill-color: transparent !important;
+      text-shadow: none;
+      filter: drop-shadow(0 0 18px rgba(0,209,255,.18));
     }
     .hero-lead {
-      font-size: 1.14rem; color: var(--muted); line-height: 1.72;
+      font-size: 1.14rem; color: #d4e3ee; line-height: 1.72;
       max-width: 480px;
       animation: fadeUp .7s ease .5s both;
     }
@@ -270,7 +302,7 @@
     }
     .hero-trust {
       display: flex; align-items: center; gap: 12px;
-      color: var(--muted-2); font-size: .86rem;
+      color: #9fb2c2; font-size: .86rem;
       animation: fadeUp .7s ease .75s both;
     }
     .avatars { display: flex; }

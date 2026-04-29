@@ -127,17 +127,39 @@
     ]
   }
   </script>
-────  <link rel="stylesheet" href="/assets/css/home.css">
-ltas/" class="btn btn-primary">Consulta gratuita</a>
+</head>
+<body>
 
+<!-- Cursor ambient glow (desktop) -->
+<div id="cursor-glow" aria-hidden="true"></div>
+
+<header class="site-header" id="site-header">
+  <div class="shell nav-inner">
+    <a href="/" class="brand" aria-label="Vantelia · Inicio">
+      <img src="/assets/img/logo-letra.png" alt="Logo Vantelia · Agencia de IA y Marketing B2B" width="200" height="48" fetchpriority="high" decoding="async">
+    </a>
+    <nav aria-label="Navegación principal">
+      <ul class="nav-links">
+        <li><a href="/servicios/">Servicios</a></li>
+        <li><a href="/plataforma/">Plataforma</a></li>
+        <li><a href="/resultados/">Resultados</a></li>
+        <li><a href="/nosotros/">Nosotros</a></li>
+        <li><a href="/faq/">FAQ</a></li>
+      </ul>
+    </nav>
+    <div style="display:flex;gap:10px;align-items:center" class="nav-cta">
+      <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener">
+        <span class="dot-live" aria-hidden="true"></span>Acceso plataforma
+      </a>
+      <a href="/consultas/" class="btn btn-primary">Consulta gratuita</a>
     </div>
-
     <button class="nav-toggle" id="nav-toggle" aria-label="Abrir menú" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
   </div>
-</he      <img src="/assets/img/logo-letra.png" alt="Logo Vantelia · Agencia de IA y Marketing B2B" width="200" height="48" fetchpriority="high" decoding="async">
-obile-menu" role="dialog" aria-label="Menú de navegación">
+</header>
+
+<div class="mobile-menu" id="mobile-menu" role="dialog" aria-label="Menú de navegación">
   <button class="mobile-close" id="mobile-close" aria-label="Cerrar menú">✕</button>
   <a href="/servicios/"  class="mm-link">Servicios</a>
   <a href="/plataforma/" class="mm-link">Plataforma</a>
@@ -215,8 +237,9 @@ obile-menu" role="dialog" aria-label="Menú de navegación">
           <div class="msg msg-ai">
             Perfecto. Basándome en tu objetivo, te recomiendo nuestro
             Hydrafacial Premium. ¿Te gustaría ver disponibilidad?
-          </div>       <img class="hero-mark" src="/assets/img/logo-vantelia.png" alt="" aria-hidden="true" width="360" height="314" loading="lazy" decoding="async">
-an><span></span>
+          </div>
+          <div class="typing" aria-hidden="true">
+            <span></span><span></span><span></span>
           </div>
         </div>
 
@@ -635,7 +658,7 @@ an><span></span>
             </div>
             <div class="portal-arrow">↗</div>
           </a>
-          <a href="https://app.vantelia.es/portal" class="portal-card" target="_blank" rel="noopener">
+          <a href="https://app.vantelia.es/acceso" class="portal-card" target="_blank" rel="noopener">
             <div class="portal-ico client">👤</div>
             <div class="portal-body">
               <h4>Portal de cliente</h4>
@@ -920,7 +943,7 @@ cios/">Agenda inteligente</a>
         <div class="col-links">
           <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso a la plataforma</a>
           <a href="https://app.vantelia.es/dashboard" target="_blank" rel="noopener">Panel de administración</a>
-          <a href="https://app.vantelia.es/portal" target="_blank" rel="noopener">Portal de cliente</a>
+          <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Portal de cliente</a>
           <a href="mailto:info@vantelia.es">info@vantelia.es</a>
           <a href="/consultas/">Consulta gratuita</a>
           <a href="/legal/privacidad">Privacidad</a>
@@ -941,32 +964,12 @@ cios/">Agenda inteligente</a>
   </div>
 </footer>
 
-<!-- ══════════════ SCRIPTS ══════════════ -->
-<script>
-/* ── Particle canvas ──────────────────────────────── */
-(function () {
-  const canvas = document.getElementById('particles');
-  const ctx    = canvas.getContext('2d');
-  let pts = [], raf;
+<script src="/assets/js/home.js" defer></script>
+<script
+  src="https://app.vantelia.es/widget/widget.min.js?v=1777076198"
+  data-api="https://app.vantelia.es"
+  data-client="Vantelia"
+  data-position="right"></script>
 
-  function resize() {
-    canvas.width  = canvas.offsetWidhefsetHeight;
-  }
-
-  function Pt() {
-    this.x  = Math.random() * canvas.width;
-    this.y  = Math.random() * canvas.height;
-    this.vx = (Math.random() - .5) * .38;
-    this.vy = (Math.random() - .5) * .38;
-    this.r  = Math.random() * 1.4 + .5;
-    this.o  = Math.random() * .45 + .1;
-  }
-  Pt.prototype.tick = function () {
-    this.x += this.vx; this.y += this.vy;
-    if (this.x < 0 || this.x > canvas.width)  this.vx *= -1;
-    if (this.y < 0 || this.y > canvas.height)  this.vy *= -1;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,209,255,' + this.o + ')';
-    ctx.fill();
-  }<<script src="/assets/js/home.js" defer></script>
+</body>
+</html>

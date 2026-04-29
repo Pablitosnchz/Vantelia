@@ -61,7 +61,7 @@
     const container = document.querySelector("[data-site-footer]");
     if (!container) return;
 
-    const email = getConfigValue("contactEmail", "hola@vantelia.com");
+    const email = getConfigValue("contactEmail", "info@vantelia.es");
     const leadEmail = getConfigValue("leadEmail", email);
     const phone = getConfigValue("phone", "+34 912 345 678");
 
@@ -209,7 +209,7 @@
         }
       }
 
-      const targetEmail = getConfigValue("leadEmail", getConfigValue("contactEmail", "hola@vantelia.com"));
+      const targetEmail = getConfigValue("leadEmail", getConfigValue("contactEmail", "info@vantelia.es"));
       const subject = encodeURIComponent("Solicitud de auditoria desde Vantelia");
       const body = encodeURIComponent(`Nombre: ${name}\nCorreo: ${email}\n\nContexto:\n${message}`);
       window.location.href = `mailto:${targetEmail}?subject=${subject}&body=${body}`;
@@ -246,7 +246,7 @@
         }
       }
 
-      const targetEmail = getConfigValue("contactEmail", "hola@vantelia.com");
+      const targetEmail = getConfigValue("contactEmail", "info@vantelia.es");
       const subject = encodeURIComponent("Alta newsletter Vantelia");
       const body = encodeURIComponent(`Quiero suscribirme con este correo: ${email}`);
       window.location.href = `mailto:${targetEmail}?subject=${subject}&body=${body}`;

@@ -31,56 +31,397 @@
 {
   "@context": "https://schema.org",
   "@graph": [
-    {
-      "@type": "Organization",
-      "@id": "https://www.vantelia.es/#org"
-    },
+    { "@type": "Organization", "@id": "https://www.vantelia.es/#org" },
     {
       "@type": "BreadcrumbList",
       "itemListElement": [
-        {
-          "@type": "ListItem",
-          "position": 1,
-          "name": "Inicio",
-          "item": "https://www.vantelia.es/"
-        },
-        {
-          "@type": "ListItem",
-          "position": 2,
-          "name": "Consulta gratuita",
-          "item": "https://www.vantelia.es/consultas/"
-        }
+        { "@type": "ListItem", "position": 1, "name": "Inicio", "item": "https://www.vantelia.es/" },
+        { "@type": "ListItem", "position": 2, "name": "Consulta gratuita", "item": "https://www.vantelia.es/consultas/" }
       ]
     },
     {
-      "@type": "WebPage",
+      "@type": "ContactPage",
       "url": "https://www.vantelia.es/consultas/",
       "name": "Consulta Gratuita de IA y Marketing B2B | Vantelia",
       "description": "Solicita una consulta gratuita con Vantelia. Auditamos captación, conversión, automatización e IA en tu empresa B2B y te damos una hoja de ruta clara.",
       "inLanguage": "es-ES",
-      "isPartOf": {
-        "@id": "https://www.vantelia.es/#website"
-      },
-      "publisher": {
-        "@id": "https://www.vantelia.es/#org"
-      }
-    },
-    {
-      "@type": "ContactPage",
-      "name": "Consulta gratuita Vantelia",
-      "url": "https://www.vantelia.es/consultas/",
-      "description": "Página de contacto y solicitud de consulta gratuita con Vantelia.",
-      "publisher": {
-        "@id": "https://www.vantelia.es/#org"
-      }
+      "publisher": { "@id": "https://www.vantelia.es/#org" }
     }
   ]
 }
   </script>
+
+  <style>
+    /* ============================================================
+       /consultas/ — estilos específicos de página
+       El sistema de diseño base viene de /assets/css/home.css
+       ============================================================ */
+
+    /* ---- HERO ---- */
+    .consultas-hero {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 140px 0 120px;
+      overflow: hidden;
+    }
+    .consultas-hero .shell {
+      position: relative;
+      z-index: 2;
+      max-width: 840px;
+    }
+    .consultas-hero h1 {
+      font-size: clamp(2.8rem, 5.8vw, 5.2rem);
+      font-weight: 700;
+      line-height: 1.04;
+      letter-spacing: -0.04em;
+      margin-bottom: 1.4rem;
+      color: var(--text);
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, #00D1FF 20%, #00F5D4 80%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .consultas-hero .hero-lead {
+      max-width: 570px;
+      margin-inline: auto;
+      margin-bottom: 2.5rem;
+      font-size: 1.08rem;
+      color: var(--muted);
+      line-height: 1.72;
+    }
+    .hero-cta-group {
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 2.8rem;
+    }
+    .hero-trust-row {
+      display: flex;
+      gap: 1.8rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .hero-trust-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.84rem;
+      color: var(--muted);
+    }
+    .hero-trust-item svg { color: var(--primary); flex-shrink: 0; }
+
+    /* Fondo de rejilla tecnológica */
+    .hero-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,209,255,0.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,209,255,0.022) 1px, transparent 1px);
+      background-size: 64px 64px;
+      mask-image: radial-gradient(ellipse 72% 68% at 50% 50%, black 15%, transparent 100%);
+      pointer-events: none;
+    }
+
+    /* Orbes decorativos */
+    .hero-orb { position: absolute; border-radius: 50%; pointer-events: none; }
+    .orb-c {
+      width: 680px; height: 680px;
+      background: radial-gradient(circle, rgba(0,209,255,0.07) 0%, transparent 70%);
+      top: -200px; right: -150px;
+      animation: orbFloat 9s ease-in-out infinite;
+    }
+    .orb-t {
+      width: 440px; height: 440px;
+      background: radial-gradient(circle, rgba(0,245,212,0.055) 0%, transparent 70%);
+      bottom: -80px; left: -80px;
+      animation: orbFloat 11s ease-in-out infinite reverse;
+    }
+    @keyframes orbFloat {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-28px) scale(1.04); }
+    }
+
+    /* Indicador de scroll */
+    .scroll-down {
+      position: absolute;
+      bottom: 2.2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted-2);
+      font-size: 0.72rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      text-decoration: none;
+      transition: color 0.2s;
+      z-index: 2;
+    }
+    .scroll-down:hover { color: var(--primary); }
+    .scroll-down svg { animation: arrowPulse 2s ease-in-out infinite; }
+    @keyframes arrowPulse {
+      0%, 100% { transform: translateY(0); opacity: 0.55; }
+      50% { transform: translateY(7px); opacity: 1; }
+    }
+
+    /* ---- SECCIÓN FORMULARIO ---- */
+    .form-section { padding: 96px 0 120px; }
+    .form-shell { max-width: 1080px; }
+    .form-section-head { text-align: center; margin-bottom: 60px; }
+    .form-section-head h2 {
+      font-size: clamp(1.8rem, 3vw, 2.5rem);
+      font-weight: 700;
+      letter-spacing: -0.032em;
+      margin: 0.5rem 0 0.65rem;
+    }
+    .form-section-head p {
+      color: var(--muted);
+      max-width: 460px;
+      margin-inline: auto;
+      line-height: 1.65;
+    }
+    .form-layout {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 48px;
+      align-items: start;
+    }
+
+    /* Tarjeta del formulario */
+    .form-card {
+      background: rgba(255,255,255,0.025);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 44px 48px;
+      position: relative;
+      backdrop-filter: blur(10px);
+    }
+    .form-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 12%; right: 12%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(0,209,255,0.45), transparent);
+    }
+
+    /* Campos */
+    .f-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .f-group { display: flex; flex-direction: column; gap: 7px; margin-bottom: 18px; }
+    .f-label { font-size: 0.82rem; font-weight: 600; color: var(--text); letter-spacing: 0.015em; }
+    .f-req { color: var(--primary); margin-left: 1px; }
+    .f-opt { font-weight: 400; color: var(--muted-2); font-size: 0.78rem; }
+    .f-input {
+      background: rgba(255,255,255,0.038);
+      border: 1.5px solid rgba(255,255,255,0.09);
+      border-radius: 10px;
+      padding: 12px 15px;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.93rem;
+      color: var(--text);
+      width: 100%;
+      box-sizing: border-box;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+      -webkit-appearance: none;
+    }
+    .f-input::placeholder { color: var(--muted-2); font-size: 0.87rem; }
+    .f-input:hover {
+      border-color: rgba(0,209,255,0.28);
+      background: rgba(255,255,255,0.052);
+    }
+    .f-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(0,209,255,0.11);
+      background: rgba(255,255,255,0.056);
+    }
+    select.f-input {
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%238fa3b4' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 38px;
+    }
+    select.f-input option { background: #0d1530; color: var(--text); }
+    textarea.f-input { resize: vertical; min-height: 108px; line-height: 1.6; }
+    .f-group.has-error .f-input {
+      border-color: #ff4d6d;
+      box-shadow: 0 0 0 3px rgba(255,77,109,0.09);
+    }
+    .f-error { font-size: 0.76rem; color: #ff6b84; display: none; }
+    .f-group.has-error .f-error { display: block; }
+
+    /* Alerta de error */
+    .form-alert {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255,77,109,0.07);
+      border: 1px solid rgba(255,77,109,0.22);
+      border-radius: 10px;
+      padding: 12px 15px;
+      font-size: 0.86rem;
+      color: #ff8096;
+      margin-bottom: 18px;
+    }
+    .form-alert.visible { display: flex; }
+
+    /* Botón de envío */
+    .submit-btn {
+      width: 100%;
+      justify-content: center;
+      height: 52px;
+      font-size: 1rem;
+      margin-top: 4px;
+      gap: 10px;
+    }
+    .btn-spinner {
+      display: none;
+      width: 17px; height: 17px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: btnSpin 0.65s linear infinite;
+    }
+    .submit-btn.loading .btn-text { display: none; }
+    .submit-btn.loading .btn-spinner { display: block; }
+    .submit-btn.loading { pointer-events: none; opacity: 0.78; }
+    @keyframes btnSpin { to { transform: rotate(360deg); } }
+
+    .form-legal-note {
+      margin-top: 13px;
+      font-size: 0.76rem;
+      color: var(--muted-2);
+      text-align: center;
+      line-height: 1.5;
+    }
+    .form-legal-note a {
+      color: var(--muted);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    /* Estado de éxito */
+    .form-success-state { text-align: center; padding: 36px 16px; }
+    .success-ico {
+      width: 68px; height: 68px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(0,209,255,0.14), rgba(0,245,212,0.12));
+      border: 1.5px solid rgba(0,245,212,0.38);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 1.5rem;
+      color: var(--accent);
+      animation: popIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275);
+    }
+    @keyframes popIn {
+      from { transform: scale(0.4); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .form-success-state h3 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.65rem; }
+    .form-success-state p { color: var(--muted); font-size: 0.94rem; line-height: 1.65; }
+    .form-success-state .btn { margin-top: 1.6rem; }
+
+    /* Columna de confianza */
+    .trust-col {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      position: sticky;
+      top: 88px;
+    }
+    .trust-item {
+      background: rgba(255,255,255,0.028);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 20px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      transition: border-color 0.25s, transform 0.25s;
+    }
+    .trust-item:hover {
+      border-color: rgba(0,209,255,0.26);
+      transform: translateX(4px);
+    }
+    .trust-ico {
+      width: 38px; height: 38px;
+      border-radius: 9px;
+      background: var(--primary-dim);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--primary);
+      flex-shrink: 0;
+    }
+    .trust-body h4 { font-size: 0.88rem; font-weight: 600; margin-bottom: 3px; }
+    .trust-body p { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+    .trust-stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .trust-stat {
+      background: rgba(255,255,255,0.028);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+    .s-val {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.65rem; font-weight: 700;
+      background: linear-gradient(135deg, #00D1FF, #00F5D4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .s-label { font-size: 0.73rem; color: var(--muted); }
+    .trust-quote {
+      background: linear-gradient(135deg, rgba(0,209,255,0.055), rgba(0,245,212,0.038));
+      border: 1px solid rgba(0,209,255,0.18);
+      border-radius: 14px;
+      padding: 20px 22px;
+    }
+    .trust-quote blockquote {
+      font-size: 0.87rem;
+      color: var(--muted);
+      line-height: 1.62;
+      font-style: italic;
+      margin: 0 0 10px;
+    }
+    .trust-quote cite { font-size: 0.76rem; color: var(--primary); font-weight: 600; font-style: normal; }
+
+    /* ---- RESPONSIVE ---- */
+    @media (max-width: 960px) {
+      .form-layout { grid-template-columns: 1fr; }
+      .trust-col {
+        position: static;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .trust-stat-row,
+      .trust-quote { grid-column: span 2; }
+    }
+    @media (max-width: 620px) {
+      .f-row { grid-template-columns: 1fr; }
+      .form-card { padding: 28px 22px; }
+      .form-section { padding: 68px 0 90px; }
+      .hero-trust-row { gap: 1rem; }
+      .consultas-hero { padding: 120px 0 90px; }
+      .trust-col { grid-template-columns: 1fr; }
+      .trust-stat-row,
+      .trust-quote { grid-column: span 1; }
+    }
+  </style>
 </head>
 <body>
 
-<!-- Cursor ambient glow (desktop) -->
 <div id="cursor-glow" aria-hidden="true"></div>
 
 <header class="site-header" id="site-header">
@@ -101,7 +442,7 @@
       <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener">
         <span class="dot-live" aria-hidden="true"></span>Acceso plataforma
       </a>
-      <a href="/consultas/" class="btn btn-primary">Consulta gratuita</a>
+      <a href="/consultas/" class="btn btn-primary" aria-current="page">Consulta gratuita</a>
     </div>
     <button class="nav-toggle" id="nav-toggle" aria-label="Abrir menú" aria-expanded="false">
       <span></span><span></span><span></span>
@@ -119,25 +460,220 @@
   <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener" style="margin-top:8px;font-size:1rem;height:48px;padding:0 28px">
     <span class="dot-live"></span>Acceso plataforma
   </a>
-  <a href="/consultas/"   class="btn btn-primary btn-lg" style="margin-top:8px">Consulta gratuita</a>
+  <a href="#formulario" class="btn btn-primary btn-lg" style="margin-top:8px">Consulta gratuita</a>
 </div>
 
-<section class="subpage-hero" aria-label="Cabecera de página">
+<!-- ============================================================
+     HERO — full viewport con CTA hacia el formulario
+     ============================================================ -->
+<section class="consultas-hero" aria-label="Consulta gratuita">
   <div class="hero-bg" aria-hidden="true"></div>
+  <div class="hero-grid" aria-hidden="true"></div>
+  <div class="hero-orb orb-c" aria-hidden="true"></div>
+  <div class="hero-orb orb-t" aria-hidden="true"></div>
+
   <div class="shell">
-    <nav class="breadcrumbs" aria-label="Migas de pan"><a href="/">Inicio</a> <span class="sep" aria-hidden="true">/</span> <span aria-current="page">Consulta gratuita</span></nav>
+    <nav class="breadcrumbs" aria-label="Migas de pan">
+      <a href="/">Inicio</a>
+      <span class="sep" aria-hidden="true">/</span>
+      <span aria-current="page">Consulta gratuita</span>
+    </nav>
+
     <div class="hero-badge">
       <span class="badge-dot" aria-hidden="true"></span>
-      Consulta gratuita
+      Consulta gratuita · Sin compromiso
     </div>
-    <h1>Auditamos tu sistema de captación, conversión e IA. Sin compromiso.</h1>
-    <p class="hero-lead">En 30 minutos revisamos tu web, embudo y operación. Te decimos qué priorizar y qué ignorar. Sin formularios infinitos ni propuestas genéricas.</p>
-    <div class="hero-actions"><a href="mailto:info@vantelia.es" class="btn btn-primary btn-lg">Escribir a info@vantelia.es</a><a href="/servicios/" class="btn btn-ghost btn-lg">Ver servicios</a></div>
+
+    <h1>Solicita tu consulta<br><span class="gradient-text">gratuita</span></h1>
+
+    <p class="hero-lead">
+      En 30 minutos auditamos tu web, embudo y estrategia de IA. Sales con un roadmap claro y accionable, uses nuestros servicios o no.
+    </p>
+
+    <div class="hero-cta-group">
+      <a href="#formulario" class="btn btn-primary btn-lg">Solicitar consulta</a>
+      <a href="/servicios/" class="btn btn-ghost btn-lg">Ver servicios</a>
+    </div>
+
+    <div class="hero-trust-row" role="list">
+      <span class="hero-trust-item" role="listitem">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+        Respuesta en menos de 24h
+      </span>
+      <span class="hero-trust-item" role="listitem">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+        Sin compromiso de contratación
+      </span>
+      <span class="hero-trust-item" role="listitem">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+        Equipo senior
+      </span>
+    </div>
+  </div>
+
+  <a href="#formulario" class="scroll-down" aria-label="Ir al formulario">
+    <span>Formulario</span>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+  </a>
+</section>
+
+<div class="glow-line" aria-hidden="true"></div>
+
+<!-- ============================================================
+     FORMULARIO + CONFIANZA
+     ============================================================ -->
+<section id="formulario" class="form-section" aria-label="Formulario de consulta gratuita">
+  <div class="shell form-shell">
+
+    <div class="form-section-head reveal">
+      <span class="eyebrow">30 minutos de valor real</span>
+      <h2>Cuéntanos tu situación</h2>
+      <p>Analizamos tu caso antes de la llamada. Sin presentaciones corporativas ni propuestas enlatadas.</p>
+    </div>
+
+    <div class="form-layout">
+
+      <!-- ---- Tarjeta del formulario ---- -->
+      <div class="form-card reveal">
+
+        <!-- Estado de éxito (oculto por defecto) -->
+        <div id="form-success-state" class="form-success-state" hidden>
+          <div class="success-ico" aria-hidden="true">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <h3>¡Solicitud recibida!</h3>
+          <p>Te respondemos en menos de 24 horas. Revisa tu bandeja de entrada (y la de spam, por si acaso).</p>
+          <a href="/" class="btn btn-ghost">Volver al inicio</a>
+        </div>
+
+        <!-- Formulario -->
+        <form id="consulta-form" novalidate>
+
+          <div class="form-alert" id="form-alert" role="alert" aria-live="assertive">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span id="form-alert-msg">Hubo un error al enviar. Por favor, inténtalo de nuevo.</span>
+          </div>
+
+          <div class="f-row">
+            <div class="f-group" id="fg-nombre">
+              <label class="f-label" for="nombre">Nombre <span class="f-req" aria-hidden="true">*</span></label>
+              <input class="f-input" type="text" id="nombre" name="nombre"
+                placeholder="Tu nombre" required autocomplete="given-name"
+                aria-required="true" aria-describedby="err-nombre">
+              <span class="f-error" id="err-nombre" role="alert">Por favor, introduce tu nombre</span>
+            </div>
+            <div class="f-group" id="fg-email">
+              <label class="f-label" for="email">Email <span class="f-req" aria-hidden="true">*</span></label>
+              <input class="f-input" type="email" id="email" name="email"
+                placeholder="tu@empresa.com" required autocomplete="email"
+                aria-required="true" aria-describedby="err-email">
+              <span class="f-error" id="err-email" role="alert">Introduce un email válido</span>
+            </div>
+          </div>
+
+          <div class="f-row">
+            <div class="f-group">
+              <label class="f-label" for="telefono">Teléfono <span class="f-opt">(opcional)</span></label>
+              <input class="f-input" type="tel" id="telefono" name="telefono"
+                placeholder="+34 600 000 000" autocomplete="tel">
+            </div>
+            <div class="f-group">
+              <label class="f-label" for="empresa">Empresa <span class="f-opt">(opcional)</span></label>
+              <input class="f-input" type="text" id="empresa" name="empresa"
+                placeholder="Nombre de tu empresa" autocomplete="organization">
+            </div>
+          </div>
+
+          <div class="f-group">
+            <label class="f-label" for="servicio">¿Qué te interesa?</label>
+            <select class="f-input" id="servicio" name="servicio">
+              <option value="" disabled selected>Selecciona un área...</option>
+              <option value="asistente-ia">Asistente IA / Chatbot</option>
+              <option value="automatizacion">Automatización de procesos</option>
+              <option value="marketing">Marketing digital B2B</option>
+              <option value="seo">SEO y posicionamiento</option>
+              <option value="whatsapp-ia">WhatsApp IA</option>
+              <option value="agenda">Agenda inteligente</option>
+              <option value="todo">Todo lo anterior</option>
+              <option value="otro">Otro / No lo sé aún</option>
+            </select>
+          </div>
+
+          <div class="f-group">
+            <label class="f-label" for="mensaje">Mensaje <span class="f-opt">(opcional)</span></label>
+            <textarea class="f-input" id="mensaje" name="mensaje" rows="4"
+              placeholder="Cuéntanos brevemente tu situación, tu web o el reto principal que quieres resolver..."></textarea>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-lg submit-btn" id="submit-btn">
+            <span class="btn-text">Solicitar consulta gratuita</span>
+            <span class="btn-spinner" aria-hidden="true"></span>
+          </button>
+
+          <p class="form-legal-note">
+            Al enviar aceptas nuestra <a href="/legal/privacidad">política de privacidad</a>. Solo te contactamos para la consulta, sin spam.
+          </p>
+        </form>
+      </div>
+
+      <!-- ---- Columna de confianza ---- -->
+      <aside class="trust-col reveal d1" aria-label="Por qué Vantelia">
+        <div class="trust-item">
+          <div class="trust-ico" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div class="trust-body">
+            <h4>Respuesta en menos de 24h</h4>
+            <p>Revisamos tu caso antes de la llamada para darte valor desde el minuto uno.</p>
+          </div>
+        </div>
+
+        <div class="trust-item">
+          <div class="trust-ico" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+          <div class="trust-body">
+            <h4>Diagnóstico personalizado</h4>
+            <p>Sin plantillas genéricas. Analizamos tu web, embudo y operación a fondo.</p>
+          </div>
+        </div>
+
+        <div class="trust-item">
+          <div class="trust-ico" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div class="trust-body">
+            <h4>Sin compromiso</h4>
+            <p>Te quedas con la hoja de ruta aunque no sigamos trabajando juntos.</p>
+          </div>
+        </div>
+
+        <div class="trust-stat-row">
+          <div class="trust-stat">
+            <div class="s-val">30'</div>
+            <div class="s-label">Sesión de diagnóstico</div>
+          </div>
+          <div class="trust-stat">
+            <div class="s-val">0€</div>
+            <div class="s-label">Coste total</div>
+          </div>
+        </div>
+
+        <div class="trust-quote">
+          <blockquote>"Nos dieron un roadmap real en 30 minutos. Implementamos sus prioridades y en 90 días duplicamos las solicitudes entrantes."</blockquote>
+          <cite>— Director de Marketing, empresa B2B industrial</cite>
+        </div>
+      </aside>
+
+    </div>
   </div>
 </section>
 
 <div class="glow-line" aria-hidden="true"></div>
 
+<!-- ============================================================
+     QUÉ OBTIENES
+     ============================================================ -->
 <section class="section" aria-label="Qué obtienes">
   <div class="shell">
     <div class="section-head reveal">
@@ -164,6 +700,9 @@
   </div>
 </section>
 
+<!-- ============================================================
+     CÓMO FUNCIONA
+     ============================================================ -->
 <section class="section" aria-label="Cómo es la sesión">
   <div class="shell">
     <div class="section-head reveal">
@@ -171,15 +710,34 @@
       <h2>30 minutos. Sin presentación corporativa.</h2>
     </div>
     <div class="process-grid">
-      <article class="process-step reveal d1"><div class="p-num">01</div><h3>Escribes</h3><p>Mándanos un email a info@vantelia.es con la URL de tu web y una línea sobre tu situación.</p></article>
-      <article class="process-step reveal d2"><div class="p-num">02</div><h3>Revisamos</h3><p>Antes de la llamada, analizamos tu web, embudo y presencia digital con foco en oportunidades reales.</p></article>
-      <article class="process-step reveal d3"><div class="p-num">03</div><h3>Hablamos</h3><p>Videollamada de 30 minutos. Te explicamos qué vemos y qué priorizaríamos.</p></article>
-      <article class="process-step reveal d4"><div class="p-num">04</div><h3>Resumen</h3><p>Te enviamos por escrito las prioridades y el roadmap para que lo puedas usar con o sin nosotros.</p></article>
+      <article class="process-step reveal d1">
+        <div class="p-num">01</div>
+        <h3>Rellenas el formulario</h3>
+        <p>Cuéntanos tu situación en dos líneas. Es suficiente para preparar algo útil.</p>
+      </article>
+      <article class="process-step reveal d2">
+        <div class="p-num">02</div>
+        <h3>Revisamos</h3>
+        <p>Antes de la llamada, analizamos tu web, embudo y presencia digital con foco en oportunidades reales.</p>
+      </article>
+      <article class="process-step reveal d3">
+        <div class="p-num">03</div>
+        <h3>Hablamos</h3>
+        <p>Videollamada de 30 minutos. Te explicamos qué vemos y qué priorizaríamos si fuera nuestra empresa.</p>
+      </article>
+      <article class="process-step reveal d4">
+        <div class="p-num">04</div>
+        <h3>Resumen escrito</h3>
+        <p>Te enviamos las prioridades y el roadmap por escrito para que lo uses con o sin nosotros.</p>
+      </article>
     </div>
   </div>
 </section>
 
-<section class="section cta-section" aria-label="Contacto">
+<!-- ============================================================
+     CTA FINAL
+     ============================================================ -->
+<section class="section cta-section" aria-label="Llamada a la acción final">
   <div class="cta-bg" aria-hidden="true"></div>
   <div class="shell">
     <div class="cta-inner reveal">
@@ -190,7 +748,7 @@
         automatización o las tres a la vez. Primera consulta gratuita y sin compromiso.
       </p>
       <div class="cta-actions">
-        <a href="/consultas/" class="btn btn-primary btn-lg">Solicitar auditoría gratuita</a>
+        <a href="#formulario" class="btn btn-primary btn-lg">Solicitar consulta gratuita</a>
         <a href="mailto:info@vantelia.es" class="btn btn-ghost btn-lg">Hablar con Vantelia</a>
       </div>
       <p class="cta-note">Sin costes ocultos · Respuesta en menos de 24h · Equipo senior</p>
@@ -198,6 +756,9 @@
   </div>
 </section>
 
+<!-- ============================================================
+     FOOTER
+     ============================================================ -->
 <footer class="site-footer" aria-label="Pie de página">
   <div class="shell">
     <div class="footer-grid">
@@ -243,7 +804,7 @@
         <div class="col-links">
           <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso a la plataforma</a>
           <a href="https://app.vantelia.es/dashboard" target="_blank" rel="noopener">Panel de administración</a>
-          <a href="https://app.vantelia.es/portal" target="_blank" rel="noopener">Portal de cliente</a>
+          <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Portal de cliente</a>
           <a href="mailto:info@vantelia.es">info@vantelia.es</a>
           <a href="/consultas/">Consulta gratuita</a>
           <a href="/legal/privacidad">Privacidad</a>
@@ -269,6 +830,85 @@
   data-api="https://app.vantelia.es"
   data-client="Vantelia"
   data-position="right"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  var form        = document.getElementById('consulta-form');
+  var submitBtn   = document.getElementById('submit-btn');
+  var formAlert   = document.getElementById('form-alert');
+  var alertMsg    = document.getElementById('form-alert-msg');
+  var successDiv  = document.getElementById('form-success-state');
+
+  function setError(groupId, show) {
+    var g = document.getElementById('fg-' + groupId);
+    if (g) g.classList.toggle('has-error', show);
+  }
+
+  function validEmail(v) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  }
+
+  ['nombre', 'email'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', function () { setError(id, false); });
+  });
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+
+    var nombre = document.getElementById('nombre').value.trim();
+    var email  = document.getElementById('email').value.trim();
+
+    var nameErr  = nombre.length === 0;
+    var emailErr = email.length === 0 || !validEmail(email);
+
+    setError('nombre', nameErr);
+    setError('email',  emailErr);
+    if (nameErr || emailErr) return;
+
+    submitBtn.classList.add('loading');
+    formAlert.classList.remove('visible');
+
+    var payload = {
+      nombre:   nombre,
+      email:    email,
+      telefono: document.getElementById('telefono').value.trim() || null,
+      empresa:  document.getElementById('empresa').value.trim()  || null,
+      servicio: document.getElementById('servicio').value        || null,
+      mensaje:  document.getElementById('mensaje').value.trim()  || null,
+    };
+
+    try {
+      var resp = await fetch('https://app.vantelia.es/consulta', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      form.hidden = true;
+      successDiv.hidden = false;
+      successDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (_) {
+      alertMsg.textContent = 'Hubo un error al enviar. Escríbenos directamente a info@vantelia.es';
+      formAlert.classList.add('visible');
+      submitBtn.classList.remove('loading');
+    }
+  });
+
+  /* Smooth scroll para los CTAs del hero y CTA final */
+  document.querySelectorAll('a[href="#formulario"]').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      var target = document.getElementById('formulario');
+      if (!target) return;
+      e.preventDefault();
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+}());
+</script>
 
 </body>
 </html>

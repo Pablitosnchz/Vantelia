@@ -96,7 +96,7 @@ FOOTER = """<footer class="site-footer" aria-label="Pie de página">
         <div class="col-links">
           <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso a la plataforma</a>
           <a href="https://app.vantelia.es/dashboard" target="_blank" rel="noopener">Panel de administración</a>
-          <a href="https://app.vantelia.es/portal" target="_blank" rel="noopener">Portal de cliente</a>
+          <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Portal de cliente</a>
           <a href="mailto:info@vantelia.es">info@vantelia.es</a>
           <a href="/consultas/">Consulta gratuita</a>
           <a href="/legal/privacidad">Privacidad</a>
@@ -440,7 +440,7 @@ PAGES["plataforma"] = page(
             </div>
             <div class="portal-arrow" aria-hidden="true">↗</div>
           </a>
-          <a href="https://app.vantelia.es/portal" class="portal-card" target="_blank" rel="noopener">
+          <a href="https://app.vantelia.es/acceso" class="portal-card" target="_blank" rel="noopener">
             <div class="portal-ico client" aria-hidden="true">👤</div>
             <div class="portal-body">
               <h4>Portal de cliente</h4>

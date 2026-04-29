@@ -18,6 +18,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
+from email.utils import formataddr, parseaddr
 from html import escape
 from io import StringIO
 from pathlib import Path
@@ -97,9 +98,26 @@ SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME", "").strip()
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "").strip()
-SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "").strip()
+ALLOWED_VANTELIA_SENDER_EMAILS = {"info@vantelia.es", "soporte@vantelia.es"}
+DEFAULT_VANTELIA_FROM_EMAIL = "info@vantelia.es"
+DEFAULT_VANTELIA_SUPPORT_EMAIL = "soporte@vantelia.es"
+
+
+def _allowed_vantelia_email(value: str, fallback: str) -> str:
+    parsed = parseaddr(str(value or "").strip())[1].lower()
+    fallback_email = fallback if fallback in ALLOWED_VANTELIA_SENDER_EMAILS else DEFAULT_VANTELIA_FROM_EMAIL
+    return parsed if parsed in ALLOWED_VANTELIA_SENDER_EMAILS else fallback_email
+
+
+SMTP_FROM_EMAIL = _allowed_vantelia_email(
+    os.getenv("SMTP_FROM_EMAIL", "").strip(),
+    DEFAULT_VANTELIA_FROM_EMAIL,
+)
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Vantelia").strip()
-SMTP_REPLY_TO = os.getenv("SMTP_REPLY_TO", "").strip()
+SMTP_REPLY_TO = _allowed_vantelia_email(
+    os.getenv("SMTP_REPLY_TO", "").strip(),
+    DEFAULT_VANTELIA_SUPPORT_EMAIL,
+)
 SMTP_STARTTLS = os.getenv("SMTP_STARTTLS", "true").strip().lower() in {"1", "true", "yes", "on"}
 REMINDER_24H_HOURS = int(os.getenv("REMINDER_24H_HOURS", "24"))
 REMINDER_2H_HOURS = int(os.getenv("REMINDER_2H_HOURS", "2"))
@@ -115,7 +133,7 @@ PORTAL_ADMIN_PASSWORD = os.getenv("PORTAL_ADMIN_PASSWORD", "").strip()
 PORTAL_ADMIN_NAME = os.getenv("PORTAL_ADMIN_NAME", "Administrador Vantelia").strip()
 MARKETING_SITE_URL = os.getenv("MARKETING_SITE_URL", "https://vantelia.es").strip()
 PORTAL_SUPPORT_EMAIL = (
-    os.getenv("PORTAL_SUPPORT_EMAIL", "").strip() or SMTP_REPLY_TO or SMTP_FROM_EMAIL or "soporte@vantelia.es"
+    _allowed_vantelia_email(os.getenv("PORTAL_SUPPORT_EMAIL", "").strip(), SMTP_REPLY_TO)
 )
 
 DEFAULT_MESSAGE_TEMPLATES = {
@@ -2159,22 +2177,116 @@ def _password_reset_url(public_token: str, request: Optional[Request] = None) ->
 
 def _send_password_reset_email(user: sqlite3.Row, public_token: str, request: Optional[Request] = None) -> None:
     reset_url = _password_reset_url(public_token, request)
-    expires_text = f"{max(1, PASSWORD_RESET_TOKEN_HOURS)} hora(s)"
-    subject = "Restablece tu contrasena de Vantelia"
+    base_url = (_preferred_public_base_url(request) or APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
+    logo_url = f"{base_url}/brand-assets/Logo_1_sin_resplandor.png"
+    display_name = str(user["display_name"] or "").strip()
+    greeting_text = f"Hola {display_name}," if display_name else "Hola,"
+    greeting_html = f"Hola {escape(display_name)}," if display_name else "Hola,"
+    expires_minutes = max(1, PASSWORD_RESET_TOKEN_HOURS * 60)
+    expires_text = f"{expires_minutes} minuto{'s' if expires_minutes != 1 else ''}"
+    reset_domain = urlparse(reset_url).netloc or "app.vantelia.es"
+    support_email = PORTAL_SUPPORT_EMAIL or DEFAULT_VANTELIA_SUPPORT_EMAIL
+    current_year = datetime.now(timezone.utc).year
+    subject = "Restablece tu contraseña de Vantelia"
     text_body = (
-        f"Hola {user['display_name']},\n\n"
-        "Hemos recibido una solicitud para cambiar la contrasena de tu acceso al portal de Vantelia.\n\n"
-        f"Abre este enlace para definir una nueva contrasena:\n{reset_url}\n\n"
-        f"El enlace caduca en {expires_text}.\n"
-        "Si no has pedido este cambio, puedes ignorar este correo.\n"
+        f"{greeting_text}\n\n"
+        "Hemos recibido una solicitud para restablecer la contraseña de tu acceso a Vantelia.\n\n"
+        "Para crear una nueva contraseña, abre este enlace seguro:\n"
+        f"{reset_url}\n\n"
+        f"Dominio seguro: {reset_domain}\n"
+        f"Este enlace expirará en {expires_text}.\n\n"
+        "Si no has solicitado este cambio, puedes ignorar este mensaje. Tu cuenta seguirá protegida.\n\n"
+        f"Si tienes problemas, contacta con soporte: {support_email}\n\n"
+        "Vantelia\n"
+        f"(c) {current_year} Vantelia. Todos los derechos reservados.\n"
     )
-    html_body = (
-        f"<p>Hola {escape(user['display_name'])},</p>"
-        "<p>Hemos recibido una solicitud para cambiar la contrasena de tu acceso al portal de Vantelia.</p>"
-        f'<p><a href="{escape(reset_url)}">Restablecer contrasena</a></p>'
-        f"<p>El enlace caduca en {escape(expires_text)}.</p>"
-        "<p>Si no has pedido este cambio, puedes ignorar este correo.</p>"
-    )
+    html_body = f"""<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <title>Restablece tu contraseña de Vantelia</title>
+  </head>
+  <body style="margin:0;padding:0;background:#0B132B;font-family:Inter,Segoe UI,Arial,sans-serif;color:#F0F4F8;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+      Hemos recibido una solicitud para restablecer tu contraseña de Vantelia. El enlace expira en {escape(expires_text)}.
+    </div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background:#0B132B;">
+      <tr>
+        <td align="center" style="padding:28px 14px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;border-collapse:separate;border-spacing:0;">
+            <tr>
+              <td style="padding:0 0 18px;text-align:center;">
+                <img src="{escape(logo_url)}" width="148" alt="Vantelia" style="display:inline-block;width:148px;max-width:60%;height:auto;border:0;outline:none;text-decoration:none;">
+              </td>
+            </tr>
+            <tr>
+              <td style="border:1px solid rgba(0,209,255,0.22);border-radius:24px;overflow:hidden;background:#08102A;box-shadow:0 28px 70px rgba(0,0,0,0.38);">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td style="padding:34px 30px 22px;background:linear-gradient(135deg,rgba(0,209,255,0.18),rgba(0,245,212,0.08) 46%,rgba(8,16,42,0.92));">
+                      <div style="display:inline-block;padding:7px 12px;border:1px solid rgba(0,209,255,0.30);border-radius:999px;background:rgba(0,209,255,0.10);color:#00D1FF;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">
+                        Acceso seguro
+                      </div>
+                      <h1 style="margin:18px 0 0;font-family:'Space Grotesk',Inter,Segoe UI,Arial,sans-serif;font-size:30px;line-height:1.12;color:#FFFFFF;font-weight:700;">
+                        Restablece tu contraseña
+                      </h1>
+                      <p style="margin:12px 0 0;color:#D4E3EE;font-size:16px;line-height:1.65;">
+                        {greeting_html} hemos recibido una solicitud para cambiar la contraseña de tu acceso a Vantelia.
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:30px;">
+                      <p style="margin:0 0 22px;color:#D4E3EE;font-size:16px;line-height:1.7;">
+                        Si has sido tú, puedes crear una nueva contraseña desde el botón inferior. Por seguridad, el enlace solo funciona una vez y durante un tiempo limitado.
+                      </p>
+                      <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 24px;">
+                        <tr>
+                          <td style="border-radius:999px;background:linear-gradient(135deg,#00D1FF,#00F5D4);box-shadow:0 12px 34px rgba(0,209,255,0.32);">
+                            <a href="{escape(reset_url)}" style="display:inline-block;padding:15px 26px;border-radius:999px;color:#04101C;font-size:15px;font-weight:800;text-decoration:none;font-family:'Space Grotesk',Inter,Segoe UI,Arial,sans-serif;">
+                              Restablecer contraseña
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 22px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;background:rgba(255,255,255,0.04);">
+                        <tr>
+                          <td style="padding:16px 18px;">
+                            <p style="margin:0 0 8px;color:#F0F4F8;font-size:14px;font-weight:700;">Detalles de seguridad</p>
+                            <p style="margin:0;color:#8FA3B4;font-size:14px;line-height:1.65;">
+                              Este enlace expirará en <strong style="color:#F0F4F8;">{escape(expires_text)}</strong>.<br>
+                              Dominio seguro: <strong style="color:#00D1FF;">{escape(reset_domain)}</strong>
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="margin:0 0 16px;color:#8FA3B4;font-size:14px;line-height:1.7;">
+                        Si no has solicitado este cambio, puedes ignorar este mensaje. Tu contraseña actual no se modificará.
+                      </p>
+                      <p style="margin:0;color:#8FA3B4;font-size:14px;line-height:1.7;">
+                        Si tienes problemas, contacta con soporte en
+                        <a href="mailto:{escape(support_email)}" style="color:#00D1FF;text-decoration:none;font-weight:700;">{escape(support_email)}</a>.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:22px 8px 0;text-align:center;color:#637C8E;font-size:12px;line-height:1.6;">
+                <p style="margin:0 0 6px;">Vantelia · IA y automatización para empresas</p>
+                <p style="margin:0;">(c) {current_year} Vantelia. Todos los derechos reservados.</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>"""
     _send_email_message(user["email"], subject, text_body, html_body)
 
 
@@ -2270,7 +2382,7 @@ def _smtp_configured() -> bool:
 
 def _email_sender() -> str:
     if SMTP_FROM_NAME:
-        return f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
+        return formataddr((SMTP_FROM_NAME, SMTP_FROM_EMAIL))
     return SMTP_FROM_EMAIL
 
 
