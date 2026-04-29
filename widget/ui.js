@@ -50,6 +50,11 @@ export function toggleChat(forceValue) {
 export function construirWidget(cfg) {
   if (document.getElementById("ia-w-container")) return;
 
+  const logoUrl = String(cfg.logo_url || "").trim();
+  const avatarMarkup = logoUrl
+    ? `<img class="ia-avatar-img" src="${escapeHtml(logoUrl)}" alt="Logo" />`
+    : `<span class="ia-avatar" aria-hidden="true">${escapeHtml(cfg.icono || "AI")}</span>`;
+
   const container = document.createElement("div");
   container.id = "ia-w-container";
   container.className = WIDGET_CONFIG.position === "left" ? "ia-left" : "ia-right";
@@ -65,7 +70,7 @@ export function construirWidget(cfg) {
     <section id="ia-w-chat" aria-label="Chat con asistente virtual">
       <header id="ia-w-header">
         <div id="ia-w-header-info">
-          <span class="ia-avatar" aria-hidden="true">${escapeHtml(cfg.icono || "AI")}</span>
+          ${avatarMarkup}
           <div>
             <p>${escapeHtml(cfg.nombre || "Asistente virtual")}</p>
             <p>Asistente oficial</p>
@@ -84,6 +89,7 @@ export function construirWidget(cfg) {
         />
         <button id="ia-w-send" type="button" aria-label="Enviar mensaje">Enviar</button>
       </div>
+      <div id="ia-w-branding">${escapeHtml(WIDGET_CONFIG.brandingText.replace("Vantelia", "")).trimEnd()} <a href="https://www.vantelia.es" target="_blank" rel="noopener noreferrer">Vantelia</a></div>
     </section>
   `;
 

@@ -307,6 +307,8 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
         "nombre": _sanitize_text(payload.get("nombre", cliente_id)),
         "icono": _sanitize_text(payload.get("icono", "Chat"))[:12] or "Chat",
         "color": _sanitize_text(payload.get("color", "#00b1d9")) or "#00b1d9",
+        "accent_color": _sanitize_text(payload.get("accent_color", "")),
+        "logo_url": _sanitize_text(payload.get("logo_url", "")),
         "bienvenida": _sanitize_text(
             payload.get("bienvenida", "Hola, soy tu asistente virtual. En que puedo ayudarte?"),
             allow_multiline=True,
@@ -374,6 +376,8 @@ def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
         "nombre": config["nombre"],
         "icono": config["icono"],
         "color": config["color"],
+        "accent_color": config.get("accent_color", ""),
+        "logo_url": config.get("logo_url", ""),
         "bienvenida": config["bienvenida"],
         "prompt_extra": config.get("prompt_extra", ""),
         "allowed_origins": list(config.get("allowed_origins", [])),
@@ -920,6 +924,9 @@ def _validate_single_client_runtime(cliente_id: str, config: Dict[str, Any]) -> 
     whatsapp_cfg = config.get("whatsapp", {})
     if not re.match(r"^#[0-9A-Fa-f]{6}$", str(config.get("color", ""))):
         raise RuntimeError(f"color invalido para {cliente_id}. Usa formato #RRGGBB.")
+    accent_color = str(config.get("accent_color", "")).strip()
+    if accent_color and not re.match(r"^#[0-9A-Fa-f]{6}$", accent_color):
+        raise RuntimeError(f"accent_color invalido para {cliente_id}. Usa formato #RRGGBB.")
     if whatsapp_cfg.get("enabled") and not str(whatsapp_cfg.get("phone_number_id", "")).strip():
         raise RuntimeError(f"whatsapp.phone_number_id requerido para {cliente_id} si WhatsApp esta activo")
     if booking_cfg["enabled"]:
@@ -1239,6 +1246,8 @@ class ConfigPublicaCliente(BaseModel):
     nombre: str
     icono: str
     color: str
+    accent_color: str = ""
+    logo_url: str = ""
     bienvenida: str
     booking_enabled: bool
     branding_text: str
@@ -1436,13 +1445,22 @@ class PortalAiConfigPayload(BaseModel):
     icono: str = Field(default="AI", max_length=12)
     bienvenida: str = Field(min_length=5, max_length=400)
     prompt_extra: str = Field(default="", max_length=2000)
+    nombre: Optional[str] = Field(default=None, max_length=120)
+    color: Optional[str] = Field(default=None, max_length=7)
+    accent_color: Optional[str] = Field(default=None, max_length=7)
+    branding_text: Optional[str] = Field(default=None, max_length=120)
+    logo_url: Optional[str] = Field(default=None, max_length=2000000)
 
 
 class PortalAiConfigPublic(BaseModel):
     nombre: str
     icono: str
+    color: str
+    accent_color: str = ""
+    logo_url: str = ""
     bienvenida: str
     prompt_extra: str
+    branding_text: str = "Powered by Vantelia"
 
 
 class PortalBrainPayload(BaseModel):
@@ -1621,6 +1639,8 @@ class AdminClientePayload(BaseModel):
     nombre: str = Field(min_length=2, max_length=120)
     icono: str = Field(default="AI", max_length=12)
     color: str = Field(default="#00b1d9", min_length=7, max_length=7)
+    accent_color: Optional[str] = Field(default=None, max_length=7)
+    logo_url: Optional[str] = Field(default=None, max_length=2000000)
     bienvenida: str = Field(min_length=5, max_length=400)
     prompt_extra: str = Field(default="", max_length=2000)
     allowed_origins: List[str] = Field(default_factory=list)
@@ -2455,6 +2475,8 @@ def _client_payload_from_config(config: Dict[str, Any], info_txt: str) -> AdminC
         nombre=config["nombre"],
         icono=config["icono"],
         color=config["color"],
+        accent_color=config.get("accent_color", "") or None,
+        logo_url=config.get("logo_url", "") or None,
         bienvenida=config["bienvenida"],
         prompt_extra=config.get("prompt_extra", ""),
         allowed_origins=list(config.get("allowed_origins", [])),
@@ -2494,12 +2516,25 @@ def _client_payload_from_config(config: Dict[str, Any], info_txt: str) -> AdminC
 
 def _config_from_admin_payload(cliente_id: str, payload: AdminClientePayload) -> Dict[str, Any]:
     existing_booking = CONFIG_CLIENTES.get(cliente_id, {}).get("booking", {})
+    existing_config = CONFIG_CLIENTES.get(cliente_id, {})
+    # accent_color: usa el valor del payload si viene, si no conserva el existente
+    if payload.accent_color is not None:
+        accent_color = _sanitize_text(payload.accent_color or "")
+    else:
+        accent_color = existing_config.get("accent_color", "")
+    # logo_url: usa el valor del payload si viene, si no conserva el existente
+    if payload.logo_url is not None:
+        logo_url = _sanitize_text(payload.logo_url or "")
+    else:
+        logo_url = existing_config.get("logo_url", "")
     return _normalize_client_config(
         cliente_id,
         {
             "nombre": payload.nombre,
             "icono": payload.icono,
             "color": payload.color,
+            "accent_color": accent_color,
+            "logo_url": logo_url,
             "bienvenida": payload.bienvenida,
             "prompt_extra": payload.prompt_extra,
             "allowed_origins": payload.allowed_origins,
@@ -2739,8 +2774,12 @@ def _portal_ai_config_from_client_config(cliente_id: str) -> PortalAiConfigPubli
     return PortalAiConfigPublic(
         nombre=config.get("nombre", cliente_id),
         icono=config.get("icono", "AI"),
+        color=config.get("color", "#00b1d9"),
+        accent_color=config.get("accent_color", ""),
+        logo_url=config.get("logo_url", ""),
         bienvenida=config.get("bienvenida", ""),
         prompt_extra=config.get("prompt_extra", ""),
+        branding_text=config.get("branding", {}).get("powered_by", "Powered by Vantelia"),
     )
 
 
@@ -2753,6 +2792,23 @@ def _update_portal_ai_config(cliente_id: str, data: PortalAiConfigPayload) -> Po
     config["icono"] = _sanitize_text(data.icono)[:12] or "AI"
     config["bienvenida"] = _sanitize_text(data.bienvenida, allow_multiline=True)[:400]
     config["prompt_extra"] = _sanitize_text(data.prompt_extra, allow_multiline=True)[:2000]
+    if data.nombre is not None:
+        nombre = _sanitize_text(data.nombre)[:120]
+        if nombre:
+            config["nombre"] = nombre
+    if data.color is not None:
+        color = _sanitize_text(data.color)
+        if color:
+            config["color"] = color
+    if data.accent_color is not None:
+        config["accent_color"] = _sanitize_text(data.accent_color)
+    if data.branding_text is not None:
+        branding = config.get("branding") or {}
+        branding_value = _sanitize_text(data.branding_text) or "Powered by Vantelia"
+        branding["powered_by"] = branding_value
+        config["branding"] = branding
+    if data.logo_url is not None:
+        config["logo_url"] = _sanitize_text(data.logo_url)
 
     _validate_single_client_runtime(cliente_id, config)
     _persist_configs_to_disk(next_configs)
@@ -7410,6 +7466,8 @@ async def info_cliente(cliente_id: str, request: Request) -> ConfigPublicaClient
         nombre=config["nombre"],
         icono=config["icono"],
         color=config["color"],
+        accent_color=config.get("accent_color", ""),
+        logo_url=config.get("logo_url", ""),
         bienvenida=config["bienvenida"],
         booking_enabled=config["booking"]["enabled"],
         branding_text=branding.get("powered_by", "Powered by Vantelia"),

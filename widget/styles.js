@@ -22,18 +22,25 @@ function alpha(hex, opacity = 0.12) {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 }
 
-export function inyectarEstilos(color) {
+function normalizeHexColor(value) {
+  const normalized = String(value || "").trim();
+  return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized : "";
+}
+
+export function inyectarEstilos(color, accentColor) {
   document.getElementById("ia-w-style")?.remove();
 
-  const colorDark = darken(color, 0.2);
-  const colorSoft = alpha(color, 0.12);
-  const colorSoftStrong = alpha(color, 0.2);
+  const baseColor = normalizeHexColor(color) || "#1F6FEB";
+  const accent = normalizeHexColor(accentColor);
+  const colorDark = accent || darken(baseColor, 0.2);
+  const colorSoft = alpha(baseColor, 0.12);
+  const colorSoftStrong = alpha(baseColor, 0.2);
 
   const css = document.createElement("style");
   css.id = "ia-w-style";
   css.textContent = `
     :root {
-      --ia-color: ${color};
+      --ia-color: ${baseColor};
       --ia-color-dark: ${colorDark};
       --ia-color-soft: ${colorSoft};
       --ia-color-soft-strong: ${colorSoftStrong};
@@ -191,6 +198,12 @@ export function inyectarEstilos(color) {
       font-size: 17px;
       font-weight: 700;
       letter-spacing: 0.02em;
+      flex-shrink: 0;
+    }
+    .ia-avatar-img {
+      width: 42px;
+      height: 42px;
+      object-fit: contain;
       flex-shrink: 0;
     }
 
@@ -822,6 +835,26 @@ export function inyectarEstilos(color) {
       .ia-form-actions {
         flex-direction: column;
       }
+    }
+
+    #ia-w-branding {
+      text-align: center;
+      padding: 5px 14px 8px;
+      font-size: 11px;
+      color: var(--ia-text-soft);
+      background: rgba(255,255,255,0.96);
+      border-top: 1px solid rgba(20,34,53,0.05);
+      letter-spacing: 0.01em;
+    }
+
+    #ia-w-branding a {
+      color: var(--ia-color);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    #ia-w-branding a:hover {
+      text-decoration: underline;
     }
   `;
 

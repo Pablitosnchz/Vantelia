@@ -428,13 +428,13 @@ button {
   line-height: 1;
   font-family: var(--font-title);
   letter-spacing: 0.01em;
-  box-shadow: 0 8px 22px rgba(0,209,255,0.22);
+  box-shadow: none;
   transition: filter .18s, transform .12s, box-shadow .18s, background .15s, color .15s, border-color .15s;
   white-space: nowrap;
 }
-button:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 12px 28px rgba(0,209,255,0.32); }
+button:hover { filter: brightness(1.02); transform: translateY(-1px); box-shadow: none; }
 button:active { transform: translateY(0); }
-button:focus-visible { outline: none; box-shadow: var(--ring), 0 8px 22px rgba(0,209,255,0.22); }
+button:focus-visible { outline: none; box-shadow: var(--ring); }
 button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; filter: none; }
 
 button.secondary {
@@ -1584,6 +1584,27 @@ tbody tr:last-child td { border-bottom: none; }
           </label>
         </div>
 
+        <div class="grid-3">
+          <label>
+            Color secundario (acento)
+            <input id="accentColor" type="color" value="#00F5D4" />
+            <span class="field-note">Usado en gradientes y botones del widget.</span>
+          </label>
+
+          <label>
+            Logo del asistente (URL o base64)
+            <input id="aiLogoUrl" type="text" placeholder="https://... o dejar vacio" />
+            <span class="field-note">URL publica de la imagen o base64. Deja vacio para usar el icono de texto.</span>
+          </label>
+
+          <label>
+            Subir imagen de logo
+            <input id="aiLogoFile" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" />
+            <span class="field-note">Sube una imagen para usarla como logo del asistente. Sobreescribe el campo URL.</span>
+            <button id="aiLogoRemoveBtn" type="button" class="secondary small" style="margin-top:6px">Eliminar imagen</button>
+          </label>
+        </div>
+
         <label>
           Mensaje de bienvenida
           <textarea id="bienvenida"></textarea>
@@ -1826,6 +1847,10 @@ tbody tr:last-child td { border-bottom: none; }
       saveAiBtn: document.getElementById("saveAiBtn"),
       reindexAiBtn: document.getElementById("reindexAiBtn"),
       openAiDemoBtn: document.getElementById("openAiDemoBtn"),
+      accentColor: document.getElementById("accentColor"),
+      aiLogoUrl: document.getElementById("aiLogoUrl"),
+      aiLogoFile: document.getElementById("aiLogoFile"),
+      aiLogoRemoveBtn: document.getElementById("aiLogoRemoveBtn"),
     };
 
     function showStatus(message, type = "info") {
@@ -2413,12 +2438,14 @@ tbody tr:last-child td { border-bottom: none; }
         nombre: elements.nombre.value.trim(),
         icono: elements.icono.value.trim() || "AI",
         color: elements.color.value.trim() || "#00b1d9",
+        accent_color: (elements.accentColor && elements.accentColor.value.trim()) || "",
         bienvenida: elements.bienvenida.value.trim(),
         prompt_extra: elements.promptExtra.value.trim(),
         allowed_origins: nextOrigins,
         contacto_email: elements.contactoEmail.value.trim(),
         contacto_telefono: elements.contactoTelefono.value.trim(),
         branding_text: elements.brandingText.value.trim() || "Powered by Vantelia",
+        logo_url: (elements.aiLogoUrl && elements.aiLogoUrl.value.trim()) || "",
         whatsapp_enabled: elements.whatsappEnabled.checked,
         whatsapp_phone_number_id: elements.whatsappPhoneNumberId.value.trim(),
         whatsapp_access_token_env: elements.whatsappAccessTokenEnv.value.trim(),
@@ -2458,6 +2485,8 @@ tbody tr:last-child td { border-bottom: none; }
       elements.icono.value = cfg.icono || "AI";
       elements.color.value = cfg.color || "#00b1d9";
       elements.brandingText.value = cfg.branding_text || "Powered by Vantelia";
+      if (elements.accentColor) elements.accentColor.value = cfg.accent_color || "#00F5D4";
+      if (elements.aiLogoUrl) elements.aiLogoUrl.value = cfg.logo_url || "";
       elements.bienvenida.value = cfg.bienvenida || "";
       elements.promptExtra.value = cfg.prompt_extra || "";
       elements.whatsappEnabled.checked = Boolean(cfg.whatsapp_enabled);
@@ -3036,6 +3065,38 @@ tbody tr:last-child td { border-bottom: none; }
         showStatus(error.message, "error");
       }
     });
+
+    if (elements.aiLogoFile) {
+      elements.aiLogoFile.addEventListener("change", () => {
+        const file = elements.aiLogoFile.files && elements.aiLogoFile.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const MAX = 400;
+            const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+            const compressed = canvas.toDataURL("image/webp", 0.82);
+            if (elements.aiLogoUrl) elements.aiLogoUrl.value = compressed;
+            showStatus("Imagen cargada y comprimida. Guarda el cliente para aplicarla.", "info");
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    if (elements.aiLogoRemoveBtn) {
+      elements.aiLogoRemoveBtn.addEventListener("click", () => {
+        if (elements.aiLogoUrl) elements.aiLogoUrl.value = "";
+        if (elements.aiLogoFile) elements.aiLogoFile.value = "";
+        showStatus("Imagen eliminada. Guarda el cliente para aplicar el cambio.", "info");
+      });
+    }
 
     elements.saveAiBtn.addEventListener("click", async () => {
       try {

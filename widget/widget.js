@@ -7,6 +7,8 @@ async function init() {
     nombre: "Asistente virtual",
     icono: "AI",
     color: "#1F6FEB",
+    accent_color: "",
+    logo_url: "",
     bienvenida: "Hola, soy tu asistente virtual. En que puedo ayudarte?",
     booking_enabled: false,
     branding_text: "Powered by Vantelia",
@@ -21,7 +23,7 @@ async function init() {
   }
 
   applyPublicConfig(config);
-  inyectarEstilos(config.color || "#1F6FEB");
+  inyectarEstilos(config.color || "#1F6FEB", config.accent_color || "");
   construirWidget(config);
 
   if (window.IA_WIDGET_OPEN_ON_LOAD) {

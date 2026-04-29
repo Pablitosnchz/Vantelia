@@ -294,14 +294,11 @@ button {
   line-height: 1;
   font-family: var(--font-title);
   letter-spacing: 0.01em;
-  box-shadow: 0 8px 22px rgba(0,209,255,0.22);
   transition: filter .18s, transform .12s, box-shadow .18s, background .15s, color .15s, border-color .15s;
   white-space: nowrap;
 }
 
-button:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 12px 28px rgba(0,209,255,0.32); }
-button:active { transform: translateY(0); }
-button:focus-visible { outline: none; box-shadow: var(--ring), 0 8px 22px rgba(0,209,255,0.22); }
+button:focus-visible { outline: none; box-shadow: var(--ring); }
 button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; filter: none; }
 
 button.primary {
@@ -876,7 +873,8 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.calendar-event.success { background: var(--success-soft); color: var(--success); border-color: var(--success-line); }
+.calendar-event.confirmed { background: var(--info-soft); color: var(--info); border-color: var(--accent-line); }
+.calendar-event.completed { background: var(--success-soft); color: var(--success); border-color: var(--success-line); }
 .calendar-event.warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
 .calendar-event.danger { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-line); }
 
@@ -896,18 +894,35 @@ select {
 .day-agenda-item {
   display: grid;
   grid-template-columns: 80px minmax(0,1fr) auto;
-  gap: 12px;
+  gap: 16px;
   align-items: center;
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 12px 14px;
+  border-left-width: 4px;
+  border-radius: 12px;
+  padding: 16px 20px;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
-.day-agenda-time {
-  font-family: var(--font-title); font-weight: 700; color: var(--accent); font-size: 13.5px;
+.day-agenda-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
 }
-.day-agenda-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.day-agenda-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.day-agenda-item.is-booked { border-left-color: var(--info); }
+.day-agenda-item.is-blocked { border-left-color: var(--warn); }
+.day-agenda-item.is-closed { border-left-color: var(--danger); }
+.day-agenda-item.is-past { border-left-color: var(--success); }
+.day-agenda-item.is-cancelled { border-left-color: var(--danger); opacity: 0.75; }
+
+.day-agenda-time { font-size: 14.5px; font-weight: 700; color: var(--text); }
+.day-agenda-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.day-agenda-main strong { font-size: 15px; color: var(--ink); font-weight: 700; }
+.day-agenda-details { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-2); align-items: center; }
+.day-agenda-badge { padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+.day-agenda-badge.badge-confirmed { background: var(--info-soft); color: var(--info); }
+.day-agenda-badge.badge-pending { background: var(--warn-soft); color: var(--warn); }
+.day-agenda-badge.badge-cancelled { background: var(--danger-soft); color: var(--danger); }
+.day-agenda-badge.badge-completed { background: var(--success-soft); color: var(--success); }
+.day-agenda-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* ── Today layout ───────────────────────────────── */
 .today-layout {
@@ -1121,30 +1136,60 @@ select {
   display: flex; flex-direction: column; gap: 12px;
 }
 .ai-widget-mock {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 14px;
-  display: flex; flex-direction: column; gap: 10px;
-}
-.ai-widget-head { display: flex; align-items: center; gap: 10px; }
-.ai-widget-avatar {
-  width: 36px; height: 36px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  display: grid; place-items: center;
-  font-family: var(--font-title); font-weight: 700; color: #061021;
-}
-.ai-widget-title { font-size: 13.5px; font-weight: 600; }
-.ai-widget-bubble {
+  --ai-c1: var(--accent);
+  --ai-c2: var(--accent-2);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 13px;
-  color: var(--text-2);
-  line-height: 1.55;
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex; flex-direction: column;
 }
-.ai-widget-footer { font-size: 11px; color: var(--soft-2); padding-top: 4px; border-top: 1px solid var(--line); }
+.ai-widget-head { 
+  background: linear-gradient(135deg, var(--ai-c2), var(--ai-c1));
+  padding: 12px 14px;
+  color: #fff;
+  display: flex; align-items: center; gap: 10px; 
+}
+.ai-widget-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  display: grid; place-items: center;
+  font-family: var(--font-title); font-weight: 700; color: #fff;
+  flex-shrink: 0;
+}
+.ai-widget-title { font-size: 13.5px; font-weight: 600; color: #fff; }
+.ai-widget-title span.muted { font-size: 11px; display: block; margin-top: 1px; color: rgba(255,255,255,0.85); font-weight: 400; }
+.ai-widget-msgs {
+  background: radial-gradient(circle at top left, rgba(0,209,255,0.06), transparent 36%), linear-gradient(180deg, #f9fbfe, #f4f7fb 38%, #f9fbfe);
+  flex: 1;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ai-widget-bubble {
+  max-width: 88%;
+  padding: 11px 13px;
+  border-radius: 18px;
+  font-size: 13px;
+  line-height: 1.48;
+}
+.ai-widget-bubble.bot {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(20, 34, 53, 0.08);
+  border-bottom-left-radius: 6px;
+  box-shadow: 0 6px 18px rgba(9, 20, 40, 0.06);
+  color: #0e1c2e;
+}
+.ai-widget-bubble.user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, var(--ai-c1), var(--ai-c2));
+  color: #fff;
+  border-bottom-right-radius: 6px;
+}
+.ai-widget-footer { background: #f9fbfe; font-size: 11px; color: var(--soft-2); padding: 0 14px 14px; text-align: center; }
 
 .brain-textarea {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -1381,13 +1426,11 @@ tbody tr:hover { background: var(--surface-2); }
       <div class="top-actions">
         <div class="topbar-user hidden" id="topbarUser" aria-label="Usuario activo">
           <span class="topbar-user-copy">
-            <strong id="topUserName">-</strong>
             <span id="topUserEmail">-</span>
           </span>
-          <button id="topLogoutBtn" class="danger small" type="button">Salir</button>
+          <button id="topLogoutBtn" class="danger small" type="button">Cerrar sesion</button>
           <span class="topbar-avatar hidden" id="topUserAvatar" aria-hidden="true">V</span>
         </div>
-        <a href="__MARKETING_SITE_URL__" target="_blank" rel="noreferrer"><button class="ghost small" type="button">Ir a vantelia.es</button></a>
       </div>
     </header>
 
@@ -1496,6 +1539,11 @@ tbody tr:hover { background: var(--surface-2); }
             </button>
           </nav>
 
+          <section class="card block" id="statusCard">
+            <h3>Estado</h3>
+            <div class="status" id="status">Sin sesion activa.</div>
+          </section>
+
           <section class="card block hidden" id="sessionCard">
             <div class="role-pill" id="rolePill">Sesion</div>
             <div>
@@ -1508,11 +1556,6 @@ tbody tr:hover { background: var(--surface-2); }
               <button id="openAdminBtn" class="ghost small" type="button">Abrir admin</button>
               <button id="logoutBtn" class="danger small" type="button">Salir</button>
             </div>
-          </section>
-
-          <section class="card block" id="statusCard">
-            <h3>Estado</h3>
-            <div class="status" id="status">Sin sesion activa.</div>
           </section>
 
           <section class="card block hidden" id="contactBlock">
@@ -1658,7 +1701,7 @@ tbody tr:hover { background: var(--surface-2); }
               </div>
             </div>
 
-            <div class="booking-toolbar">
+            <div class="booking-toolbar" style="display: none !important;">
               <label>
                 Buscar
                 <input id="bookingSearch" type="search" placeholder="Nombre, email, servicio, ID..." />
@@ -1673,7 +1716,7 @@ tbody tr:hover { background: var(--surface-2); }
               </label>
               <button id="clearBookingFiltersBtn" class="ghost small" type="button">Limpiar</button>
             </div>
-            <div class="quick-actions">
+            <div class="quick-actions" style="display: none !important;">
               <button id="todayBookingsBtn" class="secondary small" type="button">Hoy</button>
               <button id="tomorrowBookingsBtn" class="secondary small" type="button">Manana</button>
               <button id="weekBookingsBtn" class="secondary small" type="button">Esta semana</button>
@@ -1708,11 +1751,11 @@ tbody tr:hover { background: var(--surface-2); }
                 </div>
               </section>
 
-              <div id="bookingList" class="booking-grid hidden">
+              <div id="bookingList" class="booking-grid hidden" style="display: none !important;">
                 <div class="empty">Inicia sesion para ver reservas.</div>
               </div>
 
-              <div class="pagination hidden" id="pagination">
+              <div class="pagination hidden" id="pagination" style="display: none !important;">
                 <div class="muted" id="paginationText">-</div>
                 <div class="row">
                   <button id="prevPageBtn" class="ghost small" type="button">Anterior</button>
@@ -2122,6 +2165,7 @@ tbody tr:hover { background: var(--surface-2); }
                 <label>
                   Logo del asistente
                   <input id="aiLogo" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" />
+                  <button id="aiLogoRemoveBtn" type="button" class="secondary small" style="margin-top:6px">Eliminar imagen</button>
                 </label>
                 <label>
                   Texto de marca
@@ -2167,7 +2211,10 @@ tbody tr:hover { background: var(--surface-2); }
                     <span class="muted">Asistente oficial</span>
                   </div>
                 </div>
-                <div class="ai-widget-bubble" id="aiPreviewWelcome">Hola, soy tu asistente virtual. En que puedo ayudarte hoy?</div>
+                <div class="ai-widget-msgs">
+                  <div class="ai-widget-bubble user">Hola! Me gustaria pedir una cita para una revision.</div>
+                  <div class="ai-widget-bubble bot" id="aiPreviewWelcome">Hola, soy tu asistente virtual. En que puedo ayudarte hoy?</div>
+                </div>
                 <div class="ai-widget-footer" id="aiPreviewBranding">Powered by Vantelia</div>
               </div>
               <div class="slot-status" id="aiPreviewPromptSummary">Las instrucciones internas no se muestran al usuario, pero afectan al tono, enfoque y limites de respuesta.</div>
@@ -2305,7 +2352,6 @@ tbody tr:hover { background: var(--surface-2); }
       authUserStack: document.getElementById("authUserStack"),
       topbarUser: document.getElementById("topbarUser"),
       topUserAvatar: document.getElementById("topUserAvatar"),
-      topUserName: document.getElementById("topUserName"),
       topUserEmail: document.getElementById("topUserEmail"),
       topLogoutBtn: document.getElementById("topLogoutBtn"),
       loginCard: document.getElementById("loginCard"),
@@ -2866,9 +2912,6 @@ tbody tr:hover { background: var(--surface-2); }
       if (mock) {
         if (colorPrimary && colorPrimary.value) mock.style.setProperty("--ai-c1", colorPrimary.value);
         if (colorAccent && colorAccent.value) mock.style.setProperty("--ai-c2", colorAccent.value);
-        const c1 = (colorPrimary && colorPrimary.value) || "#00D1FF";
-        const c2 = (colorAccent && colorAccent.value) || "#00F5D4";
-        if (el.aiPreviewIcon) el.aiPreviewIcon.style.background = `linear-gradient(135deg, ${c1}, ${c2})`;
       }
     }
     // Live preview wiring (wires after DOMContentLoaded effectively, since script runs at end)
@@ -2878,6 +2921,7 @@ tbody tr:hover { background: var(--surface-2); }
     });
     const aiLogoInput = document.getElementById("aiLogo");
     if (aiLogoInput) {
+      const aiLogoRemoveBtn = document.getElementById("aiLogoRemoveBtn");
       aiLogoInput.addEventListener("change", () => {
         const file = aiLogoInput.files && aiLogoInput.files[0];
         const logoImg = document.getElementById("aiPreviewLogo");
@@ -2891,6 +2935,18 @@ tbody tr:hover { background: var(--surface-2); }
         };
         reader.readAsDataURL(file);
       });
+      if (aiLogoRemoveBtn) {
+        aiLogoRemoveBtn.addEventListener("click", () => {
+          const logoImg = document.getElementById("aiPreviewLogo");
+          const iconSpan = document.getElementById("aiPreviewIcon");
+          if (logoImg) {
+            logoImg.src = "";
+            logoImg.hidden = true;
+          }
+          if (iconSpan) iconSpan.style.display = "grid";
+          aiLogoInput.value = "";
+        });
+      }
     }
 
     function renderAiConfig(config) {
@@ -2898,6 +2954,29 @@ tbody tr:hover { background: var(--surface-2); }
       el.aiIcono.value = config?.icono || "AI";
       el.aiWelcome.value = config?.bienvenida || "Hola, soy tu asistente virtual. En que puedo ayudarte hoy?";
       el.aiPromptExtra.value = config?.prompt_extra || "";
+      
+      const titleInput = document.getElementById("aiTitle");
+      const colorPrimary = document.getElementById("aiColorPrimary");
+      const colorAccent = document.getElementById("aiColorAccent");
+      const brandingText = document.getElementById("aiBrandingText");
+      
+      if (titleInput) titleInput.value = config?.nombre || "";
+      if (colorPrimary) colorPrimary.value = config?.color || "#00D1FF";
+      if (colorAccent) colorAccent.value = config?.accent_color || "#00F5D4";
+      if (brandingText) brandingText.value = config?.branding_text || "Powered by Vantelia";
+      
+      const logoImg = document.getElementById("aiPreviewLogo");
+      const iconSpan = document.getElementById("aiPreviewIcon");
+      if (config?.logo_url && logoImg && iconSpan) {
+        logoImg.src = config.logo_url;
+        logoImg.hidden = false;
+        iconSpan.style.display = "none";
+      } else if (logoImg && iconSpan) {
+        logoImg.hidden = true;
+        logoImg.src = "";
+        iconSpan.style.display = "grid";
+      }
+
       renderAiPreview(config || {});
     }
 
@@ -2910,6 +2989,21 @@ tbody tr:hover { background: var(--surface-2); }
       const icono = el.aiIcono.value.trim() || "AI";
       const bienvenida = el.aiWelcome.value.trim();
       const promptExtra = el.aiPromptExtra.value.trim();
+      const titleInput = document.getElementById("aiTitle");
+      const colorPrimary = document.getElementById("aiColorPrimary");
+      const colorAccent = document.getElementById("aiColorAccent");
+      const brandingText = document.getElementById("aiBrandingText");
+      const logoImg = document.getElementById("aiPreviewLogo");
+      
+      let logoUrl = undefined;
+      if (logoImg && !logoImg.hidden && logoImg.src && logoImg.src.startsWith("data:image")) {
+        logoUrl = logoImg.src;
+      } else if (logoImg && !logoImg.hidden && logoImg.src) {
+        logoUrl = state.aiConfig?.logo_url || "";
+      } else {
+        logoUrl = "";
+      }
+
       if (!bienvenida || bienvenida.length < 5) {
         throw new Error("La bienvenida debe tener al menos 5 caracteres.");
       }
@@ -2917,6 +3011,11 @@ tbody tr:hover { background: var(--surface-2); }
         icono: icono.slice(0, 12),
         bienvenida,
         prompt_extra: promptExtra,
+        nombre: titleInput ? titleInput.value.trim() : undefined,
+        color: colorPrimary ? colorPrimary.value : undefined,
+        accent_color: colorAccent ? colorAccent.value : undefined,
+        branding_text: brandingText ? brandingText.value.trim() : undefined,
+        logo_url: logoUrl
       };
     }
 
@@ -3495,7 +3594,6 @@ tbody tr:hover { background: var(--surface-2); }
       el.rolePill.textContent = adminClientView ? "Admin modo cliente" : (isAdmin ? "Administrador" : "Cliente");
       el.userName.textContent = shellDisplayName;
       el.userEmail.textContent = user.email;
-      el.topUserName.textContent = shellDisplayName || "Usuario";
       el.topUserEmail.textContent = user.email || "";
       el.topUserAvatar.textContent = userInitials(shellDisplayName || user.email || "V");
       el.templateTestEmail.value = user.email || "";
@@ -3758,18 +3856,31 @@ tbody tr:hover { background: var(--surface-2); }
       } else {
         el.todayBookingsList.innerHTML = "";
         todayItems.forEach((booking) => {
+          const professionalHtml = `<span class="pro-name">${escapeHtml(booking.employee_name || "Agenda principal")}</span>`;
+          const isCancelled = booking.estado === "cancelled";
+          const isPast = booking.estado === "completed";
+          const statusClass = isCancelled ? "is-cancelled" : (isPast ? "is-past" : "is-booked");
+          const estadoLabel = booking.estado === "confirmed" ? "Confirmada" : 
+                              booking.estado === "pending_review" ? "Pendiente" : 
+                              booking.estado === "cancelled" ? "Cancelada" : 
+                              booking.estado === "completed" ? "Completada" : escapeHtml(booking.estado || "-");
+          const badgeClass = booking.estado === "confirmed" ? "badge-confirmed" : 
+                             booking.estado === "pending_review" ? "badge-pending" : 
+                             booking.estado === "cancelled" ? "badge-cancelled" : 
+                             booking.estado === "completed" ? "badge-completed" : "badge-completed";
+
           const card = document.createElement("article");
-          card.className = "today-menu-item";
+          card.className = `day-agenda-item ${statusClass}`;
           card.innerHTML = `
-            <div class="today-booking-top">
-              <div>
-                <div class="today-chip">${escapeHtml(booking.hora || "--:--")}</div>
-                <strong>${escapeHtml(booking.nombre || "-")}</strong>
-                <div class="muted">${escapeHtml(booking.employee_name || "Agenda principal")} | ${escapeHtml(booking.servicio || "Consulta")} | ${escapeHtml(booking.email || "-")}</div>
+            <div class="day-agenda-time">${escapeHtml(booking.hora || "--:--")}</div>
+            <div class="day-agenda-main">
+              <strong>${escapeHtml(booking.nombre || "-")}</strong>
+              <div class="day-agenda-details">
+                <span class="day-agenda-badge ${badgeClass}">${estadoLabel}</span>
+                <span>${professionalHtml} &bull; ${escapeHtml(booking.servicio || "Consulta")} &bull; ${escapeHtml(booking.email || "-")}</span>
               </div>
-              <span class="${pillClass(booking.estado)}">${escapeHtml(booking.estado || "-")}</span>
             </div>
-            <div class="row">
+            <div class="day-agenda-actions">
               <button class="secondary small" type="button" data-today-action="manage" data-url="${escapeHtml(booking.manage_url || "")}">Gestionar</button>
               <button class="secondary small" type="button" data-today-action="reschedule" data-id="${escapeHtml(booking.booking_id || "")}" data-employee-id="${escapeHtml(booking.employee_id || "")}" data-fecha="${escapeHtml(booking.fecha || "")}" data-hora="${escapeHtml(booking.hora || "")}" data-label="${escapeHtml(`${booking.employee_name || "Agenda principal"} - ${booking.servicio || "Consulta"} - ${formatDateLabel(booking)}`)}" ${booking.can_reschedule ? "" : "disabled"}>Reprogramar</button>
             </div>
@@ -4094,12 +4205,15 @@ tbody tr:hover { background: var(--surface-2); }
 
       if (scheduleInfo.isClosed) {
         const closedItem = document.createElement("article");
-        closedItem.className = "day-agenda-item";
+        closedItem.className = "day-agenda-item is-closed";
         closedItem.innerHTML = `
           <div class="day-agenda-time">Todo el dia</div>
           <div class="day-agenda-main">
             <strong>Agenda cerrada</strong>
-            <span>Este dia esta marcado como no disponible en el horario.</span>
+            <div class="day-agenda-details">
+              <span class="day-agenda-badge badge-cancelled">Cerrado</span>
+              <span>Este dia esta marcado como no disponible en el horario.</span>
+            </div>
           </div>
           <div class="day-agenda-actions"></div>
         `;
@@ -4108,12 +4222,15 @@ tbody tr:hover { background: var(--surface-2); }
 
       scheduleInfo.blocks.forEach((block) => {
         const blockItem = document.createElement("article");
-        blockItem.className = "day-agenda-item";
+        blockItem.className = "day-agenda-item is-blocked";
         blockItem.innerHTML = `
           <div class="day-agenda-time">${escapeHtml(block.hora_inicio || "--:--")}</div>
           <div class="day-agenda-main">
             <strong>${escapeHtml(block.scope_label || "Bloqueo de agenda")}</strong>
-            <span>${escapeHtml((block.hora_inicio || "--:--") + " - " + (block.hora_fin || "--:--"))}${block.motivo ? ` | ${escapeHtml(block.motivo)}` : ""}</span>
+            <div class="day-agenda-details">
+              <span class="day-agenda-badge badge-pending">Bloqueado</span>
+              <span>${escapeHtml((block.hora_inicio || "--:--") + " - " + (block.hora_fin || "--:--"))}${block.motivo ? ` &bull; ${escapeHtml(block.motivo)}` : ""}</span>
+            </div>
           </div>
           <div class="day-agenda-actions"></div>
         `;
@@ -4129,12 +4246,28 @@ tbody tr:hover { background: var(--surface-2); }
         const hora = escapeHtml(booking.hora || "");
         const label = escapeHtml(`${employeeName} - ${booking.servicio || "Consulta"} - ${formatDateLabel(booking)}`);
         const item = document.createElement("article");
-        item.className = "day-agenda-item";
+        
+        const isCancelled = booking.estado === "cancelled";
+        const isPast = booking.estado === "completed";
+        const statusClass = isCancelled ? "is-cancelled" : (isPast ? "is-past" : "is-booked");
+        const estadoLabel = booking.estado === "confirmed" ? "Confirmada" : 
+                            booking.estado === "pending_review" ? "Pendiente" : 
+                            booking.estado === "cancelled" ? "Cancelada" : 
+                            booking.estado === "completed" ? "Completada" : escapeHtml(booking.estado || "-");
+        const badgeClass = booking.estado === "confirmed" ? "badge-confirmed" : 
+                           booking.estado === "pending_review" ? "badge-pending" : 
+                           booking.estado === "cancelled" ? "badge-cancelled" : 
+                           booking.estado === "completed" ? "badge-completed" : "badge-completed";
+                           
+        item.className = `day-agenda-item ${statusClass}`;
         item.innerHTML = `
           <div class="day-agenda-time">${escapeHtml(booking.hora || "--:--")}</div>
           <div class="day-agenda-main">
             <strong>${escapeHtml(booking.nombre || booking.servicio || "Consulta")}</strong>
-            <span>${escapeHtml(employeeName)} | ${escapeHtml(booking.servicio || "Consulta")} | ${escapeHtml(booking.email || "-")} | ${escapeHtml(booking.estado || "-")}</span>
+            <div class="day-agenda-details">
+              <span class="day-agenda-badge ${badgeClass}">${estadoLabel}</span>
+              <span>${escapeHtml(employeeName)} &bull; ${escapeHtml(booking.servicio || "Consulta")} &bull; ${escapeHtml(booking.email || "-")}</span>
+            </div>
           </div>
           <div class="day-agenda-actions">
             <button class="secondary small" type="button" data-day-action="manage" data-url="${manageUrl}">Gestionar</button>
@@ -4264,7 +4397,7 @@ tbody tr:hover { background: var(--surface-2); }
         if (scheduleInfo.isClosed) {
           const closedEvent = document.createElement("button");
           closedEvent.type = "button";
-          closedEvent.className = "calendar-event closed";
+          closedEvent.className = "calendar-event danger";
           closedEvent.textContent = "Cerrado";
           closedEvent.addEventListener("click", (event) => {
             event.stopPropagation();
@@ -4277,7 +4410,7 @@ tbody tr:hover { background: var(--surface-2); }
         scheduleInfo.blocks.slice(0, Math.max(0, 3 - visibleMarkers)).forEach((block) => {
           const blockEvent = document.createElement("button");
           blockEvent.type = "button";
-          blockEvent.className = "calendar-event block";
+          blockEvent.className = "calendar-event warn";
           const blockLabel = block.motivo ? String(block.motivo).trim() : "Bloqueado";
           blockEvent.textContent = `${block.hora_inicio || "--:--"} ${blockLabel}`;
           blockEvent.title = `${block.hora_inicio || "--:--"} - ${block.hora_fin || "--:--"}${block.motivo ? ` | ${block.motivo}` : ""}`;
@@ -4292,7 +4425,11 @@ tbody tr:hover { background: var(--surface-2); }
         dayItems.slice(0, Math.max(0, 3 - visibleMarkers)).forEach((booking) => {
           const event = document.createElement("button");
           event.type = "button";
-          event.className = `calendar-event${booking.estado === "cancelled" ? " cancelled" : ""}`;
+          let stateClass = "";
+          if (booking.estado === "cancelled") stateClass = " danger";
+          else if (booking.estado === "confirmed") stateClass = " confirmed";
+          else if (booking.estado === "completed") stateClass = " completed";
+          event.className = `calendar-event${stateClass}`;
           event.textContent = `${booking.hora || "--:--"} ${booking.servicio || "Consulta"}`;
           event.addEventListener("click", (event) => {
             event.stopPropagation();
