@@ -1370,6 +1370,15 @@ class AuthSimpleResponse(BaseModel):
     retry_after_seconds: int = 0
 
 
+class ConsultaLeadPayload(BaseModel):
+    nombre: str = Field(min_length=1, max_length=120)
+    email: EmailStr
+    telefono: Optional[str] = Field(default=None, max_length=40)
+    empresa: Optional[str] = Field(default=None, max_length=120)
+    servicio: Optional[str] = Field(default=None, max_length=80)
+    mensaje: Optional[str] = Field(default=None, max_length=2000)
+
+
 class AuthManagedUser(BaseModel):
     user_id: str
     email: str
@@ -6767,6 +6776,53 @@ async def demo_cliente(cliente_id: str, request: Request) -> HTMLResponse:
     _assert_valid_client_id(cliente_id)
     _get_client_config(cliente_id)
     return HTMLResponse(_build_demo_page(cliente_id, request))
+
+
+@app.post("/consulta")
+async def solicitar_consulta(data: ConsultaLeadPayload, request: Request) -> Dict[str, Any]:
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"consulta:{client_ip}", 5)
+
+    servicio_texto = data.servicio or "No especificado"
+    empresa_texto  = data.empresa  or "No especificada"
+    telefono_texto = data.telefono or "No proporcionado"
+    mensaje_texto  = data.mensaje  or "(sin mensaje)"
+
+    asunto = f"[Vantelia] Nueva consulta gratuita de {escape(data.nombre)}"
+    cuerpo_text = (
+        f"Nueva solicitud de consulta gratuita recibida desde vantelia.es\n\n"
+        f"Nombre:   {data.nombre}\n"
+        f"Email:    {data.email}\n"
+        f"Teléfono: {telefono_texto}\n"
+        f"Empresa:  {empresa_texto}\n"
+        f"Servicio: {servicio_texto}\n\n"
+        f"Mensaje:\n{mensaje_texto}\n\n"
+        f"---\nIP de origen: {client_ip}\n"
+        f"Fecha: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n"
+    )
+    cuerpo_html = f"""
+<div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#1a1a2e">
+  <h2 style="color:#00b1d9">Nueva consulta gratuita — Vantelia</h2>
+  <table style="width:100%;border-collapse:collapse">
+    <tr><td style="padding:6px 0;color:#666;width:110px">Nombre</td><td style="padding:6px 0;font-weight:600">{escape(data.nombre)}</td></tr>
+    <tr><td style="padding:6px 0;color:#666">Email</td><td style="padding:6px 0"><a href="mailto:{escape(data.email)}">{escape(data.email)}</a></td></tr>
+    <tr><td style="padding:6px 0;color:#666">Teléfono</td><td style="padding:6px 0">{escape(telefono_texto)}</td></tr>
+    <tr><td style="padding:6px 0;color:#666">Empresa</td><td style="padding:6px 0">{escape(empresa_texto)}</td></tr>
+    <tr><td style="padding:6px 0;color:#666">Servicio</td><td style="padding:6px 0">{escape(servicio_texto)}</td></tr>
+  </table>
+  <p style="margin-top:16px;color:#333"><strong>Mensaje:</strong><br>{escape(mensaje_texto).replace(chr(10), '<br>')}</p>
+  <hr style="margin:20px 0;border:none;border-top:1px solid #eee">
+  <p style="font-size:12px;color:#999">IP: {escape(client_ip)} · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+</div>"""
+
+    if _smtp_configured():
+        try:
+            _send_email_message(PORTAL_SUPPORT_EMAIL, asunto, cuerpo_text, cuerpo_html)
+        except Exception as exc:
+            logger.error("Error enviando notificacion de consulta: %s", exc)
+
+    logger.info("Consulta recibida de %s <%s> (IP: %s)", data.nombre, data.email, client_ip)
+    return {"ok": True, "message": "Solicitud recibida. Te respondemos en menos de 24h."}
 
 
 @app.get("/health")

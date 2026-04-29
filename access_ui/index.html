@@ -3,661 +3,719 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vantelia Acceso</title>
+  <title>Acceso · Vantelia</title>
   <link rel="icon" type="image/png" href="/brand-assets/favicon.png" />
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
     :root {
       color-scheme: dark;
-      --bg:            #0B132B;
-      --bg-2:          #091028;
-      --panel:         rgba(8, 16, 42, 0.88);
-      --panel-strong:  rgba(6, 12, 32, 0.96);
-      --text:          #F0F4F8;
-      --soft:          #8fa3b4;
-      --soft-2:        #637c8e;
-      --line:          rgba(255, 255, 255, 0.08);
-      --line-strong:   rgba(0, 209, 255, 0.22);
-      --accent:        #00D1FF;
-      --accent-2:      #00F5D4;
-      --accent-dark:   #0099bb;
-      --accent-soft:   rgba(0, 209, 255, 0.12);
-      --accent-soft-2: rgba(0, 245, 212, 0.10);
-      --danger:        #ff7b86;
-      --danger-soft:   rgba(255, 123, 134, 0.14);
-      --success:       #22c55e;
-      --shadow:        0 28px 80px rgba(0, 0, 0, 0.38);
-      --radius:        22px;
-      --radius-sm:     14px;
-      --font-title:    "Space Grotesk", "Segoe UI", sans-serif;
-      --font:          "Inter", "Segoe UI", sans-serif;
+      --bg:          #0B132B;
+      --text:        #F0F4F8;
+      --soft:        #8fa3b4;
+      --soft-2:      #637c8e;
+      --line:        rgba(255,255,255,0.08);
+      --line-glow:   rgba(0,209,255,0.22);
+      --accent:      #00D1FF;
+      --accent-2:    #00F5D4;
+      --accent-soft: rgba(0,209,255,0.10);
+      --danger:      #ff7b86;
+      --danger-soft: rgba(255,123,134,0.12);
+      --font:        'Inter', 'Segoe UI', sans-serif;
+      --font-title:  'Space Grotesk', 'Segoe UI', sans-serif;
     }
 
-    * { box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      margin: 0;
-      min-height: 100vh;
       font-family: var(--font);
       color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 28px 16px;
       background:
-        radial-gradient(ellipse at 14% 12%, rgba(0, 209, 255, 0.08), transparent 32%),
-        radial-gradient(ellipse at 85% 85%, rgba(0, 245, 212, 0.05), transparent 28%),
+        radial-gradient(ellipse at 15% 15%, rgba(0,209,255,0.09), transparent 35%),
+        radial-gradient(ellipse at 85% 80%, rgba(0,245,212,0.06), transparent 30%),
         linear-gradient(160deg, #0e1b3e 0%, #0B132B 52%, #07101f 100%);
       overflow-x: hidden;
     }
 
-    a {
-      color: inherit;
-      text-decoration: none;
+    /* ── Fondo decorativo ── */
+    .bg-grid {
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(0,209,255,0.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,209,255,0.022) 1px, transparent 1px);
+      background-size: 52px 52px;
+      mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 15%, transparent 100%);
+      pointer-events: none; z-index: 0;
+    }
+    .bg-orb {
+      position: fixed; border-radius: 50%;
+      pointer-events: none; z-index: 0;
+    }
+    .orb-1 {
+      width: 520px; height: 520px;
+      background: radial-gradient(circle, rgba(0,209,255,0.07) 0%, transparent 70%);
+      top: -160px; right: -110px;
+    }
+    .orb-2 {
+      width: 360px; height: 360px;
+      background: radial-gradient(circle, rgba(0,245,212,0.05) 0%, transparent 70%);
+      bottom: -90px; left: -70px;
     }
 
-    button,
-    input {
-      font: inherit;
+    /* ── Card ── */
+    .login-wrap {
+      position: relative; z-index: 1;
+      width: 100%; max-width: 420px;
+      animation: cardIn 0.48s cubic-bezier(0.16,1,0.3,1) both;
+    }
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(28px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0)    scale(1);    }
     }
 
-    .page {
-      min-height: 100vh;
-      width: min(1180px, calc(100vw - 32px));
-      margin: 0 auto;
-      padding: 28px 0 40px;
-      display: grid;
-      gap: 24px;
-      align-content: start;
-    }
-
-    .topbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .brand {
-      display: grid;
-      gap: 12px;
-    }
-
-    .brand-mark {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .brand-logo {
-      width: 68px;
-      height: 68px;
-      object-fit: contain;
-      filter: drop-shadow(0 0 24px rgba(0, 209, 255, 0.26));
-      flex: 0 0 auto;
-    }
-
-    .brand-copy {
-      display: grid;
-      gap: 6px;
-    }
-
-    .brand-kicker {
-      display: inline-flex;
-      width: fit-content;
-      padding: 7px 11px;
-      border-radius: 999px;
-      background: rgba(0, 209, 255, 0.08);
-      color: var(--accent);
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-
-    .brand h1 {
-      margin: 0;
-      font-size: 1.9rem;
-      line-height: 1;
-      font-family: var(--font-title);
-    }
-
-    .brand p {
-      margin: 0;
-      color: var(--soft);
-      line-height: 1.6;
-      max-width: 720px;
-    }
-
-    .ghost-link {
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 11px 16px;
-      background: transparent;
-      color: var(--text);
-      font-weight: 800;
-    }
-
-    .hero {
-      display: grid;
-      grid-template-columns: minmax(0, 1.1fr) minmax(340px, 420px);
-      gap: 22px;
-      align-items: start;
-    }
-
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-    }
-
-    .story {
-      padding: 28px;
-      display: grid;
-      gap: 18px;
-      min-height: 100%;
-      background:
-        radial-gradient(ellipse at top right, rgba(0, 209, 255, 0.12), transparent 40%),
-        radial-gradient(ellipse at bottom left, rgba(0, 245, 212, 0.07), transparent 38%),
-        linear-gradient(160deg, rgba(10, 19, 48, 0.98) 0%, rgba(6, 12, 32, 0.94) 100%);
-      border-radius: inherit;
-    }
-
-    .story-chip {
-      display: inline-flex;
-      width: fit-content;
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: var(--accent-soft);
-      color: var(--accent);
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-
-    .story h2 {
-      margin: 0;
-      font-size: 2.3rem;
-      line-height: 1.03;
-      font-family: var(--font-title);
-    }
-
-    .story p {
-      margin: 0;
-      color: var(--soft);
-      line-height: 1.7;
-    }
-
-    .feature-list {
-      display: grid;
-      gap: 14px;
-    }
-
-    .feature {
+    .login-card {
+      background: rgba(10,18,46,0.9);
       border: 1px solid var(--line);
       border-radius: 20px;
-      padding: 16px;
-      background: rgba(255, 255, 255, 0.02);
-      display: grid;
-      gap: 6px;
+      padding: 40px 36px 32px;
+      backdrop-filter: blur(18px);
+      box-shadow: 0 32px 80px rgba(0,0,0,0.42), 0 0 0 1px rgba(0,209,255,0.05);
+      position: relative; overflow: hidden;
+    }
+    .login-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 12%; right: 12%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(0,209,255,0.42), transparent);
     }
 
-    .feature strong {
-      font-size: 1rem;
+    /* ── Logo ── */
+    .card-logo {
+      display: flex; justify-content: center;
+      margin-bottom: 22px;
+    }
+    .card-logo img {
+      height: 42px; width: auto;
+      filter: drop-shadow(0 0 18px rgba(0,209,255,0.22));
     }
 
-    .card {
-      padding: 22px;
-      display: grid;
-      gap: 16px;
-    }
-
-    .pill {
-      display: inline-flex;
-      width: fit-content;
-      align-items: center;
-      justify-content: center;
-      border-radius: 999px;
-      padding: 8px 12px;
-      background: var(--accent-soft);
-      color: var(--accent);
-      font-size: 0.88rem;
-      font-weight: 800;
-    }
-
-    h2, h3 {
-      margin: 0;
-    }
-
-    .muted {
-      color: var(--soft);
-      line-height: 1.65;
-    }
-
-    label {
-      display: grid;
-      gap: 8px;
-      font-weight: 700;
-    }
-
-    input {
-      width: 100%;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--line);
-      background: rgba(7, 18, 45, 0.92);
-      padding: 13px 14px;
-      color: var(--text);
-      outline: none;
-    }
-
-    input:focus {
-      border-color: rgba(0, 209, 255, 0.45);
-      box-shadow: 0 0 0 4px rgba(0, 209, 255, 0.12);
-    }
-
-    button {
-      border: 0;
-      border-radius: var(--radius-sm);
-      padding: 12px 20px;
+    /* ── Cabecera ── */
+    .card-head { text-align: center; margin-bottom: 24px; }
+    .card-head h1 {
       font-family: var(--font-title);
-      font-weight: 700;
-      font-size: 0.92rem;
+      font-size: 1.5rem; font-weight: 700;
+      letter-spacing: -0.02em; margin-bottom: 5px;
+    }
+    .card-subtitle {
+      font-size: 0.85rem; color: var(--soft);
+      line-height: 1.5;
+      min-height: 20px;
+      transition: opacity 0.2s;
+    }
+
+    /* ── Tabs de rol ── */
+    .role-tabs {
+      display: flex;
+      background: rgba(255,255,255,0.035);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 3px; gap: 3px;
+      margin-bottom: 22px;
+      transition: opacity 0.2s;
+    }
+    .role-tabs.hidden { display: none; }
+    .role-tab {
+      flex: 1; padding: 9px 12px;
+      border-radius: 7px; border: none;
+      background: transparent; color: var(--soft);
+      font-family: var(--font);
+      font-size: 0.84rem; font-weight: 600;
       cursor: pointer;
-      transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease;
+      transition: background 0.18s, color 0.18s;
+    }
+    .role-tab:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+    .role-tab.active {
+      background: rgba(0,209,255,0.12);
+      color: var(--accent);
+    }
+
+    /* ── Grupos de campo ── */
+    .form-group { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; }
+    .f-label { font-size: 0.81rem; font-weight: 600; color: var(--text); letter-spacing: 0.01em; }
+    .input-wrap { position: relative; }
+    .f-input {
+      width: 100%;
+      background: rgba(7,18,45,0.9);
+      border: 1.5px solid rgba(255,255,255,0.09);
+      border-radius: 10px;
+      padding: 12px 15px;
+      font-family: var(--font);
+      font-size: 0.92rem; color: var(--text);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .f-input::placeholder { color: var(--soft-2); font-size: 0.87rem; }
+    .f-input:hover  { border-color: rgba(0,209,255,0.26); background: rgba(7,18,45,0.96); }
+    .f-input:focus  { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,209,255,0.11); }
+    .f-input.has-toggle { padding-right: 44px; }
+    .f-input.has-error  { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+
+    /* ── Toggle contraseña ── */
+    .pwd-toggle {
+      position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: var(--soft-2);
+      cursor: pointer; padding: 4px; border-radius: 4px;
+      display: flex; align-items: center; transition: color 0.15s;
+      box-shadow: none;
+    }
+    .pwd-toggle:hover { color: var(--accent); transform: translateY(-50%) !important; filter: none !important; box-shadow: none !important; }
+
+    /* ── Fila recordarme / olvidé ── */
+    .form-meta {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .check-label {
+      display: flex; align-items: center; gap: 8px;
+      cursor: pointer; user-select: none;
+      font-size: 0.83rem; color: var(--soft); font-weight: 500;
+    }
+    .check-label input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
+    .check-box {
+      width: 16px; height: 16px;
+      border: 1.5px solid rgba(255,255,255,0.18);
+      border-radius: 4px; background: transparent;
+      transition: background 0.15s, border-color 0.15s;
+      position: relative; flex-shrink: 0;
+    }
+    .check-label input:checked + .check-box {
+      background: var(--accent); border-color: var(--accent);
+    }
+    .check-label input:checked + .check-box::after {
+      content: '';
+      position: absolute;
+      left: 4px; top: 1px;
+      width: 5px; height: 8px;
+      border: 2px solid #04101c;
+      border-left: none; border-top: none;
+      transform: rotate(45deg);
+    }
+    .forgot-link {
+      font-size: 0.83rem; color: var(--soft); font-weight: 500;
+      background: none; border: none; cursor: pointer;
+      font-family: var(--font); padding: 0;
+      transition: color 0.15s;
+      box-shadow: none; border-radius: 0;
+    }
+    .forgot-link:hover { color: var(--accent); transform: none !important; filter: none !important; box-shadow: none !important; }
+
+    /* ── Botón primario ── */
+    .btn-primary {
+      width: 100%; padding: 13px; border: none; border-radius: 10px;
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
       color: #04101c;
-      box-shadow: 0 6px 22px rgba(0, 209, 255, 0.24);
+      font-family: var(--font-title); font-size: 0.94rem; font-weight: 700;
+      letter-spacing: 0.01em; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: transform 0.18s, box-shadow 0.18s, filter 0.18s, opacity 0.18s;
+      box-shadow: 0 6px 22px rgba(0,209,255,0.22);
+    }
+    .btn-primary:hover  { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(0,209,255,0.30); filter: brightness(1.05); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled { opacity: 0.52; cursor: not-allowed; transform: none; filter: none; box-shadow: 0 6px 22px rgba(0,209,255,0.12); }
+
+    /* ── Botón ghost ── */
+    .btn-ghost {
+      width: 100%; padding: 11px; border-radius: 10px;
+      background: transparent;
+      border: 1px solid var(--line); color: var(--soft);
+      font-family: var(--font); font-size: 0.86rem; font-weight: 600;
+      cursor: pointer; box-shadow: none;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      transition: border-color 0.18s, color 0.18s, background 0.18s;
+      margin-top: 10px;
+    }
+    .btn-ghost:hover { border-color: rgba(0,209,255,0.3); color: var(--accent); background: rgba(0,209,255,0.06); transform: none; filter: none; box-shadow: none; }
+
+    /* ── Spinner ── */
+    .btn-spinner {
+      display: none; width: 17px; height: 17px;
+      border: 2px solid rgba(4,16,28,0.25);
+      border-top-color: #04101c;
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .btn-primary.loading .btn-text    { display: none; }
+    .btn-primary.loading .btn-spinner { display: inline-block; }
+    .btn-primary.loading { pointer-events: none; }
+
+    /* ── Mensajes de estado ── */
+    .status-area { margin-top: 12px; min-height: 0; }
+    .status-msg {
+      display: none; font-size: 0.84rem;
+      line-height: 1.5; border-radius: 8px;
+      padding: 10px 13px;
+    }
+    .status-msg.visible { display: block; }
+    .status-msg.info    { color: var(--soft); }
+    .status-msg.error   { color: #ffd7db; background: var(--danger-soft); border: 1px solid rgba(255,123,134,0.2); }
+    .status-msg.success { color: var(--accent-2); background: rgba(0,245,212,0.07); border: 1px solid rgba(0,245,212,0.18); }
+
+    /* ── Feedback forgot ── */
+    .feedback-box {
+      display: none; padding: 11px 13px; border-radius: 8px;
+      font-size: 0.84rem; line-height: 1.55; margin-top: 14px;
+    }
+    .feedback-box.visible { display: block; }
+    .feedback-box.success { color: var(--accent-2); background: rgba(0,245,212,0.07); border: 1px solid rgba(0,245,212,0.18); }
+    .feedback-box.error   { color: #ffd7db; background: var(--danger-soft); border: 1px solid rgba(255,123,134,0.2); }
+
+    /* ── Vistas ── */
+    .view { display: none; }
+    .view.active {
+      display: block;
+      animation: viewIn 0.22s ease both;
+    }
+    @keyframes viewIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0);   }
     }
 
-    button:not(:disabled):hover {
-      transform: translateY(-2px);
-      filter: brightness(1.07);
-      box-shadow: 0 12px 32px rgba(0, 209, 255, 0.34);
+    /* ── Volver ── */
+    .back-row { display: flex; align-items: center; margin-bottom: 18px; }
+    .back-btn {
+      background: none; border: none; color: var(--soft);
+      cursor: pointer; font-family: var(--font);
+      font-size: 0.83rem; font-weight: 500;
+      display: flex; align-items: center; gap: 5px;
+      padding: 0; transition: color 0.15s;
+      box-shadow: none; border-radius: 0;
     }
-    button:disabled { opacity: 0.52; cursor: not-allowed; }
-    button.primary { color: #04101c; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
-    button.secondary { color: var(--text); background: rgba(255,255,255,.07); box-shadow: none; border: 1px solid var(--line); }
-    button.secondary:not(:disabled):hover { background: rgba(255,255,255,.12); box-shadow: none; filter: none; }
-    button.ghost { color: var(--text); background: transparent; border: 1px solid var(--line); box-shadow: none; }
-    button.ghost:not(:disabled):hover { border-color: rgba(0,209,255,.35); color: var(--accent); background: rgba(0,209,255,.08); box-shadow: none; filter: none; }
+    .back-btn:hover { color: var(--accent); transform: none; filter: none; box-shadow: none; }
 
-    .row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-    }
+    /* ── Hint contraseña ── */
+    .pwd-hint { font-size: 0.75rem; color: var(--soft-2); }
 
-    .status {
-      min-height: 22px;
-      font-size: 0.95rem;
-      color: var(--soft);
-    }
+    /* ── Divisor y footer ── */
+    .card-divider { height: 1px; background: var(--line); margin: 22px 0 14px; }
+    .card-footer  { text-align: center; font-size: 0.8rem; color: var(--soft-2); }
+    .card-footer a { color: var(--soft); text-decoration: none; transition: color 0.15s; }
+    .card-footer a:hover { color: var(--accent); }
+    .support-note { text-align: center; font-size: 0.77rem; color: var(--soft-2); margin-top: 6px; }
+    .support-note a { color: var(--soft); text-decoration: underline; text-underline-offset: 2px; }
 
-    .status.error { color: var(--danger); }
-    .status.success { color: var(--accent); }
-
-    .feedback {
-      display: none;
-      padding: 12px 14px;
-      border-radius: 14px;
-      border: 1px solid rgba(0, 209, 255, 0.2);
-      background: rgba(0, 209, 255, 0.12);
-      line-height: 1.55;
-      font-size: 0.92rem;
-    }
-
-    .feedback.visible { display: block; }
-    .feedback.error {
-      border-color: rgba(196, 69, 54, 0.22);
-      background: var(--danger-soft);
-      color: #ffd7db;
-    }
-
-    .hidden { display: none !important; }
-
-    @media (max-width: 980px) {
-      .hero {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    @media (max-width: 720px) {
-      .page {
-        width: min(1180px, calc(100vw - 20px));
-        padding-top: 18px;
-      }
-
-      .topbar,
-      .row {
-        align-items: stretch;
-      }
-
-      .topbar,
-      .brand-mark {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-
-      .row button,
-      .topbar a {
-        width: 100%;
-      }
+    /* ── Responsive ── */
+    @media (max-width: 480px) {
+      .login-card { padding: 32px 22px 26px; }
+      .card-head h1 { font-size: 1.3rem; }
     }
   </style>
 </head>
 <body>
-  <div class="page">
-    <header class="topbar">
-      <section class="brand">
-        <div class="brand-mark">
-          <img class="brand-logo" src="/brand-assets/Logo_1_sin_resplandor.png" alt="Vantelia" />
-          <div class="brand-copy">
-            <span class="brand-kicker">Secure Access</span>
-            <h1>Acceso Vantelia</h1>
-            <p>Una sola puerta de entrada para administracion y clientes. Desde aqui inicias sesion o recuperas tu contrasena, y despues te llevamos al panel correcto.</p>
-          </div>
+
+<div class="bg-grid" aria-hidden="true"></div>
+<div class="bg-orb orb-1" aria-hidden="true"></div>
+<div class="bg-orb orb-2" aria-hidden="true"></div>
+
+<div class="login-wrap">
+  <div class="login-card">
+
+    <!-- Logo -->
+    <div class="card-logo">
+      <img src="/brand-assets/Logo_1_sin_resplandor.png" alt="Vantelia" />
+    </div>
+
+    <!-- Cabecera -->
+    <div class="card-head">
+      <h1 id="cardTitle">Acceso al portal</h1>
+      <p class="card-subtitle" id="cardSubtitle">Clientes y administradores</p>
+    </div>
+
+    <!-- Tabs de rol (solo en login) -->
+    <div class="role-tabs" id="roleTabs" role="tablist" aria-label="Tipo de acceso">
+      <button class="role-tab active" id="tabCliente" role="tab" aria-selected="true" type="button">Cliente</button>
+      <button class="role-tab"        id="tabAdmin"   role="tab" aria-selected="false" type="button">Administrador</button>
+    </div>
+
+    <!-- ─── VISTA LOGIN ─── -->
+    <div id="loginView" class="view active" role="tabpanel">
+
+      <div class="form-group">
+        <label class="f-label" for="email">Email</label>
+        <input class="f-input" type="email" id="email"
+          placeholder="tu@empresa.com" autocomplete="email" />
+      </div>
+
+      <div class="form-group">
+        <label class="f-label" for="password">Contraseña</label>
+        <div class="input-wrap">
+          <input class="f-input has-toggle" type="password" id="password"
+            placeholder="Tu contraseña" autocomplete="current-password" />
+          <button class="pwd-toggle" id="togglePwd" type="button" aria-label="Mostrar contraseña" tabindex="-1">
+            <svg id="eyeOpen" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+            <svg id="eyeClosed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+              <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+              <line x1="1" y1="1" x2="23" y2="23"/>
+            </svg>
+          </button>
         </div>
-      </section>
-      <a class="ghost-link" href="__MARKETING_SITE_URL__" target="_blank" rel="noreferrer">Ir a vantelia.es</a>
-    </header>
+      </div>
 
-    <section class="hero">
-      <article class="panel story">
-        <span class="story-chip">Flujo limpio</span>
-        <h2>Login separado, paneles claros.</h2>
-        <p>El acceso se queda solo para autenticacion. Cuando entras, cada usuario aterriza directamente en su espacio: clientes al portal y administradores al dashboard operativo.</p>
-        <div class="feature-list">
-          <div class="feature">
-            <strong>Admins</strong>
-            <span class="muted">Dashboard con clientes, alta express, snippet, demo, estado general y control completo de usuarios.</span>
-          </div>
-          <div class="feature">
-            <strong>Clientes</strong>
-            <span class="muted">Portal centrado en sus citas, cambios de reserva, historial y seguridad de la cuenta.</span>
-          </div>
-          <div class="feature">
-            <strong>Recuperacion segura</strong>
-            <span class="muted">Si el correo esta registrado, recibiras un enlace temporal para definir una nueva contrasena.</span>
-          </div>
+      <div class="form-meta">
+        <label class="check-label">
+          <input type="checkbox" id="rememberMe" />
+          <span class="check-box"></span>
+          Recordarme
+        </label>
+        <button class="forgot-link" id="showForgotBtn" type="button">
+          ¿Olvidaste tu contraseña?
+        </button>
+      </div>
+
+      <button class="btn-primary" id="loginBtn" type="button">
+        <span class="btn-text">Iniciar sesión</span>
+        <span class="btn-spinner" aria-hidden="true"></span>
+      </button>
+
+      <div class="status-area">
+        <div class="status-msg" id="loginStatus" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <!-- ─── VISTA RECUPERAR ─── -->
+    <div id="forgotView" class="view" role="tabpanel">
+
+      <div class="back-row">
+        <button class="back-btn" id="backToLoginBtn" type="button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+          Volver al acceso
+        </button>
+      </div>
+
+      <div class="form-group">
+        <label class="f-label" for="forgotEmail">Email</label>
+        <input class="f-input" type="email" id="forgotEmail"
+          placeholder="tu@empresa.com" autocomplete="email" />
+      </div>
+
+      <button class="btn-primary" id="forgotBtn" type="button">
+        <span class="btn-text">Enviar enlace de recuperación</span>
+        <span class="btn-spinner" aria-hidden="true"></span>
+      </button>
+
+      <div id="forgotFeedback" class="feedback-box"></div>
+
+      <div class="status-area">
+        <div class="status-msg" id="forgotStatus" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <!-- ─── VISTA NUEVA CONTRASEÑA ─── -->
+    <div id="resetView" class="view" role="tabpanel">
+
+      <div class="form-group">
+        <label class="f-label" for="resetPassword">Nueva contraseña</label>
+        <div class="input-wrap">
+          <input class="f-input has-toggle" type="password" id="resetPassword"
+            placeholder="Mínimo 8 caracteres" autocomplete="new-password" />
+          <button class="pwd-toggle" id="toggleResetPwd" type="button" aria-label="Mostrar contraseña" tabindex="-1">
+            <svg id="eyeResetOpen" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+            <svg id="eyeResetClosed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+              <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+              <line x1="1" y1="1" x2="23" y2="23"/>
+            </svg>
+          </button>
         </div>
-      </article>
+        <span class="pwd-hint">Mínimo 8 caracteres</span>
+      </div>
 
-      <article class="panel card">
-        <div class="pill" id="cardPill">Acceso seguro</div>
-        <h2 id="cardTitle">Inicia sesion</h2>
-        <div class="muted" id="cardText">Usa tu email y contrasena del portal. Te redirigiremos automaticamente al panel de cliente o al dashboard admin.</div>
+      <div class="form-group">
+        <label class="f-label" for="resetPasswordConfirm">Repite la contraseña</label>
+        <input class="f-input" type="password" id="resetPasswordConfirm"
+          placeholder="Repite la contraseña" autocomplete="new-password" />
+      </div>
 
-        <section id="loginView">
-          <label>
-            Email
-            <input id="email" type="email" placeholder="tu@empresa.com" />
-          </label>
-          <label>
-            Contrasena
-            <input id="password" type="password" placeholder="Tu contrasena" />
-          </label>
-          <div class="row">
-            <button id="loginBtn" class="primary" type="button">Entrar</button>
-            <button id="showForgotBtn" class="secondary" type="button">He olvidado mi contrasena</button>
-          </div>
-        </section>
+      <button class="btn-primary" id="resetBtn" type="button">
+        <span class="btn-text">Guardar nueva contraseña</span>
+        <span class="btn-spinner" aria-hidden="true"></span>
+      </button>
 
-        <section id="forgotView" class="hidden">
-          <label>
-            Email
-            <input id="forgotEmail" type="email" placeholder="tu@empresa.com" />
-          </label>
-          <div class="row">
-            <button id="forgotBtn" class="primary" type="button">Enviar enlace</button>
-            <button id="backToLoginBtn" class="ghost" type="button">Volver</button>
-          </div>
-          <div id="forgotFeedback" class="feedback"></div>
-        </section>
+      <div class="status-area">
+        <div class="status-msg" id="resetStatus" aria-live="polite"></div>
+      </div>
 
-        <section id="resetView" class="hidden">
-          <label>
-            Nueva contrasena
-            <input id="resetPassword" type="password" placeholder="Minimo 8 caracteres" />
-          </label>
-          <label>
-            Repite la nueva contrasena
-            <input id="resetPasswordConfirm" type="password" placeholder="Repite la contrasena" />
-          </label>
-          <div class="row">
-            <button id="resetBtn" class="primary" type="button">Guardar nueva contrasena</button>
-            <button id="resetBackBtn" class="ghost" type="button">Volver al acceso</button>
-          </div>
-        </section>
+      <button class="btn-ghost" id="resetBackBtn" type="button">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        Volver al acceso
+      </button>
+    </div>
 
-        <div id="status" class="status" aria-live="polite"></div>
-        <div class="muted">Si sigue fallando, escribe a __SUPPORT_EMAIL__.</div>
-      </article>
-    </section>
+    <!-- Footer -->
+    <div class="card-divider"></div>
+    <div class="card-footer">
+      <a href="__MARKETING_SITE_URL__" target="_blank" rel="noreferrer">Ir a vantelia.es →</a>
+    </div>
+    <div class="support-note">
+      ¿Problemas? <a href="mailto:__SUPPORT_EMAIL__">__SUPPORT_EMAIL__</a>
+    </div>
+
   </div>
+</div>
 
-  <script>
-    const urlParams = new URLSearchParams(window.location.search);
+<script>
+'use strict';
 
-    const state = {
-      view: urlParams.get("reset_token") ? "reset" : "login",
-      resetToken: (urlParams.get("reset_token") || "").trim(),
-      forgotCooldownSeconds: 0,
-      forgotCooldownTimer: null,
-    };
+const urlParams  = new URLSearchParams(window.location.search);
 
-    const el = {
-      cardPill: document.getElementById("cardPill"),
-      cardTitle: document.getElementById("cardTitle"),
-      cardText: document.getElementById("cardText"),
-      loginView: document.getElementById("loginView"),
-      forgotView: document.getElementById("forgotView"),
-      resetView: document.getElementById("resetView"),
-      email: document.getElementById("email"),
-      password: document.getElementById("password"),
-      forgotEmail: document.getElementById("forgotEmail"),
-      resetPassword: document.getElementById("resetPassword"),
-      resetPasswordConfirm: document.getElementById("resetPasswordConfirm"),
-      loginBtn: document.getElementById("loginBtn"),
-      showForgotBtn: document.getElementById("showForgotBtn"),
-      forgotBtn: document.getElementById("forgotBtn"),
-      backToLoginBtn: document.getElementById("backToLoginBtn"),
-      resetBtn: document.getElementById("resetBtn"),
-      resetBackBtn: document.getElementById("resetBackBtn"),
-      forgotFeedback: document.getElementById("forgotFeedback"),
-      status: document.getElementById("status"),
-    };
+const state = {
+  view:                   urlParams.get('reset_token') ? 'reset' : 'login',
+  resetToken:             (urlParams.get('reset_token') || '').trim(),
+  role:                   'cliente',
+  forgotCooldownSeconds:  0,
+  forgotCooldownTimer:    null,
+};
 
-    function setStatus(message, type = "info") {
-      el.status.className = `status ${type}`;
-      el.status.textContent = message;
-    }
+const el = {
+  cardTitle:            document.getElementById('cardTitle'),
+  cardSubtitle:         document.getElementById('cardSubtitle'),
+  roleTabs:             document.getElementById('roleTabs'),
+  tabCliente:           document.getElementById('tabCliente'),
+  tabAdmin:             document.getElementById('tabAdmin'),
+  loginView:            document.getElementById('loginView'),
+  forgotView:           document.getElementById('forgotView'),
+  resetView:            document.getElementById('resetView'),
+  email:                document.getElementById('email'),
+  password:             document.getElementById('password'),
+  togglePwd:            document.getElementById('togglePwd'),
+  eyeOpen:              document.getElementById('eyeOpen'),
+  eyeClosed:            document.getElementById('eyeClosed'),
+  forgotEmail:          document.getElementById('forgotEmail'),
+  resetPassword:        document.getElementById('resetPassword'),
+  resetPasswordConfirm: document.getElementById('resetPasswordConfirm'),
+  toggleResetPwd:       document.getElementById('toggleResetPwd'),
+  eyeResetOpen:         document.getElementById('eyeResetOpen'),
+  eyeResetClosed:       document.getElementById('eyeResetClosed'),
+  loginBtn:             document.getElementById('loginBtn'),
+  loginStatus:          document.getElementById('loginStatus'),
+  showForgotBtn:        document.getElementById('showForgotBtn'),
+  forgotBtn:            document.getElementById('forgotBtn'),
+  forgotStatus:         document.getElementById('forgotStatus'),
+  forgotFeedback:       document.getElementById('forgotFeedback'),
+  backToLoginBtn:       document.getElementById('backToLoginBtn'),
+  resetBtn:             document.getElementById('resetBtn'),
+  resetStatus:          document.getElementById('resetStatus'),
+  resetBackBtn:         document.getElementById('resetBackBtn'),
+};
 
-    function setForgotFeedback(message, type = "success") {
-      if (!message) {
-        el.forgotFeedback.className = "feedback";
-        el.forgotFeedback.textContent = "";
-        return;
-      }
-      el.forgotFeedback.className = `feedback visible ${type}`;
-      el.forgotFeedback.textContent = message;
-    }
+// ── Helpers de estado ───────────────────────────────────────────────
+function setStatus(statusEl, message, type) {
+  if (!message) { statusEl.className = 'status-msg'; statusEl.textContent = ''; return; }
+  statusEl.className = `status-msg visible ${type || 'info'}`;
+  statusEl.textContent = message;
+}
 
-    function renderForgotButton() {
-      if (state.forgotCooldownSeconds > 0) {
-        el.forgotBtn.disabled = true;
-        el.forgotBtn.textContent = `Reenviar en ${state.forgotCooldownSeconds}s`;
-        return;
-      }
-      el.forgotBtn.disabled = false;
-      el.forgotBtn.textContent = "Enviar enlace";
-    }
+function setForgotFeedback(message, type) {
+  if (!message) { el.forgotFeedback.className = 'feedback-box'; el.forgotFeedback.textContent = ''; return; }
+  el.forgotFeedback.className = `feedback-box visible ${type || 'success'}`;
+  el.forgotFeedback.textContent = message;
+}
 
-    function startForgotCooldown(seconds) {
-      state.forgotCooldownSeconds = Math.max(0, Number(seconds || 0));
-      if (state.forgotCooldownTimer) {
-        window.clearInterval(state.forgotCooldownTimer);
-        state.forgotCooldownTimer = null;
-      }
-      renderForgotButton();
-      if (!state.forgotCooldownSeconds) return;
-      state.forgotCooldownTimer = window.setInterval(() => {
-        state.forgotCooldownSeconds = Math.max(0, state.forgotCooldownSeconds - 1);
-        renderForgotButton();
-        if (!state.forgotCooldownSeconds && state.forgotCooldownTimer) {
-          window.clearInterval(state.forgotCooldownTimer);
-          state.forgotCooldownTimer = null;
-        }
-      }, 1000);
-    }
+function setLoading(btn, on) {
+  btn.classList.toggle('loading', on);
+  btn.disabled = on;
+}
 
-    function setView(view) {
-      state.view = view;
-      el.loginView.classList.toggle("hidden", view !== "login");
-      el.forgotView.classList.toggle("hidden", view !== "forgot");
-      el.resetView.classList.toggle("hidden", view !== "reset");
+// ── API helper ──────────────────────────────────────────────────────
+function formatDetail(d) {
+  if (!d) return 'No se pudo completar la solicitud.';
+  if (typeof d === 'string') return d;
+  if (Array.isArray(d)) return d.map(i => i?.msg || i).join(' | ');
+  if (typeof d === 'object' && d.message) return d.message;
+  try { return JSON.stringify(d); } catch { return String(d); }
+}
 
-      if (view === "forgot") {
-        el.cardPill.textContent = "Recuperacion";
-        el.cardTitle.textContent = "Recuperar acceso";
-        el.cardText.textContent = "Introduce tu correo y te enviaremos un enlace seguro para crear una nueva contrasena.";
-      } else if (view === "reset") {
-        el.cardPill.textContent = "Nueva contrasena";
-        el.cardTitle.textContent = "Restablecer contrasena";
-        el.cardText.textContent = "Guarda una nueva contrasena para volver a entrar al portal con normalidad.";
-      } else {
-        el.cardPill.textContent = "Acceso seguro";
-        el.cardTitle.textContent = "Inicia sesion";
-        el.cardText.textContent = "Usa tu email y contrasena del portal. Te redirigiremos automaticamente al panel de cliente o al dashboard admin.";
-      }
-    }
+async function api(path, opts) {
+  const resp = await fetch(path, { ...opts, headers: { Accept: 'application/json', ...(opts?.headers || {}) } });
+  let data = null;
+  try { data = await resp.json(); } catch {}
+  if (!resp.ok) throw new Error(formatDetail(data?.detail));
+  return data;
+}
 
-    function formatApiDetail(detail) {
-      if (!detail) return "No se pudo completar la solicitud.";
-      if (typeof detail === "string") return detail;
-      if (Array.isArray(detail)) {
-        return detail.map((item) => item?.msg || item).join(" | ");
-      }
-      if (typeof detail === "object" && detail.message) return detail.message;
-      try {
-        return JSON.stringify(detail);
-      } catch (error) {
-        return String(detail);
-      }
-    }
+// ── Tabs de rol ─────────────────────────────────────────────────────
+const roleSubtitles = {
+  cliente: 'Portal de cliente · Reservas y consultas',
+  admin:   'Panel de administración · Solo equipo Vantelia',
+};
 
-    async function api(path, options = {}) {
-      const response = await fetch(path, {
-        ...options,
-        headers: {
-          Accept: "application/json",
-          ...(options.headers || {}),
-        },
-      });
+function setRole(role) {
+  state.role = role;
+  el.tabCliente.classList.toggle('active', role === 'cliente');
+  el.tabAdmin.classList.toggle('active',   role === 'admin');
+  el.tabCliente.setAttribute('aria-selected', String(role === 'cliente'));
+  el.tabAdmin.setAttribute('aria-selected',   String(role === 'admin'));
+  if (state.view === 'login') el.cardSubtitle.textContent = roleSubtitles[role];
+}
 
-      let data = null;
-      try {
-        data = await response.json();
-      } catch (error) {
-        data = null;
-      }
+el.tabCliente.addEventListener('click', () => setRole('cliente'));
+el.tabAdmin.addEventListener('click',   () => setRole('admin'));
 
-      if (!response.ok) {
-        throw new Error(formatApiDetail(data?.detail));
-      }
+// ── Gestión de vistas ───────────────────────────────────────────────
+const viewConfig = {
+  login:  { el: el.loginView,  title: 'Acceso al portal',      subtitle: null,                                                           tabs: true  },
+  forgot: { el: el.forgotView, title: 'Recuperar contraseña',  subtitle: 'Introduce tu correo y te enviamos un enlace seguro.',           tabs: false },
+  reset:  { el: el.resetView,  title: 'Nueva contraseña',      subtitle: 'Define tu nueva contraseña para recuperar el acceso.',          tabs: false },
+};
 
-      return data;
-    }
+function setView(view) {
+  state.view = view;
+  const cfg = viewConfig[view];
+  Object.values(viewConfig).forEach(v => v.el.classList.remove('active'));
+  cfg.el.classList.add('active');
+  el.cardTitle.textContent    = cfg.title;
+  el.cardSubtitle.textContent = cfg.subtitle || roleSubtitles[state.role];
+  el.roleTabs.classList.toggle('hidden', !cfg.tabs);
+}
 
-    function readMatchingPasswords(a, b) {
-      if (!a || !b) throw new Error("Escribe y confirma la nueva contrasena.");
-      if (a !== b) throw new Error("Las contrasenas no coinciden.");
-      return a;
-    }
+// ── Toggle contraseña ───────────────────────────────────────────────
+function makePwdToggle(inputEl, toggleBtn, openIcon, closedIcon) {
+  toggleBtn.addEventListener('click', () => {
+    const isText = inputEl.type === 'text';
+    inputEl.type            = isText ? 'password' : 'text';
+    openIcon.style.display  = isText ? ''     : 'none';
+    closedIcon.style.display = isText ? 'none' : '';
+    toggleBtn.setAttribute('aria-label', isText ? 'Mostrar contraseña' : 'Ocultar contraseña');
+  });
+}
 
-    function clearResetTokenFromUrl() {
-      state.resetToken = "";
-      const cleanUrl = `${window.location.pathname}`;
-      window.history.replaceState({}, "", cleanUrl);
-    }
+makePwdToggle(el.password,      el.togglePwd,      el.eyeOpen,      el.eyeClosed);
+makePwdToggle(el.resetPassword, el.toggleResetPwd, el.eyeResetOpen, el.eyeResetClosed);
 
-    async function login() {
-      setStatus("Iniciando sesion...", "info");
-      const payload = await api("/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: el.email.value.trim(),
-          password: el.password.value,
-        }),
-      });
-      el.password.value = "";
-      const nextUrl = payload.redirect_to || "/portal";
-      window.location.href = nextUrl;
-    }
+// ── Cooldown olvidé contraseña ──────────────────────────────────────
+function renderForgotBtn() {
+  const txt = el.forgotBtn.querySelector('.btn-text');
+  if (state.forgotCooldownSeconds > 0) {
+    el.forgotBtn.disabled = true;
+    txt.textContent = `Reenviar en ${state.forgotCooldownSeconds}s`;
+  } else {
+    el.forgotBtn.disabled = false;
+    txt.textContent = 'Enviar enlace de recuperación';
+  }
+}
 
-    async function sendReset() {
-      if (state.forgotCooldownSeconds > 0) return;
-      setStatus("Enviando enlace de recuperacion...", "info");
-      setForgotFeedback("Estamos comprobando la solicitud...", "success");
-      const payload = await api("/auth/password/forgot", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: el.forgotEmail.value.trim() }),
-      });
-      el.forgotEmail.value = "";
-      setForgotFeedback(payload.message || "Si el correo esta registrado, se te enviara un enlace de recuperacion.", "success");
-      startForgotCooldown(payload.retry_after_seconds || 0);
-      setStatus("Solicitud enviada.", "success");
-    }
+function startForgotCooldown(seconds) {
+  state.forgotCooldownSeconds = Math.max(0, Number(seconds || 0));
+  if (state.forgotCooldownTimer) clearInterval(state.forgotCooldownTimer);
+  state.forgotCooldownTimer = null;
+  renderForgotBtn();
+  if (!state.forgotCooldownSeconds) return;
+  state.forgotCooldownTimer = setInterval(() => {
+    state.forgotCooldownSeconds = Math.max(0, state.forgotCooldownSeconds - 1);
+    renderForgotBtn();
+    if (!state.forgotCooldownSeconds) { clearInterval(state.forgotCooldownTimer); state.forgotCooldownTimer = null; }
+  }, 1000);
+}
 
-    async function submitNewPassword() {
-      if (!state.resetToken) {
-        throw new Error("Falta el token de recuperacion en la URL.");
-      }
-      const newPassword = readMatchingPasswords(el.resetPassword.value, el.resetPasswordConfirm.value);
-      setStatus("Guardando nueva contrasena...", "info");
-      await api("/auth/password/reset", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token: state.resetToken,
-          new_password: newPassword,
-        }),
-      });
-      el.resetPassword.value = "";
-      el.resetPasswordConfirm.value = "";
-      clearResetTokenFromUrl();
-      setView("login");
-      setStatus("Contrasena actualizada. Ya puedes iniciar sesion.", "success");
-    }
-
-    el.loginBtn.addEventListener("click", () => login().catch((error) => setStatus(error.message, "error")));
-    el.showForgotBtn.addEventListener("click", () => {
-      setView("forgot");
-      setForgotFeedback("");
-      setStatus("Introduce tu correo y te enviaremos un enlace de recuperacion.", "info");
+// ── Acciones ────────────────────────────────────────────────────────
+async function login() {
+  setStatus(el.loginStatus, 'Iniciando sesión...', 'info');
+  setLoading(el.loginBtn, true);
+  try {
+    const data = await api('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: el.email.value.trim(), password: el.password.value }),
     });
-    el.backToLoginBtn.addEventListener("click", () => {
-      setView("login");
-      setForgotFeedback("");
-      setStatus("Vuelve a iniciar sesion cuando quieras.", "info");
-    });
-    el.forgotBtn.addEventListener("click", () => sendReset().catch((error) => {
-      setForgotFeedback(error.message, "error");
-      setStatus(error.message, "error");
-    }));
-    el.resetBtn.addEventListener("click", () => submitNewPassword().catch((error) => setStatus(error.message, "error")));
-    el.resetBackBtn.addEventListener("click", () => {
-      clearResetTokenFromUrl();
-      setView("login");
-      setStatus("Ya puedes iniciar sesion de nuevo.", "info");
-    });
+    el.password.value = '';
+    window.location.href = data.redirect_to || '/portal';
+  } catch (err) {
+    setStatus(el.loginStatus, err.message, 'error');
+    setLoading(el.loginBtn, false);
+  }
+}
 
-    setView(state.view);
-    renderForgotButton();
+async function sendReset() {
+  if (state.forgotCooldownSeconds > 0) return;
+  setForgotFeedback('Comprobando la solicitud...', 'success');
+  setLoading(el.forgotBtn, true);
+  try {
+    const data = await api('/auth/password/forgot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: el.forgotEmail.value.trim() }),
+    });
+    el.forgotEmail.value = '';
+    setForgotFeedback(data.message || 'Si el correo está registrado, recibirás un enlace de recuperación.', 'success');
+    startForgotCooldown(data.retry_after_seconds || 0);
+  } catch (err) {
+    setForgotFeedback(err.message, 'error');
+    setStatus(el.forgotStatus, err.message, 'error');
+  } finally {
+    setLoading(el.forgotBtn, false);
+  }
+}
 
-    if (state.view === "reset") {
-      setStatus("Define tu nueva contrasena para recuperar el acceso.", "info");
-    }
-  </script>
+async function submitNewPassword() {
+  if (!state.resetToken) throw new Error('Falta el token de recuperación en la URL.');
+  const a = el.resetPassword.value;
+  const b = el.resetPasswordConfirm.value;
+  if (!a || !b) throw new Error('Escribe y confirma la nueva contraseña.');
+  if (a !== b)  throw new Error('Las contraseñas no coinciden.');
+  setStatus(el.resetStatus, 'Guardando contraseña...', 'info');
+  setLoading(el.resetBtn, true);
+  try {
+    await api('/auth/password/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: state.resetToken, new_password: a }),
+    });
+    el.resetPassword.value = '';
+    el.resetPasswordConfirm.value = '';
+    state.resetToken = '';
+    window.history.replaceState({}, '', window.location.pathname);
+    setView('login');
+    setStatus(el.loginStatus, 'Contraseña actualizada. Ya puedes iniciar sesión.', 'success');
+  } catch (err) {
+    setStatus(el.resetStatus, err.message, 'error');
+    setLoading(el.resetBtn, false);
+  }
+}
+
+// ── Event listeners ─────────────────────────────────────────────────
+el.loginBtn.addEventListener('click',      login);
+el.showForgotBtn.addEventListener('click', () => { setView('forgot'); setForgotFeedback(''); setStatus(el.forgotStatus, '', null); });
+el.backToLoginBtn.addEventListener('click',() => setView('login'));
+el.forgotBtn.addEventListener('click',     () => sendReset().catch(err => setForgotFeedback(err.message, 'error')));
+el.resetBtn.addEventListener('click',      () => submitNewPassword().catch(err => { setStatus(el.resetStatus, err.message, 'error'); setLoading(el.resetBtn, false); }));
+el.resetBackBtn.addEventListener('click',  () => { state.resetToken = ''; window.history.replaceState({}, '', window.location.pathname); setView('login'); });
+
+// Atajos de teclado (Enter)
+el.email.addEventListener('keydown',                e => { if (e.key === 'Enter') login(); });
+el.password.addEventListener('keydown',             e => { if (e.key === 'Enter') login(); });
+el.forgotEmail.addEventListener('keydown',          e => { if (e.key === 'Enter') sendReset(); });
+el.resetPasswordConfirm.addEventListener('keydown', e => { if (e.key === 'Enter') submitNewPassword().catch(err => setStatus(el.resetStatus, err.message, 'error')); });
+
+// ── Init ─────────────────────────────────────────────────────────────
+setView(state.view);
+setRole('cliente');
+renderForgotBtn();
+if (state.view === 'reset') setStatus(el.resetStatus, 'Define tu nueva contraseña para recuperar el acceso.', 'info');
+</script>
+
 </body>
 </html>

@@ -121,6 +121,7 @@ Endpoints publicos principales:
 - `GET /acceso`, `/login`, `/portal`, `/dashboard`, `/demo/{cliente_id}`
 - `GET/POST /whatsapp/webhook`
 - `GET/POST /whatsapp/webhook/{cliente_id}`
+- `POST /consulta` — captura leads desde el formulario de `vantelia.es/consultas/`. Acepta `ConsultaLeadPayload` (nombre, email, telefono?, empresa?, servicio?, mensaje?). Rate limit 5/min por IP. Envia email de notificacion a `PORTAL_SUPPORT_EMAIL` via SMTP.
 
 Endpoints de portal/auth:
 
@@ -293,5 +294,7 @@ Si cambias contratos de respuesta, auth, cookies, booking o WhatsApp, actualiza 
 - Produccion recomendada: `vantelia.es` para web publica y `app.vantelia.es` para API, panel y widget.
 - `APP_BASE_URL` debe apuntar a `https://app.vantelia.es` en produccion.
 - `PORTAL_COOKIE_DOMAIN=.vantelia.es` permite compartir sesion entre subdominios cuando aplica.
-- `EXTRA_CORS_ORIGINS` debe incluir `https://vantelia.es`, `https://www.vantelia.es` y `https://app.vantelia.es`.
+- `EXTRA_CORS_ORIGINS` debe incluir `https://vantelia.es`, `https://www.vantelia.es` y `https://app.vantelia.es`. Critico para el formulario de `/consultas/` que hace POST cross-origin a `app.vantelia.es`.
 - Para escalar a varias instancias, el siguiente paso natural es mover SQLite a Postgres y externalizar indices/storage.
+- `deploy/deploy.ps1` usa `%TEMP%` para generar el `.tar.gz` (no el directorio padre del proyecto, que puede ser `C:\` sin permisos de escritura).
+- `site_exports/` esta excluido del empaquetado VPS — contiene rutas muy largas que rompen el cleanup en Windows. Solo sirve para snapshots manuales del sitio publico.

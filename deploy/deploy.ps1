@@ -126,7 +126,7 @@ if (-not $PSBoundParameters.ContainsKey("DemoClient") -and $DotEnvValues.Contain
     $DemoClient = $DotEnvValues["DEPLOY_DEMO_CLIENT"]
 }
 
-$ArchivePath = Join-Path $ProjectParent $ArchiveName
+$ArchivePath = Join-Path ([System.IO.Path]::GetTempPath()) $ArchiveName
 $scpArgsBase = @()
 $sshArgsBase = @()
 if ($SshKeyPath) {
@@ -162,7 +162,7 @@ New-Item -ItemType Directory -Path $StageProjectPath -Force | Out-Null
 
 Invoke-RobocopyChecked -Source $ProjectRoot -Destination $StageProjectPath -ExtraArguments @(
     "/E",
-    "/XD", ".git", ".git-inner-backup", ".venv", ".pytest_cache", "node_modules", "storage", "data", "backups", "__pycache__", "Identidad Visual", "service_account",
+    "/XD", ".git", ".git-inner-backup", ".venv", ".pytest_cache", "node_modules", "storage", "data", "backups", "__pycache__", "Identidad Visual", "service_account", "site_exports",
     "/XF", ".env", "config.json"
 )
 
@@ -172,7 +172,11 @@ $tarArgs = @(
     $ProjectName
 )
 Invoke-Checked -FilePath "tar.exe" -Arguments $tarArgs -WorkingDirectory $StageRoot
-Remove-Item -LiteralPath $StageRoot -Recurse -Force
+try {
+    Remove-Item -LiteralPath $StageRoot -Recurse -Force -ErrorAction SilentlyContinue
+} catch {
+    Write-Host "Aviso: limpieza temporal incompleta (rutas largas). Continuando..." -ForegroundColor Yellow
+}
 
 Write-Step "Subiendo paquete al VPS"
 Invoke-Checked -FilePath "scp.exe" -Arguments ($scpArgsBase + @($ArchivePath, "${ServerHost}:${RemoteBase}/"))
