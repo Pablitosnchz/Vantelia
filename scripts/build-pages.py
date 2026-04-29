@@ -260,66 +260,125 @@ PAGES = {}
 # ── SERVICIOS ─────────────────────────────────────────────
 PAGES["servicios"] = page(
     slug="servicios",
-    title="Servicios de IA y Marketing Digital para Empresas | Vantelia",
-    description="Servicios de inteligencia artificial, marketing digital, automatización comercial, SEO B2B y analítica para empresas. Captación, conversión y operación conectadas.",
+    title="Asistentes IA personalizados para empresas | Servicios | Vantelia",
+    description="Asistentes IA propios entrenados con tus datos. Reservas automáticas, WhatsApp IA, integraciones nativas y panel propio. Marketing digital y SEO B2B como complemento.",
     og_image="/assets/img/resumen.png",
     breadcrumbs=[("Inicio", BASE_URL + "/"), ("Servicios", BASE_URL + "/servicios/")],
-    hero_eyebrow="Servicios B2B",
-    hero_h1="Servicios de IA y marketing digital para empresas que quieren resultados.",
-    hero_lead="No trabajamos como una agencia de piezas sueltas. Diseñamos sistemas donde SEO, conversión, CRM, automatización, IA y analítica se conectan para mover pipeline real.",
-    hero_cta_primary=("Solicitar auditoría gratuita", "/consultas/"),
-    hero_cta_secondary=("Ver resultados", "/resultados/"),
+    hero_eyebrow="IA + automatización + marketing",
+    hero_h1="Asistentes IA personalizables, entrenados con la información de tu empresa.",
+    hero_lead="Nuestro producto principal es un asistente conversacional propio para cada cliente: aprende de tu web y documentos, agenda citas, responde por WhatsApp y se conecta a tus herramientas. Todo lo demás (marketing, SEO, automatización) lo construimos alrededor.",
+    hero_cta_primary=("Solicitar demo gratuita", "/consultas/"),
+    hero_cta_secondary=("Ver plataforma", "/plataforma/"),
     sections=[
-        """<section class="section services-bg" aria-label="Áreas de trabajo">
+        """<section class="section services-bg" aria-label="Producto principal: IA personalizable">
   <div class="shell">
     <div class="section-head reveal">
-      <span class="eyebrow">Qué hacemos</span>
-      <h2>Cuatro frentes para mejorar captación, conversión y operación.</h2>
+      <span class="eyebrow">Producto principal</span>
+      <h2>Una IA propia para cada empresa. No un chatbot genérico.</h2>
+      <p class="section-lead">Cada asistente Vantelia se entrena con la información real de tu negocio: web, documentos, FAQs, precios, servicios. Responde con precisión, deriva al equipo cuando hace falta y aprende de cada conversación.</p>
     </div>
     <div class="services-grid">
-      <article class="svc-card reveal d1">
-        <div class="svc-ico ico-a" aria-hidden="true">🎯</div>
-        <span class="svc-tag">01 · Demanda y visibilidad</span>
-        <h3>SEO B2B y contenido con foco comercial</h3>
-        <p>Posicionamiento orgánico para empresas que necesitan demanda cualificada y autoridad temática real.</p>
-        <ul class="svc-feats">
-          <li class="svc-feat">Mapeo de intenciones de búsqueda y oportunidades</li>
-          <li class="svc-feat">Landings, semántica y contenidos orientados a captación</li>
-          <li class="svc-feat">Posicionamiento de autoridad en categorías clave</li>
-        </ul>
+      <article class="svc-card wide reveal d1">
+        <div class="svc-ico ico-a" aria-hidden="true">🧠</div>
+        <span class="svc-tag">01 · Asistente IA personalizado</span>
+        <h3>Tu propio cerebro IA, entrenado con tus datos</h3>
+        <p>Cada cliente dispone de una IA exclusiva con su propio índice vectorial (RAG). Editas el cerebro, el tono, el saludo, los colores y el logo desde un panel claro. Cero plantillas, cero respuestas genéricas.</p>
+        <div class="svc-body">
+          <ul class="svc-feats">
+            <li class="svc-feat">RAG (Retrieval-Augmented Generation) propio por tenant</li>
+            <li class="svc-feat">Configuración de tono, identidad, prompt e instrucciones internas</li>
+            <li class="svc-feat">Logo, colores de marca y "Powered by tu empresa" personalizables</li>
+            <li class="svc-feat">Reindexación en horas cuando cambias la información</li>
+            <li class="svc-feat">Aislamiento total entre clientes (multi-tenant)</li>
+          </ul>
+        </div>
       </article>
       <article class="svc-card reveal d2">
-        <div class="svc-ico ico-b" aria-hidden="true">🚀</div>
-        <span class="svc-tag">02 · Conversión y rendimiento</span>
-        <h3>Paid media, CRO y experiencias que convierten</h3>
-        <p>Estructura de campañas con mensajes alineados al embudo. Optimización basada en datos, no en intuición.</p>
+        <div class="svc-ico ico-b" aria-hidden="true">📅</div>
+        <span class="svc-tag">02 · Reservas y agenda IA</span>
+        <h3>Tu IA agenda citas sola</h3>
+        <p>El asistente cualifica al usuario, consulta disponibilidad real y reserva la cita en Google Calendar o Calendly. Notifica por email a ambas partes. Cero intervención manual.</p>
         <ul class="svc-feats">
-          <li class="svc-feat">Estructura de campañas alineada al embudo</li>
-          <li class="svc-feat">Revisión de oferta, copy, landings y fricciones</li>
-          <li class="svc-feat">Seguimiento de conversión y optimización continua</li>
+          <li class="svc-feat">Sincronización con Google Calendar y Calendly</li>
+          <li class="svc-feat">Servicios, horarios, profesionales y bloqueos por cliente</li>
+          <li class="svc-feat">Recordatorios 24h y 2h antes</li>
+          <li class="svc-feat">Cancelación y reprogramación con un clic</li>
         </ul>
       </article>
       <article class="svc-card reveal d3">
-        <div class="svc-ico ico-c" aria-hidden="true">🤖</div>
-        <span class="svc-tag">03 · Automatización e IA</span>
-        <h3>Asistentes IA y procesos automáticos</h3>
-        <p>Asistentes conversacionales con IA propia por cliente. Flujos de cualificación, respuesta y seguimiento sin fricción.</p>
+        <div class="svc-ico ico-c" aria-hidden="true">💬</div>
+        <span class="svc-tag">03 · WhatsApp IA</span>
+        <h3>Mismo asistente. Por WhatsApp.</h3>
+        <p>Webhook nativo con WhatsApp Cloud API. La IA responde, agenda y deriva igual que en la web, con el mismo cerebro. Conversación unificada en el panel.</p>
         <ul class="svc-feats">
-          <li class="svc-feat">Flujos de cualificación, respuesta y seguimiento automatizado</li>
-          <li class="svc-feat">Agentes IA y asistentes para tareas repetitivas</li>
-          <li class="svc-feat">Integración con formularios, CRM, email y canales</li>
+          <li class="svc-feat">WhatsApp Cloud API oficial de Meta</li>
+          <li class="svc-feat">Webhook por cliente, número propio</li>
+          <li class="svc-feat">Mismo RAG, misma configuración, mismo tono</li>
         </ul>
       </article>
       <article class="svc-card reveal d4">
-        <div class="svc-ico ico-d" aria-hidden="true">📊</div>
-        <span class="svc-tag">04 · Analítica y dirección</span>
-        <h3>Analítica orientada a pipeline real</h3>
-        <p>Lectura clara para saber qué merece escalar. Paneles ejecutivos con foco en pipeline y eficiencia.</p>
+        <div class="svc-ico ico-d" aria-hidden="true">🔗</div>
+        <span class="svc-tag">04 · Widget embebible</span>
+        <h3>Un snippet JS. Cualquier web.</h3>
+        <p>Pega una línea en tu HTML y el asistente está vivo. Compatible con WordPress, Webflow, Shopify, Squarespace o HTML puro. Se adapta a tu marca automáticamente.</p>
         <ul class="svc-feats">
-          <li class="svc-feat">Unificación de marketing, conversión y CRM</li>
-          <li class="svc-feat">Paneles ejecutivos enfocados en pipeline</li>
-          <li class="svc-feat">Priorización por impacto y esfuerzo</li>
+          <li class="svc-feat">Instalación en menos de 5 minutos</li>
+          <li class="svc-feat">Posicionamiento configurable y CSS aislado</li>
+          <li class="svc-feat">Carga asíncrona sin penalizar el LCP</li>
         </ul>
+      </article>
+      <article class="svc-card reveal d1">
+        <div class="svc-ico ico-a" aria-hidden="true">⚡</div>
+        <span class="svc-tag">05 · Alta express</span>
+        <h3>De URL a IA operativa en menos de un día</h3>
+        <p>Mándanos tu web. Analizamos, indexamos, configuramos y entregamos el widget listo. Tú revisas el cerebro y publicas.</p>
+        <ul class="svc-feats">
+          <li class="svc-feat">Scraping y extracción automática de tu información pública</li>
+          <li class="svc-feat">Generación del índice RAG en horas</li>
+          <li class="svc-feat">Editor del cerebro accesible desde el panel</li>
+        </ul>
+      </article>
+      <article class="svc-card reveal d2">
+        <div class="svc-ico ico-b" aria-hidden="true">📊</div>
+        <span class="svc-tag">06 · Métricas y conversaciones</span>
+        <h3>Sabes lo que la IA hace. Siempre.</h3>
+        <p>Panel con conversaciones guardadas, intenciones detectadas, citas generadas, leads cualificados y embudo completo. Sin dispersión entre herramientas.</p>
+        <ul class="svc-feats">
+          <li class="svc-feat">Historial completo de cada conversación con etiquetas de intención</li>
+          <li class="svc-feat">KPIs: conversaciones, citas, satisfacción, deflection</li>
+          <li class="svc-feat">Exportación a CSV y conexión con tu CRM</li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>""",
+        """<section class="section" aria-label="Servicios complementarios">
+  <div class="shell">
+    <div class="section-head reveal">
+      <span class="eyebrow">Servicios complementarios</span>
+      <h2>Marketing y SEO B2B que potencian tu IA.</h2>
+      <p class="section-lead">La IA convierte conversaciones en oportunidades. Marketing y SEO traen conversaciones cualificadas. Lo conectamos todo en un sistema único.</p>
+    </div>
+    <div class="content-grid-4">
+      <article class="content-card reveal d1">
+        <span class="c-tag">SEO B2B</span>
+        <h3>Posicionamiento orgánico</h3>
+        <p>Mapeo de intenciones, landings de captación, semántica y autoridad temática para empresas que necesitan tráfico cualificado.</p>
+      </article>
+      <article class="content-card reveal d2">
+        <span class="c-tag">Paid media</span>
+        <h3>Campañas y CRO</h3>
+        <p>Estructura de campañas alineadas al embudo, revisión de oferta y copy, optimización con datos. Sin gastar por gastar.</p>
+      </article>
+      <article class="content-card reveal d3">
+        <span class="c-tag">Email & CRM</span>
+        <h3>Automatización comercial</h3>
+        <p>Secuencias de seguimiento, scoring, conexión con HubSpot, Pipedrive o el CRM que uses. La IA alimenta el pipeline.</p>
+      </article>
+      <article class="content-card reveal d4">
+        <span class="c-tag">Analítica</span>
+        <h3>Dashboard ejecutivo</h3>
+        <p>Lectura unificada de captación, conversión, IA y comercial. Para decidir qué escalar y qué retirar.</p>
       </article>
     </div>
   </div>
@@ -384,7 +443,7 @@ PAGES["servicios"] = page(
     extra_schema=[
         {
             "@type": "Service",
-            "serviceType": "Servicios de IA y marketing digital para empresas",
+            "serviceType": "Asistentes IA personalizados y plataforma SaaS",
             "provider": {"@id": f"{BASE_URL}/#org"},
             "areaServed": "ES",
             "url": f"{BASE_URL}/servicios/",
@@ -392,10 +451,12 @@ PAGES["servicios"] = page(
                 "@type": "OfferCatalog",
                 "name": "Servicios Vantelia",
                 "itemListElement": [
-                    {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "SEO B2B y contenido con foco comercial"}},
-                    {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Paid media, CRO y conversión"}},
-                    {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Automatización e IA aplicada"}},
-                    {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Analítica orientada a pipeline"}},
+                    {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Asistente IA personalizado por cliente (RAG propio)"}},
+                    {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Reservas automáticas y agenda IA"}},
+                    {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "WhatsApp IA con webhook nativo"}},
+                    {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Widget embebible y alta express"}},
+                    {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "SEO B2B y marketing digital complementario"}},
+                    {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Analítica unificada de IA y pipeline"}},
                 ],
             },
         }
@@ -407,72 +468,225 @@ PAGES["servicios"] = page(
 PAGES["plataforma"] = page(
     slug="plataforma",
     title="Plataforma de IA para Empresas | app.vantelia.es | Vantelia",
-    description="Plataforma de IA empresarial: asistente propio entrenado con tus datos, panel de administración, portal de cliente y gestión de citas. Siempre activa, siempre tuya.",
+    description="Plataforma multi-tenant: asistente IA propio, panel de administración, portal de cliente, configuración de IA, conversaciones, agenda y métricas. Una sola arquitectura.",
     og_image="/assets/img/prototipo-web.png",
     breadcrumbs=[("Inicio", BASE_URL + "/"), ("Plataforma", BASE_URL + "/plataforma/")],
     hero_eyebrow="app.vantelia.es",
-    hero_h1="La plataforma de IA empresarial. Siempre activa, siempre tuya.",
-    hero_lead="Cada cliente tiene su propio asistente IA, panel de administración y portal de cliente. Nosotros gestionamos la infraestructura. Tú controlas el cerebro.",
+    hero_h1="Una plataforma. Cada empresa con su IA propia.",
+    hero_lead="Multi-tenant. Cada cliente tiene asistente, cerebro, panel y métricas separados. Nosotros gestionamos la infraestructura. Tú decides cómo se comporta tu IA, qué sabe, qué responde y cómo se conecta.",
     hero_cta_primary=("Acceder a la plataforma", "https://app.vantelia.es/acceso"),
-    hero_cta_secondary=("Solicitar acceso", "/consultas/"),
+    hero_cta_secondary=("Solicitar demo", "/consultas/"),
     sections=[
-        """<section class="section platform-bg" aria-label="Portales de la plataforma">
+        """<section class="section platform-bg" aria-label="Vistas de la plataforma">
   <div class="shell">
-    <div class="platform-grid">
-      <div class="platform-copy reveal">
-        <span class="eyebrow">Tres portales · Un sistema</span>
-        <h2>Todo lo que necesitas para gestionar tu IA y tus clientes.</h2>
-        <p>La plataforma centraliza la gestión de asistentes, conversaciones, citas y métricas en una arquitectura unificada y multi-tenant.</p>
-        <div class="platform-portals">
-          <a href="https://app.vantelia.es/acceso" class="portal-card" target="_blank" rel="noopener">
-            <div class="portal-ico admin" aria-hidden="true">🛡️</div>
-            <div class="portal-body">
-              <h4>Panel de administración</h4>
-              <p>Gestión total de clientes, asistentes, reservas y analítica</p>
-            </div>
-            <div class="portal-arrow" aria-hidden="true">↗</div>
-          </a>
-          <a href="https://app.vantelia.es/acceso" class="portal-card" target="_blank" rel="noopener">
-            <div class="portal-ico client" aria-hidden="true">👤</div>
-            <div class="portal-body">
-              <h4>Portal de cliente</h4>
-              <p>Cada empresa ve y gestiona sus citas, conversaciones y configuración</p>
-            </div>
-            <div class="portal-arrow" aria-hidden="true">↗</div>
-          </a>
-          <a href="https://app.vantelia.es/acceso" class="portal-card" target="_blank" rel="noopener">
-            <div class="portal-ico config" aria-hidden="true">🤖</div>
-            <div class="portal-body">
-              <h4>Configuración de IA</h4>
-              <p>Edita el cerebro, bienvenida, tono y personalidad del asistente</p>
-            </div>
-            <div class="portal-arrow" aria-hidden="true">↗</div>
-          </a>
-        </div>
-      </div>
-      <div class="platform-visual reveal d2">
+    <div class="section-head centered reveal" style="margin-inline:auto;text-align:center;max-width:680px">
+      <span class="eyebrow">Vistas reales · app.vantelia.es</span>
+      <h2>Esto es lo que ves al entrar.</h2>
+      <p class="section-lead">Capturas fieles de la plataforma actual. Cada vista es navegable y operativa desde el primer día tras el alta.</p>
+    </div>
+
+    <!-- VISTA 1 — EDITOR IA -->
+    <div class="platform-grid reveal" style="margin-top:64px">
+      <div class="platform-visual" style="order:1">
         <div class="platform-screen">
           <div class="pscreen-bar">
             <div class="pscreen-dot" style="background:#ff5f57"></div>
             <div class="pscreen-dot" style="background:#febc2e"></div>
             <div class="pscreen-dot" style="background:#28c840"></div>
-            <div class="pscreen-url">app.vantelia.es/dashboard</div>
+            <div class="pscreen-url">app.vantelia.es/portal#ia</div>
           </div>
           <div class="pscreen-body">
             <div class="pscreen-head">
-              <div class="pscreen-title">Panel Vantelia</div>
-              <div class="pscreen-badge">● En vivo</div>
+              <div class="pscreen-title">Editor del asistente</div>
+              <div class="pscreen-badge">● Live preview</div>
             </div>
-            <div class="pscreen-stats">
-              <div class="ps-stat"><div class="ps-stat-val">247</div><div class="ps-stat-lbl">Conversaciones</div></div>
-              <div class="ps-stat"><div class="ps-stat-val">38</div><div class="ps-stat-lbl">Citas hoy</div></div>
-              <div class="ps-stat"><div class="ps-stat-val">94%</div><div class="ps-stat-lbl">Satisfacción</div></div>
+            <div style="display:grid;gap:8px;font-size:.78rem">
+              <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:9px 11px">
+                <div style="color:var(--muted-2);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Título del asistente</div>
+                <div style="color:var(--text)">Clínica Estética Plus</div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:9px 11px">
+                  <div style="color:var(--muted-2);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Color principal</div>
+                  <div style="display:flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:50%;background:#00D1FF"></span><code style="font-size:.74rem;color:var(--text)">#00D1FF</code></div>
+                </div>
+                <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:9px 11px">
+                  <div style="color:var(--muted-2);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Color acento</div>
+                  <div style="display:flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:50%;background:#00F5D4"></span><code style="font-size:.74rem;color:var(--text)">#00F5D4</code></div>
+                </div>
+              </div>
+              <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:9px 11px">
+                <div style="color:var(--muted-2);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Mensaje de bienvenida</div>
+                <div style="color:var(--text);font-size:.78rem">Hola, soy el asistente de Clínica Estética Plus. ¿En qué puedo ayudarte hoy?</div>
+              </div>
+              <div style="background:rgba(0,209,255,.06);border:1px solid rgba(0,209,255,.20);border-radius:10px;padding:9px 11px">
+                <div style="color:var(--primary);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Instrucciones internas</div>
+                <div style="color:var(--text);font-size:.76rem;line-height:1.5">Responde en tono cercano. No inventes precios. Deriva a humano si detectas urgencia médica.</div>
+              </div>
             </div>
-            <div class="pscreen-clients">
-              <div style="font-size:.72rem;color:var(--muted-2);margin-bottom:2px;letter-spacing:.06em;text-transform:uppercase">Clientes activos</div>
-              <div class="pscreen-client"><div class="pc-dot"></div><div class="pc-name">Clínica Estética Plus</div><div class="pc-convs">84 conv.</div></div>
-              <div class="pscreen-client"><div class="pc-dot"></div><div class="pc-name">Industrias Técnicas Iberia</div><div class="pc-convs">61 conv.</div></div>
-              <div class="pscreen-client"><div class="pc-dot"></div><div class="pc-name">Academia Formación Digital</div><div class="pc-convs">102 conv.</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="platform-copy">
+        <span class="eyebrow">01 · Configuración de IA</span>
+        <h3 style="font-size:1.4rem">Edita el cerebro de tu asistente, sin tocar código</h3>
+        <p>Título, logo, colores de marca, tono, mensaje de bienvenida e instrucciones internas. Todo desde un panel claro con preview en vivo del widget.</p>
+        <ul class="bullet-list">
+          <li>Logo y colores personalizables (powered by tu empresa)</li>
+          <li>Prompt de sistema editable con texto plano</li>
+          <li>Instrucciones internas que el usuario nunca ve</li>
+          <li>Cerebro (info.txt) editable y reindexación automática</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- VISTA 2 — PORTAL CLIENTE: agenda + citas -->
+    <div class="platform-grid reveal" style="margin-top:64px">
+      <div class="platform-copy">
+        <span class="eyebrow">02 · Portal cliente</span>
+        <h3 style="font-size:1.4rem">Calendario, citas del día y métricas</h3>
+        <p>Cada empresa ve sus reservas, gestiona profesionales, define horarios y bloquea fechas. Días cerrados en rojo, vacaciones en amarillo, cambios al instante.</p>
+        <ul class="bullet-list">
+          <li>Calendario mensual con eventos coloreados por estado</li>
+          <li>Citas del día con servicio, profesional y datos del cliente</li>
+          <li>Reprogramar y cancelar con un clic</li>
+          <li>Bloqueos y vacaciones por profesional o agenda general</li>
+        </ul>
+      </div>
+      <div class="platform-visual">
+        <div class="platform-screen">
+          <div class="pscreen-bar">
+            <div class="pscreen-dot" style="background:#ff5f57"></div>
+            <div class="pscreen-dot" style="background:#febc2e"></div>
+            <div class="pscreen-dot" style="background:#28c840"></div>
+            <div class="pscreen-url">app.vantelia.es/portal#calendario</div>
+          </div>
+          <div class="pscreen-body">
+            <div class="pscreen-head">
+              <div class="pscreen-title">Jueves, 30 de abril · 2 citas</div>
+              <div class="pscreen-badge">● Live</div>
+            </div>
+            <div style="display:grid;gap:6px">
+              <div style="display:grid;grid-template-columns:48px 1fr;gap:10px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+                <div style="font-family:var(--font-d);color:var(--primary);font-weight:700;font-size:.92rem">09:30</div>
+                <div>
+                  <div style="font-size:.82rem;color:var(--text);font-weight:600">Pablo Sánchez</div>
+                  <div style="font-size:.72rem;color:var(--muted)"><span style="color:var(--accent);font-weight:600">Dra Marta</span> · Automatización de procesos</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:48px 1fr;gap:10px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+                <div style="font-family:var(--font-d);color:var(--primary);font-weight:700;font-size:.92rem">11:00</div>
+                <div>
+                  <div style="font-size:.82rem;color:var(--text);font-weight:600">Sofía Fernández</div>
+                  <div style="font-size:.72rem;color:var(--muted)"><span style="color:var(--accent);font-weight:600">Paco</span> · Campañas personalizadas</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:8px">
+                <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:6px;text-align:center;font-size:.7rem">28</div>
+                <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:6px;text-align:center;font-size:.7rem">29</div>
+                <div style="background:rgba(0,209,255,.10);border:1px solid var(--primary);border-radius:6px;padding:6px;text-align:center;font-size:.7rem;color:var(--primary);font-weight:700">30</div>
+                <div style="background:rgba(247,93,122,.10);border:1px solid rgba(247,93,122,.45);border-radius:6px;padding:6px;text-align:center;font-size:.7rem;color:#F75D7A">1</div>
+                <div style="background:rgba(245,165,36,.10);border:1px solid rgba(245,165,36,.45);border-radius:6px;padding:6px;text-align:center;font-size:.7rem;color:#F5A524">2</div>
+                <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:6px;text-align:center;font-size:.7rem">3</div>
+                <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:6px;text-align:center;font-size:.7rem">4</div>
+              </div>
+              <div style="display:flex;gap:14px;font-size:.7rem;color:var(--muted);margin-top:6px">
+                <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#F75D7A;margin-right:5px"></span>Cerrado</span>
+                <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#F5A524;margin-right:5px"></span>Bloqueado</span>
+                <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--primary);margin-right:5px"></span>Hoy</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VISTA 3 — CONVERSACIONES -->
+    <div class="platform-grid reveal" style="margin-top:64px">
+      <div class="platform-visual" style="order:1">
+        <div class="platform-screen">
+          <div class="pscreen-bar">
+            <div class="pscreen-dot" style="background:#ff5f57"></div>
+            <div class="pscreen-dot" style="background:#febc2e"></div>
+            <div class="pscreen-dot" style="background:#28c840"></div>
+            <div class="pscreen-url">app.vantelia.es/portal#conversaciones</div>
+          </div>
+          <div class="pscreen-body">
+            <div class="pscreen-head">
+              <div class="pscreen-title">Conversaciones del asistente</div>
+              <div class="pscreen-badge">● 8 mensajes</div>
+            </div>
+            <div style="display:grid;gap:6px;font-size:.78rem">
+              <div style="background:linear-gradient(135deg,rgba(0,209,255,.10),rgba(0,245,212,.06));border:1px solid rgba(0,209,255,.28);border-radius:10px;padding:8px 10px">
+                <div style="font-size:.66rem;color:var(--primary);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">Asistente IA</div>
+                <div style="color:var(--text)">Hola, soy el asistente de Clínica Estética Plus. ¿En qué puedo ayudarte?</div>
+              </div>
+              <div style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-left:auto;max-width:80%">
+                <div style="color:var(--text)">Quiero información sobre tratamiento facial</div>
+              </div>
+              <div style="background:linear-gradient(135deg,rgba(0,209,255,.10),rgba(0,245,212,.06));border:1px solid rgba(0,209,255,.28);border-radius:10px;padding:8px 10px">
+                <div style="font-size:.66rem;color:var(--primary);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">Asistente IA</div>
+                <div style="color:var(--text)">Te recomiendo nuestro Hydrafacial Premium. ¿Quieres ver disponibilidad?</div>
+              </div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">
+                <span style="background:rgba(0,245,212,.10);border:1px solid rgba(0,245,212,.30);color:#00F5D4;padding:2px 8px;border-radius:5px;font-size:.66rem;font-weight:600">recomendación</span>
+                <span style="background:rgba(0,209,255,.10);border:1px solid rgba(0,209,255,.30);color:var(--primary);padding:2px 8px;border-radius:5px;font-size:.66rem;font-weight:600">agenda</span>
+                <span style="background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--muted);padding:2px 8px;border-radius:5px;font-size:.66rem;font-weight:600">2026-04-25</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="platform-copy">
+        <span class="eyebrow">03 · Conversaciones</span>
+        <h3 style="font-size:1.4rem">Cada conversación guardada y etiquetada</h3>
+        <p>Historial completo de cada chat con la IA. Etiquetas automáticas de intención (consulta, agenda, recomendación, queja). Filtros por fecha, dominio y estado.</p>
+        <ul class="bullet-list">
+          <li>Mensajes diferenciados por rol (usuario · IA · sistema)</li>
+          <li>Etiquetas de intención generadas en tiempo real</li>
+          <li>Búsqueda por contenido y filtros temporales</li>
+          <li>Exportación a CSV para análisis externo</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- VISTA 4 — METRICAS -->
+    <div class="platform-grid reveal" style="margin-top:64px">
+      <div class="platform-copy">
+        <span class="eyebrow">04 · Métricas</span>
+        <h3 style="font-size:1.4rem">KPIs reales. No vanity metrics.</h3>
+        <p>Conversaciones, mensajes, intenciones, citas próximas, archivadas e historial. Resumen operativo automático para saber si la IA está moviendo negocio.</p>
+        <ul class="bullet-list">
+          <li>Conversaciones IA y mensajes procesados</li>
+          <li>Citas activas, próximas y completadas</li>
+          <li>Intenciones detectadas (diagnóstico, recomendación, agenda)</li>
+          <li>Tasa de deflection (consultas resueltas sin humano)</li>
+        </ul>
+      </div>
+      <div class="platform-visual">
+        <div class="platform-screen">
+          <div class="pscreen-bar">
+            <div class="pscreen-dot" style="background:#ff5f57"></div>
+            <div class="pscreen-dot" style="background:#febc2e"></div>
+            <div class="pscreen-dot" style="background:#28c840"></div>
+            <div class="pscreen-url">app.vantelia.es/portal#metricas</div>
+          </div>
+          <div class="pscreen-body">
+            <div class="pscreen-head">
+              <div class="pscreen-title">Dashboard de métricas</div>
+              <div class="pscreen-badge">● 30 días</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+              <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:10px"><div style="font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Conversaciones</div><div style="font-family:var(--font-d);font-size:1.4rem;font-weight:700;background:linear-gradient(135deg,var(--primary),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">247</div></div>
+              <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:10px"><div style="font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Mensajes</div><div style="font-family:var(--font-d);font-size:1.4rem;font-weight:700;background:linear-gradient(135deg,var(--primary),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">1.8K</div></div>
+              <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:10px"><div style="font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Citas mes</div><div style="font-family:var(--font-d);font-size:1.4rem;font-weight:700;background:linear-gradient(135deg,var(--primary),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">38</div></div>
+              <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:10px"><div style="font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Intenciones</div><div style="font-family:var(--font-d);font-size:1.4rem;font-weight:700;background:linear-gradient(135deg,var(--primary),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">12</div></div>
+              <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:10px"><div style="font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Deflection</div><div style="font-family:var(--font-d);font-size:1.4rem;font-weight:700;background:linear-gradient(135deg,var(--primary),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">76%</div></div>
+              <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:10px"><div style="font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Satisfacción</div><div style="font-family:var(--font-d);font-size:1.4rem;font-weight:700;background:linear-gradient(135deg,var(--primary),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">94%</div></div>
+            </div>
+            <div style="background:rgba(0,209,255,.06);border:1px solid rgba(0,209,255,.20);border-radius:10px;padding:8px 11px;margin-top:6px">
+              <div style="color:var(--primary);font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Resumen operativo</div>
+              <div style="color:var(--text);font-size:.74rem;line-height:1.5">+18% conversaciones vs mes anterior. 76% resueltas sin humano. Intención dominante: agenda.</div>
             </div>
           </div>
         </div>
@@ -490,22 +704,22 @@ PAGES["plataforma"] = page(
       <article class="content-card reveal d1">
         <span class="c-tag">RAG</span>
         <h3>RAG por cliente</h3>
-        <p>Retrieval-Augmented Generation entrenado con la información real de cada empresa. Respuestas precisas, no genéricas.</p>
+        <p>Índice vectorial propio entrenado con tu información. Respuestas precisas, no genéricas. Reindexación con un clic.</p>
       </article>
       <article class="content-card reveal d2">
         <span class="c-tag">Integraciones</span>
         <h3>Integraciones nativas</h3>
-        <p>Google Calendar, Calendly, WhatsApp Cloud API, SMTP y CRM. Agendado y notificación automatizadas.</p>
+        <p>Google Calendar, Calendly, WhatsApp Cloud API, SMTP. Webhooks para CRM personalizables por cliente.</p>
       </article>
       <article class="content-card reveal d3">
-        <span class="c-tag">Analítica</span>
-        <h3>Analítica unificada</h3>
-        <p>Conversaciones, citas, leads y embudo en un panel. Sin dispersión entre herramientas.</p>
+        <span class="c-tag">Multi-tenant</span>
+        <h3>Aislamiento por cliente</h3>
+        <p>Cada empresa con base de datos, índice y configuración propios. Cero filtración entre tenants.</p>
       </article>
       <article class="content-card reveal d4">
         <span class="c-tag">Seguridad</span>
-        <h3>Seguridad y RGPD</h3>
-        <p>Control de dominios, sesiones, rate limiting y cumplimiento RGPD. Datos aislados por tenant.</p>
+        <h3>RGPD + control de dominios</h3>
+        <p>Allowed origins, sesiones con TTL, rate limiting, hash bcrypt, datos en infraestructura europea.</p>
       </article>
     </div>
   </div>
@@ -514,7 +728,7 @@ PAGES["plataforma"] = page(
   <div class="shell">
     <div class="section-head reveal">
       <span class="eyebrow">Alta express</span>
-      <h2>De URL a asistente IA operativo en menos de un día.</h2>
+      <h2>De URL a IA operativa en menos de un día.</h2>
     </div>
     <div class="content-grid-3">
       <article class="content-card reveal d1">
