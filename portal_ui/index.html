@@ -660,6 +660,226 @@ select {
 }
 .insight-panel strong { color: var(--accent); font-size: 13px; }
 
+.subscription-layout { display: grid; gap: 14px; }
+.subscription-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(260px, .75fr);
+  gap: 14px;
+  align-items: stretch;
+}
+.subscription-summary,
+.subscription-side,
+.subscription-actions {
+  padding: 18px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 14px;
+}
+.subscription-summary {
+  background: linear-gradient(135deg, rgba(0,209,255,0.12), rgba(0,245,212,0.06));
+  border-color: var(--accent-line);
+}
+.subscription-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.subscription-plan-title {
+  font-family: var(--font-title);
+  font-size: 1.75rem;
+  color: var(--text);
+  line-height: 1.1;
+}
+.subscription-price {
+  font-family: var(--font-title);
+  font-size: 2rem;
+  color: var(--accent);
+  line-height: 1.05;
+}
+.subscription-price small {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font);
+  font-size: 12px;
+  color: var(--soft);
+}
+.subscription-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.subscription-list li {
+  display: flex;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.subscription-list li::before {
+  content: "✓";
+  color: var(--accent-2);
+  font-weight: 800;
+}
+.subscription-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.subscription-kpi {
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 4px;
+}
+.subscription-kpi span {
+  color: var(--soft);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+.subscription-kpi strong { color: var(--text); font-size: 13px; }
+.benefit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.benefit-card {
+  padding: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 5px;
+}
+.benefit-card strong { color: var(--text); font-size: 13.5px; }
+.benefit-card span { color: var(--soft); font-size: 12.5px; line-height: 1.45; }
+.account-security-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+  gap: 14px;
+  align-items: start;
+}
+.account-stack {
+  display: grid;
+  gap: 14px;
+}
+.security-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+.security-checklist li {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 9px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.security-checklist li::before {
+  content: "✓";
+  color: var(--accent-2);
+  font-weight: 800;
+}
+.account-note {
+  padding: 12px 13px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(0,209,255,0.08), rgba(0,245,212,0.04));
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.plan-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.plan-card.current {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 1px rgba(0,209,255,0.10);
+}
+.plan-card.recommended {
+  background: linear-gradient(180deg, rgba(0,209,255,0.08), rgba(0,245,212,0.03));
+  border-color: var(--accent-line);
+}
+.plan-card strong { font-size: 1rem; color: var(--text); }
+.plan-price {
+  font-family: var(--font-title);
+  font-size: 1.6rem;
+  color: var(--accent);
+}
+.plan-card p { font-size: 12.5px; color: var(--text-2); }
+.plan-card ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--soft);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.subscription-actions {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.subscription-action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.usage-meter { display: grid; gap: 6px; }
+.usage-meter-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.usage-bar {
+  height: 8px;
+  background: var(--surface-3);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.usage-bar span {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+.plan-lock {
+  padding: 10px 12px;
+  border: 1px solid var(--warn-line);
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.is-plan-locked {
+  opacity: .55;
+  pointer-events: none;
+}
+
 /* ── Panel header ────────────────────────────────── */
 .panel-header {
   display: flex;
@@ -1369,6 +1589,7 @@ tbody tr:hover { background: var(--surface-2); }
   :root { --side-w: 240px; }
   .conversation-layout { grid-template-columns: 1fr; }
   .ai-editor-grid { grid-template-columns: 1fr; }
+  .subscription-hero { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 960px) {
@@ -1386,6 +1607,9 @@ tbody tr:hover { background: var(--surface-2); }
   .sidebar.is-open { transform: translateX(0); }
   .page { grid-template-columns: 1fr; }
   .main { grid-column: 1; padding: 18px 16px 56px; }
+  .subscription-actions { grid-template-columns: 1fr; }
+  .subscription-action-buttons { justify-content: flex-start; }
+  .account-security-layout { grid-template-columns: 1fr; }
   .booking-top { flex-direction: column; align-items: stretch; }
   .booking-meta { grid-template-columns: 1fr 1fr; }
   .today-columns { grid-template-columns: 1fr; }
@@ -1505,6 +1729,10 @@ tbody tr:hover { background: var(--surface-2); }
               <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"></path><rect x="7" y="12" width="3" height="5" rx="1"></rect><rect x="12" y="8" width="3" height="9" rx="1"></rect><rect x="17" y="5" width="3" height="12" rx="1"></rect></svg></span>
               <span class="nav-text"><strong>Metricas</strong><span>Resultados y actividad IA</span></span>
             </button>
+            <button class="nav-button" type="button" data-scroll-target="subscriptionBlock">
+              <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18M7 15h4M15 15h2"></path></svg></span>
+              <span class="nav-text"><strong>Suscripcion</strong><span>Plan, uso y pagos</span></span>
+            </button>
             <button class="nav-button" type="button" data-scroll-target="teamBlock">
               <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
               <span class="nav-text"><strong>Profesionales</strong><span>Equipo, horarios y agenda</span></span>
@@ -1526,12 +1754,8 @@ tbody tr:hover { background: var(--surface-2); }
               <span class="nav-text"><strong>IA</strong><span>Bienvenida, tono e identidad</span></span>
             </button>
             <button class="nav-button" type="button" data-scroll-target="accountBlock">
-              <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M20 21a8 8 0 0 0-16 0"></path></svg></span>
-              <span class="nav-text"><strong>Cuenta</strong><span>Datos del acceso</span></span>
-            </button>
-            <button class="nav-button" type="button" data-scroll-target="securityBlock">
               <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9.5 12l1.8 1.8L15 10"></path></svg></span>
-              <span class="nav-text"><strong>Seguridad</strong><span>Cambiar contrasena</span></span>
+              <span class="nav-text"><strong>Cuenta y seguridad</strong><span>Acceso, perfil y contrasena</span></span>
             </button>
             <button class="nav-button" type="button" data-scroll-target="conversationsBlock">
               <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"></path></svg></span>
@@ -1604,6 +1828,107 @@ tbody tr:hover { background: var(--surface-2); }
           <div class="insight-panel">
             <strong>Resumen operativo</strong>
             <div id="metricsSummary" class="muted">Cargando actividad del portal...</div>
+          </div>
+        </section>
+
+        <section class="card panel hidden" id="subscriptionBlock">
+          <div class="panel-header">
+            <div>
+              <h3>Suscripcion</h3>
+              <div class="muted">Tu plan, lo que incluye y las opciones para cambiarlo. Sin permanencia.</div>
+            </div>
+            <div class="row">
+              <button id="subscriptionUpgradeBtn" class="primary small" type="button">Mejorar mi plan</button>
+              <button id="subscriptionHelpBtn" class="secondary small" type="button">Contactar para ayuda</button>
+            </div>
+          </div>
+
+          <div class="subscription-layout">
+            <div class="subscription-hero">
+              <article class="subscription-summary">
+                <div class="subscription-title-row">
+                  <div>
+                    <div class="muted">Plan actual</div>
+                    <div class="subscription-plan-title" id="subscriptionPlanLabel">-</div>
+                    <div class="muted" id="subscriptionStatus">Cargando suscripcion...</div>
+                  </div>
+                  <div class="subscription-price">
+                    <span id="subscriptionPrice">-</span>
+                    <small>IVA no incluido</small>
+                  </div>
+                </div>
+                <div>
+                  <strong>Que incluye</strong>
+                  <ul class="subscription-list" id="subscriptionIncludedList">
+                    <li>Cargando contenido del plan...</li>
+                  </ul>
+                </div>
+              </article>
+
+              <aside class="subscription-side">
+                <div>
+                  <strong>Informacion de pago</strong>
+                  <div class="subscription-kpis">
+                    <div class="subscription-kpi">
+                      <span>Proximo cobro</span>
+                      <strong id="subscriptionNextCharge">-</strong>
+                    </div>
+                    <div class="subscription-kpi">
+                      <span>Renovacion</span>
+                      <strong id="subscriptionRenewal">-</strong>
+                    </div>
+                    <div class="subscription-kpi">
+                      <span>Permanencia</span>
+                      <strong>Sin permanencia</strong>
+                    </div>
+                  </div>
+                </div>
+                <div class="usage-meter">
+                  <div class="usage-meter-top"><span>Conversaciones este mes</span><span id="subscriptionConversationsLabel">-</span></div>
+                  <div class="usage-bar"><span id="subscriptionConversationsBar"></span></div>
+                </div>
+                <div class="usage-meter">
+                  <div class="usage-meter-top"><span>Citas este mes</span><span id="subscriptionBookingsLabel">-</span></div>
+                  <div class="usage-bar"><span id="subscriptionBookingsBar"></span></div>
+                </div>
+              </aside>
+            </div>
+
+            <div>
+              <div class="panel-header">
+                <div>
+                  <h3>Beneficios del servicio</h3>
+                  <div class="muted">Lo que este plan aporta al negocio en el dia a dia.</div>
+                </div>
+              </div>
+              <div class="benefit-grid" id="subscriptionBenefits">
+                <div class="benefit-card"><strong>Cargando beneficios...</strong><span>Un momento.</span></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="panel-header">
+                <div>
+                  <h3>Opciones disponibles</h3>
+                  <div class="muted">Mejora cuando necesites mas volumen, WhatsApp, marca propia o varias agendas.</div>
+                </div>
+              </div>
+              <div class="plan-grid" id="plansGrid">
+                <div class="empty">Cargando planes disponibles...</div>
+              </div>
+            </div>
+
+            <div class="subscription-actions">
+              <div>
+                <strong>Gestion de la suscripcion</strong>
+                <div class="muted" id="subscriptionActionText">Puedes cambiar o cancelar desde facturacion. Si prefieres que revisemos tu caso, te ayudamos.</div>
+              </div>
+              <div class="subscription-action-buttons">
+                <button id="manageBillingBtn" class="secondary small" type="button">Cambiar suscripcion</button>
+                <button id="cancelSubscriptionBtn" class="ghost small" type="button">Cancelar suscripcion</button>
+                <button id="subscriptionHelpFooterBtn" class="secondary small" type="button">Contactar para ayuda</button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1867,36 +2192,123 @@ tbody tr:hover { background: var(--surface-2); }
         <section class="card panel hidden" id="accountBlock">
           <div class="panel-header">
             <div>
-              <h3>Cuenta</h3>
-              <div class="muted">Actualiza los datos del acceso que usas para entrar al portal.</div>
+              <h3>Cuenta y seguridad</h3>
+              <div class="muted">Gestiona tu acceso al portal, los datos visibles de tu cuenta y la contrasena desde un unico sitio.</div>
             </div>
+            <button id="logoutFromAccountBtn" class="danger small" type="button">Cerrar sesion</button>
           </div>
-          <div class="reschedule-grid">
-            <label>
-              Nombre visible
-              <input id="accountDisplayName" type="text" maxlength="120" />
-            </label>
-            <label>
-              Email de acceso
-              <input id="accountEmail" type="email" maxlength="120" />
-            </label>
-            <label>
-              Empresa
-              <input id="accountCompany" type="text" readonly />
-            </label>
-          </div>
-          <div class="booking-meta">
-            <div class="meta-box">
-              <span class="meta-label">Rol</span>
-              <span class="meta-value" id="accountRole">-</span>
+
+          <div class="account-security-layout">
+            <div class="account-stack">
+              <div class="subcard">
+                <div class="panel-header">
+                  <div>
+                    <h3>Datos de acceso</h3>
+                    <div class="muted">Estos datos identifican tu cuenta dentro del portal de cliente.</div>
+                  </div>
+                </div>
+                <div class="reschedule-grid">
+                  <label>
+                    Nombre visible
+                    <input id="accountDisplayName" type="text" maxlength="120" />
+                  </label>
+                  <label>
+                    Email de acceso
+                    <input id="accountEmail" type="email" maxlength="120" />
+                  </label>
+                  <label>
+                    Empresa
+                    <input id="accountCompany" type="text" readonly />
+                  </label>
+                </div>
+                <div class="row">
+                  <button id="saveAccountBtn" class="primary small" type="button">Guardar datos</button>
+                </div>
+              </div>
+
+              <div class="subcard">
+                <div class="panel-header">
+                  <div>
+                    <h3>Cambiar contrasena</h3>
+                    <div class="muted">Usa una contrasena unica y dificil de adivinar para proteger la agenda y los datos de clientes.</div>
+                  </div>
+                </div>
+                <div class="reschedule-grid">
+                  <label>
+                    Contrasena actual
+                    <input id="changeCurrentPassword" type="password" placeholder="Tu contrasena actual" />
+                  </label>
+                  <label>
+                    Nueva contrasena
+                    <input id="changeNewPassword" type="password" placeholder="Minimo 8 caracteres" />
+                  </label>
+                  <label>
+                    Repite la nueva contrasena
+                    <input id="changeNewPasswordConfirm" type="password" placeholder="Repite la nueva contrasena" />
+                  </label>
+                </div>
+                <div class="row">
+                  <button id="changePasswordBtn" class="secondary small" type="button">Actualizar contrasena</button>
+                </div>
+              </div>
             </div>
-            <div class="meta-box">
-              <span class="meta-label">Ultimo acceso</span>
-              <span class="meta-value" id="accountLastLogin">-</span>
-            </div>
+
+            <aside class="account-stack">
+              <div class="subcard">
+                <div class="panel-header">
+                  <div>
+                    <h3>Estado de la cuenta</h3>
+                    <div class="muted">Resumen rapido de tu acceso actual.</div>
+                  </div>
+                </div>
+                <div class="booking-meta">
+                  <div class="meta-box">
+                    <span class="meta-label">Rol</span>
+                    <span class="meta-value" id="accountRole">-</span>
+                  </div>
+                  <div class="meta-box">
+                    <span class="meta-label">Ultimo acceso</span>
+                    <span class="meta-value" id="accountLastLogin">-</span>
+                  </div>
+                  <div class="meta-box">
+                    <span class="meta-label">Sesion</span>
+                    <span class="meta-value" id="accountSessionState">Activa</span>
+                  </div>
+                  <div class="meta-box">
+                    <span class="meta-label">Soporte</span>
+                    <span class="meta-value">soporte@vantelia.es</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="subcard">
+                <div class="panel-header">
+                  <div>
+                    <h3>Buenas practicas</h3>
+                    <div class="muted">Pequenos habitos que reducen riesgos en el dia a dia.</div>
+                  </div>
+                </div>
+                <ul class="security-checklist">
+                  <li>No compartas tu usuario con otras personas del equipo.</li>
+                  <li>Cierra sesion si usas un ordenador compartido.</li>
+                  <li>Cambia la contrasena si alguien deja de trabajar contigo.</li>
+                  <li>Usa el apartado Profesionales para gestionar el equipo, no cuentas compartidas.</li>
+                </ul>
+              </div>
+
+              <div class="account-note">
+                Si necesitas cambiar el propietario de la cuenta, crear accesos para otras personas o revisar permisos, contacta con Vantelia y lo dejamos configurado sin afectar a tus citas.
+              </div>
+            </aside>
           </div>
-          <div class="row">
-            <button id="saveAccountBtn" class="primary small" type="button">Guardar datos</button>
+        </section>
+
+        <section class="card panel hidden" id="securityBlock" aria-hidden="true">
+          <div class="panel-header">
+            <div>
+              <h3>Cuenta y seguridad</h3>
+              <div class="muted">Esta seccion se ha unificado. Te llevamos al panel principal de cuenta.</div>
+            </div>
           </div>
         </section>
 
@@ -2239,31 +2651,6 @@ tbody tr:hover { background: var(--surface-2); }
           </div>
         </section>
 
-        <section class="card panel hidden" id="securityBlock">
-          <div class="panel-header">
-            <div>
-              <h3>Seguridad</h3>
-              <div class="muted">Actualiza la contrasena del portal cuando necesites reforzar el acceso.</div>
-            </div>
-          </div>
-          <div class="reschedule-grid">
-            <label>
-              Contrasena actual
-              <input id="changeCurrentPassword" type="password" placeholder="Tu contrasena actual" />
-            </label>
-            <label>
-              Nueva contrasena
-              <input id="changeNewPassword" type="password" placeholder="Nueva contrasena" />
-            </label>
-            <label>
-              Repite la nueva contrasena
-              <input id="changeNewPasswordConfirm" type="password" placeholder="Repite la nueva contrasena" />
-            </label>
-          </div>
-          <div class="row">
-            <button id="changePasswordBtn" class="secondary small" type="button">Actualizar contrasena</button>
-          </div>
-        </section>
       </main>
     </div>
   </div>
@@ -2311,6 +2698,7 @@ tbody tr:hover { background: var(--surface-2); }
       blockTarget: "general",
       employeeFilter: "",
       dashboard: null,
+      subscription: null,
       searchTimer: null,
       forgotCooldownSeconds: 0,
       forgotCooldownTimer: null,
@@ -2336,6 +2724,7 @@ tbody tr:hover { background: var(--surface-2); }
         "/auth/schedule",
         "/auth/ai-config",
         "/auth/brain",
+        "/auth/subscription",
         "/auth/chats",
         "/auth/employees",
         "/auth/services",
@@ -2393,6 +2782,25 @@ tbody tr:hover { background: var(--surface-2); }
       stat4: document.getElementById("stat4"),
       stat4Label: document.getElementById("stat4Label"),
       metricsBlock: document.getElementById("metricsBlock"),
+      subscriptionBlock: document.getElementById("subscriptionBlock"),
+      subscriptionPlanLabel: document.getElementById("subscriptionPlanLabel"),
+      subscriptionStatus: document.getElementById("subscriptionStatus"),
+      subscriptionPrice: document.getElementById("subscriptionPrice"),
+      subscriptionIncludedList: document.getElementById("subscriptionIncludedList"),
+      subscriptionConversationsLabel: document.getElementById("subscriptionConversationsLabel"),
+      subscriptionConversationsBar: document.getElementById("subscriptionConversationsBar"),
+      subscriptionBookingsLabel: document.getElementById("subscriptionBookingsLabel"),
+      subscriptionBookingsBar: document.getElementById("subscriptionBookingsBar"),
+      subscriptionNextCharge: document.getElementById("subscriptionNextCharge"),
+      subscriptionRenewal: document.getElementById("subscriptionRenewal"),
+      subscriptionBenefits: document.getElementById("subscriptionBenefits"),
+      subscriptionActionText: document.getElementById("subscriptionActionText"),
+      plansGrid: document.getElementById("plansGrid"),
+      subscriptionUpgradeBtn: document.getElementById("subscriptionUpgradeBtn"),
+      subscriptionHelpBtn: document.getElementById("subscriptionHelpBtn"),
+      manageBillingBtn: document.getElementById("manageBillingBtn"),
+      cancelSubscriptionBtn: document.getElementById("cancelSubscriptionBtn"),
+      subscriptionHelpFooterBtn: document.getElementById("subscriptionHelpFooterBtn"),
       metricChats: document.getElementById("metricChats"),
       metricMessages: document.getElementById("metricMessages"),
       metricIntents: document.getElementById("metricIntents"),
@@ -2443,7 +2851,9 @@ tbody tr:hover { background: var(--surface-2); }
       accountCompany: document.getElementById("accountCompany"),
       accountRole: document.getElementById("accountRole"),
       accountLastLogin: document.getElementById("accountLastLogin"),
+      accountSessionState: document.getElementById("accountSessionState"),
       saveAccountBtn: document.getElementById("saveAccountBtn"),
+      logoutFromAccountBtn: document.getElementById("logoutFromAccountBtn"),
       scheduleBlock: document.getElementById("scheduleBlock"),
       blocksBlock: document.getElementById("blocksBlock"),
       messagesBlock: document.getElementById("messagesBlock"),
@@ -2576,6 +2986,267 @@ tbody tr:hover { background: var(--surface-2); }
       return data;
     }
 
+    const SUBSCRIPTION_PLAN_COPY = {
+      esencial: {
+        headline: "Para empezar rapido con un asistente en tu web y agenda basica.",
+        includes: [
+          "Asistente IA en la web entrenado con la informacion de tu empresa.",
+          "Hasta 500 conversaciones al mes.",
+          "Hasta 50 citas al mes con recordatorios por email.",
+          "Agenda basica para 1 profesional.",
+          "Panel con citas, conversaciones y metricas basicas.",
+          "Alta express incluida y soporte por email.",
+        ],
+        benefits: [
+          ["Atencion 24/7", "Tus visitantes reciben respuesta aunque tu equipo no este disponible."],
+          ["Menos tareas manuales", "El asistente responde dudas frecuentes y recoge solicitudes de cita."],
+          ["Arranque rapido", "Ideal para validar el canal sin una configuracion compleja."],
+        ],
+      },
+      pro: {
+        headline: "Para pymes con varios profesionales, marca propia y atencion por WhatsApp.",
+        includes: [
+          "Personalizacion completa con logo, colores e icono.",
+          "Hasta 3.000 conversaciones al mes.",
+          "Hasta 500 citas al mes.",
+          "Agenda multi-profesional, hasta 5 personas.",
+          "WhatsApp inteligente incluido.",
+          "Hasta 3 cuentas de acceso al portal.",
+          "Exportacion de conversaciones y citas para analizarlas.",
+          "Soporte prioritario por email.",
+        ],
+        benefits: [
+          ["Mas canales de venta", "El mismo asistente atiende en web y WhatsApp con respuestas coherentes."],
+          ["Mejor imagen de marca", "El asistente se presenta con la identidad visual de tu negocio."],
+          ["Equipo mas ordenado", "Varias agendas y accesos para trabajar sin depender de una sola persona."],
+        ],
+      },
+      empresa: {
+        headline: "Para empresas con varias sedes, alto volumen o integraciones a medida.",
+        includes: [
+          "Conversaciones y citas ilimitadas.",
+          "Profesionales y cuentas del portal ilimitadas.",
+          "Multiples agendas o sedes en paralelo.",
+          "Conexion con CRM cuando el proyecto lo requiere.",
+          "Onboarding personalizado 1:1.",
+          "Revision mensual de conversaciones.",
+          "Asesoria estrategica mensual y soporte directo.",
+        ],
+        benefits: [
+          ["Escala sin frenar", "El asistente acompana el crecimiento sin limites de volumen."],
+          ["Operacion conectada", "El portal puede encajar con CRM, sedes y procesos internos."],
+          ["Acompanamiento cercano", "Revisamos resultados y mejoras contigo cada mes."],
+        ],
+      },
+    };
+
+    function usagePercent(current, limit) {
+      if (limit === null || limit === undefined || !Number(limit)) return 100;
+      return Math.max(0, Math.min(100, Math.round((Number(current || 0) / Number(limit)) * 100)));
+    }
+
+    function simpleDateLabel(value) {
+      if (!value) return "No disponible";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return formatDateTimeLabel(value);
+      return date.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }).replace(".", "");
+    }
+
+    function subscriptionStatusLabel(status) {
+      const labels = {
+        active: "Activa",
+        trialing: "En prueba",
+        past_due: "Pago pendiente",
+        unpaid: "Pago pendiente",
+        canceled: "Cancelada",
+        incomplete: "Pendiente",
+        incomplete_expired: "Pendiente",
+      };
+      return labels[String(status || "").toLowerCase()] || "Activa";
+    }
+
+    function subscriptionUsageText(current, limit, singular, plural) {
+      const used = Number(current || 0);
+      const noun = used === 1 ? singular : plural;
+      if (limit === null || limit === undefined) return `${used} ${noun} / ilimitadas`;
+      return `${used} ${noun} / ${limit}`;
+    }
+
+    function nextPlanFor(plan) {
+      if (plan === "esencial") return "pro";
+      if (plan === "pro") return "empresa";
+      return "empresa";
+    }
+
+    function supportUrl(plan = "") {
+      const query = plan ? `?plan=${encodeURIComponent(plan)}&origen=portal-suscripcion` : "?origen=portal-suscripcion";
+      return `https://www.vantelia.es/consultas/${query}`;
+    }
+
+    function applyPlanRestrictions() {
+      const subscription = state.subscription || {};
+      const features = subscription.features || {};
+      const brandingAllowed = Boolean(features.branding_customization);
+      const brandingFields = [
+        document.getElementById("aiTitle"),
+        el.aiIcono,
+        document.getElementById("aiLogo"),
+        document.getElementById("aiLogoRemoveBtn"),
+        document.getElementById("aiBrandingText"),
+        document.getElementById("aiColorPrimary"),
+        document.getElementById("aiColorAccent"),
+      ].filter(Boolean);
+      brandingFields.forEach((field) => {
+        field.disabled = !brandingAllowed;
+        field.closest("label")?.classList.toggle("is-plan-locked", !brandingAllowed);
+      });
+      let lockNote = document.getElementById("aiBrandingLock");
+      if (!lockNote) {
+        lockNote = document.createElement("div");
+        lockNote.id = "aiBrandingLock";
+        lockNote.className = "plan-lock hidden";
+        const editor = el.aiBlock?.querySelector(".ai-editor-grid .subcard");
+        const header = editor?.querySelector(".panel-header");
+        if (header) header.insertAdjacentElement("afterend", lockNote);
+      }
+      lockNote.textContent = "Tu plan actual mantiene la identidad visual de Vantelia. La personalizacion de colores, logo e icono se activa desde Pro.";
+      lockNote.classList.toggle("hidden", brandingAllowed);
+
+      if (el.exportBookingsBtn) {
+        el.exportBookingsBtn.disabled = !Boolean(features.csv_export);
+        el.exportBookingsBtn.title = features.csv_export ? "" : "La exportacion CSV esta incluida en Pro y Empresa.";
+      }
+      const maxProfessionals = features.max_professionals;
+      const activeProfessionals = state.employees.filter((employee) => employee.is_active).length;
+      if (el.newEmployeeBtn && maxProfessionals !== null && maxProfessionals !== undefined) {
+        const atLimit = activeProfessionals >= Number(maxProfessionals);
+        el.newEmployeeBtn.disabled = atLimit;
+        el.newEmployeeBtn.title = atLimit ? `Tu plan permite hasta ${maxProfessionals} profesional(es).` : "";
+      }
+    }
+
+    function renderSubscription(subscription) {
+      state.subscription = subscription || null;
+      if (!subscription) return;
+      const usage = subscription.usage || {};
+      const plan = String(subscription.plan || "esencial").toLowerCase();
+      const planCopy = SUBSCRIPTION_PLAN_COPY[plan] || SUBSCRIPTION_PLAN_COPY.esencial;
+      const conversationLimit = usage.conversations_limit;
+      const bookingLimit = usage.bookings_limit;
+      const renewalLabel = simpleDateLabel(subscription.renews_at);
+
+      el.subscriptionPlanLabel.textContent = subscription.plan_label || "Esencial";
+      el.subscriptionStatus.textContent = subscription.renews_at
+        ? `${subscriptionStatusLabel(subscription.status)} | renueva el ${renewalLabel}`
+        : `${subscriptionStatusLabel(subscription.status)} | mes a mes`;
+      el.subscriptionPrice.textContent = `${subscription.price_eur || 0} EUR/mes`;
+      el.subscriptionIncludedList.innerHTML = planCopy.includes
+        .map((item) => `<li>${escapeHtml(item)}</li>`)
+        .join("");
+      el.subscriptionConversationsLabel.textContent = subscriptionUsageText(
+        usage.conversations,
+        conversationLimit,
+        "conversacion",
+        "conversaciones"
+      );
+      el.subscriptionConversationsBar.style.width = `${usagePercent(usage.conversations, conversationLimit)}%`;
+      el.subscriptionBookingsLabel.textContent = subscriptionUsageText(
+        usage.bookings,
+        bookingLimit,
+        "cita",
+        "citas"
+      );
+      el.subscriptionBookingsBar.style.width = `${usagePercent(usage.bookings, bookingLimit)}%`;
+      el.subscriptionNextCharge.textContent = renewalLabel;
+      el.subscriptionRenewal.textContent = renewalLabel;
+      el.manageBillingBtn.disabled = !subscription.stripe_customer_id;
+      el.cancelSubscriptionBtn.disabled = !subscription.stripe_customer_id;
+      el.subscriptionActionText.textContent = subscription.stripe_customer_id
+        ? "Puedes cambiar, reducir o cancelar desde facturacion. Si quieres orientacion, te ayudamos a elegir el plan correcto."
+        : "Este cliente no tiene facturacion online activa. Para cambios o cancelacion, contacta con Vantelia.";
+      el.subscriptionBenefits.innerHTML = planCopy.benefits.map(([title, text]) => `
+        <article class="benefit-card">
+          <strong>${escapeHtml(title)}</strong>
+          <span>${escapeHtml(text)}</span>
+        </article>
+      `).join("");
+
+      const planOrder = ["esencial", "pro", "empresa"];
+      const currentIndex = planOrder.indexOf(plan);
+      el.plansGrid.innerHTML = "";
+      (subscription.available_plans || []).forEach((plan) => {
+        const planId = String(plan.plan || "").toLowerCase();
+        const copy = SUBSCRIPTION_PLAN_COPY[planId] || SUBSCRIPTION_PLAN_COPY.esencial;
+        const planIndex = planOrder.indexOf(planId);
+        const isUpgrade = currentIndex >= 0 && planIndex > currentIndex;
+        const isDowngrade = currentIndex >= 0 && planIndex < currentIndex;
+        const buttonText = plan.is_current
+          ? "Plan activo"
+          : (planId === "empresa"
+            ? "Contactar para ayuda"
+            : (isUpgrade ? "Mejorar mi plan" : (isDowngrade ? "Reducir plan" : "Cambiar suscripcion")));
+        const card = document.createElement("article");
+        card.className = `plan-card${plan.is_current ? " current" : ""}${planId === "pro" && !plan.is_current ? " recommended" : ""}`;
+        card.innerHTML = `
+          <div class="panel-header">
+            <div>
+              <strong>${escapeHtml(plan.label || plan.plan)}</strong>
+              <div class="plan-price">${planId === "empresa" ? "Desde " : ""}${escapeHtml(plan.price_eur || 0)} EUR/mes</div>
+            </div>
+            ${plan.is_current ? '<span class="pill accent">Actual</span>' : ""}
+            ${planId === "pro" && !plan.is_current ? '<span class="pill success">Mas elegido</span>' : ""}
+          </div>
+          <p>${escapeHtml(copy.headline)}</p>
+          <ul>${copy.includes.slice(0, 4).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+          <button class="${isUpgrade || planId === "empresa" ? "primary" : "secondary"} small" type="button" data-plan="${escapeHtml(planId)}" ${plan.is_current ? "disabled" : ""}>${buttonText}</button>
+        `;
+        el.plansGrid.appendChild(card);
+      });
+      el.plansGrid.querySelectorAll("button[data-plan]").forEach((button) => {
+        button.addEventListener("click", () => startCheckout(button.dataset.plan || "").catch((error) => setStatus(error.message, "error")));
+      });
+      applyPlanRestrictions();
+    }
+
+    async function loadSubscription() {
+      const subscription = await api("/auth/subscription");
+      renderSubscription(subscription);
+    }
+
+    async function startCheckout(plan) {
+      if (!plan) return;
+      if (plan === "empresa") {
+        window.location.href = supportUrl("empresa");
+        return;
+      }
+      setStatus("Abriendo pago seguro...", "info");
+      const response = await api("/auth/subscription/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan,
+          success_url: `${window.location.origin}${window.location.pathname}?subscription=success`,
+          cancel_url: `${window.location.origin}${window.location.pathname}?subscription=cancel`,
+        }),
+      });
+      window.location.href = response.url;
+    }
+
+    function contactSubscriptionHelp() {
+      window.location.href = supportUrl(state.subscription?.plan || "");
+    }
+
+    function upgradeSubscription() {
+      const targetPlan = nextPlanFor(String(state.subscription?.plan || "esencial").toLowerCase());
+      startCheckout(targetPlan).catch((error) => setStatus(error.message, "error"));
+    }
+
+    async function openBillingPortal() {
+      setStatus("Abriendo facturacion...", "info");
+      const response = await api("/auth/subscription/portal", { method: "POST" });
+      window.location.href = response.url;
+    }
+
     function setAuthView(view) {
       state.authView = view;
       el.loginCard.classList.toggle("hidden", view !== "login");
@@ -2631,9 +3302,9 @@ tbody tr:hover { background: var(--surface-2); }
 
     function openSecurityPanel() {
       if (!state.user) return;
-      setPortalView("seguridad");
+      setPortalView("cuenta");
       el.changeCurrentPassword.focus();
-      setStatus("Aqui puedes cambiar tu contrasena actual.", "info");
+      setStatus("Cuenta y seguridad: aqui puedes cambiar tu contrasena actual.", "info");
     }
 
     function syncBlockDateMode() {
@@ -2845,10 +3516,11 @@ tbody tr:hover { background: var(--surface-2); }
 
     function setPortalView(view) {
       if (!state.user) return;
-      const normalizedView = String(view || "").trim().toLowerCase();
+      let normalizedView = String(view || "").trim().toLowerCase();
+      if (normalizedView === "seguridad") normalizedView = "cuenta";
       const allowedViews = isPortalAdminClientView()
-        ? ["citas", "hoy", "metricas", "conversaciones", "profesionales", "horario", "bloqueos", "mensajes", "ia"]
-        : ["citas", "hoy", "metricas", "conversaciones", "profesionales", "cuenta", "horario", "bloqueos", "mensajes", "ia", "seguridad"];
+        ? ["citas", "hoy", "metricas", "suscripcion", "conversaciones", "profesionales", "horario", "bloqueos", "mensajes", "ia"]
+        : ["citas", "hoy", "metricas", "suscripcion", "conversaciones", "profesionales", "cuenta", "horario", "bloqueos", "mensajes", "ia"];
       const nextView = allowedViews.includes(normalizedView)
         ? normalizedView
         : "citas";
@@ -2857,6 +3529,7 @@ tbody tr:hover { background: var(--surface-2); }
         citas: el.portalContent,
         hoy: el.todayBlock,
         metricas: el.metricsBlock,
+        suscripcion: el.subscriptionBlock,
         conversaciones: el.conversationsBlock,
         profesionales: el.teamBlock,
         cuenta: el.accountBlock,
@@ -2864,7 +3537,6 @@ tbody tr:hover { background: var(--surface-2); }
         bloqueos: el.blocksBlock,
         mensajes: el.messagesBlock,
         ia: el.aiBlock,
-        seguridad: el.securityBlock,
       };
       Object.entries(viewTargets).forEach(([key, target]) => {
         target.classList.toggle("hidden", key !== nextView);
@@ -2882,6 +3554,7 @@ tbody tr:hover { background: var(--surface-2); }
       el.accountCompany.value = user.cliente_id || "Vantelia";
       el.accountRole.textContent = user.role === "admin" ? "Administrador" : "Cliente";
       el.accountLastLogin.textContent = formatDateTimeLabel(user.last_login_at);
+      if (el.accountSessionState) el.accountSessionState.textContent = "Activa";
     }
 
     function aiAssistantName() {
@@ -2978,6 +3651,7 @@ tbody tr:hover { background: var(--surface-2); }
       }
 
       renderAiPreview(config || {});
+      applyPlanRestrictions();
     }
 
     async function loadAiConfig() {
@@ -3225,6 +3899,7 @@ tbody tr:hover { background: var(--surface-2); }
       if (state.dashboard) renderTodayOverview(state.dashboard);
       renderUnifiedScheduleEditor();
       renderUnifiedBlocksEditor();
+      applyPlanRestrictions();
     }
 
     function startNewEmployeeDraft() {
@@ -3563,6 +4238,7 @@ tbody tr:hover { background: var(--surface-2); }
       el.statsGrid.classList.toggle("hidden", !isAuthed);
       el.todayBlock.classList.toggle("hidden", true);
       el.portalContent.classList.toggle("hidden", true);
+      el.subscriptionBlock.classList.toggle("hidden", true);
       el.teamBlock.classList.toggle("hidden", true);
       el.accountBlock.classList.toggle("hidden", true);
       el.scheduleBlock.classList.toggle("hidden", true);
@@ -3602,7 +4278,6 @@ tbody tr:hover { background: var(--surface-2); }
       el.openAdminBtn.classList.toggle("hidden", !isAdmin);
       el.changePasswordShortcutBtn.classList.toggle("hidden", adminClientView);
       document.querySelector('[data-scroll-target="accountBlock"]')?.classList.toggle("hidden", adminClientView);
-      document.querySelector('[data-scroll-target="securityBlock"]')?.classList.toggle("hidden", adminClientView);
       el.contactBlock.classList.remove("hidden");
       setAuthView("login");
 
@@ -4675,6 +5350,7 @@ tbody tr:hover { background: var(--surface-2); }
       renderShell();
       renderStats(payload.stats || {});
       renderTodayOverview(payload);
+      await loadSubscription();
       await loadAiConfig();
       await loadBrainInfo();
       await loadServices();
@@ -4764,6 +5440,7 @@ tbody tr:hover { background: var(--surface-2); }
       state.schedule = null;
       state.aiConfig = null;
       state.brainInfo = null;
+      state.subscription = null;
       el.changeCurrentPassword.value = "";
       el.changeNewPassword.value = "";
       el.changeNewPasswordConfirm.value = "";
@@ -4850,9 +5527,15 @@ tbody tr:hover { background: var(--surface-2); }
     el.changePasswordShortcutBtn.addEventListener("click", () => openSecurityPanel());
     el.logoutBtn.addEventListener("click", () => logout().catch((error) => setStatus(error.message, "error")));
     el.topLogoutBtn.addEventListener("click", () => logout().catch((error) => setStatus(error.message, "error")));
+    el.logoutFromAccountBtn.addEventListener("click", () => logout().catch((error) => setStatus(error.message, "error")));
     el.openAdminBtn.addEventListener("click", () => window.open("/dashboard", "_blank", "noopener,noreferrer"));
     el.changePasswordBtn.addEventListener("click", () => changePassword().catch((error) => setStatus(error.message, "error")));
     el.saveAccountBtn.addEventListener("click", () => saveAccount().catch((error) => setStatus(error.message, "error")));
+    el.subscriptionUpgradeBtn.addEventListener("click", () => upgradeSubscription());
+    el.subscriptionHelpBtn.addEventListener("click", () => contactSubscriptionHelp());
+    el.manageBillingBtn.addEventListener("click", () => openBillingPortal().catch((error) => setStatus(error.message, "error")));
+    el.cancelSubscriptionBtn.addEventListener("click", () => openBillingPortal().catch((error) => setStatus(error.message, "error")));
+    el.subscriptionHelpFooterBtn.addEventListener("click", () => contactSubscriptionHelp());
     el.refreshMetricsBtn.addEventListener("click", () => loadDashboard().catch((error) => setStatus(error.message, "error")));
     el.refreshConversationsBtn.addEventListener("click", () => {
       state.selectedChatSessionId = "";
@@ -4895,13 +5578,13 @@ tbody tr:hover { background: var(--surface-2); }
           todayBlock: "hoy",
           metricsBlock: "metricas",
           conversationsBlock: "conversaciones",
+          subscriptionBlock: "suscripcion",
           teamBlock: "profesionales",
           accountBlock: "cuenta",
           scheduleBlock: "horario",
           blocksBlock: "bloqueos",
           messagesBlock: "mensajes",
           aiBlock: "ia",
-          securityBlock: "seguridad",
         };
         setPortalView(targetToView[button.dataset.scrollTarget] || "citas");
       });

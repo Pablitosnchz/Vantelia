@@ -27,6 +27,12 @@ from urllib.parse import quote, urlparse
 
 import httpx
 from dotenv import load_dotenv
+
+try:
+    import stripe as _stripe_module
+    stripe: Any = _stripe_module
+except ImportError:
+    stripe = None
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -139,6 +145,79 @@ CONSULTA_NOTIFICATION_EMAIL = (
     parseaddr(os.getenv("CONSULTA_NOTIFICATION_EMAIL", "").strip())[1]
     or "vanteliadigital@gmail.com"
 )
+
+# ─── Planes y suscripciones ───────────────────────────────────────────
+PLAN_DEFAULT = "esencial"
+PLAN_VALID = {"esencial", "pro", "empresa"}
+
+PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
+    "esencial": {
+        "label": "Esencial",
+        "monthly_conversations": 500,
+        "monthly_bookings": 50,
+        "max_professionals": 1,
+        "max_users": 1,
+        "max_extra_documents": 0,
+        "branding_customization": False,
+        "whatsapp_enabled": False,
+        "csv_export": False,
+        "multi_branch": False,
+        "crm_integration": False,
+        "show_powered_by": True,
+        "price_eur": 49,
+    },
+    "pro": {
+        "label": "Pro",
+        "monthly_conversations": 3000,
+        "monthly_bookings": 500,
+        "max_professionals": 5,
+        "max_users": 3,
+        "max_extra_documents": 50,
+        "branding_customization": True,
+        "whatsapp_enabled": True,
+        "csv_export": True,
+        "multi_branch": False,
+        "crm_integration": False,
+        "show_powered_by": False,
+        "price_eur": 149,
+    },
+    "empresa": {
+        "label": "Empresa",
+        "monthly_conversations": None,
+        "monthly_bookings": None,
+        "max_professionals": None,
+        "max_users": None,
+        "max_extra_documents": None,
+        "branding_customization": True,
+        "whatsapp_enabled": True,
+        "csv_export": True,
+        "multi_branch": True,
+        "crm_integration": True,
+        "show_powered_by": False,
+        "price_eur": 399,
+    },
+}
+
+# Stripe
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "").strip()
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "").strip()
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
+STRIPE_PRICE_ESENCIAL = os.getenv("STRIPE_PRICE_ESENCIAL", "").strip()
+STRIPE_PRICE_PRO = os.getenv("STRIPE_PRICE_PRO", "").strip()
+STRIPE_PRICE_EMPRESA = os.getenv("STRIPE_PRICE_EMPRESA", "").strip()
+STRIPE_PRICE_BY_PLAN = {
+    "esencial": STRIPE_PRICE_ESENCIAL,
+    "pro": STRIPE_PRICE_PRO,
+    "empresa": STRIPE_PRICE_EMPRESA,
+}
+STRIPE_PRICE_ESENCIAL_ANNUAL = os.getenv("STRIPE_PRICE_ESENCIAL_ANNUAL", "").strip()
+STRIPE_PRICE_PRO_ANNUAL = os.getenv("STRIPE_PRICE_PRO_ANNUAL", "").strip()
+STRIPE_PRICE_EMPRESA_ANNUAL = os.getenv("STRIPE_PRICE_EMPRESA_ANNUAL", "").strip()
+STRIPE_PRICE_ANNUAL_BY_PLAN = {
+    "esencial": STRIPE_PRICE_ESENCIAL_ANNUAL,
+    "pro": STRIPE_PRICE_PRO_ANNUAL,
+    "empresa": STRIPE_PRICE_EMPRESA_ANNUAL,
+}
 
 DEFAULT_MESSAGE_TEMPLATES = {
     "confirmed": (
@@ -307,8 +386,19 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
         if isinstance(origin, str) and str(origin).strip()
     ]
 
+    incoming_subscription = payload.get("subscription") if isinstance(payload.get("subscription"), dict) else {}
+    explicit_plan = payload.get("plan") or incoming_subscription.get("plan")
+    inferred_default_plan = "pro" if payload.get("whatsapp", {}).get("enabled", False) else PLAN_DEFAULT
+    plan = str(explicit_plan or inferred_default_plan).lower()
+    if plan not in PLAN_VALID:
+        plan = PLAN_DEFAULT
+    subscription = dict(incoming_subscription)
+    subscription["plan"] = plan
+
     return {
         "nombre": _sanitize_text(payload.get("nombre", cliente_id)),
+        "plan": plan,
+        "subscription": subscription,
         "icono": _sanitize_text(payload.get("icono", "Chat"))[:12] or "Chat",
         "color": _sanitize_text(payload.get("color", "#00b1d9")) or "#00b1d9",
         "accent_color": _sanitize_text(payload.get("accent_color", "")),
@@ -378,6 +468,8 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
 def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "nombre": config["nombre"],
+        "plan": config.get("plan", PLAN_DEFAULT),
+        "subscription": dict(config.get("subscription") or {"plan": config.get("plan", PLAN_DEFAULT)}),
         "icono": config["icono"],
         "color": config["color"],
         "accent_color": config.get("accent_color", ""),
@@ -1386,6 +1478,8 @@ class AuthUserPublic(BaseModel):
     display_name: str
     role: str
     cliente_id: str = ""
+    plan: str = PLAN_DEFAULT
+    plan_label: str = "Esencial"
     last_login_at: str = ""
 
 
@@ -1408,6 +1502,58 @@ class ConsultaLeadPayload(BaseModel):
     empresa: Optional[str] = Field(default=None, max_length=120)
     servicio: Optional[str] = Field(default=None, max_length=80)
     mensaje: Optional[str] = Field(default=None, max_length=2000)
+
+
+class SubscriptionUsage(BaseModel):
+    conversations: int = 0
+    conversations_limit: Optional[int] = None
+    bookings: int = 0
+    bookings_limit: Optional[int] = None
+    period_start: str = ""
+    period_end: str = ""
+
+
+class SubscriptionFeatures(BaseModel):
+    branding_customization: bool = False
+    whatsapp_enabled: bool = False
+    csv_export: bool = False
+    multi_branch: bool = False
+    crm_integration: bool = False
+    show_powered_by: bool = True
+    max_professionals: Optional[int] = 1
+    max_users: Optional[int] = 1
+    max_extra_documents: Optional[int] = 0
+
+
+class SubscriptionPublic(BaseModel):
+    plan: str
+    plan_label: str
+    status: str
+    price_eur: int
+    renews_at: str = ""
+    started_at: str = ""
+    canceled_at: str = ""
+    stripe_customer_id: str = ""
+    stripe_subscription_id: str = ""
+    features: SubscriptionFeatures
+    usage: SubscriptionUsage
+    available_plans: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class SubscriptionCheckoutPayload(BaseModel):
+    plan: str = Field(min_length=1, max_length=20)
+    billing_period: str = Field(default="monthly", max_length=20)
+    success_url: Optional[str] = Field(default=None, max_length=500)
+    cancel_url: Optional[str] = Field(default=None, max_length=500)
+
+
+class SubscriptionCheckoutResponse(BaseModel):
+    url: str
+    session_id: str = ""
+
+
+class SubscriptionPortalResponse(BaseModel):
+    url: str
 
 
 class AuthManagedUser(BaseModel):
@@ -1927,12 +2073,17 @@ def _verify_secret(raw_value: str, encoded: str) -> bool:
 
 
 def _serialize_auth_user(row: sqlite3.Row) -> AuthUserPublic:
+    cliente_id = row["cliente_id"] or ""
+    plan = _client_plan(cliente_id) if cliente_id else PLAN_DEFAULT
+    limits = _plan_limits(plan)
     return AuthUserPublic(
         user_id=row["id"],
         email=row["email"],
         display_name=row["display_name"],
         role=row["role"],
-        cliente_id=row["cliente_id"] or "",
+        cliente_id=cliente_id,
+        plan=plan,
+        plan_label=str(limits.get("label") or plan.title()),
         last_login_at=row["last_login_at"] or "",
     )
 
@@ -2542,6 +2693,8 @@ def _config_from_admin_payload(cliente_id: str, payload: AdminClientePayload) ->
         cliente_id,
         {
             "nombre": payload.nombre,
+            "plan": existing_config.get("plan", PLAN_DEFAULT),
+            "subscription": dict(existing_config.get("subscription") or {}),
             "icono": payload.icono,
             "color": payload.color,
             "accent_color": accent_color,
@@ -2794,32 +2947,235 @@ def _portal_ai_config_from_client_config(cliente_id: str) -> PortalAiConfigPubli
     )
 
 
+def _client_subscription(cliente_id: str) -> Dict[str, Any]:
+    config = CONFIG_CLIENTES.get(cliente_id) or {}
+    sub = config.get("subscription") or {}
+    plan = str(sub.get("plan") or config.get("plan") or PLAN_DEFAULT).lower()
+    if plan not in PLAN_VALID:
+        plan = PLAN_DEFAULT
+    return {
+        "plan": plan,
+        "status": str(sub.get("status") or "active"),
+        "started_at": str(sub.get("started_at") or ""),
+        "renews_at": str(sub.get("renews_at") or ""),
+        "canceled_at": str(sub.get("canceled_at") or ""),
+        "stripe_customer_id": str(sub.get("stripe_customer_id") or ""),
+        "stripe_subscription_id": str(sub.get("stripe_subscription_id") or ""),
+    }
+
+
+def _client_plan(cliente_id: str) -> str:
+    return _client_subscription(cliente_id)["plan"]
+
+
+def _plan_limits(plan: str) -> Dict[str, Any]:
+    return PLAN_LIMITS.get(plan) or PLAN_LIMITS[PLAN_DEFAULT]
+
+
+def _plan_feature(cliente_id: str, feature: str) -> Any:
+    return _plan_limits(_client_plan(cliente_id)).get(feature)
+
+
+def _require_plan_feature(cliente_id: str, feature: str, error_message: str) -> None:
+    if not _plan_feature(cliente_id, feature):
+        raise HTTPException(status_code=403, detail=error_message)
+
+
+def _require_active_subscription(cliente_id: str) -> None:
+    sub = _client_subscription(cliente_id)
+    if sub.get("status") in {"canceled", "past_due", "unpaid", "incomplete_expired"}:
+        raise HTTPException(status_code=402, detail="La suscripcion de este cliente no esta activa.")
+
+
+def _current_billing_period() -> Tuple[str, str]:
+    now = datetime.now(timezone.utc)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if start.month == 12:
+        end = start.replace(year=start.year + 1, month=1)
+    else:
+        end = start.replace(month=start.month + 1)
+    return start.isoformat(), end.isoformat()
+
+
+def _count_conversations_this_month(cliente_id: str) -> int:
+    period_start, _ = _current_billing_period()
+    try:
+        with _get_db_connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(DISTINCT session_id) FROM chat_messages "
+                "WHERE cliente_id = ? AND created_at >= ?",
+                (cliente_id, period_start),
+            ).fetchone()
+            return int(row[0]) if row and row[0] is not None else 0
+    except Exception:
+        return 0
+
+
+def _count_bookings_this_month(cliente_id: str) -> int:
+    period_start, _ = _current_billing_period()
+    try:
+        with _get_db_connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM bookings WHERE cliente_id = ? AND created_at >= ?",
+                (cliente_id, period_start),
+            ).fetchone()
+            return int(row[0]) if row and row[0] is not None else 0
+    except Exception:
+        return 0
+
+
+def _count_client_users(cliente_id: str) -> int:
+    try:
+        with _get_db_connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM portal_users WHERE cliente_id = ? AND is_active = 1",
+                (cliente_id,),
+            ).fetchone()
+            return int(row[0]) if row and row[0] is not None else 0
+    except Exception:
+        return 0
+
+
+def _build_subscription_public(cliente_id: str) -> SubscriptionPublic:
+    sub = _client_subscription(cliente_id)
+    plan = sub["plan"]
+    limits = _plan_limits(plan)
+    period_start, period_end = _current_billing_period()
+    usage = SubscriptionUsage(
+        conversations=_count_conversations_this_month(cliente_id),
+        conversations_limit=limits.get("monthly_conversations"),
+        bookings=_count_bookings_this_month(cliente_id),
+        bookings_limit=limits.get("monthly_bookings"),
+        period_start=period_start,
+        period_end=period_end,
+    )
+    features = SubscriptionFeatures(
+        branding_customization=bool(limits.get("branding_customization")),
+        whatsapp_enabled=bool(limits.get("whatsapp_enabled")),
+        csv_export=bool(limits.get("csv_export")),
+        multi_branch=bool(limits.get("multi_branch")),
+        crm_integration=bool(limits.get("crm_integration")),
+        show_powered_by=bool(limits.get("show_powered_by")),
+        max_professionals=limits.get("max_professionals"),
+        max_users=limits.get("max_users"),
+        max_extra_documents=limits.get("max_extra_documents"),
+    )
+    available = []
+    for plan_id in ("esencial", "pro", "empresa"):
+        info = PLAN_LIMITS[plan_id]
+        available.append({
+            "plan": plan_id,
+            "label": info["label"],
+            "price_eur": info["price_eur"],
+            "is_current": plan_id == plan,
+        })
+    return SubscriptionPublic(
+        plan=plan,
+        plan_label=str(limits.get("label") or plan.title()),
+        status=sub["status"],
+        price_eur=int(limits.get("price_eur") or 0),
+        renews_at=sub["renews_at"],
+        started_at=sub["started_at"],
+        canceled_at=sub["canceled_at"],
+        stripe_customer_id=sub["stripe_customer_id"],
+        stripe_subscription_id=sub["stripe_subscription_id"],
+        features=features,
+        usage=usage,
+        available_plans=available,
+    )
+
+
+def _set_client_subscription(cliente_id: str, **fields: Any) -> None:
+    next_configs = copy.deepcopy(CONFIG_CLIENTES)
+    config = next_configs.get(cliente_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Cliente no configurado")
+    sub = dict(config.get("subscription") or {})
+    for key, value in fields.items():
+        if value is None:
+            sub.pop(key, None)
+        else:
+            sub[key] = value
+    config["subscription"] = sub
+    if "plan" in fields and fields.get("plan") in PLAN_VALID:
+        config["plan"] = fields["plan"]
+    _persist_configs_to_disk(next_configs)
+    _update_runtime_configs(next_configs)
+
+
+def _stripe_configured() -> bool:
+    return bool(stripe is not None and STRIPE_SECRET_KEY)
+
+
+def _stripe_init() -> None:
+    if stripe is None:
+        raise HTTPException(status_code=503, detail="Stripe no está disponible (instala el paquete 'stripe').")
+    if not STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="STRIPE_SECRET_KEY no configurada.")
+    stripe.api_key = STRIPE_SECRET_KEY
+
+
+def _stripe_price_for_plan(plan: str, billing_period: str = "monthly") -> Tuple[str, str]:
+    normalized_plan = str(plan or "").strip().lower()
+    if normalized_plan not in PLAN_VALID:
+        raise HTTPException(status_code=400, detail="Plan no valido.")
+
+    normalized_period = str(billing_period or "monthly").strip().lower()
+    if normalized_period in {"annual", "yearly", "year"}:
+        price_id = STRIPE_PRICE_ANNUAL_BY_PLAN.get(normalized_plan, "")
+        period = "annual"
+    elif normalized_period in {"monthly", "month", ""}:
+        price_id = STRIPE_PRICE_BY_PLAN.get(normalized_plan, "")
+        period = "monthly"
+    else:
+        raise HTTPException(status_code=400, detail="Periodo de facturacion no valido.")
+
+    if not price_id:
+        env_suffix = "_ANNUAL" if period == "annual" else ""
+        raise HTTPException(
+            status_code=503,
+            detail=f"STRIPE_PRICE_{normalized_plan.upper()}{env_suffix} no configurado.",
+        )
+    return price_id, period
+
+
 def _update_portal_ai_config(cliente_id: str, data: PortalAiConfigPayload) -> PortalAiConfigPublic:
     next_configs = copy.deepcopy(CONFIG_CLIENTES)
     config = next_configs.get(cliente_id)
     if not config:
         raise HTTPException(status_code=404, detail="Cliente no configurado")
 
-    config["icono"] = _sanitize_text(data.icono)[:12] or "AI"
+    plan = _client_plan(cliente_id)
+    limits = _plan_limits(plan)
+    branding_allowed = bool(limits.get("branding_customization"))
+
     config["bienvenida"] = _sanitize_text(data.bienvenida, allow_multiline=True)[:400]
     config["prompt_extra"] = _sanitize_text(data.prompt_extra, allow_multiline=True)[:2000]
     if data.nombre is not None:
         nombre = _sanitize_text(data.nombre)[:120]
         if nombre:
             config["nombre"] = nombre
-    if data.color is not None:
-        color = _sanitize_text(data.color)
-        if color:
-            config["color"] = color
-    if data.accent_color is not None:
-        config["accent_color"] = _sanitize_text(data.accent_color)
-    if data.branding_text is not None:
+
+    if branding_allowed:
+        config["icono"] = _sanitize_text(data.icono)[:12] or "AI"
+        if data.color is not None:
+            color = _sanitize_text(data.color)
+            if color:
+                config["color"] = color
+        if data.accent_color is not None:
+            config["accent_color"] = _sanitize_text(data.accent_color)
+        if data.branding_text is not None:
+            branding = config.get("branding") or {}
+            branding_value = _sanitize_text(data.branding_text) or "Powered by Vantelia"
+            branding["powered_by"] = branding_value
+            config["branding"] = branding
+        if data.logo_url is not None:
+            config["logo_url"] = _sanitize_text(data.logo_url)
+    else:
+        # Plan sin personalización: forzamos branding por defecto Vantelia
         branding = config.get("branding") or {}
-        branding_value = _sanitize_text(data.branding_text) or "Powered by Vantelia"
-        branding["powered_by"] = branding_value
+        branding["powered_by"] = "Powered by Vantelia"
         config["branding"] = branding
-    if data.logo_url is not None:
-        config["logo_url"] = _sanitize_text(data.logo_url)
 
     _validate_single_client_runtime(cliente_id, config)
     _persist_configs_to_disk(next_configs)
@@ -2979,6 +3335,18 @@ def _validate_employee_payload(cliente_id: str, data: PortalEmployeePayload) -> 
 
 def _create_portal_employee(cliente_id: str, data: PortalEmployeePayload) -> PortalEmployeePublic:
     payload = _validate_employee_payload(cliente_id, data)
+    max_professionals = _plan_feature(cliente_id, "max_professionals")
+    if max_professionals is not None and payload["is_active"]:
+        current_count = len([item for item in _list_employee_rows(cliente_id, include_inactive=False) if bool(item["is_active"])])
+        if current_count >= int(max_professionals):
+            limits = _plan_limits(_client_plan(cliente_id))
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"Tu plan {limits.get('label')} permite hasta {max_professionals} profesional(es). "
+                    "Sube de plan para ampliar el equipo."
+                ),
+            )
     created_at = _utc_now_iso()
     employee_id = f"emp_{secrets.token_urlsafe(8)}"
     with _get_db_connection() as connection:
@@ -3037,6 +3405,22 @@ def _update_portal_employee(cliente_id: str, employee_id: str, data: PortalEmplo
     if not row:
         raise HTTPException(status_code=404, detail="Profesional no encontrado.")
     payload = _validate_employee_payload(cliente_id, data)
+    max_professionals = _plan_feature(cliente_id, "max_professionals")
+    if (
+        max_professionals is not None
+        and payload["is_active"]
+        and not bool(row["is_active"])
+    ):
+        active_count = len([item for item in _list_employee_rows(cliente_id, include_inactive=False) if bool(item["is_active"])])
+        if active_count >= int(max_professionals):
+            limits = _plan_limits(_client_plan(cliente_id))
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"Tu plan {limits.get('label')} permite hasta {max_professionals} profesional(es) activos. "
+                    "Sube de plan para reactivar mas equipo."
+                ),
+            )
     if row["is_default"]:
         payload["role_label"] = DEFAULT_EMPLOYEE_ROLE_LABEL
     if row["is_default"] and not payload["is_active"]:
@@ -6415,6 +6799,12 @@ async def auth_export_bookings(
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> Response:
     target_client_id = _portal_client_id_or_403(user, cliente_id) if (user["role"] != "admin" or cliente_id) else ""
+    if target_client_id:
+        _require_plan_feature(
+            target_client_id,
+            "csv_export",
+            "La exportacion CSV esta disponible en los planes Pro y Empresa.",
+        )
     rows, _ = _list_booking_rows(
         cliente_id=target_client_id,
         employee_id=employee_id.strip(),
@@ -6794,6 +7184,195 @@ async def auth_list_users(
     )
 
 
+# ─── Suscripciones / Pagos ────────────────────────────────────────────
+
+@app.get("/auth/subscription", response_model=SubscriptionPublic)
+async def auth_subscription(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> SubscriptionPublic:
+    return _build_subscription_public(_portal_client_id_or_403(user, cliente_id))
+
+
+@app.post("/auth/subscription/checkout", response_model=SubscriptionCheckoutResponse)
+async def auth_subscription_checkout(
+    data: SubscriptionCheckoutPayload,
+    request: Request,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> SubscriptionCheckoutResponse:
+    cid = _portal_client_id_or_403(user, cliente_id)
+    plan = data.plan.strip().lower()
+    price_id, billing_period = _stripe_price_for_plan(plan, data.billing_period)
+    _stripe_init()
+
+    base_url = _public_base_url(request)
+    success_url = data.success_url or f"{base_url}/portal?subscription=success"
+    cancel_url = data.cancel_url or f"{base_url}/portal?subscription=cancel"
+
+    sub = _client_subscription(cid)
+    customer_kwargs: Dict[str, Any] = {}
+    if sub.get("stripe_customer_id"):
+        customer_kwargs["customer"] = sub["stripe_customer_id"]
+    else:
+        customer_kwargs["customer_email"] = str(user["email"])
+
+    try:
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            line_items=[{"price": price_id, "quantity": 1}],
+            success_url=success_url,
+            cancel_url=cancel_url,
+            client_reference_id=cid,
+            metadata={"cliente_id": cid, "plan": plan, "billing_period": billing_period},
+            subscription_data={"metadata": {"cliente_id": cid, "plan": plan, "billing_period": billing_period}},
+            billing_address_collection="required",
+            phone_number_collection={"enabled": True},
+            tax_id_collection={"enabled": True},
+            allow_promotion_codes=True,
+            **customer_kwargs,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Error creando Stripe Checkout para %s: %s", cid, exc)
+        raise HTTPException(status_code=502, detail="No se pudo iniciar el proceso de pago.") from exc
+
+    return SubscriptionCheckoutResponse(url=session.url, session_id=session.id)
+
+
+@app.post("/subscription/checkout", response_model=SubscriptionCheckoutResponse)
+async def public_subscription_checkout(
+    data: SubscriptionCheckoutPayload,
+    request: Request,
+) -> SubscriptionCheckoutResponse:
+    plan = data.plan.strip().lower()
+    price_id, billing_period = _stripe_price_for_plan(plan, data.billing_period)
+    _stripe_init()
+
+    marketing_url = MARKETING_SITE_URL.rstrip("/") or "https://www.vantelia.es"
+    success_url = f"{marketing_url}/planes/?checkout=success&plan={quote(plan)}&period={quote(billing_period)}"
+    cancel_url = f"{marketing_url}/planes/?checkout=cancel&plan={quote(plan)}"
+
+    try:
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            line_items=[{"price": price_id, "quantity": 1}],
+            success_url=success_url,
+            cancel_url=cancel_url,
+            client_reference_id=f"public:{plan}:{billing_period}",
+            metadata={"source": "public_plans", "plan": plan, "billing_period": billing_period},
+            subscription_data={"metadata": {"source": "public_plans", "plan": plan, "billing_period": billing_period}},
+            billing_address_collection="required",
+            phone_number_collection={"enabled": True},
+            tax_id_collection={"enabled": True},
+            allow_promotion_codes=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Error creando Stripe Checkout publico para plan=%s: %s", plan, exc)
+        raise HTTPException(status_code=502, detail="No se pudo iniciar el proceso de pago.") from exc
+
+    return SubscriptionCheckoutResponse(url=session.url, session_id=session.id)
+
+
+@app.post("/auth/subscription/portal", response_model=SubscriptionPortalResponse)
+async def auth_subscription_portal(
+    request: Request,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> SubscriptionPortalResponse:
+    cid = _portal_client_id_or_403(user, cliente_id)
+    sub = _client_subscription(cid)
+    if not sub.get("stripe_customer_id"):
+        raise HTTPException(status_code=400, detail="Aún no tienes una suscripción activa con pago.")
+    _stripe_init()
+    base_url = _public_base_url(request)
+    try:
+        session = stripe.billing_portal.Session.create(
+            customer=sub["stripe_customer_id"],
+            return_url=f"{base_url}/portal",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Error creando Stripe Billing Portal para %s: %s", cid, exc)
+        raise HTTPException(status_code=502, detail="No se pudo abrir el portal de facturación.") from exc
+    return SubscriptionPortalResponse(url=session.url)
+
+
+@app.post("/webhooks/stripe", include_in_schema=False)
+async def stripe_webhook(request: Request) -> Dict[str, Any]:
+    if not _stripe_configured():
+        raise HTTPException(status_code=503, detail="Stripe no configurado.")
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+    try:
+        if STRIPE_WEBHOOK_SECRET:
+            event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+        else:
+            event = json.loads(payload.decode("utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Stripe webhook signature/JSON error: %s", exc)
+        raise HTTPException(status_code=400, detail="Webhook payload inválido.") from exc
+
+    event_type = event.get("type") if isinstance(event, dict) else event["type"]
+    data_object = (event.get("data") if isinstance(event, dict) else event["data"]).get("object", {})
+
+    try:
+        if event_type == "checkout.session.completed":
+            cid = (data_object.get("metadata") or {}).get("cliente_id") or data_object.get("client_reference_id")
+            plan = (data_object.get("metadata") or {}).get("plan") or PLAN_DEFAULT
+            customer_id = data_object.get("customer") or ""
+            sub_id = data_object.get("subscription") or ""
+            if cid and cid in CONFIG_CLIENTES:
+                _set_client_subscription(
+                    cid,
+                    plan=plan,
+                    status="active",
+                    stripe_customer_id=customer_id,
+                    stripe_subscription_id=sub_id,
+                    started_at=datetime.now(timezone.utc).isoformat(),
+                )
+                logger.info("Suscripción activada para %s · plan=%s", cid, plan)
+        elif event_type in {"customer.subscription.updated", "customer.subscription.created"}:
+            sub_id = data_object.get("id", "")
+            status_str = data_object.get("status", "")
+            current_period_end = data_object.get("current_period_end")
+            cid = (data_object.get("metadata") or {}).get("cliente_id")
+            plan = (data_object.get("metadata") or {}).get("plan")
+            if not cid:
+                # Buscar por subscription_id
+                for candidate_cid, cfg in CONFIG_CLIENTES.items():
+                    if (cfg.get("subscription") or {}).get("stripe_subscription_id") == sub_id:
+                        cid = candidate_cid
+                        break
+            if cid and cid in CONFIG_CLIENTES:
+                renews_at = ""
+                if current_period_end:
+                    renews_at = datetime.fromtimestamp(int(current_period_end), tz=timezone.utc).isoformat()
+                fields = {"status": status_str or "active", "stripe_subscription_id": sub_id}
+                if renews_at:
+                    fields["renews_at"] = renews_at
+                if plan and plan in PLAN_VALID:
+                    fields["plan"] = plan
+                _set_client_subscription(cid, **fields)
+                logger.info("Suscripción actualizada %s · status=%s", cid, status_str)
+        elif event_type == "customer.subscription.deleted":
+            sub_id = data_object.get("id", "")
+            cid_target = None
+            for candidate_cid, cfg in CONFIG_CLIENTES.items():
+                if (cfg.get("subscription") or {}).get("stripe_subscription_id") == sub_id:
+                    cid_target = candidate_cid
+                    break
+            if cid_target:
+                _set_client_subscription(
+                    cid_target,
+                    status="canceled",
+                    canceled_at=datetime.now(timezone.utc).isoformat(),
+                )
+                logger.info("Suscripción cancelada %s", cid_target)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Error procesando evento Stripe %s: %s", event_type, exc)
+
+    return {"received": True}
+
+
 @app.post("/auth/users", response_model=AuthManagedUser)
 async def auth_create_user_managed(
     data: PortalCreateUserPayload,
@@ -6808,6 +7387,13 @@ async def auth_create_user_managed(
         cliente_id = slugify_company(data.cliente_id)
         _assert_valid_client_id(cliente_id)
         _get_client_config(cliente_id)
+        max_users = _plan_feature(cliente_id, "max_users")
+        if max_users is not None and _count_client_users(cliente_id) >= int(max_users):
+            limits = _plan_limits(_client_plan(cliente_id))
+            raise HTTPException(
+                status_code=403,
+                detail=f"Tu plan {limits.get('label')} permite hasta {max_users} usuario(s). Sube de plan para añadir más."
+            )
     if _get_user_by_email(data.email):
         raise HTTPException(status_code=409, detail="Ya existe un usuario con ese email.")
     created = _create_user(
@@ -7580,6 +8166,18 @@ async def chat(data: MensajeChat, request: Request) -> RespuestaChat:
     if not message:
         raise HTTPException(status_code=400, detail="El mensaje no puede estar vacio.")
 
+    # Plan: bloquear si suscripción cancelada o se supera límite mensual
+    _require_active_subscription(data.cliente_id)
+    sub = _client_subscription(data.cliente_id)
+    if sub.get("status") in {"canceled", "past_due"}:
+        raise HTTPException(status_code=402, detail="La suscripción de este asistente no está activa.")
+    conv_limit = _plan_limits(sub["plan"]).get("monthly_conversations")
+    if conv_limit is not None and _count_conversations_this_month(data.cliente_id) >= int(conv_limit):
+        raise HTTPException(
+            status_code=429,
+            detail="Se ha alcanzado el límite mensual de conversaciones del plan. Contacta con la empresa para ampliar el plan.",
+        )
+
     session_id = _normalize_session_id(data.session_id)
     try:
         return await _process_chat_message(
@@ -7659,6 +8257,15 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
 
     if not config["booking"]["enabled"]:
         raise HTTPException(status_code=404, detail="La reserva online no esta habilitada para este cliente.")
+
+    # Plan: límite mensual de citas
+    _require_active_subscription(data.cliente_id)
+    booking_limit = _plan_limits(_client_plan(data.cliente_id)).get("monthly_bookings")
+    if booking_limit is not None and _count_bookings_this_month(data.cliente_id) >= int(booking_limit):
+        raise HTTPException(
+            status_code=429,
+            detail="Se ha alcanzado el límite mensual de citas del plan. Contacta con la empresa para ampliar el plan.",
+        )
 
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(f"booking:{data.cliente_id}:{client_ip}", BOOKING_RATE_LIMIT)
@@ -7971,6 +8578,11 @@ def _resolve_whatsapp_client_id(phone_number_id: str, forced_cliente_id: str = "
         config = _get_client_config(forced_cliente_id)
         if not config.get("whatsapp", {}).get("enabled", False):
             raise HTTPException(status_code=404, detail="WhatsApp no esta activo para este cliente.")
+        _require_plan_feature(
+            forced_cliente_id,
+            "whatsapp_enabled",
+            "WhatsApp esta disponible en los planes Pro y Empresa.",
+        )
         return forced_cliente_id
 
     mapping = _whatsapp_phone_client_map()
@@ -7981,6 +8593,11 @@ def _resolve_whatsapp_client_id(phone_number_id: str, forced_cliente_id: str = "
     config = _get_client_config(cliente_id)
     if not config.get("whatsapp", {}).get("enabled", False):
         raise HTTPException(status_code=404, detail="WhatsApp no esta activo para este cliente.")
+    _require_plan_feature(
+        cliente_id,
+        "whatsapp_enabled",
+        "WhatsApp esta disponible en los planes Pro y Empresa.",
+    )
     return cliente_id
 
 

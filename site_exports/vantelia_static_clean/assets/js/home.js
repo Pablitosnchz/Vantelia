@@ -74,14 +74,24 @@
   const menu   = document.getElementById('mobile-menu');
   const close  = document.getElementById('mobile-close');
   if (!toggle || !menu || !close) return;
-  function openMenu()  { menu.classList.add('open'); toggle.setAttribute('aria-expanded', 'true');  document.body.style.overflow = 'hidden'; }
-  function closeMenu() { menu.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false'); document.body.style.overflow = ''; }
+  function openMenu()  {
+    menu.classList.add('open');
+    toggle.setAttribute('aria-expanded', 'true');
+    document.body.classList.add('mobile-nav-open');
+  }
+  function closeMenu() {
+    menu.classList.remove('open');
+    toggle.setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('mobile-nav-open');
+  }
   toggle.addEventListener('click', () => {
     if (menu.classList.contains('open')) closeMenu();
     else openMenu();
   });
   close.addEventListener('click', closeMenu);
   menu.querySelectorAll('a').forEach(a => a.addEventListener('click', closeMenu));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+  window.addEventListener('resize', () => { if (window.innerWidth > 768) closeMenu(); }, { passive: true });
 })();
 
 /* Scroll reveal */

@@ -1,6 +1,7 @@
 {
   "Clinica_Saga": {
     "nombre": "Clinica Saga",
+    "plan": "esencial",
     "icono": "CS",
     "color": "#2E86AB",
     "bienvenida": "Hola, soy Clara, la asistente de Clinica Saga. En que puedo ayudarte hoy?",
@@ -33,6 +34,7 @@
   },
   "demo": {
     "nombre": "Agencia IA Demo",
+    "plan": "esencial",
     "icono": "AI",
     "color": "#00b1d9",
     "bienvenida": "Hola, soy el asistente demo de la agencia. Puedo resolver dudas y recoger solicitudes de contacto.",
