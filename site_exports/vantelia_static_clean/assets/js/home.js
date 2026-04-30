@@ -76,7 +76,10 @@
   if (!toggle || !menu || !close) return;
   function openMenu()  { menu.classList.add('open'); toggle.setAttribute('aria-expanded', 'true');  document.body.style.overflow = 'hidden'; }
   function closeMenu() { menu.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false'); document.body.style.overflow = ''; }
-  toggle.addEventListener('click', openMenu);
+  toggle.addEventListener('click', () => {
+    if (menu.classList.contains('open')) closeMenu();
+    else openMenu();
+  });
   close.addEventListener('click', closeMenu);
   menu.querySelectorAll('a').forEach(a => a.addEventListener('click', closeMenu));
 })();

@@ -26,7 +26,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preload" as="image" href="/assets/img/fondo-web.png" fetchpriority="high">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/home.css">
+  <link rel="stylesheet" href="/assets/css/home.css?v=logo-20260430-bgtoggle">
   <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -146,7 +146,23 @@
           "name": "¿Qué presupuesto necesito para empezar?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Depende de alcance y madurez del proyecto. La consulta inicial es gratuita y sirve para alinear expectativas, ámbito y plazos antes de cualquier propuesta económica."
+            "text": "Tenemos planes desde 49€/mes (Esencial), 149€/mes (Pro) y desde 399€/mes (Empresa). La consulta inicial es gratuita y sirve para recomendarte el plan adecuado."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Hay permanencia o cuota de alta?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Todos los planes son mes a mes y la alta express está incluida sin coste extra. Puedes cambiar o cancelar cuando quieras desde el portal."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Por qué la personalización de marca solo está en Pro?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "El plan Esencial está pensado para empresas pequeñas que quieren empezar rápido. La personalización completa (logo, colores e icono) y WhatsApp inteligente forman parte del plan Pro."
           }
         }
       ]
@@ -163,14 +179,14 @@
 <header class="site-header" id="site-header">
   <div class="shell nav-inner">
     <a href="/" class="brand" aria-label="Vantelia · Inicio">
-      <img src="/assets/img/logo-letra.png" alt="Logo Vantelia · Agencia de IA y Marketing B2B" width="200" height="48" fetchpriority="high" decoding="async">
+      <img src="/assets/img/logo-letra.png?v=logo-20260430-bgtoggle" alt="Logo Vantelia · Agencia de IA y Marketing B2B" width="200" height="48" fetchpriority="high" decoding="async">
     </a>
     <nav aria-label="Navegación principal">
       <ul class="nav-links">
         <li><a href="/servicios/">Servicios</a></li>
+        <li><a href="/planes/">Planes</a></li>
         <li><a href="/plataforma/">Plataforma</a></li>
         <li><a href="/resultados/">Resultados</a></li>
-        <li><a href="/nosotros/">Nosotros</a></li>
         <li><a href="/faq/" aria-current="page">FAQ</a></li>
       </ul>
     </nav>
@@ -189,9 +205,9 @@
 <div class="mobile-menu" id="mobile-menu" role="dialog" aria-label="Menú de navegación">
   <button class="mobile-close" id="mobile-close" aria-label="Cerrar menú">✕</button>
   <a href="/servicios/"  class="mm-link">Servicios</a>
+  <a href="/planes/"     class="mm-link">Planes</a>
   <a href="/plataforma/" class="mm-link">Plataforma</a>
   <a href="/resultados/" class="mm-link">Resultados</a>
-  <a href="/nosotros/"   class="mm-link">Nosotros</a>
   <a href="/faq/"        class="mm-link">FAQ</a>
   <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener" style="margin-top:8px;font-size:1rem;height:48px;padding:0 28px">
     <span class="dot-live"></span>Acceso plataforma
@@ -291,7 +307,21 @@
       ¿Qué presupuesto necesito para empezar?
       <span class="faq-chev" aria-hidden="true">▾</span>
     </button>
-    <div class="faq-ans"><div class="faq-ans-in">Depende de alcance y madurez del proyecto. La consulta inicial es gratuita y sirve para alinear expectativas, ámbito y plazos antes de cualquier propuesta económica.</div></div>
+    <div class="faq-ans"><div class="faq-ans-in">Tenemos planes desde 49€/mes (Esencial), 149€/mes (Pro) y desde 399€/mes (Empresa). Puedes ver el detalle en la <a href="/planes/">página de planes</a>. La consulta inicial es gratuita y sirve para recomendarte el plan adecuado.</div></div>
+  </div>
+  <div class="faq-item">
+    <button class="faq-btn" aria-expanded="false">
+      ¿Hay permanencia o cuota de alta?
+      <span class="faq-chev" aria-hidden="true">▾</span>
+    </button>
+    <div class="faq-ans"><div class="faq-ans-in">No. Todos los planes son mes a mes y la alta express está incluida sin coste extra. Puedes cambiar o cancelar cuando quieras desde el portal.</div></div>
+  </div>
+  <div class="faq-item">
+    <button class="faq-btn" aria-expanded="false">
+      ¿Por qué la personalización de marca solo está en Pro?
+      <span class="faq-chev" aria-hidden="true">▾</span>
+    </button>
+    <div class="faq-ans"><div class="faq-ans-in">El plan Esencial está pensado para empresas pequeñas que quieren empezar rápido. La personalización completa (logo, colores e icono) y WhatsApp inteligente forman parte del plan Pro, que es el más elegido por pymes con web activa.</div></div>
   </div>
 </div>
   </div>
@@ -336,6 +366,7 @@
         <div class="col-title">Producto</div>
         <div class="col-links">
           <a href="/servicios/">Servicios</a>
+          <a href="/planes/">Planes</a>
           <a href="/plataforma/">Plataforma</a>
           <a href="/resultados/">Resultados</a>
           <a href="/consultas/">Consulta gratuita</a>
@@ -373,7 +404,7 @@
   </div>
 </footer>
 
-<script src="/assets/js/home.js" defer></script>
+<script src="/assets/js/home.js?v=logo-20260430-bgtoggle" defer></script>
 <script
   src="https://app.vantelia.es/widget/widget.min.js?v=1777076198"
   data-api="https://app.vantelia.es"

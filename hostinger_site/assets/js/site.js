@@ -38,7 +38,7 @@
       <header class="site-header">
         <div class="shell site-header__inner">
           <a class="brand" href="/" aria-label="Ir al inicio de Vantelia">
-            <img src="/assets/img/logo-letra.png" alt="Vantelia">
+            <img src="/assets/img/logo-letra.png?v=logo-20260430-bgtoggle" alt="Vantelia">
           </a>
           <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">
             Menu
@@ -69,7 +69,7 @@
       <footer class="site-footer">
         <div class="shell footer-grid">
           <div class="footer-col footer-col--brand">
-            <img class="footer-logo" src="/assets/img/logo-letra.png" alt="Vantelia">
+            <img class="footer-logo" src="/assets/img/logo-letra.png?v=logo-20260430-bgtoggle" alt="Vantelia">
             <p>${data.tagLine || ""}</p>
           </div>
           <div class="footer-col">
