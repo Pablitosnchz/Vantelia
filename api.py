@@ -135,6 +135,10 @@ MARKETING_SITE_URL = os.getenv("MARKETING_SITE_URL", "https://vantelia.es").stri
 PORTAL_SUPPORT_EMAIL = (
     _allowed_vantelia_email(os.getenv("PORTAL_SUPPORT_EMAIL", "").strip(), SMTP_REPLY_TO)
 )
+CONSULTA_NOTIFICATION_EMAIL = (
+    parseaddr(os.getenv("CONSULTA_NOTIFICATION_EMAIL", "").strip())[1]
+    or "vanteliadigital@gmail.com"
+)
 
 DEFAULT_MESSAGE_TEMPLATES = {
     "confirmed": (
@@ -2406,7 +2410,13 @@ def _email_sender() -> str:
     return SMTP_FROM_EMAIL
 
 
-def _send_email_message(to_email: str, subject: str, text_body: str, html_body: str = "") -> None:
+def _send_email_message(
+    to_email: str,
+    subject: str,
+    text_body: str,
+    html_body: str = "",
+    reply_to: Optional[str] = None,
+) -> None:
     if not _smtp_configured():
         raise RuntimeError("El sistema de correo no esta configurado. Revisa SMTP_HOST y SMTP_FROM_EMAIL.")
 
@@ -2414,8 +2424,9 @@ def _send_email_message(to_email: str, subject: str, text_body: str, html_body: 
     message["Subject"] = subject
     message["From"] = _email_sender()
     message["To"] = to_email
-    if SMTP_REPLY_TO:
-        message["Reply-To"] = SMTP_REPLY_TO
+    reply_addr = (reply_to or SMTP_REPLY_TO or "").strip()
+    if reply_addr:
+        message["Reply-To"] = reply_addr
     message.set_content(text_body)
     if html_body:
         message.add_alternative(html_body, subtype="html")
@@ -6956,9 +6967,11 @@ async def solicitar_consulta(data: ConsultaLeadPayload, request: Request) -> Dic
     telefono_texto = data.telefono or "No proporcionado"
     mensaje_texto  = data.mensaje  or "(sin mensaje)"
 
-    asunto = f"[Vantelia] Nueva consulta gratuita de {escape(data.nombre)}"
-    cuerpo_text = (
-        f"Nueva solicitud de consulta gratuita recibida desde vantelia.es\n\n"
+    fecha_utc = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+
+    asunto_admin = "Nueva consulta recibida"
+    cuerpo_admin_text = (
+        f"Tienes una nueva consulta desde la web.\n\n"
         f"Nombre:   {data.nombre}\n"
         f"Email:    {data.email}\n"
         f"Teléfono: {telefono_texto}\n"
@@ -6966,11 +6979,12 @@ async def solicitar_consulta(data: ConsultaLeadPayload, request: Request) -> Dic
         f"Servicio: {servicio_texto}\n\n"
         f"Mensaje:\n{mensaje_texto}\n\n"
         f"---\nIP de origen: {client_ip}\n"
-        f"Fecha: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n"
+        f"Fecha: {fecha_utc}\n"
     )
-    cuerpo_html = f"""
+    cuerpo_admin_html = f"""
 <div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#1a1a2e">
-  <h2 style="color:#00b1d9">Nueva consulta gratuita — Vantelia</h2>
+  <h2 style="color:#00b1d9">Nueva consulta recibida</h2>
+  <p style="color:#333">Tienes una nueva consulta desde la web.</p>
   <table style="width:100%;border-collapse:collapse">
     <tr><td style="padding:6px 0;color:#666;width:110px">Nombre</td><td style="padding:6px 0;font-weight:600">{escape(data.nombre)}</td></tr>
     <tr><td style="padding:6px 0;color:#666">Email</td><td style="padding:6px 0"><a href="mailto:{escape(data.email)}">{escape(data.email)}</a></td></tr>
@@ -6980,16 +6994,73 @@ async def solicitar_consulta(data: ConsultaLeadPayload, request: Request) -> Dic
   </table>
   <p style="margin-top:16px;color:#333"><strong>Mensaje:</strong><br>{escape(mensaje_texto).replace(chr(10), '<br>')}</p>
   <hr style="margin:20px 0;border:none;border-top:1px solid #eee">
-  <p style="font-size:12px;color:#999">IP: {escape(client_ip)} · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+  <p style="font-size:12px;color:#999">IP: {escape(client_ip)} · {fecha_utc}</p>
 </div>"""
 
+    asunto_cliente = "Hemos recibido tu consulta"
+    cuerpo_cliente_text = (
+        f"Hola {data.nombre},\n\n"
+        "Hemos recibido tu consulta correctamente. Nos pondremos en contacto contigo "
+        "lo antes posible (normalmente en menos de 24 horas).\n\n"
+        "Resumen de tu solicitud:\n"
+        f"  · Servicio: {servicio_texto}\n"
+        f"  · Empresa:  {empresa_texto}\n"
+        f"  · Mensaje:  {mensaje_texto}\n\n"
+        "Si necesitas añadir información, responde directamente a este correo.\n\n"
+        "Un saludo,\nEquipo Vantelia\nhttps://www.vantelia.es\n"
+    )
+    cuerpo_cliente_html = f"""
+<div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#1a1a2e">
+  <h2 style="color:#00b1d9">Hemos recibido tu consulta</h2>
+  <p style="color:#333">Hola <strong>{escape(data.nombre)}</strong>,</p>
+  <p style="color:#333;line-height:1.55">
+    Hemos recibido tu consulta correctamente. Nos pondremos en contacto contigo lo antes
+    posible (normalmente en menos de 24 horas).
+  </p>
+  <table style="width:100%;border-collapse:collapse;margin-top:12px">
+    <tr><td style="padding:6px 0;color:#666;width:110px">Servicio</td><td style="padding:6px 0">{escape(servicio_texto)}</td></tr>
+    <tr><td style="padding:6px 0;color:#666">Empresa</td><td style="padding:6px 0">{escape(empresa_texto)}</td></tr>
+    <tr><td style="padding:6px 0;color:#666;vertical-align:top">Mensaje</td><td style="padding:6px 0">{escape(mensaje_texto).replace(chr(10), '<br>')}</td></tr>
+  </table>
+  <p style="margin-top:18px;color:#333">
+    Si necesitas añadir información, responde directamente a este correo.
+  </p>
+  <p style="margin-top:24px;color:#333">Un saludo,<br><strong>Equipo Vantelia</strong></p>
+  <hr style="margin:20px 0;border:none;border-top:1px solid #eee">
+  <p style="font-size:12px;color:#999">Este es un mensaje automático desde info@vantelia.es · <a href="https://www.vantelia.es" style="color:#00b1d9">vantelia.es</a></p>
+</div>"""
+
+    notif_sent = False
+    confirm_sent = False
     if _smtp_configured():
         try:
-            _send_email_message(PORTAL_SUPPORT_EMAIL, asunto, cuerpo_text, cuerpo_html)
+            _send_email_message(
+                CONSULTA_NOTIFICATION_EMAIL,
+                asunto_admin,
+                cuerpo_admin_text,
+                cuerpo_admin_html,
+                reply_to=str(data.email),
+            )
+            notif_sent = True
         except Exception as exc:
-            logger.error("Error enviando notificacion de consulta: %s", exc)
+            logger.error("Error enviando notificacion de consulta a %s: %s", CONSULTA_NOTIFICATION_EMAIL, exc)
+        try:
+            _send_email_message(
+                str(data.email),
+                asunto_cliente,
+                cuerpo_cliente_text,
+                cuerpo_cliente_html,
+            )
+            confirm_sent = True
+        except Exception as exc:
+            logger.error("Error enviando confirmacion de consulta a %s: %s", data.email, exc)
+    else:
+        logger.warning("SMTP no configurado: no se han enviado emails de la consulta de %s", data.email)
 
-    logger.info("Consulta recibida de %s <%s> (IP: %s)", data.nombre, data.email, client_ip)
+    logger.info(
+        "Consulta recibida de %s <%s> (IP: %s) notif=%s confirm=%s",
+        data.nombre, data.email, client_ip, notif_sent, confirm_sent,
+    )
     return {"ok": True, "message": "Solicitud recibida. Te respondemos en menos de 24h."}
 
 

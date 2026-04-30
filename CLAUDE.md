@@ -38,7 +38,7 @@ config.json          Config multi-tenant de clientes.
 | Hosting API | Hostinger VPS con Docker |
 | Hosting web | Hostinger static/FTP |
 | Canales | Web widget, portal, email SMTP, WhatsApp Cloud API |
-| Agenda | Interna, Google Calendar o Calendly por cliente |
+| Agenda | Interna por cliente |
 
 ## Reglas de oro
 
@@ -121,7 +121,7 @@ Endpoints publicos principales:
 - `GET /acceso`, `/login`, `/portal`, `/dashboard`, `/demo/{cliente_id}`
 - `GET/POST /whatsapp/webhook`
 - `GET/POST /whatsapp/webhook/{cliente_id}`
-- `POST /consulta` — captura leads desde el formulario de `vantelia.es/consultas/`. Acepta `ConsultaLeadPayload` (nombre, email, telefono?, empresa?, servicio?, mensaje?). Rate limit 5/min por IP. Envia email de notificacion a `PORTAL_SUPPORT_EMAIL` via SMTP.
+- `POST /consulta` — captura leads desde el formulario de `vantelia.es/consultas/`. Acepta `ConsultaLeadPayload` (nombre, email, telefono?, empresa?, servicio?, mensaje?). Rate limit 5/min por IP. Envia dos emails via SMTP desde `SMTP_FROM_EMAIL` (info@vantelia.es): notificacion a `CONSULTA_NOTIFICATION_EMAIL` (asunto "Nueva consulta recibida", Reply-To = email del lead) y confirmacion al lead (asunto "Hemos recibido tu consulta").
 
 Endpoints de portal/auth:
 
@@ -232,7 +232,7 @@ Al cambiar la web publica:
 
 ## Booking, emails y recordatorios
 
-El sistema soporta agenda interna, Google Calendar y Calendly por cliente. Antes de tocar booking, revisar:
+El sistema soporta agenda interna por cliente. Antes de tocar booking, revisar:
 
 - Validacion de disponibilidad.
 - Zona horaria del cliente.

@@ -287,8 +287,8 @@ PAGES["servicios"] = page(
           <ul class="svc-feats">
             <li class="svc-feat">RAG (Retrieval-Augmented Generation) propio por tenant</li>
             <li class="svc-feat">Configuración de tono, identidad, prompt e instrucciones internas</li>
-            <li class="svc-feat">Logo, colores de marca y "Powered by tu empresa" personalizables</li>
-            <li class="svc-feat">Reindexación en horas cuando cambias la información</li>
+            <li class="svc-feat">Logo y colores de marca personalizables</li>
+            <li class="svc-feat">Reindexación en segundos cuando cambias la información</li>
             <li class="svc-feat">Aislamiento total entre clientes (multi-tenant)</li>
           </ul>
         </div>
@@ -297,9 +297,9 @@ PAGES["servicios"] = page(
         <div class="svc-ico ico-b" aria-hidden="true">📅</div>
         <span class="svc-tag">02 · Reservas y agenda IA</span>
         <h3>Tu IA agenda citas sola</h3>
-        <p>El asistente cualifica al usuario, consulta disponibilidad real y reserva la cita en Google Calendar o Calendly. Notifica por email a ambas partes. Cero intervención manual.</p>
+        <p>El asistente cualifica al usuario, consulta disponibilidad real y reserva la cita en la Agenda de Vantelia. Notifica por email a ambas partes. Cero intervención manual.</p>
         <ul class="svc-feats">
-          <li class="svc-feat">Sincronización con Google Calendar y Calendly</li>
+          <li class="svc-feat">Sincronización con la Agenda de Vantelia</li>
           <li class="svc-feat">Servicios, horarios, profesionales y bloqueos por cliente</li>
           <li class="svc-feat">Recordatorios 24h y 2h antes</li>
           <li class="svc-feat">Cancelación y reprogramación con un clic</li>
@@ -532,7 +532,7 @@ PAGES["plataforma"] = page(
         <h3 style="font-size:1.4rem">Edita el cerebro de tu asistente, sin tocar código</h3>
         <p>Título, logo, colores de marca, tono, mensaje de bienvenida e instrucciones internas. Todo desde un panel claro con preview en vivo del widget.</p>
         <ul class="bullet-list">
-          <li>Logo y colores personalizables (powered by tu empresa)</li>
+          <li>Logo y colores personalizables</li>
           <li>Prompt de sistema editable con texto plano</li>
           <li>Instrucciones internas que el usuario nunca ve</li>
           <li>Cerebro (info.txt) editable y reindexación automática</li>
@@ -709,7 +709,7 @@ PAGES["plataforma"] = page(
       <article class="content-card reveal d2">
         <span class="c-tag">Integraciones</span>
         <h3>Integraciones nativas</h3>
-        <p>Google Calendar, Calendly, WhatsApp Cloud API, SMTP. Webhooks para CRM personalizables por cliente.</p>
+        <p>La Agenda de Vantelia, WhatsApp Cloud API, SMTP. Webhooks para CRM personalizables por cliente.</p>
       </article>
       <article class="content-card reveal d3">
         <span class="c-tag">Multi-tenant</span>
@@ -841,7 +841,7 @@ PAGES["resultados"] = page(
       <div class="value-visual reveal d2">
         <div class="stack-list">
           <div class="stack-item"><div class="si-ico" aria-hidden="true">🧠</div><div class="si-body"><h4>RAG por cliente</h4><p>Retrieval-Augmented Generation con datos propios</p></div><div class="si-check" aria-hidden="true">✓</div></div>
-          <div class="stack-item"><div class="si-ico" aria-hidden="true">🔗</div><div class="si-body"><h4>Integraciones nativas</h4><p>Google Calendar, Calendly, WhatsApp, CRM</p></div><div class="si-check" aria-hidden="true">✓</div></div>
+          <div class="stack-item"><div class="si-ico" aria-hidden="true">🔗</div><div class="si-body"><h4>Integraciones nativas</h4><p>La Agenda de Vantelia, WhatsApp, CRM</p></div><div class="si-check" aria-hidden="true">✓</div></div>
           <div class="stack-item"><div class="si-ico" aria-hidden="true">📊</div><div class="si-body"><h4>Analítica unificada</h4><p>Conversaciones, citas, leads y embudo en un panel</p></div><div class="si-check" aria-hidden="true">✓</div></div>
           <div class="stack-item"><div class="si-ico" aria-hidden="true">🛡️</div><div class="si-body"><h4>Seguridad y privacidad</h4><p>Control de dominios, sesiones, rate limit y RGPD</p></div><div class="si-check" aria-hidden="true">✓</div></div>
           <div class="stack-item"><div class="si-ico" aria-hidden="true">⚡</div><div class="si-body"><h4>Alta express en horas</h4><p>De URL a asistente operativo en menos de un día</p></div><div class="si-check" aria-hidden="true">✓</div></div>
@@ -998,7 +998,7 @@ FAQ_ITEMS = [
     ("¿Podéis colaborar con equipos internos o agencias existentes?", "Sí. Podemos actuar como partner estratégico, capa de ejecución especializada o apoyo a equipos internos que necesitan acelerar una parte concreta del sistema."),
     ("¿Y si solo necesito el asistente IA o solo el SEO?", "Encaja perfectamente. Empezamos por una necesidad concreta y, si tiene sentido, escalamos hacia un sistema más completo. No hay mínimos artificiales ni paquetes forzados."),
     ("¿Cómo se entrena el asistente con la información de mi empresa?", "El proceso de alta express analiza tu web automáticamente y construye el cerebro IA con tu información real. Puedes añadir documentos adicionales y el asistente se actualiza sin intervención técnica."),
-    ("¿El asistente IA puede gestionar reservas y citas?", "Sí. El asistente cualifica al usuario, consulta disponibilidad y agenda citas en Google Calendar o Calendly, con notificaciones automáticas para ambas partes."),
+    ("¿El asistente IA puede gestionar reservas y citas?", "Sí. El asistente cualifica al usuario, consulta disponibilidad y agenda citas en la Agenda de Vantelia, con notificaciones automáticas para ambas partes."),
     ("¿Cumple con el RGPD y la normativa europea?", "Sí. Datos almacenados en infraestructura europea, control de dominios permitidos, gestión de sesiones y cumplimiento RGPD desde el diseño de la plataforma."),
     ("¿Qué presupuesto necesito para empezar?", "Depende de alcance y madurez del proyecto. La consulta inicial es gratuita y sirve para alinear expectativas, ámbito y plazos antes de cualquier propuesta económica."),
 ]

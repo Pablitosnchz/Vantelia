@@ -239,20 +239,13 @@ curl http://127.0.0.1:8000/health
 
 ### Booking real con proveedor
 
-Ahora Vantelia puede trabajar de tres formas:
+Ahora Vantelia puede trabajar de una formaa:
 
 - `internal`: guarda la solicitud en Vantelia y la manda por webhook si existe.
-- `google_calendar`: crea el evento real en Google Calendar.
-- `calendly`: crea la reserva real en Calendly.
 
 Campos importantes del panel admin:
 
 - `Proveedor real`
-- `Calendly user env`
-- `Calendly event type env`
-- `Calendly location kind`
-- `Calendly location value`
-- `Google Calendar ID directo`
 - `Google service account JSON`
 
 Ejemplo para Calendly en `.env` del VPS:
@@ -278,10 +271,6 @@ Notas practicas:
 - Para enviar recuperaciones de acceso y correos operativos desde `info@vantelia.es`, configura `SMTP_USERNAME`, `SMTP_PASSWORD` y `SMTP_FROM_EMAIL`.
 - Para centralizar respuestas humanas en `soporte@vantelia.es`, configura `SMTP_REPLY_TO` y `PORTAL_SUPPORT_EMAIL`.
 - Para ajustar la caducidad del enlace de reset, usa `PASSWORD_RESET_TOKEN_HOURS`.
-
-Documentacion especifica:
-
-- [Manual de Google Calendar](docs/MANUAL_GOOGLE_CALENDAR.md)
 
 ## 1. Que es lo que administras
 

@@ -144,7 +144,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\backup.ps1
 - Si alguna clave o webhook estuvo expuesto anteriormente, rotalo antes de produccion.
 - Para escalar a varias instancias, el siguiente paso natural es mover reservas a Postgres y externalizar storage de indices.
 - Booking real soportado por cliente:
-  `internal` para flujo manual, `google_calendar` para crear eventos reales en Google Calendar y `calendly` para crear reservas reales en Calendly.
+  `internal` para flujo manual.
 - Para correos y enlaces de gestion, configura tambien `APP_BASE_URL` y SMTP en `.env`.
 - WhatsApp Cloud API reutiliza la misma IA, RAG y guardado de conversaciones que el widget. Activa el canal por cliente desde Admin > IA > WhatsApp y configura en Meta el webhook `https://app.vantelia.es/whatsapp/webhook` o `https://app.vantelia.es/whatsapp/webhook/{cliente_id}`.
 - Para WhatsApp, define `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_ACCESS_TOKEN` y opcionalmente `WHATSAPP_APP_SECRET`. Si cada cliente usa un token distinto, guarda el nombre de la variable de entorno en el campo `Env token acceso`.

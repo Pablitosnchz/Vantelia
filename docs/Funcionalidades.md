@@ -86,8 +86,6 @@ Incluye:
 Proveedores soportados:
 
 - Agenda interna de Vantelia.
-- Google Calendar.
-- Calendly.
 - Webhooks hacia herramientas externas.
 
 ## 7. Guardado de Conversaciones
@@ -216,7 +214,6 @@ Incluye:
 - Healthcheck avanzado.
 - Script de backup.
 - Documentación de administración.
-- Documentación de Google Calendar.
 - Documentación legal base.
 - Tests mínimos de seguridad y smoke.
 

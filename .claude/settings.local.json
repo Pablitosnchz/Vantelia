@@ -6,7 +6,8 @@
       "PowerShell(Get-ChildItem *)",
       "Bash(xargs wc *)",
       "PowerShell(& \"e:\\\\Vantelia\\\\scripts\\\\deploy-ftp.ps1\")",
-      "PowerShell(python \"e:\\\\Vantelia\\\\scripts\\\\fix-favicon.py\")"
+      "PowerShell(python \"e:\\\\Vantelia\\\\scripts\\\\fix-favicon.py\")",
+      "Bash(python -m pytest tests/test_api_smoke.py -q)"
     ]
   }
 }
