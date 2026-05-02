@@ -1,41 +1,145 @@
 # Politica de privacidad
 
-Ultima actualizacion: 24 de abril de 2026
+Ultima actualizacion: 2 de mayo de 2026.
 
-Este documento es una plantilla operativa inicial para Vantelia. Debe revisarse con asesoria legal antes de publicarse como version definitiva.
+Esta politica describe como Vantelia trata los datos personales en su plataforma (`https://www.vantelia.es` y `https://app.vantelia.es`). Plantilla operativa; debe revisarse con asesoria legal antes de publicarse como version definitiva.
 
-## Responsable
+---
 
-Responsable: Vantelia
+## 1. Responsable del tratamiento
 
-Email de contacto: soporte@vantelia.es
+- **Vantelia** (razon social, CIF y domicilio social a completar antes de la version final).
+- Email: privacidad@vantelia.es
+- Web: https://www.vantelia.es
+- Contacto soporte: soporte@vantelia.es
 
-Sitio web: https://vantelia.es
+---
 
-## Datos que podemos tratar
+## 2. Cuando Vantelia actua como Responsable y cuando como Encargado
 
-Segun el uso de la plataforma, podemos tratar datos identificativos y de contacto como nombre, email, telefono, empresa, mensajes enviados al asistente, solicitudes de cita, preferencias de agenda, datos tecnicos de conexion y registros necesarios para operar el servicio.
+- **Responsable**: cuando trata datos de personas que se comunican directamente con Vantelia (formulario de consultas en `vantelia.es`, contratacion del servicio, soporte, marketing propio).
+- **Encargado del Tratamiento**: cuando trata datos de los clientes finales de las empresas que han contratado Vantelia (mensajes al asistente IA, reservas, conversaciones WhatsApp del cliente B2B). En estos casos, el Responsable es la empresa cliente y la relacion se rige por el **Acuerdo de Encargado de Tratamiento (DPA)**.
 
-## Finalidades
+Si quieres ejercer derechos sobre datos tratados a traves de un asistente Vantelia integrado en la web o WhatsApp de una empresa, escribe primero a esa empresa. Vantelia colabora con ella en la respuesta.
 
-Usamos los datos para responder consultas, gestionar solicitudes comerciales o citas, prestar el servicio contratado a empresas cliente, mantener la seguridad de la plataforma, diagnosticar incidencias, enviar comunicaciones operativas relacionadas con reservas o accesos, y mejorar la calidad del asistente y de los flujos de atencion.
+---
 
-## Base juridica
+## 3. Datos que podemos tratar
 
-El tratamiento puede basarse en la solicitud de informacion de la persona usuaria, la ejecucion de un contrato o medidas precontractuales, el interes legitimo en mantener seguridad y operativa, y el consentimiento cuando sea necesario para comunicaciones o tecnologias que lo requieran.
+Como Responsable:
 
-## Conservacion
+- Datos identificativos y de contacto: nombre, email, telefono, empresa.
+- Datos de la cuenta del portal: usuario, contrasena cifrada, rol, ultima conexion.
+- Datos de facturacion: razon social, CIF, direccion fiscal, metodo de pago (gestionado por Stripe; Vantelia no almacena el numero completo de tarjeta).
+- Datos de soporte: mensajes intercambiados.
+- Datos tecnicos: IP, identificadores de sesion, user agent.
 
-Conservaremos los datos durante el tiempo necesario para atender la solicitud, mantener la trazabilidad operativa, cumplir obligaciones legales y prestar el servicio a la empresa cliente. Los plazos concretos deben ajustarse en la version legal definitiva.
+Como Encargado, en nombre del cliente B2B:
 
-## Destinatarios y encargados
+- Datos identificativos y de contacto del cliente final.
+- Contenido de las conversaciones con el asistente.
+- Datos de cita: fecha, hora, servicio, profesional, notas.
+- Metadatos de WhatsApp.
+- Datos tecnicos de conexion.
 
-Podremos usar proveedores tecnicos necesarios para operar la plataforma, como infraestructura, correo, automatizaciones, calendario, analitica o servicios de inteligencia artificial. Cuando Vantelia actue para una empresa cliente, Vantelia puede actuar como encargado del tratamiento y la empresa cliente como responsable.
+---
 
-## Derechos
+## 4. Finalidades
 
-Puedes solicitar acceso, rectificacion, supresion, oposicion, limitacion, portabilidad y retirada del consentimiento cuando proceda escribiendo a soporte@vantelia.es. Tambien puedes reclamar ante la autoridad de control competente.
+- Prestar y mantener el servicio contratado.
+- Atender consultas comerciales.
+- Gestionar la facturacion y el cobro.
+- Cumplir obligaciones legales (fiscales, contables).
+- Garantizar la seguridad de la plataforma.
+- Mejorar el servicio mediante metricas anonimizadas.
 
-## Inteligencia artificial
+No usamos los datos para tomar decisiones automatizadas con efectos juridicos sobre las personas. No vendemos los datos a terceros.
 
-Algunas respuestas pueden generarse con sistemas de inteligencia artificial a partir de informacion configurada por Vantelia o por la empresa cliente. El asistente no debe utilizarse para decisiones criticas sin revision humana.
+---
+
+## 5. Base juridica
+
+- **Ejecucion de contrato** o medidas precontractuales: para prestar el servicio a clientes y atender consultas.
+- **Cumplimiento legal**: facturacion, contabilidad, seguridad.
+- **Interes legitimo**: prevencion de fraude, seguridad, mejora del servicio mediante datos anonimizados.
+- **Consentimiento**: comunicaciones comerciales, cookies no esenciales.
+
+---
+
+## 6. Conservacion
+
+- Datos de cuenta y facturacion: durante la vigencia del servicio + plazos legales tributarios (6 anos).
+- Conversaciones del asistente: durante la vigencia del servicio para el cliente B2B; tras finalizacion, segun clausula 11 del DPA (devolucion o supresion en 30 dias).
+- Datos de consultas comerciales no contratadas: maximo 12 meses.
+- Logs tecnicos: maximo 90 dias salvo investigacion de incidente.
+- Copias de seguridad: rotacion configurada; se elimina dentro del ciclo de retencion del backup.
+
+---
+
+## 7. Destinatarios y subencargados
+
+Vantelia comparte datos solo con proveedores estrictamente necesarios:
+
+- **OpenAI Ireland Ltd.** — modelo de IA (UE/EE.UU. bajo Data Privacy Framework).
+- **Hostinger International Ltd.** — hosting y email transaccional (UE).
+- **Meta Platforms Ireland Ltd.** — WhatsApp Cloud API (UE/EE.UU. bajo DPF).
+- **Stripe Payments Europe Ltd.** — pasarela de pago (UE).
+
+La lista completa y actualizada se mantiene en el DPA firmado con cada cliente B2B.
+
+No realizamos transferencias internacionales fuera de las cubiertas por el Data Privacy Framework o por clausulas contractuales tipo aprobadas por la Comision Europea.
+
+---
+
+## 8. Derechos
+
+Puedes ejercer los derechos de:
+
+- Acceso a tus datos.
+- Rectificacion.
+- Supresion ("derecho al olvido").
+- Oposicion al tratamiento.
+- Limitacion del tratamiento.
+- Portabilidad.
+- Retirada del consentimiento cuando aplique.
+
+Como ejercerlos:
+
+- Escribe a `privacidad@vantelia.es` indicando el derecho que ejerces y adjuntando documento que acredite tu identidad.
+- Plazo de respuesta: maximo 1 mes (prorrogable a 2 meses en casos complejos).
+- Tambien puedes reclamar ante la **Agencia Espanola de Proteccion de Datos** (https://www.aepd.es).
+
+---
+
+## 9. Cookies
+
+Cookies tecnicas necesarias para el funcionamiento del portal y del widget. Cookies analiticas y de marketing solo con tu consentimiento. Detalle en `https://www.vantelia.es/legal/cookies/`.
+
+---
+
+## 10. Inteligencia artificial
+
+El asistente puede generar respuestas usando modelos de IA. La calidad de la respuesta depende de la informacion configurada por la empresa cliente. **Las respuestas no deben utilizarse para decisiones criticas sin revision humana**, especialmente en sectores regulados (medico, legal, financiero).
+
+Detalle en `https://www.vantelia.es/legal/ia-responsable/`.
+
+---
+
+## 11. Seguridad
+
+Cifrado en transito, control de acceso por roles, auditoria de acciones, copias diarias, validacion de origen y firma en webhooks externos. Mas detalle en la clausula 9 del DPA.
+
+En caso de brecha de seguridad con riesgo para los derechos de los interesados, la notificaremos a la AEPD en menos de 72h y, cuando proceda, a los afectados.
+
+---
+
+## 12. Cambios
+
+Cualquier cambio relevante se comunicara con al menos 30 dias de antelacion por email a las cuentas activas y en este mismo documento.
+
+---
+
+## 13. Contacto
+
+- privacidad@vantelia.es — proteccion de datos.
+- soporte@vantelia.es — incidencias tecnicas.

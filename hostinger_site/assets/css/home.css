@@ -1070,29 +1070,90 @@
 ═══════════════════════════════════════════════ */
 .subpage-hero {
   position: relative;
-  min-height: 56vh;
+  min-height: 60vh;
   display: flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   overflow: hidden;
-  padding: calc(var(--nav-h) + 64px) 0 56px;
+  padding: calc(var(--nav-h) + 80px) 0 72px;
 }
 .subpage-hero .hero-bg {
   position: absolute; inset: 0; z-index: 1;
   background:
-    linear-gradient(160deg, rgba(10,18,38,.92) 0%, rgba(8,14,30,.95) 100%),
+    linear-gradient(160deg, rgba(10,18,38,.88) 0%, rgba(8,14,30,.9) 100%),
     radial-gradient(ellipse at 18% 45%, rgba(0,209,255,.12), transparent 50%),
     radial-gradient(ellipse at 78% 18%, rgba(0,245,212,.09), transparent 42%),
-    url("/assets/img/fondo-web.png") center/cover no-repeat;
+    url("/assets/img/fondo-movil.png") center/cover no-repeat;
 }
-.subpage-hero .shell { position: relative; z-index: 2; }
+.subpage-hero::before,
+.subpage-hero::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+}
+.subpage-hero::before {
+  width: 680px; height: 680px;
+  background: radial-gradient(circle, rgba(0,209,255,0.07) 0%, transparent 70%);
+  top: -240px; right: -150px;
+  animation: subOrbFloat 9s ease-in-out infinite;
+}
+.subpage-hero::after {
+  width: 440px; height: 440px;
+  background: radial-gradient(circle, rgba(0,245,212,0.055) 0%, transparent 70%);
+  bottom: -120px; left: -80px;
+  animation: subOrbFloat 11s ease-in-out infinite reverse;
+}
+@keyframes subOrbFloat {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-28px) scale(1.04); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .subpage-hero::before,
+  .subpage-hero::after,
+  .gradient-text { animation: none !important; }
+}
+
+/* Fondo desktop diferenciado: imagen ancha en >=768px */
+@media (min-width: 768px) {
+  .hero-bg,
+  .subpage-hero .hero-bg {
+    background:
+      linear-gradient(160deg, rgba(10,18,38,.88) 0%, rgba(8,14,30,.9) 100%),
+      radial-gradient(ellipse at 18% 45%, rgba(0,209,255,.12), transparent 50%),
+      radial-gradient(ellipse at 78% 18%, rgba(0,245,212,.09), transparent 42%),
+      url("/assets/img/fondo-desktop.png") center/cover no-repeat;
+  }
+}
+.subpage-hero .shell {
+  position: relative; z-index: 2;
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center;
+  max-width: 880px;
+}
+.subpage-hero .breadcrumbs {
+  justify-content: center;
+}
+.subpage-hero .hero-badge { margin: 0 auto 18px; }
 .subpage-hero h1 {
   font-size: clamp(2.4rem, 5vw, 4rem);
   line-height: 1.04; letter-spacing: -.04em;
-  max-width: 18ch;
-  margin-bottom: 18px;
+  max-width: 22ch;
+  margin: 0 auto 18px;
+  text-align: center;
 }
-.subpage-hero .hero-lead { font-size: 1.08rem; color: var(--muted); line-height: 1.7; max-width: 620px; margin-bottom: 24px; }
-.subpage-hero .hero-actions { display: flex; flex-wrap: wrap; gap: 14px; }
+.subpage-hero .hero-lead {
+  font-size: 1.08rem; color: var(--muted); line-height: 1.7;
+  max-width: 620px;
+  margin: 0 auto 24px;
+  text-align: center;
+}
+.subpage-hero .hero-actions {
+  display: flex; flex-wrap: wrap; gap: 14px;
+  justify-content: center;
+}
 
 /* Breadcrumbs */
 .breadcrumbs {

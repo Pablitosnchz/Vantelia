@@ -1511,6 +1511,7 @@ tbody tr:last-child td { border-bottom: none; }
         </div>
         <div class="actions">
           <button id="saveAiBtn" type="button">Guardar IA</button>
+          <button id="rebrainAiBtn" class="secondary" type="button" title="Vuelve a raspar la web del cliente y regenera info.txt">Actualizar cerebro</button>
           <button id="reindexAiBtn" class="secondary" type="button">Reindexar</button>
           <button id="openAiDemoBtn" class="ghost" type="button">Abrir demo</button>
         </div>
@@ -1845,6 +1846,7 @@ tbody tr:last-child td { border-bottom: none; }
       reindexAfterSave: document.getElementById("reindexAfterSave"),
       infoTxt: document.getElementById("infoTxt"),
       saveAiBtn: document.getElementById("saveAiBtn"),
+      rebrainAiBtn: document.getElementById("rebrainAiBtn"),
       reindexAiBtn: document.getElementById("reindexAiBtn"),
       openAiDemoBtn: document.getElementById("openAiDemoBtn"),
       accentColor: document.getElementById("accentColor"),
@@ -2982,6 +2984,52 @@ tbody tr:last-child td { border-bottom: none; }
       showStatus("Indice reindexado correctamente.", "success");
     }
 
+    async function rebrainCurrentClient() {
+      const clienteId = elements.clienteId.value.trim();
+      if (!clienteId) {
+        throw new Error("No hay cliente seleccionado.");
+      }
+
+      const origins = (elements.allowedOrigins?.value || "")
+        .split(/[\s,]+/)
+        .map((o) => o.trim())
+        .filter((o) => o.startsWith("http"));
+      let websiteUrl = origins[0] || "";
+      if (!websiteUrl) {
+        websiteUrl = (window.prompt(
+          "URL del sitio web del cliente para regenerar el cerebro:",
+          "https://"
+        ) || "").trim();
+      }
+      if (!websiteUrl || !websiteUrl.startsWith("http")) {
+        throw new Error("URL invalida. Configura allowed_origins o introduce una URL valida.");
+      }
+
+      const confirmed = window.confirm(
+        `Vamos a raspar ${websiteUrl} y regenerar el cerebro de ${clienteId}.\n\nEsto puede tardar unos minutos y sobrescribira info.txt. ¿Continuar?`
+      );
+      if (!confirmed) return;
+
+      showStatus("Raspando web y regenerando cerebro... (puede tardar 1-2 min)", "info");
+      const res = await api(`/admin/rebrain/${encodeURIComponent(clienteId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ website_url: websiteUrl }),
+      });
+
+      if (res?.info_txt_size && elements.infoTxt) {
+        try {
+          const fresh = await api(`/admin/clientes/${encodeURIComponent(clienteId)}`);
+          if (fresh?.config?.info_txt != null) elements.infoTxt.value = fresh.config.info_txt;
+        } catch (_) {}
+      }
+
+      await loadStats();
+      const detail = `Cerebro regenerado: ${res.links_found} paginas, info.txt ${res.info_txt_size} chars` +
+        (res.reindexed ? " · indice recargado" : ` · reindex fallo: ${res.reindex_error || "?"}`);
+      showStatus(detail, res.reindexed ? "success" : "error");
+    }
+
     async function copySnippet() {
       const snippet = elements.installSnippet.value.trim();
       if (!snippet) {
@@ -3111,6 +3159,15 @@ tbody tr:last-child td { border-bottom: none; }
       try {
         setView("ai");
         await withButtonLoading(elements.reindexAiBtn, "Reindexando IA...", () => reindexCurrentClient());
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+
+    elements.rebrainAiBtn.addEventListener("click", async () => {
+      try {
+        setView("ai");
+        await withButtonLoading(elements.rebrainAiBtn, "Raspando web...", () => rebrainCurrentClient());
       } catch (error) {
         showStatus(error.message, "error");
       }

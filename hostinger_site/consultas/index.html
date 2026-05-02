@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Consulta Gratuita de IA y Marketing B2B | Vantelia</title>
-  <meta name="description" content="Solicita una consulta gratuita con Vantelia. Auditamos captación, conversión, automatización e IA en tu empresa B2B y te damos una hoja de ruta clara.">
+  <title>Consulta Gratuita guiada por IA | Vantelia</title>
+  <meta name="description" content="Habla con nuestra IA y agenda tu consulta gratuita. Te hace unas preguntas y te propone cita en menos de 2 minutos. Sin compromiso.">
   <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
   <meta name="theme-color" content="#0B132B">
   <meta name="author" content="Vantelia">
@@ -13,20 +13,20 @@
   <link rel="apple-touch-icon" href="/assets/img/favicon.png">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Vantelia">
-  <meta property="og:title" content="Consulta Gratuita de IA y Marketing B2B | Vantelia">
-  <meta property="og:description" content="Solicita una consulta gratuita con Vantelia. Auditamos captación, conversión, automatización e IA en tu empresa B2B y te damos una hoja de ruta clara.">
+  <meta property="og:title" content="Consulta Gratuita guiada por IA | Vantelia">
+  <meta property="og:description" content="Habla con nuestra IA y agenda tu consulta gratuita. Te hace unas preguntas y te propone cita en menos de 2 minutos. Sin compromiso.">
   <meta property="og:url" content="https://www.vantelia.es/consultas/">
   <meta property="og:image" content="https://www.vantelia.es/assets/img/resumen.png">
   <meta property="og:locale" content="es_ES">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Consulta Gratuita de IA y Marketing B2B | Vantelia">
-  <meta name="twitter:description" content="Solicita una consulta gratuita con Vantelia. Auditamos captación, conversión, automatización e IA en tu empresa B2B y te damos una hoja de ruta clara.">
+  <meta name="twitter:title" content="Consulta Gratuita guiada por IA | Vantelia">
+  <meta name="twitter:description" content="Habla con nuestra IA y agenda tu consulta gratuita. Te hace unas preguntas y te propone cita en menos de 2 minutos. Sin compromiso.">
   <meta name="twitter:image" content="https://www.vantelia.es/assets/img/resumen.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preload" as="image" href="/assets/img/fondo-web.png" fetchpriority="high">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/home.css?v=logo-20260430-bgtoggle">
+  <link rel="stylesheet" href="/assets/css/home.css?v=hero-bg-desktop-20260501">
   <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -42,8 +42,8 @@
     {
       "@type": "ContactPage",
       "url": "https://www.vantelia.es/consultas/",
-      "name": "Consulta Gratuita de IA y Marketing B2B | Vantelia",
-      "description": "Solicita una consulta gratuita con Vantelia. Auditamos captación, conversión, automatización e IA en tu empresa B2B y te damos una hoja de ruta clara.",
+      "name": "Consulta Gratuita guiada por IA | Vantelia",
+      "description": "Habla con nuestra IA y agenda tu consulta gratuita. Te hace unas preguntas y te propone cita en menos de 2 minutos. Sin compromiso.",
       "inLanguage": "es-ES",
       "publisher": { "@id": "https://www.vantelia.es/#org" }
     }
@@ -54,7 +54,7 @@
   <style>
     /* ============================================================
        /consultas/ — estilos específicos de página
-       El sistema de diseño base viene de /assets/css/home.css?v=logo-20260430-bgtoggle
+       El sistema de diseño base viene de /assets/css/home.css?v=hero-bg-desktop-20260501
        ============================================================ */
 
     /* ---- HERO ---- */
@@ -174,249 +174,225 @@
       50% { transform: translateY(7px); opacity: 1; }
     }
 
-    /* ---- SECCIÓN FORMULARIO ---- */
-    .form-section { padding: 96px 0 120px; }
-    .form-shell { max-width: 1080px; }
-    .form-section-head { text-align: center; margin-bottom: 60px; }
-    .form-section-head h2 {
+    /* ---- HERO IA badge sobre el botón principal ---- */
+    .hero-cta-group .btn-primary {
+      position: relative;
+      box-shadow: 0 0 0 0 rgba(0,209,255,0.55);
+      animation: ctaPulse 2.4s ease-in-out infinite;
+    }
+    @keyframes ctaPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(0,209,255,0.55); }
+      50%      { box-shadow: 0 0 0 14px rgba(0,209,255,0); }
+    }
+
+    /* Flecha animada bajo el hero apuntando hacia abajo-derecha */
+    .ia-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 1.2rem;
+      padding: 9px 16px;
+      border-radius: 999px;
+      background: rgba(0,209,255,0.07);
+      border: 1px solid rgba(0,209,255,0.22);
+      color: var(--text);
+      font-size: 0.84rem;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+    .ia-hint .ia-hint-arrow {
+      display: inline-block;
+      animation: hintArrow 1.6s ease-in-out infinite;
+    }
+    @keyframes hintArrow {
+      0%, 100% { transform: translate(0, 0); }
+      50%      { transform: translate(4px, 4px); }
+    }
+
+    /* ---- SECCIÓN PROCESO IA ---- */
+    .ia-section { padding: 96px 0 96px; }
+    .ia-shell { max-width: 1080px; }
+    .ia-section-head { text-align: center; margin-bottom: 56px; }
+    .ia-section-head h2 {
       font-size: clamp(1.8rem, 3vw, 2.5rem);
       font-weight: 700;
       letter-spacing: -0.032em;
       margin: 0.5rem 0 0.65rem;
     }
-    .form-section-head p {
+    .ia-section-head p {
       color: var(--muted);
-      max-width: 460px;
+      max-width: 540px;
       margin-inline: auto;
       line-height: 1.65;
     }
-    .form-layout {
-      display: grid;
-      grid-template-columns: 1fr 360px;
-      gap: 48px;
-      align-items: start;
-    }
 
-    /* Tarjeta del formulario */
-    .form-card {
-      background: rgba(255,255,255,0.025);
-      border: 1px solid var(--border);
+    /* Tarjeta-conversación que invita al chat */
+    .ia-cta-card {
+      max-width: 720px;
+      margin: 0 auto 56px;
+      background: linear-gradient(135deg, rgba(0,209,255,0.06), rgba(0,245,212,0.04));
+      border: 1px solid rgba(0,209,255,0.22);
       border-radius: 20px;
-      padding: 44px 48px;
-      position: relative;
+      padding: 36px 40px;
+      text-align: center;
       backdrop-filter: blur(10px);
+      position: relative;
     }
-    .form-card::before {
+    .ia-cta-card::before {
       content: '';
       position: absolute;
       top: 0; left: 12%; right: 12%;
       height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(0,209,255,0.45), transparent);
+      background: linear-gradient(90deg, transparent, rgba(0,209,255,0.55), transparent);
     }
-
-    /* Campos */
-    .f-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .f-group { display: flex; flex-direction: column; gap: 7px; margin-bottom: 18px; }
-    .f-label { font-size: 0.82rem; font-weight: 600; color: var(--text); letter-spacing: 0.015em; }
-    .f-req { color: var(--primary); margin-left: 1px; }
-    .f-opt { font-weight: 400; color: var(--muted-2); font-size: 0.78rem; }
-    .f-input {
-      background: rgba(255,255,255,0.038);
-      border: 1.5px solid rgba(255,255,255,0.09);
-      border-radius: 10px;
-      padding: 12px 15px;
-      font-family: 'Inter', sans-serif;
-      font-size: 0.93rem;
-      color: var(--text);
-      width: 100%;
-      box-sizing: border-box;
-      outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
-      -webkit-appearance: none;
+    .ia-cta-card h3 {
+      font-size: clamp(1.3rem, 2.4vw, 1.7rem);
+      font-weight: 700;
+      margin-bottom: 0.6rem;
+      letter-spacing: -0.025em;
     }
-    .f-input::placeholder { color: var(--muted-2); font-size: 0.87rem; }
-    .f-input:hover {
-      border-color: rgba(0,209,255,0.28);
-      background: rgba(255,255,255,0.052);
+    .ia-cta-card p {
+      color: var(--muted);
+      max-width: 520px;
+      margin: 0 auto 1.5rem;
+      line-height: 1.65;
     }
-    .f-input:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(0,209,255,0.11);
-      background: rgba(255,255,255,0.056);
-    }
-    select.f-input {
-      cursor: pointer;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%238fa3b4' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 14px center;
-      padding-right: 38px;
-    }
-    select.f-input option { background: #0d1530; color: var(--text); }
-    textarea.f-input { resize: vertical; min-height: 108px; line-height: 1.6; }
-    .f-group.has-error .f-input {
-      border-color: #ff4d6d;
-      box-shadow: 0 0 0 3px rgba(255,77,109,0.09);
-    }
-    .f-error { font-size: 0.76rem; color: #ff6b84; display: none; }
-    .f-group.has-error .f-error { display: block; }
-
-    /* Alerta de error */
-    .form-alert {
-      display: none;
-      align-items: center;
-      gap: 10px;
-      background: rgba(255,77,109,0.07);
-      border: 1px solid rgba(255,77,109,0.22);
-      border-radius: 10px;
-      padding: 12px 15px;
-      font-size: 0.86rem;
-      color: #ff8096;
-      margin-bottom: 18px;
-    }
-    .form-alert.visible { display: flex; }
-
-    /* Botón de envío */
-    .submit-btn {
-      width: 100%;
-      justify-content: center;
-      height: 52px;
-      font-size: 1rem;
-      margin-top: 4px;
-      gap: 10px;
-    }
-    .btn-spinner {
-      display: none;
-      width: 17px; height: 17px;
-      border: 2px solid rgba(255,255,255,0.25);
-      border-top-color: white;
-      border-radius: 50%;
-      animation: btnSpin 0.65s linear infinite;
-    }
-    .submit-btn.loading .btn-text { display: none; }
-    .submit-btn.loading .btn-spinner { display: block; }
-    .submit-btn.loading { pointer-events: none; opacity: 0.78; }
-    @keyframes btnSpin { to { transform: rotate(360deg); } }
-
-    .form-legal-note {
-      margin-top: 13px;
-      font-size: 0.76rem;
+    .ia-cta-card .btn { margin-bottom: 0.4rem; }
+    .ia-cta-fallback {
+      display: block;
+      margin-top: 1rem;
+      font-size: 0.83rem;
       color: var(--muted-2);
-      text-align: center;
-      line-height: 1.5;
     }
-    .form-legal-note a {
+    .ia-cta-fallback a {
       color: var(--muted);
       text-decoration: underline;
       text-underline-offset: 2px;
     }
+    .ia-cta-fallback a:hover { color: var(--primary); }
 
-    /* Estado de éxito */
-    .form-success-state { text-align: center; padding: 36px 16px; }
-    .success-ico {
-      width: 68px; height: 68px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, rgba(0,209,255,0.14), rgba(0,245,212,0.12));
-      border: 1.5px solid rgba(0,245,212,0.38);
-      display: flex; align-items: center; justify-content: center;
-      margin: 0 auto 1.5rem;
-      color: var(--accent);
-      animation: popIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275);
-    }
-    @keyframes popIn {
-      from { transform: scale(0.4); opacity: 0; }
-      to { transform: scale(1); opacity: 1; }
-    }
-    .form-success-state h3 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.65rem; }
-    .form-success-state p { color: var(--muted); font-size: 0.94rem; line-height: 1.65; }
-    .form-success-state .btn { margin-top: 1.6rem; }
-
-    /* Columna de confianza */
-    .trust-col {
-      display: flex;
-      flex-direction: column;
+    /* Trust badges en fila */
+    .ia-trust-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
       gap: 14px;
-      position: sticky;
-      top: 88px;
+      max-width: 880px;
+      margin: 0 auto;
     }
-    .trust-item {
+    .ia-trust-card {
       background: rgba(255,255,255,0.028);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 18px 20px;
-      display: flex;
-      gap: 14px;
-      align-items: flex-start;
+      padding: 18px 16px;
+      text-align: center;
       transition: border-color 0.25s, transform 0.25s;
     }
-    .trust-item:hover {
+    .ia-trust-card:hover {
       border-color: rgba(0,209,255,0.26);
-      transform: translateX(4px);
+      transform: translateY(-3px);
     }
-    .trust-ico {
-      width: 38px; height: 38px;
+    .ia-trust-card .ia-trust-ico {
+      width: 36px; height: 36px;
       border-radius: 9px;
       background: var(--primary-dim);
-      display: flex; align-items: center; justify-content: center;
       color: var(--primary);
-      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 10px;
     }
-    .trust-body h4 { font-size: 0.88rem; font-weight: 600; margin-bottom: 3px; }
-    .trust-body p { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
-    .trust-stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .trust-stat {
-      background: rgba(255,255,255,0.028);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      text-align: center;
+    .ia-trust-card h4 {
+      font-size: 0.88rem;
+      font-weight: 600;
+      margin-bottom: 2px;
     }
-    .s-val {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 1.65rem; font-weight: 700;
-      background: linear-gradient(135deg, #00D1FF, #00F5D4);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      line-height: 1;
-      margin-bottom: 4px;
-    }
-    .s-label { font-size: 0.73rem; color: var(--muted); }
-    .trust-quote {
-      background: linear-gradient(135deg, rgba(0,209,255,0.055), rgba(0,245,212,0.038));
-      border: 1px solid rgba(0,209,255,0.18);
-      border-radius: 14px;
-      padding: 20px 22px;
-    }
-    .trust-quote blockquote {
-      font-size: 0.87rem;
+    .ia-trust-card p {
+      font-size: 0.77rem;
       color: var(--muted);
-      line-height: 1.62;
-      font-style: italic;
-      margin: 0 0 10px;
+      line-height: 1.45;
+      margin: 0;
     }
-    .trust-quote cite { font-size: 0.76rem; color: var(--primary); font-weight: 600; font-style: normal; }
+
+    /* ---- GLOW + ARROW que apuntan al widget ---- */
+    /* Glow continuo sobre el botón del widget hasta que se abre */
+    #ia-w-btn:not(.abierto) {
+      animation: widgetGlow 2.2s ease-in-out infinite !important;
+    }
+    @keyframes widgetGlow {
+      0%, 100% {
+        box-shadow:
+          0 8px 28px rgba(0,209,255,0.35),
+          0 0 0 0 rgba(0,209,255,0.55);
+      }
+      50% {
+        box-shadow:
+          0 8px 28px rgba(0,209,255,0.35),
+          0 0 0 18px rgba(0,209,255,0);
+      }
+    }
+
+    /* Indicador externo: tooltip + flecha */
+    .ia-pointer {
+      position: fixed;
+      right: 24px;
+      bottom: 92px;
+      z-index: 9998;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+      pointer-events: none;
+      animation: pointerFloat 2s ease-in-out infinite;
+      transition: opacity 0.4s, transform 0.4s;
+    }
+    .ia-pointer.hidden {
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+    }
+    .ia-pointer-bubble {
+      pointer-events: auto;
+      background: linear-gradient(135deg, #00D1FF, #00F5D4);
+      color: #051026;
+      font-weight: 700;
+      font-size: 0.84rem;
+      letter-spacing: 0.01em;
+      padding: 10px 14px;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,209,255,0.35);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .ia-pointer-arrow {
+      color: #00D1FF;
+      filter: drop-shadow(0 4px 10px rgba(0,209,255,0.5));
+      margin-right: 22px;
+    }
+    @keyframes pointerFloat {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-6px); }
+    }
+    @media (max-width: 620px) {
+      .ia-pointer {
+        right: 18px;
+        bottom: 82px;
+      }
+      .ia-pointer-bubble { font-size: 0.78rem; padding: 8px 12px; }
+    }
 
     /* ---- RESPONSIVE ---- */
     @media (max-width: 960px) {
-      .form-layout { grid-template-columns: 1fr; }
-      .trust-col {
-        position: static;
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 14px;
-      }
-      .trust-stat-row,
-      .trust-quote { grid-column: span 2; }
+      .ia-trust-grid { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 620px) {
-      .f-row { grid-template-columns: 1fr; }
-      .form-card { padding: 28px 22px; }
-      .form-section { padding: 68px 0 90px; }
+      .ia-section { padding: 68px 0 80px; }
+      .ia-cta-card { padding: 28px 22px; }
       .hero-trust-row { gap: 1rem; }
       .consultas-hero { padding: 120px 0 90px; }
-      .trust-col { grid-template-columns: 1fr; }
-      .trust-stat-row,
-      .trust-quote { grid-column: span 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .hero-cta-group .btn-primary,
+      #ia-w-btn:not(.abierto),
+      .ia-pointer,
+      .ia-hint .ia-hint-arrow { animation: none !important; }
     }
   </style>
 </head>
@@ -427,7 +403,7 @@
 <header class="site-header" id="site-header">
   <div class="shell nav-inner">
     <a href="/" class="brand" aria-label="Vantelia · Inicio">
-      <img src="/assets/img/logo-letra.png?v=logo-20260430-bgtoggle" alt="Logo Vantelia · Agencia de IA y Marketing B2B" width="200" height="48" fetchpriority="high" decoding="async">
+      <img src="/assets/img/logo-letra.png?v=hero-bg-desktop-20260501" alt="Logo Vantelia · Agencia de IA y Marketing B2B" width="200" height="48" fetchpriority="high" decoding="async">
     </a>
     <nav aria-label="Navegación principal">
       <ul class="nav-links">
@@ -460,7 +436,7 @@
   <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener" style="margin-top:8px;font-size:1rem;height:48px;padding:0 28px">
     <span class="dot-live"></span>Acceso plataforma
   </a>
-  <a href="#formulario" class="btn btn-primary btn-lg" style="margin-top:8px">Consulta gratuita</a>
+  <button type="button" class="btn btn-primary btn-lg" data-open-chat style="margin-top:8px">Consulta gratuita</button>
 </div>
 
 <!-- ============================================================
@@ -481,191 +457,97 @@
 
     <div class="hero-badge">
       <span class="badge-dot" aria-hidden="true"></span>
-      Consulta gratuita · Sin compromiso
+      Asistente IA · Consulta gratuita · Sin compromiso
     </div>
 
-    <h1>Solicita tu consulta<br><span class="gradient-text">gratuita</span></h1>
+    <h1>Habla con nuestra IA<br>y agenda tu <span class="gradient-text">consulta gratuita</span></h1>
 
     <p class="hero-lead">
-      En 30 minutos auditamos tu web, embudo y estrategia de IA. Sales con un roadmap claro y accionable, uses nuestros servicios o no.
+      Te hace unas preguntas y te propone una cita en menos de 2 minutos. Sin formularios largos ni esperas.
     </p>
 
     <div class="hero-cta-group">
-      <a href="#formulario" class="btn btn-primary btn-lg">Solicitar consulta</a>
+      <button type="button" class="btn btn-primary btn-lg" data-open-chat aria-label="Abrir asistente IA y empezar consulta">
+        Empezar ahora
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
       <a href="/servicios/" class="btn btn-ghost btn-lg">Ver servicios</a>
     </div>
 
-    <div class="hero-trust-row" role="list">
+    <div class="hero-trust-row" role="list" style="margin-top:2.4rem">
       <span class="hero-trust-item" role="listitem">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-        Respuesta en menos de 24h
+        Respuesta inmediata
       </span>
       <span class="hero-trust-item" role="listitem">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-        Sin compromiso de contratación
+        Proceso guiado
       </span>
       <span class="hero-trust-item" role="listitem">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-        Equipo senior
+        Sin compromiso
       </span>
     </div>
   </div>
-
-  <a href="#formulario" class="scroll-down" aria-label="Ir al formulario">
-    <span>Formulario</span>
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-  </a>
 </section>
 
 <div class="glow-line" aria-hidden="true"></div>
 
 <!-- ============================================================
-     FORMULARIO + CONFIANZA
+     PROCESO IA + LLAMADA AL CHAT
      ============================================================ -->
-<section id="formulario" class="form-section" aria-label="Formulario de consulta gratuita">
-  <div class="shell form-shell">
+<section id="empezar" class="ia-section" aria-label="Cómo agendar la consulta con la IA">
+  <div class="shell ia-shell">
 
-    <div class="form-section-head reveal">
-      <span class="eyebrow">30 minutos de valor real</span>
-      <h2>Cuéntanos tu situación</h2>
-      <p>Analizamos tu caso antes de la llamada. Sin presentaciones corporativas ni propuestas enlatadas.</p>
+    <div class="ia-section-head reveal">
+      <span class="eyebrow">Así funciona</span>
+      <h2>Tres pasos guiados por la IA</h2>
+      <p>Sin formularios, sin esperas. La IA hace el trabajo de calificación y agenda por ti.</p>
     </div>
 
-    <div class="form-layout">
+    <div class="ia-cta-card reveal">
+      <h3>¿Listo para empezar?</h3>
+      <p>Pulsa el botón y la IA te llevará paso a paso. Tarda menos de 2 minutos y queda confirmada al instante.</p>
+      <button type="button" class="btn btn-primary btn-lg" data-open-chat aria-label="Abrir asistente IA">
+        Hablar con la IA ahora
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+      <span class="ia-cta-fallback">
+        ¿Prefieres que te contactemos manualmente? <a href="mailto:info@vantelia.es?subject=Consulta%20gratuita%20Vantelia">Escríbenos a info@vantelia.es</a>
+      </span>
+    </div>
 
-      <!-- ---- Tarjeta del formulario ---- -->
-      <div class="form-card reveal">
-
-        <!-- Estado de éxito (oculto por defecto) -->
-        <div id="form-success-state" class="form-success-state" hidden>
-          <div class="success-ico" aria-hidden="true">
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          </div>
-          <h3>¡Solicitud recibida!</h3>
-          <p>Te respondemos en menos de 24 horas. Revisa tu bandeja de entrada (y la de spam, por si acaso).</p>
-          <a href="/" class="btn btn-ghost">Volver al inicio</a>
+    <div class="ia-trust-grid">
+      <div class="ia-trust-card reveal">
+        <div class="ia-trust-ico" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
-
-        <!-- Formulario -->
-        <form id="consulta-form" novalidate>
-
-          <div class="form-alert" id="form-alert" role="alert" aria-live="assertive">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <span id="form-alert-msg">Hubo un error al enviar. Por favor, inténtalo de nuevo.</span>
-          </div>
-
-          <div class="f-row">
-            <div class="f-group" id="fg-nombre">
-              <label class="f-label" for="nombre">Nombre <span class="f-req" aria-hidden="true">*</span></label>
-              <input class="f-input" type="text" id="nombre" name="nombre"
-                placeholder="Tu nombre" required autocomplete="given-name"
-                aria-required="true" aria-describedby="err-nombre">
-              <span class="f-error" id="err-nombre" role="alert">Por favor, introduce tu nombre</span>
-            </div>
-            <div class="f-group" id="fg-email">
-              <label class="f-label" for="email">Email <span class="f-req" aria-hidden="true">*</span></label>
-              <input class="f-input" type="email" id="email" name="email"
-                placeholder="tu@empresa.com" required autocomplete="email"
-                aria-required="true" aria-describedby="err-email">
-              <span class="f-error" id="err-email" role="alert">Introduce un email válido</span>
-            </div>
-          </div>
-
-          <div class="f-row">
-            <div class="f-group">
-              <label class="f-label" for="telefono">Teléfono <span class="f-opt">(opcional)</span></label>
-              <input class="f-input" type="tel" id="telefono" name="telefono"
-                placeholder="+34 600 000 000" autocomplete="tel">
-            </div>
-            <div class="f-group">
-              <label class="f-label" for="empresa">Empresa <span class="f-opt">(opcional)</span></label>
-              <input class="f-input" type="text" id="empresa" name="empresa"
-                placeholder="Nombre de tu empresa" autocomplete="organization">
-            </div>
-          </div>
-
-          <div class="f-group">
-            <label class="f-label" for="servicio">¿Qué te interesa?</label>
-            <select class="f-input" id="servicio" name="servicio">
-              <option value="" disabled selected>Selecciona un área...</option>
-              <option value="asistente-ia">Asistente IA / Chatbot</option>
-              <option value="automatizacion">Automatización de procesos</option>
-              <option value="marketing">Marketing digital B2B</option>
-              <option value="seo">SEO y posicionamiento</option>
-              <option value="whatsapp-ia">WhatsApp IA</option>
-              <option value="agenda">Agenda inteligente</option>
-              <option value="todo">Todo lo anterior</option>
-              <option value="otro">Otro / No lo sé aún</option>
-            </select>
-          </div>
-
-          <div class="f-group">
-            <label class="f-label" for="mensaje">Mensaje <span class="f-opt">(opcional)</span></label>
-            <textarea class="f-input" id="mensaje" name="mensaje" rows="4"
-              placeholder="Cuéntanos brevemente tu situación, tu web o el reto principal que quieres resolver..."></textarea>
-          </div>
-
-          <button type="submit" class="btn btn-primary btn-lg submit-btn" id="submit-btn">
-            <span class="btn-text">Solicitar consulta gratuita</span>
-            <span class="btn-spinner" aria-hidden="true"></span>
-          </button>
-
-          <p class="form-legal-note">
-            Al enviar aceptas nuestra <a href="/legal/privacidad">política de privacidad</a>. Solo te contactamos para la consulta, sin spam.
-          </p>
-        </form>
+        <h4>Consulta gratuita</h4>
+        <p>0 € y sin tarjeta de por medio.</p>
       </div>
-
-      <!-- ---- Columna de confianza ---- -->
-      <aside class="trust-col reveal d1" aria-label="Por qué Vantelia">
-        <div class="trust-item">
-          <div class="trust-ico" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          </div>
-          <div class="trust-body">
-            <h4>Respuesta en menos de 24h</h4>
-            <p>Revisamos tu caso antes de la llamada para darte valor desde el minuto uno.</p>
-          </div>
+      <div class="ia-trust-card reveal d1">
+        <div class="ia-trust-ico" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         </div>
-
-        <div class="trust-item">
-          <div class="trust-ico" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
-          </div>
-          <div class="trust-body">
-            <h4>Diagnóstico personalizado</h4>
-            <p>Sin plantillas genéricas. Analizamos tu web, embudo y operación a fondo.</p>
-          </div>
+        <h4>Sin compromiso</h4>
+        <p>Te llevas el roadmap, contrates o no.</p>
+      </div>
+      <div class="ia-trust-card reveal d2">
+        <div class="ia-trust-ico" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
         </div>
-
-        <div class="trust-item">
-          <div class="trust-ico" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </div>
-          <div class="trust-body">
-            <h4>Sin compromiso</h4>
-            <p>Te quedas con la hoja de ruta aunque no sigamos trabajando juntos.</p>
-          </div>
+        <h4>Respuesta inmediata</h4>
+        <p>La IA contesta en segundos, 24/7.</p>
+      </div>
+      <div class="ia-trust-card reveal d3">
+        <div class="ia-trust-ico" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         </div>
-
-        <div class="trust-stat-row">
-          <div class="trust-stat">
-            <div class="s-val">30'</div>
-            <div class="s-label">Sesión de diagnóstico</div>
-          </div>
-          <div class="trust-stat">
-            <div class="s-val">0€</div>
-            <div class="s-label">Coste total</div>
-          </div>
-        </div>
-
-        <div class="trust-quote">
-          <blockquote>"Nos dieron un roadmap real en 30 minutos. Implementamos sus prioridades y en 90 días duplicamos las solicitudes entrantes."</blockquote>
-          <cite>— Director de Marketing, empresa B2B industrial</cite>
-        </div>
-      </aside>
-
+        <h4>Proceso guiado</h4>
+        <p>Te lleva paso a paso, sin perderte.</p>
+      </div>
     </div>
+
   </div>
 </section>
 
@@ -700,35 +582,31 @@
   </div>
 </section>
 
+
 <!-- ============================================================
-     CÓMO FUNCIONA
+     CÓMO FUNCIONA · 3 pasos con IA
      ============================================================ -->
-<section class="section" aria-label="Cómo es la sesión">
+<section class="section" aria-label="Cómo funciona la consulta con IA">
   <div class="shell">
     <div class="section-head reveal">
-      <span class="eyebrow">Cómo funciona</span>
-      <h2>30 minutos. Sin presentación corporativa.</h2>
+      <span class="eyebrow">Paso a paso</span>
+      <h2>Menos de 2 minutos para tener tu cita confirmada.</h2>
     </div>
     <div class="process-grid">
       <article class="process-step reveal d1">
         <div class="p-num">01</div>
-        <h3>Rellenas el formulario</h3>
-        <p>Cuéntanos tu situación en dos líneas. Es suficiente para preparar algo útil.</p>
+        <h3>Cuéntanos qué necesitas</h3>
+        <p>Hablas con la IA en lenguaje natural. Sin formularios. Solo lo que tú quieras contar.</p>
       </article>
       <article class="process-step reveal d2">
         <div class="p-num">02</div>
-        <h3>Revisamos</h3>
-        <p>Antes de la llamada, analizamos tu web, embudo y presencia digital con foco en oportunidades reales.</p>
+        <h3>La IA analiza tu caso</h3>
+        <p>Detecta tu sector, tus prioridades y el tipo de consulta que más te encaja en tiempo real.</p>
       </article>
       <article class="process-step reveal d3">
         <div class="p-num">03</div>
-        <h3>Hablamos</h3>
-        <p>Videollamada de 30 minutos. Te explicamos qué vemos y qué priorizaríamos si fuera nuestra empresa.</p>
-      </article>
-      <article class="process-step reveal d4">
-        <div class="p-num">04</div>
-        <h3>Resumen escrito</h3>
-        <p>Te enviamos las prioridades y el roadmap por escrito para que lo uses con o sin nosotros.</p>
+        <h3>Te propone una cita</h3>
+        <p>Elige hueco entre los disponibles. Recibes confirmación por email al instante. Sin esperas.</p>
       </article>
     </div>
   </div>
@@ -748,10 +626,9 @@
         automatización o las tres a la vez. Primera consulta gratuita y sin compromiso.
       </p>
       <div class="cta-actions">
-        <a href="#formulario" class="btn btn-primary btn-lg">Solicitar consulta gratuita</a>
-        <a href="mailto:info@vantelia.es" class="btn btn-ghost btn-lg">Hablar con Vantelia</a>
+        <button type="button" class="btn btn-primary btn-lg" data-open-chat>Solicita tu consulta gratuita</button>
       </div>
-      <p class="cta-note">Sin costes ocultos · Respuesta en menos de 24h · Equipo senior</p>
+      <p class="cta-note">Consulta gratuita · Sin compromiso · Respuesta inmediata</p>
     </div>
   </div>
 </section>
@@ -817,7 +694,7 @@
   </div>
 </footer>
 
-<script src="/assets/js/home.js?v=logo-20260430-bgtoggle" defer></script>
+<script src="/assets/js/home.js?v=hero-bg-desktop-20260501" defer></script>
 <script
   src="https://app.vantelia.es/widget/widget.min.js?v=1777076198"
   data-api="https://app.vantelia.es"
@@ -828,78 +705,85 @@
 (function () {
   'use strict';
 
-  var form        = document.getElementById('consulta-form');
-  var submitBtn   = document.getElementById('submit-btn');
-  var formAlert   = document.getElementById('form-alert');
-  var alertMsg    = document.getElementById('form-alert-msg');
-  var successDiv  = document.getElementById('form-success-state');
+  var INTENT_MESSAGE = 'Quiero agendar una cita';
+  var userOpened     = false;
+  var autoOpenedOnce = false;
 
-  function setError(groupId, show) {
-    var g = document.getElementById('fg-' + groupId);
-    if (g) g.classList.toggle('has-error', show);
+  function findWidgetButton() { return document.getElementById('ia-w-btn'); }
+  function widgetIsOpen() {
+    var chat = document.getElementById('ia-w-chat');
+    return !!(chat && chat.classList.contains('visible'));
   }
 
-  function validEmail(v) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  /* Inyecta texto en el input del widget y dispara el envío */
+  function sendMessageToWidget(message) {
+    var attempts = 0;
+    var iv = setInterval(function () {
+      attempts++;
+      var input = document.getElementById('ia-w-input');
+      var send  = document.getElementById('ia-w-send');
+      if (input && send && !input.disabled) {
+        input.value = message;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        send.click();
+        clearInterval(iv);
+      } else if (attempts >= 40) {
+        clearInterval(iv);
+      }
+    }, 100);
   }
 
-  ['nombre', 'email'].forEach(function (id) {
-    var el = document.getElementById(id);
-    if (el) el.addEventListener('input', function () { setError(id, false); });
-  });
+  /* Abre el chat. withMessage=true inyecta el mensaje de intención */
+  function openChat(withMessage) {
+    var btn = findWidgetButton();
+    if (!btn) return false;
+    if (!widgetIsOpen()) btn.click();
+    userOpened = true;
+    if (withMessage) sendMessageToWidget(INTENT_MESSAGE);
+    return true;
+  }
 
-  form.addEventListener('submit', async function (e) {
+  /* CTAs con data-open-chat → abren chat + envían mensaje */
+  document.addEventListener('click', function (e) {
+    var trigger = e.target.closest && e.target.closest('[data-open-chat]');
+    if (!trigger) return;
     e.preventDefault();
-
-    var nombre = document.getElementById('nombre').value.trim();
-    var email  = document.getElementById('email').value.trim();
-
-    var nameErr  = nombre.length === 0;
-    var emailErr = email.length === 0 || !validEmail(email);
-
-    setError('nombre', nameErr);
-    setError('email',  emailErr);
-    if (nameErr || emailErr) return;
-
-    submitBtn.classList.add('loading');
-    formAlert.classList.remove('visible');
-
-    var payload = {
-      nombre:   nombre,
-      email:    email,
-      telefono: document.getElementById('telefono').value.trim() || null,
-      empresa:  document.getElementById('empresa').value.trim()  || null,
-      servicio: document.getElementById('servicio').value        || null,
-      mensaje:  document.getElementById('mensaje').value.trim()  || null,
-    };
-
-    try {
-      var resp = await fetch('https://app.vantelia.es/consulta', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
-      });
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-
-      form.hidden = true;
-      successDiv.hidden = false;
-      successDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } catch (_) {
-      alertMsg.textContent = 'Hubo un error al enviar. Escríbenos directamente a info@vantelia.es';
-      formAlert.classList.add('visible');
-      submitBtn.classList.remove('loading');
+    if (!openChat(true)) {
+      var attempts = 0;
+      var iv = setInterval(function () {
+        attempts++;
+        if (openChat(true) || attempts >= 30) clearInterval(iv);
+      }, 100);
     }
   });
 
-  /* Smooth scroll para los CTAs del hero y CTA final */
-  document.querySelectorAll('a[href="#formulario"]').forEach(function (a) {
-    a.addEventListener('click', function (e) {
-      var target = document.getElementById('formulario');
-      if (!target) return;
-      e.preventDefault();
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
+  /* Marca como manualmente abierto si el usuario clickea el widget */
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (t && t.closest && (t.closest('#ia-w-btn') || t.closest('#ia-w-badge'))) {
+      userOpened = true;
+    }
   });
+
+  /* Auto-apertura silenciosa: scroll significativo o 12s — sin mensaje */
+  function maybeAutoOpen() {
+    if (autoOpenedOnce || userOpened || widgetIsOpen()) return;
+    if (!findWidgetButton()) return;
+    autoOpenedOnce = true;
+    openChat(false);
+  }
+  var scrollTriggered = false;
+  window.addEventListener('scroll', function () {
+    if (scrollTriggered) return;
+    var scrolled = window.scrollY + window.innerHeight;
+    var doc      = document.documentElement.scrollHeight;
+    if (window.scrollY > window.innerHeight * 0.6 || scrolled / doc > 0.45) {
+      scrollTriggered = true;
+      maybeAutoOpen();
+    }
+  }, { passive: true });
+
+  setTimeout(maybeAutoOpen, 12000);
 }());
 </script>
 

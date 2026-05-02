@@ -10,11 +10,22 @@ from bs4 import BeautifulSoup
 from openai import OpenAI
 
 
-PAGE_LIMIT_CHARS = 8000
-MODEL_CONTEXT_LIMIT = 48000
+PAGE_LIMIT_CHARS = 14000
+MODEL_CONTEXT_LIMIT = 140000
 REQUEST_TIMEOUT = 12
 MAX_PREVIEW_PAGES = 40
 DEFAULT_ONBOARDING_MODEL = os.getenv("ONBOARDING_MODEL", "gpt-4o-mini")
+
+PRIORITY_SLUGS = (
+    "servicios", "service", "services",
+    "planes", "precios", "tarifas", "pricing", "plans", "tarifa",
+    "productos", "producto", "product", "products",
+    "faq", "preguntas", "preguntas-frecuentes", "ayuda", "help",
+    "contacto", "contact",
+    "nosotros", "sobre", "sobre-nosotros", "about", "equipo", "team",
+    "resultados", "casos", "casos-de-exito", "testimonios",
+    "plataforma", "platform",
+)
 
 SESSION = requests.Session()
 SESSION.headers.update(
@@ -93,13 +104,9 @@ def infer_company_name(base_url: str, html: str) -> str:
     return base_name.title() or "Empresa"
 
 
-def get_all_links(base_url: str, max_paginas: int) -> list[str]:
-    html = fetch_html(base_url)
+def _extract_internal_links(base_url: str, html: str, base_domain: str) -> set[str]:
+    found: set[str] = set()
     soup = BeautifulSoup(html, "html.parser")
-    parsed_base = urlparse(base_url)
-    base_domain = parsed_base.netloc.replace("www.", "")
-    links = {base_url}
-
     for anchor in soup.find_all("a", href=True):
         href = anchor["href"].strip()
         if not href or href.startswith(("#", "mailto:", "tel:", "javascript:")):
@@ -117,17 +124,50 @@ def get_all_links(base_url: str, max_paginas: int) -> list[str]:
             continue
 
         clean_url = parsed._replace(query="", fragment="").geturl().rstrip("/")
-        links.add(clean_url)
+        found.add(clean_url)
+    return found
+
+
+def _slug_priority(url: str) -> int:
+    path_parts = [p for p in urlparse(url).path.lower().split("/") if p]
+    for idx, slug in enumerate(PRIORITY_SLUGS):
+        if any(part == slug or part.startswith(slug) for part in path_parts):
+            return idx
+    return len(PRIORITY_SLUGS) + 100
+
+
+def get_all_links(base_url: str, max_paginas: int) -> list[str]:
+    parsed_base = urlparse(base_url)
+    base_domain = parsed_base.netloc.replace("www.", "")
+    base_clean = base_url.rstrip("/")
+
+    root_html = fetch_html(base_url)
+    discovered: set[str] = {base_clean}
+    discovered.update(_extract_internal_links(base_url, root_html, base_domain))
+
+    cap = min(max_paginas, MAX_PREVIEW_PAGES)
+
+    if len(discovered) < cap:
+        first_level = sorted(discovered - {base_clean}, key=_slug_priority)[:6]
+        for child_url in first_level:
+            try:
+                child_html = fetch_html(child_url)
+            except Exception:  # noqa: BLE001
+                continue
+            discovered.update(_extract_internal_links(child_url, child_html, base_domain))
+            if len(discovered) >= cap * 2:
+                break
 
     prioritized = sorted(
-        links,
+        discovered,
         key=lambda item: (
-            0 if item.rstrip("/") == base_url.rstrip("/") else 1,
+            0 if item.rstrip("/") == base_clean else 1,
+            _slug_priority(item),
             len(urlparse(item).path),
             item,
         ),
     )
-    return prioritized[: min(max_paginas, MAX_PREVIEW_PAGES)]
+    return prioritized[:cap]
 
 
 def scrape_page(target_url: str) -> str:
@@ -138,6 +178,17 @@ def scrape_page(target_url: str) -> str:
         for tag in soup(["script", "style", "noscript", "iframe", "svg"]):
             tag.decompose()
 
+        # Eliminar nav/header/footer y elementos de chrome para reducir ruido repetido
+        chrome_selectors = [
+            "header", "footer", "nav",
+            "[role=navigation]", "[role=banner]", "[role=contentinfo]",
+            ".site-header", ".site-footer", ".mobile-menu",
+            ".cookie-banner", ".cookies", "#cookies",
+        ]
+        for selector in chrome_selectors:
+            for node in soup.select(selector):
+                node.decompose()
+
         title = soup.title.string.strip() if soup.title and soup.title.string else ""
         meta_description = ""
         meta = soup.find("meta", attrs={"name": "description"})
@@ -146,16 +197,17 @@ def scrape_page(target_url: str) -> str:
 
         headings = [
             clean_text(node.get_text(" ", strip=True))
-            for node in soup.find_all(["h1", "h2", "h3"])
+            for node in soup.find_all(["h1", "h2", "h3", "h4"])
             if node.get_text(strip=True)
         ]
-        body_text = clean_text(soup.get_text(separator="\n", strip=True))[:PAGE_LIMIT_CHARS]
+        main = soup.select_one("main, article, [role=main]") or soup.body or soup
+        body_text = clean_text(main.get_text(separator="\n", strip=True))[:PAGE_LIMIT_CHARS]
 
         return (
             f"PAGINA: {target_url}\n"
             f"TITULO: {title}\n"
             f"META_DESCRIPTION: {meta_description}\n"
-            f"HEADINGS: {' | '.join(headings[:14])}\n"
+            f"HEADINGS: {' | '.join(headings[:24])}\n"
             f"CONTENIDO:\n{body_text}\n"
         )
     except Exception as exc:  # noqa: BLE001
@@ -227,11 +279,12 @@ HORARIOS:
 - Domingos:
 - Notas:
 
-SERVICIOS Y PRECIOS:
+SERVICIOS Y PRECIOS (Lista TODOS los encontrados en la web):
 - Categoria:
   - Servicio:
   - Precio:
   - Detalle:
+  (Repite la estructura para cada servicio individual)
 
 PROCESO COMERCIAL Y OPERATIVO:
 - Como funciona la atencion:
@@ -252,9 +305,10 @@ R: ...
 EQUIPO PROFESIONAL:
 - Nombre - Cargo - Notas
 
-PREGUNTAS FRECUENTES:
+PREGUNTAS FRECUENTES (Extrae TODAS las que encuentres):
 P: ...
 R: ...
+(Repite para cada pregunta frecuente)
 
 PREGUNTAS SUGERIDAS PARA REVISION HUMANA:
 P: ...
