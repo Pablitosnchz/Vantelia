@@ -2987,55 +2987,56 @@ tbody tr:hover { background: var(--surface-2); }
     }
 
     const SUBSCRIPTION_PLAN_COPY = {
-      esencial: {
-        headline: "Para empezar rapido con un asistente en tu web y agenda basica.",
+      web: {
+        headline: "Asistente IA embebido en tu web. Atiende y agenda 24/7 desde el widget.",
         includes: [
-          "Asistente IA en la web entrenado con la informacion de tu empresa.",
+          "Widget IA en tu web con el contenido de tu empresa.",
           "Hasta 500 conversaciones al mes.",
           "Hasta 50 citas al mes con recordatorios por email.",
           "Agenda basica para 1 profesional.",
-          "Panel con citas, conversaciones y metricas basicas.",
+          "Panel con citas, conversaciones y metricas.",
           "Alta express incluida y soporte por email.",
         ],
         benefits: [
           ["Atencion 24/7", "Tus visitantes reciben respuesta aunque tu equipo no este disponible."],
           ["Menos tareas manuales", "El asistente responde dudas frecuentes y recoge solicitudes de cita."],
-          ["Arranque rapido", "Ideal para validar el canal sin una configuracion compleja."],
+          ["Arranque rapido", "Ideal para validar el canal web sin una configuracion compleja."],
         ],
       },
-      pro: {
-        headline: "Para pymes con varios profesionales, marca propia y atencion por WhatsApp.",
+      whatsapp: {
+        headline: "Asistente IA dentro de WhatsApp Business. Responde y agenda donde tus clientes ya escriben.",
         includes: [
+          "Asistente IA en WhatsApp Business.",
+          "Hasta 1.000 conversaciones al mes.",
+          "Hasta 200 citas al mes con recordatorios por WhatsApp.",
+          "Agenda basica para 1 profesional.",
+          "Configuracion del numero WhatsApp Business incluida.",
+          "Panel con citas, conversaciones y metricas.",
+          "Soporte por email.",
+        ],
+        benefits: [
+          ["Canal preferido", "Tus clientes contactan en el chat que ya usan a diario."],
+          ["Menos llamadas", "El asistente filtra dudas y agenda sin descolgar el telefono."],
+          ["Cero apps extra", "Sigues operando con WhatsApp, no necesitas otra plataforma."],
+        ],
+      },
+      completo: {
+        headline: "Web + WhatsApp con un solo cerebro. Mismo asistente coherente en ambos canales.",
+        includes: [
+          "Widget IA en tu web y asistente IA en WhatsApp Business.",
           "Personalizacion completa con logo, colores e icono.",
-          "Hasta 3.000 conversaciones al mes.",
+          "Hasta 2.500 conversaciones al mes (web + WhatsApp).",
           "Hasta 500 citas al mes.",
           "Agenda multi-profesional, hasta 5 personas.",
-          "WhatsApp inteligente incluido.",
+          "Edicion avanzada del cerebro y exportacion a Excel.",
           "Hasta 3 cuentas de acceso al portal.",
-          "Exportacion de conversaciones y citas para analizarlas.",
+          "Sin marca \"Con tecnologia Vantelia\".",
           "Soporte prioritario por email.",
         ],
         benefits: [
-          ["Mas canales de venta", "El mismo asistente atiende en web y WhatsApp con respuestas coherentes."],
+          ["Mas canales de venta", "El mismo asistente atiende web y WhatsApp con respuestas coherentes."],
           ["Mejor imagen de marca", "El asistente se presenta con la identidad visual de tu negocio."],
           ["Equipo mas ordenado", "Varias agendas y accesos para trabajar sin depender de una sola persona."],
-        ],
-      },
-      empresa: {
-        headline: "Para empresas con varias sedes, alto volumen o integraciones a medida.",
-        includes: [
-          "Conversaciones y citas ilimitadas.",
-          "Profesionales y cuentas del portal ilimitadas.",
-          "Multiples agendas o sedes en paralelo.",
-          "Conexion con CRM cuando el proyecto lo requiere.",
-          "Onboarding personalizado 1:1.",
-          "Revision mensual de conversaciones.",
-          "Asesoria estrategica mensual y soporte directo.",
-        ],
-        benefits: [
-          ["Escala sin frenar", "El asistente acompana el crecimiento sin limites de volumen."],
-          ["Operacion conectada", "El portal puede encajar con CRM, sedes y procesos internos."],
-          ["Acompanamiento cercano", "Revisamos resultados y mejoras contigo cada mes."],
         ],
       },
     };
@@ -3073,9 +3074,9 @@ tbody tr:hover { background: var(--surface-2); }
     }
 
     function nextPlanFor(plan) {
-      if (plan === "esencial") return "pro";
-      if (plan === "pro") return "empresa";
-      return "empresa";
+      if (plan === "web") return "completo";
+      if (plan === "whatsapp") return "completo";
+      return "completo";
     }
 
     function supportUrl(plan = "") {
@@ -3109,12 +3110,12 @@ tbody tr:hover { background: var(--surface-2); }
         const header = editor?.querySelector(".panel-header");
         if (header) header.insertAdjacentElement("afterend", lockNote);
       }
-      lockNote.textContent = "Tu plan actual mantiene la identidad visual de Vantelia. La personalizacion de colores, logo e icono se activa desde Pro.";
+      lockNote.textContent = "Tu plan actual mantiene la identidad visual de Vantelia. La personalizacion de colores, logo e icono se activa con el plan Completo.";
       lockNote.classList.toggle("hidden", brandingAllowed);
 
       if (el.exportBookingsBtn) {
         el.exportBookingsBtn.disabled = !Boolean(features.csv_export);
-        el.exportBookingsBtn.title = features.csv_export ? "" : "La exportacion CSV esta incluida en Pro y Empresa.";
+        el.exportBookingsBtn.title = features.csv_export ? "" : "La exportacion CSV esta incluida en el plan Completo.";
       }
       const maxProfessionals = features.max_professionals;
       const activeProfessionals = state.employees.filter((employee) => employee.is_active).length;
@@ -3129,13 +3130,13 @@ tbody tr:hover { background: var(--surface-2); }
       state.subscription = subscription || null;
       if (!subscription) return;
       const usage = subscription.usage || {};
-      const plan = String(subscription.plan || "esencial").toLowerCase();
-      const planCopy = SUBSCRIPTION_PLAN_COPY[plan] || SUBSCRIPTION_PLAN_COPY.esencial;
+      const plan = String(subscription.plan || "web").toLowerCase();
+      const planCopy = SUBSCRIPTION_PLAN_COPY[plan] || SUBSCRIPTION_PLAN_COPY.web;
       const conversationLimit = usage.conversations_limit;
       const bookingLimit = usage.bookings_limit;
       const renewalLabel = simpleDateLabel(subscription.renews_at);
 
-      el.subscriptionPlanLabel.textContent = subscription.plan_label || "Esencial";
+      el.subscriptionPlanLabel.textContent = subscription.plan_label || "Web";
       el.subscriptionStatus.textContent = subscription.renews_at
         ? `${subscriptionStatusLabel(subscription.status)} | renueva el ${renewalLabel}`
         : `${subscriptionStatusLabel(subscription.status)} | mes a mes`;
@@ -3171,34 +3172,32 @@ tbody tr:hover { background: var(--surface-2); }
         </article>
       `).join("");
 
-      const planOrder = ["esencial", "pro", "empresa"];
+      const planOrder = ["web", "whatsapp", "completo"];
       const currentIndex = planOrder.indexOf(plan);
       el.plansGrid.innerHTML = "";
       (subscription.available_plans || []).forEach((plan) => {
         const planId = String(plan.plan || "").toLowerCase();
-        const copy = SUBSCRIPTION_PLAN_COPY[planId] || SUBSCRIPTION_PLAN_COPY.esencial;
+        const copy = SUBSCRIPTION_PLAN_COPY[planId] || SUBSCRIPTION_PLAN_COPY.web;
         const planIndex = planOrder.indexOf(planId);
         const isUpgrade = currentIndex >= 0 && planIndex > currentIndex;
         const isDowngrade = currentIndex >= 0 && planIndex < currentIndex;
         const buttonText = plan.is_current
           ? "Plan activo"
-          : (planId === "empresa"
-            ? "Contactar para ayuda"
-            : (isUpgrade ? "Mejorar mi plan" : (isDowngrade ? "Reducir plan" : "Cambiar suscripcion")));
+          : (isUpgrade ? "Mejorar mi plan" : (isDowngrade ? "Reducir plan" : "Cambiar suscripcion"));
         const card = document.createElement("article");
-        card.className = `plan-card${plan.is_current ? " current" : ""}${planId === "pro" && !plan.is_current ? " recommended" : ""}`;
+        card.className = `plan-card${plan.is_current ? " current" : ""}${planId === "completo" && !plan.is_current ? " recommended" : ""}`;
         card.innerHTML = `
           <div class="panel-header">
             <div>
               <strong>${escapeHtml(plan.label || plan.plan)}</strong>
-              <div class="plan-price">${planId === "empresa" ? "Desde " : ""}${escapeHtml(plan.price_eur || 0)} EUR/mes</div>
+              <div class="plan-price">${escapeHtml(plan.price_eur || 0)} EUR/mes</div>
             </div>
             ${plan.is_current ? '<span class="pill accent">Actual</span>' : ""}
-            ${planId === "pro" && !plan.is_current ? '<span class="pill success">Mas elegido</span>' : ""}
+            ${planId === "completo" && !plan.is_current ? '<span class="pill success">Recomendado</span>' : ""}
           </div>
           <p>${escapeHtml(copy.headline)}</p>
           <ul>${copy.includes.slice(0, 4).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
-          <button class="${isUpgrade || planId === "empresa" ? "primary" : "secondary"} small" type="button" data-plan="${escapeHtml(planId)}" ${plan.is_current ? "disabled" : ""}>${buttonText}</button>
+          <button class="${isUpgrade ? "primary" : "secondary"} small" type="button" data-plan="${escapeHtml(planId)}" ${plan.is_current ? "disabled" : ""}>${buttonText}</button>
         `;
         el.plansGrid.appendChild(card);
       });
@@ -3215,10 +3214,6 @@ tbody tr:hover { background: var(--surface-2); }
 
     async function startCheckout(plan) {
       if (!plan) return;
-      if (plan === "empresa") {
-        window.location.href = supportUrl("empresa");
-        return;
-      }
       setStatus("Abriendo pago seguro...", "info");
       const response = await api("/auth/subscription/checkout", {
         method: "POST",
@@ -3237,7 +3232,7 @@ tbody tr:hover { background: var(--surface-2); }
     }
 
     function upgradeSubscription() {
-      const targetPlan = nextPlanFor(String(state.subscription?.plan || "esencial").toLowerCase());
+      const targetPlan = nextPlanFor(String(state.subscription?.plan || "web").toLowerCase());
       startCheckout(targetPlan).catch((error) => setStatus(error.message, "error"));
     }
 

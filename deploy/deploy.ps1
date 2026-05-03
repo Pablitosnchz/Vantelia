@@ -142,11 +142,30 @@ Write-Step "Validando herramientas locales"
 Assert-Command "tar.exe"
 Assert-Command "scp.exe"
 Assert-Command "ssh.exe"
-Assert-Command "python"
+
+$PythonCommand = "python"
+$Python311Venv = Join-Path $ProjectRoot ".venv311\Scripts\python.exe"
+$DefaultVenv = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+if (Test-Path -LiteralPath $Python311Venv) {
+    $PythonCommand = $Python311Venv
+} elseif (Test-Path -LiteralPath $DefaultVenv) {
+    $PythonCommand = $DefaultVenv
+} else {
+    Assert-Command "python"
+}
 
 if (-not $SkipLocalChecks) {
     Write-Step "Ejecutando comprobaciones locales"
-    Invoke-Checked -FilePath "python" -Arguments @("-m", "py_compile", "api.py", "auto_onboarding.py", "onboarding_utils.py") -WorkingDirectory $ProjectRoot
+    $pythonVersionOutput = (& $PythonCommand -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')").Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "No se pudo comprobar la version de Python local."
+    }
+    $pythonVersion = [version]$pythonVersionOutput
+    if ($pythonVersion -lt [version]"3.11") {
+        throw "Python local debe ser 3.11 o superior para coincidir con Docker (actual: $pythonVersionOutput)."
+    }
+    Invoke-Checked -FilePath $PythonCommand -Arguments @("-m", "pytest") -WorkingDirectory $ProjectRoot
+    Invoke-Checked -FilePath $PythonCommand -Arguments @("-m", "py_compile", "api.py", "auto_onboarding.py", "onboarding_utils.py") -WorkingDirectory $ProjectRoot
 }
 
 Write-Step "Empaquetando proyecto para despliegue"
@@ -162,7 +181,7 @@ New-Item -ItemType Directory -Path $StageProjectPath -Force | Out-Null
 
 Invoke-RobocopyChecked -Source $ProjectRoot -Destination $StageProjectPath -ExtraArguments @(
     "/E",
-    "/XD", ".git", ".git-inner-backup", ".venv", ".pytest_cache", "node_modules", "storage", "data", "backups", "__pycache__", "Identidad Visual", "service_account", "site_exports",
+    "/XD", ".git", ".git-inner-backup", ".venv", ".venv311", ".pytest_cache", "node_modules", "storage", "data", "backups", "__pycache__", "Identidad Visual", "service_account", "site_exports",
     "/XF", ".env", ".env.ftp", "env.ftp", "config.json"
 )
 

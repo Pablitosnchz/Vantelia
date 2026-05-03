@@ -7,10 +7,13 @@ Este documento deja una base practica para operar Vantelia con mas tranquilidad 
 Ejecutar antes de cada despliegue:
 
 ```powershell
+python -V
 python -m pytest
 npm run build
 python -m py_compile api.py auto_onboarding.py onboarding_utils.py
 ```
+
+La version local debe ser Python 3.11 o superior, alineada con el Dockerfile de produccion.
 
 Que cubren ahora mismo:
 

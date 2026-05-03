@@ -11,7 +11,8 @@ Ultima actualizacion: 2 de mayo de 2026.
 ## 1. Partes
 
 **Prestador**:
-Vantelia (nombre legal, CIF y domicilio social a completar antes de firmar).
+Vantelia (nombre legal y CIF a completar antes de firmar).
+Domicilio social: Calle Garabay.
 Email: contacto@vantelia.es
 Web: https://vantelia.es
 

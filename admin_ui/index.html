@@ -2311,6 +2311,30 @@ tbody tr:last-child td { border-bottom: none; }
       setView("bookings");
     }
 
+    async function deleteClient(clienteId, clientName) {
+      const label = clientName ? `${clientName} (${clienteId})` : clienteId;
+      const confirmed = window.confirm(
+        `Vas a eliminar ${label}.\n\nSe borraran su configuracion, usuarios cliente, reservas, chats, agenda y ficheros de IA. Esta accion no se puede deshacer.`
+      );
+      if (!confirmed) return;
+
+      showStatus(`Eliminando cliente ${clienteId}...`, "info");
+      const result = await api(`/admin/clientes/${encodeURIComponent(clienteId)}`, { method: "DELETE" });
+      if (state.currentClientId === clienteId) {
+        state.currentClientId = "";
+      }
+      await Promise.all([
+        loadClients(),
+        loadManagedUsers(),
+        loadBookings(),
+        loadStats(),
+      ]);
+      if (!state.currentClientId && state.clients.length) {
+        await loadClientDetail(state.clients[0].cliente_id);
+      }
+      showStatus(result.message || "Cliente eliminado correctamente.", "success");
+    }
+
     function renderSelectedClientSummary() {
       const client = currentClientSummaryRecord();
       if (!client) {
@@ -2391,11 +2415,16 @@ tbody tr:last-child td { border-bottom: none; }
             </button>
             <button class="client-list-side ghost small" type="button" data-client-action="ai">IA</button>
             <button class="client-list-side ghost small" type="button" data-client-action="portal">Portal</button>
+            <button class="client-list-side danger small" type="button" data-client-action="delete">Eliminar</button>
           </div>
         `;
         row.querySelectorAll("button[data-client-action]").forEach((button) => {
           button.addEventListener("click", () => {
             const action = button.dataset.clientAction;
+            if (action === "delete") {
+              deleteClient(client.cliente_id, client.nombre).catch((error) => showStatus(error.message, "error"));
+              return;
+            }
             if (action === "portal") {
               openClientPortal(client.cliente_id);
               return;

@@ -239,38 +239,37 @@ curl http://127.0.0.1:8000/health
 
 ### Booking real con proveedor
 
-Ahora Vantelia puede trabajar de una formaa:
+Ahora Vantelia trabaja en produccion con un proveedor real:
 
 - `internal`: guarda la solicitud en Vantelia y la manda por webhook si existe.
 
-Campos importantes del panel admin:
-
-- `Proveedor real`
-- `Google service account JSON`
-
-Ejemplo para Calendly en `.env` del VPS:
-
-```env
-CALENDLY_API_TOKEN=tu_token_real
-CALENDLY_USER_URI_CLINICA_SAGA=https://api.calendly.com/users/XXXXXXXX
-CALENDLY_EVENT_TYPE_URI_CLINICA_SAGA=https://api.calendly.com/event_types/YYYYYYYY
-```
-
-Y en el panel del cliente:
-
-- `Proveedor real`: `calendly`
-- `Calendly user env`: `CALENDLY_USER_URI_CLINICA_SAGA`
-- `Calendly event type env`: `CALENDLY_EVENT_TYPE_URI_CLINICA_SAGA`
-- `Calendly location kind`: solo si tu event type lo necesita, por ejemplo `zoom_conference`
+Campos de Calendly y Google Calendar pueden aparecer en configuracion interna, pero actualmente son preparacion tecnica, no integraciones activas. No se deben vender como disponibles hasta implementar y probar disponibilidad, creacion, cancelacion y reprogramacion contra esos proveedores.
 
 Notas practicas:
 
-- Con `google_calendar`, la disponibilidad sigue saliendo de la configuracion horaria del cliente y el evento se crea de verdad en Google.
-- Con `calendly`, la disponibilidad del formulario se consulta contra Calendly y la cita se crea alli.
-- Si falta una credencial o un permiso del proveedor, la reserva no se confirmara.
+- Con `internal`, la disponibilidad sale de la configuracion horaria de Vantelia y la cita se guarda en la base de datos interna.
+- Si hay `webhook_env`, Vantelia envia la solicitud al webhook configurado tras guardarla.
+- `google_calendar` y `calendly` quedan como roadmap, no como proveedor operativo actual.
 - Para enviar recuperaciones de acceso y correos operativos desde `info@vantelia.es`, configura `SMTP_USERNAME`, `SMTP_PASSWORD` y `SMTP_FROM_EMAIL`.
 - Para centralizar respuestas humanas en `soporte@vantelia.es`, configura `SMTP_REPLY_TO` y `PORTAL_SUPPORT_EMAIL`.
 - Para ajustar la caducidad del enlace de reset, usa `PASSWORD_RESET_TOKEN_HOURS`.
+
+### Alta automatica desde Stripe
+
+Cuando una suscripcion se inicia desde la pagina publica de planes, Stripe Checkout pide:
+
+- Web donde se instalara la IA.
+- Nombre de la empresa.
+- Nombre deseado para el asistente IA.
+
+Al completarse el pago y llegar el webhook `checkout.session.completed`, Vantelia ejecuta Alta express, crea un `cliente_id` nuevo, guarda el cerebro inicial, configura el cliente, reindexa si OpenAI esta disponible, asocia la suscripcion de Stripe y crea un acceso de portal para el email del comprador. Si el correo esta configurado, envia enlace para crear contrasena.
+
+Este automatismo depende de:
+
+- `OPENAI_API_KEY` configurada.
+- `STRIPE_WEBHOOK_SECRET` correcto en produccion.
+- Webhook de Stripe apuntando a `https://app.vantelia.es/webhooks/stripe`.
+- Eventos `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated` y `customer.subscription.deleted`.
 
 ## 1. Que es lo que administras
 
@@ -394,7 +393,7 @@ Estados principales:
 
 Campos utiles en la tabla:
 
-- `provider_name`: indica si la reserva vive en `internal`, `google_calendar` o `calendly`.
+- `provider_name`: actualmente debe ser `internal`.
 - `provider_booking_id`: identificador externo de la cita.
 - `customer_email_status`: ultimo resultado del correo al cliente.
 - `manage_url`: enlace seguro para que el cliente gestione su propia cita.

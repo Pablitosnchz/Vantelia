@@ -8,7 +8,8 @@ Esta politica describe como Vantelia trata los datos personales en su plataforma
 
 ## 1. Responsable del tratamiento
 
-- **Vantelia** (razon social, CIF y domicilio social a completar antes de la version final).
+- **Vantelia** (razon social y CIF a completar antes de la version final).
+- Domicilio social: Calle Garabay.
 - Email: privacidad@vantelia.es
 - Web: https://www.vantelia.es
 - Contacto soporte: soporte@vantelia.es

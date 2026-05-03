@@ -4,6 +4,7 @@ node_modules/
 __pycache__/
 *.pyc
 .venv/
+.venv311/
 service_account/
 storage/vantelia.db
 storage/*.db

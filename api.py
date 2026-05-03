@@ -34,7 +34,7 @@ try:
     stripe: Any = _stripe_module
 except ImportError:
     stripe = None
-from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import BackgroundTasks, Cookie, Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from llama_index.core import (
@@ -148,12 +148,25 @@ CONSULTA_NOTIFICATION_EMAIL = (
 )
 
 # ─── Planes y suscripciones ───────────────────────────────────────────
-PLAN_DEFAULT = "esencial"
-PLAN_VALID = {"esencial", "pro", "empresa"}
+PLAN_DEFAULT = "web"
+PLAN_VALID = {"web", "whatsapp", "completo"}
+
+# Slugs anteriores → nuevos (compat hacia atrás para suscripciones existentes y configs)
+PLAN_LEGACY_ALIASES: Dict[str, str] = {
+    "esencial": "web",
+    "pro": "whatsapp",
+    "empresa": "completo",
+}
+
+
+def _normalize_plan_slug(plan: str) -> str:
+    p = (plan or "").strip().lower()
+    return PLAN_LEGACY_ALIASES.get(p, p)
+
 
 PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
-    "esencial": {
-        "label": "Esencial",
+    "web": {
+        "label": "Web",
         "monthly_conversations": 500,
         "monthly_bookings": 50,
         "max_professionals": 1,
@@ -167,9 +180,24 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         "show_powered_by": True,
         "price_eur": 49,
     },
-    "pro": {
-        "label": "Pro",
-        "monthly_conversations": 3000,
+    "whatsapp": {
+        "label": "WhatsApp",
+        "monthly_conversations": 1000,
+        "monthly_bookings": 200,
+        "max_professionals": 1,
+        "max_users": 1,
+        "max_extra_documents": 0,
+        "branding_customization": False,
+        "whatsapp_enabled": True,
+        "csv_export": False,
+        "multi_branch": False,
+        "crm_integration": False,
+        "show_powered_by": True,
+        "price_eur": 79,
+    },
+    "completo": {
+        "label": "Completo",
+        "monthly_conversations": 2500,
         "monthly_bookings": 500,
         "max_professionals": 5,
         "max_users": 3,
@@ -180,22 +208,7 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         "multi_branch": False,
         "crm_integration": False,
         "show_powered_by": False,
-        "price_eur": 149,
-    },
-    "empresa": {
-        "label": "Empresa",
-        "monthly_conversations": None,
-        "monthly_bookings": None,
-        "max_professionals": None,
-        "max_users": None,
-        "max_extra_documents": None,
-        "branding_customization": True,
-        "whatsapp_enabled": True,
-        "csv_export": True,
-        "multi_branch": True,
-        "crm_integration": True,
-        "show_powered_by": False,
-        "price_eur": 399,
+        "price_eur": 89,
     },
 }
 
@@ -203,21 +216,21 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "").strip()
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
-STRIPE_PRICE_ESENCIAL = os.getenv("STRIPE_PRICE_ESENCIAL", "").strip()
-STRIPE_PRICE_PRO = os.getenv("STRIPE_PRICE_PRO", "").strip()
-STRIPE_PRICE_EMPRESA = os.getenv("STRIPE_PRICE_EMPRESA", "").strip()
+STRIPE_PRICE_WEB = os.getenv("STRIPE_PRICE_WEB", "").strip()
+STRIPE_PRICE_WHATSAPP = os.getenv("STRIPE_PRICE_WHATSAPP", "").strip()
+STRIPE_PRICE_COMPLETO = os.getenv("STRIPE_PRICE_COMPLETO", "").strip()
 STRIPE_PRICE_BY_PLAN = {
-    "esencial": STRIPE_PRICE_ESENCIAL,
-    "pro": STRIPE_PRICE_PRO,
-    "empresa": STRIPE_PRICE_EMPRESA,
+    "web": STRIPE_PRICE_WEB,
+    "whatsapp": STRIPE_PRICE_WHATSAPP,
+    "completo": STRIPE_PRICE_COMPLETO,
 }
-STRIPE_PRICE_ESENCIAL_ANNUAL = os.getenv("STRIPE_PRICE_ESENCIAL_ANNUAL", "").strip()
-STRIPE_PRICE_PRO_ANNUAL = os.getenv("STRIPE_PRICE_PRO_ANNUAL", "").strip()
-STRIPE_PRICE_EMPRESA_ANNUAL = os.getenv("STRIPE_PRICE_EMPRESA_ANNUAL", "").strip()
+STRIPE_PRICE_WEB_ANNUAL = os.getenv("STRIPE_PRICE_WEB_ANNUAL", "").strip()
+STRIPE_PRICE_WHATSAPP_ANNUAL = os.getenv("STRIPE_PRICE_WHATSAPP_ANNUAL", "").strip()
+STRIPE_PRICE_COMPLETO_ANNUAL = os.getenv("STRIPE_PRICE_COMPLETO_ANNUAL", "").strip()
 STRIPE_PRICE_ANNUAL_BY_PLAN = {
-    "esencial": STRIPE_PRICE_ESENCIAL_ANNUAL,
-    "pro": STRIPE_PRICE_PRO_ANNUAL,
-    "empresa": STRIPE_PRICE_EMPRESA_ANNUAL,
+    "web": STRIPE_PRICE_WEB_ANNUAL,
+    "whatsapp": STRIPE_PRICE_WHATSAPP_ANNUAL,
+    "completo": STRIPE_PRICE_COMPLETO_ANNUAL,
 }
 
 DEFAULT_MESSAGE_TEMPLATES = {
@@ -409,8 +422,8 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
 
     incoming_subscription = payload.get("subscription") if isinstance(payload.get("subscription"), dict) else {}
     explicit_plan = payload.get("plan") or incoming_subscription.get("plan")
-    inferred_default_plan = "pro" if payload.get("whatsapp", {}).get("enabled", False) else PLAN_DEFAULT
-    plan = str(explicit_plan or inferred_default_plan).lower()
+    inferred_default_plan = "whatsapp" if payload.get("whatsapp", {}).get("enabled", False) else PLAN_DEFAULT
+    plan = _normalize_plan_slug(explicit_plan or inferred_default_plan)
     if plan not in PLAN_VALID:
         plan = PLAN_DEFAULT
     subscription = dict(incoming_subscription)
@@ -1500,7 +1513,7 @@ class AuthUserPublic(BaseModel):
     role: str
     cliente_id: str = ""
     plan: str = PLAN_DEFAULT
-    plan_label: str = "Esencial"
+    plan_label: str = "Web"
     last_login_at: str = ""
 
 
@@ -2486,6 +2499,152 @@ def _send_password_reset_email(user: sqlite3.Row, public_token: str, request: Op
     _send_email_message(user["email"], subject, text_body, html_body)
 
 
+def _platform_access_url(request: Optional[Request] = None) -> str:
+    base_url = (_preferred_public_base_url(request) or APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
+    return f"{base_url}/acceso"
+
+
+def _send_checkout_welcome_email(
+    *,
+    to_email: str,
+    display_name: str,
+    company_name: str,
+    cliente_id: str,
+    ai_name: str,
+    plan: str,
+    billing_period: str,
+    subscription_id: str,
+    temporary_password: str,
+    request: Optional[Request] = None,
+) -> None:
+    access_url = _platform_access_url(request)
+    base_url = (_preferred_public_base_url(request) or APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
+    logo_url = f"{base_url}/brand-assets/Logo_1_sin_resplandor.png"
+    support_email = PORTAL_SUPPORT_EMAIL or DEFAULT_VANTELIA_SUPPORT_EMAIL
+    current_year = datetime.now(timezone.utc).year
+    clean_name = _sanitize_text(display_name) or _sanitize_text(company_name) or "Cliente"
+    clean_company = _sanitize_text(company_name) or clean_name
+    clean_ai_name = _sanitize_text(ai_name) or "Asistente Vantelia"
+    plan_label = PLAN_LIMITS.get(plan, {}).get("label") or plan.title()
+    period_label = "mensual" if billing_period == "monthly" else "anual"
+    subject = "Tu alta en Vantelia esta lista"
+
+    text_body = (
+        f"Hola {clean_name},\n\n"
+        "Gracias por contratar Vantelia. Hemos creado tu cliente y tu acceso a la plataforma.\n\n"
+        "Resumen de la compra:\n"
+        f"- Empresa: {clean_company}\n"
+        f"- Cliente interno: {cliente_id}\n"
+        f"- IA: {clean_ai_name}\n"
+        f"- Plan: {plan_label} ({period_label})\n"
+        f"- Suscripcion Stripe: {subscription_id or '-'}\n\n"
+        "Acceso a la plataforma:\n"
+        f"- Email: {to_email}\n"
+        f"- Contrasena temporal: {temporary_password}\n"
+        f"- URL: {access_url}\n\n"
+        "Te recomendamos cambiar la contrasena despues del primer acceso.\n\n"
+        f"Soporte: {support_email}\n\n"
+        "Vantelia\n"
+        f"(c) {current_year} Vantelia. Todos los derechos reservados.\n"
+    )
+    html_body = f"""<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <title>Tu alta en Vantelia esta lista</title>
+  </head>
+  <body bgcolor="#0B132B" style="margin:0;padding:0;background-color:#0B132B;background:#0B132B;font-family:Inter,Segoe UI,Arial,sans-serif;color:#F0F4F8;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#0B132B" style="width:100%;background-color:#0B132B;background:#0B132B;">
+      <tr>
+        <td align="center" bgcolor="#0B132B" style="padding:28px 14px;background-color:#0B132B;background:#0B132B;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#0B132B" style="width:100%;max-width:660px;border-collapse:separate;border-spacing:0;background-color:#0B132B;background:#0B132B;">
+            <tr>
+              <td style="padding:0 0 18px;text-align:center;">
+                <img src="{escape(logo_url)}" width="148" alt="Vantelia" style="display:inline-block;width:148px;max-width:60%;height:auto;border:0;">
+              </td>
+            </tr>
+            <tr>
+              <td style="border:1px solid rgba(0,209,255,0.22);border-radius:24px;overflow:hidden;background:#08102A;box-shadow:0 28px 70px rgba(0,0,0,0.38);">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td style="padding:34px 30px 22px;background:linear-gradient(135deg,rgba(0,209,255,0.18),rgba(0,245,212,0.08) 46%,rgba(8,16,42,0.92));">
+                      <div style="display:inline-block;padding:7px 12px;border:1px solid rgba(0,209,255,0.30);border-radius:999px;background:rgba(0,209,255,0.10);color:#00D1FF;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">
+                        Alta completada
+                      </div>
+                      <h1 style="margin:18px 0 0;font-family:'Space Grotesk',Inter,Segoe UI,Arial,sans-serif;font-size:30px;line-height:1.12;color:#FFFFFF;font-weight:700;">
+                        Tu acceso a Vantelia esta listo
+                      </h1>
+                      <p style="margin:12px 0 0;color:#D4E3EE;font-size:16px;line-height:1.65;">
+                        Hola {escape(clean_name)}, hemos creado el cliente de {escape(clean_company)} y ya puedes entrar en la plataforma.
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:30px;">
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 22px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;background:rgba(255,255,255,0.04);">
+                        <tr>
+                          <td style="padding:16px 18px;">
+                            <p style="margin:0 0 10px;color:#F0F4F8;font-size:15px;font-weight:800;">Resumen de la compra</p>
+                            <p style="margin:0;color:#D4E3EE;font-size:14px;line-height:1.75;">
+                              Empresa: <strong style="color:#FFFFFF;">{escape(clean_company)}</strong><br>
+                              IA: <strong style="color:#FFFFFF;">{escape(clean_ai_name)}</strong><br>
+                              Plan: <strong style="color:#FFFFFF;">{escape(str(plan_label))} ({escape(period_label)})</strong><br>
+                              Cliente interno: <strong style="color:#00D1FF;">{escape(cliente_id)}</strong><br>
+                              Suscripcion: <strong style="color:#FFFFFF;">{escape(subscription_id or "-")}</strong>
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;border:1px solid rgba(0,209,255,0.20);border-radius:16px;background:rgba(0,209,255,0.07);">
+                        <tr>
+                          <td style="padding:16px 18px;">
+                            <p style="margin:0 0 10px;color:#F0F4F8;font-size:15px;font-weight:800;">Credenciales temporales</p>
+                            <p style="margin:0;color:#D4E3EE;font-size:14px;line-height:1.75;">
+                              Email: <strong style="color:#FFFFFF;">{escape(to_email)}</strong><br>
+                              Contrasena temporal: <strong style="color:#00D1FF;">{escape(temporary_password)}</strong>
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                      <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 22px;">
+                        <tr>
+                          <td style="border-radius:999px;background:linear-gradient(135deg,#00D1FF,#00F5D4);box-shadow:0 12px 34px rgba(0,209,255,0.32);">
+                            <a href="{escape(access_url)}" style="display:inline-block;padding:15px 26px;border-radius:999px;color:#04101C;font-size:15px;font-weight:800;text-decoration:none;font-family:'Space Grotesk',Inter,Segoe UI,Arial,sans-serif;">
+                              Acceder a la plataforma
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="margin:0 0 16px;color:#8FA3B4;font-size:14px;line-height:1.7;">
+                        Por seguridad, cambia la contrasena despues del primer acceso.
+                      </p>
+                      <p style="margin:0;color:#8FA3B4;font-size:14px;line-height:1.7;">
+                        Soporte:
+                        <a href="mailto:{escape(support_email)}" style="color:#00D1FF;text-decoration:none;font-weight:700;">{escape(support_email)}</a>.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:22px 8px 0;text-align:center;color:#637C8E;font-size:12px;line-height:1.6;">
+                <p style="margin:0 0 6px;">Vantelia - IA y automatizacion para empresas</p>
+                <p style="margin:0;">(c) {current_year} Vantelia. Todos los derechos reservados.</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>"""
+    _send_email_message(to_email, subject, text_body, html_body)
+
+
 def _cleanup_auth_sessions() -> None:
     now_iso = _utc_now_iso()
     with _get_db_connection() as connection:
@@ -2971,7 +3130,7 @@ def _portal_ai_config_from_client_config(cliente_id: str) -> PortalAiConfigPubli
 def _client_subscription(cliente_id: str) -> Dict[str, Any]:
     config = CONFIG_CLIENTES.get(cliente_id) or {}
     sub = config.get("subscription") or {}
-    plan = str(sub.get("plan") or config.get("plan") or PLAN_DEFAULT).lower()
+    plan = _normalize_plan_slug(sub.get("plan") or config.get("plan") or PLAN_DEFAULT)
     if plan not in PLAN_VALID:
         plan = PLAN_DEFAULT
     return {
@@ -3049,7 +3208,7 @@ def _count_client_users(cliente_id: str) -> int:
     try:
         with _get_db_connection() as conn:
             row = conn.execute(
-                "SELECT COUNT(*) FROM portal_users WHERE cliente_id = ? AND is_active = 1",
+                "SELECT COUNT(*) FROM users WHERE role = 'client' AND cliente_id = ? AND is_active = 1",
                 (cliente_id,),
             ).fetchone()
             return int(row[0]) if row and row[0] is not None else 0
@@ -3082,7 +3241,7 @@ def _build_subscription_public(cliente_id: str) -> SubscriptionPublic:
         max_extra_documents=limits.get("max_extra_documents"),
     )
     available = []
-    for plan_id in ("esencial", "pro", "empresa"):
+    for plan_id in ("web", "whatsapp", "completo"):
         info = PLAN_LIMITS[plan_id]
         available.append({
             "plan": plan_id,
@@ -3137,7 +3296,7 @@ def _stripe_init() -> None:
 
 
 def _stripe_price_for_plan(plan: str, billing_period: str = "monthly") -> Tuple[str, str]:
-    normalized_plan = str(plan or "").strip().lower()
+    normalized_plan = _normalize_plan_slug(plan)
     if normalized_plan not in PLAN_VALID:
         raise HTTPException(status_code=400, detail="Plan no valido.")
 
@@ -3158,6 +3317,201 @@ def _stripe_price_for_plan(plan: str, billing_period: str = "monthly") -> Tuple[
             detail=f"STRIPE_PRICE_{normalized_plan.upper()}{env_suffix} no configurado.",
         )
     return price_id, period
+
+
+def _stripe_onboarding_custom_fields() -> List[Dict[str, Any]]:
+    return [
+        {
+            "key": "website",
+            "label": {"type": "custom", "custom": "Web donde instalaremos la IA"},
+            "type": "text",
+            "text": {"maximum_length": 200, "minimum_length": 4},
+            "optional": False,
+        },
+        {
+            "key": "empresa",
+            "label": {"type": "custom", "custom": "Nombre de tu empresa"},
+            "type": "text",
+            "text": {"maximum_length": 80, "minimum_length": 2},
+            "optional": False,
+        },
+        {
+            "key": "ianame",
+            "label": {"type": "custom", "custom": "Nombre del asistente IA"},
+            "type": "text",
+            "text": {"maximum_length": 40, "minimum_length": 2},
+            "optional": True,
+        },
+    ]
+
+
+def _stripe_custom_field_values(session_object: Dict[str, Any]) -> Dict[str, str]:
+    values: Dict[str, str] = {}
+    for field in session_object.get("custom_fields") or []:
+        key = str(field.get("key") or "").strip()
+        text_value = ((field.get("text") or {}).get("value") or "").strip()
+        if key and text_value:
+            values[key] = text_value
+    return values
+
+
+def _unique_cliente_id(seed: str) -> str:
+    base = (slugify_company(seed) or "cliente").lower()
+    base = base[:64].strip("_") or "cliente"
+    candidate = base
+    index = 2
+    while candidate in CONFIG_CLIENTES:
+        suffix = f"_{index}"
+        candidate = f"{base[:80 - len(suffix)]}{suffix}"
+        index += 1
+    _assert_valid_client_id(candidate)
+    return candidate
+
+
+def _public_checkout_customer_details(session_object: Dict[str, Any]) -> Dict[str, str]:
+    customer_details = session_object.get("customer_details") or {}
+    return {
+        "email": str(customer_details.get("email") or session_object.get("customer_email") or "").strip(),
+        "name": str(customer_details.get("name") or "").strip(),
+        "phone": str(customer_details.get("phone") or "").strip(),
+    }
+
+
+_STRIPE_SESSIONS_IN_FLIGHT: Set[str] = set()
+
+
+def _claim_stripe_session(session_id: str) -> bool:
+    """Reserva una session_id para procesamiento. False si ya esta en curso."""
+    if not session_id:
+        return True
+    if session_id in _STRIPE_SESSIONS_IN_FLIGHT:
+        return False
+    _STRIPE_SESSIONS_IN_FLIGHT.add(session_id)
+    return True
+
+
+def _release_stripe_session(session_id: str) -> None:
+    if session_id:
+        _STRIPE_SESSIONS_IN_FLIGHT.discard(session_id)
+
+
+def _find_client_by_stripe_id(
+    *, customer_id: str = "", subscription_id: str = "", session_id: str = ""
+) -> str:
+    if not (customer_id or subscription_id or session_id):
+        return ""
+    for cid, cfg in CONFIG_CLIENTES.items():
+        sub = cfg.get("subscription") or {}
+        if subscription_id and sub.get("stripe_subscription_id") == subscription_id:
+            return cid
+        if customer_id and sub.get("stripe_customer_id") == customer_id:
+            return cid
+        if session_id and sub.get("stripe_checkout_session_id") == session_id:
+            return cid
+    return ""
+
+
+def _create_client_from_public_checkout(
+    session_object: Dict[str, Any],
+    *,
+    request: Request,
+    plan: str,
+    billing_period: str,
+    customer_id: str,
+    subscription_id: str,
+) -> str:
+    session_id = str(session_object.get("id") or "").strip()
+    existing_cid = _find_client_by_stripe_id(
+        customer_id=customer_id, subscription_id=subscription_id, session_id=session_id
+    )
+    if existing_cid:
+        logger.info(
+            "checkout.session.completed ignorado (idempotente): cliente=%s session=%s sub=%s",
+            existing_cid, session_id, subscription_id,
+        )
+        return existing_cid
+    fields = _stripe_custom_field_values(session_object)
+    customer = _public_checkout_customer_details(session_object)
+    website_url = fields.get("website", "")
+    company_name = fields.get("empresa") or customer.get("name") or customer.get("email") or "Cliente Vantelia"
+    ai_name = fields.get("ianame") or "Clara"
+
+    if not website_url:
+        raise RuntimeError("Stripe Checkout no incluyo la web del cliente.")
+    if not OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY no configurada; no se puede ejecutar alta express.")
+
+    cliente_id = _unique_cliente_id(company_name)
+    result = run_onboarding(
+        website_url=website_url,
+        api_key=OPENAI_API_KEY,
+        nombre_bot=ai_name,
+        tono="Profesional y cercano",
+        idioma="Espanol",
+        max_paginas=12,
+    )
+    payload = _payload_from_alta_express(
+        cliente_id=cliente_id,
+        result=result,
+        nombre_bot=ai_name,
+        tono="Profesional y cercano",
+        idioma="Espanol",
+        color="#00b1d9",
+        booking_enabled=True,
+        booking_timezone=DEFAULT_TIMEZONE,
+    )
+    payload.contacto_email = customer.get("email", "")
+    payload.contacto_telefono = customer.get("phone", "")
+    save_result = _save_admin_client_payload(cliente_id, payload, request)
+    _ensure_default_employees_for_all_clients()
+    _set_client_subscription(
+        cliente_id,
+        plan=plan,
+        status="active",
+        stripe_customer_id=customer_id,
+        stripe_subscription_id=subscription_id,
+        stripe_checkout_session_id=session_id,
+        billing_period=billing_period,
+        started_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+    customer_email = customer.get("email", "")
+    temporary_password = secrets.token_urlsafe(12)
+    if customer_email:
+        try:
+            existing_user = _get_user_by_email(customer_email)
+            if existing_user:
+                temporary_password = ""
+            else:
+                _create_user(
+                    email=customer_email,
+                    password=temporary_password,
+                    role="client",
+                    display_name=customer.get("name") or company_name,
+                    cliente_id=cliente_id,
+                )
+            _send_checkout_welcome_email(
+                to_email=customer_email,
+                display_name=customer.get("name") or company_name,
+                company_name=company_name,
+                cliente_id=cliente_id,
+                ai_name=ai_name,
+                plan=plan,
+                billing_period=billing_period,
+                subscription_id=subscription_id,
+                temporary_password=temporary_password or "Usa tu contrasena actual",
+                request=request,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Cliente %s creado, pero no se pudo crear/enviar acceso portal: %s", cliente_id, exc)
+
+    logger.info(
+        "Alta express automatica completada desde Stripe: cliente=%s plan=%s snippet=%s",
+        cliente_id,
+        plan,
+        save_result.install_snippet,
+    )
+    return cliente_id
 
 
 def _update_portal_ai_config(cliente_id: str, data: PortalAiConfigPayload) -> PortalAiConfigPublic:
@@ -3553,6 +3907,48 @@ def _save_admin_client_payload(
         api_base_url=snippet["api_base_url"],
         demo_url=snippet["demo_url"],
     )
+
+
+def _delete_client_everywhere(cliente_id: str) -> None:
+    _assert_valid_client_id(cliente_id)
+    if cliente_id not in CONFIG_CLIENTES:
+        raise HTTPException(status_code=404, detail="Cliente no configurado")
+
+    next_configs = copy.deepcopy(CONFIG_CLIENTES)
+    next_configs.pop(cliente_id, None)
+    _persist_configs_to_disk(next_configs)
+    _update_runtime_configs(next_configs)
+
+    with _get_db_connection() as connection:
+        user_rows = connection.execute(
+            "SELECT id FROM users WHERE role = 'client' AND cliente_id = ?",
+            (cliente_id,),
+        ).fetchall()
+        user_ids = [row["id"] for row in user_rows]
+        if user_ids:
+            placeholders = ",".join("?" for _ in user_ids)
+            connection.execute(f"DELETE FROM auth_sessions WHERE user_id IN ({placeholders})", tuple(user_ids))
+            connection.execute(f"DELETE FROM password_reset_tokens WHERE user_id IN ({placeholders})", tuple(user_ids))
+        connection.execute("DELETE FROM users WHERE role = 'client' AND cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM booking_audit WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM bookings WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM agenda_blocks WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM employees WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM chat_messages WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM chat_sessions WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM whatsapp_inbound_messages WHERE cliente_id = ?", (cliente_id,))
+        connection.commit()
+
+    with state_lock:
+        indices.pop(cliente_id, None)
+        for session_id in [sid for sid, session in sesiones.items() if session.cliente_id == cliente_id]:
+            sesiones.pop(session_id, None)
+
+    for base_dir in (DATA_DIR, STORAGE_DIR):
+        target_dir = base_dir / cliente_id
+        _ensure_path_within(base_dir, target_dir)
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
 
 
 def _invalidate_client_runtime(cliente_id: str) -> None:
@@ -7450,7 +7846,7 @@ async def auth_export_bookings(
         _require_plan_feature(
             target_client_id,
             "csv_export",
-            "La exportacion CSV esta disponible en los planes Pro y Empresa.",
+            "La exportacion CSV esta disponible en el plan Completo.",
         )
     rows, _ = _list_booking_rows(
         cliente_id=target_client_id,
@@ -7907,7 +8303,11 @@ async def public_subscription_checkout(
             cancel_url=cancel_url,
             client_reference_id=f"public:{plan}:{billing_period}",
             metadata={"source": "public_plans", "plan": plan, "billing_period": billing_period},
-            subscription_data={"metadata": {"source": "public_plans", "plan": plan, "billing_period": billing_period}},
+            subscription_data={
+                "trial_period_days": 30,
+                "metadata": {"source": "public_plans", "plan": plan, "billing_period": billing_period},
+            },
+            custom_fields=_stripe_onboarding_custom_fields(),
             billing_address_collection="required",
             phone_number_collection={"enabled": True},
             tax_id_collection={"enabled": True},
@@ -7944,7 +8344,7 @@ async def auth_subscription_portal(
 
 
 @app.post("/webhooks/stripe", include_in_schema=False)
-async def stripe_webhook(request: Request) -> Dict[str, Any]:
+async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) -> Dict[str, Any]:
     if not _stripe_configured():
         raise HTTPException(status_code=503, detail="Stripe no configurado.")
     payload = await request.body()
@@ -7965,15 +8365,56 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
         if event_type == "checkout.session.completed":
             cid = (data_object.get("metadata") or {}).get("cliente_id") or data_object.get("client_reference_id")
             plan = (data_object.get("metadata") or {}).get("plan") or PLAN_DEFAULT
+            billing_period = (data_object.get("metadata") or {}).get("billing_period") or "monthly"
             customer_id = data_object.get("customer") or ""
             sub_id = data_object.get("subscription") or ""
-            if cid and cid in CONFIG_CLIENTES:
+            source = (data_object.get("metadata") or {}).get("source") or ""
+            if source == "public_plans" and str(cid or "").startswith("public:"):
+                session_id = str(data_object.get("id") or "").strip()
+                existing_cid = _find_client_by_stripe_id(
+                    customer_id=customer_id, subscription_id=sub_id, session_id=session_id
+                )
+                if existing_cid:
+                    logger.info(
+                        "checkout.session.completed duplicado ignorado: cliente=%s session=%s",
+                        existing_cid, session_id,
+                    )
+                elif not _claim_stripe_session(session_id):
+                    logger.info(
+                        "checkout.session.completed en curso, reintento ignorado: session=%s",
+                        session_id,
+                    )
+                else:
+                    # Onboarding lento (scrape + indexado): correr en background y
+                    # responder 200 a Stripe para evitar reintentos que generan duplicados.
+                    def _run_onboarding_bg(
+                        data_object=data_object, plan=plan, billing_period=billing_period,
+                        customer_id=customer_id, sub_id=sub_id, session_id=session_id, request=request,
+                    ) -> None:
+                        try:
+                            _create_client_from_public_checkout(
+                                data_object,
+                                request=request,
+                                plan=plan,
+                                billing_period=billing_period,
+                                customer_id=customer_id,
+                                subscription_id=sub_id,
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            logger.exception(
+                                "Onboarding async fallido session=%s: %s", session_id, exc
+                            )
+                        finally:
+                            _release_stripe_session(session_id)
+                    background_tasks.add_task(_run_onboarding_bg)
+            elif cid and cid in CONFIG_CLIENTES:
                 _set_client_subscription(
                     cid,
                     plan=plan,
                     status="active",
                     stripe_customer_id=customer_id,
                     stripe_subscription_id=sub_id,
+                    billing_period=billing_period,
                     started_at=datetime.now(timezone.utc).isoformat(),
                 )
                 logger.info("Suscripción activada para %s · plan=%s", cid, plan)
@@ -8504,6 +8945,16 @@ async def admin_guardar_cliente(
 ) -> AdminClienteSaveResult:
     _assert_valid_client_id(cliente_id)
     return _save_admin_client_payload(cliente_id, data, request)
+
+
+@app.delete(
+    "/admin/clientes/{cliente_id}",
+    dependencies=[Depends(_require_admin_token)],
+    response_model=AuthSimpleResponse,
+)
+async def admin_eliminar_cliente(cliente_id: str) -> AuthSimpleResponse:
+    _delete_client_everywhere(cliente_id)
+    return AuthSimpleResponse(ok=True, message=f"Cliente {cliente_id} eliminado correctamente.")
 
 
 @app.get(
@@ -9131,7 +9582,6 @@ async def _process_chat_message(
     client_config = _get_client_config(cliente_id)
     booking_enabled = bool(client_config["booking"]["enabled"])
     nombre_empresa = client_config.get("nombre", "")
-    is_whatsapp = origin_override.startswith("whatsapp:") if origin_override else False
 
     if _message_is_greeting(message) or _message_requests_menu(message):
         menu_text = _build_main_menu_text(
@@ -9154,7 +9604,7 @@ async def _process_chat_message(
         return menu_response
 
     menu_option = _detect_menu_option(message)
-    if menu_option == "agendar" and booking_enabled and not is_whatsapp:
+    if menu_option == "agendar" and booking_enabled:
         booking_response = RespuestaChat(
             respuesta="📅 Te muestro el formulario para agendar tu cita. Elige servicio, fecha y hora.",
             mostrar_formulario=True,
@@ -9169,7 +9619,7 @@ async def _process_chat_message(
         )
         return booking_response
 
-    if booking_enabled and _message_requests_booking_form(message) and not is_whatsapp:
+    if booking_enabled and _message_requests_booking_form(message):
         booking_response = RespuestaChat(
             respuesta="📅 Te muestro el formulario de solicitud de cita para que puedas elegir servicio, fecha y hora.",
             mostrar_formulario=True,
@@ -9300,7 +9750,7 @@ def _resolve_whatsapp_client_id(phone_number_id: str, forced_cliente_id: str = "
         _require_plan_feature(
             forced_cliente_id,
             "whatsapp_enabled",
-            "WhatsApp esta disponible en los planes Pro y Empresa.",
+            "WhatsApp esta disponible en los planes WhatsApp y Completo.",
         )
         return forced_cliente_id
 
@@ -9315,7 +9765,7 @@ def _resolve_whatsapp_client_id(phone_number_id: str, forced_cliente_id: str = "
     _require_plan_feature(
         cliente_id,
         "whatsapp_enabled",
-        "WhatsApp esta disponible en los planes Pro y Empresa.",
+        "WhatsApp esta disponible en los planes WhatsApp y Completo.",
     )
     return cliente_id
 
@@ -10564,7 +11014,7 @@ class AdminRebrainResponse(BaseModel):
     dependencies=[Depends(_require_admin_token)],
     response_model=AdminRebrainResponse,
 )
-async def regenerar_cerebro(cliente_id: str, data: AdminRebrainPayload | None = None) -> AdminRebrainResponse:
+async def regenerar_cerebro(cliente_id: str, data: Optional[AdminRebrainPayload] = None) -> AdminRebrainResponse:
     _assert_valid_client_id(cliente_id)
     cfg = _get_client_config(cliente_id)
 
