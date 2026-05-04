@@ -638,6 +638,76 @@ select {
 .client-list-name { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .client-list-meta { font-size: 12px; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+.client-pill-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.client-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.client-pill.demo {
+  background: rgba(255, 184, 0, .12);
+  color: #ffb800;
+  border-color: rgba(255, 184, 0, .35);
+}
+.client-pill.sub-active {
+  background: #16a34a;
+  color: #ffffff;
+  border-color: #22c55e;
+}
+.client-pill.sub-trial {
+  background: rgba(0, 209, 255, .10);
+  color: #00d1ff;
+  border-color: rgba(0, 209, 255, .35);
+}
+.client-pill.sub-canceled,
+.client-pill.sub-past_due,
+.client-pill.sub-unpaid {
+  background: rgba(255, 93, 143, .10);
+  color: #ff5d8f;
+  border-color: rgba(255, 93, 143, .35);
+}
+.client-pill.sub-none {
+  background: rgba(255, 255, 255, .04);
+  color: var(--soft);
+  border-color: var(--line);
+}
+.client-pill.booking-on {
+  background: rgba(120, 200, 120, .12);
+  color: #7bd17b;
+  border-color: rgba(120, 200, 120, .35);
+}
+.client-pill.booking-off {
+  background: rgba(255, 255, 255, .03);
+  color: var(--soft);
+  border-color: var(--line);
+}
+
+.client-filter-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.client-filter-pills button {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--soft);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.client-filter-pills button:hover { border-color: var(--line-strong); color: var(--text); }
+.client-filter-pills button.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 /* Client summary block */
 .client-summary {
   display: grid;
@@ -1019,6 +1089,10 @@ tbody tr:last-child td { border-bottom: none; }
           <span class="nav-icon">RS</span>
           <span class="nav-text"><strong>Reservas</strong><span>Citas y recordatorios</span></span>
         </button>
+        <button class="nav-button" type="button" data-nav-view="analytics">
+          <span class="nav-icon">ST</span>
+          <span class="nav-text"><strong>Estadisticas</strong><span>Conversiones y eventos</span></span>
+        </button>
         <button class="nav-button" type="button" data-nav-view="express">
           <span class="nav-icon">AE</span>
           <span class="nav-text"><strong>Alta express</strong><span>Crear desde una web</span></span>
@@ -1277,6 +1351,66 @@ tbody tr:last-child td { border-bottom: none; }
         </section>
       </section>
 
+      <section class="dashboard-view" data-view="analytics">
+        <section class="card panel">
+          <div class="section-header">
+            <div>
+              <h2>Estadisticas</h2>
+              <p>Conversiones capturadas desde la web, planes, demo y widget.</p>
+            </div>
+            <div class="actions">
+              <select id="analyticsDays">
+                <option value="7">7 dias</option>
+                <option value="30" selected>30 dias</option>
+                <option value="90">90 dias</option>
+                <option value="365">365 dias</option>
+              </select>
+              <button id="refreshAnalyticsBtn" class="secondary" type="button">Actualizar</button>
+            </div>
+          </div>
+
+          <div class="stat-grid">
+            <div class="stat"><strong id="analyticsTotal">-</strong><span>Eventos</span></div>
+            <div class="stat"><strong id="analyticsDemo">-</strong><span>Leads / demos</span></div>
+            <div class="stat"><strong id="analyticsCheckout">-</strong><span>Checkout final</span></div>
+            <div class="stat"><strong id="analyticsMessages">-</strong><span>Mensajes widget</span></div>
+            <div class="stat"><strong id="analyticsBookings">-</strong><span>Citas confirmadas</span></div>
+          </div>
+
+          <div class="grid">
+            <div class="subcard">
+              <strong>Eventos por tipo</strong>
+              <div id="analyticsEventList" class="users-grid">
+                <div class="empty">Sin eventos todavia.</div>
+              </div>
+            </div>
+            <div class="subcard">
+              <strong>Eventos por cliente</strong>
+              <div id="analyticsClientList" class="users-grid">
+                <div class="empty">Sin clientes todavia.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Evento</th>
+                  <th>Cliente</th>
+                  <th>Pagina</th>
+                  <th>Detalle</th>
+                </tr>
+              </thead>
+              <tbody id="analyticsRecentBody">
+                <tr><td colspan="5" class="muted">Sin eventos todavia.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
       <section class="dashboard-view active" data-view="clients">
       <section class="card hero">
         <div>
@@ -1304,6 +1438,12 @@ tbody tr:last-child td { border-bottom: none; }
             <input id="clientSearch" type="search" placeholder="Nombre, ID, email, telefono..." />
           </label>
           <button id="newClientBtn" class="secondary" type="button">Nuevo cliente</button>
+        </div>
+        <div class="client-filter-pills" role="tablist" aria-label="Filtrar clientes" style="margin: 8px 0 0;">
+          <button type="button" data-client-filter="all" class="active" role="tab">Todos</button>
+          <button type="button" data-client-filter="subscribed" role="tab">Suscritos</button>
+          <button type="button" data-client-filter="demo" role="tab">Demos</button>
+          <button type="button" data-client-filter="other" role="tab">Sin suscripción</button>
         </div>
         <div id="clientDirectory" class="client-directory">
           <div class="empty"><span class="loading-inline"><span class="loading-dot"></span>Cargando clientes...</span></div>
@@ -1755,6 +1895,7 @@ tbody tr:last-child td { border-bottom: none; }
       bookingModalMode: "",
       activeBookingId: "",
       rescheduleSelectedTime: "",
+      clientFilter: "all",
     };
 
     const elements = {
@@ -1830,6 +1971,15 @@ tbody tr:last-child td { border-bottom: none; }
       bookingDateTo: document.getElementById("bookingDateTo"),
       bookingLimit: document.getElementById("bookingLimit"),
       bookingsTableBody: document.getElementById("bookingsTableBody"),
+      analyticsDays: document.getElementById("analyticsDays"),
+      analyticsTotal: document.getElementById("analyticsTotal"),
+      analyticsDemo: document.getElementById("analyticsDemo"),
+      analyticsCheckout: document.getElementById("analyticsCheckout"),
+      analyticsMessages: document.getElementById("analyticsMessages"),
+      analyticsBookings: document.getElementById("analyticsBookings"),
+      analyticsEventList: document.getElementById("analyticsEventList"),
+      analyticsClientList: document.getElementById("analyticsClientList"),
+      analyticsRecentBody: document.getElementById("analyticsRecentBody"),
       bookingModalOverlay: document.getElementById("bookingModalOverlay"),
       bookingRescheduleModal: document.getElementById("bookingRescheduleModal"),
       bookingTimelineModal: document.getElementById("bookingTimelineModal"),
@@ -1898,6 +2048,8 @@ tbody tr:last-child td { border-bottom: none; }
 
       if (nextView === "bookings") {
         loadBookings().catch((error) => showStatus(error.message, "error"));
+      } else if (nextView === "analytics") {
+        loadAnalytics().catch((error) => showStatus(error.message, "error"));
       }
     }
 
@@ -2274,6 +2426,7 @@ tbody tr:last-child td { border-bottom: none; }
 
     function getVisibleClients() {
       const search = elements.clientSearch.value.trim().toLowerCase();
+      const filter = state.clientFilter || "all";
       return state.clients.filter((client) => {
         const haystack = [
           client.nombre,
@@ -2282,8 +2435,17 @@ tbody tr:last-child td { border-bottom: none; }
           client.contacto_telefono,
           client.booking_provider,
           client.booking_timezone,
+          client.subscription_plan,
+          client.subscription_status,
         ].join(" ").toLowerCase();
-        return !search || haystack.includes(search);
+        if (search && !haystack.includes(search)) return false;
+        const isDemo = !!client.is_demo;
+        const subStatus = (client.subscription_status || "").toLowerCase();
+        const hasActiveSub = !isDemo && (subStatus === "active" || subStatus === "trialing");
+        if (filter === "demo") return isDemo;
+        if (filter === "subscribed") return hasActiveSub;
+        if (filter === "other") return !isDemo && !hasActiveSub;
+        return true;
       });
     }
 
@@ -2391,7 +2553,14 @@ tbody tr:last-child td { border-bottom: none; }
     }
 
     function renderClientDirectory(selectedId, visibleClients) {
-      elements.clientCountLabel.textContent = `${visibleClients.length} de ${state.clients.length} clientes visibles`;
+      const totals = state.clients.reduce((acc, c) => {
+        if (c.is_demo) acc.demo += 1;
+        else if ((c.subscription_status || "").toLowerCase() === "active" || (c.subscription_status || "").toLowerCase() === "trialing") acc.subscribed += 1;
+        else acc.other += 1;
+        return acc;
+      }, { demo: 0, subscribed: 0, other: 0 });
+      elements.clientCountLabel.textContent =
+        `${visibleClients.length} de ${state.clients.length} visibles · ${totals.subscribed} suscritos · ${totals.demo} demos · ${totals.other} sin suscripción`;
       elements.clientDirectory.innerHTML = "";
       if (!visibleClients.length) {
         elements.clientDirectory.innerHTML = '<div class="empty">No hay clientes que coincidan con la busqueda.</div>';
@@ -2403,7 +2572,32 @@ tbody tr:last-child td { border-bottom: none; }
         row.className = `client-list-row${client.cliente_id === selectedId ? " active" : ""}`;
         const clientName = escapeHtml(client.nombre || "-");
         const clientId = escapeHtml(client.cliente_id || "-");
-        const bookingStatus = client.booking_enabled ? "Reservas ON" : "Reservas OFF";
+        const isDemo = !!client.is_demo;
+        const subStatus = (client.subscription_status || "").toLowerCase();
+        const subPlan = (client.subscription_plan || "").toString();
+        const subPlanLabel = subPlan ? subPlan.charAt(0).toUpperCase() + subPlan.slice(1) : "";
+        const pills = [];
+        pills.push(client.booking_enabled
+          ? '<span class="client-pill booking-on">Reservas ON</span>'
+          : '<span class="client-pill booking-off">Reservas OFF</span>');
+        if (isDemo) {
+          let demoText = "Demo";
+          const remaining = Number(client.demo_expires_in_seconds || 0);
+          if (remaining > 0) {
+            const mins = Math.max(1, Math.round(remaining / 60));
+            demoText = `Demo · ${mins} min`;
+          }
+          pills.push(`<span class="client-pill demo" title="${escapeHtml(client.demo_expires_at || "")}">${demoText}</span>`);
+        } else if (subStatus === "active") {
+          pills.push(`<span class="client-pill sub-active">Suscrito${subPlanLabel ? " · " + escapeHtml(subPlanLabel) : ""}</span>`);
+        } else if (subStatus === "trialing") {
+          pills.push(`<span class="client-pill sub-trial">Trial${subPlanLabel ? " · " + escapeHtml(subPlanLabel) : ""}</span>`);
+        } else if (subStatus === "canceled" || subStatus === "past_due" || subStatus === "unpaid" || subStatus === "incomplete_expired") {
+          pills.push(`<span class="client-pill sub-${escapeHtml(subStatus)}">${escapeHtml(subStatus)}</span>`);
+        } else {
+          pills.push('<span class="client-pill sub-none">Sin suscripción</span>');
+        }
+        const pillsHtml = `<span class="client-pill-row">${pills.join("")}</span>`;
         row.innerHTML = `
           <div class="client-list-actions">
             <button class="client-list-main" type="button" data-client-action="profile">
@@ -2411,7 +2605,7 @@ tbody tr:last-child td { border-bottom: none; }
                 <strong>${clientName}</strong>
                 <span>${clientId}</span>
               </span>
-              <span class="client-list-meta">${bookingStatus}</span>
+              ${pillsHtml}
             </button>
             <button class="client-list-side ghost small" type="button" data-client-action="ai">IA</button>
             <button class="client-list-side ghost small" type="button" data-client-action="portal">Portal</button>
@@ -2829,6 +3023,65 @@ tbody tr:last-child td { border-bottom: none; }
       params.set("limit", String(Math.max(1, Math.min(limit, 500))));
       const bookings = await api(`/admin/bookings?${params.toString()}`);
       renderBookings(bookings || []);
+    }
+
+    function renderMetricList(container, items, emptyText, labelKey) {
+      if (!container) return;
+      if (!items || !items.length) {
+        container.innerHTML = `<div class="empty">${emptyText}</div>`;
+        return;
+      }
+      container.innerHTML = items.slice(0, 12).map((item) => {
+        const label = escapeHtml(item[labelKey] || "-");
+        const total = Number(item.total || 0);
+        return `
+          <div class="meta-box">
+            <span class="meta-label">${label}</span>
+            <strong>${total}</strong>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderAnalyticsRecent(events) {
+      if (!events || !events.length) {
+        elements.analyticsRecentBody.innerHTML = '<tr><td colspan="5" class="muted">Sin eventos todavia.</td></tr>';
+        return;
+      }
+      elements.analyticsRecentBody.innerHTML = "";
+      events.forEach((event) => {
+        const metadata = event.metadata || {};
+        const detail = [
+          metadata.plan ? `Plan: ${metadata.plan}` : "",
+          metadata.service ? `Servicio: ${metadata.service}` : "",
+          metadata.cta_label ? `CTA: ${metadata.cta_label}` : "",
+          metadata.error_message ? `Error: ${metadata.error_message}` : "",
+        ].filter(Boolean).join(" · ");
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${escapeHtml(event.created_at || "-")}</td>
+          <td><span class="pill">${escapeHtml(event.event_name || "-")}</span></td>
+          <td>${escapeHtml(event.cliente_id || "-")}</td>
+          <td>${escapeHtml(event.page_path || "-")}</td>
+          <td>${escapeHtml(detail || JSON.stringify(metadata).slice(0, 160) || "-")}</td>
+        `;
+        elements.analyticsRecentBody.appendChild(row);
+      });
+    }
+
+    async function loadAnalytics() {
+      const days = Number(elements.analyticsDays?.value || 30);
+      elements.analyticsRecentBody.innerHTML = '<tr><td colspan="5"><span class="loading-inline"><span class="loading-dot"></span>Cargando estadisticas...</span></td></tr>';
+      const data = await api(`/admin/analytics?days=${encodeURIComponent(days)}&limit=80`);
+      const kpis = data.kpis || {};
+      elements.analyticsTotal.textContent = String(data.total_events ?? 0);
+      elements.analyticsDemo.textContent = `${Number(kpis.lead_created || 0)} / ${Number(kpis.demo_generated || 0)}`;
+      elements.analyticsCheckout.textContent = `${Number(kpis.checkout_redirect || 0)} / ${Number(kpis.checkout_completed || 0)}`;
+      elements.analyticsMessages.textContent = String(kpis.widget_messages || 0);
+      elements.analyticsBookings.textContent = String(kpis.booking_confirmed || 0);
+      renderMetricList(elements.analyticsEventList, data.events_by_name || [], "Sin eventos todavia.", "event_name");
+      renderMetricList(elements.analyticsClientList, data.events_by_client || [], "Sin clientes todavia.", "cliente_id");
+      renderAnalyticsRecent(data.recent || []);
     }
 
     async function runBookingReminders() {
@@ -3276,6 +3529,17 @@ tbody tr:last-child td { border-bottom: none; }
       }
     });
     elements.clientSearch.addEventListener("input", () => renderClientList());
+
+    document.querySelectorAll('[data-client-filter]').forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const value = btn.dataset.clientFilter || "all";
+        state.clientFilter = value;
+        document.querySelectorAll('[data-client-filter]').forEach((other) => {
+          other.classList.toggle("active", other === btn);
+        });
+        renderClientList();
+      });
+    });
     elements.aiClientPicker.addEventListener("change", () => {
       const clienteId = elements.aiClientPicker.value.trim();
       if (!clienteId) return;
@@ -3303,6 +3567,11 @@ tbody tr:last-child td { border-bottom: none; }
       withButtonLoading(document.getElementById("runRemindersBtn"), "Ejecutando...", () => runBookingReminders())
         .catch((error) => showStatus(error.message, "error"));
     });
+    document.getElementById("refreshAnalyticsBtn").addEventListener("click", () => {
+      withButtonLoading(document.getElementById("refreshAnalyticsBtn"), "Actualizando...", () => loadAnalytics())
+        .catch((error) => showStatus(error.message, "error"));
+    });
+    elements.analyticsDays.addEventListener("change", () => loadAnalytics().catch((error) => showStatus(error.message, "error")));
     elements.closeRescheduleModalBtn.addEventListener("click", () => closeBookingModal());
     elements.closeTimelineModalBtn.addEventListener("click", () => closeBookingModal());
     elements.bookingRescheduleDate.addEventListener("change", () => {

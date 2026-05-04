@@ -32,6 +32,45 @@
       "success_message": "Tu cita ha quedado registrada correctamente. Nuestro equipo revisara la solicitud y te contactara si necesita ajustar algo."
     }
   },
+  "Vantelia": {
+    "nombre": "Vantelia",
+    "plan": "completo",
+    "icono": "VA",
+    "color": "#00b1d9",
+    "bienvenida": "Hola, soy el asistente de Vantelia. Puedo resolver dudas sobre nuestros planes, generar una demo y ayudarte a solicitar una consulta.",
+    "prompt_extra": "Habla con tono profesional, claro y cercano. Prioriza llevar al usuario a una consulta gratuita, una demo o el plan adecuado. No inventes precios ni condiciones fuera de la base documental.",
+    "allowed_origins": [
+      "https://vantelia.es",
+      "https://www.vantelia.es",
+      "https://app.vantelia.es",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:5500",
+      "http://localhost:8000"
+    ],
+    "contacto": {
+      "email": "soporte@vantelia.es",
+      "telefono": "+34 600000000"
+    },
+    "branding": {
+      "powered_by": "Powered by Vantelia"
+    },
+    "subscription": {
+      "plan": "completo",
+      "status": "active"
+    },
+    "booking": {
+      "enabled": true,
+      "timezone": "Europe/Madrid",
+      "slot_minutes": 30,
+      "day_start": "09:00",
+      "day_end": "18:00",
+      "closed_weekdays": [6],
+      "provider": "internal",
+      "webhook_env": "WEBHOOK_DEFAULT",
+      "success_message": "Tu solicitud de consulta ha quedado registrada correctamente. Te contactaremos para confirmar los detalles."
+    }
+  },
   "demo": {
     "nombre": "Agencia IA Demo",
     "plan": "web",

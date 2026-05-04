@@ -6,6 +6,7 @@ import {
   humanizeErrorMessage,
   scrollMsgs,
   setSessionId,
+  trackWidgetEvent,
 } from "./utils.js";
 import { mostrarFormulario } from "./form.js";
 
@@ -100,6 +101,9 @@ export function agregarAccionesIniciales() {
   div.querySelectorAll("button[data-quick-message]").forEach((button) => {
     button.addEventListener("click", () => {
       const message = button.getAttribute("data-quick-message") || "";
+      trackWidgetEvent("widget_quick_action_click", {
+        quick_action: message,
+      });
       enviarMensaje(message);
     });
   });
@@ -137,6 +141,10 @@ export async function enviarMensaje(textoForzado = "") {
   if (!texto) return;
 
   sending = true;
+  trackWidgetEvent("widget_message_sent", {
+    message_length: texto.length,
+    forced_message: !!forcedText,
+  });
   input.value = "";
   input.disabled = true;
   sendBtn.disabled = true;
@@ -155,21 +163,27 @@ export async function enviarMensaje(textoForzado = "") {
     });
 
     setSessionId(data.session_id);
+    trackWidgetEvent("widget_message_response", {
+      response_length: String(data.respuesta || "").length,
+      booking_form_shown: !!(data.mostrar_formulario && WIDGET_CONFIG.bookingEnabled),
+    });
     ocultarTyping();
     agregarMensaje(data.respuesta, "bot");
 
     if (data.mostrar_formulario && WIDGET_CONFIG.bookingEnabled) {
+      trackWidgetEvent("booking_form_requested");
       mostrarFormulario();
     }
   } catch (error) {
-    ocultarTyping();
-    agregarMensaje(
-      humanizeErrorMessage(
-        error,
-        "No se ha podido enviar el mensaje. Intentalo de nuevo en unos segundos."
-      ),
-      "bot"
+    const message = humanizeErrorMessage(
+      error,
+      "No se ha podido enviar el mensaje. Intentalo de nuevo en unos segundos."
     );
+    trackWidgetEvent("widget_message_error", {
+      error_message: error?.message || "unknown",
+    });
+    ocultarTyping();
+    agregarMensaje(`${message} Si quieres, puedes abrir una consulta gratuita desde la web.`, "bot");
   } finally {
     sending = false;
     input.disabled = false;

@@ -1,10 +1,12 @@
 <!doctype html>
 <html lang="es">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Consulta Gratuita guiada por IA | Vantelia</title>
-  <meta name="description" content="Habla con nuestra IA y agenda tu consulta gratuita. Te hace unas preguntas y te propone cita en menos de 2 minutos. Sin compromiso.">
+  <meta name="description"
+    content="Habla con nuestra IA y agenda tu consulta gratuita. Te hace unas preguntas y te propone cita en menos de 2 minutos. Sin compromiso.">
   <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
   <meta name="theme-color" content="#0B132B">
   <meta name="author" content="Vantelia">
@@ -14,19 +16,23 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Vantelia">
   <meta property="og:title" content="Consulta Gratuita guiada por IA | Vantelia">
-  <meta property="og:description" content="Habla con nuestra IA y agenda tu consulta gratuita. Te hace unas preguntas y te propone cita en menos de 2 minutos. Sin compromiso.">
+  <meta property="og:description"
+    content="Habla con nuestra IA y agenda tu consulta gratuita. Te hace unas preguntas y te propone cita en menos de 2 minutos. Sin compromiso.">
   <meta property="og:url" content="https://www.vantelia.es/consultas/">
   <meta property="og:image" content="https://www.vantelia.es/assets/img/resumen.png">
   <meta property="og:locale" content="es_ES">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Consulta Gratuita guiada por IA | Vantelia">
-  <meta name="twitter:description" content="Habla con nuestra IA y agenda tu consulta gratuita. Te hace unas preguntas y te propone cita en menos de 2 minutos. Sin compromiso.">
+  <meta name="twitter:description"
+    content="Habla con nuestra IA y agenda tu consulta gratuita. Te hace unas preguntas y te propone cita en menos de 2 minutos. Sin compromiso.">
   <meta name="twitter:image" content="https://www.vantelia.es/assets/img/resumen.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preload" as="image" href="/assets/img/fondo-web.png" fetchpriority="high">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/home.css?v=hero-bg-desktop-20260501">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/home.css?v=cookies-20260504">
   <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -54,7 +60,7 @@
   <style>
     /* ============================================================
        /consultas/ — estilos específicos de página
-       El sistema de diseño base viene de /assets/css/home.css?v=hero-bg-desktop-20260501
+       El sistema de diseño base viene de /assets/css/home.css?v=cookies-20260504
        ============================================================ */
 
     /* ---- HERO ---- */
@@ -69,11 +75,13 @@
       padding: 140px 0 120px;
       overflow: hidden;
     }
+
     .consultas-hero .shell {
       position: relative;
       z-index: 2;
       max-width: 840px;
     }
+
     .consultas-hero h1 {
       font-size: clamp(2.8rem, 5.8vw, 5.2rem);
       font-weight: 700;
@@ -82,12 +90,14 @@
       margin-bottom: 1.4rem;
       color: var(--text);
     }
+
     .gradient-text {
       background: linear-gradient(135deg, #00D1FF 20%, #00F5D4 80%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
+
     .consultas-hero .hero-lead {
       max-width: 570px;
       margin-inline: auto;
@@ -96,6 +106,7 @@
       color: var(--muted);
       line-height: 1.72;
     }
+
     .hero-cta-group {
       display: flex;
       gap: 14px;
@@ -103,12 +114,14 @@
       flex-wrap: wrap;
       margin-bottom: 2.8rem;
     }
+
     .hero-trust-row {
       display: flex;
       gap: 1.8rem;
       justify-content: center;
       flex-wrap: wrap;
     }
+
     .hero-trust-item {
       display: flex;
       align-items: center;
@@ -116,37 +129,59 @@
       font-size: 0.84rem;
       color: var(--muted);
     }
-    .hero-trust-item svg { color: var(--primary); flex-shrink: 0; }
+
+    .hero-trust-item svg {
+      color: var(--primary);
+      flex-shrink: 0;
+    }
 
     /* Fondo de rejilla tecnológica */
     .hero-grid {
       position: absolute;
       inset: 0;
       background-image:
-        linear-gradient(rgba(0,209,255,0.022) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0,209,255,0.022) 1px, transparent 1px);
+        linear-gradient(rgba(0, 209, 255, 0.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 209, 255, 0.022) 1px, transparent 1px);
       background-size: 64px 64px;
       mask-image: radial-gradient(ellipse 72% 68% at 50% 50%, black 15%, transparent 100%);
       pointer-events: none;
     }
 
     /* Orbes decorativos */
-    .hero-orb { position: absolute; border-radius: 50%; pointer-events: none; }
+    .hero-orb {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
     .orb-c {
-      width: 680px; height: 680px;
-      background: radial-gradient(circle, rgba(0,209,255,0.07) 0%, transparent 70%);
-      top: -200px; right: -150px;
+      width: 680px;
+      height: 680px;
+      background: radial-gradient(circle, rgba(0, 209, 255, 0.07) 0%, transparent 70%);
+      top: -200px;
+      right: -150px;
       animation: orbFloat 9s ease-in-out infinite;
     }
+
     .orb-t {
-      width: 440px; height: 440px;
-      background: radial-gradient(circle, rgba(0,245,212,0.055) 0%, transparent 70%);
-      bottom: -80px; left: -80px;
+      width: 440px;
+      height: 440px;
+      background: radial-gradient(circle, rgba(0, 245, 212, 0.055) 0%, transparent 70%);
+      bottom: -80px;
+      left: -80px;
       animation: orbFloat 11s ease-in-out infinite reverse;
     }
+
     @keyframes orbFloat {
-      0%, 100% { transform: translateY(0) scale(1); }
-      50% { transform: translateY(-28px) scale(1.04); }
+
+      0%,
+      100% {
+        transform: translateY(0) scale(1);
+      }
+
+      50% {
+        transform: translateY(-28px) scale(1.04);
+      }
     }
 
     /* Indicador de scroll */
@@ -167,22 +202,46 @@
       transition: color 0.2s;
       z-index: 2;
     }
-    .scroll-down:hover { color: var(--primary); }
-    .scroll-down svg { animation: arrowPulse 2s ease-in-out infinite; }
+
+    .scroll-down:hover {
+      color: var(--primary);
+    }
+
+    .scroll-down svg {
+      animation: arrowPulse 2s ease-in-out infinite;
+    }
+
     @keyframes arrowPulse {
-      0%, 100% { transform: translateY(0); opacity: 0.55; }
-      50% { transform: translateY(7px); opacity: 1; }
+
+      0%,
+      100% {
+        transform: translateY(0);
+        opacity: 0.55;
+      }
+
+      50% {
+        transform: translateY(7px);
+        opacity: 1;
+      }
     }
 
     /* ---- HERO IA badge sobre el botón principal ---- */
     .hero-cta-group .btn-primary {
       position: relative;
-      box-shadow: 0 0 0 0 rgba(0,209,255,0.55);
+      box-shadow: 0 0 0 0 rgba(0, 209, 255, 0.55);
       animation: ctaPulse 2.4s ease-in-out infinite;
     }
+
     @keyframes ctaPulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(0,209,255,0.55); }
-      50%      { box-shadow: 0 0 0 14px rgba(0,209,255,0); }
+
+      0%,
+      100% {
+        box-shadow: 0 0 0 0 rgba(0, 209, 255, 0.55);
+      }
+
+      50% {
+        box-shadow: 0 0 0 14px rgba(0, 209, 255, 0);
+      }
     }
 
     /* Flecha animada bajo el hero apuntando hacia abajo-derecha */
@@ -193,32 +252,52 @@
       margin-top: 1.2rem;
       padding: 9px 16px;
       border-radius: 999px;
-      background: rgba(0,209,255,0.07);
-      border: 1px solid rgba(0,209,255,0.22);
+      background: rgba(0, 209, 255, 0.07);
+      border: 1px solid rgba(0, 209, 255, 0.22);
       color: var(--text);
       font-size: 0.84rem;
       font-weight: 500;
       letter-spacing: 0.01em;
     }
+
     .ia-hint .ia-hint-arrow {
       display: inline-block;
       animation: hintArrow 1.6s ease-in-out infinite;
     }
+
     @keyframes hintArrow {
-      0%, 100% { transform: translate(0, 0); }
-      50%      { transform: translate(4px, 4px); }
+
+      0%,
+      100% {
+        transform: translate(0, 0);
+      }
+
+      50% {
+        transform: translate(4px, 4px);
+      }
     }
 
     /* ---- SECCIÓN PROCESO IA ---- */
-    .ia-section { padding: 96px 0 96px; }
-    .ia-shell { max-width: 1080px; }
-    .ia-section-head { text-align: center; margin-bottom: 56px; }
+    .ia-section {
+      padding: 96px 0 96px;
+    }
+
+    .ia-shell {
+      max-width: 1080px;
+    }
+
+    .ia-section-head {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+
     .ia-section-head h2 {
       font-size: clamp(1.8rem, 3vw, 2.5rem);
       font-weight: 700;
       letter-spacing: -0.032em;
       margin: 0.5rem 0 0.65rem;
     }
+
     .ia-section-head p {
       color: var(--muted);
       max-width: 540px;
@@ -230,46 +309,59 @@
     .ia-cta-card {
       max-width: 720px;
       margin: 0 auto 56px;
-      background: linear-gradient(135deg, rgba(0,209,255,0.06), rgba(0,245,212,0.04));
-      border: 1px solid rgba(0,209,255,0.22);
+      background: linear-gradient(135deg, rgba(0, 209, 255, 0.06), rgba(0, 245, 212, 0.04));
+      border: 1px solid rgba(0, 209, 255, 0.22);
       border-radius: 20px;
       padding: 36px 40px;
       text-align: center;
       backdrop-filter: blur(10px);
       position: relative;
     }
+
     .ia-cta-card::before {
       content: '';
       position: absolute;
-      top: 0; left: 12%; right: 12%;
+      top: 0;
+      left: 12%;
+      right: 12%;
       height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(0,209,255,0.55), transparent);
+      background: linear-gradient(90deg, transparent, rgba(0, 209, 255, 0.55), transparent);
     }
+
     .ia-cta-card h3 {
       font-size: clamp(1.3rem, 2.4vw, 1.7rem);
       font-weight: 700;
       margin-bottom: 0.6rem;
       letter-spacing: -0.025em;
     }
+
     .ia-cta-card p {
       color: var(--muted);
       max-width: 520px;
       margin: 0 auto 1.5rem;
       line-height: 1.65;
     }
-    .ia-cta-card .btn { margin-bottom: 0.4rem; }
+
+    .ia-cta-card .btn {
+      margin-bottom: 0.4rem;
+    }
+
     .ia-cta-fallback {
       display: block;
       margin-top: 1rem;
       font-size: 0.83rem;
       color: var(--muted-2);
     }
+
     .ia-cta-fallback a {
       color: var(--muted);
       text-decoration: underline;
       text-underline-offset: 2px;
     }
-    .ia-cta-fallback a:hover { color: var(--primary); }
+
+    .ia-cta-fallback a:hover {
+      color: var(--primary);
+    }
 
     /* Trust badges en fila */
     .ia-trust-grid {
@@ -279,31 +371,39 @@
       max-width: 880px;
       margin: 0 auto;
     }
+
     .ia-trust-card {
-      background: rgba(255,255,255,0.028);
+      background: rgba(255, 255, 255, 0.028);
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 18px 16px;
       text-align: center;
       transition: border-color 0.25s, transform 0.25s;
     }
+
     .ia-trust-card:hover {
-      border-color: rgba(0,209,255,0.26);
+      border-color: rgba(0, 209, 255, 0.26);
       transform: translateY(-3px);
     }
+
     .ia-trust-card .ia-trust-ico {
-      width: 36px; height: 36px;
+      width: 36px;
+      height: 36px;
       border-radius: 9px;
       background: var(--primary-dim);
       color: var(--primary);
-      display: flex; align-items: center; justify-content: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       margin: 0 auto 10px;
     }
+
     .ia-trust-card h4 {
       font-size: 0.88rem;
       font-weight: 600;
       margin-bottom: 2px;
     }
+
     .ia-trust-card p {
       font-size: 0.77rem;
       color: var(--muted);
@@ -316,16 +416,20 @@
     #ia-w-btn:not(.abierto) {
       animation: widgetGlow 2.2s ease-in-out infinite !important;
     }
+
     @keyframes widgetGlow {
-      0%, 100% {
+
+      0%,
+      100% {
         box-shadow:
-          0 8px 28px rgba(0,209,255,0.35),
-          0 0 0 0 rgba(0,209,255,0.55);
+          0 8px 28px rgba(0, 209, 255, 0.35),
+          0 0 0 0 rgba(0, 209, 255, 0.55);
       }
+
       50% {
         box-shadow:
-          0 8px 28px rgba(0,209,255,0.35),
-          0 0 0 18px rgba(0,209,255,0);
+          0 8px 28px rgba(0, 209, 255, 0.35),
+          0 0 0 18px rgba(0, 209, 255, 0);
       }
     }
 
@@ -343,11 +447,13 @@
       animation: pointerFloat 2s ease-in-out infinite;
       transition: opacity 0.4s, transform 0.4s;
     }
+
     .ia-pointer.hidden {
       opacity: 0;
       transform: translateY(8px);
       pointer-events: none;
     }
+
     .ia-pointer-bubble {
       pointer-events: auto;
       background: linear-gradient(135deg, #00D1FF, #00F5D4);
@@ -357,435 +463,507 @@
       letter-spacing: 0.01em;
       padding: 10px 14px;
       border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0,209,255,0.35);
+      box-shadow: 0 10px 30px rgba(0, 209, 255, 0.35);
       cursor: pointer;
       white-space: nowrap;
     }
+
     .ia-pointer-arrow {
       color: #00D1FF;
-      filter: drop-shadow(0 4px 10px rgba(0,209,255,0.5));
+      filter: drop-shadow(0 4px 10px rgba(0, 209, 255, 0.5));
       margin-right: 22px;
     }
+
     @keyframes pointerFloat {
-      0%, 100% { transform: translateY(0); }
-      50%      { transform: translateY(-6px); }
+
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-6px);
+      }
     }
+
     @media (max-width: 620px) {
       .ia-pointer {
         right: 18px;
         bottom: 82px;
       }
-      .ia-pointer-bubble { font-size: 0.78rem; padding: 8px 12px; }
+
+      .ia-pointer-bubble {
+        font-size: 0.78rem;
+        padding: 8px 12px;
+      }
     }
 
     /* ---- RESPONSIVE ---- */
     @media (max-width: 960px) {
-      .ia-trust-grid { grid-template-columns: repeat(2, 1fr); }
+      .ia-trust-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
     }
+
     @media (max-width: 620px) {
-      .ia-section { padding: 68px 0 80px; }
-      .ia-cta-card { padding: 28px 22px; }
-      .hero-trust-row { gap: 1rem; }
-      .consultas-hero { padding: 120px 0 90px; }
+      .ia-section {
+        padding: 68px 0 80px;
+      }
+
+      .ia-cta-card {
+        padding: 28px 22px;
+      }
+
+      .hero-trust-row {
+        gap: 1rem;
+      }
+
+      .consultas-hero {
+        padding: 120px 0 90px;
+      }
     }
+
     @media (prefers-reduced-motion: reduce) {
+
       .hero-cta-group .btn-primary,
       #ia-w-btn:not(.abierto),
       .ia-pointer,
-      .ia-hint .ia-hint-arrow { animation: none !important; }
+      .ia-hint .ia-hint-arrow {
+        animation: none !important;
+      }
     }
   </style>
 </head>
+
 <body>
 
-<div id="cursor-glow" aria-hidden="true"></div>
+  <div id="cursor-glow" aria-hidden="true"></div>
 
-<header class="site-header" id="site-header">
-  <div class="shell nav-inner">
-    <a href="/" class="brand" aria-label="Vantelia · Inicio">
-      <img src="/assets/img/logo-letra.png?v=hero-bg-desktop-20260501" alt="Logo Vantelia · Agencia de IA y Marketing B2B" width="200" height="48" fetchpriority="high" decoding="async">
-    </a>
-    <nav aria-label="Navegación principal">
-      <ul class="nav-links">
-        <li><a href="/servicios/">Servicios</a></li>
-        <li><a href="/planes/">Planes</a></li>
-        <li><a href="/plataforma/">Plataforma</a></li>
-        <li><a href="/resultados/">Resultados</a></li>
-        <li><a href="/faq/">FAQ</a></li>
-      </ul>
-    </nav>
-    <div style="display:flex;gap:10px;align-items:center" class="nav-cta">
-      <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener">
-        <span class="dot-live" aria-hidden="true"></span>Acceso plataforma
+  <header class="site-header" id="site-header">
+    <div class="shell nav-inner">
+      <a href="/" class="brand" aria-label="Vantelia · Inicio">
+        <img src="/assets/img/logo-letra.png?v=cookies-20260504"
+          alt="Logo Vantelia · Agencia de IA y Marketing B2B" width="200" height="48" fetchpriority="high"
+          decoding="async">
       </a>
-      <a href="/consultas/" class="btn btn-primary" aria-current="page">Consulta gratuita</a>
+      <nav aria-label="Navegación principal">
+        <ul class="nav-links">
+          <li><a href="/servicios/">Servicios</a></li>
+          <li><a href="/planes/">Planes</a></li>
+          <li><a href="/plataforma/">Plataforma</a></li>
+          <li><a href="/demo/">Demo</a></li>
+          <li><a href="/resultados/">Resultados</a></li>
+          <li><a href="/faq/">FAQ</a></li>
+        </ul>
+      </nav>
+      <div style="display:flex;gap:10px;align-items:center" class="nav-cta">
+        <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener">
+          <span class="dot-live" aria-hidden="true"></span>Acceso plataforma
+        </a>
+        <a href="/consultas/" class="btn btn-primary" aria-current="page">Consulta gratuita</a>
+      </div>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Abrir menú" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
     </div>
-    <button class="nav-toggle" id="nav-toggle" aria-label="Abrir menú" aria-expanded="false">
-      <span></span><span></span><span></span>
-    </button>
+  </header>
+
+  <div class="mobile-menu" id="mobile-menu" role="dialog" aria-label="Menú de navegación">
+    <button class="mobile-close" id="mobile-close" aria-label="Cerrar menú">✕</button>
+    <a href="/servicios/" class="mm-link">Servicios</a>
+    <a href="/planes/" class="mm-link">Planes</a>
+    <a href="/plataforma/" class="mm-link">Plataforma</a>
+    <a href="/demo/" class="mm-link">Demo</a>
+    <a href="/resultados/" class="mm-link">Resultados</a>
+    <a href="/faq/" class="mm-link">FAQ</a>
+    <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener"
+      style="margin-top:8px;font-size:1rem;height:48px;padding:0 28px">
+      <span class="dot-live"></span>Acceso plataforma
+    </a>
+    <button type="button" class="btn btn-primary btn-lg" data-open-chat style="margin-top:8px">Consulta
+      gratuita</button>
   </div>
-</header>
 
-<div class="mobile-menu" id="mobile-menu" role="dialog" aria-label="Menú de navegación">
-  <button class="mobile-close" id="mobile-close" aria-label="Cerrar menú">✕</button>
-  <a href="/servicios/"  class="mm-link">Servicios</a>
-  <a href="/planes/"     class="mm-link">Planes</a>
-  <a href="/plataforma/" class="mm-link">Plataforma</a>
-  <a href="/resultados/" class="mm-link">Resultados</a>
-  <a href="/faq/"        class="mm-link">FAQ</a>
-  <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener" style="margin-top:8px;font-size:1rem;height:48px;padding:0 28px">
-    <span class="dot-live"></span>Acceso plataforma
-  </a>
-  <button type="button" class="btn btn-primary btn-lg" data-open-chat style="margin-top:8px">Consulta gratuita</button>
-</div>
-
-<!-- ============================================================
+  <!-- ============================================================
      HERO — full viewport con CTA hacia el formulario
      ============================================================ -->
-<section class="consultas-hero" aria-label="Consulta gratuita">
-  <div class="hero-bg" aria-hidden="true"></div>
-  <div class="hero-grid" aria-hidden="true"></div>
-  <div class="hero-orb orb-c" aria-hidden="true"></div>
-  <div class="hero-orb orb-t" aria-hidden="true"></div>
+  <section class="consultas-hero" aria-label="Consulta gratuita">
+    <div class="hero-bg" aria-hidden="true"></div>
+    <div class="hero-grid" aria-hidden="true"></div>
+    <div class="hero-orb orb-c" aria-hidden="true"></div>
+    <div class="hero-orb orb-t" aria-hidden="true"></div>
 
-  <div class="shell">
-    <nav class="breadcrumbs" aria-label="Migas de pan">
-      <a href="/">Inicio</a>
-      <span class="sep" aria-hidden="true">/</span>
-      <span aria-current="page">Consulta gratuita</span>
-    </nav>
+    <div class="shell">
+      <nav class="breadcrumbs" aria-label="Migas de pan">
+        <a href="/">Inicio</a>
+        <span class="sep" aria-hidden="true">/</span>
+        <span aria-current="page">Consulta gratuita</span>
+      </nav>
 
-    <div class="hero-badge">
-      <span class="badge-dot" aria-hidden="true"></span>
-      Asistente IA · Consulta gratuita · Sin compromiso
+      <div class="hero-badge">
+        <span class="badge-dot" aria-hidden="true"></span>
+        Asistente IA · Consulta gratuita · Sin compromiso
+      </div>
+
+      <h1>Habla con nuestra IA<br>y agenda tu <span class="gradient-text">consulta gratuita</span></h1>
+
+      <p class="hero-lead">
+        Te hace unas preguntas y te propone una cita en menos de 2 minutos. Sin formularios largos ni esperas.
+      </p>
+
+      <div class="hero-cta-group">
+        <button type="button" class="btn btn-primary btn-lg" data-open-chat
+          aria-label="Abrir asistente IA y empezar consulta">
+          Empezar ahora
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-left:6px">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+        <a href="/servicios/" class="btn btn-ghost btn-lg">Ver servicios</a>
+      </div>
+
+      <div class="hero-trust-row" role="list" style="margin-top:2.4rem">
+        <span class="hero-trust-item" role="listitem">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          Respuesta inmediata
+        </span>
+        <span class="hero-trust-item" role="listitem">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          Proceso guiado
+        </span>
+        <span class="hero-trust-item" role="listitem">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          Sin compromiso
+        </span>
+      </div>
     </div>
+  </section>
 
-    <h1>Habla con nuestra IA<br>y agenda tu <span class="gradient-text">consulta gratuita</span></h1>
+  <div class="glow-line" aria-hidden="true"></div>
 
-    <p class="hero-lead">
-      Te hace unas preguntas y te propone una cita en menos de 2 minutos. Sin formularios largos ni esperas.
-    </p>
-
-    <div class="hero-cta-group">
-      <button type="button" class="btn btn-primary btn-lg" data-open-chat aria-label="Abrir asistente IA y empezar consulta">
-        Empezar ahora
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
-      </button>
-      <a href="/servicios/" class="btn btn-ghost btn-lg">Ver servicios</a>
-    </div>
-
-    <div class="hero-trust-row" role="list" style="margin-top:2.4rem">
-      <span class="hero-trust-item" role="listitem">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-        Respuesta inmediata
-      </span>
-      <span class="hero-trust-item" role="listitem">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-        Proceso guiado
-      </span>
-      <span class="hero-trust-item" role="listitem">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-        Sin compromiso
-      </span>
-    </div>
-  </div>
-</section>
-
-<div class="glow-line" aria-hidden="true"></div>
-
-<!-- ============================================================
+  <!-- ============================================================
      PROCESO IA + LLAMADA AL CHAT
      ============================================================ -->
-<section id="empezar" class="ia-section" aria-label="Cómo agendar la consulta con la IA">
-  <div class="shell ia-shell">
+  <section id="empezar" class="ia-section" aria-label="Cómo agendar la consulta con la IA">
+    <div class="shell ia-shell">
 
-    <div class="ia-section-head reveal">
-      <span class="eyebrow">Así funciona</span>
-      <h2>Tres pasos guiados por la IA</h2>
-      <p>Sin formularios, sin esperas. La IA hace el trabajo de calificación y agenda por ti.</p>
+      <div class="ia-section-head reveal">
+        <span class="eyebrow">Así funciona</span>
+        <h2>Tres pasos guiados por la IA</h2>
+        <p>Sin formularios, sin esperas. La IA hace el trabajo de calificación y agenda por ti.</p>
+      </div>
+
+      <div class="ia-cta-card reveal">
+        <h3>¿Listo para empezar?</h3>
+        <p>Pulsa el botón y la IA te llevará paso a paso. Tarda menos de 2 minutos y queda confirmada al instante.</p>
+        <button type="button" class="btn btn-primary btn-lg" data-open-chat aria-label="Abrir asistente IA">
+          Hablar con la IA ahora
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-left:6px">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+        <span class="ia-cta-fallback">
+          ¿Prefieres que te contactemos manualmente? <a
+            href="mailto:info@vantelia.es?subject=Consulta%20gratuita%20Vantelia">Escríbenos a info@vantelia.es</a>
+        </span>
+      </div>
+
+      <div class="ia-trust-grid">
+        <div class="ia-trust-card reveal">
+          <div class="ia-trust-ico" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </div>
+          <h4>Consulta gratuita</h4>
+          <p>0 € y sin tarjeta de por medio.</p>
+        </div>
+        <div class="ia-trust-card reveal d1">
+          <div class="ia-trust-ico" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+          </div>
+          <h4>Sin compromiso</h4>
+          <p>Te llevas el roadmap, contrates o no.</p>
+        </div>
+        <div class="ia-trust-card reveal d2">
+          <div class="ia-trust-ico" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+          </div>
+          <h4>Respuesta inmediata</h4>
+          <p>La IA contesta en segundos, 24/7.</p>
+        </div>
+        <div class="ia-trust-card reveal d3">
+          <div class="ia-trust-ico" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+          </div>
+          <h4>Proceso guiado</h4>
+          <p>Te lleva paso a paso, sin perderte.</p>
+        </div>
+      </div>
+
     </div>
+  </section>
 
-    <div class="ia-cta-card reveal">
-      <h3>¿Listo para empezar?</h3>
-      <p>Pulsa el botón y la IA te llevará paso a paso. Tarda menos de 2 minutos y queda confirmada al instante.</p>
-      <button type="button" class="btn btn-primary btn-lg" data-open-chat aria-label="Abrir asistente IA">
-        Hablar con la IA ahora
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
-      </button>
-      <span class="ia-cta-fallback">
-        ¿Prefieres que te contactemos manualmente? <a href="mailto:info@vantelia.es?subject=Consulta%20gratuita%20Vantelia">Escríbenos a info@vantelia.es</a>
-      </span>
-    </div>
+  <div class="glow-line" aria-hidden="true"></div>
 
-    <div class="ia-trust-grid">
-      <div class="ia-trust-card reveal">
-        <div class="ia-trust-ico" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        </div>
-        <h4>Consulta gratuita</h4>
-        <p>0 € y sin tarjeta de por medio.</p>
-      </div>
-      <div class="ia-trust-card reveal d1">
-        <div class="ia-trust-ico" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        </div>
-        <h4>Sin compromiso</h4>
-        <p>Te llevas el roadmap, contrates o no.</p>
-      </div>
-      <div class="ia-trust-card reveal d2">
-        <div class="ia-trust-ico" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        </div>
-        <h4>Respuesta inmediata</h4>
-        <p>La IA contesta en segundos, 24/7.</p>
-      </div>
-      <div class="ia-trust-card reveal d3">
-        <div class="ia-trust-ico" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        </div>
-        <h4>Proceso guiado</h4>
-        <p>Te lleva paso a paso, sin perderte.</p>
-      </div>
-    </div>
-
-  </div>
-</section>
-
-<div class="glow-line" aria-hidden="true"></div>
-
-<!-- ============================================================
+  <!-- ============================================================
      QUÉ OBTIENES
      ============================================================ -->
-<section class="section" aria-label="Qué obtienes">
-  <div class="shell">
-    <div class="section-head reveal">
-      <span class="eyebrow">Qué obtienes</span>
-      <h2>Una conversación útil. Aunque no nos contrates.</h2>
+  <section class="section" aria-label="Qué obtienes">
+    <div class="shell">
+      <div class="section-head reveal">
+        <span class="eyebrow">Qué obtienes</span>
+        <h2>Una conversación útil. Aunque no nos contrates.</h2>
+      </div>
+      <div class="content-grid-3">
+        <article class="content-card reveal d1">
+          <span class="c-tag">01</span>
+          <h3>Diagnóstico real</h3>
+          <p>Revisión de tu captación, conversión, automatización e IA aplicada con criterio profesional, no con
+            plantilla.</p>
+        </article>
+        <article class="content-card reveal d2">
+          <span class="c-tag">02</span>
+          <h3>Hoja de ruta</h3>
+          <p>Tres prioridades concretas para mover negocio en los próximos 90 días, ordenadas por impacto y esfuerzo.
+          </p>
+        </article>
+        <article class="content-card reveal d3">
+          <span class="c-tag">03</span>
+          <h3>Sin compromiso</h3>
+          <p>Si encaja, hablamos de cómo trabajar juntos. Si no, te quedas con la hoja de ruta. Tan simple como eso.</p>
+        </article>
+      </div>
     </div>
-    <div class="content-grid-3">
-      <article class="content-card reveal d1">
-        <span class="c-tag">01</span>
-        <h3>Diagnóstico real</h3>
-        <p>Revisión de tu captación, conversión, automatización e IA aplicada con criterio profesional, no con plantilla.</p>
-      </article>
-      <article class="content-card reveal d2">
-        <span class="c-tag">02</span>
-        <h3>Hoja de ruta</h3>
-        <p>Tres prioridades concretas para mover negocio en los próximos 90 días, ordenadas por impacto y esfuerzo.</p>
-      </article>
-      <article class="content-card reveal d3">
-        <span class="c-tag">03</span>
-        <h3>Sin compromiso</h3>
-        <p>Si encaja, hablamos de cómo trabajar juntos. Si no, te quedas con la hoja de ruta. Tan simple como eso.</p>
-      </article>
-    </div>
-  </div>
-</section>
+  </section>
 
 
-<!-- ============================================================
+  <!-- ============================================================
      CÓMO FUNCIONA · 3 pasos con IA
      ============================================================ -->
-<section class="section" aria-label="Cómo funciona la consulta con IA">
-  <div class="shell">
-    <div class="section-head reveal">
-      <span class="eyebrow">Paso a paso</span>
-      <h2>Menos de 2 minutos para tener tu cita confirmada.</h2>
+  <section class="section" aria-label="Cómo funciona la consulta con IA">
+    <div class="shell">
+      <div class="section-head reveal">
+        <span class="eyebrow">Paso a paso</span>
+        <h2>Menos de 2 minutos para tener tu cita confirmada.</h2>
+      </div>
+      <div class="process-grid">
+        <article class="process-step reveal d1">
+          <div class="p-num">01</div>
+          <h3>Cuéntanos qué necesitas</h3>
+          <p>Hablas con la IA en lenguaje natural. Sin formularios. Solo lo que tú quieras contar.</p>
+        </article>
+        <article class="process-step reveal d2">
+          <div class="p-num">02</div>
+          <h3>La IA analiza tu caso</h3>
+          <p>Detecta tu sector, tus prioridades y el tipo de consulta que más te encaja en tiempo real.</p>
+        </article>
+        <article class="process-step reveal d3">
+          <div class="p-num">03</div>
+          <h3>Te propone una cita</h3>
+          <p>Elige hueco entre los disponibles. Recibes confirmación por email al instante. Sin esperas.</p>
+        </article>
+      </div>
     </div>
-    <div class="process-grid">
-      <article class="process-step reveal d1">
-        <div class="p-num">01</div>
-        <h3>Cuéntanos qué necesitas</h3>
-        <p>Hablas con la IA en lenguaje natural. Sin formularios. Solo lo que tú quieras contar.</p>
-      </article>
-      <article class="process-step reveal d2">
-        <div class="p-num">02</div>
-        <h3>La IA analiza tu caso</h3>
-        <p>Detecta tu sector, tus prioridades y el tipo de consulta que más te encaja en tiempo real.</p>
-      </article>
-      <article class="process-step reveal d3">
-        <div class="p-num">03</div>
-        <h3>Te propone una cita</h3>
-        <p>Elige hueco entre los disponibles. Recibes confirmación por email al instante. Sin esperas.</p>
-      </article>
-    </div>
-  </div>
-</section>
+  </section>
 
-<!-- ============================================================
+  <!-- ============================================================
      CTA FINAL
      ============================================================ -->
-<section class="section cta-section" aria-label="Llamada a la acción final">
-  <div class="cta-bg" aria-hidden="true"></div>
-  <div class="shell">
-    <div class="cta-inner reveal">
-      <span class="eyebrow">¿Empezamos?</span>
-      <h2>Una sola conversación puede cambiar cómo crece tu empresa.</h2>
-      <p>
-        Cuéntanos tu situación y te diremos qué tiene más sentido: IA, marketing,
-        automatización o las tres a la vez. Primera consulta gratuita y sin compromiso.
-      </p>
-      <div class="cta-actions">
-        <button type="button" class="btn btn-primary btn-lg" data-open-chat>Solicita tu consulta gratuita</button>
+  <section class="section cta-section" aria-label="Llamada a la acción final">
+    <div class="cta-bg" aria-hidden="true"></div>
+    <div class="shell">
+      <div class="cta-inner reveal">
+        <span class="eyebrow">¿Empezamos?</span>
+        <h2>Una sola conversación puede cambiar cómo crece tu empresa.</h2>
+        <p>
+          Cuéntanos tu situación y te diremos qué tiene más sentido: IA, marketing,
+          automatización o las tres a la vez. Primera consulta gratuita y sin compromiso.
+        </p>
+        <div class="cta-actions">
+          <button type="button" class="btn btn-primary btn-lg" data-open-chat>Solicita tu consulta gratuita</button>
+        </div>
+        <p class="cta-note">Consulta gratuita · Sin compromiso · Respuesta inmediata</p>
       </div>
-      <p class="cta-note">Consulta gratuita · Sin compromiso · Respuesta inmediata</p>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ============================================================
+  <!-- ============================================================
      FOOTER
      ============================================================ -->
-<footer class="site-footer" aria-label="Pie de página">
-  <div class="shell">
-    <div class="footer-grid">
-      <div class="footer-brand">
-        <div class="footer-logo">
-          <span class="brand-name">Vantelia</span>
+  <footer class="site-footer" aria-label="Pie de página">
+    <div class="shell">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="footer-logo">
+            <span class="brand-name">Vantelia</span>
+          </div>
+          <p class="footer-desc">
+            Asistentes inteligentes para empresas. Atienden, recomienden y agendan por ti,
+            mientras tu equipo se centra en lo importante.
+          </p>
+          <div class="footer-social" aria-label="Redes sociales">
+            <a href="https://linkedin.com/company/vantelia" class="social-a" aria-label="LinkedIn"
+              rel="noopener noreferrer" target="_blank">in</a>
+            <a href="/consultas/" class="social-a" aria-label="Solicitar consulta">✉</a>
+          </div>
         </div>
-        <p class="footer-desc">
-          Asistentes inteligentes para empresas. Atienden, recomienden y agendan por ti,
-          mientras tu equipo se centra en lo importante.
-        </p>
-        <div class="footer-social" aria-label="Redes sociales">
-          <a href="https://linkedin.com/company/vantelia" class="social-a" aria-label="LinkedIn" rel="noopener noreferrer" target="_blank">in</a>
-          <a href="/consultas/" class="social-a" aria-label="Solicitar consulta">✉</a>
+        <div class="footer-col">
+          <div class="col-title">Producto</div>
+          <div class="col-links">
+            <a href="/servicios/">Servicios</a>
+            <a href="/planes/">Planes</a>
+            <a href="/plataforma/">Plataforma</a>
+            <a href="/demo/">Demo</a>
+            <a href="/resultados/">Resultados</a>
+            <a href="/consultas/">Consulta gratuita</a>
+          </div>
+        </div>
+        <div class="footer-col">
+          <div class="col-title">Empresa</div>
+          <div class="col-links">
+            <a href="/nosotros/">Nosotros</a>
+            <a href="/faq/">Preguntas frecuentes</a>
+            <a href="/consultas/">Solicitar consulta</a>
+          </div>
+        </div>
+        <div class="footer-col">
+          <div class="col-title">Plataforma</div>
+          <div class="col-links">
+            <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso clientes</a>
+            <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso administradores</a>
+          </div>
+        </div>
+        <div class="footer-col">
+          <div class="col-title">Legal</div>
+          <div class="col-links">
+            <a href="/legal/privacidad/">Política de privacidad</a>
+            <a href="/legal/terminos/">Términos de uso</a>
+            <a href="/legal/cookies/">Política de cookies</a>
+          <a href="#" onclick="event.preventDefault();window.openCookiePreferences&&window.openCookiePreferences()">Preferencias cookies</a>
+            <a href="/legal/ia-responsable/">IA responsable</a>
+          </div>
         </div>
       </div>
-      <div class="footer-col">
-        <div class="col-title">Producto</div>
-        <div class="col-links">
-          <a href="/servicios/">Servicios</a>
-          <a href="/planes/">Planes</a>
-          <a href="/plataforma/">Plataforma</a>
-          <a href="/resultados/">Resultados</a>
-          <a href="/consultas/">Consulta gratuita</a>
-        </div>
-      </div>
-      <div class="footer-col">
-        <div class="col-title">Empresa</div>
-        <div class="col-links">
-          <a href="/nosotros/">Nosotros</a>
-          <a href="/faq/">Preguntas frecuentes</a>
-          <a href="/consultas/">Solicitar consulta</a>
-        </div>
-      </div>
-      <div class="footer-col">
-        <div class="col-title">Plataforma</div>
-        <div class="col-links">
-          <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso clientes</a>
-          <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso administradores</a>
-        </div>
-      </div>
-      <div class="footer-col">
-        <div class="col-title">Legal</div>
-        <div class="col-links">
-          <a href="/legal/privacidad/">Política de privacidad</a>
-          <a href="/legal/terminos/">Términos de uso</a>
-          <a href="/legal/cookies/">Política de cookies</a>
-          <a href="/legal/ia-responsable/">IA responsable</a>
-        </div>
+      <div class="footer-bottom">
+        <p>© 2026 Vantelia · Todos los derechos reservados</p>
+        <p class="footer-locale">Hecho en España · ES</p>
       </div>
     </div>
-    <div class="footer-bottom">
-      <p>© 2026 Vantelia · Todos los derechos reservados</p>
-      <p class="footer-locale">Hecho en España · ES</p>
-    </div>
-  </div>
-</footer>
+  </footer>
 
-<script src="/assets/js/home.js?v=hero-bg-desktop-20260501" defer></script>
-<script
-  src="https://app.vantelia.es/widget/widget.min.js?v=1777076198"
-  data-api="https://app.vantelia.es"
-  data-client="Vantelia"
-  data-position="right"></script>
+  <script src="/assets/js/home.js?v=cookies-20260504" defer></script>
+  <script src="https://app.vantelia.es/widget/widget.min.js?v=1777076198" data-api="https://app.vantelia.es"
+    data-client="Vantelia" data-position="right"></script>
 
-<script>
-(function () {
-  'use strict';
+  <script>
+    (function () {
+      'use strict';
 
-  var INTENT_MESSAGE = 'Quiero agendar una cita';
-  var userOpened     = false;
-  var autoOpenedOnce = false;
+      var INTENT_MESSAGE = 'Quiero agendar una cita';
+      var userOpened = false;
+      var autoOpenedOnce = false;
 
-  function findWidgetButton() { return document.getElementById('ia-w-btn'); }
-  function widgetIsOpen() {
-    var chat = document.getElementById('ia-w-chat');
-    return !!(chat && chat.classList.contains('visible'));
-  }
-
-  /* Inyecta texto en el input del widget y dispara el envío */
-  function sendMessageToWidget(message) {
-    var attempts = 0;
-    var iv = setInterval(function () {
-      attempts++;
-      var input = document.getElementById('ia-w-input');
-      var send  = document.getElementById('ia-w-send');
-      if (input && send && !input.disabled) {
-        input.value = message;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        send.click();
-        clearInterval(iv);
-      } else if (attempts >= 40) {
-        clearInterval(iv);
+      function findWidgetButton() { return document.getElementById('ia-w-btn'); }
+      function widgetIsOpen() {
+        var chat = document.getElementById('ia-w-chat');
+        return !!(chat && chat.classList.contains('visible'));
       }
-    }, 100);
-  }
 
-  /* Abre el chat. withMessage=true inyecta el mensaje de intención */
-  function openChat(withMessage) {
-    var btn = findWidgetButton();
-    if (!btn) return false;
-    if (!widgetIsOpen()) btn.click();
-    userOpened = true;
-    if (withMessage) sendMessageToWidget(INTENT_MESSAGE);
-    return true;
-  }
+      /* Inyecta texto en el input del widget y dispara el envío */
+      function sendMessageToWidget(message) {
+        var attempts = 0;
+        var iv = setInterval(function () {
+          attempts++;
+          var input = document.getElementById('ia-w-input');
+          var send = document.getElementById('ia-w-send');
+          if (input && send && !input.disabled) {
+            input.value = message;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            send.click();
+            clearInterval(iv);
+          } else if (attempts >= 40) {
+            clearInterval(iv);
+          }
+        }, 100);
+      }
 
-  /* CTAs con data-open-chat → abren chat + envían mensaje */
-  document.addEventListener('click', function (e) {
-    var trigger = e.target.closest && e.target.closest('[data-open-chat]');
-    if (!trigger) return;
-    e.preventDefault();
-    if (!openChat(true)) {
-      var attempts = 0;
-      var iv = setInterval(function () {
-        attempts++;
-        if (openChat(true) || attempts >= 30) clearInterval(iv);
-      }, 100);
-    }
-  });
+      /* Abre el chat. withMessage=true inyecta el mensaje de intención */
+      function openChat(withMessage) {
+        var btn = findWidgetButton();
+        if (!btn) return false;
+        if (!widgetIsOpen()) btn.click();
+        userOpened = true;
+        if (withMessage) sendMessageToWidget(INTENT_MESSAGE);
+        return true;
+      }
 
-  /* Marca como manualmente abierto si el usuario clickea el widget */
-  document.addEventListener('click', function (e) {
-    var t = e.target;
-    if (t && t.closest && (t.closest('#ia-w-btn') || t.closest('#ia-w-badge'))) {
-      userOpened = true;
-    }
-  });
+      /* CTAs con data-open-chat → abren chat + envían mensaje */
+      document.addEventListener('click', function (e) {
+        var trigger = e.target.closest && e.target.closest('[data-open-chat]');
+        if (!trigger) return;
+        e.preventDefault();
+        if (!openChat(true)) {
+          var attempts = 0;
+          var iv = setInterval(function () {
+            attempts++;
+            if (openChat(true) || attempts >= 30) clearInterval(iv);
+          }, 100);
+        }
+      });
 
-  /* Auto-apertura silenciosa: scroll significativo o 12s — sin mensaje */
-  function maybeAutoOpen() {
-    if (autoOpenedOnce || userOpened || widgetIsOpen()) return;
-    if (!findWidgetButton()) return;
-    autoOpenedOnce = true;
-    openChat(false);
-  }
-  var scrollTriggered = false;
-  window.addEventListener('scroll', function () {
-    if (scrollTriggered) return;
-    var scrolled = window.scrollY + window.innerHeight;
-    var doc      = document.documentElement.scrollHeight;
-    if (window.scrollY > window.innerHeight * 0.6 || scrolled / doc > 0.45) {
-      scrollTriggered = true;
-      maybeAutoOpen();
-    }
-  }, { passive: true });
+      /* Marca como manualmente abierto si el usuario clickea el widget */
+      document.addEventListener('click', function (e) {
+        var t = e.target;
+        if (t && t.closest && (t.closest('#ia-w-btn') || t.closest('#ia-w-badge'))) {
+          userOpened = true;
+        }
+      });
 
-  setTimeout(maybeAutoOpen, 12000);
-}());
-</script>
+      /* Auto-apertura silenciosa: scroll significativo o 12s — sin mensaje */
+      function maybeAutoOpen() {
+        if (autoOpenedOnce || userOpened || widgetIsOpen()) return;
+        if (!findWidgetButton()) return;
+        autoOpenedOnce = true;
+        openChat(false);
+      }
+      var scrollTriggered = false;
+      window.addEventListener('scroll', function () {
+        if (scrollTriggered) return;
+        var scrolled = window.scrollY + window.innerHeight;
+        var doc = document.documentElement.scrollHeight;
+        if (window.scrollY > window.innerHeight * 0.6 || scrolled / doc > 0.45) {
+          scrollTriggered = true;
+          maybeAutoOpen();
+        }
+      }, { passive: true });
+
+      setTimeout(maybeAutoOpen, 12000);
+    }());
+  </script>
 
 </body>
+
 </html>

@@ -712,6 +712,12 @@ export function inyectarEstilos(color, accentColor) {
       padding: 20px 18px;
     }
 
+    .ia-form-error {
+      border: 1px solid rgba(255, 93, 143, 0.26);
+      border-radius: 18px;
+      background: rgba(255, 93, 143, 0.07);
+    }
+
     .ia-check {
       width: 58px;
       height: 58px;
@@ -725,6 +731,10 @@ export function inyectarEstilos(color, accentColor) {
       font-size: 20px;
       font-weight: 800;
       letter-spacing: 0.04em;
+    }
+
+    .ia-check-error {
+      background: #e0446f;
     }
 
     @keyframes ia-fade-in {

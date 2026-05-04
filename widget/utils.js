@@ -77,6 +77,19 @@ export function setSessionId(nextSessionId) {
   storage.setItem(sessionStorageKey, nextSessionId);
 }
 
+export function trackWidgetEvent(eventName, payload = {}) {
+  if (!eventName || typeof document === "undefined") return;
+  document.dispatchEvent(new CustomEvent("vantelia:widget", {
+    detail: {
+      event: eventName,
+      widget_client_id: WIDGET_CONFIG.clienteId,
+      widget_position: WIDGET_CONFIG.position,
+      session_id: getSessionId(),
+      ...payload,
+    },
+  }));
+}
+
 export function applyPublicConfig(config = {}) {
   WIDGET_CONFIG.bookingEnabled = Boolean(config.booking_enabled);
   WIDGET_CONFIG.brandingText = config.branding_text || WIDGET_CONFIG.brandingText;

@@ -203,7 +203,7 @@ PRIVACIDAD = f"""
 <p>Vantelia (en adelante, <strong>"Vantelia"</strong>, <strong>"nosotros"</strong>) es responsable del tratamiento de los datos personales recogidos a través de <a href="https://www.vantelia.es">www.vantelia.es</a>, de la plataforma <a href="https://app.vantelia.es">app.vantelia.es</a> y del widget de IA conversacional embebido en webs de nuestros clientes.</p>
 <ul>
   <li><strong>Email de contacto:</strong> <a href="/consultas/">Solicitar consulta</a></li>
-  <li><strong>Email del Delegado de Protección de Datos:</strong> <a href="mailto:dpo@vantelia.es">dpo@vantelia.es</a></li>
+  <li><strong>Email del Delegado de Protección de Datos:</strong> <a href="mailto:soporte@vantelia.es">soporte@vantelia.es</a></li>
   <li><strong>Ámbito territorial:</strong> España y Espacio Económico Europeo</li>
 </ul>
 
@@ -291,7 +291,7 @@ PRIVACIDAD = f"""
   <li><strong>Oposición:</strong> oponerte a tratamientos basados en interés legítimo</li>
   <li><strong>No ser objeto de decisiones automatizadas con efectos jurídicos</strong></li>
 </ul>
-<p>Solicítalos por email a <a href="mailto:dpo@vantelia.es">dpo@vantelia.es</a>. Respondemos en un máximo de 30 días.</p>
+<p>Solicítalos por email a <a href="mailto:soporte@vantelia.es">soporte@vantelia.es</a>. Respondemos en un máximo de 30 días.</p>
 
 <h2 id="seguridad">9. Seguridad</h2>
 <p>Aplicamos medidas técnicas y organizativas proporcionales al riesgo:</p>
@@ -307,7 +307,7 @@ PRIVACIDAD = f"""
 <h2 id="contacto">10. Contacto y reclamaciones</h2>
 <p>Si consideras que tus datos no han sido tratados conforme a la normativa puedes:</p>
 <ul>
-  <li>Escribirnos a <a href="mailto:dpo@vantelia.es">dpo@vantelia.es</a></li>
+  <li>Escribirnos a <a href="mailto:soporte@vantelia.es">soporte@vantelia.es</a></li>
   <li>Reclamar ante la <strong>Agencia Española de Protección de Datos</strong> en <a href="https://www.aepd.es" target="_blank" rel="noopener">www.aepd.es</a></li>
 </ul>
 """
@@ -547,7 +547,7 @@ IA_RESPONSABLE = f"""
 </ul>
 
 <h2 id="incidentes">9. Gestión de incidentes</h2>
-<p>Si detectas una respuesta incorrecta, ofensiva o problemática, repórtanos a <a href="mailto:dpo@vantelia.es">dpo@vantelia.es</a>. Procedimiento:</p>
+<p>Si detectas una respuesta incorrecta, ofensiva o problemática, repórtanos a <a href="mailto:soporte@vantelia.es">soporte@vantelia.es</a>. Procedimiento:</p>
 <ul>
   <li>Acuse de recibo en 48 h hábiles</li>
   <li>Análisis con el cliente afectado en 5 días</li>
@@ -556,7 +556,7 @@ IA_RESPONSABLE = f"""
 </ul>
 
 <h2 id="contacto">10. Contacto</h2>
-<p>Para consultas sobre IA responsable: <a href="mailto:dpo@vantelia.es">dpo@vantelia.es</a> o <a href="/consultas/">Solicitar consulta</a>.</p>
+<p>Para consultas sobre IA responsable: <a href="mailto:soporte@vantelia.es">soporte@vantelia.es</a> o <a href="/consultas/">Solicitar consulta</a>.</p>
 """
 
 PAGES = {

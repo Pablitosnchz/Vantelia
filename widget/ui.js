@@ -1,5 +1,5 @@
 import { agregarAccionesIniciales, agregarMensaje, enviarMensaje } from "./chat.js";
-import { escapeHtml, scrollMsgs, WIDGET_CONFIG } from "./utils.js";
+import { escapeHtml, scrollMsgs, trackWidgetEvent, WIDGET_CONFIG } from "./utils.js";
 
 let abierto = false;
 
@@ -20,6 +20,7 @@ function getCloseIcon() {
 }
 
 function setOpenState(nextValue) {
+  const previousValue = abierto;
   abierto = nextValue;
 
   const chat = document.getElementById("ia-w-chat");
@@ -40,6 +41,10 @@ function setOpenState(nextValue) {
       document.getElementById("ia-w-input")?.focus();
       scrollMsgs();
     }, 120);
+  }
+
+  if (previousValue !== abierto) {
+    trackWidgetEvent(abierto ? "widget_opened" : "widget_closed");
   }
 }
 
@@ -94,6 +99,9 @@ export function construirWidget(cfg) {
   `;
 
   document.body.appendChild(container);
+  trackWidgetEvent("widget_loaded", {
+    booking_enabled: !!cfg.booking_enabled,
+  });
   agregarMensaje(cfg.bienvenida || "Hola, en que puedo ayudarte hoy?", "bot");
   agregarAccionesIniciales();
 

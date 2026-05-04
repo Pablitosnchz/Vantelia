@@ -971,6 +971,29 @@ def _init_database() -> None:
         )
         connection.execute(
             """
+            CREATE TABLE IF NOT EXISTS analytics_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_name TEXT NOT NULL,
+                event_source TEXT NOT NULL DEFAULT '',
+                cliente_id TEXT NOT NULL DEFAULT '',
+                session_id TEXT NOT NULL DEFAULT '',
+                page_path TEXT NOT NULL DEFAULT '',
+                page_url TEXT NOT NULL DEFAULT '',
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                user_agent TEXT NOT NULL DEFAULT '',
+                ip_hash TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_analytics_events_lookup
+            ON analytics_events(created_at, event_name, cliente_id)
+            """
+        )
+        connection.execute(
+            """
             CREATE TABLE IF NOT EXISTS whatsapp_inbound_messages (
                 id TEXT PRIMARY KEY,
                 cliente_id TEXT NOT NULL,
@@ -1230,6 +1253,13 @@ def _booking_reminder_worker() -> None:
     )
     while not booking_reminder_stop.is_set():
         try:
+            try:
+                purged_demos = _purge_expired_demos()
+                if purged_demos:
+                    logger.info("Demos expiradas purgadas en background: %s", purged_demos)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Error purgando demos en background: %s", exc)
+
             auto_confirmed = _auto_confirm_pending_bookings()
             if auto_confirmed:
                 logger.info(
@@ -1262,6 +1292,13 @@ def _booking_reminder_worker() -> None:
 @app.on_event("startup")
 async def startup_background_services() -> None:
     global booking_reminder_thread
+
+    try:
+        purged_at_boot = _purge_expired_demos()
+        if purged_at_boot:
+            logger.info("Demos expiradas purgadas al arranque: %s", purged_at_boot)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Error purgando demos al arranque: %s", exc)
 
     if REMINDER_RUN_INTERVAL_MINUTES <= 0:
         logger.info("Recordatorios automaticos desactivados (REMINDER_RUN_INTERVAL_MINUTES <= 0).")
@@ -1536,6 +1573,25 @@ class ConsultaLeadPayload(BaseModel):
     empresa: Optional[str] = Field(default=None, max_length=120)
     servicio: Optional[str] = Field(default=None, max_length=80)
     mensaje: Optional[str] = Field(default=None, max_length=2000)
+
+
+class DemoGeneratePayload(BaseModel):
+    nombre_empresa: str = Field(min_length=1, max_length=120)
+    sector: str = Field(min_length=1, max_length=60)
+    email: EmailStr
+    descripcion: str = Field(min_length=1, max_length=1500)
+    servicios: str = Field(min_length=1, max_length=1500)
+    horario: Optional[str] = Field(default=None, max_length=200)
+    color: Optional[str] = Field(default=None, max_length=20)
+    website_url: Optional[str] = Field(default=None, max_length=300)
+
+
+class DemoGenerateResponse(BaseModel):
+    ok: bool = True
+    cliente_id: str
+    demo_url: str
+    expires_at: str
+    expires_in_seconds: int
 
 
 class SubscriptionUsage(BaseModel):
@@ -1879,6 +1935,12 @@ class AdminClienteResumen(BaseModel):
     info_file_size: int = 0
     bookings_total: int = 0
     bookings_pending: int = 0
+    is_demo: bool = False
+    demo_expires_at: str = ""
+    demo_expires_in_seconds: int = 0
+    subscription_plan: str = ""
+    subscription_status: str = ""
+    stripe_subscription_id: str = ""
 
 
 class AdminClienteDetalle(BaseModel):
@@ -1945,11 +2007,13 @@ def _list_employee_rows(cliente_id: str, *, include_inactive: bool = True) -> Li
 
 
 def _list_public_employee_rows(cliente_id: str, *, include_inactive: bool = False) -> List[sqlite3.Row]:
-    return [
+    rows = _list_employee_rows(cliente_id, include_inactive=include_inactive)
+    public_rows = [
         row
-        for row in _list_employee_rows(cliente_id, include_inactive=include_inactive)
+        for row in rows
         if not bool(row["is_default"])
     ]
+    return public_rows or rows
 
 
 def _get_employee_row(employee_id: str, *, cliente_id: str = "") -> Optional[sqlite3.Row]:
@@ -2643,6 +2707,150 @@ def _send_checkout_welcome_email(
   </body>
 </html>"""
     _send_email_message(to_email, subject, text_body, html_body)
+
+
+def _send_payment_failed_emails(
+    *,
+    cliente_id: str,
+    customer_email: str,
+    company_name: str,
+    plan: str,
+    amount_due_eur: str,
+    attempt_count: int,
+    next_attempt_iso: str,
+    hosted_invoice_url: str,
+    customer_id: str,
+    subscription_id: str,
+) -> None:
+    plan_label = PLAN_LIMITS.get(plan, {}).get("label") or plan.title() or "-"
+    next_attempt_label = next_attempt_iso or "Sin nuevo intento programado"
+    invoice_link = hosted_invoice_url or "https://app.vantelia.es/portal"
+    support_email = PORTAL_SUPPORT_EMAIL or DEFAULT_VANTELIA_SUPPORT_EMAIL or "soporte@vantelia.es"
+
+    if customer_email:
+        subject_c = "Vantelia: tu pago no se ha podido procesar"
+        text_c = (
+            f"Hola,\n\n"
+            f"Hemos intentado cobrar la cuota del plan {plan_label} de Vantelia y la operacion no se ha podido completar.\n\n"
+            f"Importe: {amount_due_eur} EUR\n"
+            f"Intento numero: {attempt_count}\n"
+            f"Proximo reintento: {next_attempt_label}\n\n"
+            f"Para evitar la suspension del servicio, actualiza el metodo de pago desde el portal de facturacion:\n"
+            f"{invoice_link}\n\n"
+            f"Si tienes dudas, escribenos a {support_email}.\n\n"
+            f"Vantelia\n"
+        )
+        html_c = (
+            f"<h2>Pago no completado</h2>"
+            f"<p>Hemos intentado cobrar la cuota del plan <strong>{escape(str(plan_label))}</strong> y la operacion no se ha podido completar.</p>"
+            f"<table cellpadding='6' style='border-collapse:collapse'>"
+            f"<tr><td><strong>Importe</strong></td><td>{escape(amount_due_eur)} EUR</td></tr>"
+            f"<tr><td><strong>Intento</strong></td><td>{escape(str(attempt_count))}</td></tr>"
+            f"<tr><td><strong>Proximo reintento</strong></td><td>{escape(next_attempt_label)}</td></tr>"
+            f"</table>"
+            f"<p>Para evitar la suspension del servicio, actualiza el metodo de pago desde el portal de facturacion:</p>"
+            f"<p><a href='{escape(invoice_link)}'>Actualizar pago</a></p>"
+            f"<p>Si tienes dudas, escribenos a <a href='mailto:{escape(support_email)}'>{escape(support_email)}</a>.</p>"
+        )
+        try:
+            _send_email_message(customer_email, subject_c, text_c, html_c)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("No se pudo enviar aviso de pago fallido a %s: %s", customer_email, exc)
+
+    if CONSULTA_NOTIFICATION_EMAIL:
+        subject_a = f"Pago fallido Vantelia: {company_name or cliente_id} ({plan_label})"
+        text_a = (
+            f"Pago fallido en Stripe.\n\n"
+            f"Cliente: {company_name or cliente_id} ({cliente_id})\n"
+            f"Email contacto: {customer_email or '-'}\n"
+            f"Plan: {plan_label}\n"
+            f"Importe: {amount_due_eur} EUR\n"
+            f"Intento: {attempt_count}\n"
+            f"Proximo reintento: {next_attempt_label}\n"
+            f"Stripe customer: {customer_id or '-'}\n"
+            f"Stripe subscription: {subscription_id or '-'}\n"
+            f"Hosted invoice: {invoice_link}\n"
+        )
+        html_a = (
+            f"<h2>Pago fallido Stripe</h2>"
+            f"<table cellpadding='6' style='border-collapse:collapse'>"
+            f"<tr><td><strong>Cliente</strong></td><td>{escape(company_name or cliente_id)} ({escape(cliente_id)})</td></tr>"
+            f"<tr><td><strong>Email contacto</strong></td><td>{escape(customer_email or '-')}</td></tr>"
+            f"<tr><td><strong>Plan</strong></td><td>{escape(str(plan_label))}</td></tr>"
+            f"<tr><td><strong>Importe</strong></td><td>{escape(amount_due_eur)} EUR</td></tr>"
+            f"<tr><td><strong>Intento</strong></td><td>{escape(str(attempt_count))}</td></tr>"
+            f"<tr><td><strong>Proximo reintento</strong></td><td>{escape(next_attempt_label)}</td></tr>"
+            f"<tr><td><strong>Stripe customer</strong></td><td>{escape(customer_id or '-')}</td></tr>"
+            f"<tr><td><strong>Stripe subscription</strong></td><td>{escape(subscription_id or '-')}</td></tr>"
+            f"<tr><td><strong>Hosted invoice</strong></td><td><a href='{escape(invoice_link)}'>{escape(invoice_link)}</a></td></tr>"
+            f"</table>"
+        )
+        try:
+            _send_email_message(CONSULTA_NOTIFICATION_EMAIL, subject_a, text_a, html_a)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("No se pudo enviar aviso pago fallido admin: %s", exc)
+
+
+def _send_checkout_admin_notification(
+    *,
+    customer_email: str,
+    customer_name: str,
+    customer_phone: str,
+    company_name: str,
+    cliente_id: str,
+    ai_name: str,
+    website_url: str,
+    plan: str,
+    billing_period: str,
+    customer_id: str,
+    subscription_id: str,
+    session_id: str,
+) -> None:
+    if not CONSULTA_NOTIFICATION_EMAIL:
+        return
+    plan_label = PLAN_LIMITS.get(plan, {}).get("label") or plan.title()
+    period_label = "mensual" if billing_period == "monthly" else "anual"
+    price_eur = PLAN_LIMITS.get(plan, {}).get("price_eur") or "-"
+    subject = f"Nueva alta Vantelia: {company_name} ({plan_label})"
+    text_body = (
+        f"Nuevo cliente dado de alta automaticamente desde Stripe Checkout.\n\n"
+        f"Empresa: {company_name}\n"
+        f"Cliente interno: {cliente_id}\n"
+        f"IA: {ai_name}\n"
+        f"Web: {website_url}\n\n"
+        f"Contacto:\n"
+        f"  Nombre: {customer_name or '-'}\n"
+        f"  Email:  {customer_email or '-'}\n"
+        f"  Telefono: {customer_phone or '-'}\n\n"
+        f"Suscripcion:\n"
+        f"  Plan: {plan_label} ({period_label}) - {price_eur} EUR/mes\n"
+        f"  Stripe customer: {customer_id or '-'}\n"
+        f"  Stripe subscription: {subscription_id or '-'}\n"
+        f"  Stripe session: {session_id or '-'}\n"
+        f"  Trial: 30 dias gratis\n\n"
+        f"Panel: https://app.vantelia.es/dashboard\n"
+    )
+    html_body = (
+        f"<h2>Nueva alta Vantelia</h2>"
+        f"<p>Cliente dado de alta desde Stripe Checkout.</p>"
+        f"<table cellpadding='6' style='border-collapse:collapse'>"
+        f"<tr><td><strong>Empresa</strong></td><td>{escape(company_name)}</td></tr>"
+        f"<tr><td><strong>Cliente interno</strong></td><td>{escape(cliente_id)}</td></tr>"
+        f"<tr><td><strong>IA</strong></td><td>{escape(ai_name)}</td></tr>"
+        f"<tr><td><strong>Web</strong></td><td>{escape(website_url)}</td></tr>"
+        f"<tr><td><strong>Contacto</strong></td><td>{escape(customer_name or '-')}<br>{escape(customer_email or '-')}<br>{escape(customer_phone or '-')}</td></tr>"
+        f"<tr><td><strong>Plan</strong></td><td>{escape(str(plan_label))} ({escape(period_label)}) - {escape(str(price_eur))} EUR/mes</td></tr>"
+        f"<tr><td><strong>Stripe customer</strong></td><td>{escape(customer_id or '-')}</td></tr>"
+        f"<tr><td><strong>Stripe subscription</strong></td><td>{escape(subscription_id or '-')}</td></tr>"
+        f"<tr><td><strong>Stripe session</strong></td><td>{escape(session_id or '-')}</td></tr>"
+        f"<tr><td><strong>Trial</strong></td><td>30 dias gratis</td></tr>"
+        f"</table>"
+        f"<p><a href='https://app.vantelia.es/dashboard'>Abrir panel admin</a></p>"
+    )
+    try:
+        _send_email_message(CONSULTA_NOTIFICATION_EMAIL, subject, text_body, html_body)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("No se pudo enviar notificacion de alta a %s: %s", CONSULTA_NOTIFICATION_EMAIL, exc)
 
 
 def _cleanup_auth_sessions() -> None:
@@ -3377,22 +3585,60 @@ def _public_checkout_customer_details(session_object: Dict[str, Any]) -> Dict[st
     }
 
 
-_STRIPE_SESSIONS_IN_FLIGHT: Set[str] = set()
+_STRIPE_SESSIONS_FILE = STORAGE_DIR / "stripe_sessions.json"
+_STRIPE_SESSIONS_LOCK = threading.Lock()
+
+
+def _load_stripe_sessions() -> Dict[str, Dict[str, Any]]:
+    if not _STRIPE_SESSIONS_FILE.exists():
+        return {}
+    try:
+        with _STRIPE_SESSIONS_FILE.open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("No se pudo leer stripe_sessions.json: %s", exc)
+        return {}
+
+
+def _save_stripe_sessions(data: Dict[str, Dict[str, Any]]) -> None:
+    STORAGE_DIR.mkdir(exist_ok=True)
+    tmp = _STRIPE_SESSIONS_FILE.with_suffix(".json.tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+    tmp.replace(_STRIPE_SESSIONS_FILE)
 
 
 def _claim_stripe_session(session_id: str) -> bool:
-    """Reserva una session_id para procesamiento. False si ya esta en curso."""
+    """Reserva session_id de Stripe en disco. False si ya fue vista (procesando/done/failed)."""
     if not session_id:
         return True
-    if session_id in _STRIPE_SESSIONS_IN_FLIGHT:
-        return False
-    _STRIPE_SESSIONS_IN_FLIGHT.add(session_id)
+    with _STRIPE_SESSIONS_LOCK:
+        sessions = _load_stripe_sessions()
+        if session_id in sessions:
+            return False
+        sessions[session_id] = {
+            "status": "processing",
+            "ts": datetime.now(timezone.utc).isoformat(),
+        }
+        _save_stripe_sessions(sessions)
     return True
 
 
-def _release_stripe_session(session_id: str) -> None:
-    if session_id:
-        _STRIPE_SESSIONS_IN_FLIGHT.discard(session_id)
+def _mark_stripe_session(session_id: str, *, status: str, cliente_id: str = "", error: str = "") -> None:
+    if not session_id:
+        return
+    with _STRIPE_SESSIONS_LOCK:
+        sessions = _load_stripe_sessions()
+        entry = dict(sessions.get(session_id) or {})
+        entry["status"] = status
+        entry["ts"] = datetime.now(timezone.utc).isoformat()
+        if cliente_id:
+            entry["cliente_id"] = cliente_id
+        if error:
+            entry["error"] = error[:500]
+        sessions[session_id] = entry
+        _save_stripe_sessions(sessions)
 
 
 def _find_client_by_stripe_id(
@@ -3504,6 +3750,21 @@ def _create_client_from_public_checkout(
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("Cliente %s creado, pero no se pudo crear/enviar acceso portal: %s", cliente_id, exc)
+
+    _send_checkout_admin_notification(
+        customer_email=customer_email,
+        customer_name=customer.get("name") or "",
+        customer_phone=customer.get("phone") or "",
+        company_name=company_name,
+        cliente_id=cliente_id,
+        ai_name=ai_name,
+        website_url=website_url,
+        plan=plan,
+        billing_period=billing_period,
+        customer_id=customer_id,
+        subscription_id=subscription_id,
+        session_id=session_id,
+    )
 
     logger.info(
         "Alta express automatica completada desde Stripe: cliente=%s plan=%s snippet=%s",
@@ -3961,6 +4222,59 @@ def _invalidate_client_runtime(cliente_id: str) -> None:
     _ensure_path_within(STORAGE_DIR, ruta_storage)
     if ruta_storage.exists():
         shutil.rmtree(ruta_storage)
+
+
+DEMO_TENANT_PREFIX = "demo_auto_"
+DEMO_TTL_SECONDS = int(os.getenv("DEMO_TENANT_TTL_SECONDS", "3600"))
+
+
+def _demo_registry_path() -> Path:
+    return DATA_DIR / "demo_tenants.json"
+
+
+def _load_demo_registry() -> Dict[str, float]:
+    path = _demo_registry_path()
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return {str(k): float(v) for k, v in raw.items()}
+    except Exception:  # noqa: BLE001
+        logger.warning("Registro de demos corrupto; se reinicia.")
+        return {}
+
+
+def _save_demo_registry(registry: Dict[str, float]) -> None:
+    path = _demo_registry_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(registry, indent=2), encoding="utf-8")
+
+
+def _register_demo_tenant(cliente_id: str) -> None:
+    registry = _load_demo_registry()
+    registry[cliente_id] = time.time()
+    _save_demo_registry(registry)
+
+
+def _purge_expired_demos() -> int:
+    registry = _load_demo_registry()
+    if not registry:
+        return 0
+    now = time.time()
+    expired = [cid for cid, ts in registry.items() if now - ts > DEMO_TTL_SECONDS]
+    if not expired:
+        return 0
+    for cliente_id in expired:
+        try:
+            if cliente_id in CONFIG_CLIENTES:
+                _delete_client_everywhere(cliente_id)
+            registry.pop(cliente_id, None)
+            logger.info("Demo expirada eliminada: %s", cliente_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("No se pudo eliminar demo expirada %s: %s", cliente_id, exc)
+            registry.pop(cliente_id, None)
+    _save_demo_registry(registry)
+    return len(expired)
 
 
 def _build_install_snippet(cliente_id: str, request: Request) -> Dict[str, str]:
@@ -5527,13 +5841,16 @@ def _record_chat_message(
 
 
 def _chat_session_summary_from_row(row: sqlite3.Row) -> ChatSessionSummary:
+    keys = row.keys() if hasattr(row, "keys") else []
+    live_count = row["live_message_count"] if "live_message_count" in keys else None
+    count_val = int(live_count) if live_count is not None else int(row["message_count"] or 0)
     return ChatSessionSummary(
         session_id=row["id"],
         cliente_id=row["cliente_id"],
         origin=row["origin"] or "",
         started_at=row["started_at"],
         last_message_at=row["last_message_at"],
-        message_count=int(row["message_count"] or 0),
+        message_count=count_val,
         intents=_safe_json_list(row["intents_json"] or "[]"),
         last_message=row["last_message"] or "",
     )
@@ -5572,7 +5889,12 @@ def _list_chat_session_rows(
                        WHERE m.session_id = s.id
                        ORDER BY m.id DESC
                        LIMIT 1
-                   ), '') AS last_message
+                   ), '') AS last_message,
+                   (
+                       SELECT COUNT(*)
+                       FROM chat_messages m
+                       WHERE m.session_id = s.id
+                   ) AS live_message_count
             FROM chat_sessions s
             {where_sql}
             ORDER BY s.last_message_at DESC
@@ -5598,7 +5920,12 @@ def _load_chat_session_or_404(session_id: str, *, cliente_id: str = "") -> sqlit
                        WHERE m.session_id = s.id
                        ORDER BY m.id DESC
                        LIMIT 1
-                   ), '') AS last_message
+                   ), '') AS last_message,
+                   (
+                       SELECT COUNT(*)
+                       FROM chat_messages m
+                       WHERE m.session_id = s.id
+                   ) AS live_message_count
             FROM chat_sessions s
             WHERE {' AND '.join(clauses)}
             LIMIT 1
@@ -8292,7 +8619,10 @@ async def public_subscription_checkout(
     _stripe_init()
 
     marketing_url = MARKETING_SITE_URL.rstrip("/") or "https://www.vantelia.es"
-    success_url = f"{marketing_url}/planes/?checkout=success&plan={quote(plan)}&period={quote(billing_period)}"
+    success_url = (
+        f"{marketing_url}/bienvenido/?plan={quote(plan)}&period={quote(billing_period)}"
+        "&session={CHECKOUT_SESSION_ID}"
+    )
     cancel_url = f"{marketing_url}/planes/?checkout=cancel&plan={quote(plan)}"
 
     try:
@@ -8392,7 +8722,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
                         customer_id=customer_id, sub_id=sub_id, session_id=session_id, request=request,
                     ) -> None:
                         try:
-                            _create_client_from_public_checkout(
+                            new_cid = _create_client_from_public_checkout(
                                 data_object,
                                 request=request,
                                 plan=plan,
@@ -8400,12 +8730,24 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
                                 customer_id=customer_id,
                                 subscription_id=sub_id,
                             )
+                            _mark_stripe_session(session_id, status="done", cliente_id=new_cid or "")
+                            _try_record_analytics_event(
+                                {
+                                    "event": "checkout_completed",
+                                    "event_source": "stripe_webhook",
+                                    "cliente_id": new_cid or "",
+                                    "plan": plan,
+                                    "billing_period": billing_period,
+                                    "checkout_session_id": session_id,
+                                    "checkout_status": "completed",
+                                },
+                                request,
+                            )
                         except Exception as exc:  # noqa: BLE001
                             logger.exception(
                                 "Onboarding async fallido session=%s: %s", session_id, exc
                             )
-                        finally:
-                            _release_stripe_session(session_id)
+                            _mark_stripe_session(session_id, status="failed", error=str(exc))
                     background_tasks.add_task(_run_onboarding_bg)
             elif cid and cid in CONFIG_CLIENTES:
                 _set_client_subscription(
@@ -8416,6 +8758,18 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
                     stripe_subscription_id=sub_id,
                     billing_period=billing_period,
                     started_at=datetime.now(timezone.utc).isoformat(),
+                )
+                _try_record_analytics_event(
+                    {
+                        "event": "checkout_completed",
+                        "event_source": "stripe_webhook",
+                        "cliente_id": cid,
+                        "plan": plan,
+                        "billing_period": billing_period,
+                        "checkout_session_id": str(data_object.get("id") or ""),
+                        "checkout_status": "completed",
+                    },
+                    request,
                 )
                 logger.info("Suscripción activada para %s · plan=%s", cid, plan)
         elif event_type in {"customer.subscription.updated", "customer.subscription.created"}:
@@ -8455,6 +8809,49 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
                     canceled_at=datetime.now(timezone.utc).isoformat(),
                 )
                 logger.info("Suscripción cancelada %s", cid_target)
+        elif event_type == "invoice.payment_failed":
+            sub_id = str(data_object.get("subscription") or "")
+            customer_id = str(data_object.get("customer") or "")
+            customer_email = str(data_object.get("customer_email") or "")
+            attempt_count = int(data_object.get("attempt_count") or 1)
+            next_payment_attempt = data_object.get("next_payment_attempt")
+            hosted_invoice_url = str(data_object.get("hosted_invoice_url") or "")
+            amount_due_cents = int(data_object.get("amount_due") or 0)
+            amount_due_eur = f"{amount_due_cents / 100:.2f}" if amount_due_cents else "-"
+            next_iso = ""
+            if next_payment_attempt:
+                next_iso = datetime.fromtimestamp(int(next_payment_attempt), tz=timezone.utc).isoformat()
+            cid_target = _find_client_by_stripe_id(customer_id=customer_id, subscription_id=sub_id)
+            if cid_target and cid_target in CONFIG_CLIENTES:
+                cfg = CONFIG_CLIENTES.get(cid_target) or {}
+                sub_cfg = cfg.get("subscription") or {}
+                _set_client_subscription(
+                    cid_target,
+                    status="past_due",
+                    last_payment_failed_at=datetime.now(timezone.utc).isoformat(),
+                    last_payment_failed_invoice_url=hosted_invoice_url,
+                )
+                _send_payment_failed_emails(
+                    cliente_id=cid_target,
+                    customer_email=customer_email or sub_cfg.get("contacto_email", "") or "",
+                    company_name=cfg.get("nombre", "") or cid_target,
+                    plan=sub_cfg.get("plan", "") or cfg.get("plan", "") or PLAN_DEFAULT,
+                    amount_due_eur=amount_due_eur,
+                    attempt_count=attempt_count,
+                    next_attempt_iso=next_iso,
+                    hosted_invoice_url=hosted_invoice_url,
+                    customer_id=customer_id,
+                    subscription_id=sub_id,
+                )
+                logger.warning(
+                    "invoice.payment_failed cliente=%s sub=%s intento=%s importe=%s",
+                    cid_target, sub_id, attempt_count, amount_due_eur,
+                )
+            else:
+                logger.warning(
+                    "invoice.payment_failed sin cliente asociado: customer=%s sub=%s",
+                    customer_id, sub_id,
+                )
     except Exception as exc:  # noqa: BLE001
         logger.error("Error procesando evento Stripe %s: %s", event_type, exc)
 
@@ -8629,6 +9026,333 @@ async def demo_cliente(cliente_id: str, request: Request) -> HTMLResponse:
     _assert_valid_client_id(cliente_id)
     _get_client_config(cliente_id)
     return HTMLResponse(_build_demo_page(cliente_id, request))
+
+
+@app.post("/demo/generate", response_model=DemoGenerateResponse)
+async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGenerateResponse:
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"demo:{client_ip}", 3)
+
+    _purge_expired_demos()
+    registry = _load_demo_registry()
+    email_lower = str(data.email).lower()
+    now_ts = time.time()
+    for existing_id, created_ts in registry.items():
+        cfg = CONFIG_CLIENTES.get(existing_id, {})
+        contacto_existing = cfg.get("contacto", {})
+        if (
+            str(contacto_existing.get("email", "")).lower() == email_lower
+            and now_ts - created_ts < DEMO_TTL_SECONDS
+        ):
+            existing_url = f"{_public_base_url(request)}/demo/{existing_id}"
+            expires_dt = datetime.fromtimestamp(created_ts + DEMO_TTL_SECONDS, tz=timezone.utc)
+            remaining = max(0, int(created_ts + DEMO_TTL_SECONDS - now_ts))
+            return DemoGenerateResponse(
+                ok=True,
+                cliente_id=existing_id,
+                demo_url=existing_url,
+                expires_at=expires_dt.isoformat(),
+                expires_in_seconds=remaining,
+            )
+
+    if not OPENAI_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El servicio de demos no esta disponible en este momento.",
+        )
+
+    base_slug = slugify_company(data.nombre_empresa).lower()[:30] or "empresa"
+    token = secrets.token_hex(3)
+    cliente_id = f"{DEMO_TENANT_PREFIX}{base_slug}_{token}"
+    _assert_valid_client_id(cliente_id)
+
+    sector_clean = data.sector.strip()
+    descripcion_clean = data.descripcion.strip()
+    servicios_clean = data.servicios.strip()
+    horario_clean = (data.horario or "").strip()
+    empresa_clean = data.nombre_empresa.strip()
+
+    manual_info = (
+        f"Empresa: {empresa_clean}\n"
+        f"Sector: {sector_clean}\n\n"
+        f"Descripcion del negocio:\n{descripcion_clean}\n\n"
+        f"Servicios principales:\n{servicios_clean}\n"
+    )
+    if horario_clean:
+        manual_info += f"\nHorario:\n{horario_clean}\n"
+    manual_info += f"\nContacto comercial: {data.email}\n"
+
+    detected_business_name = empresa_clean
+    info_txt = manual_info
+    allowed_origins: List[str] = []
+
+    base_app = (APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
+    allowed_origins.append(base_app)
+    for origin in ("https://www.vantelia.es", "https://vantelia.es"):
+        if origin not in allowed_origins:
+            allowed_origins.append(origin)
+
+    if data.website_url:
+        try:
+            scrape_result = await asyncio.to_thread(
+                run_onboarding,
+                website_url=data.website_url,
+                api_key=OPENAI_API_KEY,
+                nombre_bot="Asistente",
+                tono="profesional",
+                idioma="es",
+                max_paginas=4,
+            )
+            if scrape_result.detected_business_name:
+                detected_business_name = scrape_result.detected_business_name
+            if scrape_result.info_txt:
+                info_txt = (
+                    manual_info
+                    + "\n--- Informacion extraida de la web ---\n"
+                    + scrape_result.info_txt
+                )
+            parsed = urlparse(scrape_result.normalized_url)
+            if parsed.netloc:
+                origin_url = f"{parsed.scheme}://{parsed.netloc}"
+                if origin_url not in allowed_origins:
+                    allowed_origins.append(origin_url)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Demo scraping fallo para %s: %s", data.website_url, exc)
+
+    color_val = (data.color or "#0EA5E9").strip()
+    if not re.match(r"^#[0-9A-Fa-f]{6}$", color_val):
+        color_val = "#0EA5E9"
+
+    icono = "".join(ch for ch in detected_business_name if ch.isalnum())[:2].upper() or "AI"
+
+    payload = AdminClientePayload(
+        nombre=detected_business_name[:120] or empresa_clean[:120] or "Empresa",
+        icono=icono,
+        color=color_val,
+        bienvenida=(
+            f"Hola, soy el asistente virtual de {detected_business_name}. "
+            "Cuentame en que puedo ayudarte."
+        )[:400],
+        prompt_extra=(
+            "Habla con tono profesional y cercano, mantente dentro del contexto del negocio, "
+            "responde solo con informacion apoyada en la base documental y deriva al equipo "
+            "humano cuando falten datos. Si te preguntan precios concretos, indica que estos "
+            "son orientativos y deben confirmarse con el equipo."
+        ),
+        allowed_origins=allowed_origins,
+        contacto_email=str(data.email),
+        contacto_telefono="",
+        branding_text="Powered by Vantelia",
+        booking_enabled=False,
+        booking_timezone=DEFAULT_TIMEZONE,
+        booking_slot_minutes=30,
+        booking_day_start="09:00",
+        booking_day_end="18:00",
+        booking_closed_weekdays=[6],
+        booking_provider="internal",
+        booking_webhook_env="WEBHOOK_DEFAULT",
+        booking_webhook_url="",
+        booking_calendly_user_env="",
+        booking_calendly_event_type_env="",
+        booking_calendly_location_kind="",
+        booking_calendly_location_value="",
+        booking_google_calendar_id_env="",
+        booking_google_service_account_env="",
+        booking_success_message="Tu solicitud de cita ha quedado registrada correctamente.",
+        info_txt=info_txt[:120000],
+        reindex_after_save=True,
+    )
+
+    try:
+        await asyncio.to_thread(_save_admin_client_payload, cliente_id, payload, request)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Error guardando demo %s: %s", cliente_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No se ha podido generar la demo. Intentalo de nuevo en unos minutos.",
+        ) from exc
+
+    _register_demo_tenant(cliente_id)
+
+    expires_dt = datetime.now(timezone.utc) + timedelta(seconds=DEMO_TTL_SECONDS)
+    demo_url = f"{_public_base_url(request)}/demo/{cliente_id}"
+
+    if _smtp_configured() and CONSULTA_NOTIFICATION_EMAIL:
+        try:
+            asunto = f"Nueva demo generada: {empresa_clean}"
+            cuerpo_text = (
+                f"Se ha generado una demo desde la web publica.\n\n"
+                f"Empresa: {empresa_clean}\n"
+                f"Sector: {sector_clean}\n"
+                f"Email: {data.email}\n"
+                f"Web: {data.website_url or '(no proporcionada)'}\n"
+                f"IP: {client_ip}\n"
+                f"Demo URL: {demo_url}\n"
+                f"Cliente ID: {cliente_id}\n"
+                f"Expira: {expires_dt.isoformat()}\n\n"
+                f"Descripcion:\n{descripcion_clean}\n\n"
+                f"Servicios:\n{servicios_clean}\n"
+            )
+            cuerpo_html = (
+                '<div style="font-family:sans-serif;max-width:600px;color:#1a1a2e">'
+                '<h2 style="color:#00b1d9">Nueva demo generada</h2>'
+                '<table style="width:100%;border-collapse:collapse">'
+                f'<tr><td style="padding:6px 0;color:#666;width:120px">Empresa</td><td style="padding:6px 0;font-weight:600">{escape(empresa_clean)}</td></tr>'
+                f'<tr><td style="padding:6px 0;color:#666">Sector</td><td style="padding:6px 0">{escape(sector_clean)}</td></tr>'
+                f'<tr><td style="padding:6px 0;color:#666">Email</td><td style="padding:6px 0"><a href="mailto:{escape(str(data.email))}">{escape(str(data.email))}</a></td></tr>'
+                f'<tr><td style="padding:6px 0;color:#666">Web</td><td style="padding:6px 0">{escape(data.website_url or "(no proporcionada)")}</td></tr>'
+                f'<tr><td style="padding:6px 0;color:#666">Demo URL</td><td style="padding:6px 0"><a href="{escape(demo_url)}">{escape(demo_url)}</a></td></tr>'
+                f'<tr><td style="padding:6px 0;color:#666">Cliente ID</td><td style="padding:6px 0"><code>{escape(cliente_id)}</code></td></tr>'
+                f'<tr><td style="padding:6px 0;color:#666">Expira</td><td style="padding:6px 0">{escape(expires_dt.isoformat())}</td></tr>'
+                '</table>'
+                f'<p style="margin-top:16px"><strong>Descripcion:</strong><br>{escape(descripcion_clean).replace(chr(10), "<br>")}</p>'
+                f'<p><strong>Servicios:</strong><br>{escape(servicios_clean).replace(chr(10), "<br>")}</p>'
+                '<hr style="margin:20px 0;border:none;border-top:1px solid #eee">'
+                f'<p style="font-size:12px;color:#999">IP: {escape(client_ip)} - lead automatico desde /demo/</p>'
+                '</div>'
+            )
+            _send_email_message(
+                CONSULTA_NOTIFICATION_EMAIL,
+                asunto,
+                cuerpo_text,
+                cuerpo_html,
+                reply_to=str(data.email),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("No se pudo notificar lead de demo: %s", exc)
+
+    logger.info(
+        "Demo creada %s para %s desde IP %s (expira en %ss)",
+        cliente_id, data.email, client_ip, DEMO_TTL_SECONDS,
+    )
+
+    return DemoGenerateResponse(
+        ok=True,
+        cliente_id=cliente_id,
+        demo_url=demo_url,
+        expires_at=expires_dt.isoformat(),
+        expires_in_seconds=DEMO_TTL_SECONDS,
+    )
+
+
+_ANALYTICS_ALLOWED_KEYS = {
+    "event",
+    "event_source",
+    "page_path",
+    "page_url",
+    "timestamp",
+    "cta_label",
+    "cta_href",
+    "plan",
+    "plan_label",
+    "billing_period",
+    "sector",
+    "has_website_url",
+    "demo_url",
+    "expires_in_minutes",
+    "status",
+    "error_message",
+    "widget_client_id",
+    "widget_position",
+    "session_id",
+    "booking_enabled",
+    "message_length",
+    "forced_message",
+    "response_length",
+    "booking_form_shown",
+    "quick_action",
+    "date",
+    "time",
+    "service",
+    "has_employee",
+    "booking_id",
+    "booking_status",
+    "has_manage_url",
+    "has_provider_booking_url",
+    "lead_type",
+    "checkout_session_id",
+    "checkout_status",
+}
+
+
+def _analytics_client_id(payload: Dict[str, Any]) -> str:
+    value = payload.get("widget_client_id") or payload.get("cliente_id") or ""
+    value = str(value).strip()
+    return value[:80] if CLIENT_ID_PATTERN.match(value) else ""
+
+
+def _safe_analytics_value(value: Any) -> Any:
+    if isinstance(value, bool) or isinstance(value, int) or isinstance(value, float):
+        return value
+    if isinstance(value, str):
+        return _sanitize_text(value, allow_multiline=False)[:300]
+    return str(value)[:300]
+
+
+def _record_analytics_event(payload: Dict[str, Any], request: Request) -> Dict[str, Any]:
+    event_name = _sanitize_text(payload.get("event", ""), allow_multiline=False)[:80]
+    if not re.match(r"^[a-zA-Z0-9_.:-]{2,80}$", event_name):
+        raise HTTPException(status_code=400, detail="Evento de analitica invalido.")
+
+    metadata = {
+        key: _safe_analytics_value(value)
+        for key, value in payload.items()
+        if key in _ANALYTICS_ALLOWED_KEYS and key not in {"event", "session_id"}
+    }
+    session_id = str(payload.get("session_id") or "").strip()[:128]
+    if session_id and not SESSION_ID_PATTERN.match(session_id):
+        session_id = ""
+    client_ip = request.client.host if request.client else ""
+    ip_hash = hashlib.sha256(client_ip.encode("utf-8")).hexdigest()[:24] if client_ip else ""
+    user_agent = _sanitize_text(request.headers.get("user-agent", ""), allow_multiline=False)[:240]
+    created_at = _utc_now_iso()
+
+    with _get_db_connection() as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO analytics_events (
+                event_name, event_source, cliente_id, session_id, page_path, page_url,
+                metadata_json, user_agent, ip_hash, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event_name,
+                _sanitize_text(payload.get("event_source", "vantelia_site"), allow_multiline=False)[:80],
+                _analytics_client_id(payload),
+                session_id,
+                _sanitize_text(payload.get("page_path", ""), allow_multiline=False)[:220],
+                _sanitize_text(payload.get("page_url", ""), allow_multiline=False)[:500],
+                json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))[:4000],
+                user_agent,
+                ip_hash,
+                created_at,
+            ),
+        )
+        connection.commit()
+        event_id = int(cursor.lastrowid or 0)
+
+    return {"ok": True, "id": event_id}
+
+
+def _try_record_analytics_event(payload: Dict[str, Any], request: Request) -> None:
+    try:
+        _record_analytics_event(payload, request)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("No se pudo registrar evento de analitica %s: %s", payload.get("event"), exc)
+
+
+@app.post("/analytics/event")
+async def analytics_event(request: Request) -> Dict[str, Any]:
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Payload JSON invalido.") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Payload de analitica invalido.")
+    return _record_analytics_event(payload, request)
 
 
 @app.post("/consulta")
@@ -8882,6 +9606,9 @@ async def admin_clientes() -> List[AdminClienteResumen]:
             for row in rows
         }
 
+    demo_registry = _load_demo_registry()
+    now_ts = time.time()
+
     for cliente_id, config in sorted(CONFIG_CLIENTES.items(), key=lambda item: item[0].lower()):
         booking_cfg = config.get("booking", {})
         whatsapp_cfg = config.get("whatsapp", {})
@@ -8889,6 +9616,20 @@ async def admin_clientes() -> List[AdminClienteResumen]:
         branding = config.get("branding", {})
         info_path = _client_info_path(cliente_id)
         client_counts = booking_counts.get(cliente_id, {})
+
+        is_demo = cliente_id.startswith(DEMO_TENANT_PREFIX) or cliente_id in demo_registry
+        demo_expires_at = ""
+        demo_remaining = 0
+        if is_demo and cliente_id in demo_registry:
+            created_ts = demo_registry[cliente_id]
+            expires_ts = created_ts + DEMO_TTL_SECONDS
+            demo_remaining = max(0, int(expires_ts - now_ts))
+            demo_expires_at = datetime.fromtimestamp(expires_ts, tz=timezone.utc).isoformat()
+
+        sub = _client_subscription(cliente_id) if not is_demo else {
+            "plan": "", "status": "", "stripe_subscription_id": "",
+        }
+
         summaries.append(
             AdminClienteResumen(
                 cliente_id=cliente_id,
@@ -8908,6 +9649,12 @@ async def admin_clientes() -> List[AdminClienteResumen]:
                 info_file_size=(info_path.stat().st_size if info_path.exists() else 0),
                 bookings_total=int(client_counts.get("total", 0)),
                 bookings_pending=int(client_counts.get("pending", 0)),
+                is_demo=is_demo,
+                demo_expires_at=demo_expires_at,
+                demo_expires_in_seconds=demo_remaining,
+                subscription_plan=str(sub.get("plan") or ""),
+                subscription_status=str(sub.get("status") or ""),
+                stripe_subscription_id=str(sub.get("stripe_subscription_id") or ""),
             )
         )
     return summaries
@@ -11107,6 +11854,106 @@ async def estadisticas() -> Dict[str, Any]:
         "indices_cargados": indices_cargados,
         "bookings_por_cliente": {row["cliente_id"]: row["total"] for row in rows},
         "bookings_por_estado": {row["status"]: row["total"] for row in status_rows},
+    }
+
+
+@app.get("/admin/analytics", dependencies=[Depends(_require_admin_token)])
+async def admin_analytics(days: int = 30, limit: int = 80) -> Dict[str, Any]:
+    days = max(1, min(int(days or 30), 365))
+    limit = max(1, min(int(limit or 80), 300))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since_iso = since.isoformat().replace("+00:00", "Z")
+
+    with _get_db_connection() as connection:
+        total = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM analytics_events WHERE created_at >= ?",
+                (since_iso,),
+            ).fetchone()[0]
+        )
+        by_event = connection.execute(
+            """
+            SELECT event_name, COUNT(*) AS total
+            FROM analytics_events
+            WHERE created_at >= ?
+            GROUP BY event_name
+            ORDER BY total DESC, event_name ASC
+            """,
+            (since_iso,),
+        ).fetchall()
+        by_client = connection.execute(
+            """
+            SELECT COALESCE(NULLIF(cliente_id, ''), 'sin_cliente') AS cliente_id, COUNT(*) AS total
+            FROM analytics_events
+            WHERE created_at >= ?
+            GROUP BY COALESCE(NULLIF(cliente_id, ''), 'sin_cliente')
+            ORDER BY total DESC, cliente_id ASC
+            """,
+            (since_iso,),
+        ).fetchall()
+        daily = connection.execute(
+            """
+            SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS total
+            FROM analytics_events
+            WHERE created_at >= ?
+            GROUP BY substr(created_at, 1, 10)
+            ORDER BY day ASC
+            """,
+            (since_iso,),
+        ).fetchall()
+        recent_rows = connection.execute(
+            """
+            SELECT id, event_name, event_source, cliente_id, session_id, page_path, page_url,
+                   metadata_json, created_at
+            FROM analytics_events
+            WHERE created_at >= ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (since_iso, limit),
+        ).fetchall()
+
+    key_events = {row["event_name"]: int(row["total"]) for row in by_event}
+    recent = []
+    for row in recent_rows:
+        try:
+            metadata = json.loads(row["metadata_json"] or "{}")
+        except json.JSONDecodeError:
+            metadata = {}
+        recent.append(
+            {
+                "id": row["id"],
+                "event_name": row["event_name"],
+                "event_source": row["event_source"],
+                "cliente_id": row["cliente_id"],
+                "session_id": row["session_id"],
+                "page_path": row["page_path"],
+                "page_url": row["page_url"],
+                "metadata": metadata,
+                "created_at": row["created_at"],
+            }
+        )
+
+    return {
+        "days": days,
+        "since": since_iso,
+        "total_events": total,
+        "kpis": {
+            "demo_submits": key_events.get("demo_submit", 0),
+            "demo_generated": key_events.get("demo_generated", 0),
+            "checkout_started": key_events.get("checkout_started", 0),
+            "checkout_redirect": key_events.get("checkout_redirect", 0),
+            "checkout_completed": key_events.get("checkout_completed", 0),
+            "lead_created": key_events.get("lead_created", 0),
+            "widget_messages": key_events.get("widget_message_sent", 0),
+            "booking_submitted": key_events.get("booking_submitted", 0),
+            "booking_confirmed": key_events.get("booking_confirmed", 0),
+            "consultation_clicks": key_events.get("consultation_cta_click", 0),
+        },
+        "events_by_name": [{"event_name": row["event_name"], "total": row["total"]} for row in by_event],
+        "events_by_client": [{"cliente_id": row["cliente_id"], "total": row["total"]} for row in by_client],
+        "daily": [{"day": row["day"], "total": row["total"]} for row in daily],
+        "recent": recent,
     }
 
 

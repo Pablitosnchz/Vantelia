@@ -314,6 +314,34 @@ def test_public_stripe_checkout_builds_subscription_session(client: TestClient, 
     assert payload["allow_promotion_codes"] is True
 
 
+def test_analytics_events_are_recorded_and_visible_to_admin(client: TestClient):
+    public_response = client.post(
+        "/analytics/event",
+        json={
+            "event": "demo_submit",
+            "event_source": "vantelia_site",
+            "page_path": "/demo/",
+            "page_url": "https://www.vantelia.es/demo/",
+            "sector": "Servicios B2B",
+            "has_website_url": True,
+        },
+        headers={"User-Agent": "pytest-browser"},
+    )
+    admin_response = client.get(
+        "/admin/analytics?days=30",
+        headers={"Authorization": "Bearer test-admin-token"},
+    )
+
+    assert public_response.status_code == 200
+    assert public_response.json()["ok"] is True
+    assert admin_response.status_code == 200
+    payload = admin_response.json()
+    assert payload["total_events"] >= 1
+    assert payload["kpis"]["demo_submits"] >= 1
+    assert any(item["event_name"] == "demo_submit" for item in payload["events_by_name"])
+    assert payload["recent"][0]["event_name"] == "demo_submit"
+
+
 def test_stripe_webhook_activates_client_subscription(client: TestClient, api_module):
     api_module.stripe = _FakeStripe
 

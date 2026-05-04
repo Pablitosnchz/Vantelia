@@ -5,6 +5,7 @@ import {
   formatLocalDate,
   humanizeErrorMessage,
   scrollMsgs,
+  trackWidgetEvent,
   WIDGET_CONFIG,
 } from "./utils.js";
 
@@ -269,6 +270,11 @@ function renderSlots() {
         button.classList.add("selected");
         citaData.hora = slot.hora;
         nextButton.disabled = false;
+        trackWidgetEvent("booking_slot_selected", {
+          date: citaData.fecha,
+          time: citaData.hora,
+          service: citaData.servicio,
+        });
       });
     }
 
@@ -322,6 +328,10 @@ async function confirmarCita() {
 
   confirmButton.disabled = true;
   confirmButton.innerHTML = '<span class="ia-spinner"></span>';
+  trackWidgetEvent("booking_submit", {
+    service: citaData.servicio,
+    has_employee: !!citaData.employeeId,
+  });
 
   try {
     const response = await fetchJson(`${WIDGET_CONFIG.apiUrl}/agendar`, {
@@ -362,17 +372,47 @@ async function confirmarCita() {
         </div>
       </div>
     `;
+    trackWidgetEvent("booking_submitted", {
+      booking_id: response.booking_id,
+      booking_status: response.estado,
+      service: citaData.servicio,
+      has_manage_url: !!response.manage_url,
+      has_provider_booking_url: !!response.provider_booking_url,
+    });
+    trackWidgetEvent("booking_confirmed", {
+      booking_id: response.booking_id,
+      booking_status: response.estado,
+      service: citaData.servicio,
+      has_manage_url: !!response.manage_url,
+      has_provider_booking_url: !!response.provider_booking_url,
+    });
     agregarMensaje(response.mensaje, "bot");
   } catch (error) {
     confirmButton.disabled = false;
     confirmButton.textContent = "Confirmar solicitud";
-    agregarMensaje(
-      `${humanizeErrorMessage(
-        error,
-        "No se ha podido registrar la solicitud."
-      )}.${fallbackContacto()}`.trim(),
-      "bot"
-    );
+    trackWidgetEvent("booking_submit_error", {
+      service: citaData.servicio,
+      error_message: error?.message || "unknown",
+    });
+    const form = document.getElementById("ia-form-cita");
+    const message = `${humanizeErrorMessage(
+      error,
+      "No se ha podido registrar la solicitud."
+    )}.${fallbackContacto()}`.trim();
+    if (form) {
+      form.innerHTML = `
+        <div class="ia-form-success ia-form-error">
+          <div class="ia-check ia-check-error">!</div>
+          <h4>No se ha podido confirmar</h4>
+          <p>${escapeHtml(message)}</p>
+          <div class="ia-form-actions">
+            <button id="ia-f-retry" class="ia-form-btn primary" type="button">Reintentar</button>
+          </div>
+        </div>
+      `;
+      document.getElementById("ia-f-retry")?.addEventListener("click", confirmarCita);
+    }
+    agregarMensaje(message, "bot");
   }
 }
 
@@ -388,11 +428,15 @@ export async function mostrarFormulario() {
   }
 
   resetState();
+  trackWidgetEvent("booking_form_opened");
 
   try {
     await cargarServicios();
     await cargarProfesionales();
   } catch (error) {
+    trackWidgetEvent("booking_form_error", {
+      error_message: error?.message || "unknown",
+    });
     agregarMensaje(
       humanizeErrorMessage(error, "No se ha podido cargar el formulario de reserva.") + fallbackContacto(),
       "bot"
