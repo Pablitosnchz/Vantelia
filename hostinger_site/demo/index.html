@@ -769,6 +769,16 @@
           has_website_url: !!data.website_url
         });
 
+        var demoWindow = window.open('about:blank', '_blank');
+        if (demoWindow) {
+          demoWindow.document.write(
+            '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Preparando demo | Vantelia</title>' +
+            '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0B132B;color:#fff;font-family:Inter,Arial,sans-serif;text-align:center;padding:24px}p{color:rgba(255,255,255,.68);line-height:1.6}</style>' +
+            '</head><body><main><h1>Preparando tu demo...</h1><p>Estamos creando el asistente IA. Esta pestaña se actualizara automaticamente.</p></main></body></html>'
+          );
+          demoWindow.document.close();
+        }
+
         setLoading(true);
         showStatus('success', statusCard(
           'Demo en curso',
@@ -803,6 +813,9 @@
               escapeHtml(detail),
               '<a class="form-status-action" href="/consultas/">Pedir consulta gratuita</a>'
             ));
+            if (demoWindow && !demoWindow.closed) {
+              demoWindow.close();
+            }
             return;
           }
           var url = result.body.demo_url;
@@ -821,12 +834,18 @@
           showStatus('success', statusCard(
             'Demo lista',
             'Tu asistente IA se ha generado correctamente',
-            'Se abrira en una pestana nueva. Estara disponible durante ' + minutes + ' minutos.',
+            demoWindow ? 'Se ha abierto en una pestana nueva. Estara disponible durante ' + minutes + ' minutos.'
+              : 'Tu navegador ha bloqueado la pestana nueva. Puedes abrirla desde el boton inferior. Estara disponible durante ' + minutes + ' minutos.',
             '<a class="form-status-action" href="' + url + '" target="_blank" rel="noopener">Abrir demo</a><a class="form-status-action" href="/consultas/">Pedir consulta</a>'
           ));
-          window.open(url, '_blank', 'noopener');
+          if (demoWindow && !demoWindow.closed) {
+            demoWindow.location.href = url;
+          }
         }).catch(function (err) {
           setLoading(false);
+          if (demoWindow && !demoWindow.closed) {
+            demoWindow.close();
+          }
           window.vanteliaTrack && window.vanteliaTrack('demo_generate_error', {
             error_message: err && err.message ? err.message : 'network_error'
           });

@@ -2036,6 +2036,13 @@ tbody tr:last-child td { border-bottom: none; }
         .replace(/'/g, "&#39;");
     }
 
+    function clientDisplayLabel(client) {
+      const name = String(client?.nombre || "-").trim() || "-";
+      const id = String(client?.cliente_id || "").trim();
+      if (!id || client?.is_demo) return name;
+      return `${name} (${id})`;
+    }
+
     function setView(view) {
       const nextView = view || "clients";
       state.activeView = nextView;
@@ -2152,7 +2159,7 @@ tbody tr:last-child td { border-bottom: none; }
       state.clients.forEach((client) => {
         const option = document.createElement("option");
         option.value = client.cliente_id;
-        option.textContent = `${client.nombre} (${client.cliente_id})`;
+        option.textContent = clientDisplayLabel(client);
         select.appendChild(option);
       });
       if ([...select.options].some((option) => option.value === currentValue)) {
@@ -2514,7 +2521,7 @@ tbody tr:last-child td { border-bottom: none; }
       const bookingProvider = client.booking_provider || "internal";
       const originsCount = Array.isArray(client.allowed_origins) ? client.allowed_origins.length : 0;
       elements.selectedClientSummary.innerHTML = `
-        <div class="client-summary-block"><span>Cliente seleccionado</span><strong>${escapeHtml(client.nombre)} (${escapeHtml(client.cliente_id)})</strong></div>
+        <div class="client-summary-block"><span>Cliente seleccionado</span><strong>${escapeHtml(clientDisplayLabel(client))}</strong></div>
         <div class="client-summary-block"><span>Reservas</span><strong>${Number(client.bookings_total || 0)} total / ${Number(client.bookings_pending || 0)} activas</strong></div>
         <div class="client-summary-block"><span>Agenda</span><strong>${escapeHtml(bookingStatus)} · ${escapeHtml(bookingProvider)}</strong></div>
         <div class="client-summary-block"><span>Dominios</span><strong>${originsCount} permitidos</strong></div>
@@ -2543,7 +2550,7 @@ tbody tr:last-child td { border-bottom: none; }
         ? `Activo${elements.whatsappPhoneNumberId.value.trim() ? ` · ${elements.whatsappPhoneNumberId.value.trim()}` : ""}`
         : "Inactivo";
       elements.aiSelectedClientSummary.innerHTML = `
-        <div class="client-summary-block"><span>Cliente IA</span><strong>${escapeHtml(client.nombre)} (${escapeHtml(client.cliente_id)})</strong></div>
+        <div class="client-summary-block"><span>Cliente IA</span><strong>${escapeHtml(clientDisplayLabel(client))}</strong></div>
         <div class="client-summary-block"><span>Icono</span><strong>${escapeHtml(elements.icono.value.trim() || "AI")}</strong></div>
         <div class="client-summary-block"><span>Color</span><strong>${escapeHtml(elements.color.value.trim() || "#00b1d9")}</strong></div>
         <div class="client-summary-block"><span>Bienvenida</span><strong>${escapeHtml(welcomeText ? `${welcomeText.length} caracteres` : "Pendiente")}</strong></div>
@@ -2571,8 +2578,10 @@ tbody tr:last-child td { border-bottom: none; }
         const row = document.createElement("article");
         row.className = `client-list-row${client.cliente_id === selectedId ? " active" : ""}`;
         const clientName = escapeHtml(client.nombre || "-");
-        const clientId = escapeHtml(client.cliente_id || "-");
         const isDemo = !!client.is_demo;
+        const clientIdHtml = isDemo
+          ? ""
+          : `<span class="client-list-meta">${escapeHtml(client.cliente_id || "-")}</span>`;
         const subStatus = (client.subscription_status || "").toLowerCase();
         const subPlan = (client.subscription_plan || "").toString();
         const subPlanLabel = subPlan ? subPlan.charAt(0).toUpperCase() + subPlan.slice(1) : "";
@@ -2603,8 +2612,8 @@ tbody tr:last-child td { border-bottom: none; }
             <button class="client-list-main" type="button" data-client-action="profile">
               <span class="client-list-name">
                 <strong>${clientName}</strong>
-                <span>${clientId}</span>
               </span>
+              ${clientIdHtml}
               ${pillsHtml}
             </button>
             <button class="client-list-side ghost small" type="button" data-client-action="ai">IA</button>

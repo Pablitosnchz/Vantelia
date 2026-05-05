@@ -1,5 +1,8 @@
 .env
 .env.*
+deploy/known_hosts
+deploy/ssh-askpass.cmd
+deploy/vantelia_deploy*
 node_modules/
 __pycache__/
 *.pyc

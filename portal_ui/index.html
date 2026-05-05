@@ -1286,6 +1286,92 @@ select {
   padding: 14px 16px;
   display: flex; flex-direction: column; gap: 10px;
 }
+.install-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+  gap: 14px;
+}
+.install-snippet {
+  min-height: 132px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre;
+}
+.install-steps {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-2);
+  line-height: 1.65;
+}
+.install-steps li { margin-bottom: 8px; }
+.install-note {
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.welcome-tour {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(4, 9, 20, 0.72);
+  backdrop-filter: blur(12px);
+}
+.welcome-tour.hidden { display: none; }
+.welcome-tour-card {
+  width: min(760px, 100%);
+  max-height: min(720px, calc(100vh - 40px));
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 22px;
+}
+.welcome-tour-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+.welcome-tour-head p {
+  margin-top: 6px;
+  max-width: 560px;
+}
+.tour-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.tour-item {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+.tour-item strong {
+  display: block;
+  margin-bottom: 4px;
+}
+.tour-item span {
+  color: var(--text-2);
+  line-height: 1.45;
+  font-size: 13px;
+}
+.welcome-tour-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
 .service-check-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px;
 }
@@ -1636,6 +1722,7 @@ tbody tr:hover { background: var(--surface-2); }
   .conversation-layout { grid-template-columns: 1fr; }
   .ai-editor-grid { grid-template-columns: 1fr; }
   .subscription-hero { grid-template-columns: 1fr; }
+  .install-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 960px) {
@@ -1655,6 +1742,8 @@ tbody tr:hover { background: var(--surface-2); }
   .main { grid-column: 1; padding: 18px 16px 56px; }
   .subscription-actions { grid-template-columns: 1fr; }
   .subscription-action-buttons { justify-content: flex-start; }
+  .tour-grid { grid-template-columns: 1fr; }
+  .welcome-tour-head { flex-direction: column; }
   .account-security-layout { grid-template-columns: 1fr; }
   .booking-top { flex-direction: column; align-items: stretch; }
   .booking-meta { grid-template-columns: 1fr 1fr; }
@@ -1674,6 +1763,8 @@ tbody tr:hover { background: var(--surface-2); }
 @media (max-width: 560px) {
   body { font-size: 13.5px; }
   .booking-card, .day-agenda { padding: 14px; }
+  .welcome-tour-card { padding: 16px; }
+  .welcome-tour-actions button { width: 100%; }
   h1 { font-size: 1.25rem; }
   h2 { font-size: 1.1rem; }
   .stat strong { font-size: 1.4rem; }
@@ -1681,6 +1772,31 @@ tbody tr:hover { background: var(--surface-2); }
   </style>
 </head>
 <body>
+  <div class="welcome-tour hidden" id="welcomeTour" role="dialog" aria-modal="true" aria-labelledby="welcomeTourTitle">
+    <div class="welcome-tour-card">
+      <div class="welcome-tour-head">
+        <div>
+          <div class="role-pill">Primeros pasos</div>
+          <h2 id="welcomeTourTitle">Bienvenido al portal de cliente</h2>
+          <p>Desde aqui puedes dejar tu asistente listo, instalarlo en tu web y controlar las citas que entren por la IA.</p>
+        </div>
+        <button class="ghost small" type="button" id="closeWelcomeTourBtn">Cerrar</button>
+      </div>
+      <div class="tour-grid">
+        <div class="tour-item"><strong>Calendario</strong><span>Revisa reservas futuras, filtra por fecha y cambia o cancela citas cuando sea necesario.</span></div>
+        <div class="tour-item"><strong>Citas del dia</strong><span>Ten a mano lo que ocurre hoy y los bloqueos activos de la agenda.</span></div>
+        <div class="tour-item"><strong>Instalacion</strong><span>Copia el snippet del widget, abre la demo y pide ayuda si quieres que lo instalemos nosotros.</span></div>
+        <div class="tour-item"><strong>Profesionales y horario</strong><span>Define quien atiende, sus servicios, duracion de citas, dias cerrados y bloqueos puntuales.</span></div>
+        <div class="tour-item"><strong>IA</strong><span>Ajusta bienvenida, tono, identidad visual y el contenido que usa el asistente para responder.</span></div>
+        <div class="tour-item"><strong>Metricas y conversaciones</strong><span>Mide actividad, revisa preguntas reales y detecta oportunidades para mejorar respuestas.</span></div>
+      </div>
+      <div class="welcome-tour-actions">
+        <button class="secondary small" type="button" id="welcomeTourInstallBtn">Ver instalacion</button>
+        <button class="secondary small" type="button" id="welcomeTourAiBtn">Configurar IA</button>
+        <button class="primary small" type="button" id="finishWelcomeTourBtn">Empezar</button>
+      </div>
+    </div>
+  </div>
   <div class="page">
     <header class="topbar">
       <section class="brand">
@@ -1778,6 +1894,10 @@ tbody tr:hover { background: var(--surface-2); }
             <button class="nav-button" type="button" data-scroll-target="subscriptionBlock">
               <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18M7 15h4M15 15h2"></path></svg></span>
               <span class="nav-text"><strong>Suscripcion</strong><span>Plan, uso y pagos</span></span>
+            </button>
+            <button class="nav-button" type="button" data-scroll-target="installBlock">
+              <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 18l6-6-6-6"></path><path d="M8 6l-6 6 6 6"></path><path d="M14.5 4l-5 16"></path></svg></span>
+              <span class="nav-text"><strong>Instalacion</strong><span>Snippet para tu web</span></span>
             </button>
             <button class="nav-button" type="button" data-scroll-target="teamBlock">
               <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
@@ -1973,6 +2093,44 @@ tbody tr:hover { background: var(--surface-2); }
                 <button id="manageBillingBtn" class="secondary small" type="button">Cambiar suscripcion</button>
                 <button id="cancelSubscriptionBtn" class="ghost small" type="button">Cancelar suscripcion</button>
                 <button id="subscriptionHelpFooterBtn" class="secondary small" type="button">Contactar para ayuda</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card panel hidden" id="installBlock">
+          <div class="panel-header">
+            <div>
+              <h3>Instalacion en tu web</h3>
+              <div class="muted">Copia este snippet y pegalo en tu web para mostrar el asistente IA a tus visitantes.</div>
+            </div>
+            <div class="row">
+              <button id="copyInstallSnippetBtn" class="secondary small" type="button">Copiar snippet</button>
+              <button id="openInstallDemoBtn" class="ghost small" type="button">Abrir demo</button>
+            </div>
+          </div>
+
+          <div class="install-grid">
+            <div class="subcard">
+              <label>
+                Snippet de instalacion
+                <textarea id="installSnippet" class="install-snippet" readonly spellcheck="false" placeholder="El snippet aparecera aqui cuando cargue el portal."></textarea>
+              </label>
+              <div class="slot-status" id="installStatus">Cargando snippet de instalacion...</div>
+            </div>
+            <div class="subcard">
+              <h3>Como instalarlo</h3>
+              <ol class="install-steps">
+                <li>Copia el snippet con el boton superior.</li>
+                <li>Abre el editor de tu web o pasaselo a la persona que gestiona la pagina.</li>
+                <li>Pegalo antes de la etiqueta final <strong>&lt;/body&gt;</strong> o en el apartado de codigo personalizado del sitio.</li>
+                <li>Guarda, publica la web y abre una pagina publica para comprobar que aparece el asistente.</li>
+              </ol>
+              <div class="install-note">
+                En WordPress suele ir en un plugin de codigo tipo header/footer o en el footer del tema. En Shopify, Webflow, Wix o Hostinger Website Builder se pega como codigo personalizado antes del cierre del body.
+              </div>
+              <div class="install-note">
+                Si necesitais ayuda con la instalacion, podemos hacerlo nosotros. Escribid a <a href="mailto:soporte@vantelia.es">soporte@vantelia.es</a>; necesitaremos acceso al proveedor de vuestra web o al HTML donde se debe insertar el snippet.
               </div>
             </div>
           </div>
@@ -2716,7 +2874,8 @@ tbody tr:hover { background: var(--surface-2); }
       offset: 0,
       total: 0,
       items: [],
-      activePortalView: "citas",
+      activePortalView: urlParams.get("welcome") === "1" ? "instalacion" : "citas",
+      showWelcomeTour: urlParams.get("welcome") === "1",
       calendarOpen: true,
       calendarDate: new Date(),
       calendarItems: [],
@@ -2809,6 +2968,11 @@ tbody tr:hover { background: var(--surface-2); }
       resetPasswordConfirm: document.getElementById("resetPasswordConfirm"),
       resetSubmitBtn: document.getElementById("resetSubmitBtn"),
       resetBackBtn: document.getElementById("resetBackBtn"),
+      welcomeTour: document.getElementById("welcomeTour"),
+      closeWelcomeTourBtn: document.getElementById("closeWelcomeTourBtn"),
+      finishWelcomeTourBtn: document.getElementById("finishWelcomeTourBtn"),
+      welcomeTourInstallBtn: document.getElementById("welcomeTourInstallBtn"),
+      welcomeTourAiBtn: document.getElementById("welcomeTourAiBtn"),
       refreshBtn: document.getElementById("refreshBtn"),
       changePasswordShortcutBtn: document.getElementById("changePasswordShortcutBtn"),
       openAdminBtn: document.getElementById("openAdminBtn"),
@@ -2870,6 +3034,11 @@ tbody tr:hover { background: var(--surface-2); }
       showMoreMessagesBtn: document.getElementById("showMoreMessagesBtn"),
       collapseMessagesBtn: document.getElementById("collapseMessagesBtn"),
       refreshConversationsBtn: document.getElementById("refreshConversationsBtn"),
+      installBlock: document.getElementById("installBlock"),
+      installSnippet: document.getElementById("installSnippet"),
+      installStatus: document.getElementById("installStatus"),
+      copyInstallSnippetBtn: document.getElementById("copyInstallSnippetBtn"),
+      openInstallDemoBtn: document.getElementById("openInstallDemoBtn"),
       todayBlock: document.getElementById("todayBlock"),
       portalContent: document.getElementById("portalContent"),
       todayOverviewIntro: document.getElementById("todayOverviewIntro"),
@@ -3010,6 +3179,26 @@ tbody tr:hover { background: var(--surface-2); }
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
+    }
+
+    async function copyTextToClipboard(text) {
+      const value = String(text || "");
+      if (!value.trim()) {
+        throw new Error("No hay contenido para copiar.");
+      }
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        return;
+      }
+      const helper = document.createElement("textarea");
+      helper.value = value;
+      helper.setAttribute("readonly", "");
+      helper.style.position = "fixed";
+      helper.style.left = "-9999px";
+      document.body.appendChild(helper);
+      helper.select();
+      document.execCommand("copy");
+      helper.remove();
     }
 
     async function api(path, options = {}) {
@@ -3288,6 +3477,55 @@ tbody tr:hover { background: var(--surface-2); }
       window.location.href = response.url;
     }
 
+    function renderInstallPanel() {
+      const snippet = String(state.dashboard?.install_snippet || "").trim();
+      const demoUrl = String(state.dashboard?.demo_url || "").trim();
+      el.installSnippet.value = snippet;
+      el.copyInstallSnippetBtn.disabled = !snippet;
+      el.openInstallDemoBtn.disabled = !demoUrl;
+      el.installStatus.textContent = snippet
+        ? "Snippet listo. Al pegarlo en tu web, el asistente se cargara con la configuracion de tu empresa."
+        : "Todavia no hay snippet disponible para este cliente.";
+    }
+
+    function cleanWelcomeParam() {
+      if (urlParams.get("welcome") !== "1") return;
+      urlParams.delete("welcome");
+      const query = urlParams.toString();
+      const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash || ""}`;
+      window.history.replaceState({}, "", nextUrl);
+    }
+
+    function openWelcomeTour() {
+      el.welcomeTour.classList.remove("hidden");
+    }
+
+    function closeWelcomeTour() {
+      el.welcomeTour.classList.add("hidden");
+      state.showWelcomeTour = false;
+      cleanWelcomeParam();
+    }
+
+    function goFromWelcomeTour(view) {
+      closeWelcomeTour();
+      setPortalView(view);
+    }
+
+    async function copyInstallSnippet() {
+      await copyTextToClipboard(el.installSnippet.value);
+      setStatus("Snippet de instalacion copiado.", "success");
+      el.installStatus.textContent = "Copiado. Pegalo antes de </body> o en el apartado de codigo personalizado de tu web.";
+    }
+
+    function openInstallDemo() {
+      const demoUrl = String(state.dashboard?.demo_url || "").trim();
+      if (!demoUrl) {
+        throw new Error("No hay URL de demo disponible todavia.");
+      }
+      window.open(demoUrl, "_blank", "noopener,noreferrer");
+      setStatus("Demo abierta en otra pestana.", "info");
+    }
+
     function setAuthView(view) {
       state.authView = view;
       el.loginCard.classList.toggle("hidden", view !== "login");
@@ -3560,8 +3798,8 @@ tbody tr:hover { background: var(--surface-2); }
       let normalizedView = String(view || "").trim().toLowerCase();
       if (normalizedView === "seguridad") normalizedView = "cuenta";
       const allowedViews = isPortalAdminClientView()
-        ? ["citas", "hoy", "metricas", "suscripcion", "conversaciones", "profesionales", "horario", "bloqueos", "mensajes", "ia"]
-        : ["citas", "hoy", "metricas", "suscripcion", "conversaciones", "profesionales", "cuenta", "horario", "bloqueos", "mensajes", "ia"];
+        ? ["citas", "hoy", "metricas", "suscripcion", "instalacion", "conversaciones", "profesionales", "horario", "bloqueos", "mensajes", "ia"]
+        : ["citas", "hoy", "metricas", "suscripcion", "instalacion", "conversaciones", "profesionales", "cuenta", "horario", "bloqueos", "mensajes", "ia"];
       const nextView = allowedViews.includes(normalizedView)
         ? normalizedView
         : "citas";
@@ -3571,6 +3809,7 @@ tbody tr:hover { background: var(--surface-2); }
         hoy: el.todayBlock,
         metricas: el.metricsBlock,
         suscripcion: el.subscriptionBlock,
+        instalacion: el.installBlock,
         conversaciones: el.conversationsBlock,
         profesionales: el.teamBlock,
         cuenta: el.accountBlock,
@@ -4280,6 +4519,7 @@ tbody tr:hover { background: var(--surface-2); }
       el.todayBlock.classList.toggle("hidden", true);
       el.portalContent.classList.toggle("hidden", true);
       el.subscriptionBlock.classList.toggle("hidden", true);
+      el.installBlock.classList.toggle("hidden", true);
       el.teamBlock.classList.toggle("hidden", true);
       el.accountBlock.classList.toggle("hidden", true);
       el.scheduleBlock.classList.toggle("hidden", true);
@@ -5438,6 +5678,7 @@ tbody tr:hover { background: var(--surface-2); }
       renderShell();
       renderStats(payload.stats || {});
       renderTodayOverview(payload);
+      renderInstallPanel();
       await loadSubscription();
       await loadAiConfig();
       await loadBrainInfo();
@@ -5446,6 +5687,9 @@ tbody tr:hover { background: var(--surface-2); }
       await loadEmployees();
       await loadBookings();
       await loadChats();
+      if (state.showWelcomeTour && state.user?.role === "client") {
+        openWelcomeTour();
+      }
       const sessionLabel = isPortalAdminClientView()
         ? `${payload.user.display_name} en modo portal cliente`
         : payload.user.display_name;
@@ -5611,6 +5855,13 @@ tbody tr:hover { background: var(--surface-2); }
       setAuthView("login");
       setStatus("Ya puedes iniciar sesion de nuevo.", "info");
     });
+    el.closeWelcomeTourBtn.addEventListener("click", () => closeWelcomeTour());
+    el.finishWelcomeTourBtn.addEventListener("click", () => closeWelcomeTour());
+    el.welcomeTourInstallBtn.addEventListener("click", () => goFromWelcomeTour("instalacion"));
+    el.welcomeTourAiBtn.addEventListener("click", () => goFromWelcomeTour("ia"));
+    el.welcomeTour.addEventListener("click", (event) => {
+      if (event.target === el.welcomeTour) closeWelcomeTour();
+    });
     el.refreshBtn.addEventListener("click", () => loadDashboard().catch((error) => setStatus(error.message, "error")));
     el.changePasswordShortcutBtn.addEventListener("click", () => openSecurityPanel());
     el.logoutBtn.addEventListener("click", () => logout().catch((error) => setStatus(error.message, "error")));
@@ -5625,6 +5876,14 @@ tbody tr:hover { background: var(--surface-2); }
     el.cancelSubscriptionBtn.addEventListener("click", () => openBillingPortal().catch((error) => setStatus(error.message, "error")));
     el.subscriptionHelpFooterBtn.addEventListener("click", () => contactSubscriptionHelp());
     el.refreshMetricsBtn.addEventListener("click", () => loadDashboard().catch((error) => setStatus(error.message, "error")));
+    el.copyInstallSnippetBtn.addEventListener("click", () => copyInstallSnippet().catch((error) => setStatus(error.message, "error")));
+    el.openInstallDemoBtn.addEventListener("click", () => {
+      try {
+        openInstallDemo();
+      } catch (error) {
+        setStatus(error.message, "error");
+      }
+    });
     el.refreshConversationsBtn.addEventListener("click", () => {
       state.selectedChatSessionId = "";
       state.chatDetailMessages = [];
@@ -5667,6 +5926,7 @@ tbody tr:hover { background: var(--surface-2); }
           metricsBlock: "metricas",
           conversationsBlock: "conversaciones",
           subscriptionBlock: "suscripcion",
+          installBlock: "instalacion",
           teamBlock: "profesionales",
           accountBlock: "cuenta",
           scheduleBlock: "horario",

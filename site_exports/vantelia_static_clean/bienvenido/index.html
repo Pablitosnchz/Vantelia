@@ -279,6 +279,21 @@
       margin-top: 30px;
     }
     .welcome-ctas .btn { min-width: 200px; justify-content: center; }
+    .portal-entry-status {
+      max-width: 680px; margin: 18px auto 0;
+      padding: 14px 16px;
+      border: 1px solid rgba(0,209,255,0.26);
+      background: rgba(0,209,255,0.07);
+      border-radius: 12px;
+      color: var(--muted);
+      font-size: 0.92rem; line-height: 1.55;
+      text-align: center;
+    }
+    .portal-entry-status strong { color: var(--text); }
+    .portal-entry-status.error {
+      border-color: rgba(255,107,107,0.35);
+      background: rgba(255,107,107,0.08);
+    }
     .whatsapp-note {
       max-width: 600px; margin: 26px auto 0;
       padding: 14px 18px;
@@ -538,8 +553,11 @@
       </div>
 
       <div class="welcome-ctas">
-        <a href="https://app.vantelia.es/acceso" class="btn btn-primary btn-lg" target="_blank" rel="noopener">Ir al portal</a>
+        <a href="https://app.vantelia.es/acceso" class="btn btn-primary btn-lg" id="portalEntryBtn">Ir al portal</a>
         <a href="mailto:soporte@vantelia.es?subject=Alta%20nueva%20Vantelia&body=Hola,%20acabo%20de%20darme%20de%20alta%20y%20necesito%20ayuda%20con%3A" class="btn btn-ghost btn-lg">Hablar con soporte</a>
+      </div>
+      <div class="portal-entry-status" id="portalEntryStatus" aria-live="polite">
+        Estamos preparando tu portal. En cuanto el alta automatica termine, te llevaremos dentro con tu sesion iniciada.
       </div>
 
       <div class="whatsapp-note" id="whatsappNote" style="display:none">
@@ -690,6 +708,7 @@
   }
 
   const params = new URLSearchParams(window.location.search);
+  const checkoutSessionId = String(params.get('session') || '').trim();
   const planRaw = String(params.get('plan') || '').toLowerCase().trim();
   const planSafe = PLAN_DATA[planRaw] ? planRaw : 'web';
   const period = String(params.get('period') || 'monthly').toLowerCase().trim() === 'annual' ? 'annual' : 'monthly';
@@ -736,6 +755,52 @@
     } else if (planSafe === 'completo') {
       lead.textContent = 'Tu asistente IA para web y WhatsApp se está configurando. En unos minutos recibirás tu acceso al portal.';
     }
+  }
+
+  const portalBtn = document.getElementById('portalEntryBtn');
+  const portalStatus = document.getElementById('portalEntryStatus');
+  let redirectStarted = false;
+
+  function setPortalEntryStatus(message, kind) {
+    if (!portalStatus) return;
+    portalStatus.className = 'portal-entry-status' + (kind === 'error' ? ' error' : '');
+    portalStatus.innerHTML = message;
+  }
+
+  async function checkPortalEntry() {
+    if (!checkoutSessionId || redirectStarted) return;
+    try {
+      const resp = await fetch('https://app.vantelia.es/subscription/checkout/status?session_id=' + encodeURIComponent(checkoutSessionId), {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const status = await resp.json();
+      if (status.status === 'ready' && status.portal_enter_url) {
+        redirectStarted = true;
+        if (portalBtn) portalBtn.href = status.portal_enter_url;
+        setPortalEntryStatus('<strong>Portal listo.</strong> Te estamos llevando a tu cuenta...', 'success');
+        window.setTimeout(function () {
+          window.location.href = status.portal_enter_url;
+        }, 900);
+        return;
+      }
+      if (status.status === 'failed') {
+        setPortalEntryStatus('<strong>Estamos revisando tu alta.</strong> Te avisaremos por email; si quieres, escribe a <a href="mailto:soporte@vantelia.es">soporte@vantelia.es</a>.', 'error');
+        return;
+      }
+      setPortalEntryStatus('<strong>Alta en curso.</strong> ' + (status.message || 'Estamos creando tu asistente y tu acceso al portal.'), 'success');
+      window.setTimeout(checkPortalEntry, 4000);
+    } catch (_) {
+      setPortalEntryStatus('<strong>Seguimos preparando tu portal.</strong> Si no redirige en unos minutos, usa el email de bienvenida o contacta con soporte.', 'error');
+      window.setTimeout(checkPortalEntry, 7000);
+    }
+  }
+
+  if (portalBtn && checkoutSessionId) {
+    portalBtn.href = 'https://app.vantelia.es/subscription/checkout/enter?session_id=' + encodeURIComponent(checkoutSessionId);
+    window.setTimeout(checkPortalEntry, 1200);
+  } else if (portalStatus) {
+    portalStatus.style.display = 'none';
   }
 
   window.addEventListener('DOMContentLoaded', function () {

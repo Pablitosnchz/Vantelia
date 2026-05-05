@@ -1132,6 +1132,17 @@ app = FastAPI(
     version="2.0.0",
 )
 
+
+@app.middleware("http")
+async def _no_cache_widget_bundle(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/widget/widget.min.js":
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 app.mount("/widget", StaticFiles(directory=str(WIDGET_DIR)), name="widget")
 if BRAND_DIR.exists():
     app.mount("/brand-assets", StaticFiles(directory=str(BRAND_DIR)), name="brand-assets")
@@ -1378,6 +1389,8 @@ class RespuestaChat(BaseModel):
     respuesta: str
     mostrar_formulario: bool
     session_id: str
+    intent: str = ""
+    quick_actions: List[Dict[str, str]] = Field(default_factory=list)
 
 
 class WhatsAppWebhookStatus(BaseModel):
@@ -1642,6 +1655,13 @@ class SubscriptionCheckoutResponse(BaseModel):
     session_id: str = ""
 
 
+class PublicCheckoutStatusResponse(BaseModel):
+    status: str
+    message: str = ""
+    cliente_id: str = ""
+    portal_enter_url: str = ""
+
+
 class SubscriptionPortalResponse(BaseModel):
     url: str
 
@@ -1835,6 +1855,10 @@ class PortalDashboardResponse(BaseModel):
     bookings_upcoming: List[PortalBookingSummary]
     bookings_today: List[PortalBookingSummary] = Field(default_factory=list)
     today_blocks: List[PortalAgendaBlock] = Field(default_factory=list)
+    install_snippet: str = ""
+    widget_script_url: str = ""
+    api_base_url: str = ""
+    demo_url: str = ""
 
 
 class PortalMessagePreviewPayload(BaseModel):
@@ -2294,6 +2318,16 @@ def _create_user(*, email: str, password: str, role: str, display_name: str, cli
             ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, '')
             """,
             (user_id, email_norm, password_hash, role, display_name.strip(), cliente_id.strip(), now_iso),
+        )
+        connection.commit()
+        return connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+
+def _assign_client_user_to_cliente(user_id: str, cliente_id: str) -> sqlite3.Row:
+    with _get_db_connection() as connection:
+        connection.execute(
+            "UPDATE users SET role = 'client', cliente_id = ?, is_active = 1 WHERE id = ?",
+            (cliente_id.strip(), user_id),
         )
         connection.commit()
         return connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -3657,6 +3691,64 @@ def _find_client_by_stripe_id(
     return ""
 
 
+def _retrieve_public_checkout_session(session_id: str) -> Any:
+    session_id = str(session_id or "").strip()
+    if not session_id or not SESSION_ID_PATTERN.match(session_id) or not session_id.startswith("cs_"):
+        raise HTTPException(status_code=400, detail="Sesion de Stripe no valida.")
+    _stripe_init()
+    try:
+        return stripe.checkout.Session.retrieve(session_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("No se pudo recuperar Stripe Checkout session %s: %s", session_id, exc)
+        raise HTTPException(status_code=404, detail="No se ha encontrado la sesion de Stripe.") from exc
+
+
+def _public_checkout_session_state(session_object: Any) -> Tuple[str, str, str]:
+    session_id = str(session_object.get("id") or "").strip()
+    metadata = session_object.get("metadata") or {}
+    source = str(metadata.get("source") or "").strip()
+    client_reference_id = str(session_object.get("client_reference_id") or "")
+    if source != "public_plans" or not client_reference_id.startswith("public:"):
+        raise HTTPException(status_code=403, detail="Esta sesion no corresponde a un alta publica.")
+
+    status_value = str(session_object.get("status") or "").strip()
+    payment_status = str(session_object.get("payment_status") or "").strip()
+    if status_value != "complete" or payment_status not in {"paid", "no_payment_required"}:
+        return "pending", "", "Stripe aun no ha confirmado el alta."
+
+    customer_id = str(session_object.get("customer") or "")
+    subscription_id = str(session_object.get("subscription") or "")
+    cliente_id = _find_client_by_stripe_id(
+        customer_id=customer_id,
+        subscription_id=subscription_id,
+        session_id=session_id,
+    )
+    sessions = _load_stripe_sessions()
+    local_entry = sessions.get(session_id) or {}
+    if not cliente_id and local_entry.get("cliente_id"):
+        cliente_id = str(local_entry.get("cliente_id") or "")
+    if cliente_id and cliente_id in CONFIG_CLIENTES:
+        return "ready", cliente_id, "Tu portal ya esta listo."
+    if local_entry.get("status") == "failed":
+        return "failed", "", "El alta automatica ha fallado. Soporte revisara tu caso."
+    return "processing", "", "Estamos creando tu asistente y tu usuario del portal."
+
+
+def _portal_user_for_checkout_client(cliente_id: str, session_object: Any) -> sqlite3.Row:
+    customer = _public_checkout_customer_details(session_object)
+    customer_email = _normalize_email(customer.get("email", ""))
+    if customer_email:
+        user = _get_user_by_email(customer_email)
+        if user and user["is_active"] and user["role"] == "client":
+            if user["cliente_id"] != cliente_id:
+                user = _assign_client_user_to_cliente(user["id"], cliente_id)
+            return user
+    users = _list_users(role="client", cliente_id=cliente_id, include_inactive=False)
+    if users:
+        return users[0]
+    raise HTTPException(status_code=409, detail="El cliente existe, pero aun no hay usuario de portal activo.")
+
+
 def _create_client_from_public_checkout(
     session_object: Dict[str, Any],
     *,
@@ -3727,6 +3819,8 @@ def _create_client_from_public_checkout(
         try:
             existing_user = _get_user_by_email(customer_email)
             if existing_user:
+                if existing_user["role"] == "client" and existing_user["cliente_id"] != cliente_id:
+                    _assign_client_user_to_cliente(existing_user["id"], cliente_id)
                 temporary_password = ""
             else:
                 _create_user(
@@ -5282,7 +5376,7 @@ REGLAS DE FORMATO Y TONO
 5. Responde en el mismo idioma del usuario (es/en/ca/etc). Por defecto espanol natural y profesional.
 6. Tono profesional, cercano, sin jerga innecesaria. Adapta la formalidad al usuario.
 7. Respuestas breves por defecto (1-4 frases). Si la pregunta es compleja, usa listas o pasos numerados. Tablas comparativas cuando comparas opciones.
-8. Cuando enumeres servicios, precios o pasos, usa viñetas con guion ("- "). Negrita con dobles asteriscos solo en titulos cortos.
+8. Cuando enumeres servicios, precios, pasos, FAQs u opciones, usa una linea por elemento con este formato: "· **Titulo:** explicacion breve". No uses guiones ("-") salvo que el usuario lo pida expresamente. Usa negrita con dobles asteriscos solo en el titulo o pregunta de cada elemento.
 9. Si das telefono o email, ponlos tal cual aparecen en los datos verificados, sin alterar formato.
 10. Cierra con un siguiente paso util cuando aporte valor (reservar, llamar, escribir email, ver web).
 
@@ -5312,7 +5406,7 @@ EXPERIENCIA TIPO MENU INTERACTIVO
 25. Tras cualquier respuesta de un flujo de menu, ofrece volver al menu principal con una frase corta tipo "_Escribe **menú** para volver al menu principal._".
 26. Si la consulta del usuario es ambigua o termina un flujo, ofrece tambien volver al menu principal.
 27. Usa emojis con moderacion (📅 cita, 💬 dudas, 🛍️ productos, ⭐ recomendacion, ⚖️ comparar, 💶 precio). Maximo 1-2 por respuesta.
-28. Mensajes cortos y claros, formato conversacional, listas numeradas con emojis cuando enumeres opciones o pasos.
+28. Mensajes cortos y claros, formato conversacional, listas con "· **Titulo:** ..." cuando enumeres opciones o pasos.
 29. En el flujo "agendar" cita por chat (sin formulario): pregunta UNA cosa por mensaje en orden fecha → hora → nombre. Tras tener los tres, confirma resumen y añade {BOOKING_SENTINEL}.
 """.strip()
 
@@ -5428,12 +5522,28 @@ def _build_main_menu_text(nombre_empresa: str, booking_enabled: bool, *, greetin
         f"{saludo}"
         f"{booking_line}"
         f"2️⃣ 💬 Preguntas frecuentes\n"
-        f"3️⃣ 🛍️ Información de productos / servicios\n"
-        f"4️⃣ ⭐ Recomendar producto\n"
-        f"5️⃣ ⚖️ Comparar productos\n"
+        f"3️⃣ 🛍️ Información de servicios\n"
+        f"4️⃣ ⭐ Recomendar servicio\n"
+        f"5️⃣ ⚖️ Comparar servicios\n"
         f"6️⃣ 💶 Estimar precio\n\n"
         f"Responde con el número de la opción o escribe directamente tu consulta."
     )
+
+
+def _main_menu_quick_actions(booking_enabled: bool) -> List[Dict[str, str]]:
+    actions: List[Dict[str, str]] = []
+    if booking_enabled:
+        actions.append({"label": "Agendar cita", "message": "Quiero agendar una cita"})
+    actions.extend(
+        [
+            {"label": "Preguntas frecuentes", "message": "Muestrame las preguntas frecuentes principales"},
+            {"label": "Informacion servicios", "message": "Quiero informacion sobre servicios disponibles"},
+            {"label": "Recomendar servicio", "message": "Recomiendame el servicio que mejor encaja con mi caso"},
+            {"label": "Comparar servicios", "message": "Quiero comparar servicios antes de decidir"},
+            {"label": "Estimar precio", "message": "Ayudame a estimar precio, tiempo o alcance aproximado"},
+        ]
+    )
+    return actions
 
 
 MENU_OPTION_INSTRUCTIONS = {
@@ -5444,8 +5554,10 @@ MENU_OPTION_INSTRUCTIONS = {
         "del bloque DATOS_EN_TIEMPO_REAL_DISPONIBILIDAD. Cierra siempre ofreciendo volver al menu principal."
     ),
     "faq": (
-        "El usuario quiere ver preguntas frecuentes. Lista 4-6 FAQs cortas con emojis al inicio (numeradas) "
-        "extraidas de la base documental. Invitalo a elegir una por numero o a escribir su duda libre. "
+        "El usuario quiere ver preguntas frecuentes. Muestra 4-6 FAQs extraidas de la base documental, "
+        "pero no listes solo los titulos: incluye cada pregunta y una respuesta breve de 1-2 frases. "
+        "Usa formato compacto con punto medio: \"· **Pregunta:** respuesta breve\". "
+        "Invitalo a pedir ampliar una por numero o a escribir su duda libre. "
         "Cierra ofreciendo volver al menu principal."
     ),
     "productos": (
@@ -8109,12 +8221,17 @@ async def auth_dashboard_data(
     today_blocks: List[PortalAgendaBlock] = []
     if target_client_id:
         today_bookings, today_blocks = _portal_today_dashboard(target_client_id, request)
+    install_assets = _build_install_snippet(target_client_id, request) if target_client_id else {}
     return PortalDashboardResponse(
         user=_serialize_auth_user(user),
         stats=_portal_stats_for_user(user, target_client_id),
         bookings_upcoming=[_portal_booking_summary_from_row(row, request) for row in bookings],
         bookings_today=today_bookings,
         today_blocks=today_blocks,
+        install_snippet=install_assets.get("install_snippet", ""),
+        widget_script_url=install_assets.get("widget_script_url", ""),
+        api_base_url=install_assets.get("api_base_url", ""),
+        demo_url=install_assets.get("demo_url", ""),
     )
 
 
@@ -8648,6 +8765,52 @@ async def public_subscription_checkout(
         raise HTTPException(status_code=502, detail="No se pudo iniciar el proceso de pago.") from exc
 
     return SubscriptionCheckoutResponse(url=session.url, session_id=session.id)
+
+
+@app.get("/subscription/checkout/status", response_model=PublicCheckoutStatusResponse)
+async def public_subscription_checkout_status(
+    request: Request,
+    session_id: str = "",
+    session: str = "",
+) -> PublicCheckoutStatusResponse:
+    checkout_session_id = session_id or session
+    session_object = _retrieve_public_checkout_session(checkout_session_id)
+    state_value, cliente_id, message = _public_checkout_session_state(session_object)
+    base_url = _public_base_url(request)
+    portal_enter_url = (
+        f"{base_url}/subscription/checkout/enter?session_id={quote(checkout_session_id, safe='')}"
+        if state_value == "ready"
+        else ""
+    )
+    return PublicCheckoutStatusResponse(
+        status=state_value,
+        message=message,
+        cliente_id=cliente_id,
+        portal_enter_url=portal_enter_url,
+    )
+
+
+@app.get("/subscription/checkout/enter", include_in_schema=False)
+async def public_subscription_checkout_enter(
+    session_id: str = "",
+    session: str = "",
+) -> Response:
+    checkout_session_id = session_id or session
+    session_object = _retrieve_public_checkout_session(checkout_session_id)
+    state_value, cliente_id, _ = _public_checkout_session_state(session_object)
+    if state_value != "ready" or not cliente_id:
+        return RedirectResponse(url=f"/acceso?checkout_status={quote(state_value)}", status_code=303)
+    user = _portal_user_for_checkout_client(cliente_id, session_object)
+    with _get_db_connection() as connection:
+        connection.execute(
+            "UPDATE users SET last_login_at = ? WHERE id = ?",
+            (_utc_now_iso(), user["id"]),
+        )
+        connection.commit()
+    raw_token = _create_auth_session(user["id"])
+    response = RedirectResponse(url="/portal?welcome=1", status_code=303)
+    _set_portal_cookie(response, raw_token)
+    return response
 
 
 @app.post("/auth/subscription/portal", response_model=SubscriptionPortalResponse)
@@ -10302,6 +10465,39 @@ async def servicios(cliente_id: str, request: Request, employee_id: str = "") ->
     return {"servicios": _public_services_for_booking(cliente_id, employee_id)}
 
 
+def _emphasize_structured_headings(text: str) -> str:
+    lines = str(text or "").splitlines()
+    if not lines:
+        return text
+
+    detail_pattern = re.compile(
+        r"^\s*(precio|encaja\s+para|incluye|ideal\s+para|soporte|conversaciones|profesionales|cuentas)\s*:",
+        re.IGNORECASE,
+    )
+    skip_pattern = re.compile(r"^(\s*(·|-|\*|\d+\.)\s*)?\*\*.+\*\*")
+    sentence_end_pattern = re.compile(r"[.!?…:]$")
+    result: List[str] = []
+
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        next_line = lines[index + 1].strip() if index + 1 < len(lines) else ""
+        if (
+            stripped
+            and next_line
+            and detail_pattern.match(next_line)
+            and not detail_pattern.match(stripped)
+            and not skip_pattern.match(stripped)
+            and not sentence_end_pattern.search(stripped)
+            and len(stripped) <= 90
+        ):
+            prefix = line[: len(line) - len(line.lstrip())]
+            result.append(f"{prefix}**{stripped}**")
+            continue
+        result.append(line)
+
+    return "\n".join(result)
+
+
 async def _process_chat_message(
     *,
     cliente_id: str,
@@ -10340,6 +10536,8 @@ async def _process_chat_message(
             respuesta=menu_text,
             mostrar_formulario=False,
             session_id=session_id,
+            intent="menu",
+            quick_actions=_main_menu_quick_actions(booking_enabled),
         )
         _record_chat_message(
             session_id=session_id,
@@ -10438,6 +10636,7 @@ async def _process_chat_message(
     raw_text = response.response.strip()
     mostrar_formulario = BOOKING_SENTINEL in raw_text
     clean_text = raw_text.replace(BOOKING_SENTINEL, "").strip()
+    clean_text = _emphasize_structured_headings(clean_text)
     if booking_enabled and not mostrar_formulario and _message_requests_booking_form(message):
         mostrar_formulario = True
         if not clean_text:

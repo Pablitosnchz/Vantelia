@@ -38,7 +38,7 @@
     "icono": "VA",
     "color": "#00b1d9",
     "bienvenida": "Hola, soy el asistente de Vantelia. Puedo resolver dudas sobre nuestros planes, generar una demo y ayudarte a solicitar una consulta.",
-    "prompt_extra": "Habla con tono profesional, claro y cercano. Prioriza llevar al usuario a una consulta gratuita, una demo o el plan adecuado. No inventes precios ni condiciones fuera de la base documental.",
+    "prompt_extra": "Habla con tono profesional, claro y cercano. Prioriza llevar al usuario a una consulta gratuita, una demo o el plan adecuado. No inventes precios ni condiciones fuera de la base documental. Si preguntan precios, tarifas o planes, responde en version corta: 3 bullets con plan, precio y encaje; anade solo que hay 30 dias gratis, sin permanencia e IVA no incluido. No uses tabla larga salvo que el usuario la pida expresamente.",
     "allowed_origins": [
       "https://vantelia.es",
       "https://www.vantelia.es",

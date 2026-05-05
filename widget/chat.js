@@ -12,12 +12,21 @@ import { mostrarFormulario } from "./form.js";
 
 let sending = false;
 
+const DEFAULT_QUICK_ACTIONS = [
+  { label: "Agendar cita", message: "Quiero agendar una cita" },
+  { label: "Preguntas frecuentes", message: "Muestrame las preguntas frecuentes principales" },
+  { label: "Informacion servicios", message: "Quiero informacion sobre servicios disponibles" },
+  { label: "Recomendar servicio", message: "Recomiendame el servicio que mejor encaja con mi caso" },
+  { label: "Comparar servicios", message: "Quiero comparar servicios antes de decidir" },
+  { label: "Estimar precio", message: "Ayudame a estimar precio, tiempo o alcance aproximado" },
+];
+
 function formatInline(text) {
   return text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
 }
 
 function formatListInline(text) {
-  return text.replace(/\*\*(.+?)\*\*/g, "$1");
+  return formatInline(text);
 }
 
 export function formatMessage(text) {
@@ -47,8 +56,8 @@ export function formatMessage(text) {
   };
 
   lines.forEach((line) => {
-    if (/^[-*•]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
-      listItems.push(line.replace(/^([-*•]|\d+\.)\s+/, ""));
+    if (/^[-*•·]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
+      listItems.push(line.replace(/^([-*•·]|\d+\.)\s+/, ""));
       return;
     }
 
@@ -91,10 +100,52 @@ export function agregarAccionesIniciales() {
     <div class="ia-action-grid">
       <button type="button" data-quick-message="Quiero agendar una cita">Agendar cita</button>
       <button type="button" data-quick-message="Muestrame las preguntas frecuentes principales">Preguntas frecuentes</button>
-      <button type="button" data-quick-message="Quiero informacion sobre productos disponibles">Informacion productos</button>
-      <button type="button" data-quick-message="Recomiendame el producto que mejor encaja con mi caso">Recomendar producto</button>
-      <button type="button" data-quick-message="Quiero comparar productos, servicios o tratamientos antes de decidir">Comparar productos</button>
+      <button type="button" data-quick-message="Quiero informacion sobre servicios disponibles">Informacion servicios</button>
+      <button type="button" data-quick-message="Recomiendame el servicio que mejor encaja con mi caso">Recomendar servicio</button>
+      <button type="button" data-quick-message="Quiero comparar servicios antes de decidir">Comparar servicios</button>
       <button type="button" data-quick-message="Ayudame a estimar precio, tiempo o alcance aproximado">Estimar precio</button>
+    </div>
+  `;
+
+  div.querySelectorAll("button[data-quick-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const message = button.getAttribute("data-quick-message") || "";
+      trackWidgetEvent("widget_quick_action_click", {
+        quick_action: message,
+      });
+      enviarMensaje(message);
+    });
+  });
+
+  msgs.appendChild(div);
+  scrollMsgs();
+  return div;
+}
+
+export function agregarAccionesMenu(actions = []) {
+  const msgs = document.getElementById("ia-w-msgs");
+  if (!msgs || !Array.isArray(actions) || !actions.length) return null;
+
+  const cleanActions = actions
+    .map((action) => ({
+      label: String(action?.label || "").trim(),
+      message: String(action?.message || "").trim(),
+    }))
+    .filter((action) => action.label && action.message)
+    .slice(0, 8);
+  if (!cleanActions.length) return null;
+
+  const div = document.createElement("div");
+  div.className = "ia-msg bot ia-action-card";
+  div.innerHTML = `
+    <p><strong>Elige una opcion</strong></p>
+    <div class="ia-action-grid">
+      ${cleanActions
+        .map(
+          (action) =>
+            `<button type="button" data-quick-message="${escapeHtml(action.message)}">${escapeHtml(action.label)}</button>`
+        )
+        .join("")}
     </div>
   `;
 
@@ -169,6 +220,9 @@ export async function enviarMensaje(textoForzado = "") {
     });
     ocultarTyping();
     agregarMensaje(data.respuesta, "bot");
+    if (Array.isArray(data.quick_actions) && data.quick_actions.length) {
+      agregarAccionesMenu(data.quick_actions);
+    }
 
     if (data.mostrar_formulario && WIDGET_CONFIG.bookingEnabled) {
       trackWidgetEvent("booking_form_requested");
