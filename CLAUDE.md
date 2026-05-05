@@ -253,6 +253,83 @@ WhatsApp reutiliza la misma logica de chat/RAG y guardado de conversaciones. Pun
 - Token global `WHATSAPP_ACCESS_TOKEN` o variable especifica por cliente.
 - No responder si el cliente no esta habilitado o no se puede resolver con seguridad.
 
+## Captacion / Outreach
+
+Modulo separado para captar clientes B2B mediante email outbound multi-touch.
+
+### Componentes
+
+- `scripts/outreach_campaign.py`: CLI principal (import, preview, send, followup, suppress, stats). Estado en `storage/outreach/outreach.db`.
+- `scripts/outreach_templates.py`: plantillas por stage (cold/fu1/fu2/breakup), copy por nicho, tracking helpers (HMAC tokens).
+- `scripts/outreach_discover.py`: discovery via Google Places + extraccion de emails publicos de webs corporativas.
+- `outreach/`: CSVs de prospects (no commitear datos reales).
+- Panel web: pestaña "Captacion" en `admin_ui/index.html`. Sub-tabs: Dashboard, Prospects, Campañas, Discovery, Plantillas, Bajas.
+
+### Endpoints admin (Bearer ADMIN_API_TOKEN o sesion admin del portal)
+
+- `GET    /admin/outreach/stats`
+- `GET    /admin/outreach/prospects` (filtros q, status, niche, city, source, stage, page, page_size)
+- `GET    /admin/outreach/prospects/{email}` (timeline completo)
+- `POST   /admin/outreach/prospects` (alta manual)
+- `PATCH  /admin/outreach/prospects/{email}` (edicion parcial: status, notes, score, etc.)
+- `DELETE /admin/outreach/prospects/{email}`
+- `POST   /admin/outreach/import` (CSV crudo en body)
+- `GET    /admin/outreach/export.csv`
+- `POST   /admin/outreach/send` (lanza job background, devuelve job_id)
+- `GET    /admin/outreach/jobs`, `GET /admin/outreach/jobs/{id}`
+- `POST   /admin/outreach/suppress`, `DELETE /admin/outreach/suppress/{email}`, `GET /admin/outreach/suppressions`
+- `GET    /admin/outreach/templates`, `PUT /admin/outreach/templates`
+- `POST   /admin/outreach/discover` (Google Places, en background)
+- `POST   /admin/outreach/replies` (marcar prospect como respondido)
+
+### Endpoints publicos de tracking
+
+- `GET /track/open/{token}.gif`: pixel 1x1 + log de open.
+- `GET /track/click/{token}?u=URL`: redirect 302 + log de click. Solo permite redirect a hosts en `OUTREACH_TRACKING_ALLOWED_HOSTS`.
+
+Tokens firmados HMAC-SHA256 con `OUTREACH_TRACKING_SECRET`. Si secret vacio o `OUTREACH_TRACKING_DISABLED=true`, el tracking se desactiva sin romper el envio.
+
+### Variables de entorno
+
+- `OUTREACH_DB_PATH`: ruta SQLite. Default `storage/outreach/outreach.db`.
+- `OUTREACH_TRACKING_SECRET`: secreto HMAC. **Obligatorio** para activar tracking.
+- `OUTREACH_TRACKING_BASE_URL`: URL publica de la API (ej. `https://app.vantelia.es`).
+- `OUTREACH_TRACKING_DISABLED`: `true` para desactivar pixel y reescritura de links.
+- `OUTREACH_UNSUBSCRIBE_EMAIL`: buzon que recibe BAJA (default `baja@vantelia.es`).
+- `OUTREACH_BCC`: bcc opcional para todos los envios.
+- `OUTREACH_DOMAIN_DAILY_CAP`: tope diario por dominio destinatario (default 3).
+- `OUTREACH_RESPECT_WINDOW`, `OUTREACH_START_HOUR`, `OUTREACH_END_HOUR`, `OUTREACH_SKIP_WEEKEND`: ventana laboral.
+- `OUTREACH_MSGID_DOMAIN`: dominio del Message-ID generado.
+- `GOOGLE_PLACES_API_KEY`: requerido para discovery automatico.
+- `IMAP_HOST`/`IMAP_PORT`/`IMAP_USER`/`IMAP_PASSWORD`: fase 2 (autodeteccion respuestas, no implementado todavia).
+
+### Flujo operativo desde el panel
+
+1. Captacion → Discovery: indicar sector y ciudad, lanzar busqueda. Revisar resultados, marcar `Importar directo` si confias o exportar CSV.
+2. Captacion → Prospects: filtrar, editar manualmente, crear nuevos, importar CSV propio.
+3. Captacion → Campañas: lanzar `cold` con `Dry-run` o `test-to`; cuando este OK, lanzar real.
+4. Captacion → Plantillas: editar copy por stage si quieres pisar el default.
+5. Captacion → Dashboard: monitorizar tasas open/reply. Si un prospect responde, abrir su drawer y marcar "respondido" o cambiar status.
+6. Captacion → Bajas: gestionar lista de supresion. Cada vez que un destinatario responda BAJA, anadir aqui.
+
+### Compliance
+
+- Tratamiento bajo interes legitimo LSSI/RGPD: cada email lleva footer con razon social, finalidad y baja al instante.
+- Cabeceras `List-Unsubscribe` + `List-Unsubscribe-Post: One-Click`.
+- Discovery solo extrae emails publicamente listados en webs corporativas. Respeta robots.txt y aplica rate limit.
+- No usar listas compradas. No suplantar identidad. No hacer scraping agresivo.
+- Para no caer en spam, configurar SPF/DKIM/DMARC en `vantelia.es` antes de envios reales.
+
+### Comandos CLI utiles (alternativa al panel)
+
+```powershell
+python scripts/outreach_campaign.py import --csv outreach/prospects_torrejon.csv
+python scripts/outreach_campaign.py send --stage cold --max 10 --send
+python scripts/outreach_campaign.py followup --stage fu1 --after-days 4 --send
+python scripts/outreach_campaign.py stats
+python scripts/outreach_discover.py --sector "clinica dental" --ciudad "Torrejon" --max 30 --output outreach/dental.csv
+```
+
 ## Tests actuales
 
 `tests/test_api_smoke.py` cubre:

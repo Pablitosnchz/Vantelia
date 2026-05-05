@@ -2388,6 +2388,7 @@ tbody tr:hover { background: var(--surface-2); }
 
               <div class="row">
                 <button id="saveEmployeeBtn" class="primary small" type="button">Guardar profesional</button>
+                <button id="deleteEmployeeBtn" class="danger small" type="button">Eliminar profesional</button>
               </div>
             </div>
           </div>
@@ -2757,6 +2758,7 @@ tbody tr:hover { background: var(--surface-2); }
               <h3>IA</h3>
               <div class="muted">Ajusta como se presenta tu asistente, que mensaje lanza al abrirse y que instrucciones internas debe respetar en cada conversacion. Aqui tambien puedes editar el contenido base del cerebro.</div>
             </div>
+            <button id="openAiDemoBtn" class="ghost small" type="button" disabled>Abrir demo</button>
           </div>
 
           <div class="ai-editor-grid">
@@ -3060,6 +3062,7 @@ tbody tr:hover { background: var(--surface-2); }
       employeeAllServices: document.getElementById("employeeAllServices"),
       employeeServicesList: document.getElementById("employeeServicesList"),
       saveEmployeeBtn: document.getElementById("saveEmployeeBtn"),
+      deleteEmployeeBtn: document.getElementById("deleteEmployeeBtn"),
       accountBlock: document.getElementById("accountBlock"),
       accountDisplayName: document.getElementById("accountDisplayName"),
       accountEmail: document.getElementById("accountEmail"),
@@ -3103,6 +3106,7 @@ tbody tr:hover { background: var(--surface-2); }
       aiIcono: document.getElementById("aiIcono"),
       aiWelcome: document.getElementById("aiWelcome"),
       aiPromptExtra: document.getElementById("aiPromptExtra"),
+      openAiDemoBtn: document.getElementById("openAiDemoBtn"),
       saveAiConfigBtn: document.getElementById("saveAiConfigBtn"),
       aiPreviewIcon: document.getElementById("aiPreviewIcon"),
       aiPreviewName: document.getElementById("aiPreviewName"),
@@ -3369,10 +3373,19 @@ tbody tr:hover { background: var(--surface-2); }
       const planCopy = SUBSCRIPTION_PLAN_COPY[plan] || SUBSCRIPTION_PLAN_COPY.web;
       const conversationLimit = usage.conversations_limit;
       const bookingLimit = usage.bookings_limit;
-      const renewalLabel = simpleDateLabel(subscription.renews_at);
+      const billingDate = subscription.renews_at || usage.period_end || "";
+      const renewalLabel = simpleDateLabel(billingDate);
+      const isLifetime = Boolean(subscription.lifetime);
+      const nextChargeLabel = isLifetime
+        ? "No aplica"
+        : subscription.stripe_customer_id
+        ? renewalLabel
+        : (billingDate ? `${renewalLabel} (gestion manual)` : "Gestion manual");
 
       el.subscriptionPlanLabel.textContent = subscription.plan_label || "Web";
-      el.subscriptionStatus.textContent = subscription.renews_at
+      el.subscriptionStatus.textContent = isLifetime
+        ? `${subscriptionStatusLabel(subscription.status)} | para siempre`
+        : subscription.renews_at
         ? `${subscriptionStatusLabel(subscription.status)} | renueva el ${renewalLabel}`
         : `${subscriptionStatusLabel(subscription.status)} | mes a mes`;
       el.subscriptionPrice.textContent = `${subscription.price_eur || 0} EUR/mes`;
@@ -3393,11 +3406,13 @@ tbody tr:hover { background: var(--surface-2); }
         "citas"
       );
       el.subscriptionBookingsBar.style.width = `${usagePercent(usage.bookings, bookingLimit)}%`;
-      el.subscriptionNextCharge.textContent = renewalLabel;
-      el.subscriptionRenewal.textContent = renewalLabel;
-      el.manageBillingBtn.disabled = !subscription.stripe_customer_id;
-      el.cancelSubscriptionBtn.disabled = !subscription.stripe_customer_id;
-      el.subscriptionActionText.textContent = subscription.stripe_customer_id
+      el.subscriptionNextCharge.textContent = nextChargeLabel;
+      el.subscriptionRenewal.textContent = isLifetime ? "Para siempre" : renewalLabel;
+      el.manageBillingBtn.disabled = isLifetime || !subscription.stripe_customer_id;
+      el.cancelSubscriptionBtn.disabled = isLifetime || !subscription.stripe_customer_id;
+      el.subscriptionActionText.textContent = isLifetime
+        ? "Este cliente tiene plan Completo vitalicio. No hay cobros recurrentes ni permanencia."
+        : subscription.stripe_customer_id
         ? "Puedes cambiar, reducir o cancelar desde facturacion. Si quieres orientacion, te ayudamos a elegir el plan correcto."
         : "Este cliente no tiene facturacion online activa. Para cambios o cancelacion, contacta con Vantelia.";
       el.subscriptionBenefits.innerHTML = planCopy.benefits.map(([title, text]) => `
@@ -3483,6 +3498,10 @@ tbody tr:hover { background: var(--surface-2); }
       el.installSnippet.value = snippet;
       el.copyInstallSnippetBtn.disabled = !snippet;
       el.openInstallDemoBtn.disabled = !demoUrl;
+      if (el.openAiDemoBtn) {
+        el.openAiDemoBtn.disabled = !demoUrl;
+        el.openAiDemoBtn.title = demoUrl ? "Abrir la demo publica del asistente." : "Todavia no hay demo disponible para este cliente.";
+      }
       el.installStatus.textContent = snippet
         ? "Snippet listo. Al pegarlo en tu web, el asistente se cargara con la configuracion de tu empresa."
         : "Todavia no hay snippet disponible para este cliente.";
@@ -4127,6 +4146,8 @@ tbody tr:hover { background: var(--surface-2); }
       el.employeeActive.checked = employee ? Boolean(employee.is_active) : true;
       el.employeeActive.disabled = Boolean(employee?.is_default);
       el.employeeRole.disabled = Boolean(employee?.is_default);
+      el.deleteEmployeeBtn.classList.toggle("hidden", !employee || Boolean(employee.is_default));
+      el.deleteEmployeeBtn.disabled = !employee || Boolean(employee.is_default);
       renderEmployeeServicesEditor(employee);
     }
 
@@ -4251,6 +4272,26 @@ tbody tr:hover { background: var(--surface-2); }
       await loadEmployees();
       await loadBookings();
       setStatus(employee ? "Profesional actualizado correctamente." : "Profesional creado correctamente.", "success");
+    }
+
+    async function deleteEmployee() {
+      const employee = state.employeeDraftMode ? null : selectedEmployee();
+      if (!employee || employee.is_default) return;
+      const label = employee.name || "este profesional";
+      const confirmed = window.confirm(`Vas a eliminar a ${label}. Esta accion tambien eliminara sus bloqueos de agenda. ¿Quieres continuar?`);
+      if (!confirmed) return;
+      setStatus("Eliminando profesional...", "info");
+      await api(`/auth/employees/${encodeURIComponent(employee.employee_id)}`, { method: "DELETE" });
+      if (state.employeeFilter === employee.employee_id) state.employeeFilter = "";
+      if (state.scheduleTarget === `employee:${employee.employee_id}`) state.scheduleTarget = "general";
+      if (state.blockTarget === `employee:${employee.employee_id}`) state.blockTarget = "general";
+      if (state.todayAgendaFilter === `employee:${employee.employee_id}`) state.todayAgendaFilter = "";
+      state.selectedEmployeeId = "";
+      state.employeeDraftMode = false;
+      state.employeeEditorOpen = false;
+      await loadEmployees();
+      await loadBookings();
+      setStatus("Profesional eliminado correctamente.", "success");
     }
 
     function renderSchedule(schedule) {
@@ -5884,6 +5925,13 @@ tbody tr:hover { background: var(--surface-2); }
         setStatus(error.message, "error");
       }
     });
+    el.openAiDemoBtn.addEventListener("click", () => {
+      try {
+        openInstallDemo();
+      } catch (error) {
+        setStatus(error.message, "error");
+      }
+    });
     el.refreshConversationsBtn.addEventListener("click", () => {
       state.selectedChatSessionId = "";
       state.chatDetailMessages = [];
@@ -5999,6 +6047,7 @@ tbody tr:hover { background: var(--surface-2); }
       renderEmployees({ items: state.employees });
     });
     el.saveEmployeeBtn.addEventListener("click", () => saveEmployee().catch((error) => setStatus(error.message, "error")));
+    el.deleteEmployeeBtn.addEventListener("click", () => deleteEmployee().catch((error) => setStatus(error.message, "error")));
     el.exportBookingsBtn.addEventListener("click", () => exportBookings());
     el.todayAgendaFilter.addEventListener("change", () => {
       state.todayAgendaFilter = el.todayAgendaFilter.value.trim();

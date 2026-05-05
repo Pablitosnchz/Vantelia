@@ -61,6 +61,10 @@ export function inyectarEstilos(color, accentColor) {
       font-family: var(--ia-font);
     }
 
+    #ia-w-container .hidden {
+      display: none !important;
+    }
+
     #ia-w-container {
       position: fixed;
       right: 24px;
@@ -548,10 +552,22 @@ export function inyectarEstilos(color, accentColor) {
       border-radius: 14px;
       background: #fbfcfe;
       color: var(--ia-text);
+      color-scheme: light;
       padding: 11px 13px;
       outline: none;
       font-size: 13px;
       transition: border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .ia-form-card input::placeholder,
+    .ia-form-card textarea::placeholder {
+      color: var(--ia-text-soft);
+      opacity: 0.72;
+    }
+
+    .ia-form-card select option {
+      color: var(--ia-text);
+      background: #fff;
     }
 
     .ia-form-card textarea {
@@ -588,8 +604,10 @@ export function inyectarEstilos(color, accentColor) {
       border: 1px solid var(--ia-border);
       border-radius: 14px;
       background: #fbfcfe;
+      color: var(--ia-text);
       padding: 11px 8px;
       font-size: 12px;
+      font-weight: 800;
       text-align: center;
       cursor: pointer;
       transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
@@ -610,6 +628,7 @@ export function inyectarEstilos(color, accentColor) {
     .ia-time-slot.disabled,
     .ia-time-slot.disabled:hover {
       opacity: 0.45;
+      color: var(--ia-text-soft);
       cursor: not-allowed;
       background: #eef2f7;
       border-color: #dbe3ef;
@@ -620,6 +639,8 @@ export function inyectarEstilos(color, accentColor) {
       display: block;
       margin-top: 4px;
       font-size: 11px;
+      color: inherit;
+      font-weight: 700;
     }
 
     .ia-form-actions {

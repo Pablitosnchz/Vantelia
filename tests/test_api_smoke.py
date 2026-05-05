@@ -98,6 +98,10 @@ def api_module(tmp_path_factory: pytest.TempPathFactory):
             "STRIPE_PRICE_WEB_ANNUAL": "price_test_web_annual",
             "STRIPE_PRICE_WHATSAPP_ANNUAL": "price_test_whatsapp_annual",
             "STRIPE_PRICE_COMPLETO_ANNUAL": "price_test_completo_annual",
+            "OUTREACH_DB_PATH": str(storage_dir / "outreach" / "outreach.db"),
+            "OUTREACH_TRACKING_SECRET": "test-outreach-secret",
+            "OUTREACH_TRACKING_BASE_URL": "https://app.test.local",
+            "OUTREACH_RESPECT_WINDOW": "false",
         }
     )
     sys.modules.pop("api", None)
@@ -130,6 +134,23 @@ class _FakeStripeCheckout:
 class _FakeStripe:
     api_key = ""
     checkout = _FakeStripeCheckout()
+
+
+class _FakeStripeSubscriptionApi:
+    current_period_end = int((datetime.now() + timedelta(days=30)).timestamp())
+
+    @classmethod
+    def retrieve(cls, subscription_id):
+        return {
+            "id": subscription_id,
+            "status": "active",
+            "current_period_end": cls.current_period_end,
+            "start_date": int((datetime.now() - timedelta(days=1)).timestamp()),
+        }
+
+
+class _FakeStripeWithSubscription(_FakeStripe):
+    Subscription = _FakeStripeSubscriptionApi
 
 
 class _FakeOnboardingResult:
@@ -188,6 +209,68 @@ def test_login_creates_portal_session(client: TestClient):
     assert response.status_code == 200
     assert response.json()["user"]["role"] == "admin"
     assert "vantelia_portal_session" in response.cookies
+
+
+def test_portal_can_delete_professional(client: TestClient):
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "admin@example.com", "password": "test-password-123"},
+    )
+    assert login_response.status_code == 200
+    cookies = {"vantelia_portal_session": login_response.cookies["vantelia_portal_session"]}
+
+    create_response = client.post(
+        "/auth/employees",
+        params={"cliente_id": "demo"},
+        cookies=cookies,
+        json={
+            "name": "Profesional Borrable",
+            "role_label": "Pruebas",
+            "color": "#00b1d9",
+            "is_active": False,
+            "timezone": "Europe/Madrid",
+            "slot_minutes": 30,
+            "day_start": "09:00",
+            "day_end": "10:00",
+            "closed_weekdays": [],
+            "service_ids": [],
+        },
+    )
+    assert create_response.status_code == 200
+    employee_id = create_response.json()["employee_id"]
+
+    delete_response = client.delete(
+        f"/auth/employees/{employee_id}",
+        params={"cliente_id": "demo"},
+        cookies=cookies,
+    )
+    assert delete_response.status_code == 200
+    assert delete_response.json()["ok"] is True
+
+    list_response = client.get("/auth/employees", params={"cliente_id": "demo"}, cookies=cookies)
+    assert list_response.status_code == 200
+    assert employee_id not in {item["employee_id"] for item in list_response.json()["items"]}
+
+
+def test_portal_cannot_delete_default_professional(client: TestClient):
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "admin@example.com", "password": "test-password-123"},
+    )
+    assert login_response.status_code == 200
+    cookies = {"vantelia_portal_session": login_response.cookies["vantelia_portal_session"]}
+
+    list_response = client.get("/auth/employees", params={"cliente_id": "demo"}, cookies=cookies)
+    assert list_response.status_code == 200
+    default_employee = next(item for item in list_response.json()["items"] if item["is_default"])
+
+    delete_response = client.delete(
+        f"/auth/employees/{default_employee['employee_id']}",
+        params={"cliente_id": "demo"},
+        cookies=cookies,
+    )
+    assert delete_response.status_code == 409
+    assert "agenda principal" in delete_response.json()["detail"]
 
 
 def test_booking_availability_works_without_openai(client: TestClient):
@@ -369,6 +452,46 @@ def test_stripe_webhook_activates_client_subscription(client: TestClient, api_mo
     assert subscription["stripe_subscription_id"] == "sub_test_demo"
 
 
+def test_auth_subscription_refreshes_billing_dates_from_stripe(client: TestClient, api_module):
+    api_module.stripe = _FakeStripeWithSubscription
+    expected_iso_prefix = datetime.fromtimestamp(
+        _FakeStripeSubscriptionApi.current_period_end,
+        tz=api_module.timezone.utc,
+    ).date().isoformat()
+    api_module._set_client_subscription(
+        "demo",
+        plan="whatsapp",
+        status="active",
+        stripe_customer_id="cus_test_demo",
+        stripe_subscription_id="sub_test_demo_refresh",
+        renews_at="",
+    )
+
+    payload = api_module._build_subscription_public("demo").model_dump()
+
+    assert payload["renews_at"].startswith(expected_iso_prefix)
+
+
+def test_lifetime_subscription_does_not_refresh_from_stripe(client: TestClient, api_module):
+    api_module.stripe = _FakeStripeWithSubscription
+    api_module._set_client_subscription(
+        "demo",
+        plan="completo",
+        status="active",
+        stripe_customer_id="cus_test_demo",
+        stripe_subscription_id="sub_test_lifetime",
+        renews_at="",
+        lifetime=True,
+        billing_period="lifetime",
+    )
+
+    payload = api_module._build_subscription_public("demo").model_dump()
+
+    assert payload["plan"] == "completo"
+    assert payload["lifetime"] is True
+    assert payload["renews_at"] == ""
+
+
 def test_public_stripe_webhook_creates_client_with_alta_express(client: TestClient, api_module, monkeypatch):
     api_module.stripe = _FakeStripe
     captured_welcome = {}
@@ -462,3 +585,78 @@ def test_admin_can_delete_client(client: TestClient, api_module):
     assert not data_dir.exists()
     assert not storage_dir.exists()
     assert api_module._get_user_by_email("cliente.borrable@example.com") is None
+
+
+# ---------------- Outreach panel tests ----------------
+
+def _admin_headers():
+    return {"Authorization": "Bearer test-admin-token"}
+
+
+def test_outreach_stats_requires_admin_token(client: TestClient):
+    response = client.get("/admin/outreach/stats")
+    assert response.status_code in (401, 403)
+
+
+def test_outreach_stats_with_token(client: TestClient):
+    response = client.get("/admin/outreach/stats", headers=_admin_headers())
+    assert response.status_code == 200
+    data = response.json()
+    assert "totals" in data and "funnel" in data and "daily" in data
+
+
+def test_outreach_import_and_list_csv(client: TestClient):
+    csv_payload = (
+        "business_name,email,contact_name,niche,website,service_hint,city,phone,tags,source\n"
+        "ACME Test,acme.test@example.com,Pablo,clinica,https://acme.test,medicina,Torrejon,,test,smoke\n"
+    )
+    response = client.post(
+        "/admin/outreach/import",
+        headers={**_admin_headers(), "Content-Type": "text/csv"},
+        content=csv_payload,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["added"] >= 1
+
+    listing = client.get("/admin/outreach/prospects?q=ACME", headers=_admin_headers())
+    assert listing.status_code == 200
+    items = listing.json()["items"]
+    assert any(item["email"] == "acme.test@example.com" for item in items)
+
+
+def test_outreach_suppress_add_and_remove(client: TestClient):
+    add = client.post(
+        "/admin/outreach/suppress",
+        headers={**_admin_headers(), "Content-Type": "application/json"},
+        json={"email": "baja.test@example.com", "reason": "smoke"},
+    )
+    assert add.status_code == 200
+    listed = client.get("/admin/outreach/suppressions", headers=_admin_headers()).json()
+    assert any(item["email"] == "baja.test@example.com" for item in listed["items"])
+
+    rm = client.delete("/admin/outreach/suppress/baja.test@example.com", headers=_admin_headers())
+    assert rm.status_code == 200
+
+
+def test_outreach_tracking_pixel_logs_open(client: TestClient, api_module):
+    from outreach_templates import make_tracking_token
+
+    token = make_tracking_token("track.test@example.com", "cold", "test-outreach-secret")
+    response = client.get(f"/track/open/{token}.gif")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/gif"
+
+    detail = client.get(
+        "/admin/outreach/prospects/track.test@example.com",
+        headers=_admin_headers(),
+    )
+    if detail.status_code == 200:
+        events = detail.json().get("events", [])
+        assert any(e["type"] == "open" for e in events)
+
+
+def test_outreach_tracking_invalid_token_does_not_crash(client: TestClient):
+    response = client.get("/track/open/invalid-token.gif")
+    assert response.status_code == 200  # devuelve pixel igualmente
+    click = client.get("/track/click/invalid-token", params={"u": "https://www.vantelia.es"})
+    assert click.status_code in (302, 404)

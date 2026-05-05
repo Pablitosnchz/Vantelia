@@ -613,7 +613,7 @@
 
       <div class="hero-cta-group">
         <button type="button" class="btn btn-primary btn-lg" data-open-chat
-          aria-label="Abrir asistente IA y empezar consulta">
+          aria-label="Abrir asistente IA y empezar consulta" data-cta-location="consultas_hero">
           Empezar ahora
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-left:6px">
@@ -666,7 +666,8 @@
       <div class="ia-cta-card reveal">
         <h3>¿Listo para empezar?</h3>
         <p>Pulsa el botón y la IA te llevará paso a paso. Tarda menos de 2 minutos y queda confirmada al instante.</p>
-        <button type="button" class="btn btn-primary btn-lg" data-open-chat aria-label="Abrir asistente IA">
+        <button type="button" class="btn btn-primary btn-lg" data-open-chat aria-label="Abrir asistente IA"
+          data-cta-location="consultas_process">
           Hablar con la IA ahora
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-left:6px">
@@ -803,7 +804,8 @@
           automatización o las tres a la vez. Primera consulta gratuita y sin compromiso.
         </p>
         <div class="cta-actions">
-          <button type="button" class="btn btn-primary btn-lg" data-open-chat>Solicita tu consulta gratuita</button>
+          <button type="button" class="btn btn-primary btn-lg" data-open-chat
+            data-cta-location="consultas_final">Solicita tu consulta gratuita</button>
         </div>
         <p class="cta-note">Consulta gratuita · Sin compromiso · Respuesta inmediata</p>
       </div>
@@ -885,6 +887,7 @@
       var INTENT_MESSAGE = 'Quiero agendar una cita';
       var userOpened = false;
       var autoOpenedOnce = false;
+      var messageQueued = false;
 
       function findWidgetButton() { return document.getElementById('ia-w-btn'); }
       function widgetIsOpen() {
@@ -916,7 +919,10 @@
         if (!btn) return false;
         if (!widgetIsOpen()) btn.click();
         userOpened = true;
-        if (withMessage) sendMessageToWidget(INTENT_MESSAGE);
+        if (withMessage && !messageQueued) {
+          messageQueued = true;
+          sendMessageToWidget(INTENT_MESSAGE);
+        }
         return true;
       }
 
@@ -925,6 +931,12 @@
         var trigger = e.target.closest && e.target.closest('[data-open-chat]');
         if (!trigger) return;
         e.preventDefault();
+        if (window.vanteliaTrack) {
+          window.vanteliaTrack('chat_consultation_start', {
+            cta_label: (trigger.textContent || trigger.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' '),
+            cta_location: trigger.getAttribute('data-cta-location') || ''
+          });
+        }
         if (!openChat(true)) {
           var attempts = 0;
           var iv = setInterval(function () {
@@ -947,6 +959,9 @@
         if (autoOpenedOnce || userOpened || widgetIsOpen()) return;
         if (!findWidgetButton()) return;
         autoOpenedOnce = true;
+        if (window.vanteliaTrack) {
+          window.vanteliaTrack('chat_auto_open', { trigger: 'consultas_page' });
+        }
         openChat(false);
       }
       var scrollTriggered = false;

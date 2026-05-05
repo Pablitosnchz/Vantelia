@@ -57,7 +57,9 @@
     },
     "subscription": {
       "plan": "completo",
-      "status": "active"
+      "status": "active",
+      "lifetime": true,
+      "billing_period": "lifetime"
     },
     "booking": {
       "enabled": true,

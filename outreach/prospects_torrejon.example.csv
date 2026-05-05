@@ -1,0 +1,11 @@
+business_name,email,contact_name,niche,website,service_hint,city,phone,tags,source
+Clinica Ejemplo,contacto@clinica-ejemplo.test,Laura Gomez,clinica privada,https://clinica-ejemplo.test,medicina general y especialidades,Torrejon de Ardoz,+34910000001,salud;cita-online,manual
+Academia Idiomas Ejemplo,info@academia-ejemplo.test,,academia,https://academia-ejemplo.test,cursos de ingles y aleman,Torrejon de Ardoz,+34910000002,formacion,manual
+Taller Mecanico Ejemplo,hola@taller-ejemplo.test,Jose,taller,https://taller-ejemplo.test,reparacion mecanica y prerevision ITV,Torrejon de Ardoz,+34910000003,gremio,manual
+Reformas Ejemplo,info@reformas-ejemplo.test,,reformas integrales,https://reformas-ejemplo.test,reformas de pisos y banos,Torrejon de Ardoz,,gremio;leads-frios,google-maps
+Inmobiliaria Ejemplo,oficina@inmo-ejemplo.test,Maria,inmobiliaria,https://inmo-ejemplo.test,venta y alquiler residencial,Torrejon de Ardoz,+34910000005,inmo,referido
+Restaurante Ejemplo,reservas@resto-ejemplo.test,,restaurante,https://resto-ejemplo.test,reservas para grupos y eventos,Torrejon de Ardoz,+34910000006,horeca,manual
+Asesoria Ejemplo,contacto@asesoria-ejemplo.test,Carlos,asesoria fiscal,https://asesoria-ejemplo.test,fiscal y laboral para autonomos,Torrejon de Ardoz,+34910000007,b2b;servicios-pro,linkedin
+Autoescuela Ejemplo,info@autoescuela-ejemplo.test,,autoescuela,https://autoescuela-ejemplo.test,permiso B y intensivos,Torrejon de Ardoz,+34910000008,formacion,google-maps
+Peluqueria Ejemplo,hola@pelu-ejemplo.test,Sara,peluqueria y estetica,https://pelu-ejemplo.test,corte color y tratamientos,Torrejon de Ardoz,+34910000009,belleza,manual
+Clinica Dental Ejemplo,recepcion@dental-ejemplo.test,Ana Ruiz,clinica dental,https://dental-ejemplo.test,ortodoncia e implantes,Torrejon de Ardoz,+34910000010,salud;cita-online,referido

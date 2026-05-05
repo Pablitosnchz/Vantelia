@@ -18,3 +18,5 @@ storage/*/
 .git-inner-backup/
 .pytest_cache/
 backups/
+outreach/*.csv
+!outreach/*.example.csv

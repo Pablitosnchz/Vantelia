@@ -122,9 +122,6 @@ async function cargarServicios() {
 async function cargarProfesionales() {
   const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/profesionales/${WIDGET_CONFIG.clienteId}`);
   employees = Array.isArray(data.items) ? data.items : [];
-  if (!employees.length) {
-    throw new Error("No hay profesionales disponibles para reservar en este momento.");
-  }
 }
 
 function fillServiceOptions(select) {
@@ -163,8 +160,8 @@ function fillEmployeeOptions(select, wrap) {
   if (employees.length <= 1) {
     wrap.classList.add("hidden");
     const first = employees[0];
-    citaData.employeeId = first?.employee_id || "";
-    citaData.employeeName = first?.name || "";
+    citaData.employeeId = first && !first.is_default ? (first.employee_id || "") : "";
+    citaData.employeeName = first && !first.is_default ? (first.name || "") : "";
     return;
   }
 
@@ -301,7 +298,7 @@ function renderResumen() {
     <div class="ia-resumen-row"><span>Email</span><span>${escapeHtml(citaData.email)}</span></div>
     <div class="ia-resumen-row"><span>Telefono</span><span>${escapeHtml(citaData.telefono)}</span></div>
     ${
-      citaData.employeeName
+      employees.length > 1 && citaData.employeeName
         ? `<div class="ia-resumen-row"><span>Profesional</span><span>${escapeHtml(citaData.employeeName)}</span></div>`
         : ""
     }

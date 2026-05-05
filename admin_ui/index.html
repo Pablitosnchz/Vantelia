@@ -337,6 +337,28 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
   font-weight: 600;
 }
 
+/* ── Outreach panel ──── */
+.outreach-panel { display: none; padding-top: 12px; }
+.outreach-panel.active { display: block; animation: fadeUp .2s ease both; }
+.or-job { border:1px solid #e4eaf2; border-radius:10px; padding:10px 12px; background:#fafbfd; }
+.or-job header { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.or-job pre { background:#0f172a; color:#cbd5f5; font-size:11px; padding:8px; border-radius:6px; max-height:220px; overflow:auto; margin:6px 0 0; white-space:pre-wrap; }
+.or-status { padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; text-transform:uppercase; }
+.or-status.queued { background:#e0e7ff; color:#3730a3; }
+.or-status.running { background:#fef3c7; color:#92400e; }
+.or-status.done { background:#dcfce7; color:#166534; }
+.or-status.error { background:#fee2e2; color:#991b1b; }
+.or-funnel-bar { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:13px; }
+.or-funnel-bar .bar { height:14px; background:#dbeafe; border-radius:6px; }
+.or-funnel-bar .bar > span { display:block; height:100%; background:#2563eb; border-radius:6px; }
+.checkbox-line { display:flex; align-items:center; gap:6px; font-size:13px; }
+.or-prospect-row:hover { background:#f1f5f9; cursor:pointer; }
+.or-prospect-row td { padding:6px 8px; border-bottom:1px solid #eef2f7; }
+.or-badge { display:inline-block; padding:1px 6px; border-radius:6px; font-size:11px; background:#e2e8f0; color:#0f172a; }
+.or-badge.replied { background:#dcfce7; color:#166534; }
+.or-badge.client { background:#dbeafe; color:#1e3a8a; }
+.or-badge.lost { background:#fee2e2; color:#991b1b; }
+
 /* ── Dashboard view (toggle by .active via JS) ──── */
 .dashboard-view { display: none; }
 .dashboard-view.active {
@@ -1105,6 +1127,10 @@ tbody tr:last-child td { border-bottom: none; }
           <span class="nav-icon">US</span>
           <span class="nav-text"><strong>Usuarios</strong><span>Accesos del portal</span></span>
         </button>
+        <button class="nav-button" type="button" data-nav-view="outreach">
+          <span class="nav-icon">CP</span>
+          <span class="nav-text"><strong>Captacion</strong><span>Outbound, demos y leads</span></span>
+        </button>
         <button class="nav-button" type="button" data-nav-view="security">
           <span class="nav-icon">SG</span>
           <span class="nav-text"><strong>Seguridad</strong><span>Sesion y contrasena</span></span>
@@ -1839,6 +1865,240 @@ tbody tr:last-child td { border-bottom: none; }
           </div>
         </section>
       </section>
+
+      <section class="dashboard-view" data-view="outreach">
+        <section class="card panel">
+          <div class="section-header">
+            <div>
+              <h2>Captacion</h2>
+              <p>Panel de control outbound: prospects, secuencias, tracking, discovery y bajas.</p>
+            </div>
+            <div class="actions">
+              <button class="ghost small" type="button" data-outreach-tab="dashboard">Dashboard</button>
+              <button class="ghost small" type="button" data-outreach-tab="prospects">Prospects</button>
+              <button class="ghost small" type="button" data-outreach-tab="campaigns">Campañas</button>
+              <button class="ghost small" type="button" data-outreach-tab="discovery">Discovery</button>
+              <button class="ghost small" type="button" data-outreach-tab="templates">Plantillas</button>
+              <button class="ghost small" type="button" data-outreach-tab="suppressions">Bajas</button>
+            </div>
+          </div>
+
+          <!-- Dashboard -->
+          <div data-outreach-panel="dashboard" class="outreach-panel active">
+            <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:14px;">
+              <div class="stat"><strong id="orProspects">-</strong><span>Prospects</span></div>
+              <div class="stat"><strong id="orSentToday">-</strong><span>Enviados hoy</span></div>
+              <div class="stat"><strong id="orSentWeek">-</strong><span>Ultimos 7 dias</span></div>
+              <div class="stat"><strong id="orOpenRate">-</strong><span>Tasa apertura</span></div>
+              <div class="stat"><strong id="orReplyRate">-</strong><span>Tasa respuesta</span></div>
+              <div class="stat"><strong id="orSuppressed">-</strong><span>Bajas</span></div>
+            </div>
+            <div class="grid" style="grid-template-columns:2fr 1fr;gap:14px;">
+              <div class="card" style="padding:14px;">
+                <strong>Actividad ultimos 30 dias</strong>
+                <svg id="orChart" viewBox="0 0 600 200" style="width:100%;height:200px;display:block;margin-top:8px;"></svg>
+                <div class="muted" style="font-size:12px;">Lineas: envios (azul), aperturas (verde), respuestas (naranja).</div>
+              </div>
+              <div class="card" style="padding:14px;">
+                <strong>Embudo</strong>
+                <div id="orFunnel" style="margin-top:10px;"></div>
+                <strong style="display:block;margin-top:14px;">Top nichos</strong>
+                <div id="orTopNiches" style="margin-top:6px;font-size:13px;"></div>
+              </div>
+            </div>
+            <div class="actions" style="margin-top:14px;">
+              <button class="secondary small" type="button" id="orRefreshStats">Refrescar</button>
+              <a class="ghost small" id="orExportCsv" href="#" style="padding:6px 12px;">Exportar CSV</a>
+            </div>
+          </div>
+
+          <!-- Prospects -->
+          <div data-outreach-panel="prospects" class="outreach-panel">
+            <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end;">
+              <label>Buscar<input id="orSearch" type="text" placeholder="empresa, email..." /></label>
+              <label>Status
+                <select id="orFilterStatus">
+                  <option value="">Todos</option>
+                  <option value="new">Nuevos</option>
+                  <option value="contacted">Contactados</option>
+                  <option value="engaged">Engaged</option>
+                  <option value="replied">Respondieron</option>
+                  <option value="client">Clientes</option>
+                  <option value="lost">Perdidos</option>
+                </select>
+              </label>
+              <label>Niche<input id="orFilterNiche" type="text" placeholder="clinica, academia..." /></label>
+              <label>Ciudad<input id="orFilterCity" type="text" /></label>
+              <label>Source<input id="orFilterSource" type="text" /></label>
+              <button class="secondary small" type="button" id="orApplyFilters">Filtrar</button>
+            </div>
+            <div class="actions" style="margin:10px 0;">
+              <button class="ghost small" type="button" id="orImportBtn">Importar CSV</button>
+              <input id="orImportFile" type="file" accept=".csv" style="display:none;" />
+              <button class="secondary small" type="button" id="orNewProspectBtn">+ Nuevo prospect</button>
+              <span id="orProspectCount" class="muted" style="font-size:12px;align-self:center;"></span>
+            </div>
+            <div style="overflow:auto;max-height:520px;border:1px solid #e4eaf2;border-radius:10px;">
+              <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead style="position:sticky;top:0;background:#f6f8fb;">
+                  <tr>
+                    <th style="text-align:left;padding:8px;">Empresa</th>
+                    <th style="text-align:left;padding:8px;">Email</th>
+                    <th style="text-align:left;padding:8px;">Niche</th>
+                    <th style="text-align:left;padding:8px;">Ciudad</th>
+                    <th style="text-align:left;padding:8px;">Status</th>
+                    <th style="text-align:left;padding:8px;">Stage</th>
+                    <th style="text-align:left;padding:8px;">Ultimo envio</th>
+                    <th style="text-align:right;padding:8px;">Op</th>
+                    <th style="text-align:right;padding:8px;">Cl</th>
+                    <th style="text-align:right;padding:8px;">Re</th>
+                  </tr>
+                </thead>
+                <tbody id="orProspectsBody"><tr><td colspan="10" class="empty">Cargando...</td></tr></tbody>
+              </table>
+            </div>
+            <div class="actions" style="margin-top:10px;">
+              <button class="ghost small" type="button" id="orPrevPage">Anterior</button>
+              <span id="orPageInfo" style="align-self:center;font-size:12px;"></span>
+              <button class="ghost small" type="button" id="orNextPage">Siguiente</button>
+            </div>
+          </div>
+
+          <!-- Campaigns -->
+          <div data-outreach-panel="campaigns" class="outreach-panel">
+            <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end;">
+              <label>Stage
+                <select id="orSendStage">
+                  <option value="cold">cold</option>
+                  <option value="fu1">fu1</option>
+                  <option value="fu2">fu2</option>
+                  <option value="breakup">breakup</option>
+                </select>
+              </label>
+              <label>Max envios<input id="orSendMax" type="number" min="1" max="200" value="10" /></label>
+              <label>Dias minimos<input id="orSendAfterDays" type="number" min="0" max="60" value="4" /></label>
+              <label>Test-to (opcional)<input id="orSendTestTo" type="email" placeholder="tu@email.com" /></label>
+              <label>Email concreto (opcional)<input id="orSendOnlyEmail" type="email" /></label>
+              <label class="checkbox-line"><input id="orSendForceWindow" type="checkbox" /> Ignorar ventana</label>
+            </div>
+            <div class="actions" style="margin-top:10px;">
+              <button class="ghost small" type="button" id="orDryRunBtn">Dry-run</button>
+              <button class="secondary small" type="button" id="orSendRealBtn">Enviar real</button>
+              <span class="muted" style="font-size:12px;align-self:center;">Sin test-to ni dry-run = envio real.</span>
+            </div>
+            <h3 style="margin-top:18px;">Jobs recientes</h3>
+            <div id="orJobsList" style="display:flex;flex-direction:column;gap:8px;max-height:460px;overflow:auto;"></div>
+          </div>
+
+          <!-- Discovery -->
+          <div data-outreach-panel="discovery" class="outreach-panel">
+            <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;align-items:end;">
+              <label>Sector<input id="orDiscSector" placeholder="clinica dental" /></label>
+              <label>Ciudad<input id="orDiscCity" placeholder="Torrejon de Ardoz" /></label>
+              <label>Max resultados<input id="orDiscMax" type="number" min="5" max="100" value="30" /></label>
+              <label>Fuente
+                <select id="orDiscSource">
+                  <option value="auto" selected>Auto</option>
+                  <option value="osm">OpenStreetMap (sin API key)</option>
+                  <option value="places">Google Places (requiere key)</option>
+                </select>
+              </label>
+              <label class="checkbox-line"><input id="orDiscEmails" type="checkbox" checked /> Extraer emails</label>
+              <label class="checkbox-line"><input id="orDiscImport" type="checkbox" /> Importar directo</label>
+            </div>
+            <div class="actions" style="margin-top:10px;">
+              <button class="secondary small" type="button" id="orDiscRunBtn">Buscar empresas</button>
+              <span class="muted" style="font-size:12px;align-self:center;">
+                Solo extraemos emails publicamente listados en webs corporativas. Respeta robots.txt.
+                OSM gratuito; Places requiere GOOGLE_PLACES_API_KEY en .env.
+              </span>
+            </div>
+            <div id="orDiscResults" style="margin-top:14px;"></div>
+          </div>
+
+          <!-- Templates -->
+          <div data-outreach-panel="templates" class="outreach-panel">
+            <p class="muted" style="font-size:13px;">Override por stage. Vacio = usa la plantilla por defecto del codigo. Variables: {first_name}, {business}, {city}, {niche}, {service_hint}, {website}.</p>
+            <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px;">
+              <div>
+                <label>Stage
+                  <select id="orTplStage">
+                    <option value="cold">cold</option>
+                    <option value="fu1">fu1</option>
+                    <option value="fu2">fu2</option>
+                    <option value="breakup">breakup</option>
+                  </select>
+                </label>
+                <label>Subject pool (uno por linea)<textarea id="orTplSubjects" rows="4"></textarea></label>
+                <label>Body texto plano<textarea id="orTplText" rows="10"></textarea></label>
+                <label>Body HTML<textarea id="orTplHtml" rows="10"></textarea></label>
+                <div class="actions">
+                  <button class="secondary small" type="button" id="orTplSaveBtn">Guardar override</button>
+                  <button class="ghost small" type="button" id="orTplResetBtn">Borrar override</button>
+                </div>
+              </div>
+              <div>
+                <strong>Preview</strong>
+                <div style="margin-top:6px;">
+                  <div id="orTplPreviewSubject" style="font-size:13px;color:#637c8e;margin-bottom:6px;">Subject: <em>(escribe para previsualizar)</em></div>
+                  <iframe id="orTplPreviewFrame" style="width:100%;height:560px;border:1px solid #e4eaf2;border-radius:10px;background:#f9fbfd;"></iframe>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Suppressions -->
+          <div data-outreach-panel="suppressions" class="outreach-panel">
+            <div class="grid" style="grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">
+              <label>Email<input id="orSupEmail" type="email" /></label>
+              <label>Motivo<input id="orSupReason" type="text" value="manual" /></label>
+              <button class="secondary small" type="button" id="orSupAddBtn">Anadir baja</button>
+            </div>
+            <div style="overflow:auto;max-height:480px;border:1px solid #e4eaf2;border-radius:10px;margin-top:10px;">
+              <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead style="position:sticky;top:0;background:#f6f8fb;">
+                  <tr><th style="text-align:left;padding:8px;">Email</th>
+                      <th style="text-align:left;padding:8px;">Motivo</th>
+                      <th style="text-align:left;padding:8px;">Fecha</th>
+                      <th></th></tr>
+                </thead>
+                <tbody id="orSupBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+        </section>
+      </section>
+
+      <!-- Drawer detalle prospect -->
+      <div id="orDrawer" class="modal-overlay" aria-hidden="true" style="display:none;">
+        <div class="card" style="max-width:780px;margin:40px auto;padding:18px;max-height:90vh;overflow:auto;">
+          <div class="section-header">
+            <div><h3 id="orDrawerTitle">Prospect</h3><p id="orDrawerEmail" class="muted"></p></div>
+            <button class="ghost small" type="button" id="orDrawerCloseBtn">Cerrar</button>
+          </div>
+          <div id="orDrawerBody"></div>
+        </div>
+      </div>
+
+      <div id="orSendPreview" class="modal-overlay" aria-hidden="true" style="display:none;">
+        <div class="card" style="max-width:760px;margin:40px auto;padding:18px;max-height:92vh;overflow:auto;">
+          <div class="section-header">
+            <div>
+              <h3 style="margin:0;">Preview email</h3>
+              <p class="muted" id="orSendPreviewMeta" style="margin:4px 0 0 0;font-size:12px;"></p>
+            </div>
+            <button class="ghost small" type="button" id="orSendPreviewClose">Cerrar</button>
+          </div>
+          <div style="margin:10px 0 8px 0;font-size:13px;"><strong>Subject:</strong> <span id="orSendPreviewSubject"></span></div>
+          <iframe id="orSendPreviewFrame" style="width:100%;height:580px;border:1px solid #e4eaf2;border-radius:10px;background:#f9fbfd;"></iframe>
+          <details style="margin-top:10px;">
+            <summary style="cursor:pointer;font-size:13px;color:#637c8e;">Version texto plano</summary>
+            <pre id="orSendPreviewText" style="white-space:pre-wrap;font-family:Inter,Helvetica,Arial,sans-serif;font-size:12px;background:#f9fbfd;border:1px solid #e4eaf2;border-radius:8px;padding:12px;margin-top:6px;"></pre>
+          </details>
+        </div>
+      </div>
+
     </main>
   </div>
 
@@ -3628,6 +3888,604 @@ tbody tr:last-child td { border-bottom: none; }
     setClientTab("profile");
     setView("clients");
     connect().catch((error) => showStatus(error.message, "error"));
+
+    // ============================================================
+    // === OUTREACH PANEL =========================================
+    // ============================================================
+    (function outreachModule() {
+      const ORQ = (sel) => document.querySelector(sel);
+      const ORALL = (sel) => Array.from(document.querySelectorAll(sel));
+      const orState = {
+        page: 1, pageSize: 50, total: 0,
+        filters: { q: "", status: "", niche: "", city: "", source: "" },
+        currentEmail: "",
+        jobsTimer: null,
+        loaded: false,
+      };
+
+      function authHeaders(extra) {
+        return Object.assign({}, extra || {});
+      }
+
+      async function orFetch(url, opts) {
+        const res = await fetch(url, Object.assign({ credentials: "include" }, opts || {}));
+        if (!res.ok) {
+          let detail = "Error " + res.status;
+          try { const data = await res.json(); detail = data.detail || detail; } catch(e){}
+          throw new Error(detail);
+        }
+        const ct = res.headers.get("content-type") || "";
+        return ct.includes("application/json") ? res.json() : res.text();
+      }
+
+      function setOutreachTab(tab) {
+        ORALL("[data-outreach-tab]").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.outreachTab === tab);
+        });
+        ORALL("[data-outreach-panel]").forEach((p) => {
+          p.classList.toggle("active", p.dataset.outreachPanel === tab);
+        });
+        if (tab === "dashboard") loadStats();
+        if (tab === "prospects") loadProspects();
+        if (tab === "campaigns") { loadJobs(); startJobsPolling(); } else { stopJobsPolling(); }
+        if (tab === "templates") loadTemplates();
+        if (tab === "suppressions") loadSuppressions();
+      }
+
+      // ----- Dashboard -----
+      async function loadStats() {
+        try {
+          const data = await orFetch("/admin/outreach/stats");
+          const t = data.totals;
+          ORQ("#orProspects").textContent = t.prospects;
+          ORQ("#orSentToday").textContent = t.sent_today;
+          ORQ("#orSentWeek").textContent = t.sent_week;
+          ORQ("#orOpenRate").textContent = t.open_rate_pct + "%";
+          ORQ("#orReplyRate").textContent = t.reply_rate_pct + "%";
+          ORQ("#orSuppressed").textContent = t.suppressed;
+          renderChart(data.daily);
+          renderFunnel(data.funnel, t.sent_distinct);
+          renderTopNiches(data.top_niches);
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      function renderChart(daily) {
+        const svg = ORQ("#orChart");
+        if (!svg) return;
+        const days = {};
+        ["sends", "opens", "replies"].forEach((k) => (daily[k] || []).forEach((d) => {
+          days[d.day] = days[d.day] || { sends:0, opens:0, replies:0 };
+          days[d.day][k] = d.c;
+        }));
+        const sorted = Object.keys(days).sort();
+        if (!sorted.length) { svg.innerHTML = '<text x="10" y="20" fill="#94a3b8" font-size="12">Sin datos aun</text>'; return; }
+        const W=600,H=200,P=24;
+        const max = Math.max(1, ...sorted.flatMap((d) => [days[d].sends, days[d].opens, days[d].replies]));
+        const xStep = (W - 2*P) / Math.max(1, sorted.length - 1);
+        function path(key, color) {
+          const pts = sorted.map((d,i) => `${P+i*xStep},${H-P-(days[d][key]/max)*(H-2*P)}`);
+          return `<polyline fill="none" stroke="${color}" stroke-width="2" points="${pts.join(' ')}" />`;
+        }
+        svg.innerHTML = `
+          <line x1="${P}" y1="${H-P}" x2="${W-P}" y2="${H-P}" stroke="#cbd5e1" />
+          ${path('sends','#2563eb')}${path('opens','#10b981')}${path('replies','#f59e0b')}
+          <text x="${W-P}" y="${H-4}" fill="#94a3b8" font-size="10" text-anchor="end">${sorted[sorted.length-1]}</text>
+          <text x="${P}" y="${H-4}" fill="#94a3b8" font-size="10">${sorted[0]}</text>
+        `;
+      }
+
+      function renderFunnel(funnel, totalSent) {
+        const stages = ["cold","fu1","fu2","breakup"];
+        const max = Math.max(1, ...stages.map((s) => funnel[s] || 0));
+        ORQ("#orFunnel").innerHTML = stages.map((s) => {
+          const v = funnel[s] || 0;
+          const pct = Math.round((v / max) * 100);
+          return `<div class="or-funnel-bar"><div style="width:50px;text-transform:uppercase;font-weight:600;">${s}</div>
+                  <div class="bar" style="flex:1;"><span style="width:${pct}%;"></span></div>
+                  <div style="width:40px;text-align:right;">${v}</div></div>`;
+        }).join("");
+      }
+
+      function renderTopNiches(niches) {
+        if (!niches || !niches.length) { ORQ("#orTopNiches").innerHTML = '<span class="muted">Sin datos.</span>'; return; }
+        ORQ("#orTopNiches").innerHTML = niches.map((n) =>
+          `<div style="display:flex;justify-content:space-between;border-bottom:1px solid #eef2f7;padding:4px 0;">
+            <span>${escapeHtml(n.niche)}</span>
+            <span class="muted">${n.replies}/${n.prospects}</span>
+          </div>`
+        ).join("");
+      }
+
+      // ----- Prospects -----
+      async function loadProspects() {
+        const params = new URLSearchParams({
+          q: orState.filters.q,
+          status: orState.filters.status,
+          niche: orState.filters.niche,
+          city: orState.filters.city,
+          source: orState.filters.source,
+          page: orState.page,
+          page_size: orState.pageSize,
+        });
+        try {
+          const data = await orFetch("/admin/outreach/prospects?" + params.toString());
+          orState.total = data.total;
+          ORQ("#orProspectCount").textContent = `${data.total} prospects`;
+          const body = ORQ("#orProspectsBody");
+          if (!data.items.length) { body.innerHTML = '<tr><td colspan="10" class="empty">Sin resultados.</td></tr>'; return; }
+          body.innerHTML = data.items.map((p) => {
+            const status = p.status || "new";
+            const badgeCls = ["replied","client","lost"].includes(status) ? status : "";
+            const last = p.last_sent_at ? new Date(p.last_sent_at).toLocaleString("es-ES") : "-";
+            return `<tr class="or-prospect-row" data-email="${escapeHtml(p.email)}">
+              <td>${escapeHtml(p.business_name)}</td>
+              <td>${escapeHtml(p.email)}${p.suppressed ? ' <span class="or-badge lost">BAJA</span>' : ''}</td>
+              <td>${escapeHtml(p.niche || '')}</td>
+              <td>${escapeHtml(p.city || '')}</td>
+              <td><span class="or-badge ${badgeCls}">${status}</span></td>
+              <td>${escapeHtml(p.last_stage || '-')}</td>
+              <td>${last}</td>
+              <td style="text-align:right;">${p.opens}</td>
+              <td style="text-align:right;">${p.clicks}</td>
+              <td style="text-align:right;">${p.replies}</td>
+            </tr>`;
+          }).join("");
+          ORQ("#orPageInfo").textContent = `Pag ${orState.page} (${data.items.length}/${data.total})`;
+          body.querySelectorAll(".or-prospect-row").forEach((tr) => tr.addEventListener("click", () => openDrawer(tr.dataset.email)));
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      // ----- Drawer detalle -----
+      async function openDrawer(email) {
+        try {
+          const data = await orFetch("/admin/outreach/prospects/" + encodeURIComponent(email));
+          orState.currentEmail = email;
+          ORQ("#orDrawerTitle").textContent = data.prospect.business_name;
+          ORQ("#orDrawerEmail").textContent = email;
+          const sends = data.sends.map((s, i) =>
+            `<li style="margin:4px 0;">${new Date(s.sent_at).toLocaleString("es-ES")} <strong>${escapeHtml(s.stage)}</strong> — ${escapeHtml(s.subject)} <span class="muted">(${s.mode})</span> <button class="ghost small" type="button" data-preview-stage="${escapeHtml(s.stage)}" style="margin-left:6px;">Ver email</button></li>`
+          ).join("") || "<li class='muted'>Sin envios.</li>";
+          const events = data.events.map((e) =>
+            `<li>${new Date(e.ts).toLocaleString("es-ES")} <strong>${escapeHtml(e.type)}</strong>${e.url ? ' → ' + escapeHtml(e.url) : ''}</li>`
+          ).join("") || "<li class='muted'>Sin eventos.</li>";
+          const sup = data.suppression ? `<p><strong>SUPRIMIDO:</strong> ${escapeHtml(data.suppression.reason)} (${data.suppression.added_at})</p>` : "";
+          const p = data.prospect || {};
+          ORQ("#orDrawerBody").innerHTML = `
+            ${sup}
+            <h4 style="margin:0 0 8px 0;">Datos</h4>
+            <div class="grid" style="grid-template-columns:1fr 1fr;gap:8px;">
+              <label>Empresa<input id="orDrField_business_name" type="text" value="${escapeHtml(p.business_name || '')}" /></label>
+              <label>Contacto (nombre)<input id="orDrField_contact_name" type="text" value="${escapeHtml(p.contact_name || '')}" /></label>
+              <label>Niche<input id="orDrField_niche" type="text" value="${escapeHtml(p.niche || '')}" /></label>
+              <label>Service hint<input id="orDrField_service_hint" type="text" value="${escapeHtml(p.service_hint || '')}" /></label>
+              <label>Ciudad<input id="orDrField_city" type="text" value="${escapeHtml(p.city || '')}" /></label>
+              <label>Telefono<input id="orDrField_phone" type="text" value="${escapeHtml(p.phone || '')}" /></label>
+              <label style="grid-column:span 2;">Web<input id="orDrField_website" type="url" value="${escapeHtml(p.website || '')}" /></label>
+              <label>Tags<input id="orDrField_tags" type="text" value="${escapeHtml(p.tags || '')}" /></label>
+              <label>Source<input id="orDrField_source" type="text" value="${escapeHtml(p.source || '')}" /></label>
+              <label>Status
+                <select id="orDrField_status">
+                  ${["new","contacted","engaged","replied","client","lost"].map((s) => `<option value="${s}" ${s===(p.status||'new')?'selected':''}>${s}</option>`).join("")}
+                </select>
+              </label>
+              <label>Score<input id="orDrField_score" type="number" min="0" max="100" value="${p.score || 0}" /></label>
+            </div>
+            <label style="margin-top:8px;display:block;">Notas<textarea id="orDrField_notes" rows="3" style="width:100%;">${escapeHtml(p.notes || '')}</textarea></label>
+            <div class="actions" style="margin-top:10px;">
+              <button class="secondary small" type="button" id="orDrawerSaveAll">Guardar cambios</button>
+            </div>
+            <h4 style="margin-top:18px;">Envios</h4><ul style="font-size:13px;">${sends}</ul>
+            <h4>Eventos</h4><ul style="font-size:13px;">${events}</ul>
+            <div class="actions">
+              <button class="ghost small" type="button" id="orDrawerReplyBtn">Marcar como respondido</button>
+              <button class="ghost small" type="button" id="orDrawerSuppressBtn">Suprimir</button>
+              <button class="ghost small danger" type="button" id="orDrawerDeleteBtn">Borrar prospect</button>
+            </div>`;
+          ORQ("#orDrawer").style.display = "flex";
+          ORQ("#orDrawerSaveAll").addEventListener("click", async () => {
+            const fields = ["business_name","contact_name","niche","service_hint","city","phone","website","tags","source","status","notes"];
+            const payload = {};
+            for (const f of fields) payload[f] = ORQ("#orDrField_" + f).value;
+            payload.score = parseInt(ORQ("#orDrField_score").value, 10) || 0;
+            try {
+              await orFetch("/admin/outreach/prospects/" + encodeURIComponent(email), {
+                method: "PATCH", headers: { "Content-Type":"application/json" },
+                body: JSON.stringify(payload) });
+              showStatus("Cambios guardados", "ok"); loadProspects();
+            } catch (err) { showStatus(err.message, "error"); }
+          });
+          ORQ("#orDrawerReplyBtn").addEventListener("click", async () => {
+            await orFetch("/admin/outreach/replies", {
+              method:"POST", headers:{"Content-Type":"application/json"},
+              body: JSON.stringify({ email, stage: data.prospect.last_stage || "" }) });
+            showStatus("Marcado como respondido", "ok"); openDrawer(email); loadProspects();
+          });
+          ORQ("#orDrawerSuppressBtn").addEventListener("click", async () => {
+            await orFetch("/admin/outreach/suppress", {
+              method:"POST", headers:{"Content-Type":"application/json"},
+              body: JSON.stringify({ email, reason: "manual desde panel" }) });
+            showStatus("Suprimido", "ok"); openDrawer(email); loadProspects();
+          });
+          ORQ("#orDrawerDeleteBtn").addEventListener("click", async () => {
+            if (!confirm("¿Borrar prospect " + email + "?")) return;
+            await orFetch("/admin/outreach/prospects/" + encodeURIComponent(email), { method:"DELETE" });
+            ORQ("#orDrawer").style.display = "none"; loadProspects();
+          });
+          document.querySelectorAll("[data-preview-stage]").forEach((btn) => {
+            btn.addEventListener("click", async (ev) => {
+              const stage = ev.target.getAttribute("data-preview-stage");
+              try {
+                const data = await orFetch("/admin/outreach/prospects/" + encodeURIComponent(email) + "/render?stage=" + encodeURIComponent(stage));
+                showSendPreview(data);
+              } catch (err) { showStatus(err.message, "error"); }
+            });
+          });
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      // ----- Campaigns / jobs -----
+      async function launchSend(dryRun) {
+        const body = {
+          stage: ORQ("#orSendStage").value,
+          max: parseInt(ORQ("#orSendMax").value, 10) || 10,
+          after_days: parseInt(ORQ("#orSendAfterDays").value, 10) || 0,
+          test_to: ORQ("#orSendTestTo").value.trim(),
+          email: ORQ("#orSendOnlyEmail").value.trim(),
+          force_window: ORQ("#orSendForceWindow").checked,
+          dry_run: !!dryRun,
+        };
+        if (!dryRun && !body.test_to) {
+          if (!confirm(`Vas a enviar correo REAL a ${body.max} prospects (stage ${body.stage}). ¿Confirmar?`)) return;
+        }
+        try {
+          const data = await orFetch("/admin/outreach/send", {
+            method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
+          showStatus("Job " + data.job_id + " lanzado", "ok");
+          loadJobs();
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      async function loadJobs() {
+        try {
+          const data = await orFetch("/admin/outreach/jobs?limit=15");
+          const list = ORQ("#orJobsList");
+          if (!data.items.length) { list.innerHTML = '<div class="empty">Sin jobs aun.</div>'; return; }
+          const detailed = await Promise.all(data.items.map((j) =>
+            orFetch("/admin/outreach/jobs/" + j.id).catch(() => j)));
+          list.innerHTML = detailed.map((j) => {
+            const params = j.params_json ? JSON.parse(j.params_json) : {};
+            return `<div class="or-job">
+              <header>
+                <span><strong>#${j.id}</strong> ${j.kind} · stage=${escapeHtml(params.stage||'-')} · max=${params.max||'-'}</span>
+                <span class="or-status ${j.status}">${j.status}</span>
+              </header>
+              <div class="muted" style="font-size:11px;">Inicio: ${j.started_at} ${j.finished_at ? '· Fin: '+j.finished_at : ''}</div>
+              <pre>${escapeHtml((j.log || '').slice(-2000))}</pre>
+            </div>`;
+          }).join("");
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+      function startJobsPolling() { stopJobsPolling(); orState.jobsTimer = setInterval(loadJobs, 3000); }
+      function stopJobsPolling() { if (orState.jobsTimer) { clearInterval(orState.jobsTimer); orState.jobsTimer = null; } }
+
+      // ----- Discovery -----
+      async function runDiscovery() {
+        const body = {
+          sector: ORQ("#orDiscSector").value.trim(),
+          ciudad: ORQ("#orDiscCity").value.trim(),
+          max: parseInt(ORQ("#orDiscMax").value, 10) || 30,
+          extract_emails: ORQ("#orDiscEmails").checked,
+          import_direct: ORQ("#orDiscImport").checked,
+          source: ORQ("#orDiscSource").value || "auto",
+        };
+        if (!body.sector || !body.ciudad) { showStatus("Sector y ciudad obligatorios.", "error"); return; }
+        try {
+          const data = await orFetch("/admin/outreach/discover", {
+            method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
+          ORQ("#orDiscResults").innerHTML = `<div class="muted">Job #${data.job_id} en marcha. Resultados aqui en cuanto termine.</div>`;
+          watchDiscovery(data.job_id);
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+      let orDiscoveryItems = [];
+      async function watchDiscovery(jobId) {
+        const target = ORQ("#orDiscResults");
+        const poll = async () => {
+          try {
+            const j = await orFetch("/admin/outreach/jobs/" + jobId);
+            const log = j.log || "";
+            const match = log.match(/RESULT_JSON: (\[.*\])/);
+            if (j.status === "done" && match) {
+              const items = JSON.parse(match[1]);
+              orDiscoveryItems = items;
+              renderDiscoveryResults();
+              return;
+            }
+            if (j.status === "error") { target.innerHTML = `<div class="status error">Error: ${escapeHtml(log)}</div>`; return; }
+            target.innerHTML = `<div class="muted">Job #${jobId} ${j.status}...</div><pre style="font-size:11px;background:#0f172a;color:#cbd5f5;padding:8px;border-radius:6px;max-height:200px;overflow:auto;">${escapeHtml(log.slice(-1000))}</pre>`;
+            setTimeout(poll, 2500);
+          } catch(e){ target.innerHTML = `<div class="status error">${e.message}</div>`; }
+        };
+        poll();
+      }
+      const orDiscEmailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      function renderDiscoveryResults() {
+        const target = ORQ("#orDiscResults");
+        const items = orDiscoveryItems || [];
+        const withEmail = items.filter((i)=>i.email).length;
+        target.innerHTML =
+          `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+            <span class="muted" style="font-size:13px;">${items.length} resultados (${withEmail} con email auto)</span>
+            <button class="ghost small" type="button" id="orDiscSelAllBtn">Seleccionar con email</button>
+            <button class="ghost small" type="button" id="orDiscSelNoneBtn">Ninguno</button>
+            <button class="ghost small" type="button" id="orDiscInvertBtn">Invertir</button>
+            <span style="flex:1;"></span>
+            <span class="muted" id="orDiscSelCount" style="font-size:12px;">0 seleccionados</span>
+            <button class="secondary small" type="button" id="orDiscImportBtn">Importar seleccionados</button>
+          </div>
+          <p class="muted" style="font-size:12px;margin:0 0 10px 0;">Si una empresa no trae email, abre su web (icono enlace), busca contacto y pegalo en el campo Email. La fila se selecciona sola al introducir un email valido.</p>
+          <div style="overflow:auto;max-height:520px;border:1px solid #e4eaf2;border-radius:10px;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead style="position:sticky;top:0;background:#f6f8fb;z-index:1;">
+              <tr>
+                <th style="padding:8px 10px;text-align:left;width:30px;"><input type="checkbox" id="orDiscMaster" /></th>
+                <th style="padding:8px 10px;text-align:left;">Empresa</th>
+                <th style="padding:8px 10px;text-align:left;min-width:220px;">Email</th>
+                <th style="padding:8px 10px;text-align:left;">Niche</th>
+                <th style="padding:8px 10px;text-align:left;">Tel</th>
+                <th style="padding:8px 10px;text-align:left;">Web</th>
+              </tr>
+            </thead>
+            <tbody>${items.map((i, idx)=>{
+              const hasEmail = !!i.email;
+              return `<tr data-idx="${idx}" style="border-top:1px solid #eef2f7;${hasEmail?'':'background:#fffaf0;'}">
+                <td style="padding:6px 10px;"><input type="checkbox" class="orDiscRow" data-idx="${idx}" ${hasEmail?'checked':''} ${hasEmail?'':'disabled'}/></td>
+                <td style="padding:6px 10px;">${escapeHtml(i.business_name||'')}</td>
+                <td style="padding:4px 10px;"><input type="email" class="orDiscEmailInput" data-idx="${idx}" value="${escapeHtml(i.email||'')}" placeholder="contacto@..." style="width:100%;padding:5px 8px;border:1px solid #d6dde6;border-radius:6px;font-size:13px;" /></td>
+                <td style="padding:6px 10px;">${escapeHtml(i.niche||'')}</td>
+                <td style="padding:6px 10px;">${escapeHtml(i.phone||'')}</td>
+                <td style="padding:6px 10px;">${i.website?'<a href="'+escapeHtml(i.website)+'" target="_blank" rel="noopener">link</a>':''}</td>
+              </tr>`;
+            }).join("")}</tbody></table></div>`;
+        ORQ("#orDiscMaster").addEventListener("change", (ev) => {
+          document.querySelectorAll(".orDiscRow:not(:disabled)").forEach((c) => { c.checked = ev.target.checked; });
+          updateDiscSelCount();
+        });
+        ORQ("#orDiscSelAllBtn").addEventListener("click", () => {
+          document.querySelectorAll(".orDiscRow:not(:disabled)").forEach((c) => { c.checked = true; });
+          updateDiscSelCount();
+        });
+        ORQ("#orDiscSelNoneBtn").addEventListener("click", () => {
+          document.querySelectorAll(".orDiscRow").forEach((c) => { c.checked = false; });
+          updateDiscSelCount();
+        });
+        ORQ("#orDiscInvertBtn").addEventListener("click", () => {
+          document.querySelectorAll(".orDiscRow:not(:disabled)").forEach((c) => { c.checked = !c.checked; });
+          updateDiscSelCount();
+        });
+        ORQ("#orDiscImportBtn").addEventListener("click", importDiscoverySelection);
+        document.querySelectorAll(".orDiscRow").forEach((c) => c.addEventListener("change", updateDiscSelCount));
+        document.querySelectorAll(".orDiscEmailInput").forEach((inp) => {
+          inp.addEventListener("input", (ev) => {
+            const idx = parseInt(ev.target.getAttribute("data-idx"), 10);
+            const val = (ev.target.value || "").trim();
+            orDiscoveryItems[idx].email = val;
+            const cb = document.querySelector(`.orDiscRow[data-idx="${idx}"]`);
+            if (cb) {
+              if (orDiscEmailRe.test(val)) {
+                cb.disabled = false;
+                cb.checked = true;
+                ev.target.style.borderColor = "#cdd6df";
+              } else {
+                cb.disabled = true;
+                cb.checked = false;
+                ev.target.style.borderColor = val ? "#f59e0b" : "#d6dde6";
+              }
+              updateDiscSelCount();
+            }
+          });
+        });
+        updateDiscSelCount();
+      }
+      function updateDiscSelCount() {
+        const n = document.querySelectorAll(".orDiscRow:checked").length;
+        const el = ORQ("#orDiscSelCount"); if (el) el.textContent = `${n} seleccionados`;
+      }
+      async function importDiscoverySelection() {
+        const checked = Array.from(document.querySelectorAll(".orDiscRow:checked"));
+        if (!checked.length) { showStatus("Selecciona al menos uno (introduce email si falta).", "error"); return; }
+        const sectorHint = ORQ("#orDiscSector").value.trim();
+        const cityHint = ORQ("#orDiscCity").value.trim();
+        const items = checked.map((c) => {
+          const i = orDiscoveryItems[parseInt(c.getAttribute("data-idx"), 10)] || {};
+          return {
+            email: (i.email || "").trim(),
+            business_name: i.business_name || "",
+            contact_name: "",
+            niche: i.niche || sectorHint,
+            website: i.website || "",
+            service_hint: sectorHint,
+            city: i.city || cityHint,
+            phone: i.phone || "",
+            tags: "discovery",
+            source: "discovery:osm",
+          };
+        }).filter((x) => orDiscEmailRe.test(x.email));
+        if (!items.length) { showStatus("Ningun email valido entre los seleccionados.", "error"); return; }
+        try {
+          const data = await orFetch("/admin/outreach/prospects/bulk", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ items, upsert: false })
+          });
+          showStatus(`Importados ${data.added} nuevos, ${data.updated} actualizados, ${data.skipped} omitidos.`, "ok");
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      // ----- Templates -----
+      let orTemplatesCache = null;
+      async function loadTemplates() {
+        try {
+          const data = await orFetch("/admin/outreach/templates");
+          orTemplatesCache = data.overrides || {};
+          fillTemplateForm();
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+      function fillTemplateForm() {
+        const stage = ORQ("#orTplStage").value;
+        const o = orTemplatesCache[stage] || {};
+        ORQ("#orTplSubjects").value = o.subject_pool || "";
+        ORQ("#orTplText").value = o.body_text || "";
+        ORQ("#orTplHtml").value = o.body_html || "";
+        renderTemplatePreview();
+      }
+      let orTplPreviewTimer = null;
+      async function renderTemplatePreview() {
+        if (orTplPreviewTimer) clearTimeout(orTplPreviewTimer);
+        orTplPreviewTimer = setTimeout(async () => {
+          try {
+            const data = await orFetch("/admin/outreach/templates/preview", {
+              method: "POST", headers: {"Content-Type":"application/json"},
+              body: JSON.stringify({
+                stage: ORQ("#orTplStage").value,
+                subject_pool: ORQ("#orTplSubjects").value,
+                body_text: ORQ("#orTplText").value,
+                body_html: ORQ("#orTplHtml").value,
+              })
+            });
+            ORQ("#orTplPreviewSubject").innerHTML = "Subject: <strong>" + escapeHtml(data.subject || "") + "</strong>";
+            const iframe = ORQ("#orTplPreviewFrame");
+            const doc = iframe.contentDocument || iframe.contentWindow.document;
+            doc.open(); doc.write(data.html || ""); doc.close();
+          } catch (err) {
+            ORQ("#orTplPreviewSubject").textContent = "Error preview: " + err.message;
+          }
+        }, 350);
+      }
+      async function saveTemplate() {
+        const stage = ORQ("#orTplStage").value;
+        try {
+          await orFetch("/admin/outreach/templates", {
+            method:"PUT", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({
+              stage,
+              subject_pool: ORQ("#orTplSubjects").value,
+              body_text: ORQ("#orTplText").value,
+              body_html: ORQ("#orTplHtml").value,
+            })
+          });
+          showStatus("Override guardado", "ok"); loadTemplates();
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+      async function resetTemplate() {
+        const stage = ORQ("#orTplStage").value;
+        await orFetch("/admin/outreach/templates", {
+          method:"PUT", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ stage, subject_pool:"", body_text:"", body_html:"" }) });
+        showStatus("Override borrado", "ok"); loadTemplates();
+      }
+
+      // ----- Suppressions -----
+      async function loadSuppressions() {
+        try {
+          const data = await orFetch("/admin/outreach/suppressions");
+          const body = ORQ("#orSupBody");
+          if (!data.items.length) { body.innerHTML = '<tr><td colspan="4" class="empty">Sin bajas.</td></tr>'; return; }
+          body.innerHTML = data.items.map((s) =>
+            `<tr><td>${escapeHtml(s.email)}</td><td>${escapeHtml(s.reason||'')}</td><td>${s.added_at}</td>
+              <td><button class="ghost small" data-unsup="${escapeHtml(s.email)}">Quitar</button></td></tr>`).join("");
+          body.querySelectorAll("[data-unsup]").forEach((btn) => btn.addEventListener("click", async () => {
+            await orFetch("/admin/outreach/suppress/" + encodeURIComponent(btn.dataset.unsup), { method:"DELETE" });
+            loadSuppressions();
+          }));
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+      async function addSuppression() {
+        const email = ORQ("#orSupEmail").value.trim();
+        if (!email) return;
+        try {
+          await orFetch("/admin/outreach/suppress", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ email, reason: ORQ("#orSupReason").value || "manual" }) });
+          ORQ("#orSupEmail").value = ""; loadSuppressions();
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      // ----- Import / Export -----
+      async function importCsv(file) {
+        const text = await file.text();
+        try {
+          const data = await orFetch("/admin/outreach/import", { method:"POST", headers:{"Content-Type":"text/csv"}, body: text });
+          showStatus(`Import: ${data.added} nuevos, ${data.updated} actualizados, ${data.skipped} descartados.`, "ok");
+          loadProspects();
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      // ----- Wiring -----
+      ORALL("[data-outreach-tab]").forEach((btn) => btn.addEventListener("click", () => setOutreachTab(btn.dataset.outreachTab)));
+      ORQ("#orRefreshStats").addEventListener("click", loadStats);
+      ORQ("#orExportCsv").addEventListener("click", (ev) => { ev.preventDefault(); window.open("/admin/outreach/export.csv", "_blank"); });
+      ORQ("#orApplyFilters").addEventListener("click", () => {
+        orState.filters = {
+          q: ORQ("#orSearch").value.trim(), status: ORQ("#orFilterStatus").value,
+          niche: ORQ("#orFilterNiche").value.trim(), city: ORQ("#orFilterCity").value.trim(),
+          source: ORQ("#orFilterSource").value.trim(),
+        };
+        orState.page = 1; loadProspects();
+      });
+      ORQ("#orPrevPage").addEventListener("click", () => { if (orState.page>1) { orState.page--; loadProspects(); } });
+      ORQ("#orNextPage").addEventListener("click", () => { if (orState.page*orState.pageSize<orState.total) { orState.page++; loadProspects(); } });
+      ORQ("#orImportBtn").addEventListener("click", () => ORQ("#orImportFile").click());
+      ORQ("#orImportFile").addEventListener("change", (ev) => { if (ev.target.files[0]) importCsv(ev.target.files[0]); });
+      ORQ("#orNewProspectBtn").addEventListener("click", async () => {
+        const email = prompt("Email:"); if (!email) return;
+        const business = prompt("Nombre empresa:"); if (!business) return;
+        try {
+          await orFetch("/admin/outreach/prospects", { method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ email, business_name: business, status:"new" }) });
+          showStatus("Prospect creado", "ok"); loadProspects();
+        } catch (err) { showStatus(err.message, "error"); }
+      });
+      ORQ("#orDryRunBtn").addEventListener("click", () => launchSend(true));
+      ORQ("#orSendRealBtn").addEventListener("click", () => launchSend(false));
+      ORQ("#orDiscRunBtn").addEventListener("click", runDiscovery);
+      ORQ("#orTplStage").addEventListener("change", fillTemplateForm);
+      ORQ("#orTplHtml").addEventListener("input", renderTemplatePreview);
+      ORQ("#orTplText").addEventListener("input", renderTemplatePreview);
+      ORQ("#orTplSubjects").addEventListener("input", renderTemplatePreview);
+      ORQ("#orTplSaveBtn").addEventListener("click", saveTemplate);
+      ORQ("#orTplResetBtn").addEventListener("click", resetTemplate);
+      ORQ("#orSupAddBtn").addEventListener("click", addSuppression);
+      ORQ("#orDrawerCloseBtn").addEventListener("click", () => { ORQ("#orDrawer").style.display = "none"; });
+      ORQ("#orDrawer").addEventListener("click", (ev) => { if (ev.target.id === "orDrawer") ORQ("#orDrawer").style.display = "none"; });
+      ORQ("#orSendPreviewClose").addEventListener("click", () => { ORQ("#orSendPreview").style.display = "none"; });
+      ORQ("#orSendPreview").addEventListener("click", (ev) => { if (ev.target.id === "orSendPreview") ORQ("#orSendPreview").style.display = "none"; });
+      function showSendPreview(data) {
+        ORQ("#orSendPreviewMeta").textContent = (data.email || "") + " — stage " + (data.stage || "");
+        ORQ("#orSendPreviewSubject").textContent = data.subject || "";
+        ORQ("#orSendPreviewText").textContent = data.text || "";
+        const frame = ORQ("#orSendPreviewFrame");
+        const doc = frame.contentDocument || frame.contentWindow.document;
+        doc.open(); doc.write(data.html || ""); doc.close();
+        ORQ("#orSendPreview").style.display = "flex";
+      }
+
+      // Hook entrada al view outreach
+      const prevSetView = window.setView || setView;
+      window.setView = function(view) {
+        prevSetView(view);
+        if (view === "outreach") {
+          if (!orState.loaded) { setOutreachTab("dashboard"); orState.loaded = true; }
+          else loadStats();
+        } else {
+          stopJobsPolling();
+        }
+      };
+      elements.navButtons.forEach((button) => {
+        if (button.dataset.navView === "outreach") {
+          button.addEventListener("click", () => window.setView("outreach"));
+        }
+      });
+    })();
+    // === END OUTREACH PANEL =====================================
   </script>
 </body>
 </html>

@@ -91,17 +91,24 @@
     const href = link.getAttribute('href') || '';
     const label = ctaLabel(link);
 
-    if (href.includes('/demo/')) {
+    if (link.classList && link.classList.contains('plan-cta')) {
+      track('plan_cta_click', {
+        cta_label: label,
+        cta_href: href,
+        plan: link.getAttribute('data-plan') || '',
+        plan_label: link.getAttribute('data-plan-label') || '',
+      });
+    } else if (link.hasAttribute && link.hasAttribute('data-open-chat')) {
+      track('chat_consultation_cta_click', {
+        cta_label: label,
+        cta_location: link.getAttribute('data-cta-location') || '',
+      });
+    } else if (href.includes('/demo/')) {
       track('demo_cta_click', { cta_label: label, cta_href: href });
     } else if (href.includes('/consultas/')) {
       track('consultation_cta_click', { cta_label: label, cta_href: href });
     } else if (href.includes('app.vantelia.es/acceso')) {
       track('portal_access_click', { cta_label: label, cta_href: href });
-    } else if (link.classList && link.classList.contains('plan-cta')) {
-      track('plan_cta_click', {
-        cta_label: label,
-        plan: link.getAttribute('data-plan') || '',
-      });
     }
   }, true);
 
