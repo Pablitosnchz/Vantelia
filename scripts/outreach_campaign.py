@@ -41,6 +41,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 from pathlib import Path
 from typing import Iterable
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
@@ -175,6 +176,22 @@ def env_bool(name: str, default: bool) -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def _email_domain(value: str) -> str:
+    if not value or "@" not in value:
+        return ""
+    return value.rsplit("@", 1)[-1].strip().lower()
+
+
+def _align_from_email(from_email: str, smtp_username: str) -> str:
+    if "@" not in from_email and "@" in smtp_username:
+        return smtp_username
+    from_domain = _email_domain(from_email)
+    smtp_domain = _email_domain(smtp_username)
+    if smtp_domain and from_domain and smtp_domain != from_domain:
+        return smtp_username
+    return from_email
+
+
 # -------------------- Importacion --------------------
 
 CSV_FIELDS = (
@@ -242,18 +259,40 @@ def cmd_import(args: argparse.Namespace) -> int:
 
 def smtp_settings() -> dict[str, object]:
     load_dotenv(BASE_DIR / ".env")
+    # OUTREACH_FROM_* permite usar buzon/nombre personal solo para outreach,
+    # dejando SMTP_FROM_* para transaccionales (reset, recordatorios, etc.).
+    # Personal sender (Pablo Sanchez <pablo@...>) entra mejor en Primary que
+    # marca corporativa (Vantelia <info@...>).
+    smtp_user = os.getenv("SMTP_USERNAME", "").strip()
+    from_email_raw = (
+        os.getenv("OUTREACH_FROM_EMAIL", "").strip()
+        or os.getenv("SMTP_FROM_EMAIL", "").strip()
+        or smtp_user
+    )
+    from_email = _align_from_email(from_email_raw, smtp_user)
+    from_name = (
+        os.getenv("OUTREACH_FROM_NAME", "").strip()
+        or os.getenv("SMTP_FROM_NAME", "Vantelia").strip()
+    )
+    reply_to = (
+        os.getenv("OUTREACH_REPLY_TO", "").strip()
+        or os.getenv("SMTP_REPLY_TO", "soporte@vantelia.es").strip()
+    )
+    domain_for_id = os.getenv("OUTREACH_MSGID_DOMAIN", "").strip()
+    if not domain_for_id:
+        domain_for_id = _email_domain(from_email) or "vantelia.es"
     return {
         "host": os.getenv("SMTP_HOST", "").strip(),
         "port": int(os.getenv("SMTP_PORT", "587")),
-        "username": os.getenv("SMTP_USERNAME", "").strip(),
+        "username": smtp_user,
         "password": os.getenv("SMTP_PASSWORD", "").strip(),
-        "from_email": os.getenv("SMTP_FROM_EMAIL", "").strip() or os.getenv("SMTP_USERNAME", "").strip(),
-        "from_name": os.getenv("SMTP_FROM_NAME", "Vantelia").strip(),
-        "reply_to": os.getenv("SMTP_REPLY_TO", "soporte@vantelia.es").strip(),
+        "from_email": from_email,
+        "from_name": from_name,
+        "reply_to": reply_to,
         "starttls": env_bool("SMTP_STARTTLS", True),
         "unsubscribe_mailto": os.getenv("OUTREACH_UNSUBSCRIBE_EMAIL", "baja@vantelia.es").strip(),
         "bcc": os.getenv("OUTREACH_BCC", "").strip(),
-        "domain_for_id": os.getenv("OUTREACH_MSGID_DOMAIN", "vantelia.es").strip(),
+        "domain_for_id": domain_for_id,
     }
 
 
@@ -278,12 +317,13 @@ def build_message(
         msg["In-Reply-To"] = in_reply_to
         msg["References"] = in_reply_to
     unsub = str(settings["unsubscribe_mailto"]) or "baja@vantelia.es"
+    # List-Unsubscribe fijo para mejorar entregabilidad y cumplimiento.
     msg["List-Unsubscribe"] = f"<mailto:{unsub}?subject=BAJA>"
     msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
-    msg["X-Mailer"] = "vantelia-outreach/1.0"
-    msg["Auto-Submitted"] = "auto-generated"
     msg.set_content(text)
-    msg.add_alternative(html_body, subtype="html")
+    # Enviamos multipart con HTML para mantener consistencia visual y version rica.
+    if html_body:
+        msg.add_alternative(html_body, subtype="html")
     return msg
 
 
@@ -313,7 +353,11 @@ def in_business_window() -> tuple[bool, str]:
     except ValueError:
         start, end = 9, 19
     skip_weekend = env_bool("OUTREACH_SKIP_WEEKEND", True)
-    now = datetime.now()
+    tz_name = os.getenv("OUTREACH_TIMEZONE", "Europe/Madrid")
+    try:
+        now = datetime.now(ZoneInfo(tz_name))
+    except Exception:
+        now = datetime.now(ZoneInfo("Europe/Madrid"))
     if skip_weekend and now.weekday() >= 5:
         return False, f"fin de semana ({now.strftime('%a')})"
     if not (start <= now.hour < end):

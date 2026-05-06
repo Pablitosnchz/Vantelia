@@ -11,6 +11,7 @@ import base64
 import hashlib
 import hmac
 import html as html_lib
+import os
 import re
 import secrets
 from dataclasses import dataclass
@@ -109,28 +110,27 @@ def stable_pick(seed: str, options: list[str]) -> str:
 
 
 SUBJECTS_COLD = [
-    "Idea concreta para {business}",
-    "Asistente IA para {business}",
-    "Demo personalizada para {business}",
-    "Posible mejora para la web de {business}",
+    "Consulta rapida para {business}",
+    "{business}: contacto breve",
+    "Pregunta corta sobre {business}",
 ]
 
 SUBJECTS_FU1 = [
-    "Re: {business} y la demo",
-    "¿Te llego mi mensaje, {first_or_team}?",
-    "Reabro: demo IA para {business}",
+    "Seguimiento: {business}",
+    "{business}: lo dejo en un minuto",
+    "Dejo esto aqui por si encaja, {first_or_team}",
 ]
 
 SUBJECTS_FU2 = [
-    "Un caso real parecido a {business}",
-    "{business}: 3 minutos para enseñartelo",
-    "Te lo dejo grabado para {business}",
+    "Ejemplo rapido para {business}",
+    "{business}: te paso un esquema",
+    "Notas cortas para {business}",
 ]
 
 SUBJECTS_BREAKUP = [
-    "Cierro tu ficha de {business}",
-    "Ultimo correo sobre {business}",
-    "Lo dejo aqui, {first_or_team}",
+    "Cierro el hilo por ahora",
+    "{business}: lo dejo aqui",
+    "Ultimo mensaje, {first_or_team}",
 ]
 
 
@@ -152,69 +152,49 @@ def pick_subject(stage: str, p: Prospect) -> str:
 
 SIGNATURE_TEXT = (
     "Pablo Sanchez\n"
-    "Fundador de Vantelia\n"
-    "https://www.vantelia.es\n"
+    "Vantelia\n"
 )
 
 
 def signature_html(stage: str) -> str:
+    # Firma plana tipo email humano: sin tablas, sin gradientes, sin UTMs.
     return (
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
-        'style="margin:24px 0 0 0;border-collapse:collapse;">'
-        '<tr><td style="padding:16px 0 0 0;border-top:1px solid #eef2f7;'
-        'font-family:Inter,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#0B132B;">'
-        '<strong style="font-weight:600;color:#0B132B;">Pablo Sanchez</strong><br>'
-        '<span style="color:#637c8e;font-size:13px;">Fundador de Vantelia</span><br>'
-        f'<a href="https://www.vantelia.es?utm_source=outreach&amp;utm_medium=email&amp;utm_campaign={stage}" '
-        'style="color:#0891b2;text-decoration:none;font-size:13px;font-weight:500;">www.vantelia.es</a>'
-        '</td></tr></table>'
+        '<p style="margin:18px 0 0 0;">'
+        'Un saludo,<br>'
+        'Pablo Sanchez<br>'
+        'Vantelia'
+        '</p>'
     )
 
 
 def cta_button_html(text: str, href: str = "mailto:info@vantelia.es") -> str:
+    # Sin boton: enlace inline, igual que en correo manual.
     safe_text = html_lib.escape(text)
     safe_href = html_lib.escape(href, quote=True)
-    return (
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
-        'style="margin:18px 0 6px 0;border-collapse:collapse;">'
-        '<tr><td style="border-radius:10px;'
-        'background:linear-gradient(135deg,#00D1FF 0%,#00F5D4 100%);'
-        'background-color:#00D1FF;">'
-        f'<a href="{safe_href}" style="display:inline-block;padding:13px 28px;'
-        'font-family:Inter,Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;'
-        'color:#0B132B;text-decoration:none;letter-spacing:0.2px;border-radius:10px;">'
-        f'{safe_text}</a>'
-        '</td></tr></table>'
-    )
+    return f'<p style="margin:12px 0;"><a href="{safe_href}">{safe_text}</a></p>'
 
 
 def footer_text(unsubscribe_mailto: str) -> str:
-    return (
-        "\n--\n"
-        "Vantelia | Asistentes IA para negocios B2B en España.\n"
-        "Si no quieres recibir mas mensajes, responde \"BAJA\" o escribe a "
-        f"{unsubscribe_mailto}. Te eliminaremos al instante.\n"
+    # Footer minimo sin linea de baja. Las menciones legales completas se incluyen
+    # solo si OUTREACH_LEGAL_FOOTER=true (se activa con volumen alto).
+    legal = (
         "Tratamos tus datos solo para este contacto comercial. Responsable: Vantelia. "
         "Base legal: interes legitimo (LSSI/RGPD).\n"
     )
+    if os.getenv("OUTREACH_LEGAL_FOOTER", "").lower() in ("1", "true", "yes"):
+        return "\n--\n" + legal
+    return ""
 
 
 def footer_html(unsubscribe_mailto: str) -> str:
-    safe_mail = html_lib.escape(unsubscribe_mailto)
-    return (
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
-        'style="margin:28px 0 0 0;border-collapse:collapse;">'
-        '<tr><td style="padding:18px 0 0 0;border-top:1px solid #eef2f7;'
-        'font-family:Inter,Helvetica,Arial,sans-serif;font-size:11px;line-height:1.6;'
-        'color:#8fa3b4;text-align:left;">'
-        '<strong style="color:#637c8e;">Vantelia</strong> &middot; Asistentes IA para negocios B2B en España.<br>'
-        f'Si no quieres recibir mas mensajes, responde <strong>BAJA</strong> o escribe a '
-        f'<a href="mailto:{safe_mail}?subject=BAJA" style="color:#8fa3b4;text-decoration:underline;">{safe_mail}</a>. '
-        'Te eliminaremos al instante.<br>'
-        '<span style="color:#aab8c5;">Tratamos tus datos solo para este contacto comercial. '
-        'Responsable: Vantelia. Base legal: interes legitimo (LSSI/RGPD).</span>'
-        '</td></tr></table>'
-    )
+    if os.getenv("OUTREACH_LEGAL_FOOTER", "").lower() in ("1", "true", "yes"):
+        return (
+            '<p style="margin:18px 0 0 0;font-size:12px;color:#666;">'
+            'Tratamos tus datos solo para este contacto comercial. Responsable: Vantelia. '
+            'Base legal: interes legitimo (LSSI/RGPD).'
+            '</p>'
+        )
+    return ""
 
 
 def html_shell(inner_html: str, preheader: str = "") -> str:
@@ -226,209 +206,106 @@ def html_shell(inner_html: str, preheader: str = "") -> str:
             f'{html_lib.escape(preheader)}'
             '</div>'
         )
+    # Email plano tipo correo humano: sin card, sin logo grafico, sin marketing chrome.
+    # Gmail clasifica como Promociones cuando ve tablas anidadas, gradientes, botones grandes.
     return (
-        '<!doctype html><html lang="es" xmlns:v="urn:schemas-microsoft-com:vml">'
-        '<head>'
+        '<!doctype html><html lang="es"><head>'
         '<meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        '<meta name="x-apple-disable-message-reformatting">'
-        '<meta http-equiv="X-UA-Compatible" content="IE=edge">'
-        '<title>Vantelia</title>'
-        '<style>'
-        '@media (max-width:620px){.vt-card{padding:22px 18px !important;}.vt-shell{padding:14px 8px !important;}}'
-        'a{color:#0891b2;}'
-        '</style>'
         '</head>'
-        '<body style="margin:0;padding:0;background:#f6f8fb;'
-        'font-family:Inter,Helvetica,Arial,sans-serif;color:#0B132B;-webkit-font-smoothing:antialiased;">'
+        '<body style="margin:0;padding:16px;font-family:Arial,Helvetica,sans-serif;'
+        'font-size:14px;line-height:1.5;color:#222;">'
         f'{pre}'
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
-        'style="background:#f6f8fb;border-collapse:collapse;">'
-        '<tr><td align="center" class="vt-shell" style="padding:28px 16px;">'
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" '
-        'style="max-width:600px;width:100%;border-collapse:collapse;">'
-        # Logo / header
-        '<tr><td style="padding:0 0 18px 0;">'
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
-        'style="border-collapse:collapse;">'
-        '<tr><td style="font-family:Inter,Helvetica,Arial,sans-serif;font-size:20px;'
-        'font-weight:700;letter-spacing:-0.4px;color:#0B132B;">'
-        '<span style="background:linear-gradient(135deg,#00D1FF 0%,#00F5D4 100%);'
-        '-webkit-background-clip:text;-webkit-text-fill-color:transparent;'
-        'background-clip:text;color:#00D1FF;">Vantelia</span>'
-        '</td></tr></table>'
-        '</td></tr>'
-        # Card
-        '<tr><td class="vt-card" style="background:#ffffff;border:1px solid #e4eaf2;'
-        'border-radius:16px;padding:32px 28px;box-shadow:0 1px 2px rgba(11,19,43,0.04);'
-        'font-family:Inter,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#172033;">'
-        f'{inner_html}'
-        '</td></tr>'
-        # Outer note
-        '<tr><td style="padding:14px 6px 0 6px;'
-        'font-family:Inter,Helvetica,Arial,sans-serif;font-size:11px;color:#aab8c5;text-align:center;">'
-        'Email enviado a contactos publicos de empresas españolas. '
-        '<a href="https://www.vantelia.es" style="color:#aab8c5;text-decoration:underline;">vantelia.es</a>'
-        '</td></tr>'
-        '</table>'
-        '</td></tr></table>'
+        f'<div style="max-width:560px;">{inner_html}</div>'
         '</body></html>'
     )
 
 
 def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
-    task, outcome, proof = niche_copy(p.niche, p.service_hint)
-    service_line = (
-        f"He visto que en {p.business_name} trabajais {p.service_hint}."
-        if p.service_hint
-        else f"He visto vuestro negocio en {p.city}."
-    )
-    web_note = (
-        f" Eche un ojo a vuestra web ({p.website}) y creo que tiene margen claro de mejora."
-        if p.website
-        else ""
-    )
-
     text = (
         f"{p.greeting}\n\n"
-        f"Soy Pablo, fundador de Vantelia. {service_line}{web_note}\n\n"
-        f"Os escribo porque {proof}. Un asistente IA conectado a vuestra web "
-        f"y a WhatsApp puede {task}, con el objetivo de {outcome}.\n\n"
-        f"Estoy preparando 3 demos personalizadas para negocios de {p.city} esta semana. "
-        f"La hago con vuestra propia informacion, en menos de 24h y sin compromiso.\n\n"
-        f"Si encaja, lo dejamos funcionando 30 dias gratis, sin permanencia, "
-        f"y medimos juntos si genera solicitudes reales.\n\n"
-        f"¿Te paso una demo concreta de {p.business_name}? Con un \"si\" basta y te la mando.\n\n"
+        f"Soy Pablo, de Vantelia. Trabajo con negocios que quieren resolver preguntas "
+        f"habituales en la web y filtrar solicitudes sin perder tiempo.\n\n"
+        f"Vi {p.business_name} y pense que podria encajar. Si eres la persona adecuada, "
+        f"te mando un esquema corto con el flujo y un ejemplo adaptado.\n\n"
+        f"Si no, dime con quien deberia hablar.\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
-
-    web_html = ""
-    if p.website:
-        url = html_lib.escape(p.website, quote=True)
-        url_text = html_lib.escape(p.website)
-        web_html = (
-            f' Eche un ojo a vuestra web (<a href="{url}" style="color:#0891b2;">{url_text}</a>) '
-            f"y creo que tiene margen claro de mejora."
-        )
-    cta = cta_button_html(f"Si, preparame la demo")
     inner = (
-        f'<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{html_lib.escape(p.greeting)}</p>'
-        f'<p style="margin:0 0 14px 0;">Soy Pablo, fundador de <strong style="color:#0B132B;">Vantelia</strong>. '
-        f'{html_lib.escape(service_line)}{web_html}</p>'
-        f'<p style="margin:0 0 14px 0;">Os escribo porque '
-        f'<em style="color:#0891b2;font-style:normal;font-weight:500;">{html_lib.escape(proof)}</em>. '
-        f'Un asistente IA conectado a vuestra web y a WhatsApp puede '
-        f'<strong>{html_lib.escape(task)}</strong>, con el objetivo de '
-        f'<strong>{html_lib.escape(outcome)}</strong>.</p>'
-        # Highlight box
-        f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
-        f'style="border-collapse:collapse;margin:18px 0;">'
-        f'<tr><td style="background:#f0fbff;border-left:3px solid #00D1FF;border-radius:6px;'
-        f'padding:14px 16px;font-size:14px;color:#0B132B;line-height:1.55;">'
-        f'<strong style="color:#0891b2;">3 demos personalizadas</strong> esta semana para negocios de '
-        f'{html_lib.escape(p.city)}. Hecha con vuestra propia informacion, en menos de 24h y sin compromiso.<br>'
-        f'<span style="color:#637c8e;font-size:13px;">Si encaja: 30 dias gratis, sin permanencia.</span>'
-        f'</td></tr></table>'
-        f'<p style="margin:0 0 6px 0;font-size:16px;color:#0B132B;">'
-        f'<strong>¿Te paso una demo concreta de {html_lib.escape(p.business_name)}?</strong></p>'
-        f'<p style="margin:0 0 4px 0;color:#637c8e;font-size:14px;">Con un "si" basta y te la mando.</p>'
-        f'{cta}'
+        f'<p>{html_lib.escape(p.greeting)}</p>'
+        f'<p>Soy Pablo, de Vantelia. Trabajo con negocios que quieren resolver preguntas '
+        f'habituales en la web y filtrar solicitudes sin perder tiempo.</p>'
+        f'<p>Vi <strong>{html_lib.escape(p.business_name)}</strong> y pense que podria encajar. '
+        f'Si eres la persona adecuada, te mando un esquema corto con el flujo y un ejemplo adaptado.</p>'
+        f'<p><strong>Si no, dime con quien deberia hablar.</strong></p>'
         f'{signature_html("cold")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
-    preheader = f"Demo IA personalizada para {p.business_name} en menos de 24h, sin compromiso."
-    return pick_subject("cold", p), text, html_shell(inner, preheader=preheader)
+    return pick_subject("cold", p), text, html_shell(inner)
 
 
 def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     text = (
         f"{p.greeting}\n\n"
-        f"Te escribi hace unos dias sobre montaros una demo de asistente IA para "
-        f"{p.business_name}. Cierro huecos de agenda esta semana y queria saber si os encaja.\n\n"
-        f"Si lo prefieres, te la grabo en 3 minutos con vuestra info y te la mando por aqui. "
-        f"Sin llamada, sin compromiso.\n\n"
-        f"¿Te interesa que la prepare?\n\n"
+        f"Te escribi hace unos dias. Por si no lo viste, puedo mandarte un esquema corto "
+        f"con el flujo y un ejemplo adaptado a {p.business_name}.\n\n"
+        f"Si no es prioridad ahora, lo dejo aqui.\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
-    cta = cta_button_html("Si, prepara la demo")
     inner = (
         f'<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{html_lib.escape(p.greeting)}</p>'
-        f'<p style="margin:0 0 14px 0;">Te escribi hace unos dias sobre montaros una demo de '
-        f'asistente IA para <strong>{html_lib.escape(p.business_name)}</strong>. Cierro huecos de '
-        f'agenda esta semana y queria saber si os encaja.</p>'
-        f'<p style="margin:0 0 14px 0;">Si lo prefieres, te la '
-        f'<strong style="color:#0891b2;">grabo en 3 minutos</strong> con vuestra info y te la '
-        f'mando por aqui. Sin llamada, sin compromiso.</p>'
+        f'<p style="margin:0 0 14px 0;">Te escribi hace unos dias. Por si no lo viste, puedo '
+        f'mandarte un esquema corto con el flujo y un ejemplo adaptado a '
+        f'<strong>{html_lib.escape(p.business_name)}</strong>.</p>'
         f'<p style="margin:0 0 6px 0;font-size:16px;color:#0B132B;">'
-        f'<strong>¿Te interesa que la prepare?</strong></p>'
-        f'{cta}'
+        f'<strong>Si no es prioridad ahora, lo dejo aqui.</strong></p>'
         f'{signature_html("fu1")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
-    preheader = f"Reabro: demo IA grabada en 3 minutos para {p.business_name}."
+    preheader = f"Seguimiento breve para {p.business_name}."
     return pick_subject("fu1", p), text, html_shell(inner, preheader=preheader)
 
 
 def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
-    task, outcome, proof = niche_copy(p.niche, p.service_hint)
     text = (
         f"{p.greeting}\n\n"
-        f"Te dejo un caso concreto para que veas el angulo:\n\n"
-        f"Negocios parecidos a {p.business_name} usan Vantelia para {task}. "
-        f"En la primera semana suelen ver mas solicitudes desde la web y menos llamadas repetidas.\n\n"
-        f"Si quieres, te lo monto con vuestros datos reales y te paso un enlace de demo privado. "
-        f"24h y listo.\n\n"
-        f"¿Sigo adelante?\n\n"
+        f"Te dejo un ejemplo rapido de lo que solemos montar: preguntas frecuentes + "
+        f"captura de datos + derivacion a la persona adecuada.\n\n"
+        f"Si te encaja, lo adapto a {p.business_name} y te lo envio.\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
-    cta = cta_button_html("Si, montalo con mis datos")
     inner = (
         f'<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{html_lib.escape(p.greeting)}</p>'
-        f'<p style="margin:0 0 14px 0;">Te dejo un caso concreto para que veas el angulo:</p>'
-        # Quote-style block
-        f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
-        f'style="border-collapse:collapse;margin:14px 0 18px 0;">'
-        f'<tr><td style="background:#f9fbfd;border-left:3px solid #00F5D4;border-radius:6px;'
-        f'padding:16px 18px;font-size:14px;color:#172033;line-height:1.6;">'
-        f'Negocios parecidos a <strong style="color:#0B132B;">{html_lib.escape(p.business_name)}</strong> '
-        f'usan Vantelia para <strong style="color:#0891b2;">{html_lib.escape(task)}</strong>. '
-        f'En la primera semana suelen ver mas solicitudes desde la web y menos llamadas repetidas.'
-        f'</td></tr></table>'
-        f'<p style="margin:0 0 14px 0;">Si quieres, te lo monto con vuestros datos reales y te '
-        f'paso un enlace de demo privado. <strong>24h y listo.</strong></p>'
-        f'<p style="margin:0 0 6px 0;font-size:16px;color:#0B132B;"><strong>¿Sigo adelante?</strong></p>'
-        f'{cta}'
+        f'<p style="margin:0 0 14px 0;">Te dejo un ejemplo rapido de lo que solemos montar: '
+        f'preguntas frecuentes + captura de datos + derivacion a la persona adecuada.</p>'
+        f'<p style="margin:0 0 6px 0;font-size:16px;color:#0B132B;">'
+        f'<strong>Si te encaja, lo adapto a {html_lib.escape(p.business_name)} y te lo envio.</strong></p>'
         f'{signature_html("fu2")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
-    preheader = f"Caso real parecido a {p.business_name}: demo privada en 24h."
+    preheader = f"Ejemplo rapido para {p.business_name}."
     return pick_subject("fu2", p), text, html_shell(inner, preheader=preheader)
 
 
 def render_breakup(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     text = (
         f"{p.greeting}\n\n"
-        f"Cierro la ficha de {p.business_name} para no llenarte la bandeja. "
-        f"Si en algun momento quereis ver una demo de asistente IA, basta con responder a "
-        f"este correo y la preparo.\n\n"
-        f"Suerte con todo y un saludo,\n\n"
+        f"Lo dejo por ahora para no insistir. Si en otro momento te interesa, "
+        f"responde a este correo y lo preparo.\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
     inner = (
         f'<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{html_lib.escape(p.greeting)}</p>'
-        f'<p style="margin:0 0 14px 0;">Cierro la ficha de '
-        f'<strong>{html_lib.escape(p.business_name)}</strong> para no llenarte la bandeja. '
-        f'Si en algun momento quereis ver una demo de asistente IA, basta con responder a este '
-        f'correo y la preparo.</p>'
-        f'<p style="margin:0 0 6px 0;color:#637c8e;">Suerte con todo y un saludo,</p>'
+        f'<p style="margin:0 0 14px 0;">Lo dejo por ahora para no insistir. '
+        f'Si en otro momento te interesa, responde a este correo y lo preparo.</p>'
         f'{signature_html("breakup")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
-    preheader = f"Ultimo correo. Cierro tu ficha, {p.first_name or 'equipo'}."
+    preheader = f"Cierro el hilo por ahora, {p.first_name or 'equipo'}."
     return pick_subject("breakup", p), text, html_shell(inner, preheader=preheader)
 
 

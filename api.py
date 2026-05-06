@@ -12267,6 +12267,7 @@ try:
         in_business_window as outreach_in_business_window,
         domain_of as outreach_domain_of,
         normalize_email as outreach_normalize_email,
+        _row_to_prospect as outreach_row_to_prospect,
         STAGE_ORDER as OUTREACH_STAGES,
     )
     from outreach_templates import (  # type: ignore
@@ -12954,8 +12955,36 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
             limit=int(params.get("max", 20)),
             only_email=params.get("email") or None,
         )
+        # Modo test sin email concreto: si la query estandar no devuelve nada,
+        # caemos a "cualquier prospect" para poder previsualizar el envio real.
+        if not candidates and params.get("test_to") and not params.get("email"):
+            limit = int(params.get("max", 1)) or 1
+            rows = conn.execute(
+                "SELECT * FROM prospects ORDER BY created_at ASC LIMIT ?", (limit,)
+            ).fetchall()
+            candidates = [outreach_row_to_prospect(r) for r in rows]
+            if not candidates:
+                # BD sin prospects: prospect sintetico para que renderice plantilla.
+                from outreach_templates import Prospect as _Prospect  # type: ignore
+                candidates = [_Prospect(
+                    email=str(params["test_to"]),
+                    business_name="Prospect de prueba",
+                    contact_name="",
+                    niche="",
+                    website="",
+                    service_hint="",
+                    city="Madrid",
+                    phone="",
+                    tags="",
+                    source="test",
+                )]
+                _job_log(conn, job_id, "Test-mode fallback: BD sin prospects, usando prospect sintetico")
+            else:
+                _job_log(conn, job_id, f"Test-mode fallback: usando {len(candidates)} prospect(s) sin filtrar historial")
+
         _job_log(conn, job_id, f"Stage={stage} candidatos={len(candidates)} mode={'send' if real_send else 'dry-run'}")
         if not candidates:
+            _job_log(conn, job_id, "Sin candidatos. Comprueba que hay prospects en BD y que el stage seleccionado tiene pendientes.")
             _job_finish(conn, job_id, "done")
             return
 
@@ -13006,18 +13035,19 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                 _job_log(conn, job_id, f"ERROR {recipient}: {err}")
                 continue
 
-            conn.execute(
-                "INSERT INTO sends (email, stage, subject, sent_at, mode, message_id) VALUES (?,?,?,?,?,?)",
-                (p.email, stage, subject, _outreach_now(), mode, msg["Message-ID"] or ""),
-            )
-            conn.execute(
-                "UPDATE prospects SET status=CASE WHEN status='new' THEN 'contacted' ELSE status END, updated_at=? WHERE email=?",
-                (_outreach_now(), p.email),
-            )
-            conn.commit()
+            if mode == "send":
+                conn.execute(
+                    "INSERT INTO sends (email, stage, subject, sent_at, mode, message_id) VALUES (?,?,?,?,?,?)",
+                    (p.email, stage, subject, _outreach_now(), mode, msg["Message-ID"] or ""),
+                )
+                conn.execute(
+                    "UPDATE prospects SET status=CASE WHEN status='new' THEN 'contacted' ELSE status END, updated_at=? WHERE email=?",
+                    (_outreach_now(), p.email),
+                )
+                conn.commit()
+                domain_today[outreach_domain_of(p.email)] = domain_today.get(outreach_domain_of(p.email), 0) + 1
             sent_count += 1
-            domain_today[outreach_domain_of(p.email)] = domain_today.get(outreach_domain_of(p.email), 0) + 1
-            _job_log(conn, job_id, f"[{idx}/{len(candidates)}] OK {recipient} | {p.business_name}")
+            _job_log(conn, job_id, f"[{idx}/{len(candidates)}] OK {recipient} | {p.business_name} ({mode})")
 
             if idx < len(candidates):
                 import random as _r
@@ -13044,16 +13074,18 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
 def outreach_send(payload: OutreachSendRequest):
     if payload.stage not in OUTREACH_STAGES:
         raise HTTPException(status_code=400, detail="Stage invalido.")
+    test_to_clean = "" if payload.dry_run else (payload.test_to or "")
     params = {
         "stage": payload.stage,
         "max": payload.max,
-        "send": (not payload.dry_run) and not payload.test_to,
-        "test_to": payload.test_to or "",
+        "send": (not payload.dry_run) and not test_to_clean,
+        "test_to": test_to_clean,
         "email": payload.email or "",
         "after_days": payload.after_days,
         "delay": payload.delay,
         "jitter": payload.jitter,
         "force_window": payload.force_window,
+        "dry_run": bool(payload.dry_run),
     }
     with _outreach_db() as conn:
         cur = conn.execute(

@@ -340,7 +340,9 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
 /* ── Outreach panel ──── */
 .outreach-panel { display: none; padding-top: 12px; }
 .outreach-panel.active { display: block; animation: fadeUp .2s ease both; }
-.or-job { border:1px solid #e4eaf2; border-radius:10px; padding:10px 12px; background:#fafbfd; }
+.or-job { border:1px solid #e4eaf2; border-radius:10px; padding:10px 12px; background:#fafbfd; color:#0f172a; }
+.or-job header span { color:#0f172a; }
+.or-job .muted { color:#64748b !important; }
 .or-job header { display:flex; justify-content:space-between; align-items:center; gap:8px; }
 .or-job pre { background:#0f172a; color:#cbd5f5; font-size:11px; padding:8px; border-radius:6px; max-height:220px; overflow:auto; margin:6px 0 0; white-space:pre-wrap; }
 .or-status { padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; text-transform:uppercase; }
@@ -1984,7 +1986,7 @@ tbody tr:last-child td { border-bottom: none; }
             <div class="actions" style="margin-top:10px;">
               <button class="ghost small" type="button" id="orDryRunBtn">Dry-run</button>
               <button class="secondary small" type="button" id="orSendRealBtn">Enviar real</button>
-              <span class="muted" style="font-size:12px;align-self:center;">Sin test-to ni dry-run = envio real.</span>
+              <span class="muted" style="font-size:12px;align-self:center;">Dry-run no envía nada. Enviar real con test-to: solo a esa dirección. Enviar real sin test-to: a prospects reales.</span>
             </div>
             <h3 style="margin-top:18px;">Jobs recientes</h3>
             <div id="orJobsList" style="display:flex;flex-direction:column;gap:8px;max-height:460px;overflow:auto;"></div>
@@ -4016,7 +4018,7 @@ tbody tr:last-child td { border-bottom: none; }
           body.innerHTML = data.items.map((p) => {
             const status = p.status || "new";
             const badgeCls = ["replied","client","lost"].includes(status) ? status : "";
-            const last = p.last_sent_at ? new Date(p.last_sent_at).toLocaleString("es-ES") : "-";
+            const last = p.last_sent_at ? new Date(p.last_sent_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) : "-";
             return `<tr class="or-prospect-row" data-email="${escapeHtml(p.email)}">
               <td>${escapeHtml(p.business_name)}</td>
               <td>${escapeHtml(p.email)}${p.suppressed ? ' <span class="or-badge lost">BAJA</span>' : ''}</td>
@@ -4043,10 +4045,10 @@ tbody tr:last-child td { border-bottom: none; }
           ORQ("#orDrawerTitle").textContent = data.prospect.business_name;
           ORQ("#orDrawerEmail").textContent = email;
           const sends = data.sends.map((s, i) =>
-            `<li style="margin:4px 0;">${new Date(s.sent_at).toLocaleString("es-ES")} <strong>${escapeHtml(s.stage)}</strong> — ${escapeHtml(s.subject)} <span class="muted">(${s.mode})</span> <button class="ghost small" type="button" data-preview-stage="${escapeHtml(s.stage)}" style="margin-left:6px;">Ver email</button></li>`
+            `<li style="margin:4px 0;">${new Date(s.sent_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" })} <strong>${escapeHtml(s.stage)}</strong> — ${escapeHtml(s.subject)} <span class="muted">(${s.mode})</span> <button class="ghost small" type="button" data-preview-stage="${escapeHtml(s.stage)}" style="margin-left:6px;">Ver email</button></li>`
           ).join("") || "<li class='muted'>Sin envios.</li>";
           const events = data.events.map((e) =>
-            `<li>${new Date(e.ts).toLocaleString("es-ES")} <strong>${escapeHtml(e.type)}</strong>${e.url ? ' → ' + escapeHtml(e.url) : ''}</li>`
+            `<li>${new Date(e.ts).toLocaleString("es-ES", { timeZone: "Europe/Madrid" })} <strong>${escapeHtml(e.type)}</strong>${e.url ? ' → ' + escapeHtml(e.url) : ''}</li>`
           ).join("") || "<li class='muted'>Sin eventos.</li>";
           const sup = data.suppression ? `<p><strong>SUPRIMIDO:</strong> ${escapeHtml(data.suppression.reason)} (${data.suppression.added_at})</p>` : "";
           const p = data.prospect || {};
@@ -4134,8 +4136,11 @@ tbody tr:last-child td { border-bottom: none; }
           force_window: ORQ("#orSendForceWindow").checked,
           dry_run: !!dryRun,
         };
-        if (!dryRun && !body.test_to) {
-          if (!confirm(`Vas a enviar correo REAL a ${body.max} prospects (stage ${body.stage}). ¿Confirmar?`)) return;
+        if (!dryRun) {
+          const msg = body.test_to
+            ? `Vas a enviar correo de PRUEBA a ${body.test_to} (stage ${body.stage}). ¿Confirmar?`
+            : `Vas a enviar correo REAL a ${body.max} prospects (stage ${body.stage}). ¿Confirmar?`;
+          if (!confirm(msg)) return;
         }
         try {
           const data = await orFetch("/admin/outreach/send", {
@@ -4159,7 +4164,7 @@ tbody tr:last-child td { border-bottom: none; }
                 <span><strong>#${j.id}</strong> ${j.kind} · stage=${escapeHtml(params.stage||'-')} · max=${params.max||'-'}</span>
                 <span class="or-status ${j.status}">${j.status}</span>
               </header>
-              <div class="muted" style="font-size:11px;">Inicio: ${j.started_at} ${j.finished_at ? '· Fin: '+j.finished_at : ''}</div>
+              <div class="muted" style="font-size:11px;">Inicio: ${j.started_at ? new Date(j.started_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) : '-'} ${j.finished_at ? '· Fin: '+new Date(j.finished_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) : ''}</div>
               <pre>${escapeHtml((j.log || '').slice(-2000))}</pre>
             </div>`;
           }).join("");
