@@ -109,6 +109,27 @@ def stable_pick(seed: str, options: list[str]) -> str:
     return options[int(digest, 16) % len(options)]
 
 
+def _personal_context(p: Prospect) -> str:
+    parts = [p.city, p.niche, p.service_hint]
+    clean_parts = [part.strip() for part in parts if part and part.strip()]
+    return ", ".join(clean_parts)
+
+
+def _personal_line_text(p: Prospect) -> str:
+    if not p.business_name:
+        return ""
+    context = _personal_context(p)
+    if context:
+        return f"Sobre {p.business_name} ({context})."
+    return f"Sobre {p.business_name}."
+
+
+def _personal_line_html(p: Prospect) -> str:
+    line = _personal_line_text(p)
+    if not line:
+        return ""
+    return f'<p style="margin:0 0 12px 0;color:#4b5563;">{html_lib.escape(line)}</p>'
+
 SUBJECTS_COLD = [
     "Consulta rapida para {business}",
     "{business}: contacto breve",
@@ -153,6 +174,7 @@ def pick_subject(stage: str, p: Prospect) -> str:
 SIGNATURE_TEXT = (
     "Pablo Sanchez\n"
     "Vantelia\n"
+    "https://www.vantelia.es\n"
 )
 
 
@@ -162,16 +184,31 @@ def signature_html(stage: str) -> str:
         '<p style="margin:18px 0 0 0;">'
         'Un saludo,<br>'
         'Pablo Sanchez<br>'
-        'Vantelia'
+        'Vantelia &middot; <a href="https://www.vantelia.es">vantelia.es</a>'
         '</p>'
     )
 
 
 def cta_button_html(text: str, href: str = "mailto:info@vantelia.es") -> str:
-    # Sin boton: enlace inline, igual que en correo manual.
+    # Boton CTA con degradado Vantelia, estilo compatible con clientes de email.
     safe_text = html_lib.escape(text)
     safe_href = html_lib.escape(href, quote=True)
-    return f'<p style="margin:12px 0;"><a href="{safe_href}">{safe_text}</a></p>'
+    return (
+        '<table role="presentation" cellspacing="0" cellpadding="0" style="margin:14px 0;">'
+        '<tr>'
+        '<td style="border-radius:999px; background:#00D1FF; '
+        'background:linear-gradient(135deg,#00D1FF,#00F5D4); '
+        'box-shadow:0 10px 26px rgba(0,209,255,0.28);">'
+        f'<a href="{safe_href}" '
+        'style="display:inline-block;padding:12px 22px;border-radius:999px;'
+        'color:#04101C;font-size:14px;font-weight:700;text-decoration:none;'
+        'font-family:Arial,Helvetica,sans-serif;">'
+        f'{safe_text}'
+        '</a>'
+        '</td>'
+        '</tr>'
+        '</table>'
+    )
 
 
 def footer_text(unsubscribe_mailto: str) -> str:
@@ -222,23 +259,32 @@ def html_shell(inner_html: str, preheader: str = "") -> str:
 
 
 def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
+    personal_line = _personal_line_text(p)
+    personal_text = f"{personal_line}\n\n" if personal_line else ""
     text = (
         f"{p.greeting}\n\n"
+        f"{personal_text}"
         f"Soy Pablo, de Vantelia. Trabajo con negocios que quieren resolver preguntas "
         f"habituales en la web y filtrar solicitudes sin perder tiempo.\n\n"
+        f"Vantelia es una plataforma de asistentes IA para web y WhatsApp en empresas B2B.\n\n"
         f"Vi {p.business_name} y pense que podria encajar. Si eres la persona adecuada, "
         f"te mando un esquema corto con el flujo y un ejemplo adaptado.\n\n"
         f"Si no, dime con quien deberia hablar.\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
+    personal_html = _personal_line_html(p)
+    cta = cta_button_html("Si, preparame la demo")
     inner = (
         f'<p>{html_lib.escape(p.greeting)}</p>'
+        f'{personal_html}'
         f'<p>Soy Pablo, de Vantelia. Trabajo con negocios que quieren resolver preguntas '
         f'habituales en la web y filtrar solicitudes sin perder tiempo.</p>'
+        f'<p>Vantelia es una plataforma de asistentes IA para web y WhatsApp en empresas B2B.</p>'
         f'<p>Vi <strong>{html_lib.escape(p.business_name)}</strong> y pense que podria encajar. '
         f'Si eres la persona adecuada, te mando un esquema corto con el flujo y un ejemplo adaptado.</p>'
         f'<p><strong>Si no, dime con quien deberia hablar.</strong></p>'
+        f'{cta}'
         f'{signature_html("cold")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
@@ -246,21 +292,28 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 
 
 def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
+    personal_line = _personal_line_text(p)
+    personal_text = f"{personal_line}\n\n" if personal_line else ""
     text = (
         f"{p.greeting}\n\n"
+        f"{personal_text}"
         f"Te escribi hace unos dias. Por si no lo viste, puedo mandarte un esquema corto "
         f"con el flujo y un ejemplo adaptado a {p.business_name}.\n\n"
         f"Si no es prioridad ahora, lo dejo aqui.\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
+    personal_html = _personal_line_html(p)
+    cta = cta_button_html("Si, preparame la demo")
     inner = (
         f'<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{html_lib.escape(p.greeting)}</p>'
+        f'{personal_html}'
         f'<p style="margin:0 0 14px 0;">Te escribi hace unos dias. Por si no lo viste, puedo '
         f'mandarte un esquema corto con el flujo y un ejemplo adaptado a '
         f'<strong>{html_lib.escape(p.business_name)}</strong>.</p>'
         f'<p style="margin:0 0 6px 0;font-size:16px;color:#0B132B;">'
         f'<strong>Si no es prioridad ahora, lo dejo aqui.</strong></p>'
+        f'{cta}'
         f'{signature_html("fu1")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
@@ -269,20 +322,27 @@ def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 
 
 def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
+    personal_line = _personal_line_text(p)
+    personal_text = f"{personal_line}\n\n" if personal_line else ""
     text = (
         f"{p.greeting}\n\n"
+        f"{personal_text}"
         f"Te dejo un ejemplo rapido de lo que solemos montar: preguntas frecuentes + "
         f"captura de datos + derivacion a la persona adecuada.\n\n"
         f"Si te encaja, lo adapto a {p.business_name} y te lo envio.\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
+    personal_html = _personal_line_html(p)
+    cta = cta_button_html("Si, preparame la demo")
     inner = (
         f'<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{html_lib.escape(p.greeting)}</p>'
+        f'{personal_html}'
         f'<p style="margin:0 0 14px 0;">Te dejo un ejemplo rapido de lo que solemos montar: '
         f'preguntas frecuentes + captura de datos + derivacion a la persona adecuada.</p>'
         f'<p style="margin:0 0 6px 0;font-size:16px;color:#0B132B;">'
         f'<strong>Si te encaja, lo adapto a {html_lib.escape(p.business_name)} y te lo envio.</strong></p>'
+        f'{cta}'
         f'{signature_html("fu2")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
@@ -291,15 +351,20 @@ def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 
 
 def render_breakup(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
+    personal_line = _personal_line_text(p)
+    personal_text = f"{personal_line}\n\n" if personal_line else ""
     text = (
         f"{p.greeting}\n\n"
+        f"{personal_text}"
         f"Lo dejo por ahora para no insistir. Si en otro momento te interesa, "
         f"responde a este correo y lo preparo.\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
+    personal_html = _personal_line_html(p)
     inner = (
         f'<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{html_lib.escape(p.greeting)}</p>'
+        f'{personal_html}'
         f'<p style="margin:0 0 14px 0;">Lo dejo por ahora para no insistir. '
         f'Si en otro momento te interesa, responde a este correo y lo preparo.</p>'
         f'{signature_html("breakup")}'

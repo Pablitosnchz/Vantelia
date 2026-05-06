@@ -340,6 +340,213 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
 /* ── Outreach panel ──── */
 .outreach-panel { display: none; padding-top: 12px; }
 .outreach-panel.active { display: block; animation: fadeUp .2s ease both; }
+.campaign-wizard { display: grid; gap: 16px; }
+.cw-shell {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015)),
+    var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.cw-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cw-topbar h3 { font-size: 1.08rem; }
+.cw-autosave { display: inline-flex; align-items: center; gap: 6px; color: var(--soft); font-size: 12px; }
+.cw-autosave::before { content: ""; width: 7px; height: 7px; border-radius: 999px; background: var(--success); box-shadow: 0 0 0 4px var(--success-soft); }
+.cw-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  padding: 5px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.cw-step {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--soft);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  cursor: pointer;
+  box-shadow: none;
+  transform: none;
+}
+.cw-step:hover { background: var(--surface-2); color: var(--text); box-shadow: none; transform: none; }
+.cw-step.active { background: var(--accent-soft); border-color: var(--accent-line); color: var(--text); }
+.cw-step.done .cw-step-num { background: var(--success); color: #061021; }
+.cw-step-num {
+  width: 24px; height: 24px; border-radius: 999px;
+  display: inline-grid; place-items: center;
+  flex: 0 0 auto;
+  background: var(--surface-2);
+  color: var(--soft);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 800;
+}
+.cw-step-text { min-width: 0; display: grid; gap: 2px; text-align: left; }
+.cw-step-text strong { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cw-step-text span { font-size: 11px; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cw-body { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 16px; align-items: start; }
+.cw-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+.cw-card h4 { font-size: 1rem; }
+.cw-card-header { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap; }
+.cw-step-panel { display: none; animation: fadeUp .18s ease both; }
+.cw-step-panel.active { display: grid; gap: 14px; }
+.cw-progress { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.06); overflow: hidden; }
+.cw-progress span { display:block; height:100%; width:0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .25s ease; }
+.cw-result-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.cw-table-wrap { overflow: auto; max-height: 470px; border: 1px solid var(--line); border-radius: 10px; }
+.cw-result-table th {
+  position: sticky; top: 0; z-index: 1;
+  text-align: left;
+  padding: 9px 10px;
+  background: var(--surface);
+  color: var(--soft);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.cw-result-table td { padding: 8px 10px; border-top: 1px solid var(--line); vertical-align: middle; }
+.cw-result-table input[type="text"],
+.cw-result-table input[type="email"],
+.cw-result-table input[type="url"] { padding: 7px 8px; min-height: 34px; font-size: 12.5px; }
+.cw-score { display: inline-flex; align-items: center; gap: 6px; min-width: 58px; font-weight: 700; color: var(--text); }
+.cw-score-bar { width: 34px; height: 6px; border-radius:999px; background: rgba(255,255,255,.08); overflow:hidden; }
+.cw-score-bar span { display:block; height:100%; background: var(--success); }
+.cw-template-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+.cw-template-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--surface);
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  min-height: 112px;
+}
+.cw-template-card:hover { border-color: var(--line-strong); }
+.cw-template-card.active { border-color: var(--accent); background: var(--accent-soft); }
+.cw-template-card strong { text-transform: uppercase; letter-spacing:.04em; font-size:12px; }
+.cw-variable-row { display:flex; flex-wrap:wrap; gap:6px; }
+.cw-variable {
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.cw-preview-frame { width: 100%; height: 420px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.cw-side-stat {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.cw-side-stat strong { font-size: 18px; color: var(--text); }
+.cw-side-stat span { font-size: 12px; color: var(--soft); }
+.cw-summary { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; }
+.cw-preflight {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 14px;
+}
+.cw-preflight-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+.cw-check-list { display:grid; gap:6px; }
+.cw-check {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:8px 10px;
+  border-radius:8px;
+  background: rgba(255,255,255,.025);
+  border:1px solid var(--line);
+  color: var(--text-2);
+  font-size: 13px;
+}
+.cw-check strong { color: var(--text); }
+.cw-check.ok strong { color: var(--success); }
+.cw-check.warn strong { color: var(--warn); }
+.cw-check.error strong { color: var(--danger); }
+.cw-mini-preview {
+  display:grid;
+  gap:8px;
+}
+.cw-mini-preview iframe { height: 300px; }
+.cw-campaigns {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.cw-campaign-list { display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:10px; }
+.cw-campaign-card {
+  display:grid;
+  gap:10px;
+  padding:12px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background: var(--surface-2);
+}
+.cw-campaign-card header { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+.cw-campaign-card h4 { font-size: 14px; margin:0; }
+.cw-campaign-progress { height: 7px; border-radius:999px; background:rgba(255,255,255,.07); overflow:hidden; }
+.cw-campaign-progress span { display:block; height:100%; background:linear-gradient(90deg,var(--accent),var(--success)); }
+.cw-campaign-detail { border-top:1px solid var(--line); padding-top:10px; display:grid; gap:8px; }
+.cw-member-table { width:100%; border-collapse:collapse; font-size:12px; }
+.cw-member-table th, .cw-member-table td { padding:7px 8px; border-bottom:1px solid var(--line); text-align:left; }
+.cw-advanced-tabs { display: none; }
+.cw-advanced-tabs.active { display: flex; }
+.cw-advanced-tabs:not(.active) ~ .outreach-panel { display: none !important; }
+.cw-toast-wrap {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 10000;
+  display: grid;
+  gap: 8px;
+  pointer-events: none;
+}
+.cw-toast {
+  min-width: 260px;
+  max-width: 380px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(15,24,48,.96);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: 13px;
+  animation: fadeUp .18s ease both;
+}
+.cw-toast.success { border-color: var(--success-line); }
+.cw-toast.error { border-color: var(--danger-line); }
+.cw-toast.info { border-color: var(--accent-line); }
 .or-job { border:1px solid #e4eaf2; border-radius:10px; padding:10px 12px; background:#fafbfd; color:#0f172a; }
 .or-job header span { color:#0f172a; }
 .or-job .muted { color:#64748b !important; }
@@ -1041,6 +1248,8 @@ tbody tr:last-child td { border-bottom: none; }
 @media (max-width: 1180px) {
   :root { --side-w: 230px; }
   .grid, .grid-3, .split { grid-template-columns: 1fr; }
+  .cw-steps { grid-template-columns: 1fr; }
+  .cw-body { grid-template-columns: 1fr; }
   .modal-grid { grid-template-columns: 1fr; }
 }
 
@@ -1876,12 +2085,104 @@ tbody tr:last-child td { border-bottom: none; }
               <p>Panel de control outbound: prospects, secuencias, tracking, discovery y bajas.</p>
             </div>
             <div class="actions">
+              <span id="cwAutosaveLabel" class="cw-autosave">Borrador guardado</span>
+              <button class="ghost small" type="button" id="cwResetBtn">Nuevo wizard</button>
+              <button class="ghost small" type="button" id="cwAdvancedToggle" hidden>Herramientas avanzadas</button>
+              <span style="display:none">
               <button class="ghost small" type="button" data-outreach-tab="dashboard">Dashboard</button>
               <button class="ghost small" type="button" data-outreach-tab="prospects">Prospects</button>
               <button class="ghost small" type="button" data-outreach-tab="campaigns">Campañas</button>
               <button class="ghost small" type="button" data-outreach-tab="discovery">Discovery</button>
               <button class="ghost small" type="button" data-outreach-tab="templates">Plantillas</button>
               <button class="ghost small" type="button" data-outreach-tab="suppressions">Bajas</button>
+              </span>
+            </div>
+          </div>
+
+          <div class="actions cw-advanced-tabs" id="orAdvancedTabs">
+            <button class="ghost small" type="button" data-outreach-tab="dashboard">Dashboard</button>
+            <button class="ghost small" type="button" data-outreach-tab="prospects">Prospects</button>
+            <button class="ghost small" type="button" data-outreach-tab="campaigns">Campanas</button>
+            <button class="ghost small" type="button" data-outreach-tab="discovery">Discovery</button>
+            <button class="ghost small" type="button" data-outreach-tab="templates">Plantillas</button>
+            <button class="ghost small" type="button" data-outreach-tab="suppressions">Bajas</button>
+          </div>
+
+          <div class="campaign-wizard" id="campaignWizard">
+            <div class="cw-campaigns">
+              <div class="cw-card-header">
+                <div>
+                  <h3>Campanas activas</h3>
+                  <p>Controla campanas separadas, etapas, progreso, metricas y follow-ups desde aqui.</p>
+                </div>
+                <button class="ghost small" type="button" id="cwRefreshCampaignsBtn">Actualizar</button>
+              </div>
+              <div id="cwCampaignList" class="cw-campaign-list">
+                <div class="empty">Cargando campanas...</div>
+              </div>
+              <div id="cwCampaignDetail" class="cw-campaign-detail" style="display:none;"></div>
+            </div>
+            <div class="cw-shell">
+              <div class="cw-topbar">
+                <div>
+                  <h3>Campaign Wizard</h3>
+                  <p>Busca, revisa, prueba y lanza una campana cold outreach desde un solo flujo.</p>
+                </div>
+                <div class="pills">
+                  <span class="pill accent" id="cwSelectedPill">0 seleccionados</span>
+                  <span class="pill info" id="cwImportedPill">0 importados</span>
+                </div>
+              </div>
+              <div class="cw-steps" aria-label="Pasos de campana">
+                <button class="cw-step active" type="button" data-cw-step-btn="search"><span class="cw-step-num">1</span><span class="cw-step-text"><strong>Buscar</strong><span>Empresas objetivo</span></span></button>
+                <button class="cw-step" type="button" data-cw-step-btn="review"><span class="cw-step-num">2</span><span class="cw-step-text"><strong>Revisar</strong><span>Seleccionar leads</span></span></button>
+                <button class="cw-step" type="button" data-cw-step-btn="template"><span class="cw-step-num">3</span><span class="cw-step-text"><strong>Plantilla</strong><span>Preview y variables</span></span></button>
+                <button class="cw-step" type="button" data-cw-step-btn="test"><span class="cw-step-num">4</span><span class="cw-step-text"><strong>Prueba</strong><span>Email de test</span></span></button>
+                <button class="cw-step" type="button" data-cw-step-btn="launch"><span class="cw-step-num">5</span><span class="cw-step-text"><strong>Lanzar</strong><span>Resumen final</span></span></button>
+              </div>
+              <div class="cw-body">
+                <div class="cw-card">
+                  <div class="cw-step-panel active" data-cw-step="search">
+                    <div class="cw-card-header"><div><h4>Buscar empresas</h4><p>Define un nicho local y el wizard guardara los resultados automaticamente.</p></div><span class="pill info" id="cwDiscoveryStatus">Listo</span></div>
+                    <div class="grid-3"><label>Ciudad<input id="cwCity" type="text" placeholder="Torrejon de Ardoz" /></label><label>Sector / nicho<input id="cwSector" type="text" placeholder="clinica dental" /></label><label>Cantidad de leads<input id="cwLeadCount" type="number" min="5" max="100" value="30" /></label></div>
+                    <div class="actions"><button class="secondary" type="button" id="cwSearchBtn">Buscar empresas</button><button class="ghost" type="button" data-cw-next="review">Continuar</button></div>
+                    <div class="cw-progress"><span id="cwSearchProgress"></span></div>
+                    <pre id="cwSearchLog" style="display:none;background:#0f172a;color:#cbd5f5;font-size:12px;padding:10px;border-radius:8px;max-height:190px;overflow:auto;white-space:pre-wrap;"></pre>
+                  </div>
+                  <div class="cw-step-panel" data-cw-step="review">
+                    <div class="cw-card-header"><div><h4>Revisar e importar prospects</h4><p>Edita inline, selecciona los mejores y guarda los prospects antes del envio.</p></div><div class="actions"><button class="ghost small" type="button" id="cwSelectAllBtn">Seleccionar todos</button><button class="ghost small" type="button" id="cwSelectWithEmailBtn">Con email</button></div></div>
+                    <div class="cw-table-wrap"><table class="cw-result-table"><thead><tr><th></th><th>Empresa</th><th>Web</th><th>Email</th><th>Telefono</th><th>Score</th></tr></thead><tbody id="cwResultsBody"><tr><td colspan="6" class="empty">Busca empresas para empezar.</td></tr></tbody></table></div>
+                    <div class="actions"><button class="secondary" type="button" id="cwImportSelectedBtn">Importar seleccionados</button><button class="ghost" type="button" id="cwImportAllBtn">Importar todos</button><button class="ghost" type="button" data-cw-prev="search">Atras</button><button class="ghost" type="button" data-cw-next="template">Continuar</button></div>
+                  </div>
+                  <div class="cw-step-panel" data-cw-step="template">
+                    <div class="cw-card-header"><div><h4>Elegir plantilla</h4><p>Selecciona una etapa. Las plantillas base no se modifican desde este wizard.</p></div><div class="actions"><button class="ghost small" type="button" id="cwEditTemplateBtn" hidden>Editar en avanzado</button><button class="ghost small" type="button" id="cwDuplicateTemplateBtn">Duplicar borrador</button></div></div>
+                    <div class="cw-template-grid" id="cwTemplateGrid"></div>
+                    <div><div class="field-note" style="margin-bottom:6px;">Variables disponibles</div><div class="cw-variable-row"><span class="cw-variable">{business}</span><span class="cw-variable">{city}</span><span class="cw-variable">{website}</span><span class="cw-variable">{first_name}</span><span class="cw-variable">{niche}</span><span class="cw-variable">{service_hint}</span></div></div>
+                    <div id="cwTemplateSubject" class="status">Subject: -</div>
+                    <iframe id="cwTemplatePreview" class="cw-preview-frame"></iframe>
+                    <div class="actions"><button class="ghost" type="button" data-cw-prev="review">Atras</button><button class="secondary" type="button" data-cw-next="test">Continuar</button></div>
+                  </div>
+                  <div class="cw-step-panel" data-cw-step="test">
+                    <div class="cw-card-header"><div><h4>Enviar email de prueba</h4><p>Comprueba el email final antes de lanzar la campana real.</p></div><span class="pill" id="cwTestStatus">Pendiente</span></div>
+                    <div class="grid"><label>Email de test<input id="cwTestEmail" type="email" placeholder="tu@email.com" /></label><label>Remitente<input id="cwSenderPreview" type="text" value="Pablo Sanchez &lt;info@vantelia.es&gt;" disabled /></label></div>
+                    <div class="actions"><button class="secondary" type="button" id="cwSendTestBtn">Enviar prueba</button><button class="ghost" type="button" id="cwRefreshFinalPreviewBtn">Actualizar preview</button></div>
+                    <iframe id="cwFinalPreview" class="cw-preview-frame"></iframe>
+                    <div class="actions"><button class="ghost" type="button" data-cw-prev="template">Atras</button><button class="secondary" type="button" data-cw-next="launch">Continuar</button></div>
+                  </div>
+                  <div class="cw-step-panel" data-cw-step="launch">
+                    <div class="cw-card-header"><div><h4>Lanzar campana</h4><p>Ultima comprobacion antes de enviar a los prospects seleccionados.</p></div><span class="pill warn" id="cwLaunchStatus">Sin lanzar</span></div>
+                    <div class="grid"><label>Nombre campana<input id="cwCampaignName" type="text" placeholder="Clinicas Torrejon - Mayo" /></label><label>Velocidad<input id="cwSendDelay" type="number" min="0" max="600" value="70" /></label><label>Delay aleatorio<input id="cwSendJitter" type="number" min="0" max="180" value="25" /></label><label class="checkbox-line"><input id="cwRespectWindow" type="checkbox" checked /> Respetar horario permitido</label></div>
+                    <div class="cw-summary"><div class="cw-side-stat"><strong id="cwSummaryProspects">0</strong><span>Prospects</span></div><div class="cw-side-stat"><strong id="cwSummaryTemplate">cold</strong><span>Plantilla</span></div><div class="cw-side-stat"><strong id="cwSummarySender">info@vantelia.es</strong><span>Remitente</span></div></div>
+                    <div class="cw-preflight" id="cwPreflightBox">
+                      <div class="cw-card-header"><div><h4>Preflight check</h4><p>Valida candidatos, render final, HTML, tracking y autenticacion antes del envio real.</p></div><button class="ghost small" type="button" id="cwPreflightBtn">Comprobar ahora</button></div>
+                      <div id="cwPreflightContent" class="muted">Ejecuta el preflight antes de lanzar la campana.</div>
+                    </div>
+                    <div id="cwLaunchLog" class="or-job" style="display:none;"></div>
+                    <div class="actions"><button class="ghost" type="button" data-cw-prev="test">Atras</button><button class="secondary" type="button" id="cwLaunchBtn">Lanzar campana</button></div>
+                  </div>
+                </div>
+                <aside class="cw-card"><h4>Metricas basicas</h4><div class="cw-side-stat"><strong id="cwMetricSent">-</strong><span>Enviados</span></div><div class="cw-side-stat"><strong id="cwMetricOpen">-</strong><span>Abiertos</span></div><div class="cw-side-stat"><strong id="cwMetricReplies">-</strong><span>Respuestas</span></div><div class="cw-side-stat"><strong id="cwMetricReady">0</strong><span>Leads listos</span></div><p class="muted">El wizard guarda tu borrador en este navegador y usa jobs async para scraping y envio.</p></aside>
+              </div>
             </div>
           </div>
 
@@ -3920,6 +4221,684 @@ tbody tr:last-child td { border-bottom: none; }
         return ct.includes("application/json") ? res.json() : res.text();
       }
 
+      const CW_KEY = "vantelia_campaign_wizard_v1";
+      const cwSteps = ["search", "review", "template", "test", "launch"];
+      const cwTemplateNames = {
+        cold: ["Primer contacto", "Email inicial para abrir conversacion"],
+        fu1: ["Follow-up 1", "Seguimiento suave tras el primer envio"],
+        fu2: ["Follow-up 2", "Ejemplo corto y concreto"],
+        breakup: ["Cierre", "Ultimo toque sin insistir"],
+      };
+      const cwDefault = {
+        step: "search",
+        city: "Torrejon de Ardoz",
+        sector: "",
+        leadCount: 30,
+        results: [],
+        selected: [],
+        importedEmails: [],
+        templateStage: "cold",
+        testEmail: "",
+        campaignName: "",
+        delay: 70,
+        jitter: 25,
+        respectWindow: true,
+        discoveryJobId: null,
+        sendJobId: null,
+        preflight: null,
+      };
+      let cwState = loadWizardState();
+      let cwSaveTimer = null;
+      let cwJobTimer = null;
+
+      function loadWizardState() {
+        try {
+          const raw = localStorage.getItem(CW_KEY);
+          if (raw) return Object.assign({}, cwDefault, JSON.parse(raw));
+        } catch (err) {}
+        return Object.assign({}, cwDefault);
+      }
+
+      function saveWizardState() {
+        clearTimeout(cwSaveTimer);
+        const label = ORQ("#cwAutosaveLabel");
+        if (label) label.textContent = "Guardando...";
+        cwSaveTimer = setTimeout(() => {
+          localStorage.setItem(CW_KEY, JSON.stringify(cwState));
+          if (label) label.textContent = "Borrador guardado";
+        }, 180);
+      }
+
+      function cwToast(message, type = "info") {
+        let wrap = ORQ("#cwToastWrap");
+        if (!wrap) {
+          wrap = document.createElement("div");
+          wrap.id = "cwToastWrap";
+          wrap.className = "cw-toast-wrap";
+          document.body.appendChild(wrap);
+        }
+        const node = document.createElement("div");
+        node.className = "cw-toast " + type;
+        node.textContent = message;
+        wrap.appendChild(node);
+        setTimeout(() => node.remove(), 3600);
+      }
+
+      function cwScore(item) {
+        let score = 20;
+        if (item.website) score += 20;
+        if (orDiscEmailRe.test(item.email || "")) score += 30;
+        if (item.phone) score += 10;
+        if (item.niche || item.service_hint) score += 10;
+        if ((item.email || "").match(/^(info|contacto|hola|admin)@/i)) score -= 5;
+        return Math.max(0, Math.min(100, score));
+      }
+
+      function selectedWizardItems() {
+        const selected = new Set(cwState.selected || []);
+        return (cwState.results || []).filter((item, idx) => selected.has(String(idx)) && orDiscEmailRe.test(item.email || ""));
+      }
+
+      function campaignWizardEmails() {
+        const selectedEmails = selectedWizardItems().map((i) => i.email);
+        const fallback = (cwState.importedEmails || []).filter((email) => orDiscEmailRe.test(email || ""));
+        return Array.from(new Set((selectedEmails.length ? selectedEmails : fallback).map((email) => String(email).toLowerCase().trim())));
+      }
+
+      function setWizardStep(step) {
+        if (!cwSteps.includes(step)) return;
+        cwState.step = step;
+        ORALL("[data-cw-step]").forEach((panel) => panel.classList.toggle("active", panel.dataset.cwStep === step));
+        ORALL("[data-cw-step-btn]").forEach((btn) => {
+          const idx = cwSteps.indexOf(btn.dataset.cwStepBtn);
+          const activeIdx = cwSteps.indexOf(step);
+          btn.classList.toggle("active", btn.dataset.cwStepBtn === step);
+          btn.classList.toggle("done", idx < activeIdx);
+        });
+        if (step === "template") renderWizardTemplates();
+        if (step === "test") refreshWizardPreview("cwFinalPreview");
+        if (step === "launch") { renderWizardSummary(); runWizardPreflight(false); }
+        saveWizardState();
+      }
+
+      function hydrateWizardForm() {
+        const pairs = [
+          ["#cwCity", "city"], ["#cwSector", "sector"], ["#cwLeadCount", "leadCount"],
+          ["#cwTestEmail", "testEmail"], ["#cwCampaignName", "campaignName"],
+          ["#cwSendDelay", "delay"], ["#cwSendJitter", "jitter"],
+        ];
+        pairs.forEach(([sel, key]) => { const el = ORQ(sel); if (el) el.value = cwState[key] || ""; });
+        const respect = ORQ("#cwRespectWindow");
+        if (respect) respect.checked = !!cwState.respectWindow;
+        renderWizardResults();
+        renderWizardTemplates();
+        updateWizardCounts();
+        setWizardStep(cwState.step || "search");
+      }
+
+      function readWizardForm() {
+        cwState.city = ORQ("#cwCity")?.value.trim() || "";
+        cwState.sector = ORQ("#cwSector")?.value.trim() || "";
+        cwState.leadCount = parseInt(ORQ("#cwLeadCount")?.value, 10) || 30;
+        cwState.testEmail = ORQ("#cwTestEmail")?.value.trim() || "";
+        cwState.campaignName = ORQ("#cwCampaignName")?.value.trim() || "";
+        cwState.delay = parseFloat(ORQ("#cwSendDelay")?.value) || 0;
+        cwState.jitter = parseFloat(ORQ("#cwSendJitter")?.value) || 0;
+        cwState.respectWindow = !!ORQ("#cwRespectWindow")?.checked;
+        saveWizardState();
+        renderWizardSummary();
+      }
+
+      function updateWizardCounts() {
+        const selectedCount = selectedWizardItems().length;
+        const importedCount = (cwState.importedEmails || []).length;
+        const ready = (cwState.results || []).filter((i) => orDiscEmailRe.test(i.email || "")).length;
+        if (ORQ("#cwSelectedPill")) ORQ("#cwSelectedPill").textContent = `${selectedCount} seleccionados`;
+        if (ORQ("#cwImportedPill")) ORQ("#cwImportedPill").textContent = `${importedCount} importados`;
+        if (ORQ("#cwMetricReady")) ORQ("#cwMetricReady").textContent = ready;
+      }
+
+      async function runWizardDiscovery() {
+        readWizardForm();
+        if (!cwState.city || !cwState.sector) { cwToast("Ciudad y sector son obligatorios.", "error"); return; }
+        ORQ("#cwDiscoveryStatus").textContent = "Buscando";
+        ORQ("#cwSearchProgress").style.width = "12%";
+        ORQ("#cwSearchLog").style.display = "block";
+        ORQ("#cwSearchLog").textContent = "Preparando scraping...";
+        try {
+          const data = await orFetch("/admin/outreach/discover", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sector: cwState.sector,
+              ciudad: cwState.city,
+              max: cwState.leadCount,
+              extract_emails: true,
+              import_direct: false,
+              source: "auto",
+            }),
+          });
+          cwState.discoveryJobId = data.job_id;
+          saveWizardState();
+          cwToast("Busqueda lanzada.", "success");
+          watchWizardDiscovery(data.job_id);
+        } catch (err) {
+          ORQ("#cwDiscoveryStatus").textContent = "Error";
+          cwToast(err.message, "error");
+        }
+      }
+
+      async function watchWizardDiscovery(jobId) {
+        clearTimeout(cwJobTimer);
+        try {
+          const j = await orFetch("/admin/outreach/jobs/" + jobId);
+          const log = j.log || "";
+          const match = log.match(/RESULT_JSON: (\[.*\])/);
+          ORQ("#cwSearchLog").textContent = log.slice(-1800) || "Buscando...";
+          if (j.status === "done" && match) {
+            const items = JSON.parse(match[1]).map((item) => Object.assign({ selected: !!item.email }, item));
+            cwState.results = items;
+            cwState.selected = items.map((item, idx) => item.email ? String(idx) : null).filter(Boolean);
+            ORQ("#cwSearchProgress").style.width = "100%";
+            ORQ("#cwDiscoveryStatus").textContent = "Completado";
+            renderWizardResults();
+            updateWizardCounts();
+            saveWizardState();
+            cwToast(`${items.length} empresas encontradas.`, "success");
+            setWizardStep("review");
+            return;
+          }
+          if (j.status === "error") {
+            ORQ("#cwDiscoveryStatus").textContent = "Error";
+            cwToast("Discovery fallo. Revisa el log.", "error");
+            return;
+          }
+          ORQ("#cwSearchProgress").style.width = j.status === "running" ? "55%" : "25%";
+          cwJobTimer = setTimeout(() => watchWizardDiscovery(jobId), 2500);
+        } catch (err) {
+          cwToast(err.message, "error");
+        }
+      }
+
+      function renderWizardResults() {
+        const body = ORQ("#cwResultsBody");
+        if (!body) return;
+        const items = cwState.results || [];
+        if (!items.length) {
+          body.innerHTML = '<tr><td colspan="6" class="empty">Busca empresas para empezar.</td></tr>';
+          updateWizardCounts();
+          return;
+        }
+        const selected = new Set(cwState.selected || []);
+        body.innerHTML = items.map((item, idx) => {
+          const score = cwScore(item);
+          return `<tr data-cw-row="${idx}">
+            <td><input type="checkbox" class="cw-row-check" data-idx="${idx}" ${selected.has(String(idx)) ? "checked" : ""} /></td>
+            <td><input type="text" class="cw-inline" data-field="business_name" data-idx="${idx}" value="${escapeHtml(item.business_name || "")}" /></td>
+            <td><input type="url" class="cw-inline" data-field="website" data-idx="${idx}" value="${escapeHtml(item.website || "")}" /></td>
+            <td><input type="email" class="cw-inline" data-field="email" data-idx="${idx}" value="${escapeHtml(item.email || "")}" /></td>
+            <td><input type="text" class="cw-inline" data-field="phone" data-idx="${idx}" value="${escapeHtml(item.phone || "")}" /></td>
+            <td><span class="cw-score">${score}<span class="cw-score-bar"><span style="width:${score}%"></span></span></span></td>
+          </tr>`;
+        }).join("");
+        body.querySelectorAll(".cw-row-check").forEach((input) => input.addEventListener("change", (ev) => {
+          const idx = ev.target.dataset.idx;
+          const set = new Set(cwState.selected || []);
+          ev.target.checked ? set.add(idx) : set.delete(idx);
+          cwState.selected = Array.from(set);
+          updateWizardCounts();
+          saveWizardState();
+        }));
+        body.querySelectorAll(".cw-inline").forEach((input) => input.addEventListener("input", (ev) => {
+          const idx = parseInt(ev.target.dataset.idx, 10);
+          const field = ev.target.dataset.field;
+          cwState.results[idx][field] = ev.target.value.trim();
+          if (field === "email" && orDiscEmailRe.test(ev.target.value.trim())) {
+            const set = new Set(cwState.selected || []);
+            set.add(String(idx));
+            cwState.selected = Array.from(set);
+          }
+          updateWizardCounts();
+          saveWizardState();
+        }));
+        updateWizardCounts();
+      }
+
+      function wizardItemsForImport(all = false) {
+        const source = all ? (cwState.results || []) : selectedWizardItems();
+        return source.filter((i) => orDiscEmailRe.test(i.email || "")).map((i) => ({
+          email: (i.email || "").trim(),
+          business_name: i.business_name || "",
+          contact_name: "",
+          niche: i.niche || cwState.sector || "",
+          website: i.website || "",
+          service_hint: cwState.sector || i.service_hint || "",
+          city: i.city || cwState.city || "",
+          phone: i.phone || "",
+          tags: "wizard",
+          source: "campaign-wizard",
+          score: cwScore(i),
+        }));
+      }
+
+      async function importWizardProspects(all = false) {
+        readWizardForm();
+        const items = wizardItemsForImport(all);
+        if (!items.length) { cwToast("No hay emails validos para importar.", "error"); return; }
+        try {
+          const data = await orFetch("/admin/outreach/prospects/bulk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ items, upsert: false }),
+          });
+          cwState.importedEmails = Array.from(new Set([...(cwState.importedEmails || []), ...items.map((i) => i.email)]));
+          saveWizardState();
+          updateWizardCounts();
+          cwToast(`Importados ${data.added}; omitidos ${data.skipped}.`, "success");
+        } catch (err) { cwToast(err.message, "error"); }
+      }
+
+      function renderWizardTemplates() {
+        const grid = ORQ("#cwTemplateGrid");
+        if (!grid) return;
+        grid.innerHTML = Object.entries(cwTemplateNames).map(([stage, copy]) => `
+          <div class="cw-template-card ${cwState.templateStage === stage ? "active" : ""}" data-cw-template="${stage}">
+            <strong>${stage}</strong>
+            <span>${escapeHtml(copy[0])}</span>
+            <p class="muted">${escapeHtml(copy[1])}</p>
+          </div>`).join("");
+        grid.querySelectorAll("[data-cw-template]").forEach((card) => card.addEventListener("click", () => {
+          cwState.templateStage = card.dataset.cwTemplate;
+          saveWizardState();
+          renderWizardTemplates();
+          refreshWizardPreview("cwTemplatePreview");
+        }));
+        refreshWizardPreview("cwTemplatePreview");
+      }
+
+      function sampleWizardProspect() {
+        return selectedWizardItems()[0] || (cwState.results || []).find((i) => i.email) || {
+          business_name: "Prospect de prueba",
+          email: "test@example.com",
+          niche: cwState.sector,
+          city: cwState.city,
+          website: "",
+        };
+      }
+
+      async function refreshWizardPreview(frameId) {
+        const sample = sampleWizardProspect();
+        const stage = cwState.templateStage || "cold";
+        try {
+          const data = await orFetch("/admin/outreach/templates/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              stage,
+              subject_pool: ((orTemplatesCache && orTemplatesCache[stage]) || {}).subject_pool || "",
+              body_text: ((orTemplatesCache && orTemplatesCache[stage]) || {}).body_text || "",
+              body_html: ((orTemplatesCache && orTemplatesCache[stage]) || {}).body_html || "",
+              sample_business: sample.business_name || "Prospect de prueba",
+              sample_email: sample.email || "test@example.com",
+              sample_city: sample.city || cwState.city || "Madrid",
+              sample_niche: sample.niche || cwState.sector || "",
+              sample_website: sample.website || "",
+            }),
+          });
+          if (ORQ("#cwTemplateSubject")) ORQ("#cwTemplateSubject").innerHTML = "Subject: <strong>" + escapeHtml(data.subject || "") + "</strong>";
+          const frame = ORQ("#" + frameId);
+          if (frame) {
+            const doc = frame.contentDocument || frame.contentWindow.document;
+            doc.open(); doc.write(data.html || ""); doc.close();
+          }
+        } catch (err) { cwToast(err.message, "error"); }
+      }
+
+      async function sendWizardTest() {
+        readWizardForm();
+        if (!orDiscEmailRe.test(cwState.testEmail || "")) { cwToast("Introduce un email de prueba valido.", "error"); return; }
+        ORQ("#cwTestStatus").textContent = "Enviando";
+        try {
+          const data = await orFetch("/admin/outreach/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              stage: cwState.templateStage,
+              max: 1,
+              test_to: cwState.testEmail,
+              dry_run: false,
+              force_window: true,
+              emails: selectedWizardItems().map((i) => i.email),
+              campaign_name: cwState.campaignName,
+            }),
+          });
+          ORQ("#cwTestStatus").textContent = "Enviado";
+          cwToast("Email de prueba en cola.", "success");
+          watchWizardSend(data.job_id, true);
+        } catch (err) {
+          ORQ("#cwTestStatus").textContent = "Error";
+          cwToast(err.message, "error");
+        }
+      }
+
+      function renderWizardSummary() {
+        const count = campaignWizardEmails().length;
+        if (ORQ("#cwSummaryProspects")) ORQ("#cwSummaryProspects").textContent = count;
+        if (ORQ("#cwSummaryTemplate")) ORQ("#cwSummaryTemplate").textContent = cwState.templateStage || "cold";
+      }
+
+      function campaignStatusLabel(status) {
+        const map = { draft: "Borrador", running: "Activa", paused: "Pausada", completed: "Completada", archived: "Archivada" };
+        return map[status] || status || "-";
+      }
+
+      async function loadWizardCampaigns() {
+        const target = ORQ("#cwCampaignList");
+        if (!target) return;
+        try {
+          const data = await orFetch("/admin/outreach/campaigns?limit=24");
+          const items = data.items || [];
+          if (!items.length) {
+            target.innerHTML = '<div class="empty">Aun no hay campanas. Lanza la primera desde el wizard.</div>';
+            return;
+          }
+          target.innerHTML = items.map((c) => {
+            const m = c.metrics || {};
+            const total = m.total || 0;
+            const sent = m.sent || 0;
+            const progress = total ? Math.round((sent / total) * 100) : 0;
+            const replyRate = total ? Math.round(((m.replies || 0) / total) * 100) : 0;
+            const openRate = total ? Math.round(((m.opens || 0) / total) * 100) : 0;
+            return `
+              <article class="cw-campaign-card" data-campaign-id="${c.id}">
+                <header>
+                  <div>
+                    <h4>${escapeHtml(c.name || "Campana")}</h4>
+                    <div class="muted">Etapa ${escapeHtml(c.stage || "cold")} &middot; ${sent}/${total} enviados</div>
+                  </div>
+                  <span class="pill ${c.status === "running" ? "success" : c.status === "paused" ? "warn" : "info"}">${escapeHtml(campaignStatusLabel(c.status))}</span>
+                </header>
+                <div class="cw-campaign-progress"><span style="width:${progress}%"></span></div>
+                <div class="cw-summary">
+                  <div class="cw-side-stat"><strong>${openRate}%</strong><span>Apertura</span></div>
+                  <div class="cw-side-stat"><strong>${replyRate}%</strong><span>Respuesta</span></div>
+                  <div class="cw-side-stat"><strong>${m.skipped || 0}</strong><span>Saltados</span></div>
+                </div>
+                <div class="actions">
+                  <button class="ghost small" type="button" data-campaign-view="${c.id}">Ver</button>
+                  ${c.status === "paused" ? `<button class="ghost small" type="button" data-campaign-status="${c.id}" data-status="running">Reanudar</button>` : `<button class="ghost small" type="button" data-campaign-status="${c.id}" data-status="paused">Pausar</button>`}
+                  <button class="ghost small" type="button" data-campaign-followup="${c.id}">Preparar follow-up</button>
+                  <button class="ghost small" type="button" data-campaign-duplicate="${c.id}">Duplicar</button>
+                  <button class="ghost small danger" type="button" data-campaign-status="${c.id}" data-status="archived">Archivar</button>
+                </div>
+              </article>`;
+          }).join("");
+        } catch (err) {
+          target.innerHTML = `<div class="status error">${escapeHtml(err.message)}</div>`;
+        }
+      }
+
+      async function showWizardCampaignDetail(id) {
+        const target = ORQ("#cwCampaignDetail");
+        if (!target) return;
+        target.style.display = "grid";
+        target.innerHTML = '<div class="status">Cargando detalle...</div>';
+        try {
+          const data = await orFetch("/admin/outreach/campaigns/" + encodeURIComponent(id));
+          const c = data.campaign || {};
+          const members = (data.members || []).slice(0, 80);
+          target.innerHTML = `
+            <div class="cw-card-header">
+              <div><h4>${escapeHtml(c.name || "Campana")}</h4><p>${escapeHtml(campaignStatusLabel(c.status))} &middot; etapa ${escapeHtml(c.stage || "-")} &middot; remitente ${escapeHtml(c.sender || "-")}</p></div>
+              <button class="ghost small" type="button" id="cwCloseCampaignDetail">Cerrar</button>
+            </div>
+            <div class="cw-table-wrap" style="max-height:300px;">
+              <table class="cw-member-table">
+                <thead><tr><th>Empresa</th><th>Email</th><th>Estado</th><th>Etapa</th><th>Ultimo envio</th><th>Motivo</th></tr></thead>
+                <tbody>
+                  ${members.map((m) => `<tr><td>${escapeHtml(m.business_name || "-")}</td><td>${escapeHtml(m.email || "")}</td><td>${escapeHtml(m.status || "")}</td><td>${escapeHtml(m.stage || "")}</td><td>${escapeHtml(m.last_sent_at || "-")}</td><td>${escapeHtml(m.skip_reason || "")}</td></tr>`).join("") || '<tr><td colspan="6" class="empty">Sin miembros.</td></tr>'}
+                </tbody>
+              </table>
+            </div>`;
+          ORQ("#cwCloseCampaignDetail")?.addEventListener("click", () => { target.style.display = "none"; });
+        } catch (err) {
+          target.innerHTML = `<div class="status error">${escapeHtml(err.message)}</div>`;
+        }
+      }
+
+      async function patchWizardCampaign(id, status) {
+        try {
+          if (status === "running") {
+            await orFetch("/admin/outreach/campaigns/" + encodeURIComponent(id) + "/resume", { method: "POST" });
+          } else {
+            await orFetch("/admin/outreach/campaigns/" + encodeURIComponent(id), {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ status }),
+            });
+          }
+          cwToast("Campana actualizada.", "success");
+          loadWizardCampaigns();
+        } catch (err) { cwToast(err.message, "error"); }
+      }
+
+      async function duplicateWizardCampaign(id) {
+        try {
+          await orFetch("/admin/outreach/campaigns/" + encodeURIComponent(id) + "/duplicate", { method: "POST" });
+          cwToast("Campana duplicada como borrador.", "success");
+          loadWizardCampaigns();
+        } catch (err) { cwToast(err.message, "error"); }
+      }
+
+      async function prepareWizardFollowup(id) {
+        try {
+          const data = await orFetch("/admin/outreach/campaigns/" + encodeURIComponent(id) + "/prepare-followup", { method: "POST" });
+          cwState.templateStage = data.next_stage;
+          cwState.campaignName = `${data.campaign_name || "Campana"} - ${data.next_stage}`;
+          cwState.importedEmails = data.eligible_emails || [];
+          cwState.results = [];
+          cwState.selected = [];
+          hydrateWizardForm();
+          renderWizardSummary();
+          renderWizardResults();
+          setWizardStep("launch");
+          cwToast(`${(data.eligible_emails || []).length} candidatos preparados para ${data.next_stage}.`, "success");
+        } catch (err) { cwToast(err.message, "error"); }
+      }
+
+      function preflightPayload() {
+        return {
+          stage: cwState.templateStage || "cold",
+          max: campaignWizardEmails().length || cwState.leadCount || 20,
+          after_days: 4,
+          emails: campaignWizardEmails(),
+        };
+      }
+
+      function preflightHasBlockingIssues(data) {
+        if (!data) return true;
+        const warnings = data.warnings || {};
+        const skipped = (data.counts && data.counts.skipped) || {};
+        return !data.counts || data.counts.real_candidates <= 0 ||
+          warnings.empty_href || warnings.code_fence ||
+          (warnings.unfilled_variables || []).length > 0 ||
+          skipped.missing_email > 0 ||
+          skipped.already_in_campaign > 0;
+      }
+
+      function renderPreflight(data) {
+        const target = ORQ("#cwPreflightContent");
+        if (!target) return;
+        if (!data) {
+          target.innerHTML = '<span class="muted">Ejecuta el preflight antes de lanzar la campana.</span>';
+          return;
+        }
+        const counts = data.counts || {};
+        const skipped = counts.skipped || {};
+        const warnings = data.warnings || {};
+        const auth = data.auth || {};
+        const flag = (ok, label, detail = "") => `<div class="cw-check ${ok ? "ok" : "warn"}"><span>${escapeHtml(label)}${detail ? `<small class="muted"> · ${escapeHtml(detail)}</small>` : ""}</span><strong>${ok ? "OK" : "Revisar"}</strong></div>`;
+        const authLine = (key, label) => {
+          const item = auth[key] || {};
+          const ok = item.status === "ok";
+          return `<div class="cw-check ${ok ? "ok" : "warn"}"><span>${label}<small class="muted"> · ${escapeHtml(item.message || "Sin datos")}</small></span><strong>${escapeHtml((item.status || "unknown").toUpperCase())}</strong></div>`;
+        };
+        target.innerHTML = `
+          <div class="cw-preflight-grid">
+            <div class="cw-side-stat"><strong>${counts.real_candidates || 0}</strong><span>Candidatos reales</span></div>
+            <div class="cw-side-stat"><strong>${skipped.total || 0}</strong><span>Saltados</span></div>
+            <div class="cw-side-stat"><strong>${skipped.suppressed || 0}</strong><span>Bajas</span></div>
+            <div class="cw-side-stat"><strong>${skipped.missing_email || 0}</strong><span>Sin email</span></div>
+            <div class="cw-side-stat"><strong>${skipped.already_contacted || 0}</strong><span>Ya contactados</span></div>
+            <div class="cw-side-stat"><strong>${skipped.already_in_campaign || 0}</strong><span>En otra campana</span></div>
+          </div>
+          <div class="status">Asunto final: <strong>${escapeHtml(data.subject || "-")}</strong></div>
+          <div class="cw-check-list">
+            ${flag(!!data.html_active, "HTML activo", data.html_active ? "se enviara version visual" : "solo texto plano")}
+            ${flag(!!data.tracking_active, "Tracking activo", data.tracking_active ? "opens/clicks habilitados" : "tracking desactivado")}
+            ${flag(!warnings.empty_href, 'Sin href=""')}
+            ${flag(!warnings.code_fence, "Sin bloques ```")}
+            ${flag(!(warnings.unfilled_variables || []).length, "Sin variables sin rellenar", (warnings.unfilled_variables || []).join(", "))}
+            ${authLine("spf", "SPF")}
+            ${authLine("dkim", "DKIM")}
+            ${authLine("dmarc", "DMARC")}
+          </div>
+          ${(data.skipped_samples || []).length ? `<div class="muted">Ejemplos saltados: ${(data.skipped_samples || []).map((s) => `${escapeHtml(s.email)} (${escapeHtml(s.reason)})`).join(", ")}</div>` : ""}
+          <div class="cw-mini-preview">
+            <div class="field-note">Primer email renderizado</div>
+            <iframe id="cwPreflightPreview" class="cw-preview-frame"></iframe>
+          </div>
+        `;
+        const frame = ORQ("#cwPreflightPreview");
+        if (frame) {
+          const doc = frame.contentDocument || frame.contentWindow.document;
+          doc.open(); doc.write(data.html || `<pre>${escapeHtml(data.text || "")}</pre>`); doc.close();
+        }
+      }
+
+      async function runWizardPreflight(showToast = true) {
+        readWizardForm();
+        const emails = campaignWizardEmails();
+        if (!emails.length) {
+          cwState.preflight = null;
+          renderPreflight(null);
+          if (showToast) cwToast("Selecciona prospects con email para comprobar.", "error");
+          return null;
+        }
+        const target = ORQ("#cwPreflightContent");
+        if (target) target.innerHTML = '<div class="status">Ejecutando preflight...</div>';
+        try {
+          const data = await orFetch("/admin/outreach/preflight", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(preflightPayload()),
+          });
+          cwState.preflight = data;
+          saveWizardState();
+          renderPreflight(data);
+          if (showToast) cwToast("Preflight completado.", preflightHasBlockingIssues(data) ? "info" : "success");
+          return data;
+        } catch (err) {
+          if (target) target.innerHTML = `<div class="status error">${escapeHtml(err.message)}</div>`;
+          cwToast(err.message, "error");
+          return null;
+        }
+      }
+
+      async function launchWizardCampaign() {
+        readWizardForm();
+        const emails = campaignWizardEmails();
+        if (!emails.length) { cwToast("Selecciona prospects con email valido.", "error"); return; }
+        const preflight = await runWizardPreflight(false);
+        if (preflightHasBlockingIssues(preflight)) {
+          cwToast("Preflight con avisos. Revisa el bloque antes de enviar.", "error");
+          return;
+        }
+        if (!confirm(`Vas a lanzar una campana real a ${emails.length} prospects. Confirmar?`)) return;
+        ORQ("#cwLaunchStatus").textContent = "Lanzando";
+        try {
+          const data = await orFetch("/admin/outreach/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              stage: cwState.templateStage,
+              max: emails.length,
+              dry_run: false,
+              delay: cwState.delay,
+              jitter: cwState.jitter,
+              force_window: !cwState.respectWindow,
+              emails,
+              campaign_name: cwState.campaignName,
+            }),
+          });
+          cwState.sendJobId = data.job_id;
+          saveWizardState();
+          ORQ("#cwLaunchStatus").textContent = "En cola";
+          cwToast("Campana lanzada.", "success");
+          loadWizardCampaigns();
+          watchWizardSend(data.job_id, false);
+        } catch (err) {
+          ORQ("#cwLaunchStatus").textContent = "Error";
+          cwToast(err.message, "error");
+        }
+      }
+
+      async function watchWizardSend(jobId, isTest) {
+        try {
+          const j = await orFetch("/admin/outreach/jobs/" + jobId);
+          if (!isTest) {
+            const box = ORQ("#cwLaunchLog");
+            box.style.display = "block";
+            box.innerHTML = `<header><span><strong>#${j.id}</strong> send</span><span class="or-status ${j.status}">${j.status}</span></header><pre>${escapeHtml((j.log || "").slice(-2000))}</pre>`;
+            ORQ("#cwLaunchStatus").textContent = j.status;
+          }
+          if (["queued", "running"].includes(j.status)) setTimeout(() => watchWizardSend(jobId, isTest), 3000);
+          if (j.status === "done") { loadStats(); loadWizardCampaigns(); }
+        } catch (err) { cwToast(err.message, "error"); }
+      }
+
+      function wireWizard() {
+        hydrateWizardForm();
+        loadTemplates().then(renderWizardTemplates).catch(() => {});
+        loadWizardCampaigns();
+        ["#cwCity", "#cwSector", "#cwLeadCount", "#cwTestEmail", "#cwCampaignName", "#cwSendDelay", "#cwSendJitter", "#cwRespectWindow"].forEach((sel) => {
+          const el = ORQ(sel);
+          if (el) el.addEventListener("input", readWizardForm);
+          if (el && el.type === "checkbox") el.addEventListener("change", readWizardForm);
+        });
+        ORALL("[data-cw-step-btn]").forEach((btn) => btn.addEventListener("click", () => setWizardStep(btn.dataset.cwStepBtn)));
+        ORALL("[data-cw-next]").forEach((btn) => btn.addEventListener("click", () => setWizardStep(btn.dataset.cwNext)));
+        ORALL("[data-cw-prev]").forEach((btn) => btn.addEventListener("click", () => setWizardStep(btn.dataset.cwPrev)));
+        ORQ("#cwSearchBtn")?.addEventListener("click", runWizardDiscovery);
+        ORQ("#cwSelectAllBtn")?.addEventListener("click", () => { cwState.selected = (cwState.results || []).map((_, i) => String(i)); renderWizardResults(); saveWizardState(); });
+        ORQ("#cwSelectWithEmailBtn")?.addEventListener("click", () => { cwState.selected = (cwState.results || []).map((i, idx) => orDiscEmailRe.test(i.email || "") ? String(idx) : null).filter(Boolean); renderWizardResults(); saveWizardState(); });
+        ORQ("#cwImportSelectedBtn")?.addEventListener("click", () => importWizardProspects(false));
+        ORQ("#cwImportAllBtn")?.addEventListener("click", () => importWizardProspects(true));
+        ORQ("#cwEditTemplateBtn")?.addEventListener("click", () => { ORQ("#orAdvancedTabs").classList.add("active"); setOutreachTab("templates"); ORQ("#orTplStage").value = cwState.templateStage || "cold"; fillTemplateForm(); });
+        ORQ("#cwDuplicateTemplateBtn")?.addEventListener("click", () => { cwToast("Borrador duplicado en memoria. Abre avanzado para guardarlo como override.", "info"); });
+        ORQ("#cwRefreshFinalPreviewBtn")?.addEventListener("click", () => refreshWizardPreview("cwFinalPreview"));
+        ORQ("#cwSendTestBtn")?.addEventListener("click", sendWizardTest);
+        ORQ("#cwPreflightBtn")?.addEventListener("click", () => runWizardPreflight(true));
+        ORQ("#cwLaunchBtn")?.addEventListener("click", launchWizardCampaign);
+        ORQ("#cwRefreshCampaignsBtn")?.addEventListener("click", loadWizardCampaigns);
+        ORQ("#cwAdvancedToggle")?.addEventListener("click", () => ORQ("#orAdvancedTabs").classList.toggle("active"));
+        ORQ("#cwCampaignList")?.addEventListener("click", (ev) => {
+          const btn = ev.target.closest("button");
+          if (!btn) return;
+          if (btn.dataset.campaignView) showWizardCampaignDetail(btn.dataset.campaignView);
+          if (btn.dataset.campaignStatus) patchWizardCampaign(btn.dataset.campaignStatus, btn.dataset.status);
+          if (btn.dataset.campaignDuplicate) duplicateWizardCampaign(btn.dataset.campaignDuplicate);
+          if (btn.dataset.campaignFollowup) prepareWizardFollowup(btn.dataset.campaignFollowup);
+        });
+        ORQ("#cwResetBtn")?.addEventListener("click", () => {
+          if (!confirm("Borrar el borrador del wizard y empezar de cero?")) return;
+          localStorage.removeItem(CW_KEY);
+          cwState = Object.assign({}, cwDefault);
+          hydrateWizardForm();
+          cwToast("Wizard reiniciado.", "success");
+        });
+      }
+
       function setOutreachTab(tab) {
         ORALL("[data-outreach-tab]").forEach((btn) => {
           btn.classList.toggle("active", btn.dataset.outreachTab === tab);
@@ -3945,6 +4924,9 @@ tbody tr:last-child td { border-bottom: none; }
           ORQ("#orOpenRate").textContent = t.open_rate_pct + "%";
           ORQ("#orReplyRate").textContent = t.reply_rate_pct + "%";
           ORQ("#orSuppressed").textContent = t.suppressed;
+          if (ORQ("#cwMetricSent")) ORQ("#cwMetricSent").textContent = t.sent_total;
+          if (ORQ("#cwMetricOpen")) ORQ("#cwMetricOpen").textContent = t.opens_unique;
+          if (ORQ("#cwMetricReplies")) ORQ("#cwMetricReplies").textContent = t.replies_unique;
           renderChart(data.daily);
           renderFunnel(data.funnel, t.sent_distinct);
           renderTopNiches(data.top_niches);
@@ -4045,7 +5027,7 @@ tbody tr:last-child td { border-bottom: none; }
           ORQ("#orDrawerTitle").textContent = data.prospect.business_name;
           ORQ("#orDrawerEmail").textContent = email;
           const sends = data.sends.map((s, i) =>
-            `<li style="margin:4px 0;">${new Date(s.sent_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" })} <strong>${escapeHtml(s.stage)}</strong> — ${escapeHtml(s.subject)} <span class="muted">(${s.mode})</span> <button class="ghost small" type="button" data-preview-stage="${escapeHtml(s.stage)}" style="margin-left:6px;">Ver email</button></li>`
+            `<li style="margin:4px 0;">${new Date(s.sent_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" })} <strong>${escapeHtml(s.stage)}</strong> — ${escapeHtml(s.subject)} <span class="muted">(${s.mode})</span>${s.body_html || s.body_text ? ' <span class="pill success">snapshot</span>' : ''} <button class="ghost small" type="button" data-preview-stage="${escapeHtml(s.stage)}" data-send-id="${s.id}" style="margin-left:6px;">Ver email</button></li>`
           ).join("") || "<li class='muted'>Sin envios.</li>";
           const events = data.events.map((e) =>
             `<li>${new Date(e.ts).toLocaleString("es-ES", { timeZone: "Europe/Madrid" })} <strong>${escapeHtml(e.type)}</strong>${e.url ? ' → ' + escapeHtml(e.url) : ''}</li>`
@@ -4117,7 +5099,8 @@ tbody tr:last-child td { border-bottom: none; }
             btn.addEventListener("click", async (ev) => {
               const stage = ev.target.getAttribute("data-preview-stage");
               try {
-                const data = await orFetch("/admin/outreach/prospects/" + encodeURIComponent(email) + "/render?stage=" + encodeURIComponent(stage));
+                const sendId = ev.target.getAttribute("data-send-id") || "";
+                const data = await orFetch("/admin/outreach/prospects/" + encodeURIComponent(email) + "/render?stage=" + encodeURIComponent(stage) + (sendId ? "&send_id=" + encodeURIComponent(sendId) : ""));
                 showSendPreview(data);
               } catch (err) { showStatus(err.message, "error"); }
             });
@@ -4425,6 +5408,7 @@ tbody tr:last-child td { border-bottom: none; }
       }
 
       // ----- Wiring -----
+      wireWizard();
       ORALL("[data-outreach-tab]").forEach((btn) => btn.addEventListener("click", () => setOutreachTab(btn.dataset.outreachTab)));
       ORQ("#orRefreshStats").addEventListener("click", loadStats);
       ORQ("#orExportCsv").addEventListener("click", (ev) => { ev.preventDefault(); window.open("/admin/outreach/export.csv", "_blank"); });

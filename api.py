@@ -12264,8 +12264,6 @@ try:
         build_message as outreach_build_message,
         smtp_send as outreach_smtp_send,
         fetch_candidates as outreach_fetch_candidates,
-        in_business_window as outreach_in_business_window,
-        domain_of as outreach_domain_of,
         normalize_email as outreach_normalize_email,
         _row_to_prospect as outreach_row_to_prospect,
         STAGE_ORDER as OUTREACH_STAGES,
@@ -12335,14 +12333,37 @@ class OutreachProspectPatch(BaseModel):
 
 class OutreachSendRequest(BaseModel):
     stage: str = "cold"
+    campaign_name: str = ""
     max: int = 20
     dry_run: bool = True
     test_to: str = ""
     email: str = ""
+    emails: List[str] = Field(default_factory=list)
     after_days: int = 4
     delay: float = 70.0
     jitter: float = 25.0
     force_window: bool = False
+
+
+class OutreachPreflightRequest(BaseModel):
+    stage: str = "cold"
+    emails: List[str] = Field(default_factory=list)
+    max: int = 20
+    after_days: int = 4
+
+
+class OutreachCampaignCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=180)
+    stage: str = "cold"
+    emails: List[str] = Field(default_factory=list)
+    delay: float = 70.0
+    jitter: float = 25.0
+    force_window: bool = False
+
+
+class OutreachCampaignPatch(BaseModel):
+    status: Optional[str] = None
+    name: Optional[str] = None
 
 
 class OutreachSuppressRequest(BaseModel):
@@ -12568,7 +12589,7 @@ def outreach_prospect_detail(email: str):
         if not row:
             raise HTTPException(status_code=404, detail="Prospect no encontrado.")
         sends = conn.execute(
-            "SELECT id, stage, subject, sent_at, mode, message_id FROM sends WHERE email=? ORDER BY id ASC",
+            "SELECT id, stage, subject, body_text, body_html, sent_at, mode, message_id FROM sends WHERE email=? ORDER BY id ASC",
             (email_l,),
         ).fetchall()
         events = conn.execute(
@@ -12844,7 +12865,7 @@ class OutreachTemplatePreview(BaseModel):
 
 
 @app.get("/admin/outreach/prospects/{email}/render", dependencies=[Depends(_require_admin_token)])
-def outreach_render_prospect_email(email: str, stage: str = "cold"):
+def outreach_render_prospect_email(email: str, stage: str = "cold", send_id: int = 0):
     if not OUTREACH_AVAILABLE:
         raise HTTPException(status_code=503, detail="Outreach no disponible.")
     if stage not in OUTREACH_STAGES:
@@ -12852,6 +12873,23 @@ def outreach_render_prospect_email(email: str, stage: str = "cold"):
     email = email.lower().strip()
     from outreach_campaign import render_with_override, load_template_overrides  # type: ignore
     with _outreach_db() as conn:
+        if send_id:
+            send_row = conn.execute(
+                "SELECT id, email, stage, subject, body_text, body_html FROM sends WHERE id=? AND email=?",
+                (send_id, email),
+            ).fetchone()
+            if not send_row:
+                raise HTTPException(status_code=404, detail="Envio no encontrado.")
+            if send_row["body_text"] or send_row["body_html"]:
+                return {
+                    "subject": send_row["subject"] or "",
+                    "text": send_row["body_text"] or "",
+                    "html": send_row["body_html"] or "",
+                    "stage": send_row["stage"] or stage,
+                    "email": email,
+                    "send_id": send_id,
+                    "snapshot": True,
+                }
         row = conn.execute("SELECT * FROM prospects WHERE email=?", (email,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Prospect no encontrado.")
@@ -12899,6 +12937,476 @@ def outreach_preview_template(payload: OutreachTemplatePreview):
     return {"subject": subject, "text": text, "html": html}
 
 
+def _outreach_preflight_auth_status(settings: Dict[str, object]) -> Dict[str, Any]:
+    from_email = str(settings.get("from_email") or "").strip().lower()
+    smtp_user = str(settings.get("username") or "").strip().lower()
+    from_domain = from_email.rsplit("@", 1)[-1] if "@" in from_email else ""
+    smtp_domain = smtp_user.rsplit("@", 1)[-1] if "@" in smtp_user else ""
+    aligned = bool(from_domain and smtp_domain and from_domain == smtp_domain)
+    return {
+        "spf": {
+            "status": "ok" if aligned else "warning",
+            "message": "Dominio del remitente alineado con SMTP." if aligned else "El dominio del remitente no coincide claramente con el usuario SMTP.",
+        },
+        "dkim": {
+            "status": "ok" if from_domain else "unknown",
+            "message": f"DKIM depende del proveedor para {from_domain or 'el dominio remitente'}; no se firma localmente.",
+        },
+        "dmarc": {
+            "status": "ok" if aligned else "unknown",
+            "message": "DMARC deberia alinear si SPF/DKIM pasan con el dominio remitente." if aligned else "No se puede confirmar DMARC solo con la configuracion local.",
+        },
+    }
+
+
+def _outreach_unfilled_vars(*parts: str) -> List[str]:
+    found: Set[str] = set()
+    for part in parts:
+        for match in re.findall(r"\{[A-Za-z_][A-Za-z0-9_]*\}", part or ""):
+            found.add(match)
+    return sorted(found)
+
+
+def _outreach_campaign_metrics(conn: sqlite3.Connection, campaign_id: int) -> Dict[str, int]:
+    total = conn.execute(
+        "SELECT COUNT(*) AS c FROM campaign_members WHERE campaign_id=?",
+        (campaign_id,),
+    ).fetchone()["c"]
+    sent = conn.execute(
+        "SELECT COUNT(*) AS c FROM campaign_members WHERE campaign_id=? AND status='sent'",
+        (campaign_id,),
+    ).fetchone()["c"]
+    skipped = conn.execute(
+        "SELECT COUNT(*) AS c FROM campaign_members WHERE campaign_id=? AND status='skipped'",
+        (campaign_id,),
+    ).fetchone()["c"]
+    errors = conn.execute(
+        "SELECT COUNT(*) AS c FROM campaign_members WHERE campaign_id=? AND status='error'",
+        (campaign_id,),
+    ).fetchone()["c"]
+    suppressed = conn.execute(
+        """SELECT COUNT(*) AS c
+           FROM campaign_members cm
+           JOIN suppressions s ON s.email=cm.email
+           WHERE cm.campaign_id=?""",
+        (campaign_id,),
+    ).fetchone()["c"]
+    opens = conn.execute(
+        """SELECT COUNT(DISTINCT e.email) AS c
+           FROM campaign_members cm
+           JOIN events e ON e.email=cm.email AND e.type='open'
+           WHERE cm.campaign_id=?""",
+        (campaign_id,),
+    ).fetchone()["c"]
+    clicks = conn.execute(
+        """SELECT COUNT(DISTINCT e.email) AS c
+           FROM campaign_members cm
+           JOIN events e ON e.email=cm.email AND e.type='click'
+           WHERE cm.campaign_id=?""",
+        (campaign_id,),
+    ).fetchone()["c"]
+    replies = conn.execute(
+        """SELECT COUNT(DISTINCT e.email) AS c
+           FROM campaign_members cm
+           JOIN events e ON e.email=cm.email AND e.type='reply'
+           WHERE cm.campaign_id=?""",
+        (campaign_id,),
+    ).fetchone()["c"]
+    return {
+        "total": int(total or 0),
+        "sent": int(sent or 0),
+        "pending": max(0, int(total or 0) - int(sent or 0) - int(skipped or 0) - int(errors or 0)),
+        "skipped": int(skipped or 0),
+        "errors": int(errors or 0),
+        "suppressed": int(suppressed or 0),
+        "opens": int(opens or 0),
+        "clicks": int(clicks or 0),
+        "replies": int(replies or 0),
+    }
+
+
+def _outreach_create_campaign(
+    conn: sqlite3.Connection,
+    *,
+    name: str,
+    stage: str,
+    emails: List[str],
+    settings: Dict[str, object],
+    delay: float,
+    jitter: float,
+    force_window: bool,
+    status: str = "draft",
+    job_id: int = 0,
+) -> int:
+    now = _outreach_now()
+    unique_emails = list(dict.fromkeys(email.lower().strip() for email in emails if email and "@" in email))
+    if unique_emails:
+        placeholders = ",".join("?" for _ in unique_emails)
+        existing = conn.execute(
+            f"""SELECT cm.email, cm.campaign_id, c.name AS campaign_name, c.status
+                FROM campaign_members cm
+                LEFT JOIN campaigns c ON c.id=cm.campaign_id
+                WHERE cm.email IN ({placeholders})""",
+            unique_emails,
+        ).fetchall()
+        if existing:
+            examples = ", ".join(
+                f"{r['email']} ({r['campaign_name'] or 'campana #' + str(r['campaign_id'])})"
+                for r in existing[:5]
+            )
+            raise HTTPException(
+                status_code=409,
+                detail=f"{len(existing)} email(s) ya pertenecen a otra campana: {examples}",
+            )
+    sender = str(settings.get("from_email") or "")
+    tracking = int(bool((not OUTREACH_TRACKING_DISABLED) and OUTREACH_TRACKING_SECRET and OUTREACH_TRACKING_BASE_URL))
+    cur = conn.execute(
+        """INSERT INTO campaigns
+           (name, status, stage, template_stage, sender, delay, jitter, force_window, tracking, job_id, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (name.strip() or f"Campana {now[:10]}", status, stage, stage, sender, float(delay), float(jitter), int(force_window), tracking, int(job_id), now, now),
+    )
+    campaign_id = int(cur.lastrowid)
+    for email in unique_emails:
+        conn.execute(
+            """INSERT INTO campaign_members
+               (campaign_id, email, stage, status, created_at, updated_at)
+               VALUES (?,?,?,?,?,?)""",
+            (campaign_id, email, stage, "pending", now, now),
+        )
+    return campaign_id
+
+
+def _outreach_campaign_summary(conn: sqlite3.Connection, row: sqlite3.Row) -> Dict[str, Any]:
+    data = dict(row)
+    data["metrics"] = _outreach_campaign_metrics(conn, int(row["id"]))
+    return data
+
+
+@app.get("/admin/outreach/campaigns", dependencies=[Depends(_require_admin_token)])
+def outreach_list_campaigns(limit: int = 50):
+    limit = max(1, min(200, int(limit)))
+    with _outreach_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM campaigns ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return {"items": [_outreach_campaign_summary(conn, r) for r in rows]}
+
+
+@app.post("/admin/outreach/campaigns", dependencies=[Depends(_require_admin_token)])
+def outreach_create_campaign(payload: OutreachCampaignCreate):
+    if payload.stage not in OUTREACH_STAGES:
+        raise HTTPException(status_code=400, detail="Stage invalido.")
+    emails = [str(email).lower().strip() for email in payload.emails if str(email).strip()]
+    with _outreach_db() as conn:
+        campaign_id = _outreach_create_campaign(
+            conn,
+            name=payload.name,
+            stage=payload.stage,
+            emails=emails,
+            settings=outreach_smtp_settings(),
+            delay=payload.delay,
+            jitter=payload.jitter,
+            force_window=payload.force_window,
+            status="draft",
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
+        return _outreach_campaign_summary(conn, row)
+
+
+@app.get("/admin/outreach/campaigns/{campaign_id}", dependencies=[Depends(_require_admin_token)])
+def outreach_campaign_detail(campaign_id: int):
+    with _outreach_db() as conn:
+        row = conn.execute("SELECT * FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Campana no encontrada.")
+        members = conn.execute(
+            """SELECT cm.*, p.business_name, p.website, p.phone
+               FROM campaign_members cm
+               LEFT JOIN prospects p ON p.email=cm.email
+               WHERE cm.campaign_id=?
+               ORDER BY cm.id ASC""",
+            (campaign_id,),
+        ).fetchall()
+        return {
+            "campaign": _outreach_campaign_summary(conn, row),
+            "members": [dict(r) for r in members],
+        }
+
+
+@app.patch("/admin/outreach/campaigns/{campaign_id}", dependencies=[Depends(_require_admin_token)])
+def outreach_patch_campaign(campaign_id: int, payload: OutreachCampaignPatch):
+    allowed = {"draft", "running", "paused", "completed", "archived"}
+    fields = []
+    values: List[Any] = []
+    if payload.status is not None:
+        if payload.status not in allowed:
+            raise HTTPException(status_code=400, detail="Estado invalido.")
+        fields.append("status=?")
+        values.append(payload.status)
+    if payload.name is not None:
+        fields.append("name=?")
+        values.append(payload.name.strip()[:180] or "Campana")
+    if not fields:
+        raise HTTPException(status_code=400, detail="Sin cambios.")
+    fields.append("updated_at=?")
+    values.append(_outreach_now())
+    values.append(campaign_id)
+    with _outreach_db() as conn:
+        cur = conn.execute(f"UPDATE campaigns SET {', '.join(fields)} WHERE id=?", values)
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Campana no encontrada.")
+        conn.commit()
+        row = conn.execute("SELECT * FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
+        return _outreach_campaign_summary(conn, row)
+
+
+@app.post("/admin/outreach/campaigns/{campaign_id}/duplicate", dependencies=[Depends(_require_admin_token)])
+def outreach_duplicate_campaign(campaign_id: int):
+    with _outreach_db() as conn:
+        row = conn.execute("SELECT * FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Campana no encontrada.")
+        emails = [r["email"] for r in conn.execute("SELECT email FROM campaign_members WHERE campaign_id=? ORDER BY id ASC", (campaign_id,))]
+        new_id = _outreach_create_campaign(
+            conn,
+            name=f"{row['name']} copia",
+            stage=row["stage"],
+            emails=emails,
+            settings={"from_email": row["sender"]},
+            delay=float(row["delay"] or 70),
+            jitter=float(row["jitter"] or 25),
+            force_window=bool(row["force_window"]),
+            status="draft",
+        )
+        conn.commit()
+        new_row = conn.execute("SELECT * FROM campaigns WHERE id=?", (new_id,)).fetchone()
+        return _outreach_campaign_summary(conn, new_row)
+
+
+@app.post("/admin/outreach/campaigns/{campaign_id}/resume", dependencies=[Depends(_require_admin_token)])
+def outreach_resume_campaign(campaign_id: int):
+    with _outreach_db() as conn:
+        row = conn.execute("SELECT * FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Campana no encontrada.")
+        if row["status"] == "archived":
+            raise HTTPException(status_code=400, detail="No se puede reanudar una campana archivada.")
+        emails = [
+            r["email"] for r in conn.execute(
+                "SELECT email FROM campaign_members WHERE campaign_id=? AND status='pending' ORDER BY id ASC",
+                (campaign_id,),
+            )
+        ]
+        if not emails:
+            conn.execute("UPDATE campaigns SET status='completed', updated_at=? WHERE id=?", (_outreach_now(), campaign_id))
+            conn.commit()
+            return {"ok": True, "campaign_id": campaign_id, "job_id": 0, "message": "Sin pendientes; campana completada."}
+        params = {
+            "stage": row["stage"] or "cold",
+            "max": len(emails),
+            "send": True,
+            "test_to": "",
+            "email": "",
+            "emails": emails,
+            "campaign_name": row["name"],
+            "campaign_id": campaign_id,
+            "after_days": 4,
+            "delay": float(row["delay"] or 70),
+            "jitter": float(row["jitter"] or 25),
+            "force_window": bool(row["force_window"]),
+            "dry_run": False,
+        }
+        cur = conn.execute(
+            "INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES (?,?,?,?,?)",
+            ("send", "queued", json.dumps(params), "", _outreach_now()),
+        )
+        job_id = int(cur.lastrowid)
+        conn.execute(
+            "UPDATE campaigns SET status='running', job_id=?, updated_at=? WHERE id=?",
+            (job_id, _outreach_now(), campaign_id),
+        )
+        conn.commit()
+    threading.Thread(target=_outreach_run_send_job, args=(job_id, params), daemon=True).start()
+    return {"ok": True, "campaign_id": campaign_id, "job_id": job_id}
+
+
+@app.post("/admin/outreach/campaigns/{campaign_id}/prepare-followup", dependencies=[Depends(_require_admin_token)])
+def outreach_prepare_campaign_followup(campaign_id: int):
+    with _outreach_db() as conn:
+        row = conn.execute("SELECT * FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Campana no encontrada.")
+        stage = row["stage"] or "cold"
+        try:
+            next_stage = OUTREACH_STAGES[OUTREACH_STAGES.index(stage) + 1]
+        except Exception:
+            raise HTTPException(status_code=400, detail="Esta campana ya esta en la ultima etapa.")
+        suppressed = 0
+        replied = 0
+        already_sent = 0
+        eligible: List[str] = []
+        for member in conn.execute("SELECT email FROM campaign_members WHERE campaign_id=? ORDER BY id ASC", (campaign_id,)):
+            email = member["email"]
+            if conn.execute("SELECT 1 FROM suppressions WHERE email=?", (email,)).fetchone():
+                suppressed += 1
+            elif conn.execute("SELECT 1 FROM events WHERE email=? AND type='reply'", (email,)).fetchone():
+                replied += 1
+            elif conn.execute("SELECT 1 FROM sends WHERE email=? AND stage=? AND mode='send'", (email, next_stage)).fetchone():
+                already_sent += 1
+            elif conn.execute("SELECT 1 FROM sends WHERE email=? AND stage=? AND mode='send'", (email, stage)).fetchone():
+                eligible.append(email)
+        return {
+            "campaign_id": campaign_id,
+            "campaign_name": row["name"],
+            "from_stage": stage,
+            "next_stage": next_stage,
+            "eligible_emails": eligible,
+            "counts": {
+                "eligible": len(eligible),
+                "suppressed": suppressed,
+                "replied": replied,
+                "already_sent": already_sent,
+            },
+        }
+
+
+@app.post("/admin/outreach/preflight", dependencies=[Depends(_require_admin_token)])
+def outreach_preflight(payload: OutreachPreflightRequest):
+    if not OUTREACH_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Outreach no disponible.")
+    if payload.stage not in OUTREACH_STAGES:
+        raise HTTPException(status_code=400, detail="Stage invalido.")
+
+    selected_emails = [
+        str(email).lower().strip()
+        for email in payload.emails
+        if str(email).strip()
+    ]
+    settings = outreach_smtp_settings()
+    unsub = str(settings["unsubscribe_mailto"]) or "baja@vantelia.es"
+
+    with _outreach_db() as conn:
+        try:
+            from outreach_campaign import render_with_override, load_template_overrides  # type: ignore
+            overrides = load_template_overrides(conn)
+        except Exception:
+            overrides = {}
+
+        rows = []
+        if selected_emails:
+            placeholders = ",".join("?" for _ in selected_emails)
+            rows = conn.execute(
+                f"SELECT * FROM prospects WHERE email IN ({placeholders}) ORDER BY created_at ASC",
+                selected_emails,
+            ).fetchall()
+        else:
+            candidates = outreach_fetch_candidates(
+                conn,
+                payload.stage,
+                after_days=int(payload.after_days or 4),
+                limit=int(payload.max or 20),
+                only_email=None,
+            )
+            rows = []
+            for p in candidates:
+                row = conn.execute("SELECT * FROM prospects WHERE email=?", (p.email,)).fetchone()
+                if row:
+                    rows.append(row)
+
+        missing_requested = max(0, len(set(selected_emails)) - len(rows)) if selected_emails else 0
+        suppressed = 0
+        missing_email = 0
+        already_contacted = 0
+        already_in_campaign = 0
+        real_rows = []
+        skipped_samples = []
+        for row in rows:
+            email = (row["email"] or "").strip().lower()
+            reason = ""
+            if not email or "@" not in email:
+                missing_email += 1
+                reason = "sin email"
+            elif conn.execute("SELECT 1 FROM suppressions WHERE email=?", (email,)).fetchone():
+                suppressed += 1
+                reason = "baja"
+            elif conn.execute("SELECT 1 FROM campaign_members WHERE email=?", (email,)).fetchone():
+                already_in_campaign += 1
+                reason = "ya en otra campana"
+            elif payload.stage == "cold" and conn.execute("SELECT 1 FROM sends WHERE email=? AND mode='send'", (email,)).fetchone():
+                already_contacted += 1
+                reason = "ya contactado"
+            elif payload.stage != "cold" and conn.execute("SELECT 1 FROM sends WHERE email=? AND stage=? AND mode='send'", (email, payload.stage)).fetchone():
+                already_contacted += 1
+                reason = "stage ya enviado"
+            if reason:
+                if len(skipped_samples) < 8:
+                    skipped_samples.append({"email": email or "-", "reason": reason})
+                continue
+            real_rows.append(row)
+
+        real_count = len(real_rows)
+        first = real_rows[0] if real_rows else (rows[0] if rows else None)
+        subject = ""
+        text = ""
+        html = ""
+        if first:
+            p = OutreachProspect(
+                email=first["email"] or "test@example.com",
+                business_name=first["business_name"] or "Prospect de prueba",
+                contact_name=first["contact_name"] or "",
+                niche=first["niche"] or "",
+                service_hint=first["service_hint"] or "",
+                city=first["city"] or "",
+                website=first["website"] or "",
+                phone=first["phone"] or "",
+                tags=first["tags"] or "",
+                source=first["source"] or "",
+            )
+            if overrides:
+                subject, text, html = render_with_override(payload.stage, p, unsub, overrides)
+            else:
+                subject, text, html = outreach_render(payload.stage, p, unsub)
+
+    warnings = {
+        "empty_href": bool(re.search(r'href=(["\'])\s*\1', html or "", re.IGNORECASE)),
+        "code_fence": "```" in (html or "") or "```" in (text or ""),
+        "unfilled_variables": _outreach_unfilled_vars(subject, text, html),
+    }
+    html_active = bool(html)
+    tracking_active = bool((not OUTREACH_TRACKING_DISABLED) and OUTREACH_TRACKING_SECRET and OUTREACH_TRACKING_BASE_URL)
+    return {
+        "stage": payload.stage,
+        "counts": {
+            "requested": len(selected_emails) if selected_emails else int(payload.max or 20),
+            "found": len(rows),
+            "real_candidates": real_count,
+            "skipped": {
+                "suppressed": suppressed,
+                "missing_email": missing_email + missing_requested,
+                "already_contacted": already_contacted,
+                "already_in_campaign": already_in_campaign,
+                "total": suppressed + missing_email + missing_requested + already_contacted + already_in_campaign,
+            },
+        },
+        "skipped_samples": skipped_samples,
+        "subject": subject,
+        "text": text,
+        "html": html,
+        "html_active": html_active,
+        "tracking_active": tracking_active,
+        "warnings": warnings,
+        "auth": _outreach_preflight_auth_status(settings),
+        "sender": {
+            "from_email": settings.get("from_email"),
+            "from_name": settings.get("from_name"),
+            "smtp_host": settings.get("host"),
+        },
+    }
+
+
 # ----- Send/jobs -----
 
 OUTREACH_JOB_LOCK = threading.Lock()
@@ -12933,28 +13441,46 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
         return
 
     stage = params.get("stage", "cold")
+    campaign_id = int(params.get("campaign_id") or 0)
     real_send = bool(params.get("send")) or bool(params.get("test_to"))
     settings = outreach_smtp_settings()
     unsub = str(settings["unsubscribe_mailto"]) or "baja@vantelia.es"
 
     try:
+        from outreach_campaign import render_with_override, load_template_overrides  # type: ignore
+        overrides = load_template_overrides(conn)
+    except Exception:
+        overrides = {}
+
+    try:
         conn.execute("UPDATE jobs SET status='running' WHERE id=?", (job_id,))
+        if campaign_id and params.get("send"):
+            conn.execute(
+                "UPDATE campaigns SET status='running', job_id=?, updated_at=? WHERE id=? AND status<>'archived'",
+                (job_id, _outreach_now(), campaign_id),
+            )
         conn.commit()
 
-        if real_send and not params.get("force_window"):
-            ok, motivo = outreach_in_business_window()
-            if not ok:
-                _job_log(conn, job_id, f"Bloqueado por ventana: {motivo}")
-                _job_finish(conn, job_id, "error")
-                return
-
-        candidates = outreach_fetch_candidates(
-            conn,
-            stage,
-            after_days=int(params.get("after_days", 4)),
-            limit=int(params.get("max", 20)),
-            only_email=params.get("email") or None,
-        )
+        selected_emails = [
+            str(email).lower().strip()
+            for email in (params.get("emails") or [])
+            if str(email).strip()
+        ]
+        if selected_emails and not params.get("test_to"):
+            placeholders = ",".join("?" for _ in selected_emails)
+            rows = conn.execute(
+                f"SELECT * FROM prospects WHERE email IN ({placeholders}) ORDER BY created_at ASC",
+                selected_emails,
+            ).fetchall()
+            candidates = [outreach_row_to_prospect(r) for r in rows]
+        else:
+            candidates = outreach_fetch_candidates(
+                conn,
+                stage,
+                after_days=int(params.get("after_days", 4)),
+                limit=int(params.get("max", 20)),
+                only_email=params.get("email") or None,
+            )
         # Modo test sin email concreto: si la query estandar no devuelve nada,
         # caemos a "cualquier prospect" para poder previsualizar el envio real.
         if not candidates and params.get("test_to") and not params.get("email"):
@@ -12988,23 +13514,50 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
             _job_finish(conn, job_id, "done")
             return
 
-        domain_cap = int(os.getenv("OUTREACH_DOMAIN_DAILY_CAP", "3"))
-        today = datetime.now(timezone.utc).date().isoformat()
-        domain_today: Dict[str, int] = {}
-        for r in conn.execute(
-            "SELECT email FROM sends WHERE substr(sent_at,1,10)=? AND mode='send'", (today,)
-        ):
-            d = outreach_domain_of(r["email"])
-            domain_today[d] = domain_today.get(d, 0) + 1
-
         sent_count = 0
         for idx, p in enumerate(candidates, 1):
+            if campaign_id and params.get("send"):
+                status_row = conn.execute("SELECT status FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
+                if status_row and status_row["status"] == "paused":
+                    _job_log(conn, job_id, "Campana pausada. El job se detiene sin marcar pendientes como error.")
+                    _job_finish(conn, job_id, "done")
+                    return
             if real_send and not params.get("test_to"):
-                if domain_today.get(outreach_domain_of(p.email), 0) >= domain_cap:
-                    _job_log(conn, job_id, f"skip {p.email} (cap dominio)")
+                if conn.execute("SELECT 1 FROM suppressions WHERE email=?", (p.email,)).fetchone():
+                    if campaign_id:
+                        conn.execute(
+                            "UPDATE campaign_members SET status='skipped', skip_reason='baja', updated_at=? WHERE campaign_id=? AND email=?",
+                            (_outreach_now(), campaign_id, p.email),
+                        )
+                        conn.commit()
+                    _job_log(conn, job_id, f"skip {p.email} (baja)")
+                    continue
+                if stage == "cold" and conn.execute("SELECT 1 FROM sends WHERE email=? AND mode='send'", (p.email,)).fetchone():
+                    if campaign_id:
+                        conn.execute(
+                            "UPDATE campaign_members SET status='skipped', skip_reason='ya contactado', updated_at=? WHERE campaign_id=? AND email=?",
+                            (_outreach_now(), campaign_id, p.email),
+                        )
+                        conn.commit()
+                    _job_log(conn, job_id, f"skip {p.email} (ya contactado)")
+                    continue
+                if stage != "cold" and conn.execute(
+                    "SELECT 1 FROM sends WHERE email=? AND stage=? AND mode='send'",
+                    (p.email, stage),
+                ).fetchone():
+                    if campaign_id:
+                        conn.execute(
+                            "UPDATE campaign_members SET status='skipped', skip_reason='stage ya enviado', updated_at=? WHERE campaign_id=? AND email=?",
+                            (_outreach_now(), campaign_id, p.email),
+                        )
+                        conn.commit()
+                    _job_log(conn, job_id, f"skip {p.email} (stage ya enviado)")
                     continue
 
-            subject, text, html_body = outreach_render(stage, p, unsub)
+            if overrides:
+                subject, text, html_body = render_with_override(stage, p, unsub, overrides)
+            else:
+                subject, text, html_body = outreach_render(stage, p, unsub)
             if not OUTREACH_TRACKING_DISABLED and OUTREACH_TRACKING_SECRET and OUTREACH_TRACKING_BASE_URL:
                 html_body = outreach_apply_tracking(
                     html_body, p.email, stage,
@@ -13032,20 +13585,37 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
             try:
                 outreach_smtp_send(msg, settings)
             except Exception as err:  # noqa: BLE001
+                if campaign_id and mode == "send":
+                    conn.execute(
+                        "UPDATE campaign_members SET status='error', skip_reason=?, updated_at=? WHERE campaign_id=? AND email=?",
+                        (str(err)[:240], _outreach_now(), campaign_id, p.email),
+                    )
+                    conn.commit()
                 _job_log(conn, job_id, f"ERROR {recipient}: {err}")
                 continue
 
             if mode == "send":
                 conn.execute(
-                    "INSERT INTO sends (email, stage, subject, sent_at, mode, message_id) VALUES (?,?,?,?,?,?)",
-                    (p.email, stage, subject, _outreach_now(), mode, msg["Message-ID"] or ""),
+                    "INSERT INTO sends (campaign_id, email, stage, subject, body_text, body_html, sent_at, mode, message_id) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (campaign_id, p.email, stage, subject, text, html_body, _outreach_now(), mode, msg["Message-ID"] or ""),
                 )
+                send_id = int(conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"])
                 conn.execute(
                     "UPDATE prospects SET status=CASE WHEN status='new' THEN 'contacted' ELSE status END, updated_at=? WHERE email=?",
                     (_outreach_now(), p.email),
                 )
+                if campaign_id:
+                    conn.execute(
+                        """UPDATE campaign_members
+                           SET status='sent', stage=?, last_send_id=?, last_sent_at=?, skip_reason='', updated_at=?
+                           WHERE campaign_id=? AND email=?""",
+                        (stage, send_id, _outreach_now(), _outreach_now(), campaign_id, p.email),
+                    )
+                    conn.execute(
+                        "UPDATE campaigns SET last_sent_at=?, updated_at=? WHERE id=?",
+                        (_outreach_now(), _outreach_now(), campaign_id),
+                    )
                 conn.commit()
-                domain_today[outreach_domain_of(p.email)] = domain_today.get(outreach_domain_of(p.email), 0) + 1
             sent_count += 1
             _job_log(conn, job_id, f"[{idx}/{len(candidates)}] OK {recipient} | {p.business_name} ({mode})")
 
@@ -13055,6 +13625,16 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                 time.sleep(delay)
 
         _job_log(conn, job_id, f"Enviados: {sent_count}")
+        if campaign_id and params.get("send"):
+            pending = conn.execute(
+                "SELECT COUNT(*) AS c FROM campaign_members WHERE campaign_id=? AND status='pending'",
+                (campaign_id,),
+            ).fetchone()["c"]
+            conn.execute(
+                "UPDATE campaigns SET status=?, updated_at=? WHERE id=? AND status<>'paused'",
+                ("completed" if int(pending or 0) == 0 else "running", _outreach_now(), campaign_id),
+            )
+            conn.commit()
         _job_finish(conn, job_id, "done")
     except Exception as err:  # noqa: BLE001
         logger.exception("Outreach send job error")
@@ -13075,12 +13655,16 @@ def outreach_send(payload: OutreachSendRequest):
     if payload.stage not in OUTREACH_STAGES:
         raise HTTPException(status_code=400, detail="Stage invalido.")
     test_to_clean = "" if payload.dry_run else (payload.test_to or "")
+    selected_emails = [str(email).lower().strip() for email in payload.emails if str(email).strip()]
     params = {
         "stage": payload.stage,
         "max": payload.max,
         "send": (not payload.dry_run) and not test_to_clean,
         "test_to": test_to_clean,
         "email": payload.email or "",
+        "emails": selected_emails,
+        "campaign_name": payload.campaign_name,
+        "campaign_id": 0,
         "after_days": payload.after_days,
         "delay": payload.delay,
         "jitter": payload.jitter,
@@ -13088,15 +13672,31 @@ def outreach_send(payload: OutreachSendRequest):
         "dry_run": bool(payload.dry_run),
     }
     with _outreach_db() as conn:
+        campaign_id = 0
+        if params["send"] and selected_emails:
+            campaign_id = _outreach_create_campaign(
+                conn,
+                name=payload.campaign_name or f"Campana {payload.stage} {_outreach_now()[:10]}",
+                stage=payload.stage,
+                emails=selected_emails,
+                settings=outreach_smtp_settings(),
+                delay=payload.delay,
+                jitter=payload.jitter,
+                force_window=payload.force_window,
+                status="running",
+            )
+            params["campaign_id"] = campaign_id
         cur = conn.execute(
             "INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES (?,?,?,?,?)",
             ("send", "queued", json.dumps(params), "", _outreach_now()),
         )
         job_id = cur.lastrowid
+        if campaign_id:
+            conn.execute("UPDATE campaigns SET job_id=?, updated_at=? WHERE id=?", (job_id, _outreach_now(), campaign_id))
         conn.commit()
 
     threading.Thread(target=_outreach_run_send_job, args=(job_id, params), daemon=True).start()
-    return {"ok": True, "job_id": job_id}
+    return {"ok": True, "job_id": job_id, "campaign_id": params.get("campaign_id") or 0}
 
 
 @app.get("/admin/outreach/jobs", dependencies=[Depends(_require_admin_token)])

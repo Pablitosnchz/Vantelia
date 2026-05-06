@@ -78,15 +78,53 @@ CREATE TABLE IF NOT EXISTS prospects (
 
 CREATE TABLE IF NOT EXISTS sends (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id INTEGER DEFAULT 0,
     email       TEXT NOT NULL,
     stage       TEXT NOT NULL,
     subject     TEXT NOT NULL,
+    body_text   TEXT DEFAULT '',
+    body_html   TEXT DEFAULT '',
     sent_at     TEXT NOT NULL,
     mode        TEXT NOT NULL,
     message_id  TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_sends_email_stage ON sends(email, stage);
 CREATE INDEX IF NOT EXISTS idx_sends_email_sent  ON sends(email, sent_at);
+
+CREATE TABLE IF NOT EXISTS campaigns (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    name           TEXT NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'draft',
+    stage          TEXT NOT NULL DEFAULT 'cold',
+    template_stage TEXT NOT NULL DEFAULT 'cold',
+    sender         TEXT DEFAULT '',
+    delay          REAL DEFAULT 70,
+    jitter         REAL DEFAULT 25,
+    force_window   INTEGER DEFAULT 0,
+    tracking       INTEGER DEFAULT 0,
+    job_id         INTEGER DEFAULT 0,
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL,
+    last_sent_at   TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status);
+
+CREATE TABLE IF NOT EXISTS campaign_members (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id    INTEGER NOT NULL,
+    email          TEXT NOT NULL,
+    stage          TEXT NOT NULL DEFAULT 'cold',
+    status         TEXT NOT NULL DEFAULT 'pending',
+    last_send_id   INTEGER DEFAULT 0,
+    last_sent_at   TEXT DEFAULT '',
+    next_send_at   TEXT DEFAULT '',
+    skip_reason    TEXT DEFAULT '',
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL,
+    UNIQUE(email)
+);
+CREATE INDEX IF NOT EXISTS idx_campaign_members_campaign ON campaign_members(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_campaign_members_email ON campaign_members(email);
 
 CREATE TABLE IF NOT EXISTS suppressions (
     email     TEXT PRIMARY KEY,
@@ -133,6 +171,12 @@ PROSPECT_MIGRATIONS = [
     ("score", "INTEGER DEFAULT 0"),
 ]
 
+SEND_MIGRATIONS = [
+    ("campaign_id", "INTEGER DEFAULT 0"),
+    ("body_text", "TEXT DEFAULT ''"),
+    ("body_html", "TEXT DEFAULT ''"),
+]
+
 
 def connect(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -147,6 +191,21 @@ def connect(db_path: Path) -> sqlite3.Connection:
                 conn.execute(f"ALTER TABLE prospects ADD COLUMN {column} {ddl}")
             except sqlite3.OperationalError:
                 pass
+    existing_sends = {row["name"] for row in conn.execute("PRAGMA table_info(sends)")}
+    for column, ddl in SEND_MIGRATIONS:
+        if column not in existing_sends:
+            try:
+                conn.execute(f"ALTER TABLE sends ADD COLUMN {column} {ddl}")
+            except sqlite3.OperationalError:
+                pass
+    try:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sends_campaign ON sends(campaign_id)")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_campaign_members_email_unique ON campaign_members(email)")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     return conn
 
@@ -624,9 +683,9 @@ def _send_loop(args: argparse.Namespace, stage: str) -> int:
                 continue
 
             conn.execute(
-                "INSERT INTO sends (email, stage, subject, sent_at, mode, message_id) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (p.email, stage, subject, now_iso(), mode, msg["Message-ID"] or ""),
+                "INSERT INTO sends (campaign_id, email, stage, subject, body_text, body_html, sent_at, mode, message_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (0, p.email, stage, subject, text, html_body, now_iso(), mode, msg["Message-ID"] or ""),
             )
             conn.commit()
             sent_count += 1
