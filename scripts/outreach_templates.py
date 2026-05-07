@@ -437,7 +437,7 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
         f'<p style="margin:0 0 14px 0;">{html_lib.escape(proof)}</p>' if proof else ""
     )
     subject, _variant = pick_subject_with_variant("cold", p)
-    cta_text, cta_html = _cta_block(p, "Ver demo personalizada", "Si, preparame la demo")
+    cta_text, cta_html = _cta_block(p, "Si, preparame la demo", "Si, preparame la demo")
     text = (
         f"{p.greeting}\n\n"
         f"{personal_text}"
