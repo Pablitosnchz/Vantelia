@@ -504,19 +504,27 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
   border-radius: var(--radius-lg);
   background: var(--surface);
 }
-.cw-campaign-list { display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:10px; }
+.cw-campaign-list { display:grid; grid-template-columns: 1fr; gap:8px; }
 .cw-campaign-card {
   display:grid;
-  gap:10px;
-  padding:12px;
+  grid-template-columns: minmax(220px, 1.25fr) minmax(150px, .8fr) minmax(230px, 1fr) auto;
+  gap:12px;
+  align-items:center;
+  padding:10px 12px;
   border:1px solid var(--line);
-  border-radius:10px;
+  border-radius:8px;
   background: var(--surface-2);
 }
 .cw-campaign-card header { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
 .cw-campaign-card h4 { font-size: 14px; margin:0; }
+.cw-campaign-card .cw-campaign-status { display:flex; align-items:center; justify-content:flex-start; gap:8px; min-width:0; }
 .cw-campaign-progress { height: 7px; border-radius:999px; background:rgba(255,255,255,.07); overflow:hidden; }
 .cw-campaign-progress span { display:block; height:100%; background:linear-gradient(90deg,var(--accent),var(--success)); }
+.cw-campaign-card .cw-summary { grid-template-columns: repeat(3, minmax(66px, 1fr)); gap:6px; }
+.cw-campaign-card .cw-side-stat { padding:6px 8px; border-radius:8px; }
+.cw-campaign-card .cw-side-stat strong { font-size:14px; }
+.cw-campaign-card .cw-side-stat span { font-size:11px; }
+.cw-campaign-card .actions { justify-content:flex-end; min-width:220px; }
 .cw-campaign-detail { border-top:1px solid var(--line); padding-top:10px; display:grid; gap:8px; }
 .cw-member-table { width:100%; border-collapse:collapse; font-size:12px; }
 .cw-member-table th, .cw-member-table td { padding:7px 8px; border-bottom:1px solid var(--line); text-align:left; }
@@ -563,11 +571,23 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
 .checkbox-line { display:flex; align-items:center; gap:6px; font-size:13px; }
 .or-prospect-row:hover { background:#f1f5f9; cursor:pointer; }
 .or-prospect-row td { padding:6px 8px; border-bottom:1px solid #eef2f7; }
+.or-status-stack { display:flex; flex-wrap:wrap; gap:4px; align-items:center; min-width:96px; }
 .or-badge { display:inline-block; padding:1px 6px; border-radius:6px; font-size:11px; background:#e2e8f0; color:#0f172a; }
 .or-badge.engaged { background:#fef3c7; color:#92400e; }
 .or-badge.replied { background:#dcfce7; color:#166534; }
 .or-badge.client { background:#dbeafe; color:#1e3a8a; }
 .or-badge.lost { background:#fee2e2; color:#991b1b; }
+.or-badge.opened { background:#dcfce7; color:#166534; }
+
+@media (max-width: 1180px) {
+  .cw-campaign-card { grid-template-columns: minmax(220px, 1fr) minmax(180px, .8fr); }
+  .cw-campaign-card .actions { justify-content:flex-start; min-width:0; }
+}
+
+@media (max-width: 760px) {
+  .cw-campaign-card { grid-template-columns: 1fr; align-items:stretch; }
+  .cw-campaign-card .cw-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 
 /* ── Dashboard view (toggle by .active via JS) ──── */
 .dashboard-view { display: none; }
@@ -4625,9 +4645,11 @@ tbody tr:last-child td { border-bottom: none; }
                     <h4>${escapeHtml(c.name || "Campana")}</h4>
                     <div class="muted">Etapa ${escapeHtml(c.stage || "cold")} &middot; ${sent}/${total} enviados</div>
                   </div>
-                  <span class="pill ${c.status === "running" ? "success" : c.status === "paused" ? "warn" : "info"}">${escapeHtml(campaignStatusLabel(c.status))}</span>
                 </header>
-                <div class="cw-campaign-progress"><span style="width:${progress}%"></span></div>
+                <div class="cw-campaign-status">
+                  <span class="pill ${c.status === "running" ? "success" : c.status === "paused" ? "warn" : "info"}">${escapeHtml(campaignStatusLabel(c.status))}</span>
+                  <div class="cw-campaign-progress" title="${progress}% enviado" style="flex:1;"><span style="width:${progress}%"></span></div>
+                </div>
                 <div class="cw-summary">
                   <div class="cw-side-stat"><strong>${openRate}%</strong><span>Apertura</span></div>
                   <div class="cw-side-stat"><strong>${replyRate}%</strong><span>Respuesta</span></div>
@@ -5032,13 +5054,14 @@ tbody tr:last-child td { border-bottom: none; }
           body.innerHTML = data.items.map((p) => {
             const status = p.status || "new";
             const badgeCls = ["engaged","replied","client","lost"].includes(status) ? status : "";
+            const openedBadge = (p.opens || 0) > 0 ? `<span class="or-badge opened" title="${p.opens} aperturas">Abierto${p.opens > 1 ? " x" + p.opens : ""}</span>` : "";
             const last = p.last_sent_at ? new Date(p.last_sent_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) : "-";
             return `<tr class="or-prospect-row" data-email="${escapeHtml(p.email)}">
               <td>${escapeHtml(p.business_name)}</td>
               <td>${escapeHtml(p.email)}${p.suppressed ? ' <span class="or-badge lost">BAJA</span>' : ''}</td>
               <td>${escapeHtml(p.niche || '')}</td>
               <td>${escapeHtml(p.city || '')}</td>
-              <td><span class="or-badge ${badgeCls}">${status}</span></td>
+              <td><div class="or-status-stack"><span class="or-badge ${badgeCls}">${escapeHtml(status)}</span>${openedBadge}</div></td>
               <td>${escapeHtml(p.last_stage || '-')}</td>
               <td>${last}</td>
               <td style="text-align:right;">${p.opens}</td>
