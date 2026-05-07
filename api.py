@@ -13368,7 +13368,7 @@ def outreach_preflight(payload: OutreachPreflightRequest):
         text = ""
         html = ""
         if first:
-            p = OutreachProspect(
+            preview_prospect = OutreachProspect(
                 email=first["email"] or "test@example.com",
                 business_name=first["business_name"] or "Prospect de prueba",
                 contact_name=first["contact_name"] or "",
@@ -13380,10 +13380,27 @@ def outreach_preflight(payload: OutreachPreflightRequest):
                 tags=first["tags"] or "",
                 source=first["source"] or "",
             )
+        else:
+            # El wizard puede llegar a preflight con emails descubiertos pero aun no
+            # importados. Seguimos marcando 0 candidatos reales, pero renderizamos
+            # una muestra para validar HTML/variables sin mostrar "solo texto plano".
+            preview_prospect = OutreachProspect(
+                email=(selected_emails[0] if selected_emails else "test@example.com"),
+                business_name="Prospect de prueba",
+                contact_name="",
+                niche="",
+                service_hint="",
+                city="Madrid",
+                website="",
+                phone="",
+                tags="",
+                source="preflight",
+            )
+        if preview_prospect:
             if overrides:
-                subject, text, html = render_with_override(payload.stage, p, unsub, overrides)
+                subject, text, html = render_with_override(payload.stage, preview_prospect, unsub, overrides)
             else:
-                subject, text, html = outreach_render(payload.stage, p, unsub)
+                subject, text, html = outreach_render(payload.stage, preview_prospect, unsub)
 
     warnings = {
         "empty_href": bool(re.search(r'href=(["\'])\s*\1', html or "", re.IGNORECASE)),

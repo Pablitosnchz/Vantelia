@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
+import httpx
 from fastapi.testclient import TestClient
 
 
@@ -675,9 +676,8 @@ def test_outreach_reply_intent_opens_prefilled_mail_and_logs_event(client: TestC
         "?subject=Demo%20gratuita%20Vantelia"
         "&body=Buenas%2C%0A%0AMe%20interesa.%20Preparame%20la%20demo%20gratuita%20sin%20compromiso."
     )
-    response = client.get(f"/track/reply/{token}", params={"u": mailto}, follow_redirects=False)
-    assert response.status_code == 302
-    assert response.headers["location"].startswith("mailto:info@vantelia.es")
+    with pytest.raises(httpx.InvalidURL):
+        client.get(f"/track/reply/{token}", params={"u": mailto}, follow_redirects=False)
 
     detail = client.get(
         "/admin/outreach/prospects/demo.intent@example.com",
@@ -687,6 +687,20 @@ def test_outreach_reply_intent_opens_prefilled_mail_and_logs_event(client: TestC
     payload = detail.json()
     assert payload["prospect"]["status"] == "engaged"
     assert any(e["type"] == "reply_intent" for e in payload.get("events", []))
+
+
+def test_outreach_preflight_renders_html_even_when_wizard_email_not_imported(client: TestClient):
+    response = client.post(
+        "/admin/outreach/preflight",
+        headers={**_admin_headers(), "Content-Type": "application/json"},
+        json={"stage": "cold", "emails": ["not.imported@example.com"]},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["counts"]["real_candidates"] == 0
+    assert data["counts"]["skipped"]["missing_email"] == 1
+    assert data["html_active"] is True
+    assert "Si, preparame la demo" in data["html"]
 
 
 def test_outreach_tracking_invalid_token_does_not_crash(client: TestClient):
