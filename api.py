@@ -12401,10 +12401,24 @@ def outreach_stats():
 
         opens = conn.execute("SELECT COUNT(*) AS c FROM events WHERE type='open'").fetchone()["c"]
         clicks = conn.execute("SELECT COUNT(*) AS c FROM events WHERE type='click'").fetchone()["c"]
+        vantelia_clicks = conn.execute(
+            """SELECT COUNT(*) AS c FROM events
+               WHERE type='click' AND (
+                 lower(coalesce(url,'')) LIKE 'https://www.vantelia.es%'
+                 OR lower(coalesce(url,'')) LIKE 'https://vantelia.es%'
+               )"""
+        ).fetchone()["c"]
         reply_intents = conn.execute("SELECT COUNT(*) AS c FROM events WHERE type='reply_intent'").fetchone()["c"]
         replies = conn.execute("SELECT COUNT(*) AS c FROM events WHERE type='reply'").fetchone()["c"]
         unique_opens = conn.execute(
             "SELECT COUNT(DISTINCT email) AS c FROM events WHERE type='open'"
+        ).fetchone()["c"]
+        unique_vantelia_clicks = conn.execute(
+            """SELECT COUNT(DISTINCT email) AS c FROM events
+               WHERE type='click' AND (
+                 lower(coalesce(url,'')) LIKE 'https://www.vantelia.es%'
+                 OR lower(coalesce(url,'')) LIKE 'https://vantelia.es%'
+               )"""
         ).fetchone()["c"]
         unique_reply_intents = conn.execute(
             "SELECT COUNT(DISTINCT email) AS c FROM events WHERE type='reply_intent'"
@@ -12454,6 +12468,25 @@ def outreach_stats():
             (month_cutoff,),
         ).fetchall()
 
+        vantelia_click_rows = conn.execute(
+            """SELECT e.email, p.business_name, p.niche, p.city,
+                      COUNT(*) AS clicks, MAX(e.ts) AS last_clicked_at,
+                      (SELECT e2.url FROM events e2
+                         WHERE e2.email=e.email AND e2.type='click'
+                           AND (lower(coalesce(e2.url,'')) LIKE 'https://www.vantelia.es%'
+                                OR lower(coalesce(e2.url,'')) LIKE 'https://vantelia.es%')
+                         ORDER BY e2.ts DESC LIMIT 1) AS last_url
+               FROM events e
+               LEFT JOIN prospects p ON p.email=e.email
+               WHERE e.type='click' AND (
+                 lower(coalesce(e.url,'')) LIKE 'https://www.vantelia.es%'
+                 OR lower(coalesce(e.url,'')) LIKE 'https://vantelia.es%'
+               )
+               GROUP BY e.email
+               ORDER BY last_clicked_at DESC
+               LIMIT 20"""
+        ).fetchall()
+
         # top niches por reply rate
         top_niches_rows = conn.execute(
             """SELECT p.niche AS niche, COUNT(DISTINCT p.email) AS prospects,
@@ -12481,6 +12514,8 @@ def outreach_stats():
             "opens_total": opens,
             "opens_unique": unique_opens,
             "clicks_total": clicks,
+            "vantelia_clicks_total": vantelia_clicks,
+            "vantelia_clicks_unique": unique_vantelia_clicks,
             "reply_intents_total": reply_intents,
             "reply_intents_unique": unique_reply_intents,
             "replies_total": replies,
@@ -12503,6 +12538,18 @@ def outreach_stats():
             {"niche": r["niche"], "prospects": r["prospects"], "replies": r["replies"]}
             for r in top_niches_rows
         ],
+        "vantelia_clickers": [
+            {
+                "email": r["email"],
+                "business_name": r["business_name"] or "",
+                "niche": r["niche"] or "",
+                "city": r["city"] or "",
+                "clicks": r["clicks"],
+                "last_clicked_at": r["last_clicked_at"],
+                "last_url": r["last_url"] or "",
+            }
+            for r in vantelia_click_rows
+        ],
     }
 
 
@@ -12516,6 +12563,7 @@ def outreach_list_prospects(
     city: str = "",
     source: str = "",
     stage: str = "",
+    clicked_vantelia: bool = False,
     page: int = 1,
     page_size: int = 50,
 ):
@@ -12541,6 +12589,15 @@ def outreach_list_prospects(
     if source:
         where.append("p.source LIKE ?")
         params.append(f"%{source}%")
+    if clicked_vantelia:
+        where.append(
+            """EXISTS (
+                SELECT 1 FROM events ev
+                WHERE ev.email=p.email AND ev.type='click'
+                  AND (lower(coalesce(ev.url,'')) LIKE 'https://www.vantelia.es%'
+                       OR lower(coalesce(ev.url,'')) LIKE 'https://vantelia.es%')
+            )"""
+        )
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
@@ -12551,6 +12608,9 @@ def outreach_list_prospects(
                (SELECT sent_at FROM sends s WHERE s.email=p.email ORDER BY id DESC LIMIT 1) AS last_sent_at,
                (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='open') AS opens,
                (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='click') AS clicks,
+               (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='click'
+                  AND (lower(coalesce(e.url,'')) LIKE 'https://www.vantelia.es%'
+                       OR lower(coalesce(e.url,'')) LIKE 'https://vantelia.es%')) AS vantelia_clicks,
                (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='reply_intent') AS reply_intents,
                (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='reply') AS replies,
                (SELECT 1 FROM suppressions x WHERE x.email=p.email) AS suppressed
@@ -12586,6 +12646,7 @@ def outreach_list_prospects(
             "last_sent_at": r["last_sent_at"],
             "opens": r["opens"],
             "clicks": r["clicks"],
+            "vantelia_clicks": r["vantelia_clicks"],
             "reply_intents": r["reply_intents"],
             "replies": r["replies"],
             "suppressed": bool(r["suppressed"]),

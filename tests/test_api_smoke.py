@@ -703,6 +703,40 @@ def test_outreach_preflight_renders_html_even_when_wizard_email_not_imported(cli
     assert "Si, preparame la demo" in data["html"]
 
 
+def test_outreach_stats_and_list_show_vantelia_link_clicks(client: TestClient, api_module):
+    from outreach_templates import make_tracking_token
+
+    csv_payload = (
+        "business_name,email,contact_name,niche,website,service_hint,city,phone,tags,source\n"
+        "Vantelia Click,click.vantelia@example.com,Pablo,clinica,https://demo.test,medicina,Torrejon,,test,smoke\n"
+    )
+    created = client.post(
+        "/admin/outreach/import",
+        headers={**_admin_headers(), "Content-Type": "text/csv"},
+        content=csv_payload,
+    )
+    assert created.status_code == 200
+
+    token = make_tracking_token("click.vantelia@example.com", "cold", "test-outreach-secret")
+    click = client.get(
+        f"/track/click/{token}",
+        params={"u": "https://www.vantelia.es/planes"},
+        follow_redirects=False,
+    )
+    assert click.status_code == 302
+
+    stats = client.get("/admin/outreach/stats", headers=_admin_headers())
+    assert stats.status_code == 200
+    stats_data = stats.json()
+    assert stats_data["totals"]["vantelia_clicks_unique"] >= 1
+    assert any(item["email"] == "click.vantelia@example.com" for item in stats_data["vantelia_clickers"])
+
+    listing = client.get("/admin/outreach/prospects?clicked_vantelia=true", headers=_admin_headers())
+    assert listing.status_code == 200
+    item = next(i for i in listing.json()["items"] if i["email"] == "click.vantelia@example.com")
+    assert item["vantelia_clicks"] >= 1
+
+
 def test_outreach_tracking_invalid_token_does_not_crash(client: TestClient):
     response = client.get("/track/open/invalid-token.gif")
     assert response.status_code == 200  # devuelve pixel igualmente
