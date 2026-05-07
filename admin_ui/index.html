@@ -2235,9 +2235,43 @@ tbody tr:last-child td { border-bottom: none; }
                 <div id="orVanteliaClickers" style="margin-top:6px;font-size:13px;"></div>
               </div>
             </div>
-            <div class="actions" style="margin-top:14px;">
-              <button class="secondary small" type="button" id="orRefreshStats">Refrescar</button>
-              <a class="ghost small" id="orExportCsv" href="#" style="padding:6px 12px;">Exportar CSV</a>
+            <div class="card" style="padding:14px;margin-top:14px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                <div>
+                  <strong>Hot leads</strong>
+                  <div class="muted" style="font-size:12px;">Prospects que abren o clican. Sin respuesta aun. Llamalos hoy.</div>
+                </div>
+                <div class="actions">
+                  <button class="ghost small" type="button" id="orHotLeadsRefresh">Refrescar</button>
+                  <button class="ghost small" type="button" id="orImapPollNow" title="Forzar lectura IMAP">Comprobar respuestas</button>
+                </div>
+              </div>
+              <div id="orHotLeads" style="margin-top:10px;font-size:13px;">
+                <div class="muted">Cargando...</div>
+              </div>
+            </div>
+
+            <div class="card" style="padding:14px;margin-top:14px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                <div>
+                  <strong>A/B subjects</strong>
+                  <div class="muted" style="font-size:12px;">Comparativa por variante de asunto. Asignacion estable por prospect.</div>
+                </div>
+                <div class="actions">
+                  <label style="font-size:12px;">Stage
+                    <select id="orAbStage" style="margin-left:6px;">
+                      <option value="cold" selected>cold</option>
+                      <option value="fu1">fu1</option>
+                      <option value="fu2">fu2</option>
+                      <option value="breakup">breakup</option>
+                    </select>
+                  </label>
+                  <button class="ghost small" type="button" id="orAbRefresh">Refrescar</button>
+                </div>
+              </div>
+              <div id="orAbStats" style="margin-top:10px;font-size:13px;">
+                <div class="muted">Cargando...</div>
+              </div>
             </div>
           </div>
 
@@ -4937,7 +4971,7 @@ tbody tr:last-child td { border-bottom: none; }
         ORALL("[data-outreach-panel]").forEach((p) => {
           p.classList.toggle("active", p.dataset.outreachPanel === tab);
         });
-        if (tab === "dashboard") loadStats();
+        if (tab === "dashboard") { loadStats(); loadHotLeads(); loadAbStats(); }
         if (tab === "prospects") loadProspects();
         if (tab === "campaigns") { loadJobs(); startJobsPolling(); } else { stopJobsPolling(); }
         if (tab === "templates") loadTemplates();
@@ -5033,6 +5067,129 @@ tbody tr:last-child td { border-bottom: none; }
         });
       }
 
+      async function loadHotLeads() {
+        const box = ORQ("#orHotLeads");
+        if (!box) return;
+        try {
+          const data = await orFetch("/admin/outreach/hot-leads?limit=15&days=14");
+          if (!data.items || !data.items.length) {
+            box.innerHTML = '<div class="muted" style="font-size:12px;">Sin leads calientes en los ultimos ' + data.window_days + ' dias. Manda mas cold para alimentar el embudo.</div>';
+            return;
+          }
+          box.innerHTML = `
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+              <thead><tr style="text-align:left;color:#637c8e;border-bottom:1px solid #e4eaf2;">
+                <th style="padding:6px 4px;">Empresa</th>
+                <th style="padding:6px 4px;">Stage</th>
+                <th style="padding:6px 4px;text-align:right;" title="Aperturas recientes">Op</th>
+                <th style="padding:6px 4px;text-align:right;" title="Clicks recientes">Cl</th>
+                <th style="padding:6px 4px;text-align:right;" title="Visitas a demo personalizada">Demo</th>
+                <th style="padding:6px 4px;text-align:right;">Score</th>
+                <th style="padding:6px 4px;">Ult.</th>
+                <th style="padding:6px 4px;"></th>
+              </tr></thead>
+              <tbody>
+              ${data.items.map((it) => {
+                const last = it.last_event_at ? new Date(it.last_event_at).toLocaleDateString("es-ES") : "-";
+                const phoneBtn = it.phone ? `<a class="ghost small" href="tel:${escapeHtml(it.phone)}" style="padding:2px 8px;">Llamar</a>` : "";
+                const mailBtn = `<a class="ghost small" href="mailto:${escapeHtml(it.email)}?subject=Re%3A%20${encodeURIComponent(it.business_name||'')}" style="padding:2px 8px;">Email</a>`;
+                const demoRecent = it.demo_recent || 0;
+                return `<tr class="or-hot-row" data-email="${escapeHtml(it.email)}" style="border-bottom:1px solid #f1f5f9;cursor:pointer;">
+                  <td style="padding:6px 4px;">
+                    <div style="font-weight:600;">${escapeHtml(it.business_name||it.email)}</div>
+                    <div class="muted" style="font-size:11px;">${escapeHtml(it.email)}${it.city ? ' &middot; ' + escapeHtml(it.city) : ''}</div>
+                  </td>
+                  <td style="padding:6px 4px;">${escapeHtml(it.last_stage || '-')}</td>
+                  <td style="padding:6px 4px;text-align:right;">${it.opens_recent}</td>
+                  <td style="padding:6px 4px;text-align:right;color:${it.clicks_recent>0?'#0ea5e9':'#94a3b8'};font-weight:${it.clicks_recent>0?'700':'400'};">${it.clicks_recent}</td>
+                  <td style="padding:6px 4px;text-align:right;color:${demoRecent>0?'#16a34a':'#94a3b8'};font-weight:${demoRecent>0?'700':'400'};">${demoRecent}</td>
+                  <td style="padding:6px 4px;text-align:right;font-weight:700;">${it.score}</td>
+                  <td style="padding:6px 4px;font-size:11px;color:#637c8e;">${last}</td>
+                  <td style="padding:6px 4px;text-align:right;white-space:nowrap;">${mailBtn} ${phoneBtn}</td>
+                </tr>`;
+              }).join("")}
+              </tbody>
+            </table>`;
+          ORALL("#orHotLeads .or-hot-row").forEach((tr) => {
+            tr.addEventListener("click", (ev) => {
+              if (ev.target.closest("a")) return;
+              openDrawer(tr.dataset.email);
+            });
+          });
+        } catch (err) { box.innerHTML = `<div class="muted" style="color:#b91c1c;">${escapeHtml(err.message)}</div>`; }
+      }
+
+      async function loadAbStats() {
+        const box = ORQ("#orAbStats");
+        if (!box) return;
+        const stage = (ORQ("#orAbStage") && ORQ("#orAbStage").value) || "cold";
+        try {
+          const data = await orFetch(`/admin/outreach/ab-stats?stage=${encodeURIComponent(stage)}&days=30`);
+          const variants = data.variants || [];
+          if (!variants.length) {
+            box.innerHTML = '<div class="muted">Aun sin envios reales en este stage. Lanza una campana para empezar a comparar.</div>';
+            return;
+          }
+          const winnerOpen = Math.max(...variants.map(v => v.open_rate_pct));
+          const winnerReply = Math.max(...variants.map(v => v.reply_rate_pct));
+          const tableRows = variants.map(v => {
+            const isOpenWin = v.open_rate_pct === winnerOpen && winnerOpen > 0;
+            const isReplyWin = v.reply_rate_pct === winnerReply && winnerReply > 0;
+            return `<tr>
+              <td style="padding:6px 4px;font-weight:700;">${escapeHtml(v.variant)}</td>
+              <td style="padding:6px 4px;text-align:right;">${v.sent}</td>
+              <td style="padding:6px 4px;text-align:right;${isOpenWin?'color:#0ea5e9;font-weight:700;':''}">${v.open_rate_pct}% (${v.opens})</td>
+              <td style="padding:6px 4px;text-align:right;">${v.click_rate_pct}% (${v.clicks})</td>
+              <td style="padding:6px 4px;text-align:right;${isReplyWin?'color:#16a34a;font-weight:700;':''}">${v.reply_rate_pct}% (${v.replies})</td>
+            </tr>`;
+          }).join("");
+          const samplesByVariant = {};
+          (data.samples || []).forEach(s => {
+            const key = s.variant || "?";
+            if (!samplesByVariant[key]) samplesByVariant[key] = [];
+            if (samplesByVariant[key].length < 3) samplesByVariant[key].push(s);
+          });
+          const samplesHtml = Object.keys(samplesByVariant).sort().map(k => {
+            const list = samplesByVariant[k].map(s => `<li style="margin:2px 0;color:#475569;">${escapeHtml(s.subject)} <span class="muted">(${s.count})</span></li>`).join("");
+            return `<div style="margin-top:6px;"><strong>${escapeHtml(k)}</strong><ul style="margin:2px 0 0 18px;padding:0;font-size:12px;">${list}</ul></div>`;
+          }).join("");
+          box.innerHTML = `
+            <table style="width:100%;border-collapse:collapse;">
+              <thead><tr style="text-align:left;color:#637c8e;border-bottom:1px solid #e4eaf2;">
+                <th style="padding:6px 4px;">Variante</th>
+                <th style="padding:6px 4px;text-align:right;">Enviados</th>
+                <th style="padding:6px 4px;text-align:right;">Aperturas</th>
+                <th style="padding:6px 4px;text-align:right;">Clicks</th>
+                <th style="padding:6px 4px;text-align:right;">Respuestas</th>
+              </tr></thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+            <div style="margin-top:10px;font-size:12px;">
+              <div class="muted">Subjects mas usados (top 3 por variante):</div>
+              ${samplesHtml || '<div class="muted">Sin muestras.</div>'}
+            </div>`;
+        } catch (err) { box.innerHTML = `<div class="muted" style="color:#b91c1c;">${escapeHtml(err.message)}</div>`; }
+      }
+
+      async function imapPollNow(btn) {
+        if (!btn) return;
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "Comprobando...";
+        try {
+          const data = await orFetch("/admin/outreach/imap/poll", { method: "POST" });
+          const s = data.stats || {};
+          showStatus(`IMAP: ${s.replies_new||0} respuestas nuevas, ${s.matched||0} matched, ${s.checked||0} revisados.`, "ok");
+          loadHotLeads();
+          loadStats();
+        } catch (err) {
+          showStatus(err.message, "error");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = original;
+        }
+      }
+
       // ----- Prospects -----
       async function loadProspects() {
         const params = new URLSearchParams({
@@ -5093,8 +5250,25 @@ tbody tr:last-child td { border-bottom: none; }
           }).join("") || "<li class='muted'>Sin eventos.</li>";
           const sup = data.suppression ? `<p><strong>SUPRIMIDO:</strong> ${escapeHtml(data.suppression.reason)} (${data.suppression.added_at})</p>` : "";
           const p = data.prospect || {};
+          const demoSlug = p.demo_slug || "";
+          const demoOrigin = window.location.origin;
+          const demoUrl = demoSlug ? `${demoOrigin}/d/${demoSlug}` : "";
+          const demoBlock = demoUrl ? `
+            <div class="card" style="padding:10px 12px;margin-bottom:10px;background:#0B132B;color:#F0F4F8;border-radius:10px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                <div>
+                  <div style="font-weight:700;color:#00D1FF;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">Demo personalizada</div>
+                  <a href="${escapeHtml(demoUrl)}" target="_blank" rel="noopener" style="color:#F0F4F8;font-size:13px;word-break:break-all;">${escapeHtml(demoUrl)}</a>
+                </div>
+                <div class="actions">
+                  <button class="ghost small" type="button" id="orDrawerCopyDemo" data-url="${escapeHtml(demoUrl)}">Copiar</button>
+                  <a class="ghost small" href="${escapeHtml(demoUrl)}" target="_blank" rel="noopener" style="padding:4px 10px;">Abrir</a>
+                </div>
+              </div>
+            </div>` : "";
           ORQ("#orDrawerBody").innerHTML = `
             ${sup}
+            ${demoBlock}
             <h4 style="margin:0 0 8px 0;">Datos</h4>
             <div class="grid" style="grid-template-columns:1fr 1fr;gap:8px;">
               <label>Empresa<input id="orDrField_business_name" type="text" value="${escapeHtml(p.business_name || '')}" /></label>
@@ -5125,6 +5299,15 @@ tbody tr:last-child td { border-bottom: none; }
               <button class="ghost small danger" type="button" id="orDrawerDeleteBtn">Borrar prospect</button>
             </div>`;
           ORQ("#orDrawer").style.display = "flex";
+          const _copyDemoBtn = ORQ("#orDrawerCopyDemo");
+          if (_copyDemoBtn) {
+            _copyDemoBtn.addEventListener("click", async () => {
+              try {
+                await navigator.clipboard.writeText(_copyDemoBtn.dataset.url);
+                showStatus("Demo URL copiada", "ok");
+              } catch (e) { showStatus("No se pudo copiar", "error"); }
+            });
+          }
           ORQ("#orDrawerSaveAll").addEventListener("click", async () => {
             const fields = ["business_name","contact_name","niche","service_hint","city","phone","website","tags","source","status","notes"];
             const payload = {};
@@ -5469,8 +5652,16 @@ tbody tr:last-child td { border-bottom: none; }
       // ----- Wiring -----
       wireWizard();
       ORALL("[data-outreach-tab]").forEach((btn) => btn.addEventListener("click", () => setOutreachTab(btn.dataset.outreachTab)));
-      ORQ("#orRefreshStats").addEventListener("click", loadStats);
+      ORQ("#orRefreshStats").addEventListener("click", () => { loadStats(); loadHotLeads(); loadAbStats(); });
       ORQ("#orExportCsv").addEventListener("click", (ev) => { ev.preventDefault(); window.open("/admin/outreach/export.csv", "_blank"); });
+      const _hotRefreshBtn = ORQ("#orHotLeadsRefresh");
+      if (_hotRefreshBtn) _hotRefreshBtn.addEventListener("click", loadHotLeads);
+      const _imapBtn = ORQ("#orImapPollNow");
+      if (_imapBtn) _imapBtn.addEventListener("click", () => imapPollNow(_imapBtn));
+      const _abRefreshBtn = ORQ("#orAbRefresh");
+      if (_abRefreshBtn) _abRefreshBtn.addEventListener("click", loadAbStats);
+      const _abStageSel = ORQ("#orAbStage");
+      if (_abStageSel) _abStageSel.addEventListener("change", loadAbStats);
       ORQ("#orApplyFilters").addEventListener("click", () => {
         orState.filters = {
           q: ORQ("#orSearch").value.trim(), status: ORQ("#orFilterStatus").value,
@@ -5523,7 +5714,7 @@ tbody tr:last-child td { border-bottom: none; }
         prevSetView(view);
         if (view === "outreach") {
           if (!orState.loaded) { setOutreachTab("dashboard"); orState.loaded = true; }
-          else loadStats();
+          else { loadStats(); loadHotLeads(); loadAbStats(); }
         } else {
           stopJobsPolling();
         }

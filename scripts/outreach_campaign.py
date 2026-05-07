@@ -53,6 +53,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 from outreach_templates import (  # noqa: E402
     Prospect, STAGE_ORDER, render, niche_copy, stable_pick,
     html_shell, signature_html, cta_button_html, footer_html, footer_text,
+    assign_variant, make_demo_slug,
 )
 
 BASE_DIR = SCRIPTS_DIR.parent
@@ -169,12 +170,14 @@ PROSPECT_MIGRATIONS = [
     ("status", "TEXT DEFAULT 'new'"),
     ("notes", "TEXT DEFAULT ''"),
     ("score", "INTEGER DEFAULT 0"),
+    ("demo_slug", "TEXT DEFAULT ''"),
 ]
 
 SEND_MIGRATIONS = [
     ("campaign_id", "INTEGER DEFAULT 0"),
     ("body_text", "TEXT DEFAULT ''"),
     ("body_html", "TEXT DEFAULT ''"),
+    ("subject_variant", "TEXT DEFAULT ''"),
 ]
 
 
@@ -200,6 +203,10 @@ def connect(db_path: Path) -> sqlite3.Connection:
                 pass
     try:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_sends_campaign ON sends(campaign_id)")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_prospects_demo_slug ON prospects(demo_slug)")
     except sqlite3.OperationalError:
         pass
     try:
@@ -277,6 +284,7 @@ def cmd_import(args: argparse.Namespace) -> int:
             if not email or "@" not in email or not business:
                 skipped += 1
                 continue
+            demo_slug = make_demo_slug(email, business)
             payload = {
                 "email": email,
                 "business_name": business,
@@ -288,6 +296,7 @@ def cmd_import(args: argparse.Namespace) -> int:
                 "phone": clean(row.get("phone", "")),
                 "tags": clean(row.get("tags", "")),
                 "source": clean(row.get("source", "")) or csv_path.name,
+                "demo_slug": demo_slug,
                 "now": now_iso(),
             }
             existing = conn.execute("SELECT email FROM prospects WHERE email=?", (email,)).fetchone()
@@ -295,16 +304,17 @@ def cmd_import(args: argparse.Namespace) -> int:
                 conn.execute(
                     """UPDATE prospects SET business_name=:business_name, contact_name=:contact_name,
                        niche=:niche, website=:website, service_hint=:service_hint, city=:city,
-                       phone=:phone, tags=:tags, source=:source, updated_at=:now WHERE email=:email""",
+                       phone=:phone, tags=:tags, source=:source, demo_slug=:demo_slug,
+                       updated_at=:now WHERE email=:email""",
                     payload,
                 )
                 updated += 1
             else:
                 conn.execute(
                     """INSERT INTO prospects (email, business_name, contact_name, niche, website,
-                       service_hint, city, phone, tags, source, created_at, updated_at)
+                       service_hint, city, phone, tags, source, demo_slug, created_at, updated_at)
                        VALUES (:email, :business_name, :contact_name, :niche, :website,
-                       :service_hint, :city, :phone, :tags, :source, :now, :now)""",
+                       :service_hint, :city, :phone, :tags, :source, :demo_slug, :now, :now)""",
                     payload,
                 )
                 added += 1
@@ -456,6 +466,8 @@ def fetch_candidates(
         SELECT p.* FROM prospects p
         WHERE NOT EXISTS (SELECT 1 FROM sends s WHERE s.email = p.email)
           AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email = p.email)
+          AND NOT EXISTS (SELECT 1 FROM events ev WHERE ev.email = p.email AND ev.type = 'reply')
+          AND COALESCE(p.status, '') NOT IN ('replied', 'client', 'lost')
         ORDER BY p.created_at ASC
         LIMIT ?
         """
@@ -470,6 +482,8 @@ def fetch_candidates(
             SELECT 1 FROM sends s2 WHERE s2.email = p.email AND s2.stage = ?
         )
         AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email = p.email)
+        AND NOT EXISTS (SELECT 1 FROM events ev WHERE ev.email = p.email AND ev.type = 'reply')
+        AND COALESCE(p.status, '') NOT IN ('replied', 'client', 'lost')
         ORDER BY p.created_at ASC
         LIMIT ?
         """
@@ -682,10 +696,11 @@ def _send_loop(args: argparse.Namespace, stage: str) -> int:
                     return 4
                 continue
 
+            variant = assign_variant(p.email, stage)
             conn.execute(
-                "INSERT INTO sends (campaign_id, email, stage, subject, body_text, body_html, sent_at, mode, message_id) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (0, p.email, stage, subject, text, html_body, now_iso(), mode, msg["Message-ID"] or ""),
+                "INSERT INTO sends (campaign_id, email, stage, subject, body_text, body_html, sent_at, mode, message_id, subject_variant) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (0, p.email, stage, subject, text, html_body, now_iso(), mode, msg["Message-ID"] or "", variant),
             )
             conn.commit()
             sent_count += 1

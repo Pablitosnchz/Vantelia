@@ -311,6 +311,8 @@ last_cleanup_run = 0.0
 state_lock = threading.RLock()
 booking_reminder_stop = threading.Event()
 booking_reminder_thread: Optional[threading.Thread] = None
+outreach_imap_stop = threading.Event()
+outreach_imap_thread: Optional[threading.Thread] = None
 STARTED_AT = datetime.now(timezone.utc)
 
 
@@ -1300,9 +1302,37 @@ def _booking_reminder_worker() -> None:
         booking_reminder_stop.wait(interval_seconds)
 
 
+def _outreach_imap_worker() -> None:
+    interval_minutes = int(os.getenv("OUTREACH_IMAP_INTERVAL_MINUTES", "10"))
+    if interval_minutes <= 0:
+        logger.info("Poller IMAP outreach desactivado por configuracion.")
+        return
+    if not os.getenv("IMAP_HOST", "").strip():
+        logger.info("Poller IMAP outreach: IMAP_HOST vacio, no se arranca.")
+        return
+    interval_seconds = max(60, interval_minutes * 60)
+    logger.info("Poller IMAP outreach iniciado. Intervalo: %s minutos.", interval_minutes)
+    while not outreach_imap_stop.is_set():
+        try:
+            if not OUTREACH_IMAP_AVAILABLE or outreach_imap_poll is None:
+                break
+            db_path = Path(os.getenv("OUTREACH_DB_PATH", str(OUTREACH_DEFAULT_DB)))
+            stats = outreach_imap_poll(db_path)
+            if stats.get("replies_new"):
+                logger.info(
+                    "IMAP poll: respuestas nuevas=%s matched=%s checked=%s",
+                    stats.get("replies_new"), stats.get("matched"), stats.get("checked"),
+                )
+            elif stats.get("matched"):
+                logger.debug("IMAP poll stats: %s", stats)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Error en poller IMAP outreach: %s", exc)
+        outreach_imap_stop.wait(interval_seconds)
+
+
 @app.on_event("startup")
 async def startup_background_services() -> None:
-    global booking_reminder_thread
+    global booking_reminder_thread, outreach_imap_thread
 
     try:
         purged_at_boot = _purge_expired_demos()
@@ -1310,6 +1340,15 @@ async def startup_background_services() -> None:
             logger.info("Demos expiradas purgadas al arranque: %s", purged_at_boot)
     except Exception as exc:  # noqa: BLE001
         logger.error("Error purgando demos al arranque: %s", exc)
+
+    if OUTREACH_IMAP_AVAILABLE and (not outreach_imap_thread or not outreach_imap_thread.is_alive()):
+        outreach_imap_stop.clear()
+        outreach_imap_thread = threading.Thread(
+            target=_outreach_imap_worker,
+            name="vantelia-outreach-imap",
+            daemon=True,
+        )
+        outreach_imap_thread.start()
 
     if REMINDER_RUN_INTERVAL_MINUTES <= 0:
         logger.info("Recordatorios automaticos desactivados (REMINDER_RUN_INTERVAL_MINUTES <= 0).")
@@ -1330,6 +1369,7 @@ async def startup_background_services() -> None:
 @app.on_event("shutdown")
 async def shutdown_background_services() -> None:
     booking_reminder_stop.set()
+    outreach_imap_stop.set()
 
 
 def _build_cors_headers(origin: str) -> Dict[str, str]:
@@ -12274,10 +12314,19 @@ try:
         verify_tracking_token as outreach_verify_token,
         apply_tracking as outreach_apply_tracking,
     )
+    try:
+        from outreach_imap import poll_once as outreach_imap_poll  # type: ignore
+        OUTREACH_IMAP_AVAILABLE = True
+    except Exception as _imap_err:  # noqa: BLE001
+        logger.warning(f"Modulo outreach_imap no disponible: {_imap_err}")
+        OUTREACH_IMAP_AVAILABLE = False
+        outreach_imap_poll = None  # type: ignore
     OUTREACH_AVAILABLE = True
 except Exception as _outreach_err:  # noqa: BLE001
     logger.warning(f"Modulo outreach no disponible: {_outreach_err}")
     OUTREACH_AVAILABLE = False
+    OUTREACH_IMAP_AVAILABLE = False
+    outreach_imap_poll = None  # type: ignore
     OUTREACH_DEFAULT_DB = STORAGE_DIR / "outreach" / "outreach.db"
     OUTREACH_STAGES = ["cold", "fu1", "fu2", "breakup"]
 
@@ -12553,6 +12602,541 @@ def outreach_stats():
     }
 
 
+# ----- Hot leads (Fase 1) -----
+
+@app.get("/admin/outreach/hot-leads", dependencies=[Depends(_require_admin_token)])
+def outreach_hot_leads(limit: int = 15, days: int = 14):
+    """Devuelve prospects calientes ordenados por engagement reciente.
+
+    Score compuesto: clicks*5 + opens*1 + bonus por actividad reciente.
+    Excluye prospects con respuesta detectada (ya en pipeline) y bajas.
+    """
+    limit = max(1, min(100, int(limit or 15)))
+    days = max(1, min(60, int(days or 14)))
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+
+    with _outreach_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT p.email, p.business_name, p.contact_name, p.niche, p.city, p.phone,
+                   p.website, COALESCE(p.status, 'new') AS status,
+                   (SELECT stage FROM sends s WHERE s.email=p.email ORDER BY id DESC LIMIT 1) AS last_stage,
+                   (SELECT sent_at FROM sends s WHERE s.email=p.email ORDER BY id DESC LIMIT 1) AS last_sent_at,
+                   (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='open'  AND e.ts>=?) AS opens_recent,
+                   (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='click' AND e.ts>=?) AS clicks_recent,
+                   (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='demo_visit' AND e.ts>=?) AS demo_recent,
+                   (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='open')  AS opens_total,
+                   (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='click') AS clicks_total,
+                   (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='demo_visit') AS demo_total,
+                   (SELECT MAX(ts) FROM events e WHERE e.email=p.email AND e.type IN ('open','click','demo_visit')) AS last_event_at
+            FROM prospects p
+            WHERE NOT EXISTS (SELECT 1 FROM events ev WHERE ev.email=p.email AND ev.type='reply')
+              AND COALESCE(p.status,'') NOT IN ('replied','client','lost')
+              AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email=p.email)
+            """,
+            (cutoff, cutoff, cutoff),
+        ).fetchall()
+
+    items = []
+    for r in rows:
+        opens_recent = int(r["opens_recent"] or 0)
+        clicks_recent = int(r["clicks_recent"] or 0)
+        demo_recent = int(r["demo_recent"] or 0)
+        opens_total = int(r["opens_total"] or 0)
+        clicks_total = int(r["clicks_total"] or 0)
+        demo_total = int(r["demo_total"] or 0)
+        if opens_recent + clicks_recent + demo_recent + opens_total + clicks_total + demo_total == 0:
+            continue
+        # demo_visit pesa mas que click; visitar la demo personal = intencion fuerte.
+        score = (
+            demo_recent * 12 + clicks_recent * 6 + opens_recent * 2
+            + demo_total * 6 + clicks_total * 3 + opens_total
+        )
+        items.append({
+            "email": r["email"],
+            "business_name": r["business_name"],
+            "contact_name": r["contact_name"] or "",
+            "niche": r["niche"] or "",
+            "city": r["city"] or "",
+            "phone": r["phone"] or "",
+            "website": r["website"] or "",
+            "status": r["status"],
+            "last_stage": r["last_stage"] or "",
+            "last_sent_at": r["last_sent_at"] or "",
+            "last_event_at": r["last_event_at"] or "",
+            "opens_recent": opens_recent,
+            "clicks_recent": clicks_recent,
+            "demo_recent": demo_recent,
+            "opens_total": opens_total,
+            "clicks_total": clicks_total,
+            "demo_total": demo_total,
+            "score": score,
+        })
+
+    items.sort(key=lambda x: (x["score"], x["last_event_at"]), reverse=True)
+    return {"window_days": days, "items": items[:limit]}
+
+
+@app.get("/admin/outreach/ab-stats", dependencies=[Depends(_require_admin_token)])
+def outreach_ab_stats(stage: str = "cold", days: int = 30):
+    """A/B subjects: open rate y reply rate por variante (A vs B) en stage dado.
+
+    Match opens/replies por email+stage para no contar eventos cruzados de stages
+    siguientes. Solo cuenta envios reales (mode='send').
+    """
+    if stage not in OUTREACH_STAGES:
+        raise HTTPException(status_code=400, detail="Stage invalido.")
+    days = max(1, min(365, int(days or 30)))
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+
+    with _outreach_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT COALESCE(NULLIF(s.subject_variant, ''), '?') AS variant,
+                   COUNT(DISTINCT s.email) AS sent,
+                   SUM(CASE WHEN EXISTS (
+                     SELECT 1 FROM events e WHERE e.email = s.email AND e.type = 'open'
+                       AND e.stage = s.stage AND e.ts >= s.sent_at
+                   ) THEN 1 ELSE 0 END) AS opens_unique,
+                   SUM(CASE WHEN EXISTS (
+                     SELECT 1 FROM events e WHERE e.email = s.email AND e.type = 'click'
+                       AND e.stage = s.stage AND e.ts >= s.sent_at
+                   ) THEN 1 ELSE 0 END) AS clicks_unique,
+                   SUM(CASE WHEN EXISTS (
+                     SELECT 1 FROM events e WHERE e.email = s.email AND e.type = 'reply'
+                       AND e.ts >= s.sent_at
+                   ) THEN 1 ELSE 0 END) AS replies_unique
+            FROM sends s
+            WHERE s.stage = ? AND s.mode = 'send' AND s.sent_at >= ?
+            GROUP BY variant
+            ORDER BY variant
+            """,
+            (stage, cutoff),
+        ).fetchall()
+
+        sample_rows = conn.execute(
+            """SELECT subject_variant, subject, COUNT(*) AS c FROM sends
+               WHERE stage = ? AND mode = 'send' AND sent_at >= ?
+               GROUP BY subject_variant, subject ORDER BY c DESC LIMIT 20""",
+            (stage, cutoff),
+        ).fetchall()
+
+    items = []
+    for r in rows:
+        sent = int(r["sent"] or 0)
+        opens = int(r["opens_unique"] or 0)
+        clicks = int(r["clicks_unique"] or 0)
+        replies = int(r["replies_unique"] or 0)
+        items.append({
+            "variant": r["variant"],
+            "sent": sent,
+            "opens": opens,
+            "clicks": clicks,
+            "replies": replies,
+            "open_rate_pct": round(opens / sent * 100, 1) if sent else 0.0,
+            "click_rate_pct": round(clicks / sent * 100, 1) if sent else 0.0,
+            "reply_rate_pct": round(replies / sent * 100, 1) if sent else 0.0,
+        })
+
+    samples = [
+        {"variant": r["subject_variant"] or "?", "subject": r["subject"], "count": int(r["c"])}
+        for r in sample_rows
+    ]
+    return {"stage": stage, "window_days": days, "variants": items, "samples": samples}
+
+
+# ----- Demo personalizada por prospect (Fase 2) -----
+
+OUTREACH_DEMO_CLIENT_ID = os.getenv("OUTREACH_DEMO_CLIENT_ID", "demo").strip() or "demo"
+OUTREACH_BOOKING_CLIENTE_ID = os.getenv("OUTREACH_BOOKING_CLIENTE_ID", "").strip()
+
+
+def _outreach_booking_available() -> tuple[bool, str, int]:
+    """Devuelve (enabled, cliente_id, slot_minutes). Si OUTREACH_BOOKING_CLIENTE_ID
+    no existe en config.json o no tiene booking habilitado, devuelve (False, '', 0).
+    """
+    cliente_id = OUTREACH_BOOKING_CLIENTE_ID
+    if not cliente_id:
+        return False, "", 0
+    try:
+        config = _get_client_config(cliente_id)
+    except Exception:
+        return False, "", 0
+    booking_cfg = config.get("booking", {}) or {}
+    if not booking_cfg.get("enabled"):
+        return False, "", 0
+    slot = int(booking_cfg.get("slot_minutes") or booking_cfg.get("slot_duration_minutes") or 30)
+    return True, cliente_id, slot
+
+
+def _outreach_niche_pitch(niche: str, service_hint: str = "") -> tuple[str, list[str]]:
+    """Devuelve (titular, faqs[]) en castellano segun el nicho del prospect.
+
+    Reusa NICHE_VALUE de outreach_templates para que cold/demo cuenten lo mismo.
+    """
+    blob = f"{(niche or '').lower()} {(service_hint or '').lower()}"
+    presets = [
+        (("clinica","dental","fisio","estet","podolog","psico","salud"),
+         "Recoge consultas y agenda primeras citas 24/7",
+         ["Cuanto cuesta una primera cita?",
+          "Que horarios teneis los sabados?",
+          "Hace falta cita previa para una urgencia?",
+          "Que tratamientos hay para implantes?"]),
+        (("academia","formacion","curso","escuela","idiomas"),
+         "Atiende solicitudes de matricula sin que el equipo escriba lo mismo cada dia",
+         ["Cuanto cuesta el curso intensivo?",
+          "Cuando empieza el siguiente grupo?",
+          "Hay clases por la tarde?",
+          "Hay descuentos para hermanos?"]),
+        (("reforma","taller","fontan","electric","cerraj","albañil","carpinter"),
+         "Filtra trabajos serios y recoge fotos antes de llamar",
+         ["Hacen presupuesto sin compromiso?",
+          "En cuanto tiempo viene un tecnico?",
+          "Trabajan los fines de semana?",
+          "Cuanto cuesta cambiar una cerradura?"]),
+        (("inmobiliaria","alquiler","inmobil"),
+         "Cualifica interesados y agenda visitas automaticamente",
+         ["Que pisos teneis disponibles en alquiler?",
+          "Aceptan animales?",
+          "Pediria un mes de fianza?",
+          "Cuando podriamos hacer la visita?"]),
+        (("restaurant","bar","cafeter","hotel","hostal"),
+         "Gestiona reservas y resuelve dudas frecuentes sin perder llamadas",
+         ["Tienen mesa para 6 esta noche?",
+          "Que opciones veganas hay?",
+          "Hay menu del dia los sabados?",
+          "Hasta que hora sirven cocina?"]),
+        (("abogad","asesor","gestor","consultor"),
+         "Filtra primeras consultas y agenda solo casos que encajan",
+         ["Cuanto cuesta una primera consulta?",
+          "Llevais herencias?",
+          "Que documentacion necesito traer?",
+          "Atendeis online?"]),
+        (("autoescuela","auto-escuela"),
+         "Convierte clases pendientes en matriculas",
+         ["Cuanto cuesta sacarse el carnet B?",
+          "Cuantas clases practicas estan incluidas?",
+          "Hay clases por la tarde?",
+          "Que pasa si suspendo el examen?"]),
+        (("peluqueria","barber","estetica","spa"),
+         "Llena huecos de agenda y reduce no-shows",
+         ["Que disponibilidad teneis manana por la tarde?",
+          "Cuanto cuesta un corte y barba?",
+          "Hacen tratamientos de queratina?",
+          "Aceptan walk-ins los sabados?"]),
+    ]
+    for keys, headline, faqs in presets:
+        if any(k in blob for k in keys):
+            return headline, faqs
+    return (
+        "Atiende preguntas frecuentes y recoge solicitudes 24/7",
+        [
+            "Que servicios ofreceis?",
+            "Cuanto cuesta empezar?",
+            "Que horarios teneis?",
+            "Donde estais?",
+        ],
+    )
+
+
+def _outreach_register_demo_visit(conn, prospect_email: str, slug: str, ua: str, ip: str) -> None:
+    try:
+        conn.execute(
+            "INSERT INTO events (email, type, stage, url, ts, ua, ip) VALUES (?, 'demo_visit', '', ?, ?, ?, ?)",
+            (prospect_email, slug, datetime.now(timezone.utc).isoformat(timespec="seconds"), ua[:200], ip[:64]),
+        )
+        conn.commit()
+    except Exception:
+        pass
+
+
+def _outreach_render_demo_html(prospect: dict) -> str:
+    business = prospect.get("business_name") or "Tu negocio"
+    city = prospect.get("city") or ""
+    niche = prospect.get("niche") or ""
+    contact = prospect.get("contact_name") or ""
+    first_name = contact.split(" ", 1)[0] if contact else ""
+    headline, faqs = _outreach_niche_pitch(niche, prospect.get("service_hint") or "")
+    api_base = (os.getenv("APP_BASE_URL", "").strip().rstrip("/")) or "https://app.vantelia.es"
+    demo_client = OUTREACH_DEMO_CLIENT_ID
+    salutation = f"Hola {first_name}" if first_name else "Hola"
+    safe = lambda s: escape(str(s or ""))
+
+    booking_enabled, booking_cliente, slot_minutes = _outreach_booking_available()
+    fallback_cal = os.getenv("OUTREACH_CALENDAR_URL", "").strip()
+    cta_label_min = slot_minutes if booking_enabled else 15
+    if booking_enabled:
+        primary_cta_html = (
+            f'<a href="#agenda" class="primary" style="display:inline-block;padding:14px 28px;border-radius:999px;'
+            f'background:linear-gradient(135deg,#00D1FF,#00F5D4);color:#04101C;font-weight:700;text-decoration:none;'
+            f'box-shadow:0 18px 38px rgba(0,209,255,0.32);">Agendar {cta_label_min} min con Pablo</a>'
+        )
+    elif fallback_cal:
+        safe_cal = escape(fallback_cal, quote=True)
+        primary_cta_html = (
+            f'<a href="{safe_cal}" class="primary" style="display:inline-block;padding:14px 28px;border-radius:999px;'
+            f'background:linear-gradient(135deg,#00D1FF,#00F5D4);color:#04101C;font-weight:700;text-decoration:none;'
+            f'box-shadow:0 18px 38px rgba(0,209,255,0.32);">Agendar {cta_label_min} min con Pablo</a>'
+        )
+    else:
+        primary_cta_html = (
+            f'<a href="mailto:info@vantelia.es?subject=Demo%20Vantelia" class="primary" style="display:inline-block;padding:14px 28px;border-radius:999px;'
+            f'background:linear-gradient(135deg,#00D1FF,#00F5D4);color:#04101C;font-weight:700;text-decoration:none;'
+            f'box-shadow:0 18px 38px rgba(0,209,255,0.32);">Reservar {cta_label_min} min</a>'
+        )
+    faq_html = "".join(
+        f'<li style="margin:8px 0;color:#cbd5f5;">{safe(q)}</li>' for q in faqs
+    )
+    widget_snippet = (
+        f'<script src="{api_base}/widget/widget.min.js" '
+        f'data-api="{api_base}" data-client="{safe(demo_client)}" '
+        f'data-position="right"></script>'
+    )
+
+    # Booking embebido. Solo si OUTREACH_BOOKING_CLIENTE_ID apunta a un cliente con
+    # booking habilitado en config.json. UX: date picker -> /disponibilidad ->
+    # click slot -> POST /agendar con datos del prospect prerellenados.
+    booking_section = ""
+    if booking_enabled:
+        prospect_email = safe(prospect.get("email") or "")
+        prospect_name_raw = (contact or business or "").strip()
+        prospect_name = safe(prospect_name_raw)
+        prospect_phone = safe(prospect.get("phone") or "")
+        nota_default = f"Demo solicitada desde captacion para {business}"
+        servicio_label = f"Demo {slot_minutes} min"
+        booking_section = f"""
+  <div class="card" id="agenda">
+    <h2>Reserva {slot_minutes} min con Pablo</h2>
+    <p class="muted">Elige el dia y te muestro huecos libres. Sin redirecciones, sin calendarios externos.</p>
+    <div class="booking">
+      <label class="bk-row">
+        <span>Dia</span>
+        <input type="date" id="bkDate" min="" />
+      </label>
+      <label class="bk-row">
+        <span>Tu nombre</span>
+        <input type="text" id="bkName" value="{prospect_name}" placeholder="Nombre y apellido" />
+      </label>
+      <label class="bk-row">
+        <span>Email</span>
+        <input type="email" id="bkEmail" value="{prospect_email}" placeholder="tu@email" />
+      </label>
+      <label class="bk-row">
+        <span>Telefono (opcional)</span>
+        <input type="tel" id="bkPhone" value="{prospect_phone}" placeholder="+34..." />
+      </label>
+      <div id="bkSlotsLabel" class="bk-label">Huecos disponibles</div>
+      <div id="bkSlots" class="bk-slots"><span class="muted">Elige un dia para ver huecos.</span></div>
+      <div id="bkStatus" class="bk-status"></div>
+    </div>
+  </div>
+"""
+
+    booking_styles = """
+.booking { margin-top:14px; display:grid; gap:12px; }
+.bk-row { display:flex; flex-direction:column; gap:6px; }
+.bk-row span { font-size:12px; color:var(--muted); letter-spacing:.05em; text-transform:uppercase; }
+.bk-row input { background:#04101C; border:1px solid rgba(0,209,255,0.22); border-radius:10px; color:var(--ink); padding:10px 12px; font-size:14px; font-family:inherit; }
+.bk-row input:focus { outline:none; border-color:var(--accent); }
+.bk-label { font-size:12px; color:var(--muted); letter-spacing:.05em; text-transform:uppercase; margin-top:6px; }
+.bk-slots { display:flex; flex-wrap:wrap; gap:8px; min-height:40px; }
+.bk-slot { padding:8px 14px; border-radius:999px; background:rgba(0,209,255,0.10); border:1px solid rgba(0,209,255,0.30); color:var(--ink); font-size:14px; cursor:pointer; font-family:inherit; }
+.bk-slot:hover { background:rgba(0,209,255,0.22); }
+.bk-slot:disabled { opacity:.35; cursor:not-allowed; background:transparent; }
+.bk-slot.busy { opacity:.35; cursor:not-allowed; text-decoration:line-through; }
+.bk-status { font-size:14px; padding:10px 0; min-height:20px; }
+.bk-status.ok { color:#00F5D4; }
+.bk-status.err { color:#ff7c7c; }
+"""
+
+    booking_script = ""
+    if booking_enabled:
+        # Pre-llena el date picker con manana (hoy podria estar fuera de horario).
+        booking_script = f"""
+<script>
+(function() {{
+  var clienteId = {repr(booking_cliente)};
+  var apiBase = {repr(api_base)};
+  var bkDate = document.getElementById('bkDate');
+  var bkSlots = document.getElementById('bkSlots');
+  var bkStatus = document.getElementById('bkStatus');
+  if (!bkDate || !bkSlots) return;
+  var today = new Date();
+  var tomorrow = new Date(today.getTime() + 24*60*60*1000);
+  var iso = function(d) {{ return d.toISOString().slice(0,10); }};
+  bkDate.min = iso(today);
+  bkDate.value = iso(tomorrow);
+  function setStatus(msg, cls) {{
+    bkStatus.textContent = msg || '';
+    bkStatus.className = 'bk-status' + (cls ? ' ' + cls : '');
+  }}
+  function fmtPhone(s) {{ return (s || '').toString().replace(/[^0-9+\\s-]/g,'').slice(0,30); }}
+  function loadSlots() {{
+    var f = bkDate.value;
+    if (!f) return;
+    bkSlots.innerHTML = '<span class="muted">Cargando...</span>';
+    setStatus('');
+    fetch(apiBase + '/disponibilidad?cliente_id=' + encodeURIComponent(clienteId) + '&fecha=' + encodeURIComponent(f))
+      .then(function(r) {{ return r.json().then(function(j) {{ return {{ ok: r.ok, data: j }}; }}); }})
+      .then(function(res) {{
+        if (!res.ok) {{
+          bkSlots.innerHTML = '<span class="muted">' + ((res.data && res.data.detail) || 'Sin disponibilidad') + '</span>';
+          return;
+        }}
+        var slots = (res.data.slots) || [];
+        if (!slots.length) {{ bkSlots.innerHTML = '<span class="muted">Sin huecos ese dia. Prueba otra fecha.</span>'; return; }}
+        bkSlots.innerHTML = '';
+        slots.forEach(function(s) {{
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'bk-slot' + (s.disponible ? '' : ' busy');
+          btn.textContent = s.hora;
+          btn.disabled = !s.disponible;
+          btn.addEventListener('click', function() {{ reservar(f, s.hora); }});
+          bkSlots.appendChild(btn);
+        }});
+      }})
+      .catch(function() {{ bkSlots.innerHTML = '<span class="muted">No se ha podido cargar la disponibilidad.</span>'; }});
+  }}
+  function reservar(fecha, hora) {{
+    var nombre = (document.getElementById('bkName').value || '').trim();
+    var email  = (document.getElementById('bkEmail').value || '').trim();
+    var tel    = fmtPhone(document.getElementById('bkPhone').value);
+    if (nombre.length < 2) {{ setStatus('Indica tu nombre.', 'err'); return; }}
+    if (email.indexOf('@') < 0) {{ setStatus('Indica un email valido.', 'err'); return; }}
+    setStatus('Reservando...', '');
+    fetch(apiBase + '/agendar', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{
+        cliente_id: clienteId,
+        nombre: nombre, email: email, telefono: tel,
+        fecha: fecha, hora: hora,
+        servicio: {repr(servicio_label)},
+        notas: {repr(nota_default)}
+      }})
+    }})
+      .then(function(r) {{ return r.json().then(function(j) {{ return {{ ok: r.ok, data: j }}; }}); }})
+      .then(function(res) {{
+        if (!res.ok) {{ setStatus((res.data && res.data.detail) || 'No se ha podido reservar.', 'err'); return; }}
+        setStatus('Listo. Te llamo el ' + fecha + ' a las ' + hora + '. Te he mandado confirmacion al email.', 'ok');
+        loadSlots();
+      }})
+      .catch(function() {{ setStatus('Error de red al reservar.', 'err'); }});
+  }}
+  bkDate.addEventListener('change', loadSlots);
+  loadSlots();
+}})();
+</script>
+"""
+    return f"""<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Demo Vantelia para {safe(business)}</title>
+<style>
+:root {{ --bg:#04101C; --panel:#0B132B; --accent:#00D1FF; --accent2:#00F5D4; --ink:#F0F4F8; --muted:#8AA0B5; }}
+* {{ box-sizing:border-box; }}
+body {{ margin:0; background:var(--bg); color:var(--ink); font-family:Inter,Segoe UI,Arial,sans-serif; line-height:1.55; }}
+.wrap {{ max-width:920px; margin:0 auto; padding:48px 22px 80px; }}
+.tag {{ display:inline-block; padding:6px 12px; border:1px solid rgba(0,209,255,0.35); border-radius:999px; color:var(--accent); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; font-weight:700; }}
+h1 {{ font-size:clamp(28px,4.5vw,44px); margin:18px 0 12px; line-height:1.15; }}
+h1 strong {{ background:linear-gradient(135deg,var(--accent),var(--accent2)); -webkit-background-clip:text; background-clip:text; color:transparent; }}
+.lead {{ font-size:18px; color:#cbd5f5; max-width:62ch; }}
+.card {{ background:var(--panel); border:1px solid rgba(0,209,255,0.14); border-radius:20px; padding:28px; margin-top:28px; box-shadow:0 28px 70px rgba(0,0,0,0.38); }}
+.card h2 {{ margin:0 0 8px; font-size:22px; }}
+.card .muted {{ color:var(--muted); font-size:14px; }}
+.faq {{ list-style:none; padding:0; margin:14px 0 0; }}
+.faq li {{ position:relative; padding-left:22px; }}
+.faq li::before {{ content:"›"; color:var(--accent); position:absolute; left:0; top:-1px; font-weight:700; }}
+.cta-row {{ display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin-top:22px; }}
+.cta-row .secondary {{ color:var(--ink); border-bottom:1px solid rgba(255,255,255,0.4); text-decoration:none; padding:6px 0; font-size:14px; }}
+.foot {{ margin-top:40px; color:var(--muted); font-size:13px; }}
+.foot a {{ color:var(--accent); text-decoration:none; }}
+{booking_styles}
+@media (max-width:560px) {{ .wrap {{ padding:32px 16px 60px; }} .card {{ padding:20px; }} }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="tag">Demo personalizada</span>
+  <h1>{safe(salutation)}, esto es como funcionaria <strong>Vantelia</strong> en {safe(business)}{(' (' + safe(city) + ')') if city else ''}.</h1>
+  <p class="lead">{safe(headline)}. Mismo asistente que ves en la esquina, integrado en tu web o WhatsApp en cuestion de horas.</p>
+
+  <div class="card">
+    <h2>Que contestaria por ti, sin que tu equipo escriba</h2>
+    <p class="muted">Ejemplos de preguntas reales que recibiriais:</p>
+    <ul class="faq">{faq_html}</ul>
+    <div class="cta-row">
+      {primary_cta_html}
+      <a class="secondary" href="mailto:info@vantelia.es?subject={quote('Demo Vantelia para ' + business)}">o respondeme al email</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Probalo en vivo &darr;</h2>
+    <p class="muted">Abre el chat de la esquina inferior derecha. Pregunta cualquier cosa, como lo haria un cliente de {safe(business)}.</p>
+  </div>
+{booking_section}
+  <p class="foot">Esta pagina la prepare a mano para {safe(business)}. Si no es para ti, escribeme y la borro: <a href="mailto:info@vantelia.es">info@vantelia.es</a>.</p>
+</div>
+{widget_snippet}
+{booking_script}
+</body>
+</html>"""
+
+
+@app.get("/d/{slug}")
+def outreach_prospect_demo(slug: str, request: Request):
+    if not OUTREACH_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Outreach no disponible.")
+    slug_clean = (slug or "").strip().lower()
+    if not slug_clean or len(slug_clean) > 80:
+        raise HTTPException(status_code=404, detail="Demo no encontrada.")
+    with _outreach_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM prospects WHERE demo_slug = ? LIMIT 1", (slug_clean,)
+        ).fetchone()
+        if not row:
+            # Compat: si la columna existe pero esta vacia, intenta recalcular y match.
+            from outreach_templates import make_demo_slug as _slug  # type: ignore
+            candidates = conn.execute(
+                "SELECT * FROM prospects WHERE demo_slug='' OR demo_slug IS NULL LIMIT 500"
+            ).fetchall()
+            for c in candidates:
+                if _slug(c["email"], c["business_name"]) == slug_clean:
+                    conn.execute(
+                        "UPDATE prospects SET demo_slug=? WHERE email=?",
+                        (slug_clean, c["email"]),
+                    )
+                    conn.commit()
+                    row = c
+                    break
+        if not row:
+            raise HTTPException(status_code=404, detail="Demo no encontrada.")
+        prospect = {k: row[k] for k in row.keys()}
+        ua = request.headers.get("user-agent", "")[:300]
+        ip = (request.client.host if request.client else "")[:64]
+        _outreach_register_demo_visit(conn, prospect["email"], slug_clean, ua, ip)
+
+    html_body = _outreach_render_demo_html(prospect)
+    return HTMLResponse(html_body, headers={"X-Robots-Tag": "noindex, nofollow"})
+
+
+@app.post("/admin/outreach/imap/poll", dependencies=[Depends(_require_admin_token)])
+def outreach_imap_poll_now():
+    """Lanza una pasada del poller IMAP en modo sincrono (manual)."""
+    if not OUTREACH_IMAP_AVAILABLE or outreach_imap_poll is None:
+        raise HTTPException(status_code=503, detail="Modulo IMAP no disponible.")
+    if not os.getenv("IMAP_HOST", "").strip():
+        raise HTTPException(status_code=400, detail="IMAP_HOST no configurado en .env.")
+    db_path = Path(os.getenv("OUTREACH_DB_PATH", str(OUTREACH_DEFAULT_DB)))
+    stats = outreach_imap_poll(db_path)
+    return {"ok": True, "stats": stats}
+
+
 # ----- Prospects list/detail/CRUD -----
 
 @app.get("/admin/outreach/prospects", dependencies=[Depends(_require_admin_token)])
@@ -12642,6 +13226,7 @@ def outreach_list_prospects(
             "status": r["status"] if "status" in r.keys() else "new",
             "notes": r["notes"] if "notes" in r.keys() else "",
             "score": r["score"] if "score" in r.keys() else 0,
+            "demo_slug": (r["demo_slug"] if "demo_slug" in r.keys() else "") or "",
             "last_stage": r["last_stage"],
             "last_sent_at": r["last_sent_at"],
             "opens": r["opens"],
@@ -12687,6 +13272,7 @@ class OutreachProspectsBulkIn(BaseModel):
 
 @app.post("/admin/outreach/prospects/bulk", dependencies=[Depends(_require_admin_token)])
 def outreach_bulk_prospects(payload: OutreachProspectsBulkIn):
+    from outreach_templates import make_demo_slug as _slug  # type: ignore
     added = updated = skipped = 0
     now = _outreach_now()
     with _outreach_db() as conn:
@@ -12695,15 +13281,16 @@ def outreach_bulk_prospects(payload: OutreachProspectsBulkIn):
             if not email:
                 skipped += 1
                 continue
+            slug = _slug(email, item.business_name)
             existing = conn.execute("SELECT email FROM prospects WHERE email=?", (email,)).fetchone()
             if existing:
                 if payload.upsert:
                     conn.execute(
                         """UPDATE prospects SET business_name=?, contact_name=?, niche=?, website=?,
-                           service_hint=?, city=?, phone=?, tags=?, source=?, updated_at=? WHERE email=?""",
+                           service_hint=?, city=?, phone=?, tags=?, source=?, demo_slug=?, updated_at=? WHERE email=?""",
                         (item.business_name, item.contact_name, item.niche, item.website,
                          item.service_hint, item.city or "Torrejon de Ardoz", item.phone,
-                         item.tags, item.source, now, email),
+                         item.tags, item.source, slug, now, email),
                     )
                     updated += 1
                 else:
@@ -12711,11 +13298,11 @@ def outreach_bulk_prospects(payload: OutreachProspectsBulkIn):
                 continue
             conn.execute(
                 """INSERT INTO prospects (email, business_name, contact_name, niche, website,
-                   service_hint, city, phone, tags, source, status, notes, score, created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   service_hint, city, phone, tags, source, status, notes, score, demo_slug, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (email, item.business_name, item.contact_name, item.niche, item.website,
                  item.service_hint, item.city or "Torrejon de Ardoz", item.phone, item.tags,
-                 item.source, item.status, item.notes, int(item.score or 0), now, now),
+                 item.source, item.status, item.notes, int(item.score or 0), slug, now, now),
             )
             added += 1
         conn.commit()
@@ -12724,22 +13311,24 @@ def outreach_bulk_prospects(payload: OutreachProspectsBulkIn):
 
 @app.post("/admin/outreach/prospects", dependencies=[Depends(_require_admin_token)])
 def outreach_create_prospect(payload: OutreachProspectIn):
+    from outreach_templates import make_demo_slug as _slug  # type: ignore
     email = str(payload.email).lower().strip()
     now = _outreach_now()
+    slug = _slug(email, payload.business_name)
     with _outreach_db() as conn:
         existing = conn.execute("SELECT email FROM prospects WHERE email=?", (email,)).fetchone()
         if existing:
             raise HTTPException(status_code=409, detail="Ya existe.")
         conn.execute(
             """INSERT INTO prospects (email, business_name, contact_name, niche, website,
-               service_hint, city, phone, tags, source, status, notes, score, created_at, updated_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               service_hint, city, phone, tags, source, status, notes, score, demo_slug, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (email, payload.business_name, payload.contact_name, payload.niche, payload.website,
              payload.service_hint, payload.city or "Torrejon de Ardoz", payload.phone, payload.tags,
-             payload.source, payload.status, payload.notes, int(payload.score or 0), now, now),
+             payload.source, payload.status, payload.notes, int(payload.score or 0), slug, now, now),
         )
         conn.commit()
-    return {"ok": True, "email": email}
+    return {"ok": True, "email": email, "demo_slug": slug}
 
 
 @app.patch("/admin/outreach/prospects/{email}", dependencies=[Depends(_require_admin_token)])
@@ -12778,6 +13367,7 @@ async def outreach_import_csv(request: Request):
         text = body.decode("utf-8-sig")
     except UnicodeDecodeError:
         text = body.decode("latin-1", errors="replace")
+    from outreach_templates import make_demo_slug as _slug  # type: ignore
     reader = csv.DictReader(StringIO(text))
     if not reader.fieldnames:
         raise HTTPException(status_code=400, detail="CSV sin cabecera.")
@@ -12801,6 +13391,7 @@ async def outreach_import_csv(request: Request):
                 "phone": (row.get("phone") or "").strip(),
                 "tags": (row.get("tags") or "").strip(),
                 "source": (row.get("source") or "csv-upload").strip(),
+                "demo_slug": _slug(email, business),
                 "now": now,
             }
             existing = conn.execute("SELECT email FROM prospects WHERE email=?", (email,)).fetchone()
@@ -12808,16 +13399,17 @@ async def outreach_import_csv(request: Request):
                 conn.execute(
                     """UPDATE prospects SET business_name=:business_name, contact_name=:contact_name,
                        niche=:niche, website=:website, service_hint=:service_hint, city=:city,
-                       phone=:phone, tags=:tags, source=:source, updated_at=:now WHERE email=:email""",
+                       phone=:phone, tags=:tags, source=:source, demo_slug=:demo_slug,
+                       updated_at=:now WHERE email=:email""",
                     payload,
                 )
                 updated += 1
             else:
                 conn.execute(
                     """INSERT INTO prospects (email, business_name, contact_name, niche, website,
-                       service_hint, city, phone, tags, source, created_at, updated_at)
+                       service_hint, city, phone, tags, source, demo_slug, created_at, updated_at)
                        VALUES (:email, :business_name, :contact_name, :niche, :website,
-                       :service_hint, :city, :phone, :tags, :source, :now, :now)""",
+                       :service_hint, :city, :phone, :tags, :source, :demo_slug, :now, :now)""",
                     payload,
                 )
                 added += 1
@@ -13660,6 +14252,29 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                         conn.commit()
                     _job_log(conn, job_id, f"skip {p.email} (baja)")
                     continue
+                if conn.execute(
+                    "SELECT 1 FROM events WHERE email=? AND type='reply' LIMIT 1", (p.email,)
+                ).fetchone():
+                    if campaign_id:
+                        conn.execute(
+                            "UPDATE campaign_members SET status='skipped', skip_reason='ya respondio', updated_at=? WHERE campaign_id=? AND email=?",
+                            (_outreach_now(), campaign_id, p.email),
+                        )
+                        conn.commit()
+                    _job_log(conn, job_id, f"skip {p.email} (ya respondio)")
+                    continue
+                prospect_status_row = conn.execute(
+                    "SELECT status FROM prospects WHERE email=?", (p.email,)
+                ).fetchone()
+                if prospect_status_row and (prospect_status_row["status"] or "") in ("replied", "client", "lost"):
+                    if campaign_id:
+                        conn.execute(
+                            "UPDATE campaign_members SET status='skipped', skip_reason=?, updated_at=? WHERE campaign_id=? AND email=?",
+                            (f"status={prospect_status_row['status']}", _outreach_now(), campaign_id, p.email),
+                        )
+                        conn.commit()
+                    _job_log(conn, job_id, f"skip {p.email} (status={prospect_status_row['status']})")
+                    continue
                 if stage == "cold" and conn.execute("SELECT 1 FROM sends WHERE email=? AND mode='send'", (p.email,)).fetchone():
                     if campaign_id:
                         conn.execute(
@@ -13723,9 +14338,14 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                 continue
 
             if mode == "send":
+                try:
+                    from outreach_templates import assign_variant as _assign_variant  # type: ignore
+                    _variant = _assign_variant(p.email, stage)
+                except Exception:
+                    _variant = ""
                 conn.execute(
-                    "INSERT INTO sends (campaign_id, email, stage, subject, body_text, body_html, sent_at, mode, message_id) VALUES (?,?,?,?,?,?,?,?,?)",
-                    (campaign_id, p.email, stage, subject, text, html_body, _outreach_now(), mode, msg["Message-ID"] or ""),
+                    "INSERT INTO sends (campaign_id, email, stage, subject, body_text, body_html, sent_at, mode, message_id, subject_variant) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (campaign_id, p.email, stage, subject, text, html_body, _outreach_now(), mode, msg["Message-ID"] or "", _variant),
                 )
                 send_id = int(conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"])
                 conn.execute(

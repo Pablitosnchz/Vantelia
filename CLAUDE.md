@@ -301,7 +301,47 @@ Tokens firmados HMAC-SHA256 con `OUTREACH_TRACKING_SECRET`. Si secret vacio o `O
 - `OUTREACH_RESPECT_WINDOW`, `OUTREACH_START_HOUR`, `OUTREACH_END_HOUR`, `OUTREACH_SKIP_WEEKEND`: ventana laboral.
 - `OUTREACH_MSGID_DOMAIN`: dominio del Message-ID generado.
 - `GOOGLE_PLACES_API_KEY`: requerido para discovery automatico.
-- `IMAP_HOST`/`IMAP_PORT`/`IMAP_USER`/`IMAP_PASSWORD`: fase 2 (autodeteccion respuestas, no implementado todavia).
+- `IMAP_HOST`/`IMAP_PORT`/`IMAP_USER`/`IMAP_PASSWORD`/`IMAP_FOLDER`/`IMAP_USE_SSL`: poller IMAP de respuestas. Cuando matchea (por `In-Reply-To` con `sends.message_id` o por remitente conocido) registra evento `reply`, marca `prospects.status='replied'` y los siguientes stages (`fu1/fu2/breakup`) se saltan automaticamente. Filtra autoresponders (Auto-Submitted, asuntos "Out of office"). Implementado en `scripts/outreach_imap.py` y arrancado por `_outreach_imap_worker` en `api.py`.
+- `OUTREACH_IMAP_INTERVAL_MINUTES`: intervalo del poller (default 10).
+- `OUTREACH_IMAP_LOOKBACK_DAYS`: ventana IMAP en cada pasada (default 14).
+
+### Fase 2 (mayo 2026): Demo personalizada por prospect
+
+- Endpoint publico `GET /d/{slug}` (sin auth, `noindex,nofollow`) renderiza una landing oscura con headline tipo "Hola Ana, asi funcionaria Vantelia en {business} ({city})" + FAQs adaptadas al niche + CTA de calendario y widget Vantelia embebido apuntando a `OUTREACH_DEMO_CLIENT_ID` (default `demo`).
+- Slug deterministico: `make_demo_slug(email, business_name)` → `{slugified-business}-{sha256(email)[:6]}`. Migracion `prospects.demo_slug` + indice. Se popula en bulk/create/import (panel y CSV) y CLI.
+- CTAs de cold/fu1/fu2 ahora apuntan al link `/d/{slug}` como boton primario y al calendario (`OUTREACH_CALENDAR_URL`) como secundario. Si ninguna URL esta configurada, recae en CTA `mailto:info@vantelia.es` clasico.
+- Visitar la demo registra evento `demo_visit` en `outreach.events`. Hot leads suma `demo_visit*12` (reciente) y `demo_visit*6` (historico) al score → un visitante de la demo aparece arriba del todo. Tabla del widget muestra columna "Demo".
+- Variables `.env`: `OUTREACH_DEMO_BASE_URL` (publico), `OUTREACH_DEMO_CLIENT_ID` (cerebro RAG), `OUTREACH_BOOKING_CLIENTE_ID` (agenda interna para reservar 15 min), `OUTREACH_CALENDAR_URL` (fallback externo).
+- Si la demo va a recibir trafico real, asegurate de que el `cliente_id` configurado existe en `config.json` y tiene `data/<id>/info.txt` poblado, y que `allowed_origins` incluye `app.vantelia.es` (para que el widget cargue dentro de la propia demo).
+
+#### Booking interno: cliente "vantelia" en config.json
+
+`OUTREACH_BOOKING_CLIENTE_ID` apunta a un cliente real de `config.json` que actua de "agenda de Pablo". Cuando esta configurado, `/d/{slug}` incluye selector de fecha + huecos libres y reserva directamente via `/agendar` (sin Calendly/cal.com).
+
+Pasos minimos para crear el cliente "vantelia":
+1. Anadir entrada en `config.json` con `cliente_id` (ej. `vantelia`), `nombre`, `bienvenida` neutros.
+2. `allowed_origins` debe incluir `https://app.vantelia.es` (la demo se sirve desde ahi y hace fetch a `/disponibilidad` y `/agendar`).
+3. `booking.enabled = true`. Definir `timezone` (`Europe/Madrid`), horario laboral, slot duration 15 min y proveedor interno.
+4. Anadir un servicio "Demo 15 min" con esa duracion.
+5. `data/vantelia/info.txt` puede ser minimo o vacio (no se usa para RAG en este flujo).
+
+Si el cliente no existe o tiene `booking.enabled=false`, la pagina `/d/{slug}` esconde la seccion `#agenda` y el CTA principal recae en `OUTREACH_CALENDAR_URL` o `mailto:`. Sin downtime.
+
+### Fase 4 (mayo 2026): Subjects A/B + proof line
+
+- Subjects reescritos lowercase + curiosidad en `scripts/outreach_templates.py`. Pools separados A/B por stage en `SUBJECT_POOLS_AB`. Asignacion estable por hash(email|stage) → mismo prospect siempre recibe misma variante en ese stage.
+- `pick_subject_with_variant(stage, p)` devuelve `(subject, "A"|"B")`. `pick_subject` se mantiene como compat shim.
+- Tabla `sends` tiene columna `subject_variant` (migracion idempotente). El job de envio de campanas y el CLI rellenan la variante en cada insert.
+- `GET /admin/outreach/ab-stats?stage=cold&days=30` devuelve por variante: enviados, opens unicos, clicks unicos, replies unicos + open/click/reply rate. Incluye top 3 subjects mas usados por variante.
+- Panel Dashboard incluye widget "A/B subjects" con tabla y selector de stage. Marca en azul (mejor open rate) y verde (mejor reply rate).
+- `OUTREACH_PROOF_LINE`: frase de credibilidad opcional inyectada en cold (ej: "Lo monte para Clinica Sonrisa, reciben 22 consultas/semana"). Vacio = sin proof. Sin tocar codigo, basta editar `.env`.
+
+### Fase 1 (mayo 2026): Hot leads + reply detection
+
+- `GET /admin/outreach/hot-leads?limit=&days=` devuelve prospects que abren/clican y aun no han respondido. Score = clicks_recent\*6 + opens_recent\*2 + clicks_total\*3 + opens_total. Excluye replied/client/lost/bajas.
+- `POST /admin/outreach/imap/poll` fuerza una pasada manual del poller IMAP.
+- Panel Dashboard de Captacion incluye widget "Hot leads" con CTA email/telefono y botón "Comprobar respuestas".
+- `fetch_candidates` (`outreach_campaign.py`) y el job de envio de campanas (`api.py`) excluyen prospects con evento `reply` o status en `(replied, client, lost)`.
 
 ### Flujo operativo desde el panel
 
