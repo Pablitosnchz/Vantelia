@@ -655,6 +655,40 @@ def test_outreach_tracking_pixel_logs_open(client: TestClient, api_module):
         assert any(e["type"] == "open" for e in events)
 
 
+def test_outreach_reply_intent_opens_prefilled_mail_and_logs_event(client: TestClient, api_module):
+    from outreach_templates import make_tracking_token
+
+    csv_payload = (
+        "business_name,email,contact_name,niche,website,service_hint,city,phone,tags,source\n"
+        "Demo Intent,demo.intent@example.com,Pablo,clinica,https://demo.test,medicina,Torrejon,,test,smoke\n"
+    )
+    created = client.post(
+        "/admin/outreach/import",
+        headers={**_admin_headers(), "Content-Type": "text/csv"},
+        content=csv_payload,
+    )
+    assert created.status_code == 200
+
+    token = make_tracking_token("demo.intent@example.com", "cold", "test-outreach-secret")
+    mailto = (
+        "mailto:info@vantelia.es"
+        "?subject=Demo%20gratuita%20Vantelia"
+        "&body=Buenas%2C%0A%0AMe%20interesa.%20Preparame%20la%20demo%20gratuita%20sin%20compromiso."
+    )
+    response = client.get(f"/track/reply/{token}", params={"u": mailto}, follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers["location"].startswith("mailto:info@vantelia.es")
+
+    detail = client.get(
+        "/admin/outreach/prospects/demo.intent@example.com",
+        headers=_admin_headers(),
+    )
+    assert detail.status_code == 200
+    payload = detail.json()
+    assert payload["prospect"]["status"] == "engaged"
+    assert any(e["type"] == "reply_intent" for e in payload.get("events", []))
+
+
 def test_outreach_tracking_invalid_token_does_not_crash(client: TestClient):
     response = client.get("/track/open/invalid-token.gif")
     assert response.status_code == 200  # devuelve pixel igualmente

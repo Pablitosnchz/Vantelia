@@ -12401,9 +12401,13 @@ def outreach_stats():
 
         opens = conn.execute("SELECT COUNT(*) AS c FROM events WHERE type='open'").fetchone()["c"]
         clicks = conn.execute("SELECT COUNT(*) AS c FROM events WHERE type='click'").fetchone()["c"]
+        reply_intents = conn.execute("SELECT COUNT(*) AS c FROM events WHERE type='reply_intent'").fetchone()["c"]
         replies = conn.execute("SELECT COUNT(*) AS c FROM events WHERE type='reply'").fetchone()["c"]
         unique_opens = conn.execute(
             "SELECT COUNT(DISTINCT email) AS c FROM events WHERE type='open'"
+        ).fetchone()["c"]
+        unique_reply_intents = conn.execute(
+            "SELECT COUNT(DISTINCT email) AS c FROM events WHERE type='reply_intent'"
         ).fetchone()["c"]
         unique_replies = conn.execute(
             "SELECT COUNT(DISTINCT email) AS c FROM events WHERE type='reply'"
@@ -12462,6 +12466,7 @@ def outreach_stats():
         }
 
     open_rate = (unique_opens / sent_distinct * 100) if sent_distinct else 0.0
+    reply_intent_rate = (unique_reply_intents / sent_distinct * 100) if sent_distinct else 0.0
     reply_rate = (unique_replies / sent_distinct * 100) if sent_distinct else 0.0
 
     return {
@@ -12476,10 +12481,17 @@ def outreach_stats():
             "opens_total": opens,
             "opens_unique": unique_opens,
             "clicks_total": clicks,
+            "reply_intents_total": reply_intents,
+            "reply_intents_unique": unique_reply_intents,
             "replies_total": replies,
             "replies_unique": unique_replies,
             "open_rate_pct": round(open_rate, 1),
+            "reply_intent_rate_pct": round(reply_intent_rate, 1),
             "reply_rate_pct": round(reply_rate, 1),
+        },
+        "tracking": {
+            "active": bool(OUTREACH_AVAILABLE and OUTREACH_TRACKING_SECRET and OUTREACH_TRACKING_BASE_URL and not OUTREACH_TRACKING_DISABLED),
+            "base_url": OUTREACH_TRACKING_BASE_URL,
         },
         "funnel": funnel,
         "daily": {
@@ -12539,6 +12551,7 @@ def outreach_list_prospects(
                (SELECT sent_at FROM sends s WHERE s.email=p.email ORDER BY id DESC LIMIT 1) AS last_sent_at,
                (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='open') AS opens,
                (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='click') AS clicks,
+               (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='reply_intent') AS reply_intents,
                (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='reply') AS replies,
                (SELECT 1 FROM suppressions x WHERE x.email=p.email) AS suppressed
         FROM prospects p
@@ -12573,6 +12586,7 @@ def outreach_list_prospects(
             "last_sent_at": r["last_sent_at"],
             "opens": r["opens"],
             "clicks": r["clicks"],
+            "reply_intents": r["reply_intents"],
             "replies": r["replies"],
             "suppressed": bool(r["suppressed"]),
             "created_at": r["created_at"],
@@ -12757,7 +12771,7 @@ def outreach_export_csv():
     writer.writerow([
         "email", "business_name", "contact_name", "niche", "website", "service_hint",
         "city", "phone", "tags", "source", "status", "score", "last_stage", "last_sent_at",
-        "opens", "clicks", "replies", "suppressed",
+        "opens", "clicks", "reply_intents", "replies", "suppressed",
     ])
     with _outreach_db() as conn:
         rows = conn.execute(
@@ -12766,6 +12780,7 @@ def outreach_export_csv():
                   (SELECT sent_at FROM sends s WHERE s.email=p.email ORDER BY id DESC LIMIT 1) AS last_sent_at,
                   (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='open') AS opens,
                   (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='click') AS clicks,
+                  (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='reply_intent') AS reply_intents,
                   (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='reply') AS replies,
                   (SELECT 1 FROM suppressions x WHERE x.email=p.email) AS suppressed
                 FROM prospects p ORDER BY p.created_at ASC"""
@@ -12777,7 +12792,7 @@ def outreach_export_csv():
             r["status"] if "status" in r.keys() else "new",
             r["score"] if "score" in r.keys() else 0,
             r["last_stage"] or "", r["last_sent_at"] or "",
-            r["opens"], r["clicks"], r["replies"], "1" if r["suppressed"] else "0",
+            r["opens"], r["clicks"], r["reply_intents"], r["replies"], "1" if r["suppressed"] else "0",
         ])
     return Response(
         content=out.getvalue(),
@@ -13868,6 +13883,35 @@ def outreach_track_click(token: str, request: Request, u: str = ""):
     except Exception:
         logger.exception("Outreach click track error")
     return RedirectResponse(url=target, status_code=302)
+
+
+@app.get("/track/reply/{token}", include_in_schema=False)
+def outreach_track_reply_intent(token: str, request: Request, u: str = ""):
+    if not u.lower().startswith("mailto:"):
+        raise HTTPException(status_code=404, detail="not found")
+    if not OUTREACH_AVAILABLE or not OUTREACH_TRACKING_SECRET:
+        return RedirectResponse(url=u, status_code=302)
+    parsed = outreach_verify_token(token, OUTREACH_TRACKING_SECRET)
+    if not parsed:
+        raise HTTPException(status_code=404, detail="not found")
+    email, stage = parsed
+    try:
+        with _outreach_db() as conn:
+            conn.execute(
+                "INSERT INTO events (email, type, stage, url, ts, ua, ip) VALUES (?,?,?,?,?,?,?)",
+                (email, "reply_intent", stage, u[:500], _outreach_now(),
+                 request.headers.get("user-agent", "")[:300],
+                 (request.client.host if request.client else "")[:64]),
+            )
+            conn.execute(
+                """UPDATE prospects SET status='engaged', updated_at=?
+                   WHERE email=? AND status IN ('new','contacted')""",
+                (_outreach_now(), email),
+            )
+            conn.commit()
+    except Exception:
+        logger.exception("Outreach reply intent track error")
+    return RedirectResponse(url=u, status_code=302)
 
 
 class OutreachReplyPayload(BaseModel):

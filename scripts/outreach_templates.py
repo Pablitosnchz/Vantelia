@@ -189,10 +189,32 @@ def signature_html(stage: str) -> str:
     )
 
 
-def cta_button_html(text: str, href: str = "mailto:info@vantelia.es") -> str:
+DEMO_REPLY_SUBJECT = "Demo gratuita Vantelia"
+DEMO_REPLY_BODY = (
+    "Buenas,\n\n"
+    "Me interesa. Preparame la demo gratuita sin compromiso.\n\n"
+    "Gracias."
+)
+
+
+def demo_reply_mailto(to_email: str | None = None) -> str:
+    recipient = (
+        (to_email or "").strip()
+        or os.getenv("OUTREACH_REPLY_TO", "").strip()
+        or os.getenv("SMTP_REPLY_TO", "").strip()
+        or "info@vantelia.es"
+    )
+    return (
+        f"mailto:{recipient}"
+        f"?subject={quote(DEMO_REPLY_SUBJECT, safe='')}"
+        f"&body={quote(DEMO_REPLY_BODY, safe='')}"
+    )
+
+
+def cta_button_html(text: str, href: str | None = None) -> str:
     # Boton CTA con degradado Vantelia, estilo compatible con clientes de email.
     safe_text = html_lib.escape(text)
-    safe_href = html_lib.escape(href, quote=True)
+    safe_href = html_lib.escape(href or demo_reply_mailto(), quote=True)
     return (
         '<table role="presentation" cellspacing="0" cellpadding="0" style="margin:14px 0;">'
         '<tr>'
@@ -269,6 +291,7 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
         f"Vantelia es una plataforma de asistentes IA para web y WhatsApp en empresas B2B.\n\n"
         f"Vi {p.business_name} y pense que podria encajar. Si eres la persona adecuada, "
         f"te mando un esquema corto con el flujo y un ejemplo adaptado.\n\n"
+        f"Si te interesa, responde con: \"Buenas, me interesa. Preparame la demo gratuita sin compromiso.\"\n\n"
         f"Si no, dime con quien deberia hablar.\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
@@ -426,6 +449,7 @@ def verify_tracking_token(token: str, secret: str) -> tuple[str, str] | None:
 
 
 _TRACKABLE_HREF = re.compile(r'href=(["\'])(https?://[^"\']+)(["\'])', re.IGNORECASE)
+_REPLY_MAILTO_HREF = re.compile(r'href=(["\'])(mailto:[^"\']+)(["\'])', re.IGNORECASE)
 
 
 def apply_tracking(html_body: str, email: str, stage: str, base_url: str, secret: str) -> str:
@@ -443,7 +467,13 @@ def apply_tracking(html_body: str, email: str, stage: str, base_url: str, secret
         wrapped = f"{base}/track/click/{token}?u={quote(url, safe='')}"
         return f"href={quote_char}{wrapped}{end_quote}"
 
+    def _rewrite_reply(match: re.Match[str]) -> str:
+        quote_char, url, end_quote = match.group(1), match.group(2), match.group(3)
+        wrapped = f"{base}/track/reply/{token}?u={quote(html_lib.unescape(url), safe='')}"
+        return f"href={quote_char}{wrapped}{end_quote}"
+
     rewritten = _TRACKABLE_HREF.sub(_rewrite, html_body)
+    rewritten = _REPLY_MAILTO_HREF.sub(_rewrite_reply, rewritten)
     pixel = (
         f'<img src="{base}/track/open/{token}.gif" '
         f'width="1" height="1" alt="" '

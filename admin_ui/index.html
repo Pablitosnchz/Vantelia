@@ -564,6 +564,7 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
 .or-prospect-row:hover { background:#f1f5f9; cursor:pointer; }
 .or-prospect-row td { padding:6px 8px; border-bottom:1px solid #eef2f7; }
 .or-badge { display:inline-block; padding:1px 6px; border-radius:6px; font-size:11px; background:#e2e8f0; color:#0f172a; }
+.or-badge.engaged { background:#fef3c7; color:#92400e; }
 .or-badge.replied { background:#dcfce7; color:#166534; }
 .or-badge.client { background:#dbeafe; color:#1e3a8a; }
 .or-badge.lost { background:#fee2e2; color:#991b1b; }
@@ -2193,9 +2194,11 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="stat"><strong id="orSentToday">-</strong><span>Enviados hoy</span></div>
               <div class="stat"><strong id="orSentWeek">-</strong><span>Ultimos 7 dias</span></div>
               <div class="stat"><strong id="orOpenRate">-</strong><span>Tasa apertura</span></div>
+              <div class="stat"><strong id="orDemoInterest">-</strong><span>Interes demo</span></div>
               <div class="stat"><strong id="orReplyRate">-</strong><span>Tasa respuesta</span></div>
               <div class="stat"><strong id="orSuppressed">-</strong><span>Bajas</span></div>
             </div>
+            <div id="orTrackingNotice" class="muted" style="font-size:12px;margin:-4px 0 12px 0;"></div>
             <div class="grid" style="grid-template-columns:2fr 1fr;gap:14px;">
               <div class="card" style="padding:14px;">
                 <strong>Actividad ultimos 30 dias</strong>
@@ -2254,10 +2257,11 @@ tbody tr:last-child td { border-bottom: none; }
                     <th style="text-align:left;padding:8px;">Ultimo envio</th>
                     <th style="text-align:right;padding:8px;">Op</th>
                     <th style="text-align:right;padding:8px;">Cl</th>
+                    <th style="text-align:right;padding:8px;">Demo</th>
                     <th style="text-align:right;padding:8px;">Re</th>
                   </tr>
                 </thead>
-                <tbody id="orProspectsBody"><tr><td colspan="10" class="empty">Cargando...</td></tr></tbody>
+                <tbody id="orProspectsBody"><tr><td colspan="11" class="empty">Cargando...</td></tr></tbody>
               </table>
             </div>
             <div class="actions" style="margin-top:10px;">
@@ -4922,11 +4926,15 @@ tbody tr:last-child td { border-bottom: none; }
           ORQ("#orSentToday").textContent = t.sent_today;
           ORQ("#orSentWeek").textContent = t.sent_week;
           ORQ("#orOpenRate").textContent = t.open_rate_pct + "%";
+          ORQ("#orDemoInterest").textContent = `${t.reply_intents_unique || 0} (${t.reply_intent_rate_pct || 0}%)`;
           ORQ("#orReplyRate").textContent = t.reply_rate_pct + "%";
           ORQ("#orSuppressed").textContent = t.suppressed;
           if (ORQ("#cwMetricSent")) ORQ("#cwMetricSent").textContent = t.sent_total;
           if (ORQ("#cwMetricOpen")) ORQ("#cwMetricOpen").textContent = t.opens_unique;
           if (ORQ("#cwMetricReplies")) ORQ("#cwMetricReplies").textContent = t.replies_unique;
+          ORQ("#orTrackingNotice").textContent = data.tracking && data.tracking.active
+            ? `Tracking activo: aperturas, clicks e interes en demo se registran en ${data.tracking.base_url}.`
+            : "Tracking inactivo: configura OUTREACH_TRACKING_SECRET y OUTREACH_TRACKING_BASE_URL para registrar aperturas y clicks.";
           renderChart(data.daily);
           renderFunnel(data.funnel, t.sent_distinct);
           renderTopNiches(data.top_niches);
@@ -4996,10 +5004,10 @@ tbody tr:last-child td { border-bottom: none; }
           orState.total = data.total;
           ORQ("#orProspectCount").textContent = `${data.total} prospects`;
           const body = ORQ("#orProspectsBody");
-          if (!data.items.length) { body.innerHTML = '<tr><td colspan="10" class="empty">Sin resultados.</td></tr>'; return; }
+          if (!data.items.length) { body.innerHTML = '<tr><td colspan="11" class="empty">Sin resultados.</td></tr>'; return; }
           body.innerHTML = data.items.map((p) => {
             const status = p.status || "new";
-            const badgeCls = ["replied","client","lost"].includes(status) ? status : "";
+            const badgeCls = ["engaged","replied","client","lost"].includes(status) ? status : "";
             const last = p.last_sent_at ? new Date(p.last_sent_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) : "-";
             return `<tr class="or-prospect-row" data-email="${escapeHtml(p.email)}">
               <td>${escapeHtml(p.business_name)}</td>
@@ -5011,6 +5019,7 @@ tbody tr:last-child td { border-bottom: none; }
               <td>${last}</td>
               <td style="text-align:right;">${p.opens}</td>
               <td style="text-align:right;">${p.clicks}</td>
+              <td style="text-align:right;">${p.reply_intents || 0}</td>
               <td style="text-align:right;">${p.replies}</td>
             </tr>`;
           }).join("");
