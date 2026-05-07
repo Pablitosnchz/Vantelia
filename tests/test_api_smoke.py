@@ -737,6 +737,45 @@ def test_outreach_stats_and_list_show_vantelia_link_clicks(client: TestClient, a
     assert item["vantelia_clicks"] >= 1
 
 
+def test_outreach_admin_preview_does_not_include_live_tracking(client: TestClient, api_module):
+    from outreach_templates import make_tracking_token
+
+    csv_payload = (
+        "business_name,email,contact_name,niche,website,service_hint,city,phone,tags,source\n"
+        "Preview Safe,preview.safe@example.com,Pablo,clinica,https://demo.test,medicina,Torrejon,,test,smoke\n"
+    )
+    created = client.post(
+        "/admin/outreach/import",
+        headers={**_admin_headers(), "Content-Type": "text/csv"},
+        content=csv_payload,
+    )
+    assert created.status_code == 200
+
+    token = make_tracking_token("preview.safe@example.com", "cold", "test-outreach-secret")
+    tracked = (
+        f'<html><body><a href="https://app.test.local/track/click/{token}?u=https%3A%2F%2Fwww.vantelia.es%2Fplanes">web</a>'
+        f'<img src="https://app.test.local/track/open/{token}.gif" width="1" height="1" /></body></html>'
+    )
+    with api_module._outreach_db() as conn:
+        cur = conn.execute(
+            """INSERT INTO sends (email, stage, subject, body_text, body_html, sent_at, mode, message_id)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            ("preview.safe@example.com", "cold", "Preview", "texto", tracked, "2026-05-07T00:00:00+00:00", "send", "msg-test"),
+        )
+        send_id = cur.lastrowid
+        conn.commit()
+
+    preview = client.get(
+        f"/admin/outreach/prospects/preview.safe@example.com/render?stage=cold&send_id={send_id}",
+        headers=_admin_headers(),
+    )
+    assert preview.status_code == 200
+    html = preview.json()["html"]
+    assert "/track/open/" not in html
+    assert "/track/click/" not in html
+    assert 'href="https://www.vantelia.es/planes"' in html
+
+
 def test_outreach_tracking_invalid_token_does_not_crash(client: TestClient):
     response = client.get("/track/open/invalid-token.gif")
     assert response.status_code == 200  # devuelve pixel igualmente

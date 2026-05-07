@@ -24,7 +24,7 @@ from html import escape
 from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 import httpx
 from dotenv import load_dotenv
@@ -12940,6 +12940,41 @@ class OutreachTemplatePreview(BaseModel):
     sample_email: str = "maria@dentalsmile.es"
 
 
+def _outreach_admin_preview_html(html: str) -> str:
+    """Evita que las previews del panel admin disparen opens/clicks reales."""
+    if not html:
+        return html
+
+    def _unwrap_tracking_link(match: re.Match[str]) -> str:
+        quote_char = match.group(1)
+        href = match.group(2)
+        parsed = urlparse(href)
+        query = parsed.query or ""
+        target = ""
+        for part in query.split("&"):
+            key, _, value = part.partition("=")
+            if key == "u":
+                target = unquote(value)
+                break
+        if not target:
+            return match.group(0)
+        return f'href={quote_char}{escape(target, quote=True)}{quote_char}'
+
+    cleaned = re.sub(
+        r'<img\b[^>]*src=["\'][^"\']*/track/open/[^"\']+["\'][^>]*>',
+        "",
+        html,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r'href=(["\'])([^"\']*/track/(?:click|reply)/[^"\']*)\1',
+        _unwrap_tracking_link,
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    return cleaned
+
+
 @app.get("/admin/outreach/prospects/{email}/render", dependencies=[Depends(_require_admin_token)])
 def outreach_render_prospect_email(email: str, stage: str = "cold", send_id: int = 0):
     if not OUTREACH_AVAILABLE:
@@ -12960,7 +12995,7 @@ def outreach_render_prospect_email(email: str, stage: str = "cold", send_id: int
                 return {
                     "subject": send_row["subject"] or "",
                     "text": send_row["body_text"] or "",
-                    "html": send_row["body_html"] or "",
+                    "html": _outreach_admin_preview_html(send_row["body_html"] or ""),
                     "stage": send_row["stage"] or stage,
                     "email": email,
                     "send_id": send_id,
@@ -12984,7 +13019,7 @@ def outreach_render_prospect_email(email: str, stage: str = "cold", send_id: int
     )
     unsub = os.getenv("OUTREACH_UNSUBSCRIBE_EMAIL", "baja@vantelia.es").strip() or "baja@vantelia.es"
     subject, text, html = render_with_override(stage, p, unsub, overrides)
-    return {"subject": subject, "text": text, "html": html, "stage": stage, "email": email}
+    return {"subject": subject, "text": text, "html": _outreach_admin_preview_html(html), "stage": stage, "email": email}
 
 
 @app.post("/admin/outreach/templates/preview", dependencies=[Depends(_require_admin_token)])
