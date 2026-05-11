@@ -15,7 +15,7 @@ import os
 import re
 import secrets
 from dataclasses import dataclass
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 
 @dataclass
@@ -262,52 +262,45 @@ def demo_reply_mailto(to_email: str | None = None) -> str:
     )
 
 
-_SLUG_RE = re.compile(r"[^a-z0-9]+")
+DEMO_PAGE_URL = "https://www.vantelia.es/demo/"
 
 
-def slugify(text: str, fallback: str = "demo", max_len: int = 30) -> str:
-    base = _SLUG_RE.sub("-", (text or "").lower()).strip("-")
-    if not base:
-        return fallback
-    return base[:max_len].strip("-") or fallback
+def _demo_sector_for_prospect(p: Prospect) -> str:
+    blob = f"{p.niche} {p.service_hint}".lower()
+    if any(k in blob for k in ("clinica", "clínica", "dental", "fisio", "salud", "podolog", "psico")):
+        return "Clínica / Salud"
+    if any(k in blob for k in ("estet", "belleza", "peluquer", "barber", "spa")):
+        return "Belleza y estética"
+    if any(k in blob for k in ("academia", "formacion", "formación", "curso", "escuela", "idiomas")):
+        return "Educación / Academias"
+    if any(k in blob for k in ("restaurant", "bar", "cafeter", "hotel", "hostal")):
+        return "Restaurante / Hostelería"
+    if any(k in blob for k in ("inmobiliaria", "inmobil", "alquiler")):
+        return "Inmobiliaria"
+    if any(k in blob for k in ("taller", "reforma", "fontan", "electric", "cerraj", "repar")):
+        return "Talleres y reparación"
+    if any(k in blob for k in ("abogad", "asesor", "gestor", "consultor")):
+        return "Servicios profesionales"
+    return "Otro"
 
 
-def make_demo_slug(email: str, business_name: str) -> str:
-    """Slug deterministico para URL demo personalizada.
-
-    Formato: {slug-empresa}-{hash6} donde hash6 = sha256(email)[:6].
-    Determinista: misma entrada => misma salida (sin necesidad de DB).
-    """
-    slug_part = slugify(business_name)
-    h = hashlib.sha256((email or "").lower().encode("utf-8")).hexdigest()[:6]
-    return f"{slug_part}-{h}"
-
-
-def demo_url_for(p: Prospect) -> str:
-    base = os.getenv("OUTREACH_DEMO_BASE_URL", "").strip().rstrip("/")
-    if not base:
-        base = os.getenv("APP_BASE_URL", "").strip().rstrip("/")
-    if not base:
-        return ""
-    return f"{base}/d/{make_demo_slug(p.email, p.business_name)}"
-
-
-def booking_url_for(p: Prospect) -> str:
-    """Devuelve URL para agendar 15 min. Prioriza booking interno de Vantelia
-    (apunta a /d/{slug}#agenda donde vive el modulo de reservas), si no
-    `OUTREACH_CALENDAR_URL` externo, si no vacio.
-    """
-    if os.getenv("OUTREACH_BOOKING_CLIENTE_ID", "").strip():
-        demo = demo_url_for(p)
-        if demo:
-            return f"{demo}#agenda"
-    return os.getenv("OUTREACH_CALENDAR_URL", "").strip()
+def demo_url_with_utm(stage: str, p: Prospect | None = None) -> str:
+    params = {
+        "utm_source": "outreach",
+        "utm_medium": "email",
+        "utm_campaign": stage,
+    }
+    if p:
+        params.update({
+            "empresa": p.business_name or "",
+            "sector": _demo_sector_for_prospect(p),
+            "email": p.email or "",
+            "web": p.website or "",
+        })
+    return f"{DEMO_PAGE_URL}?{urlencode({k: v for k, v in params.items() if v})}"
 
 
 def calendar_url() -> str:
-    """Compat: ahora alias de booking_url_for sin contexto. Vacio si no hay
-    booking interno ni OUTREACH_CALENDAR_URL.
-    """
     return os.getenv("OUTREACH_CALENDAR_URL", "").strip()
 
 
@@ -318,9 +311,7 @@ def cta_button_html(text: str, href: str | None = None) -> str:
     return (
         '<table role="presentation" cellspacing="0" cellpadding="0" style="margin:14px 0;">'
         '<tr>'
-        '<td style="border-radius:999px; background:#00D1FF; '
-        'background:linear-gradient(135deg,#00D1FF,#00F5D4); '
-        'box-shadow:0 10px 26px rgba(0,209,255,0.28);">'
+        '<td style="border-radius:999px; background:#00D1FF; background:linear-gradient(135deg,#00D1FF,#00F5D4); box-shadow:0 10px 26px rgba(0,209,255,0.28);">'
         f'<a href="{safe_href}" '
         'style="display:inline-block;padding:12px 22px;border-radius:999px;'
         'color:#04101C;font-size:14px;font-weight:700;text-decoration:none;'
@@ -400,54 +391,46 @@ def _booking_minutes() -> int:
         return 15
 
 
-def _cta_block(p: Prospect, primary_text: str, fallback_text: str) -> tuple[str, str]:
-    """Devuelve (text_cta, html_cta). Si hay demo URL la usa como CTA principal.
-    El secundario apunta al booking interno de Vantelia (anchor #agenda dentro
-    de la propia demo) si OUTREACH_BOOKING_CLIENTE_ID esta configurado, si no
-    a OUTREACH_CALENDAR_URL externo. Sin ninguna URL recae en mailto."""
-    demo = demo_url_for(p)
-    book = booking_url_for(p)
+def _cta_block(primary_text: str, stage: str = "cold", p: Prospect | None = None) -> tuple[str, str]:
+    """Devuelve (text_cta, html_cta). CTA con UTM por stage para analytics."""
+    if p and p.business_name:
+        primary_text = f"Ver cómo quedaría en {p.business_name}"
+    utm_url = demo_url_with_utm(stage, p)
+    book = calendar_url()
     minutes = _booking_minutes()
-    text_lines: list[str] = []
-    html_parts: list[str] = []
-    if demo:
-        text_lines.append(f"Demo personalizada para {p.business_name}: {demo}")
-        html_parts.append(cta_button_html(primary_text, demo))
-    if book and book != demo:
-        text_lines.append(f"Si prefieres reservar {minutes} min directamente: {book}")
-        # Enlace plano, sin degradado, para no parecer marketing duplicado.
+    text_lines: list[str] = [f"{primary_text}: {utm_url}"]
+    html_parts: list[str] = [cta_button_html(primary_text, utm_url)]
+    if book:
+        text_lines.append(f"O reserva {minutes} min directamente: {book}")
         safe_book = html_lib.escape(book, quote=True)
         html_parts.append(
             f'<p style="margin:0 0 14px 0;font-size:14px;">'
             f'<a href="{safe_book}" style="color:#0B132B;border-bottom:1px solid #0B132B;text-decoration:none;">'
             f'Reservar {minutes} min</a></p>'
         )
-    if not text_lines:
-        html_parts.append(cta_button_html(fallback_text))
-        text_lines.append("Responde a este correo y lo preparo.")
     return ("\n".join(text_lines), "".join(html_parts))
 
 
 def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     personal_line = _personal_line_text(p)
     personal_text = f"{personal_line}\n\n" if personal_line else ""
-    proof = _proof_line()
-    proof_text = f"{proof}\n\n" if proof else ""
+    task, _outcome, niche_proof = niche_copy(p.niche, p.service_hint)
+    env_proof = _proof_line()
+    proof_final = env_proof if env_proof else niche_proof
+    proof_text = f"{proof_final}\n\n" if proof_final else ""
     proof_html = (
-        f'<p style="margin:0 0 14px 0;">{html_lib.escape(proof)}</p>' if proof else ""
+        f'<p style="margin:0 0 14px 0;">{html_lib.escape(proof_final)}</p>' if proof_final else ""
     )
     subject, _variant = pick_subject_with_variant("cold", p)
-    cta_text, cta_html = _cta_block(p, "Si, preparame la demo", "Si, preparame la demo")
+    cta_text, cta_html = _cta_block("Ver mi demo preparada (1 min)", "cold", p)
     text = (
         f"{p.greeting}\n\n"
         f"{personal_text}"
         f"Soy Pablo, de Vantelia. Monto asistentes IA en web y WhatsApp para que "
-        f"contesten preguntas frecuentes y recojan solicitudes 24/7, sin que tu "
-        f"equipo escriba lo mismo cada dia.\n\n"
+        f"{task}, sin que tu equipo escriba lo mismo cada dia.\n\n"
         f"{proof_text}"
-        f"Te he preparado una demo adaptada a {p.business_name}.\n"
+        f"He preparado un ejemplo de como quedaria para {p.business_name}; puedes verlo en un clic.\n"
         f"{cta_text}\n\n"
-        f"Si no encaja, dime con quien deberia hablar.\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
@@ -456,12 +439,11 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
         f'<p>{html_lib.escape(p.greeting)}</p>'
         f'{personal_html}'
         f'<p>Soy Pablo, de Vantelia. Monto asistentes IA en web y WhatsApp para que '
-        f'contesten preguntas frecuentes y recojan solicitudes 24/7, sin que tu '
-        f'equipo escriba lo mismo cada dia.</p>'
+        f'{html_lib.escape(task)}, sin que tu equipo escriba lo mismo cada dia.</p>'
         f'{proof_html}'
-        f'<p>Te he preparado una demo adaptada a <strong>{html_lib.escape(p.business_name)}</strong>.</p>'
+        f'<p>He preparado un ejemplo de como quedaria para '
+        f'{html_lib.escape(p.business_name)}; puedes verlo en un clic.</p>'
         f'{cta_html}'
-        f'<p><strong>Si no encaja, dime con quien deberia hablar.</strong></p>'
         f'{signature_html("cold")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
@@ -471,13 +453,12 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     personal_line = _personal_line_text(p)
     personal_text = f"{personal_line}\n\n" if personal_line else ""
-    cta_text, cta_html = _cta_block(p, "Ver demo personalizada", "Si, preparame la demo")
+    cta_text, cta_html = _cta_block("Abrir demo preparada (1 min)", "fu1", p)
     text = (
         f"{p.greeting}\n\n"
         f"{personal_text}"
-        f"Te escribi hace unos dias. La demo que prepare para {p.business_name} sigue ahi.\n"
+        f"Te escribi hace unos dias. Por si no lo viste, te dejo el ejemplo de como quedaria para {p.business_name}.\n"
         f"{cta_text}\n\n"
-        f"Si no es prioridad ahora, lo dejo aqui.\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
@@ -485,11 +466,9 @@ def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     inner = (
         f'<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{html_lib.escape(p.greeting)}</p>'
         f'{personal_html}'
-        f'<p style="margin:0 0 14px 0;">Te escribi hace unos dias. La demo que prepare para '
-        f'<strong>{html_lib.escape(p.business_name)}</strong> sigue ahi.</p>'
+        f'<p style="margin:0 0 14px 0;">Te escribi hace unos dias. Por si no lo viste, '
+        f'te dejo el ejemplo de como quedaria para {html_lib.escape(p.business_name)}.</p>'
         f'{cta_html}'
-        f'<p style="margin:0 0 6px 0;font-size:16px;color:#0B132B;">'
-        f'<strong>Si no es prioridad ahora, lo dejo aqui.</strong></p>'
         f'{signature_html("fu1")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
@@ -500,13 +479,12 @@ def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     personal_line = _personal_line_text(p)
     personal_text = f"{personal_line}\n\n" if personal_line else ""
-    cta_text, cta_html = _cta_block(p, "Ver demo personalizada", "Si, preparame la demo")
+    cta_text, cta_html = _cta_block("Abrir demo preparada (1 min)", "fu2", p)
     text = (
         f"{p.greeting}\n\n"
         f"{personal_text}"
-        f"Te dejo un ejemplo rapido de lo que solemos montar: preguntas frecuentes + "
-        f"captura de datos + derivacion a la persona adecuada.\n\n"
-        f"Lo tienes adaptado a {p.business_name} aqui:\n"
+        f"Ultimo intento. He preparado el ejemplo especifico para {p.business_name}: "
+        f"como responderia el asistente, que preguntas cubriria y como captaria datos.\n\n"
         f"{cta_text}\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
@@ -515,10 +493,9 @@ def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     inner = (
         f'<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{html_lib.escape(p.greeting)}</p>'
         f'{personal_html}'
-        f'<p style="margin:0 0 14px 0;">Te dejo un ejemplo rapido de lo que solemos montar: '
-        f'preguntas frecuentes + captura de datos + derivacion a la persona adecuada.</p>'
-        f'<p style="margin:0 0 6px 0;font-size:16px;color:#0B132B;">'
-        f'<strong>Lo tienes adaptado a {html_lib.escape(p.business_name)} aqui:</strong></p>'
+        f'<p style="margin:0 0 14px 0;">Ultimo intento. He preparado el ejemplo especifico para '
+        f'{html_lib.escape(p.business_name)}: como responderia el asistente, '
+        f'que preguntas cubriria y como captaria datos.</p>'
         f'{cta_html}'
         f'{signature_html("fu2")}'
         f'{footer_html(unsubscribe_mailto)}'
@@ -618,7 +595,7 @@ def apply_tracking(html_body: str, email: str, stage: str, base_url: str, secret
         # No reescribir el propio dominio de tracking ni mailto/anchors
         if base in url:
             return match.group(0)
-        wrapped = f"{base}/track/click/{token}?u={quote(url, safe='')}"
+        wrapped = f"{base}/track/click/{token}?u={quote(html_lib.unescape(url), safe='')}"
         return f"href={quote_char}{wrapped}{end_quote}"
 
     def _rewrite_reply(match: re.Match[str]) -> str:

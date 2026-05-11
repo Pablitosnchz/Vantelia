@@ -700,7 +700,241 @@ def test_outreach_preflight_renders_html_even_when_wizard_email_not_imported(cli
     assert data["counts"]["real_candidates"] == 0
     assert data["counts"]["skipped"]["missing_email"] == 1
     assert data["html_active"] is True
-    assert "Si, preparame la demo" in data["html"]
+    assert "Ver cómo quedaría en" in data["html"]
+
+
+def test_outreach_email_uses_prefilled_demo_link(client: TestClient, api_module):
+    from outreach_templates import Prospect, demo_url_with_utm, render
+
+    prospect = Prospect(
+        email="prefill.demo@example.com",
+        business_name="Clinica Demo Norte",
+        niche="clinica dental",
+        website="https://clinicademo.test",
+        city="Madrid",
+    )
+    url = demo_url_with_utm("cold", prospect)
+    assert "utm_source=outreach" in url
+    assert "empresa=Clinica+Demo+Norte" in url
+    assert "email=prefill.demo%40example.com" in url
+    assert "web=https%3A%2F%2Fclinicademo.test" in url
+
+    _subject, text, html = render("cold", prospect, "baja@vantelia.es")
+    assert "He preparado un ejemplo de como quedaria" in text
+    assert "empresa=Clinica+Demo+Norte" in html
+
+
+def test_outreach_campaigns_backfill_orphan_cold_sends(client: TestClient, api_module):
+    for email, business in [
+        ("legacy.one@example.com", "Legacy One"),
+        ("legacy.two@example.com", "Legacy Two"),
+    ]:
+        created = client.post(
+            "/admin/outreach/prospects",
+            headers=_admin_headers(),
+            json={"email": email, "business_name": business},
+        )
+        assert created.status_code == 200, created.text
+
+    with api_module._outreach_db() as conn:
+        for email in ["legacy.one@example.com", "legacy.two@example.com"]:
+            conn.execute(
+                """INSERT INTO sends
+                   (campaign_id, email, stage, subject, body_text, body_html, sent_at, mode, message_id)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                (0, email, "cold", "Hola", "texto", "<p>texto</p>", "2026-05-07T00:00:00+00:00", "send", f"msg-{email}"),
+            )
+        conn.commit()
+
+    listing = client.get("/admin/outreach/campaigns", headers=_admin_headers())
+    assert listing.status_code == 200, listing.text
+    items = listing.json()["items"]
+    legacy = next(item for item in items if item["name"].startswith("Emails cold lanzados"))
+    assert legacy["status"] == "completed"
+    assert legacy["metrics"]["total"] == 2
+    assert legacy["metrics"]["sent"] == 2
+
+    detail = client.get(f"/admin/outreach/campaigns/{legacy['id']}", headers=_admin_headers())
+    assert detail.status_code == 200
+    assert {member["email"] for member in detail.json()["members"]} == {
+        "legacy.one@example.com",
+        "legacy.two@example.com",
+    }
+
+
+def test_outreach_hot_leads_prioritizes_generated_demo(client: TestClient, api_module):
+    created = client.post(
+        "/admin/outreach/prospects",
+        headers=_admin_headers(),
+        json={"email": "hot.demo@example.com", "business_name": "Hot Demo"},
+    )
+    assert created.status_code == 200, created.text
+
+    with api_module._outreach_db() as conn:
+        conn.execute(
+            "INSERT INTO events (email, type, stage, url, ts, ua, ip) VALUES (?,?,?,?,?,?,?)",
+            (
+                "hot.demo@example.com",
+                "demo_generated",
+                "cold",
+                "https://app.test.local/demo/demo_auto_hot",
+                "2026-05-07T00:00:00+00:00",
+                "pytest",
+                "127.0.0.1",
+            ),
+        )
+        conn.commit()
+
+    response = client.get("/admin/outreach/hot-leads?limit=5&days=60", headers=_admin_headers())
+    assert response.status_code == 200, response.text
+    item = next(row for row in response.json()["items"] if row["email"] == "hot.demo@example.com")
+    assert item["demos_recent"] == 1
+    assert item["score"] >= 12
+
+
+def test_outreach_followup_queue_segments_and_returns_copy(client: TestClient, api_module):
+    now = datetime.utcnow().isoformat(timespec="seconds") + "+00:00"
+    prospects = [
+        ("fu.p1@example.com", "Follow P1"),
+        ("fu.p2@example.com", "Follow P2"),
+        ("fu.p3@example.com", "Follow P3"),
+    ]
+    for email, business in prospects:
+        created = client.post(
+            "/admin/outreach/prospects",
+            headers=_admin_headers(),
+            json={
+                "email": email,
+                "business_name": business,
+                "niche": "clinica dental",
+                "website": f"https://{email.split('@')[0]}.test",
+            },
+        )
+        assert created.status_code == 200, created.text
+
+    with api_module._outreach_db() as conn:
+        for email, _business in prospects:
+            conn.execute(
+                """INSERT INTO sends
+                   (email, stage, subject, body_text, body_html, sent_at, mode, message_id)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (email, "cold", "Hola", "texto", "<p>texto</p>", now, "send", f"msg-{email}"),
+            )
+        conn.execute(
+            "INSERT INTO events (email, type, stage, url, ts, ua, ip) VALUES (?,?,?,?,?,?,?)",
+            ("fu.p1@example.com", "click", "cold", "https://www.vantelia.es/demo/", now, "pytest", "127.0.0.1"),
+        )
+        conn.execute(
+            "INSERT INTO events (email, type, stage, ts, ua, ip) VALUES (?,?,?,?,?,?)",
+            ("fu.p2@example.com", "open", "cold", now, "pytest", "127.0.0.1"),
+        )
+        conn.commit()
+
+    queue = client.get("/admin/outreach/followup-queue?days=60", headers=_admin_headers())
+    assert queue.status_code == 200, queue.text
+    by_email = {item["email"]: item for item in queue.json()["items"]}
+    assert by_email["fu.p1@example.com"]["priority"] == 1
+    assert by_email["fu.p2@example.com"]["priority"] == 2
+    assert by_email["fu.p3@example.com"]["priority"] == 3
+    assert "respondes \"si\"" in by_email["fu.p1@example.com"]["body_text"]
+    assert "empresa=Follow+P1" in by_email["fu.p1@example.com"]["demo_url"]
+
+    copy = client.get("/admin/outreach/prospects/fu.p1@example.com/followup-copy", headers=_admin_headers())
+    assert copy.status_code == 200
+    assert copy.json()["subject"].startswith("Follow P1")
+    assert "mailto:" in copy.json()["mailto"]
+
+
+def test_outreach_autopilot_marks_engaged_and_groups_approvals(client: TestClient, api_module):
+    sent_at = (datetime.utcnow() - timedelta(days=4)).isoformat(timespec="seconds") + "+00:00"
+    created = client.post(
+        "/admin/outreach/prospects",
+        headers=_admin_headers(),
+        json={
+            "email": "auto.p1@example.com",
+            "business_name": "Auto P1",
+            "niche": "clinica dental",
+            "website": "https://autop1.test",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    with api_module._outreach_db() as conn:
+        conn.execute(
+            """INSERT INTO sends
+               (email, stage, subject, body_text, body_html, sent_at, mode, message_id)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            ("auto.p1@example.com", "cold", "Hola", "texto", "<p>texto</p>", sent_at, "send", "msg-auto-p1"),
+        )
+        conn.execute(
+            "INSERT INTO events (email, type, stage, url, ts, ua, ip) VALUES (?,?,?,?,?,?,?)",
+            ("auto.p1@example.com", "demo_generated", "cold", "https://app.test.local/demo/x", sent_at, "pytest", "127.0.0.1"),
+        )
+        conn.commit()
+
+    status_response = client.get("/admin/outreach/autopilot?days=60", headers=_admin_headers())
+    assert status_response.status_code == 200, status_response.text
+    status_data = status_response.json()
+    assert status_data["p1_count"] >= 1
+    assert "auto.p1@example.com" in status_data["approval_groups"]["fu1"]
+    plan_item = next(item for item in status_data["today_plan"] if item["email"] == "auto.p1@example.com")
+    assert plan_item["next_action"] == "approve_send"
+    assert plan_item["next_action_label"] == "Aprobar fu1"
+    assert plan_item["requires_approval"] is True
+    assert "Asunto:" in plan_item["suggested_message"]
+    assert status_data["rules"]["safeguards"].startswith("Maximo")
+
+    run_response = client.post(
+        "/admin/outreach/autopilot/run",
+        headers=_admin_headers(),
+        json={"days": 60, "limit": 120, "apply_status": True},
+    )
+    assert run_response.status_code == 200, run_response.text
+    assert run_response.json()["updated_engaged"] >= 1
+
+    detail = client.get("/admin/outreach/prospects/auto.p1@example.com", headers=_admin_headers())
+    assert detail.status_code == 200
+    assert detail.json()["prospect"]["status"] == "engaged"
+
+
+def test_outreach_autopilot_blocks_prospect_after_max_touches(client: TestClient, api_module):
+    sent_at = (datetime.utcnow() - timedelta(days=12)).isoformat(timespec="seconds") + "+00:00"
+    created = client.post(
+        "/admin/outreach/prospects",
+        headers=_admin_headers(),
+        json={
+            "email": "max.touch@example.com",
+            "business_name": "Max Touch",
+            "niche": "clinica dental",
+            "website": "https://max-touch.test",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    with api_module._outreach_db() as conn:
+        for idx, stage in enumerate(["cold", "cold", "fu1", "fu2"], start=1):
+            conn.execute(
+                """INSERT INTO sends
+                   (email, stage, subject, body_text, body_html, sent_at, mode, message_id)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                ("max.touch@example.com", stage, "Hola", "texto", "<p>texto</p>", sent_at, "send", f"msg-max-{idx}"),
+            )
+        conn.execute(
+            "INSERT INTO events (email, type, stage, ts, ua, ip) VALUES (?,?,?,?,?,?)",
+            ("max.touch@example.com", "open", "fu2", sent_at, "pytest", "127.0.0.1"),
+        )
+        conn.commit()
+
+    queue = client.get("/admin/outreach/followup-queue?days=60", headers=_admin_headers())
+    assert queue.status_code == 200, queue.text
+    item = next(row for row in queue.json()["items"] if row["email"] == "max.touch@example.com")
+    assert item["recommended_stage"] == "breakup"
+    assert item["can_send"] is False
+    assert item["blocked_reason"] == "limite de contactos alcanzado"
+
+    response = client.get("/admin/outreach/autopilot?days=60", headers=_admin_headers())
+    assert response.status_code == 200, response.text
+    assert "max.touch@example.com" not in response.json()["approval_groups"].get("breakup", [])
 
 
 def test_outreach_stats_and_list_show_vantelia_link_clicks(client: TestClient, api_module):

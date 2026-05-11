@@ -241,6 +241,12 @@ else
   mkdir -p "${NEW_DIR}/storage"
 fi
 
+if [ -d "${REMOTE_PROJECT}/secrets" ]; then
+  cp -a "${REMOTE_PROJECT}/secrets" "${NEW_DIR}/secrets"
+else
+  mkdir -p "${NEW_DIR}/secrets"
+fi
+
 rm -rf "$PREV_DIR"
 if [ -d "$REMOTE_PROJECT" ]; then
   mv "$REMOTE_PROJECT" "$PREV_DIR"

@@ -53,7 +53,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 from outreach_templates import (  # noqa: E402
     Prospect, STAGE_ORDER, render, niche_copy, stable_pick,
     html_shell, signature_html, cta_button_html, footer_html, footer_text,
-    assign_variant, make_demo_slug,
+    assign_variant, demo_url_with_utm,
 )
 
 BASE_DIR = SCRIPTS_DIR.parent
@@ -170,7 +170,6 @@ PROSPECT_MIGRATIONS = [
     ("status", "TEXT DEFAULT 'new'"),
     ("notes", "TEXT DEFAULT ''"),
     ("score", "INTEGER DEFAULT 0"),
-    ("demo_slug", "TEXT DEFAULT ''"),
 ]
 
 SEND_MIGRATIONS = [
@@ -203,10 +202,6 @@ def connect(db_path: Path) -> sqlite3.Connection:
                 pass
     try:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_sends_campaign ON sends(campaign_id)")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_prospects_demo_slug ON prospects(demo_slug)")
     except sqlite3.OperationalError:
         pass
     try:
@@ -284,7 +279,6 @@ def cmd_import(args: argparse.Namespace) -> int:
             if not email or "@" not in email or not business:
                 skipped += 1
                 continue
-            demo_slug = make_demo_slug(email, business)
             payload = {
                 "email": email,
                 "business_name": business,
@@ -296,7 +290,6 @@ def cmd_import(args: argparse.Namespace) -> int:
                 "phone": clean(row.get("phone", "")),
                 "tags": clean(row.get("tags", "")),
                 "source": clean(row.get("source", "")) or csv_path.name,
-                "demo_slug": demo_slug,
                 "now": now_iso(),
             }
             existing = conn.execute("SELECT email FROM prospects WHERE email=?", (email,)).fetchone()
@@ -304,7 +297,7 @@ def cmd_import(args: argparse.Namespace) -> int:
                 conn.execute(
                     """UPDATE prospects SET business_name=:business_name, contact_name=:contact_name,
                        niche=:niche, website=:website, service_hint=:service_hint, city=:city,
-                       phone=:phone, tags=:tags, source=:source, demo_slug=:demo_slug,
+                       phone=:phone, tags=:tags, source=:source,
                        updated_at=:now WHERE email=:email""",
                     payload,
                 )
@@ -312,9 +305,9 @@ def cmd_import(args: argparse.Namespace) -> int:
             else:
                 conn.execute(
                     """INSERT INTO prospects (email, business_name, contact_name, niche, website,
-                       service_hint, city, phone, tags, source, demo_slug, created_at, updated_at)
+                       service_hint, city, phone, tags, source, created_at, updated_at)
                        VALUES (:email, :business_name, :contact_name, :niche, :website,
-                       :service_hint, :city, :phone, :tags, :source, :demo_slug, :now, :now)""",
+                       :service_hint, :city, :phone, :tags, :source, :now, :now)""",
                     payload,
                 )
                 added += 1
@@ -385,10 +378,6 @@ def build_message(
     if in_reply_to:
         msg["In-Reply-To"] = in_reply_to
         msg["References"] = in_reply_to
-    unsub = str(settings["unsubscribe_mailto"]) or "baja@vantelia.es"
-    # List-Unsubscribe fijo para mejorar entregabilidad y cumplimiento.
-    msg["List-Unsubscribe"] = f"<mailto:{unsub}?subject=BAJA>"
-    msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
     msg.set_content(text)
     # Enviamos multipart con HTML para mantener consistencia visual y version rica.
     if html_body:
@@ -511,7 +500,7 @@ def load_template_overrides(conn: sqlite3.Connection) -> dict[str, dict]:
 def _template_vars(p: Prospect, unsub: str, stage: str) -> dict[str, str]:
     task, outcome, proof = niche_copy(p.niche, p.service_hint)
     return {
-        "first_name": p.first_name or "",
+        "first_name": p.first_name or "equipo",
         "first_or_team": p.first_name or "equipo",
         "greeting": p.greeting,
         "business": p.business_name or "",
@@ -528,7 +517,7 @@ def _template_vars(p: Prospect, unsub: str, stage: str) -> dict[str, str]:
         "signature_html": signature_html(stage),
         "footer_html": footer_html(unsub),
         "footer_text": footer_text(unsub),
-        "cta_html": cta_button_html("Si, preparame la demo"),
+        "cta_html": cta_button_html("Ver mi demo preparada (1 min)", demo_url_with_utm(stage, p)),
     }
 
 

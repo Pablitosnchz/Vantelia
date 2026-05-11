@@ -13,3 +13,4 @@ services:
       - ../../data:/app/data
       - ../../storage:/app/storage
       - ../../config.json:/app/config.json
+      - ../../secrets:/app/secrets

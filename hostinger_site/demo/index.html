@@ -2,7 +2,14 @@
 <html lang="es">
 
 <head>
-  <meta charset="utf-8">
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-Q7KTBVD92P"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-Q7KTBVD92P');
+</script>  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Genera tu Demo de IA en 60 segundos | Vantelia</title>
   <meta name="description"
@@ -452,8 +459,7 @@
   </style>
 </head>
 
-<body>
-  <div id="cursor-glow" aria-hidden="true"></div>
+<body>  <div id="cursor-glow" aria-hidden="true"></div>
 
   <header class="site-header" id="site-header">
     <div class="shell nav-inner">
@@ -528,8 +534,7 @@
         aria-describedby="demo-form-status">
         <h2>Genera tu demo</h2>
         <p class="form-sub">
-          Rellena estos datos. Podemos también extraer información automáticamente de tu web si nos pasas la
-          URL.
+          Empresa, sector y email. Listo. Si nos das tu web, la IA aprende tu negocio en segundos.
         </p>
 
         <div class="form-grid">
@@ -557,42 +562,16 @@
           </div>
 
           <div class="form-field form-row-full">
-            <label for="df-web">Web actual (opcional)</label>
-            <input id="df-web" name="website_url" type="url" maxlength="300"
-              placeholder="https://www.tunegocio.com" autocomplete="url">
-            <span class="hint">Si la pones, leeremos las páginas principales y la IA conocerá tu negocio
-              mejor.</span>
-          </div>
-
-          <div class="form-field">
             <label for="df-email">Email de contacto <span class="req">*</span></label>
             <input id="df-email" name="email" type="email" required maxlength="120" autocomplete="email"
               placeholder="tunombre@empresa.com">
           </div>
 
-          <div class="form-field">
-            <label for="df-color">Color principal de marca</label>
-            <input id="df-color" name="color" type="color" value="#00B1D9">
-            <span class="hint">El asistente usará este color en tu demo.</span>
-          </div>
-
           <div class="form-field form-row-full">
-            <label for="df-descripcion">Describe tu negocio <span class="req">*</span></label>
-            <textarea id="df-descripcion" name="descripcion" required maxlength="1500" rows="3"
-              placeholder="Ej. Clínica dental en Madrid centro, especialistas en ortodoncia invisible y estética dental. Atención cercana y tecnología puntera."></textarea>
-          </div>
-
-          <div class="form-field form-row-full">
-            <label for="df-servicios">Servicios principales <span class="req">*</span></label>
-            <textarea id="df-servicios" name="servicios" required maxlength="1500" rows="4"
-              placeholder="Ej.&#10;Limpieza dental - 60 €&#10;Ortodoncia invisible - desde 1.800 €&#10;Implantes dentales - desde 950 €"></textarea>
-            <span class="hint">Uno por línea. Incluye precio si quieres que la IA lo conozca.</span>
-          </div>
-
-          <div class="form-field form-row-full">
-            <label for="df-horario">Horario de atención (opcional)</label>
-            <input id="df-horario" name="horario" type="text" maxlength="200"
-              placeholder="Lunes a viernes 9:00 - 20:00 · Sábados 9:00 - 14:00">
+            <label for="df-web">Web actual <span style="font-weight:400;opacity:.65">(opcional, mejora la demo)</span></label>
+            <input id="df-web" name="website_url" type="url" maxlength="300"
+              placeholder="https://www.tunegocio.com" autocomplete="url">
+            <span class="hint">Si la pones, la IA aprenderá tu negocio directamente de tu web.</span>
           </div>
         </div>
 
@@ -623,7 +602,7 @@
         <article class="step-card">
           <div class="step-num">1</div>
           <h3>Cuéntanos tu negocio</h3>
-          <p>Rellenas el formulario o pegas tu web. Tarda menos de 1 minuto.</p>
+          <p>Empresa, sector y email. Opcional: tu web para personalizar más.</p>
         </article>
         <article class="step-card">
           <div class="step-num">2</div>
@@ -745,6 +724,59 @@
         }
       }
 
+      function getParam(names) {
+        var search = (window.location.search || '').replace(/&amp;/g, '&');
+        var params = new URLSearchParams(search);
+        for (var i = 0; i < names.length; i += 1) {
+          var value = params.get(names[i]);
+          if (value) return value.trim();
+        }
+        return '';
+      }
+
+      function setField(name, value) {
+        if (!value || !form.elements[name]) return;
+        form.elements[name].value = value;
+      }
+
+      function prefillFromUrl() {
+        var empresa = getParam(['empresa', 'nombre_empresa', 'business']);
+        var sector = getParam(['sector', 'niche']);
+        var email = getParam(['email']);
+        var web = getParam(['web', 'website', 'website_url']);
+        setField('nombre_empresa', empresa);
+        setField('email', email);
+        setField('website_url', web);
+        if (sector && form.elements['sector']) {
+          var select = form.elements['sector'];
+          var matched = false;
+          Array.prototype.forEach.call(select.options, function (option) {
+            if (option.value.toLowerCase() === sector.toLowerCase()) {
+              select.value = option.value;
+              matched = true;
+            }
+          });
+          if (!matched) select.value = 'Otro';
+        }
+        if (empresa || web || email) {
+          showStatus('success', statusCard(
+            'Demo preparada',
+            'He dejado tus datos cargados',
+            'Revisa que estén bien y pulsa “Generar mi demo”. Si la web está incluida, la IA la usará para personalizar el asistente.',
+            ''
+          ));
+          setTimeout(function () {
+            window.vanteliaTrack && window.vanteliaTrack('demo_prefilled_view', {
+              sector: sector || '',
+              has_website_url: !!web,
+              source: getParam(['utm_source'])
+            });
+          }, 600);
+        }
+      }
+
+      prefillFromUrl();
+
       form.addEventListener('submit', function (event) {
         event.preventDefault();
         clearStatus();
@@ -757,10 +789,6 @@
           nombre_empresa: form.elements['nombre_empresa'].value.trim(),
           sector: form.elements['sector'].value.trim(),
           email: form.elements['email'].value.trim(),
-          descripcion: form.elements['descripcion'].value.trim(),
-          servicios: form.elements['servicios'].value.trim(),
-          horario: form.elements['horario'].value.trim() || null,
-          color: form.elements['color'].value || null,
           website_url: form.elements['website_url'].value.trim() || null
         };
 
