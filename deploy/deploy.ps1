@@ -190,7 +190,8 @@ $tarArgs = @(
     $ArchivePath,
     $ProjectName
 )
-Invoke-Checked -FilePath "tar.exe" -Arguments $tarArgs -WorkingDirectory $StageRoot
+$NativeTar = "$env:SystemRoot\System32\tar.exe"
+Invoke-Checked -FilePath $NativeTar -Arguments $tarArgs -WorkingDirectory $StageRoot
 try {
     Remove-Item -LiteralPath $StageRoot -Recurse -Force -ErrorAction SilentlyContinue
 } catch {
