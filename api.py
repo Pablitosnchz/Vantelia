@@ -1361,6 +1361,16 @@ async def startup_background_services() -> None:
         )
         outreach_autopilot_thread.start()
 
+    global outreach_autonomous_thread
+    if not outreach_autonomous_thread or not outreach_autonomous_thread.is_alive():
+        outreach_autonomous_stop.clear()
+        outreach_autonomous_thread = threading.Thread(
+            target=_outreach_autonomous_worker,
+            name="vantelia-outreach-autonomous",
+            daemon=True,
+        )
+        outreach_autonomous_thread.start()
+
     if REMINDER_RUN_INTERVAL_MINUTES <= 0:
         logger.info("Recordatorios automaticos desactivados (REMINDER_RUN_INTERVAL_MINUTES <= 0).")
         return
@@ -1382,6 +1392,7 @@ async def shutdown_background_services() -> None:
     booking_reminder_stop.set()
     outreach_imap_stop.set()
     outreach_autopilot_stop.set()
+    outreach_autonomous_stop.set()
 
 
 def _build_cors_headers(origin: str) -> Dict[str, str]:
@@ -13220,6 +13231,87 @@ def outreach_autopilot_run(payload: OutreachAutopilotSendPayload):
     return {"ok": True, "job_id": job_id, "max": max_send, "send": bool(payload.send), "updated_engaged": updated_engaged}
 
 
+class AutopilotConfigPayload(BaseModel):
+    enabled: Optional[bool] = None
+    targets: Optional[List[Dict[str, str]]] = None
+    daily_new_target: Optional[int] = None
+    daily_cold_cap: Optional[int] = None
+    auto_followups: Optional[bool] = None
+
+
+def _autopilot_config_row(conn) -> Dict[str, Any]:
+    row = conn.execute("SELECT * FROM autopilot_config WHERE id=1").fetchone()
+    if not row:
+        conn.execute("INSERT OR IGNORE INTO autopilot_config (id) VALUES (1)")
+        conn.commit()
+        row = conn.execute("SELECT * FROM autopilot_config WHERE id=1").fetchone()
+    try:
+        targets = json.loads(row["targets_json"] or "[]")
+    except Exception:
+        targets = []
+    sent_today = conn.execute(
+        "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND stage='cold' AND date(sent_at)=date('now')"
+    ).fetchone()["c"]
+    imported_24h = conn.execute(
+        "SELECT COUNT(*) AS c FROM prospects WHERE (source LIKE '%autopilot%' OR tags LIKE '%autopilot%') AND created_at >= datetime('now','-1 day')"
+    ).fetchone()["c"]
+    return {
+        "enabled": bool(row["enabled"]),
+        "targets": targets,
+        "daily_new_target": int(row["daily_new_target"] or 20),
+        "daily_cold_cap": int(row["daily_cold_cap"] or 30),
+        "auto_followups": bool(row["auto_followups"]),
+        "last_discovery_at": row["last_discovery_at"] or "",
+        "last_cold_at": row["last_cold_at"] or "",
+        "updated_at": row["updated_at"] or "",
+        "env_enabled": (os.getenv("OUTREACH_AUTONOMOUS_ENABLED", "").lower() == "true"),
+        "stats": {
+            "cold_today": sent_today,
+            "imported_24h": imported_24h,
+        },
+    }
+
+
+@app.get("/admin/outreach/autopilot-config", dependencies=[Depends(_require_admin_token)])
+def outreach_autopilot_config_get():
+    with _outreach_db() as conn:
+        return _autopilot_config_row(conn)
+
+
+@app.put("/admin/outreach/autopilot-config", dependencies=[Depends(_require_admin_token)])
+def outreach_autopilot_config_put(payload: AutopilotConfigPayload):
+    fields = []
+    params: List[Any] = []
+    if payload.enabled is not None:
+        fields.append("enabled=?"); params.append(1 if payload.enabled else 0)
+    if payload.targets is not None:
+        clean_targets = []
+        for t in payload.targets:
+            s = (t.get("sector") or "").strip()
+            c = (t.get("city") or "").strip()
+            if s and c:
+                clean_targets.append({"sector": s, "city": c})
+        fields.append("targets_json=?"); params.append(json.dumps(clean_targets, ensure_ascii=False))
+    if payload.daily_new_target is not None:
+        fields.append("daily_new_target=?"); params.append(max(1, min(200, int(payload.daily_new_target))))
+    if payload.daily_cold_cap is not None:
+        fields.append("daily_cold_cap=?"); params.append(max(1, min(200, int(payload.daily_cold_cap))))
+    if payload.auto_followups is not None:
+        fields.append("auto_followups=?"); params.append(1 if payload.auto_followups else 0)
+    fields.append("updated_at=?"); params.append(_outreach_now())
+    with _outreach_db() as conn:
+        conn.execute(f"UPDATE autopilot_config SET {', '.join(fields)} WHERE id=1", params)
+        conn.commit()
+        return _autopilot_config_row(conn)
+
+
+@app.post("/admin/outreach/autopilot-tick", dependencies=[Depends(_require_admin_token)])
+def outreach_autopilot_tick():
+    """Fuerza una ronda del worker autónomo."""
+    threading.Thread(target=_outreach_autonomous_tick, daemon=True).start()
+    return {"ok": True, "started_at": _outreach_now()}
+
+
 @app.get("/admin/outreach/prospects/{email}/followup-copy", dependencies=[Depends(_require_admin_token)])
 def outreach_prospect_followup_copy(email: str):
     email_l = email.lower().strip()
@@ -14586,6 +14678,252 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
             _job_finish(conn, job_id, "error")
         except Exception:
             pass
+
+
+OUTREACH_AUTONOMOUS_GENERIC_PREFIXES = {
+    "info", "contacto", "hola", "admin", "administracion", "recepcion",
+    "cita", "citaciones", "cliente", "clientes", "soporte", "help",
+    "ayuda", "reservas", "marketing", "ventas", "comercial", "rrhh", "contact",
+}
+OUTREACH_AUTONOMOUS_CHAIN_KEYWORDS = (
+    "vivanta", "plus dental", "kivet", "sanitas", "vitaldent", "dentix",
+    "donte group", "asisa", "dkv", "mapfre", "adeslas",
+)
+
+
+def _autonomous_is_chain(name: str) -> bool:
+    n = (name or "").lower()
+    return any(k in n for k in OUTREACH_AUTONOMOUS_CHAIN_KEYWORDS)
+
+
+def _autonomous_email_is_personal(email: str) -> bool:
+    local = (email or "").lower().split("@", 1)[0].strip()
+    if not local:
+        return False
+    if local in OUTREACH_AUTONOMOUS_GENERIC_PREFIXES:
+        return False
+    return "." in local or len(local) >= 8
+
+
+def _autonomous_within_window() -> bool:
+    """Mismas reglas que _outreach_within_window pero locales aquí por si no existe."""
+    if (os.getenv("OUTREACH_RESPECT_WINDOW", "true").lower() != "true"):
+        return True
+    now = datetime.now(timezone.utc)
+    try:
+        from zoneinfo import ZoneInfo
+        tz_name = os.getenv("OUTREACH_TIMEZONE", "Europe/Madrid")
+        now = now.astimezone(ZoneInfo(tz_name))
+    except Exception:
+        pass
+    if os.getenv("OUTREACH_SKIP_WEEKEND", "true").lower() == "true" and now.weekday() >= 5:
+        return False
+    start_h = int(os.getenv("OUTREACH_START_HOUR", "9") or 9)
+    end_h = int(os.getenv("OUTREACH_END_HOUR", "19") or 19)
+    return start_h <= now.hour < end_h
+
+
+def _outreach_autonomous_tick() -> None:
+    """Una pasada del modo autónomo: discovery + cold + follow-ups."""
+    log = lambda msg: logger.info("[autopilot] %s", msg)
+    log_err = lambda msg: logger.error("[autopilot] %s", msg)
+    env_on = os.getenv("OUTREACH_AUTONOMOUS_ENABLED", "").lower() == "true"
+    if not env_on:
+        log("disabled por env OUTREACH_AUTONOMOUS_ENABLED")
+        return
+    if not OUTREACH_AVAILABLE:
+        log("OUTREACH_AVAILABLE=False, skip")
+        return
+    try:
+        with _outreach_db() as conn:
+            row = conn.execute("SELECT * FROM autopilot_config WHERE id=1").fetchone()
+            if not row:
+                log("config row no existe, skip")
+                return
+            enabled = bool(row["enabled"])
+            try:
+                targets = json.loads(row["targets_json"] or "[]")
+            except Exception:
+                targets = []
+            daily_new_target = int(row["daily_new_target"] or 20)
+            daily_cold_cap = int(row["daily_cold_cap"] or 30)
+            auto_followups = bool(row["auto_followups"])
+            last_discovery_at = row["last_discovery_at"] or ""
+        if not enabled:
+            log("disabled en DB, skip")
+            return
+        if not _autonomous_within_window():
+            log("fuera de ventana laboral, skip")
+            return
+
+        # ---- DISCOVERY ----
+        discovery_hours = max(1, int(os.getenv("OUTREACH_AUTONOMOUS_DISCOVERY_HOURS", "6") or 6))
+        run_discovery = True
+        if last_discovery_at:
+            try:
+                last_dt = datetime.fromisoformat(last_discovery_at.replace("Z", "+00:00"))
+                if (datetime.now(timezone.utc) - last_dt).total_seconds() < discovery_hours * 3600:
+                    run_discovery = False
+            except Exception:
+                pass
+        google_key = os.getenv("GOOGLE_PLACES_API_KEY", "").strip()
+        if run_discovery and not google_key:
+            log("discovery skip: GOOGLE_PLACES_API_KEY vacío")
+            run_discovery = False
+        if run_discovery and not targets:
+            log("discovery skip: sin targets configurados")
+            run_discovery = False
+
+        if run_discovery:
+            try:
+                from outreach_discover import discover_companies  # type: ignore
+            except Exception as exc:
+                log_err(f"discovery: módulo no disponible ({exc})")
+                discover_companies = None
+            if discover_companies is not None:
+                imported_total = 0
+                with _outreach_db() as conn:
+                    known = {r["email"] for r in conn.execute("SELECT email FROM prospects").fetchall()}
+                    suppressed = {r["email"] for r in conn.execute("SELECT email FROM suppressions").fetchall()}
+                    for t in targets:
+                        sector = (t.get("sector") or "").strip()
+                        city = (t.get("city") or "").strip()
+                        if not sector or not city:
+                            continue
+                        try:
+                            companies = discover_companies(
+                                sector=sector,
+                                ciudad=city,
+                                max_results=30,
+                                extract_emails=True,
+                                source="auto",
+                            )
+                        except Exception as exc:
+                            log_err(f"discovery {sector}/{city}: {exc}")
+                            continue
+                        now_iso = _outreach_now()
+                        added = 0
+                        for c in companies:
+                            email = (getattr(c, "email", "") or "").lower().strip()
+                            if not email:
+                                continue
+                            if email in known or email in suppressed:
+                                continue
+                            if _autonomous_is_chain(getattr(c, "business_name", "")):
+                                continue
+                            payload = c.as_csv_row()
+                            payload["email"] = email
+                            payload["tags"] = (payload.get("tags") or "") + (",autopilot" if payload.get("tags") else "autopilot")
+                            payload["source"] = (payload.get("source") or "autopilot")
+                            payload["now"] = now_iso
+                            try:
+                                conn.execute(
+                                    """INSERT OR IGNORE INTO prospects (email, business_name, contact_name, niche, website,
+                                       service_hint, city, phone, tags, source, created_at, updated_at)
+                                       VALUES (:email,:business_name,:contact_name,:niche,:website,:service_hint,:city,:phone,:tags,:source,:now,:now)""",
+                                    payload,
+                                )
+                                known.add(email)
+                                added += 1
+                            except Exception as exc:
+                                log_err(f"insert {email}: {exc}")
+                        log(f"discovery {sector}/{city}: {len(companies)} encontrados, {added} importados")
+                        imported_total += added
+                    conn.execute(
+                        "UPDATE autopilot_config SET last_discovery_at=?, updated_at=? WHERE id=1",
+                        (_outreach_now(), _outreach_now()),
+                    )
+                    conn.commit()
+                log(f"discovery total importados: {imported_total}")
+
+        # ---- COLD AUTOMÁTICO ----
+        settings = outreach_smtp_settings()
+        smtp_ok = bool(settings.get("host") and settings.get("from_email"))
+        if not smtp_ok:
+            log("cold/followups skip: SMTP no configurado")
+            return
+
+        with _outreach_db() as conn:
+            sent_today = conn.execute(
+                "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND stage='cold' AND date(sent_at)=date('now')"
+            ).fetchone()["c"]
+            remaining = daily_cold_cap - int(sent_today or 0)
+            n = max(0, min(remaining, daily_new_target))
+            if n <= 0:
+                log(f"cold skip: cap diario alcanzado ({sent_today}/{daily_cold_cap})")
+            else:
+                rows = conn.execute(
+                    """SELECT email FROM prospects
+                       WHERE COALESCE(status,'new')='new'
+                         AND (source LIKE '%autopilot%' OR tags LIKE '%autopilot%')
+                         AND email NOT IN (SELECT email FROM suppressions)
+                         AND email NOT IN (SELECT email FROM sends WHERE mode='send')
+                       ORDER BY created_at ASC
+                       LIMIT ?""",
+                    (n,),
+                ).fetchall()
+                cold_emails = [r["email"] for r in rows]
+                if not cold_emails:
+                    log("cold skip: 0 prospects nuevos elegibles")
+                else:
+                    params = {
+                        "stage": "cold",
+                        "emails": cold_emails,
+                        "max": len(cold_emails),
+                        "send": True,
+                        "dry_run": False,
+                        "delay": 70.0,
+                        "jitter": 25.0,
+                        "force_window": False,
+                        "campaign_name": "Autopilot cold",
+                    }
+                    cur = conn.execute(
+                        "INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES (?,?,?,?,?)",
+                        ("send", "queued", json.dumps(params), "", _outreach_now()),
+                    )
+                    cold_job_id = cur.lastrowid
+                    conn.execute(
+                        "UPDATE autopilot_config SET last_cold_at=?, updated_at=? WHERE id=1",
+                        (_outreach_now(), _outreach_now()),
+                    )
+                    conn.commit()
+                    threading.Thread(target=_outreach_run_send_job, args=(cold_job_id, params), daemon=True).start()
+                    log(f"cold lanzado: job #{cold_job_id} con {len(cold_emails)} prospects")
+
+        # ---- FOLLOW-UPS ----
+        if auto_followups:
+            params = {"max": 10, "send": True, "delay": 70.0, "jitter": 25.0}
+            with _outreach_db() as conn:
+                cur = conn.execute(
+                    "INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES (?,?,?,?,?)",
+                    ("autopilot", "queued", json.dumps(params), "", _outreach_now()),
+                )
+                fu_job_id = cur.lastrowid
+                conn.commit()
+            threading.Thread(target=_outreach_run_autopilot_job, args=(fu_job_id, params), daemon=True).start()
+            log(f"follow-ups lanzado: job #{fu_job_id}")
+    except Exception as exc:
+        log_err(f"tick falló: {exc}")
+
+
+outreach_autonomous_stop = threading.Event()
+outreach_autonomous_thread: Optional[threading.Thread] = None
+
+
+def _outreach_autonomous_worker() -> None:
+    interval_minutes = max(10, int(os.getenv("OUTREACH_AUTONOMOUS_TICK_MINUTES", "60") or 60))
+    if os.getenv("OUTREACH_AUTONOMOUS_ENABLED", "").lower() != "true":
+        logger.info("[autopilot] worker autónomo desactivado por env")
+        return
+    logger.info("[autopilot] worker autónomo iniciado. Tick cada %s min.", interval_minutes)
+    # Primera pasada tras 60s para no bloquear startup
+    outreach_autonomous_stop.wait(60)
+    while not outreach_autonomous_stop.is_set():
+        try:
+            _outreach_autonomous_tick()
+        except Exception as exc:
+            logger.error("[autopilot] worker error: %s", exc)
+        outreach_autonomous_stop.wait(interval_minutes * 60)
 
 
 def _outreach_autopilot_worker() -> None:

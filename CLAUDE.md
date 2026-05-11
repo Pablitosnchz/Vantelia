@@ -360,6 +360,32 @@ Si el cliente no existe o tiene `booking.enabled=false`, la pagina `/d/{slug}` e
 - No usar listas compradas. No suplantar identidad. No hacer scraping agresivo.
 - Para no caer en spam, configurar SPF/DKIM/DMARC en `vantelia.es` antes de envios reales.
 
+### Modo automático (captación pasiva)
+
+El sistema busca prospects, filtra, importa, lanza cold y follow-ups solo. Usuario solo mira dashboard.
+
+Tabla `autopilot_config` (id=1) con: `enabled`, `targets_json` (lista `[{"sector","city"}, ...]`), `daily_new_target`, `daily_cold_cap`, `auto_followups`, `last_discovery_at`, `last_cold_at`.
+
+Endpoints:
+- `GET /admin/outreach/autopilot-config` — config + stats (cold hoy, importados 24h)
+- `PUT /admin/outreach/autopilot-config` — patch parcial (enabled, targets, daily_new_target, daily_cold_cap, auto_followups)
+- `POST /admin/outreach/autopilot-tick` — fuerza ronda inmediata
+
+Worker `_outreach_autonomous_worker` arranca en startup si `OUTREACH_AUTONOMOUS_ENABLED=true`. Cada `OUTREACH_AUTONOMOUS_TICK_MINUTES` (default 60) ejecuta:
+1. **Discovery**: si pasaron `OUTREACH_AUTONOMOUS_DISCOVERY_HOURS` desde la última (default 6h), itera targets, filtra (sin email/cadenas/duplicados/bajas), importa con tag `autopilot`.
+2. **Cold**: cuenta sends de hoy con stage=cold mode=send. Si < cap, lanza send job para hasta `min(cap-sent, daily_new_target)` prospects nuevos con source/tag `autopilot`.
+3. **Follow-ups**: si `auto_followups=1`, dispara autopilot run (max=10).
+
+Salvaguardas:
+- Kill switch dual: env `OUTREACH_AUTONOMOUS_ENABLED` + `enabled` en DB
+- Ventana laboral respetada (start/end hour, skip weekend)
+- Sin `GOOGLE_PLACES_API_KEY` → skip discovery
+- Sin SMTP → skip cold/followups
+- Cadenas conocidas (vivanta, kivet, sanitas...) descartadas
+- Errores loggean `[autopilot]` sin romper el thread
+
+Panel admin: tab "Modo automático". Switch ON/OFF, editor de targets, configuración de cap/target, toggle auto-followups, stats en vivo, botón "Ejecutar ronda ahora".
+
 ### Comandos CLI utiles (alternativa al panel)
 
 ```powershell

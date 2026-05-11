@@ -163,6 +163,19 @@ CREATE TABLE IF NOT EXISTS templates_overrides (
     body_html     TEXT DEFAULT '',
     updated_at    TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS autopilot_config (
+    id INTEGER PRIMARY KEY CHECK (id=1),
+    enabled INTEGER DEFAULT 0,
+    targets_json TEXT DEFAULT '[]',
+    daily_new_target INTEGER DEFAULT 20,
+    daily_cold_cap INTEGER DEFAULT 30,
+    auto_followups INTEGER DEFAULT 1,
+    last_discovery_at TEXT DEFAULT '',
+    last_cold_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
+);
+INSERT OR IGNORE INTO autopilot_config (id) VALUES (1);
 """
 
 # Migraciones de columnas que se han ido anadiendo a posteriori.

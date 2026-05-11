@@ -431,6 +431,21 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
 .cw-score { display: inline-flex; align-items: center; gap: 6px; min-width: 58px; font-weight: 700; color: var(--text); }
 .cw-score-bar { width: 34px; height: 6px; border-radius:999px; background: rgba(255,255,255,.08); overflow:hidden; }
 .cw-score-bar span { display:block; height:100%; background: var(--success); }
+.cw-chip-input { display:flex; flex-direction:column; gap:6px; }
+.cw-chip-input input { width:100%; }
+.cw-chips { display:flex; flex-wrap:wrap; gap:4px; min-height:24px; }
+.cw-chip { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; background:var(--accent-line); border-radius:14px; font-size:12px; color:var(--text); }
+.cw-chip button { background:none; border:none; cursor:pointer; padding:0 2px; color:var(--soft); font-weight:700; font-size:14px; line-height:1; }
+.cw-chip button:hover { color:var(--danger); }
+.cw-filter-chip { display:inline-flex; align-items:center; padding:4px 10px; border-radius:14px; font-size:12px; border:1px solid var(--line); background:var(--surface); cursor:pointer; user-select:none; }
+.cw-filter-chip.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.cw-status-badge { display:inline-block; padding:2px 6px; border-radius:8px; font-size:10px; font-weight:700; text-transform:uppercase; }
+.cw-status-new { background:rgba(34,197,94,.15); color:#16a34a; }
+.cw-status-exist { background:rgba(245,158,11,.15); color:#b45309; }
+.cw-status-baja { background:rgba(220,38,38,.15); color:#dc2626; }
+.cw-email-badge { display:inline-block; padding:1px 5px; border-radius:8px; font-size:11px; margin-right:4px; vertical-align:middle; }
+.cw-email-personal { background:rgba(34,197,94,.18); color:#16a34a; }
+.cw-email-generic { background:rgba(156,163,175,.20); color:#6b7280; }
 .cw-template-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
 .cw-template-card {
   border: 1px solid var(--line);
@@ -2123,6 +2138,7 @@ tbody tr:last-child td { border-bottom: none; }
 
           <div class="actions cw-advanced-tabs" id="orAdvancedTabs">
             <button class="ghost small" type="button" data-outreach-tab="autopilot">Autopiloto <span class="or-tab-badge" data-badge="autopilot" style="display:none;"></span></button>
+            <button class="ghost small" type="button" data-outreach-tab="autonomous">Modo automático <span class="or-tab-badge" data-badge="autonomous" style="display:none;"></span></button>
             <button class="ghost small" type="button" data-outreach-tab="prospects">Prospects <span class="or-tab-badge" data-badge="prospects" style="display:none;"></span></button>
             <button class="ghost small" type="button" data-outreach-tab="campaigns">Campanas</button>
             <button class="ghost small" type="button" data-outreach-tab="discovery">Discovery</button>
@@ -2171,15 +2187,30 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="cw-body">
                 <div class="cw-card">
                   <div class="cw-step-panel active" data-cw-step="search">
-                    <div class="cw-card-header"><div><h4>Buscar empresas</h4><p>Define un nicho local y el wizard guardara los resultados automaticamente.</p></div><span class="pill info" id="cwDiscoveryStatus">Listo</span></div>
-                    <div class="grid-3"><label>Ciudad<input id="cwCity" type="text" placeholder="Torrejon de Ardoz" /></label><label>Sector / nicho<input id="cwSector" type="text" placeholder="clinica dental" /></label><label>Cantidad de leads<input id="cwLeadCount" type="number" min="5" max="100" value="30" /></label></div>
+                    <div class="cw-card-header"><div><h4>Buscar empresas</h4><p>Añade una o varias ciudades y sectores. Pulsa Enter para añadir un chip.</p></div><span class="pill info" id="cwDiscoveryStatus">Listo</span></div>
+                    <div class="grid-3">
+                      <label>Ciudades
+                        <div class="cw-chip-input">
+                          <input id="cwCityInput" type="text" placeholder="Torrejón de Ardoz, Alcalá..." />
+                          <div id="cwCityChips" class="cw-chips"></div>
+                        </div>
+                      </label>
+                      <label>Sectores / nichos
+                        <div class="cw-chip-input">
+                          <input id="cwSectorInput" type="text" placeholder="clinica dental, estética..." />
+                          <div id="cwSectorChips" class="cw-chips"></div>
+                        </div>
+                      </label>
+                      <label>Cantidad por combo<input id="cwLeadCount" type="number" min="5" max="100" value="30" /></label>
+                    </div>
                     <div class="actions"><button class="secondary" type="button" id="cwSearchBtn">Buscar empresas</button><button class="ghost" type="button" data-cw-next="review">Continuar</button></div>
                     <div class="cw-progress"><span id="cwSearchProgress"></span></div>
                     <pre id="cwSearchLog" style="display:none;background:#0f172a;color:#cbd5f5;font-size:12px;padding:10px;border-radius:8px;max-height:190px;overflow:auto;white-space:pre-wrap;"></pre>
                   </div>
                   <div class="cw-step-panel" data-cw-step="review">
-                    <div class="cw-card-header"><div><h4>Revisar e importar prospects</h4><p>Edita inline, selecciona los mejores y guarda los prospects antes del envio.</p></div><div class="actions"><button class="ghost small" type="button" id="cwSelectAllBtn">Seleccionar todos</button><button class="ghost small" type="button" id="cwSelectWithEmailBtn">Con email</button></div></div>
-                    <div class="cw-table-wrap"><table class="cw-result-table"><thead><tr><th></th><th>Empresa</th><th>Web</th><th>Email</th><th>Telefono</th><th>Score</th></tr></thead><tbody id="cwResultsBody"><tr><td colspan="6" class="empty">Busca empresas para empezar.</td></tr></tbody></table></div>
+                    <div class="cw-card-header"><div><h4>Revisar e importar prospects</h4><p>Edita inline, selecciona los mejores y guarda los prospects antes del envio.</p></div><div class="actions"><button class="ghost small" type="button" id="cwSelectAllBtn">Seleccionar nuevos</button><button class="ghost small" type="button" id="cwSelectWithEmailBtn">Con email</button><button class="ghost small" type="button" id="cwSelectIncludeDupesBtn">Incluir duplicados</button></div></div>
+                    <div id="cwResultFilters" class="cw-chips" style="margin:0 0 8px 0;"></div>
+                    <div class="cw-table-wrap"><table class="cw-result-table"><thead><tr><th></th><th>Estado</th><th>Empresa</th><th>Web</th><th>Email</th><th>Telefono</th><th>Score</th></tr></thead><tbody id="cwResultsBody"><tr><td colspan="7" class="empty">Busca empresas para empezar.</td></tr></tbody></table></div>
                     <div class="actions"><button class="secondary" type="button" id="cwImportSelectedBtn">Importar seleccionados</button><button class="ghost" type="button" id="cwImportAllBtn">Importar todos</button><button class="ghost" type="button" data-cw-prev="search">Atras</button><button class="ghost" type="button" data-cw-next="template">Continuar</button></div>
                   </div>
                   <div class="cw-step-panel" data-cw-step="template">
@@ -2346,6 +2377,67 @@ tbody tr:last-child td { border-bottom: none; }
 
             <!-- Autopilot status box (oculto, solo para renderAutopilot) -->
             <div id="orAutopilotBox" style="display:none;"></div>
+          </div>
+
+          <!-- Modo automático -->
+          <div data-outreach-panel="autonomous" class="outreach-panel">
+            <div id="orAutonomousActiveBanner" style="display:none;margin-bottom:14px;padding:12px 16px;border-radius:10px;background:#dc2626;color:#fff;font-size:13px;">
+              ⚠️ <strong>Modo automático activo.</strong> El sistema envía cold y follow-ups sin confirmación manual. Vigila el dashboard.
+            </div>
+            <div class="card" style="padding:18px;margin-bottom:14px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+                <div>
+                  <strong style="font-size:16px;">Captación pasiva</strong>
+                  <p class="muted" style="margin:4px 0 0;font-size:12px;">El sistema busca prospects, los importa y lanza cold + follow-ups automáticamente.</p>
+                  <p class="muted" style="margin:4px 0 0;font-size:11px;" id="orAutonomousEnvWarning"></p>
+                </div>
+                <button type="button" id="orAutonomousToggle" style="min-width:140px;padding:10px 18px;border-radius:10px;border:0;font-weight:700;font-size:14px;cursor:pointer;">Cargando...</button>
+              </div>
+            </div>
+            <div class="card" style="padding:14px;margin-bottom:14px;">
+              <strong style="font-size:14px;">Estado en vivo</strong>
+              <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-top:10px;">
+                <div class="stat"><strong id="orAutonomousColdToday">-</strong><span>Cold hoy / cap</span></div>
+                <div class="stat"><strong id="orAutonomousImported">-</strong><span>Nuevos 24h</span></div>
+                <div class="stat"><strong id="orAutonomousLastRun">-</strong><span>Última ronda</span></div>
+              </div>
+              <div class="actions" style="margin-top:10px;">
+                <button class="ghost small" type="button" id="orAutonomousTickBtn">Ejecutar ronda ahora</button>
+                <button class="ghost small" type="button" id="orAutonomousRefresh">Actualizar</button>
+              </div>
+            </div>
+            <div class="card" style="padding:14px;margin-bottom:14px;">
+              <strong style="font-size:14px;">Configuración</strong>
+              <div class="grid" style="grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;">
+                <label>Nuevos a importar/día<input id="orAutonomousDailyNew" type="number" min="1" max="200" value="20" /></label>
+                <label>Tope cold enviados/día<input id="orAutonomousDailyCold" type="number" min="1" max="200" value="30" /></label>
+                <label style="display:flex;flex-direction:column;gap:4px;">Auto follow-ups
+                  <span><input id="orAutonomousAutoFu" type="checkbox" /> Aprobar follow-ups solo</span>
+                </label>
+              </div>
+              <div class="actions" style="margin-top:10px;">
+                <button class="secondary small" type="button" id="orAutonomousSaveBtn">Guardar</button>
+              </div>
+            </div>
+            <div class="card" style="padding:14px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
+                <strong style="font-size:14px;">Objetivos de búsqueda (sector + ciudad)</strong>
+                <span class="muted" style="font-size:11px;" id="orAutonomousTargetsCount">0 combos</span>
+              </div>
+              <div style="overflow:auto;max-height:280px;border:1px solid var(--line);border-radius:10px;">
+                <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                  <thead style="position:sticky;top:0;background:#f6f8fb;">
+                    <tr><th style="text-align:left;padding:8px;">Sector</th><th style="text-align:left;padding:8px;">Ciudad</th><th style="width:60px;"></th></tr>
+                  </thead>
+                  <tbody id="orAutonomousTargetsBody"><tr><td colspan="3" class="empty">Sin objetivos.</td></tr></tbody>
+                </table>
+              </div>
+              <div class="grid" style="grid-template-columns:1fr 1fr auto;gap:8px;margin-top:10px;align-items:end;">
+                <label>Sector<input id="orAutonomousNewSector" type="text" placeholder="clinica dental" /></label>
+                <label>Ciudad<input id="orAutonomousNewCity" type="text" placeholder="Torrejón de Ardoz" /></label>
+                <button class="secondary small" type="button" id="orAutonomousAddTargetBtn">Añadir</button>
+              </div>
+            </div>
           </div>
 
           <!-- Prospects -->
@@ -4397,6 +4489,8 @@ tbody tr:last-child td { border-bottom: none; }
         step: "search",
         city: "Torrejon de Ardoz",
         sector: "",
+        cities: [],
+        sectors: [],
         leadCount: 30,
         results: [],
         selected: [],
@@ -4410,7 +4504,44 @@ tbody tr:last-child td { border-bottom: none; }
         discoveryJobId: null,
         sendJobId: null,
         preflight: null,
+        activeFilters: ["chains", "new"],
       };
+      let cwKnownEmails = new Set();
+      let cwSuppressedEmails = new Set();
+      const CW_GENERIC_PREFIXES = ['info','contacto','hola','admin','administracion','recepcion','cita','citaciones','cliente','clientes','soporte','help','ayuda','reservas','marketing','ventas','comercial','rrhh','contact'];
+      const CW_CHAIN_KEYWORDS = ['vivanta','plus dental','kivet','sanitas','vitaldent','dentix','donte group','asisa','dkv','mapfre','adeslas'];
+      function classifyEmail(email) {
+        if (!email) return "none";
+        const local = (email.toLowerCase().split("@")[0] || "").trim();
+        if (!local) return "none";
+        if (CW_GENERIC_PREFIXES.includes(local)) return "generic";
+        if (local.includes(".") || local.length >= 8) return "personal";
+        return "generic";
+      }
+      function cwProspectStatus(email) {
+        if (!email) return "new";
+        const lower = email.toLowerCase().trim();
+        if (cwSuppressedEmails.has(lower)) return "baja";
+        if (cwKnownEmails.has(lower)) return "exist";
+        return "new";
+      }
+      function cwIsChain(name) {
+        const n = (name || "").toLowerCase();
+        return CW_CHAIN_KEYWORDS.some((k) => n.includes(k));
+      }
+      async function refreshCwDedupCache() {
+        try {
+          const [pp, sp] = await Promise.all([
+            orFetch("/admin/outreach/prospects?page_size=200"),
+            orFetch("/admin/outreach/suppressions"),
+          ]);
+          cwKnownEmails = new Set((pp.items || []).map((p) => (p.email || "").toLowerCase()));
+          cwSuppressedEmails = new Set((sp.items || []).map((s) => (s.email || "").toLowerCase()));
+        } catch (err) {
+          cwKnownEmails = new Set();
+          cwSuppressedEmails = new Set();
+        }
+      }
       let cwState = loadWizardState();
       let cwSaveTimer = null;
       let cwJobTimer = null;
@@ -4487,28 +4618,105 @@ tbody tr:last-child td { border-bottom: none; }
 
       function hydrateWizardForm() {
         const pairs = [
-          ["#cwCity", "city"], ["#cwSector", "sector"], ["#cwLeadCount", "leadCount"],
+          ["#cwLeadCount", "leadCount"],
           ["#cwTestEmail", "testEmail"], ["#cwCampaignName", "campaignName"],
           ["#cwSendDelay", "delay"], ["#cwSendJitter", "jitter"],
         ];
         pairs.forEach(([sel, key]) => { const el = ORQ(sel); if (el) el.value = cwState[key] || ""; });
         const respect = ORQ("#cwRespectWindow");
         if (respect) respect.checked = !!cwState.respectWindow;
+        // Migración legacy: si hay city/sector singular y no cities/sectors, popúlalo
+        if (!cwState.cities || !cwState.cities.length) {
+          cwState.cities = cwState.city ? [cwState.city] : [];
+        }
+        if (!cwState.sectors || !cwState.sectors.length) {
+          cwState.sectors = cwState.sector ? [cwState.sector] : [];
+        }
+        rerenderCwChips("city");
+        rerenderCwChips("sector");
+        renderCwResultFilters();
         renderWizardResults();
         renderWizardTemplates();
         updateWizardCounts();
         setWizardStep(cwState.step || "search");
       }
 
+      const CW_FILTERS = [
+        { key: "email",     label: "Con email" },
+        { key: "personal",  label: "Email personal" },
+        { key: "web",       label: "Con web" },
+        { key: "phone",     label: "Con teléfono" },
+        { key: "chains",    label: "Sin cadenas" },
+        { key: "new",       label: "Solo nuevos" },
+      ];
+      function renderCwResultFilters() {
+        const c = ORQ("#cwResultFilters");
+        if (!c) return;
+        const active = new Set(cwState.activeFilters || []);
+        c.innerHTML = CW_FILTERS.map((f) =>
+          `<span class="cw-filter-chip ${active.has(f.key) ? "active" : ""}" data-filter="${f.key}">${escapeHtml(f.label)}</span>`
+        ).join("");
+        c.querySelectorAll("[data-filter]").forEach((el) => {
+          el.addEventListener("click", () => {
+            const k = el.dataset.filter;
+            const a = new Set(cwState.activeFilters || []);
+            a.has(k) ? a.delete(k) : a.add(k);
+            cwState.activeFilters = Array.from(a);
+            saveWizardState();
+            renderCwResultFilters();
+            renderWizardResults();
+          });
+        });
+      }
+      function cwPassesFilters(item) {
+        const a = new Set(cwState.activeFilters || []);
+        const email = (item.email || "").trim();
+        if (a.has("email") && !email) return false;
+        if (a.has("personal") && classifyEmail(email) !== "personal") return false;
+        if (a.has("web") && !(item.website || "").trim()) return false;
+        if (a.has("phone") && !(item.phone || "").trim()) return false;
+        if (a.has("chains") && cwIsChain(item.business_name)) return false;
+        if (a.has("new") && cwProspectStatus(email) !== "new") return false;
+        return true;
+      }
+
+      function cwListFor(kind) { return kind === "city" ? cwState.cities : cwState.sectors; }
+      function cwContainerFor(kind) { return kind === "city" ? "#cwCityChips" : "#cwSectorChips"; }
+      function rerenderCwChips(kind) {
+        const c = ORQ(cwContainerFor(kind));
+        if (!c) return;
+        const list = cwListFor(kind);
+        c.innerHTML = (list || []).map((v, i) =>
+          `<span class="cw-chip">${escapeHtml(v)}<button type="button" data-chip-idx="${i}" title="Quitar">×</button></span>`
+        ).join("");
+        c.querySelectorAll("button[data-chip-idx]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const idx = parseInt(btn.dataset.chipIdx, 10);
+            list.splice(idx, 1);
+            rerenderCwChips(kind);
+            saveWizardState();
+          });
+        });
+      }
+      function cwAddChip(kind, value) {
+        const v = (value || "").trim();
+        if (!v) return;
+        const list = cwListFor(kind);
+        if (list.includes(v)) return;
+        list.push(v);
+        rerenderCwChips(kind);
+        saveWizardState();
+      }
+
       function readWizardForm() {
-        cwState.city = ORQ("#cwCity")?.value.trim() || "";
-        cwState.sector = ORQ("#cwSector")?.value.trim() || "";
         cwState.leadCount = parseInt(ORQ("#cwLeadCount")?.value, 10) || 30;
         cwState.testEmail = ORQ("#cwTestEmail")?.value.trim() || "";
         cwState.campaignName = ORQ("#cwCampaignName")?.value.trim() || "";
         cwState.delay = parseFloat(ORQ("#cwSendDelay")?.value) || 0;
         cwState.jitter = parseFloat(ORQ("#cwSendJitter")?.value) || 0;
         cwState.respectWindow = !!ORQ("#cwRespectWindow")?.checked;
+        cwState.city = (cwState.cities && cwState.cities[0]) || "";
+        cwState.sector = (cwState.sectors && cwState.sectors[0]) || "";
         saveWizardState();
         renderWizardSummary();
       }
@@ -4523,33 +4731,84 @@ tbody tr:last-child td { border-bottom: none; }
       }
 
       async function runWizardDiscovery() {
+        // Si hay texto en los inputs sin commit, lo añadimos como chip
+        const cityInputVal = ORQ("#cwCityInput")?.value.trim();
+        if (cityInputVal) { cwAddChip("city", cityInputVal); ORQ("#cwCityInput").value = ""; }
+        const sectorInputVal = ORQ("#cwSectorInput")?.value.trim();
+        if (sectorInputVal) { cwAddChip("sector", sectorInputVal); ORQ("#cwSectorInput").value = ""; }
         readWizardForm();
-        if (!cwState.city || !cwState.sector) { cwToast("Ciudad y sector son obligatorios.", "error"); return; }
-        ORQ("#cwDiscoveryStatus").textContent = "Buscando";
-        ORQ("#cwSearchProgress").style.width = "12%";
+        const cities = (cwState.cities || []).filter(Boolean);
+        const sectors = (cwState.sectors || []).filter(Boolean);
+        if (!cities.length || !sectors.length) { cwToast("Añade al menos una ciudad y un sector.", "error"); return; }
+        const combos = [];
+        cities.forEach((c) => sectors.forEach((s) => combos.push({ city: c, sector: s })));
+        ORQ("#cwDiscoveryStatus").textContent = `Buscando 0/${combos.length}`;
+        ORQ("#cwSearchProgress").style.width = "5%";
         ORQ("#cwSearchLog").style.display = "block";
-        ORQ("#cwSearchLog").textContent = "Preparando scraping...";
-        try {
-          const data = await orFetch("/admin/outreach/discover", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              sector: cwState.sector,
-              ciudad: cwState.city,
-              max: cwState.leadCount,
-              extract_emails: true,
-              import_direct: false,
-              source: "auto",
-            }),
-          });
-          cwState.discoveryJobId = data.job_id;
-          saveWizardState();
-          cwToast("Busqueda lanzada.", "success");
-          watchWizardDiscovery(data.job_id);
-        } catch (err) {
-          ORQ("#cwDiscoveryStatus").textContent = "Error";
-          cwToast(err.message, "error");
+        ORQ("#cwSearchLog").textContent = `Lanzando ${combos.length} combo(s)...`;
+        await refreshCwDedupCache();
+        const allResults = [];
+        const seenEmails = new Set();
+        let i = 0;
+        for (const combo of combos) {
+          i += 1;
+          ORQ("#cwDiscoveryStatus").textContent = `Buscando ${i}/${combos.length} (${combo.sector} en ${combo.city})`;
+          ORQ("#cwSearchProgress").style.width = `${Math.min(95, Math.floor((i / combos.length) * 90))}%`;
+          try {
+            const data = await orFetch("/admin/outreach/discover", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sector: combo.sector,
+                ciudad: combo.city,
+                max: cwState.leadCount,
+                extract_emails: true,
+                import_direct: false,
+                source: "auto",
+              }),
+            });
+            const items = await waitDiscoveryJob(data.job_id, combo);
+            items.forEach((it) => {
+              const e = (it.email || "").toLowerCase().trim();
+              if (e && seenEmails.has(e)) return;
+              if (e) seenEmails.add(e);
+              it.city = it.city || combo.city;
+              it.niche = it.niche || combo.sector;
+              allResults.push(it);
+            });
+          } catch (err) {
+            ORQ("#cwSearchLog").textContent += `\nError en ${combo.sector}/${combo.city}: ${err.message}`;
+          }
         }
+        cwState.results = allResults.map((item) => Object.assign({ selected: cwProspectStatus(item.email) === "new" && !!item.email }, item));
+        cwState.selected = cwState.results.map((it, idx) => cwProspectStatus(it.email) === "new" && it.email ? String(idx) : null).filter(Boolean);
+        ORQ("#cwSearchProgress").style.width = "100%";
+        ORQ("#cwDiscoveryStatus").textContent = "Completado";
+        renderWizardResults();
+        updateWizardCounts();
+        saveWizardState();
+        cwToast(`${allResults.length} empresas únicas tras ${combos.length} combo(s).`, "success");
+        setWizardStep("review");
+      }
+
+      async function waitDiscoveryJob(jobId, combo) {
+        return new Promise((resolve, reject) => {
+          const poll = async () => {
+            try {
+              const j = await orFetch("/admin/outreach/jobs/" + jobId);
+              const log = j.log || "";
+              const match = log.match(/RESULT_JSON: (\[.*\])/);
+              ORQ("#cwSearchLog").textContent = log.slice(-1800) || "Buscando...";
+              if (j.status === "done" && match) {
+                resolve(JSON.parse(match[1]));
+                return;
+              }
+              if (j.status === "error") { reject(new Error("Discovery fallo en " + (combo ? combo.city : ""))); return; }
+              setTimeout(poll, 2500);
+            } catch (err) { reject(err); }
+          };
+          poll();
+        });
       }
 
       async function watchWizardDiscovery(jobId) {
@@ -4589,18 +4848,35 @@ tbody tr:last-child td { border-bottom: none; }
         if (!body) return;
         const items = cwState.results || [];
         if (!items.length) {
-          body.innerHTML = '<tr><td colspan="6" class="empty">Busca empresas para empezar.</td></tr>';
+          body.innerHTML = '<tr><td colspan="7" class="empty">Busca empresas para empezar.</td></tr>';
           updateWizardCounts();
           return;
         }
         const selected = new Set(cwState.selected || []);
-        body.innerHTML = items.map((item, idx) => {
+        const filtered = items.map((it, idx) => ({ it, idx })).filter(({ it }) => cwPassesFilters(it));
+        if (!filtered.length) {
+          body.innerHTML = `<tr><td colspan="7" class="empty">Ningún resultado pasa los filtros activos. ${items.length} ocultos.</td></tr>`;
+          updateWizardCounts();
+          return;
+        }
+        body.innerHTML = filtered.map(({ it: item, idx }) => {
           const score = cwScore(item);
+          const status = cwProspectStatus(item.email);
+          const statusBadge = status === "baja"
+            ? '<span class="cw-status-badge cw-status-baja">BAJA</span>'
+            : status === "exist"
+              ? '<span class="cw-status-badge cw-status-exist">YA EN LISTA</span>'
+              : '<span class="cw-status-badge cw-status-new">NUEVO</span>';
+          const emailType = classifyEmail(item.email);
+          let emailBadge = "";
+          if (emailType === "personal") emailBadge = '<span class="cw-email-badge cw-email-personal" title="Email personal">👤</span>';
+          else if (emailType === "generic") emailBadge = '<span class="cw-email-badge cw-email-generic" title="Email genérico">🏢</span>';
           return `<tr data-cw-row="${idx}">
             <td><input type="checkbox" class="cw-row-check" data-idx="${idx}" ${selected.has(String(idx)) ? "checked" : ""} /></td>
+            <td>${statusBadge}</td>
             <td><input type="text" class="cw-inline" data-field="business_name" data-idx="${idx}" value="${escapeHtml(item.business_name || "")}" /></td>
             <td><input type="url" class="cw-inline" data-field="website" data-idx="${idx}" value="${escapeHtml(item.website || "")}" /></td>
-            <td><input type="email" class="cw-inline" data-field="email" data-idx="${idx}" value="${escapeHtml(item.email || "")}" /></td>
+            <td>${emailBadge}<input type="email" class="cw-inline" data-field="email" data-idx="${idx}" value="${escapeHtml(item.email || "")}" style="display:inline-block;width:calc(100% - 30px);" /></td>
             <td><input type="text" class="cw-inline" data-field="phone" data-idx="${idx}" value="${escapeHtml(item.phone || "")}" /></td>
             <td><span class="cw-score">${score}<span class="cw-score-bar"><span style="width:${score}%"></span></span></span></td>
           </tr>`;
@@ -4658,6 +4934,8 @@ tbody tr:last-child td { border-bottom: none; }
           cwState.importedEmails = Array.from(new Set([...(cwState.importedEmails || []), ...items.map((i) => i.email)]));
           saveWizardState();
           updateWizardCounts();
+          await refreshCwDedupCache();
+          renderWizardResults();
           cwToast(`Importados ${data.added}; omitidos ${data.skipped}.`, "success");
         } catch (err) { cwToast(err.message, "error"); }
       }
@@ -5027,17 +5305,30 @@ tbody tr:last-child td { border-bottom: none; }
         hydrateWizardForm();
         loadTemplates().then(renderWizardTemplates).catch(() => {});
         loadWizardCampaigns();
-        ["#cwCity", "#cwSector", "#cwLeadCount", "#cwTestEmail", "#cwCampaignName", "#cwSendDelay", "#cwSendJitter", "#cwRespectWindow"].forEach((sel) => {
+        ["#cwLeadCount", "#cwTestEmail", "#cwCampaignName", "#cwSendDelay", "#cwSendJitter", "#cwRespectWindow"].forEach((sel) => {
           const el = ORQ(sel);
           if (el) el.addEventListener("input", readWizardForm);
           if (el && el.type === "checkbox") el.addEventListener("change", readWizardForm);
         });
+        const wireChipInput = (inputSel, kind) => {
+          const el = ORQ(inputSel);
+          if (!el) return;
+          const commit = () => { const v = el.value.trim(); if (v) { cwAddChip(kind, v); el.value = ""; } };
+          el.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter" || ev.key === ",") { ev.preventDefault(); commit(); }
+          });
+          el.addEventListener("blur", commit);
+        };
+        wireChipInput("#cwCityInput", "city");
+        wireChipInput("#cwSectorInput", "sector");
+        refreshCwDedupCache();
         ORALL("[data-cw-step-btn]").forEach((btn) => btn.addEventListener("click", () => setWizardStep(btn.dataset.cwStepBtn)));
         ORALL("[data-cw-next]").forEach((btn) => btn.addEventListener("click", () => setWizardStep(btn.dataset.cwNext)));
         ORALL("[data-cw-prev]").forEach((btn) => btn.addEventListener("click", () => setWizardStep(btn.dataset.cwPrev)));
         ORQ("#cwSearchBtn")?.addEventListener("click", runWizardDiscovery);
-        ORQ("#cwSelectAllBtn")?.addEventListener("click", () => { cwState.selected = (cwState.results || []).map((_, i) => String(i)); renderWizardResults(); saveWizardState(); });
-        ORQ("#cwSelectWithEmailBtn")?.addEventListener("click", () => { cwState.selected = (cwState.results || []).map((i, idx) => orDiscEmailRe.test(i.email || "") ? String(idx) : null).filter(Boolean); renderWizardResults(); saveWizardState(); });
+        ORQ("#cwSelectAllBtn")?.addEventListener("click", () => { cwState.selected = (cwState.results || []).map((it, idx) => cwProspectStatus(it.email) === "new" && it.email ? String(idx) : null).filter(Boolean); renderWizardResults(); saveWizardState(); });
+        ORQ("#cwSelectWithEmailBtn")?.addEventListener("click", () => { cwState.selected = (cwState.results || []).map((i, idx) => orDiscEmailRe.test(i.email || "") && cwProspectStatus(i.email) === "new" ? String(idx) : null).filter(Boolean); renderWizardResults(); saveWizardState(); });
+        ORQ("#cwSelectIncludeDupesBtn")?.addEventListener("click", () => { cwState.selected = (cwState.results || []).map((i, idx) => orDiscEmailRe.test(i.email || "") && cwProspectStatus(i.email) !== "baja" ? String(idx) : null).filter(Boolean); renderWizardResults(); saveWizardState(); });
         ORQ("#cwImportSelectedBtn")?.addEventListener("click", () => importWizardProspects(false));
         ORQ("#cwImportAllBtn")?.addEventListener("click", () => importWizardProspects(true));
         ORQ("#cwEditTemplateBtn")?.addEventListener("click", () => { ORQ("#orAdvancedTabs").classList.add("active"); setOutreachTab("templates"); ORQ("#orTplStage").value = cwState.templateStage || "cold"; fillTemplateForm(); });
@@ -5089,6 +5380,101 @@ tbody tr:last-child td { border-bottom: none; }
         if (tab === "campaigns") { loadWizardCampaigns(); loadJobs(); startJobsPolling(); } else { stopJobsPolling(); }
         if (tab === "templates") loadTemplates();
         if (tab === "suppressions") loadSuppressions();
+        if (tab === "autonomous") loadAutonomousConfig();
+      }
+
+      // ----- Modo automático -----
+      let _autonomousState = null;
+      async function loadAutonomousConfig() {
+        try {
+          const data = await orFetch("/admin/outreach/autopilot-config");
+          _autonomousState = data;
+          renderAutonomous(data);
+        } catch (err) {
+          cwToast(err.message, "error");
+        }
+      }
+      function renderAutonomous(d) {
+        const banner = ORQ("#orAutonomousActiveBanner");
+        if (banner) banner.style.display = d.enabled ? "block" : "none";
+        const envWarn = ORQ("#orAutonomousEnvWarning");
+        if (envWarn) envWarn.textContent = d.env_enabled ? "" : "⚠️ OUTREACH_AUTONOMOUS_ENABLED no está activado en el VPS. El worker no correrá hasta que el env esté en true.";
+        const tog = ORQ("#orAutonomousToggle");
+        if (tog) {
+          tog.textContent = d.enabled ? "● Activo · pausar" : "○ Pausado · activar";
+          tog.style.background = d.enabled ? "#16a34a" : "#9ca3af";
+          tog.style.color = "#fff";
+        }
+        ORQ("#orAutonomousColdToday").textContent = `${d.stats.cold_today}/${d.daily_cold_cap}`;
+        ORQ("#orAutonomousImported").textContent = d.stats.imported_24h;
+        ORQ("#orAutonomousLastRun").textContent = d.last_discovery_at ? new Date(d.last_discovery_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) : "Nunca";
+        ORQ("#orAutonomousDailyNew").value = d.daily_new_target;
+        ORQ("#orAutonomousDailyCold").value = d.daily_cold_cap;
+        ORQ("#orAutonomousAutoFu").checked = d.auto_followups;
+        const body = ORQ("#orAutonomousTargetsBody");
+        const targets = d.targets || [];
+        ORQ("#orAutonomousTargetsCount").textContent = `${targets.length} combo${targets.length === 1 ? "" : "s"}`;
+        if (!targets.length) {
+          body.innerHTML = '<tr><td colspan="3" class="empty">Sin objetivos. Añade abajo.</td></tr>';
+        } else {
+          body.innerHTML = targets.map((t, i) =>
+            `<tr><td>${escapeHtml(t.sector)}</td><td>${escapeHtml(t.city)}</td><td style="text-align:right;"><button class="ghost small" type="button" data-target-remove="${i}">Quitar</button></td></tr>`
+          ).join("");
+          body.querySelectorAll("[data-target-remove]").forEach((b) => {
+            b.addEventListener("click", () => {
+              const idx = parseInt(b.dataset.targetRemove, 10);
+              const next = (_autonomousState.targets || []).slice();
+              next.splice(idx, 1);
+              saveAutonomousConfig({ targets: next });
+            });
+          });
+        }
+      }
+      async function saveAutonomousConfig(patch) {
+        try {
+          const data = await orFetch("/admin/outreach/autopilot-config", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(patch),
+          });
+          _autonomousState = data;
+          renderAutonomous(data);
+          cwToast("Configuración guardada.", "success");
+        } catch (err) { cwToast(err.message, "error"); }
+      }
+      function wireAutonomous() {
+        ORQ("#orAutonomousToggle")?.addEventListener("click", () => {
+          if (!_autonomousState) return;
+          const turningOn = !_autonomousState.enabled;
+          if (turningOn && !confirm("¿Activar modo automático? El sistema enviará cold y follow-ups sin confirmación.")) return;
+          saveAutonomousConfig({ enabled: turningOn });
+        });
+        ORQ("#orAutonomousRefresh")?.addEventListener("click", loadAutonomousConfig);
+        ORQ("#orAutonomousTickBtn")?.addEventListener("click", async () => {
+          try {
+            await orFetch("/admin/outreach/autopilot-tick", { method: "POST" });
+            cwToast("Ronda lanzada. Revisa logs y stats en unos segundos.", "success");
+            setTimeout(loadAutonomousConfig, 3000);
+          } catch (err) { cwToast(err.message, "error"); }
+        });
+        ORQ("#orAutonomousSaveBtn")?.addEventListener("click", () => {
+          saveAutonomousConfig({
+            daily_new_target: parseInt(ORQ("#orAutonomousDailyNew").value, 10),
+            daily_cold_cap: parseInt(ORQ("#orAutonomousDailyCold").value, 10),
+            auto_followups: !!ORQ("#orAutonomousAutoFu").checked,
+          });
+        });
+        ORQ("#orAutonomousAddTargetBtn")?.addEventListener("click", () => {
+          const sector = ORQ("#orAutonomousNewSector").value.trim();
+          const city = ORQ("#orAutonomousNewCity").value.trim();
+          if (!sector || !city) { cwToast("Sector y ciudad obligatorios.", "error"); return; }
+          const next = (_autonomousState?.targets || []).slice();
+          if (next.find((t) => t.sector === sector && t.city === city)) { cwToast("Ya existe ese combo.", "info"); return; }
+          next.push({ sector, city });
+          saveAutonomousConfig({ targets: next });
+          ORQ("#orAutonomousNewSector").value = "";
+          ORQ("#orAutonomousNewCity").value = "";
+        });
       }
 
       // ----- Dashboard -----
@@ -6147,6 +6533,7 @@ tbody tr:last-child td { border-bottom: none; }
 
       // ----- Wiring -----
       wireWizard();
+      wireAutonomous();
       ORALL("[data-outreach-tab]").forEach((btn) => btn.addEventListener("click", () => setOutreachTab(btn.dataset.outreachTab)));
       ORQ("#orRepliesBannerBtn")?.addEventListener("click", () => {
         setOutreachTab("prospects");
