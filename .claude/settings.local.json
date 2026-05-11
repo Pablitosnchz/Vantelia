@@ -7,7 +7,9 @@
       "Bash(xargs wc *)",
       "PowerShell(& \"e:\\\\Vantelia\\\\scripts\\\\deploy-ftp.ps1\")",
       "PowerShell(python \"e:\\\\Vantelia\\\\scripts\\\\fix-favicon.py\")",
-      "Bash(python -m pytest tests/test_api_smoke.py -q)"
+      "Bash(python -m pytest tests/test_api_smoke.py -q)",
+      "Bash(curl -s \"https://www.vantelia.es/demo/\")",
+      "Bash(git add *)"
     ]
   }
 }
