@@ -2122,13 +2122,19 @@ tbody tr:last-child td { border-bottom: none; }
           </div>
 
           <div class="actions cw-advanced-tabs" id="orAdvancedTabs">
-            <button class="ghost small" type="button" data-outreach-tab="autopilot">Autopiloto</button>
-            <button class="ghost small" type="button" data-outreach-tab="prospects">Prospects</button>
+            <button class="ghost small" type="button" data-outreach-tab="autopilot">Autopiloto <span class="or-tab-badge" data-badge="autopilot" style="display:none;"></span></button>
+            <button class="ghost small" type="button" data-outreach-tab="prospects">Prospects <span class="or-tab-badge" data-badge="prospects" style="display:none;"></span></button>
             <button class="ghost small" type="button" data-outreach-tab="campaigns">Campanas</button>
             <button class="ghost small" type="button" data-outreach-tab="discovery">Discovery</button>
             <button class="ghost small" type="button" data-outreach-tab="templates">Plantillas</button>
-            <button class="ghost small" type="button" data-outreach-tab="suppressions">Bajas</button>
+            <button class="ghost small" type="button" data-outreach-tab="suppressions">Bajas <span class="or-tab-badge" data-badge="suppressions" style="display:none;"></span></button>
           </div>
+          <style>
+            .or-tab-badge { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 6px; margin-left:4px; border-radius:10px; background:var(--accent); color:#fff; font-size:11px; font-weight:700; vertical-align:middle; }
+            .or-tab-badge.warning { background:#f59e0b; }
+            .or-tab-badge.danger { background:#dc2626; }
+            .or-tab-badge.success { background:#16a34a; }
+          </style>
 
           <div class="campaign-wizard outreach-panel" data-outreach-panel="campaigns" id="campaignWizard">
             <div class="cw-campaigns">
@@ -2210,6 +2216,18 @@ tbody tr:last-child td { border-bottom: none; }
 
           <!-- Autopilot -->
           <div data-outreach-panel="autopilot" class="outreach-panel active">
+
+            <!-- Banner respuestas nuevas -->
+            <div id="orRepliesBanner" style="display:none;margin-bottom:14px;padding:14px 18px;border-radius:10px;background:linear-gradient(135deg,#a855f7,#6366f1);color:#fff;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:22px;">💬</span>
+                <div>
+                  <strong id="orRepliesBannerText" style="font-size:15px;">0 respuestas esta semana</strong>
+                  <p style="margin:2px 0 0;font-size:12px;opacity:.9;">Revisa los prospects que han respondido y márcalos como cliente o cerrado.</p>
+                </div>
+              </div>
+              <button class="ghost small" type="button" id="orRepliesBannerBtn" style="background:rgba(255,255,255,0.2);color:#fff;border-color:rgba(255,255,255,0.4);">Ver respuestas</button>
+            </div>
 
             <!-- A) Stats bar -->
             <div class="card" style="padding:14px 18px;margin-bottom:14px;">
@@ -2367,6 +2385,7 @@ tbody tr:last-child td { border-bottom: none; }
                     <th style="text-align:left;padding:8px;">Ciudad</th>
                     <th style="text-align:left;padding:8px;">Status</th>
                     <th style="text-align:left;padding:8px;">Stage</th>
+                    <th style="text-align:left;padding:8px;" title="cold · fu1 · fu2 · breakup">Secuencia</th>
                     <th style="text-align:left;padding:8px;">Ultimo envio</th>
                     <th style="text-align:right;padding:8px;">V.es</th>
                     <th style="text-align:right;padding:8px;">Re</th>
@@ -2514,6 +2533,10 @@ tbody tr:last-child td { border-bottom: none; }
             <summary style="cursor:pointer;font-size:13px;color:#637c8e;">Version texto plano</summary>
             <pre id="orSendPreviewText" style="white-space:pre-wrap;font-family:Inter,Helvetica,Arial,sans-serif;font-size:12px;background:#f9fbfd;border:1px solid #e4eaf2;border-radius:8px;padding:12px;margin-top:6px;"></pre>
           </details>
+          <div id="orSendPreviewActions" class="actions" style="margin-top:14px;justify-content:flex-end;display:none;">
+            <button class="ghost small" type="button" id="orSendPreviewCancel">Cancelar</button>
+            <button class="secondary small" type="button" id="orSendPreviewConfirm">Enviar</button>
+          </div>
         </div>
       </div>
 
@@ -5042,6 +5065,18 @@ tbody tr:last-child td { border-bottom: none; }
         });
       }
 
+      function updateTabBadge(tab, count, variant) {
+        ORALL(`.or-tab-badge[data-badge="${tab}"]`).forEach((el) => {
+          if (count && count > 0) {
+            el.textContent = count;
+            el.style.display = "";
+            el.className = "or-tab-badge" + (variant ? " " + variant : "");
+          } else {
+            el.style.display = "none";
+          }
+        });
+      }
+
       function setOutreachTab(tab) {
         ORALL("[data-outreach-tab]").forEach((btn) => {
           btn.classList.toggle("active", btn.dataset.outreachTab === tab);
@@ -5195,6 +5230,26 @@ tbody tr:last-child td { border-bottom: none; }
         } catch (err) {
           box.innerHTML = `<div class="muted" style="color:#b91c1c;">${escapeHtml(err.message)}</div>`;
         }
+        loadRepliesBanner();
+      }
+
+      async function loadRepliesBanner() {
+        const banner = ORQ("#orRepliesBanner");
+        if (!banner) return;
+        try {
+          const data = await orFetch("/admin/outreach/prospects?status=replied&days=7&page_size=200");
+          const count = (data.items || []).length;
+          if (count > 0) {
+            ORQ("#orRepliesBannerText").textContent = `${count} ${count === 1 ? "prospect ha respondido" : "prospects han respondido"} esta semana`;
+            banner.style.display = "flex";
+            updateTabBadge("prospects", count, "success");
+          } else {
+            banner.style.display = "none";
+            updateTabBadge("prospects", 0);
+          }
+        } catch (err) {
+          banner.style.display = "none";
+        }
       }
 
       async function runAutopilot() {
@@ -5217,10 +5272,7 @@ tbody tr:last-child td { border-bottom: none; }
         }
       }
 
-      async function approveAutopilotStage(stage, selectedEmails) {
-        const emails = (selectedEmails && selectedEmails.length ? selectedEmails : (((orState.autopilot || {}).approval_groups || {})[stage] || [])).slice(0, 25);
-        if (!stage || !emails.length) return;
-        if (!confirm(`Vas a enviar ${stage} a ${emails.length} prospects priorizados. Confirmar?`)) return;
+      async function _doApproveStage(stage, emails) {
         try {
           const data = await orFetch("/admin/outreach/send", {
             method: "POST",
@@ -5238,7 +5290,45 @@ tbody tr:last-child td { border-bottom: none; }
           });
           cwToast(`${stage} aprobado. Job #${data.job_id}`, "success");
           loadAutopilot();
+          loadFollowupQueue();
           loadWizardCampaigns();
+        } catch (err) {
+          cwToast(err.message, "error");
+        }
+      }
+
+      async function approveAutopilotStage(stage, selectedEmails) {
+        const emails = (selectedEmails && selectedEmails.length ? selectedEmails : (((orState.autopilot || {}).approval_groups || {})[stage] || [])).slice(0, 25);
+        if (!stage || !emails.length) return;
+        if (emails.length === 1) {
+          await openSendPreviewWithConfirm(stage, emails[0], () => _doApproveStage(stage, emails));
+          return;
+        }
+        if (!confirm(`Vas a enviar ${stage} a ${emails.length} prospects priorizados. Confirmar?`)) return;
+        await _doApproveStage(stage, emails);
+      }
+
+      async function openSendPreviewWithConfirm(stage, email, onConfirm) {
+        try {
+          const data = await orFetch("/admin/outreach/prospects/" + encodeURIComponent(email) + "/render?stage=" + encodeURIComponent(stage));
+          showSendPreview(data);
+          const actions = ORQ("#orSendPreviewActions");
+          if (actions) actions.style.display = "";
+          const confirmBtn = ORQ("#orSendPreviewConfirm");
+          const cancelBtn = ORQ("#orSendPreviewCancel");
+          const closeModal = () => {
+            ORQ("#orSendPreview").style.display = "none";
+            if (actions) actions.style.display = "none";
+          };
+          const newConfirm = confirmBtn.cloneNode(true);
+          confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+          const newCancel = cancelBtn.cloneNode(true);
+          cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+          newConfirm.addEventListener("click", async () => {
+            closeModal();
+            await onConfirm();
+          });
+          newCancel.addEventListener("click", closeModal);
         } catch (err) {
           cwToast(err.message, "error");
         }
@@ -5359,6 +5449,7 @@ tbody tr:last-child td { border-bottom: none; }
             if (ready.length) { countBadge.textContent = ready.length + " listos"; countBadge.style.display = ""; }
             else { countBadge.style.display = "none"; }
           }
+          updateTabBadge("autopilot", ready.length, ready.length > 0 ? "warning" : "");
           if (approveAllBtn) {
             approveAllBtn.style.display = ready.length > 1 ? "" : "none";
           }
@@ -5572,7 +5663,7 @@ tbody tr:last-child td { border-bottom: none; }
           orState.total = data.total;
           ORQ("#orProspectCount").textContent = `${data.total} prospects`;
           const body = ORQ("#orProspectsBody");
-          if (!data.items.length) { body.innerHTML = '<tr><td colspan="8" class="empty">Sin resultados.</td></tr>'; return; }
+          if (!data.items.length) { body.innerHTML = '<tr><td colspan="10" class="empty">Sin resultados.</td></tr>'; return; }
           const _stageThresholds = { cold: 0, fu1: 4, fu2: 5, breakup: 6 };
           function _nextStageDue(p) {
             const status = p.status || "new";
@@ -5589,7 +5680,10 @@ tbody tr:last-child td { border-bottom: none; }
           body.innerHTML = data.items.map((p) => {
             const status = p.status || "new";
             const badgeCls = ["engaged","replied","client","lost"].includes(status) ? status : "";
-            const last = p.last_sent_at ? new Date(p.last_sent_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) : "-";
+            const lastDate = p.last_sent_at ? new Date(p.last_sent_at) : null;
+            const last = lastDate ? lastDate.toLocaleDateString("es-ES", { day:"2-digit", month:"2-digit", year:"2-digit", timeZone: "Europe/Madrid" }) : "-";
+            const daysAgo = lastDate ? Math.floor((Date.now() - lastDate.getTime()) / 86400000) : null;
+            const lastHtml = lastDate ? `${last} <span class="muted" style="font-size:11px;">(${daysAgo}d)</span>` : "-";
             const nextStage = _nextStageDue(p);
             let stageCellHtml;
             if (!nextStage) {
@@ -5599,6 +5693,18 @@ tbody tr:last-child td { border-bottom: none; }
             } else {
               stageCellHtml = `<span class="or-badge" style="color:var(--soft);">${escapeHtml(nextStage.stage)} en ${nextStage.daysLeft}d</span>`;
             }
+            const seqStages = [
+              { key:"cold", sent: (p.cold_sent || 0) > 0 },
+              { key:"fu1",  sent: (p.fu1_sent  || 0) > 0 },
+              { key:"fu2",  sent: (p.fu2_sent  || 0) > 0 },
+              { key:"brk",  sent: (p.breakup_sent || 0) > 0 },
+            ];
+            const nextKey = nextStage && nextStage.ready ? (nextStage.stage === "breakup" ? "brk" : nextStage.stage) : "";
+            const seqHtml = seqStages.map((s) => {
+              if (s.sent) return `<span title="${s.key} enviado" style="color:#16a34a;font-weight:700;">✓</span>`;
+              if (s.key === nextKey) return `<span title="${s.key} listo" style="color:#f59e0b;font-weight:700;">→</span>`;
+              return `<span title="${s.key} pendiente" style="color:#9ca3af;">·</span>`;
+            }).join('<span style="color:#d1d5db;margin:0 1px;">·</span>');
             return `<tr class="or-prospect-row" data-email="${escapeHtml(p.email)}">
               <td>${escapeHtml(p.business_name)}</td>
               <td>${escapeHtml(p.email)}${p.suppressed ? ' <span class="or-badge lost">BAJA</span>' : ''}</td>
@@ -5606,7 +5712,8 @@ tbody tr:last-child td { border-bottom: none; }
               <td>${escapeHtml(p.city || '')}</td>
               <td><span class="or-badge ${badgeCls}">${escapeHtml(status)}</span></td>
               <td>${stageCellHtml}</td>
-              <td>${last}</td>
+              <td style="font-family:monospace;font-size:12px;letter-spacing:1px;white-space:nowrap;">${seqHtml}</td>
+              <td style="white-space:nowrap;">${lastHtml}</td>
               <td style="text-align:right;">${p.vantelia_clicks || 0}</td>
               <td style="text-align:right;">${p.replies}</td>
             </tr>`;
@@ -5631,6 +5738,37 @@ tbody tr:last-child td { border-bottom: none; }
             const badge = isVanteliaClick ? ' <span class="pill success">vantelia.es</span>' : "";
             return `<li>${new Date(e.ts).toLocaleString("es-ES", { timeZone: "Europe/Madrid" })} <strong>${escapeHtml(e.type)}</strong>${badge}${e.url ? ' -> ' + escapeHtml(e.url) : ''}</li>`;
           }).join("") || "<li class='muted'>Sin eventos.</li>";
+
+          const TL_ICONS = { send: "📤", open: "👁", click: "🔗", reply: "💬", reply_intent: "↩", demo_visit: "🎬", demo_generated: "✨", suppress: "🚫" };
+          const TL_COLOR = { send: "#3b82f6", open: "#16a34a", click: "#f59e0b", reply: "#a855f7", reply_intent: "#a855f7", demo_visit: "#06b6d4", demo_generated: "#06b6d4", suppress: "#dc2626" };
+          const fmtRel = (ts) => {
+            const d = (Date.now() - new Date(ts).getTime()) / 86400000;
+            if (d < 1) { const h = Math.floor(d * 24); return h <= 0 ? "ahora" : `hace ${h}h`; }
+            if (d < 30) return `hace ${Math.floor(d)}d`;
+            if (d < 365) return `hace ${Math.floor(d / 30)} meses`;
+            return `hace ${Math.floor(d / 365)}a`;
+          };
+          const fmtAbs = (ts) => new Date(ts).toLocaleString("es-ES", { timeZone: "Europe/Madrid" });
+          const tlItems = [];
+          (data.sends || []).forEach((s) => tlItems.push({ ts: s.sent_at, type: "send", label: `${(s.stage||"").toUpperCase()} · ${s.subject || ""}`, sub: s.mode || "" }));
+          (data.events || []).forEach((e) => {
+            const isVanteliaClick = e.type === "click" && /^https:\/\/(www\.)?vantelia\.es/i.test(e.url || "");
+            tlItems.push({ ts: e.ts, type: e.type, label: e.type === "click" ? (isVanteliaClick ? "Click a vantelia.es" : "Click") : (e.type.charAt(0).toUpperCase() + e.type.slice(1)), sub: e.url || "" });
+          });
+          tlItems.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+          const timelineHtml = tlItems.length ? tlItems.map((it) => {
+            const color = TL_COLOR[it.type] || "#6b7280";
+            const icon = TL_ICONS[it.type] || "•";
+            const subHtml = it.sub ? `<div class="muted" style="font-size:11px;margin-top:2px;word-break:break-all;">${escapeHtml(it.sub.slice(0, 120))}${it.sub.length > 120 ? "…" : ""}</div>` : "";
+            return `<div style="display:flex;gap:10px;padding:8px 0;border-left:2px solid ${color};padding-left:12px;margin-left:6px;position:relative;">
+              <span style="position:absolute;left:-9px;top:10px;width:16px;height:16px;border-radius:50%;background:${color};color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;">${icon}</span>
+              <div style="flex:1;">
+                <div style="font-size:13px;"><strong>${escapeHtml(it.label)}</strong></div>
+                ${subHtml}
+              </div>
+              <div class="muted" style="font-size:11px;white-space:nowrap;" title="${escapeHtml(fmtAbs(it.ts))}">${escapeHtml(fmtRel(it.ts))}</div>
+            </div>`;
+          }).join("") : '<p class="muted" style="font-size:12px;margin:8px 0;">Sin actividad.</p>';
           const sup = data.suppression ? `<p><strong>SUPRIMIDO:</strong> ${escapeHtml(data.suppression.reason)} (${data.suppression.added_at})</p>` : "";
           const p = data.prospect || {};
           ORQ("#orDrawerBody").innerHTML = `
@@ -5657,8 +5795,9 @@ tbody tr:last-child td { border-bottom: none; }
             <div class="actions" style="margin-top:10px;">
               <button class="secondary small" type="button" id="orDrawerSaveAll">Guardar cambios</button>
             </div>
-            <h4 style="margin-top:18px;">Envios</h4><ul style="font-size:13px;">${sends}</ul>
-            <h4>Eventos</h4><ul style="font-size:13px;">${events}</ul>
+            <h4 style="margin-top:18px;">Actividad</h4>
+            <div style="margin:8px 0 12px 0;">${timelineHtml}</div>
+            <details style="margin-bottom:10px;"><summary class="muted" style="cursor:pointer;font-size:12px;">Ver envíos detallados</summary><ul style="font-size:13px;margin-top:6px;">${sends}</ul></details>
             <div class="actions">
               <button class="ghost small" type="button" id="orDrawerReplyBtn">Marcar como respondido</button>
               <button class="ghost small" type="button" id="orDrawerSuppressBtn">Suprimir</button>
@@ -6009,6 +6148,12 @@ tbody tr:last-child td { border-bottom: none; }
       // ----- Wiring -----
       wireWizard();
       ORALL("[data-outreach-tab]").forEach((btn) => btn.addEventListener("click", () => setOutreachTab(btn.dataset.outreachTab)));
+      ORQ("#orRepliesBannerBtn")?.addEventListener("click", () => {
+        setOutreachTab("prospects");
+        const f = ORQ("#orFilterStatus");
+        if (f) f.value = "replied";
+        if (ORQ("#orApplyFilters")) ORQ("#orApplyFilters").click();
+      });
       ORQ("#orRefreshStats")?.addEventListener("click", () => { loadStats(); loadAutopilot(); loadHotLeads(); loadFollowupQueue(); loadAbStats(); });
       ORQ("#orExportCsv")?.addEventListener("click", (ev) => { ev.preventDefault(); window.open("/admin/outreach/export.csv", "_blank"); });
       const _hotRefreshBtn = ORQ("#orHotLeadsRefresh");

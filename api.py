@@ -13395,6 +13395,7 @@ def outreach_list_prospects(
     source: str = "",
     stage: str = "",
     clicked_vantelia: bool = False,
+    days: int = 0,
     page: int = 1,
     page_size: int = 50,
 ):
@@ -13420,6 +13421,10 @@ def outreach_list_prospects(
     if source:
         where.append("p.source LIKE ?")
         params.append(f"%{source}%")
+    if days and days > 0:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=int(days))).isoformat(timespec="seconds")
+        where.append("p.updated_at >= ?")
+        params.append(cutoff)
     if clicked_vantelia:
         where.append(
             """EXISTS (
@@ -13437,6 +13442,10 @@ def outreach_list_prospects(
         SELECT p.*,
                (SELECT stage FROM sends s WHERE s.email=p.email ORDER BY id DESC LIMIT 1) AS last_stage,
                (SELECT sent_at FROM sends s WHERE s.email=p.email ORDER BY id DESC LIMIT 1) AS last_sent_at,
+               (SELECT COUNT(*) FROM sends s WHERE s.email=p.email AND s.mode='send' AND s.stage='cold') AS cold_sent,
+               (SELECT COUNT(*) FROM sends s WHERE s.email=p.email AND s.mode='send' AND s.stage='fu1') AS fu1_sent,
+               (SELECT COUNT(*) FROM sends s WHERE s.email=p.email AND s.mode='send' AND s.stage='fu2') AS fu2_sent,
+               (SELECT COUNT(*) FROM sends s WHERE s.email=p.email AND s.mode='send' AND s.stage='breakup') AS breakup_sent,
                (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='open') AS opens,
                (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='click') AS clicks,
                (SELECT COUNT(*) FROM events e WHERE e.email=p.email AND e.type='click'
@@ -13475,6 +13484,10 @@ def outreach_list_prospects(
             "score": r["score"] if "score" in r.keys() else 0,
             "last_stage": r["last_stage"],
             "last_sent_at": r["last_sent_at"],
+            "cold_sent": r["cold_sent"],
+            "fu1_sent": r["fu1_sent"],
+            "fu2_sent": r["fu2_sent"],
+            "breakup_sent": r["breakup_sent"],
             "opens": r["opens"],
             "clicks": r["clicks"],
             "vantelia_clicks": r["vantelia_clicks"],
