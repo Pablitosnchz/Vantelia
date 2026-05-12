@@ -222,21 +222,57 @@ def pick_subject_with_variant(stage: str, p: Prospect) -> tuple[str, str]:
     return fmt_subject(template, p), variant
 
 
+VANTELIA_SIGNATURE = {
+    "company_name": "Vantelia",
+    "phone": "+34 675 802 001",
+    "phone_href": "+34675802001",
+    "email": "info@vantelia.es",
+    "website": "https://vantelia.es",
+    "website_label": "vantelia.es",
+    "address": "Calle Garabay 7, Torrejon de Ardoz, 28850 Madrid",
+    "logo_url": os.getenv(
+        "VANTELIA_EMAIL_LOGO_URL",
+        "https://app.vantelia.es/brand-assets/Logo_Letra.png",
+    ).strip() or "https://app.vantelia.es/brand-assets/Logo_Letra.png",
+}
+
+
 SIGNATURE_TEXT = (
-    "Pablo Sanchez\n"
-    "Vantelia\n"
-    "https://www.vantelia.es\n"
+    f"{VANTELIA_SIGNATURE['company_name']}\n"
+    f"{VANTELIA_SIGNATURE['phone']}\n"
+    f"{VANTELIA_SIGNATURE['email']}\n"
+    f"{VANTELIA_SIGNATURE['website']}\n"
+    f"{VANTELIA_SIGNATURE['address']}\n"
 )
 
 
 def signature_html(stage: str) -> str:
-    # Firma plana tipo email humano: sin tablas, sin gradientes, sin UTMs.
+    # Firma corporativa compatible con clientes de email: tabla simple e inline styles.
+    signature = VANTELIA_SIGNATURE
     return (
-        '<p style="margin:18px 0 0 0;">'
-        'Un saludo,<br>'
-        'Pablo Sanchez<br>'
-        'Vantelia &middot; <a href="https://www.vantelia.es">vantelia.es</a>'
-        '</p>'
+        '<table role="presentation" cellpadding="0" cellspacing="0" '
+        'style="width:100%;max-width:560px;margin-top:16px;border-top:1px solid #e5e7eb;'
+        'padding-top:18px;font-family:Arial,Helvetica,sans-serif;">'
+        '<tr>'
+        '<td style="padding:0 0 12px 0;">'
+        f'<img src="{html_lib.escape(signature["logo_url"], quote=True)}" '
+        f'alt="{html_lib.escape(signature["company_name"], quote=True)}" '
+        'style="display:block;max-width:150px;height:auto;border:0;">'
+        '</td>'
+        '</tr>'
+        '<tr>'
+        '<td style="font-size:14px;line-height:1.6;color:#1f2937;">'
+        f'<strong style="font-size:15px;color:#111827;">{html_lib.escape(signature["company_name"])}</strong><br>'
+        f'<a href="tel:{html_lib.escape(signature["phone_href"], quote=True)}" '
+        f'style="color:#00a9cc;text-decoration:none;font-weight:700;">{html_lib.escape(signature["phone"])}</a><br>'
+        f'<a href="mailto:{html_lib.escape(signature["email"], quote=True)}" '
+        f'style="color:#00a9cc;text-decoration:none;font-weight:700;">{html_lib.escape(signature["email"])}</a><br>'
+        f'<a href="{html_lib.escape(signature["website"], quote=True)}" '
+        f'style="color:#00a9cc;text-decoration:none;font-weight:700;">{html_lib.escape(signature["website_label"])}</a><br>'
+        f'<span style="color:#6b7280;">{html_lib.escape(signature["address"])}</span>'
+        '</td>'
+        '</tr>'
+        '</table>'
     )
 
 

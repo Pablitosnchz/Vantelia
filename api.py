@@ -12551,6 +12551,14 @@ class OutreachAutopilotSendPayload(BaseModel):
     apply_status: bool = False
 
 
+class OutreachManualEmailPayload(BaseModel):
+    recipient: EmailStr
+    subject: str = Field(..., min_length=1, max_length=180)
+    text: str = Field(default="", max_length=50000)
+    html: str = Field(default="", max_length=200000)
+    css: str = Field(default="", max_length=50000)
+
+
 # ----- Stats -----
 
 @app.get("/admin/outreach/stats", dependencies=[Depends(_require_admin_token)])
@@ -13916,8 +13924,6 @@ def _outreach_admin_preview_html(html: str) -> str:
 def outreach_render_prospect_email(email: str, stage: str = "cold", send_id: int = 0):
     if not OUTREACH_AVAILABLE:
         raise HTTPException(status_code=503, detail="Outreach no disponible.")
-    if stage not in OUTREACH_STAGES:
-        raise HTTPException(status_code=400, detail="Stage invalido.")
     email = email.lower().strip()
     from outreach_campaign import render_with_override, load_template_overrides  # type: ignore
     with _outreach_db() as conn:
@@ -13938,6 +13944,8 @@ def outreach_render_prospect_email(email: str, stage: str = "cold", send_id: int
                     "send_id": send_id,
                     "snapshot": True,
                 }
+        if stage not in OUTREACH_STAGES:
+            raise HTTPException(status_code=400, detail="Stage invalido.")
         row = conn.execute("SELECT * FROM prospects WHERE email=?", (email,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Prospect no encontrado.")
@@ -15225,6 +15233,80 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
             conn.close()
         except Exception:
             pass
+
+def _manual_email_html_document(html_body: str, css_body: str) -> str:
+    html_body = (html_body or "").strip()
+    css_body = (css_body or "").strip()
+    if not html_body:
+        html_body = '<div class="email-shell"><div class="email-card"><div class="brand">Vantelia</div><p></p></div></div>'
+    style_tag = f"<style>{css_body}</style>" if css_body else ""
+    if re.search(r"<!doctype|<html[\s>]", html_body, flags=re.IGNORECASE):
+        if style_tag and re.search(r"</head>", html_body, flags=re.IGNORECASE):
+            return re.sub(r"</head>", f"{style_tag}</head>", html_body, count=1, flags=re.IGNORECASE)
+        return f"{style_tag}{html_body}"
+    return (
+        "<!doctype html><html><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+        f"{style_tag}</head><body>{html_body}</body></html>"
+    )
+
+
+@app.post("/admin/outreach/manual-email/send", dependencies=[Depends(_require_admin_token)])
+def sendManualAcquisitionEmail(payload: OutreachManualEmailPayload):
+    recipient = str(payload.recipient).strip().lower()
+    subject = payload.subject.strip()
+    text_body = payload.text.strip()
+    html_body = payload.html.strip()
+    css_body = payload.css.strip()
+    if not subject:
+        raise HTTPException(status_code=400, detail="El asunto es obligatorio.")
+    if not text_body and not html_body:
+        raise HTTPException(status_code=400, detail="Anade texto plano o HTML antes de enviar.")
+
+    final_html = _manual_email_html_document(html_body, css_body) if html_body or css_body else ""
+    now = _outreach_now()
+    message_id = ""
+
+    if OUTREACH_AVAILABLE:
+        with _outreach_db() as conn:
+            suppressed = conn.execute("SELECT reason FROM suppressions WHERE email=?", (recipient,)).fetchone()
+            if suppressed:
+                raise HTTPException(status_code=409, detail=f"El destinatario esta en bajas: {suppressed['reason'] or 'manual'}")
+
+    try:
+        if OUTREACH_AVAILABLE:
+            settings = outreach_smtp_settings()
+            msg = outreach_build_message(recipient, subject, text_body or " ", final_html, settings)
+            outreach_smtp_send(msg, settings)
+            message_id = msg["Message-ID"] or ""
+        else:
+            _send_email_message(recipient, subject, text_body or " ", final_html)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("No se pudo enviar email manual de captacion a %s: %s", recipient, exc)
+        raise HTTPException(status_code=502, detail=f"No se pudo enviar el email: {exc}") from exc
+
+    recorded = False
+    if OUTREACH_AVAILABLE:
+        with _outreach_db() as conn:
+            conn.execute(
+                """INSERT INTO sends (email, stage, subject, body_text, body_html, sent_at, mode, message_id)
+                   VALUES (?, 'manual', ?, ?, ?, ?, 'send', ?)""",
+                (recipient, subject, text_body, final_html, now, message_id),
+            )
+            prospect = conn.execute("SELECT email FROM prospects WHERE email=?", (recipient,)).fetchone()
+            if prospect:
+                conn.execute(
+                    "INSERT INTO events (email, type, stage, url, ts, ua, ip) VALUES (?, 'manual_email', 'manual', ?, ?, '', '')",
+                    (recipient, subject[:500], now),
+                )
+                conn.execute(
+                    "UPDATE prospects SET status=CASE WHEN status='new' THEN 'contacted' ELSE status END, updated_at=? WHERE email=?",
+                    (now, recipient),
+                )
+                recorded = True
+            conn.commit()
+
+    return {"ok": True, "message_id": message_id, "recorded": recorded, "sent_at": now}
 
 
 @app.post("/admin/outreach/send", dependencies=[Depends(_require_admin_token)])
