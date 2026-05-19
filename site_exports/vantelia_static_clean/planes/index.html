@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
 
 <head>
@@ -948,7 +948,7 @@
           </div>
           <div class="price-fineprint">Mensual · IVA no incluido · Sin permanencia</div>
 
-          <a href="https://app.vantelia.es/acceso?mode=signup&plan=starter" class="btn btn-ghost plan-cta" target="_blank" rel="noopener" data-plan="starter" data-plan-label="Starter">Empezar gratis →</a>
+          <a href="https://app.vantelia.es/acceso" class="btn btn-ghost plan-cta" target="_blank" rel="noopener" data-plan="starter" data-plan-label="Starter">Empezar gratis →</a>
 
           <ul class="plan-feats">
             <li class="plan-feat"><span class="feat-check">✓</span> <strong>1.000 mensajes/mes</strong></li>
@@ -981,7 +981,7 @@
           </div>
           <div class="price-fineprint">Mensual · IVA no incluido · Sin permanencia</div>
 
-          <a href="https://app.vantelia.es/acceso?mode=signup&plan=pro" class="btn btn-primary plan-cta" target="_blank" rel="noopener" data-plan="pro" data-plan-label="Pro">Empezar gratis →</a>
+          <a href="https://app.vantelia.es/acceso" class="btn btn-primary plan-cta" target="_blank" rel="noopener" data-plan="pro" data-plan-label="Pro">Empezar gratis →</a>
 
           <ul class="plan-feats">
             <li class="plan-feat"><span class="feat-check">✓</span> <strong>5.000 mensajes/mes</strong></li>
@@ -1012,7 +1012,7 @@
           </div>
           <div class="price-fineprint">Mensual · IVA no incluido · Sin permanencia</div>
 
-          <a href="https://app.vantelia.es/acceso?mode=signup&plan=business" class="btn btn-ghost plan-cta" target="_blank" rel="noopener" data-plan="business" data-plan-label="Business">Empezar gratis →</a>
+          <a href="https://app.vantelia.es/acceso" class="btn btn-ghost plan-cta" target="_blank" rel="noopener" data-plan="business" data-plan-label="Business">Empezar gratis →</a>
 
           <ul class="plan-feats">
             <li class="plan-feat"><span class="feat-check">✓</span> <strong>25.000 mensajes/mes</strong></li>
@@ -1029,7 +1029,7 @@
       </div>
 
       <p style="text-align:center; margin-top:24px; color:rgba(255,255,255,0.55); font-size:0.92rem;">
-        ¿Solo quieres probar? <a href="https://app.vantelia.es/acceso?mode=signup" target="_blank" rel="noopener" style="color:#00D1FF; font-weight:600;">Crea tu bot gratis (50 mensajes/mes)</a> sin tarjeta.
+        ¿Solo quieres probar? <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener" style="color:#00D1FF; font-weight:600;">Crea tu bot gratis (50 mensajes/mes)</a> sin tarjeta.
       </p>
     </div>
   </section>
@@ -1359,7 +1359,7 @@
     </div>
   </section>
 
-  <!-- Plan modal eliminado: las cards apuntan directamente a /acceso?mode=signup&plan=X (self-serve). -->
+  <!-- Plan modal eliminado: las cards apuntan directamente a /acceso (self-serve). -->
 
 
   <footer class="site-footer" aria-label="Pie de página">
@@ -1489,7 +1489,7 @@
         });
       }
 
-      // Self-serve: cards apuntan directamente a app.vantelia.es/acceso?mode=signup&plan=X.
+      // Self-serve: cards apuntan directamente a app.vantelia.es/acceso
       // Trackeo opcional al click (no interceptamos navegacion).
       document.querySelectorAll('.plan-cta[data-plan]').forEach(function (cta) {
         cta.addEventListener('click', function () {

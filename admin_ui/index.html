@@ -3495,6 +3495,11 @@ tbody tr:last-child td { border-bottom: none; }
         data = null;
       }
 
+      if (response.status === 401 || response.status === 403) {
+        window.location.href = "/acceso?next=/dashboard";
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(formatApiDetail(data?.detail) || "No se pudo completar la solicitud.");
       }

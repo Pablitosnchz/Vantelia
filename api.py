@@ -1171,6 +1171,18 @@ def _init_database() -> None:
             """
         )
 
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS oauth_states (
+                state TEXT PRIMARY KEY,
+                nonce TEXT NOT NULL,
+                intent TEXT NOT NULL DEFAULT 'login',
+                claim TEXT NOT NULL DEFAULT '',
+                created_at REAL NOT NULL
+            )
+            """
+        )
+
         # --- Vantelia 2.0 self-serve tables (Sem 1 migration) ---
         user_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(users)").fetchall()
@@ -3471,37 +3483,38 @@ def _create_user_self_serve(
 # --- Google OAuth helpers ---
 
 _OAUTH_STATE_TTL_SECONDS = 600
-_oauth_state_lock = threading.Lock()
-_oauth_states: Dict[str, Dict[str, Any]] = {}
 
 
 def _oauth_create_state(intent: str = "login", claim: str = "") -> str:
     state = secrets.token_urlsafe(24)
     nonce = secrets.token_urlsafe(16)
-    with _oauth_state_lock:
-        _oauth_states[state] = {
-            "nonce": nonce,
-            "intent": intent,
-            "claim": claim or "",
-            "created_at": time.time(),
-        }
-        # garbage collect expired entries opportunistically
-        cutoff = time.time() - _OAUTH_STATE_TTL_SECONDS
-        for stale in [k for k, v in _oauth_states.items() if v["created_at"] < cutoff]:
-            _oauth_states.pop(stale, None)
+    now = time.time()
+    cutoff = now - _OAUTH_STATE_TTL_SECONDS
+    with _get_db_connection() as conn:
+        conn.execute(
+            "INSERT INTO oauth_states (state, nonce, intent, claim, created_at) VALUES (?, ?, ?, ?, ?)",
+            (state, nonce, intent, claim or "", now),
+        )
+        conn.execute("DELETE FROM oauth_states WHERE created_at < ?", (cutoff,))
+        conn.commit()
     return state
 
 
 def _oauth_consume_state(state: str) -> Optional[Dict[str, Any]]:
     if not state:
         return None
-    with _oauth_state_lock:
-        payload = _oauth_states.pop(state, None)
-    if not payload:
+    with _get_db_connection() as conn:
+        row = conn.execute(
+            "SELECT nonce, intent, claim, created_at FROM oauth_states WHERE state = ?", (state,)
+        ).fetchone()
+        if row:
+            conn.execute("DELETE FROM oauth_states WHERE state = ?", (state,))
+            conn.commit()
+    if not row:
         return None
-    if time.time() - payload["created_at"] > _OAUTH_STATE_TTL_SECONDS:
+    if time.time() - row["created_at"] > _OAUTH_STATE_TTL_SECONDS:
         return None
-    return payload
+    return {"nonce": row["nonce"], "intent": row["intent"], "claim": row["claim"], "created_at": row["created_at"]}
 
 
 def _google_oauth_configured() -> bool:
@@ -4391,7 +4404,7 @@ def _get_session_user(session_token: str) -> Optional[sqlite3.Row]:
 def _redirect_for_role(role: str) -> str:
     if role == "admin":
         return "/dashboard"
-    return "/portal"
+    return "/app"
 
 
 def _set_portal_cookie(response: Response, raw_token: str) -> None:
@@ -10035,8 +10048,10 @@ async def root() -> Dict[str, Any]:
 @app.post("/auth/login", response_model=AuthLoginResponse)
 async def auth_login(data: AuthLoginPayload) -> Response:
     user = _get_user_by_email(data.email)
-    if not user or not user["is_active"] or not _verify_secret(data.password, user["password_hash"]):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales invalidas.")
+    if not user or not user["is_active"]:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No encontramos ninguna cuenta con ese correo.")
+    if not _verify_secret(data.password, user["password_hash"]):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Contraseña incorrecta.")
 
     with _get_db_connection() as connection:
         connection.execute(
@@ -10140,7 +10155,7 @@ async def auth_google_callback(
         raise HTTPException(status_code=400, detail="Faltan code o state.")
     state_payload = _oauth_consume_state(state)
     if not state_payload:
-        raise HTTPException(status_code=400, detail="state invalido o caducado.")
+        return RedirectResponse("/acceso?google_error=state_expired")
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -12454,32 +12469,17 @@ async def app_entry(
 
 @app.get("/signup", include_in_schema=False)
 async def signup_entry() -> Response:
-    return RedirectResponse("/acceso?mode=signup")
+    return RedirectResponse("/acceso")
 
 
 @app.get("/portal", include_in_schema=False)
 async def portal_entry(
-    request: Request,
     portal_session: Optional[str] = Cookie(default=None, alias=PORTAL_COOKIE_NAME),
 ) -> Response:
     user = _get_authenticated_portal_user_or_none(portal_session)
     if not user:
         return RedirectResponse("/acceso")
-    requested_client_id = str(request.query_params.get("cliente_id", "")).strip()
-    if user["role"] == "admin" and not requested_client_id:
-        return RedirectResponse("/dashboard")
-    if user["role"] == "admin" and requested_client_id:
-        _get_client_config(requested_client_id)
-
-    index_path = PORTAL_UI_DIR / "index.html"
-    if not index_path.exists():
-        raise HTTPException(status_code=404, detail="Portal no disponible.")
-    html = (
-        index_path.read_text(encoding="utf-8")
-        .replace("__MARKETING_SITE_URL__", escape(MARKETING_SITE_URL))
-        .replace("__SUPPORT_EMAIL__", escape(PORTAL_SUPPORT_EMAIL))
-    )
-    return HTMLResponse(html)
+    return RedirectResponse("/dashboard")
 
 
 @app.get("/dashboard", include_in_schema=False)
@@ -12490,7 +12490,7 @@ async def dashboard(
     if not user:
         return RedirectResponse("/acceso")
     if user["role"] != "admin":
-        return RedirectResponse("/portal")
+        return RedirectResponse("/app")
     index_path = ADMIN_UI_DIR / "index.html"
     if not index_path.exists():
         raise HTTPException(status_code=404, detail="Panel admin no disponible.")

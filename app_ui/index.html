@@ -343,13 +343,159 @@
     .toast.success { border-color: var(--accent-2); color: var(--accent-2); }
     .toast.error { border-color: var(--danger); color: var(--danger); }
 
+    .sidebar-toggle {
+      background: transparent; border: 0; color: var(--soft); cursor: pointer;
+      padding: 4px; border-radius: 6px; display: flex; align-items: center;
+    }
+    .sidebar-toggle:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+    .sidebar-divider { height: 1px; background: var(--line); margin: 12px 0; }
+    .sidebar.collapsed { width: 64px; min-width: 64px; padding: 18px 10px; }
+    .sidebar.collapsed .sidebar-section,
+    .sidebar.collapsed .sidebar-head .menu-title,
+    .sidebar.collapsed .nav-item span,
+    .sidebar.collapsed .pro-pill { display: none; }
+    .sidebar.collapsed .nav-item { justify-content: center; padding: 10px; }
+    .sidebar.collapsed .sidebar-divider { margin: 8px 0; }
+
+    /* ── Bot test drawer ── */
+    .bot-fab {
+      position: fixed; bottom: 28px; right: 28px;
+      width: 52px; height: 52px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #0B132B; border: 0; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 8px 24px rgba(0,209,255,0.35);
+      z-index: 100; font-size: 1.3rem; font-weight: 700;
+      transition: transform .15s ease;
+    }
+    .bot-fab:hover { transform: scale(1.08); }
+    .bot-drawer {
+      position: fixed; top: 0; right: -400px; width: 380px; height: 100%;
+      background: var(--panel); border-left: 1px solid var(--line);
+      z-index: 110; display: flex; flex-direction: column;
+      transition: right .25s cubic-bezier(.4,0,.2,1);
+      box-shadow: -12px 0 40px rgba(0,0,0,0.4);
+    }
+    .bot-drawer.open { right: 0; }
+    .bot-drawer-head {
+      padding: 16px 18px; border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .bot-drawer-head b { flex: 1; font-size: 0.95rem; }
+    .bot-drawer-head button { background: transparent; border: 0; color: var(--soft); cursor: pointer; font-size: 1.2rem; padding: 0 4px; }
+    .bot-drawer-head button:hover { color: var(--text); }
+    .bot-drawer-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .bot-drawer-input { padding: 10px; border-top: 1px solid var(--line); display: flex; gap: 8px; }
+    .bot-drawer-input input { flex: 1; background: rgba(7,16,31,0.6); border: 1px solid var(--line); color: var(--text); padding: 9px 12px; border-radius: 10px; font-family: var(--font); font-size: 0.86rem; }
+    .bot-drawer-input input:focus { outline: none; border-color: var(--accent); }
+    .bot-drawer-input button { background: var(--accent); color: #0B132B; border: 0; padding: 0 14px; border-radius: 10px; cursor: pointer; font-weight: 700; }
+    .drawer-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4); z-index: 109;
+    }
+    .drawer-overlay.open { display: block; }
+
+    /* ── Calendar ── */
+    .cal-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .cal-nav h3 { flex: 1; text-align: center; font-family: var(--font-title); font-size: 1rem; }
+    .cal-nav button { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); padding: 6px 14px; border-radius: 8px; cursor: pointer; }
+    .cal-nav button:hover { border-color: var(--accent); color: var(--accent); }
+    .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; }
+    .cal-hdr { text-align: center; font-size: 0.72rem; color: var(--soft-2); text-transform: uppercase; letter-spacing: .06em; padding: 4px 0; }
+    .cal-day {
+      min-height: 60px; border-radius: 10px; padding: 6px;
+      background: rgba(255,255,255,0.02); border: 1px solid transparent;
+      cursor: pointer; transition: all .1s ease;
+    }
+    .cal-day:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .cal-day.today { border-color: var(--accent-2); }
+    .cal-day.other-month .cal-day-num { color: var(--soft-2); }
+    .cal-day-num { font-size: 0.8rem; font-weight: 600; margin-bottom: 3px; }
+    .cal-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin: 1px 0; }
+    .cal-dot-count { font-size: 0.68rem; color: var(--accent); }
+
+    /* ── Accordion ── */
+    .accordion { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
+    .accordion-head {
+      padding: 14px 18px; cursor: pointer;
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(255,255,255,0.02);
+      user-select: none;
+    }
+    .accordion-head:hover { background: rgba(255,255,255,0.04); }
+    .accordion-head b { flex: 1; font-size: 0.95rem; }
+    .accordion-arrow { color: var(--soft-2); transition: transform .2s; }
+    .accordion.open .accordion-arrow { transform: rotate(180deg); }
+    .accordion-body { display: none; padding: 16px 18px; border-top: 1px solid var(--line); }
+    .accordion.open .accordion-body { display: block; }
+
+    /* ── Employee grid ── */
+    .employee-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 14px; }
+    .employee-card {
+      background: var(--panel-2); border: 1px solid var(--line);
+      border-radius: 14px; padding: 18px; cursor: pointer;
+      transition: border-color .12s ease;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .employee-card:hover { border-color: var(--accent); }
+    .employee-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .employee-name { font-weight: 600; font-size: 0.95rem; }
+    .employee-role { color: var(--soft); font-size: 0.82rem; }
+    .employee-status { font-size: 0.75rem; }
+
+    /* ── Side panel (equipo editor) ── */
+    .side-panel {
+      position: fixed; top: 0; right: -360px; width: 340px; height: 100%;
+      background: var(--panel); border-left: 1px solid var(--line);
+      z-index: 108; display: flex; flex-direction: column;
+      transition: right .25s cubic-bezier(.4,0,.2,1);
+      box-shadow: -12px 0 40px rgba(0,0,0,0.4);
+      overflow-y: auto;
+    }
+    .side-panel.open { right: 0; }
+    .side-panel-head { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
+    .side-panel-head b { flex: 1; font-family: var(--font-title); font-size: 1rem; }
+    .side-panel-head button { background: transparent; border: 0; color: var(--soft); cursor: pointer; font-size: 1.2rem; }
+    .side-panel-head button:hover { color: var(--text); }
+    .side-panel-body { flex: 1; padding: 18px; overflow-y: auto; }
+
+    /* ── Booking drawer ── */
+    .booking-drawer {
+      position: fixed; top: 0; right: -440px; width: 420px; height: 100%;
+      background: var(--panel); border-left: 1px solid var(--line);
+      z-index: 108; flex-direction: column;
+      transition: right .25s cubic-bezier(.4,0,.2,1);
+      box-shadow: -12px 0 40px rgba(0,0,0,0.4);
+      display: flex;
+    }
+    .booking-drawer.open { right: 0; }
+
+    /* ── Quick filter chips ── */
+    .filter-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    .filter-chip {
+      padding: 6px 14px; border-radius: 99px; font-size: 0.82rem; font-weight: 600;
+      background: var(--panel-2); border: 1px solid var(--line); color: var(--soft);
+      cursor: pointer; transition: all .1s ease;
+    }
+    .filter-chip:hover, .filter-chip.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+    /* ── Status badge ── */
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+    .badge-pending { background: rgba(255,200,87,0.15); color: var(--warning); }
+    .badge-confirmed { background: rgba(0,245,212,0.12); color: var(--success); }
+    .badge-cancelled { background: var(--danger-soft); color: var(--danger); }
+    .badge-completed { background: rgba(255,255,255,0.06); color: var(--soft); }
+
     /* responsive */
     @media (max-width: 1100px) {
       .rightpanel { display: none; }
     }
     @media (max-width: 768px) {
-      .sidebar { width: 200px; min-width: 200px; }
+      .rail { display: none; }
+      .sidebar { position: fixed; left: -270px; top: 0; height: 100%; z-index: 120; transition: left .25s ease; }
+      .sidebar.mobile-open { left: 0; }
       .main { padding: 16px; }
+      .bot-fab { bottom: 80px; right: 16px; }
     }
   </style>
 </head>
@@ -365,72 +511,80 @@
 </div>
 
 <!-- Sidebar -->
-<aside class="sidebar">
+<aside class="sidebar" id="sidebar">
   <div class="sidebar-head">
-    <span class="menu-title">Menú</span>
+    <span class="menu-title">Panel</span>
+    <button class="sidebar-toggle" id="sidebarToggle" title="Colapsar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
   </div>
 
-  <div class="sidebar-section">Resumen</div>
+  <div class="sidebar-section" data-label="Asistente IA">Asistente IA</div>
   <div class="nav-item active" data-tab="overview">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-    Overview
+    <span>Overview</span>
   </div>
-
-  <div class="sidebar-section">Actividad</div>
   <div class="nav-item" data-tab="chats">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-    Historial de chats
+    <span>Chats</span>
   </div>
   <div class="nav-item" data-tab="leads">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-    Leads
+    <span>Leads</span>
   </div>
-  <div class="nav-item locked" data-tab="livechat" title="Plan Pro">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-    Live Chat
-    <span class="pro-pill">Pro</span>
-  </div>
-
-  <div class="sidebar-section">Entrenamiento</div>
   <div class="nav-item" data-tab="knowledge">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-    Conocimiento
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+    <span>Conocimiento</span>
   </div>
   <div class="nav-item" data-tab="qa">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-    Q&amp;A
+    <span>Q&amp;A</span>
   </div>
-
-  <div class="sidebar-section">Comportamiento</div>
   <div class="nav-item" data-tab="tune">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
-    Tune AI
+    <span>Tune AI</span>
   </div>
-  <div class="nav-item" data-tab="test">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2h4"/><path d="M12 14v-4"/><circle cx="12" cy="14" r="8"/></svg>
-    Test Bot
-  </div>
-
-  <div class="sidebar-section">Despliegue</div>
   <div class="nav-item" data-tab="appearance">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="4.93" y1="4.93" x2="9.17" y2="9.17"/><line x1="14.83" y1="14.83" x2="19.07" y2="19.07"/><line x1="14.83" y1="9.17" x2="19.07" y2="4.93"/><line x1="9.17" y1="14.83" x2="4.93" y2="19.07"/></svg>
-    Apariencia
+    <span>Apariencia</span>
   </div>
   <div class="nav-item" data-tab="deploy">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-    Deploy
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+    <span>Deploy</span>
   </div>
 
-  <div class="sidebar-section">Cuenta</div>
+  <div class="sidebar-divider"></div>
+  <div class="sidebar-section" data-label="Agenda">Agenda</div>
+  <div class="nav-item" data-tab="citas">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <span>Citas</span>
+  </div>
+  <div class="nav-item" data-tab="equipo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    <span>Equipo</span>
+  </div>
+  <div class="nav-item" data-tab="horarios">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    <span>Horarios</span>
+  </div>
+  <div class="nav-item" data-tab="mensajes">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+    <span>Mensajes</span>
+  </div>
+
+  <div class="sidebar-divider"></div>
+  <div class="sidebar-section" data-label="Cuenta">Cuenta</div>
   <div class="nav-item" data-tab="billing">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-    Plan y facturación
+    <span>Suscripción</span>
   </div>
-
-  <div class="sidebar-section">Avanzado</div>
-  <div class="nav-item locked" data-tab="integrations">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 9v6"/><path d="M9 6h6"/><path d="M15 9l3 3-3 3"/></svg>
-    Integraciones
+  <div class="nav-item" data-tab="instalacion">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+    <span>Instalación</span>
+  </div>
+  <div class="nav-item" data-tab="cuenta">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    <span>Cuenta</span>
   </div>
 </aside>
 
@@ -799,6 +953,204 @@
     </div>
   </section>
 
+  <!-- CITAS -->
+  <section class="page" id="page-citas">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;">
+      <div class="filter-chips" id="citasQuickFilters">
+        <div class="filter-chip active" data-period="all">Todas</div>
+        <div class="filter-chip" data-period="today">Hoy</div>
+        <div class="filter-chip" data-period="tomorrow">Mañana</div>
+        <div class="filter-chip" data-period="week">Esta semana</div>
+        <div class="filter-chip" data-period="upcoming">Próximas</div>
+      </div>
+      <div style="margin-left:auto; display:flex; gap:8px;">
+        <button class="btn btn-ghost" id="citasViewCal" style="padding:8px 14px;" title="Vista calendario">Cal</button>
+        <button class="btn btn-ghost" id="citasViewList" style="padding:8px 14px;" title="Vista lista">Lista</button>
+        <a class="btn btn-ghost" href="/auth/bookings/export">CSV</a>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
+      <select class="field-input" id="citasFiltProf" style="width:auto; flex:0 0 200px;">
+        <option value="">Todos los profesionales</option>
+      </select>
+      <select class="field-input" id="citasFiltEstado" style="width:auto; flex:0 0 180px;">
+        <option value="">Todos los estados</option>
+        <option value="pending">Pendiente</option>
+        <option value="confirmed">Confirmada</option>
+        <option value="cancelled">Cancelada</option>
+        <option value="completed">Completada</option>
+      </select>
+      <input type="date" class="field-input" id="citasFiltDesde" style="width:auto; flex:0 0 160px;" />
+      <input type="date" class="field-input" id="citasFiltHasta" style="width:auto; flex:0 0 160px;" />
+      <button class="btn btn-ghost" id="citasFiltLimpiar" style="padding:8px 14px;">Limpiar</button>
+    </div>
+
+    <!-- Vista Calendario -->
+    <div id="citasCalView" class="panel-card" style="display:none;">
+      <div class="cal-nav">
+        <button id="calPrev">&#8592;</button>
+        <h3 id="calTitle">Mayo 2026</h3>
+        <button id="calNext">&#8594;</button>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+
+    <!-- Vista Lista -->
+    <div id="citasListView">
+      <div id="citasListContent" style="display:flex; flex-direction:column; gap:10px;"></div>
+      <div style="display:flex; gap:10px; margin-top:14px; align-items:center;">
+        <button class="btn btn-ghost" id="citasPrevPage" disabled>Anterior</button>
+        <span class="panel-sub" id="citasPageInfo" style="margin:0; flex:1; text-align:center;"></span>
+        <button class="btn btn-ghost" id="citasNextPage" disabled>Siguiente</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- EQUIPO -->
+  <section class="page" id="page-equipo">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;">
+      <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600;">Equipo</h2>
+      <button class="btn btn-primary" id="equipoNewBtn" style="margin-left:auto;">+ Nuevo profesional</button>
+    </div>
+    <div class="employee-grid" id="equipoGrid"></div>
+  </section>
+
+  <!-- HORARIOS -->
+  <section class="page" id="page-horarios">
+    <div class="panel-card">
+      <h2>Horarios</h2>
+      <p class="panel-sub">Configura disponibilidad general o por profesional.</p>
+      <div style="display:flex; gap:12px; align-items:center; margin: 14px 0;">
+        <select class="field-input" id="horProf" style="width:auto; flex:0 0 240px;">
+          <option value="">Horario general</option>
+        </select>
+        <label style="display:flex; align-items:center; gap:8px; color:var(--soft); font-size:0.88rem;">
+          <input type="checkbox" id="horEnabled" /> Habilitar horario
+        </label>
+      </div>
+      <div class="form-row">
+        <div class="field"><label class="field-label">Hora inicio</label><input type="time" class="field-input" id="horStart" /></div>
+        <div class="field"><label class="field-label">Hora fin</label><input type="time" class="field-input" id="horEnd" /></div>
+        <div class="field"><label class="field-label">Duración slot (min)</label><input type="number" class="field-input" id="horSlot" min="5" max="240" /></div>
+        <div class="field"><label class="field-label">Zona horaria</label><input type="text" class="field-input" id="horTz" placeholder="Europe/Madrid" /></div>
+      </div>
+      <div style="margin-top:14px;">
+        <label class="field-label">Días cerrados</label>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:8px;" id="horDays">
+          <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="0" style="display:none;" /> Lun</label>
+          <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="1" style="display:none;" /> Mar</label>
+          <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="2" style="display:none;" /> Mié</label>
+          <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="3" style="display:none;" /> Jue</label>
+          <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="4" style="display:none;" /> Vie</label>
+          <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="5" style="display:none;" /> Sáb</label>
+          <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="6" style="display:none;" /> Dom</label>
+        </div>
+      </div>
+      <div style="margin-top:18px;">
+        <button class="btn btn-primary" id="horSaveBtn">Guardar horario</button>
+      </div>
+    </div>
+
+    <div class="panel-card" style="margin-top:18px;">
+      <h2>Bloqueos de agenda</h2>
+      <p class="panel-sub">Períodos en los que no se aceptan citas.</p>
+      <div id="horBlocksList" style="margin-bottom:14px; display:flex; flex-direction:column; gap:8px;"></div>
+      <div class="form-row">
+        <div class="field"><label class="field-label">Desde</label><input type="date" class="field-input" id="horBlockStart" /></div>
+        <div class="field"><label class="field-label">Hasta</label><input type="date" class="field-input" id="horBlockEnd" /></div>
+        <div class="field"><label class="field-label">Hora inicio</label><input type="time" class="field-input" id="horBlockHStart" /></div>
+        <div class="field"><label class="field-label">Hora fin</label><input type="time" class="field-input" id="horBlockHEnd" /></div>
+      </div>
+      <div class="form-row">
+        <div class="field" style="flex:1 1 100%;"><label class="field-label">Motivo</label><input type="text" class="field-input" id="horBlockReason" maxlength="160" placeholder="Vacaciones, mantenimiento..." /></div>
+      </div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-primary" id="horBlockAddBtn">Añadir bloqueo</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- MENSAJES -->
+  <section class="page" id="page-mensajes">
+    <div class="panel-card">
+      <h2>Plantillas de email automático</h2>
+      <p class="panel-sub">Personaliza los mensajes que se envían al cliente en cada evento de agenda.</p>
+      <div id="mensajesAccordions" style="margin-top:14px;"></div>
+      <div style="margin-top:18px;">
+        <button class="btn btn-primary" id="mensajesGuardarBtn">Guardar plantillas</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- INSTALACION -->
+  <section class="page" id="page-instalacion">
+    <div class="panel-card">
+      <h2>Instalar el widget en tu web</h2>
+      <p class="panel-sub">Pega este código justo antes de <code style="color:var(--accent-2);">&lt;/body&gt;</code>. La burbuja aparecerá en la esquina inferior derecha.</p>
+      <div style="margin-top:14px;">
+        <label class="field-label">Código de instalación</label>
+        <textarea class="field-textarea" id="instSnippet" readonly style="font-family:'Courier New',monospace; font-size:0.8rem; color:var(--accent-2); background:#07101f; min-height:100px;"></textarea>
+        <div style="margin-top:10px; display:flex; gap:10px;">
+          <button class="btn btn-primary" id="instCopyBtn">Copiar código</button>
+          <a class="btn btn-ghost" id="instDemoLink" target="_blank" rel="noreferrer">Abrir demo</a>
+        </div>
+      </div>
+      <div style="margin-top:28px;">
+        <h3 style="font-family:var(--font-title); font-size:1rem; margin-bottom:14px;">Instrucciones en 3 pasos</h3>
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div style="display:flex; gap:14px; align-items:flex-start;">
+            <div style="width:32px; height:32px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">1</div>
+            <div><b>Copia el snippet</b><p class="panel-sub" style="margin:4px 0 0;">Haz clic en "Copiar código" arriba.</p></div>
+          </div>
+          <div style="display:flex; gap:14px; align-items:flex-start;">
+            <div style="width:32px; height:32px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">2</div>
+            <div><b>Pégalo en tu web</b><p class="panel-sub" style="margin:4px 0 0;">Añade el código justo antes del cierre <code>&lt;/body&gt;</code> en cada página donde quieras el chat.</p></div>
+          </div>
+          <div style="display:flex; gap:14px; align-items:flex-start;">
+            <div style="width:32px; height:32px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">3</div>
+            <div><b>Pruébalo</b><p class="panel-sub" style="margin:4px 0 0;">Abre tu web y busca la burbuja de chat en la esquina inferior derecha.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CUENTA -->
+  <section class="page" id="page-cuenta">
+    <div class="panel-card">
+      <h2>Perfil</h2>
+      <p class="panel-sub">Tu nombre e email de acceso.</p>
+      <div class="form-row">
+        <div class="field"><label class="field-label">Nombre</label><input type="text" class="field-input" id="cuentaNombre" maxlength="200" /></div>
+        <div class="field"><label class="field-label">Email</label><input type="email" class="field-input" id="cuentaEmail" readonly style="opacity:.6;" /></div>
+      </div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-primary" id="cuentaSavePerfilBtn">Guardar perfil</button>
+      </div>
+    </div>
+
+    <div class="panel-card" style="margin-top:18px;">
+      <h2>Cambiar contraseña</h2>
+      <div class="form-row">
+        <div class="field"><label class="field-label">Contraseña actual</label><input type="password" class="field-input" id="cuentaPwdActual" /></div>
+        <div class="field"><label class="field-label">Nueva contraseña (mín. 8)</label><input type="password" class="field-input" id="cuentaPwdNueva" minlength="8" /></div>
+        <div class="field"><label class="field-label">Confirmar nueva</label><input type="password" class="field-input" id="cuentaPwdConfirm" minlength="8" /></div>
+      </div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-primary" id="cuentaChangePwdBtn">Cambiar contraseña</button>
+      </div>
+    </div>
+
+    <div class="panel-card" style="margin-top:18px; border-color:var(--danger);">
+      <h2 style="color:var(--danger);">Zona de peligro</h2>
+      <p class="panel-sub">Cerrar sesión en este dispositivo.</p>
+      <div style="margin-top:14px;">
+        <button class="btn" style="background:var(--danger-soft); color:var(--danger); border:1px solid var(--danger);" id="cuentaLogoutBtn">Cerrar sesión</button>
+      </div>
+    </div>
+  </section>
+
   <!-- Locked placeholder -->
   <section class="page" id="page-locked">
     <div class="panel-card" style="text-align:center; padding: 60px 32px;">
@@ -808,8 +1160,70 @@
   </section>
 </main>
 
+<!-- Bot test drawer -->
+<div class="drawer-overlay" id="botOverlay"></div>
+<div class="bot-drawer" id="botDrawer">
+  <div class="bot-drawer-head">
+    <div class="avatar" id="drawerAvatar" style="width:28px;height:28px;font-size:0.75rem;">AI</div>
+    <b id="drawerTitle">Test del asistente</b>
+    <button id="botDrawerClose">×</button>
+  </div>
+  <div class="bot-drawer-body" id="botDrawerBody">
+    <div class="chat-msg bot" id="botDrawerWelcome">Hola, ¿en qué puedo ayudarte hoy?</div>
+  </div>
+  <div class="bot-drawer-input">
+    <input type="text" id="botDrawerInput" placeholder="Escribe un mensaje..." />
+    <button id="botDrawerSend">→</button>
+  </div>
+</div>
+<button class="bot-fab" id="botFab" title="Probar asistente">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+</button>
+
+<!-- Side panel: employee editor -->
+<div class="drawer-overlay" id="equipoOverlay"></div>
+<div class="side-panel" id="equipoPanel">
+  <div class="side-panel-head">
+    <b id="equipoPanelTitle">Profesional</b>
+    <button id="equipoPanelClose">×</button>
+  </div>
+  <div class="side-panel-body">
+    <input type="hidden" id="equipoEditId" />
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Nombre</label><input type="text" class="field-input" id="equipoNombre" maxlength="120" /></div>
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Rol</label><input type="text" class="field-input" id="equipoRol" maxlength="80" /></div>
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Color</label><div class="color-row"><input type="color" id="equipoColor" /><input class="field-input" id="equipoColorText" maxlength="7" /></div></div>
+    <label style="display:flex; align-items:center; gap:8px; margin-bottom:16px; color:var(--soft); font-size:0.88rem;"><input type="checkbox" id="equipoActivo" checked /> Activo</label>
+    <div class="field" style="margin-bottom:12px;">
+      <label class="field-label">Servicios asignados</label>
+      <label style="display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:0.84rem; color:var(--soft);"><input type="checkbox" id="equipoAllServices" /> Puede atender todos los servicios</label>
+      <div id="equipoServicesCheck" style="display:flex; flex-direction:column; gap:6px;"></div>
+    </div>
+    <div style="display:flex; gap:10px; margin-top:18px;">
+      <button class="btn btn-primary" id="equipoSaveBtn" style="flex:1;">Guardar</button>
+      <button class="btn" id="equipoDeleteBtn" style="background:var(--danger-soft); color:var(--danger); border:1px solid var(--danger);">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Booking reschedule drawer -->
+<div class="drawer-overlay" id="reschedOverlay"></div>
+<div class="booking-drawer" id="reschedDrawer">
+  <div class="side-panel-head">
+    <b>Reprogramar cita</b>
+    <button id="reschedClose">×</button>
+  </div>
+  <div style="padding:18px; overflow-y:auto; flex:1;">
+    <p class="panel-sub" id="reschedDesc"></p>
+    <div class="field" style="margin:14px 0 10px;"><label class="field-label">Fecha</label><input type="date" class="field-input" id="reschedDate" /></div>
+    <div id="reschedSlots" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;"></div>
+    <input type="hidden" id="reschedBookingId" />
+    <input type="hidden" id="reschedSlotSelected" />
+    <button class="btn btn-primary" id="reschedConfirmBtn" disabled style="width:100%;">Confirmar reprogramación</button>
+  </div>
+</div>
+
 <!-- Right panel: chat preview -->
-<aside class="rightpanel" id="rightPanel">
+<aside class="rightpanel" id="rightPanel" style="display:none;">
   <div class="rp-head">
     <div class="avatar" id="rpAvatar">AI</div>
     <b id="rpTitle">Tu Asistente</b>
@@ -846,7 +1260,7 @@ const state = {
   session_id: 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
 };
 
-const TABS = ['overview', 'chats', 'leads', 'knowledge', 'qa', 'tune', 'test', 'appearance', 'deploy', 'billing'];
+const TABS = ['overview','chats','leads','knowledge','qa','tune','appearance','deploy','billing','citas','equipo','horarios','mensajes','instalacion','cuenta'];
 const billingState = { period: 'monthly', plans: [], current: 'free', portal: false };
 
 function formatDetail(d) {
@@ -907,19 +1321,25 @@ function setTab(tab) {
   document.getElementById('page-' + tab).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.getAttribute('data-tab') === tab));
   const titles = {
-    overview: 'Overview', chats: 'Historial de chats', leads: 'Leads',
-    knowledge: 'Conocimiento', qa: 'Q&A', tune: 'Tune AI',
-    test: 'Test Bot', appearance: 'Apariencia', deploy: 'Deploy',
-    billing: 'Plan y facturación',
+    overview:'Overview', chats:'Chats', leads:'Leads',
+    knowledge:'Conocimiento', qa:'Q&A', tune:'Tune AI',
+    appearance:'Apariencia', deploy:'Deploy', billing:'Suscripción',
+    citas:'Citas', equipo:'Equipo', horarios:'Horarios',
+    mensajes:'Mensajes automáticos', instalacion:'Instalación', cuenta:'Cuenta',
   };
   document.getElementById('pageTitle').textContent = titles[tab] || 'Panel';
-  if (tab === 'chats')     loadChats();
-  if (tab === 'leads')     loadLeads();
-  if (tab === 'knowledge') loadKnowledge();
-  if (tab === 'qa')        loadQA();
-  if (tab === 'tune')      loadTune();
-  if (tab === 'billing')   loadBilling();
-  if (tab === 'test')      ensureWidgetLoaded();
+  if (tab === 'chats')      loadChats();
+  if (tab === 'leads')      loadLeads();
+  if (tab === 'knowledge')  loadKnowledge();
+  if (tab === 'qa')         loadQA();
+  if (tab === 'tune')       loadTune();
+  if (tab === 'billing')    loadBilling();
+  if (tab === 'citas')      loadCitas();
+  if (tab === 'equipo')     loadEquipo();
+  if (tab === 'horarios')   loadHorarios();
+  if (tab === 'mensajes')   loadMensajes();
+  if (tab === 'instalacion') loadInstalacion();
+  if (tab === 'cuenta')     loadCuenta();
 }
 
 document.querySelectorAll('.nav-item').forEach(n => {
@@ -1625,9 +2045,550 @@ document.getElementById('blPortalBtn').addEventListener('click', openBillingPort
   }
 })();
 
+// ── Sidebar collapse ─────────────────────────────────────────────────
+document.getElementById('sidebarToggle').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+});
+
+// ── Bot test drawer ───────────────────────────────────────────────────
+const botDrawer = document.getElementById('botDrawer');
+const botOverlay = document.getElementById('botOverlay');
+const botSession = 's_bot_' + Math.random().toString(36).slice(2);
+
+function openBotDrawer() { botDrawer.classList.add('open'); botOverlay.classList.add('open'); }
+function closeBotDrawer() { botDrawer.classList.remove('open'); botOverlay.classList.remove('open'); }
+
+document.getElementById('botFab').addEventListener('click', openBotDrawer);
+document.getElementById('botDrawerClose').addEventListener('click', closeBotDrawer);
+botOverlay.addEventListener('click', closeBotDrawer);
+
+async function sendBotMessage(text) {
+  text = (text || '').trim();
+  if (!text) return;
+  const body = document.getElementById('botDrawerBody');
+  const u = document.createElement('div'); u.className = 'chat-msg user'; u.textContent = text;
+  body.appendChild(u); body.scrollTop = body.scrollHeight;
+  document.getElementById('botDrawerInput').value = '';
+  try {
+    const r = await api('/chat', { method:'POST', headers:{'Content-Type':'application/json','Origin':location.origin},
+      body: JSON.stringify({ cliente_id: state.cliente_id, session_id: botSession, message: text }) });
+    const b = document.createElement('div'); b.className = 'chat-msg bot';
+    b.textContent = (r?.respuesta || r?.message || '').replace(/\[MOSTRAR_FORMULARIO\]/g,'').trim() || '(sin respuesta)';
+    body.appendChild(b); body.scrollTop = body.scrollHeight;
+  } catch(e) {
+    const b = document.createElement('div'); b.className = 'chat-msg bot'; b.textContent = '⚠ ' + e.message;
+    body.appendChild(b);
+  }
+}
+document.getElementById('botDrawerSend').addEventListener('click', () => sendBotMessage(document.getElementById('botDrawerInput').value));
+document.getElementById('botDrawerInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendBotMessage(e.target.value); });
+
+// ── CITAS ─────────────────────────────────────────────────────────────
+const citasState = { page: 0, pageSize: 20, total: 0, period: 'all', calYear: null, calMonth: null, calData: [] };
+
+async function loadCitas() {
+  const now = new Date();
+  if (!citasState.calYear) { citasState.calYear = now.getFullYear(); citasState.calMonth = now.getMonth(); }
+  const isCalView = document.getElementById('citasCalView').style.display !== 'none';
+  if (isCalView) renderCalendar(); else await fetchCitasList();
+}
+
+async function fetchCitasList() {
+  const cont = document.getElementById('citasListContent');
+  cont.innerHTML = '<div class="panel-sub">Cargando…</div>';
+  const prof = document.getElementById('citasFiltProf').value;
+  const estado = document.getElementById('citasFiltEstado').value;
+  const desde = document.getElementById('citasFiltDesde').value;
+  const hasta = document.getElementById('citasFiltHasta').value;
+  const period = citasState.period;
+
+  let params = `limit=${citasState.pageSize}&offset=${citasState.page * citasState.pageSize}`;
+  if (prof) params += `&employee_id=${encodeURIComponent(prof)}`;
+  if (estado) params += `&status=${encodeURIComponent(estado)}`;
+  if (desde) params += `&date_from=${desde}`;
+  if (hasta) params += `&date_to=${hasta}`;
+  if (period === 'today') { const d = new Date().toISOString().slice(0,10); params += `&date_from=${d}&date_to=${d}`; }
+  else if (period === 'tomorrow') { const d = new Date(Date.now()+86400000).toISOString().slice(0,10); params += `&date_from=${d}&date_to=${d}`; }
+  else if (period === 'week') { const from = new Date().toISOString().slice(0,10); const to = new Date(Date.now()+7*86400000).toISOString().slice(0,10); params += `&date_from=${from}&date_to=${to}`; }
+  else if (period === 'upcoming') { params += `&date_from=${new Date().toISOString().slice(0,10)}`; }
+
+  try {
+    const data = await api('/auth/bookings?' + params);
+    const items = data.items || data || [];
+    citasState.total = data.total || items.length;
+    cont.innerHTML = '';
+    if (!items.length) { cont.innerHTML = '<div class="panel-sub">Sin citas con estos filtros.</div>'; }
+    items.forEach(b => cont.appendChild(buildCitaRow(b)));
+    const info = document.getElementById('citasPageInfo');
+    info.textContent = `${citasState.page * citasState.pageSize + 1}–${Math.min((citasState.page+1)*citasState.pageSize, citasState.total)} de ${citasState.total}`;
+    document.getElementById('citasPrevPage').disabled = citasState.page === 0;
+    document.getElementById('citasNextPage').disabled = (citasState.page+1)*citasState.pageSize >= citasState.total;
+  } catch(e) { cont.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+}
+
+function buildCitaRow(b) {
+  const row = document.createElement('div');
+  row.className = 'panel-card';
+  row.style.cssText = 'padding:14px; background:var(--panel-2);';
+  const fecha = b.datetime || b.date || b.start_time || '';
+  const fmtDate = fecha ? new Date(fecha).toLocaleString('es-ES', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '–';
+  const statusMap = { pending:'badge-pending', confirmed:'badge-confirmed', cancelled:'badge-cancelled', completed:'badge-completed' };
+  row.innerHTML = `
+    <div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; margin-bottom:4px;">${escapeHtml(b.client_name || b.name || '(cliente)')}</div>
+        <div class="panel-sub" style="margin:0;">${escapeHtml(b.service_name || b.service || '')} · ${escapeHtml(b.employee_name || b.professional || '')} · ${fmtDate}</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+        <span class="badge ${statusMap[b.status] || ''}">${escapeHtml(b.status || 'pending')}</span>
+        ${b.status !== 'cancelled' && b.status !== 'completed' ? `<button class="btn btn-ghost" data-cancel="${escapeHtml(b.id)}" style="padding:4px 10px; font-size:0.78rem;">Cancelar</button>` : ''}
+        ${b.status !== 'cancelled' && b.status !== 'completed' ? `<button class="btn btn-ghost" data-resched="${escapeHtml(b.id)}" style="padding:4px 10px; font-size:0.78rem;">Reprogramar</button>` : ''}
+      </div>
+    </div>
+    <div id="confirm-${escapeHtml(b.id)}" style="display:none; margin-top:10px; display:none; align-items:center; gap:8px; background:var(--danger-soft); padding:8px 12px; border-radius:8px;">
+      <span style="flex:1; font-size:0.84rem; color:var(--danger);">¿Cancelar esta cita?</span>
+      <button class="btn" style="background:var(--danger); color:#fff; padding:4px 12px; font-size:0.78rem;" data-confirm-cancel="${escapeHtml(b.id)}">Sí, cancelar</button>
+      <button class="btn btn-ghost" style="padding:4px 10px; font-size:0.78rem;" data-dismiss-cancel="${escapeHtml(b.id)}">No</button>
+    </div>`;
+  const cancelBtn = row.querySelector(`[data-cancel="${b.id}"]`);
+  if (cancelBtn) cancelBtn.addEventListener('click', () => {
+    const conf = row.querySelector(`#confirm-${b.id}`); conf.style.display = 'flex';
+  });
+  const confBtn = row.querySelector(`[data-confirm-cancel="${b.id}"]`);
+  if (confBtn) confBtn.addEventListener('click', async () => {
+    try { await api(`/auth/bookings/${b.id}/cancel`, { method:'POST' }); toast('Cita cancelada', 'success'); fetchCitasList(); }
+    catch(e) { toast(e.message, 'error'); }
+  });
+  const dismissBtn = row.querySelector(`[data-dismiss-cancel="${b.id}"]`);
+  if (dismissBtn) dismissBtn.addEventListener('click', () => { row.querySelector(`#confirm-${b.id}`).style.display = 'none'; });
+  const reschedBtn = row.querySelector(`[data-resched="${b.id}"]`);
+  if (reschedBtn) reschedBtn.addEventListener('click', () => openReschedDrawer(b));
+  return row;
+}
+
+async function openReschedDrawer(b) {
+  document.getElementById('reschedBookingId').value = b.id;
+  document.getElementById('reschedSlotSelected').value = '';
+  document.getElementById('reschedDesc').textContent = `Cita de ${b.client_name || b.name || '(cliente)'} — ${b.service_name || ''}`;
+  document.getElementById('reschedDate').value = (b.datetime || b.date || '').slice(0,10);
+  document.getElementById('reschedConfirmBtn').disabled = true;
+  document.getElementById('reschedDrawer').classList.add('open');
+  document.getElementById('reschedOverlay').classList.add('open');
+  await loadReschedSlots();
+}
+
+async function loadReschedSlots() {
+  const date = document.getElementById('reschedDate').value;
+  const slotsDiv = document.getElementById('reschedSlots');
+  if (!date) { slotsDiv.innerHTML = '<div class="panel-sub">Selecciona una fecha.</div>'; return; }
+  slotsDiv.innerHTML = '<div class="panel-sub">Cargando huecos…</div>';
+  try {
+    const data = await api(`/disponibilidad?cliente_id=${state.cliente_id}&fecha=${date}`);
+    const slots = data.slots || data || [];
+    slotsDiv.innerHTML = '';
+    if (!slots.length) { slotsDiv.innerHTML = '<div class="panel-sub">Sin huecos disponibles ese día.</div>'; return; }
+    slots.forEach(s => {
+      const btn = document.createElement('button');
+      btn.className = 'filter-chip'; btn.textContent = s.time || s;
+      btn.addEventListener('click', () => {
+        slotsDiv.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('reschedSlotSelected').value = s.datetime || (date + 'T' + (s.time || s));
+        document.getElementById('reschedConfirmBtn').disabled = false;
+      });
+      slotsDiv.appendChild(btn);
+    });
+  } catch(e) { slotsDiv.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+}
+
+document.getElementById('reschedDate').addEventListener('change', loadReschedSlots);
+document.getElementById('reschedConfirmBtn').addEventListener('click', async () => {
+  const id = document.getElementById('reschedBookingId').value;
+  const dt = document.getElementById('reschedSlotSelected').value;
+  try {
+    await api(`/auth/bookings/${id}/reschedule`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ new_datetime: dt }) });
+    toast('Cita reprogramada', 'success');
+    document.getElementById('reschedDrawer').classList.remove('open');
+    document.getElementById('reschedOverlay').classList.remove('open');
+    fetchCitasList();
+  } catch(e) { toast(e.message, 'error'); }
+});
+document.getElementById('reschedClose').addEventListener('click', () => { document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
+document.getElementById('reschedOverlay').addEventListener('click', () => { document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
+
+document.getElementById('citasViewCal').addEventListener('click', () => {
+  document.getElementById('citasCalView').style.display = '';
+  document.getElementById('citasListView').style.display = 'none';
+  renderCalendar();
+});
+document.getElementById('citasViewList').addEventListener('click', () => {
+  document.getElementById('citasCalView').style.display = 'none';
+  document.getElementById('citasListView').style.display = '';
+  fetchCitasList();
+});
+document.getElementById('citasPrevPage').addEventListener('click', () => { citasState.page--; fetchCitasList(); });
+document.getElementById('citasNextPage').addEventListener('click', () => { citasState.page++; fetchCitasList(); });
+document.getElementById('citasFiltLimpiar').addEventListener('click', () => {
+  ['citasFiltProf','citasFiltEstado'].forEach(id => document.getElementById(id).value = '');
+  ['citasFiltDesde','citasFiltHasta'].forEach(id => document.getElementById(id).value = '');
+  citasState.period = 'all'; citasState.page = 0;
+  document.querySelectorAll('#citasQuickFilters .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.period === 'all'));
+  fetchCitasList();
+});
+document.querySelectorAll('#citasQuickFilters .filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    citasState.period = chip.dataset.period; citasState.page = 0;
+    document.querySelectorAll('#citasQuickFilters .filter-chip').forEach(c => c.classList.toggle('active', c === chip));
+    fetchCitasList();
+  });
+});
+
+function renderCalendar() {
+  const y = citasState.calYear, m = citasState.calMonth;
+  const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  document.getElementById('calTitle').textContent = `${monthNames[m]} ${y}`;
+  const grid = document.getElementById('calGrid');
+  grid.innerHTML = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d => `<div class="cal-hdr">${d}</div>`).join('');
+  const first = new Date(y, m, 1);
+  const startDay = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(y, m+1, 0).getDate();
+  const today = new Date();
+  for (let i = 0; i < startDay; i++) {
+    const prev = new Date(y, m, -startDay + i + 1);
+    const d = document.createElement('div'); d.className = 'cal-day other-month';
+    d.innerHTML = `<div class="cal-day-num">${prev.getDate()}</div>`;
+    grid.appendChild(d);
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const d = document.createElement('div'); d.className = 'cal-day';
+    if (y === today.getFullYear() && m === today.getMonth() && day === today.getDate()) d.classList.add('today');
+    const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const count = (citasState.calData || []).filter(b => (b.datetime||b.date||'').slice(0,10) === dateStr).length;
+    d.innerHTML = `<div class="cal-day-num">${day}</div>${count ? `<div class="cal-dot"></div><div class="cal-dot-count">${count}</div>` : ''}`;
+    d.addEventListener('click', () => {
+      document.getElementById('citasFiltDesde').value = dateStr;
+      document.getElementById('citasFiltHasta').value = dateStr;
+      document.getElementById('citasCalView').style.display = 'none';
+      document.getElementById('citasListView').style.display = '';
+      citasState.page = 0; fetchCitasList();
+    });
+    grid.appendChild(d);
+  }
+}
+document.getElementById('calPrev').addEventListener('click', () => { citasState.calMonth--; if (citasState.calMonth < 0) { citasState.calMonth = 11; citasState.calYear--; } renderCalendar(); });
+document.getElementById('calNext').addEventListener('click', () => { citasState.calMonth++; if (citasState.calMonth > 11) { citasState.calMonth = 0; citasState.calYear++; } renderCalendar(); });
+
+// ── EQUIPO ────────────────────────────────────────────────────────────
+let allServices = [];
+async function loadEquipo() {
+  const grid = document.getElementById('equipoGrid');
+  grid.innerHTML = '<div class="panel-sub">Cargando…</div>';
+  try {
+    const [emps, svcs] = await Promise.all([api('/auth/employees'), api('/auth/services').catch(() => [])]);
+    allServices = svcs || [];
+    grid.innerHTML = '';
+    if (!emps.length) { grid.innerHTML = '<div class="panel-sub">Sin profesionales. Crea el primero.</div>'; }
+    emps.forEach(emp => {
+      const card = document.createElement('div'); card.className = 'employee-card';
+      card.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div class="employee-dot" style="background:${escapeHtml(emp.color||'#00D1FF')};"></div>
+          <span class="employee-name">${escapeHtml(emp.name)}</span>
+        </div>
+        <div class="employee-role">${escapeHtml(emp.role||'')}</div>
+        <div class="employee-status" style="color:${emp.active?'var(--success)':'var(--soft-2)'};">${emp.active?'Activo':'Inactivo'}</div>`;
+      card.addEventListener('click', () => openEquipoPanel(emp));
+      grid.appendChild(card);
+    });
+    loadHorariosProfSelect(emps);
+    loadCitasProfSelect(emps);
+  } catch(e) { grid.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+}
+
+function loadCitasProfSelect(emps) {
+  const sel = document.getElementById('citasFiltProf');
+  while (sel.options.length > 1) sel.remove(1);
+  (emps||[]).forEach(e => { const o = document.createElement('option'); o.value = e.id; o.textContent = e.name; sel.appendChild(o); });
+}
+
+function openEquipoPanel(emp) {
+  document.getElementById('equipoEditId').value = emp ? emp.id : '';
+  document.getElementById('equipoPanelTitle').textContent = emp ? 'Editar profesional' : 'Nuevo profesional';
+  document.getElementById('equipoNombre').value = emp ? emp.name : '';
+  document.getElementById('equipoRol').value = emp ? (emp.role||'') : '';
+  document.getElementById('equipoColor').value = emp ? (emp.color||'#00D1FF') : '#00D1FF';
+  document.getElementById('equipoColorText').value = emp ? (emp.color||'#00D1FF') : '#00D1FF';
+  document.getElementById('equipoActivo').checked = emp ? !!emp.active : true;
+  const servCheck = document.getElementById('equipoServicesCheck');
+  servCheck.innerHTML = '';
+  allServices.forEach(s => {
+    const assigned = emp && emp.service_ids ? emp.service_ids.includes(s.id) : false;
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:0.84rem; color:var(--soft);';
+    lbl.innerHTML = `<input type="checkbox" value="${escapeHtml(s.id)}" ${assigned?'checked':''} /> ${escapeHtml(s.name)}`;
+    servCheck.appendChild(lbl);
+  });
+  document.getElementById('equipoDeleteBtn').style.display = emp ? '' : 'none';
+  document.getElementById('equipoPanel').classList.add('open');
+  document.getElementById('equipoOverlay').classList.add('open');
+}
+
+document.getElementById('equipoNewBtn').addEventListener('click', () => openEquipoPanel(null));
+document.getElementById('equipoPanelClose').addEventListener('click', () => { document.getElementById('equipoPanel').classList.remove('open'); document.getElementById('equipoOverlay').classList.remove('open'); });
+document.getElementById('equipoOverlay').addEventListener('click', () => { document.getElementById('equipoPanel').classList.remove('open'); document.getElementById('equipoOverlay').classList.remove('open'); });
+document.getElementById('equipoColor').addEventListener('input', e => { document.getElementById('equipoColorText').value = e.target.value; });
+document.getElementById('equipoColorText').addEventListener('input', e => { if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) document.getElementById('equipoColor').value = e.target.value; });
+
+document.getElementById('equipoSaveBtn').addEventListener('click', async () => {
+  const id = document.getElementById('equipoEditId').value;
+  const payload = {
+    name: document.getElementById('equipoNombre').value.trim(),
+    role: document.getElementById('equipoRol').value.trim(),
+    color: document.getElementById('equipoColor').value,
+    active: document.getElementById('equipoActivo').checked,
+    service_ids: [...document.querySelectorAll('#equipoServicesCheck input:checked')].map(c => c.value),
+  };
+  if (!payload.name) { toast('El nombre es obligatorio.', 'error'); return; }
+  try {
+    if (id) await api(`/auth/employees/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    else await api('/auth/employees', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    toast('Profesional guardado', 'success');
+    document.getElementById('equipoPanel').classList.remove('open'); document.getElementById('equipoOverlay').classList.remove('open');
+    loadEquipo();
+  } catch(e) { toast(e.message, 'error'); }
+});
+
+document.getElementById('equipoDeleteBtn').addEventListener('click', async () => {
+  const id = document.getElementById('equipoEditId').value;
+  if (!id) return;
+  const btn = document.getElementById('equipoDeleteBtn');
+  if (btn.dataset.confirm !== '1') { btn.dataset.confirm = '1'; btn.textContent = '¿Confirmar?'; setTimeout(() => { btn.dataset.confirm = ''; btn.textContent = 'Eliminar'; }, 3000); return; }
+  try {
+    await api(`/auth/employees/${id}`, { method:'DELETE' });
+    toast('Profesional eliminado', 'success');
+    document.getElementById('equipoPanel').classList.remove('open'); document.getElementById('equipoOverlay').classList.remove('open');
+    loadEquipo();
+  } catch(e) { toast(e.message, 'error'); }
+});
+
+// ── HORARIOS ──────────────────────────────────────────────────────────
+function loadHorariosProfSelect(emps) {
+  const sel = document.getElementById('horProf');
+  while (sel.options.length > 1) sel.remove(1);
+  (emps||[]).forEach(e => { const o = document.createElement('option'); o.value = e.id; o.textContent = e.name; sel.appendChild(o); });
+}
+
+async function loadHorarios() {
+  try {
+    const [data, emps] = await Promise.all([api('/auth/schedule'), api('/auth/employees').catch(() => [])]);
+    loadHorariosProfSelect(emps);
+    fillHorarioForm(data);
+    renderBloqueos(data.blocks || []);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function fillHorarioForm(data) {
+  document.getElementById('horEnabled').checked = !!data.enabled;
+  document.getElementById('horStart').value = data.start_time || '09:00';
+  document.getElementById('horEnd').value = data.end_time || '18:00';
+  document.getElementById('horSlot').value = data.slot_duration || 30;
+  document.getElementById('horTz').value = data.timezone || 'Europe/Madrid';
+  const closed = data.closed_days || [];
+  document.querySelectorAll('#horDays input[type=checkbox]').forEach(cb => {
+    cb.checked = closed.includes(parseInt(cb.value));
+    cb.closest('label').classList.toggle('active', closed.includes(parseInt(cb.value)));
+  });
+}
+
+function renderBloqueos(blocks) {
+  const list = document.getElementById('horBlocksList');
+  list.innerHTML = '';
+  if (!blocks.length) { list.innerHTML = '<div class="panel-sub">Sin bloqueos activos.</div>'; return; }
+  blocks.forEach(b => {
+    const row = document.createElement('div'); row.className = 'chat-row';
+    row.style.cssText = 'padding:10px 14px; display:flex; align-items:center; gap:10px;';
+    row.innerHTML = `<div style="flex:1;"><b>${escapeHtml(b.start_date||'')} – ${escapeHtml(b.end_date||b.start_date||'')}</b> <span class="panel-sub" style="margin:0;">${escapeHtml(b.reason||'')}</span></div><button class="btn btn-ghost" data-block-id="${escapeHtml(b.id)}" style="padding:4px 10px; font-size:0.78rem;">Eliminar</button>`;
+    row.querySelector('[data-block-id]').addEventListener('click', async () => {
+      try { await api(`/auth/schedule/blocks/${b.id}`, { method:'DELETE' }); toast('Bloqueo eliminado', 'success'); loadHorarios(); }
+      catch(e) { toast(e.message, 'error'); }
+    });
+    list.appendChild(row);
+  });
+}
+
+document.querySelectorAll('#horDays label').forEach(lbl => {
+  lbl.addEventListener('click', () => setTimeout(() => lbl.classList.toggle('active', lbl.querySelector('input').checked), 0));
+});
+
+document.getElementById('horSaveBtn').addEventListener('click', async () => {
+  const closed = [...document.querySelectorAll('#horDays input:checked')].map(cb => parseInt(cb.value));
+  const profId = document.getElementById('horProf').value;
+  const payload = {
+    enabled: document.getElementById('horEnabled').checked,
+    start_time: document.getElementById('horStart').value,
+    end_time: document.getElementById('horEnd').value,
+    slot_duration: parseInt(document.getElementById('horSlot').value) || 30,
+    timezone: document.getElementById('horTz').value.trim() || 'Europe/Madrid',
+    closed_days: closed,
+  };
+  const url = profId ? `/auth/schedule/employee/${profId}` : '/auth/schedule';
+  try { await api(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); toast('Horario guardado', 'success'); }
+  catch(e) { toast(e.message, 'error'); }
+});
+
+document.getElementById('horProf').addEventListener('change', async () => {
+  const profId = document.getElementById('horProf').value;
+  const url = profId ? `/auth/schedule/employee/${profId}` : '/auth/schedule';
+  try { const data = await api(url); fillHorarioForm(data); renderBloqueos(data.blocks||[]); }
+  catch(e) { toast(e.message, 'error'); }
+});
+
+document.getElementById('horBlockAddBtn').addEventListener('click', async () => {
+  const payload = {
+    start_date: document.getElementById('horBlockStart').value,
+    end_date: document.getElementById('horBlockEnd').value,
+    start_time: document.getElementById('horBlockHStart').value || null,
+    end_time: document.getElementById('horBlockHEnd').value || null,
+    reason: document.getElementById('horBlockReason').value.trim(),
+  };
+  if (!payload.start_date) { toast('Indica la fecha de inicio.', 'error'); return; }
+  try { await api('/auth/schedule/blocks', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); toast('Bloqueo añadido', 'success'); loadHorarios(); }
+  catch(e) { toast(e.message, 'error'); }
+});
+
+// ── MENSAJES ──────────────────────────────────────────────────────────
+const MSG_TEMPLATES = [
+  { key:'confirmacion', label:'Confirmación de cita' },
+  { key:'recordatorio_24h', label:'Recordatorio 24 horas antes' },
+  { key:'recordatorio_2h', label:'Recordatorio 2 horas antes' },
+  { key:'cancelada', label:'Cita cancelada' },
+  { key:'reprogramada', label:'Cita reprogramada' },
+];
+let mensajesData = {};
+
+async function loadMensajes() {
+  try {
+    const data = await api('/auth/schedule');
+    mensajesData = data.message_templates || {};
+    renderMensajesAccordions();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function renderMensajesAccordions() {
+  const cont = document.getElementById('mensajesAccordions');
+  cont.innerHTML = '';
+  MSG_TEMPLATES.forEach(tpl => {
+    const cfg = mensajesData[tpl.key] || {};
+    const acc = document.createElement('div'); acc.className = 'accordion';
+    acc.innerHTML = `
+      <div class="accordion-head">
+        <b>${escapeHtml(tpl.label)}</b>
+        <span style="font-size:0.78rem; color:${cfg.enabled?'var(--success)':'var(--soft-2)'};">${cfg.enabled?'Activo':'Inactivo'}</span>
+        <svg class="accordion-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="accordion-body">
+        <label style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:0.88rem; color:var(--soft);">
+          <input type="checkbox" class="msg-enabled" data-key="${tpl.key}" ${cfg.enabled?'checked':''} /> Habilitar este mensaje
+        </label>
+        <label class="field-label">Contenido</label>
+        <textarea class="field-textarea msg-content" data-key="${tpl.key}" maxlength="500" style="min-height:80px;">${escapeHtml(cfg.content||'')}</textarea>
+        <div style="font-size:0.74rem; color:var(--soft-2); margin-top:4px; text-align:right;" class="msg-counter" data-key="${tpl.key}">${(cfg.content||'').length}/500</div>
+        <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center;">
+          <button class="btn btn-ghost msg-preview-btn" data-key="${tpl.key}" style="padding:7px 14px; font-size:0.82rem;">Preview</button>
+          <input type="email" class="field-input msg-test-email" data-key="${tpl.key}" placeholder="email@prueba.com" style="width:auto; flex:1 1 180px;" />
+          <button class="btn btn-ghost msg-test-btn" data-key="${tpl.key}" style="padding:7px 14px; font-size:0.82rem;">Enviar test</button>
+        </div>
+        <div class="msg-preview-out" data-key="${tpl.key}" style="display:none; margin-top:12px; padding:12px; background:#07101f; border-radius:10px; font-size:0.84rem; color:var(--soft); white-space:pre-wrap;"></div>
+      </div>`;
+    acc.querySelector('.accordion-head').addEventListener('click', () => acc.classList.toggle('open'));
+    acc.querySelector('.msg-content').addEventListener('input', e => {
+      acc.querySelector(`.msg-counter[data-key="${tpl.key}"]`).textContent = e.target.value.length + '/500';
+    });
+    acc.querySelector('.msg-preview-btn').addEventListener('click', async () => {
+      const content = acc.querySelector(`.msg-content[data-key="${tpl.key}"]`).value;
+      const out = acc.querySelector(`.msg-preview-out[data-key="${tpl.key}"]`);
+      try {
+        const r = await api('/auth/schedule/message-preview', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ template_key: tpl.key, content }) });
+        out.textContent = r.preview || r.html || JSON.stringify(r); out.style.display = '';
+      } catch(e) { toast(e.message, 'error'); }
+    });
+    acc.querySelector('.msg-test-btn').addEventListener('click', async () => {
+      const email = acc.querySelector(`.msg-test-email[data-key="${tpl.key}"]`).value.trim();
+      const content = acc.querySelector(`.msg-content[data-key="${tpl.key}"]`).value;
+      if (!email) { toast('Indica un email de prueba.', 'error'); return; }
+      try {
+        await api('/auth/schedule/message-test', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ template_key: tpl.key, content, test_email: email }) });
+        toast('Email de prueba enviado', 'success');
+      } catch(e) { toast(e.message, 'error'); }
+    });
+    cont.appendChild(acc);
+  });
+}
+
+document.getElementById('mensajesGuardarBtn').addEventListener('click', async () => {
+  const templates = {};
+  MSG_TEMPLATES.forEach(tpl => {
+    templates[tpl.key] = {
+      enabled: !!(document.querySelector(`.msg-enabled[data-key="${tpl.key}"]`)?.checked),
+      content: document.querySelector(`.msg-content[data-key="${tpl.key}"]`)?.value || '',
+    };
+  });
+  try {
+    await api('/auth/schedule', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ message_templates: templates }) });
+    toast('Plantillas guardadas', 'success'); loadMensajes();
+  } catch(e) { toast(e.message, 'error'); }
+});
+
+// ── INSTALACION ───────────────────────────────────────────────────────
+function loadInstalacion() {
+  const snippet = `<script\n  src="https://app.vantelia.es/widget/widget.min.js"\n  data-api="https://app.vantelia.es"\n  data-client="__CLIENTE_ID__"\n  data-position="right">\n<\/script>`;
+  document.getElementById('instSnippet').value = snippet;
+  document.getElementById('instDemoLink').href = '/demo/__CLIENTE_ID__';
+}
+document.getElementById('instCopyBtn').addEventListener('click', e => copy(document.getElementById('instSnippet').value, e.target));
+
+// ── CUENTA ────────────────────────────────────────────────────────────
+async function loadCuenta() {
+  try {
+    const me = await api('/auth/me');
+    document.getElementById('cuentaNombre').value = me.name || me.nombre || '';
+    document.getElementById('cuentaEmail').value = me.email || '';
+  } catch(e) { toast(e.message, 'error'); }
+}
+document.getElementById('cuentaSavePerfilBtn').addEventListener('click', async () => {
+  try {
+    await api('/auth/profile', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: document.getElementById('cuentaNombre').value.trim() }) });
+    toast('Perfil actualizado', 'success');
+    document.getElementById('userName').textContent = document.getElementById('cuentaNombre').value.trim();
+    document.getElementById('userAvatar').textContent = (document.getElementById('cuentaNombre').value.trim()||'?').slice(0,1).toUpperCase();
+  } catch(e) { toast(e.message, 'error'); }
+});
+document.getElementById('cuentaChangePwdBtn').addEventListener('click', async () => {
+  const actual = document.getElementById('cuentaPwdActual').value;
+  const nueva = document.getElementById('cuentaPwdNueva').value;
+  const confirm = document.getElementById('cuentaPwdConfirm').value;
+  if (!actual || !nueva) { toast('Rellena todos los campos.', 'error'); return; }
+  if (nueva.length < 8) { toast('La nueva contraseña debe tener al menos 8 caracteres.', 'error'); return; }
+  if (nueva !== confirm) { toast('Las contraseñas no coinciden.', 'error'); return; }
+  try {
+    await api('/auth/password/change', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ current_password: actual, new_password: nueva }) });
+    toast('Contraseña cambiada', 'success');
+    ['cuentaPwdActual','cuentaPwdNueva','cuentaPwdConfirm'].forEach(id => { document.getElementById(id).value = ''; });
+  } catch(e) { toast(e.message, 'error'); }
+});
+document.getElementById('cuentaLogoutBtn').addEventListener('click', async () => {
+  try { await api('/auth/logout', { method:'POST' }); } catch {}
+  window.location.href = '/acceso';
+});
+
 // ── Init ──────────────────────────────────────────────────────────────
 (async function init() {
   await Promise.all([loadOverview(), loadDeploy(), loadAppearance()]);
+  loadInstalacion();
+  // Update bot drawer with bot name/welcome after overview loads
+  document.getElementById('drawerAvatar').textContent = (state.icono||'AI').slice(0,2).toUpperCase();
+  document.getElementById('drawerTitle').textContent = (state.nombre||'Tu Asistente') + ' — Test';
+  document.getElementById('botDrawerWelcome').textContent = state.bienvenida || 'Hola, ¿en qué puedo ayudarte hoy?';
 })();
 </script>
 </body>
