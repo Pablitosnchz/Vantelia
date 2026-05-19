@@ -594,15 +594,228 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
 .or-badge.client { background:#dbeafe; color:#1e3a8a; }
 .or-badge.lost { background:#fee2e2; color:#991b1b; }
 .or-badge.opened { background:#dcfce7; color:#166534; }
+.or-discovery-table-wrap {
+  overflow: auto;
+  max-height: 520px;
+  border: 1px solid #e4eaf2;
+  border-radius: 10px;
+  background: #fff;
+}
+.or-discovery-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #0f172a;
+  background: #fff;
+}
+.or-discovery-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 10px;
+  text-align: left;
+  background: #f6f8fb;
+  color: #334155;
+  border-bottom: 1px solid #e4eaf2;
+}
+.or-discovery-table td {
+  padding: 6px 10px;
+  border-top: 1px solid #eef2f7;
+  color: #0f172a;
+  vertical-align: middle;
+}
+.or-discovery-table tbody tr.no-email { background: #fffaf0; }
+.or-discovery-table tbody tr:hover { background: #eef6ff; }
+.or-discovery-table a {
+  color: #0369a1;
+  font-weight: 600;
+}
+.or-discovery-table input[type="email"] {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #d6dde6;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 13px;
+}
+.or-discovery-table input[type="email"]::placeholder { color: #94a3b8; }
+.or-discovery-table input[type="checkbox"] { accent-color: var(--accent); }
+
+[data-view="instagram"] .grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+[data-view="instagram"] .grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+[data-view="instagram"] .stat-card {
+  min-height: 96px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+[data-view="instagram"] .stat-card strong {
+  font-family: var(--font-title);
+  font-size: 28px;
+  line-height: 1;
+  color: var(--accent);
+}
+[data-view="instagram"] .stat-card span {
+  color: var(--soft);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+[data-view="instagram"] .ig-empty {
+  padding: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--soft);
+  background: rgba(255,255,255,.025);
+  font-size: 13px;
+}
+[data-view="instagram"] .ig-list {
+  display: grid;
+  gap: 8px;
+}
+[data-view="instagram"] .ig-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+[data-view="instagram"] .ig-row:last-child {
+  border-bottom: 0;
+}
+[data-view="instagram"] .ig-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+[data-view="instagram"] .ig-main strong,
+[data-view="instagram"] .ig-main span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+[data-view="instagram"] .ig-table-wrap,
+[data-view="instagram"] #igProspectsTable {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+[data-view="instagram"] .ig-table-wrap table,
+[data-view="instagram"] #igProspectsTable table {
+  min-width: 760px;
+  color: var(--text);
+}
+[data-view="instagram"] .ig-job {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  display: grid;
+  gap: 4px;
+}
+[data-view="instagram"] .ig-job header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+[data-view="instagram"] .checkbox,
+[data-view="instagram"] .switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+[data-view="instagram"] .checkbox input,
+[data-view="instagram"] .switch input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+}
+[data-view="instagram"] [data-ig-panel] {
+  min-width: 0;
+}
+[data-view="instagram"] [data-ig-panel] > .card.panel,
+[data-view="instagram"] #igTemplatesEditor .card.panel,
+[data-view="instagram"] #igDraftsList .card.panel {
+  border-radius: 8px;
+  background: var(--surface-2);
+  box-shadow: none;
+}
+[data-view="instagram"] #igDraftsList .card.panel {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+[data-view="instagram"] #igDraftsList textarea,
+[data-view="instagram"] #igTemplatesEditor textarea {
+  color: var(--text);
+  background: rgba(255,255,255,.04);
+  border-color: var(--line);
+}
+[data-view="instagram"] #igProspectsTable,
+[data-view="instagram"] #igSupBody {
+  color: var(--text);
+}
+[data-view="instagram"] #igProspectsTable table,
+[data-view="instagram"] [data-ig-panel="suppressions"] table,
+[data-view="instagram"] #igAbBox table {
+  min-width: 760px;
+  color: var(--text);
+}
+[data-view="instagram"] #igProspectsTable a {
+  color: var(--accent);
+  font-weight: 700;
+}
+[data-view="instagram"] #igDiscLog {
+  border: 1px solid var(--line);
+}
 
 @media (max-width: 1180px) {
   .cw-campaign-card { grid-template-columns: minmax(220px, 1fr) minmax(180px, .8fr); }
   .cw-campaign-card .actions { justify-content:flex-start; min-width:0; }
+  [data-view="instagram"] .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-view="instagram"] .grid-2 { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
   .cw-campaign-card { grid-template-columns: 1fr; align-items:stretch; }
   .cw-campaign-card .cw-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  [data-view="instagram"] .grid-4 { grid-template-columns: 1fr; }
+  [data-view="instagram"] #igDraftsList .card.panel {
+    grid-template-columns: 1fr !important;
+  }
+  [data-view="instagram"] #igDraftsList .card.panel > div:last-child {
+    min-width: 0 !important;
+  }
+  [data-view="instagram"] .actions {
+    align-items: stretch;
+  }
+  [data-view="instagram"] .actions > input,
+  [data-view="instagram"] .actions > select,
+  [data-view="instagram"] .actions > button,
+  [data-view="instagram"] .actions > a {
+    width: 100%;
+  }
 }
 
 /* ── Dashboard view (toggle by .active via JS) ──── */
@@ -1379,6 +1592,10 @@ tbody tr:last-child td { border-bottom: none; }
           <span class="nav-icon">CP</span>
           <span class="nav-text"><strong>Captacion</strong><span>Outbound, demos y leads</span></span>
         </button>
+        <button class="nav-button" type="button" data-nav-view="instagram">
+          <span class="nav-icon">IG</span>
+          <span class="nav-text"><strong>Instagram</strong><span>Captacion via DM</span></span>
+        </button>
         <button class="nav-button" type="button" data-nav-view="security">
           <span class="nav-icon">SG</span>
           <span class="nav-text"><strong>Seguridad</strong><span>Sesion y contrasena</span></span>
@@ -2119,11 +2336,11 @@ tbody tr:last-child td { border-bottom: none; }
           <div class="section-header">
             <div>
               <h2>Captacion</h2>
-              <p>Panel de control outbound: prospects, secuencias, tracking, discovery y bajas.</p>
+              <p>Vista operativa de captacion: estado, acciones pendientes, leads calientes y errores.</p>
             </div>
             <div class="actions">
               <span id="cwAutosaveLabel" class="cw-autosave">Borrador guardado</span>
-              <button class="ghost small" type="button" id="cwResetBtn">Nuevo wizard</button>
+              <button class="ghost small" type="button" id="cwResetBtn">Reiniciar wizard</button>
               <button class="ghost small" type="button" id="cwAdvancedToggle" hidden>Herramientas avanzadas</button>
               <span style="display:none">
               <button class="ghost small" type="button" data-outreach-tab="autopilot">Autopiloto</button>
@@ -2137,12 +2354,11 @@ tbody tr:last-child td { border-bottom: none; }
           </div>
 
           <div class="actions cw-advanced-tabs" id="orAdvancedTabs">
-            <button class="ghost small" type="button" data-outreach-tab="autopilot">Autopiloto <span class="or-tab-badge" data-badge="autopilot" style="display:none;"></span></button>
-            <button class="ghost small" type="button" data-outreach-tab="autonomous">Modo automático <span class="or-tab-badge" data-badge="autonomous" style="display:none;"></span></button>
+            <button class="ghost small" type="button" data-outreach-tab="autopilot">Hoy <span class="or-tab-badge" data-badge="autopilot" style="display:none;"></span></button>
             <button class="ghost small" type="button" data-outreach-tab="prospects">Prospects <span class="or-tab-badge" data-badge="prospects" style="display:none;"></span></button>
+            <button class="ghost small" type="button" data-outreach-tab="autonomous">Automatizacion <span class="or-tab-badge" data-badge="autonomous" style="display:none;"></span></button>
             <button class="ghost small" type="button" data-outreach-tab="campaigns">Campanas</button>
-            <button class="ghost small" type="button" data-outreach-tab="discovery">Discovery</button>
-            <button class="ghost small" type="button" data-outreach-tab="templates">Plantillas</button>
+            <button class="ghost small" type="button" data-outreach-tab="templates">Mensajes</button>
             <button class="ghost small" type="button" data-outreach-tab="suppressions">Bajas <span class="or-tab-badge" data-badge="suppressions" style="display:none;"></span></button>
           </div>
           <style>
@@ -2150,6 +2366,16 @@ tbody tr:last-child td { border-bottom: none; }
             .or-tab-badge.warning { background:#f59e0b; }
             .or-tab-badge.danger { background:#dc2626; }
             .or-tab-badge.success { background:#16a34a; }
+            .or-ops-grid { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr); gap:14px; margin-bottom:14px; }
+            .or-status-row { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+            .or-status-pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700; }
+            .or-status-pill.ok { color:#065f46; background:#dcfce7; }
+            .or-status-pill.warn { color:#92400e; background:#fef3c7; }
+            .or-status-pill.run { color:#075985; background:#e0f2fe; }
+            .or-status-pill.err { color:#991b1b; background:#fee2e2; }
+            .or-error-list { margin-top:10px; display:flex; flex-direction:column; gap:8px; font-size:12px; }
+            .or-error-item { padding:8px 10px; border:1px solid #fecaca; border-radius:8px; background:#fff7f7; color:#7f1d1d; }
+            @media (max-width: 920px) { .or-ops-grid { grid-template-columns:1fr; } }
           </style>
 
           <div class="campaign-wizard outreach-panel" data-outreach-panel="campaigns" id="campaignWizard">
@@ -2260,24 +2486,60 @@ tbody tr:last-child td { border-bottom: none; }
               <button class="ghost small" type="button" id="orRepliesBannerBtn" style="background:rgba(255,255,255,0.2);color:#fff;border-color:rgba(255,255,255,0.4);">Ver respuestas</button>
             </div>
 
+            <!-- Vista Hoy -->
+            <div class="or-ops-grid">
+              <div class="card" style="padding:18px;border:1px solid var(--accent-line);">
+                <div class="or-status-row">
+                  <div>
+                    <strong style="font-size:16px;">Hoy</strong>
+                    <p class="muted" style="margin:4px 0 0;font-size:12px;">Lo importante para operar captacion sin entrar en ajustes.</p>
+                  </div>
+                  <div class="actions">
+                    <button class="secondary small" type="button" id="orTodayRunNow">Ejecutar ronda</button>
+                    <button class="ghost small" type="button" id="orTodayOpenAutomation">Configurar</button>
+                  </div>
+                </div>
+                <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-top:14px;">
+                  <div class="stat"><strong id="orTodayProspects">-</strong><span>Prospects</span></div>
+                  <div class="stat"><strong id="orTodaySentToday">-</strong><span>Enviados hoy</span></div>
+                  <div class="stat"><strong id="orTodaySentWeek">-</strong><span>Ultimos 7 dias</span></div>
+                  <div class="stat"><strong id="orTodayReplyRate">-</strong><span>Tasa respuesta</span></div>
+                </div>
+              </div>
+              <div class="card" style="padding:18px;">
+                <div class="or-status-row">
+                  <div>
+                    <strong style="font-size:16px;">Automatizacion</strong>
+                    <p class="muted" style="margin:4px 0 0;font-size:12px;" id="orTodayAutomationDetail">Cargando estado...</p>
+                  </div>
+                  <span id="orTodayAutomationStatus" class="or-status-pill warn">Cargando</span>
+                </div>
+                <div class="actions" style="margin-top:12px;">
+                  <button type="button" id="orTodayToggleAutomation" class="ghost small">Cargando...</button>
+                </div>
+                <div id="orRecentErrors" class="or-error-list">
+                  <div class="muted">Cargando errores recientes...</div>
+                </div>
+              </div>
+            </div>
+
             <!-- A) Stats bar -->
             <div class="card" style="padding:14px 18px;margin-bottom:14px;">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
                 <div>
-                  <strong style="font-size:15px;">Autopiloto comercial</strong>
-                  <p class="muted" style="margin:2px 0 0;font-size:12px;">Estado de tu campaña outbound en tiempo real.</p>
+                  <strong style="font-size:15px;">Resumen general</strong>
+                  <p class="muted" style="margin:2px 0 0;font-size:12px;">Volumen, bajas y salud de los ultimos dias.</p>
                 </div>
                 <div class="actions">
                   <button class="ghost small" type="button" id="orAutopilotRefresh">Actualizar</button>
                   <button class="secondary small" type="button" id="orAutopilotRun">Enviar follow-ups</button>
                 </div>
               </div>
-              <div class="stat-grid" style="grid-template-columns:repeat(5,1fr);">
-                <div class="stat"><strong id="orProspects">-</strong><span>Prospects</span></div>
-                <div class="stat"><strong id="orSentToday">-</strong><span>Enviados hoy</span></div>
-                <div class="stat"><strong id="orSentWeek">-</strong><span>Últimos 7 días</span></div>
-                <div class="stat"><strong id="orReplyRate">-</strong><span>Tasa respuesta</span></div>
+              <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);">
                 <div class="stat"><strong id="orSuppressed">-</strong><span>Bajas</span></div>
+                <div class="stat"><strong id="orTodayReadyFu">-</strong><span>Follow-ups listos</span></div>
+                <div class="stat"><strong id="orTodayHotLeads">-</strong><span>Leads calientes</span></div>
+                <div class="stat"><strong id="orTodayErrors">-</strong><span>Errores recientes</span></div>
               </div>
             </div>
 
@@ -2393,6 +2655,7 @@ tbody tr:last-child td { border-bottom: none; }
                 </div>
                 <button type="button" id="orAutonomousToggle" style="min-width:140px;padding:10px 18px;border-radius:10px;border:0;font-weight:700;font-size:14px;cursor:pointer;">Cargando...</button>
               </div>
+              <div id="orAutonomousDiagnostics" style="margin-top:14px;display:none;"></div>
             </div>
             <div class="card" style="padding:14px;margin-bottom:14px;">
               <strong style="font-size:14px;">Estado en vivo</strong>
@@ -2407,10 +2670,40 @@ tbody tr:last-child td { border-bottom: none; }
               </div>
             </div>
             <div class="card" style="padding:14px;margin-bottom:14px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                <div>
+                  <strong style="font-size:14px;">Actividad del modo automático</strong>
+                  <p class="muted" style="margin:3px 0 0;font-size:11px;">Eventos recientes del worker: discovery, importaciones, envíos, errores. Hora Europe/Madrid.</p>
+                </div>
+                <div class="actions" style="margin:0;">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                    <input type="checkbox" id="orAutonomousLogAuto" checked />
+                    Auto-refresh 12s
+                  </label>
+                  <select id="orAutonomousLogLevel" style="font-size:12px;padding:4px 8px;">
+                    <option value="">Todos los niveles</option>
+                    <option value="info">Info</option>
+                    <option value="success">Éxito</option>
+                    <option value="warning">Aviso</option>
+                    <option value="error">Error</option>
+                  </select>
+                  <button class="ghost small" type="button" id="orAutonomousLogRefresh">Actualizar log</button>
+                  <button class="ghost small" type="button" id="orAutonomousLogClear">Limpiar vista</button>
+                </div>
+              </div>
+              <div id="orAutonomousLogBox" style="margin-top:12px;max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fbfcfe;">
+                <div class="muted" style="padding:14px;font-size:12px;">Cargando actividad...</div>
+              </div>
+              <div class="muted" style="margin-top:6px;font-size:11px;" id="orAutonomousLogMeta"></div>
+            </div>
+            <div class="card" style="padding:14px;margin-bottom:14px;">
               <strong style="font-size:14px;">Configuración</strong>
-              <div class="grid" style="grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;">
+              <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px;">
                 <label>Nuevos a importar/día<input id="orAutonomousDailyNew" type="number" min="1" max="200" value="20" /></label>
                 <label>Tope cold enviados/día<input id="orAutonomousDailyCold" type="number" min="1" max="200" value="30" /></label>
+                <label>Dias cold -> FU1<input id="orFollowupFu1Days" type="number" min="0" max="90" value="4" /></label>
+                <label>Dias FU1 -> FU2<input id="orFollowupFu2Days" type="number" min="0" max="90" value="5" /></label>
+                <label>Dias FU2 -> cierre<input id="orFollowupBreakupDays" type="number" min="0" max="90" value="6" /></label>
                 <label style="display:flex;flex-direction:column;gap:4px;">Auto follow-ups
                   <span><input id="orAutonomousAutoFu" type="checkbox" /> Aprobar follow-ups solo</span>
                 </label>
@@ -2527,9 +2820,9 @@ tbody tr:last-child td { border-bottom: none; }
               <label>Max resultados<input id="orDiscMax" type="number" min="5" max="100" value="30" /></label>
               <label>Fuente
                 <select id="orDiscSource">
-                  <option value="auto" selected>Auto</option>
-                  <option value="osm">OpenStreetMap (sin API key)</option>
-                  <option value="places">Google Places (requiere key)</option>
+                  <option value="auto" selected>Google Places + OSM</option>
+                  <option value="places">Solo Google Places</option>
+                  <option value="osm">Solo OpenStreetMap</option>
                 </select>
               </label>
               <label class="checkbox-line"><input id="orDiscEmails" type="checkbox" checked /> Extraer emails</label>
@@ -2539,7 +2832,7 @@ tbody tr:last-child td { border-bottom: none; }
               <button class="secondary small" type="button" id="orDiscRunBtn">Buscar empresas</button>
               <span class="muted" style="font-size:12px;align-self:center;">
                 Solo extraemos emails publicamente listados en webs corporativas. Respeta robots.txt.
-                OSM gratuito; Places requiere GOOGLE_PLACES_API_KEY en .env.
+                Google Places se usa primero si hay key; OSM complementa y actua como fallback.
               </span>
             </div>
             <div id="orDiscResults" style="margin-top:14px;"></div>
@@ -2592,6 +2885,220 @@ tbody tr:last-child td { border-bottom: none; }
                       <th></th></tr>
                 </thead>
                 <tbody id="orSupBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+        </section>
+      </section>
+
+      <section class="dashboard-view" data-view="instagram">
+        <section class="card panel">
+          <div class="section-header">
+            <div>
+              <h2>Captacion Instagram</h2>
+              <p>CRM ligero para registrar DMs, priorizar follow-ups y ver que usuarios estan calientes.</p>
+            </div>
+            <div class="actions">
+              <span id="igAutosendBadge" class="pill" style="display:none;">Autosend ON</span>
+              <span id="igWindowBadge" class="pill"></span>
+              <button class="ghost small" type="button" id="igPollRepliesBtn">Buscar respuestas</button>
+              <button class="ghost small" type="button" id="igRefreshBtn">Actualizar</button>
+            </div>
+          </div>
+
+          <div id="igComplianceBanner" style="background:#0b132b;color:#cbd5f5;padding:10px 12px;border-radius:8px;margin:8px 0 12px 0;font-size:13px;line-height:1.5;">
+            <strong>Modo asistido compliant.</strong> Captacion Instagram opera con deep links ig.me y envio manual.
+            Cumple ToS Meta. <span id="igAutosendWarn" style="display:none;color:#fca5a5;">Modo agresivo activo: riesgo bloqueo cuenta IG, usa cuenta secundaria.</span>
+          </div>
+
+          <div class="actions cw-advanced-tabs">
+            <button class="ghost small active" type="button" data-ig-tab="dashboard">Hoy</button>
+            <button class="ghost small" type="button" data-ig-tab="manual">Registrar contacto</button>
+            <button class="ghost small" type="button" data-ig-tab="prospects">Prospects IG</button>
+            <button class="ghost small" type="button" data-ig-tab="drafts">Seguimientos <span class="or-tab-badge" id="igDraftsBadge" style="display:none;"></span></button>
+            <button class="ghost small" type="button" data-ig-tab="templates">Mensajes</button>
+            <button class="ghost small" type="button" data-ig-tab="autopilot">Configuracion</button>
+            <button class="ghost small" type="button" data-ig-tab="suppressions">Bajas</button>
+          </div>
+
+          <div class="outreach-panel active" data-ig-panel="dashboard">
+            <div class="grid-4" style="margin-top:12px;">
+              <div class="stat-card"><strong id="igStatSent">0</strong><span>Contactos hoy</span></div>
+              <div class="stat-card"><strong id="igOpsSentWeek">0</strong><span>Ultimos 7 dias</span></div>
+              <div class="stat-card"><strong id="igOpsFollowupsDue">0</strong><span>Follow-ups vencidos</span></div>
+              <div class="stat-card"><strong id="igStatReplies">0</strong><span>Respuestas</span></div>
+            </div>
+            <div class="grid-2" style="margin-top:14px;">
+              <div class="card panel" style="padding:12px;">
+                <div class="section-header" style="margin-bottom:8px;">
+                  <div><strong>Acciones pendientes</strong><p class="muted">Usuarios a los que toca escribir hoy.</p></div>
+                  <button class="ghost small" type="button" id="igTodayRegisterBtn">Registrar contacto</button>
+                </div>
+                <div id="igTodayFollowups" class="muted">cargando...</div>
+              </div>
+              <div class="card panel" style="padding:12px;">
+                <strong>Leads calientes</strong>
+                <div id="igHotLeadsBox" class="muted">cargando...</div>
+              </div>
+            </div>
+            <div class="grid-2" style="margin-top:14px;">
+              <div class="card panel" style="padding:12px;">
+                <strong>Estado del embudo</strong>
+                <div id="igFunnelBox" class="muted">cargando...</div>
+              </div>
+              <div class="card panel" style="padding:12px;">
+                <strong>Actividad reciente</strong>
+                <div id="igRecentActivity" class="muted">cargando...</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="outreach-panel" data-ig-panel="manual" style="display:none;">
+            <div class="grid-2" style="margin-top:12px;">
+              <div class="card panel" style="padding:14px;">
+                <div class="section-header">
+                  <div><strong>Registrar contacto</strong><p class="muted">Pega el usuario y el mensaje que acabas de enviar o recibir.</p></div>
+                </div>
+                <div class="grid-2" style="margin-top:10px;">
+                  <label>Usuario IG *<input id="igManualUsername" placeholder="@clinica_demo" /></label>
+                  <label>Etapa
+                    <select id="igManualStage">
+                      <option value="">Inferir automaticamente</option>
+                      <option value="cold">Primer contacto</option>
+                      <option value="fu1">Follow-up 1</option>
+                      <option value="fu2">Follow-up 2</option>
+                      <option value="breakup">Cierre</option>
+                      <option value="respuesta">Respuesta recibida</option>
+                      <option value="interesado">Interesado</option>
+                      <option value="perdido">Perdido</option>
+                    </select>
+                  </label>
+                  <label>Nombre<input id="igManualFullName" placeholder="Clinica Demo" /></label>
+                  <label>Fecha/hora<input id="igManualAt" type="datetime-local" /></label>
+                  <label>Nicho<input id="igManualNiche" placeholder="estetica" /></label>
+                  <label>Ciudad<input id="igManualCity" placeholder="Madrid" /></label>
+                  <label style="grid-column:1/-1;">Mensaje *
+                    <textarea id="igManualMessage" rows="5" placeholder="Mensaje que has enviado o respuesta que te han dado"></textarea>
+                  </label>
+                  <label style="grid-column:1/-1;">Notas
+                    <textarea id="igManualNotes" rows="2" placeholder="Contexto interno opcional"></textarea>
+                  </label>
+                </div>
+                <div class="actions" style="margin-top:10px;">
+                  <button class="secondary" type="button" id="igManualSaveBtn">Guardar contacto</button>
+                  <button class="ghost small" type="button" id="igManualOpenIgBtn">Abrir IG</button>
+                  <span id="igManualStatus" class="muted"></span>
+                </div>
+              </div>
+              <div class="card panel" style="padding:14px;">
+                <strong>Que automatiza</strong>
+                <div class="ig-list" style="margin-top:10px;">
+                  <div class="ig-row"><span>Normaliza @usuario y evita duplicados</span><strong>OK</strong></div>
+                  <div class="ig-row"><span>Guarda historico de mensajes y eventos</span><strong>OK</strong></div>
+                  <div class="ig-row"><span>Calcula proximo follow-up</span><strong>OK</strong></div>
+                  <div class="ig-row"><span>Actualiza estadisticas de Hoy</span><strong>OK</strong></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="outreach-panel" data-ig-panel="drafts" style="display:none;">
+            <div class="card panel" style="padding:12px;margin-top:12px;">
+              <div class="section-header">
+                <div><strong>Follow-ups listos</strong><p class="muted">Copia o abre el DM sugerido. Al volver, puedes marcarlo como enviado.</p></div>
+                <button class="ghost small" type="button" id="igFollowupsRefreshBtn">Refrescar</button>
+              </div>
+              <div id="igFollowupQueue" class="muted">cargando...</div>
+            </div>
+            <div class="actions" style="margin-top:12px;">
+              <select id="igDraftsStageFilter"><option value="">todos los stages</option><option value="cold">cold</option><option value="fu1">fu1</option><option value="fu2">fu2</option><option value="breakup">breakup</option></select>
+              <input id="igDraftsNiche" placeholder="filtrar niche..." />
+              <input id="igDraftsCity" placeholder="filtrar ciudad..." />
+              <button class="secondary small" type="button" id="igDraftsRefreshBtn">Refrescar</button>
+              <button class="ghost small" type="button" id="igGenerateColdBtn">+ Generar drafts cold</button>
+              <button class="ghost small" type="button" id="igGenerateFu1Btn">+ Follow-up fu1</button>
+              <button class="ghost small" type="button" id="igGenerateFu2Btn">+ Follow-up fu2</button>
+            </div>
+            <p class="muted" style="margin-top:8px;">Boton <strong>Enviar DM</strong> abre Instagram con texto prellenado. Despues marca como enviado al volver al panel.</p>
+            <div id="igDraftsList" style="margin-top:12px;display:grid;grid-template-columns:1fr;gap:12px;"></div>
+          </div>
+
+          <div class="outreach-panel" data-ig-panel="prospects" style="display:none;">
+            <div class="actions" style="margin-top:12px;">
+              <input id="igProspectsQ" placeholder="buscar @usuario, nombre o bio..." />
+              <select id="igProspectsStatus"><option value="">cualquier estado</option><option value="new">new</option><option value="queued">queued</option><option value="contacted">contacted</option><option value="replied">replied</option><option value="client">client</option><option value="lost">lost</option><option value="dnc">dnc</option></select>
+              <input id="igProspectsNiche" placeholder="niche" />
+              <input id="igProspectsCity" placeholder="ciudad" />
+              <button class="secondary small" type="button" id="igProspectsRefreshBtn">Filtrar</button>
+              <button class="ghost small" type="button" id="igProspectsAddBtn">+ Nuevo prospect</button>
+              <a class="ghost small" href="/admin/instagram/export.csv">Exportar CSV</a>
+            </div>
+            <div id="igProspectsTable" style="margin-top:12px;"></div>
+            <div id="igProspectsPager" class="muted" style="margin-top:8px;"></div>
+          </div>
+
+          <div class="outreach-panel" data-ig-panel="templates" style="display:none;">
+            <p class="muted" style="margin-top:12px;">Overrides opcionales del copy por stage. Vacio = usar default de scripts/instagram_templates.py.</p>
+            <div id="igTemplatesEditor"></div>
+          </div>
+
+          <div class="outreach-panel" data-ig-panel="autopilot" style="display:none;">
+            <div class="section-header">
+              <div><strong>Configuracion Instagram</strong><p class="muted">Automatizacion asistida. El envio real sigue siendo manual salvo modo agresivo opt-in.</p></div>
+              <label class="switch"><input id="igAutoEnabled" type="checkbox" /> Activo</label>
+            </div>
+            <div class="grid-3" style="margin-top:10px;">
+              <label>Target diario nuevos<input id="igAutoDailyNew" type="number" min="1" max="200" value="15" /></label>
+              <label>Cap diario outreach<input id="igAutoDailyCap" type="number" min="1" max="200" value="25" /></label>
+              <label class="checkbox"><input id="igAutoFollowups" type="checkbox" /> Auto follow-ups</label>
+            </div>
+            <label>Targets JSON (lista de {usernames, niche, city})
+              <textarea id="igAutoTargets" rows="6" placeholder='[{"usernames":["c1","c2"],"niche":"dental","city":"Madrid"}]'></textarea>
+            </label>
+            <div class="actions">
+              <button class="secondary small" type="button" id="igAutoSaveBtn">Guardar</button>
+              <button class="ghost small" type="button" id="igAutoTickBtn">Ejecutar ronda ahora</button>
+              <span id="igAutoStatus" class="muted"></span>
+            </div>
+            <details style="margin-top:16px;">
+              <summary class="ghost small" style="cursor:pointer;display:inline-flex;">Discovery avanzado</summary>
+              <div class="grid-2" style="margin-top:12px;">
+                <label>Usernames (uno por linea o coma)
+                  <textarea id="igDiscUsernames" rows="6" placeholder="cuenta1&#10;cuenta2&#10;cuenta3"></textarea>
+                </label>
+                <div>
+                  <label>Niche<input id="igDiscNiche" placeholder="clinica dental" /></label>
+                  <label>Ciudad<input id="igDiscCity" placeholder="Madrid" /></label>
+                  <label>Source label<input id="igDiscSource" value="discover" /></label>
+                  <label>Min followers<input id="igDiscMinFollowers" type="number" value="0" /></label>
+                  <label>Max followers<input id="igDiscMaxFollowers" type="number" value="0" /></label>
+                  <label class="checkbox"><input id="igDiscHasWebsite" type="checkbox" /> Solo con website</label>
+                  <label class="checkbox"><input id="igDiscIsBusiness" type="checkbox" /> Solo cuentas business</label>
+                  <label class="checkbox"><input id="igDiscUseGraph" type="checkbox" checked /> Usar Graph API si disponible</label>
+                </div>
+              </div>
+              <div class="actions" style="margin-top:10px;">
+                <button class="secondary" type="button" id="igDiscRunBtn">Lanzar discovery</button>
+                <button class="ghost small" type="button" id="igJobsRefreshBtn">Ver jobs</button>
+                <span id="igDiscStatus" class="muted"></span>
+              </div>
+              <pre id="igDiscLog" style="display:none;background:#0f172a;color:#cbd5f5;font-size:12px;padding:10px;border-radius:8px;max-height:240px;overflow:auto;white-space:pre-wrap;margin-top:10px;"></pre>
+              <div id="igJobsList" class="ig-list" style="margin-top:12px;"></div>
+            </details>
+          </div>
+
+          <div class="outreach-panel" data-ig-panel="suppressions" style="display:none;">
+            <div class="actions" style="margin-top:12px;">
+              <input id="igSupUsername" placeholder="@cuenta" />
+              <input id="igSupReason" placeholder="razon (manual, dnc, etc)" />
+              <button class="secondary small" type="button" id="igSupAddBtn">Suprimir</button>
+              <button class="ghost small" type="button" id="igSupRefreshBtn">Refrescar</button>
+            </div>
+            <div class="ig-table-wrap" style="margin-top:12px;">
+              <table style="width:100%;font-size:13px;">
+                <thead><tr><th>Username</th><th>Razon</th><th>Fecha</th><th></th></tr></thead>
+                <tbody id="igSupBody"><tr><td colspan="4" class="muted">Cargando bajas...</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -2874,6 +3381,8 @@ tbody tr:last-child td { border-bottom: none; }
         loadBookings().catch((error) => showStatus(error.message, "error"));
       } else if (nextView === "analytics") {
         loadAnalytics().catch((error) => showStatus(error.message, "error"));
+      } else if (nextView === "instagram") {
+        try { window.__igInit && window.__igInit(); } catch(e) { console.warn(e); }
       }
     }
 
@@ -4459,6 +4968,7 @@ tbody tr:last-child td { border-bottom: none; }
         jobsTimer: null,
         autopilot: null,
         loaded: false,
+        followupDays: { fu1: 4, fu2: 5, breakup: 6 },
         _followupItems: [],
       };
 
@@ -4721,6 +5231,21 @@ tbody tr:last-child td { border-bottom: none; }
         renderWizardSummary();
       }
 
+      function cwResultKey(item) {
+        const email = (item.email || "").toLowerCase().trim();
+        if (email) return "email:" + email;
+        const domain = (item.website || "")
+          .toLowerCase()
+          .replace(/^https?:\/\//, "")
+          .replace(/^www\./, "")
+          .split("/")[0]
+          .split(":")[0];
+        if (domain) return "domain:" + domain;
+        const phone = (item.phone || "").replace(/\D+/g, "").replace(/^34(?=\d{9,})/, "").slice(-9);
+        if (phone) return "phone:" + phone;
+        return "namecity:" + `${item.business_name || ""}|${item.city || ""}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+      }
+
       function updateWizardCounts() {
         const selectedCount = selectedWizardItems().length;
         const importedCount = (cwState.importedEmails || []).length;
@@ -4748,7 +5273,7 @@ tbody tr:last-child td { border-bottom: none; }
         ORQ("#cwSearchLog").textContent = `Lanzando ${combos.length} combo(s)...`;
         await refreshCwDedupCache();
         const allResults = [];
-        const seenEmails = new Set();
+        const seenKeys = new Set();
         let i = 0;
         for (const combo of combos) {
           i += 1;
@@ -4769,11 +5294,11 @@ tbody tr:last-child td { border-bottom: none; }
             });
             const items = await waitDiscoveryJob(data.job_id, combo);
             items.forEach((it) => {
-              const e = (it.email || "").toLowerCase().trim();
-              if (e && seenEmails.has(e)) return;
-              if (e) seenEmails.add(e);
               it.city = it.city || combo.city;
               it.niche = it.niche || combo.sector;
+              const key = cwResultKey(it);
+              if (key && seenKeys.has(key)) return;
+              if (key) seenKeys.add(key);
               allResults.push(it);
             });
           } catch (err) {
@@ -5375,7 +5900,7 @@ tbody tr:last-child td { border-bottom: none; }
         ORALL("[data-outreach-panel]").forEach((p) => {
           p.classList.toggle("active", p.dataset.outreachPanel === tab);
         });
-        if (tab === "autopilot") { loadStats(); loadAutopilot(); loadHotLeads(); loadFollowupQueue(); loadAbStats(); loadGA4Stats(); loadNextAction(); }
+        if (tab === "autopilot") { loadStats(); loadAutopilot(); loadAutonomousConfig(); loadRecentAutopilotErrors(); loadHotLeads(); loadFollowupQueue(); loadAbStats(); loadGA4Stats(); loadNextAction(); }
         if (tab === "prospects") loadProspects();
         if (tab === "campaigns") { loadWizardCampaigns(); loadJobs(); startJobsPolling(); } else { stopJobsPolling(); }
         if (tab === "templates") loadTemplates();
@@ -5390,8 +5915,48 @@ tbody tr:last-child td { border-bottom: none; }
           const data = await orFetch("/admin/outreach/autopilot-config");
           _autonomousState = data;
           renderAutonomous(data);
+          renderTodayAutomation(data);
+          loadAutopilotLog(false);
+          if (ORQ("#orAutonomousLogAuto")?.checked) startAutopilotLogPolling();
         } catch (err) {
           cwToast(err.message, "error");
+        }
+      }
+      function renderTodayAutomation(d) {
+        const status = ORQ("#orTodayAutomationStatus");
+        if (!status) return;
+        const detail = ORQ("#orTodayAutomationDetail");
+        const toggle = ORQ("#orTodayToggleAutomation");
+        const activeTick = d.active_tick || null;
+        const blockers = d.blockers || [];
+        let text = "Pausado";
+        let tone = "warn";
+        let message = "El modo automatico esta pausado.";
+        if (activeTick) {
+          text = "Ronda en curso";
+          tone = "run";
+          const started = activeTick.started_at ? fmtMadrid(activeTick.started_at) : "-";
+          const step = activeTick.step || activeTick.status || "trabajando";
+          message = `${activeTick.message || "Trabajando"} - ${step} - desde ${started}`;
+        } else if (d.enabled && d.ready) {
+          text = "Activo";
+          tone = "ok";
+          message = "Listo para buscar, importar y enviar en la proxima ronda.";
+        } else if (d.enabled && blockers.length) {
+          text = "Bloqueado";
+          tone = "err";
+          message = "Requiere accion: " + blockers.join(" - ");
+        } else if (d.enabled) {
+          text = "Activo";
+          tone = "warn";
+          message = "Activo, pero revisa configuracion antes de esperar envios.";
+        }
+        status.textContent = text;
+        status.className = `or-status-pill ${tone}`;
+        if (detail) detail.textContent = message;
+        if (toggle) {
+          toggle.textContent = d.enabled ? "Pausar automatico" : "Activar automatico";
+          toggle.className = d.enabled ? "ghost small" : "secondary small";
         }
       }
       function renderAutonomous(d) {
@@ -5405,11 +5970,51 @@ tbody tr:last-child td { border-bottom: none; }
           tog.style.background = d.enabled ? "#16a34a" : "#9ca3af";
           tog.style.color = "#fff";
         }
+        const diag = ORQ("#orAutonomousDiagnostics");
+        if (diag) {
+          const checks = [
+            { ok: !!d.env_enabled,    label: "OUTREACH_AUTONOMOUS_ENABLED (VPS)" },
+            { ok: !!d.enabled,        label: "Activado en panel" },
+            { ok: !!d.smtp_ok,        label: "SMTP configurado" },
+            { ok: !!d.google_places_ok, label: "Google Places API key opcional" },
+            { ok: (d.targets_count || 0) > 0, label: `Objetivos configurados (${d.targets_count || 0})` },
+          ];
+          const chips = checks.map((c) => {
+            const color = c.ok ? "#16a34a" : "#dc2626";
+            const bg = c.ok ? "#dcfce7" : "#fee2e2";
+            const icon = c.ok ? "✓" : "✗";
+            return `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:14px;font-size:11px;color:${color};background:${bg};font-weight:600;">${icon} ${escapeHtml(c.label)}</span>`;
+          }).join("");
+          const ready = !!d.ready;
+          const activeTick = d.active_tick || null;
+          let tickBanner = "";
+          if (activeTick) {
+            const started = activeTick.started_at ? fmtMadrid(activeTick.started_at) : "-";
+            const source = activeTick.source || "desconocido";
+            const step = activeTick.step || activeTick.status || "en curso";
+            const msg = activeTick.message || "Ronda en curso";
+            const target = activeTick.current_target
+              ? ` · ${escapeHtml(activeTick.current_target.sector || "")} / ${escapeHtml(activeTick.current_target.city || "")}`
+              : "";
+            tickBanner = `<div style="padding:8px 12px;border-radius:8px;background:#e0f2fe;color:#075985;font-size:12px;margin-bottom:8px;"><strong>Ronda en curso.</strong> ${escapeHtml(msg)}<br><span class="muted" style="font-size:11px;">ID ${escapeHtml(activeTick.tick_id || "-")} · origen ${escapeHtml(source)} · paso ${escapeHtml(step)} · inicio ${escapeHtml(started)}${target}</span></div>`;
+          }
+          const banner = ready
+            ? '<div style="padding:8px 12px;border-radius:8px;background:#dcfce7;color:#065f46;font-size:12px;font-weight:600;margin-bottom:8px;">✓ Listo para captar. El worker hará un tick automático y enviará si hay candidatos.</div>'
+            : (d.blockers && d.blockers.length
+                ? `<div style="padding:8px 12px;border-radius:8px;background:#fef3c7;color:#92400e;font-size:12px;margin-bottom:8px;"><strong>No enviará todavía.</strong> Bloqueado por: ${d.blockers.map(escapeHtml).join(" · ")}</div>`
+                : '');
+          diag.innerHTML = tickBanner + banner + `<div style="display:flex;flex-wrap:wrap;gap:6px;">${chips}</div>`;
+          diag.style.display = "";
+        }
         ORQ("#orAutonomousColdToday").textContent = `${d.stats.cold_today}/${d.daily_cold_cap}`;
         ORQ("#orAutonomousImported").textContent = d.stats.imported_24h;
         ORQ("#orAutonomousLastRun").textContent = d.last_discovery_at ? new Date(d.last_discovery_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) : "Nunca";
         ORQ("#orAutonomousDailyNew").value = d.daily_new_target;
         ORQ("#orAutonomousDailyCold").value = d.daily_cold_cap;
+        orState.followupDays = Object.assign({ fu1: 4, fu2: 5, breakup: 6 }, d.followup_days || {});
+        ORQ("#orFollowupFu1Days").value = orState.followupDays.fu1;
+        ORQ("#orFollowupFu2Days").value = orState.followupDays.fu2;
+        ORQ("#orFollowupBreakupDays").value = orState.followupDays.breakup;
         ORQ("#orAutonomousAutoFu").checked = d.auto_followups;
         const body = ORQ("#orAutonomousTargetsBody");
         const targets = d.targets || [];
@@ -5439,28 +6044,65 @@ tbody tr:last-child td { border-bottom: none; }
           });
           _autonomousState = data;
           renderAutonomous(data);
+          renderTodayAutomation(data);
+          if (Object.prototype.hasOwnProperty.call(patch || {}, "enabled")) {
+            loadAutopilotLog(false);
+            setTimeout(() => { loadAutopilotLog(false); loadAutonomousConfig(); }, 1200);
+            setTimeout(() => loadAutopilotLog(false), 3500);
+          }
           cwToast("Configuración guardada.", "success");
         } catch (err) { cwToast(err.message, "error"); }
       }
-      function wireAutonomous() {
-        ORQ("#orAutonomousToggle")?.addEventListener("click", () => {
-          if (!_autonomousState) return;
+      let _autonomousPendingToggle = false;
+      async function toggleAutonomousMode() {
+        if (_autonomousPendingToggle) return;
+        _autonomousPendingToggle = true;
+        try {
+          if (!_autonomousState) {
+            try { await loadAutonomousConfig(); } catch (e) {}
+          }
+          if (!_autonomousState) {
+            cwToast("Estado no cargado todavia. Reintentando...", "warning");
+            return;
+          }
           const turningOn = !_autonomousState.enabled;
-          if (turningOn && !confirm("¿Activar modo automático? El sistema enviará cold y follow-ups sin confirmación.")) return;
-          saveAutonomousConfig({ enabled: turningOn });
-        });
+          if (turningOn) {
+            const ok = window.confirm("Activar modo automatico? El sistema enviara cold y follow-ups sin confirmacion.");
+            if (!ok) return;
+          }
+          await saveAutonomousConfig({ enabled: turningOn });
+        } finally {
+          _autonomousPendingToggle = false;
+        }
+      }
+      async function runAutonomousTickFromPanel() {
+        try {
+          await orFetch("/admin/outreach/autopilot-tick", { method: "POST" });
+          cwToast("Ronda lanzada. Revisa estado y logs en unos segundos.", "success");
+          loadAutopilotLog(false);
+          loadRecentAutopilotErrors();
+          setTimeout(() => { loadAutopilotLog(false); loadAutonomousConfig(); loadRecentAutopilotErrors(); }, 1500);
+          setTimeout(() => { loadAutopilotLog(false); loadRecentAutopilotErrors(); }, 4000);
+        } catch (err) { cwToast(err.message, "error"); }
+      }
+      function wireAutonomous() {
+        const toggleBtn = ORQ("#orAutonomousToggle");
+        if (!toggleBtn) { console.warn("[autonomous] toggle button no encontrado al cablear"); }
+        toggleBtn?.addEventListener("click", toggleAutonomousMode);
+        ORQ("#orTodayToggleAutomation")?.addEventListener("click", toggleAutonomousMode);
+        ORQ("#orTodayOpenAutomation")?.addEventListener("click", () => setOutreachTab("autonomous"));
+        ORQ("#orTodayRunNow")?.addEventListener("click", runAutonomousTickFromPanel);
         ORQ("#orAutonomousRefresh")?.addEventListener("click", loadAutonomousConfig);
-        ORQ("#orAutonomousTickBtn")?.addEventListener("click", async () => {
-          try {
-            await orFetch("/admin/outreach/autopilot-tick", { method: "POST" });
-            cwToast("Ronda lanzada. Revisa logs y stats en unos segundos.", "success");
-            setTimeout(loadAutonomousConfig, 3000);
-          } catch (err) { cwToast(err.message, "error"); }
-        });
+        ORQ("#orAutonomousTickBtn")?.addEventListener("click", runAutonomousTickFromPanel);
         ORQ("#orAutonomousSaveBtn")?.addEventListener("click", () => {
           saveAutonomousConfig({
             daily_new_target: parseInt(ORQ("#orAutonomousDailyNew").value, 10),
             daily_cold_cap: parseInt(ORQ("#orAutonomousDailyCold").value, 10),
+            followup_days: {
+              fu1: parseInt(ORQ("#orFollowupFu1Days").value, 10) || 0,
+              fu2: parseInt(ORQ("#orFollowupFu2Days").value, 10) || 0,
+              breakup: parseInt(ORQ("#orFollowupBreakupDays").value, 10) || 0,
+            },
             auto_followups: !!ORQ("#orAutonomousAutoFu").checked,
           });
         });
@@ -5475,6 +6117,105 @@ tbody tr:last-child td { border-bottom: none; }
           ORQ("#orAutonomousNewSector").value = "";
           ORQ("#orAutonomousNewCity").value = "";
         });
+        ORQ("#orAutonomousLogRefresh")?.addEventListener("click", () => loadAutopilotLog(true));
+        ORQ("#orAutonomousLogClear")?.addEventListener("click", () => {
+          _autopilotLogCleared = true;
+          _autopilotLogItems = [];
+          renderAutopilotLog();
+          ORQ("#orAutonomousLogMeta").textContent = "Vista limpiada en el navegador. El historial sigue en el servidor — pulsa Actualizar log para recargarlo.";
+        });
+        ORQ("#orAutonomousLogLevel")?.addEventListener("change", () => loadAutopilotLog(true));
+        ORQ("#orAutonomousLogAuto")?.addEventListener("change", () => {
+          if (ORQ("#orAutonomousLogAuto").checked) startAutopilotLogPolling();
+          else stopAutopilotLogPolling();
+        });
+      }
+
+      // ----- Log de actividad del modo automático -----
+      const AUTOPILOT_LEVEL_META = {
+        info:    { color: "#475569", bg: "#e2e8f0", label: "INFO" },
+        success: { color: "#065f46", bg: "#d1fae5", label: "OK"   },
+        warning: { color: "#92400e", bg: "#fef3c7", label: "AVISO" },
+        error:   { color: "#991b1b", bg: "#fee2e2", label: "ERROR" },
+      };
+      let _autopilotLogItems = [];
+      let _autopilotLogCleared = false;
+      let _autopilotLogTimer = null;
+      function fmtMadrid(iso) {
+        if (!iso) return "-";
+        try {
+          return new Date(iso).toLocaleString("es-ES", {
+            timeZone: "Europe/Madrid",
+            hour12: false,
+            day: "2-digit", month: "2-digit", year: "2-digit",
+            hour: "2-digit", minute: "2-digit", second: "2-digit",
+          });
+        } catch (e) { return iso; }
+      }
+      function renderAutopilotLog() {
+        const box = ORQ("#orAutonomousLogBox");
+        if (!box) return;
+        if (!_autopilotLogItems.length) {
+          box.innerHTML = '<div class="muted" style="padding:14px;font-size:12px;">Sin eventos registrados todavía. Pulsa "Ejecutar ronda ahora" o espera al siguiente tick.</div>';
+          return;
+        }
+        const rows = _autopilotLogItems.map((it) => {
+          const meta = AUTOPILOT_LEVEL_META[it.level] || AUTOPILOT_LEVEL_META.info;
+          const detail = (it.detail || "").trim();
+          let detailBlock = "";
+          if (detail) {
+            let pretty = detail;
+            try {
+              const parsed = JSON.parse(detail);
+              if (parsed && typeof parsed === "object") {
+                pretty = Object.entries(parsed).map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`).join(" · ");
+              }
+            } catch(e) {}
+            detailBlock = `<div style="margin-top:3px;font-size:11px;color:#64748b;">${escapeHtml(pretty)}</div>`;
+          }
+          return `<div style="display:grid;grid-template-columns:140px 70px 1fr;gap:10px;padding:8px 12px;border-bottom:1px solid #eef2f7;align-items:start;">
+            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:#64748b;">${escapeHtml(fmtMadrid(it.ts))}</span>
+            <span style="display:inline-block;padding:1px 6px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:0.4px;text-align:center;color:${meta.color};background:${meta.bg};">${meta.label}</span>
+            <div>
+              <div style="font-size:13px;color:#0f172a;">${escapeHtml(it.message || it.event || "")}</div>
+              ${it.event ? `<div style="font-size:10px;color:#94a3b8;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:2px;">${escapeHtml(it.event)}</div>` : ""}
+              ${detailBlock}
+            </div>
+          </div>`;
+        }).join("");
+        box.innerHTML = rows;
+      }
+      async function loadAutopilotLog(force) {
+        const box = ORQ("#orAutonomousLogBox");
+        if (!box) return;
+        const level = ORQ("#orAutonomousLogLevel")?.value || "";
+        const url = `/admin/outreach/autopilot-log?limit=120${level ? `&level=${encodeURIComponent(level)}` : ""}`;
+        try {
+          const data = await orFetch(url);
+          _autopilotLogCleared = false;
+          _autopilotLogItems = data.items || [];
+          renderAutopilotLog();
+          const meta = ORQ("#orAutonomousLogMeta");
+          if (meta) {
+            const stamp = new Date().toLocaleTimeString("es-ES", { timeZone: "Europe/Madrid", hour12: false });
+            meta.textContent = `Actualizado ${stamp} · ${_autopilotLogItems.length} eventos`;
+          }
+        } catch (err) {
+          if (force) cwToast(err.message, "error");
+          box.innerHTML = `<div class="muted" style="padding:14px;font-size:12px;color:#b91c1c;">Error cargando log: ${escapeHtml(err.message)}</div>`;
+        }
+      }
+      function startAutopilotLogPolling() {
+        stopAutopilotLogPolling();
+        _autopilotLogTimer = setInterval(() => {
+          const panel = document.querySelector('[data-outreach-panel="autonomous"]');
+          if (!panel || !panel.classList.contains("active")) return;
+          if (_autopilotLogCleared) return;
+          loadAutopilotLog(false);
+        }, 12000);
+      }
+      function stopAutopilotLogPolling() {
+        if (_autopilotLogTimer) { clearInterval(_autopilotLogTimer); _autopilotLogTimer = null; }
       }
 
       // ----- Dashboard -----
@@ -5482,11 +6223,15 @@ tbody tr:last-child td { border-bottom: none; }
         try {
           const data = await orFetch("/admin/outreach/stats");
           const t = data.totals;
-          ORQ("#orProspects").textContent = t.prospects;
-          ORQ("#orSentToday").textContent = t.sent_today;
-          ORQ("#orSentWeek").textContent = t.sent_week;
-          ORQ("#orReplyRate").textContent = t.reply_rate_pct + "%";
-          ORQ("#orSuppressed").textContent = t.suppressed;
+          if (ORQ("#orProspects")) ORQ("#orProspects").textContent = t.prospects;
+          if (ORQ("#orSentToday")) ORQ("#orSentToday").textContent = t.sent_today;
+          if (ORQ("#orSentWeek")) ORQ("#orSentWeek").textContent = t.sent_week;
+          if (ORQ("#orReplyRate")) ORQ("#orReplyRate").textContent = t.reply_rate_pct + "%";
+          if (ORQ("#orSuppressed")) ORQ("#orSuppressed").textContent = t.suppressed;
+          if (ORQ("#orTodayProspects")) ORQ("#orTodayProspects").textContent = t.prospects;
+          if (ORQ("#orTodaySentToday")) ORQ("#orTodaySentToday").textContent = t.sent_today;
+          if (ORQ("#orTodaySentWeek")) ORQ("#orTodaySentWeek").textContent = t.sent_week;
+          if (ORQ("#orTodayReplyRate")) ORQ("#orTodayReplyRate").textContent = t.reply_rate_pct + "%";
           if (ORQ("#cwMetricSent")) ORQ("#cwMetricSent").textContent = t.sent_total;
           if (ORQ("#cwMetricOpen")) ORQ("#cwMetricOpen").textContent = t.opens_unique;
           if (ORQ("#cwMetricReplies")) ORQ("#cwMetricReplies").textContent = t.replies_unique;
@@ -5603,6 +6348,9 @@ tbody tr:last-child td { border-bottom: none; }
 
       function renderAutopilot(data) {
         orState.autopilot = data;
+        if (data.followup_days) {
+          orState.followupDays = Object.assign({ fu1: 4, fu2: 5, breakup: 6 }, data.followup_days);
+        }
         // Los grupos de aprobación sólo se usan en approveAutopilotStage — no hay box visible propio.
         // Si hay grupos listos, los reflejamos en la cola de seguimiento vía loadFollowupQueue.
       }
@@ -5635,6 +6383,28 @@ tbody tr:last-child td { border-bottom: none; }
           }
         } catch (err) {
           banner.style.display = "none";
+        }
+      }
+
+      async function loadRecentAutopilotErrors() {
+        const box = ORQ("#orRecentErrors");
+        try {
+          const data = await orFetch("/admin/outreach/autopilot-log?level=error&limit=3");
+          const items = data.items || [];
+          if (ORQ("#orTodayErrors")) ORQ("#orTodayErrors").textContent = items.length;
+          if (!box) return;
+          if (!items.length) {
+            box.innerHTML = '<div class="muted">Sin errores recientes.</div>';
+            return;
+          }
+          box.innerHTML = items.map((it) => {
+            const when = it.created_at ? fmtMadrid(it.created_at) : "-";
+            const msg = it.message || it.event || "Error";
+            return `<div class="or-error-item"><strong>${escapeHtml(when)}</strong><br>${escapeHtml(msg)}</div>`;
+          }).join("");
+        } catch (err) {
+          if (ORQ("#orTodayErrors")) ORQ("#orTodayErrors").textContent = "-";
+          if (box) box.innerHTML = `<div class="muted" style="color:var(--danger);">No se pudieron cargar errores: ${escapeHtml(err.message)}</div>`;
         }
       }
 
@@ -5720,7 +6490,9 @@ tbody tr:last-child td { border-bottom: none; }
         }
       }
 
-      document.getElementById("orAutopilotRefresh") && document.getElementById("orAutopilotRefresh").addEventListener("click", loadAutopilot);
+      document.getElementById("orAutopilotRefresh") && document.getElementById("orAutopilotRefresh").addEventListener("click", () => {
+        loadStats(); loadAutopilot(); loadAutonomousConfig(); loadRecentAutopilotErrors(); loadHotLeads(); loadFollowupQueue(); loadNextAction();
+      });
       document.getElementById("orAutopilotRun") && document.getElementById("orAutopilotRun").addEventListener("click", runAutopilot);
       document.getElementById("orNextActionRefresh") && document.getElementById("orNextActionRefresh").addEventListener("click", loadNextAction);
 
@@ -5827,10 +6599,14 @@ tbody tr:last-child td { border-bottom: none; }
         try {
           const data = await orFetch("/admin/outreach/followup-queue?limit=120&days=60");
           const items = data.items || [];
+          if (data.followup_days) {
+            orState.followupDays = Object.assign({ fu1: 4, fu2: 5, breakup: 6 }, data.followup_days);
+          }
           orState._followupItems = items;
           const countBadge = ORQ("#orFollowupCount");
           const approveAllBtn = ORQ("#orFollowupApproveAll");
           const ready = items.filter(it => it.can_send);
+          if (ORQ("#orTodayReadyFu")) ORQ("#orTodayReadyFu").textContent = ready.length;
           if (countBadge) {
             if (ready.length) { countBadge.textContent = ready.length + " listos"; countBadge.style.display = ""; }
             else { countBadge.style.display = "none"; }
@@ -5886,6 +6662,7 @@ tbody tr:last-child td { border-bottom: none; }
             btn.addEventListener("click", () => approveAutopilotStage(btn.dataset.autopilotSendOne, [btn.dataset.autopilotEmail]));
           });
         } catch (err) {
+          if (ORQ("#orTodayReadyFu")) ORQ("#orTodayReadyFu").textContent = "-";
           box.innerHTML = `<p class="muted" style="color:var(--danger);margin:0;">${escapeHtml(err.message)}</p>`;
         }
       }
@@ -5925,6 +6702,7 @@ tbody tr:last-child td { border-bottom: none; }
         if (!box) return;
         try {
           const data = await orFetch("/admin/outreach/hot-leads?limit=8&days=14");
+          if (ORQ("#orTodayHotLeads")) ORQ("#orTodayHotLeads").textContent = (data.items || []).length;
           if (!data.items || !data.items.length) {
             box.innerHTML = '<p class="muted" style="font-size:12px;margin:0;">Sin señales de interés en los últimos 14 días. Envía más emails para alimentar el embudo.</p>';
             return;
@@ -5963,6 +6741,7 @@ tbody tr:last-child td { border-bottom: none; }
             btn.addEventListener("click", () => copyFollowupMessage(btn.dataset.followupCopy));
           });
         } catch (err) {
+          if (ORQ("#orTodayHotLeads")) ORQ("#orTodayHotLeads").textContent = "-";
           box.innerHTML = `<p class="muted" style="color:var(--danger);margin:0;">${escapeHtml(err.message)}</p>`;
         }
       }
@@ -6050,7 +6829,7 @@ tbody tr:last-child td { border-bottom: none; }
           ORQ("#orProspectCount").textContent = `${data.total} prospects`;
           const body = ORQ("#orProspectsBody");
           if (!data.items.length) { body.innerHTML = '<tr><td colspan="10" class="empty">Sin resultados.</td></tr>'; return; }
-          const _stageThresholds = { cold: 0, fu1: 4, fu2: 5, breakup: 6 };
+          const _stageThresholds = Object.assign({ cold: 0, fu1: 4, fu2: 5, breakup: 6 }, orState.followupDays || {});
           function _nextStageDue(p) {
             const status = p.status || "new";
             if (["replied","client","lost"].includes(status) || p.suppressed) return null;
@@ -6335,27 +7114,29 @@ tbody tr:last-child td { border-bottom: none; }
             <button class="secondary small" type="button" id="orDiscImportBtn">Importar seleccionados</button>
           </div>
           <p class="muted" style="font-size:12px;margin:0 0 10px 0;">Si una empresa no trae email, abre su web (icono enlace), busca contacto y pegalo en el campo Email. La fila se selecciona sola al introducir un email valido.</p>
-          <div style="overflow:auto;max-height:520px;border:1px solid #e4eaf2;border-radius:10px;">
-          <table style="width:100%;border-collapse:collapse;font-size:13px;">
-            <thead style="position:sticky;top:0;background:#f6f8fb;z-index:1;">
+          <div class="or-discovery-table-wrap">
+          <table class="or-discovery-table">
+            <thead>
               <tr>
-                <th style="padding:8px 10px;text-align:left;width:30px;"><input type="checkbox" id="orDiscMaster" /></th>
-                <th style="padding:8px 10px;text-align:left;">Empresa</th>
-                <th style="padding:8px 10px;text-align:left;min-width:220px;">Email</th>
-                <th style="padding:8px 10px;text-align:left;">Niche</th>
-                <th style="padding:8px 10px;text-align:left;">Tel</th>
-                <th style="padding:8px 10px;text-align:left;">Web</th>
+                <th style="width:30px;"><input type="checkbox" id="orDiscMaster" /></th>
+                <th>Empresa</th>
+                <th style="min-width:220px;">Email</th>
+                <th>Niche</th>
+                <th>Tel</th>
+                <th>Web</th>
+                <th>Fuente</th>
               </tr>
             </thead>
             <tbody>${items.map((i, idx)=>{
               const hasEmail = !!i.email;
-              return `<tr data-idx="${idx}" style="border-top:1px solid #eef2f7;${hasEmail?'':'background:#fffaf0;'}">
-                <td style="padding:6px 10px;"><input type="checkbox" class="orDiscRow" data-idx="${idx}" ${hasEmail?'checked':''} ${hasEmail?'':'disabled'}/></td>
-                <td style="padding:6px 10px;">${escapeHtml(i.business_name||'')}</td>
-                <td style="padding:4px 10px;"><input type="email" class="orDiscEmailInput" data-idx="${idx}" value="${escapeHtml(i.email||'')}" placeholder="contacto@..." style="width:100%;padding:5px 8px;border:1px solid #d6dde6;border-radius:6px;font-size:13px;" /></td>
-                <td style="padding:6px 10px;">${escapeHtml(i.niche||'')}</td>
-                <td style="padding:6px 10px;">${escapeHtml(i.phone||'')}</td>
-                <td style="padding:6px 10px;">${i.website?'<a href="'+escapeHtml(i.website)+'" target="_blank" rel="noopener">link</a>':''}</td>
+              return `<tr data-idx="${idx}" class="${hasEmail?'':'no-email'}">
+                <td><input type="checkbox" class="orDiscRow" data-idx="${idx}" ${hasEmail?'checked':''} ${hasEmail?'':'disabled'}/></td>
+                <td>${escapeHtml(i.business_name||'')}</td>
+                <td><input type="email" class="orDiscEmailInput" data-idx="${idx}" value="${escapeHtml(i.email||'')}" placeholder="contacto@..." /></td>
+                <td>${escapeHtml(i.niche||'')}</td>
+                <td>${escapeHtml(i.phone||'')}</td>
+                <td>${i.website?'<a href="'+escapeHtml(i.website)+'" target="_blank" rel="noopener">link</a>':''}</td>
+                <td>${escapeHtml((i.source || '').replace('discovery:', '') || '-')}</td>
               </tr>`;
             }).join("")}</tbody></table></div>`;
         ORQ("#orDiscMaster").addEventListener("change", (ev) => {
@@ -6419,7 +7200,7 @@ tbody tr:last-child td { border-bottom: none; }
             city: i.city || cityHint,
             phone: i.phone || "",
             tags: "discovery",
-            source: "discovery:osm",
+            source: i.source || "discovery:auto",
           };
         }).filter((x) => orDiscEmailRe.test(x.email));
         if (!items.length) { showStatus("Ningun email valido entre los seleccionados.", "error"); return; }
@@ -6667,6 +7448,648 @@ tbody tr:last-child td { border-bottom: none; }
       });
     })();
     // === END OUTREACH PANEL =====================================
+
+    // ============================================================
+    // === INSTAGRAM PANEL ========================================
+    // ============================================================
+    (function instagramModule() {
+      const IGQ = (sel) => document.querySelector(sel);
+      const IGALL = (sel) => Array.from(document.querySelectorAll(sel));
+      const igState = { loaded: false, currentTab: "dashboard", prospectsPage: 1 };
+
+      async function igFetch(url, opts) {
+        const next = Object.assign({ credentials: "include" }, opts || {});
+        next.headers = Object.assign({ "Accept": "application/json" }, next.headers || {});
+        if (next.body && !next.headers["Content-Type"]) next.headers["Content-Type"] = "application/json";
+        const res = await fetch(url, next);
+        if (!res.ok) {
+          let detail = "Error " + res.status;
+          try { const d = await res.json(); detail = d.detail || detail; } catch(e){}
+          throw new Error(detail);
+        }
+        const ct = res.headers.get("content-type") || "";
+        return ct.includes("application/json") ? res.json() : res.text();
+      }
+
+      function escapeHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+      }
+
+      function igEmpty(text) {
+        return `<div class="ig-empty">${escapeHtml(text)}</div>`;
+      }
+
+      function igStageLabel(stage) {
+        return ({ cold: "Cold", fu1: "FU1", fu2: "FU2", breakup: "Breakup" }[stage] || stage || "-");
+      }
+
+      function igNumber(value) {
+        const n = Number(value || 0);
+        if (n >= 1000000) return (n / 1000000).toFixed(n >= 10000000 ? 0 : 1) + "M";
+        if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k";
+        return String(n);
+      }
+
+      function igDate(value) {
+        if (!value) return "-";
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return value;
+        return d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "2-digit" });
+      }
+
+      function igBadge(text, cls = "") {
+        return `<span class="pill ${cls}">${escapeHtml(text)}</span>`;
+      }
+
+      function igStatus(message, type = "info") {
+        if (typeof showStatus === "function") showStatus(message, type === "ok" ? "success" : type);
+        else console[type === "error" ? "error" : "log"](message);
+      }
+
+      function setIgTab(tab) {
+        igState.currentTab = tab;
+        IGALL("[data-ig-tab]").forEach(b => b.classList.toggle("active", b.dataset.igTab === tab));
+        IGALL("[data-ig-panel]").forEach(p => {
+          const isActive = p.dataset.igPanel === tab;
+          p.classList.toggle("active", isActive);
+          p.style.display = isActive ? "" : "none";
+        });
+        if (tab === "dashboard") { loadStats(); loadOpsSummary(); loadHotLeads(); }
+        if (tab === "drafts") { loadFollowupQueue(); loadDrafts(); }
+        if (tab === "prospects") loadProspects();
+        if (tab === "templates") loadTemplates();
+        if (tab === "autopilot") loadAutopilot();
+        if (tab === "suppressions") loadSuppressions();
+      }
+
+      async function loadStats() {
+        try {
+          const data = await igFetch("/admin/instagram/stats");
+          const t = data.totals || {};
+          if (IGQ("#igStatProspects")) IGQ("#igStatProspects").textContent = t.prospects || 0;
+          if (IGQ("#igStatDrafts")) IGQ("#igStatDrafts").textContent = t.drafts_pending || 0;
+          if (IGQ("#igStatSent")) IGQ("#igStatSent").textContent = t.sent_today || 0;
+          if (IGQ("#igStatReplies")) IGQ("#igStatReplies").textContent = t.replies_unique || 0;
+          const f = data.funnel || {};
+          IGQ("#igFunnelBox").innerHTML = ["cold","fu1","fu2","breakup"].map(s => `
+            <div class="ig-row">
+              <span>${igStageLabel(s)}</span>
+              <strong>${f[s] || 0}</strong>
+            </div>`).join("");
+          if (data.autosend_enabled) { IGQ("#igAutosendBadge").style.display = ""; IGQ("#igAutosendWarn").style.display = ""; }
+          else { IGQ("#igAutosendBadge").style.display = "none"; IGQ("#igAutosendWarn").style.display = "none"; }
+          IGQ("#igWindowBadge").textContent = data.in_window ? "ventana laboral" : "fuera de ventana";
+          IGQ("#igWindowBadge").className = "pill " + (data.in_window ? "success" : "warn");
+          if (t.drafts_pending) { IGQ("#igDraftsBadge").textContent = t.drafts_pending; IGQ("#igDraftsBadge").style.display = ""; }
+          else IGQ("#igDraftsBadge").style.display = "none";
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      async function loadHotLeads() {
+        try {
+          const data = await igFetch("/admin/instagram/hot-leads?limit=10");
+          const items = data.items || [];
+          if (!items.length) { IGQ("#igHotLeadsBox").innerHTML = igEmpty("Sin hot leads por ahora."); return; }
+          IGQ("#igHotLeadsBox").innerHTML = items.map(p => `
+            <div class="ig-row">
+              <div class="ig-main">
+                <strong>@${escapeHtml(p.username)}</strong>
+              <span class="muted">${escapeHtml(p.niche || "")} ${p.followers_count ? "· " + p.followers_count + " seguidores" : ""}</span>
+              </div>
+              <a class="pill accent" href="https://ig.me/m/${encodeURIComponent(p.username)}" target="_blank">Abrir IG</a>
+            </div>`).join("");
+        } catch (e) { IGQ("#igHotLeadsBox").innerHTML = igEmpty(e.message); }
+      }
+
+      async function loadAb() {
+        try {
+          const stage = IGQ("#igAbStage").value || "cold";
+          const data = await igFetch("/admin/instagram/ab-stats?stage=" + encodeURIComponent(stage) + "&days=30");
+          const v = data.variants || [];
+          if (!v.length) { IGQ("#igAbBox").innerHTML = igEmpty("Sin datos suficientes para comparar variantes."); return; }
+          IGQ("#igAbBox").innerHTML = `<div class="ig-table-wrap"><table style="width:100%;font-size:13px;">
+            <thead><tr><th>Variante</th><th>Enviados</th><th>Replies</th><th>Reply rate</th></tr></thead>
+            <tbody>${v.map(r => `<tr><td>${r.variant}</td><td>${r.sent}</td><td>${r.replies}</td><td>${r.reply_rate}%</td></tr>`).join("")}</tbody>
+          </table></div>`;
+        } catch (e) { IGQ("#igAbBox").innerHTML = igEmpty(e.message); }
+      }
+
+      // ----- Drafts -----
+      let _draftFocusCheckActive = false;
+      async function loadDrafts() {
+        const stage = IGQ("#igDraftsStageFilter").value;
+        const niche = IGQ("#igDraftsNiche").value.trim();
+        const city = IGQ("#igDraftsCity").value.trim();
+        const params = new URLSearchParams();
+        if (stage) params.set("stage", stage);
+        if (niche) params.set("niche", niche);
+        if (city) params.set("city", city);
+        params.set("limit", "60");
+        try {
+          const data = await igFetch("/admin/instagram/drafts?" + params.toString());
+          const items = data.items || [];
+          const box = IGQ("#igDraftsList");
+          if (!items.length) { box.innerHTML = igEmpty("No hay drafts pendientes. Genera cold o follow-ups desde los botones superiores."); return; }
+          box.innerHTML = items.map(d => `
+            <div class="card panel" data-draft-id="${d.send_id}" style="padding:12px;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;">
+              <img src="${escapeHtml(d.avatar_url || '')}" alt="" style="width:48px;height:48px;border-radius:50%;background:#1f2937;object-fit:cover;" onerror="this.style.display='none'" />
+              <div>
+                <div><strong>@${escapeHtml(d.username)}</strong> ${igBadge(igStageLabel(d.stage) + "/" + (d.variant || "?"), "accent")} <span class="muted">${escapeHtml(d.full_name || "")}</span></div>
+                <div class="muted" style="font-size:12px;margin:4px 0;">${escapeHtml(d.niche || "")} ${d.city ? "· " + escapeHtml(d.city) : ""} ${d.followers_count ? "· " + d.followers_count + " seguidores" : ""}</div>
+                <textarea data-draft-text style="width:100%;min-height:80px;font-size:13px;">${escapeHtml(d.message_text)}</textarea>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px;min-width:160px;">
+                <button class="secondary small" type="button" data-action="send">Enviar DM</button>
+                <button class="ghost small" type="button" data-action="save">Guardar texto</button>
+                <button class="ghost small" type="button" data-action="skip">Saltar draft</button>
+              </div>
+            </div>`).join("");
+          box.querySelectorAll("[data-draft-id]").forEach(card => {
+            const id = card.dataset.draftId;
+            const username = card.querySelector("strong").textContent.replace(/^@/, "");
+            const ta = card.querySelector("[data-draft-text]");
+            card.querySelector("[data-action='send']").addEventListener("click", () => sendDraft(id, username, ta.value));
+            card.querySelector("[data-action='save']").addEventListener("click", () => saveDraftText(id, ta.value));
+            card.querySelector("[data-action='skip']").addEventListener("click", () => skipDraft(id));
+          });
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      function sendDraft(id, username, text) {
+        const link = "https://ig.me/m/" + encodeURIComponent(username) + "?text=" + encodeURIComponent(text);
+        const win = window.open(link, "_blank");
+        if (!win) { igStatus("Bloqueado popup. Permite popups y reintenta.", "error"); return; }
+        // Marca como enviado al volver al panel (visibilitychange).
+        if (!_draftFocusCheckActive) {
+          _draftFocusCheckActive = true;
+          const handler = async () => {
+            if (document.visibilityState !== "visible") return;
+            document.removeEventListener("visibilitychange", handler);
+            _draftFocusCheckActive = false;
+            if (!confirm("¿Marcar el DM a @" + username + " como enviado?")) return;
+            try {
+              await igFetch("/admin/instagram/drafts/" + id + "/mark-sent", { method: "POST" });
+              loadDrafts(); loadStats();
+            } catch (e) { igStatus(e.message, "error"); }
+          };
+          document.addEventListener("visibilitychange", handler);
+        }
+      }
+
+      async function saveDraftText(id, text) {
+        try {
+          await igFetch("/admin/instagram/drafts/" + id, {
+            method: "PATCH", headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({ message_text: text }),
+          });
+          igStatus("Texto guardado", "success");
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      async function skipDraft(id) {
+        if (!confirm("¿Saltar este draft?")) return;
+        try {
+          await igFetch("/admin/instagram/drafts/" + id + "/skip", { method: "POST" });
+          loadDrafts();
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      async function generateDrafts(stage) {
+        try {
+          const afterDays = { cold: 0, fu1: 5, fu2: 7, breakup: 10 }[stage] || 5;
+          const data = await igFetch("/admin/instagram/draft", {
+            method: "POST", headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({ stage, max: 20, after_days: afterDays }),
+          });
+          igStatus("Creados " + data.created + " drafts " + stage, "success");
+          loadDrafts(); loadStats();
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      function igLocalNowInput() {
+        const d = new Date();
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        return d.toISOString().slice(0, 16);
+      }
+
+      async function saveManualContact() {
+        const username = IGQ("#igManualUsername").value.trim();
+        const message = IGQ("#igManualMessage").value.trim();
+        if (!username || !message) { igStatus("Usuario y mensaje son obligatorios.", "error"); return; }
+        const payload = {
+          username,
+          full_name: IGQ("#igManualFullName").value.trim(),
+          message_text: message,
+          stage: IGQ("#igManualStage").value,
+          contacted_at: IGQ("#igManualAt").value ? new Date(IGQ("#igManualAt").value).toISOString() : "",
+          notes: IGQ("#igManualNotes").value.trim(),
+          niche: IGQ("#igManualNiche").value.trim(),
+          city: IGQ("#igManualCity").value.trim(),
+        };
+        try {
+          const data = await igFetch("/admin/instagram/manual-contact", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify(payload),
+          });
+          IGQ("#igManualStatus").textContent = data.next_followup_at ? "Guardado. Proximo follow-up: " + igDate(data.next_followup_at) : "Guardado.";
+          IGQ("#igManualMessage").value = "";
+          IGQ("#igManualNotes").value = "";
+          loadStats(); loadOpsSummary();
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      function openManualIg() {
+        const username = IGQ("#igManualUsername").value.trim().replace(/^@/, "");
+        const message = IGQ("#igManualMessage").value.trim();
+        if (!username) { igStatus("Escribe un usuario primero.", "error"); return; }
+        window.open("https://ig.me/m/" + encodeURIComponent(username) + (message ? "?text=" + encodeURIComponent(message) : ""), "_blank");
+      }
+
+      async function loadFollowupQueue() {
+        const box = IGQ("#igFollowupQueue");
+        if (!box) return;
+        try {
+          const data = await igFetch("/admin/instagram/followup-queue?limit=50");
+          const items = data.items || [];
+          if (!items.length) { box.innerHTML = igEmpty("No hay follow-ups vencidos."); return; }
+          box.innerHTML = items.map(item => `
+            <div class="card panel" style="padding:12px;margin-bottom:10px;">
+              <div class="section-header">
+                <div>
+                  <strong>@${escapeHtml(item.username)}</strong> ${igBadge(igStageLabel(item.next_stage), "accent")}
+                  <p class="muted">${escapeHtml(item.full_name || "")} ${item.niche ? "- " + escapeHtml(item.niche) : ""} ${item.city ? "- " + escapeHtml(item.city) : ""}</p>
+                </div>
+                <button class="secondary small" type="button" data-ig-followup-open="${escapeHtml(item.username)}" data-stage="${escapeHtml(item.next_stage)}" data-message="${escapeHtml(item.suggested_message || "")}">Abrir DM</button>
+              </div>
+              <textarea rows="3" readonly style="width:100%;font-size:13px;">${escapeHtml(item.suggested_message || "")}</textarea>
+            </div>`).join("");
+          box.querySelectorAll("[data-ig-followup-open]").forEach(btn => {
+            btn.addEventListener("click", () => openSuggestedFollowup(btn.dataset.igFollowupOpen, btn.dataset.stage, btn.dataset.message));
+          });
+        } catch (e) { box.innerHTML = igEmpty(e.message); }
+      }
+
+      function openSuggestedFollowup(username, stage, message) {
+        if (!username) return;
+        const cleanUser = username.replace(/^@/, "");
+        window.open("https://ig.me/m/" + encodeURIComponent(cleanUser) + "?text=" + encodeURIComponent(message || ""), "_blank");
+        const handler = async () => {
+          if (document.visibilityState !== "visible") return;
+          document.removeEventListener("visibilitychange", handler);
+          if (!confirm("Marcar follow-up a @" + cleanUser + " como enviado?")) return;
+          try {
+            await igFetch("/admin/instagram/manual-contact", {
+              method: "POST",
+              headers: {"Content-Type":"application/json"},
+              body: JSON.stringify({ username: cleanUser, stage, message_text: message || "(follow-up enviado)" }),
+            });
+            loadFollowupQueue(); loadStats(); loadOpsSummary();
+          } catch (e) { igStatus(e.message, "error"); }
+        };
+        document.addEventListener("visibilitychange", handler);
+      }
+
+      // ----- Prospects -----
+      async function loadProspects() {
+        const q = IGQ("#igProspectsQ").value.trim();
+        const status = IGQ("#igProspectsStatus").value;
+        const niche = IGQ("#igProspectsNiche").value.trim();
+        const city = IGQ("#igProspectsCity").value.trim();
+        const params = new URLSearchParams();
+        if (q) params.set("q", q);
+        if (status) params.set("status", status);
+        if (niche) params.set("niche", niche);
+        if (city) params.set("city", city);
+        params.set("page", String(igState.prospectsPage));
+        params.set("page_size", "50");
+        try {
+          const data = await igFetch("/admin/instagram/prospects?" + params.toString());
+          const items = data.items || [];
+          if (!items.length) {
+            IGQ("#igProspectsTable").innerHTML = igEmpty("Sin prospects para este filtro.");
+            IGQ("#igProspectsPager").innerHTML = "";
+            return;
+          }
+          IGQ("#igProspectsTable").innerHTML = `<table style="width:100%;font-size:13px;">
+            <thead><tr><th>@</th><th>Nombre</th><th>Niche</th><th>Ciudad</th><th>Followers</th><th>Status</th><th>Score</th><th>Acciones</th></tr></thead>
+            <tbody>${items.map(p => `<tr>
+              <td><a href="https://www.instagram.com/${encodeURIComponent(p.username)}/" target="_blank">@${escapeHtml(p.username)}</a></td>
+              <td>${escapeHtml(p.full_name || "")}</td>
+              <td>${escapeHtml(p.niche || "")}</td>
+              <td>${escapeHtml(p.city || "")}</td>
+              <td>${igNumber(p.followers_count)}</td>
+              <td>${igBadge(p.status || "new", p.status === "replied" ? "success" : (p.status === "dnc" ? "danger" : ""))}</td>
+              <td>${p.score || 0}</td>
+              <td>
+                <div class="actions" style="gap:4px;margin:0;">
+                  <button class="ghost small" type="button" data-prospect-reply="${escapeHtml(p.username)}">Reply</button>
+                  <button class="ghost small" type="button" data-prospect-del="${escapeHtml(p.username)}">Borrar</button>
+                </div>
+              </td>
+            </tr>`).join("")}</tbody></table>`;
+          IGQ("#igProspectsTable").querySelectorAll("[data-prospect-reply]").forEach(btn => {
+            btn.addEventListener("click", async () => recordReply(btn.dataset.prospectReply));
+          });
+          IGQ("#igProspectsTable").querySelectorAll("[data-prospect-del]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+              if (!confirm("Borrar @" + btn.dataset.prospectDel + "?")) return;
+              try { await igFetch("/admin/instagram/prospects/" + encodeURIComponent(btn.dataset.prospectDel), { method:"DELETE" }); loadProspects(); }
+              catch(e) { igStatus(e.message, "error"); }
+            });
+          });
+          const totalPages = Math.max(1, Math.ceil((data.total || 0) / (data.page_size || 50)));
+          IGQ("#igProspectsPager").innerHTML = `
+            <span>${data.total} resultados - pagina ${data.page}/${totalPages}</span>
+            <button class="ghost small" type="button" id="igPrevPage" ${data.page <= 1 ? "disabled" : ""}>Anterior</button>
+            <button class="ghost small" type="button" id="igNextPage" ${data.page >= totalPages ? "disabled" : ""}>Siguiente</button>`;
+          IGQ("#igPrevPage")?.addEventListener("click", () => { igState.prospectsPage = Math.max(1, igState.prospectsPage - 1); loadProspects(); });
+          IGQ("#igNextPage")?.addEventListener("click", () => { igState.prospectsPage += 1; loadProspects(); });
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      async function loadOpsSummary() {
+        try {
+          const data = await igFetch("/admin/instagram/ops-summary");
+          const t = data.totals || {};
+          if (IGQ("#igOpsSentWeek")) IGQ("#igOpsSentWeek").textContent = t.sent_week || 0;
+          if (IGQ("#igOpsFollowupsDue")) IGQ("#igOpsFollowupsDue").textContent = t.followups_due || 0;
+          const due = data.followups_due || [];
+          IGQ("#igTodayFollowups").innerHTML = due.length ? due.map(item => `
+            <div class="ig-row">
+              <div class="ig-main">
+                <strong>@${escapeHtml(item.username)}</strong>
+                <span class="muted">${escapeHtml(igStageLabel(item.next_stage))} ${item.next_followup_at ? "- " + igDate(item.next_followup_at) : ""}</span>
+              </div>
+              <button class="ghost small" type="button" data-ig-followup-open="${escapeHtml(item.username)}" data-stage="${escapeHtml(item.next_stage)}" data-message="${escapeHtml(item.suggested_message || "")}">Abrir</button>
+            </div>`).join("") : igEmpty("Sin follow-ups vencidos ahora.");
+          IGQ("#igTodayFollowups")?.querySelectorAll("[data-ig-followup-open]").forEach(btn => {
+            btn.addEventListener("click", () => openSuggestedFollowup(btn.dataset.igFollowupOpen, btn.dataset.stage, btn.dataset.message));
+          });
+          const recent = data.recent_activity || [];
+          IGQ("#igRecentActivity").innerHTML = recent.length ? recent.map(ev => `
+            <div class="ig-row">
+              <div class="ig-main">
+                <strong>@${escapeHtml(ev.username)}</strong>
+                <span class="muted">${escapeHtml(ev.type || "")} ${ev.stage ? "- " + escapeHtml(ev.stage) : ""}</span>
+              </div>
+              <span class="muted">${igDate(ev.ts)}</span>
+            </div>`).join("") : igEmpty("Aun sin actividad.");
+        } catch (e) {
+          if (IGQ("#igTodayFollowups")) IGQ("#igTodayFollowups").innerHTML = igEmpty(e.message);
+          if (IGQ("#igRecentActivity")) IGQ("#igRecentActivity").innerHTML = igEmpty(e.message);
+        }
+      }
+
+      async function addProspect() {
+        const username = prompt("Username (sin @):");
+        if (!username) return;
+        const full_name = prompt("Nombre completo (opcional):") || "";
+        const niche = prompt("Niche/sector (opcional):") || "";
+        const city = prompt("Ciudad (opcional):") || "";
+        try {
+          await igFetch("/admin/instagram/prospects", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ username, full_name, niche, city }),
+          });
+          loadProspects();
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      async function recordReply(username) {
+        if (!username) return;
+        const note = prompt("Nota interna de respuesta (opcional):") || "";
+        try {
+          await igFetch("/admin/instagram/replies", {
+            method: "POST",
+            body: JSON.stringify({ username, note }),
+          });
+          igStatus("@" + username + " marcado como replied", "success");
+          loadProspects(); loadStats();
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      // ----- Discovery -----
+      async function runDiscovery() {
+        const raw = IGQ("#igDiscUsernames").value.trim();
+        if (!raw) { igStatus("Necesitas al menos 1 username.", "error"); return; }
+        const usernames = raw.split(/[,;\n]/).map(s => s.trim().replace(/^@/, "")).filter(Boolean);
+        const payload = {
+          usernames,
+          niche: IGQ("#igDiscNiche").value.trim(),
+          city: IGQ("#igDiscCity").value.trim(),
+          source: IGQ("#igDiscSource").value.trim() || "discover",
+          min_followers: parseInt(IGQ("#igDiscMinFollowers").value || "0", 10),
+          max_followers: parseInt(IGQ("#igDiscMaxFollowers").value || "0", 10),
+          has_website: IGQ("#igDiscHasWebsite").checked,
+          is_business: IGQ("#igDiscIsBusiness").checked,
+          use_graph: IGQ("#igDiscUseGraph").checked,
+        };
+        IGQ("#igDiscStatus").textContent = "Lanzando job...";
+        IGQ("#igDiscLog").style.display = "block";
+        IGQ("#igDiscLog").textContent = "Job iniciado, esperando resultados...\n";
+        try {
+          const data = await igFetch("/admin/instagram/discover", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify(payload),
+          });
+          const jobId = data.job_id;
+          IGQ("#igDiscStatus").textContent = "Job #" + jobId + " corriendo...";
+          // Poll
+          const poll = async () => {
+            try {
+              const j = await igFetch("/admin/instagram/jobs/" + jobId);
+              IGQ("#igDiscLog").textContent = "Estado: " + j.status + "\n" + (j.log || "");
+              if (j.status === "done" || j.status === "error") {
+                IGQ("#igDiscStatus").textContent = "Job " + j.status;
+                loadStats();
+                loadJobs();
+                return;
+              }
+              setTimeout(poll, 2000);
+            } catch(e) { IGQ("#igDiscStatus").textContent = e.message; }
+          };
+          setTimeout(poll, 1500);
+        } catch (e) {
+          IGQ("#igDiscStatus").textContent = e.message;
+        }
+      }
+
+      async function loadJobs() {
+        const box = IGQ("#igJobsList");
+        if (!box) return;
+        try {
+          const data = await igFetch("/admin/instagram/jobs?limit=8");
+          const items = data.items || [];
+          if (!items.length) { box.innerHTML = igEmpty("Sin jobs de discovery todavia."); return; }
+          box.innerHTML = items.map(job => {
+            let summary = job.log || "";
+            try {
+              const parsed = JSON.parse(job.log || "{}");
+              summary = `Perfiles ${parsed.profiles || 0} - nuevos ${parsed.added || 0} - actualizados ${parsed.updated || 0}`;
+            } catch(e) {}
+            const cls = job.status === "done" ? "success" : (job.status === "error" ? "danger" : "warn");
+            return `<article class="ig-job">
+              <header><strong>#${job.id} ${escapeHtml(job.kind || "job")}</strong>${igBadge(job.status || "-", cls)}</header>
+              <span class="muted">${escapeHtml(summary || "Sin log")}</span>
+              <span class="muted">${igDate(job.started_at)}${job.finished_at ? " - fin " + igDate(job.finished_at) : ""}</span>
+            </article>`;
+          }).join("");
+        } catch (e) { box.innerHTML = igEmpty(e.message); }
+      }
+
+      // ----- Templates -----
+      async function loadTemplates() {
+        try {
+          const data = await igFetch("/admin/instagram/templates");
+          const stages = data.stages || ["cold","fu1","fu2","breakup"];
+          const map = {};
+          (data.overrides || []).forEach(o => map[o.stage] = o);
+          IGQ("#igTemplatesEditor").innerHTML = stages.map(s => {
+            const o = map[s] || {};
+            return `<div class="card panel" style="padding:10px;margin-bottom:10px;">
+              <strong>${s}</strong>
+              <label>Opener override<input data-tpl-opener="${s}" value="${escapeHtml(o.opener || "")}" placeholder="vacio = usar default"></label>
+              <label>Body override<textarea data-tpl-body="${s}" rows="3">${escapeHtml(o.body || "")}</textarea></label>
+              <button class="ghost small" type="button" data-tpl-save="${s}">Guardar ${s}</button>
+            </div>`;
+          }).join("");
+          IGQ("#igTemplatesEditor").querySelectorAll("[data-tpl-save]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+              const s = btn.dataset.tplSave;
+              const opener = IGQ(`[data-tpl-opener="${s}"]`).value;
+              const body = IGQ(`[data-tpl-body="${s}"]`).value;
+              try {
+                await igFetch("/admin/instagram/templates", {
+                  method:"PUT", headers:{"Content-Type":"application/json"},
+                  body: JSON.stringify({ stage: s, opener, body }),
+                });
+                igStatus("Override " + s + " guardado", "success");
+              } catch(e) { igStatus(e.message, "error"); }
+            });
+          });
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      // ----- Autopilot -----
+      async function loadAutopilot() {
+        try {
+          const data = await igFetch("/admin/instagram/autopilot-config");
+          const c = data.config || {};
+          IGQ("#igAutoEnabled").checked = !!c.enabled;
+          IGQ("#igAutoDailyNew").value = c.daily_new_target || 15;
+          IGQ("#igAutoDailyCap").value = c.daily_outreach_cap || 25;
+          IGQ("#igAutoFollowups").checked = !!c.auto_followups;
+          IGQ("#igAutoTargets").value = JSON.stringify(c.targets || [], null, 2);
+          IGQ("#igAutoStatus").textContent = `Enviados hoy: ${c.sent_today || 0} · Drafts pendientes: ${c.drafts_pending || 0}` +
+            (data.autonomous_enabled ? " · IG_AUTONOMOUS_ENABLED=true" : " · IG_AUTONOMOUS_ENABLED=false (worker apagado)");
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      async function saveAutopilot() {
+        let targets = [];
+        try { targets = JSON.parse(IGQ("#igAutoTargets").value || "[]"); }
+        catch(e) { igStatus("Targets JSON invalido", "error"); return; }
+        if (!Array.isArray(targets)) { igStatus("Targets debe ser una lista JSON.", "error"); return; }
+        try {
+          await igFetch("/admin/instagram/autopilot-config", {
+            method:"PUT", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({
+              enabled: IGQ("#igAutoEnabled").checked,
+              targets,
+              daily_new_target: parseInt(IGQ("#igAutoDailyNew").value || "0", 10),
+              daily_outreach_cap: parseInt(IGQ("#igAutoDailyCap").value || "0", 10),
+              auto_followups: IGQ("#igAutoFollowups").checked,
+            }),
+          });
+          igStatus("Autopilot guardado", "success"); loadAutopilot();
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      async function tickAutopilot() {
+        try {
+          const data = await igFetch("/admin/instagram/autopilot-tick", { method: "POST" });
+          igStatus("Ronda ejecutada: " + JSON.stringify(data.stats || {}), "success");
+          loadAutopilot(); loadStats();
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      async function pollReplies() {
+        try {
+          const data = await igFetch("/admin/instagram/replies/poll", { method: "POST" });
+          const s = data.stats || {};
+          igStatus(`Respuestas: ${s.replies_new || 0} nuevas, ${s.matched || 0} matches, ${s.checked || 0} conversaciones revisadas.`, s.error ? "error" : "success");
+          loadStats();
+          if (igState.currentTab === "prospects") loadProspects();
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      // ----- Suppressions -----
+      async function loadSuppressions() {
+        try {
+          const data = await igFetch("/admin/instagram/suppressions");
+          const items = data.items || [];
+          if (!items.length) {
+            IGQ("#igSupBody").innerHTML = `<tr><td colspan="4">${igEmpty("Sin cuentas suprimidas.")}</td></tr>`;
+            return;
+          }
+          IGQ("#igSupBody").innerHTML = items.map(s => `<tr>
+            <td>@${escapeHtml(s.username)}</td>
+            <td>${escapeHtml(s.reason || "")}</td>
+            <td>${escapeHtml(s.added_at || "")}</td>
+            <td><button class="ghost small" data-sup-del="${escapeHtml(s.username)}">quitar</button></td>
+          </tr>`).join("");
+          IGQ("#igSupBody").querySelectorAll("[data-sup-del]").forEach(btn => {
+            btn.addEventListener("click", async () => {
+              try { await igFetch("/admin/instagram/suppress/" + encodeURIComponent(btn.dataset.supDel), { method:"DELETE" }); loadSuppressions(); }
+              catch(e) { igStatus(e.message, "error"); }
+            });
+          });
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      async function addSuppression() {
+        const username = IGQ("#igSupUsername").value.trim();
+        if (!username) return;
+        try {
+          await igFetch("/admin/instagram/suppress", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ username, reason: IGQ("#igSupReason").value || "manual" }),
+          });
+          IGQ("#igSupUsername").value = "";
+          loadSuppressions();
+        } catch (e) { igStatus(e.message, "error"); }
+      }
+
+      // ----- Wiring -----
+      IGALL("[data-ig-tab]").forEach(b => b.addEventListener("click", () => setIgTab(b.dataset.igTab)));
+      IGQ("#igRefreshBtn")?.addEventListener("click", () => setIgTab(igState.currentTab || "dashboard"));
+      IGQ("#igPollRepliesBtn")?.addEventListener("click", pollReplies);
+      IGQ("#igAbStage")?.addEventListener("change", loadAb);
+      IGQ("#igTodayRegisterBtn")?.addEventListener("click", () => setIgTab("manual"));
+      IGQ("#igManualSaveBtn")?.addEventListener("click", saveManualContact);
+      IGQ("#igManualOpenIgBtn")?.addEventListener("click", openManualIg);
+      IGQ("#igFollowupsRefreshBtn")?.addEventListener("click", loadFollowupQueue);
+      IGQ("#igDraftsRefreshBtn")?.addEventListener("click", loadDrafts);
+      IGQ("#igGenerateColdBtn")?.addEventListener("click", () => generateDrafts("cold"));
+      IGQ("#igGenerateFu1Btn")?.addEventListener("click", () => generateDrafts("fu1"));
+      IGQ("#igGenerateFu2Btn")?.addEventListener("click", () => generateDrafts("fu2"));
+      IGQ("#igProspectsRefreshBtn")?.addEventListener("click", () => { igState.prospectsPage = 1; loadProspects(); });
+      IGQ("#igProspectsAddBtn")?.addEventListener("click", addProspect);
+      IGQ("#igDiscRunBtn")?.addEventListener("click", runDiscovery);
+      IGQ("#igJobsRefreshBtn")?.addEventListener("click", loadJobs);
+      IGQ("#igAutoSaveBtn")?.addEventListener("click", saveAutopilot);
+      IGQ("#igAutoTickBtn")?.addEventListener("click", tickAutopilot);
+      IGQ("#igSupAddBtn")?.addEventListener("click", addSuppression);
+      IGQ("#igSupRefreshBtn")?.addEventListener("click", loadSuppressions);
+
+      window.__igInit = function() {
+        if (IGQ("#igManualAt") && !IGQ("#igManualAt").value) IGQ("#igManualAt").value = igLocalNowInput();
+        if (!igState.loaded) { setIgTab("dashboard"); igState.loaded = true; }
+        else { loadStats(); }
+      };
+    })();
+    // === END INSTAGRAM PANEL ====================================
   </script>
 </body>
 </html>

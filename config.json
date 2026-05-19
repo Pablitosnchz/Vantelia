@@ -2,8 +2,13 @@
   "Clinica_Saga": {
     "nombre": "Clinica Saga",
     "plan": "web",
+    "subscription": {
+      "plan": "web"
+    },
     "icono": "CS",
     "color": "#2E86AB",
+    "accent_color": "",
+    "logo_url": "",
     "bienvenida": "Hola, soy Clara, la asistente de Clinica Saga. En que puedo ayudarte hoy?",
     "prompt_extra": "Habla con tono cercano y profesional. Si falta informacion, deriva al equipo humano sin inventar nada.",
     "allowed_origins": [
@@ -21,63 +26,59 @@
     "branding": {
       "powered_by": "Powered by Vantelia"
     },
+    "whatsapp": {
+      "enabled": false,
+      "phone_number_id": "",
+      "access_token_env": "",
+      "verify_token_env": ""
+    },
     "booking": {
       "enabled": true,
       "timezone": "Europe/Madrid",
       "slot_minutes": 30,
       "day_start": "17:00",
       "day_end": "21:00",
-      "closed_weekdays": [6],
-      "webhook_env": "WEBHOOK_DEFAULT",
-      "success_message": "Tu cita ha quedado registrada correctamente. Nuestro equipo revisara la solicitud y te contactara si necesita ajustar algo."
-    }
-  },
-  "Vantelia": {
-    "nombre": "Vantelia",
-    "plan": "completo",
-    "icono": "VA",
-    "color": "#00b1d9",
-    "bienvenida": "Hola, soy el asistente de Vantelia. Puedo resolver dudas sobre nuestros planes, generar una demo y ayudarte a solicitar una consulta.",
-    "prompt_extra": "Habla con tono profesional, claro y cercano. Prioriza llevar al usuario a una consulta gratuita, una demo o el plan adecuado. No inventes precios ni condiciones fuera de la base documental. Si preguntan precios, tarifas o planes, responde en version corta: 3 bullets con plan, precio y encaje; anade solo que hay 30 dias gratis, sin permanencia e IVA no incluido. No uses tabla larga salvo que el usuario la pida expresamente.",
-    "allowed_origins": [
-      "https://vantelia.es",
-      "https://www.vantelia.es",
-      "https://app.vantelia.es",
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-      "http://127.0.0.1:5500",
-      "http://localhost:8000"
-    ],
-    "contacto": {
-      "email": "soporte@vantelia.es",
-      "telefono": "+34 600000000"
-    },
-    "branding": {
-      "powered_by": "Powered by Vantelia"
-    },
-    "subscription": {
-      "plan": "completo",
-      "status": "active",
-      "lifetime": true,
-      "billing_period": "lifetime"
-    },
-    "booking": {
-      "enabled": true,
-      "timezone": "Europe/Madrid",
-      "slot_minutes": 30,
-      "day_start": "09:00",
-      "day_end": "18:00",
-      "closed_weekdays": [6],
+      "closed_weekdays": [
+        6
+      ],
       "provider": "internal",
       "webhook_env": "WEBHOOK_DEFAULT",
-      "success_message": "Tu solicitud de consulta ha quedado registrada correctamente. Te contactaremos para confirmar los detalles."
+      "webhook_url": "",
+      "calendly_user_env": "",
+      "calendly_event_type_env": "",
+      "calendly_location_kind": "",
+      "calendly_location_value": "",
+      "google_calendar_id": "",
+      "google_calendar_id_env": "",
+      "google_service_account_path": "",
+      "google_service_account_env": "",
+      "success_message": "Tu cita ha quedado registrada correctamente. Nuestro equipo revisara la solicitud y te contactara si necesita ajustar algo.",
+      "message_templates": {
+        "confirmed": "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.",
+        "reminder_24h": "Te recordamos que manana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
+        "reminder_2h": "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.",
+        "cancelled": "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.",
+        "rescheduled": "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla."
+      },
+      "message_template_enabled": {
+        "confirmed": true,
+        "reminder_24h": true,
+        "reminder_2h": true,
+        "cancelled": true,
+        "rescheduled": true
+      }
     }
   },
   "demo": {
     "nombre": "Agencia IA Demo",
     "plan": "web",
+    "subscription": {
+      "plan": "web"
+    },
     "icono": "AI",
     "color": "#00b1d9",
+    "accent_color": "",
+    "logo_url": "",
     "bienvenida": "Hola, soy el asistente demo de la agencia. Puedo resolver dudas y recoger solicitudes de contacto.",
     "prompt_extra": "Explica con claridad el servicio y mantente siempre dentro del contexto de la demo.",
     "allowed_origins": [
@@ -96,15 +97,121 @@
     "branding": {
       "powered_by": "Powered by Vantelia"
     },
+    "whatsapp": {
+      "enabled": false,
+      "phone_number_id": "",
+      "access_token_env": "",
+      "verify_token_env": ""
+    },
     "booking": {
       "enabled": true,
       "timezone": "Europe/Madrid",
       "slot_minutes": 30,
       "day_start": "09:00",
       "day_end": "18:00",
-      "closed_weekdays": [6],
+      "closed_weekdays": [
+        6
+      ],
+      "provider": "internal",
       "webhook_env": "WEBHOOK_DEFAULT",
-      "success_message": "La solicitud demo ha quedado registrada correctamente."
+      "webhook_url": "",
+      "calendly_user_env": "",
+      "calendly_event_type_env": "",
+      "calendly_location_kind": "",
+      "calendly_location_value": "",
+      "google_calendar_id": "",
+      "google_calendar_id_env": "",
+      "google_service_account_path": "",
+      "google_service_account_env": "",
+      "success_message": "La solicitud demo ha quedado registrada correctamente.",
+      "message_templates": {
+        "confirmed": "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.",
+        "reminder_24h": "Te recordamos que manana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
+        "reminder_2h": "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.",
+        "cancelled": "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.",
+        "rescheduled": "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla."
+      },
+      "message_template_enabled": {
+        "confirmed": true,
+        "reminder_24h": true,
+        "reminder_2h": true,
+        "cancelled": true,
+        "rescheduled": true
+      }
+    }
+  },
+  "Vantelia": {
+    "nombre": "Vantelia",
+    "plan": "completo",
+    "subscription": {
+      "plan": "completo",
+      "status": "active",
+      "lifetime": true,
+      "billing_period": "lifetime"
+    },
+    "icono": "VA",
+    "color": "#00b1d9",
+    "accent_color": "",
+    "logo_url": "",
+    "bienvenida": "Hola, soy el asistente de Vantelia. Puedo resolver dudas sobre nuestros planes, generar una demo y ayudarte a solicitar una consulta.",
+    "prompt_extra": "Habla con tono profesional, claro y cercano. Prioriza llevar al usuario a una consulta gratuita, una demo o el plan adecuado. No inventes precios ni condiciones fuera de la base documental. Si preguntan precios, tarifas o planes, responde en version corta: 3 bullets con plan, precio y encaje; anade solo que hay 30 dias gratis, sin permanencia e IVA no incluido. No uses tabla larga salvo que el usuario la pida expresamente.",
+    "allowed_origins": [
+      "https://vantelia.es",
+      "https://www.vantelia.es",
+      "https://app.vantelia.es",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:5500",
+      "http://localhost:8000"
+    ],
+    "contacto": {
+      "email": "soporte@vantelia.es",
+      "telefono": "+34 600000000"
+    },
+    "branding": {
+      "powered_by": "Powered by Vantelia"
+    },
+    "whatsapp": {
+      "enabled": false,
+      "phone_number_id": "",
+      "access_token_env": "",
+      "verify_token_env": ""
+    },
+    "booking": {
+      "enabled": true,
+      "timezone": "Europe/Madrid",
+      "slot_minutes": 30,
+      "day_start": "09:00",
+      "day_end": "18:00",
+      "closed_weekdays": [
+        6
+      ],
+      "provider": "internal",
+      "webhook_env": "WEBHOOK_DEFAULT",
+      "webhook_url": "",
+      "calendly_user_env": "",
+      "calendly_event_type_env": "",
+      "calendly_location_kind": "",
+      "calendly_location_value": "",
+      "google_calendar_id": "",
+      "google_calendar_id_env": "",
+      "google_service_account_path": "",
+      "google_service_account_env": "",
+      "success_message": "Tu solicitud de consulta ha quedado registrada correctamente. Te contactaremos para confirmar los detalles.",
+      "message_templates": {
+        "confirmed": "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.",
+        "reminder_24h": "Te recordamos que manana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
+        "reminder_2h": "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.",
+        "cancelled": "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.",
+        "rescheduled": "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla."
+      },
+      "message_template_enabled": {
+        "confirmed": true,
+        "reminder_24h": true,
+        "reminder_2h": true,
+        "cancelled": true,
+        "rescheduled": true
+      }
     }
   }
 }

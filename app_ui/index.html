@@ -1,0 +1,1634 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>Vantelia · Panel</title>
+  <link rel="icon" type="image/png" href="/brand-assets/favicon.png" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+    :root {
+      color-scheme: dark;
+      --bg:          #0B132B;
+      --bg-2:        #0e1b3e;
+      --panel:       #11203a;
+      --panel-2:     #142a4d;
+      --text:        #F0F4F8;
+      --soft:        #8fa3b4;
+      --soft-2:      #637c8e;
+      --line:        rgba(255,255,255,0.08);
+      --line-strong: rgba(255,255,255,0.16);
+      --accent:      #00D1FF;
+      --accent-2:    #00F5D4;
+      --accent-soft: rgba(0,209,255,0.10);
+      --success:     #00F5D4;
+      --warning:     #ffc857;
+      --danger:      #ff7b86;
+      --danger-soft: rgba(255,123,134,0.12);
+      --font:        'Inter', 'Segoe UI', sans-serif;
+      --font-title:  'Space Grotesk', 'Segoe UI', sans-serif;
+      --sidebar-w:   260px;
+      --right-w:     360px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg);
+      display: flex; min-height: 100vh; overflow: hidden;
+    }
+
+    /* ── Mini rail izquierda (logos cliente) ── */
+    .rail {
+      width: 72px; min-width: 72px;
+      background: linear-gradient(180deg, #07101f 0%, #0B132B 100%);
+      border-right: 1px solid var(--line);
+      display: flex; flex-direction: column; align-items: center;
+      padding: 18px 0; gap: 14px;
+    }
+    .rail-logo {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), #1F6FEB);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .rail-logo svg { width: 22px; height: 22px; color: #0B132B; }
+    .rail-bot {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: var(--panel);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--accent); font-weight: 700; font-size: 0.9rem;
+      cursor: pointer; transition: all .15s ease;
+      border: 1.5px solid transparent;
+    }
+    .rail-bot.active { border-color: var(--accent); background: var(--accent-soft); }
+    .rail-add {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: var(--panel); color: var(--soft);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 1.4rem; line-height: 1;
+      border: 1.5px dashed var(--line-strong);
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: var(--sidebar-w); min-width: var(--sidebar-w);
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      padding: 22px 16px;
+      overflow-y: auto;
+    }
+    .sidebar-head {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 18px; padding: 0 6px;
+    }
+    .sidebar-head .menu-title {
+      flex: 1; font-family: var(--font-title); font-weight: 600; font-size: 1rem;
+      letter-spacing: .02em;
+    }
+    .sidebar-section {
+      font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--soft-2); margin: 18px 8px 8px;
+      font-weight: 600;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: 10px;
+      color: var(--soft); cursor: pointer;
+      font-size: 0.9rem; font-weight: 500;
+      transition: all .12s ease;
+      position: relative;
+    }
+    .nav-item:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+    .nav-item.active { color: var(--accent); background: var(--accent-soft); }
+    .nav-item.locked { opacity: .5; cursor: not-allowed; }
+    .nav-item.locked:hover { background: transparent; color: var(--soft); }
+    .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+    .pro-pill {
+      margin-left: auto;
+      font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.08em;
+      padding: 2px 6px; border-radius: 99px;
+      background: rgba(255,200,87,0.15); color: var(--warning);
+    }
+
+    /* ── Main content ── */
+    .main {
+      flex: 1; overflow-y: auto;
+      background: linear-gradient(160deg, var(--bg-2) 0%, var(--bg) 60%, #07101f 100%);
+      padding: 24px 32px 80px;
+    }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .page-title {
+      font-family: var(--font-title);
+      font-size: 1.4rem; font-weight: 600; letter-spacing: -.01em;
+    }
+    .user-chip {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--panel); border: 1px solid var(--line);
+      padding: 6px 10px 6px 6px; border-radius: 12px;
+      cursor: pointer; font-size: 0.86rem;
+    }
+    .avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-2), var(--accent));
+      color: #0B132B; display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.8rem;
+    }
+    .user-chip .meta { line-height: 1.2; }
+    .user-chip .meta b { display: block; font-weight: 600; color: var(--text); }
+    .user-chip .meta span { font-size: 0.74rem; color: var(--soft-2); }
+    .user-chip .caret { color: var(--soft-2); }
+    .user-menu {
+      position: relative;
+    }
+    .user-menu-pop {
+      display: none;
+      position: absolute; right: 0; top: calc(100% + 6px);
+      background: var(--panel-2); border: 1px solid var(--line-strong);
+      border-radius: 12px; min-width: 220px; padding: 6px;
+      z-index: 50; box-shadow: 0 18px 40px rgba(0,0,0,0.45);
+    }
+    .user-menu.open .user-menu-pop { display: block; }
+    .user-menu-pop button {
+      width: 100%; text-align: left; padding: 10px 12px;
+      background: transparent; border: 0; color: var(--text);
+      cursor: pointer; border-radius: 8px; font-size: 0.88rem;
+    }
+    .user-menu-pop button:hover { background: rgba(255,255,255,0.05); }
+
+    /* ── Stat cards ── */
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;
+      margin-bottom: 18px;
+    }
+    @media (min-width: 1100px) {
+      .stats-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    .stat-card {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 16px; padding: 18px;
+    }
+    .stat-card .label { color: var(--soft); font-size: 0.78rem; text-transform: uppercase; letter-spacing: .06em; }
+    .stat-card .value { font-family: var(--font-title); font-size: 1.9rem; font-weight: 600; margin-top: 8px; }
+    .stat-card .sub { color: var(--soft-2); font-size: 0.78rem; margin-top: 4px; }
+    .stat-card .row {
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    .stat-card .row b { font-family: var(--font-title); font-size: 1.4rem; font-weight: 600; }
+    .progress {
+      margin-top: 10px;
+      height: 6px; background: rgba(255,255,255,0.05);
+      border-radius: 99px; overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      border-radius: 99px; transition: width .3s ease;
+    }
+    .stat-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--accent-soft); color: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 8px;
+    }
+    .stat-icon svg { width: 18px; height: 18px; }
+
+    /* ── Right panel (chat preview) ── */
+    .rightpanel {
+      width: var(--right-w); min-width: var(--right-w);
+      background: var(--panel);
+      border-left: 1px solid var(--line);
+      display: flex; flex-direction: column;
+    }
+    .rp-head {
+      padding: 14px 18px; border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .rp-head .avatar { width: 32px; height: 32px; font-size: 0.85rem; background: linear-gradient(135deg, var(--accent-2), var(--accent)); }
+    .rp-head b { font-size: 0.95rem; }
+    .rp-head .menu-btn { margin-left: auto; color: var(--soft-2); cursor: pointer; }
+    .rp-body {
+      flex: 1; padding: 18px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .chat-msg {
+      max-width: 88%;
+      background: var(--panel-2); border-radius: 14px;
+      padding: 10px 14px; font-size: 0.88rem; line-height: 1.5;
+      white-space: pre-wrap; word-wrap: break-word;
+    }
+    .chat-msg.bot { align-self: flex-start; background: #07101f; border: 1px solid var(--line); }
+    .chat-msg.user { align-self: flex-end; background: var(--accent-soft); color: var(--text); }
+    .chat-starters {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      margin-top: 6px;
+    }
+    .chat-starter {
+      background: var(--panel-2); border: 1px solid var(--line);
+      padding: 6px 10px; border-radius: 99px;
+      font-size: 0.78rem; color: var(--soft); cursor: pointer;
+    }
+    .chat-starter:hover { color: var(--text); border-color: var(--accent); }
+    .rp-input {
+      padding: 12px; border-top: 1px solid var(--line);
+      display: flex; gap: 8px;
+    }
+    .rp-input input {
+      flex: 1; background: rgba(7,16,31,0.6);
+      border: 1px solid var(--line); color: var(--text);
+      padding: 10px 12px; border-radius: 10px; font-family: var(--font); font-size: 0.86rem;
+    }
+    .rp-input input:focus { outline: none; border-color: var(--accent); }
+    .rp-input button {
+      background: var(--accent); color: #0B132B; border: 0;
+      padding: 0 12px; border-radius: 10px; cursor: pointer; font-weight: 600;
+    }
+
+    /* ── Pages ── */
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ── Generic cards / forms ── */
+    .panel-card {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 16px; padding: 22px;
+    }
+    .panel-card h2 {
+      font-family: var(--font-title);
+      font-size: 1.05rem; font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .panel-card .panel-sub {
+      color: var(--soft); font-size: 0.85rem; margin-bottom: 16px;
+    }
+    .form-row { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
+    .form-row .field { flex: 1 1 220px; }
+    .field-label {
+      display: block; font-size: 0.78rem; color: var(--soft);
+      text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; font-weight: 600;
+    }
+    .field-input, .field-textarea {
+      width: 100%; background: rgba(7,16,31,0.6);
+      border: 1px solid var(--line-strong); color: var(--text);
+      padding: 10px 12px; border-radius: 10px; font-family: var(--font); font-size: 0.92rem;
+    }
+    .field-input:focus, .field-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+    .field-textarea { min-height: 96px; resize: vertical; line-height: 1.5; }
+    .color-row { display: flex; align-items: center; gap: 10px; }
+    .color-row input[type="color"] {
+      width: 44px; height: 36px; padding: 0; border-radius: 8px;
+      border: 1px solid var(--line-strong); background: transparent;
+    }
+
+    .btn {
+      padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 0.92rem;
+      cursor: pointer; font-family: var(--font); border: 0;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #0B132B; }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(0,209,255,0.25); }
+    .btn-ghost { background: transparent; color: var(--soft); border: 1px solid var(--line-strong); }
+    .btn-ghost:hover { color: var(--text); border-color: var(--accent); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    .code-block {
+      background: #07101f; border: 1px solid var(--line);
+      padding: 14px; border-radius: 10px;
+      font-family: 'Courier New', monospace; font-size: 0.8rem; color: var(--accent-2);
+      overflow-x: auto; white-space: pre;
+    }
+
+    /* Chat history list */
+    .chat-list {
+      display: flex; flex-direction: column; gap: 8px;
+      max-height: 70vh; overflow-y: auto;
+    }
+    .chat-row {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 12px; padding: 14px; cursor: pointer;
+      display: flex; flex-direction: column; gap: 4px;
+      transition: all .12s ease;
+    }
+    .chat-row:hover { border-color: var(--accent); }
+    .chat-row .when { color: var(--soft-2); font-size: 0.76rem; }
+    .chat-row .preview { color: var(--soft); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chat-detail-msg {
+      padding: 10px 14px; border-radius: 12px; margin-bottom: 8px;
+      font-size: 0.88rem; line-height: 1.5; max-width: 82%; word-wrap: break-word;
+    }
+    .chat-detail-msg.user { background: var(--accent-soft); margin-left: auto; }
+    .chat-detail-msg.bot  { background: var(--panel-2); border: 1px solid var(--line); }
+
+    .starter-list { display: flex; flex-direction: column; gap: 8px; }
+    .starter-chip { display: flex; align-items: center; gap: 8px; background: rgba(7,16,31,0.4); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+    .starter-chip input { flex: 1; background: transparent; border: 0; color: var(--text); outline: none; font-family: var(--font); font-size: 0.88rem; }
+    .starter-chip button { background: transparent; border: 0; color: var(--soft-2); cursor: pointer; font-size: 1.2rem; padding: 0 4px; }
+    .starter-chip button:hover { color: var(--danger); }
+
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--panel-2); border: 1px solid var(--line-strong); color: var(--text);
+      padding: 12px 20px; border-radius: 12px; font-size: 0.88rem;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      opacity: 0; transition: opacity .2s ease, transform .2s ease;
+      z-index: 200; pointer-events: none;
+    }
+    .toast.visible { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+    .toast.success { border-color: var(--accent-2); color: var(--accent-2); }
+    .toast.error { border-color: var(--danger); color: var(--danger); }
+
+    /* responsive */
+    @media (max-width: 1100px) {
+      .rightpanel { display: none; }
+    }
+    @media (max-width: 768px) {
+      .sidebar { width: 200px; min-width: 200px; }
+      .main { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Mini rail -->
+<div class="rail">
+  <div class="rail-logo" title="Vantelia">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 L2 22 H22 Z"/></svg>
+  </div>
+  <div class="rail-bot active" id="botInitials">AI</div>
+  <div class="rail-add" title="Crear otro bot (próximamente)">+</div>
+</div>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-head">
+    <span class="menu-title">Menú</span>
+  </div>
+
+  <div class="sidebar-section">Resumen</div>
+  <div class="nav-item active" data-tab="overview">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+    Overview
+  </div>
+
+  <div class="sidebar-section">Actividad</div>
+  <div class="nav-item" data-tab="chats">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    Historial de chats
+  </div>
+  <div class="nav-item" data-tab="leads">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    Leads
+  </div>
+  <div class="nav-item locked" data-tab="livechat" title="Plan Pro">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+    Live Chat
+    <span class="pro-pill">Pro</span>
+  </div>
+
+  <div class="sidebar-section">Entrenamiento</div>
+  <div class="nav-item" data-tab="knowledge">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+    Conocimiento
+  </div>
+  <div class="nav-item" data-tab="qa">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    Q&amp;A
+  </div>
+
+  <div class="sidebar-section">Comportamiento</div>
+  <div class="nav-item" data-tab="tune">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+    Tune AI
+  </div>
+  <div class="nav-item" data-tab="test">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2h4"/><path d="M12 14v-4"/><circle cx="12" cy="14" r="8"/></svg>
+    Test Bot
+  </div>
+
+  <div class="sidebar-section">Despliegue</div>
+  <div class="nav-item" data-tab="appearance">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="4.93" y1="4.93" x2="9.17" y2="9.17"/><line x1="14.83" y1="14.83" x2="19.07" y2="19.07"/><line x1="14.83" y1="9.17" x2="19.07" y2="4.93"/><line x1="9.17" y1="14.83" x2="4.93" y2="19.07"/></svg>
+    Apariencia
+  </div>
+  <div class="nav-item" data-tab="deploy">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    Deploy
+  </div>
+
+  <div class="sidebar-section">Cuenta</div>
+  <div class="nav-item" data-tab="billing">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+    Plan y facturación
+  </div>
+
+  <div class="sidebar-section">Avanzado</div>
+  <div class="nav-item locked" data-tab="integrations">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 9v6"/><path d="M9 6h6"/><path d="M15 9l3 3-3 3"/></svg>
+    Integraciones
+  </div>
+</aside>
+
+<!-- Main -->
+<main class="main">
+  <div class="topbar">
+    <div class="page-title" id="pageTitle">Overview</div>
+    <div class="user-menu" id="userMenu">
+      <div class="user-chip" id="userChip">
+        <div class="avatar" id="userAvatar">U</div>
+        <div class="meta">
+          <b id="userName">__USER_NAME__</b>
+          <span id="userEmail">__USER_EMAIL__</span>
+        </div>
+        <span class="caret">▾</span>
+      </div>
+      <div class="user-menu-pop">
+        <button id="goWizardBtn" type="button">Reabrir wizard</button>
+        <button id="changePwdBtn" type="button">Cambiar contraseña</button>
+        <button id="logoutBtn" type="button">Cerrar sesión</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OVERVIEW -->
+  <section class="page active" id="page-overview">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+        <div class="label">Usuarios hoy</div>
+        <div class="row">
+          <div class="value" id="stUsersToday">0</div>
+          <div class="sub" id="stMessagesToday">0 mensajes</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <div class="label">Mensajes este periodo</div>
+        <div class="row">
+          <b id="stMsgUsed">0</b>
+          <div class="sub">/ <span id="stMsgQuota">50</span> · plan <span id="stPlan">free</span></div>
+        </div>
+        <div class="progress"><div class="progress-bar" id="stMsgBar" style="width:0%"></div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+        <div class="label">Leads generados</div>
+        <div class="row"><div class="value" id="stLeads">0</div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="label">Conocimiento</div>
+        <div class="row"><b id="stTrainBytes">0</b><div class="sub">caracteres</div></div>
+        <div class="sub">Total sesiones: <span id="stSessTotal">0</span></div>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <h2>Resumen rápido</h2>
+      <p class="panel-sub">Tu asistente está listo. Aquí tienes los enlaces clave.</p>
+      <div class="form-row">
+        <div class="field" style="flex:1 1 100%;">
+          <label class="field-label">Demo / preview</label>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input class="field-input" id="overviewDemoUrl" readonly />
+            <button class="btn btn-ghost" id="copyDemoBtn" type="button">Copiar</button>
+            <a class="btn btn-primary" id="openDemoBtn" target="_blank" rel="noreferrer">Abrir</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CHATS -->
+  <section class="page" id="page-chats">
+    <div class="panel-card">
+      <h2>Historial de chats</h2>
+      <p class="panel-sub">Últimas conversaciones con tu asistente.</p>
+      <div style="display:grid; grid-template-columns: 1fr 1.4fr; gap:18px; margin-top: 12px;" id="chatsLayout">
+        <div class="chat-list" id="chatList">
+          <div class="panel-sub" style="margin:0;">Cargando…</div>
+        </div>
+        <div class="panel-card" style="margin:0;">
+          <h2 id="chatDetailTitle">Selecciona una conversación</h2>
+          <p class="panel-sub" id="chatDetailMeta"></p>
+          <div id="chatDetailMessages"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TEST -->
+  <section class="page" id="page-test">
+    <div class="panel-card">
+      <h2>Probar tu asistente</h2>
+      <p class="panel-sub">El widget aparece abajo a la derecha de la pantalla. Pruébalo como lo haría una visita.</p>
+      <p style="margin-top:14px; color: var(--soft); font-size: 0.88rem;">
+        ¿No lo ves? Recarga la página o revisa que tienes JavaScript habilitado.
+      </p>
+    </div>
+  </section>
+
+  <!-- APPEARANCE -->
+  <section class="page" id="page-appearance">
+    <div class="panel-card">
+      <h2>Apariencia y personalidad</h2>
+      <p class="panel-sub">Cambia cómo se ve y se comporta tu asistente.</p>
+
+      <div class="form-row">
+        <div class="field">
+          <label class="field-label">Nombre del bot</label>
+          <input class="field-input" id="apNombre" maxlength="120" />
+        </div>
+        <div class="field" style="flex: 0 0 110px;">
+          <label class="field-label">Icono</label>
+          <input class="field-input" id="apIcono" maxlength="12" placeholder="AI" />
+        </div>
+        <div class="field" style="flex: 0 0 180px;">
+          <label class="field-label">Color principal</label>
+          <div class="color-row">
+            <input type="color" id="apColor" />
+            <input class="field-input" id="apColorText" maxlength="7" />
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field" style="flex: 1 1 100%;">
+          <label class="field-label">Mensaje de bienvenida</label>
+          <textarea class="field-textarea" id="apBienvenida" maxlength="600"></textarea>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field" style="flex: 1 1 100%;">
+          <label class="field-label">Instrucciones del asistente</label>
+          <textarea class="field-textarea" id="apPromptExtra" maxlength="4000" style="min-height:140px;"></textarea>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field" style="flex: 1 1 100%;">
+          <label class="field-label">Preguntas sugeridas (botones rápidos)</label>
+          <div class="starter-list" id="apStarterList"></div>
+          <div style="display:flex; gap:8px; margin-top:10px;">
+            <input class="field-input" id="apNewStarter" placeholder="Añadir pregunta..." maxlength="140" />
+            <button class="btn btn-ghost" id="apAddStarterBtn" type="button">Añadir</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field" style="flex: 1 1 100%;">
+          <label class="field-label">Dominios autorizados (uno por línea)</label>
+          <textarea class="field-textarea" id="apOrigins" placeholder="https://miweb.com"></textarea>
+          <p class="panel-sub" style="margin-top:6px; margin-bottom:0;">El widget solo cargará desde estos dominios. Déjalo vacío para no restringir.</p>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:18px;">
+        <button class="btn btn-primary" id="apSaveBtn" type="button">Guardar cambios</button>
+        <button class="btn btn-ghost" id="apReloadBtn" type="button">Descartar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEPLOY -->
+  <section class="page" id="page-deploy">
+    <div class="panel-card">
+      <h2>Incrustar en tu web</h2>
+      <p class="panel-sub">Pega este código justo antes de <code style="color:var(--accent-2);">&lt;/body&gt;</code>. La burbuja de chat aparecerá en la esquina inferior derecha.</p>
+      <div class="code-block" id="depSnippet"></div>
+      <div style="margin-top:12px; display:flex; gap:10px;">
+        <button class="btn btn-primary" id="depCopySnippet" type="button">Copiar código</button>
+        <button class="btn btn-ghost" id="depMailSnippet" type="button">Enviarlo a mi desarrollador</button>
+      </div>
+    </div>
+
+    <div class="panel-card" style="margin-top:18px;">
+      <h2>Compartir con un enlace</h2>
+      <p class="panel-sub">Para emails, QR o redes sociales. Cualquiera con este enlace puede chatear.</p>
+      <div style="display:flex; gap:8px; align-items:center; margin-top:10px;">
+        <input class="field-input" id="depShareLink" readonly />
+        <button class="btn btn-ghost" id="depCopyShare" type="button">Copiar</button>
+        <a class="btn btn-primary" id="depOpenShare" target="_blank" rel="noreferrer">Abrir</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- LEADS -->
+  <section class="page" id="page-leads">
+    <div class="panel-card">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+        <h2 style="margin:0;">Leads capturados</h2>
+        <div style="margin-left:auto; display:flex; gap:8px;">
+          <input class="field-input" id="ldSearch" placeholder="Buscar..." style="width:220px;" />
+          <a class="btn btn-ghost" id="ldExportBtn" href="/auth/app/leads/export.csv">Exportar CSV</a>
+          <button class="btn btn-primary" id="ldAddBtn" type="button">+ Añadir manual</button>
+        </div>
+      </div>
+      <p class="panel-sub">Personas que han contactado a través del chat. Total: <span id="ldTotal">0</span>.</p>
+      <div id="ldList" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="panel-card" id="ldFormCard" style="display:none; margin-top:18px;">
+      <h2>Nuevo lead manual</h2>
+      <p class="panel-sub">Usa esto si recibes un contacto fuera del chat (email, teléfono).</p>
+      <div class="form-row">
+        <div class="field"><label class="field-label">Nombre</label><input class="field-input" id="ldName" maxlength="200" /></div>
+        <div class="field"><label class="field-label">Email</label><input class="field-input" id="ldEmail" type="email" maxlength="200" /></div>
+        <div class="field"><label class="field-label">Teléfono</label><input class="field-input" id="ldPhone" maxlength="80" /></div>
+      </div>
+      <div class="form-row">
+        <div class="field" style="flex:1 1 100%;"><label class="field-label">Mensaje</label><textarea class="field-textarea" id="ldMessage" maxlength="4000"></textarea></div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button class="btn btn-primary" id="ldSaveBtn" type="button">Guardar lead</button>
+        <button class="btn btn-ghost" id="ldCancelBtn" type="button">Cancelar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- KNOWLEDGE -->
+  <section class="page" id="page-knowledge">
+    <div class="panel-card">
+      <h2>Base de conocimiento</h2>
+      <p class="panel-sub">Lo que tu asistente sabe. <b id="kbChars">0</b> caracteres totales. Añade webs, notas o texto manual.</p>
+
+      <div style="display:flex; gap:14px; margin-top:14px; flex-wrap:wrap;">
+        <div class="panel-card" style="flex:1 1 320px; padding:16px; background: rgba(7,16,31,0.4);">
+          <h3 style="font-size:0.95rem; margin-bottom:6px;">Añadir desde URL</h3>
+          <p class="panel-sub">Analizamos la web y mezclamos su contenido con tu RAG.</p>
+          <input class="field-input" id="kbUrl" placeholder="https://otra-pagina.com" />
+          <label style="display:flex; align-items:center; gap:8px; margin-top:8px; color:var(--soft); font-size:0.84rem;">
+            <input type="checkbox" id="kbJustPage" /> Solo esa página
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; margin-top:4px; color:var(--soft); font-size:0.84rem;">
+            <input type="checkbox" id="kbReplace" /> Reemplazar todo (en lugar de añadir)
+          </label>
+          <button class="btn btn-primary" id="kbAddUrlBtn" type="button" style="margin-top:10px;">Analizar y añadir</button>
+        </div>
+        <div class="panel-card" style="flex:1 1 320px; padding:16px; background: rgba(7,16,31,0.4);">
+          <h3 style="font-size:0.95rem; margin-bottom:6px;">Añadir texto manual</h3>
+          <p class="panel-sub">Pega información que el bot debe conocer (precios, FAQ, horarios).</p>
+          <input class="field-input" id="kbTextTitle" placeholder="Título corto" maxlength="200" />
+          <textarea class="field-textarea" id="kbTextBody" placeholder="Contenido a añadir..." maxlength="20000" style="margin-top:8px; min-height:120px;"></textarea>
+          <button class="btn btn-primary" id="kbAddTextBtn" type="button" style="margin-top:10px;">Añadir texto</button>
+        </div>
+      </div>
+
+      <h3 style="margin-top:22px; font-size:1rem;">Fuentes añadidas</h3>
+      <div id="kbList" style="margin-top:10px;"></div>
+      <div style="margin-top:14px; display:flex; gap:10px;">
+        <button class="btn btn-ghost" id="kbReindexBtn" type="button">Forzar reindex</button>
+      </div>
+    </div>
+
+    <div class="panel-card" style="margin-top:18px;">
+      <h2>Vista previa del conocimiento</h2>
+      <p class="panel-sub">Primeros 1200 caracteres de lo que el bot lee como contexto.</p>
+      <pre id="kbExcerpt" style="margin-top:10px; padding:14px; background:#07101f; border:1px solid var(--line); border-radius:10px; font-family:'Courier New',monospace; font-size:0.78rem; color:var(--soft); white-space:pre-wrap; word-wrap:break-word; max-height:320px; overflow:auto;"></pre>
+    </div>
+  </section>
+
+  <!-- Q&A -->
+  <section class="page" id="page-qa">
+    <div class="panel-card">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+        <h2 style="margin:0;">Preguntas y respuestas</h2>
+        <div style="margin-left:auto;">
+          <button class="btn btn-primary" id="qaAddBtn" type="button">+ Añadir Q&amp;A</button>
+        </div>
+      </div>
+      <p class="panel-sub">Define respuestas exactas para preguntas frecuentes. El bot las usará textualmente cuando reconozca la intención.</p>
+      <div id="qaList" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="panel-card" id="qaFormCard" style="display:none; margin-top:18px;">
+      <h2 id="qaFormTitle">Nueva Q&amp;A</h2>
+      <input type="hidden" id="qaEditingId" />
+      <div class="form-row">
+        <div class="field" style="flex:1 1 100%;"><label class="field-label">Pregunta del cliente</label><input class="field-input" id="qaQuestion" maxlength="400" placeholder="Ej: ¿Hacen envíos a Canarias?" /></div>
+      </div>
+      <div class="form-row">
+        <div class="field" style="flex:1 1 100%;"><label class="field-label">Respuesta exacta</label><textarea class="field-textarea" id="qaAnswer" maxlength="4000" style="min-height:120px;"></textarea></div>
+      </div>
+      <div class="form-row">
+        <div class="field" style="flex:1 1 100%;"><label class="field-label">Etiquetas (separadas por coma, opcional)</label><input class="field-input" id="qaTags" maxlength="200" placeholder="precios, envios" /></div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button class="btn btn-primary" id="qaSaveBtn" type="button">Guardar</button>
+        <button class="btn btn-ghost" id="qaCancelBtn" type="button">Cancelar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- TUNE AI -->
+  <section class="page" id="page-tune">
+    <div class="panel-card">
+      <h2>Tune AI</h2>
+      <p class="panel-sub">Ajustes avanzados del modelo. Si dudas, deja los valores por defecto.</p>
+
+      <div class="form-row">
+        <div class="field" style="flex:1 1 100%;">
+          <label class="field-label">Instrucciones del sistema (system prompt)</label>
+          <textarea class="field-textarea" id="tnPromptExtra" maxlength="8000" style="min-height:200px;"></textarea>
+          <p class="panel-sub" style="margin-top:6px;">Indica tono, qué evitar, cuándo derivar al humano, contexto de negocio.</p>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field" style="flex: 1 1 220px;">
+          <label class="field-label">Modelo</label>
+          <select class="field-input" id="tnModel"></select>
+          <p class="panel-sub" style="margin-top:6px;">gpt-4o-mini equilibra coste/calidad. gpt-4o más preciso, más caro.</p>
+        </div>
+        <div class="field" style="flex: 0 0 180px;">
+          <label class="field-label">Temperatura (<span id="tnTempValue">0.2</span>)</label>
+          <input class="field-input" id="tnTemperature" type="range" min="0" max="1.5" step="0.1" />
+          <p class="panel-sub" style="margin-top:6px;">0 = preciso. 1+ = creativo.</p>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:18px;">
+        <button class="btn btn-primary" id="tnSaveBtn" type="button">Guardar configuración</button>
+        <button class="btn btn-ghost" id="tnReloadBtn" type="button">Descartar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- BILLING -->
+  <section class="page" id="page-billing">
+    <div class="panel-card">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+        <h2 style="margin:0;">Tu plan actual</h2>
+        <span class="pro-pill" id="blCurrentPlanPill" style="background:var(--accent-soft); color:var(--accent);">free</span>
+        <span class="pro-pill" id="blStatusPill" style="background:rgba(0,245,212,0.15); color:var(--success);">active</span>
+      </div>
+      <p class="panel-sub" id="blPeriodSub">Tu ciclo se renueva el día 1 de cada mes.</p>
+
+      <div style="margin-top:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px;">
+          <div>
+            <b id="blMsgUsed" style="font-family:var(--font-title); font-size:1.6rem;">0</b>
+            <span style="color:var(--soft);"> / <span id="blMsgQuota">50</span> mensajes este periodo</span>
+          </div>
+          <div style="color:var(--soft-2); font-size:0.84rem;">Restantes: <span id="blMsgRemaining">50</span></div>
+        </div>
+        <div class="progress" style="margin-top:10px;"><div class="progress-bar" id="blMsgBar" style="width:0%"></div></div>
+      </div>
+
+      <div style="margin-top:18px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-ghost" id="blPortalBtn" type="button" disabled>Abrir portal de facturación</button>
+        <span class="panel-sub" style="margin:0; align-self:center;" id="blPortalHint">Disponible cuando tengas una suscripción de pago activa.</span>
+      </div>
+    </div>
+
+    <div class="panel-card" style="margin-top:18px;">
+      <h2>Cambia de plan</h2>
+      <p class="panel-sub">Mensual sin compromiso. Cancela cuando quieras.</p>
+      <div style="display:flex; gap:8px; margin: 14px 0;">
+        <button class="btn btn-ghost" data-period="monthly" id="blTabMonthly" type="button">Mensual</button>
+        <button class="btn btn-ghost" data-period="annual" id="blTabAnnual" type="button">Anual (2 meses gratis)</button>
+      </div>
+      <div id="blPlansGrid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px;"></div>
+    </div>
+  </section>
+
+  <!-- Locked placeholder -->
+  <section class="page" id="page-locked">
+    <div class="panel-card" style="text-align:center; padding: 60px 32px;">
+      <h2 id="lockedTitle">Próximamente</h2>
+      <p class="panel-sub" id="lockedSub">Esta sección se activa con un plan superior o llega en la siguiente fase.</p>
+    </div>
+  </section>
+</main>
+
+<!-- Right panel: chat preview -->
+<aside class="rightpanel" id="rightPanel">
+  <div class="rp-head">
+    <div class="avatar" id="rpAvatar">AI</div>
+    <b id="rpTitle">Tu Asistente</b>
+    <span class="menu-btn">⋮</span>
+  </div>
+  <div class="rp-body" id="rpBody">
+    <div class="chat-msg bot" id="rpWelcome">Hola, ¿en qué puedo ayudarte hoy?</div>
+    <div class="chat-starters" id="rpStarters"></div>
+  </div>
+  <div class="rp-input">
+    <input type="text" id="rpInput" placeholder="Escribe un mensaje..." />
+    <button id="rpSendBtn" type="button">→</button>
+  </div>
+</aside>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+const state = {
+  cliente_id: '__CLIENTE_ID__',
+  nombre: '',
+  color: '#00b1d9',
+  icono: 'AI',
+  bienvenida: '',
+  prompt_extra: '',
+  starter_questions: [],
+  allowed_origins: [],
+  install_snippet: '',
+  share_link: '',
+  demo_url: '',
+  api_base_url: window.location.origin,
+  session_id: 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
+};
+
+const TABS = ['overview', 'chats', 'leads', 'knowledge', 'qa', 'tune', 'test', 'appearance', 'deploy', 'billing'];
+const billingState = { period: 'monthly', plans: [], current: 'free', portal: false };
+
+function formatDetail(d) {
+  if (!d) return 'No se pudo completar la solicitud.';
+  if (typeof d === 'string') return d;
+  if (Array.isArray(d)) return d.map(i => i?.msg || i).join(' | ');
+  if (typeof d === 'object' && d.message) return d.message;
+  try { return JSON.stringify(d); } catch { return String(d); }
+}
+
+async function api(path, opts) {
+  const resp = await fetch(path, {
+    ...opts,
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json', ...(opts?.headers || {}) },
+  });
+  let data = null;
+  try { data = await resp.json(); } catch {}
+  if (!resp.ok) throw new Error(formatDetail(data?.detail));
+  return data;
+}
+
+function toast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast visible ${type || ''}`;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { el.classList.remove('visible'); }, 2200);
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+// ── Tab routing ───────────────────────────────────────────────────────
+function setTab(tab) {
+  if (!TABS.includes(tab)) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-locked').classList.add('active');
+    document.getElementById('pageTitle').textContent = 'Próximamente';
+    document.getElementById('lockedTitle').textContent = ({
+      leads: 'Leads',
+      livechat: 'Live Chat',
+      links: 'Links / Docs',
+      text: 'Texto',
+      qa: 'Q&A',
+      tune: 'Tune AI',
+      integrations: 'Integraciones',
+    })[tab] || 'Próximamente';
+    document.getElementById('lockedSub').textContent = (tab === 'livechat' || tab === 'integrations')
+      ? 'Disponible en plan Pro / Business.'
+      : 'Se activa en la próxima fase del rediseño.';
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.getAttribute('data-tab') === tab));
+    return;
+  }
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + tab).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.getAttribute('data-tab') === tab));
+  const titles = {
+    overview: 'Overview', chats: 'Historial de chats', leads: 'Leads',
+    knowledge: 'Conocimiento', qa: 'Q&A', tune: 'Tune AI',
+    test: 'Test Bot', appearance: 'Apariencia', deploy: 'Deploy',
+    billing: 'Plan y facturación',
+  };
+  document.getElementById('pageTitle').textContent = titles[tab] || 'Panel';
+  if (tab === 'chats')     loadChats();
+  if (tab === 'leads')     loadLeads();
+  if (tab === 'knowledge') loadKnowledge();
+  if (tab === 'qa')        loadQA();
+  if (tab === 'tune')      loadTune();
+  if (tab === 'billing')   loadBilling();
+  if (tab === 'test')      ensureWidgetLoaded();
+}
+
+document.querySelectorAll('.nav-item').forEach(n => {
+  n.addEventListener('click', () => {
+    const tab = n.getAttribute('data-tab');
+    setTab(tab);
+  });
+});
+
+// ── Data loaders ──────────────────────────────────────────────────────
+async function loadOverview() {
+  try {
+    const data = await api('/auth/app/overview');
+    state.cliente_id = data.cliente_id;
+    state.nombre = data.nombre;
+    state.color = data.color || '#00b1d9';
+    state.icono = (data.icono || 'AI').slice(0, 12);
+    state.bienvenida = data.bienvenida;
+
+    document.getElementById('botInitials').textContent = state.icono.slice(0, 2).toUpperCase();
+    document.getElementById('botInitials').style.background = state.color;
+    document.getElementById('rpTitle').textContent = state.nombre || 'Tu Asistente';
+    document.getElementById('rpAvatar').textContent = state.icono.slice(0, 2).toUpperCase();
+    document.getElementById('rpAvatar').style.background = `linear-gradient(135deg, ${state.color}, var(--accent-2))`;
+    document.getElementById('rpWelcome').textContent = state.bienvenida || 'Hola, ¿en qué puedo ayudarte hoy?';
+
+    document.getElementById('stUsersToday').textContent = data.stats.users_today;
+    document.getElementById('stMessagesToday').textContent = data.stats.messages_today + ' mensajes';
+    document.getElementById('stMsgUsed').textContent = data.subscription.messages_used;
+    document.getElementById('stMsgQuota').textContent = data.subscription.messages_quota;
+    document.getElementById('stPlan').textContent = data.subscription.plan;
+    const pct = Math.min(100, Math.round(100 * data.subscription.messages_used / Math.max(1, data.subscription.messages_quota)));
+    document.getElementById('stMsgBar').style.width = pct + '%';
+    document.getElementById('stLeads').textContent = data.stats.leads_generated;
+    document.getElementById('stTrainBytes').textContent = (data.stats.training_chars || 0).toLocaleString();
+    document.getElementById('stSessTotal').textContent = data.stats.chat_sessions_total;
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function loadDeploy() {
+  try {
+    const data = await api('/auth/app/deploy');
+    state.install_snippet = data.install_snippet;
+    state.share_link = data.share_link;
+    state.demo_url = data.demo_url;
+    state.api_base_url = data.api_base_url || state.api_base_url;
+    document.getElementById('depSnippet').textContent = data.install_snippet;
+    document.getElementById('depShareLink').value = data.share_link;
+    document.getElementById('depOpenShare').href = data.share_link;
+    document.getElementById('overviewDemoUrl').value = data.demo_url;
+    document.getElementById('openDemoBtn').href = data.demo_url;
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function loadAppearance() {
+  try {
+    const data = await api('/auth/app/appearance');
+    state.color = data.color;
+    state.icono = data.icono;
+    state.nombre = data.nombre;
+    state.bienvenida = data.bienvenida;
+    state.prompt_extra = data.prompt_extra;
+    state.starter_questions = data.starter_questions || [];
+    state.allowed_origins = data.allowed_origins || [];
+
+    document.getElementById('apNombre').value = state.nombre;
+    document.getElementById('apIcono').value = state.icono;
+    document.getElementById('apColor').value = state.color;
+    document.getElementById('apColorText').value = state.color;
+    document.getElementById('apBienvenida').value = state.bienvenida;
+    document.getElementById('apPromptExtra').value = state.prompt_extra;
+    document.getElementById('apOrigins').value = state.allowed_origins.join('\n');
+    renderStarters();
+    renderRightPreview();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+function renderStarters() {
+  const list = document.getElementById('apStarterList');
+  list.innerHTML = '';
+  state.starter_questions.forEach((q, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'starter-chip';
+    wrap.innerHTML = `<input type="text" value="${escapeHtml(q)}" maxlength="140" /><button type="button" title="Quitar">×</button>`;
+    wrap.querySelector('input').addEventListener('input', e => { state.starter_questions[i] = e.target.value; renderRightPreview(); });
+    wrap.querySelector('button').addEventListener('click', () => { state.starter_questions.splice(i, 1); renderStarters(); renderRightPreview(); });
+    list.appendChild(wrap);
+  });
+}
+
+function renderRightPreview() {
+  document.getElementById('rpWelcome').textContent = state.bienvenida || 'Hola, ¿en qué puedo ayudarte hoy?';
+  const list = document.getElementById('rpStarters');
+  list.innerHTML = '';
+  state.starter_questions.slice(0, 4).forEach(q => {
+    const chip = document.createElement('div');
+    chip.className = 'chat-starter';
+    chip.textContent = q;
+    chip.addEventListener('click', () => sendPreviewMessage(q));
+    list.appendChild(chip);
+  });
+}
+
+async function saveAppearance() {
+  const btn = document.getElementById('apSaveBtn');
+  btn.disabled = true;
+  try {
+    const origins = document.getElementById('apOrigins').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const payload = {
+      nombre: document.getElementById('apNombre').value.trim(),
+      icono: document.getElementById('apIcono').value.trim(),
+      color: document.getElementById('apColor').value,
+      bienvenida: document.getElementById('apBienvenida').value.trim(),
+      prompt_extra: document.getElementById('apPromptExtra').value.trim(),
+      starter_questions: state.starter_questions.map(s => (s || '').trim()).filter(Boolean).slice(0, 8),
+      allowed_origins: origins,
+    };
+    await api('/auth/app/appearance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    toast('Cambios guardados', 'success');
+    await loadAppearance();
+    await loadOverview();
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Chats ─────────────────────────────────────────────────────────────
+async function loadChats() {
+  const list = document.getElementById('chatList');
+  list.innerHTML = '<div class="panel-sub" style="margin:0;">Cargando…</div>';
+  try {
+    const rows = await api('/auth/chats?limit=50');
+    if (!rows.length) {
+      list.innerHTML = '<div class="panel-sub" style="margin:0;">Sin conversaciones todavía. Cuando alguien hable con tu asistente, aparecerán aquí.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    rows.forEach(row => {
+      const div = document.createElement('div');
+      div.className = 'chat-row';
+      const when = row.last_message_at ? new Date(row.last_message_at).toLocaleString() : '';
+      div.innerHTML = `<div class="when">${escapeHtml(when)}</div><div class="preview">${escapeHtml(row.last_message || '(sin mensajes)')}</div>`;
+      div.addEventListener('click', () => loadChatDetail(row.session_id || row.id, when));
+      list.appendChild(div);
+    });
+  } catch (err) {
+    list.innerHTML = `<div class="panel-sub" style="margin:0;">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function loadChatDetail(sessionId, when) {
+  document.getElementById('chatDetailTitle').textContent = 'Conversación';
+  document.getElementById('chatDetailMeta').textContent = when || '';
+  const cont = document.getElementById('chatDetailMessages');
+  cont.innerHTML = '<div class="panel-sub" style="margin:0;">Cargando…</div>';
+  try {
+    const data = await api('/auth/chats/' + encodeURIComponent(sessionId));
+    cont.innerHTML = '';
+    (data.messages || []).forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'chat-detail-msg ' + (m.role === 'assistant' || m.role === 'bot' ? 'bot' : 'user');
+      div.textContent = m.content || '';
+      cont.appendChild(div);
+    });
+    if (!data.messages || !data.messages.length) {
+      cont.innerHTML = '<div class="panel-sub" style="margin:0;">Esta conversación no tiene mensajes guardados.</div>';
+    }
+  } catch (err) {
+    cont.innerHTML = `<div class="panel-sub" style="margin:0;">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+// ── Right panel preview chat ──────────────────────────────────────────
+async function sendPreviewMessage(text) {
+  if (!text || !text.trim()) return;
+  const body = document.getElementById('rpBody');
+  const u = document.createElement('div');
+  u.className = 'chat-msg user';
+  u.textContent = text;
+  body.appendChild(u);
+  body.scrollTop = body.scrollHeight;
+  document.getElementById('rpInput').value = '';
+  try {
+    const resp = await api('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': window.location.origin },
+      body: JSON.stringify({
+        cliente_id: state.cliente_id,
+        session_id: state.session_id,
+        message: text,
+      }),
+    });
+    const b = document.createElement('div');
+    b.className = 'chat-msg bot';
+    b.textContent = (resp.respuesta || resp.message || '').replace(/\[MOSTRAR_FORMULARIO\]/g, '').trim() || '(sin respuesta)';
+    body.appendChild(b);
+    body.scrollTop = body.scrollHeight;
+  } catch (err) {
+    const b = document.createElement('div');
+    b.className = 'chat-msg bot';
+    b.textContent = '⚠️ ' + err.message;
+    body.appendChild(b);
+  }
+}
+
+// ── Widget injection for Test tab ─────────────────────────────────────
+function ensureWidgetLoaded() {
+  if (document.querySelector('script[data-vantelia-test]')) return;
+  const s = document.createElement('script');
+  s.src = `/widget/widget.min.js?v=${Date.now()}`;
+  s.setAttribute('data-api', window.location.origin);
+  s.setAttribute('data-client', state.cliente_id);
+  s.setAttribute('data-position', 'right');
+  s.setAttribute('data-vantelia-test', '1');
+  document.body.appendChild(s);
+}
+
+// ── User menu ─────────────────────────────────────────────────────────
+const userMenu = document.getElementById('userMenu');
+document.getElementById('userChip').addEventListener('click', () => userMenu.classList.toggle('open'));
+document.addEventListener('click', e => {
+  if (!userMenu.contains(e.target)) userMenu.classList.remove('open');
+});
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  try { await api('/auth/logout', { method: 'POST' }); } catch {}
+  window.location.href = '/acceso';
+});
+document.getElementById('goWizardBtn').addEventListener('click', () => { window.location.href = '/onboarding'; });
+document.getElementById('changePwdBtn').addEventListener('click', () => {
+  toast('Próximamente: cambio de contraseña desde el panel.', 'info');
+});
+
+// avatar initial
+const nameStr = (document.getElementById('userName').textContent || '').trim();
+document.getElementById('userAvatar').textContent = (nameStr || '?').slice(0, 1).toUpperCase();
+
+// Buttons
+document.getElementById('apSaveBtn').addEventListener('click', saveAppearance);
+document.getElementById('apReloadBtn').addEventListener('click', loadAppearance);
+document.getElementById('apColor').addEventListener('input', e => {
+  document.getElementById('apColorText').value = e.target.value;
+});
+document.getElementById('apColorText').addEventListener('input', e => {
+  if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) document.getElementById('apColor').value = e.target.value;
+});
+document.getElementById('apAddStarterBtn').addEventListener('click', () => {
+  const v = document.getElementById('apNewStarter').value.trim();
+  if (!v || state.starter_questions.length >= 8) return;
+  state.starter_questions.push(v);
+  document.getElementById('apNewStarter').value = '';
+  renderStarters();
+  renderRightPreview();
+});
+document.getElementById('apNewStarter').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('apAddStarterBtn').click();
+});
+
+async function copy(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const orig = btn.textContent;
+    btn.textContent = '¡Copiado!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  } catch {
+    btn.textContent = 'Copia manual';
+  }
+}
+document.getElementById('depCopySnippet').addEventListener('click', e => copy(state.install_snippet, e.target));
+document.getElementById('depCopyShare').addEventListener('click',   e => copy(state.share_link,     e.target));
+document.getElementById('copyDemoBtn').addEventListener('click',    e => copy(state.demo_url,       e.target));
+document.getElementById('depMailSnippet').addEventListener('click', () => {
+  const body = encodeURIComponent(`Hola, este es el código de instalación de mi asistente Vantelia. Por favor, añádelo justo antes de </body> en mi web:\n\n${state.install_snippet}`);
+  window.location.href = `mailto:?subject=Código de instalación Vantelia&body=${body}`;
+});
+
+document.getElementById('rpSendBtn').addEventListener('click', () => sendPreviewMessage(document.getElementById('rpInput').value));
+document.getElementById('rpInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendPreviewMessage(document.getElementById('rpInput').value);
+});
+
+// ── LEADS ─────────────────────────────────────────────────────────────
+let leadsSearchTimer = null;
+async function loadLeads() {
+  const list = document.getElementById('ldList');
+  list.innerHTML = '<div class="panel-sub" style="margin:0;">Cargando…</div>';
+  try {
+    const q = (document.getElementById('ldSearch').value || '').trim();
+    const url = q ? `/auth/app/leads?q=${encodeURIComponent(q)}&page_size=50` : '/auth/app/leads?page_size=50';
+    const data = await api(url);
+    document.getElementById('ldTotal').textContent = data.total;
+    if (!data.items.length) {
+      list.innerHTML = '<div class="panel-sub" style="margin:0;">Aún sin leads. Aparecerán aquí cuando tu bot capture contactos.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    data.items.forEach(lead => {
+      const row = document.createElement('div');
+      row.className = 'chat-row';
+      const when = lead.created_at ? new Date(lead.created_at).toLocaleString() : '';
+      row.innerHTML = `
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:600;">${escapeHtml(lead.name || lead.email || lead.phone || '(sin nombre)')}</div>
+            <div class="preview">${escapeHtml(lead.email || '')} ${lead.phone ? '· ' + escapeHtml(lead.phone) : ''}</div>
+            <div class="preview" style="margin-top:4px;">${escapeHtml((lead.message || '').slice(0, 200))}</div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+            <div class="when">${escapeHtml(when)}</div>
+            <button class="btn btn-ghost" data-lead-id="${escapeHtml(lead.id)}" style="padding:4px 10px; font-size:0.78rem;">Eliminar</button>
+          </div>
+        </div>`;
+      row.querySelector('button[data-lead-id]').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('¿Eliminar este lead?')) return;
+        try { await api('/auth/app/leads/' + encodeURIComponent(lead.id), { method: 'DELETE' }); toast('Lead eliminado', 'success'); loadLeads(); }
+        catch (err) { toast(err.message, 'error'); }
+      });
+      list.appendChild(row);
+    });
+  } catch (err) {
+    list.innerHTML = `<div class="panel-sub" style="margin:0;">${escapeHtml(err.message)}</div>`;
+  }
+}
+document.getElementById('ldSearch').addEventListener('input', () => {
+  clearTimeout(leadsSearchTimer);
+  leadsSearchTimer = setTimeout(loadLeads, 220);
+});
+document.getElementById('ldAddBtn').addEventListener('click', () => {
+  document.getElementById('ldFormCard').style.display = '';
+  ['ldName','ldEmail','ldPhone','ldMessage'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('ldName').focus();
+});
+document.getElementById('ldCancelBtn').addEventListener('click', () => { document.getElementById('ldFormCard').style.display = 'none'; });
+document.getElementById('ldSaveBtn').addEventListener('click', async () => {
+  try {
+    await api('/auth/app/leads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('ldName').value.trim(),
+        email: document.getElementById('ldEmail').value.trim(),
+        phone: document.getElementById('ldPhone').value.trim(),
+        message: document.getElementById('ldMessage').value.trim(),
+        source: 'manual',
+      }),
+    });
+    toast('Lead guardado', 'success');
+    document.getElementById('ldFormCard').style.display = 'none';
+    loadLeads();
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+// ── KNOWLEDGE ─────────────────────────────────────────────────────────
+async function loadKnowledge() {
+  const list = document.getElementById('kbList');
+  list.innerHTML = '<div class="panel-sub" style="margin:0;">Cargando…</div>';
+  try {
+    const data = await api('/auth/app/knowledge');
+    document.getElementById('kbChars').textContent = (data.info_chars || 0).toLocaleString();
+    document.getElementById('kbExcerpt').textContent = data.info_excerpt || '(vacío)';
+    if (!data.items.length) {
+      list.innerHTML = '<div class="panel-sub" style="margin:0;">Sin fuentes adicionales. La base inicial viene del wizard.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    data.items.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'chat-row';
+      const when = item.uploaded_at ? new Date(item.uploaded_at).toLocaleString() : '';
+      const label = item.source === 'url' ? (item.source_url || item.filename) : (item.filename || '(sin título)');
+      row.innerHTML = `
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:600;">${escapeHtml(label)}</div>
+            <div class="preview">${escapeHtml(item.source)} · ${(item.size_bytes || 0).toLocaleString()} bytes</div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+            <div class="when">${escapeHtml(when)}</div>
+            <button class="btn btn-ghost" data-kb-id="${escapeHtml(item.id)}" style="padding:4px 10px; font-size:0.78rem;">Quitar</button>
+          </div>
+        </div>`;
+      row.querySelector('button[data-kb-id]').addEventListener('click', async () => {
+        if (!confirm('¿Quitar esta fuente? (El texto ya mezclado en info.txt no se elimina automáticamente — usa "Forzar reindex" si necesitas limpiar.)')) return;
+        try { await api('/auth/app/knowledge/' + encodeURIComponent(item.id), { method: 'DELETE' }); toast('Fuente eliminada', 'success'); loadKnowledge(); }
+        catch (err) { toast(err.message, 'error'); }
+      });
+      list.appendChild(row);
+    });
+  } catch (err) {
+    list.innerHTML = `<div class="panel-sub" style="margin:0;">${escapeHtml(err.message)}</div>`;
+  }
+}
+document.getElementById('kbAddUrlBtn').addEventListener('click', async () => {
+  const url = document.getElementById('kbUrl').value.trim();
+  if (!url || !/^https?:\/\//i.test(url)) { toast('URL inválida (https:// requerido).', 'error'); return; }
+  const btn = document.getElementById('kbAddUrlBtn');
+  btn.disabled = true; btn.textContent = 'Analizando...';
+  try {
+    await api('/auth/app/knowledge/url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url,
+        just_this_page: !!document.getElementById('kbJustPage').checked,
+        replace: !!document.getElementById('kbReplace').checked,
+      }),
+    });
+    toast('URL añadida al conocimiento', 'success');
+    document.getElementById('kbUrl').value = '';
+    loadKnowledge();
+  } catch (err) { toast(err.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Analizar y añadir'; }
+});
+document.getElementById('kbAddTextBtn').addEventListener('click', async () => {
+  const content = document.getElementById('kbTextBody').value.trim();
+  if (!content) { toast('Escribe algo de contenido.', 'error'); return; }
+  try {
+    await api('/auth/app/knowledge/text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: document.getElementById('kbTextTitle').value.trim(),
+        content,
+      }),
+    });
+    toast('Texto añadido', 'success');
+    document.getElementById('kbTextTitle').value = '';
+    document.getElementById('kbTextBody').value = '';
+    loadKnowledge();
+  } catch (err) { toast(err.message, 'error'); }
+});
+document.getElementById('kbReindexBtn').addEventListener('click', async () => {
+  try {
+    await api('/auth/app/knowledge/reindex', { method: 'POST' });
+    toast('Índice regenerado', 'success');
+    loadKnowledge();
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+// ── Q&A ───────────────────────────────────────────────────────────────
+async function loadQA() {
+  const list = document.getElementById('qaList');
+  list.innerHTML = '<div class="panel-sub" style="margin:0;">Cargando…</div>';
+  try {
+    const data = await api('/auth/app/qa');
+    if (!data.items.length) {
+      list.innerHTML = '<div class="panel-sub" style="margin:0;">Sin Q&A todavía. Añade respuestas a preguntas frecuentes para guiar mejor al bot.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    data.items.forEach(qa => {
+      const row = document.createElement('div');
+      row.className = 'chat-row';
+      row.innerHTML = `
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:600;">${escapeHtml(qa.question)}</div>
+            <div class="preview" style="margin-top:6px; color:var(--soft); white-space:normal;">${escapeHtml(qa.answer.slice(0, 220))}${qa.answer.length > 220 ? '…' : ''}</div>
+            ${qa.tags && qa.tags.length ? `<div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">${qa.tags.map(t => `<span class="pro-pill" style="background:rgba(0,209,255,0.1); color:var(--accent);">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <button class="btn btn-ghost" data-edit="${escapeHtml(qa.id)}" style="padding:4px 10px; font-size:0.78rem;">Editar</button>
+            <button class="btn btn-ghost" data-delete="${escapeHtml(qa.id)}" style="padding:4px 10px; font-size:0.78rem;">Quitar</button>
+          </div>
+        </div>`;
+      row.querySelector('[data-edit]').addEventListener('click', () => {
+        document.getElementById('qaFormTitle').textContent = 'Editar Q&A';
+        document.getElementById('qaEditingId').value = qa.id;
+        document.getElementById('qaQuestion').value = qa.question;
+        document.getElementById('qaAnswer').value = qa.answer;
+        document.getElementById('qaTags').value = (qa.tags || []).join(', ');
+        document.getElementById('qaFormCard').style.display = '';
+      });
+      row.querySelector('[data-delete]').addEventListener('click', async () => {
+        if (!confirm('¿Eliminar esta Q&A?')) return;
+        try { await api('/auth/app/qa/' + encodeURIComponent(qa.id), { method: 'DELETE' }); toast('Q&A eliminada', 'success'); loadQA(); }
+        catch (err) { toast(err.message, 'error'); }
+      });
+      list.appendChild(row);
+    });
+  } catch (err) {
+    list.innerHTML = `<div class="panel-sub" style="margin:0;">${escapeHtml(err.message)}</div>`;
+  }
+}
+document.getElementById('qaAddBtn').addEventListener('click', () => {
+  document.getElementById('qaFormTitle').textContent = 'Nueva Q&A';
+  ['qaEditingId','qaQuestion','qaAnswer','qaTags'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('qaFormCard').style.display = '';
+  document.getElementById('qaQuestion').focus();
+});
+document.getElementById('qaCancelBtn').addEventListener('click', () => { document.getElementById('qaFormCard').style.display = 'none'; });
+document.getElementById('qaSaveBtn').addEventListener('click', async () => {
+  const editing = document.getElementById('qaEditingId').value;
+  const payload = {
+    question: document.getElementById('qaQuestion').value.trim(),
+    answer: document.getElementById('qaAnswer').value.trim(),
+    tags: document.getElementById('qaTags').value.split(',').map(s => s.trim()).filter(Boolean),
+  };
+  if (!payload.question || !payload.answer) { toast('Pregunta y respuesta son obligatorias.', 'error'); return; }
+  try {
+    if (editing) {
+      await api('/auth/app/qa/' + encodeURIComponent(editing), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      await api('/auth/app/qa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    }
+    toast('Q&A guardada', 'success');
+    document.getElementById('qaFormCard').style.display = 'none';
+    loadQA();
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+// ── TUNE AI ───────────────────────────────────────────────────────────
+async function loadTune() {
+  try {
+    const data = await api('/auth/app/tune');
+    document.getElementById('tnPromptExtra').value = data.prompt_extra || '';
+    const sel = document.getElementById('tnModel');
+    sel.innerHTML = '';
+    (data.available_models || []).forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m; opt.textContent = m;
+      if (m === data.chat_model) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    document.getElementById('tnTemperature').value = data.temperature;
+    document.getElementById('tnTempValue').textContent = data.temperature.toFixed(1);
+  } catch (err) { toast(err.message, 'error'); }
+}
+document.getElementById('tnTemperature').addEventListener('input', e => {
+  document.getElementById('tnTempValue').textContent = Number(e.target.value).toFixed(1);
+});
+document.getElementById('tnSaveBtn').addEventListener('click', async () => {
+  try {
+    await api('/auth/app/tune', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt_extra: document.getElementById('tnPromptExtra').value.trim(),
+        chat_model: document.getElementById('tnModel').value,
+        temperature: Number(document.getElementById('tnTemperature').value),
+      }),
+    });
+    toast('Configuración guardada', 'success');
+    loadTune();
+  } catch (err) { toast(err.message, 'error'); }
+});
+document.getElementById('tnReloadBtn').addEventListener('click', loadTune);
+
+// ── BILLING ───────────────────────────────────────────────────────────
+async function loadBilling() {
+  try {
+    const data = await api('/auth/app/billing');
+    billingState.plans = data.plans || [];
+    billingState.current = data.subscription.plan;
+    billingState.portal = !!data.portal_available;
+
+    document.getElementById('blCurrentPlanPill').textContent = data.subscription.plan;
+    document.getElementById('blStatusPill').textContent = data.subscription.status;
+    document.getElementById('blMsgUsed').textContent = data.subscription.messages_used.toLocaleString();
+    document.getElementById('blMsgQuota').textContent = data.subscription.messages_quota.toLocaleString();
+    document.getElementById('blMsgRemaining').textContent = data.subscription.messages_remaining.toLocaleString();
+    const pct = Math.min(100, Math.round(100 * data.subscription.messages_used / Math.max(1, data.subscription.messages_quota)));
+    document.getElementById('blMsgBar').style.width = pct + '%';
+
+    const periodSub = document.getElementById('blPeriodSub');
+    if (data.subscription.current_period_end) {
+      periodSub.textContent = `Próxima renovación: ${new Date(data.subscription.current_period_end).toLocaleDateString()}.`;
+    } else if (data.subscription.plan === 'free') {
+      periodSub.textContent = 'Plan gratuito. El contador se resetea el día 1 de cada mes.';
+    } else {
+      periodSub.textContent = '';
+    }
+
+    const portalBtn = document.getElementById('blPortalBtn');
+    portalBtn.disabled = !billingState.portal;
+    document.getElementById('blPortalHint').textContent = billingState.portal
+      ? 'Cancelar, cambiar tarjeta, descargar facturas...'
+      : 'Disponible cuando tengas una suscripción de pago activa.';
+
+    renderPlansGrid();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+function renderPlansGrid() {
+  const grid = document.getElementById('blPlansGrid');
+  grid.innerHTML = '';
+  document.getElementById('blTabMonthly').classList.toggle('btn-primary', billingState.period === 'monthly');
+  document.getElementById('blTabMonthly').classList.toggle('btn-ghost',  billingState.period !== 'monthly');
+  document.getElementById('blTabAnnual').classList.toggle('btn-primary',  billingState.period === 'annual');
+  document.getElementById('blTabAnnual').classList.toggle('btn-ghost',    billingState.period !== 'annual');
+
+  billingState.plans.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'panel-card';
+    card.style.cssText = 'padding:18px; background:rgba(7,16,31,0.4); position:relative;';
+    if (p.is_current) {
+      card.style.borderColor = 'var(--accent)';
+    }
+    const price = billingState.period === 'annual' ? p.price_annual_eur : p.price_monthly_eur;
+    const period = billingState.period === 'annual' ? '/año' : '/mes';
+    const hasPrice = billingState.period === 'annual' ? p.has_annual_price_id : p.has_monthly_price_id;
+    const featuresMap = {
+      chat: 'Chat web',
+      uploads: 'Subir documentos',
+      branding: 'Marca personalizada',
+      leads_export: 'Exportar leads CSV',
+      booking: 'Reservas / agenda',
+      live_chat: 'Live Chat humano',
+      qa: 'Q&A manual',
+      tune: 'Tune AI avanzado',
+      whatsapp: 'WhatsApp',
+      integrations: 'Integraciones',
+    };
+    card.innerHTML = `
+      <div style="display:flex; align-items:baseline; justify-content:space-between;">
+        <h3 style="font-size:1.05rem; margin:0;">${escapeHtml(p.label)}</h3>
+        ${p.is_current ? '<span class="pro-pill" style="background:var(--accent-soft); color:var(--accent);">Actual</span>' : ''}
+      </div>
+      <div style="margin-top:8px;"><b style="font-family:var(--font-title); font-size:1.6rem;">${price}€</b><span style="color:var(--soft);">${period}</span></div>
+      <div style="color:var(--soft); font-size:0.86rem; margin-top:4px;">${p.messages_quota.toLocaleString()} mensajes/mes</div>
+      <ul style="margin-top:12px; padding-left:16px; color:var(--soft); font-size:0.84rem;">
+        ${p.features.map(f => `<li>${escapeHtml(featuresMap[f] || f)}</li>`).join('')}
+      </ul>
+      <div style="margin-top:14px;" data-action-slot></div>
+    `;
+    const slot = card.querySelector('[data-action-slot]');
+    if (p.is_current) {
+      slot.innerHTML = '<button class="btn btn-ghost" disabled style="width:100%;">Tu plan actual</button>';
+    } else if (p.slug === 'free') {
+      slot.innerHTML = '<button class="btn btn-ghost" disabled style="width:100%;">Plan gratuito</button>';
+    } else if (!hasPrice) {
+      slot.innerHTML = '<button class="btn btn-ghost" disabled style="width:100%;" title="STRIPE_PRICE_' + p.slug.toUpperCase() + ' no configurado">No disponible</button>';
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-primary';
+      btn.style.width = '100%';
+      btn.textContent = billingState.current === 'free' ? `Empezar ${p.label}` : `Cambiar a ${p.label}`;
+      btn.addEventListener('click', () => startCheckout(p.slug));
+      slot.appendChild(btn);
+    }
+    grid.appendChild(card);
+  });
+}
+
+async function startCheckout(planSlug) {
+  try {
+    const payload = { plan: planSlug, billing_period: billingState.period };
+    // Support ?coupon=XXX in URL for server-side coupon injection (e.g. internal testing).
+    const couponFromUrl = new URLSearchParams(window.location.search).get('coupon');
+    if (couponFromUrl) payload.coupon = couponFromUrl;
+    const data = await api('/auth/app/billing/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (data.checkout_url) {
+      window.location.href = data.checkout_url;
+    } else {
+      toast('No se obtuvo URL de checkout.', 'error');
+    }
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function openBillingPortal() {
+  try {
+    const data = await api('/auth/app/billing/portal', { method: 'POST' });
+    if (data.portal_url) window.location.href = data.portal_url;
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+document.getElementById('blTabMonthly').addEventListener('click', () => { billingState.period = 'monthly'; renderPlansGrid(); });
+document.getElementById('blTabAnnual').addEventListener('click',  () => { billingState.period = 'annual';  renderPlansGrid(); });
+document.getElementById('blPortalBtn').addEventListener('click', openBillingPortal);
+
+// Handle ?billing=success|cancel coming back from Stripe checkout.
+(function handleBillingReturn() {
+  const sp = new URLSearchParams(window.location.search);
+  if (sp.get('billing') === 'success') {
+    toast('¡Suscripción activada! Puede tardar unos segundos en aparecer.', 'success');
+    setTimeout(() => setTab('billing'), 200);
+  } else if (sp.get('billing') === 'cancel') {
+    toast('Checkout cancelado.', 'info');
+  }
+})();
+
+// ── Init ──────────────────────────────────────────────────────────────
+(async function init() {
+  await Promise.all([loadOverview(), loadDeploy(), loadAppearance()]);
+})();
+</script>
+</body>
+</html>

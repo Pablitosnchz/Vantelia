@@ -41,7 +41,10 @@ from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 from pathlib import Path
 from typing import Iterable
-from zoneinfo import ZoneInfo
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # Python 3.8 fallback
+    from backports.zoneinfo import ZoneInfo  # type: ignore
 
 from dotenv import load_dotenv
 
@@ -171,11 +174,22 @@ CREATE TABLE IF NOT EXISTS autopilot_config (
     daily_new_target INTEGER DEFAULT 20,
     daily_cold_cap INTEGER DEFAULT 30,
     auto_followups INTEGER DEFAULT 1,
+    followup_days_json TEXT DEFAULT '{"fu1":4,"fu2":5,"breakup":6}',
     last_discovery_at TEXT DEFAULT '',
     last_cold_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT ''
 );
 INSERT OR IGNORE INTO autopilot_config (id) VALUES (1);
+
+CREATE TABLE IF NOT EXISTS autopilot_activity_log (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts       TEXT NOT NULL,
+    level    TEXT NOT NULL DEFAULT 'info',
+    event    TEXT NOT NULL DEFAULT '',
+    message  TEXT NOT NULL DEFAULT '',
+    detail   TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_autopilot_log_ts ON autopilot_activity_log(ts);
 """
 
 # Migraciones de columnas que se han ido anadiendo a posteriori.
@@ -193,11 +207,26 @@ SEND_MIGRATIONS = [
 ]
 
 
+_SCHEMA_INITIALIZED: set[str] = set()
+
+
 def connect(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=10.0)
     conn.row_factory = sqlite3.Row
-    conn.executescript(SCHEMA)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA busy_timeout=8000")
+    except sqlite3.OperationalError:
+        pass
+    key = str(db_path.resolve())
+    if key not in _SCHEMA_INITIALIZED:
+        conn.executescript(SCHEMA)
+        _SCHEMA_INITIALIZED.add(key)
+    else:
+        # Schema ya creado en este proceso. Saltar executescript (que toma write lock).
+        return conn
     # Migracion idempotente de columnas nuevas en prospects
     existing = {row["name"] for row in conn.execute("PRAGMA table_info(prospects)")}
     for column, ddl in PROSPECT_MIGRATIONS:

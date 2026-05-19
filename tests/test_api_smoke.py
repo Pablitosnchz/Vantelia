@@ -3,9 +3,16 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import sqlite3
 import sys
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
 import httpx
@@ -183,6 +190,77 @@ def test_healthcheck_reports_runtime_status(client: TestClient):
     assert payload["clientes_configurados"] == 1
 
 
+def test_self_serve_schema_v2_is_provisioned(client: TestClient, api_module):
+    """Sem 1: clientes table mirrors config.json, users has google_sub/email_verified,
+    and the new self-serve tables (subscriptions, kb_documents, bot_leads,
+    live_chat_sessions, message_usage_events) exist and are queryable."""
+    connection = sqlite3.connect(api_module.DB_PATH)
+    connection.row_factory = sqlite3.Row
+    try:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        for required in {
+            "clientes",
+            "subscriptions",
+            "kb_documents",
+            "bot_leads",
+            "live_chat_sessions",
+            "message_usage_events",
+        }:
+            assert required in tables, f"Falta tabla {required}"
+
+        user_cols = {row[1] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
+        for col in {"google_sub", "email_verified", "signup_source", "avatar_url"}:
+            assert col in user_cols, f"Falta columna users.{col}"
+
+        mirrored = {
+            row["cliente_id"]: dict(row)
+            for row in connection.execute(
+                "SELECT cliente_id, plan, owner_user_id, source FROM clientes"
+            ).fetchall()
+        }
+        assert "demo" in mirrored, "El cliente legacy demo no se ha replicado a la tabla clientes"
+        assert mirrored["demo"]["source"] == "legacy"
+        assert mirrored["demo"]["owner_user_id"] == ""
+    finally:
+        connection.close()
+
+
+def test_self_serve_helpers_persist_owner_and_subscription(api_module):
+    """Ownership y suscripciones free se mantienen tras mutaciones de config.json."""
+    api_module.db_set_client_owner("demo", "user_test_owner", source="self_serve")
+    try:
+        # Re-persistir el config sin tocar nada debe preservar owner/source.
+        api_module._persist_configs_to_disk(api_module.CONFIG_CLIENTES)
+        assert api_module.db_get_client_owner("demo") == "user_test_owner"
+        row = api_module.db_get_client_row("demo")
+        assert row is not None
+        assert row["source"] == "self_serve"
+
+        sub = api_module.db_ensure_free_subscription("user_test_owner", cliente_id="demo")
+        assert sub["plan"] == "free"
+        assert sub["messages_quota"] >= 1
+        sub_again = api_module.db_ensure_free_subscription("user_test_owner")
+        assert sub_again["id"] == sub["id"], "ensure_free_subscription debe ser idempotente"
+    finally:
+        # Limpieza para no contaminar otros tests de la sesion.
+        connection = sqlite3.connect(api_module.DB_PATH)
+        try:
+            connection.execute(
+                "UPDATE clientes SET owner_user_id='', source='legacy' WHERE cliente_id='demo'"
+            )
+            connection.execute(
+                "DELETE FROM subscriptions WHERE user_id='user_test_owner'"
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+
 def test_public_client_config_enforces_allowed_origin(client: TestClient):
     forbidden = client.get("/cliente/demo")
     allowed = client.get("/cliente/demo", headers={"Origin": "http://testserver"})
@@ -274,6 +352,74 @@ def test_portal_cannot_delete_default_professional(client: TestClient):
     assert "agenda principal" in delete_response.json()["detail"]
 
 
+def test_admin_client_portal_has_full_plan_capabilities(client: TestClient, api_module):
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "admin@example.com", "password": "test-password-123"},
+    )
+    assert login_response.status_code == 200
+    cookies = {"vantelia_portal_session": login_response.cookies["vantelia_portal_session"]}
+
+    subscription = client.get("/auth/subscription", params={"cliente_id": "demo"}, cookies=cookies)
+    assert subscription.status_code == 200
+    sub = subscription.json()
+    assert sub["admin_override"] is True
+    assert sub["plan"] != "completo"
+    assert sub["effective_plan"] == "completo"
+    assert sub["features"]["branding_customization"] is True
+    assert sub["features"]["csv_export"] is True
+    assert sub["features"]["max_professionals"] == 5
+
+    export_response = client.get("/auth/bookings/export", params={"cliente_id": "demo"}, cookies=cookies)
+    assert export_response.status_code == 200
+
+    employee_response = client.post(
+        "/auth/employees",
+        params={"cliente_id": "demo"},
+        cookies=cookies,
+        json={
+            "name": "Profesional Admin Full",
+            "role_label": "Pruebas",
+            "color": "#00b1d9",
+            "is_active": True,
+            "timezone": "Europe/Madrid",
+            "slot_minutes": 30,
+            "day_start": "09:00",
+            "day_end": "10:00",
+            "closed_weekdays": [],
+            "service_ids": [],
+        },
+    )
+    assert employee_response.status_code == 200, employee_response.text
+    employee_id = employee_response.json()["employee_id"]
+    try:
+        previous_configs = json.loads(json.dumps(api_module.CONFIG_CLIENTES))
+        ai_response = client.post(
+            "/auth/ai-config",
+            params={"cliente_id": "demo"},
+            cookies=cookies,
+            json={
+                "nombre": "Demo Admin Full",
+                "icono": "DA",
+                "bienvenida": "Hola, soy el asistente demo.",
+                "prompt_extra": "Responde con tono profesional.",
+                "color": "#123456",
+                "accent_color": "#654321",
+                "branding_text": "Demo Brand",
+                "logo_url": "",
+            },
+        )
+        assert ai_response.status_code == 200, ai_response.text
+        ai_config = ai_response.json()
+        assert ai_config["color"] == "#123456"
+        assert ai_config["accent_color"] == "#654321"
+        assert ai_config["branding_text"] == "Demo Brand"
+    finally:
+        client.delete(f"/auth/employees/{employee_id}", params={"cliente_id": "demo"}, cookies=cookies)
+        api_module._persist_configs_to_disk(previous_configs)
+        api_module._update_runtime_configs(previous_configs)
+
+
 def test_booking_availability_works_without_openai(client: TestClient):
     selected_day = datetime.now() + timedelta(days=1)
     while selected_day.weekday() in {5, 6}:
@@ -322,6 +468,135 @@ def test_chat_booking_intent_is_saved_without_openai(client: TestClient):
     assert "booking" in list_response.json()[0]["intents"]
     assert detail_response.status_code == 200
     assert [message["role"] for message in detail_response.json()["messages"]] == ["user", "assistant"]
+
+
+def test_chat_disponibilidad_proximo_lunes_uses_real_slots(client: TestClient):
+    response = client.post(
+        "/chat",
+        json={
+            "cliente_id": "demo",
+            "mensaje": "Tienes cita para el proximo lunes?",
+            "session_id": "s_test_chat_availability_monday",
+        },
+        headers={"Origin": "http://testserver"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    text = payload["respuesta"]
+    assert payload["mostrar_formulario"] is False
+    assert "09:00" in text
+    assert "09:30" in text
+    assert "17:00" not in text
+    assert "\\n" not in text
+    assert "lunes" in text.lower()
+
+
+def test_chat_disponibilidad_manana_tarde_filters_period(client: TestClient):
+    response = client.post(
+        "/chat",
+        json={
+            "cliente_id": "demo",
+            "mensaje": "Hay hueco manana por la tarde?",
+            "session_id": "s_test_chat_availability_tomorrow_afternoon",
+        },
+        headers={"Origin": "http://testserver"},
+    )
+
+    assert response.status_code == 200
+    text = response.json()["respuesta"]
+    assert "tarde" in text.lower()
+    assert "no veo huecos" in text.lower() or "no hay huecos" in text.lower()
+    assert "17:00" not in text
+    assert "\\n" not in text
+
+
+def test_chat_disponibilidad_dia_cerrado_reports_closed(client: TestClient):
+    response = client.post(
+        "/chat",
+        json={
+            "cliente_id": "demo",
+            "mensaje": "Estais abiertos este domingo?",
+            "session_id": "s_test_chat_availability_closed_day",
+        },
+        headers={"Origin": "http://testserver"},
+    )
+
+    assert response.status_code == 200
+    text = response.json()["respuesta"].lower()
+    assert "domingo" in text
+    assert "cerrados" in text or "no laborable" in text
+    assert "\\n" not in response.json()["respuesta"]
+
+
+def test_chat_disponibilidad_dia_sin_slots_suggests_next_day(client: TestClient, api_module):
+    target = api_module._resolve_relative_date_es("proximo lunes", "Europe/Madrid")
+    assert target is not None
+    block_id = f"blk_test_{uuid.uuid4().hex}"
+    with sqlite3.connect(api_module.DB_PATH) as connection:
+        connection.execute(
+            """
+            INSERT INTO agenda_blocks (id, cliente_id, employee_id, block_date, start_time, end_time, reason, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (block_id, "demo", "", target.isoformat(), "09:00", "10:00", "Cierre tecnico", api_module._utc_now_iso()),
+        )
+        connection.commit()
+    try:
+        response = client.post(
+            "/chat",
+            json={
+                "cliente_id": "demo",
+                "mensaje": "Tienes cita para el proximo lunes?",
+                "session_id": "s_test_chat_availability_full_day",
+            },
+            headers={"Origin": "http://testserver"},
+        )
+    finally:
+        with sqlite3.connect(api_module.DB_PATH) as connection:
+            connection.execute("DELETE FROM agenda_blocks WHERE id = ?", (block_id,))
+            connection.commit()
+
+    assert response.status_code == 200
+    text = response.json()["respuesta"]
+    assert "no queda disponibilidad" in text.lower() or "agenda completa" in text.lower()
+    assert "siguiente dia" in text.lower()
+    assert "17:00" not in text
+    assert "\\n" not in text
+
+
+def test_chat_disponibilidad_booking_disabled_does_not_invent_slots(client: TestClient, api_module):
+    booking_cfg = api_module.CONFIG_CLIENTES["demo"]["booking"]
+    previous_enabled = booking_cfg["enabled"]
+    booking_cfg["enabled"] = False
+    try:
+        response = client.post(
+            "/chat",
+            json={
+                "cliente_id": "demo",
+                "mensaje": "Tienes cita para manana?",
+                "session_id": "s_test_chat_availability_booking_disabled",
+            },
+            headers={"Origin": "http://testserver"},
+        )
+    finally:
+        booking_cfg["enabled"] = previous_enabled
+
+    assert response.status_code == 200
+    text = response.json()["respuesta"].lower()
+    assert "no puedo consultar la agenda en tiempo real" in text
+    assert "09:00" not in text
+    assert "17:00" not in text
+
+
+def test_chat_response_normalizes_literal_newlines_and_menu_footer(api_module):
+    raw = "Horario disponible\\n\\n_Escribe menú para volver al menu principal._"
+
+    cleaned = api_module._normalize_chat_response_text(raw)
+
+    assert "\\n" not in cleaned
+    assert "Horario disponible\n\n" in cleaned
+    assert cleaned.endswith("Escribe **menú** para volver al menú principal.")
 
 
 def test_whatsapp_webhook_uses_same_chat_storage(client: TestClient):
@@ -1015,3 +1290,1275 @@ def test_outreach_tracking_invalid_token_does_not_crash(client: TestClient):
     assert response.status_code == 200  # devuelve pixel igualmente
     click = client.get("/track/click/invalid-token", params={"u": "https://www.vantelia.es"})
     assert click.status_code in (302, 404)
+
+
+# ---------------- Autopilot activity log ----------------
+
+def test_autopilot_log_requires_admin(client: TestClient):
+    response = client.get("/admin/outreach/autopilot-log")
+    assert response.status_code in (401, 403)
+
+
+def test_autopilot_log_returns_items_shape(client: TestClient):
+    response = client.get("/admin/outreach/autopilot-log?limit=10", headers=_admin_headers())
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert "items" in data and isinstance(data["items"], list)
+    assert "count" in data
+
+
+def test_autopilot_tick_records_event(client: TestClient):
+    import time
+
+    tick = client.post("/admin/outreach/autopilot-tick", headers=_admin_headers())
+    assert tick.status_code == 200, tick.text
+    # El endpoint registra manual_run_requested síncrono y dispara la ronda en un thread.
+    # Damos margen a que el thread escriba al menos skip_env_disabled / tick_end.
+    deadline = time.time() + 5.0
+    events = []
+    while time.time() < deadline:
+        resp = client.get("/admin/outreach/autopilot-log?limit=20", headers=_admin_headers())
+        assert resp.status_code == 200
+        events = [it["event"] for it in resp.json()["items"]]
+        if "manual_run_requested" in events and "tick_end" in events:
+            break
+        time.sleep(0.1)
+    assert "manual_run_requested" in events, f"Eventos vistos: {events}"
+
+
+def test_autopilot_tick_overlap_is_reported_without_legacy_skip_event(client: TestClient, api_module):
+    lock = api_module.outreach_autonomous_tick_lock
+    acquired = lock.acquire(blocking=False)
+    if not acquired:
+        pytest.skip("autonomous tick lock already held by another test thread")
+    try:
+        tick = client.post("/admin/outreach/autopilot-tick", headers=_admin_headers())
+        assert tick.status_code == 200, tick.text
+        assert tick.json()["started"] is False
+    finally:
+        lock.release()
+
+    resp = client.get("/admin/outreach/autopilot-log?limit=20", headers=_admin_headers())
+    assert resp.status_code == 200
+    events = [it["event"] for it in resp.json()["items"]]
+    assert "tick_skipped_running" in events
+    assert "tick_overlap_skipped" not in events
+
+
+def test_autopilot_config_followup_days_control_queue_readiness(client: TestClient, api_module):
+    email = "delay.config@example.com"
+    sent_at = (datetime.utcnow() - timedelta(days=4)).isoformat(timespec="seconds") + "+00:00"
+    try:
+        resp = client.put(
+            "/admin/outreach/autopilot-config",
+            headers=_admin_headers(),
+            json={"followup_days": {"fu1": 7, "fu2": 8, "breakup": 9}},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["followup_days"] == {"fu1": 7, "fu2": 8, "breakup": 9}
+
+        created = client.post(
+            "/admin/outreach/prospects",
+            headers=_admin_headers(),
+            json={"email": email, "business_name": "Delay Config", "niche": "clinica dental"},
+        )
+        assert created.status_code == 200, created.text
+
+        with api_module._outreach_db() as conn:
+            conn.execute(
+                """INSERT INTO sends
+                   (email, stage, subject, body_text, body_html, sent_at, mode, message_id)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (email, "cold", "Hola", "texto", "<p>texto</p>", sent_at, "send", "msg-delay-config"),
+            )
+            conn.commit()
+
+        queue = client.get("/admin/outreach/followup-queue?days=60", headers=_admin_headers())
+        assert queue.status_code == 200, queue.text
+        item = next(it for it in queue.json()["items"] if it["email"] == email)
+        assert item["recommended_stage"] == "fu1"
+        assert item["can_send"] is False
+        assert item["blocked_reason"].startswith("esperar")
+    finally:
+        client.put(
+            "/admin/outreach/autopilot-config",
+            headers=_admin_headers(),
+            json={"followup_days": {"fu1": 4, "fu2": 5, "breakup": 6}},
+        )
+
+
+def test_autopilot_log_level_filter(client: TestClient):
+    # manual_run_requested es info -> con filter=error no debe aparecer.
+    client.post("/admin/outreach/autopilot-tick", headers=_admin_headers())
+    resp = client.get("/admin/outreach/autopilot-log?level=error&limit=5", headers=_admin_headers())
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert all(it["level"] == "error" for it in items)
+
+
+def test_outreach_discovery_expands_large_city_queries(api_module):
+    from outreach_discover import _places_queries  # type: ignore
+
+    queries = _places_queries("centro estetica", "Madrid", 80)
+    joined = " ".join(queries).lower()
+    assert len(queries) > 4
+    assert len(queries) <= 14
+    assert "centro estetica en madrid" in joined
+    assert "salon belleza" in joined or "clinica estetica" in joined
+    assert "salamanca" in joined or "chamberi" in joined
+
+
+def test_outreach_places_search_uses_places_api_new(api_module, monkeypatch):
+    import outreach_discover  # type: ignore
+
+    calls = []
+
+    class _Resp:
+        status_code = 200
+        text = "{}"
+
+        def json(self):
+            return {
+                "places": [
+                    {
+                        "id": "places/test-place",
+                        "displayName": {"text": "Clinica Test"},
+                        "formattedAddress": "Calle Test, 28830 San Fernando de Henares, Madrid, Espana",
+                        "websiteUri": "https://example.test",
+                        "nationalPhoneNumber": "911111111",
+                        "types": ["beauty_salon"],
+                    }
+                ]
+            }
+
+    class _Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, headers=None, json=None):
+            calls.append({"url": url, "headers": headers or {}, "json": json or {}})
+            return _Resp()
+
+    monkeypatch.setattr(outreach_discover.httpx, "Client", _Client)
+
+    results = outreach_discover.google_places_search("clinicas esteticas en San Fernando del Henares", "test-key", max_results=1)
+
+    assert results[0]["place_id"] == "places/test-place"
+    assert calls[0]["url"] == "https://places.googleapis.com/v1/places:searchText"
+    assert "maps.googleapis.com/maps/api/place" not in calls[0]["url"]
+    assert calls[0]["headers"]["X-Goog-Api-Key"] == "test-key"
+    assert "places.displayName" in calls[0]["headers"]["X-Goog-FieldMask"]
+    assert calls[0]["json"]["textQuery"] == "clinicas esteticas en San Fernando del Henares"
+
+
+def test_outreach_discovery_caps_email_scraping(api_module, monkeypatch):
+    import outreach_discover  # type: ignore
+
+    raw_places = [
+        {
+            "place_id": f"places/test-{i}",
+            "name": f"Centro {i}",
+            "formatted_address": "Calle Test, 28830 San Fernando de Henares, Madrid, Espana",
+            "types": ["beauty_salon"],
+                "_details": {
+                    "name": f"Centro {i}",
+                    "website": f"https://centro{i}.test",
+                    "international_phone_number": f"91111111{i}",
+                "formatted_address": "Calle Test, 28830 San Fernando de Henares, Madrid, Espana",
+                "types": ["beauty_salon"],
+            },
+        }
+        for i in range(6)
+    ]
+    scrape_calls = []
+
+    monkeypatch.setattr(outreach_discover, "google_places_search", lambda *args, **kwargs: raw_places)
+
+    def _fake_extract(url):
+        scrape_calls.append(url)
+        return [f"hola@{url.replace('https://', '')}"]
+
+    monkeypatch.setattr(outreach_discover, "extract_emails_from_website", _fake_extract)
+
+    companies = outreach_discover.discover_companies(
+        "clinica estetica",
+        "San Fernando del Henares",
+        max_results=6,
+        extract_emails=True,
+        api_key="test-key",
+        source="places",
+        email_target=2,
+        max_email_scrapes=2,
+    )
+
+    assert len(scrape_calls) == 2
+    assert sum(1 for c in companies if c.email) == 2
+
+
+def test_outreach_filter_new_discoveries_excludes_existing_campaigns_and_sends(api_module):
+    with api_module._outreach_db() as conn:
+        now = api_module._outreach_now()
+        conn.execute(
+            """INSERT INTO prospects (email, business_name, website, phone, city, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            ("known@example.com", "Known Center", "https://known.example", "911111111", "Madrid", now, now),
+        )
+        conn.execute(
+            """INSERT INTO campaigns (name, status, stage, created_at, updated_at)
+               VALUES (?,?,?,?,?)""",
+            ("Camp", "draft", "cold", now, now),
+        )
+        campaign_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        conn.execute(
+            """INSERT INTO campaign_members (campaign_id, email, stage, status, created_at, updated_at)
+               VALUES (?,?,?,?,?,?)""",
+            (campaign_id, "campaign@example.com", "cold", "pending", now, now),
+        )
+        conn.execute(
+            """INSERT INTO sends (email, stage, subject, sent_at, mode)
+               VALUES (?,?,?,?,?)""",
+            ("sent@example.com", "cold", "Subject", now, "send"),
+        )
+        conn.execute(
+            "INSERT INTO suppressions (email, reason, added_at) VALUES (?,?,?)",
+            ("baja@example.com", "manual", now),
+        )
+        conn.commit()
+
+        items = [
+            SimpleNamespace(email="known@example.com", website="", phone="", business_name="Other", city="Madrid"),
+            SimpleNamespace(email="campaign@example.com", website="", phone="", business_name="Other", city="Madrid"),
+            SimpleNamespace(email="sent@example.com", website="", phone="", business_name="Other", city="Madrid"),
+            SimpleNamespace(email="baja@example.com", website="", phone="", business_name="Other", city="Madrid"),
+            SimpleNamespace(email="new@example.com", website="https://new.example", phone="922222222", business_name="New Center", city="Madrid"),
+        ]
+        filtered = api_module._outreach_filter_new_discoveries(conn, items)
+
+    assert [item.email for item in filtered] == ["new@example.com"]
+
+
+# ----------- Instagram captacion -----------
+
+
+def test_instagram_stats_requires_admin_token(client: TestClient):
+    resp = client.get("/admin/instagram/stats")
+    assert resp.status_code in (401, 403)
+
+
+def test_instagram_stats_with_token_returns_expected_shape(client: TestClient):
+    resp = client.get("/admin/instagram/stats", headers=_admin_headers())
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "totals" in data and "funnel" in data
+    assert "prospects" in data["totals"]
+    assert set(data["funnel"].keys()) >= {"cold", "fu1", "fu2", "breakup"}
+
+
+def test_instagram_prospect_crud_flow(client: TestClient):
+    create = client.post(
+        "/admin/instagram/prospects",
+        headers={**_admin_headers(), "Content-Type": "application/json"},
+        json={
+            "username": "demo_dental_test",
+            "full_name": "Clinica Demo",
+            "niche": "clinica dental",
+            "city": "Madrid",
+            "followers_count": 1200,
+        },
+    )
+    assert create.status_code == 200
+
+    listing = client.get(
+        "/admin/instagram/prospects?q=demo_dental",
+        headers=_admin_headers(),
+    )
+    assert listing.status_code == 200
+    items = listing.json()["items"]
+    assert any(it["username"] == "demo_dental_test" for it in items)
+
+    patch = client.patch(
+        "/admin/instagram/prospects/demo_dental_test",
+        headers={**_admin_headers(), "Content-Type": "application/json"},
+        json={"status": "queued", "score": 42},
+    )
+    assert patch.status_code == 200
+
+    detail = client.get(
+        "/admin/instagram/prospects/demo_dental_test",
+        headers=_admin_headers(),
+    )
+    assert detail.status_code == 200
+    assert detail.json()["prospect"]["status"] == "queued"
+    assert detail.json()["prospect"]["score"] == 42
+
+    suppress = client.post(
+        "/admin/instagram/suppress",
+        headers={**_admin_headers(), "Content-Type": "application/json"},
+        json={"username": "demo_dental_test", "reason": "test"},
+    )
+    assert suppress.status_code == 200
+    suppr = client.get("/admin/instagram/suppressions", headers=_admin_headers())
+    assert any(s["username"] == "demo_dental_test" for s in suppr.json()["items"])
+
+    # Quitar supresion para no afectar drafts test siguiente
+    client.delete("/admin/instagram/suppress/demo_dental_test", headers=_admin_headers())
+
+    delete = client.delete(
+        "/admin/instagram/prospects/demo_dental_test",
+        headers=_admin_headers(),
+    )
+    assert delete.status_code == 200
+
+
+def test_instagram_draft_generation_no_network(client: TestClient, api_module):
+    # Crear prospect fresco y generar draft cold sin pegar a red.
+    client.post(
+        "/admin/instagram/prospects",
+        headers={**_admin_headers(), "Content-Type": "application/json"},
+        json={
+            "username": "demo_draft_user",
+            "full_name": "Demo Draft Studio",
+            "niche": "estetica",
+            "city": "Barcelona",
+            "followers_count": 800,
+        },
+    )
+    resp = client.post(
+        "/admin/instagram/draft",
+        headers={**_admin_headers(), "Content-Type": "application/json"},
+        json={"stage": "cold", "max": 5, "after_days": 0},
+    )
+    assert resp.status_code == 200
+    drafts = resp.json()["drafts"]
+    assert any(d["username"] == "demo_draft_user" for d in drafts)
+    target = next(d for d in drafts if d["username"] == "demo_draft_user")
+    assert target["stage"] == "cold"
+    assert target["variant"] in {"A", "B"}
+    assert "ig.me/m/" in target["deep_link"]
+    # Mensaje sin reventar limite 500 chars
+    assert len(target["message"]) <= 500
+    # Cleanup
+    client.delete("/admin/instagram/prospects/demo_draft_user", headers=_admin_headers())
+
+
+def test_instagram_manual_contact_creates_timeline_and_summary(client: TestClient):
+    old_ts = "2026-01-01T10:00:00+00:00"
+    resp = client.post(
+        "/admin/instagram/manual-contact",
+        headers={**_admin_headers(), "Content-Type": "application/json"},
+        json={
+            "username": "@Demo_Manual_User",
+            "full_name": "Demo Manual",
+            "message_text": "hola, te he preparado una demo",
+            "stage": "cold",
+            "contacted_at": old_ts,
+            "niche": "estetica",
+            "city": "Madrid",
+            "notes": "contacto manual test",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["username"] == "demo_manual_user"
+    assert data["stage"] == "cold"
+    assert data["next_stage"] == "fu1"
+    assert data["next_followup_at"]
+
+    detail = client.get("/admin/instagram/prospects/demo_manual_user", headers=_admin_headers())
+    assert detail.status_code == 200
+    prospect = detail.json()["prospect"]
+    assert prospect["status"] == "contacted"
+    assert prospect["last_contacted_at"] == old_ts
+    assert prospect["next_followup_at"]
+
+    timeline = client.get("/admin/instagram/prospects/demo_manual_user/timeline", headers=_admin_headers())
+    assert timeline.status_code == 200
+    assert any(item["kind"] == "send" and item["stage"] == "cold" for item in timeline.json()["items"])
+
+    summary = client.get("/admin/instagram/ops-summary", headers=_admin_headers())
+    assert summary.status_code == 200
+    assert "totals" in summary.json()
+
+
+def test_instagram_manual_contact_dedupes_username_and_followup_queue(client: TestClient):
+    headers = {**_admin_headers(), "Content-Type": "application/json"}
+    first = client.post(
+        "/admin/instagram/manual-contact",
+        headers=headers,
+        json={
+            "username": "Queue_User",
+            "message_text": "primer contacto",
+            "stage": "cold",
+            "contacted_at": "2026-01-01T09:00:00+00:00",
+        },
+    )
+    assert first.status_code == 200, first.text
+    second = client.post(
+        "/admin/instagram/manual-contact",
+        headers=headers,
+        json={
+            "username": "@queue_user",
+            "message_text": "follow up manual",
+            "stage": "fu1",
+            "contacted_at": "2026-01-07T09:00:00+00:00",
+        },
+    )
+    assert second.status_code == 200, second.text
+
+    listing = client.get("/admin/instagram/prospects?q=queue_user", headers=_admin_headers())
+    assert listing.status_code == 200
+    assert [p["username"] for p in listing.json()["items"]].count("queue_user") == 1
+
+    queue = client.get("/admin/instagram/followup-queue?limit=20", headers=_admin_headers())
+    assert queue.status_code == 200
+    items = queue.json()["items"]
+    target = next((item for item in items if item["username"] == "queue_user"), None)
+    assert target is not None
+    assert target["next_stage"] == "fu2"
+    assert "suggested_message" in target
+
+
+def test_instagram_igme_deep_link_encoded():
+    import sys as _sys
+    from pathlib import Path as _Path
+    _scripts = _Path(__file__).resolve().parent.parent / "scripts"
+    if str(_scripts) not in _sys.path:
+        _sys.path.insert(0, str(_scripts))
+    from instagram_templates import igme_deep_link  # type: ignore
+
+    link = igme_deep_link("a_user", "hola con espacios & simbolos ?=")
+    assert link.startswith("https://ig.me/m/a_user?text=")
+    # Espacios escapados como %20 (quote default), no '+'
+    assert "%20" in link
+    assert "&" not in link.split("?text=", 1)[1]  # & del input se escapa
+    # Strip arroba al inicio
+    link2 = igme_deep_link("@xx", "hi")
+    assert link2.startswith("https://ig.me/m/xx?text=")
+
+
+# ── Sem 2: self-serve signup + Google OAuth + wizard onboarding ────────
+
+def test_signup_creates_self_serve_user_and_session(client: TestClient, api_module):
+    email = f"signup_{uuid.uuid4().hex[:8]}@example.com"
+    response = client.post(
+        "/auth/signup",
+        json={
+            "email": email,
+            "password": "secret-pass-123",
+            "display_name": "Nuevo Usuario",
+            "marketing_optin": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["ok"] is True
+    assert data["redirect_to"] == "/onboarding"
+    assert data["user"]["email"] == email
+    # session cookie set
+    assert api_module.PORTAL_COOKIE_NAME in response.cookies
+    # user is persisted with signup_source='email'
+    row = api_module._get_user_by_email(email)
+    assert row is not None
+    assert row["signup_source"] == "email"
+    assert row["google_sub"] == ""
+    assert row["cliente_id"] == ""  # wizard not started yet
+
+
+def test_signup_rejects_duplicate_email(client: TestClient, api_module):
+    email = f"dup_{uuid.uuid4().hex[:8]}@example.com"
+    first = client.post(
+        "/auth/signup",
+        json={"email": email, "password": "secret-pass-123", "display_name": "Uno"},
+    )
+    assert first.status_code == 200
+    second = client.post(
+        "/auth/signup",
+        json={"email": email, "password": "secret-pass-123", "display_name": "Dos"},
+    )
+    assert second.status_code == 409
+    assert "ya tiene cuenta" in second.json()["detail"].lower()
+
+
+def test_signup_disabled_when_flag_false(client: TestClient, api_module, monkeypatch):
+    monkeypatch.setattr(api_module, "SIGNUP_ENABLED", False)
+    response = client.post(
+        "/auth/signup",
+        json={"email": "blocked@example.com", "password": "secret-pass-123", "display_name": "X"},
+    )
+    assert response.status_code == 403
+
+
+def test_google_oauth_start_503_when_not_configured(client: TestClient, api_module, monkeypatch):
+    monkeypatch.setattr(api_module, "GOOGLE_CLIENT_ID", "")
+    monkeypatch.setattr(api_module, "GOOGLE_CLIENT_SECRET", "")
+    response = client.get("/auth/google/start", follow_redirects=False)
+    assert response.status_code == 503
+
+
+def test_google_oauth_start_redirects_when_configured(client: TestClient, api_module, monkeypatch):
+    monkeypatch.setattr(api_module, "GOOGLE_CLIENT_ID", "fake-id.apps.googleusercontent.com")
+    monkeypatch.setattr(api_module, "GOOGLE_CLIENT_SECRET", "fake-secret")
+    monkeypatch.setattr(api_module, "GOOGLE_REDIRECT_URI", "https://app.test/auth/google/callback")
+    response = client.get("/auth/google/start", follow_redirects=False)
+    assert response.status_code in (302, 307)
+    location = response.headers["location"]
+    assert location.startswith("https://accounts.google.com/o/oauth2/v2/auth")
+    assert "client_id=fake-id.apps.googleusercontent.com" in location
+    assert "state=" in location
+    assert "scope=openid%20email%20profile" in location
+
+
+def _signup_and_get_cookie(client: TestClient, email: str, password: str = "secret-pass-123", name: str = "Wizard User"):
+    resp = client.post(
+        "/auth/signup",
+        json={"email": email, "password": password, "display_name": name},
+    )
+    assert resp.status_code == 200, resp.text
+    cookie_name = "vantelia_portal_session"
+    assert cookie_name in resp.cookies, f"signup response missing {cookie_name} cookie"
+    return {cookie_name: resp.cookies[cookie_name]}
+
+
+def test_onboarding_state_returns_empty_for_fresh_user(client: TestClient, api_module):
+    email = f"wiz_state_{uuid.uuid4().hex[:8]}@example.com"
+    cookies = _signup_and_get_cookie(client, email)
+    response = client.get("/onboarding/state", cookies=cookies)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["cliente_id"] == ""
+    assert data["step"] == "name"
+
+
+def test_onboarding_start_provisions_cliente_with_ownership(client: TestClient, api_module):
+    email = f"wiz_start_{uuid.uuid4().hex[:8]}@example.com"
+    cookies = _signup_and_get_cookie(client, email)
+    user_before = api_module._get_user_by_email(email)
+    response = client.post(
+        "/onboarding/start",
+        json={"nombre": "Cafeteria del Sol"},
+        cookies=cookies,
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    cliente_id = data["cliente_id"]
+    assert cliente_id.startswith("cafeteria_del_sol")
+    assert data["step"] == "learn"
+    # user.cliente_id linked
+    user_after = api_module._get_user_by_id(user_before["id"])
+    assert user_after["cliente_id"] == cliente_id
+    # clientes row owned by user
+    owner = api_module.db_get_client_owner(cliente_id)
+    assert owner == user_before["id"]
+    # free subscription created
+    sub = api_module.db_get_subscription_for_user(user_before["id"])
+    assert sub is not None
+    assert sub["plan"] == "free"
+    # config.json + data dir provisioned
+    assert cliente_id in api_module.CONFIG_CLIENTES
+    info_path = Path(os.environ["VANTELIA_DATA_DIR"]) / cliente_id / "info.txt"
+    assert info_path.exists()
+
+
+def test_onboarding_full_wizard_flow(client: TestClient, api_module, monkeypatch):
+    """name → learn → personality → finalize, end to end."""
+    monkeypatch.setattr(api_module, "OPENAI_API_KEY", "sk-test-wizard")
+    monkeypatch.setattr(api_module, "run_onboarding", lambda **kwargs: _FakeOnboardingResult())
+    monkeypatch.setattr(
+        api_module,
+        "_generate_starter_questions",
+        lambda info, nombre: [
+            "Que servicios ofreces?",
+            "Cuanto cuesta?",
+            "Donde estais?",
+            "Como reservo?",
+        ],
+    )
+    email = f"wiz_full_{uuid.uuid4().hex[:8]}@example.com"
+    cookies = _signup_and_get_cookie(client, email)
+
+    # Step name
+    start = client.post(
+        "/onboarding/start", json={"nombre": "Mi Negocio"}, cookies=cookies
+    )
+    assert start.status_code == 200
+    cliente_id = start.json()["cliente_id"]
+
+    # Step learn
+    learn = client.post(
+        "/onboarding/learn",
+        json={"website_url": "https://cliente-auto.example", "just_this_page": True},
+        cookies=cookies,
+    )
+    assert learn.status_code == 200, learn.text
+    learn_data = learn.json()
+    assert learn_data["cliente_id"] == cliente_id
+    assert learn_data["detected_business_name"] == "Cliente Auto"
+    assert len(learn_data["suggested_starters"]) == 4
+    # info.txt got written with the scraper output
+    info_path = Path(os.environ["VANTELIA_DATA_DIR"]) / cliente_id / "info.txt"
+    assert "CLIENTE AUTO" in info_path.read_text(encoding="utf-8")
+
+    # Step personality
+    pers = client.post(
+        "/onboarding/personality",
+        json={
+            "bienvenida": "Hola, te ayudo con todo.",
+            "prompt_extra": "Tono cercano.",
+            "starter_questions": ["Pregunta 1", "Pregunta 2"],
+        },
+        cookies=cookies,
+    )
+    assert pers.status_code == 200
+    pers_data = pers.json()
+    assert pers_data["bienvenida"] == "Hola, te ayudo con todo."
+    assert len(pers_data["starter_questions"]) == 2
+    cfg = api_module.CONFIG_CLIENTES[cliente_id]
+    assert cfg["bienvenida"] == "Hola, te ayudo con todo."
+    assert cfg["prompt_extra"] == "Tono cercano."
+
+    # Step finalize
+    final = client.post("/onboarding/finalize", cookies=cookies)
+    assert final.status_code == 200
+    final_data = final.json()
+    assert final_data["cliente_id"] == cliente_id
+    assert "<script" in final_data["install_snippet"]
+    assert cliente_id in final_data["install_snippet"]
+    assert final_data["demo_url"].endswith(f"/demo/{cliente_id}")
+    assert final_data["dashboard_url"].endswith("/app")
+
+
+def test_onboarding_endpoints_require_authentication(client: TestClient):
+    # GET /onboarding HTML redirects to acceso
+    resp = client.get("/onboarding", follow_redirects=False)
+    assert resp.status_code in (302, 307)
+    assert "/acceso" in resp.headers["location"]
+    # POST /onboarding/start without session → 401
+    resp = client.post("/onboarding/start", json={"nombre": "X"})
+    assert resp.status_code == 401
+
+
+# ── Sem 3: dashboard nuevo /auth/app/* ─────────────────────────────────
+
+def _signup_and_wizard(client: TestClient, api_module, monkeypatch, *, name="Mi Bot 3"):
+    monkeypatch.setattr(api_module, "OPENAI_API_KEY", "sk-test-app")
+    monkeypatch.setattr(api_module, "run_onboarding", lambda **kwargs: _FakeOnboardingResult())
+    monkeypatch.setattr(
+        api_module,
+        "_generate_starter_questions",
+        lambda info, nombre: ["Pregunta A", "Pregunta B", "Pregunta C", "Pregunta D"],
+    )
+    email = f"app_{uuid.uuid4().hex[:8]}@example.com"
+    cookies = _signup_and_get_cookie(client, email)
+    start = client.post("/onboarding/start", json={"nombre": name}, cookies=cookies)
+    assert start.status_code == 200
+    cliente_id = start.json()["cliente_id"]
+    learn = client.post(
+        "/onboarding/learn",
+        json={"website_url": "https://cliente-auto.example", "just_this_page": True},
+        cookies=cookies,
+    )
+    assert learn.status_code == 200, learn.text
+    return cookies, cliente_id, email
+
+
+def test_app_overview_returns_stats_for_self_serve_user(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch)
+    resp = client.get("/auth/app/overview", cookies=cookies)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["cliente_id"] == cliente_id
+    assert data["subscription"]["plan"] == "free"
+    assert data["subscription"]["messages_quota"] >= 1
+    assert "users_today" in data["stats"]
+    assert "training_chars" in data["stats"]
+    # training_chars > 0 because the fake onboarding wrote info.txt
+    assert data["stats"]["training_chars"] > 0
+
+
+def test_app_overview_400_when_no_cliente(client: TestClient, api_module):
+    email = f"app_nobot_{uuid.uuid4().hex[:8]}@example.com"
+    cookies = _signup_and_get_cookie(client, email)
+    resp = client.get("/auth/app/overview", cookies=cookies)
+    assert resp.status_code == 400
+
+
+def test_app_deploy_returns_snippet_and_share_link(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Deploy")
+    resp = client.get("/auth/app/deploy", cookies=cookies)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["cliente_id"] == cliente_id
+    assert "<script" in data["install_snippet"]
+    assert cliente_id in data["install_snippet"]
+    assert data["share_link"].endswith(f"/demo/{cliente_id}")
+
+
+def test_app_appearance_get_and_update(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Apariencia")
+    initial = client.get("/auth/app/appearance", cookies=cookies)
+    assert initial.status_code == 200
+    initial_data = initial.json()
+    assert initial_data["cliente_id"] == cliente_id
+    assert len(initial_data["starter_questions"]) == 4
+
+    update = client.post(
+        "/auth/app/appearance",
+        json={
+            "nombre": "Bot Renovado",
+            "color": "#aabbcc",
+            "icono": "BR",
+            "bienvenida": "Hola hola.",
+            "prompt_extra": "Tono breve.",
+            "starter_questions": ["Una", "Dos"],
+            "allowed_origins": ["https://miweb.com", "https://miweb.com"],  # dedupe
+        },
+        cookies=cookies,
+    )
+    assert update.status_code == 200, update.text
+    updated = update.json()
+    assert updated["nombre"] == "Bot Renovado"
+    assert updated["color"] == "#aabbcc"
+    assert updated["icono"] == "BR"
+    assert updated["bienvenida"] == "Hola hola."
+    assert updated["starter_questions"] == ["Una", "Dos"]
+    assert updated["allowed_origins"] == ["https://miweb.com"]
+
+    cfg = api_module.CONFIG_CLIENTES[cliente_id]
+    assert cfg["nombre"] == "Bot Renovado"
+    assert cfg["color"] == "#aabbcc"
+    assert cfg["bienvenida"] == "Hola hola."
+
+
+def test_app_appearance_rejects_bad_color(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Color")
+    cfg_before = dict(api_module.CONFIG_CLIENTES[cliente_id])
+    # 7-char string but not a valid hex (#zzzzzz) → endpoint should silently keep prior color.
+    resp = client.post(
+        "/auth/app/appearance",
+        json={"color": "#zzzzzz"},
+        cookies=cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    cfg_after = api_module.CONFIG_CLIENTES[cliente_id]
+    assert cfg_after["color"] == cfg_before["color"]
+
+
+def test_app_entry_redirects_when_no_cliente(client: TestClient, api_module):
+    email = f"app_entry_{uuid.uuid4().hex[:8]}@example.com"
+    cookies = _signup_and_get_cookie(client, email)
+    resp = client.get("/app", cookies=cookies, follow_redirects=False)
+    assert resp.status_code in (302, 307)
+    assert "/onboarding" in resp.headers["location"]
+
+
+# ── Sem 4: Leads / Q&A / Knowledge / Tune AI / Live Chat ──────────────
+
+def test_app_leads_crud_and_export(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Leads")
+    # initial list empty
+    resp = client.get("/auth/app/leads", cookies=cookies)
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 0
+
+    # create
+    created = client.post(
+        "/auth/app/leads",
+        json={"name": "Ana Pruebas", "email": "ana@test.com", "phone": "+34600111222", "message": "Quiero info"},
+        cookies=cookies,
+    )
+    assert created.status_code == 200, created.text
+    lead_id = created.json()["id"]
+    assert created.json()["email"] == "ana@test.com"
+
+    # list shows it
+    listed = client.get("/auth/app/leads", cookies=cookies).json()
+    assert listed["total"] == 1
+    assert listed["items"][0]["id"] == lead_id
+
+    # search filter
+    found = client.get("/auth/app/leads?q=ana", cookies=cookies).json()
+    assert found["total"] == 1
+    notfound = client.get("/auth/app/leads?q=zzznoexiste", cookies=cookies).json()
+    assert notfound["total"] == 0
+
+    # export csv
+    export = client.get("/auth/app/leads/export.csv", cookies=cookies)
+    assert export.status_code == 200
+    assert "text/csv" in export.headers["content-type"]
+    assert "ana@test.com" in export.text
+
+    # delete
+    deleted = client.delete(f"/auth/app/leads/{lead_id}", cookies=cookies)
+    assert deleted.status_code == 200
+    assert client.get("/auth/app/leads", cookies=cookies).json()["total"] == 0
+
+    # delete non-existent → 404
+    missing = client.delete("/auth/app/leads/lead_nope", cookies=cookies)
+    assert missing.status_code == 404
+
+
+def test_app_leads_rejects_empty_payload(client: TestClient, api_module, monkeypatch):
+    cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot LeadsEmpty")
+    resp = client.post("/auth/app/leads", json={}, cookies=cookies)
+    assert resp.status_code == 400
+
+
+def test_app_qa_crud_persists_in_info_txt(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot QA")
+    info_path = Path(os.environ["VANTELIA_DATA_DIR"]) / cliente_id / "info.txt"
+
+    # create
+    resp = client.post(
+        "/auth/app/qa",
+        json={"question": "¿Hacen envíos a Canarias?", "answer": "Sí, en 3-5 días laborables.", "tags": ["envios", "canarias"]},
+        cookies=cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    qa_id = resp.json()["id"]
+    assert resp.json()["tags"] == ["envios", "canarias"]
+    # info.txt now contains the FAQ block
+    content = info_path.read_text(encoding="utf-8")
+    assert "PREGUNTAS FRECUENTES (PANEL)" in content
+    assert "Canarias" in content
+
+    # patch
+    patched = client.patch(
+        f"/auth/app/qa/{qa_id}",
+        json={"answer": "Sí, 2-4 días.", "tags": ["envios"]},
+        cookies=cookies,
+    )
+    assert patched.status_code == 200
+    assert patched.json()["answer"] == "Sí, 2-4 días."
+    assert patched.json()["tags"] == ["envios"]
+    assert "2-4 días" in info_path.read_text(encoding="utf-8")
+
+    # list
+    listed = client.get("/auth/app/qa", cookies=cookies).json()
+    assert listed["total"] == 1
+
+    # delete
+    client.delete(f"/auth/app/qa/{qa_id}", cookies=cookies).status_code == 200
+    assert "PREGUNTAS FRECUENTES (PANEL)" not in info_path.read_text(encoding="utf-8")
+
+
+def test_app_knowledge_text_appended_to_info(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot KB")
+    info_path = Path(os.environ["VANTELIA_DATA_DIR"]) / cliente_id / "info.txt"
+    before = info_path.read_text(encoding="utf-8")
+
+    resp = client.post(
+        "/auth/app/knowledge/text",
+        json={"title": "Política de devoluciones", "content": "Aceptamos devoluciones hasta 30 días desde la compra."},
+        cookies=cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    after = info_path.read_text(encoding="utf-8")
+    assert "Política de devoluciones" in after
+    assert "AÑADIDO DESDE PANEL" in after
+    assert len(after) > len(before)
+
+    listed = client.get("/auth/app/knowledge", cookies=cookies).json()
+    assert listed["info_chars"] == len(after)
+    assert any(it["source"] == "text" for it in listed["items"])
+
+
+def test_app_knowledge_url_invokes_scraper(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot KB URL")
+    # _signup_and_wizard already patched run_onboarding; reuse the fake.
+    info_path = Path(os.environ["VANTELIA_DATA_DIR"]) / cliente_id / "info.txt"
+    before = info_path.read_text(encoding="utf-8")
+    resp = client.post(
+        "/auth/app/knowledge/url",
+        json={"url": "https://otra.example", "just_this_page": True, "replace": False},
+        cookies=cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    after = info_path.read_text(encoding="utf-8")
+    assert "Web: https://otra.example" in after
+    assert len(after) > len(before)
+
+
+def test_app_tune_get_and_post(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Tune")
+    initial = client.get("/auth/app/tune", cookies=cookies).json()
+    assert "gpt-4o-mini" in initial["available_models"]
+    assert 0.0 <= initial["temperature"] <= 2.0
+
+    updated = client.post(
+        "/auth/app/tune",
+        json={"prompt_extra": "Sé conciso.", "chat_model": "gpt-4o", "temperature": 0.7},
+        cookies=cookies,
+    )
+    assert updated.status_code == 200, updated.text
+    data = updated.json()
+    assert data["prompt_extra"] == "Sé conciso."
+    assert data["chat_model"] == "gpt-4o"
+    assert abs(data["temperature"] - 0.7) < 1e-6
+    # config.json reflects the change
+    cfg = api_module.CONFIG_CLIENTES[cliente_id]
+    assert cfg["chat_model"] == "gpt-4o"
+    assert abs(cfg["temperature"] - 0.7) < 1e-6
+
+    # invalid model is silently ignored (no crash)
+    silent = client.post(
+        "/auth/app/tune",
+        json={"chat_model": "fake-model-9000"},
+        cookies=cookies,
+    )
+    assert silent.status_code == 200
+    assert silent.json()["chat_model"] == "gpt-4o"  # unchanged
+
+
+def test_app_livechat_402_when_free_plan(client: TestClient, api_module, monkeypatch):
+    cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Free")
+    resp = client.get("/auth/app/livechat", cookies=cookies)
+    assert resp.status_code == 402
+    assert "pro" in resp.json()["detail"].lower()
+
+
+# ── Sem 5: Billing (Stripe + quota enforcement) ────────────────────────
+
+def test_app_billing_state_defaults_to_free_plan(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Billing")
+    resp = client.get("/auth/app/billing", cookies=cookies)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["subscription"]["plan"] == "free"
+    assert data["subscription"]["status"] == "active"
+    plan_slugs = [p["slug"] for p in data["plans"]]
+    assert plan_slugs == ["free", "starter", "pro", "business"]
+    free_plan = next(p for p in data["plans"] if p["slug"] == "free")
+    assert free_plan["is_current"] is True
+    assert data["portal_available"] is False
+
+
+def test_app_billing_checkout_503_when_stripe_not_configured(client: TestClient, api_module, monkeypatch):
+    cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Stripe")
+    monkeypatch.setattr(api_module, "STRIPE_SECRET_KEY", "")
+    resp = client.post(
+        "/auth/app/billing/checkout",
+        json={"plan": "pro", "billing_period": "monthly"},
+        cookies=cookies,
+    )
+    assert resp.status_code == 503
+
+
+def test_app_billing_checkout_400_for_free_plan(client: TestClient, api_module, monkeypatch):
+    cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot StripeFree")
+    monkeypatch.setattr(api_module, "STRIPE_SECRET_KEY", "sk_test")
+    resp = client.post(
+        "/auth/app/billing/checkout",
+        json={"plan": "free"},
+        cookies=cookies,
+    )
+    assert resp.status_code == 400
+
+
+def test_app_billing_checkout_creates_stripe_session(client: TestClient, api_module, monkeypatch):
+    cookies, _, email = _signup_and_wizard(client, api_module, monkeypatch, name="Bot StripeOK")
+    monkeypatch.setattr(api_module, "stripe", _FakeStripe)
+    monkeypatch.setattr(api_module, "STRIPE_SECRET_KEY", "sk_test_real")
+    # Plan needs a Stripe price id configured
+    api_module.SELF_SERVE_PLANS["pro"]["stripe_price_monthly"] = "price_test_pro_monthly"
+    try:
+        resp = client.post(
+            "/auth/app/billing/checkout",
+            json={"plan": "pro", "billing_period": "monthly"},
+            cookies=cookies,
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["checkout_url"].startswith("https://checkout.stripe.test/")
+        sent = _FakeStripeSessionApi.last_create_payload or {}
+        assert sent["mode"] == "subscription"
+        assert sent["line_items"][0]["price"] == "price_test_pro_monthly"
+        assert sent["metadata"]["source"] == "self_serve"
+        assert sent["metadata"]["plan"] == "pro"
+        assert sent["client_reference_id"].startswith("self_serve:usr_")
+    finally:
+        api_module.SELF_SERVE_PLANS["pro"]["stripe_price_monthly"] = ""
+
+
+def test_stripe_webhook_activates_self_serve_subscription(client: TestClient, api_module, monkeypatch):
+    cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot WebhookSS")
+    monkeypatch.setattr(api_module, "stripe", _FakeStripe)
+    monkeypatch.setattr(api_module, "STRIPE_SECRET_KEY", "sk_test_real")
+    # Look up the user id we just signed up.
+    state = client.get("/onboarding/state", cookies=cookies).json()
+    user_row = api_module._get_user_by_id(
+        api_module._get_user_by_email.__wrapped__(api_module, state["cliente_id"]) if False else None
+    ) if False else None
+    # Easier: lookup by cliente_id → owner
+    owner_id = api_module.db_get_client_owner(state["cliente_id"])
+    assert owner_id
+
+    payload = {
+        "type": "checkout.session.completed",
+        "data": {
+            "object": {
+                "id": "cs_test_selfserve_001",
+                "customer": "cus_selfserve_001",
+                "subscription": "sub_selfserve_001",
+                "client_reference_id": f"self_serve:{owner_id}",
+                "metadata": {
+                    "source": "self_serve",
+                    "user_id": owner_id,
+                    "plan": "pro",
+                    "billing_period": "monthly",
+                },
+            }
+        },
+    }
+    response = client.post("/webhooks/stripe", json=payload)
+    assert response.status_code == 200
+    assert response.json()["received"] is True
+
+    sub = api_module.db_get_subscription_for_user(owner_id)
+    assert sub is not None
+    assert sub["plan"] == "pro"
+    assert sub["status"] == "active"
+    assert sub["stripe_customer_id"] == "cus_selfserve_001"
+    assert sub["stripe_subscription_id"] == "sub_selfserve_001"
+    # Pro plan quota
+    assert sub["messages_quota"] == api_module.SELF_SERVE_PLANS["pro"]["messages_quota"]
+
+
+def test_chat_enforces_self_serve_quota(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Quota")
+    owner_id = api_module.db_get_client_owner(cliente_id)
+    sub = api_module.db_get_subscription_for_user(owner_id)
+    # Force the free quota to 0 so the very first /chat call is blocked.
+    with api_module._get_db_connection() as conn:
+        conn.execute(
+            "UPDATE subscriptions SET messages_quota = 1, messages_used_period = 1 WHERE id = ?",
+            (sub["id"],),
+        )
+        conn.commit()
+    # Add origin to allowed_origins so /chat passes CORS check.
+    api_module.CONFIG_CLIENTES[cliente_id].setdefault("allowed_origins", []).append("http://testserver")
+    resp = client.post(
+        "/chat",
+        json={"cliente_id": cliente_id, "session_id": "s_quota_test1234567", "mensaje": "hola"},
+        headers={"Origin": "http://testserver"},
+    )
+    assert resp.status_code == 402
+    assert "limite" in resp.json()["detail"].lower() or "límite" in resp.json()["detail"].lower()
+
+
+# ── Sem 6: Bridge captacion (claim) + migracion legacy ─────────────────
+
+def _create_demo_tenant_for_test(api_module, suffix: str = "claimme") -> str:
+    """Provision a demo_auto_* cliente in CONFIG_CLIENTES + demo_tenants.json,
+    matching what /demo/generate would have created at outreach time. Returns
+    the cliente_id."""
+    cliente_id = f"{api_module.DEMO_TENANT_PREFIX}{suffix}_{uuid.uuid4().hex[:6]}"
+    # Add a minimal normalized config so _get_client_config works.
+    normalized = api_module._normalize_client_config(cliente_id, {
+        "nombre": f"Demo {suffix}",
+        "color": "#00b1d9",
+        "icono": "AI",
+        "bienvenida": "Hola, demo.",
+        "allowed_origins": [],
+        "contacto": {"email": "lead@test.example"},
+        "booking": {"enabled": False},
+        "whatsapp": {"enabled": False},
+    })
+    with api_module.state_lock:
+        next_configs = dict(api_module.CONFIG_CLIENTES)
+        next_configs[cliente_id] = normalized
+        api_module._update_runtime_configs(next_configs)
+    api_module._persist_configs_to_disk(next_configs)
+    api_module._register_demo_tenant(cliente_id)
+    # Ensure data dir exists
+    (Path(os.environ["VANTELIA_DATA_DIR"]) / cliente_id).mkdir(parents=True, exist_ok=True)
+    (Path(os.environ["VANTELIA_DATA_DIR"]) / cliente_id / "info.txt").write_text("demo", encoding="utf-8")
+    return cliente_id
+
+
+def test_signup_claim_transfers_ownership_of_demo_tenant(client: TestClient, api_module):
+    cliente_id = _create_demo_tenant_for_test(api_module, "claim1")
+    assert api_module.db_get_client_owner(cliente_id) == ""
+    assert cliente_id in api_module._load_demo_registry()
+
+    email = f"claimer_{uuid.uuid4().hex[:8]}@example.com"
+    resp = client.post(
+        "/auth/signup",
+        json={
+            "email": email,
+            "password": "secret-pass-123",
+            "display_name": "Reclamante",
+            "claim": cliente_id,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["redirect_to"] == "/app"  # claim succeeded, skip wizard
+    user = api_module._get_user_by_email(email)
+    assert user["cliente_id"] == cliente_id
+    assert api_module.db_get_client_owner(cliente_id) == user["id"]
+    # TTL removed
+    assert cliente_id not in api_module._load_demo_registry()
+    # Free subscription seeded
+    sub = api_module.db_get_subscription_for_user(user["id"])
+    assert sub is not None
+    assert sub["plan"] == "free"
+
+
+def test_signup_claim_silently_ignores_invalid_token(client: TestClient, api_module):
+    # Claiming a cliente that does not exist must not block signup; user lands
+    # in onboarding instead.
+    email = f"badclaim_{uuid.uuid4().hex[:8]}@example.com"
+    resp = client.post(
+        "/auth/signup",
+        json={
+            "email": email,
+            "password": "secret-pass-123",
+            "display_name": "Reclamante Malo",
+            "claim": "demo_auto_no_existe_xyz999",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["redirect_to"] == "/onboarding"
+    user = api_module._get_user_by_email(email)
+    assert user["cliente_id"] == ""
+
+
+def test_claim_rejects_non_demo_cliente_publicly(client: TestClient, api_module):
+    # 'demo' is a legacy cliente, not a demo_auto_*; public claim must refuse.
+    email = f"legacyclaim_{uuid.uuid4().hex[:8]}@example.com"
+    resp = client.post(
+        "/auth/signup",
+        json={
+            "email": email,
+            "password": "secret-pass-123",
+            "display_name": "X",
+            "claim": "demo",
+        },
+    )
+    assert resp.status_code == 200  # signup succeeds
+    assert resp.json()["redirect_to"] == "/onboarding"  # claim silently rejected
+    user = api_module._get_user_by_email(email)
+    assert user["cliente_id"] == ""
+    assert api_module.db_get_client_owner("demo") == ""
+
+
+def test_claim_rejects_already_owned_demo(client: TestClient, api_module):
+    cliente_id = _create_demo_tenant_for_test(api_module, "owned1")
+    first_email = f"first_{uuid.uuid4().hex[:8]}@example.com"
+    first = client.post(
+        "/auth/signup",
+        json={"email": first_email, "password": "secret-pass-123", "display_name": "First", "claim": cliente_id},
+    )
+    assert first.status_code == 200
+    assert first.json()["redirect_to"] == "/app"
+
+    # Second user tries to claim the same demo → claim rejected, lands in onboarding.
+    second_email = f"second_{uuid.uuid4().hex[:8]}@example.com"
+    second = client.post(
+        "/auth/signup",
+        json={"email": second_email, "password": "secret-pass-123", "display_name": "Second", "claim": cliente_id},
+    )
+    assert second.status_code == 200
+    assert second.json()["redirect_to"] == "/onboarding"
+    second_user = api_module._get_user_by_email(second_email)
+    assert second_user["cliente_id"] == ""
+
+
+def test_demo_page_shows_claim_banner_for_demo_auto(client: TestClient, api_module):
+    cliente_id = _create_demo_tenant_for_test(api_module, "banner1")
+    resp = client.get(
+        f"/demo/{cliente_id}",
+        headers={"Origin": "http://testserver"},
+    )
+    assert resp.status_code == 200
+    assert "Reclamar este bot" in resp.text
+    assert f"claim={cliente_id}" in resp.text
+
+
+def test_demo_page_no_claim_banner_for_legacy_client(client: TestClient, api_module):
+    resp = client.get("/demo/demo", headers={"Origin": "http://testserver"})
+    assert resp.status_code == 200
+    assert "Reclamar este bot" not in resp.text
+
+
+def test_admin_assign_owner_links_legacy_cliente(client: TestClient, api_module):
+    # Create a fake legacy cliente
+    cliente_id = "legacy_test_" + uuid.uuid4().hex[:6]
+    normalized = api_module._normalize_client_config(cliente_id, {
+        "nombre": "Legacy Test",
+        "color": "#00b1d9",
+        "icono": "LT",
+        "bienvenida": "Hola legacy.",
+        "allowed_origins": [],
+        "booking": {"enabled": False},
+        "whatsapp": {"enabled": False},
+    })
+    with api_module.state_lock:
+        next_configs = dict(api_module.CONFIG_CLIENTES)
+        next_configs[cliente_id] = normalized
+        api_module._update_runtime_configs(next_configs)
+    api_module._persist_configs_to_disk(next_configs)
+    # Create a target user
+    target_email = f"owner_{uuid.uuid4().hex[:8]}@example.com"
+    api_module._create_user_self_serve(
+        email=target_email,
+        password="secret-pass-123",
+        display_name="Legacy Owner",
+    )
+
+    # Without admin token → 401
+    resp_no_auth = client.post(
+        f"/admin/clientes/{cliente_id}/assign-owner",
+        json={"email": target_email, "plan": "free"},
+    )
+    assert resp_no_auth.status_code == 401
+
+    # With admin token → 200
+    resp = client.post(
+        f"/admin/clientes/{cliente_id}/assign-owner",
+        json={"email": target_email, "plan": "free"},
+        headers={"Authorization": "Bearer test-admin-token"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert api_module.db_get_client_owner(cliente_id)
+    user = api_module._get_user_by_email(target_email)
+    assert user["cliente_id"] == cliente_id
+    sub = api_module.db_get_subscription_for_user(user["id"])
+    assert sub is not None
+    assert sub["plan"] == "free"
+
+
+def test_admin_assign_owner_404_for_missing_user(client: TestClient, api_module):
+    resp = client.post(
+        "/admin/clientes/demo/assign-owner",
+        json={"email": "no.existe@example.com", "plan": "free"},
+        headers={"Authorization": "Bearer test-admin-token"},
+    )
+    assert resp.status_code == 404
+
+
+def test_self_serve_period_reset_on_month_boundary(api_module):
+    # Manually craft a subscription stuck on an old period; helper should reset usage.
+    user_id = api_module._create_user_self_serve(
+        email=f"period_{uuid.uuid4().hex[:8]}@example.com",
+        password="secret-pass-123",
+        display_name="Period Test",
+    )["id"]
+    sub = api_module.db_ensure_free_subscription(user_id)
+    # Backdate period_start by setting it to last year and adding usage.
+    with api_module._get_db_connection() as conn:
+        conn.execute(
+            "UPDATE subscriptions SET current_period_start = ?, messages_used_period = 30 WHERE id = ?",
+            ("2024-01-01T00:00:00+00:00", sub["id"]),
+        )
+        conn.commit()
+        stale = conn.execute("SELECT * FROM subscriptions WHERE id = ?", (sub["id"],)).fetchone()
+    refreshed = api_module._maybe_reset_subscription_period(stale)
+    assert refreshed["messages_used_period"] == 0
+    assert refreshed["current_period_start"] >= api_module._subscription_period_start_now()[:7]

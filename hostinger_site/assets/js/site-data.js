@@ -1,42 +1,43 @@
 window.VANTELIA_DATA = {
   siteName: "Vantelia",
   tagLine:
-    "Consultoria y ejecucion de marketing, SEO, automatizacion e inteligencia artificial para empresas que necesitan demanda cualificada, conversion y un sistema comercial mas solido.",
+    "Crea tu asistente IA en 2 minutos. Lee tu web, aprende tus servicios y atiende a tus clientes 24/7 con un widget embebible. Gratis para empezar, sin tarjeta.",
   nav: [
     { label: "Inicio",     href: "/",            page: "home"      },
     { label: "Servicios",  href: "/servicios/",  page: ""          },
+    { label: "Planes",     href: "/planes/",     page: ""          },
     { label: "Plataforma", href: "/plataforma/", page: ""          },
+    { label: "Demo",       href: "/demo/",       page: ""          },
     { label: "Resultados", href: "/resultados/", page: ""          },
-    { label: "Nosotros",   href: "/nosotros/",   page: ""          },
     { label: "FAQ",        href: "/faq/",        page: ""          },
     { label: "Consultas",  href: "/consultas/",  page: "consultas" }
   ],
   posts: [],
   faqs: [
     {
-      question: "Que incluye una auditoria inicial con Vantelia?",
+      question: "Como funciona el plan gratis?",
       answer:
-        "Revisamos captacion, conversion, automatizacion, contenidos, analitica y fricciones operativas para detectar oportunidades accionables, no solo recomendaciones generales."
+        "Te registras con email o Google, completas el wizard de 5 pasos (toma 2 minutos) y tu asistente IA queda activo con 50 mensajes/mes para siempre. Sin tarjeta y sin trial que caduca."
     },
     {
-      question: "Trabajais solo la parte de IA o tambien marketing digital completo?",
+      question: "Como aprende el asistente sobre mi negocio?",
       answer:
-        "Trabajamos ambas capas. La IA es una palanca, pero la conectamos con SEO, paid media, CRO, contenido, CRM y seguimiento comercial para que genere impacto real."
+        "Le indicas la URL de tu web y Vantelia analiza hasta 12 paginas, extrae servicios, precios y FAQs y entrena el RAG automaticamente. Puedes refinar el conocimiento subiendo documentos o anadiendo Q&A manuales en el panel."
     },
     {
-      question: "Podeis colaborar con equipos internos o agencias ya existentes?",
+      question: "En que tipo de web funciona el widget?",
       answer:
-        "Si. Podemos actuar como partner estrategico, como capa de ejecucion especializada o como apoyo a equipos internos que necesitan acelerar una parte concreta del sistema."
+        "En cualquiera. Se instala con una linea de script antes de </body> y funciona en WordPress, Webflow, Shopify, Wix, Framer o sitios hechos a medida. Tambien puedes compartir un enlace publico sin instalar nada."
     },
     {
-      question: "Cuanto tarda en verse valor en un proyecto?",
+      question: "Que diferencia hay entre Free, Starter, Pro y Business?",
       answer:
-        "Depende del punto de partida, pero normalmente priorizamos quick wins de conversion, seguimiento o automatizacion desde las primeras fases para que el proyecto no arranque a ciegas."
+        "Free sirve para probar el asistente con 50 mensajes/mes. Starter (19€/mes) anade documentos, branding y exportacion de leads. Pro (49€/mes) suma reservas, Live Chat humano, Q&A y Tune AI. Business (149€/mes) anade WhatsApp Business e integraciones."
     },
     {
-      question: "Y si solo necesito SEO, automatizacion o una auditoria puntual?",
+      question: "Hay permanencia?",
       answer:
-        "Tambien encaja. Podemos empezar por una necesidad muy concreta y, si tiene sentido, escalar despues hacia un sistema mas completo."
+        "No. Todos los planes son mes a mes y puedes cancelar desde el portal de Stripe en cualquier momento. El plan Free no expira nunca."
     }
   ]
 };

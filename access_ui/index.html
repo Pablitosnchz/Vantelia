@@ -315,6 +315,47 @@
     .support-note { text-align: center; font-size: 0.77rem; color: var(--soft-2); margin-top: 6px; }
     .support-note a { color: var(--soft); text-decoration: underline; text-underline-offset: 2px; }
 
+    /* ── Google button + signup extras (Vantelia 2.0) ── */
+    .btn-google {
+      width: 100%;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      padding: 12px 16px;
+      background: #ffffff; color: #1f1f1f;
+      border: 1px solid rgba(255,255,255,0.85);
+      border-radius: 12px;
+      font-family: var(--font); font-size: 0.95rem; font-weight: 600;
+      cursor: pointer; transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
+    }
+    .btn-google:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,209,255,0.18); }
+    .btn-google:active { transform: translateY(0); }
+    .btn-google:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+
+    .divider-or {
+      display: flex; align-items: center; gap: 10px;
+      color: var(--soft-2); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em;
+      margin: 18px 0 14px;
+    }
+    .divider-or::before, .divider-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+    .switch-mode {
+      margin-top: 18px; text-align: center;
+      color: var(--soft); font-size: 0.9rem;
+    }
+    .link-btn {
+      background: none; border: 0; padding: 0;
+      color: var(--accent); font-weight: 600; cursor: pointer; font-size: inherit;
+      margin-left: 4px;
+    }
+    .link-btn:hover { text-decoration: underline; }
+
+    .check-optin { margin: 6px 0 14px; }
+
+    .legal-note {
+      margin-top: 12px; font-size: 0.78rem; color: var(--soft-2); text-align: center; line-height: 1.5;
+    }
+    .legal-note a { color: var(--accent); text-decoration: none; }
+    .legal-note a:hover { text-decoration: underline; }
+
     /* ── Responsive ── */
     @media (max-width: 480px) {
       .login-card { padding: 32px 22px 26px; }
@@ -350,6 +391,18 @@
 
     <!-- ─── VISTA LOGIN ─── -->
     <div id="loginView" class="view active" role="tabpanel">
+
+      <button class="btn-google" id="googleLoginBtn" type="button">
+        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+          <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z"/>
+          <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z"/>
+          <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.5-5.2l-6.2-5.2c-2 1.4-4.5 2.4-7.3 2.4-5.2 0-9.6-3.3-11.2-8l-6.5 5C9.5 39.5 16.2 44 24 44z"/>
+          <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4 5.6l6.2 5.2C40 35.3 44 30.1 44 24c0-1.2-.1-2.3-.4-3.5z"/>
+        </svg>
+        Continuar con Google
+      </button>
+
+      <div class="divider-or"><span>o con tu email</span></div>
 
       <div class="form-group">
         <label class="f-label" for="email">Email</label>
@@ -392,6 +445,71 @@
 
       <div class="status-area">
         <div class="status-msg" id="loginStatus" aria-live="polite"></div>
+      </div>
+
+      <div class="switch-mode">
+        ¿No tienes cuenta?
+        <button class="link-btn" id="showSignupBtn" type="button">Crear cuenta gratis</button>
+      </div>
+    </div>
+
+    <!-- ─── VISTA SIGNUP ─── -->
+    <div id="signupView" class="view" role="tabpanel">
+
+      <button class="btn-google" id="googleSignupBtn" type="button">
+        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+          <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z"/>
+          <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z"/>
+          <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.5-5.2l-6.2-5.2c-2 1.4-4.5 2.4-7.3 2.4-5.2 0-9.6-3.3-11.2-8l-6.5 5C9.5 39.5 16.2 44 24 44z"/>
+          <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4 5.6l6.2 5.2C40 35.3 44 30.1 44 24c0-1.2-.1-2.3-.4-3.5z"/>
+        </svg>
+        Crear cuenta con Google
+      </button>
+
+      <div class="divider-or"><span>o con tu email</span></div>
+
+      <div class="form-group">
+        <label class="f-label" for="signupName">Tu nombre</label>
+        <input class="f-input" type="text" id="signupName"
+          placeholder="Como te llamamos" autocomplete="name" maxlength="120" />
+      </div>
+
+      <div class="form-group">
+        <label class="f-label" for="signupEmail">Email</label>
+        <input class="f-input" type="email" id="signupEmail"
+          placeholder="tu@empresa.com" autocomplete="email" />
+      </div>
+
+      <div class="form-group">
+        <label class="f-label" for="signupPassword">Contraseña</label>
+        <input class="f-input" type="password" id="signupPassword"
+          placeholder="Mínimo 8 caracteres" autocomplete="new-password" minlength="8" />
+        <span class="pwd-hint">Mínimo 8 caracteres</span>
+      </div>
+
+      <label class="check-label check-optin">
+        <input type="checkbox" id="signupOptin" />
+        <span class="check-box"></span>
+        Quiero recibir consejos sobre IA para mi negocio (opcional).
+      </label>
+
+      <button class="btn-primary" id="signupBtn" type="button">
+        <span class="btn-text">Crear cuenta gratis</span>
+        <span class="btn-spinner" aria-hidden="true"></span>
+      </button>
+
+      <div class="status-area">
+        <div class="status-msg" id="signupStatus" aria-live="polite"></div>
+      </div>
+
+      <p class="legal-note">
+        Al crear una cuenta aceptas los <a href="/legal/terminos" target="_blank" rel="noreferrer">Términos</a>
+        y la <a href="/legal/privacidad" target="_blank" rel="noreferrer">Política de privacidad</a>.
+      </p>
+
+      <div class="switch-mode">
+        ¿Ya tienes cuenta?
+        <button class="link-btn" id="showLoginBtn" type="button">Iniciar sesión</button>
       </div>
     </div>
 
@@ -483,12 +601,18 @@
 const urlParams  = new URLSearchParams(window.location.search);
 
 const state = {
-  view:                   urlParams.get('reset_token') ? 'reset' : 'login',
+  view:                   urlParams.get('reset_token')
+                            ? 'reset'
+                            : (urlParams.get('mode') === 'signup' || urlParams.get('claim') ? 'signup' : 'login'),
   resetToken:             (urlParams.get('reset_token') || '').trim(),
+  nextUrl:                (urlParams.get('next') || '').trim(),
+  claim:                  (urlParams.get('claim') || '').trim(),
   role:                   'cliente',
   forgotCooldownSeconds:  0,
   forgotCooldownTimer:    null,
 };
+
+const googleError = urlParams.get('google_error');
 
 const el = {
   cardTitle:            document.getElementById('cardTitle'),
@@ -497,6 +621,17 @@ const el = {
   tabCliente:           document.getElementById('tabCliente'),
   tabAdmin:             document.getElementById('tabAdmin'),
   loginView:            document.getElementById('loginView'),
+  signupView:           document.getElementById('signupView'),
+  signupName:           document.getElementById('signupName'),
+  signupEmail:          document.getElementById('signupEmail'),
+  signupPassword:       document.getElementById('signupPassword'),
+  signupOptin:          document.getElementById('signupOptin'),
+  signupBtn:            document.getElementById('signupBtn'),
+  signupStatus:         document.getElementById('signupStatus'),
+  showSignupBtn:        document.getElementById('showSignupBtn'),
+  showLoginBtn:         document.getElementById('showLoginBtn'),
+  googleLoginBtn:       document.getElementById('googleLoginBtn'),
+  googleSignupBtn:      document.getElementById('googleSignupBtn'),
   forgotView:           document.getElementById('forgotView'),
   resetView:            document.getElementById('resetView'),
   email:                document.getElementById('email'),
@@ -578,6 +713,7 @@ el.tabAdmin.addEventListener('click',   () => setRole('admin'));
 // ── Gestión de vistas ───────────────────────────────────────────────
 const viewConfig = {
   login:  { el: el.loginView,  title: 'Acceso al portal',      subtitle: null,                                                           tabs: true  },
+  signup: { el: el.signupView, title: 'Crea tu cuenta',        subtitle: 'Empieza gratis. 50 mensajes/mes sin tarjeta.',                  tabs: false },
   forgot: { el: el.forgotView, title: 'Recuperar contraseña',  subtitle: 'Introduce tu correo y te enviamos un enlace seguro.',           tabs: false },
   reset:  { el: el.resetView,  title: 'Nueva contraseña',      subtitle: 'Define tu nueva contraseña para recuperar el acceso.',          tabs: false },
 };
@@ -642,11 +778,47 @@ async function login() {
       body: JSON.stringify({ email: el.email.value.trim(), password: el.password.value }),
     });
     el.password.value = '';
-    window.location.href = data.redirect_to || '/portal';
+    window.location.href = state.nextUrl || data.redirect_to || '/portal';
   } catch (err) {
     setStatus(el.loginStatus, err.message, 'error');
     setLoading(el.loginBtn, false);
   }
+}
+
+async function signup() {
+  const name  = el.signupName.value.trim();
+  const email = el.signupEmail.value.trim();
+  const pw    = el.signupPassword.value;
+  if (!name)        { setStatus(el.signupStatus, 'Escribe tu nombre.', 'error'); return; }
+  if (!email)       { setStatus(el.signupStatus, 'Email requerido.', 'error'); return; }
+  if (!pw || pw.length < 8) { setStatus(el.signupStatus, 'Contraseña mínima 8 caracteres.', 'error'); return; }
+  setStatus(el.signupStatus, 'Creando cuenta...', 'info');
+  setLoading(el.signupBtn, true);
+  try {
+    const payload = {
+      email,
+      password: pw,
+      display_name: name,
+      marketing_optin: !!el.signupOptin.checked,
+    };
+    if (state.claim) payload.claim = state.claim;
+    const data = await api('/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    el.signupPassword.value = '';
+    window.location.href = state.nextUrl || data.redirect_to || '/onboarding';
+  } catch (err) {
+    setStatus(el.signupStatus, err.message, 'error');
+    setLoading(el.signupBtn, false);
+  }
+}
+
+function startGoogle(intent) {
+  const next = state.nextUrl ? `&next=${encodeURIComponent(state.nextUrl)}` : '';
+  const claim = state.claim ? `&claim=${encodeURIComponent(state.claim)}` : '';
+  window.location.href = `/auth/google/start?intent=${encodeURIComponent(intent || 'login')}${next}${claim}`;
 }
 
 async function sendReset() {
@@ -698,6 +870,11 @@ async function submitNewPassword() {
 
 // ── Event listeners ─────────────────────────────────────────────────
 el.loginBtn.addEventListener('click',      login);
+el.signupBtn.addEventListener('click',     signup);
+el.googleLoginBtn.addEventListener('click', () => startGoogle('login'));
+el.googleSignupBtn.addEventListener('click',() => startGoogle('signup'));
+el.showSignupBtn.addEventListener('click',  () => { setView('signup'); setStatus(el.signupStatus, '', null); });
+el.showLoginBtn.addEventListener('click',   () => { setView('login'); setStatus(el.loginStatus, '', null); });
 el.showForgotBtn.addEventListener('click', () => { setView('forgot'); setForgotFeedback(''); setStatus(el.forgotStatus, '', null); });
 el.backToLoginBtn.addEventListener('click',() => setView('login'));
 el.forgotBtn.addEventListener('click',     () => sendReset().catch(err => setForgotFeedback(err.message, 'error')));
@@ -707,6 +884,9 @@ el.resetBackBtn.addEventListener('click',  () => { state.resetToken = ''; window
 // Atajos de teclado (Enter)
 el.email.addEventListener('keydown',                e => { if (e.key === 'Enter') login(); });
 el.password.addEventListener('keydown',             e => { if (e.key === 'Enter') login(); });
+el.signupName.addEventListener('keydown',           e => { if (e.key === 'Enter') signup(); });
+el.signupEmail.addEventListener('keydown',          e => { if (e.key === 'Enter') signup(); });
+el.signupPassword.addEventListener('keydown',       e => { if (e.key === 'Enter') signup(); });
 el.forgotEmail.addEventListener('keydown',          e => { if (e.key === 'Enter') sendReset(); });
 el.resetPasswordConfirm.addEventListener('keydown', e => { if (e.key === 'Enter') submitNewPassword().catch(err => setStatus(el.resetStatus, err.message, 'error')); });
 
@@ -715,6 +895,13 @@ setView(state.view);
 setRole('cliente');
 renderForgotBtn();
 if (state.view === 'reset') setStatus(el.resetStatus, 'Define tu nueva contraseña para recuperar el acceso.', 'info');
+if (googleError) {
+  const target = state.view === 'signup' ? el.signupStatus : el.loginStatus;
+  const msg = googleError === 'signup_disabled'
+    ? 'El registro de nuevas cuentas esta deshabilitado.'
+    : 'No se pudo iniciar sesión con Google. Inténtalo de nuevo.';
+  setStatus(target, msg, 'error');
+}
 </script>
 
 </body>

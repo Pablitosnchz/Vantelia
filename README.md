@@ -19,15 +19,12 @@ Sistema SaaS de chatbox embebible multiempresa pensado para instalarlo en webs c
 ## Instalacion
 
 ```powershell
-C:\Users\pabli\AppData\Local\Programs\Python\Python311\python.exe -m venv .venv311
-.venv311\Scripts\Activate.ps1
-python -V
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 npm install
 copy .env.example .env
 ```
-
-El entorno local debe usar Python 3.11 o superior, igual que el contenedor Docker (`python:3.11-slim`). Si el launcher `py -3.11` funciona en tu equipo, tambien puedes usarlo en lugar de la ruta completa.
 
 Revisa despues:
 
@@ -122,7 +119,6 @@ Manual recomendado para operacion diaria:
 
 - [Resumen de Funcionalidades](/e:/Vantelia/docs/Funcionalidades.md:1)
 - [Manual de Administracion](/e:/Vantelia/docs/MANUAL_ADMIN.md:1)
-- [Manual de Google Calendar](/e:/Vantelia/docs/MANUAL_GOOGLE_CALENDAR.md:1)
 - [Operacion minima antes de vender agresivamente](/e:/Vantelia/docs/OPERACION_PRODUCCION.md:1)
 
 Comprobaciones minimas antes de desplegar:

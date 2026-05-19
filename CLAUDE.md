@@ -396,6 +396,66 @@ python scripts/outreach_campaign.py stats
 python scripts/outreach_discover.py --sector "clinica dental" --ciudad "Torrejon" --max 30 --output outreach/dental.csv
 ```
 
+## Captacion Instagram
+
+Modulo paralelo a outreach por email. Envio en modo HIBRIDO COMPLIANT por defecto: NO se automatiza el envio. El sistema scrapea perfiles publicos, genera drafts de DM personalizados por prospect+stage y muestra una cola en el panel admin con boton "Enviar DM" que abre Instagram via `https://ig.me/m/{username}?text=...` y permite enviar manual con 1 clic. Tras volver al panel se marca como enviado.
+
+Modo agresivo (Playwright + sesion IG) bajo flag `IG_AUTOSEND_ENABLED=false`. Activar implica violar ToS Meta y arriesgar bloqueo de la cuenta — usar cuenta secundaria.
+
+### Componentes
+
+- `scripts/instagram_templates.py`: copy por stage (cold/fu1/fu2/breakup) con variantes A/B estables, niche hook (dental, estetica, fisio, gimnasio, restaurante, hotel, etc.), CTA a `/d/{demo_slug}` reusando logica de demo.
+- `scripts/instagram_discover.py`: Graph API (Business Discovery) si hay `IG_GRAPH_TOKEN`+`IG_BUSINESS_ACCOUNT_ID`. Fallback scrape publico read-only de `instagram.com/{user}/` con rate limit 1 req/2s. Sin login.
+- `scripts/instagram_campaign.py`: CLI espejo de outreach_campaign (import, discover, preview, draft, send, followup, suppress, stats). Schema en `storage/instagram/instagram.db`.
+- `scripts/instagram_replies.py`: poller Graph API para mensajes entrantes de cuenta business propia. Marca prospects como `replied`.
+
+### Endpoints admin (Bearer ADMIN_API_TOKEN o sesion admin)
+
+- `GET    /admin/instagram/stats`
+- `GET    /admin/instagram/prospects` (filtros q, status, niche, city, source, page)
+- `GET    /admin/instagram/prospects/{username}` (timeline)
+- `POST   /admin/instagram/prospects`, `PATCH /admin/instagram/prospects/{username}`, `DELETE /admin/instagram/prospects/{username}`
+- `POST   /admin/instagram/import` (CSV crudo), `GET /admin/instagram/export.csv`
+- `POST   /admin/instagram/discover` (background job), `GET /admin/instagram/jobs`, `GET /admin/instagram/jobs/{id}`
+- `POST   /admin/instagram/draft` (genera N drafts por stage)
+- `GET    /admin/instagram/drafts` (cola pendiente con `deep_link` ig.me ya construido)
+- `PATCH  /admin/instagram/drafts/{id}` (editar texto antes de enviar)
+- `POST   /admin/instagram/drafts/{id}/mark-sent`, `POST /admin/instagram/drafts/{id}/skip`
+- `POST   /admin/instagram/send` (412 si `IG_AUTOSEND_ENABLED=false`; opt-in Playwright)
+- `POST   /admin/instagram/suppress`, `DELETE /admin/instagram/suppress/{username}`, `GET /admin/instagram/suppressions`
+- `GET    /admin/instagram/templates`, `PUT /admin/instagram/templates` (overrides por stage)
+- `GET    /admin/instagram/hot-leads`, `GET /admin/instagram/ab-stats?stage=cold&days=30`
+- `GET/PUT /admin/instagram/autopilot-config`, `POST /admin/instagram/autopilot-tick`
+- `POST   /admin/instagram/replies` (marcar respondido manual), `POST /admin/instagram/replies/poll`
+
+### UI
+
+Tab "Instagram" en sidebar admin. Sub-tabs: Dashboard, Drafts (cola 1-clic), Prospects, Discovery, Plantillas, Autopiloto, Bajas.
+
+Drafts es el sub-tab clave: card por prospect con avatar, @username, bio, niche, score, textarea editable y boton "Enviar DM" que abre ig.me en nueva pestana. Al volver al panel, confirm dialog y POST mark-sent.
+
+### Comandos CLI
+
+```powershell
+python scripts/instagram_campaign.py discover --usernames cuenta1,cuenta2 --niche "clinica dental" --city "Madrid"
+python scripts/instagram_campaign.py preview --stage cold --limit 3
+python scripts/instagram_campaign.py draft --stage cold --max 20
+python scripts/instagram_campaign.py followup --stage fu1 --after-days 5 --send
+python scripts/instagram_campaign.py suppress --username @cuenta --reason BAJA
+python scripts/instagram_campaign.py stats
+```
+
+### Variables .env clave
+
+`IG_DB_PATH`, `IG_GRAPH_TOKEN`, `IG_BUSINESS_ACCOUNT_ID`, `IG_AUTOSEND_ENABLED`, `IG_AUTONOMOUS_ENABLED`, `IG_AUTONOMOUS_TICK_MINUTES`, `IG_AUTONOMOUS_DISCOVERY_HOURS`, `IG_RESPECT_WINDOW`, `IG_START_HOUR`, `IG_END_HOUR`, `IG_SKIP_WEEKEND`, `IG_PUBLIC_RATE_LIMIT_SEC`, `IG_REPLIES_INTERVAL_MINUTES`.
+
+### Compliance
+
+- Scrape publico solo lee bio/og:description, sin login, rate-limited.
+- Graph API requiere cuenta business propia y permisos formales Meta.
+- Listas de supresion honradas en discovery, drafts y autopilot.
+- Sin firma comercial estilo email en los DMs (rapido = spam en IG). Solo opener + hook + link demo.
+
 ## Tests actuales
 
 `tests/test_api_smoke.py` cubre:

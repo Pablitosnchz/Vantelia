@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>Crea tu asistente · Vantelia</title>
+  <link rel="icon" type="image/png" href="/brand-assets/favicon.png" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+    :root {
+      color-scheme: dark;
+      --bg:          #0B132B;
+      --panel:       #11203a;
+      --panel-2:     #142a4d;
+      --text:        #F0F4F8;
+      --soft:        #8fa3b4;
+      --soft-2:      #637c8e;
+      --line:        rgba(255,255,255,0.08);
+      --line-strong: rgba(255,255,255,0.18);
+      --accent:      #00D1FF;
+      --accent-2:    #00F5D4;
+      --accent-soft: rgba(0,209,255,0.10);
+      --success:     #00F5D4;
+      --danger:      #ff7b86;
+      --danger-soft: rgba(255,123,134,0.12);
+      --warning:     #ffc857;
+      --font:        'Inter', 'Segoe UI', sans-serif;
+      --font-title:  'Space Grotesk', 'Segoe UI', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 32px 16px 64px;
+      background:
+        radial-gradient(ellipse at 12% 10%, rgba(0,209,255,0.08), transparent 35%),
+        radial-gradient(ellipse at 88% 80%, rgba(0,245,212,0.05), transparent 32%),
+        linear-gradient(160deg, #0e1b3e 0%, #0B132B 52%, #07101f 100%);
+    }
+    .bg-grid {
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(0,209,255,0.020) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,209,255,0.020) 1px, transparent 1px);
+      background-size: 52px 52px;
+      mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 15%, transparent 100%);
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ── Topbar ── */
+    .topbar {
+      position: relative; z-index: 2;
+      max-width: 920px; margin: 0 auto 28px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand img { height: 28px; }
+    .brand strong { font-family: var(--font-title); font-size: 1.05rem; letter-spacing: .02em; }
+    .user-chip { display: flex; align-items: center; gap: 10px; color: var(--soft); font-size: 0.88rem; }
+    .user-chip .who { color: var(--text); font-weight: 600; }
+    .btn-logout {
+      background: transparent; border: 1px solid var(--line-strong); color: var(--soft);
+      padding: 6px 12px; border-radius: 10px; cursor: pointer; font-size: 0.82rem;
+    }
+    .btn-logout:hover { color: var(--text); border-color: var(--accent); }
+
+    /* ── Stepper ── */
+    .stepper {
+      position: relative; z-index: 2;
+      max-width: 920px; margin: 0 auto 24px;
+      display: flex; align-items: center; justify-content: space-between; gap: 4px;
+    }
+    .step-item {
+      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+      position: relative;
+    }
+    .step-circle {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--panel); border: 1.5px solid var(--line-strong);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.95rem; color: var(--soft);
+      transition: all .25s ease;
+    }
+    .step-item.active .step-circle {
+      background: var(--accent); color: #0B132B; border-color: var(--accent);
+      box-shadow: 0 0 0 6px rgba(0,209,255,0.15);
+    }
+    .step-item.done .step-circle {
+      background: var(--accent-2); color: #0B132B; border-color: var(--accent-2);
+    }
+    .step-item.done .step-circle::after { content: '✓'; font-size: 1rem; }
+    .step-item.done .step-circle .num { display: none; }
+    .step-label {
+      font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--soft-2);
+      font-weight: 600;
+    }
+    .step-item.active .step-label { color: var(--accent); }
+    .step-item.done .step-label { color: var(--accent-2); }
+    .step-line {
+      position: absolute; top: 18px; left: 50%; right: -50%;
+      height: 2px; background: var(--line-strong); z-index: -1;
+    }
+    .step-item:last-child .step-line { display: none; }
+    .step-item.done + .step-item .step-line,
+    .step-item.done .step-line { background: var(--accent-2); }
+
+    /* ── Card principal ── */
+    .wiz-card {
+      position: relative; z-index: 2;
+      max-width: 760px; margin: 0 auto;
+      background: rgba(17, 32, 58, 0.65);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 40px 44px 36px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+    }
+    .wiz-icon {
+      width: 64px; height: 64px; border-radius: 16px;
+      margin: 0 auto 18px;
+      background: linear-gradient(135deg, var(--accent), #1F6FEB);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 12px 28px rgba(0,209,255,0.35);
+    }
+    .wiz-icon svg { width: 32px; height: 32px; color: #0B132B; }
+    .wiz-title {
+      font-family: var(--font-title);
+      font-size: 1.6rem; text-align: center; font-weight: 600;
+      letter-spacing: -.01em;
+    }
+    .wiz-subtitle {
+      text-align: center; color: var(--soft); margin-top: 6px;
+      font-size: 0.95rem;
+    }
+
+    .field { margin-top: 22px; }
+    .field-label {
+      display: block; color: var(--soft); font-size: 0.82rem;
+      margin-bottom: 8px; font-weight: 500; letter-spacing: .02em;
+    }
+    .field-input, .field-textarea {
+      width: 100%;
+      background: rgba(7, 16, 31, 0.6);
+      border: 1px solid var(--line-strong);
+      color: var(--text);
+      padding: 12px 14px; border-radius: 12px;
+      font-family: var(--font); font-size: 0.95rem;
+      transition: border .15s ease, box-shadow .15s ease;
+    }
+    .field-input:focus, .field-textarea:focus {
+      outline: none; border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+    }
+    .field-textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
+    .field-help { font-size: 0.78rem; color: var(--soft-2); margin-top: 6px; }
+
+    .option-row { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+    .option-card {
+      flex: 1 1 240px;
+      background: rgba(7, 16, 31, 0.5);
+      border: 1.5px solid var(--line-strong);
+      border-radius: 14px;
+      padding: 18px;
+      cursor: pointer; transition: all .15s ease;
+    }
+    .option-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .option-card.selected { border-color: var(--accent); background: var(--accent-soft); }
+    .option-card.disabled { opacity: .35; cursor: not-allowed; }
+    .option-card h3 { font-size: 1rem; margin-bottom: 4px; }
+    .option-card p { color: var(--soft); font-size: 0.86rem; line-height: 1.5; }
+    .option-card .icon-wrap {
+      width: 38px; height: 38px; border-radius: 10px;
+      background: var(--accent-soft); display: flex; align-items: center; justify-content: center;
+      margin-bottom: 12px; color: var(--accent);
+    }
+
+    /* ── Botones ── */
+    .actions {
+      margin-top: 28px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .btn {
+      padding: 12px 22px; border-radius: 12px; font-weight: 600; font-size: 0.95rem;
+      cursor: pointer; font-family: var(--font); transition: all .15s ease;
+      border: 0;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #0B132B;
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(0,209,255,0.3); }
+    .btn-primary:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-ghost {
+      background: transparent; color: var(--soft);
+      border: 1px solid var(--line-strong);
+    }
+    .btn-ghost:hover { color: var(--text); border-color: var(--accent); }
+
+    .btn.loading .btn-text { opacity: .5; }
+    .btn-spinner {
+      display: none; width: 14px; height: 14px;
+      border: 2px solid rgba(11,19,43,0.3); border-top-color: #0B132B;
+      border-radius: 50%; animation: spin 0.75s linear infinite;
+    }
+    .btn.loading .btn-spinner { display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .status-msg {
+      margin-top: 14px;
+      font-size: 0.85rem; text-align: center;
+      padding: 10px 14px; border-radius: 10px;
+      min-height: 0; opacity: 0; transition: opacity .2s ease;
+    }
+    .status-msg.visible { opacity: 1; }
+    .status-msg.info    { background: var(--accent-soft); color: var(--accent); }
+    .status-msg.error   { background: var(--danger-soft); color: var(--danger); }
+    .status-msg.success { background: rgba(0,245,212,0.12); color: var(--success); }
+
+    /* ── Vista PERSONALITY ── */
+    .personality-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 24px;
+    }
+    @media (max-width: 720px) { .personality-grid { grid-template-columns: 1fr; } }
+    .sub-panel {
+      background: rgba(7, 16, 31, 0.55);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+    }
+    .sub-panel h3 {
+      font-size: 0.85rem; text-transform: uppercase; letter-spacing: .08em;
+      color: var(--soft); margin-bottom: 12px; font-weight: 600;
+    }
+    .ready-pill {
+      display: inline-block; padding: 2px 8px; border-radius: 99px;
+      background: rgba(0,245,212,0.12); color: var(--success);
+      font-size: 0.72rem; font-weight: 600; margin-left: 8px;
+    }
+    .starter-list { display: flex; flex-direction: column; gap: 8px; }
+    .starter-chip {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(7,16,31,0.4); border: 1px solid var(--line);
+      border-radius: 10px; padding: 8px 12px;
+    }
+    .starter-chip input {
+      flex: 1; background: transparent; border: 0; color: var(--text); outline: none;
+      font-family: var(--font); font-size: 0.88rem;
+    }
+    .starter-chip button {
+      background: transparent; border: 0; color: var(--soft-2); cursor: pointer;
+      font-size: 1.2rem; line-height: 1; padding: 0 4px;
+    }
+    .starter-chip button:hover { color: var(--danger); }
+    .add-starter-row { display: flex; gap: 8px; margin-top: 8px; }
+    .add-starter-row input {
+      flex: 1; background: rgba(7,16,31,0.4); border: 1px solid var(--line);
+      color: var(--text); padding: 8px 12px; border-radius: 10px;
+      font-family: var(--font); font-size: 0.86rem;
+    }
+    .add-starter-row button {
+      background: var(--accent-soft); color: var(--accent); border: 0;
+      padding: 8px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.85rem;
+    }
+
+    /* ── Vista TRY IT ── */
+    .demo-wrap {
+      margin-top: 22px;
+      background: rgba(7,16,31,0.4); border: 1px solid var(--line);
+      border-radius: 16px; padding: 20px;
+      min-height: 460px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center;
+    }
+    .demo-tip { color: var(--soft); font-size: 0.88rem; max-width: 480px; }
+
+    /* ── Vista USE IT ── */
+    .deploy-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 22px; }
+    @media (max-width: 720px) { .deploy-row { grid-template-columns: 1fr; } }
+    .deploy-card {
+      background: rgba(7,16,31,0.5); border: 1px solid var(--line);
+      border-radius: 14px; padding: 18px;
+    }
+    .deploy-card h3 { font-size: 0.95rem; margin-bottom: 6px; }
+    .deploy-card p { color: var(--soft); font-size: 0.83rem; line-height: 1.5; margin-bottom: 12px; }
+    .code-block {
+      background: #07101f; border: 1px solid var(--line);
+      padding: 14px; border-radius: 10px;
+      font-family: 'Courier New', monospace; font-size: 0.78rem; color: var(--accent-2);
+      overflow-x: auto; white-space: pre;
+    }
+    .copy-btn {
+      margin-top: 10px;
+      background: var(--accent-soft); color: var(--accent); border: 0;
+      padding: 8px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.84rem;
+    }
+    .copy-btn:hover { background: var(--accent); color: #0B132B; }
+    .link-row {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(7,16,31,0.6); border: 1px solid var(--line);
+      padding: 10px 12px; border-radius: 10px;
+      font-size: 0.85rem; word-break: break-all;
+    }
+    .link-row a { color: var(--accent); text-decoration: none; flex: 1; }
+    .link-row a:hover { text-decoration: underline; }
+
+    .final-cta { text-align: center; margin-top: 28px; }
+    .final-cta .btn-primary { padding: 14px 32px; font-size: 1rem; }
+  </style>
+</head>
+<body>
+
+<div class="bg-grid" aria-hidden="true"></div>
+
+<div class="topbar">
+  <div class="brand">
+    <img src="/brand-assets/Logo_1_sin_resplandor.png" alt="Vantelia" />
+    <strong>Vantelia</strong>
+  </div>
+  <div class="user-chip">
+    <span class="who">__USER_NAME__</span>
+    <span>·</span>
+    <span>__USER_EMAIL__</span>
+    <button class="btn-logout" id="logoutBtn" type="button">Salir</button>
+  </div>
+</div>
+
+<div class="stepper" id="stepper">
+  <div class="step-item" data-step="name">
+    <div class="step-circle"><span class="num">1</span></div>
+    <div class="step-label">Nombre</div>
+    <div class="step-line"></div>
+  </div>
+  <div class="step-item" data-step="learn">
+    <div class="step-circle"><span class="num">2</span></div>
+    <div class="step-label">Aprender</div>
+    <div class="step-line"></div>
+  </div>
+  <div class="step-item" data-step="personality">
+    <div class="step-circle"><span class="num">3</span></div>
+    <div class="step-label">Personalidad</div>
+    <div class="step-line"></div>
+  </div>
+  <div class="step-item" data-step="try">
+    <div class="step-circle"><span class="num">4</span></div>
+    <div class="step-label">Probar</div>
+    <div class="step-line"></div>
+  </div>
+  <div class="step-item" data-step="use">
+    <div class="step-circle"><span class="num">5</span></div>
+    <div class="step-label">Usar</div>
+  </div>
+</div>
+
+<!-- ─── STEP 1: NAME ─── -->
+<div class="wiz-card" id="cardName">
+  <div class="wiz-icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/>
+    </svg>
+  </div>
+  <h1 class="wiz-title">¿Cómo llamamos a tu asistente?</h1>
+  <p class="wiz-subtitle">Solo para que tú lo encuentres luego. Lo puedes cambiar cuando quieras.</p>
+
+  <div class="field">
+    <label class="field-label" for="botName">Nombre del bot o negocio</label>
+    <input class="field-input" type="text" id="botName" placeholder="Ej: Clínica Dental Sonrisa" maxlength="120" />
+  </div>
+
+  <div class="actions" style="justify-content: flex-end;">
+    <button class="btn btn-primary" id="nameNextBtn" type="button">
+      <span class="btn-text">Continuar →</span>
+      <span class="btn-spinner"></span>
+    </button>
+  </div>
+  <div class="status-msg" id="nameStatus" aria-live="polite"></div>
+</div>
+
+<!-- ─── STEP 2: LEARN ─── -->
+<div class="wiz-card" id="cardLearn" style="display:none;">
+  <div class="wiz-icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+    </svg>
+  </div>
+  <h1 class="wiz-title">¿De dónde aprenderá?</h1>
+  <p class="wiz-subtitle">Indica la web de tu negocio. Vantelia analizará las páginas y aprenderá los servicios, precios y FAQs.</p>
+
+  <div class="field">
+    <label class="field-label" for="learnUrl">URL de tu web</label>
+    <input class="field-input" type="url" id="learnUrl" placeholder="https://tunegocio.com" />
+    <p class="field-help">Tarda 30-90 segundos. Analizamos hasta 12 páginas y generamos el conocimiento base.</p>
+  </div>
+
+  <label style="display:flex; align-items:center; gap:8px; margin-top:14px; color:var(--soft); font-size:0.86rem; cursor:pointer;">
+    <input type="checkbox" id="justOnePage" />
+    <span>Solo esta página (más rápido, menos contexto)</span>
+  </label>
+
+  <div class="actions">
+    <button class="btn btn-ghost" id="learnBackBtn" type="button">← Atrás</button>
+    <button class="btn btn-primary" id="learnNextBtn" type="button">
+      <span class="btn-text">Empezar a aprender</span>
+      <span class="btn-spinner"></span>
+    </button>
+  </div>
+  <div class="status-msg" id="learnStatus" aria-live="polite"></div>
+</div>
+
+<!-- ─── STEP 3: PERSONALITY ─── -->
+<div class="wiz-card" id="cardPersonality" style="display:none;">
+  <h1 class="wiz-title">Tu asistente está listo</h1>
+  <p class="wiz-subtitle">Leímos tu web y preparamos esto. Ajusta lo que quieras o sigue al siguiente paso.</p>
+
+  <div class="personality-grid">
+    <div class="sub-panel">
+      <h3>Cómo se comportará <span class="ready-pill">Listo</span></h3>
+      <div class="field" style="margin-top:0;">
+        <label class="field-label" for="bienvenida">Mensaje de bienvenida</label>
+        <textarea class="field-textarea" id="bienvenida" maxlength="600"></textarea>
+      </div>
+      <div class="field">
+        <label class="field-label" for="promptExtra">Instrucciones del asistente</label>
+        <textarea class="field-textarea" id="promptExtra" maxlength="4000" style="min-height:140px;"></textarea>
+        <p class="field-help">Tono, qué debe evitar, cuándo derivar al humano...</p>
+      </div>
+    </div>
+    <div class="sub-panel">
+      <h3>Preguntas sugeridas</h3>
+      <p style="color:var(--soft); font-size:0.83rem; margin-bottom:12px;">Aparecen como botones rápidos en el chat. Edítalas o añade nuevas.</p>
+      <div class="starter-list" id="starterList"></div>
+      <div class="add-starter-row">
+        <input type="text" id="newStarter" placeholder="Añadir pregunta..." maxlength="140" />
+        <button type="button" id="addStarterBtn">Añadir</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-ghost" id="personalityBackBtn" type="button">← Atrás</button>
+    <button class="btn btn-primary" id="personalityNextBtn" type="button">
+      <span class="btn-text">Se ve bien — probarlo →</span>
+      <span class="btn-spinner"></span>
+    </button>
+  </div>
+  <div class="status-msg" id="personalityStatus" aria-live="polite"></div>
+</div>
+
+<!-- ─── STEP 4: TRY IT ─── -->
+<div class="wiz-card" id="cardTry" style="display:none;">
+  <h1 class="wiz-title">Pruébalo</h1>
+  <p class="wiz-subtitle">Hazle un par de preguntas a tu nuevo asistente. Si te convence, sigue al último paso.</p>
+
+  <div class="demo-wrap" id="demoWrap">
+    <p class="demo-tip" id="demoTip">El widget aparece en la esquina inferior derecha de esta pantalla. Pulsa el icono para abrir el chat.</p>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-ghost" id="tryBackBtn" type="button">← Atrás</button>
+    <button class="btn btn-primary" id="tryNextBtn" type="button">
+      <span class="btn-text">Finalizar →</span>
+      <span class="btn-spinner"></span>
+    </button>
+  </div>
+</div>
+
+<!-- ─── STEP 5: USE IT ─── -->
+<div class="wiz-card" id="cardUse" style="display:none;">
+  <div class="wiz-icon" style="background: linear-gradient(135deg, var(--accent-2), var(--accent));">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  </div>
+  <h1 class="wiz-title">¡Listo! Tu asistente está activo</h1>
+  <p class="wiz-subtitle">Elige cómo lo quieres usar.</p>
+
+  <div class="deploy-row">
+    <div class="deploy-card">
+      <h3>Insertar en tu web</h3>
+      <p>Pega este código justo antes de <code style="color:var(--accent-2);">&lt;/body&gt;</code> en tu web. Aparecerá una burbuja de chat.</p>
+      <div class="code-block" id="snippetBlock"></div>
+      <button class="copy-btn" id="copySnippetBtn" type="button">Copiar código</button>
+    </div>
+    <div class="deploy-card">
+      <h3>Compartir enlace</h3>
+      <p>Para emails, QR o redes. Cualquiera con este enlace puede chatear.</p>
+      <div class="link-row">
+        <a id="shareLink" href="#" target="_blank" rel="noreferrer"></a>
+        <button class="copy-btn" id="copyLinkBtn" type="button" style="margin-top:0;">Copiar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="final-cta">
+    <button class="btn btn-primary" id="goToDashboardBtn" type="button">
+      <span class="btn-text">Listo → Ir al dashboard</span>
+    </button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const state = {
+  step: 'name',
+  cliente_id: '',
+  nombre: '',
+  website_url: '',
+  bienvenida: '',
+  prompt_extra: '',
+  starter_questions: [],
+  install_snippet: '',
+  widget_script_url: '',
+  demo_url: '',
+  share_link: '',
+};
+
+const STEP_ORDER = ['name', 'learn', 'personality', 'try', 'use'];
+
+function formatDetail(d) {
+  if (!d) return 'No se pudo completar la solicitud.';
+  if (typeof d === 'string') return d;
+  if (Array.isArray(d)) return d.map(i => i?.msg || i).join(' | ');
+  if (typeof d === 'object' && d.message) return d.message;
+  try { return JSON.stringify(d); } catch { return String(d); }
+}
+
+async function api(path, opts) {
+  const resp = await fetch(path, {
+    ...opts,
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json', ...(opts?.headers || {}) },
+  });
+  let data = null;
+  try { data = await resp.json(); } catch {}
+  if (!resp.ok) throw new Error(formatDetail(data?.detail));
+  return data;
+}
+
+function setStatus(id, msg, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (!msg) { el.className = 'status-msg'; el.textContent = ''; return; }
+  el.className = `status-msg visible ${type || 'info'}`;
+  el.textContent = msg;
+}
+
+function setLoading(btnId, on) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.classList.toggle('loading', on);
+  btn.disabled = on;
+}
+
+function showStep(step) {
+  state.step = step;
+  ['Name', 'Learn', 'Personality', 'Try', 'Use'].forEach(cap => {
+    const card = document.getElementById('card' + cap);
+    if (card) card.style.display = 'none';
+  });
+  const map = { name: 'Name', learn: 'Learn', personality: 'Personality', try: 'Try', use: 'Use' };
+  const target = document.getElementById('card' + (map[step] || 'Name'));
+  if (target) target.style.display = 'block';
+
+  // stepper visual
+  const idx = STEP_ORDER.indexOf(step);
+  document.querySelectorAll('.step-item').forEach(item => {
+    const itemStep = item.getAttribute('data-step');
+    const itemIdx = STEP_ORDER.indexOf(itemStep);
+    item.classList.remove('active', 'done');
+    if (itemIdx < idx) item.classList.add('done');
+    else if (itemIdx === idx) item.classList.add('active');
+  });
+
+  if (step === 'try') renderTryStep();
+  if (step === 'use') renderUseStep();
+}
+
+function renderStarters() {
+  const list = document.getElementById('starterList');
+  list.innerHTML = '';
+  state.starter_questions.forEach((q, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'starter-chip';
+    wrap.innerHTML = `<input type="text" value="${q.replace(/"/g, '&quot;')}" maxlength="140" /><button type="button" title="Quitar">×</button>`;
+    wrap.querySelector('input').addEventListener('input', e => { state.starter_questions[i] = e.target.value; });
+    wrap.querySelector('button').addEventListener('click', () => {
+      state.starter_questions.splice(i, 1);
+      renderStarters();
+    });
+    list.appendChild(wrap);
+  });
+}
+
+function renderTryStep() {
+  const wrap = document.getElementById('demoWrap');
+  // remove old widget if any
+  document.querySelectorAll('script[data-vantelia-preview]').forEach(s => s.remove());
+  if (window.__vanteliaWidget) {
+    try { window.__vanteliaWidget.unmount && window.__vanteliaWidget.unmount(); } catch {}
+  }
+  if (!state.cliente_id) {
+    wrap.innerHTML = '<p class="demo-tip">Inicia primero el wizard.</p>';
+    return;
+  }
+  wrap.innerHTML = `<p class="demo-tip">Hazle un par de preguntas a <strong>${state.nombre || 'tu asistente'}</strong>. El widget aparece abajo a la derecha.</p>`;
+  const s = document.createElement('script');
+  s.src = `/widget/widget.min.js?v=${Date.now()}`;
+  s.setAttribute('data-api', window.location.origin);
+  s.setAttribute('data-client', state.cliente_id);
+  s.setAttribute('data-position', 'right');
+  s.setAttribute('data-vantelia-preview', '1');
+  document.body.appendChild(s);
+}
+
+function renderUseStep() {
+  document.getElementById('snippetBlock').textContent = state.install_snippet || '';
+  const sl = document.getElementById('shareLink');
+  sl.href = state.share_link || '#';
+  sl.textContent = state.share_link || '';
+}
+
+// ── Step handlers ────────────────────────────────────────────────────
+async function submitName() {
+  const name = document.getElementById('botName').value.trim();
+  if (!name) { setStatus('nameStatus', 'Escribe un nombre.', 'error'); return; }
+  setLoading('nameNextBtn', true);
+  setStatus('nameStatus', 'Creando tu asistente...', 'info');
+  try {
+    const data = await api('/onboarding/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre: name }),
+    });
+    state.cliente_id = data.cliente_id;
+    state.nombre = name;
+    setStatus('nameStatus', '', null);
+    showStep('learn');
+  } catch (err) {
+    setStatus('nameStatus', err.message, 'error');
+  } finally {
+    setLoading('nameNextBtn', false);
+  }
+}
+
+async function submitLearn() {
+  const url = document.getElementById('learnUrl').value.trim();
+  if (!url || !/^https?:\/\//i.test(url)) {
+    setStatus('learnStatus', 'Introduce una URL completa (https://...).', 'error');
+    return;
+  }
+  setLoading('learnNextBtn', true);
+  setStatus('learnStatus', 'Analizando tu web. Esto tarda 30-90 segundos...', 'info');
+  try {
+    const data = await api('/onboarding/learn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        website_url: url,
+        just_this_page: !!document.getElementById('justOnePage').checked,
+      }),
+    });
+    state.website_url = url;
+    state.bienvenida = data.suggested_welcome || `Hola, soy el asistente de ${state.nombre}. ¿En qué puedo ayudarte?`;
+    state.prompt_extra = data.suggested_prompt_extra || '';
+    state.starter_questions = (data.suggested_starters || []).slice(0, 8);
+    document.getElementById('bienvenida').value = state.bienvenida;
+    document.getElementById('promptExtra').value = state.prompt_extra;
+    renderStarters();
+    setStatus('learnStatus', '', null);
+    showStep('personality');
+  } catch (err) {
+    setStatus('learnStatus', err.message, 'error');
+  } finally {
+    setLoading('learnNextBtn', false);
+  }
+}
+
+async function submitPersonality() {
+  state.bienvenida = document.getElementById('bienvenida').value.trim();
+  state.prompt_extra = document.getElementById('promptExtra').value.trim();
+  if (!state.bienvenida) {
+    setStatus('personalityStatus', 'El mensaje de bienvenida no puede estar vacío.', 'error');
+    return;
+  }
+  setLoading('personalityNextBtn', true);
+  try {
+    const cleaned = state.starter_questions
+      .map(s => (s || '').trim())
+      .filter(s => s.length > 0)
+      .slice(0, 8);
+    state.starter_questions = cleaned;
+    await api('/onboarding/personality', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bienvenida: state.bienvenida,
+        prompt_extra: state.prompt_extra,
+        starter_questions: cleaned,
+      }),
+    });
+    showStep('try');
+  } catch (err) {
+    setStatus('personalityStatus', err.message, 'error');
+  } finally {
+    setLoading('personalityNextBtn', false);
+  }
+}
+
+async function finalizeWizard() {
+  setLoading('tryNextBtn', true);
+  try {
+    const data = await api('/onboarding/finalize', { method: 'POST' });
+    state.install_snippet = data.install_snippet;
+    state.widget_script_url = data.widget_script_url;
+    state.demo_url = data.demo_url;
+    state.share_link = data.share_link;
+    showStep('use');
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    setLoading('tryNextBtn', false);
+  }
+}
+
+async function loadInitialState() {
+  try {
+    const data = await api('/onboarding/state');
+    if (data.cliente_id) {
+      state.cliente_id = data.cliente_id;
+      state.nombre = data.nombre || '';
+      state.website_url = data.website_url || '';
+      state.bienvenida = data.bienvenida || '';
+      state.prompt_extra = data.prompt_extra || '';
+      state.starter_questions = data.starter_questions || [];
+      if (state.nombre) document.getElementById('botName').value = state.nombre;
+      if (state.website_url) document.getElementById('learnUrl').value = state.website_url;
+      if (state.bienvenida) document.getElementById('bienvenida').value = state.bienvenida;
+      if (state.prompt_extra) document.getElementById('promptExtra').value = state.prompt_extra;
+      renderStarters();
+      // jump to last completed step
+      showStep(data.step || 'name');
+    } else {
+      showStep('name');
+    }
+  } catch (err) {
+    console.warn('No se pudo cargar estado:', err);
+    showStep('name');
+  }
+}
+
+async function copy(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const orig = btn.textContent;
+    btn.textContent = '¡Copiado!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  } catch {
+    btn.textContent = 'Selecciona y copia manualmente';
+  }
+}
+
+// ── Wiring ───────────────────────────────────────────────────────────
+document.getElementById('nameNextBtn').addEventListener('click', submitName);
+document.getElementById('learnBackBtn').addEventListener('click', () => showStep('name'));
+document.getElementById('learnNextBtn').addEventListener('click', submitLearn);
+document.getElementById('personalityBackBtn').addEventListener('click', () => showStep('learn'));
+document.getElementById('personalityNextBtn').addEventListener('click', submitPersonality);
+document.getElementById('tryBackBtn').addEventListener('click', () => showStep('personality'));
+document.getElementById('tryNextBtn').addEventListener('click', finalizeWizard);
+document.getElementById('goToDashboardBtn').addEventListener('click', () => { window.location.href = '/app'; });
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  try { await api('/auth/logout', { method: 'POST' }); } catch {}
+  window.location.href = '/acceso';
+});
+
+document.getElementById('addStarterBtn').addEventListener('click', () => {
+  const inp = document.getElementById('newStarter');
+  const v = inp.value.trim();
+  if (!v) return;
+  if (state.starter_questions.length >= 8) return;
+  state.starter_questions.push(v);
+  inp.value = '';
+  renderStarters();
+});
+document.getElementById('newStarter').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('addStarterBtn').click();
+});
+
+document.getElementById('copySnippetBtn').addEventListener('click', e => copy(state.install_snippet, e.target));
+document.getElementById('copyLinkBtn').addEventListener('click',    e => copy(state.share_link, e.target));
+
+document.getElementById('botName').addEventListener('keydown', e => { if (e.key === 'Enter') submitName(); });
+document.getElementById('learnUrl').addEventListener('keydown', e => { if (e.key === 'Enter') submitLearn(); });
+
+loadInitialState();
+</script>
+</body>
+</html>

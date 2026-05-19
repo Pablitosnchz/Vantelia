@@ -3326,6 +3326,7 @@ tbody tr:hover { background: var(--surface-2); }
     function applyPlanRestrictions() {
       const subscription = state.subscription || {};
       const features = subscription.features || {};
+      const adminOverride = isPortalAdminClientView() && Boolean(subscription.admin_override);
       const brandingAllowed = Boolean(features.branding_customization);
       const brandingFields = [
         document.getElementById("aiTitle"),
@@ -3350,7 +3351,7 @@ tbody tr:hover { background: var(--surface-2); }
         if (header) header.insertAdjacentElement("afterend", lockNote);
       }
       lockNote.textContent = "Tu plan actual mantiene la identidad visual de Vantelia. La personalizacion de colores, logo e icono se activa con el plan Completo.";
-      lockNote.classList.toggle("hidden", brandingAllowed);
+      lockNote.classList.toggle("hidden", brandingAllowed || adminOverride);
 
       if (el.exportBookingsBtn) {
         el.exportBookingsBtn.disabled = !Boolean(features.csv_export);
@@ -3370,7 +3371,9 @@ tbody tr:hover { background: var(--surface-2); }
       if (!subscription) return;
       const usage = subscription.usage || {};
       const plan = String(subscription.plan || "web").toLowerCase();
-      const planCopy = SUBSCRIPTION_PLAN_COPY[plan] || SUBSCRIPTION_PLAN_COPY.web;
+      const effectivePlan = String(subscription.effective_plan || plan || "web").toLowerCase();
+      const planCopy = SUBSCRIPTION_PLAN_COPY[effectivePlan] || SUBSCRIPTION_PLAN_COPY[plan] || SUBSCRIPTION_PLAN_COPY.web;
+      const adminOverride = isPortalAdminClientView() && Boolean(subscription.admin_override);
       const conversationLimit = usage.conversations_limit;
       const bookingLimit = usage.bookings_limit;
       const billingDate = subscription.renews_at || usage.period_end || "";
@@ -3382,12 +3385,17 @@ tbody tr:hover { background: var(--surface-2); }
         ? renewalLabel
         : (billingDate ? `${renewalLabel} (gestion manual)` : "Gestion manual");
 
-      el.subscriptionPlanLabel.textContent = subscription.plan_label || "Web";
-      el.subscriptionStatus.textContent = isLifetime
+      el.subscriptionPlanLabel.textContent = adminOverride
+        ? `${subscription.plan_label || "Web"} | acceso admin ${subscription.effective_plan_label || "Completo"}`
+        : (subscription.plan_label || "Web");
+      const baseStatusText = isLifetime
         ? `${subscriptionStatusLabel(subscription.status)} | para siempre`
         : subscription.renews_at
         ? `${subscriptionStatusLabel(subscription.status)} | renueva el ${renewalLabel}`
         : `${subscriptionStatusLabel(subscription.status)} | mes a mes`;
+      el.subscriptionStatus.textContent = adminOverride
+        ? `${baseStatusText} | permisos completos solo para administradores`
+        : baseStatusText;
       el.subscriptionPrice.textContent = `${subscription.price_eur || 0} EUR/mes`;
       el.subscriptionIncludedList.innerHTML = planCopy.includes
         .map((item) => `<li>${escapeHtml(item)}</li>`)
@@ -3410,7 +3418,9 @@ tbody tr:hover { background: var(--surface-2); }
       el.subscriptionRenewal.textContent = isLifetime ? "Para siempre" : renewalLabel;
       el.manageBillingBtn.disabled = isLifetime || !subscription.stripe_customer_id;
       el.cancelSubscriptionBtn.disabled = isLifetime || !subscription.stripe_customer_id;
-      el.subscriptionActionText.textContent = isLifetime
+      el.subscriptionActionText.textContent = adminOverride
+        ? "Estas viendo este cliente con permisos de administrador. Puedes operar configuracion, identidad visual, exportaciones y equipo como si tuviera el plan Completo; el cliente mantiene sus limites reales."
+        : isLifetime
         ? "Este cliente tiene plan Completo vitalicio. No hay cobros recurrentes ni permanencia."
         : subscription.stripe_customer_id
         ? "Puedes cambiar, reducir o cancelar desde facturacion. Si quieres orientacion, te ayudamos a elegir el plan correcto."
