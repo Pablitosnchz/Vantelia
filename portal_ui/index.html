@@ -167,9 +167,6 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
   filter: drop-shadow(0 0 12px rgba(0,209,255,0.20));
 }
 .topbar .brand-copy { display: grid; gap: 0; }
-.topbar .brand-kicker {
-  display: none;
-}
 .topbar .brand h1 {
   margin: 0;
   font-size: 1rem;
@@ -1803,7 +1800,6 @@ tbody tr:hover { background: var(--surface-2); }
         <div class="brand-mark">
           <img class="brand-logo" src="/brand-assets/Logo_1_sin_resplandor.png" alt="Vantelia" />
           <div class="brand-copy">
-            <span class="brand-kicker">Client OS</span>
             <h1>Vantelia Portal</h1>
             <p>El espacio profesional donde cada cliente puede ver, cambiar y cancelar sus citas sin entrar en procesos tecnicos ni depender del calendario bruto.</p>
           </div>
@@ -1811,11 +1807,11 @@ tbody tr:hover { background: var(--surface-2); }
       </section>
       <div class="top-actions">
         <div class="topbar-user hidden" id="topbarUser" aria-label="Usuario activo">
+          <span class="topbar-avatar" id="topUserAvatar" aria-hidden="true">V</span>
           <span class="topbar-user-copy">
             <span id="topUserEmail">-</span>
           </span>
           <button id="topLogoutBtn" class="danger small" type="button">Cerrar sesion</button>
-          <span class="topbar-avatar hidden" id="topUserAvatar" aria-hidden="true">V</span>
         </div>
       </div>
     </header>
@@ -2217,7 +2213,6 @@ tbody tr:hover { background: var(--surface-2); }
                 <div class="muted" id="mainPanelText">Usa el calendario, la busqueda y los filtros para localizar cualquier cita por dia, cliente o estado.</div>
               </div>
               <div class="row">
-                <button id="toggleCalendarBtn" class="secondary small hidden" type="button">Calendario</button>
                 <select id="employeeFilter">
                   <option value="">Todos los profesionales</option>
                 </select>
@@ -2228,28 +2223,6 @@ tbody tr:hover { background: var(--surface-2); }
                   <option value="cancelled">Canceladas</option>
                 </select>
               </div>
-            </div>
-
-            <div class="booking-toolbar" style="display: none !important;">
-              <label>
-                Buscar
-                <input id="bookingSearch" type="search" placeholder="Nombre, email, servicio, ID..." />
-              </label>
-              <label>
-                Desde
-                <input id="bookingDateFrom" type="date" />
-              </label>
-              <label>
-                Hasta
-                <input id="bookingDateTo" type="date" />
-              </label>
-              <button id="clearBookingFiltersBtn" class="ghost small" type="button">Limpiar</button>
-            </div>
-            <div class="quick-actions" style="display: none !important;">
-              <button id="todayBookingsBtn" class="secondary small" type="button">Hoy</button>
-              <button id="tomorrowBookingsBtn" class="secondary small" type="button">Manana</button>
-              <button id="weekBookingsBtn" class="secondary small" type="button">Esta semana</button>
-              <button id="upcomingBookingsBtn" class="ghost small" type="button">Proximas activas</button>
             </div>
 
             <section class="admin-view" id="bookingView">
@@ -2279,18 +2252,6 @@ tbody tr:hover { background: var(--surface-2); }
                   <div class="empty">Selecciona un dia del calendario para ver sus citas.</div>
                 </div>
               </section>
-
-              <div id="bookingList" class="booking-grid hidden" style="display: none !important;">
-                <div class="empty">Inicia sesion para ver reservas.</div>
-              </div>
-
-              <div class="pagination hidden" id="pagination" style="display: none !important;">
-                <div class="muted" id="paginationText">-</div>
-                <div class="row">
-                  <button id="prevPageBtn" class="ghost small" type="button">Anterior</button>
-                  <button id="nextPageBtn" class="ghost small" type="button">Siguiente</button>
-                </div>
-              </div>
 
               <div class="reschedule-panel hidden" id="reschedulePanel">
                 <div class="panel-header">
@@ -2505,15 +2466,6 @@ tbody tr:hover { background: var(--surface-2); }
                 Si necesitas cambiar el propietario de la cuenta, crear accesos para otras personas o revisar permisos, contacta con Vantelia y lo dejamos configurado sin afectar a tus citas.
               </div>
             </aside>
-          </div>
-        </section>
-
-        <section class="card panel hidden" id="securityBlock" aria-hidden="true">
-          <div class="panel-header">
-            <div>
-              <h3>Cuenta y seguridad</h3>
-              <div class="muted">Esta seccion se ha unificado. Te llevamos al panel principal de cuenta.</div>
-            </div>
           </div>
         </section>
 
@@ -2775,15 +2727,16 @@ tbody tr:hover { background: var(--surface-2); }
                   <input id="aiTitle" type="text" maxlength="60" placeholder="Nombre de tu empresa" />
                 </label>
                 <label>
-                  Icono corto
-                  <input id="aiIcono" type="text" maxlength="12" placeholder="AI" />
+                  Foto del asistente (icono del chat)
+                  <input id="aiLogo" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" />
+                  <button id="aiLogoRemoveBtn" type="button" class="secondary small" style="margin-top:6px">Eliminar imagen</button>
+                  <span class="muted" style="font-size:11.5px;margin-top:4px;display:block">PNG, JPG, SVG o WebP. Maximo 1.4 MB. Cuadrada queda mejor.</span>
                 </label>
               </div>
               <div class="grid">
                 <label>
-                  Logo del asistente
-                  <input id="aiLogo" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" />
-                  <button id="aiLogoRemoveBtn" type="button" class="secondary small" style="margin-top:6px">Eliminar imagen</button>
+                  Icono corto (fallback si no hay foto)
+                  <input id="aiIcono" type="text" maxlength="12" placeholder="AI" />
                 </label>
                 <label>
                   Texto de marca
@@ -2867,15 +2820,7 @@ tbody tr:hover { background: var(--surface-2); }
     const state = {
       user: null,
       portalAdminClientId: (urlParams.get("cliente_id") || "").trim(),
-      scope: "upcoming",
       status: "",
-      query: "",
-      dateFrom: "",
-      dateTo: "",
-      limit: 8,
-      offset: 0,
-      total: 0,
-      items: [],
       activePortalView: urlParams.get("welcome") === "1" ? "instalacion" : "citas",
       showWelcomeTour: urlParams.get("welcome") === "1",
       calendarOpen: true,
@@ -2906,7 +2851,6 @@ tbody tr:hover { background: var(--surface-2); }
       employeeFilter: "",
       dashboard: null,
       subscription: null,
-      searchTimer: null,
       forgotCooldownSeconds: 0,
       forgotCooldownTimer: null,
       authView: urlParams.get("reset_token") ? "reset" : "login",
@@ -3129,15 +3073,6 @@ tbody tr:hover { background: var(--surface-2); }
       exportBookingsBtn: document.getElementById("exportBookingsBtn"),
       employeeFilter: document.getElementById("employeeFilter"),
       statusFilter: document.getElementById("statusFilter"),
-      bookingSearch: document.getElementById("bookingSearch"),
-      bookingDateFrom: document.getElementById("bookingDateFrom"),
-      bookingDateTo: document.getElementById("bookingDateTo"),
-      clearBookingFiltersBtn: document.getElementById("clearBookingFiltersBtn"),
-      todayBookingsBtn: document.getElementById("todayBookingsBtn"),
-      tomorrowBookingsBtn: document.getElementById("tomorrowBookingsBtn"),
-      weekBookingsBtn: document.getElementById("weekBookingsBtn"),
-      upcomingBookingsBtn: document.getElementById("upcomingBookingsBtn"),
-      toggleCalendarBtn: document.getElementById("toggleCalendarBtn"),
       calendarPanel: document.getElementById("calendarPanel"),
       calendarMonthLabel: document.getElementById("calendarMonthLabel"),
       prevCalendarMonthBtn: document.getElementById("prevCalendarMonthBtn"),
@@ -3149,11 +3084,6 @@ tbody tr:hover { background: var(--surface-2); }
       dayAgendaList: document.getElementById("dayAgendaList"),
       clearDayAgendaBtn: document.getElementById("clearDayAgendaBtn"),
       bookingView: document.getElementById("bookingView"),
-      bookingList: document.getElementById("bookingList"),
-      pagination: document.getElementById("pagination"),
-      paginationText: document.getElementById("paginationText"),
-      prevPageBtn: document.getElementById("prevPageBtn"),
-      nextPageBtn: document.getElementById("nextPageBtn"),
       reschedulePanel: document.getElementById("reschedulePanel"),
       rescheduleBookingLabel: document.getElementById("rescheduleBookingLabel"),
       rescheduleDate: document.getElementById("rescheduleDate"),
@@ -3164,7 +3094,6 @@ tbody tr:hover { background: var(--surface-2); }
       cancelRescheduleBtn: document.getElementById("cancelRescheduleBtn"),
       contactBlock: document.getElementById("contactBlock"),
       contactInfo: document.getElementById("contactInfo"),
-      securityBlock: document.getElementById("securityBlock"),
       changeCurrentPassword: document.getElementById("changeCurrentPassword"),
       changeNewPassword: document.getElementById("changeNewPassword"),
       changeNewPasswordConfirm: document.getElementById("changeNewPasswordConfirm"),
@@ -3331,8 +3260,6 @@ tbody tr:hover { background: var(--surface-2); }
       const brandingFields = [
         document.getElementById("aiTitle"),
         el.aiIcono,
-        document.getElementById("aiLogo"),
-        document.getElementById("aiLogoRemoveBtn"),
         document.getElementById("aiBrandingText"),
         document.getElementById("aiColorPrimary"),
         document.getElementById("aiColorAccent"),
@@ -3350,7 +3277,7 @@ tbody tr:hover { background: var(--surface-2); }
         const header = editor?.querySelector(".panel-header");
         if (header) header.insertAdjacentElement("afterend", lockNote);
       }
-      lockNote.textContent = "Tu plan actual mantiene la identidad visual de Vantelia. La personalizacion de colores, logo e icono se activa con el plan Completo.";
+      lockNote.textContent = "Tu plan actual mantiene la identidad visual de Vantelia (colores, icono corto, texto de marca). La foto del asistente si esta incluida en cualquier plan. La personalizacion completa de colores se activa con el plan Completo.";
       lockNote.classList.toggle("hidden", brandingAllowed || adminOverride);
 
       if (el.exportBookingsBtn) {
@@ -3739,7 +3666,7 @@ tbody tr:hover { background: var(--surface-2); }
       setStatus(ids.length === 1 ? "Bloqueo eliminado correctamente." : "Intervalo eliminado correctamente.", "success");
       await loadSchedule();
       await loadEmployees();
-      await loadBookings();
+      await loadCalendarBookings();
     }
 
     function renderUnifiedBlocksEditor() {
@@ -3904,11 +3831,17 @@ tbody tr:hover { background: var(--surface-2); }
     const aiLogoInput = document.getElementById("aiLogo");
     if (aiLogoInput) {
       const aiLogoRemoveBtn = document.getElementById("aiLogoRemoveBtn");
+      const MAX_LOGO_BYTES = 1_400_000;
       aiLogoInput.addEventListener("change", () => {
         const file = aiLogoInput.files && aiLogoInput.files[0];
         const logoImg = document.getElementById("aiPreviewLogo");
         const iconSpan = document.getElementById("aiPreviewIcon");
         if (!file || !logoImg) return;
+        if (file.size > MAX_LOGO_BYTES) {
+          aiLogoInput.value = "";
+          setStatus("La imagen pesa demasiado. Maximo 1.4 MB. Reduce tamano y vuelve a subir.", "error");
+          return;
+        }
         const reader = new FileReader();
         reader.onload = (e) => {
           logoImg.src = e.target.result;
@@ -4280,7 +4213,7 @@ tbody tr:hover { background: var(--surface-2); }
       state.employeeDraftMode = false;
       state.employeeEditorOpen = true;
       await loadEmployees();
-      await loadBookings();
+      await loadCalendarBookings();
       setStatus(employee ? "Profesional actualizado correctamente." : "Profesional creado correctamente.", "success");
     }
 
@@ -4300,7 +4233,7 @@ tbody tr:hover { background: var(--surface-2); }
       state.employeeDraftMode = false;
       state.employeeEditorOpen = false;
       await loadEmployees();
-      await loadBookings();
+      await loadCalendarBookings();
       setStatus("Profesional eliminado correctamente.", "success");
     }
 
@@ -4431,7 +4364,7 @@ tbody tr:hover { background: var(--surface-2); }
           body: JSON.stringify(collectSchedulePayload()),
         });
         renderSchedule(schedule);
-        await loadBookings();
+        await loadCalendarBookings();
         setStatus(successMessage, "success");
         return;
       }
@@ -4456,7 +4389,7 @@ tbody tr:hover { background: var(--surface-2); }
         body: JSON.stringify(payload),
       });
       await loadEmployees();
-      await loadBookings();
+      await loadCalendarBookings();
       renderUnifiedScheduleEditor();
       setStatus("Horario del profesional actualizado correctamente.", "success");
     }
@@ -4495,7 +4428,7 @@ tbody tr:hover { background: var(--surface-2); }
       el.blockReason.value = "";
       await loadSchedule();
       await loadEmployees();
-      await loadBookings();
+      await loadCalendarBookings();
       if (!result?.created_count && result?.skipped_count) {
         setStatus("Ese bloqueo ya existia en todas las fechas seleccionadas.", "success");
         return;
@@ -4512,10 +4445,7 @@ tbody tr:hover { background: var(--surface-2); }
 
     function exportBookings() {
       const params = new URLSearchParams();
-      if (state.dateFrom) params.set("date_from", state.dateFrom);
-      if (state.dateTo) params.set("date_to", state.dateTo);
       if (state.status) params.set("estado", state.status);
-      if (state.query) params.set("q", state.query);
       if (state.employeeFilter) params.set("employee_id", state.employeeFilter);
       if (state.portalAdminClientId) params.set("cliente_id", state.portalAdminClientId);
       const suffix = params.toString();
@@ -4535,11 +4465,6 @@ tbody tr:hover { background: var(--surface-2); }
         throw new Error(mismatchMessage);
       }
       return left;
-    }
-
-    function setScope(scope) {
-      state.scope = scope;
-      state.offset = 0;
     }
 
     function userInitials(value) {
@@ -4577,7 +4502,6 @@ tbody tr:hover { background: var(--surface-2); }
       el.blocksBlock.classList.toggle("hidden", true);
       el.messagesBlock.classList.toggle("hidden", true);
       el.aiBlock.classList.toggle("hidden", true);
-      el.securityBlock.classList.toggle("hidden", true);
 
       if (!user) {
         if (state.authView === "forgot") {
@@ -4619,8 +4543,6 @@ tbody tr:hover { background: var(--surface-2); }
         el.heroTitle.textContent = "Centro de operaciones de Vantelia";
         el.heroText.textContent = "El portal queda reservado para clientes. Usa el dashboard admin para operar clientes, usuarios, reservas, demos e instalacion.";
       } else {
-        state.calendarOpen = true;
-        el.calendarPanel.classList.remove("hidden");
         setPortalView(state.activePortalView);
         const targetName = adminClientView
           ? (state.dashboard?.stats?.empresa || state.portalAdminClientId || user.display_name)
@@ -5212,17 +5134,6 @@ tbody tr:hover { background: var(--surface-2); }
       }
     }
 
-    function setCalendarOpen(open) {
-      state.calendarOpen = true;
-      el.calendarPanel.classList.remove("hidden");
-      if (el.toggleCalendarBtn) {
-        el.toggleCalendarBtn.textContent = "Calendario";
-      }
-      if (state.calendarOpen) {
-        loadCalendarBookings().catch((error) => setStatus(error.message, "error"));
-      }
-    }
-
     function itemsForCalendarDate(dateKey) {
       return state.calendarItems
         .filter((item) => item.fecha === dateKey)
@@ -5232,11 +5143,9 @@ tbody tr:hover { background: var(--surface-2); }
     function renderSelectedDayAgenda() {
       if (!state.selectedCalendarDate) {
         el.dayAgenda.classList.add("hidden");
-        el.bookingList.classList.remove("hidden");
         el.dayAgendaDate.textContent = "Agenda del dia";
         el.dayAgendaMeta.textContent = "Selecciona un dia del calendario para ver sus citas.";
         el.dayAgendaList.innerHTML = '<div class="empty">Selecciona un dia del calendario para ver sus citas.</div>';
-        el.pagination.classList.toggle("hidden", state.total <= state.limit);
         return;
       }
 
@@ -5249,8 +5158,6 @@ tbody tr:hover { background: var(--surface-2); }
       if (scheduleInfo.blocks.length) summaryParts.push(`${scheduleInfo.blocks.length} bloqueo${scheduleInfo.blocks.length === 1 ? "" : "s"}`);
 
       el.dayAgenda.classList.remove("hidden");
-      el.bookingList.classList.add("hidden");
-      el.pagination.classList.add("hidden");
       el.dayAgendaDate.textContent = dateLongLabel(dateKey);
       el.dayAgendaMeta.textContent = summaryParts.length
         ? summaryParts.join(" | ")
@@ -5368,23 +5275,11 @@ tbody tr:hover { background: var(--surface-2); }
       });
     }
 
-    function applyDayFilter(dateKey) {
-      state.dateFrom = dateKey;
-      state.dateTo = dateKey;
-      state.scope = "all";
-      state.offset = 0;
-      el.bookingDateFrom.value = dateKey;
-      el.bookingDateTo.value = dateKey;
-      setScope("all");
-      clearReschedulePanel();
-      loadBookings().catch((error) => setStatus(error.message, "error"));
-    }
-
     function selectCalendarDay(dateKey) {
       state.selectedCalendarDate = dateKey;
       renderCalendar(state.calendarItems);
       renderSelectedDayAgenda();
-      applyDayFilter(dateKey);
+      clearReschedulePanel();
     }
 
     function clearSelectedCalendarDay() {
@@ -5515,207 +5410,12 @@ tbody tr:hover { background: var(--surface-2); }
         date_to: bounds.end,
       });
       if (state.status) params.set("estado", state.status);
-      if (state.query) params.set("q", state.query);
       if (state.employeeFilter) params.set("employee_id", state.employeeFilter);
       const payload = await api(`/auth/bookings?${params.toString()}`);
       state.calendarItems = payload.items || [];
+      updateContactCard(state.calendarItems);
       renderCalendar(state.calendarItems);
       renderSelectedDayAgenda();
-    }
-
-    function renderBookings(response) {
-      state.items = response.items || [];
-      state.total = response.total || 0;
-      state.limit = response.limit || state.limit;
-      state.offset = response.offset || 0;
-
-      updateContactCard(state.items);
-      el.bookingList.classList.toggle("hidden", Boolean(state.selectedCalendarDate));
-
-      if (!state.items.length) {
-        el.bookingList.innerHTML = `<div class="empty">No hay citas para este filtro. Si buscas algo pasado, prueba la vista de historial.</div>`;
-      } else {
-        el.bookingList.innerHTML = "";
-        state.items.forEach((booking) => {
-          const card = document.createElement("article");
-          card.className = `booking-card${booking.can_cancel || booking.can_reschedule ? " primary-booking" : ""}`;
-          const canCancel = booking.can_cancel;
-          const canReschedule = booking.can_reschedule;
-          const servicio = escapeHtml(booking.servicio || "Consulta");
-          const empresa = escapeHtml(booking.empresa || "-");
-          const estado = escapeHtml(booking.estado || "-");
-          const fechaLabel = escapeHtml(formatDateLabel(booking));
-          const dateParts = formatShortDateParts(booking);
-          const day = escapeHtml(dateParts.day);
-          const month = escapeHtml(dateParts.month);
-          const time = escapeHtml(dateParts.time);
-          const nombre = escapeHtml(booking.nombre || "-");
-          const email = escapeHtml(booking.email || "-");
-          const employeeId = escapeHtml(booking.employee_id || "");
-          const employeeName = escapeHtml(booking.employee_name || "Agenda principal");
-          const manageUrl = escapeHtml(booking.manage_url || "");
-          const bookingId = escapeHtml(booking.booking_id || "");
-          const fecha = escapeHtml(booking.fecha || "");
-          const hora = escapeHtml(booking.hora || "");
-          const bookingLabel = escapeHtml(`${booking.employee_name || "Agenda principal"} - ${booking.servicio || "Consulta"} - ${formatDateLabel(booking)}`);
-          card.innerHTML = `
-            <div class="booking-top">
-              <div class="booking-heading">
-                <div class="booking-date-tile">
-                  <strong>${day}</strong>
-                  <span>${month}</span>
-                  <span>${time}</span>
-                </div>
-                <div class="booking-title">
-                  <strong>${servicio}</strong>
-                  <span class="muted">${empresa}</span>
-                </div>
-              </div>
-              <div class="pills">
-                <span class="${pillClass(booking.estado)}">${estado}</span>
-              </div>
-            </div>
-
-            <div class="booking-meta">
-              <div class="meta-box">
-                <span class="meta-label">Fecha y hora</span>
-                <span class="meta-value">${fechaLabel}</span>
-              </div>
-              <div class="meta-box">
-                <span class="meta-label">Cliente</span>
-                <span class="meta-value">${nombre}<br />${email}</span>
-              </div>
-              <div class="meta-box">
-                <span class="meta-label">Gestion</span>
-                <span class="meta-value">Agenda interna Vantelia</span>
-              </div>
-              <div class="meta-box">
-                <span class="meta-label">Profesional</span>
-                <span class="meta-value">${employeeName}</span>
-              </div>
-              <div class="meta-box">
-                <span class="meta-label">ID</span>
-                <span class="meta-value">${bookingId}</span>
-              </div>
-            </div>
-
-            <div class="booking-actions">
-              <button class="secondary small" type="button" data-action="manage" data-url="${manageUrl}">Gestionar</button>
-              <button class="danger small" type="button" data-action="cancel" data-id="${bookingId}" ${canCancel ? "" : "disabled"}>Cancelar</button>
-              <button class="secondary small" type="button" data-action="reschedule" data-id="${bookingId}" data-employee-id="${employeeId}" data-fecha="${fecha}" data-hora="${hora}" data-label="${bookingLabel}" ${canReschedule ? "" : "disabled"}>Reprogramar</button>
-            </div>
-          `;
-          el.bookingList.appendChild(card);
-        });
-      }
-
-      const shownFrom = state.total ? state.offset + 1 : 0;
-      const shownTo = Math.min(state.offset + state.limit, state.total);
-      el.pagination.classList.toggle("hidden", state.total <= state.limit);
-      el.paginationText.textContent = `Mostrando ${shownFrom}-${shownTo} de ${state.total} citas`;
-      el.prevPageBtn.disabled = state.offset <= 0;
-      el.nextPageBtn.disabled = state.offset + state.limit >= state.total;
-
-      el.bookingList.querySelectorAll("button[data-action]").forEach((button) => {
-        button.addEventListener("click", async () => {
-          const action = button.dataset.action;
-          const bookingId = button.dataset.id;
-          const url = button.dataset.url;
-          try {
-            if (action === "manage") {
-              if (!url) throw new Error("Esta reserva no tiene enlace de gestion.");
-              window.open(url, "_blank", "noopener,noreferrer");
-              return;
-            }
-            if (action === "cancel") {
-              await cancelBooking(bookingId);
-              return;
-            }
-            if (action === "reschedule") {
-              openReschedulePanel(
-                bookingId,
-                button.dataset.employeeId || "",
-                button.dataset.fecha || "",
-                button.dataset.hora || "",
-                button.dataset.label || ""
-              );
-            }
-          } catch (error) {
-            setStatus(error.message, "error");
-          }
-        });
-      });
-    }
-
-    async function loadBookings() {
-      const params = new URLSearchParams();
-      params.set("scope", state.scope);
-      params.set("limit", String(state.limit));
-      params.set("offset", String(state.offset));
-      if (state.status) params.set("estado", state.status);
-      if (state.query) params.set("q", state.query);
-      if (state.dateFrom) params.set("date_from", state.dateFrom);
-      if (state.dateTo) params.set("date_to", state.dateTo);
-      if (state.employeeFilter) params.set("employee_id", state.employeeFilter);
-      const payload = await api(`/auth/bookings?${params.toString()}`);
-      renderBookings(payload);
-      if (state.calendarOpen) {
-        await loadCalendarBookings();
-      }
-    }
-
-    function syncFilterInputs() {
-      el.statusFilter.value = state.status;
-      el.employeeFilter.value = state.employeeFilter;
-      el.bookingSearch.value = state.query;
-      el.bookingDateFrom.value = state.dateFrom;
-      el.bookingDateTo.value = state.dateTo;
-    }
-
-    function applyBookingFilters({
-      scope = state.scope,
-      status = state.status,
-      dateFrom = state.dateFrom,
-      dateTo = state.dateTo,
-      query = state.query,
-      employeeId = state.employeeFilter,
-    } = {}) {
-      state.scope = scope;
-      state.status = status;
-      state.dateFrom = dateFrom;
-      state.dateTo = dateTo;
-      state.query = query;
-      state.employeeFilter = employeeId;
-      state.offset = 0;
-      setScope(scope);
-      syncFilterInputs();
-      clearReschedulePanel();
-      loadBookings().catch((error) => setStatus(error.message, "error"));
-    }
-
-    function applySingleDayFilter(date) {
-      const dateKey = toDateInputValue(date);
-      state.calendarDate = new Date(date.getFullYear(), date.getMonth(), 1);
-      if (!state.calendarOpen) {
-        setCalendarOpen(true);
-      }
-      state.selectedCalendarDate = dateKey;
-      renderSelectedDayAgenda();
-      applyBookingFilters({ scope: "all", dateFrom: dateKey, dateTo: dateKey });
-    }
-
-    function applyWeekFilter() {
-      const today = new Date();
-      const weekEnd = addDays(today, 6);
-      if (!state.calendarOpen) {
-        setCalendarOpen(true);
-      }
-      state.calendarDate = new Date(today.getFullYear(), today.getMonth(), 1);
-      applyBookingFilters({
-        scope: "all",
-        dateFrom: toDateInputValue(today),
-        dateTo: toDateInputValue(weekEnd),
-      });
     }
 
     async function loadDashboard() {
@@ -5736,7 +5436,7 @@ tbody tr:hover { background: var(--surface-2); }
       await loadServices();
       await loadSchedule();
       await loadEmployees();
-      await loadBookings();
+      await loadCalendarBookings();
       await loadChats();
       if (state.showWelcomeTour && state.user?.role === "client") {
         openWelcomeTour();
@@ -5811,7 +5511,6 @@ tbody tr:hover { background: var(--surface-2); }
     async function logout() {
       await api("/auth/logout", { method: "POST" });
       state.user = null;
-      state.items = [];
       state.calendarItems = [];
       state.chats = [];
       state.selectedChatSessionId = "";
@@ -5829,8 +5528,6 @@ tbody tr:hover { background: var(--surface-2); }
       el.changeNewPasswordConfirm.value = "";
       clearReschedulePanel();
       renderShell();
-      state.calendarOpen = true;
-      el.bookingList.innerHTML = `<div class="empty">Inicia sesion para ver reservas.</div>`;
       el.conversationList.innerHTML = `<div class="empty">Inicia sesion para ver conversaciones.</div>`;
       el.conversationMessages.innerHTML = `<div class="empty">Inicia sesion para ver mensajes.</div>`;
       renderConversationPagination(0);
@@ -6064,41 +5761,17 @@ tbody tr:hover { background: var(--surface-2); }
       renderTodayOverview(state.dashboard);
     });
     el.employeeFilter.addEventListener("change", () => {
-      applyBookingFilters({ employeeId: el.employeeFilter.value.trim() });
+      state.employeeFilter = el.employeeFilter.value.trim();
+      clearReschedulePanel();
+      loadCalendarBookings().catch((error) => setStatus(error.message, "error"));
     });
     el.statusFilter.addEventListener("change", () => {
-      applyBookingFilters({ status: el.statusFilter.value.trim() });
-    });
-    el.bookingSearch.addEventListener("input", () => {
-      state.query = el.bookingSearch.value.trim();
-      state.offset = 0;
+      state.status = el.statusFilter.value.trim();
       clearReschedulePanel();
-      if (state.searchTimer) window.clearTimeout(state.searchTimer);
-      state.searchTimer = window.setTimeout(() => {
-        loadBookings().catch((error) => setStatus(error.message, "error"));
-      }, 220);
+      loadCalendarBookings().catch((error) => setStatus(error.message, "error"));
     });
-    el.bookingDateFrom.addEventListener("change", () => {
-      applyBookingFilters({ dateFrom: el.bookingDateFrom.value });
-    });
-    el.bookingDateTo.addEventListener("change", () => {
-      applyBookingFilters({ dateTo: el.bookingDateTo.value });
-    });
-    el.clearBookingFiltersBtn.addEventListener("click", () => {
-      clearSelectedCalendarDay();
-      applyBookingFilters({ scope: "upcoming", status: "", dateFrom: "", dateTo: "", query: "", employeeId: "" });
-    });
-    el.todayBookingsBtn.addEventListener("click", () => applySingleDayFilter(new Date()));
-    el.tomorrowBookingsBtn.addEventListener("click", () => applySingleDayFilter(addDays(new Date(), 1)));
-    el.weekBookingsBtn.addEventListener("click", () => applyWeekFilter());
-    el.upcomingBookingsBtn.addEventListener("click", () => {
-      clearSelectedCalendarDay();
-      applyBookingFilters({ scope: "upcoming", status: "", dateFrom: "", dateTo: "", query: "" });
-    });
-    el.toggleCalendarBtn.addEventListener("click", () => setCalendarOpen(!state.calendarOpen));
     el.clearDayAgendaBtn.addEventListener("click", () => {
       clearSelectedCalendarDay();
-      applyBookingFilters({ scope: "upcoming", status: state.status, dateFrom: "", dateTo: "", query: state.query });
     });
     el.prevCalendarMonthBtn.addEventListener("click", () => {
       state.calendarDate = new Date(state.calendarDate.getFullYear(), state.calendarDate.getMonth() - 1, 1);
@@ -6109,16 +5782,6 @@ tbody tr:hover { background: var(--surface-2); }
       state.calendarDate = new Date(state.calendarDate.getFullYear(), state.calendarDate.getMonth() + 1, 1);
       clearSelectedCalendarDay();
       loadCalendarBookings().catch((error) => setStatus(error.message, "error"));
-    });
-    el.prevPageBtn.addEventListener("click", () => {
-      state.offset = Math.max(0, state.offset - state.limit);
-      clearReschedulePanel();
-      loadBookings().catch((error) => setStatus(error.message, "error"));
-    });
-    el.nextPageBtn.addEventListener("click", () => {
-      state.offset += state.limit;
-      clearReschedulePanel();
-      loadBookings().catch((error) => setStatus(error.message, "error"));
     });
     el.rescheduleDate.addEventListener("change", () => {
       state.rescheduleSelectedTime = "";

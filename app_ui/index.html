@@ -42,38 +42,6 @@
       display: flex; min-height: 100vh; overflow: hidden;
     }
 
-    /* ── Mini rail izquierda (logos cliente) ── */
-    .rail {
-      width: 72px; min-width: 72px;
-      background: linear-gradient(180deg, #07101f 0%, #0B132B 100%);
-      border-right: 1px solid var(--line);
-      display: flex; flex-direction: column; align-items: center;
-      padding: 18px 0; gap: 14px;
-    }
-    .rail-logo {
-      width: 44px; height: 44px; border-radius: 12px;
-      background: linear-gradient(135deg, var(--accent), #1F6FEB);
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-    }
-    .rail-logo svg { width: 22px; height: 22px; color: #0B132B; }
-    .rail-bot {
-      width: 44px; height: 44px; border-radius: 12px;
-      background: var(--panel);
-      display: flex; align-items: center; justify-content: center;
-      color: var(--accent); font-weight: 700; font-size: 0.9rem;
-      cursor: pointer; transition: all .15s ease;
-      border: 1.5px solid transparent;
-    }
-    .rail-bot.active { border-color: var(--accent); background: var(--accent-soft); }
-    .rail-add {
-      width: 44px; height: 44px; border-radius: 12px;
-      background: var(--panel); color: var(--soft);
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; font-size: 1.4rem; line-height: 1;
-      border: 1.5px dashed var(--line-strong);
-    }
-
     /* ── Sidebar ── */
     .sidebar {
       width: var(--sidebar-w); min-width: var(--sidebar-w);
@@ -286,6 +254,142 @@
       border: 1px solid var(--line-strong); background: transparent;
     }
 
+    /* Apariencia: layout en bloques */
+    #page-appearance .panel-card { padding: 26px 28px; }
+    #page-appearance > .panel-card > h2 { font-size: 1.15rem; }
+    #page-appearance > .panel-card > .panel-sub { font-size: 0.86rem; margin-bottom: 22px; }
+
+    .ap-block {
+      margin-top: 18px;
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.012), rgba(255,255,255,0.005));
+    }
+    .ap-block-head {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
+      margin-bottom: 14px;
+    }
+    .ap-block-title {
+      font-size: 0.72rem;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .ap-block-sub { font-size: 0.78rem; color: var(--soft-2); }
+    .ap-grid { display: grid; gap: 14px; }
+    .ap-grid-3 { grid-template-columns: 96px 1fr 140px; align-items: end; }
+    .ap-grid-2 { grid-template-columns: 1fr 1fr; }
+    .ap-grid-shape { grid-template-columns: 280px 1fr; align-items: end; }
+    .ap-grid-voz { grid-template-columns: 1fr 1fr; gap: 18px; }
+    .ap-grid-voz .field-textarea { min-height: 130px; }
+    @media (max-width: 960px) {
+      .ap-grid-voz { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 760px) {
+      .ap-grid-3, .ap-grid-2, .ap-grid-shape { grid-template-columns: 1fr; }
+    }
+
+    #page-appearance .field-input,
+    #page-appearance .field-textarea { font-size: 0.9rem; padding: 9px 11px; }
+    #page-appearance .field-textarea { min-height: 90px; line-height: 1.55; }
+    #apPromptExtra { min-height: 120px; }
+    .ap-size-range { width: 100%; }
+    #page-appearance .ap-shape-toggle { width: 100%; max-width: 280px; }
+
+    .ap-color-card {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      background: rgba(7,16,31,0.6);
+    }
+    .ap-color-card input[type="color"] {
+      width: 40px; height: 40px; padding: 0; border-radius: 8px;
+      border: 1px solid var(--line-strong); background: transparent;
+      cursor: pointer; flex: 0 0 auto;
+    }
+    .ap-color-card .field-input { border: 0; background: transparent; padding: 4px 0; font-family: ui-monospace, monospace; }
+    .ap-color-card .field-input:focus { box-shadow: none; border: 0; }
+
+    .ap-logo-thumb {
+      position: relative;
+      width: 64px; height: 64px;
+      border-radius: 14px;
+      border: 1px solid var(--line-strong);
+      background: rgba(7,16,31,0.6);
+      padding: 0;
+      cursor: pointer;
+      overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color .15s ease, transform .12s ease;
+    }
+    .ap-logo-thumb:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .ap-logo-thumb:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .ap-logo-thumb-inner {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--soft); font-weight: 700; font-size: 1.05rem;
+    }
+    .ap-logo-thumb-inner img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .ap-logo-thumb-edit {
+      position: absolute; inset: auto 0 0 0;
+      padding: 4px 0;
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      font-size: 0.68rem;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      font-weight: 600;
+      opacity: 0;
+      transition: opacity .15s ease;
+    }
+    .ap-logo-thumb:hover .ap-logo-thumb-edit { opacity: 1; }
+    .ap-logo-clear {
+      background: transparent; border: 0; padding: 4px 0; margin-top: 4px;
+      color: var(--soft-2); font-size: 0.74rem; cursor: pointer;
+    }
+    .ap-logo-clear:hover { color: var(--danger); }
+
+    /* Forma del launcher */
+    .ap-shape-toggle {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+      background: rgba(7,16,31,0.6);
+      border: 1px solid var(--line-strong);
+      padding: 4px; border-radius: 12px;
+    }
+    .ap-shape-opt {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 9px 10px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      color: var(--soft);
+      cursor: pointer;
+      font-family: var(--font); font-size: 0.86rem; font-weight: 600;
+      transition: background .12s ease, color .12s ease, border-color .12s ease;
+    }
+    .ap-shape-opt:hover { color: var(--text); }
+    .ap-shape-opt.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    .ap-shape-icon-circle {
+      display: inline-block; width: 16px; height: 16px;
+      border-radius: 999px; background: currentColor;
+    }
+    .ap-shape-icon-bar {
+      display: inline-block; width: 26px; height: 12px;
+      border-radius: 999px; background: currentColor;
+    }
+    .ap-size-range {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
     .btn {
       padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 0.92rem;
       cursor: pointer; font-family: var(--font); border: 0;
@@ -370,7 +474,7 @@
     }
     .bot-fab:hover { transform: scale(1.08); }
     .bot-drawer {
-      position: fixed; top: 0; right: -400px; width: 380px; height: 100%;
+      position: fixed; top: 0; right: -520px; width: 500px; max-width: 100vw; height: 100%;
       background: var(--panel); border-left: 1px solid var(--line);
       z-index: 110; display: flex; flex-direction: column;
       transition: right .25s cubic-bezier(.4,0,.2,1);
@@ -501,14 +605,6 @@
 </head>
 <body>
 
-<!-- Mini rail -->
-<div class="rail">
-  <div class="rail-logo" title="Vantelia">
-    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 L2 22 H22 Z"/></svg>
-  </div>
-  <div class="rail-bot active" id="botInitials">AI</div>
-  <div class="rail-add" title="Crear otro bot (próximamente)">+</div>
-</div>
 
 <!-- Sidebar -->
 <aside class="sidebar" id="sidebar">
@@ -693,60 +789,128 @@
       <h2>Apariencia y personalidad</h2>
       <p class="panel-sub">Cambia cómo se ve y se comporta tu asistente.</p>
 
-      <div class="form-row">
+      <div class="ap-block">
+        <div class="ap-block-head">
+          <div class="ap-block-title">Identidad</div>
+          <div class="ap-block-sub">Como se presenta el asistente al visitante.</div>
+        </div>
+        <div class="ap-grid ap-grid-3">
+          <div class="field">
+            <label class="field-label">Foto</label>
+            <button type="button" id="apLogoBtn" class="ap-logo-thumb" aria-label="Cambiar foto del asistente">
+              <span id="apLogoPreview" class="ap-logo-thumb-inner">AI</span>
+              <span class="ap-logo-thumb-edit" aria-hidden="true">Cambiar</span>
+            </button>
+            <input type="file" id="apLogo" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden />
+            <button type="button" id="apLogoRemoveBtn" class="ap-logo-clear" hidden>Quitar</button>
+          </div>
+          <div class="field">
+            <label class="field-label">Nombre del bot</label>
+            <input class="field-input" id="apNombre" maxlength="120" />
+          </div>
+          <div class="field">
+            <label class="field-label">Icono (fallback)</label>
+            <input class="field-input" id="apIcono" maxlength="12" placeholder="AI" />
+          </div>
+        </div>
+      </div>
+
+      <div class="ap-block">
+        <div class="ap-block-head">
+          <div class="ap-block-title">Colores</div>
+          <div class="ap-block-sub">Principal manda; secundario acompana degradados y resaltes.</div>
+        </div>
+        <div class="ap-grid ap-grid-2">
+          <div class="field">
+            <label class="field-label">Color principal</label>
+            <div class="ap-color-card">
+              <input type="color" id="apColor" />
+              <input class="field-input" id="apColorText" maxlength="7" placeholder="#00D1FF" />
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label">Color secundario</label>
+            <div class="ap-color-card">
+              <input type="color" id="apAccent" />
+              <input class="field-input" id="apAccentText" maxlength="7" placeholder="#00F5D4" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ap-block">
+        <div class="ap-block-head">
+          <div class="ap-block-title">Boton flotante</div>
+          <div class="ap-block-sub">Forma y tamano del lanzador en la web del cliente.</div>
+        </div>
+        <div class="ap-grid ap-grid-shape">
+          <div class="field">
+            <label class="field-label">Forma</label>
+            <div class="ap-shape-toggle" role="radiogroup" aria-label="Forma del boton flotante">
+              <button type="button" class="ap-shape-opt" data-shape="circle" role="radio">
+                <span class="ap-shape-icon-circle"></span>
+                Circulo
+              </button>
+              <button type="button" class="ap-shape-opt" data-shape="bar" role="radio">
+                <span class="ap-shape-icon-bar"></span>
+                Barra
+              </button>
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label">
+              <span id="apSizeLabel">Tamano</span>
+              <span id="apSizeValue" style="float:right;color:var(--accent);font-weight:700;">60 px</span>
+            </label>
+            <input type="range" id="apSize" class="ap-size-range" min="48" max="96" step="2" value="60" />
+            <p class="panel-sub" id="apSizeHint" style="margin:6px 0 0;font-size:0.76rem;">Circulo: 48 a 96 px de diametro.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="ap-block">
+        <div class="ap-block-head">
+          <div class="ap-block-title">Voz del asistente</div>
+          <div class="ap-block-sub">Lo primero que ve el visitante y las reglas internas que sigue la IA.</div>
+        </div>
+        <div class="ap-grid ap-grid-voz">
+          <div class="field">
+            <label class="field-label">Mensaje de bienvenida</label>
+            <textarea class="field-textarea" id="apBienvenida" maxlength="600"></textarea>
+          </div>
+          <div class="field">
+            <label class="field-label">Instrucciones internas (privadas, no se muestran)</label>
+            <textarea class="field-textarea" id="apPromptExtra" maxlength="4000"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="ap-block">
+        <div class="ap-block-head">
+          <div class="ap-block-title">Preguntas sugeridas</div>
+          <div class="ap-block-sub">Botones rapidos que ve el visitante nada mas abrir el chat (hasta 8).</div>
+        </div>
+        <div class="starter-list" id="apStarterList"></div>
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <input class="field-input" id="apNewStarter" placeholder="Anadir pregunta..." maxlength="140" />
+          <button class="btn btn-ghost" id="apAddStarterBtn" type="button">Anadir</button>
+        </div>
+      </div>
+
+      <div class="ap-block">
+        <div class="ap-block-head">
+          <div class="ap-block-title">Seguridad</div>
+          <div class="ap-block-sub">Dominios autorizados para cargar el widget. Vacio = sin restriccion.</div>
+        </div>
         <div class="field">
-          <label class="field-label">Nombre del bot</label>
-          <input class="field-input" id="apNombre" maxlength="120" />
-        </div>
-        <div class="field" style="flex: 0 0 110px;">
-          <label class="field-label">Icono</label>
-          <input class="field-input" id="apIcono" maxlength="12" placeholder="AI" />
-        </div>
-        <div class="field" style="flex: 0 0 180px;">
-          <label class="field-label">Color principal</label>
-          <div class="color-row">
-            <input type="color" id="apColor" />
-            <input class="field-input" id="apColorText" maxlength="7" />
-          </div>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="field" style="flex: 1 1 100%;">
-          <label class="field-label">Mensaje de bienvenida</label>
-          <textarea class="field-textarea" id="apBienvenida" maxlength="600"></textarea>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="field" style="flex: 1 1 100%;">
-          <label class="field-label">Instrucciones del asistente</label>
-          <textarea class="field-textarea" id="apPromptExtra" maxlength="4000" style="min-height:140px;"></textarea>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="field" style="flex: 1 1 100%;">
-          <label class="field-label">Preguntas sugeridas (botones rápidos)</label>
-          <div class="starter-list" id="apStarterList"></div>
-          <div style="display:flex; gap:8px; margin-top:10px;">
-            <input class="field-input" id="apNewStarter" placeholder="Añadir pregunta..." maxlength="140" />
-            <button class="btn btn-ghost" id="apAddStarterBtn" type="button">Añadir</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="field" style="flex: 1 1 100%;">
-          <label class="field-label">Dominios autorizados (uno por línea)</label>
+          <label class="field-label">Dominios autorizados (uno por linea)</label>
           <textarea class="field-textarea" id="apOrigins" placeholder="https://miweb.com"></textarea>
-          <p class="panel-sub" style="margin-top:6px; margin-bottom:0;">El widget solo cargará desde estos dominios. Déjalo vacío para no restringir.</p>
         </div>
       </div>
 
-      <div style="display:flex; gap:10px; margin-top:18px;">
-        <button class="btn btn-primary" id="apSaveBtn" type="button">Guardar cambios</button>
-        <button class="btn btn-ghost" id="apReloadBtn" type="button">Descartar</button>
+      <div class="ap-save-status" id="apSaveStatus" aria-live="polite" style="margin-top:22px;display:flex;align-items:center;gap:8px;color:var(--soft);font-size:0.82rem;">
+        <span class="ap-save-dot" id="apSaveDot" style="width:8px;height:8px;border-radius:999px;background:var(--success);box-shadow:0 0 0 4px rgba(0,245,212,0.18);"></span>
+        <span id="apSaveText">Cambios guardados automaticamente.</span>
       </div>
     </div>
   </section>
@@ -964,7 +1128,7 @@
         <div class="filter-chip" data-period="upcoming">Próximas</div>
       </div>
       <div style="margin-left:auto; display:flex; gap:8px;">
-        <button class="btn btn-ghost" id="citasViewCal" style="padding:8px 14px;" title="Vista calendario">Cal</button>
+        <button class="btn btn-primary" id="citasViewCal" style="padding:8px 14px;" title="Vista calendario">Calendario</button>
         <button class="btn btn-ghost" id="citasViewList" style="padding:8px 14px;" title="Vista lista">Lista</button>
         <a class="btn btn-ghost" href="/auth/bookings/export">CSV</a>
       </div>
@@ -986,8 +1150,8 @@
       <button class="btn btn-ghost" id="citasFiltLimpiar" style="padding:8px 14px;">Limpiar</button>
     </div>
 
-    <!-- Vista Calendario -->
-    <div id="citasCalView" class="panel-card" style="display:none;">
+    <!-- Vista Calendario (por defecto) -->
+    <div id="citasCalView" class="panel-card">
       <div class="cal-nav">
         <button id="calPrev">&#8592;</button>
         <h3 id="calTitle">Mayo 2026</h3>
@@ -997,7 +1161,7 @@
     </div>
 
     <!-- Vista Lista -->
-    <div id="citasListView">
+    <div id="citasListView" style="display:none;">
       <div id="citasListContent" style="display:flex; flex-direction:column; gap:10px;"></div>
       <div style="display:flex; gap:10px; margin-top:14px; align-items:center;">
         <button class="btn btn-ghost" id="citasPrevPage" disabled>Anterior</button>
@@ -1160,25 +1324,7 @@
   </section>
 </main>
 
-<!-- Bot test drawer -->
-<div class="drawer-overlay" id="botOverlay"></div>
-<div class="bot-drawer" id="botDrawer">
-  <div class="bot-drawer-head">
-    <div class="avatar" id="drawerAvatar" style="width:28px;height:28px;font-size:0.75rem;">AI</div>
-    <b id="drawerTitle">Test del asistente</b>
-    <button id="botDrawerClose">×</button>
-  </div>
-  <div class="bot-drawer-body" id="botDrawerBody">
-    <div class="chat-msg bot" id="botDrawerWelcome">Hola, ¿en qué puedo ayudarte hoy?</div>
-  </div>
-  <div class="bot-drawer-input">
-    <input type="text" id="botDrawerInput" placeholder="Escribe un mensaje..." />
-    <button id="botDrawerSend">→</button>
-  </div>
-</div>
-<button class="bot-fab" id="botFab" title="Probar asistente">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-</button>
+<!-- El widget real se carga dinamicamente para que el cliente lo vea exactamente como lo veran sus visitantes. -->
 
 <!-- Side panel: employee editor -->
 <div class="drawer-overlay" id="equipoOverlay"></div>
@@ -1359,8 +1505,6 @@ async function loadOverview() {
     state.icono = (data.icono || 'AI').slice(0, 12);
     state.bienvenida = data.bienvenida;
 
-    document.getElementById('botInitials').textContent = state.icono.slice(0, 2).toUpperCase();
-    document.getElementById('botInitials').style.background = state.color;
     document.getElementById('rpTitle').textContent = state.nombre || 'Tu Asistente';
     document.getElementById('rpAvatar').textContent = state.icono.slice(0, 2).toUpperCase();
     document.getElementById('rpAvatar').style.background = `linear-gradient(135deg, ${state.color}, var(--accent-2))`;
@@ -1398,16 +1542,40 @@ async function loadDeploy() {
   }
 }
 
+const DEFAULT_STARTERS = [
+  'Agendar cita',
+  'Preguntas frecuentes',
+  'Informacion servicios',
+  'Recomendar servicio',
+  'Comparar servicios',
+  'Estimar precio',
+];
+
 async function loadAppearance() {
   try {
     const data = await api('/auth/app/appearance');
     state.color = data.color;
+    state.accent_color = data.accent_color || '';
     state.icono = data.icono;
     state.nombre = data.nombre;
     state.bienvenida = data.bienvenida;
     state.prompt_extra = data.prompt_extra;
-    state.starter_questions = data.starter_questions || [];
+    state.logo_url = data.logo_url || '';
+    state.launcher_shape = (data.launcher_shape === 'bar') ? 'bar' : 'circle';
+    state.launcher_size = Number(data.launcher_size) || (state.launcher_shape === 'bar' ? 200 : 60);
+    const incomingStarters = Array.isArray(data.starter_questions) ? data.starter_questions.filter(Boolean) : [];
+    let seedStarters = false;
+    if (!incomingStarters.length) {
+      state.starter_questions = [...DEFAULT_STARTERS];
+      seedStarters = true;
+    } else {
+      state.starter_questions = incomingStarters;
+    }
     state.allowed_origins = data.allowed_origins || [];
+
+    const accentValue = state.accent_color || '#00F5D4';
+    document.getElementById('apAccent').value = accentValue;
+    document.getElementById('apAccentText').value = state.accent_color || '';
 
     document.getElementById('apNombre').value = state.nombre;
     document.getElementById('apIcono').value = state.icono;
@@ -1416,11 +1584,51 @@ async function loadAppearance() {
     document.getElementById('apBienvenida').value = state.bienvenida;
     document.getElementById('apPromptExtra').value = state.prompt_extra;
     document.getElementById('apOrigins').value = state.allowed_origins.join('\n');
+    renderLogoPreview();
+    renderShapeUI();
     renderStarters();
     renderRightPreview();
+    if (seedStarters) scheduleAutoSave(200);
   } catch (err) {
     toast(err.message, 'error');
   }
+}
+
+function renderLogoPreview() {
+  const box = document.getElementById('apLogoPreview');
+  const clearBtn = document.getElementById('apLogoRemoveBtn');
+  if (!box) return;
+  if (state.logo_url) {
+    box.innerHTML = `<img src="${state.logo_url}" alt="Foto del asistente" />`;
+    if (clearBtn) clearBtn.hidden = false;
+  } else {
+    box.textContent = (state.icono || 'AI').slice(0, 2).toUpperCase();
+    if (clearBtn) clearBtn.hidden = true;
+  }
+}
+
+function renderShapeUI() {
+  document.querySelectorAll('.ap-shape-opt').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.shape === state.launcher_shape);
+    btn.setAttribute('aria-checked', btn.dataset.shape === state.launcher_shape ? 'true' : 'false');
+  });
+  const range = document.getElementById('apSize');
+  const label = document.getElementById('apSizeLabel');
+  const value = document.getElementById('apSizeValue');
+  const hint = document.getElementById('apSizeHint');
+  if (state.launcher_shape === 'bar') {
+    range.min = 120; range.max = 280; range.step = 10;
+    state.launcher_size = Math.max(120, Math.min(280, state.launcher_size || 200));
+    if (label) label.textContent = 'Anchura de la barra';
+    if (hint) hint.textContent = 'Barra: 120 a 280 px de ancho.';
+  } else {
+    range.min = 48; range.max = 96; range.step = 2;
+    state.launcher_size = Math.max(48, Math.min(96, state.launcher_size || 60));
+    if (label) label.textContent = 'Diametro del circulo';
+    if (hint) hint.textContent = 'Circulo: 48 a 96 px de diametro.';
+  }
+  range.value = state.launcher_size;
+  if (value) value.textContent = state.launcher_size + ' px';
 }
 
 function renderStarters() {
@@ -1430,8 +1638,17 @@ function renderStarters() {
     const wrap = document.createElement('div');
     wrap.className = 'starter-chip';
     wrap.innerHTML = `<input type="text" value="${escapeHtml(q)}" maxlength="140" /><button type="button" title="Quitar">×</button>`;
-    wrap.querySelector('input').addEventListener('input', e => { state.starter_questions[i] = e.target.value; renderRightPreview(); });
-    wrap.querySelector('button').addEventListener('click', () => { state.starter_questions.splice(i, 1); renderStarters(); renderRightPreview(); });
+    wrap.querySelector('input').addEventListener('input', e => {
+      state.starter_questions[i] = e.target.value;
+      renderRightPreview();
+      scheduleAutoSave(700);
+    });
+    wrap.querySelector('button').addEventListener('click', () => {
+      state.starter_questions.splice(i, 1);
+      renderStarters();
+      renderRightPreview();
+      scheduleAutoSave(150);
+    });
     list.appendChild(wrap);
   });
 }
@@ -1449,32 +1666,72 @@ function renderRightPreview() {
   });
 }
 
+let _apSaveTimer = null;
+let _apSavePending = false;
+function setSaveStatus(kind, msg) {
+  const dot = document.getElementById('apSaveDot');
+  const text = document.getElementById('apSaveText');
+  if (!dot || !text) return;
+  text.textContent = msg;
+  const palette = {
+    saved:   { bg: 'var(--success)', shadow: 'rgba(0,245,212,0.18)' },
+    saving:  { bg: 'var(--accent)',  shadow: 'rgba(0,209,255,0.22)' },
+    error:   { bg: 'var(--danger)',  shadow: 'rgba(247,93,122,0.22)' },
+  };
+  const c = palette[kind] || palette.saved;
+  dot.style.background = c.bg;
+  dot.style.boxShadow = `0 0 0 4px ${c.shadow}`;
+}
+
+function scheduleAutoSave(delay = 500) {
+  if (_apSaveTimer) clearTimeout(_apSaveTimer);
+  setSaveStatus('saving', 'Guardando cambios...');
+  _apSaveTimer = setTimeout(() => { saveAppearance().catch(() => {}); }, delay);
+}
+
 async function saveAppearance() {
-  const btn = document.getElementById('apSaveBtn');
-  btn.disabled = true;
+  if (_apSavePending) {
+    scheduleAutoSave(400);
+    return;
+  }
+  _apSavePending = true;
   try {
     const origins = document.getElementById('apOrigins').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
     const payload = {
       nombre: document.getElementById('apNombre').value.trim(),
       icono: document.getElementById('apIcono').value.trim(),
       color: document.getElementById('apColor').value,
+      accent_color: (document.getElementById('apAccentText').value.trim() || document.getElementById('apAccent').value || ''),
+      logo_url: state.logo_url || '',
+      launcher_shape: state.launcher_shape || 'circle',
+      launcher_size: Number(state.launcher_size) || 60,
       bienvenida: document.getElementById('apBienvenida').value.trim(),
       prompt_extra: document.getElementById('apPromptExtra').value.trim(),
       starter_questions: state.starter_questions.map(s => (s || '').trim()).filter(Boolean).slice(0, 8),
       allowed_origins: origins,
     };
-    await api('/auth/app/appearance', {
+    const data = await api('/auth/app/appearance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    toast('Cambios guardados', 'success');
-    await loadAppearance();
-    await loadOverview();
+    state.color = data.color;
+    state.accent_color = data.accent_color || '';
+    state.icono = data.icono;
+    state.nombre = data.nombre;
+    state.bienvenida = data.bienvenida;
+    state.prompt_extra = data.prompt_extra;
+    state.logo_url = data.logo_url || '';
+    state.launcher_shape = (data.launcher_shape === 'bar') ? 'bar' : 'circle';
+    state.launcher_size = Number(data.launcher_size) || (state.launcher_shape === 'bar' ? 200 : 60);
+    state.starter_questions = data.starter_questions || [];
+    state.allowed_origins = data.allowed_origins || [];
+    setSaveStatus('saved', 'Cambios guardados automaticamente.');
+    mountVanteliaWidget();
   } catch (err) {
-    toast(err.message, 'error');
+    setSaveStatus('error', `No se pudo guardar: ${err.message}`);
   } finally {
-    btn.disabled = false;
+    _apSavePending = false;
   }
 }
 
@@ -1588,14 +1845,80 @@ document.getElementById('changePwdBtn').addEventListener('click', () => {
 const nameStr = (document.getElementById('userName').textContent || '').trim();
 document.getElementById('userAvatar').textContent = (nameStr || '?').slice(0, 1).toUpperCase();
 
-// Buttons
-document.getElementById('apSaveBtn').addEventListener('click', saveAppearance);
-document.getElementById('apReloadBtn').addEventListener('click', loadAppearance);
+// Auto-save: cualquier input/change del bloque Apariencia dispara guardado debounced.
+const MAX_LOGO_BYTES_APP = 1_400_000;
+function ingestLogoFile(file) {
+  if (!file) return;
+  if (!/^image\//.test(file.type || '')) {
+    toast('Formato no soportado. Usa PNG, JPG, SVG o WebP.', 'error');
+    return;
+  }
+  if (file.size > MAX_LOGO_BYTES_APP) {
+    toast('La foto pesa demasiado. Maximo 1.4 MB.', 'error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    state.logo_url = e.target.result;
+    renderLogoPreview();
+    scheduleAutoSave(150);
+  };
+  reader.readAsDataURL(file);
+}
+const _apLogoInput = document.getElementById('apLogo');
+const _apLogoBtn = document.getElementById('apLogoBtn');
+if (_apLogoBtn) _apLogoBtn.addEventListener('click', () => _apLogoInput.click());
+_apLogoInput.addEventListener('change', (event) => {
+  const file = event.target.files && event.target.files[0];
+  ingestLogoFile(file);
+  if (!file || file.size > MAX_LOGO_BYTES_APP) event.target.value = '';
+});
+document.getElementById('apLogoRemoveBtn').addEventListener('click', (event) => {
+  event.stopPropagation();
+  state.logo_url = '';
+  _apLogoInput.value = '';
+  renderLogoPreview();
+  scheduleAutoSave(150);
+});
+
+document.querySelectorAll('.ap-shape-opt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    state.launcher_shape = btn.dataset.shape;
+    state.launcher_size = (btn.dataset.shape === 'bar') ? 200 : 60;
+    renderShapeUI();
+    scheduleAutoSave(150);
+  });
+});
+document.getElementById('apSize').addEventListener('input', (event) => {
+  state.launcher_size = Number(event.target.value) || 60;
+  const value = document.getElementById('apSizeValue');
+  if (value) value.textContent = state.launcher_size + ' px';
+  scheduleAutoSave(400);
+});
 document.getElementById('apColor').addEventListener('input', e => {
   document.getElementById('apColorText').value = e.target.value;
+  scheduleAutoSave(400);
 });
 document.getElementById('apColorText').addEventListener('input', e => {
-  if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) document.getElementById('apColor').value = e.target.value;
+  if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) {
+    document.getElementById('apColor').value = e.target.value;
+    scheduleAutoSave(500);
+  }
+});
+document.getElementById('apAccent').addEventListener('input', e => {
+  document.getElementById('apAccentText').value = e.target.value;
+  scheduleAutoSave(400);
+});
+document.getElementById('apAccentText').addEventListener('input', e => {
+  const v = e.target.value.trim();
+  if (!v || /^#[0-9A-Fa-f]{6}$/.test(v)) {
+    if (v) document.getElementById('apAccent').value = v;
+    scheduleAutoSave(500);
+  }
+});
+['apNombre','apIcono','apBienvenida','apPromptExtra','apOrigins'].forEach((id) => {
+  const node = document.getElementById(id);
+  if (node) node.addEventListener('input', () => scheduleAutoSave(700));
 });
 document.getElementById('apAddStarterBtn').addEventListener('click', () => {
   const v = document.getElementById('apNewStarter').value.trim();
@@ -1604,6 +1927,7 @@ document.getElementById('apAddStarterBtn').addEventListener('click', () => {
   document.getElementById('apNewStarter').value = '';
   renderStarters();
   renderRightPreview();
+  scheduleAutoSave(150);
 });
 document.getElementById('apNewStarter').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('apAddStarterBtn').click();
@@ -2050,38 +2374,22 @@ document.getElementById('sidebarToggle').addEventListener('click', () => {
   document.getElementById('sidebar').classList.toggle('collapsed');
 });
 
-// ── Bot test drawer ───────────────────────────────────────────────────
-const botDrawer = document.getElementById('botDrawer');
-const botOverlay = document.getElementById('botOverlay');
-const botSession = 's_bot_' + Math.random().toString(36).slice(2);
-
-function openBotDrawer() { botDrawer.classList.add('open'); botOverlay.classList.add('open'); }
-function closeBotDrawer() { botDrawer.classList.remove('open'); botOverlay.classList.remove('open'); }
-
-document.getElementById('botFab').addEventListener('click', openBotDrawer);
-document.getElementById('botDrawerClose').addEventListener('click', closeBotDrawer);
-botOverlay.addEventListener('click', closeBotDrawer);
-
-async function sendBotMessage(text) {
-  text = (text || '').trim();
-  if (!text) return;
-  const body = document.getElementById('botDrawerBody');
-  const u = document.createElement('div'); u.className = 'chat-msg user'; u.textContent = text;
-  body.appendChild(u); body.scrollTop = body.scrollHeight;
-  document.getElementById('botDrawerInput').value = '';
-  try {
-    const r = await api('/chat', { method:'POST', headers:{'Content-Type':'application/json','Origin':location.origin},
-      body: JSON.stringify({ cliente_id: state.cliente_id, session_id: botSession, message: text }) });
-    const b = document.createElement('div'); b.className = 'chat-msg bot';
-    b.textContent = (r?.respuesta || r?.message || '').replace(/\[MOSTRAR_FORMULARIO\]/g,'').trim() || '(sin respuesta)';
-    body.appendChild(b); body.scrollTop = body.scrollHeight;
-  } catch(e) {
-    const b = document.createElement('div'); b.className = 'chat-msg bot'; b.textContent = '⚠ ' + e.message;
-    body.appendChild(b);
-  }
+// ── Widget real embebido (el mismo que verian los visitantes en su web) ──
+function mountVanteliaWidget() {
+  if (!state.cliente_id) return;
+  const old = document.getElementById('vantelia-embed-script');
+  if (old) old.remove();
+  document.getElementById('ia-w-container')?.remove();
+  const script = document.createElement('script');
+  script.id = 'vantelia-embed-script';
+  script.src = `/widget/widget.min.js?t=${Date.now()}`;
+  script.dataset.api = window.location.origin;
+  script.dataset.client = state.cliente_id;
+  script.dataset.position = 'right';
+  script.async = true;
+  document.body.appendChild(script);
 }
-document.getElementById('botDrawerSend').addEventListener('click', () => sendBotMessage(document.getElementById('botDrawerInput').value));
-document.getElementById('botDrawerInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendBotMessage(e.target.value); });
+function reloadBotDrawer() { mountVanteliaWidget(); }
 
 // ── CITAS ─────────────────────────────────────────────────────────────
 const citasState = { page: 0, pageSize: 20, total: 0, period: 'all', calYear: null, calMonth: null, calData: [] };
@@ -2219,11 +2527,15 @@ document.getElementById('reschedOverlay').addEventListener('click', () => { docu
 document.getElementById('citasViewCal').addEventListener('click', () => {
   document.getElementById('citasCalView').style.display = '';
   document.getElementById('citasListView').style.display = 'none';
+  document.getElementById('citasViewCal').classList.replace('btn-ghost', 'btn-primary');
+  document.getElementById('citasViewList').classList.replace('btn-primary', 'btn-ghost');
   renderCalendar();
 });
 document.getElementById('citasViewList').addEventListener('click', () => {
   document.getElementById('citasCalView').style.display = 'none';
   document.getElementById('citasListView').style.display = '';
+  document.getElementById('citasViewList').classList.replace('btn-ghost', 'btn-primary');
+  document.getElementById('citasViewCal').classList.replace('btn-primary', 'btn-ghost');
   fetchCitasList();
 });
 document.getElementById('citasPrevPage').addEventListener('click', () => { citasState.page--; fetchCitasList(); });
@@ -2284,24 +2596,38 @@ async function loadEquipo() {
   const grid = document.getElementById('equipoGrid');
   grid.innerHTML = '<div class="panel-sub">Cargando…</div>';
   try {
-    const [emps, svcs] = await Promise.all([api('/auth/employees'), api('/auth/services').catch(() => [])]);
-    allServices = svcs || [];
+    const [empsRaw, svcsRaw] = await Promise.all([api('/auth/employees'), api('/auth/services').catch(() => ({ items: [] }))]);
+    const emps = Array.isArray(empsRaw) ? empsRaw : (empsRaw?.items || []);
+    const svcs = Array.isArray(svcsRaw) ? svcsRaw : (svcsRaw?.items || []);
+    allServices = svcs;
     grid.innerHTML = '';
     if (!emps.length) { grid.innerHTML = '<div class="panel-sub">Sin profesionales. Crea el primero.</div>'; }
-    emps.forEach(emp => {
+    emps.forEach(raw => {
+      const emp = {
+        id: raw.employee_id || raw.id,
+        name: raw.name || '',
+        role: raw.role_label || raw.role || '',
+        color: raw.color || '#00D1FF',
+        active: typeof raw.is_active === 'boolean' ? raw.is_active : (raw.active !== false),
+        raw,
+      };
       const card = document.createElement('div'); card.className = 'employee-card';
       card.innerHTML = `
         <div style="display:flex; align-items:center; gap:8px;">
-          <div class="employee-dot" style="background:${escapeHtml(emp.color||'#00D1FF')};"></div>
+          <div class="employee-dot" style="background:${escapeHtml(emp.color)};"></div>
           <span class="employee-name">${escapeHtml(emp.name)}</span>
         </div>
-        <div class="employee-role">${escapeHtml(emp.role||'')}</div>
+        <div class="employee-role">${escapeHtml(emp.role)}</div>
         <div class="employee-status" style="color:${emp.active?'var(--success)':'var(--soft-2)'};">${emp.active?'Activo':'Inactivo'}</div>`;
       card.addEventListener('click', () => openEquipoPanel(emp));
       grid.appendChild(card);
     });
-    loadHorariosProfSelect(emps);
-    loadCitasProfSelect(emps);
+    const empsNormalized = emps.map(raw => ({
+      id: raw.employee_id || raw.id,
+      name: raw.name || '',
+    }));
+    loadHorariosProfSelect(empsNormalized);
+    loadCitasProfSelect(empsNormalized);
   } catch(e) { grid.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
 }
 
@@ -2585,10 +2911,7 @@ document.getElementById('cuentaLogoutBtn').addEventListener('click', async () =>
 (async function init() {
   await Promise.all([loadOverview(), loadDeploy(), loadAppearance()]);
   loadInstalacion();
-  // Update bot drawer with bot name/welcome after overview loads
-  document.getElementById('drawerAvatar').textContent = (state.icono||'AI').slice(0,2).toUpperCase();
-  document.getElementById('drawerTitle').textContent = (state.nombre||'Tu Asistente') + ' — Test';
-  document.getElementById('botDrawerWelcome').textContent = state.bienvenida || 'Hola, ¿en qué puedo ayudarte hoy?';
+  mountVanteliaWidget();
 })();
 </script>
 </body>

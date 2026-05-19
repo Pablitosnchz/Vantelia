@@ -2171,6 +2171,8 @@ class ConfigPublicaCliente(BaseModel):
     color: str
     accent_color: str = ""
     logo_url: str = ""
+    launcher_shape: str = "circle"
+    launcher_size: int = 60
     bienvenida: str
     booking_enabled: bool
     branding_text: str
@@ -2448,6 +2450,9 @@ class AppAppearancePayload(BaseModel):
     color: Optional[str] = Field(default=None, max_length=7)
     accent_color: Optional[str] = Field(default=None, max_length=7)
     icono: Optional[str] = Field(default=None, max_length=12)
+    logo_url: Optional[str] = Field(default=None, max_length=2000000)
+    launcher_shape: Optional[str] = Field(default=None, max_length=16)
+    launcher_size: Optional[int] = Field(default=None, ge=48, le=320)
     bienvenida: Optional[str] = Field(default=None, max_length=600)
     prompt_extra: Optional[str] = Field(default=None, max_length=4000)
     starter_questions: Optional[List[str]] = None
@@ -2461,6 +2466,9 @@ class AppAppearanceResponse(BaseModel):
     color: str
     accent_color: str = ""
     icono: str
+    logo_url: str = ""
+    launcher_shape: str = "circle"
+    launcher_size: int = 60
     bienvenida: str
     prompt_extra: str
     starter_questions: List[str] = Field(default_factory=list)
@@ -5419,6 +5427,10 @@ def _update_portal_ai_config(
         if nombre:
             config["nombre"] = nombre
 
+    # Logo del asistente disponible en todos los planes (feature basica de identidad).
+    if data.logo_url is not None:
+        config["logo_url"] = _sanitize_text(data.logo_url)
+
     if branding_allowed:
         config["icono"] = _sanitize_text(data.icono)[:12] or "AI"
         if data.color is not None:
@@ -5432,10 +5444,8 @@ def _update_portal_ai_config(
             branding_value = _sanitize_text(data.branding_text) or "Powered by Vantelia"
             branding["powered_by"] = branding_value
             config["branding"] = branding
-        if data.logo_url is not None:
-            config["logo_url"] = _sanitize_text(data.logo_url)
     else:
-        # Plan sin personalización: forzamos branding por defecto Vantelia
+        # Plan sin personalización completa: forzamos branding por defecto Vantelia.
         branding = config.get("branding") or {}
         branding["powered_by"] = "Powered by Vantelia"
         config["branding"] = branding
@@ -10777,6 +10787,13 @@ async def app_appearance_get(
     cliente_id = _resolve_cliente_for_self_serve_user(user)
     cfg = CONFIG_CLIENTES.get(cliente_id, {})
     state = _read_onboarding_state(cliente_id)
+    launcher_shape = str(cfg.get("launcher_shape", "circle") or "circle").lower()
+    if launcher_shape not in ("circle", "bar"):
+        launcher_shape = "circle"
+    try:
+        launcher_size = int(cfg.get("launcher_size", 60) or 60)
+    except (TypeError, ValueError):
+        launcher_size = 60
     return AppAppearanceResponse(
         ok=True,
         cliente_id=cliente_id,
@@ -10784,6 +10801,9 @@ async def app_appearance_get(
         color=cfg.get("color", "#00b1d9"),
         accent_color=cfg.get("accent_color", ""),
         icono=cfg.get("icono", "AI"),
+        logo_url=cfg.get("logo_url", ""),
+        launcher_shape=launcher_shape,
+        launcher_size=launcher_size,
         bienvenida=cfg.get("bienvenida", ""),
         prompt_extra=cfg.get("prompt_extra", ""),
         starter_questions=state.get("starter_questions", []) or [],
@@ -10811,6 +10831,21 @@ async def app_appearance_post(
             cfg["accent_color"] = ac if (not ac or re.match(r"^#[0-9A-Fa-f]{6}$", ac)) else cfg.get("accent_color", "")
         if data.icono is not None:
             cfg["icono"] = _sanitize_text(data.icono)[:12] or "AI"
+        if data.logo_url is not None:
+            cfg["logo_url"] = _sanitize_text(data.logo_url)
+        if data.launcher_shape is not None:
+            shape = _sanitize_text(data.launcher_shape).lower()
+            cfg["launcher_shape"] = shape if shape in ("circle", "bar") else "circle"
+        if data.launcher_size is not None:
+            try:
+                size_val = int(data.launcher_size)
+            except (TypeError, ValueError):
+                size_val = 60
+            current_shape = cfg.get("launcher_shape", "circle")
+            if current_shape == "circle":
+                cfg["launcher_size"] = max(48, min(96, size_val))
+            else:
+                cfg["launcher_size"] = max(120, min(280, size_val))
         if data.bienvenida is not None:
             cfg["bienvenida"] = _sanitize_text(data.bienvenida, allow_multiline=True)[:600]
         if data.prompt_extra is not None:
@@ -13528,12 +13563,26 @@ async def info_cliente(cliente_id: str, request: Request) -> ConfigPublicaClient
     contacto = config.get("contacto", {})
     branding = config.get("branding", {})
 
+    launcher_shape = str(config.get("launcher_shape", "circle") or "circle").lower()
+    if launcher_shape not in ("circle", "bar"):
+        launcher_shape = "circle"
+    try:
+        launcher_size = int(config.get("launcher_size", 60) or 60)
+    except (TypeError, ValueError):
+        launcher_size = 60
+    if launcher_shape == "circle":
+        launcher_size = max(48, min(96, launcher_size))
+    else:
+        launcher_size = max(120, min(280, launcher_size))
+
     return ConfigPublicaCliente(
         nombre=config["nombre"],
         icono=config["icono"],
         color=config["color"],
         accent_color=config.get("accent_color", ""),
         logo_url=config.get("logo_url", ""),
+        launcher_shape=launcher_shape,
+        launcher_size=launcher_size,
         bienvenida=config["bienvenida"],
         booking_enabled=config["booking"]["enabled"],
         branding_text=branding.get("powered_by", "Powered by Vantelia"),

@@ -30,7 +30,9 @@ function setOpenState(nextValue) {
   if (!chat || !button) return;
 
   chat.classList.toggle("visible", abierto);
-  button.innerHTML = abierto ? getCloseIcon() : getLauncherIcon();
+  const label = button.querySelector(".ia-launcher-label");
+  const labelHtml = label ? label.outerHTML : "";
+  button.innerHTML = abierto ? getCloseIcon() : (getLauncherIcon() + labelHtml);
   button.setAttribute("aria-expanded", abierto ? "true" : "false");
   button.classList.toggle("abierto", abierto);
 
@@ -60,18 +62,35 @@ export function construirWidget(cfg) {
     ? `<img class="ia-avatar-img" src="${escapeHtml(logoUrl)}" alt="Logo" />`
     : `<span class="ia-avatar" aria-hidden="true">${escapeHtml(cfg.icono || "AI")}</span>`;
 
+  const launcherShape = cfg.launcher_shape === "bar" ? "bar" : "circle";
+  let launcherSize = Number(cfg.launcher_size) || (launcherShape === "bar" ? 200 : 60);
+  if (launcherShape === "circle") {
+    launcherSize = Math.max(48, Math.min(96, launcherSize));
+  } else {
+    launcherSize = Math.max(120, Math.min(280, launcherSize));
+  }
+  const launcherLabel = launcherShape === "bar"
+    ? (cfg.nombre ? `Hablar con ${cfg.nombre}` : "Hablar con asistente")
+    : "";
+  const btnStyle = launcherShape === "bar"
+    ? `width:${launcherSize}px;height:48px;border-radius:999px;padding:0 18px;`
+    : `width:${launcherSize}px;height:${launcherSize}px;`;
+
   const container = document.createElement("div");
   container.id = "ia-w-container";
   container.className = WIDGET_CONFIG.position === "left" ? "ia-left" : "ia-right";
+  container.dataset.launcherShape = launcherShape;
   container.innerHTML = `
     <div id="ia-w-badge">${escapeHtml(cfg.bienvenida || "Necesitas ayuda?")}</div>
     <button
       id="ia-w-btn"
+      class="ia-launcher-${launcherShape}"
       type="button"
       aria-label="Abrir chat"
       aria-controls="ia-w-chat"
       aria-expanded="false"
-    >${getLauncherIcon()}</button>
+      style="${btnStyle}"
+    >${getLauncherIcon()}${launcherLabel ? `<span class="ia-launcher-label">${escapeHtml(launcherLabel)}</span>` : ""}</button>
     <section id="ia-w-chat" aria-label="Chat con asistente virtual">
       <header id="ia-w-header">
         <div id="ia-w-header-info">

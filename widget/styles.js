@@ -109,6 +109,47 @@ export function inyectarEstilos(color, accentColor) {
       fill: currentColor;
     }
 
+    #ia-w-btn .ia-launcher-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 999px;
+      display: block;
+    }
+
+    #ia-w-btn.ia-launcher-circle:has(.ia-launcher-img) {
+      background: #fff;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    #ia-w-btn.ia-launcher-bar {
+      gap: 10px;
+      font-weight: 700;
+      font-size: 14.5px;
+      letter-spacing: 0.01em;
+      color: #fff;
+    }
+    #ia-w-btn.ia-launcher-bar svg {
+      width: 20px;
+      height: 20px;
+      flex: 0 0 auto;
+    }
+    #ia-w-btn.ia-launcher-bar .ia-launcher-img {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      flex: 0 0 auto;
+    }
+    #ia-w-btn.ia-launcher-bar .ia-launcher-label {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #ia-w-btn.ia-launcher-bar.abierto {
+      transform: rotate(0deg);
+    }
+
     #ia-w-btn:hover {
       transform: translateY(-2px) scale(1.04);
       box-shadow: 0 16px 40px rgba(11, 24, 49, 0.30), 0 0 0 1px rgba(255,255,255,0.10);
