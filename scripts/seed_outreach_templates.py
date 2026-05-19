@@ -39,9 +39,6 @@ Te lo planteo asi de claro porque {proof}, y porque a un emprendedor no le robas
 
 ¿Te paso la demo de {business}? Un "si" basta y manos a la obra.
 
-Pablo Sanchez
-Fundador de Vantelia
-https://www.vantelia.es
 {footer_text}"""
 
 COLD_HTML = """<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{greeting}</p>
@@ -83,8 +80,6 @@ Si lo prefieres, te la grabo en 3 minutos con vuestra info y te la mando por aqu
 
 ¿Te interesa que la prepare?
 
-Pablo Sanchez
-Fundador de Vantelia
 {footer_text}"""
 
 FU1_HTML = """<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{greeting}</p>
@@ -115,8 +110,6 @@ Si quieres, te lo monto con vuestros datos reales y te paso un enlace de demo pr
 
 ¿Sigo adelante?
 
-Pablo Sanchez
-Fundador de Vantelia
 {footer_text}"""
 
 FU2_HTML = """<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{greeting}</p>
@@ -147,17 +140,11 @@ BREAKUP_TEXT = """{greeting}
 
 Cierro la ficha de {business} para no llenarte la bandeja. Si en algun momento quereis ver una demo de asistente IA, basta con responder a este correo y la preparo.
 
-Suerte con todo y un saludo,
-
-Pablo Sanchez
-Fundador de Vantelia
 {footer_text}"""
 
 BREAKUP_HTML = """<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{greeting}</p>
 
 <p style="margin:0 0 14px 0;">Cierro la ficha de <strong>{business}</strong> para no llenarte la bandeja. Si en algun momento quereis ver una demo de asistente IA, basta con responder a este correo y la preparo.</p>
-
-<p style="margin:0 0 6px 0;color:#637c8e;">Suerte con todo y un saludo,</p>
 
 {signature_html}
 {footer_html}"""

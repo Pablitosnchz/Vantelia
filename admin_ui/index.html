@@ -2356,7 +2356,11 @@ tbody tr:last-child td { border-bottom: none; }
           <div class="actions cw-advanced-tabs" id="orAdvancedTabs">
             <button class="ghost small" type="button" data-outreach-tab="autopilot">Hoy <span class="or-tab-badge" data-badge="autopilot" style="display:none;"></span></button>
             <button class="ghost small" type="button" data-outreach-tab="prospects">Prospects <span class="or-tab-badge" data-badge="prospects" style="display:none;"></span></button>
+<<<<<<< HEAD
             <button class="ghost small" type="button" data-outreach-tab="autonomous">Automatizacion <span class="or-tab-badge" data-badge="autonomous" style="display:none;"></span></button>
+=======
+            <button class="ghost small" type="button" data-outreach-tab="manual-email">Emails manuales</button>
+>>>>>>> 701337050c7a8fc3c486ea9c08d6417b03539f63
             <button class="ghost small" type="button" data-outreach-tab="campaigns">Campanas</button>
             <button class="ghost small" type="button" data-outreach-tab="templates">Mensajes</button>
             <button class="ghost small" type="button" data-outreach-tab="suppressions">Bajas <span class="or-tab-badge" data-badge="suppressions" style="display:none;"></span></button>
@@ -2783,6 +2787,45 @@ tbody tr:last-child td { border-bottom: none; }
               <button class="ghost small" type="button" id="orPrevPage">Anterior</button>
               <span id="orPageInfo" style="align-self:center;font-size:12px;"></span>
               <button class="ghost small" type="button" id="orNextPage">Siguiente</button>
+            </div>
+          </div>
+
+          <!-- Emails manuales -->
+          <div data-outreach-panel="manual-email" class="outreach-panel">
+            <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(320px,0.9fr);gap:14px;align-items:start;">
+              <div class="card" style="padding:14px;">
+                <div class="section-header" style="margin-bottom:10px;">
+                  <div>
+                    <h3>Emails manuales</h3>
+                    <p>Redacta un email puntual con estilos base de Vantelia y revision final antes de enviar.</p>
+                  </div>
+                </div>
+                <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;">
+                  <label>Destinatario<input id="orManualRecipient" type="email" placeholder="contacto@empresa.es" /></label>
+                  <label>Asunto<input id="orManualSubject" type="text" maxlength="180" placeholder="Asunto del email" /></label>
+                </div>
+                <label>Texto plano del email<textarea id="orManualText" rows="7" placeholder="Escribe el contenido en texto plano..."></textarea></label>
+                <div class="actions" style="margin:8px 0 10px;">
+                  <button class="ghost small" type="button" id="orManualGenerateBtn">Generar HTML</button>
+                  <span id="orManualStatus" class="muted" style="font-size:12px;align-self:center;"></span>
+                </div>
+                <label>HTML editable<textarea id="orManualHtml" rows="11" spellcheck="false"></textarea></label>
+                <label>CSS editable<textarea id="orManualCss" rows="9" spellcheck="false"></textarea></label>
+                <div class="actions" style="margin-top:10px;">
+                  <button class="secondary small" type="button" id="orManualSendBtn">Enviar email</button>
+                  <button class="ghost small" type="button" id="orManualClearBtn">Limpiar</button>
+                </div>
+              </div>
+              <div class="card" style="padding:14px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+                  <div>
+                    <strong>Previsualizacion final</strong>
+                    <p class="muted" style="font-size:12px;margin-top:2px;">Combina HTML + CSS antes del envio.</p>
+                  </div>
+                  <span class="pill info" id="orManualPreviewMeta">Sin destinatario</span>
+                </div>
+                <iframe id="orManualPreviewFrame" style="width:100%;height:620px;border:1px solid #e4eaf2;border-radius:10px;background:#f9fbfd;"></iframe>
+              </div>
             </div>
           </div>
 
@@ -4971,6 +5014,56 @@ tbody tr:last-child td { border-bottom: none; }
         followupDays: { fu1: 4, fu2: 5, breakup: 6 },
         _followupItems: [],
       };
+      const OR_MANUAL_BASE_CSS = `body {
+  margin: 0;
+  padding: 0;
+  background: #f4f7fb;
+  color: #0b132b;
+  font-family: Inter, Segoe UI, Arial, sans-serif;
+  line-height: 1.6;
+}
+.email-shell {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 28px 18px;
+}
+.email-card {
+  background: #ffffff;
+  border: 1px solid #e4eaf2;
+  border-radius: 12px;
+  padding: 28px;
+}
+.brand {
+  font-weight: 800;
+  letter-spacing: 0;
+  color: #00a9cc;
+  margin-bottom: 22px;
+}
+p {
+  margin: 0 0 14px;
+}
+a {
+  color: #00a9cc;
+  font-weight: 700;
+  text-decoration: none;
+}
+.footer {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid #e4eaf2;
+  color: #64748b;
+  font-size: 13px;
+}`;
+      const VANTELIA_EMAIL_SIGNATURE = {
+        companyName: "Vantelia",
+        phone: "+34 675 802 001",
+        phoneHref: "+34675802001",
+        email: "info@vantelia.es",
+        website: "https://vantelia.es",
+        websiteLabel: "vantelia.es",
+        address: "Calle Garabay 7, Torrejon de Ardoz, 28850 Madrid",
+        logoUrl: "/brand-assets/Logo_Letra.png",
+      };
 
       function authHeaders(extra) {
         return Object.assign({}, extra || {});
@@ -5903,6 +5996,7 @@ tbody tr:last-child td { border-bottom: none; }
         if (tab === "autopilot") { loadStats(); loadAutopilot(); loadAutonomousConfig(); loadRecentAutopilotErrors(); loadHotLeads(); loadFollowupQueue(); loadAbStats(); loadGA4Stats(); loadNextAction(); }
         if (tab === "prospects") loadProspects();
         if (tab === "campaigns") { loadWizardCampaigns(); loadJobs(); startJobsPolling(); } else { stopJobsPolling(); }
+        if (tab === "manual-email") renderManualEmailPreview();
         if (tab === "templates") loadTemplates();
         if (tab === "suppressions") loadSuppressions();
         if (tab === "autonomous") loadAutonomousConfig();
@@ -6964,11 +7058,16 @@ tbody tr:last-child td { border-bottom: none; }
             <div style="margin:8px 0 12px 0;">${timelineHtml}</div>
             <details style="margin-bottom:10px;"><summary class="muted" style="cursor:pointer;font-size:12px;">Ver envíos detallados</summary><ul style="font-size:13px;margin-top:6px;">${sends}</ul></details>
             <div class="actions">
+              <button class="secondary small" type="button" id="orDrawerManualEmailBtn">Email manual</button>
               <button class="ghost small" type="button" id="orDrawerReplyBtn">Marcar como respondido</button>
               <button class="ghost small" type="button" id="orDrawerSuppressBtn">Suprimir</button>
               <button class="ghost small danger" type="button" id="orDrawerDeleteBtn">Borrar prospect</button>
             </div>`;
           ORQ("#orDrawer").style.display = "flex";
+          ORQ("#orDrawerManualEmailBtn").addEventListener("click", () => {
+            ORQ("#orDrawer").style.display = "none";
+            prefillManualEmail(email, "");
+          });
           ORQ("#orDrawerSaveAll").addEventListener("click", async () => {
             const fields = ["business_name","contact_name","niche","service_hint","city","phone","website","tags","source","status","notes"];
             const payload = {};
@@ -7213,6 +7312,158 @@ tbody tr:last-child td { border-bottom: none; }
         } catch (err) { showStatus(err.message, "error"); }
       }
 
+      // ----- Emails manuales -----
+      function manualEmailStatus(message, type = "info") {
+        const el = ORQ("#orManualStatus");
+        if (!el) return;
+        el.textContent = message || "";
+        el.style.color = type === "error" ? "var(--danger)" : (type === "ok" ? "var(--success)" : "var(--soft)");
+      }
+
+      function manualEmailDocument(html, css) {
+        const body = (html || "").trim() || '<div class="email-shell"><div class="email-card"><div class="brand">Vantelia</div><p></p></div></div>';
+        const styles = (css || OR_MANUAL_BASE_CSS).trim();
+        if (/<!doctype|<html[\s>]/i.test(body)) {
+          if (/<\/head>/i.test(body)) return body.replace(/<\/head>/i, `<style>${styles}</style></head>`);
+          return `<style>${styles}</style>${body}`;
+        }
+        return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${styles}</style></head><body>${body}</body></html>`;
+      }
+
+      function generateVanteliaEmailSignatureHtml() {
+        const signature = VANTELIA_EMAIL_SIGNATURE;
+        return `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%; max-width:560px; margin-top:28px; border-top:1px solid #e5e7eb; padding-top:18px; font-family:Arial, Helvetica, sans-serif;">
+      <tr>
+        <td style="padding:0 0 12px 0;">
+          <img src="${escapeHtml(signature.logoUrl)}" alt="${escapeHtml(signature.companyName)}" style="display:block; max-width:150px; height:auto; border:0;">
+        </td>
+      </tr>
+      <tr>
+        <td style="font-size:14px; line-height:1.6; color:#1f2937;">
+          <strong style="font-size:15px; color:#111827;">${escapeHtml(signature.companyName)}</strong><br>
+          <a href="tel:${escapeHtml(signature.phoneHref)}" style="color:#00a9cc; text-decoration:none; font-weight:700;">${escapeHtml(signature.phone)}</a><br>
+          <a href="mailto:${escapeHtml(signature.email)}" style="color:#00a9cc; text-decoration:none; font-weight:700;">${escapeHtml(signature.email)}</a><br>
+          <a href="${escapeHtml(signature.website)}" style="color:#00a9cc; text-decoration:none; font-weight:700;">${escapeHtml(signature.websiteLabel)}</a><br>
+          <span style="color:#6b7280;">${escapeHtml(signature.address)}</span>
+        </td>
+      </tr>
+    </table>`;
+      }
+
+      function appendEmailSignature(html) {
+        const signatureHtml = generateVanteliaEmailSignatureHtml();
+        if (!html || !html.trim()) return signatureHtml;
+        return `${html.trim()}\n    ${signatureHtml}`;
+      }
+
+      function generateManualHtmlFromText() {
+        const text = ORQ("#orManualText")?.value || "";
+        const blocks = text.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
+        const content = blocks.length
+          ? blocks.map((part) => `<p>${escapeHtml(part).replace(/\n/g, "<br>")}</p>`).join("\n        ")
+          : "<p></p>";
+        ORQ("#orManualHtml").value = `<div class="email-shell">
+  <div class="email-card">
+    <div class="brand">Vantelia</div>
+    <div class="content">
+        ${content}
+    </div>
+    ${appendEmailSignature("")}
+  </div>
+</div>`;
+        manualEmailStatus("HTML generado desde texto plano.", "ok");
+        renderManualEmailPreview();
+      }
+
+      function validateManualEmail() {
+        const recipient = ORQ("#orManualRecipient")?.value.trim() || "";
+        const subject = ORQ("#orManualSubject")?.value.trim() || "";
+        const text = ORQ("#orManualText")?.value.trim() || "";
+        const html = ORQ("#orManualHtml")?.value.trim() || "";
+        if (!orDiscEmailRe.test(recipient)) return "Destinatario invalido.";
+        if (!subject) return "El asunto es obligatorio.";
+        if (!text && !html) return "Anade texto plano o HTML antes de enviar.";
+        return "";
+      }
+
+      function renderManualEmailPreview() {
+        const iframe = ORQ("#orManualPreviewFrame");
+        if (!iframe) return;
+        const recipient = ORQ("#orManualRecipient")?.value.trim() || "";
+        const subject = ORQ("#orManualSubject")?.value.trim() || "";
+        const meta = ORQ("#orManualPreviewMeta");
+        if (meta) meta.textContent = recipient ? recipient : "Sin destinatario";
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
+        doc.open();
+        doc.write(manualEmailDocument(ORQ("#orManualHtml")?.value || "", ORQ("#orManualCss")?.value || ""));
+        doc.close();
+        if (subject && recipient) manualEmailStatus("Preview actualizada.", "info");
+      }
+
+      async function sendManualAcquisitionEmail() {
+        const error = validateManualEmail();
+        if (error) { manualEmailStatus(error, "error"); return; }
+        const btn = ORQ("#orManualSendBtn");
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "Enviando...";
+        manualEmailStatus("Enviando email manual...", "info");
+        try {
+          const payload = {
+            recipient: ORQ("#orManualRecipient").value.trim(),
+            subject: ORQ("#orManualSubject").value.trim(),
+            text: ORQ("#orManualText").value,
+            html: ORQ("#orManualHtml").value,
+            css: ORQ("#orManualCss").value,
+          };
+          const data = await orFetch("/admin/outreach/manual-email/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          manualEmailStatus(`Email enviado. Message-ID: ${data.message_id || "-"}`, "ok");
+          showStatus("Email manual enviado", "ok");
+          loadStats();
+          if (orState.currentEmail === payload.recipient && ORQ("#orDrawer")?.style.display !== "none") {
+            openDrawer(payload.recipient);
+          }
+        } catch (err) {
+          manualEmailStatus(err.message || "No se pudo enviar.", "error");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = original;
+        }
+      }
+
+      function clearManualEmail() {
+        ["#orManualRecipient", "#orManualSubject", "#orManualText", "#orManualHtml"].forEach((sel) => { const el = ORQ(sel); if (el) el.value = ""; });
+        const css = ORQ("#orManualCss");
+        if (css) css.value = OR_MANUAL_BASE_CSS;
+        manualEmailStatus("", "info");
+        renderManualEmailPreview();
+      }
+
+      function prefillManualEmail(email, subject = "") {
+        setOutreachTab("manual-email");
+        const recipient = ORQ("#orManualRecipient");
+        const subjectEl = ORQ("#orManualSubject");
+        if (recipient) recipient.value = email || "";
+        if (subjectEl && subject) subjectEl.value = subject;
+        renderManualEmailPreview();
+      }
+
+      function initManualEmailEditor() {
+        const css = ORQ("#orManualCss");
+        if (css && !css.value.trim()) css.value = OR_MANUAL_BASE_CSS;
+        ORQ("#orManualGenerateBtn")?.addEventListener("click", generateManualHtmlFromText);
+        ORQ("#orManualSendBtn")?.addEventListener("click", sendManualAcquisitionEmail);
+        ORQ("#orManualClearBtn")?.addEventListener("click", clearManualEmail);
+        ["#orManualRecipient", "#orManualSubject", "#orManualText", "#orManualHtml", "#orManualCss"].forEach((sel) => {
+          ORQ(sel)?.addEventListener("input", renderManualEmailPreview);
+        });
+        renderManualEmailPreview();
+      }
+
       // ----- Templates -----
       let orTemplatesCache = null;
       async function loadTemplates() {
@@ -7315,6 +7566,7 @@ tbody tr:last-child td { border-bottom: none; }
       // ----- Wiring -----
       wireWizard();
       wireAutonomous();
+      initManualEmailEditor();
       ORALL("[data-outreach-tab]").forEach((btn) => btn.addEventListener("click", () => setOutreachTab(btn.dataset.outreachTab)));
       ORQ("#orRepliesBannerBtn")?.addEventListener("click", () => {
         setOutreachTab("prospects");

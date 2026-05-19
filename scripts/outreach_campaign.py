@@ -29,6 +29,7 @@ import argparse
 import csv
 import os
 import random
+import re
 import smtplib
 import sqlite3
 import sys
@@ -575,6 +576,31 @@ def _apply_template(template: str, vars_: dict[str, str]) -> str:
         return out
 
 
+def _html_has_vantelia_signature(html: str) -> bool:
+    needle = (html or "").lower()
+    return (
+        "logo_letra.png" in needle
+        or "tel:+34675802001" in needle
+        or "info@vantelia.es" in needle
+        or "{signature_html}" in needle
+    )
+
+
+def _append_signature_to_inner_html(inner_html: str, stage: str) -> str:
+    if not inner_html or _html_has_vantelia_signature(inner_html):
+        return inner_html
+    return f"{inner_html.rstrip()}\n{signature_html(stage)}"
+
+
+def _append_signature_to_html_document(html: str, stage: str) -> str:
+    if not html or _html_has_vantelia_signature(html):
+        return html
+    signature = signature_html(stage)
+    if "</body>" in html.lower():
+        return re.sub(r"</body>", f"{signature}</body>", html, count=1, flags=re.IGNORECASE)
+    return f"{html.rstrip()}\n{signature}"
+
+
 class _SafeDict(dict):
     def __missing__(self, key):
         return "{" + key + "}"
@@ -611,12 +637,13 @@ def render_with_override(
     text = _apply_template(ov["body_text"], vars_) if has_text else default_text
 
     if has_html:
-        raw_html = _apply_template(ov["body_html"], vars_)
+        raw_template = ov["body_html"]
+        raw_html = _apply_template(raw_template, vars_)
         # Si el override es solo el inner (no contiene <html>), envolver en shell.
         if "<html" not in raw_html.lower():
-            html = html_shell(raw_html, preheader="")
+            html = html_shell(_append_signature_to_inner_html(raw_html, stage), preheader="")
         else:
-            html = raw_html
+            html = raw_html if "{signature_html}" in raw_template else _append_signature_to_html_document(raw_html, stage)
     else:
         html = default_html
 
