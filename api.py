@@ -25,7 +25,7 @@ from html import escape
 from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import quote, unquote, urlparse
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
 
 import httpx
 from dotenv import load_dotenv
@@ -48,7 +48,7 @@ from llama_index.core import (
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
 from pydantic import BaseModel, EmailStr, Field
-from onboarding_utils import run_onboarding, slugify_company
+from onboarding_utils import run_onboarding, slugify_company, normalize_url as normalize_onboarding_url
 
 try:
     from zoneinfo import ZoneInfo
@@ -161,6 +161,64 @@ GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_OAUTH_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 DEFAULT_FREE_QUOTA = int(os.getenv("DEFAULT_FREE_QUOTA", "50"))
 ONBOARDING_MAX_PAGES_DEFAULT = int(os.getenv("ONBOARDING_MAX_PAGES", "12"))
+
+# Starter questions: 3 base fijas + hasta 5 extras escritos por el cliente (cap 8 total).
+BASE_STARTERS: List[Dict[str, Any]] = [
+    {"text": "Agendar cita", "needs_booking": True},
+    {"text": "Información servicios", "needs_booking": False},
+    {"text": "Preguntas frecuentes", "needs_booking": False},
+]
+MAX_EXTRA_STARTERS = 5
+MAX_TOTAL_STARTERS = 8
+BASE_STARTERS_LOWER = {b["text"].strip().lower() for b in BASE_STARTERS}
+
+
+def _strip_base_from_extras(items: Any) -> List[str]:
+    """Drop entries matching BASE_STARTERS (case-insensitive) and dedupe."""
+    if not isinstance(items, (list, tuple)):
+        return []
+    seen = set(BASE_STARTERS_LOWER)
+    out: List[str] = []
+    for raw in items:
+        if not isinstance(raw, (str, int, float)):
+            continue
+        text = str(raw).strip()
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(text)
+        if len(out) >= MAX_EXTRA_STARTERS:
+            break
+    return out
+
+
+def _resolve_widget_starters(config: Dict[str, Any]) -> List[str]:
+    """Fuse BASE_STARTERS with cliente's manual extras.
+
+    Returns base first (filtered by booking_enabled), then dedup-extras.
+    Cap MAX_TOTAL_STARTERS. Single source of truth for what widget renders
+    and what the IA expects in its system prompt.
+    """
+    booking_cfg = config.get("booking") if isinstance(config, dict) else None
+    booking_enabled = bool(booking_cfg.get("enabled")) if isinstance(booking_cfg, dict) else False
+
+    base = [b["text"] for b in BASE_STARTERS if booking_enabled or not b["needs_booking"]]
+    extras = _strip_base_from_extras(config.get("starter_questions"))
+
+    seen = {t.lower() for t in base}
+    fused = list(base)
+    for e in extras:
+        key = e.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        fused.append(e)
+        if len(fused) >= MAX_TOTAL_STARTERS:
+            break
+    return fused
 
 # ─── Planes y suscripciones ───────────────────────────────────────────
 PLAN_DEFAULT = "web"
@@ -1150,6 +1208,44 @@ def _init_database() -> None:
             CREATE INDEX IF NOT EXISTS idx_auth_sessions_user
             ON auth_sessions(user_id, expires_at)
             """
+        )
+        # Sem 6 migration: admin impersonation metadata on auth_sessions
+        session_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(auth_sessions)").fetchall()
+        }
+        if "impersonator_user_id" not in session_columns:
+            connection.execute(
+                "ALTER TABLE auth_sessions ADD COLUMN impersonator_user_id TEXT NOT NULL DEFAULT ''"
+            )
+        if "impersonator_email" not in session_columns:
+            connection.execute(
+                "ALTER TABLE auth_sessions ADD COLUMN impersonator_email TEXT NOT NULL DEFAULT ''"
+            )
+        if "impersonator_ip" not in session_columns:
+            connection.execute(
+                "ALTER TABLE auth_sessions ADD COLUMN impersonator_ip TEXT NOT NULL DEFAULT ''"
+            )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS admin_impersonations (
+                id TEXT PRIMARY KEY,
+                admin_user_id TEXT NOT NULL,
+                admin_email TEXT NOT NULL,
+                target_user_id TEXT NOT NULL,
+                target_cliente_id TEXT NOT NULL DEFAULT '',
+                session_id TEXT NOT NULL DEFAULT '',
+                started_at TEXT NOT NULL,
+                ended_at TEXT NOT NULL DEFAULT '',
+                ip TEXT NOT NULL DEFAULT '',
+                user_agent TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_admin_imp_admin ON admin_impersonations(admin_user_id, started_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_admin_imp_target ON admin_impersonations(target_cliente_id, started_at)"
         )
         connection.execute(
             """
@@ -2178,6 +2274,7 @@ class ConfigPublicaCliente(BaseModel):
     branding_text: str
     contact_email: str
     contact_phone: str
+    starter_questions: List[str] = Field(default_factory=list)
 
 
 class SlotDisponibilidad(BaseModel):
@@ -2310,6 +2407,8 @@ class AuthUserPublic(BaseModel):
     plan: str = PLAN_DEFAULT
     plan_label: str = "Web"
     last_login_at: str = ""
+    as_admin_session: bool = False
+    impersonator_email: str = ""
 
 
 class AuthLoginResponse(BaseModel):
@@ -2538,6 +2637,7 @@ class AppKnowledgeItem(BaseModel):
     size_bytes: int = 0
     indexed_at: str = ""
     uploaded_at: str
+    qa_created: int = 0
 
 
 class AppKnowledgeListResponse(BaseModel):
@@ -3043,7 +3143,16 @@ class AdminClientePayload(BaseModel):
 class AdminClienteResumen(BaseModel):
     cliente_id: str
     nombre: str
-    booking_enabled: bool
+    owner_user_id: str = ""
+    owner_email: str = ""
+    owner_display_name: str = ""
+    owner_last_login_at: str = ""
+    owner_created_at: str = ""
+    cliente_created_at: str = ""
+    plan: str = ""
+    messages_used: int = 0
+    messages_quota: int = 0
+    booking_enabled: bool = False
     booking_provider: str = "internal"
     booking_timezone: str = DEFAULT_TIMEZONE
     booking_day_start: str = "09:00"
@@ -3084,6 +3193,34 @@ class AdminClienteSaveResult(BaseModel):
     widget_script_url: str
     api_base_url: str
     demo_url: str
+
+
+class AdminClienteAuditEntry(BaseModel):
+    admin_email: str
+    started_at: str
+    ended_at: str = ""
+    ip: str = ""
+    user_agent: str = ""
+    duration_seconds: Optional[int] = None
+
+
+class AdminClienteAuditResponse(BaseModel):
+    cliente_id: str
+    items: List[AdminClienteAuditEntry]
+
+
+class AdminImpersonateResponse(BaseModel):
+    ok: bool
+    cliente_id: str
+    target_user_id: str
+    target_email: str
+    expires_in_minutes: int
+    redirect_url: str
+
+
+class AdminImpersonateEndResponse(BaseModel):
+    ok: bool
+    admin_redirect_url: str = "/dashboard"
 
 
 class AdminAltaExpressPayload(BaseModel):
@@ -3306,6 +3443,8 @@ def _serialize_auth_user(row: sqlite3.Row) -> AuthUserPublic:
         plan=plan,
         plan_label=str(limits.get("label") or plan.title()),
         last_login_at=row["last_login_at"] or "",
+        as_admin_session=_session_is_impersonated(row),
+        impersonator_email=_session_impersonator_email(row),
     )
 
 
@@ -3845,6 +3984,70 @@ def _create_auth_session(user_id: str) -> str:
     return f"{session_id}.{session_secret}"
 
 
+ADMIN_IMPERSONATION_TTL_MINUTES = max(
+    5, min(180, int(os.getenv("ADMIN_IMPERSONATION_TTL_MINUTES", "30")))
+)
+
+
+def _create_impersonation_session(
+    *,
+    target_user_id: str,
+    admin_user_id: str,
+    admin_email: str,
+    ip: str = "",
+) -> Tuple[str, str]:
+    """Create a short-lived auth_sessions row that proxies as target_user_id.
+
+    Returns (raw_token, session_id). Stamps impersonator_* columns so the
+    session is identifiable as admin-impersonation and the portal banner can
+    show it. Lifetime = ADMIN_IMPERSONATION_TTL_MINUTES.
+    """
+    session_id = f"ses_{secrets.token_urlsafe(10)}"
+    session_secret = secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(minutes=ADMIN_IMPERSONATION_TTL_MINUTES)
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO auth_sessions
+                (id, user_id, session_token_hash, created_at, expires_at, last_seen_at,
+                 impersonator_user_id, impersonator_email, impersonator_ip)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session_id,
+                target_user_id,
+                _hash_secret(session_secret),
+                now.isoformat(),
+                expires.isoformat(),
+                now.isoformat(),
+                admin_user_id,
+                admin_email,
+                ip,
+            ),
+        )
+        connection.commit()
+    return f"{session_id}.{session_secret}", session_id
+
+
+def _session_is_impersonated(user_row: Optional[sqlite3.Row]) -> bool:
+    if not user_row:
+        return False
+    try:
+        return bool((user_row["impersonator_user_id"] or "").strip())
+    except (IndexError, KeyError):
+        return False
+
+
+def _session_impersonator_email(user_row: Optional[sqlite3.Row]) -> str:
+    if not user_row:
+        return ""
+    try:
+        return str(user_row["impersonator_email"] or "")
+    except (IndexError, KeyError):
+        return ""
+
+
 def _delete_auth_session(raw_token: str) -> None:
     session_id, session_secret = _compound_token_parts(raw_token, "ses")
     with _get_db_connection() as connection:
@@ -4375,7 +4578,8 @@ def _get_session_user(session_token: str) -> Optional[sqlite3.Row]:
         if session_id and session_secret:
             row = connection.execute(
                 """
-                SELECT s.id AS session_id, s.session_token_hash, s.expires_at, u.*
+                SELECT s.id AS session_id, s.session_token_hash, s.expires_at,
+                       s.impersonator_user_id, s.impersonator_email, s.impersonator_ip, u.*
                 FROM auth_sessions s
                 JOIN users u ON u.id = s.user_id
                 WHERE s.id = ? AND u.is_active = 1
@@ -4392,7 +4596,8 @@ def _get_session_user(session_token: str) -> Optional[sqlite3.Row]:
 
         rows = connection.execute(
             """
-            SELECT s.id AS session_id, s.session_token_hash, s.expires_at, u.*
+            SELECT s.id AS session_id, s.session_token_hash, s.expires_at,
+                   s.impersonator_user_id, s.impersonator_email, s.impersonator_ip, u.*
             FROM auth_sessions s
             JOIN users u ON u.id = s.user_id
             WHERE u.is_active = 1
@@ -5860,16 +6065,29 @@ def _delete_client_everywhere(cliente_id: str) -> None:
         user_ids = [row["id"] for row in user_rows]
         if user_ids:
             placeholders = ",".join("?" for _ in user_ids)
-            connection.execute(f"DELETE FROM auth_sessions WHERE user_id IN ({placeholders})", tuple(user_ids))
-            connection.execute(f"DELETE FROM password_reset_tokens WHERE user_id IN ({placeholders})", tuple(user_ids))
+            params = tuple(user_ids)
+            connection.execute(f"DELETE FROM auth_sessions WHERE user_id IN ({placeholders})", params)
+            connection.execute(f"DELETE FROM password_reset_tokens WHERE user_id IN ({placeholders})", params)
+            connection.execute(f"DELETE FROM subscriptions WHERE user_id IN ({placeholders})", params)
+            connection.execute(f"DELETE FROM message_usage_events WHERE user_id IN ({placeholders})", params)
+            connection.execute(f"DELETE FROM admin_impersonations WHERE target_user_id IN ({placeholders})", params)
         connection.execute("DELETE FROM users WHERE role = 'client' AND cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM subscriptions WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM message_usage_events WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM admin_impersonations WHERE target_cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM booking_audit WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM bookings WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM agenda_blocks WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM employees WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM chat_messages WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM chat_sessions WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM live_chat_sessions WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM analytics_events WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM whatsapp_inbound_messages WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM kb_qa WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM kb_documents WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM bot_leads WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM clientes WHERE cliente_id = ?", (cliente_id,))
         connection.commit()
 
     with state_lock:
@@ -5882,6 +6100,14 @@ def _delete_client_everywhere(cliente_id: str) -> None:
         _ensure_path_within(base_dir, target_dir)
         if target_dir.exists():
             shutil.rmtree(target_dir)
+
+    try:
+        registry = _load_demo_registry()
+        if cliente_id in registry:
+            registry.pop(cliente_id, None)
+            _save_demo_registry(registry)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("No se pudo limpiar demo registry para %s: %s", cliente_id, exc)
 
 
 def _invalidate_client_runtime(cliente_id: str) -> None:
@@ -6930,6 +7156,37 @@ def _require_admin_token(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token admin invalido")
 
 
+def _require_admin_identity(
+    request: Request,
+    authorization: Optional[str] = Header(default=None),
+    portal_session: Optional[str] = Cookie(default=None, alias=PORTAL_COOKIE_NAME),
+) -> Dict[str, str]:
+    """Like _require_admin_token, but returns admin identity (id + email).
+
+    Required for actions that need attribution: impersonation, audit logs, etc.
+    Falls back to a synthetic identity when only the Bearer token is used.
+    """
+    portal_user = _get_authenticated_portal_user_or_none(portal_session)
+    if portal_user and portal_user["role"] == "admin":
+        return {
+            "user_id": portal_user["id"],
+            "email": portal_user["email"] or "",
+            "via": "session",
+        }
+
+    if not ADMIN_API_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Los endpoints de administracion no estan habilitados.",
+        )
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Falta token admin o sesion valida.")
+    token = authorization.split(" ", 1)[1].strip()
+    if not secrets.compare_digest(token, ADMIN_API_TOKEN):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token admin invalido")
+    return {"user_id": "admin-api-token", "email": "admin@bearer-token", "via": "bearer"}
+
+
 def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
     nombre_empresa = config["nombre"]
     prompt_extra = config.get("prompt_extra", "")
@@ -6937,6 +7194,21 @@ def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
     contacto = config.get("contacto", {})
     branding = config.get("branding", {})
     booking_cfg = config.get("booking", {})
+
+    starter_questions = _resolve_widget_starters(config)
+    if starter_questions:
+        starter_lines = "\n".join(f"- {q}" for q in starter_questions)
+        starter_block = (
+            "PREGUNTAS DESTACADAS DEL MENU INICIAL\n"
+            "Cuando el widget arranca, el usuario ve estos botones rapidos. Si pulsa alguno o "
+            "escribe una pregunta equivalente, DEBES poder responderla de forma concreta usando "
+            "la base documental del negocio. Si te falta el dato exacto, dilo y deriva a contacto "
+            "humano, pero nunca digas que la pregunta esta fuera de alcance: es una pregunta "
+            "oficial del menu del cliente.\n"
+            f"{starter_lines}\n"
+        )
+    else:
+        starter_block = ""
 
     contact_lines: List[str] = []
     if contacto.get("telefono"):
@@ -6978,6 +7250,7 @@ Datos de contacto verificados:
 {contact_block}
 {booking_window_line}
 
+{starter_block}
 ALCANCE DE TUS RESPUESTAS
 Puedes y debes responder con detalle a cualquier consulta razonable sobre el negocio, incluyendo (no exhaustivo):
 - Que es la empresa, mision, valores, historia, sector, publico al que se dirige.
@@ -7144,20 +7417,17 @@ def _detect_menu_option(message: str) -> str:
 
 def _build_main_menu_text(nombre_empresa: str, booking_enabled: bool, *, greeting: bool = False) -> str:
     saludo = (
-        f"👋 ¡Hola! Soy el asistente de **{nombre_empresa}**. ¿En qué puedo ayudarte?\n\n"
+        f"Hola. Soy el asistente de **{nombre_empresa}**. ¿En qué puedo ayudarte?\n\n"
         if greeting else
-        f"📋 **Menú principal de {nombre_empresa}**\n\n"
+        f"**Menu principal de {nombre_empresa}**\n\n"
     )
-    booking_line = "1️⃣ 📅 Agendar cita\n" if booking_enabled else ""
+    booking_line = "· Agendar cita\n" if booking_enabled else ""
     return (
         f"{saludo}"
         f"{booking_line}"
-        f"2️⃣ 💬 Preguntas frecuentes\n"
-        f"3️⃣ 🛍️ Información de servicios\n"
-        f"4️⃣ ⭐ Recomendar servicio\n"
-        f"5️⃣ ⚖️ Comparar servicios\n"
-        f"6️⃣ 💶 Estimar precio\n\n"
-        f"Responde con el número de la opción o escribe directamente tu consulta."
+        f"· Informacion de servicios\n"
+        f"· Preguntas frecuentes\n\n"
+        f"Pulsa una opcion o escribe directamente tu consulta."
     )
 
 
@@ -7167,11 +7437,8 @@ def _main_menu_quick_actions(booking_enabled: bool) -> List[Dict[str, str]]:
         actions.append({"label": "Agendar cita", "message": "Quiero agendar una cita"})
     actions.extend(
         [
-            {"label": "Preguntas frecuentes", "message": "Muestrame las preguntas frecuentes principales"},
             {"label": "Informacion servicios", "message": "Quiero informacion sobre servicios disponibles"},
-            {"label": "Recomendar servicio", "message": "Recomiendame el servicio que mejor encaja con mi caso"},
-            {"label": "Comparar servicios", "message": "Quiero comparar servicios antes de decidir"},
-            {"label": "Estimar precio", "message": "Ayudame a estimar precio, tiempo o alcance aproximado"},
+            {"label": "Preguntas frecuentes", "message": "Muestrame las preguntas frecuentes principales"},
         ]
     )
     return actions
@@ -7185,8 +7452,9 @@ MENU_OPTION_INSTRUCTIONS = {
         "del bloque DATOS_EN_TIEMPO_REAL_DISPONIBILIDAD. Cierra siempre ofreciendo volver al menu principal."
     ),
     "faq": (
-        "El usuario quiere ver preguntas frecuentes. Muestra 4-6 FAQs extraidas de la base documental, "
-        "pero no listes solo los titulos: incluye cada pregunta y una respuesta breve de 1-2 frases. "
+        "El usuario quiere ver preguntas frecuentes. Usa solo las Q&A configuradas en el panel del cliente "
+        "y muestra como maximo 4. No inventes FAQs ni extraigas otras de la base documental. "
+        "Incluye cada pregunta y una respuesta breve de 1-2 frases. "
         "Usa formato compacto con punto medio: \"· **Pregunta:** respuesta breve\". "
         "Invitalo a pedir ampliar una por numero o a escribir su duda libre. "
         "Cierra ofreciendo volver al menu principal."
@@ -7212,6 +7480,165 @@ MENU_OPTION_INSTRUCTIONS = {
         "Si no hay precio fijo, ofrece reservar valoracion. Cierra ofreciendo volver al menu principal."
     ),
 }
+
+
+QA_USE_INFO_MARKER = "Responder usando la informacion disponible en info.txt"
+
+
+def _client_qa_pairs_for_chat(cliente_id: str, limit: int = 4) -> List[Tuple[str, str]]:
+    limit = max(1, min(int(limit or 4), 4))
+    with _get_db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT question, answer, tags_json
+            FROM kb_qa
+            WHERE cliente_id = ?
+            ORDER BY created_at DESC
+            """,
+            (cliente_id,),
+        ).fetchall()
+    pairs: List[Tuple[str, str]] = []
+    for row in rows:
+        try:
+            tags = json.loads(row["tags_json"] or "[]")
+        except (TypeError, ValueError):
+            tags = []
+        if isinstance(tags, list) and "_starter" in tags:
+            continue
+        question = _sanitize_text(row["question"] or "", allow_multiline=True).strip()
+        answer = _sanitize_text(row["answer"] or "", allow_multiline=True).strip()
+        if question and answer:
+            pairs.append((question, answer))
+        if len(pairs) >= limit:
+            break
+    return pairs
+
+
+def _answer_is_info_txt_instruction(answer: str) -> bool:
+    normalized = _strip_accents(str(answer or "").lower())
+    marker = _strip_accents(QA_USE_INFO_MARKER.lower())
+    return marker in normalized or ("info.txt" in normalized and "responder usando" in normalized)
+
+
+_QA_MATCH_PUNCT_RE = re.compile(r"[¿?¡!.,;:\"'`()\[\]{}\-_/]+")
+
+
+def _normalize_for_qa_match(text: str) -> str:
+    t = _strip_accents(str(text or "").lower())
+    t = _QA_MATCH_PUNCT_RE.sub(" ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def _match_qa_answer(cliente_id: str, message: str) -> Optional[str]:
+    """Return verbatim Q&A answer if `message` matches a stored question.
+
+    Used to short-circuit RAG when the visitor's text aligns with a Q&A entry
+    (typically because they clicked a suggested starter mapped 1:1 to a Q&A).
+    """
+    norm_msg = _normalize_for_qa_match(message)
+    if not norm_msg:
+        return None
+    with _get_db_connection() as connection:
+        rows = connection.execute(
+            "SELECT question, answer FROM kb_qa WHERE cliente_id = ?",
+            (cliente_id,),
+        ).fetchall()
+    if not rows:
+        return None
+    msg_tokens = set(norm_msg.split())
+    best_score = 0
+    best_answer: Optional[str] = None
+    for row in rows:
+        q = (row["question"] or "").strip()
+        a = (row["answer"] or "").strip()
+        if not q or not a:
+            continue
+        if _answer_is_info_txt_instruction(a):
+            continue
+        norm_q = _normalize_for_qa_match(q)
+        if not norm_q:
+            continue
+        score = 0
+        if norm_q == norm_msg:
+            score = 100
+        elif norm_msg in norm_q or norm_q in norm_msg:
+            shorter = min(len(norm_q), len(norm_msg))
+            longer = max(len(norm_q), len(norm_msg))
+            if shorter >= 3 and shorter / longer >= 0.5:
+                score = 70
+        else:
+            q_tokens = set(norm_q.split())
+            if q_tokens and msg_tokens:
+                overlap = len(q_tokens & msg_tokens) / max(len(q_tokens), len(msg_tokens))
+                if overlap >= 0.85:
+                    score = int(60 * overlap)
+        if score >= 60 and score > best_score:
+            best_score = score
+            best_answer = a
+    return best_answer
+
+
+def _cleanup_orphan_starter_qa(cliente_id: str, current_starters: List[str]) -> int:
+    """Delete _starter-tagged Q&A whose question is not among current starters.
+
+    Called when the user saves appearance: any Q&A linked to a starter that was
+    removed from the panel must also disappear, otherwise the FAQ panel and chat
+    short-circuit keep surfacing stale answers.
+    """
+    current_norm = {_normalize_for_qa_match(s) for s in (current_starters or []) if s}
+    deleted = 0
+    with _get_db_connection() as connection:
+        rows = connection.execute(
+            "SELECT id, question, tags_json FROM kb_qa WHERE cliente_id = ?",
+            (cliente_id,),
+        ).fetchall()
+        ids_to_delete: List[str] = []
+        for row in rows:
+            try:
+                tags = json.loads(row["tags_json"] or "[]")
+            except (TypeError, ValueError):
+                tags = []
+            if not isinstance(tags, list) or "_starter" not in tags:
+                continue
+            norm_q = _normalize_for_qa_match(row["question"] or "")
+            if norm_q and norm_q in current_norm:
+                continue
+            ids_to_delete.append(row["id"])
+        for qa_id in ids_to_delete:
+            connection.execute(
+                "DELETE FROM kb_qa WHERE id = ? AND cliente_id = ?",
+                (qa_id, cliente_id),
+            )
+            deleted += 1
+        if deleted:
+            connection.commit()
+    if deleted:
+        try:
+            _maybe_regenerate_info_with_qa(cliente_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("No se pudo regenerar info.txt tras limpiar starters %s: %s", cliente_id, exc)
+    return deleted
+
+
+def _build_faq_response_from_panel(cliente_id: str) -> str:
+    pairs = _client_qa_pairs_for_chat(cliente_id, limit=4)
+    if not pairs:
+        return (
+            "Todavia no hay preguntas frecuentes configuradas. "
+            "Puedes escribirme tu duda concreta y la respondere con la informacion disponible del negocio.\n\n"
+            "Escribe **menu** para volver al menu principal."
+        )
+    lines = ["Estas son las preguntas frecuentes principales:"]
+    for question, answer in pairs:
+        clean_answer = answer
+        if _answer_is_info_txt_instruction(clean_answer):
+            clean_answer = "La IA la respondera usando la informacion disponible del negocio."
+        lines.append(f"· **{question}:** {clean_answer}")
+    lines.append("")
+    lines.append("Puedes pedirme ampliar cualquiera o escribir tu duda libre.")
+    lines.append("Escribe **menu** para volver al menu principal.")
+    return "\n".join(lines)
 
 
 def _strip_accents(text: str) -> str:
@@ -10061,6 +10488,11 @@ async def auth_login(data: AuthLoginPayload) -> Response:
     if not user or not user["is_active"]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No encontramos ninguna cuenta con ese correo.")
     if not _verify_secret(data.password, user["password_hash"]):
+        if (user["google_sub"] or "").strip() and (user["signup_source"] or "").strip().lower() == "google":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Esta cuenta se creo con Google. Inicia sesion usando Google.",
+            )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Contraseña incorrecta.")
 
     with _get_db_connection() as connection:
@@ -10204,8 +10636,7 @@ async def auth_google_callback(
 
     user = _get_user_by_google_sub(google_sub) or _get_user_by_email(email)
     if user and not user["google_sub"]:
-        _link_google_to_user(user["id"], google_sub, picture)
-        user = _get_user_by_id(user["id"])
+        return RedirectResponse("/acceso?google_error=email_account")
     if not user:
         if not SIGNUP_ENABLED:
             return RedirectResponse("/acceso?google_error=signup_disabled")
@@ -10325,6 +10756,19 @@ async def onboarding_learn(
     cliente_data_dir.mkdir(parents=True, exist_ok=True)
     (cliente_data_dir / "info.txt").write_text(result.info_txt, encoding="utf-8")
 
+    try:
+        explicit_pairs = list(getattr(result, "faq_pairs", []) or [])
+        faq_source = str(getattr(result, "faq_source", "") or "").lower()
+        _autocreate_qa_from_info(
+            cliente_id,
+            result.info_txt,
+            user["id"],
+            explicit_pairs=explicit_pairs,
+            max_pairs=(None if faq_source == "literal" else 5),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Auto-Q&A en onboarding fallo para %s: %s", cliente_id, exc)
+
     # update config with detected business name + allowed origin
     try:
         parsed = urlparse(data.website_url)
@@ -10350,7 +10794,9 @@ async def onboarding_learn(
     except NameError:
         pass
 
-    starters = _generate_starter_questions(result.info_txt, CONFIG_CLIENTES.get(cliente_id, {}).get("nombre", cliente_id))
+    # No generamos preguntas sugeridas con IA: el widget muestra las 3 fijas y
+    # solo anade las extras que el cliente escriba manualmente.
+    starters: List[str] = []
     suggested_prompt_extra = (
         "Habla con tono profesional y cercano. Responde solo con informacion del negocio. "
         "Si no sabes algo, ofrece contactar con el equipo humano."
@@ -10386,14 +10832,16 @@ async def onboarding_personality(
     cliente_id = (user["cliente_id"] or "").strip()
     if not cliente_id:
         raise HTTPException(status_code=400, detail="Inicia el wizard primero.")
-    cleaned_starters = [
+    sanitized = [
         _sanitize_text(q)[:140] for q in (data.starter_questions or []) if _sanitize_text(q)
-    ][:8]
+    ]
+    cleaned_starters = _strip_base_from_extras(sanitized)
     with state_lock:
         next_configs = copy.deepcopy(CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         cfg["bienvenida"] = _sanitize_text(data.bienvenida, allow_multiline=True)[:600]
         cfg["prompt_extra"] = _sanitize_text(data.prompt_extra, allow_multiline=True)[:4000]
+        cfg["starter_questions"] = cleaned_starters
         next_configs[cliente_id] = cfg
         _update_runtime_configs(next_configs)
     _persist_configs_to_disk(next_configs)
@@ -10439,6 +10887,11 @@ async def auth_change_password(
     data: AuthPasswordChangePayload,
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> Response:
+    if _session_is_impersonated(user):
+        raise HTTPException(
+            status_code=403,
+            detail="Acción bloqueada en sesión de admin (impersonación). Cierra la sesión admin para cambiar la contraseña.",
+        )
     if not _verify_secret(data.current_password, user["password_hash"]):
         raise HTTPException(status_code=400, detail="La contrasena actual no es correcta.")
     if data.current_password == data.new_password:
@@ -10794,6 +11247,9 @@ async def app_appearance_get(
         launcher_size = int(cfg.get("launcher_size", 60) or 60)
     except (TypeError, ValueError):
         launcher_size = 60
+    starters = cfg.get("starter_questions")
+    if not starters:
+        starters = state.get("starter_questions", []) or []
     return AppAppearanceResponse(
         ok=True,
         cliente_id=cliente_id,
@@ -10806,7 +11262,7 @@ async def app_appearance_get(
         launcher_size=launcher_size,
         bienvenida=cfg.get("bienvenida", ""),
         prompt_extra=cfg.get("prompt_extra", ""),
-        starter_questions=state.get("starter_questions", []) or [],
+        starter_questions=list(starters),
         allowed_origins=list(cfg.get("allowed_origins", [])),
     )
 
@@ -10857,14 +11313,22 @@ async def app_appearance_post(
                 if normalized and normalized not in cleaned:
                     cleaned.append(normalized)
             cfg["allowed_origins"] = cleaned
+        if data.starter_questions is not None:
+            sanitized = [
+                _sanitize_text(q)[:140] for q in data.starter_questions if _sanitize_text(q)
+            ]
+            cfg["starter_questions"] = _strip_base_from_extras(sanitized)
         next_configs[cliente_id] = cfg
         _update_runtime_configs(next_configs)
     _persist_configs_to_disk(next_configs)
     if data.starter_questions is not None:
-        cleaned_starters = [_sanitize_text(q)[:140] for q in data.starter_questions if _sanitize_text(q)][:8]
         state = _read_onboarding_state(cliente_id)
-        state["starter_questions"] = cleaned_starters
+        state["starter_questions"] = cfg.get("starter_questions", [])
         _write_onboarding_state(cliente_id, state)
+        try:
+            _cleanup_orphan_starter_qa(cliente_id, cfg.get("starter_questions", []))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("No se pudo limpiar Q&A huerfanas de starters %s: %s", cliente_id, exc)
     # Invalidate llama-index cache so the next chat re-reads info.txt if prompt changed.
     try:
         with state_lock:
@@ -11176,13 +11640,19 @@ def _maybe_regenerate_info_with_qa(cliente_id: str) -> None:
     info = _read_info(cliente_id)
     with _get_db_connection() as connection:
         rows = connection.execute(
-            "SELECT question, answer FROM kb_qa WHERE cliente_id = ? ORDER BY created_at",
+            "SELECT question, answer, tags_json FROM kb_qa WHERE cliente_id = ? ORDER BY created_at",
             (cliente_id,),
         ).fetchall()
     qa_section = ""
     if rows:
         lines = [_KB_QA_BLOCK_MARKER]
         for r in rows:
+            try:
+                tags = json.loads(r["tags_json"] or "[]")
+            except (TypeError, ValueError):
+                tags = []
+            if isinstance(tags, list) and "_starter" in tags:
+                continue
             q = (r["question"] or "").strip()
             a = (r["answer"] or "").strip()
             if not q or not a:
@@ -11190,7 +11660,7 @@ def _maybe_regenerate_info_with_qa(cliente_id: str) -> None:
             lines.append(f"P: {q}")
             lines.append(f"R: {a}")
             lines.append("")
-        qa_section = "\n".join(lines).rstrip() + "\n"
+        qa_section = "\n".join(lines).rstrip() + "\n" if len(lines) > 1 else ""
     # strip previous block if any
     if _KB_QA_BLOCK_MARKER in info:
         info = info.split(_KB_QA_BLOCK_MARKER, 1)[0].rstrip() + "\n"
@@ -11209,6 +11679,149 @@ def _kb_row_to_public(row: sqlite3.Row) -> AppKnowledgeItem:
         indexed_at=row["indexed_at"] or "",
         uploaded_at=row["uploaded_at"] or "",
     )
+
+
+def _canonical_knowledge_url(raw_url: str) -> str:
+    try:
+        normalized = normalize_onboarding_url(raw_url)
+    except ValueError:
+        normalized = str(raw_url or "").strip()
+    parsed = urlparse(normalized)
+    scheme = (parsed.scheme or "https").lower()
+    host = (parsed.hostname or parsed.netloc or "").lower()
+    if not host:
+        return normalized.rstrip("/")
+    port = parsed.port
+    netloc = host
+    if port and not ((scheme == "https" and port == 443) or (scheme == "http" and port == 80)):
+        netloc = f"{host}:{port}"
+    path = re.sub(r"/{2,}", "/", parsed.path or "/")
+    if path != "/":
+        path = path.rstrip("/")
+    query_pairs = [
+        (k, v)
+        for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+        if not k.lower().startswith("utm_") and k.lower() not in {"fbclid", "gclid"}
+    ]
+    query = urlencode(query_pairs, doseq=True)
+    rebuilt = urlunparse((scheme, netloc, path if path != "/" else "", "", query, ""))
+    return rebuilt.rstrip("/")
+
+
+_FAQ_SECTION_RE = re.compile(
+    r"PREGUNTAS\s+FRECUENTES[^\n]*:\s*\n(?P<body>.+?)(?=\nPREGUNTAS\s+SUGERIDAS|\n=====|\n[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s/]{3,}:\s*\n|\Z)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _extract_faq_pairs_from_info(info_txt: str) -> List[Tuple[str, str]]:
+    """Parse 'PREGUNTAS FRECUENTES' section into (question, answer) pairs.
+
+    Stops at the suggested-for-review section or next top-level header.
+    """
+    if not info_txt:
+        return []
+    m = _FAQ_SECTION_RE.search(info_txt)
+    if not m:
+        return []
+    body = m.group("body")
+    pairs: List[Tuple[str, str]] = []
+    current_q: Optional[str] = None
+    current_a_lines: List[str] = []
+
+    def flush() -> None:
+        nonlocal current_q, current_a_lines
+        if current_q:
+            answer = " ".join(s.strip() for s in current_a_lines).strip()
+            q = current_q.strip().strip(".").strip()
+            if q and answer and len(q) >= 4 and len(answer) >= 4 and "..." not in q:
+                pairs.append((q, answer))
+        current_q = None
+        current_a_lines = []
+
+    for raw in body.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if re.match(r"^P\s*:\s*", line, re.IGNORECASE):
+            flush()
+            current_q = re.sub(r"^P\s*:\s*", "", line, flags=re.IGNORECASE)
+            current_a_lines = []
+        elif re.match(r"^R\s*:\s*", line, re.IGNORECASE):
+            current_a_lines.append(re.sub(r"^R\s*:\s*", "", line, flags=re.IGNORECASE))
+        else:
+            if current_q is not None:
+                current_a_lines.append(line)
+    flush()
+    return pairs[:50]
+
+
+def _autocreate_qa_from_info(
+    cliente_id: str,
+    info_txt: str,
+    user_id: Any,
+    explicit_pairs: Optional[List[Tuple[str, str]]] = None,
+    max_pairs: Optional[int] = None,
+) -> int:
+    """Insert FAQ pairs (from scraper or parsed info.txt) as kb_qa rows.
+
+    Prefers `explicit_pairs` (from the scraper itself, most reliable). Falls
+    back to parsing the FAQ section out of info.txt. Dedupes by lowercased
+    question against existing rows. Returns count created.
+    """
+    pairs = list(explicit_pairs or [])
+    if not pairs:
+        pairs = _extract_faq_pairs_from_info(info_txt)
+    # Filter scraper placeholders so we never persist "(sin preguntas...)" rows.
+    pairs = [
+        (q, a)
+        for q, a in pairs
+        if q
+        and a
+        and "sin preguntas frecuentes" not in q.lower()
+        and not q.strip().startswith("(")
+    ]
+    if not pairs:
+        return 0
+    if max_pairs is not None:
+        pairs = pairs[:max(0, int(max_pairs))]
+    created = 0
+    with _get_db_connection() as connection:
+        existing_rows = connection.execute(
+            "SELECT question FROM kb_qa WHERE cliente_id = ?",
+            (cliente_id,),
+        ).fetchall()
+        existing = {(r["question"] or "").strip().lower() for r in existing_rows}
+        now_iso = _utc_now_iso()
+        for q, a in pairs:
+            key = q.strip().lower()
+            if not key or key in existing:
+                continue
+            qa_id = "qa_" + secrets.token_hex(10)
+            connection.execute(
+                """
+                INSERT INTO kb_qa (id, cliente_id, question, answer, tags_json,
+                                   created_at, updated_at, created_by_user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    qa_id,
+                    cliente_id,
+                    _sanitize_text(q, allow_multiline=True)[:400],
+                    _sanitize_text(a, allow_multiline=True)[:4000],
+                    json.dumps(["auto", "web"], ensure_ascii=False),
+                    now_iso,
+                    now_iso,
+                    user_id,
+                ),
+            )
+            existing.add(key)
+            created += 1
+        if created:
+            connection.commit()
+    if created:
+        _maybe_regenerate_info_with_qa(cliente_id)
+    return created
 
 
 @app.get("/auth/app/knowledge", response_model=AppKnowledgeListResponse)
@@ -11268,15 +11881,30 @@ async def app_knowledge_add_url(
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> AppKnowledgeItem:
     cliente_id = _resolve_cliente_for_self_serve_user(user)
-    if not OPENAI_API_KEY:
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY no configurada.")
     url = _sanitize_text(data.url)
     if not re.match(r"^https?://", url):
         raise HTTPException(status_code=400, detail="URL invalida (https:// requerido).")
+    canonical_url = _canonical_knowledge_url(url)
+    with _get_db_connection() as connection:
+        existing_url_rows = connection.execute(
+            """
+            SELECT source_url
+            FROM kb_documents
+            WHERE cliente_id = ? AND source = 'url'
+            """,
+            (cliente_id,),
+        ).fetchall()
+    if any(_canonical_knowledge_url(row["source_url"] or "") == canonical_url for row in existing_url_rows):
+        raise HTTPException(
+            status_code=409,
+            detail="Esta fuente ya esta añadida al conocimiento. Quita la fuente existente antes de volver a indexarla.",
+        )
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY no configurada.")
     try:
         max_pages = 1 if data.just_this_page else ONBOARDING_MAX_PAGES_DEFAULT
         result = run_onboarding(
-            website_url=url,
+            website_url=canonical_url,
             api_key=OPENAI_API_KEY,
             nombre_bot=CONFIG_CLIENTES.get(cliente_id, {}).get("nombre", cliente_id),
             tono="Profesional y cercano",
@@ -11290,6 +11918,7 @@ async def app_knowledge_add_url(
     now_iso = _utc_now_iso()
     kb_id = "kb_" + secrets.token_hex(10)
     info_chars = len(result.info_txt.encode("utf-8"))
+    stored_url = canonical_url
     with _get_db_connection() as connection:
         connection.execute(
             """
@@ -11300,9 +11929,9 @@ async def app_knowledge_add_url(
             """,
             (
                 kb_id, cliente_id,
-                result.detected_business_name or url,
+                result.detected_business_name or stored_url,
                 info_chars,
-                url,
+                stored_url,
                 now_iso, now_iso, user["id"],
             ),
         )
@@ -11313,14 +11942,29 @@ async def app_knowledge_add_url(
         new_info = result.info_txt
     else:
         existing = _read_info(cliente_id)
-        block = f"\n\n{_KB_BLOCK_MARKER}\n[Web: {url}]\n{result.info_txt}\n"
+        block = f"\n\n{_KB_BLOCK_MARKER}\n[Web: {stored_url}]\n{result.info_txt}\n"
         if _KB_QA_BLOCK_MARKER in existing:
             before, after = existing.split(_KB_QA_BLOCK_MARKER, 1)
             new_info = before.rstrip() + block + "\n" + _KB_QA_BLOCK_MARKER + after
         else:
             new_info = existing.rstrip() + block
     _write_info(cliente_id, new_info)
-    return _kb_row_to_public(row)
+    qa_created = 0
+    try:
+        explicit_pairs = list(getattr(result, "faq_pairs", []) or [])
+        faq_source = str(getattr(result, "faq_source", "") or "").lower()
+        qa_created = _autocreate_qa_from_info(
+            cliente_id,
+            result.info_txt,
+            user["id"],
+            explicit_pairs=explicit_pairs,
+            max_pairs=(5 if faq_source != "literal" else None),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Auto-Q&A extraction failed for %s: %s", cliente_id, exc)
+    public = _kb_row_to_public(row)
+    public.qa_created = qa_created
+    return public
 
 
 @app.delete("/auth/app/knowledge/{kb_id}")
@@ -11509,6 +12153,8 @@ async def app_billing_checkout(
     request: Request,
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> BillingCheckoutResponse:
+    if _session_is_impersonated(user):
+        raise HTTPException(status_code=403, detail="Acción bloqueada en sesión de admin (impersonación).")
     if not _stripe_configured():
         raise HTTPException(status_code=503, detail="Stripe no configurado en el servidor.")
     plan = _self_serve_plan(data.plan)
@@ -11563,6 +12209,8 @@ async def app_billing_portal(
     request: Request,
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> BillingPortalResponse:
+    if _session_is_impersonated(user):
+        raise HTTPException(status_code=403, detail="Acción bloqueada en sesión de admin (impersonación).")
     if not _stripe_configured():
         raise HTTPException(status_code=503, detail="Stripe no configurado.")
     sub = db_get_subscription_for_user(user["id"])
@@ -13124,6 +13772,7 @@ async def admin_clientes() -> List[AdminClienteResumen]:
     _auto_confirm_pending_bookings()
     summaries: List[AdminClienteResumen] = []
     booking_counts: Dict[str, Dict[str, int]] = {}
+    owners_by_cliente: Dict[str, Dict[str, Any]] = {}
     with _get_db_connection() as connection:
         rows = connection.execute(
             """
@@ -13140,6 +13789,30 @@ async def admin_clientes() -> List[AdminClienteResumen]:
                 "pending": int(row["pending"] or 0),
             }
             for row in rows
+        }
+        owner_rows = connection.execute(
+            """
+            SELECT c.cliente_id AS cliente_id,
+                   c.owner_user_id AS owner_user_id,
+                   c.created_at AS cliente_created_at,
+                   u.email AS owner_email,
+                   u.display_name AS owner_display_name,
+                   u.last_login_at AS owner_last_login_at,
+                   u.created_at AS owner_created_at
+            FROM clientes c
+            LEFT JOIN users u ON u.id = c.owner_user_id
+            """
+        ).fetchall()
+        owners_by_cliente = {
+            row["cliente_id"]: {
+                "owner_user_id": row["owner_user_id"] or "",
+                "owner_email": row["owner_email"] or "",
+                "owner_display_name": row["owner_display_name"] or "",
+                "owner_last_login_at": row["owner_last_login_at"] or "",
+                "owner_created_at": row["owner_created_at"] or "",
+                "cliente_created_at": row["cliente_created_at"] or "",
+            }
+            for row in owner_rows
         }
 
     demo_registry = _load_demo_registry()
@@ -13166,12 +13839,32 @@ async def admin_clientes() -> List[AdminClienteResumen]:
 
         sub = _client_subscription(cliente_id) if not is_demo else {
             "plan": "", "status": "", "stripe_subscription_id": "",
+            "messages_quota": 0, "messages_used_period": 0,
         }
+        owner_info = owners_by_cliente.get(cliente_id, {})
+        owner_uid = (owner_info.get("owner_user_id") or "").strip()
+        if owner_uid:
+            ss_sub = db_get_subscription_for_user(owner_uid)
+            if ss_sub:
+                sub = dict(sub)
+                sub["plan"] = ss_sub["plan"] or sub.get("plan") or "free"
+                sub["status"] = ss_sub["status"] or sub.get("status") or "active"
+                sub["messages_quota"] = int(ss_sub["messages_quota"] or 0)
+                sub["messages_used_period"] = int(ss_sub["messages_used_period"] or 0)
 
         summaries.append(
             AdminClienteResumen(
                 cliente_id=cliente_id,
                 nombre=config["nombre"],
+                owner_user_id=owner_info.get("owner_user_id", ""),
+                owner_email=owner_info.get("owner_email", ""),
+                owner_display_name=owner_info.get("owner_display_name", ""),
+                owner_last_login_at=owner_info.get("owner_last_login_at", ""),
+                owner_created_at=owner_info.get("owner_created_at", ""),
+                cliente_created_at=owner_info.get("cliente_created_at", ""),
+                plan=str(sub.get("plan") or "free") if (owner_info.get("owner_user_id") or sub.get("plan")) else "",
+                messages_used=int(sub.get("messages_used_period") or 0),
+                messages_quota=int(sub.get("messages_quota") or 0),
                 booking_enabled=bool(booking_cfg.get("enabled")),
                 booking_provider=str(booking_cfg.get("provider", "internal")),
                 booking_timezone=str(booking_cfg.get("timezone", DEFAULT_TIMEZONE)),
@@ -13215,6 +13908,54 @@ async def admin_cliente_detalle(cliente_id: str, request: Request) -> AdminClien
         widget_script_url=snippet["widget_script_url"],
         api_base_url=snippet["api_base_url"],
         demo_url=snippet["demo_url"],
+    )
+
+
+@app.get(
+    "/admin/clientes/{cliente_id}/audit",
+    dependencies=[Depends(_require_admin_token)],
+    response_model=AdminClienteAuditResponse,
+)
+async def admin_cliente_audit(cliente_id: str) -> AdminClienteAuditResponse:
+    _assert_valid_client_id(cliente_id)
+    if cliente_id not in CONFIG_CLIENTES:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado.")
+
+    def _duration_seconds(started_at: str, ended_at: str) -> Optional[int]:
+        if not started_at or not ended_at:
+            return None
+        try:
+            start_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            end_dt = datetime.fromisoformat(ended_at.replace("Z", "+00:00"))
+            return max(0, int((end_dt - start_dt).total_seconds()))
+        except ValueError:
+            return None
+
+    with _get_db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT admin_email, started_at, ended_at, ip, user_agent
+            FROM admin_impersonations
+            WHERE target_cliente_id = ?
+            ORDER BY started_at DESC
+            LIMIT 50
+            """,
+            (cliente_id,),
+        ).fetchall()
+
+    return AdminClienteAuditResponse(
+        cliente_id=cliente_id,
+        items=[
+            AdminClienteAuditEntry(
+                admin_email=row["admin_email"] or "",
+                started_at=row["started_at"] or "",
+                ended_at=row["ended_at"] or "",
+                ip=row["ip"] or "",
+                user_agent=row["user_agent"] or "",
+                duration_seconds=_duration_seconds(row["started_at"] or "", row["ended_at"] or ""),
+            )
+            for row in rows
+        ],
     )
 
 
@@ -13301,6 +14042,124 @@ async def admin_assign_cliente_owner(
         ok=True,
         message=f"Cliente {cliente_id} asignado a {target_email} (plan {plan_slug}).",
     )
+
+
+@app.post(
+    "/admin/clientes/{cliente_id}/impersonate",
+    response_model=AdminImpersonateResponse,
+)
+async def admin_impersonate_cliente(
+    cliente_id: str,
+    request: Request,
+    admin: Dict[str, str] = Depends(_require_admin_identity),
+) -> Response:
+    """Admin opens cliente's portal as the cliente owner.
+
+    Creates a short-lived auth_sessions row stamped with impersonator_* fields,
+    sets the portal cookie, and audits the action in admin_impersonations.
+    The portal banner picks up the impersonation flag via /auth/me.
+    """
+    _assert_valid_client_id(cliente_id)
+    if cliente_id not in CONFIG_CLIENTES:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado.")
+    with _get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT owner_user_id FROM clientes WHERE cliente_id = ?",
+            (cliente_id,),
+        ).fetchone()
+    target_user_id = (row["owner_user_id"] if row else "") or ""
+    if not target_user_id:
+        raise HTTPException(
+            status_code=409,
+            detail="El cliente no tiene un owner asignado. Usa /admin/clientes/{id}/assign-owner primero.",
+        )
+    target_user = _get_user_by_id(target_user_id)
+    if not target_user or not target_user["is_active"]:
+        raise HTTPException(status_code=409, detail="El owner del cliente no está activo.")
+    if target_user["role"] == "admin":
+        raise HTTPException(status_code=403, detail="No se puede impersonar a otro admin.")
+
+    ip = request.client.host if request.client else ""
+    user_agent = (request.headers.get("user-agent") or "")[:512]
+    raw_token, session_id = _create_impersonation_session(
+        target_user_id=target_user["id"],
+        admin_user_id=admin["user_id"],
+        admin_email=admin["email"],
+        ip=ip,
+    )
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO admin_impersonations
+                (id, admin_user_id, admin_email, target_user_id, target_cliente_id,
+                 session_id, started_at, ip, user_agent)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                f"imp_{secrets.token_hex(8)}",
+                admin["user_id"],
+                admin["email"],
+                target_user["id"],
+                cliente_id,
+                session_id,
+                _utc_now_iso(),
+                ip,
+                user_agent,
+            ),
+        )
+        connection.commit()
+
+    logger.info(
+        "[admin] impersonate admin=%s cliente=%s target=%s ttl_min=%s",
+        admin["email"], cliente_id, target_user["email"], ADMIN_IMPERSONATION_TTL_MINUTES,
+    )
+
+    response = JSONResponse(
+        AdminImpersonateResponse(
+            ok=True,
+            cliente_id=cliente_id,
+            target_user_id=target_user["id"],
+            target_email=target_user["email"],
+            expires_in_minutes=ADMIN_IMPERSONATION_TTL_MINUTES,
+            redirect_url="/app?as_admin=1",
+        ).model_dump()
+    )
+    response.headers["Cache-Control"] = "no-store"
+    _set_portal_cookie(response, raw_token)
+    return response
+
+
+@app.post(
+    "/admin/impersonate/end",
+    response_model=AdminImpersonateEndResponse,
+)
+async def admin_impersonate_end(
+    portal_session: Optional[str] = Cookie(default=None, alias=PORTAL_COOKIE_NAME),
+) -> Response:
+    """Closes the impersonated session and returns the admin to the dashboard.
+
+    Safe to call without admin auth: the cookie itself proves ownership of
+    the impersonation. If the cookie is not an impersonation, behaves as a
+    plain logout for that token.
+    """
+    user_row = _get_authenticated_portal_user_or_none(portal_session)
+    if _session_is_impersonated(user_row):
+        admin_email = _session_impersonator_email(user_row)
+        with _get_db_connection() as connection:
+            connection.execute(
+                "UPDATE admin_impersonations SET ended_at = ? WHERE session_id = ? AND ended_at = ''",
+                (_utc_now_iso(), user_row["session_id"]),
+            )
+            connection.commit()
+        logger.info("[admin] impersonate end admin=%s session=%s", admin_email, user_row["session_id"])
+    if portal_session:
+        _delete_auth_session(portal_session)
+    response = JSONResponse(
+        AdminImpersonateEndResponse(ok=True, admin_redirect_url="/dashboard").model_dump()
+    )
+    response.headers["Cache-Control"] = "no-store"
+    _clear_portal_cookie(response)
+    return response
 
 
 @app.get(
@@ -13575,6 +14434,8 @@ async def info_cliente(cliente_id: str, request: Request) -> ConfigPublicaClient
     else:
         launcher_size = max(120, min(280, launcher_size))
 
+    starter_questions = _resolve_widget_starters(config)
+
     return ConfigPublicaCliente(
         nombre=config["nombre"],
         icono=config["icono"],
@@ -13588,6 +14449,7 @@ async def info_cliente(cliente_id: str, request: Request) -> ConfigPublicaClient
         branding_text=branding.get("powered_by", "Powered by Vantelia"),
         contact_email=contacto.get("email", ""),
         contact_phone=contacto.get("telefono", ""),
+        starter_questions=starter_questions,
     )
 
 
@@ -14043,6 +14905,40 @@ async def _process_chat_message(
             intent="agendar",
         )
         return booking_response
+
+    if menu_option == "faq":
+        faq_text = _build_faq_response_from_panel(cliente_id)
+        faq_response = RespuestaChat(
+            respuesta=faq_text,
+            mostrar_formulario=False,
+            session_id=session_id,
+            intent="faq",
+        )
+        _record_chat_message(
+            session_id=session_id,
+            cliente_id=cliente_id,
+            role="assistant",
+            content=faq_response.respuesta,
+            intent="faq",
+        )
+        return faq_response
+
+    qa_exact_answer = _match_qa_answer(cliente_id, message)
+    if qa_exact_answer:
+        qa_response = RespuestaChat(
+            respuesta=qa_exact_answer,
+            mostrar_formulario=False,
+            session_id=session_id,
+            intent="qa_exact",
+        )
+        _record_chat_message(
+            session_id=session_id,
+            cliente_id=cliente_id,
+            role="assistant",
+            content=qa_exact_answer,
+            intent="qa_exact",
+        )
+        return qa_response
 
     if booking_enabled and _message_requests_booking_form(message):
         booking_response = RespuestaChat(
@@ -15498,6 +16394,157 @@ async def regenerar_cerebro(cliente_id: str, data: Optional[AdminRebrainPayload]
         info_txt_size=len(result.info_txt or ""),
         reindexed=reindexed,
         reindex_error=reindex_error,
+    )
+
+
+class AdminStatsTopCliente(BaseModel):
+    cliente_id: str
+    owner_email: str = ""
+    plan: str = ""
+    messages_used: int = 0
+    messages_quota: int = 0
+
+
+class AdminStatsAlta(BaseModel):
+    cliente_id: str
+    nombre: str = ""
+    owner_email: str = ""
+    created_at: str = ""
+
+
+class AdminStatsChurnRiesgo(BaseModel):
+    cliente_id: str
+    nombre: str = ""
+    owner_email: str = ""
+    last_login_at: str = ""
+    dias_inactivo: int = 0
+
+
+class AdminStatsOverview(BaseModel):
+    clientes_total: int
+    clientes_activos: int
+    clientes_demo: int
+    clientes_sin_owner: int
+    mensajes_mes: int
+    mensajes_quota_mes: int
+    top_clientes: List[AdminStatsTopCliente]
+    altas_recientes: List[AdminStatsAlta]
+    churn_riesgo: List[AdminStatsChurnRiesgo]
+    generated_at: str
+
+
+@app.get(
+    "/admin/stats/overview",
+    dependencies=[Depends(_require_admin_token)],
+    response_model=AdminStatsOverview,
+)
+async def admin_stats_overview() -> AdminStatsOverview:
+    """Compact dashboard summary for the admin Estadísticas view.
+
+    Counts active subscriptions, monthly messages used/quota, top users,
+    recent signups (7d) and churn risk (no login in 30d). One query pass.
+    """
+    now = datetime.now(timezone.utc)
+    seven_days_ago = (now - timedelta(days=7)).isoformat()
+    thirty_days_ago = (now - timedelta(days=30)).isoformat()
+
+    with _get_db_connection() as connection:
+        cliente_rows = connection.execute(
+            """
+            SELECT c.cliente_id AS cliente_id,
+                   c.nombre AS cliente_nombre,
+                   c.created_at AS cliente_created_at,
+                   c.owner_user_id AS owner_user_id,
+                   u.email AS owner_email,
+                   u.last_login_at AS owner_last_login_at,
+                   s.plan AS plan,
+                   s.status AS sub_status,
+                   s.messages_used_period AS messages_used,
+                   s.messages_quota AS messages_quota
+            FROM clientes c
+            LEFT JOIN users u ON u.id = c.owner_user_id
+            LEFT JOIN subscriptions s ON s.user_id = c.owner_user_id
+            """
+        ).fetchall()
+
+    clientes_total = 0
+    clientes_activos = 0
+    clientes_demo = 0
+    clientes_sin_owner = 0
+    mensajes_mes = 0
+    mensajes_quota_mes = 0
+    top: List[AdminStatsTopCliente] = []
+    altas: List[AdminStatsAlta] = []
+    churn: List[AdminStatsChurnRiesgo] = []
+    demo_registry = _load_demo_registry()
+
+    for row in cliente_rows:
+        cliente_id = row["cliente_id"]
+        if cliente_id.startswith(DEMO_TENANT_PREFIX) or cliente_id in demo_registry:
+            clientes_demo += 1
+            continue
+        clientes_total += 1
+        sub_status = (row["sub_status"] or "").lower()
+        if sub_status in ("active", "trialing"):
+            clientes_activos += 1
+        if not (row["owner_user_id"] or "").strip():
+            clientes_sin_owner += 1
+        used = int(row["messages_used"] or 0)
+        quota = int(row["messages_quota"] or 0)
+        mensajes_mes += used
+        mensajes_quota_mes += quota
+        if used > 0:
+            top.append(
+                AdminStatsTopCliente(
+                    cliente_id=cliente_id,
+                    owner_email=row["owner_email"] or "",
+                    plan=row["plan"] or "",
+                    messages_used=used,
+                    messages_quota=quota,
+                )
+            )
+        created_at = row["cliente_created_at"] or ""
+        if created_at and created_at >= seven_days_ago:
+            altas.append(
+                AdminStatsAlta(
+                    cliente_id=cliente_id,
+                    nombre=row["cliente_nombre"] or "",
+                    owner_email=row["owner_email"] or "",
+                    created_at=created_at,
+                )
+            )
+        last_login = row["owner_last_login_at"] or ""
+        if (row["owner_user_id"] or "").strip() and last_login and last_login < thirty_days_ago:
+            try:
+                ll_dt = datetime.fromisoformat(last_login.replace("Z", "+00:00"))
+                dias = max(0, (now - ll_dt).days)
+            except (TypeError, ValueError):
+                dias = 0
+            churn.append(
+                AdminStatsChurnRiesgo(
+                    cliente_id=cliente_id,
+                    nombre=row["cliente_nombre"] or "",
+                    owner_email=row["owner_email"] or "",
+                    last_login_at=last_login,
+                    dias_inactivo=dias,
+                )
+            )
+
+    top.sort(key=lambda x: x.messages_used, reverse=True)
+    altas.sort(key=lambda x: x.created_at, reverse=True)
+    churn.sort(key=lambda x: x.dias_inactivo, reverse=True)
+
+    return AdminStatsOverview(
+        clientes_total=clientes_total,
+        clientes_activos=clientes_activos,
+        clientes_demo=clientes_demo,
+        clientes_sin_owner=clientes_sin_owner,
+        mensajes_mes=mensajes_mes,
+        mensajes_quota_mes=mensajes_quota_mes,
+        top_clientes=top[:10],
+        altas_recientes=altas[:20],
+        churn_riesgo=churn[:20],
+        generated_at=now.isoformat(),
     )
 
 

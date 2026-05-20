@@ -122,7 +122,7 @@ export function construirWidget(cfg) {
     booking_enabled: !!cfg.booking_enabled,
   });
   agregarMensaje(cfg.bienvenida || "Hola, en que puedo ayudarte hoy?", "bot");
-  agregarAccionesIniciales();
+  agregarAccionesIniciales(Array.isArray(cfg.starter_questions) ? cfg.starter_questions : []);
 
   document.getElementById("ia-w-btn")?.addEventListener("click", () => toggleChat());
   document.getElementById("ia-w-close")?.addEventListener("click", () => toggleChat(false));

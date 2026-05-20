@@ -11,43 +11,45 @@
 :root {
   color-scheme: dark;
 
-  /* Linear/Vercel/Stripe inspired dark */
+  /* === DESIGN TOKENS — sync con app_ui/index.html === */
   --bg:            #0B132B;
-  --bg-2:          #091028;
-  --bg-3:          #060c1e;
-  --surface:       #0F1830;
-  --surface-2:     #142039;
+  --bg-2:          #0e1b3e;
+  --bg-3:          #07101f;
+  --panel:         #11203a;
+  --panel-2:       #142a4d;
+  --surface:       var(--panel);
+  --surface-2:     var(--panel-2);
   --surface-3:     #182A47;
   --surface-hover: #1D3257;
-  --panel:         var(--surface);
-  --panel-strong:  var(--surface-2);
+  --panel-strong:  var(--panel-2);
 
-  --line:          rgba(255,255,255,0.06);
-  --line-strong:   rgba(255,255,255,0.10);
+  --line:          rgba(255,255,255,0.08);
+  --line-strong:   rgba(255,255,255,0.16);
 
-  --text:          #F4F6FB;
+  --text:          #F0F4F8;
   --text-2:        #C7CCE0;
   --soft:          #8fa3b4;
-  --soft-2:        #5C6486;
+  --soft-2:        #637c8e;
   --muted:         var(--soft);
 
-  /* Vantelia brand accent (cyan + turquoise) */
+  /* Vantelia brand accent (cyan + turquoise) — alineado con app_ui */
   --accent:        #00D1FF;
   --accent-2:      #00F5D4;
   --accent-dark:   #0099BB;
-  --accent-soft:   rgba(0,209,255,0.12);
+  --accent-soft:   rgba(0,209,255,0.10);
   --accent-soft-2: rgba(0,245,212,0.10);
   --accent-line:   rgba(0,209,255,0.28);
 
-  --success:       #22C55E;
-  --success-soft:  rgba(34,197,94,0.10);
-  --success-line:  rgba(34,197,94,0.30);
-  --warn:          #F5A524;
-  --warn-soft:     rgba(245,165,36,0.10);
-  --warn-line:     rgba(245,165,36,0.30);
-  --danger:        #F75D7A;
-  --danger-soft:   rgba(247,93,122,0.10);
-  --danger-line:   rgba(247,93,122,0.30);
+  --success:       #00F5D4;
+  --success-soft:  rgba(0,245,212,0.12);
+  --success-line:  rgba(0,245,212,0.30);
+  --warning:       #ffc857;
+  --warn:          var(--warning);
+  --warn-soft:     rgba(255,200,87,0.15);
+  --warn-line:     rgba(255,200,87,0.30);
+  --danger:        #ff7b86;
+  --danger-soft:   rgba(255,123,134,0.12);
+  --danger-line:   rgba(255,123,134,0.30);
   --info:          #6BA9FF;
   --info-soft:     rgba(107,169,255,0.10);
 
@@ -118,70 +120,119 @@ h4 { font-size: 0.95rem; line-height: 1.4; }
 p { margin: 0; line-height: 1.6; color: var(--text-2); }
 
 /* ── App grid ───────────────────────────────────── */
-.app {
+.page {
+  width: 100%;
   min-height: 100vh;
+  margin: 0;
+  padding: 0;
   display: grid;
   grid-template-columns: var(--side-w) minmax(0, 1fr);
-  grid-template-rows: 1fr;
-  position: relative;
+  grid-template-rows: auto 1fr;
+  align-items: start;
 }
-.app.is-collapsed { --side-w: var(--side-w-collapsed); }
+
+/* TOPBAR */
+.topbar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(11,16,28,0.85);
+  backdrop-filter: blur(18px) saturate(1.4);
+  z-index: 30;
+  position: sticky;
+  top: 0;
+  min-height: auto;
+}
+.topbar .brand { display: grid; gap: 0; padding: 0; border: 0; }
+.topbar .brand-mark {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0; border: 0; margin: 0;
+}
+.topbar .brand-logo {
+  width: 36px; height: 36px; object-fit: contain;
+  border-radius: 8px;
+  filter: drop-shadow(0 0 12px rgba(0,209,255,0.20));
+}
+.topbar .brand-copy { display: grid; gap: 0; }
+.topbar .brand-kicker { display: none; }
+.topbar .brand h1 {
+  margin: 0;
+  font-size: 1rem;
+  font-family: var(--font-title);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.topbar .brand p { display: none; }
+.top-actions { display: flex; align-items: center; gap: 10px; }
+.topbar-user {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.topbar-user-copy { display: inline-flex; flex-direction: column; line-height: 1.15; }
+.topbar-user-copy strong { font-size: 12.5px; color: var(--text); font-weight: 600; }
+.topbar-user-copy .muted { font-size: 11px; color: var(--soft); }
+
+/* SHELL — let grid items occupy parent grid */
+.shell { display: contents; }
 
 /* ── Sidebar ────────────────────────────────────── */
 .sidebar {
+  grid-column: 1;
+  grid-row: 2;
+  width: var(--side-w);
   border-right: 1px solid var(--line);
-  background: rgba(6,7,20,0.94);
-  backdrop-filter: blur(18px) saturate(1.4);
-  padding: 16px 12px;
+  background: rgba(8,12,22,0.94);
+  backdrop-filter: blur(16px);
+  padding: 18px 14px 24px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  height: 100vh;
+  height: calc(100vh - 65px);
   position: sticky;
-  top: 0;
+  top: 65px;
   overflow-y: auto;
   overflow-x: hidden;
-  transition: width .2s ease;
 }
 
-.brand {
-  padding: 4px 8px 0;
-  display: grid;
-  gap: 14px;
-}
-.brand-mark {
+.sidebar-stack { display: flex; flex-direction: column; gap: 12px; }
+
+/* Brand fallback (rare: inside sidebar) — kept neutral */
+.sidebar .brand { padding: 4px 8px 0; display: grid; gap: 14px; }
+.sidebar .brand-mark {
   display: flex; align-items: center; gap: 12px;
   padding: 4px 4px 12px;
   border-bottom: 1px solid var(--line);
   margin-bottom: 4px;
 }
-.brand-logo {
-  width: 36px; height: 36px;
-  object-fit: contain;
+.sidebar .brand-logo {
+  width: 36px; height: 36px; object-fit: contain;
   border-radius: 8px;
   filter: drop-shadow(0 0 12px rgba(0,209,255,0.20));
   flex: 0 0 auto;
 }
-.brand-copy { display: grid; gap: 4px; min-width: 0; }
-.brand-kicker {
+.sidebar .brand-copy { display: grid; gap: 4px; min-width: 0; }
+.sidebar .brand-kicker {
   display: inline-flex; width: fit-content;
   padding: 3px 8px; border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
 }
-.brand h1 { font-size: 0.98rem; font-weight: 700; line-height: 1.1; }
-.brand p { font-size: 12px; color: var(--soft); line-height: 1.45; }
+.sidebar .brand h1 { font-size: 0.98rem; font-weight: 700; line-height: 1.1; }
+.sidebar .brand p { font-size: 12px; color: var(--soft); line-height: 1.45; }
 .brand-links { display: flex; gap: 6px; flex-wrap: wrap; }
-
-.app.is-collapsed .brand-copy,
-.app.is-collapsed .brand-links,
-.app.is-collapsed .nav-text { display: none; }
-.app.is-collapsed .brand-mark { justify-content: center; padding-bottom: 8px; }
-.app.is-collapsed .nav-button { justify-content: center; padding: 11px 10px; }
 
 /* ── Side nav ───────────────────────────────────── */
 .side-nav {
@@ -229,10 +280,11 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
 }
 
 .nav-icon {
-  width: 30px;
-  height: 30px;
-  display: inline-grid;
-  place-items: center;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 9px;
   background: rgba(0,209,255,0.10);
   border: 1px solid rgba(0,209,255,0.22);
@@ -243,8 +295,19 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
   letter-spacing: 0.05em;
   flex: 0 0 auto;
   transition: background .15s, color .15s, border-color .15s, box-shadow .15s, transform .12s;
-  text-shadow: 0 0 12px rgba(0,209,255,0.45);
 }
+.nav-icon svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+  stroke: currentColor !important;
+  fill: none !important;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.nav-icon svg * { stroke: currentColor !important; fill: none !important; }
 .nav-button:hover .nav-icon {
   background: rgba(0,209,255,0.18);
   border-color: rgba(0,209,255,0.40);
@@ -268,32 +331,59 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
 
 /* ── Main column ────────────────────────────────── */
 .main {
-  padding: 0;
+  grid-column: 2;
+  grid-row: 2;
+  padding: 28px 32px 64px;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
+  gap: 20px;
   min-width: 0;
-  min-height: 100vh;
 }
 
-/* Topbar (synthesized over .login card / first stats group) */
+/* Legacy .login (no longer used as topbar; kept as no-op shim) */
 .login {
-  position: sticky;
-  top: 0;
-  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 12px 24px;
-  background: rgba(8,10,28,0.86);
-  backdrop-filter: blur(18px) saturate(1.4);
-  border-bottom: 1px solid var(--line);
-  min-height: var(--topbar-h);
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 .login > * { margin: 0 !important; }
 .login strong { font-size: 13.5px; color: var(--text); font-weight: 600; }
 .login .muted { font-size: 12px; color: var(--soft); }
 .login .row { gap: 8px !important; }
+
+/* Hero card (matches portal) */
+.card.hero {
+  padding: 26px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background:
+    linear-gradient(135deg, rgba(0,209,255,0.06), rgba(0,245,212,0.04)),
+    var(--surface);
+  border-color: var(--line-strong);
+}
+.hero h2 { font-size: 1.5rem; }
+.hero p { color: var(--text-2); max-width: 720px; }
+.hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  width: fit-content;
+}
 
 /* ── Stats strip ─────────────────────────────────── */
 .stats {
@@ -824,14 +914,9 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding: 18px 24px 56px;
   flex: 1;
   animation: fadeUp .25s ease both;
 }
-
-/* Client tab panels also driven by .active */
-.client-tab-panel { display: none; }
-.client-tab-panel.active { display: flex; }
 
 /* ── Cards ──────────────────────────────────────── */
 .card {
@@ -1061,133 +1146,272 @@ select {
 .booking-settings { display: flex; flex-direction: column; gap: 14px; }
 
 /* ── Client tabs ────────────────────────────────── */
-.client-tabs {
-  display: inline-flex;
-  gap: 2px;
-  background: var(--surface-2);
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  flex-wrap: wrap;
-}
-.client-tabs button {
-  background: transparent;
-  color: var(--soft);
-  border: none;
-  padding: 7px 12px;
-  font-size: 12.5px;
-  font-weight: 600;
-  border-radius: 7px;
-  box-shadow: none;
-  transform: none;
-}
-.client-tabs button:hover { background: var(--surface); color: var(--text); transform: none; box-shadow: none; }
-.client-tabs button.active { background: var(--accent); color: #061021; }
-
-.client-tab-panel { display: flex; flex-direction: column; gap: 14px; }
-.client-tab-panel.hidden { display: none !important; }
-
 /* ── Client directory ───────────────────────────── */
-.client-directory { display: flex; flex-direction: column; gap: 8px; }
-.client-directory-toolbar {
-  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-  padding: 10px 12px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
-.client-directory-toolbar input { flex: 1 1 240px; min-width: 180px; }
-
-.client-list-row {
+/* Admin clients table + drawer */
+.admin-clients { gap: 12px; }
+.clients-shell { padding: 16px; gap: 12px; }
+.clients-topbar {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(180px, 1fr) minmax(240px, 360px) auto;
+  gap: 10px;
+  align-items: end;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.clients-title { display: grid; gap: 2px; }
+.clients-title h2 { font-size: 1.16rem; }
+.clients-title p { font-size: .82rem; color: var(--soft); }
+.clients-search label { gap: 5px; }
+.clients-search input { min-height: 36px; padding: 8px 10px; font-size: .85rem; }
+.clients-actions { justify-content: flex-end; }
+.admin-clients button,
+.admin-drawer button {
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 11px;
+  font-family: var(--font);
+  font-size: .82rem;
+  letter-spacing: 0;
+  transition: background .12s, border-color .12s, color .12s, transform .12s;
+}
+.admin-clients button:hover,
+.admin-drawer button:hover { background: var(--surface-3); border-color: var(--accent-line); transform: none; filter: none; }
+.admin-clients button.btn-primary,
+.admin-drawer button.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #061021;
+}
+.admin-clients button.btn-ghost,
+.admin-drawer button.btn-ghost {
+  background: transparent;
+  color: var(--text-2);
+  border-color: var(--line);
+}
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0 !important;
+  border-radius: 8px;
+  font-size: .78rem;
+}
+.client-filters { display: grid; gap: 8px; padding: 2px 0; }
+.filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.filter-label {
+  min-width: 54px;
+  color: var(--soft);
+  font-size: .74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.filter-chip {
+  min-height: 28px;
+  padding: 5px 9px !important;
+  border-radius: 999px !important;
+  font-size: .78rem !important;
+}
+.filter-chip.active {
+  background: var(--accent-soft) !important;
+  border-color: var(--accent-line) !important;
+  color: var(--text) !important;
+}
+.admin-table-shell {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: auto;
+  max-height: calc(100vh - 310px);
+  min-height: 320px;
+  background: var(--surface);
+}
+.admin-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  font-size: .85rem;
+  line-height: 1.4;
+}
+.admin-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-2);
+  color: var(--soft);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 10px;
+  font-size: .72rem;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-weight: 700;
+}
+.admin-table tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-table th:last-child,
+.admin-table td:last-child { padding-left: 6px; padding-right: 6px; }
+.admin-table tbody tr { cursor: pointer; transition: background .12s; }
+.admin-table tbody tr:nth-child(even) { background: rgba(255,255,255,.02); }
+.admin-table tbody tr:hover { background: var(--surface-2); }
+.admin-table tbody tr.active { background: var(--accent-soft); }
+.client-main-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.client-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #061021;
+  font-size: .72rem;
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+.client-cell-text { min-width: 0; display: grid; gap: 1px; }
+.client-cell-text strong { color: var(--text); font-size: .86rem; overflow: hidden; text-overflow: ellipsis; }
+.client-cell-text span { color: var(--soft); font-size: .74rem; overflow: hidden; text-overflow: ellipsis; }
+.usage-cell { display: grid; gap: 4px; min-width: 0; }
+.usage-cell span { font-size: .78rem; color: var(--text-2); }
+.usage-bar { height: 5px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+.usage-bar > i { display: block; height: 100%; background: var(--accent); }
+.row-actions { display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; width: 100%; }
+.row-action-btn {
+  min-width: 54px;
+  height: 30px;
+  padding: 0 9px !important;
+  font-size: .76rem !important;
+  line-height: 1;
+  white-space: nowrap;
+}
+.client-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--soft);
+  font-size: .8rem;
+}
+.admin-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  background: rgba(2, 6, 23, .54);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s ease;
+}
+.admin-drawer-overlay.active { opacity: 1; pointer-events: auto; }
+.admin-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 141;
+  width: min(560px, 100vw);
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  background: var(--surface);
+  border-left: 1px solid var(--line-strong);
+  transform: translateX(100%);
+  transition: transform .14s ease;
+}
+.admin-drawer.open { transform: translateX(0); }
+.admin-drawer-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
-  padding: 12px 14px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: background .15s, border-color .15s, transform .12s;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
 }
-.client-list-row:hover { background: var(--surface-2); border-color: var(--line-strong); transform: translateY(-1px); }
-.client-list-row.active { border-color: var(--accent); background: var(--accent-soft); }
-
-.client-list-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.client-list-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.client-list-side { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; min-width: 0; }
-.client-list-name { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.client-list-meta { font-size: 12px; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.client-pill-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
-.client-pill {
-  display: inline-flex;
-  align-items: center;
+.drawer-title { min-width: 0; display: grid; gap: 5px; }
+.drawer-title h3 { font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawer-title .muted { font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawer-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+.drawer-tabs {
+  display: flex;
   gap: 4px;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  border-radius: 999px;
-  letter-spacing: .01em;
-  white-space: nowrap;
-  border: 1px solid transparent;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
 }
-.client-pill.demo {
-  background: rgba(255, 184, 0, .12);
-  color: #ffb800;
-  border-color: rgba(255, 184, 0, .35);
+.drawer-tab {
+  flex: 0 0 auto;
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--soft) !important;
 }
-.client-pill.sub-active {
-  background: #16a34a;
-  color: #ffffff;
-  border-color: #22c55e;
+.drawer-tab.active {
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+  border-color: var(--line) !important;
 }
-.client-pill.sub-trial {
-  background: rgba(0, 209, 255, .10);
-  color: #00d1ff;
-  border-color: rgba(0, 209, 255, .35);
+.drawer-body { min-height: 0; overflow-y: auto; padding: 14px 16px 88px; }
+.drawer-panel { display: none; flex-direction: column; gap: 12px; }
+.drawer-panel.active { display: flex; }
+.kpi-mini {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
-.client-pill.sub-canceled,
-.client-pill.sub-past_due,
-.client-pill.sub-unpaid {
-  background: rgba(255, 93, 143, .10);
-  color: #ff5d8f;
-  border-color: rgba(255, 93, 143, .35);
-}
-.client-pill.sub-none {
-  background: rgba(255, 255, 255, .04);
-  color: var(--soft);
-  border-color: var(--line);
-}
-.client-pill.booking-on {
-  background: rgba(120, 200, 120, .12);
-  color: #7bd17b;
-  border-color: rgba(120, 200, 120, .35);
-}
-.client-pill.booking-off {
-  background: rgba(255, 255, 255, .03);
-  color: var(--soft);
-  border-color: var(--line);
-}
-
-.client-filter-pills { display: flex; gap: 6px; flex-wrap: wrap; }
-.client-filter-pills button {
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  border-radius: 999px;
+.kpi-mini > div {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
   border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.02);
+}
+.kpi-mini span { color: var(--soft); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+.kpi-mini strong { color: var(--text); font-size: .94rem; overflow-wrap: anywhere; }
+.actions-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.drawer-section {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.018);
+}
+.drawer-section h4 { font-size: .86rem; }
+.drawer-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
   background: var(--surface);
-  color: var(--soft);
-  cursor: pointer;
-  transition: background .15s, border-color .15s, color .15s;
 }
-.client-filter-pills button:hover { border-color: var(--line-strong); color: var(--text); }
-.client-filter-pills button.active {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--text);
+.drawer-footer .danger { margin-right: auto; }
+.mini-bars { display: grid; gap: 8px; }
+.mini-bar-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) 58px; gap: 8px; align-items: center; font-size: .8rem; }
+.mini-bar-row span:first-child { color: var(--soft); }
+.mini-bar { height: 8px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+.mini-bar i { display: block; height: 100%; background: var(--accent); }
+.drawer-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .8rem;
 }
+.drawer-table th,
+.drawer-table td {
+  padding: 7px 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  color: var(--text-2);
+}
+.drawer-table th { color: var(--soft); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
 
 /* Client summary block */
 .client-summary {
@@ -1504,9 +1728,10 @@ tbody tr:last-child td { border-bottom: none; }
 }
 
 @media (max-width: 960px) {
-  .app {
+  .page {
     grid-template-columns: 1fr;
   }
+  .topbar { padding: 12px 16px; }
   .sidebar {
     position: fixed;
     top: 0; left: 0;
@@ -1516,11 +1741,13 @@ tbody tr:last-child td { border-bottom: none; }
     transform: translateX(-100%);
     transition: transform .25s ease;
     box-shadow: var(--shadow-lg);
+    grid-column: 1;
+    grid-row: 1 / -1;
   }
   .sidebar.is-open { transform: translateX(0); }
   .side-nav { padding: 4px 0; }
 
-  .main { padding: 0; }
+  .main { padding: 18px 16px 44px; grid-column: 1; }
   .login { padding: 12px 16px; }
   .stats { padding: 14px 16px 0; }
   .dashboard-view { padding: 14px 16px 44px; }
@@ -1530,9 +1757,10 @@ tbody tr:last-child td { border-bottom: none; }
     grid-template-columns: 1fr;
   }
   .hero { padding: 18px; }
-  .client-list-row { grid-template-columns: 1fr; }
-  .client-list-side { align-items: flex-start; }
-  .client-list-actions { justify-content: flex-start; }
+  .clients-topbar { grid-template-columns: 1fr; align-items: stretch; }
+  .clients-actions { justify-content: flex-start; }
+  .admin-table-shell { max-height: none; }
+  .admin-drawer { width: 100vw; }
   .modal-overlay { padding: 16px; }
 }
 
@@ -1546,8 +1774,8 @@ tbody tr:last-child td { border-bottom: none; }
   </style>
 </head>
 <body>
-  <div class="app">
-    <aside class="sidebar">
+  <div class="page">
+    <header class="topbar">
       <section class="brand">
         <div class="brand-mark">
           <img class="brand-logo" src="/brand-assets/Logo_1_sin_resplandor.png" alt="Vantelia" />
@@ -1557,47 +1785,47 @@ tbody tr:last-child td { border-bottom: none; }
             <p>Operativa central para clientes, demos y despliegue comercial del ecosistema.</p>
           </div>
         </div>
-        <div class="brand-links">
-          <a href="https://vantelia.es" target="_blank" rel="noreferrer">vantelia.es</a>
-          <a href="/acceso" target="_blank" rel="noreferrer">Acceso portal</a>
-        </div>
       </section>
+      <div class="top-actions">
+        <div class="topbar-user" id="topbarUser" aria-label="Sesion activa">
+          <span class="topbar-user-copy">
+            <strong id="topSessionName">-</strong>
+            <span class="muted" id="topSessionEmail">-</span>
+          </span>
+        </div>
+        <button id="logoutBtn" class="danger small" type="button">Cerrar sesion</button>
+      </div>
+    </header>
 
+    <div class="shell">
+    <aside class="sidebar">
       <nav class="side-nav" aria-label="Navegacion del dashboard">
         <button class="nav-button active" type="button" data-nav-view="clients">
-          <span class="nav-icon">CL</span>
-          <span class="nav-text"><strong>Clientes</strong><span>Datos, dominios y reservas</span></span>
-        </button>
-        <button class="nav-button" type="button" data-nav-view="bookings">
-          <span class="nav-icon">RS</span>
-          <span class="nav-text"><strong>Reservas</strong><span>Citas y recordatorios</span></span>
+          <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
+          <span class="nav-text"><strong>Clientes</strong><span>Bots, owners y planes</span></span>
         </button>
         <button class="nav-button" type="button" data-nav-view="analytics">
-          <span class="nav-icon">ST</span>
-          <span class="nav-text"><strong>Estadisticas</strong><span>Conversiones y eventos</span></span>
+          <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"></path><rect x="7" y="12" width="3" height="5" rx="1"></rect><rect x="12" y="8" width="3" height="9" rx="1"></rect><rect x="17" y="5" width="3" height="12" rx="1"></rect></svg></span>
+          <span class="nav-text"><strong>Estadísticas</strong><span>Actividad y churn</span></span>
         </button>
         <button class="nav-button" type="button" data-nav-view="express">
-          <span class="nav-icon">AE</span>
+          <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"></path></svg></span>
           <span class="nav-text"><strong>Alta express</strong><span>Crear desde una web</span></span>
         </button>
         <button class="nav-button" type="button" data-nav-view="ai">
-          <span class="nav-icon">IA</span>
-          <span class="nav-text"><strong>IA</strong><span>Asistente, prompt y cerebro</span></span>
-        </button>
-        <button class="nav-button" type="button" data-nav-view="users">
-          <span class="nav-icon">US</span>
-          <span class="nav-text"><strong>Usuarios</strong><span>Accesos del portal</span></span>
+          <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
+          <span class="nav-text"><strong>IA</strong><span>Prompt y cerebro por cliente</span></span>
         </button>
         <button class="nav-button" type="button" data-nav-view="outreach">
-          <span class="nav-icon">CP</span>
+          <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11v2a2 2 0 0 0 2 2h1l4 4V5L6 9H5a2 2 0 0 0-2 2z"></path><path d="M16 8a5 5 0 0 1 0 8"></path><path d="M19 5a9 9 0 0 1 0 14"></path></svg></span>
           <span class="nav-text"><strong>Captacion</strong><span>Outbound, demos y leads</span></span>
         </button>
         <button class="nav-button" type="button" data-nav-view="instagram">
-          <span class="nav-icon">IG</span>
+          <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="1"></circle></svg></span>
           <span class="nav-text"><strong>Instagram</strong><span>Captacion via DM</span></span>
         </button>
         <button class="nav-button" type="button" data-nav-view="security">
-          <span class="nav-icon">SG</span>
+          <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9.5 12l1.8 1.8L15 10"></path></svg></span>
           <span class="nav-text"><strong>Seguridad</strong><span>Sesion y contrasena</span></span>
         </button>
       </nav>
@@ -1611,7 +1839,6 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="account-actions">
           <button id="refreshSessionBtn" class="secondary small" type="button">Actualizar</button>
           <button id="focusSecurityBtn" class="ghost small" type="button">Cambiar contrasena</button>
-          <button id="logoutBtn" class="danger small" type="button">Salir</button>
         </div>
         <div class="support-note">El acceso ya queda separado en `/acceso`. Desde aqui trabajas directamente con la sesion activa del administrador.</div>
       </section>
@@ -1629,6 +1856,12 @@ tbody tr:last-child td { border-bottom: none; }
     </aside>
 
     <main class="main">
+      <section class="card hero">
+        <div class="hero-chip">Control Center</div>
+        <h2>Operativa central de Vantelia</h2>
+        <p>Gestiona clientes, reservas, captacion, IA y seguridad desde un solo panel. Cada accion queda enlazada con su demo, su agenda y su cerebro RAG.</p>
+      </section>
+
       <div id="status" class="status"></div>
 
       <section class="dashboard-view" data-view="express">
@@ -1696,441 +1929,443 @@ tbody tr:last-child td { border-bottom: none; }
       </section>
       </section>
 
-      <section class="dashboard-view" data-view="users">
-      <section class="card panel">
-        <strong>Control de usuarios</strong>
-
-        <div class="subcard">
-          <div>
-            <strong>Nuevo usuario</strong>
-            <div class="muted">Crea administradores o cuentas cliente desde el propio dashboard, sin volver a la pantalla de acceso.</div>
-          </div>
-          <div class="grid">
-            <label>
-              Nombre visible
-              <input id="newUserName" type="text" placeholder="Clinica Saga" />
-            </label>
-            <label>
-              Email
-              <input id="newUserEmail" type="email" placeholder="equipo@cliente.com" />
-            </label>
-          </div>
-          <div class="grid">
-            <label>
-              Contrasena inicial
-              <input id="newUserPassword" type="password" placeholder="Minimo 8 caracteres" />
-            </label>
-            <label>
-              Rol
-              <select id="newUserRole">
-                <option value="client">Cliente</option>
-                <option value="admin">Administrador</option>
-              </select>
-            </label>
-          </div>
-          <label>
-            Cliente ID
-            <select id="newUserClientId">
-              <option value="">Selecciona un cliente</option>
-            </select>
-          </label>
-          <div class="actions">
-            <button id="createUserBtn" type="button">Crear usuario</button>
-          </div>
-        </div>
-
-        <div class="subcard">
-          <div class="toolbar">
-            <div>
-              <strong>Usuarios del portal</strong>
-              <div class="muted">Administra admins y cuentas cliente con acciones claras por usuario.</div>
-            </div>
-            <div class="toolbar-filters">
-              <label>
-                Rol
-                <select id="userRoleFilter">
-                  <option value="">Todos</option>
-                  <option value="admin">Administradores</option>
-                  <option value="client">Clientes</option>
-                </select>
-              </label>
-              <label>
-                Cliente
-                <select id="userClientFilter">
-                  <option value="">Todos</option>
-                </select>
-              </label>
-              <label class="inline-check">
-                <input id="userIncludeInactive" type="checkbox" checked />
-                Incluir inactivos
-              </label>
-              <button id="refreshUsersBtn" class="secondary small" type="button">Actualizar</button>
-            </div>
-          </div>
-          <div id="usersList" class="users-grid">
-            <div class="empty">Todavia no hay usuarios cargados.</div>
-          </div>
-        </div>
-      </section>
-      </section>
-
-      <section class="dashboard-view" data-view="bookings">
-        <section class="card panel">
-          <div class="section-header">
-            <div>
-              <h2>Reservas</h2>
-              <p>Panel operativo para revisar citas, proveedores, correos y acciones de gestion.</p>
-            </div>
-            <div class="actions">
-              <button id="refreshBookingsBtn" class="secondary" type="button">Actualizar</button>
-              <button id="runRemindersBtn" class="ghost" type="button">Ejecutar recordatorios</button>
-            </div>
-          </div>
-
-          <div class="filters-row">
-            <label>
-              Buscar
-              <input id="bookingSearch" type="search" placeholder="Nombre, email, servicio, ID..." />
-            </label>
-            <label>
-              Cliente
-              <select id="bookingClientFilter">
-                <option value="">Todos</option>
-              </select>
-            </label>
-            <label>
-              Estado
-              <select id="bookingStatusFilter">
-                <option value="">Todos</option>
-                <option value="confirmed">Confirmadas</option>
-                <option value="pending_review">Pendientes</option>
-                <option value="cancelled">Canceladas</option>
-                <option value="completed">Completadas</option>
-              </select>
-            </label>
-            <label>
-              Desde
-              <input id="bookingDateFrom" type="date" />
-            </label>
-            <label>
-              Hasta
-              <input id="bookingDateTo" type="date" />
-            </label>
-            <label>
-              Limite
-              <input id="bookingLimit" type="number" min="1" max="500" value="100" />
-            </label>
-          </div>
-
-          <div class="table-shell">
-            <table>
-              <thead>
-                <tr>
-                  <th>Cliente</th>
-                  <th>Cita</th>
-                  <th>Estado</th>
-                  <th>Agenda</th>
-                  <th>Emails</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody id="bookingsTableBody">
-                <tr><td colspan="6" class="muted">Todavia no hay reservas cargadas.</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </section>
-
       <section class="dashboard-view" data-view="analytics">
         <section class="card panel">
           <div class="section-header">
             <div>
-              <h2>Estadisticas</h2>
-              <p>Conversiones capturadas desde la web, planes, demo y widget.</p>
+              <h2>Estadísticas</h2>
+              <p class="muted">Vista rápida del estado operativo de la cartera.</p>
             </div>
             <div class="actions">
-              <select id="analyticsDays">
-                <option value="7">7 dias</option>
-                <option value="30" selected>30 dias</option>
-                <option value="90">90 dias</option>
-                <option value="365">365 dias</option>
-              </select>
-              <button id="refreshAnalyticsBtn" class="secondary" type="button">Actualizar</button>
+              <button id="refreshStatsBtn" class="secondary small" type="button">Actualizar</button>
             </div>
           </div>
 
-          <div class="stat-grid">
-            <div class="stat"><strong id="analyticsTotal">-</strong><span>Eventos</span></div>
-            <div class="stat"><strong id="analyticsDemo">-</strong><span>Leads / demos</span></div>
-            <div class="stat"><strong id="analyticsCheckout">-</strong><span>Checkout final</span></div>
-            <div class="stat"><strong id="analyticsMessages">-</strong><span>Mensajes widget</span></div>
-            <div class="stat"><strong id="analyticsBookings">-</strong><span>Citas confirmadas</span></div>
+          <div class="stats-kpi-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:18px 0 22px;">
+            <div class="card" style="padding:16px 18px;">
+              <div class="muted" style="font-size:0.74rem;text-transform:uppercase;letter-spacing:.08em;">Clientes activos</div>
+              <div id="kpiActivos" style="font-family:var(--font-title);font-size:1.7rem;font-weight:700;margin-top:6px;">—</div>
+              <div id="kpiActivosSub" class="muted" style="font-size:0.78rem;margin-top:2px;">de —</div>
+            </div>
+            <div class="card" style="padding:16px 18px;">
+              <div class="muted" style="font-size:0.74rem;text-transform:uppercase;letter-spacing:.08em;">Mensajes este mes</div>
+              <div id="kpiMensajes" style="font-family:var(--font-title);font-size:1.7rem;font-weight:700;margin-top:6px;">—</div>
+              <div id="kpiMensajesSub" class="muted" style="font-size:0.78rem;margin-top:2px;">cuota total: —</div>
+            </div>
+            <div class="card" style="padding:16px 18px;">
+              <div class="muted" style="font-size:0.74rem;text-transform:uppercase;letter-spacing:.08em;">Demos vivas</div>
+              <div id="kpiDemos" style="font-family:var(--font-title);font-size:1.7rem;font-weight:700;margin-top:6px;">—</div>
+              <div class="muted" style="font-size:0.78rem;margin-top:2px;">prospects de discovery</div>
+            </div>
+            <div class="card" style="padding:16px 18px;">
+              <div class="muted" style="font-size:0.74rem;text-transform:uppercase;letter-spacing:.08em;">Sin owner</div>
+              <div id="kpiSinOwner" style="font-family:var(--font-title);font-size:1.7rem;font-weight:700;margin-top:6px;">—</div>
+              <div class="muted" style="font-size:0.78rem;margin-top:2px;">clientes legacy a migrar</div>
+            </div>
           </div>
 
-          <div class="grid">
-            <div class="subcard">
-              <strong>Eventos por tipo</strong>
-              <div id="analyticsEventList" class="users-grid">
-                <div class="empty">Sin eventos todavia.</div>
+          <div style="display:grid;grid-template-columns:1fr;gap:16px;">
+            <div class="card" style="padding:16px 18px;">
+              <strong>Top 10 clientes por mensajes (mes en curso)</strong>
+              <div class="table-shell" style="margin-top:10px;">
+                <table>
+                  <thead>
+                    <tr><th>Cliente</th><th>Owner</th><th>Plan</th><th>Mensajes</th></tr>
+                  </thead>
+                  <tbody id="statsTopBody">
+                    <tr><td colspan="4" class="muted">Sin datos.</td></tr>
+                  </tbody>
+                </table>
               </div>
             </div>
-            <div class="subcard">
-              <strong>Eventos por cliente</strong>
-              <div id="analyticsClientList" class="users-grid">
-                <div class="empty">Sin clientes todavia.</div>
+
+            <div class="card" style="padding:16px 18px;">
+              <strong>Altas recientes (últimos 7 días)</strong>
+              <div class="table-shell" style="margin-top:10px;">
+                <table>
+                  <thead>
+                    <tr><th>Cliente</th><th>Owner</th><th>Creado</th></tr>
+                  </thead>
+                  <tbody id="statsAltasBody">
+                    <tr><td colspan="3" class="muted">Sin altas en los últimos 7 días.</td></tr>
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
 
-          <div class="table-shell">
-            <table>
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Evento</th>
-                  <th>Cliente</th>
-                  <th>Pagina</th>
-                  <th>Detalle</th>
-                </tr>
-              </thead>
-              <tbody id="analyticsRecentBody">
-                <tr><td colspan="5" class="muted">Sin eventos todavia.</td></tr>
-              </tbody>
-            </table>
+            <div class="card" style="padding:16px 18px;">
+              <strong>Riesgo de churn (sin login &gt; 30 días)</strong>
+              <div class="table-shell" style="margin-top:10px;">
+                <table>
+                  <thead>
+                    <tr><th>Cliente</th><th>Owner</th><th>Último login</th><th>Días inactivo</th></tr>
+                  </thead>
+                  <tbody id="statsChurnBody">
+                    <tr><td colspan="4" class="muted">Ningún cliente en riesgo.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </section>
       </section>
 
-      <section class="dashboard-view active" data-view="clients">
-      <section class="card hero">
-        <div>
-          <div class="hero-chip">Cliente activo</div>
-          <h2>Clientes</h2>
-          <p>Centro operativo para configurar identidad del cliente, contacto, dominios, reservas y despliegue comercial.</p>
-        </div>
-        <div class="actions">
-          <button id="saveBtn" type="button">Guardar cliente</button>
-          <button id="copySnippetBtn" class="ghost" type="button">Copiar snippet</button>
-          <button id="openDemoBtn" class="ghost" type="button">Abrir demo</button>
-        </div>
-      </section>
-
-      <section class="card panel">
-        <div class="section-header">
-          <div>
-            <h2>Listado de clientes</h2>
+      <section class="dashboard-view active admin-clients" data-view="clients">
+      <section class="card panel clients-shell">
+        <div class="clients-topbar">
+          <div class="clients-title">
+            <h2>Clientes</h2>
             <p id="clientCountLabel">Cargando clientes...</p>
           </div>
+          <div class="clients-search">
+            <label>
+              Buscar
+              <input id="clientSearch" type="search" placeholder="cliente_id, nombre u owner" autocomplete="off" />
+            </label>
+          </div>
+          <div class="actions clients-actions">
+            <button id="newClientBtn" class="btn-primary" type="button">Nuevo</button>
+          </div>
         </div>
-        <div class="client-directory-toolbar">
-          <label>
-            Buscar cliente
-            <input id="clientSearch" type="search" placeholder="Nombre, ID, email, telefono..." />
-          </label>
-          <button id="newClientBtn" class="secondary" type="button">Nuevo cliente</button>
+
+        <div class="client-filters" aria-label="Filtros de clientes">
+          <div class="filter-row">
+            <span class="filter-label">Plan</span>
+            <button class="filter-chip active" type="button" data-client-plan="">Todos</button>
+            <button class="filter-chip" type="button" data-client-plan="free">Free</button>
+            <button class="filter-chip" type="button" data-client-plan="starter">Starter</button>
+            <button class="filter-chip" type="button" data-client-plan="pro">Pro</button>
+            <button class="filter-chip" type="button" data-client-plan="business">Business</button>
+            <button class="filter-chip" type="button" data-client-plan="web">Web</button>
+            <button class="filter-chip" type="button" data-client-plan="whatsapp">WhatsApp</button>
+            <button class="filter-chip" type="button" data-client-plan="completo">Completo</button>
+          </div>
+          <div class="filter-row">
+            <span class="filter-label">Estado</span>
+            <button class="filter-chip active" type="button" data-client-status="">Todos</button>
+            <button class="filter-chip" type="button" data-client-status="active">Active</button>
+            <button class="filter-chip" type="button" data-client-status="trial">Trial</button>
+            <button class="filter-chip" type="button" data-client-status="canceled">Canceled</button>
+            <button class="filter-chip" type="button" data-client-status="demo">Demo</button>
+            <button class="filter-chip" type="button" data-client-status="sin_owner">Sin owner</button>
+            <button class="filter-chip" type="button" data-client-flag="whatsapp">WhatsApp</button>
+            <button class="filter-chip" type="button" data-client-flag="booking">Booking</button>
+          </div>
         </div>
-        <div class="client-filter-pills" role="tablist" aria-label="Filtrar clientes" style="margin: 8px 0 0;">
-          <button type="button" data-client-filter="all" class="active" role="tab">Todos</button>
-          <button type="button" data-client-filter="subscribed" role="tab">Suscritos</button>
-          <button type="button" data-client-filter="demo" role="tab">Demos</button>
-          <button type="button" data-client-filter="other" role="tab">Sin suscripción</button>
+
+        <div class="admin-table-shell" id="clientTableShell">
+          <table class="admin-table" aria-label="Clientes">
+            <colgroup>
+              <col style="width:24%;" />
+              <col style="width:18%;" />
+              <col style="width:9%;" />
+              <col style="width:14%;" />
+              <col style="width:9%;" />
+              <col style="width:10%;" />
+              <col style="width:150px;" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Bot</th>
+                <th>Owner</th>
+                <th>Plan</th>
+                <th>Mensajes</th>
+                <th>Estado</th>
+                <th>Ultimo login</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="clientsTableBody">
+              <tr><td colspan="7"><span class="loading-inline"><span class="loading-dot"></span>Cargando clientes...</span></td></tr>
+            </tbody>
+          </table>
         </div>
-        <div id="clientDirectory" class="client-directory">
-          <div class="empty"><span class="loading-inline"><span class="loading-dot"></span>Cargando clientes...</span></div>
-        </div>
+        <div id="clientsPagination" class="client-pagination"></div>
       </section>
 
-      <section class="card panel">
-        <div id="selectedClientSummary" class="client-summary">
-          <div class="client-summary-block">
-            <span>Cliente seleccionado</span>
-            <strong>Selecciona un cliente para ver y editar su informacion.</strong>
+      <div id="clientDrawerOverlay" class="admin-drawer-overlay" aria-hidden="true"></div>
+      <aside id="clientDrawer" class="admin-drawer" aria-hidden="true" aria-label="Detalle del cliente">
+        <div class="admin-drawer-header">
+          <div id="drawerClientAvatar" class="client-avatar">AI</div>
+          <div class="drawer-title">
+            <h3 id="drawerClientName">Selecciona un cliente</h3>
+            <div id="drawerClientMeta" class="muted">Sin cliente activo</div>
+            <div id="drawerClientPills" class="drawer-pills"></div>
           </div>
-          <div class="client-summary-block">
-            <span>Reservas</span>
-            <strong>-</strong>
-          </div>
-          <div class="client-summary-block">
-            <span>Agenda</span>
-            <strong>-</strong>
-          </div>
-          <div class="client-summary-block">
-            <span>Dominios</span>
-            <strong>-</strong>
-          </div>
-          <div class="client-summary-block">
-            <span>Info.txt</span>
-            <strong>-</strong>
-          </div>
+          <button id="closeClientDrawerBtn" class="btn-ghost icon-btn" type="button" title="Cerrar">X</button>
         </div>
 
-        <div class="client-tabs" aria-label="Secciones del cliente">
-          <button class="active" type="button" data-client-tab="profile">Perfil</button>
-          <button type="button" data-client-tab="booking">Reservas</button>
-          <button type="button" data-client-tab="install">Instalacion</button>
+        <div class="drawer-tabs" role="tablist" aria-label="Secciones del cliente">
+          <button class="drawer-tab active" type="button" data-drawer-tab="resumen">Resumen</button>
+          <button class="drawer-tab" type="button" data-drawer-tab="cuenta">Cuenta</button>
+          <button class="drawer-tab" type="button" data-drawer-tab="uso">Uso</button>
+          <button class="drawer-tab" type="button" data-drawer-tab="config">Configuracion</button>
+          <button class="drawer-tab" type="button" data-drawer-tab="audit">Auditoria</button>
         </div>
 
-        <section class="client-tab-panel active" data-client-panel="profile">
-          <div class="section-header">
-            <div>
-              <h2>Perfil del cliente</h2>
-              <p>Datos base del cliente, contacto humano y dominios autorizados.</p>
+        <div class="drawer-body">
+          <section class="drawer-panel active" data-drawer-panel="resumen">
+            <div id="drawerKpis" class="kpi-mini"></div>
+            <div class="drawer-section">
+              <h4>Acciones rapidas</h4>
+              <div class="actions-row">
+                <button id="drawerImpersonateBtn" class="btn-primary" type="button">Acceder</button>
+                <button id="drawerResetPasswordBtn" class="btn-ghost" type="button">Reset password</button>
+                <button id="drawerWelcomeEmailBtn" class="btn-ghost" type="button">Reenviar bienvenida</button>
+                <button id="drawerReindexBtn" class="btn-ghost" type="button">Reindex info</button>
+                <button id="drawerExportConfigBtn" class="btn-ghost" type="button">Exportar JSON</button>
+              </div>
             </div>
-          </div>
-
-          <div class="grid">
-            <label>
-              Cliente ID
-              <input id="clienteId" type="text" placeholder="clinica_saga" />
-              <span class="field-note">Se usa en la URL del widget, carpeta `data/` y configuracion interna.</span>
-            </label>
-
-            <label>
-              Nombre comercial
-              <input id="nombre" type="text" placeholder="Clinica Saga" />
-            </label>
-          </div>
-
-          <div class="grid">
-            <label>
-              Email de contacto
-              <input id="contactoEmail" type="text" placeholder="info@empresa.com" />
-            </label>
-
-            <label>
-              Telefono de contacto
-              <input id="contactoTelefono" type="text" placeholder="+34 600000000" />
-            </label>
-          </div>
-
-          <section class="guided-editor">
-            <div>
-              <strong>Allowed origins</strong>
-              <div class="field-note">Anade solo los dominios donde se insertara el chatbox. Se guardan normalizados y puedes quitarlos sin editar texto libre.</div>
+            <div class="drawer-section">
+              <h4>Instalacion</h4>
+              <label>
+                Snippet
+                <textarea id="installSnippet" class="snippet" readonly></textarea>
+              </label>
+              <label>
+                URL demo
+                <input id="demoUrl" type="text" readonly />
+              </label>
+              <div class="actions-row">
+                <button id="copySnippetBtn" class="btn-ghost" type="button">Copiar snippet</button>
+                <button id="copyDemoBtn" class="btn-ghost" type="button">Copiar demo</button>
+                <button id="openDemoBtn" class="btn-ghost" type="button">Abrir demo</button>
+                <button id="openDemoInlineBtn" class="btn-ghost" type="button">Abrir en otra pestana</button>
+              </div>
             </div>
-            <div class="guided-toolbar">
-              <input id="allowedOriginInput" type="url" placeholder="https://empresa.com" />
-              <button id="addAllowedOriginBtn" class="secondary small" type="button">Anadir dominio</button>
-            </div>
-            <div id="allowedOriginsList" class="token-list">
-              <div class="empty">Todavia no hay dominios autorizados.</div>
-            </div>
-            <textarea id="allowedOrigins" hidden placeholder="https://empresa.com&#10;https://www.empresa.com"></textarea>
           </section>
-        </section>
 
-        <section class="client-tab-panel" data-client-panel="booking">
-          <div class="section-header">
-            <div>
-              <h2>Reservas</h2>
-              <p>Activa agenda online y define disponibilidad. Todas las citas se gestionan dentro de Vantelia.</p>
+          <section class="drawer-panel" data-drawer-panel="cuenta">
+            <div id="drawerAccountSummary" class="kpi-mini"></div>
+            <div class="drawer-section">
+              <h4>Cambiar owner</h4>
+              <div class="grid">
+                <label>
+                  Owner email
+                  <input id="drawerOwnerEmail" type="email" placeholder="owner@empresa.com" />
+                </label>
+                <label>
+                  Plan inicial
+                  <select id="drawerOwnerPlan">
+                    <option value="free">free</option>
+                    <option value="starter">starter</option>
+                    <option value="pro">pro</option>
+                    <option value="business">business</option>
+                    <option value="web">web</option>
+                    <option value="whatsapp">whatsapp</option>
+                    <option value="completo">completo</option>
+                  </select>
+                </label>
+              </div>
+              <button id="assignOwnerBtn" class="btn-ghost" type="button">Asignar owner</button>
             </div>
-          </div>
+          </section>
 
-          <div class="booking-settings">
-            <label class="inline-check">
-              <input id="bookingEnabled" type="checkbox" checked />
-              Reserva online activa
-            </label>
-            <input id="bookingProvider" type="hidden" value="internal" />
+          <section class="drawer-panel" data-drawer-panel="uso">
+            <div class="drawer-section">
+              <h4>Mensajes por mes</h4>
+              <div id="usageBars" class="mini-bars"></div>
+            </div>
+            <div class="drawer-section">
+              <h4>Reservas y leads</h4>
+              <table class="drawer-table">
+                <thead><tr><th>Tipo</th><th>Total</th><th>Pendiente</th></tr></thead>
+                <tbody id="drawerUsageBody"></tbody>
+              </table>
+            </div>
+          </section>
 
-            <div class="grid-3">
+          <section class="drawer-panel" data-drawer-panel="config">
+            <div class="drawer-section">
+              <h4>Identidad</h4>
+              <div class="grid">
+                <label>
+                  Cliente ID
+                  <input id="clienteId" type="text" placeholder="clinica_saga" />
+                </label>
+                <label>
+                  Nombre comercial
+                  <input id="nombre" type="text" placeholder="Clinica Saga" />
+                </label>
+              </div>
+              <div class="grid-3">
+                <label>
+                  Icono
+                  <input id="icono" type="text" maxlength="12" placeholder="CS" />
+                </label>
+                <label>
+                  Color principal
+                  <input id="color" type="text" placeholder="#00b1d9" />
+                </label>
+                <label>
+                  Branding
+                  <input id="brandingText" type="text" placeholder="Powered by Vantelia" />
+                </label>
+              </div>
+              <div class="grid">
+                <label>
+                  Color secundario
+                  <input id="accentColor" type="color" value="#00F5D4" />
+                </label>
+                <label>
+                  Logo URL/base64
+                  <input id="aiLogoUrl" type="text" placeholder="https://... o vacio" />
+                </label>
+              </div>
               <label>
-                Timezone
-                <input id="bookingTimezone" type="text" list="bookingTimezoneOptions" value="Europe/Madrid" />
+                Subir imagen de logo
+                <input id="aiLogoFile" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" />
               </label>
-
+              <button id="aiLogoRemoveBtn" class="btn-ghost" type="button">Eliminar imagen</button>
               <label>
-                Slot minutos
-                <input id="bookingSlotMinutes" type="number" value="30" min="5" max="240" />
+                Mensaje de bienvenida
+                <textarea id="bienvenida"></textarea>
               </label>
+              <label>
+                Prompt extra
+                <textarea id="promptExtra"></textarea>
+              </label>
+            </div>
 
-              <div>
-                <span>Dias cerrados</span>
-                <div class="field-note">Marca los dias en los que el cliente no ofrece reservas online.</div>
+            <div class="drawer-section">
+              <h4>Contacto y dominios</h4>
+              <div class="grid">
+                <label>
+                  Email de contacto
+                  <input id="contactoEmail" type="text" placeholder="info@empresa.com" />
+                </label>
+                <label>
+                  Telefono de contacto
+                  <input id="contactoTelefono" type="text" placeholder="+34 600000000" />
+                </label>
+              </div>
+              <div class="guided-toolbar">
+                <input id="allowedOriginInput" type="url" placeholder="https://empresa.com" />
+                <button id="addAllowedOriginBtn" class="btn-ghost" type="button">Anadir dominio</button>
+              </div>
+              <div id="allowedOriginsList" class="token-list">
+                <div class="empty">Todavia no hay dominios autorizados.</div>
+              </div>
+              <textarea id="allowedOrigins" hidden placeholder="https://empresa.com&#10;https://www.empresa.com"></textarea>
+            </div>
+
+            <div class="drawer-section">
+              <h4>WhatsApp</h4>
+              <label class="inline-check">
+                <input id="whatsappEnabled" type="checkbox" />
+                WhatsApp activo
+              </label>
+              <div class="grid-3">
+                <label>
+                  Phone number ID
+                  <input id="whatsappPhoneNumberId" type="text" placeholder="123456789012345" />
+                </label>
+                <label>
+                  Env token acceso
+                  <input id="whatsappAccessTokenEnv" type="text" placeholder="WHATSAPP_ACCESS_TOKEN_CLIENTE" />
+                </label>
+                <label>
+                  Env verify token
+                  <input id="whatsappVerifyTokenEnv" type="text" placeholder="WHATSAPP_VERIFY_TOKEN_CLIENTE" />
+                </label>
               </div>
             </div>
 
-            <datalist id="bookingTimezoneOptions">
-              <option value="Europe/Madrid"></option>
-              <option value="Europe/Lisbon"></option>
-              <option value="Europe/London"></option>
-              <option value="Europe/Paris"></option>
-              <option value="America/New_York"></option>
-              <option value="America/Mexico_City"></option>
-              <option value="America/Bogota"></option>
-            </datalist>
-
-            <div class="weekday-checks" id="bookingClosedWeekdaysGroup">
-              <label class="inline-check"><input type="checkbox" value="0" /> Lun</label>
-              <label class="inline-check"><input type="checkbox" value="1" /> Mar</label>
-              <label class="inline-check"><input type="checkbox" value="2" /> Mie</label>
-              <label class="inline-check"><input type="checkbox" value="3" /> Jue</label>
-              <label class="inline-check"><input type="checkbox" value="4" /> Vie</label>
-              <label class="inline-check"><input type="checkbox" value="5" /> Sab</label>
-              <label class="inline-check"><input type="checkbox" value="6" /> Dom</label>
+            <div class="drawer-section">
+              <h4>Booking</h4>
+              <label class="inline-check">
+                <input id="bookingEnabled" type="checkbox" checked />
+                Reserva online activa
+              </label>
+              <input id="bookingProvider" type="hidden" value="internal" />
+              <div class="grid">
+                <label>
+                  Timezone
+                  <input id="bookingTimezone" type="text" list="bookingTimezoneOptions" value="Europe/Madrid" />
+                </label>
+                <label>
+                  Slot minutos
+                  <input id="bookingSlotMinutes" type="number" value="30" min="5" max="240" />
+                </label>
+              </div>
+              <datalist id="bookingTimezoneOptions">
+                <option value="Europe/Madrid"></option>
+                <option value="Europe/Lisbon"></option>
+                <option value="Europe/London"></option>
+                <option value="Europe/Paris"></option>
+                <option value="America/New_York"></option>
+                <option value="America/Mexico_City"></option>
+                <option value="America/Bogota"></option>
+              </datalist>
+              <div class="weekday-checks" id="bookingClosedWeekdaysGroup">
+                <label class="inline-check"><input type="checkbox" value="0" /> Lun</label>
+                <label class="inline-check"><input type="checkbox" value="1" /> Mar</label>
+                <label class="inline-check"><input type="checkbox" value="2" /> Mie</label>
+                <label class="inline-check"><input type="checkbox" value="3" /> Jue</label>
+                <label class="inline-check"><input type="checkbox" value="4" /> Vie</label>
+                <label class="inline-check"><input type="checkbox" value="5" /> Sab</label>
+                <label class="inline-check"><input type="checkbox" value="6" /> Dom</label>
+              </div>
+              <div class="grid">
+                <label>
+                  Inicio jornada
+                  <input id="bookingDayStart" type="time" value="09:00" />
+                </label>
+                <label>
+                  Fin jornada
+                  <input id="bookingDayEnd" type="time" value="18:00" />
+                </label>
+              </div>
+              <div class="grid">
+                <label>
+                  Webhook env
+                  <input id="bookingWebhookEnv" type="text" placeholder="WEBHOOK_DEFAULT" />
+                </label>
+                <label>
+                  Webhook URL
+                  <input id="bookingWebhookUrl" type="text" placeholder="https://hook.example.com" />
+                </label>
+              </div>
+              <label>
+                Mensaje de exito
+                <textarea id="bookingSuccessMessage"></textarea>
+              </label>
             </div>
 
-            <div class="grid">
-              <label>
-                Inicio jornada
-                <input id="bookingDayStart" type="time" value="09:00" />
+            <div class="drawer-section">
+              <h4>Cerebro</h4>
+              <label class="inline-check">
+                <input id="reindexAfterSave" type="checkbox" checked />
+                Reindexar automaticamente al guardar
               </label>
-
               <label>
-                Fin jornada
-                <input id="bookingDayEnd" type="time" value="18:00" />
-              </label>
-            </div>
-
-            <div class="grid">
-              <label>
-                Webhook env
-                <input id="bookingWebhookEnv" type="text" placeholder="WEBHOOK_DEFAULT" />
-              </label>
-
-              <label>
-                Webhook URL
-                <input id="bookingWebhookUrl" type="text" placeholder="https://hook.example.com" />
+                Contenido RAG
+                <textarea id="infoTxt" style="min-height: 360px;" placeholder="Pega aqui el info.txt generado para la empresa"></textarea>
               </label>
             </div>
+          </section>
 
-            <label>
-              Mensaje de exito
-              <textarea id="bookingSuccessMessage"></textarea>
-            </label>
-          </div>
-        </section>
-
-        <section class="client-tab-panel" data-client-panel="install">
-          <div class="section-header">
-            <div>
-              <h2>Instalacion y demo</h2>
-              <p>Snippet para insertar en la web final y demo compartible para validar antes de publicar.</p>
+          <section class="drawer-panel" data-drawer-panel="audit">
+            <div class="drawer-section">
+              <h4>Impersonaciones recientes</h4>
+              <table class="drawer-table">
+                <thead><tr><th>Admin</th><th>Inicio</th><th>Fin</th><th>Duracion</th></tr></thead>
+                <tbody id="clientAuditBody"><tr><td colspan="4" class="muted">Abre un cliente para cargar auditoria.</td></tr></tbody>
+              </table>
             </div>
-          </div>
+            <div class="drawer-section">
+              <h4>Cambios de plan y owner</h4>
+              <div class="empty">Pendiente de tabla de eventos administrativos.</div>
+            </div>
+          </section>
+        </div>
 
-          <label>
-            Snippet de instalacion
-            <textarea id="installSnippet" class="snippet" readonly></textarea>
-          </label>
-
-          <label>
-            URL de demo compartible
-            <input id="demoUrl" type="text" readonly />
-          </label>
-
-          <div class="actions">
-            <button id="copyDemoBtn" class="ghost" type="button">Copiar demo</button>
-            <button id="openDemoInlineBtn" class="secondary" type="button">Abrir demo en otra pestaña</button>
-          </div>
-
-          <div class="muted">
-            Flujo recomendado: configura los datos base del cliente aqui, ajusta la IA desde el menu `IA`, luego revisa demo y publica el snippet.
-          </div>
-        </section>
-      </section>
+        <div class="drawer-footer">
+          <button id="drawerDeleteClientBtn" class="danger" type="button">Eliminar cliente</button>
+          <button id="drawerCloseFooterBtn" class="btn-ghost" type="button">Cerrar</button>
+          <button id="saveBtn" class="btn-primary" type="button">Guardar</button>
+        </div>
+      </aside>
       </section>
 
       <section class="dashboard-view" data-view="ai">
@@ -2194,114 +2429,13 @@ tbody tr:last-child td { border-bottom: none; }
       <section class="card panel">
         <div class="section-header">
           <div>
-            <h2>Asistente y widget</h2>
-            <p>Aqui tienes acceso total a la identidad del asistente, su tono operativo y la configuracion visible del widget.</p>
+            <h2>Configuracion de IA</h2>
+            <p>La edicion completa de identidad, prompt, WhatsApp y cerebro se gestiona en el drawer de Clientes.</p>
           </div>
         </div>
-
-        <div class="grid-3">
-          <label>
-            Icono corto
-            <input id="icono" type="text" maxlength="12" placeholder="CS" />
-          </label>
-
-          <label>
-            Color principal
-            <input id="color" type="text" placeholder="#00b1d9" />
-          </label>
-
-          <label>
-            Branding
-            <input id="brandingText" type="text" placeholder="Powered by Vantelia" />
-          </label>
+        <div class="actions">
+          <button id="openAiDrawerBtn" class="secondary" type="button">Abrir configuracion</button>
         </div>
-
-        <div class="grid-3">
-          <label>
-            Color secundario (acento)
-            <input id="accentColor" type="color" value="#00F5D4" />
-            <span class="field-note">Usado en gradientes y botones del widget.</span>
-          </label>
-
-          <label>
-            Logo del asistente (URL o base64)
-            <input id="aiLogoUrl" type="text" placeholder="https://... o dejar vacio" />
-            <span class="field-note">URL publica de la imagen o base64. Deja vacio para usar el icono de texto.</span>
-          </label>
-
-          <label>
-            Subir imagen de logo
-            <input id="aiLogoFile" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" />
-            <span class="field-note">Sube una imagen para usarla como logo del asistente. Sobreescribe el campo URL.</span>
-            <button id="aiLogoRemoveBtn" type="button" class="secondary small" style="margin-top:6px">Eliminar imagen</button>
-          </label>
-        </div>
-
-        <label>
-          Mensaje de bienvenida
-          <textarea id="bienvenida"></textarea>
-        </label>
-
-        <label>
-          Prompt extra
-          <textarea id="promptExtra"></textarea>
-          <span class="field-note">Instrucciones internas del cerebro: tono, limites, forma de derivar, estilo de respuesta, filtros comerciales y derivacion humana.</span>
-        </label>
-      </section>
-
-      <section class="card panel">
-        <div class="section-header">
-          <div>
-            <h2>WhatsApp</h2>
-            <p>Activa el mismo asistente del widget en WhatsApp Cloud API para que los clientes finales puedan escribir por este canal.</p>
-          </div>
-        </div>
-
-        <label class="inline-check">
-          <input id="whatsappEnabled" type="checkbox" />
-          WhatsApp activo para este cliente
-        </label>
-
-        <div class="grid-3">
-          <label>
-            Phone number ID
-            <input id="whatsappPhoneNumberId" type="text" placeholder="123456789012345" />
-            <span class="field-note">ID del numero en Meta WhatsApp Cloud API.</span>
-          </label>
-
-          <label>
-            Env token acceso
-            <input id="whatsappAccessTokenEnv" type="text" placeholder="WHATSAPP_ACCESS_TOKEN_CLIENTE" />
-            <span class="field-note">Opcional. Si se deja vacio usa WHATSAPP_ACCESS_TOKEN.</span>
-          </label>
-
-          <label>
-            Env verify token
-            <input id="whatsappVerifyTokenEnv" type="text" placeholder="WHATSAPP_VERIFY_TOKEN_CLIENTE" />
-            <span class="field-note">Opcional. Si se deja vacio usa WHATSAPP_VERIFY_TOKEN.</span>
-          </label>
-        </div>
-
-        <div class="muted">
-          Webhook global: `/whatsapp/webhook`. Webhook por cliente: `/whatsapp/webhook/{cliente_id}`.
-        </div>
-      </section>
-
-      <section class="card panel">
-        <div class="section-header">
-          <div>
-            <h2>Cerebro del cliente</h2>
-            <p>Contenido RAG completo que usa la IA para responder con contexto real del negocio. Guardar aqui puede reindexar automaticamente si mantienes activa la opcion.</p>
-          </div>
-        </div>
-        <label class="inline-check">
-          <input id="reindexAfterSave" type="checkbox" checked />
-          Reindexar automaticamente al guardar
-        </label>
-        <label>
-          Contenido RAG
-          <textarea id="infoTxt" style="min-height: 520px;" placeholder="Pega aqui el info.txt generado para la empresa"></textarea>
-        </label>
       </section>
       </section>
 
@@ -3183,7 +3317,8 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
 
     </main>
-  </div>
+    </div><!-- /.shell -->
+  </div><!-- /.page -->
 
   <div id="orNewProspectModal" class="modal-overlay" aria-hidden="true" style="display:none;">
     <div class="card" style="max-width:560px;margin:60px auto;padding:18px;">
@@ -3263,6 +3398,15 @@ tbody tr:last-child td { border-bottom: none; }
       activeBookingId: "",
       rescheduleSelectedTime: "",
       clientFilter: "all",
+      filteredClients: [],
+      clientFilters: { q: "", plan: "", status: "", whatsapp: false, booking: false },
+      clientPage: 1,
+      clientPageSize: 50,
+      drawerOpen: false,
+      drawerClientId: "",
+      drawerTab: "resumen",
+      currentClientDetail: null,
+      clientAudit: [],
     };
 
     const elements = {
@@ -3279,6 +3423,21 @@ tbody tr:last-child td { border-bottom: none; }
       confirmPassword: document.getElementById("confirmPassword"),
       clientSearch: document.getElementById("clientSearch"),
       clientDirectory: document.getElementById("clientDirectory"),
+      clientsTableBody: document.getElementById("clientsTableBody"),
+      clientsPagination: document.getElementById("clientsPagination"),
+      clientDrawer: document.getElementById("clientDrawer"),
+      clientDrawerOverlay: document.getElementById("clientDrawerOverlay"),
+      drawerClientAvatar: document.getElementById("drawerClientAvatar"),
+      drawerClientName: document.getElementById("drawerClientName"),
+      drawerClientMeta: document.getElementById("drawerClientMeta"),
+      drawerClientPills: document.getElementById("drawerClientPills"),
+      drawerKpis: document.getElementById("drawerKpis"),
+      drawerAccountSummary: document.getElementById("drawerAccountSummary"),
+      drawerUsageBody: document.getElementById("drawerUsageBody"),
+      usageBars: document.getElementById("usageBars"),
+      clientAuditBody: document.getElementById("clientAuditBody"),
+      drawerOwnerEmail: document.getElementById("drawerOwnerEmail"),
+      drawerOwnerPlan: document.getElementById("drawerOwnerPlan"),
       clientCountLabel: document.getElementById("clientCountLabel"),
       selectedClientSummary: document.getElementById("selectedClientSummary"),
       aiClientPicker: document.getElementById("aiClientPicker"),
@@ -3420,12 +3579,77 @@ tbody tr:last-child td { border-bottom: none; }
         button.classList.toggle("active", button.dataset.navView === nextView);
       });
 
-      if (nextView === "bookings") {
-        loadBookings().catch((error) => showStatus(error.message, "error"));
-      } else if (nextView === "analytics") {
-        loadAnalytics().catch((error) => showStatus(error.message, "error"));
+      if (nextView === "analytics") {
+        loadStatsOverview().catch((error) => showStatus(error.message, "error"));
       } else if (nextView === "instagram") {
         try { window.__igInit && window.__igInit(); } catch(e) { console.warn(e); }
+      }
+    }
+
+    async function loadStatsOverview() {
+      const kpi = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+      const tbody = (id) => document.getElementById(id);
+      try {
+        const data = await api("/admin/stats/overview");
+        kpi("kpiActivos", String(data.clientes_activos || 0));
+        kpi("kpiActivosSub", `de ${data.clientes_total || 0} totales`);
+        kpi("kpiMensajes", String(data.mensajes_mes || 0).toLocaleString ? Number(data.mensajes_mes || 0).toLocaleString() : data.mensajes_mes);
+        kpi("kpiMensajesSub", `cuota total: ${Number(data.mensajes_quota_mes || 0).toLocaleString()}`);
+        kpi("kpiDemos", String(data.clientes_demo || 0));
+        kpi("kpiSinOwner", String(data.clientes_sin_owner || 0));
+
+        const top = tbody("statsTopBody");
+        if (top) {
+          const rows = data.top_clientes || [];
+          if (!rows.length) {
+            top.innerHTML = '<tr><td colspan="4" class="muted">Sin datos.</td></tr>';
+          } else {
+            top.innerHTML = rows.map((r) => {
+              const pct = r.messages_quota ? Math.min(100, Math.round(100 * (r.messages_used || 0) / r.messages_quota)) : 0;
+              return `<tr>
+                <td><b>${escapeHtml(r.cliente_id)}</b></td>
+                <td>${escapeHtml(r.owner_email || "—")}</td>
+                <td>${escapeHtml(r.plan || "—")}</td>
+                <td>${Number(r.messages_used || 0).toLocaleString()} / ${Number(r.messages_quota || 0).toLocaleString()} <span class="muted">(${pct}%)</span></td>
+              </tr>`;
+            }).join("");
+          }
+        }
+        const altas = tbody("statsAltasBody");
+        if (altas) {
+          const rows = data.altas_recientes || [];
+          if (!rows.length) {
+            altas.innerHTML = '<tr><td colspan="3" class="muted">Sin altas en los últimos 7 días.</td></tr>';
+          } else {
+            altas.innerHTML = rows.map((r) => {
+              const dt = r.created_at ? new Date(r.created_at).toLocaleString() : "—";
+              return `<tr>
+                <td><b>${escapeHtml(r.cliente_id)}</b> ${escapeHtml(r.nombre || "")}</td>
+                <td>${escapeHtml(r.owner_email || "—")}</td>
+                <td>${escapeHtml(dt)}</td>
+              </tr>`;
+            }).join("");
+          }
+        }
+        const churn = tbody("statsChurnBody");
+        if (churn) {
+          const rows = data.churn_riesgo || [];
+          if (!rows.length) {
+            churn.innerHTML = '<tr><td colspan="4" class="muted">Ningún cliente en riesgo.</td></tr>';
+          } else {
+            churn.innerHTML = rows.map((r) => {
+              const dt = r.last_login_at ? new Date(r.last_login_at).toLocaleDateString() : "Nunca";
+              return `<tr>
+                <td><b>${escapeHtml(r.cliente_id)}</b> ${escapeHtml(r.nombre || "")}</td>
+                <td>${escapeHtml(r.owner_email || "—")}</td>
+                <td>${escapeHtml(dt)}</td>
+                <td><span style="color:var(--danger);font-weight:600;">${r.dias_inactivo} días</span></td>
+              </tr>`;
+            }).join("");
+          }
+        }
+      } catch (err) {
+        showStatus(err.message || "No se pudo cargar estadísticas.", "error");
       }
     }
 
@@ -3495,11 +3719,6 @@ tbody tr:last-child td { border-bottom: none; }
         data = null;
       }
 
-      if (response.status === 401 || response.status === 403) {
-        window.location.href = "/acceso?next=/dashboard";
-        return;
-      }
-
       if (!response.ok) {
         throw new Error(formatApiDetail(data?.detail) || "No se pudo completar la solicitud.");
       }
@@ -3542,6 +3761,7 @@ tbody tr:last-child td { border-bottom: none; }
     }
 
     function toggleClientFieldByRole() {
+      if (!elements.newUserRole || !elements.newUserClientId) return;
       const isClientRole = (elements.newUserRole.value || "client") === "client";
       elements.newUserClientId.disabled = !isClientRole;
       if (!isClientRole) {
@@ -3847,6 +4067,18 @@ tbody tr:last-child td { border-bottom: none; }
       showStatus(`Abriendo el portal de ${clienteId} en otra pestana.`, "info");
     }
 
+    async function impersonateClient(clienteId, clientName) {
+      const label = clientName ? `${clientName} (${clienteId})` : clienteId;
+      const ok = window.confirm(
+        `Vas a acceder al portal del cliente ${label} como administrador.\n\nLa acción queda registrada en la auditoría. El cliente NO verá ninguna señal de tu presencia (modo sigiloso). Pulsa el botón discreto inferior izquierdo para salir.`
+      );
+      if (!ok) return;
+      const res = await api(`/admin/clientes/${encodeURIComponent(clienteId)}/impersonate`, { method: "POST" });
+      try { localStorage.setItem("vantelia_admin_impersonating", "1"); } catch {}
+      const redirect = (res && res.redirect_url) || "/app?as_admin=1";
+      window.location.href = redirect;
+    }
+
     function openClientBookings(clienteId) {
       if (elements.bookingClientFilter) {
         elements.bookingClientFilter.value = clienteId;
@@ -3866,15 +4098,14 @@ tbody tr:last-child td { border-bottom: none; }
       if (state.currentClientId === clienteId) {
         state.currentClientId = "";
       }
+      if (state.drawerClientId === clienteId) {
+        state.drawerClientId = "";
+        closeClientDrawer();
+      }
       await Promise.all([
         loadClients(),
-        loadManagedUsers(),
-        loadBookings(),
         loadStats(),
       ]);
-      if (!state.currentClientId && state.clients.length) {
-        await loadClientDetail(state.clients[0].cliente_id);
-      }
       showStatus(result.message || "Cliente eliminado correctamente.", "success");
     }
 
@@ -3981,6 +4212,25 @@ tbody tr:last-child td { border-bottom: none; }
           pills.push('<span class="client-pill sub-none">Sin suscripción</span>');
         }
         const pillsHtml = `<span class="client-pill-row">${pills.join("")}</span>`;
+        const ownerEmail = escapeHtml(client.owner_email || "—");
+        const ownerCreatedShort = client.owner_created_at ? new Date(client.owner_created_at).toLocaleDateString() : "—";
+        const lastLoginShort = client.owner_last_login_at ? new Date(client.owner_last_login_at).toLocaleString() : "Nunca";
+        const planTxt = escapeHtml(client.plan || "—");
+        const msgsTxt = client.messages_quota
+          ? `${Number(client.messages_used || 0).toLocaleString()} / ${Number(client.messages_quota).toLocaleString()}`
+          : "—";
+        const ownerInfo = `
+          <div class="client-list-owner" style="display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;font-size:0.78rem;color:var(--soft);">
+            <span title="Email del owner"><b style="color:var(--text);font-weight:500;">${ownerEmail}</b></span>
+            <span>Plan: <b style="color:var(--text);font-weight:500;">${planTxt}</b></span>
+            <span>Mensajes: ${escapeHtml(msgsTxt)}</span>
+            <span title="Alta del usuario">Alta: ${escapeHtml(ownerCreatedShort)}</span>
+            <span title="Último login">Último login: ${escapeHtml(lastLoginShort)}</span>
+          </div>
+        `;
+        const impersonateBtn = client.owner_user_id
+          ? `<button class="client-list-side ghost small" type="button" data-client-action="impersonate" title="Abrir el portal como este cliente">Acceder</button>`
+          : "";
         row.innerHTML = `
           <div class="client-list-actions">
             <button class="client-list-main" type="button" data-client-action="profile">
@@ -3989,7 +4239,9 @@ tbody tr:last-child td { border-bottom: none; }
               </span>
               ${clientIdHtml}
               ${pillsHtml}
+              ${ownerInfo}
             </button>
+            ${impersonateBtn}
             <button class="client-list-side ghost small" type="button" data-client-action="ai">IA</button>
             <button class="client-list-side ghost small" type="button" data-client-action="portal">Portal</button>
             <button class="client-list-side danger small" type="button" data-client-action="delete">Eliminar</button>
@@ -4004,6 +4256,10 @@ tbody tr:last-child td { border-bottom: none; }
             }
             if (action === "portal") {
               openClientPortal(client.cliente_id);
+              return;
+            }
+            if (action === "impersonate") {
+              impersonateClient(client.cliente_id, client.nombre).catch((error) => showStatus(error.message, "error"));
               return;
             }
             if (action === "ai") {
@@ -4021,17 +4277,358 @@ tbody tr:last-child td { border-bottom: none; }
       });
     }
 
+    function clientPlanValue(client) {
+      return String(client?.plan || client?.subscription_plan || "").trim().toLowerCase();
+    }
+
+    function clientStatusValue(client) {
+      if (!client?.owner_user_id) return "sin_owner";
+      if (client?.is_demo) return "demo";
+      const raw = String(client?.subscription_status || "").toLowerCase();
+      if (raw === "trialing" || raw === "trial") return "trial";
+      if (["canceled", "cancelled", "past_due", "unpaid", "incomplete_expired"].includes(raw)) return "canceled";
+      return raw || "active";
+    }
+
+    function clientStatusLabel(client) {
+      const labels = { active: "Active", trial: "Trial", canceled: "Canceled", demo: "Demo", sin_owner: "Sin owner" };
+      return labels[clientStatusValue(client)] || clientStatusValue(client);
+    }
+
+    function pillForClientStatus(client) {
+      const statusValue = clientStatusValue(client);
+      const cls = statusValue === "active" ? "success" :
+        statusValue === "trial" || statusValue === "demo" ? "info" :
+        statusValue === "canceled" ? "danger" : "warn";
+      return `<span class="pill ${cls}">${escapeHtml(clientStatusLabel(client))}</span>`;
+    }
+
+    function clientAvatarText(client) {
+      return String(client?.icono || client?.nombre || client?.cliente_id || "AI").trim().slice(0, 2).toUpperCase() || "AI";
+    }
+
+    function clientAvatarColor(client) {
+      const color = String(client?.color || "").trim();
+      return /^#[0-9A-Fa-f]{6}$/.test(color) ? color : "var(--accent)";
+    }
+
+    function usagePercent(client) {
+      const used = Number(client?.messages_used || 0);
+      const quota = Number(client?.messages_quota || 0);
+      if (!quota) return 0;
+      return Math.max(0, Math.min(100, Math.round((used / quota) * 100)));
+    }
+
+    function applyFilters() {
+      const q = String(elements.clientSearch?.value || "").trim().toLowerCase();
+      state.clientFilters.q = q;
+      state.filteredClients = state.clients.filter((client) => {
+        const haystack = [client.cliente_id, client.nombre, client.owner_email].join(" ").toLowerCase();
+        if (q && !haystack.includes(q)) return false;
+        if (state.clientFilters.plan && clientPlanValue(client) !== state.clientFilters.plan) return false;
+        if (state.clientFilters.status && clientStatusValue(client) !== state.clientFilters.status) return false;
+        if (state.clientFilters.whatsapp && !client.whatsapp_enabled) return false;
+        if (state.clientFilters.booking && !client.booking_enabled) return false;
+        return true;
+      });
+      return state.filteredClients;
+    }
+
+    function renderClientPagination(total, from, to) {
+      if (!elements.clientsPagination) return;
+      if (total <= state.clientPageSize) {
+        elements.clientsPagination.innerHTML = "";
+        return;
+      }
+      const totalPages = Math.max(1, Math.ceil(total / state.clientPageSize));
+      elements.clientsPagination.innerHTML = `
+        <span>${from}-${to} de ${total}</span>
+        <button class="btn-ghost small" type="button" data-client-page="prev" ${state.clientPage <= 1 ? "disabled" : ""}>Anterior</button>
+        <span>Pagina ${state.clientPage} / ${totalPages}</span>
+        <button class="btn-ghost small" type="button" data-client-page="next" ${state.clientPage >= totalPages ? "disabled" : ""}>Siguiente</button>
+      `;
+      elements.clientsPagination.querySelectorAll("[data-client-page]").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.clientPage += button.dataset.clientPage === "next" ? 1 : -1;
+          renderClientList();
+        });
+      });
+    }
+
     function renderClientList(selectedId = state.currentClientId) {
-      const visibleClients = getVisibleClients();
-      renderClientDirectory(selectedId, visibleClients);
-      renderSelectedClientSummary();
+      const visibleClients = applyFilters();
+      const totals = state.clients.reduce((acc, c) => {
+        if (c.is_demo) acc.demo += 1;
+        if (!c.owner_user_id) acc.sinOwner += 1;
+        if (c.whatsapp_enabled) acc.whatsapp += 1;
+        if (c.booking_enabled) acc.booking += 1;
+        return acc;
+      }, { demo: 0, sinOwner: 0, whatsapp: 0, booking: 0 });
+      if (elements.clientCountLabel) {
+        elements.clientCountLabel.textContent =
+          `${visibleClients.length} de ${state.clients.length} visibles · ${totals.demo} demos · ${totals.sinOwner} sin owner · ${totals.whatsapp} WhatsApp · ${totals.booking} booking`;
+      }
+      if (!elements.clientsTableBody) return;
+      elements.clientsTableBody.innerHTML = "";
+      if (!visibleClients.length) {
+        elements.clientsTableBody.innerHTML = `
+          <tr>
+            <td colspan="7">
+              <div class="empty">
+                No hay clientes que coincidan con la busqueda.
+                <button class="btn-primary small" type="button" data-empty-create>Crear cliente nuevo</button>
+              </div>
+            </td>
+          </tr>
+        `;
+        elements.clientsTableBody.querySelector("[data-empty-create]")?.addEventListener("click", () => {
+          document.getElementById("newClientBtn")?.click();
+        });
+        renderClientPagination(0, 0, 0);
+        renderAiClientSummary();
+        return;
+      }
+      const totalPages = Math.max(1, Math.ceil(visibleClients.length / state.clientPageSize));
+      state.clientPage = Math.min(Math.max(1, state.clientPage), totalPages);
+      const start = (state.clientPage - 1) * state.clientPageSize;
+      const pageClients = visibleClients.slice(start, start + state.clientPageSize);
+      pageClients.forEach((client) => {
+        const row = document.createElement("tr");
+        row.className = client.cliente_id === selectedId ? "active" : "";
+        const planTxt = clientPlanValue(client) || "-";
+        const used = Number(client.messages_used || 0);
+        const quota = Number(client.messages_quota || 0);
+        const pct = usagePercent(client);
+        const messagesLabel = quota ? `${used.toLocaleString()} / ${quota.toLocaleString()}` : `${used.toLocaleString()} / -`;
+        const lastLogin = client.owner_last_login_at ? new Date(client.owner_last_login_at).toLocaleDateString() : "Nunca";
+        const ownerEmail = client.owner_email || "Sin owner";
+        row.innerHTML = `
+          <td>
+            <div class="client-main-cell">
+              <span class="client-avatar" style="background:${escapeHtml(clientAvatarColor(client))};">${escapeHtml(clientAvatarText(client))}</span>
+              <span class="client-cell-text">
+                <strong>${escapeHtml(client.nombre || "-")}</strong>
+                <span>${escapeHtml(client.cliente_id || "-")}</span>
+              </span>
+            </div>
+          </td>
+          <td title="${escapeHtml(ownerEmail)}">${escapeHtml(ownerEmail)}</td>
+          <td>${escapeHtml(planTxt)}</td>
+          <td><span class="usage-cell"><span>${escapeHtml(messagesLabel)}</span><span class="usage-bar"><i style="width:${pct}%"></i></span></span></td>
+          <td>${pillForClientStatus(client)}</td>
+          <td>${escapeHtml(lastLogin)}</td>
+          <td>
+            <span class="row-actions">
+              <button class="btn-ghost row-action-btn" type="button" data-client-action="impersonate" title="Acceder" ${client.owner_user_id ? "" : "disabled"}>Acceder</button>
+              <button class="btn-ghost row-action-btn" type="button" data-client-action="edit" title="Editar">Editar</button>
+            </span>
+          </td>
+        `;
+        row.addEventListener("click", () => openClientDrawer(client.cliente_id, "resumen").catch((error) => showStatus(error.message, "error")));
+        row.querySelectorAll("[data-client-action]").forEach((button) => {
+          button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const action = button.dataset.clientAction;
+            if (action === "impersonate") return impersonateClient(client.cliente_id, client.nombre).catch((error) => showStatus(error.message, "error"));
+            if (action === "edit") return openClientDrawer(client.cliente_id, "config").catch((error) => showStatus(error.message, "error"));
+          });
+        });
+        elements.clientsTableBody.appendChild(row);
+      });
+      renderClientPagination(visibleClients.length, start + 1, Math.min(start + pageClients.length, visibleClients.length));
       renderAiClientSummary();
+    }
+
+    async function openClientSection(clienteId, tab = "resumen") {
+      const drawerTab = tab === "profile" ? "config" : tab;
+      await openClientDrawer(clienteId, drawerTab);
+    }
+
+    function closeClientDrawer() {
+      state.drawerOpen = false;
+      elements.clientDrawer?.classList.remove("open");
+      elements.clientDrawer?.setAttribute("aria-hidden", "true");
+      elements.clientDrawerOverlay?.classList.remove("active");
+      elements.clientDrawerOverlay?.setAttribute("aria-hidden", "true");
+    }
+
+    function switchDrawerTab(tab) {
+      const nextTab = tab || "resumen";
+      state.drawerTab = nextTab;
+      document.querySelectorAll("[data-drawer-tab]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.drawerTab === nextTab);
+      });
+      document.querySelectorAll("[data-drawer-panel]").forEach((panel) => {
+        panel.classList.toggle("active", panel.dataset.drawerPanel === nextTab);
+      });
+      if (nextTab === "audit" && state.drawerClientId) {
+        loadClientAudit(state.drawerClientId).catch((error) => showStatus(error.message, "error"));
+      }
+    }
+
+    function renderDrawerChrome(client) {
+      if (!client && state.currentClientDetail) {
+        client = { cliente_id: state.currentClientDetail.cliente_id, ...(state.currentClientDetail.config || {}) };
+      } else if (client && state.currentClientDetail && state.currentClientDetail.cliente_id === client.cliente_id) {
+        client = { ...(state.currentClientDetail.config || {}), ...client };
+      }
+      if (!client) return;
+      if (elements.drawerClientAvatar) {
+        elements.drawerClientAvatar.textContent = clientAvatarText(client);
+        elements.drawerClientAvatar.style.background = clientAvatarColor(client);
+      }
+      if (elements.drawerClientName) elements.drawerClientName.textContent = client.nombre || client.cliente_id || "-";
+      if (elements.drawerClientMeta) {
+        elements.drawerClientMeta.textContent = `${client.cliente_id || "-"} · ${client.owner_email || "Sin owner"}`;
+      }
+      if (elements.drawerClientPills) {
+        const plan = clientPlanValue(client) || "sin plan";
+        elements.drawerClientPills.innerHTML = `<span class="pill accent">${escapeHtml(plan)}</span>${pillForClientStatus(client)}`;
+      }
+      if (elements.drawerOwnerEmail) elements.drawerOwnerEmail.value = client.owner_email || "";
+      if (elements.drawerOwnerPlan) elements.drawerOwnerPlan.value = clientPlanValue(client) || "free";
+    }
+
+    function renderDrawerPanels(client) {
+      if (!client) return;
+      const used = Number(client.messages_used || 0);
+      const quota = Number(client.messages_quota || 0);
+      const infoSize = client.has_info_file ? formatFileSize(client.info_file_size) : "Pendiente";
+      if (elements.drawerKpis) {
+        elements.drawerKpis.innerHTML = `
+          <div><span>Mensajes</span><strong>${used.toLocaleString()} / ${quota ? quota.toLocaleString() : "-"}</strong></div>
+          <div><span>Ultimo login</span><strong>${escapeHtml(client.owner_last_login_at ? new Date(client.owner_last_login_at).toLocaleDateString() : "Nunca")}</strong></div>
+          <div><span>Bookings</span><strong>${Number(client.bookings_total || 0)} total · ${Number(client.bookings_pending || 0)} pendientes</strong></div>
+          <div><span>Info.txt</span><strong>${escapeHtml(infoSize)}</strong></div>
+        `;
+      }
+      if (elements.drawerAccountSummary) {
+        elements.drawerAccountSummary.innerHTML = `
+          <div><span>Owner</span><strong>${escapeHtml(client.owner_email || "Sin owner")}</strong></div>
+          <div><span>Display name</span><strong>${escapeHtml(client.owner_display_name || "-")}</strong></div>
+          <div><span>Alta owner</span><strong>${escapeHtml(client.owner_created_at ? new Date(client.owner_created_at).toLocaleDateString() : "-")}</strong></div>
+          <div><span>Alta cliente</span><strong>${escapeHtml(client.cliente_created_at ? new Date(client.cliente_created_at).toLocaleDateString() : "-")}</strong></div>
+        `;
+      }
+      if (elements.drawerUsageBody) {
+        elements.drawerUsageBody.innerHTML = `
+          <tr><td>Bookings</td><td>${Number(client.bookings_total || 0)}</td><td>${Number(client.bookings_pending || 0)}</td></tr>
+          <tr><td>Leads</td><td>Sin endpoint</td><td>-</td></tr>
+        `;
+      }
+      renderUsageBars(client);
+    }
+
+    function renderUsageBars(client) {
+      if (!elements.usageBars) return;
+      const now = new Date();
+      const rows = [];
+      for (let i = 5; i >= 0; i -= 1) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const label = d.toLocaleDateString("es-ES", { month: "short" });
+        const value = i === 0 ? Number(client.messages_used || 0) : 0;
+        const quota = Math.max(1, Number(client.messages_quota || value || 1));
+        const pct = Math.min(100, Math.round((value / quota) * 100));
+        rows.push(`<div class="mini-bar-row"><span>${escapeHtml(label)}</span><span class="mini-bar"><i style="width:${pct}%"></i></span><strong>${value.toLocaleString()}</strong></div>`);
+      }
+      elements.usageBars.innerHTML = rows.join("");
+    }
+
+    async function openClientDrawer(clienteId, tab = "resumen") {
+      setView("clients");
+      state.drawerOpen = true;
+      state.drawerClientId = clienteId;
+      state.currentClientId = clienteId;
+      elements.clientDrawer?.classList.add("open");
+      elements.clientDrawer?.setAttribute("aria-hidden", "false");
+      elements.clientDrawerOverlay?.classList.add("active");
+      elements.clientDrawerOverlay?.setAttribute("aria-hidden", "false");
+      switchDrawerTab(tab);
+      const summary = state.clients.find((item) => item.cliente_id === clienteId) || null;
+      renderDrawerChrome(summary);
+      renderDrawerPanels(summary);
+      await loadClientDetail(clienteId);
+      const freshSummary = state.clients.find((item) => item.cliente_id === clienteId) || summary;
+      renderDrawerChrome(freshSummary);
+      renderDrawerPanels(freshSummary);
+      renderClientList(clienteId);
+    }
+
+    async function loadClientAudit(clienteId) {
+      if (!elements.clientAuditBody) return;
+      elements.clientAuditBody.innerHTML = '<tr><td colspan="4"><span class="loading-inline"><span class="loading-dot"></span>Cargando auditoria...</span></td></tr>';
+      const response = await api(`/admin/clientes/${encodeURIComponent(clienteId)}/audit`);
+      state.clientAudit = response.items || [];
+      if (!state.clientAudit.length) {
+        elements.clientAuditBody.innerHTML = '<tr><td colspan="4" class="muted">Sin impersonaciones registradas.</td></tr>';
+        return;
+      }
+      elements.clientAuditBody.innerHTML = state.clientAudit.map((item) => `
+        <tr>
+          <td title="${escapeHtml(item.ip || "")}">${escapeHtml(item.admin_email || "-")}</td>
+          <td>${escapeHtml(formatDateTimeLabel(item.started_at))}</td>
+          <td>${escapeHtml(item.ended_at ? formatDateTimeLabel(item.ended_at) : "Abierta")}</td>
+          <td>${escapeHtml(item.duration_seconds != null ? `${Math.round(Number(item.duration_seconds || 0) / 60)} min` : "-")}</td>
+        </tr>
+      `).join("");
+    }
+
+    async function runReindex(clienteId = state.currentClientId) {
+      if (!clienteId) throw new Error("No hay cliente seleccionado.");
+      showStatus("Reindexando cerebro del cliente...", "info");
+      await api(`/admin/reindex/${encodeURIComponent(clienteId)}`, { method: "POST" });
+      await loadStats();
+      showStatus("Indice reindexado correctamente.", "success");
+    }
+
+    async function runResetPasswordOwner(client = currentClientSummaryRecord()) {
+      const email = client?.owner_email || elements.drawerOwnerEmail?.value.trim();
+      if (!email) throw new Error("El cliente no tiene owner email.");
+      await api("/auth/password/forgot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      showStatus("Email de recuperacion enviado al owner.", "success");
+    }
+
+    function exportCurrentClientConfig() {
+      if (!state.currentClientDetail) throw new Error("Abre un cliente antes de exportar.");
+      const blob = new Blob([JSON.stringify(state.currentClientDetail, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${state.currentClientDetail.cliente_id || "cliente"}-config.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function assignOwnerFromDrawer() {
+      const clienteId = state.drawerClientId || state.currentClientId;
+      const email = elements.drawerOwnerEmail?.value.trim();
+      const plan = elements.drawerOwnerPlan?.value || "free";
+      if (!clienteId) throw new Error("No hay cliente seleccionado.");
+      if (!email) throw new Error("Indica el email del owner.");
+      await api(`/admin/clientes/${encodeURIComponent(clienteId)}/assign-owner`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, plan }),
+      });
+      await loadClients(clienteId);
+      await openClientDrawer(clienteId, "cuenta");
+      showStatus("Owner asignado correctamente.", "success");
     }
 
     function renderCurrentUser() {
       const user = state.currentUser;
-      elements.sessionName.textContent = user?.display_name || "Administrador";
-      elements.sessionEmail.textContent = user?.email || "-";
+      const displayName = user?.display_name || "Administrador";
+      const email = user?.email || "-";
+      elements.sessionName.textContent = displayName;
+      elements.sessionEmail.textContent = email;
+      const topName = document.getElementById("topSessionName");
+      const topEmail = document.getElementById("topSessionEmail");
+      if (topName) topName.textContent = displayName;
+      if (topEmail) topEmail.textContent = email;
     }
 
     function payloadFromForm() {
@@ -4084,6 +4681,7 @@ tbody tr:last-child td { border-bottom: none; }
 
     function fillForm(detail) {
       const cfg = detail.config;
+      state.currentClientDetail = detail;
       state.currentClientId = detail.cliente_id;
       elements.clienteId.value = detail.cliente_id;
       if (elements.aiClientPicker) {
@@ -4124,6 +4722,9 @@ tbody tr:last-child td { border-bottom: none; }
       }
 
       renderClientList(detail.cliente_id);
+      const summary = currentClientSummaryRecord();
+      renderDrawerChrome(summary);
+      renderDrawerPanels(summary);
       renderAiClientSummary();
     }
 
@@ -4135,8 +4736,13 @@ tbody tr:last-child td { border-bottom: none; }
     }
 
     async function loadClients(selectedId = state.currentClientId) {
-      elements.clientDirectory.innerHTML = '<div class="empty"><span class="loading-inline"><span class="loading-dot"></span>Cargando clientes...</span></div>';
-      elements.clientCountLabel.textContent = "Cargando clientes...";
+      if (elements.clientsTableBody) {
+        elements.clientsTableBody.innerHTML = '<tr><td colspan="7"><span class="loading-inline"><span class="loading-dot"></span>Cargando clientes...</span></td></tr>';
+      }
+      if (elements.clientDirectory) {
+        elements.clientDirectory.innerHTML = '<div class="empty"><span class="loading-inline"><span class="loading-dot"></span>Cargando clientes...</span></div>';
+      }
+      if (elements.clientCountLabel) elements.clientCountLabel.textContent = "Cargando clientes...";
       const clients = await api("/admin/clientes");
       state.clients = clients || [];
       elements.statClients.textContent = String(state.clients.length);
@@ -4261,13 +4867,15 @@ tbody tr:last-child td { border-bottom: none; }
     }
 
     async function loadManagedUsers() {
-      elements.usersList.innerHTML = '<div class="empty"><span class="loading-inline"><span class="loading-dot"></span>Cargando usuarios...</span></div>';
+      // DEPRECATED: la tab "Usuarios" fue eliminada. Función mantenida como
+      // no-op para no romper callers existentes (eliminación de cliente, etc).
+      if (!elements.usersList) return;
       const params = new URLSearchParams();
-      const selectedRole = elements.userRoleFilter.value.trim();
-      const selectedClient = elements.userClientFilter.value.trim();
+      const selectedRole = elements.userRoleFilter && elements.userRoleFilter.value.trim();
+      const selectedClient = elements.userClientFilter && elements.userClientFilter.value.trim();
       if (selectedRole) params.set("role", selectedRole);
       if (selectedClient) params.set("cliente_id", selectedClient);
-      params.set("include_inactive", elements.userIncludeInactive.checked ? "true" : "false");
+      params.set("include_inactive", elements.userIncludeInactive && elements.userIncludeInactive.checked ? "true" : "false");
       const payload = await api(`/auth/users?${params.toString()}`);
       renderUsers(payload);
     }
@@ -4388,7 +4996,11 @@ tbody tr:last-child td { border-bottom: none; }
       });
     }
 
-    async function loadBookings(clienteId = elements.bookingClientFilter.value.trim()) {
+    async function loadBookings(clienteId) {
+      // DEPRECATED: la tab "Reservas" fue eliminada del admin. Cada cliente
+      // gestiona sus reservas en su propio portal. Función no-op defensiva.
+      if (!elements.bookingsTableBody) return;
+      const param = clienteId !== undefined ? clienteId : (elements.bookingClientFilter && elements.bookingClientFilter.value.trim()) || "";
       elements.bookingsTableBody.innerHTML = '<tr><td colspan="6"><span class="loading-inline"><span class="loading-dot"></span>Cargando reservas...</span></td></tr>';
       closeBookingModal();
       const params = new URLSearchParams();
@@ -4453,6 +5065,9 @@ tbody tr:last-child td { border-bottom: none; }
     }
 
     async function loadAnalytics() {
+      // DEPRECATED: la sección "Estadísticas" usa ahora loadStatsOverview().
+      // Esta función queda como no-op para no romper callers legacy.
+      if (!elements.analyticsRecentBody) return;
       const days = Number(elements.analyticsDays?.value || 30);
       elements.analyticsRecentBody.innerHTML = '<tr><td colspan="5"><span class="loading-inline"><span class="loading-dot"></span>Cargando estadisticas...</span></td></tr>';
       const data = await api(`/admin/analytics?days=${encodeURIComponent(days)}&limit=80`);
@@ -4607,6 +5222,13 @@ tbody tr:last-child td { border-bottom: none; }
       const clienteId = rawId.trim();
       const detail = await api(`/admin/template/${encodeURIComponent(clienteId)}`);
       fillForm(detail);
+      state.drawerClientId = detail.cliente_id;
+      elements.clientDrawer?.classList.add("open");
+      elements.clientDrawer?.setAttribute("aria-hidden", "false");
+      elements.clientDrawerOverlay?.classList.add("active");
+      elements.clientDrawerOverlay?.setAttribute("aria-hidden", "false");
+      switchDrawerTab("config");
+      renderDrawerChrome({ cliente_id: detail.cliente_id, ...(detail.config || {}) });
       showStatus("Plantilla creada. Completa los datos y guarda el cliente.", "info");
     }
 
@@ -4887,13 +5509,16 @@ tbody tr:last-child td { border-bottom: none; }
       }
     });
 
-    document.getElementById("createUserBtn").addEventListener("click", async () => {
-      try {
-        await withButtonLoading(document.getElementById("createUserBtn"), "Creando...", () => createManagedUser());
-      } catch (error) {
-        showStatus(error.message, "error");
-      }
-    });
+    const _createUserBtn = document.getElementById("createUserBtn");
+    if (_createUserBtn) {
+      _createUserBtn.addEventListener("click", async () => {
+        try {
+          await withButtonLoading(_createUserBtn, "Creando...", () => createManagedUser());
+        } catch (error) {
+          showStatus(error.message, "error");
+        }
+      });
+    }
 
     elements.addAllowedOriginBtn.addEventListener("click", () => {
       try {
@@ -4911,7 +5536,14 @@ tbody tr:last-child td { border-bottom: none; }
         showStatus(error.message, "error");
       }
     });
-    elements.clientSearch.addEventListener("input", () => renderClientList());
+    let clientSearchTimer = null;
+    elements.clientSearch.addEventListener("input", () => {
+      window.clearTimeout(clientSearchTimer);
+      clientSearchTimer = window.setTimeout(() => {
+        state.clientPage = 1;
+        renderClientList();
+      }, 150);
+    });
 
     document.querySelectorAll('[data-client-filter]').forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -4923,38 +5555,82 @@ tbody tr:last-child td { border-bottom: none; }
         renderClientList();
       });
     });
+    document.querySelectorAll("[data-client-plan]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.clientFilters.plan = btn.dataset.clientPlan || "";
+        state.clientPage = 1;
+        document.querySelectorAll("[data-client-plan]").forEach((other) => other.classList.toggle("active", other === btn));
+        renderClientList();
+      });
+    });
+    document.querySelectorAll("[data-client-status]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.clientFilters.status = btn.dataset.clientStatus || "";
+        state.clientPage = 1;
+        document.querySelectorAll("[data-client-status]").forEach((other) => other.classList.toggle("active", other === btn));
+        renderClientList();
+      });
+    });
+    document.querySelectorAll("[data-client-flag]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const flag = btn.dataset.clientFlag;
+        state.clientFilters[flag] = !state.clientFilters[flag];
+        state.clientPage = 1;
+        btn.classList.toggle("active", Boolean(state.clientFilters[flag]));
+        renderClientList();
+      });
+    });
+    document.querySelectorAll("[data-drawer-tab]").forEach((btn) => {
+      btn.addEventListener("click", () => switchDrawerTab(btn.dataset.drawerTab));
+    });
+    document.getElementById("closeClientDrawerBtn")?.addEventListener("click", () => closeClientDrawer());
+    document.getElementById("drawerCloseFooterBtn")?.addEventListener("click", () => closeClientDrawer());
+    elements.clientDrawerOverlay?.addEventListener("click", () => closeClientDrawer());
+    document.getElementById("drawerDeleteClientBtn")?.addEventListener("click", () => {
+      const client = currentClientSummaryRecord();
+      const clienteId = state.drawerClientId || state.currentClientId;
+      if (!clienteId) return showStatus("Selecciona un cliente antes de eliminar.", "error");
+      return deleteClient(clienteId, client?.nombre).catch((error) => showStatus(error.message, "error"));
+    });
+    document.getElementById("drawerImpersonateBtn")?.addEventListener("click", () => {
+      const client = currentClientSummaryRecord();
+      impersonateClient(state.drawerClientId || state.currentClientId, client?.nombre).catch((error) => showStatus(error.message, "error"));
+    });
+    document.getElementById("drawerResetPasswordBtn")?.addEventListener("click", () => {
+      runResetPasswordOwner().catch((error) => showStatus(error.message, "error"));
+    });
+    document.getElementById("drawerWelcomeEmailBtn")?.addEventListener("click", () => {
+      showStatus("Reenvio de bienvenida pendiente de endpoint backend.", "info");
+    });
+    document.getElementById("drawerReindexBtn")?.addEventListener("click", () => {
+      runReindex(state.drawerClientId || state.currentClientId).catch((error) => showStatus(error.message, "error"));
+    });
+    document.getElementById("drawerExportConfigBtn")?.addEventListener("click", () => {
+      try { exportCurrentClientConfig(); } catch (error) { showStatus(error.message, "error"); }
+    });
+    document.getElementById("assignOwnerBtn")?.addEventListener("click", () => {
+      withButtonLoading(document.getElementById("assignOwnerBtn"), "Asignando...", () => assignOwnerFromDrawer())
+        .catch((error) => showStatus(error.message, "error"));
+    });
+    document.getElementById("openAiDrawerBtn")?.addEventListener("click", () => {
+      const clienteId = elements.aiClientPicker?.value.trim() || state.currentClientId;
+      if (!clienteId) return showStatus("Selecciona un cliente para abrir su configuracion.", "error");
+      openClientDrawer(clienteId, "config").catch((error) => showStatus(error.message, "error"));
+    });
     elements.aiClientPicker.addEventListener("change", () => {
       const clienteId = elements.aiClientPicker.value.trim();
       if (!clienteId) return;
       openClientAiSection(clienteId).catch((error) => showStatus(error.message, "error"));
     });
-    elements.newUserRole.addEventListener("change", () => toggleClientFieldByRole());
-    document.getElementById("refreshUsersBtn").addEventListener("click", () => {
-      withButtonLoading(document.getElementById("refreshUsersBtn"), "Actualizando...", () => loadManagedUsers())
-        .catch((error) => showStatus(error.message, "error"));
-    });
-    elements.userRoleFilter.addEventListener("change", () => loadManagedUsers().catch((error) => showStatus(error.message, "error")));
-    elements.userClientFilter.addEventListener("change", () => loadManagedUsers().catch((error) => showStatus(error.message, "error")));
-    elements.userIncludeInactive.addEventListener("change", () => loadManagedUsers().catch((error) => showStatus(error.message, "error")));
-    elements.bookingSearch.addEventListener("input", () => scheduleBookingsReload());
-    elements.bookingClientFilter.addEventListener("change", () => loadBookings().catch((error) => showStatus(error.message, "error")));
-    elements.bookingStatusFilter.addEventListener("change", () => loadBookings().catch((error) => showStatus(error.message, "error")));
-    elements.bookingDateFrom.addEventListener("change", () => loadBookings().catch((error) => showStatus(error.message, "error")));
-    elements.bookingDateTo.addEventListener("change", () => loadBookings().catch((error) => showStatus(error.message, "error")));
-    elements.bookingLimit.addEventListener("change", () => loadBookings().catch((error) => showStatus(error.message, "error")));
-    document.getElementById("refreshBookingsBtn").addEventListener("click", () => {
-      withButtonLoading(document.getElementById("refreshBookingsBtn"), "Actualizando...", () => loadBookings())
-        .catch((error) => showStatus(error.message, "error"));
-    });
-    document.getElementById("runRemindersBtn").addEventListener("click", () => {
-      withButtonLoading(document.getElementById("runRemindersBtn"), "Ejecutando...", () => runBookingReminders())
-        .catch((error) => showStatus(error.message, "error"));
-    });
-    document.getElementById("refreshAnalyticsBtn").addEventListener("click", () => {
-      withButtonLoading(document.getElementById("refreshAnalyticsBtn"), "Actualizando...", () => loadAnalytics())
-        .catch((error) => showStatus(error.message, "error"));
-    });
-    elements.analyticsDays.addEventListener("change", () => loadAnalytics().catch((error) => showStatus(error.message, "error")));
+    // Users/bookings/analytics legacy handlers — DOM ya no existe, guards defensivos:
+    if (elements.newUserRole) elements.newUserRole.addEventListener("change", () => toggleClientFieldByRole());
+    const refreshStatsBtn = document.getElementById("refreshStatsBtn");
+    if (refreshStatsBtn) {
+      refreshStatsBtn.addEventListener("click", () => {
+        withButtonLoading(refreshStatsBtn, "Actualizando...", () => loadStatsOverview())
+          .catch((error) => showStatus(error.message, "error"));
+      });
+    }
     elements.closeRescheduleModalBtn.addEventListener("click", () => closeBookingModal());
     elements.closeTimelineModalBtn.addEventListener("click", () => closeBookingModal());
     elements.bookingRescheduleDate.addEventListener("change", () => {
@@ -4988,6 +5664,8 @@ tbody tr:last-child td { border-bottom: none; }
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && state.bookingModalMode) {
         closeBookingModal();
+      } else if (event.key === "Escape" && state.drawerOpen) {
+        closeClientDrawer();
       }
     });
     elements.navButtons.forEach((button) => {

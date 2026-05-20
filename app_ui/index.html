@@ -432,6 +432,9 @@
     .starter-list { display: flex; flex-direction: column; gap: 8px; }
     .starter-chip { display: flex; align-items: center; gap: 8px; background: rgba(7,16,31,0.4); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
     .starter-chip input { flex: 1; background: transparent; border: 0; color: var(--text); outline: none; font-family: var(--font); font-size: 0.88rem; }
+    .starter-chip input:disabled { color: var(--text); opacity: 0.95; -webkit-text-fill-color: var(--text); cursor: default; }
+    .starter-chip-base { background: rgba(0,177,217,0.08); border-color: rgba(0,177,217,0.35); }
+    .starter-pill { font-size: 0.7rem; color: var(--soft); border: 1px solid var(--line); padding: 2px 8px; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
     .starter-chip button { background: transparent; border: 0; color: var(--soft-2); cursor: pointer; font-size: 1.2rem; padding: 0 4px; }
     .starter-chip button:hover { color: var(--danger); }
 
@@ -557,6 +560,9 @@
       overflow-y: auto;
     }
     .side-panel.open { right: 0; }
+    #qaFormCard { width: 440px; right: -460px; }
+    #qaFormCard.open { right: 0; }
+    @media (max-width: 520px) { #qaFormCard { width: 100%; right: -100%; } }
     .side-panel-head { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
     .side-panel-head b { flex: 1; font-family: var(--font-title); font-size: 1rem; }
     .side-panel-head button { background: transparent; border: 0; color: var(--soft); cursor: pointer; font-size: 1.2rem; }
@@ -887,18 +893,6 @@
 
       <div class="ap-block">
         <div class="ap-block-head">
-          <div class="ap-block-title">Preguntas sugeridas</div>
-          <div class="ap-block-sub">Botones rapidos que ve el visitante nada mas abrir el chat (hasta 8).</div>
-        </div>
-        <div class="starter-list" id="apStarterList"></div>
-        <div style="display:flex; gap:8px; margin-top:10px;">
-          <input class="field-input" id="apNewStarter" placeholder="Anadir pregunta..." maxlength="140" />
-          <button class="btn btn-ghost" id="apAddStarterBtn" type="button">Anadir</button>
-        </div>
-      </div>
-
-      <div class="ap-block">
-        <div class="ap-block-head">
           <div class="ap-block-title">Seguridad</div>
           <div class="ap-block-sub">Dominios autorizados para cargar el widget. Vacio = sin restriccion.</div>
         </div>
@@ -980,7 +974,7 @@
       <div style="display:flex; gap:14px; margin-top:14px; flex-wrap:wrap;">
         <div class="panel-card" style="flex:1 1 320px; padding:16px; background: rgba(7,16,31,0.4);">
           <h3 style="font-size:0.95rem; margin-bottom:6px;">Añadir desde URL</h3>
-          <p class="panel-sub">Analizamos la web y mezclamos su contenido con tu RAG.</p>
+          <p class="panel-sub">Analizamos la web y mezclamos su contenido con tu RAG. Si ya existe esa fuente, no se volvera a indexar.</p>
           <input class="field-input" id="kbUrl" placeholder="https://otra-pagina.com" />
           <label style="display:flex; align-items:center; gap:8px; margin-top:8px; color:var(--soft); font-size:0.84rem;">
             <input type="checkbox" id="kbJustPage" /> Solo esa página
@@ -1017,32 +1011,63 @@
   <section class="page" id="page-qa">
     <div class="panel-card">
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+        <h2 style="margin:0;">Preguntas sugeridas</h2>
+      </div>
+      <p class="panel-sub">Botones rapidos que ve el visitante nada mas abrir el chat. Las 3 primeras son fijas; Vantelia no anade mas sugerencias automaticamente. Puedes anadir hasta 5 propias.</p>
+      <div class="starter-list" style="margin-top:12px; margin-bottom:6px;">
+        <div class="starter-chip starter-chip-base">
+          <input type="text" value="Agendar cita" disabled readonly />
+          <span class="starter-pill">Predeterminada</span>
+        </div>
+        <div class="starter-chip starter-chip-base">
+          <input type="text" value="Información servicios" disabled readonly />
+          <span class="starter-pill">Predeterminada</span>
+        </div>
+        <div class="starter-chip starter-chip-base">
+          <input type="text" value="Preguntas frecuentes" disabled readonly />
+          <span class="starter-pill">Predeterminada</span>
+        </div>
+      </div>
+      <div class="starter-list" id="apStarterList"></div>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <input class="field-input" id="apNewStarter" placeholder="Añadir pregunta..." maxlength="140" />
+        <button class="btn btn-ghost" id="apAddStarterBtn" type="button">Añadir</button>
+      </div>
+      <div id="apStarterAnswerPanel" style="display:none; margin-top:14px; padding:14px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.4);">
+        <div style="font-weight:600; margin-bottom:4px;">¿Qué debe responder la IA si pulsan este botón?</div>
+        <p class="panel-sub" id="apStarterQuestionEcho" style="margin:0 0 12px;"></p>
+        <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;">
+          <label style="display:flex; gap:8px; align-items:flex-start; cursor:pointer;">
+            <input type="radio" name="apStarterMode" value="exact" checked />
+            <span><b>Respuesta exacta.</b> La IA responderá con el texto que escribas debajo.</span>
+          </label>
+          <label style="display:flex; gap:8px; align-items:flex-start; cursor:pointer;">
+            <input type="radio" name="apStarterMode" value="ai" />
+            <span><b>Que la IA responda con su conocimiento.</b></span>
+          </label>
+        </div>
+        <div class="field" id="apStarterAnswerWrap">
+          <label class="field-label">Respuesta exacta</label>
+          <textarea class="field-textarea" id="apStarterAnswerText" maxlength="4000" style="min-height:110px;" placeholder="Ej: Te recomendamos la limpieza dental + revisión anual."></textarea>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:12px;">
+          <button class="btn btn-primary" id="apStarterSaveBtn" type="button">Guardar sugerencia</button>
+          <button class="btn btn-ghost" id="apStarterCancelBtn" type="button">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-card" style="margin-top:18px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
         <h2 style="margin:0;">Preguntas y respuestas</h2>
         <div style="margin-left:auto;">
           <button class="btn btn-primary" id="qaAddBtn" type="button">+ Añadir Q&amp;A</button>
         </div>
       </div>
-      <p class="panel-sub">Define respuestas exactas para preguntas frecuentes. El bot las usará textualmente cuando reconozca la intención.</p>
+      <p class="panel-sub">Define respuestas exactas para preguntas frecuentes. El bot las usará textualmente cuando reconozca la intención. Si el visitante pide preguntas frecuentes, se mostraran como maximo 4 de esta lista.</p>
       <div id="qaList" style="margin-top:14px;"></div>
     </div>
 
-    <div class="panel-card" id="qaFormCard" style="display:none; margin-top:18px;">
-      <h2 id="qaFormTitle">Nueva Q&amp;A</h2>
-      <input type="hidden" id="qaEditingId" />
-      <div class="form-row">
-        <div class="field" style="flex:1 1 100%;"><label class="field-label">Pregunta del cliente</label><input class="field-input" id="qaQuestion" maxlength="400" placeholder="Ej: ¿Hacen envíos a Canarias?" /></div>
-      </div>
-      <div class="form-row">
-        <div class="field" style="flex:1 1 100%;"><label class="field-label">Respuesta exacta</label><textarea class="field-textarea" id="qaAnswer" maxlength="4000" style="min-height:120px;"></textarea></div>
-      </div>
-      <div class="form-row">
-        <div class="field" style="flex:1 1 100%;"><label class="field-label">Etiquetas (separadas por coma, opcional)</label><input class="field-input" id="qaTags" maxlength="200" placeholder="precios, envios" /></div>
-      </div>
-      <div style="display:flex; gap:10px; margin-top:14px;">
-        <button class="btn btn-primary" id="qaSaveBtn" type="button">Guardar</button>
-        <button class="btn btn-ghost" id="qaCancelBtn" type="button">Cancelar</button>
-      </div>
-    </div>
   </section>
 
   <!-- TUNE AI -->
@@ -1351,6 +1376,33 @@
   </div>
 </div>
 
+<!-- Q&A edit panel -->
+<div class="side-panel" id="qaFormCard">
+  <div class="side-panel-head">
+    <b id="qaFormTitle">Nueva Q&amp;A</b>
+    <button id="qaPanelClose" type="button" aria-label="Cerrar">×</button>
+  </div>
+  <div class="side-panel-body">
+    <input type="hidden" id="qaEditingId" />
+    <div class="field" style="margin-bottom:14px;">
+      <label class="field-label">Pregunta del cliente</label>
+      <input class="field-input" id="qaQuestion" maxlength="400" placeholder="Ej: ¿Hacen envíos a Canarias?" />
+    </div>
+    <div class="field" style="margin-bottom:14px;">
+      <label class="field-label">Respuesta exacta</label>
+      <textarea class="field-textarea" id="qaAnswer" maxlength="4000" style="min-height:160px;"></textarea>
+    </div>
+    <div class="field" style="margin-bottom:18px;">
+      <label class="field-label">Etiquetas (separadas por coma, opcional)</label>
+      <input class="field-input" id="qaTags" maxlength="200" placeholder="precios, envios" />
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" id="qaSaveBtn" type="button" style="flex:1;">Guardar</button>
+      <button class="btn btn-ghost" id="qaCancelBtn" type="button">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Booking reschedule drawer -->
 <div class="drawer-overlay" id="reschedOverlay"></div>
 <div class="booking-drawer" id="reschedDrawer">
@@ -1542,15 +1594,6 @@ async function loadDeploy() {
   }
 }
 
-const DEFAULT_STARTERS = [
-  'Agendar cita',
-  'Preguntas frecuentes',
-  'Informacion servicios',
-  'Recomendar servicio',
-  'Comparar servicios',
-  'Estimar precio',
-];
-
 async function loadAppearance() {
   try {
     const data = await api('/auth/app/appearance');
@@ -1564,13 +1607,9 @@ async function loadAppearance() {
     state.launcher_shape = (data.launcher_shape === 'bar') ? 'bar' : 'circle';
     state.launcher_size = Number(data.launcher_size) || (state.launcher_shape === 'bar' ? 200 : 60);
     const incomingStarters = Array.isArray(data.starter_questions) ? data.starter_questions.filter(Boolean) : [];
-    let seedStarters = false;
-    if (!incomingStarters.length) {
-      state.starter_questions = [...DEFAULT_STARTERS];
-      seedStarters = true;
-    } else {
-      state.starter_questions = incomingStarters;
-    }
+    state.starter_questions = incomingStarters
+      .filter(q => q && !AP_BASE_STARTERS_LOWER.includes((q || '').trim().toLowerCase()))
+      .slice(0, 5);
     state.allowed_origins = data.allowed_origins || [];
 
     const accentValue = state.accent_color || '#00F5D4';
@@ -1588,7 +1627,6 @@ async function loadAppearance() {
     renderShapeUI();
     renderStarters();
     renderRightPreview();
-    if (seedStarters) scheduleAutoSave(200);
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -1643,11 +1681,13 @@ function renderStarters() {
       renderRightPreview();
       scheduleAutoSave(700);
     });
-    wrap.querySelector('button').addEventListener('click', () => {
+    wrap.querySelector('button').addEventListener('click', async () => {
+      const removed = state.starter_questions[i];
       state.starter_questions.splice(i, 1);
       renderStarters();
       renderRightPreview();
       scheduleAutoSave(150);
+      try { await deleteStarterQA(removed); } catch {}
     });
     list.appendChild(wrap);
   });
@@ -1657,7 +1697,9 @@ function renderRightPreview() {
   document.getElementById('rpWelcome').textContent = state.bienvenida || 'Hola, ¿en qué puedo ayudarte hoy?';
   const list = document.getElementById('rpStarters');
   list.innerHTML = '';
-  state.starter_questions.slice(0, 4).forEach(q => {
+  const base = ['Agendar cita', 'Información servicios', 'Preguntas frecuentes'];
+  const fused = base.concat(state.starter_questions.filter(q => q && !AP_BASE_STARTERS_LOWER.includes((q || '').trim().toLowerCase()))).slice(0, 8);
+  fused.forEach(q => {
     const chip = document.createElement('div');
     chip.className = 'chat-starter';
     chip.textContent = q;
@@ -1707,7 +1749,7 @@ async function saveAppearance() {
       launcher_size: Number(state.launcher_size) || 60,
       bienvenida: document.getElementById('apBienvenida').value.trim(),
       prompt_extra: document.getElementById('apPromptExtra').value.trim(),
-      starter_questions: state.starter_questions.map(s => (s || '').trim()).filter(Boolean).slice(0, 8),
+      starter_questions: state.starter_questions.map(s => (s || '').trim()).filter(Boolean).slice(0, 5),
       allowed_origins: origins,
     };
     const data = await api('/auth/app/appearance', {
@@ -1920,14 +1962,95 @@ document.getElementById('apAccentText').addEventListener('input', e => {
   const node = document.getElementById(id);
   if (node) node.addEventListener('input', () => scheduleAutoSave(700));
 });
+const AP_BASE_STARTERS_LOWER = ['agendar cita', 'información servicios', 'informacion servicios', 'preguntas frecuentes'];
+function _normalizeStarterText(s) {
+  return (s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+}
+async function deleteStarterQA(question) {
+  const norm = _normalizeStarterText(question);
+  if (!norm) return;
+  try {
+    const data = await api('/auth/app/qa');
+    const items = (data && data.items) || [];
+    const match = items.find(qa =>
+      (qa.tags || []).includes('_starter') &&
+      _normalizeStarterText(qa.question) === norm
+    );
+    if (match) {
+      await api('/auth/app/qa/' + encodeURIComponent(match.id), { method: 'DELETE' });
+    }
+  } catch (err) {
+    console.warn('deleteStarterQA failed', err);
+  }
+}
+let _apStarterPending = null;
+function _apStarterCloseAnswerPanel() {
+  _apStarterPending = null;
+  const panel = document.getElementById('apStarterAnswerPanel');
+  if (panel) panel.style.display = 'none';
+  const txt = document.getElementById('apStarterAnswerText');
+  if (txt) txt.value = '';
+  document.querySelectorAll('input[name="apStarterMode"]').forEach(r => { r.checked = r.value === 'exact'; });
+  const wrap = document.getElementById('apStarterAnswerWrap');
+  if (wrap) wrap.style.display = '';
+}
+function _apStarterOpenAnswerPanel(question) {
+  _apStarterPending = question;
+  document.getElementById('apStarterQuestionEcho').textContent = '“' + question + '”';
+  document.getElementById('apStarterAnswerText').value = '';
+  document.querySelectorAll('input[name="apStarterMode"]').forEach(r => { r.checked = r.value === 'exact'; });
+  document.getElementById('apStarterAnswerWrap').style.display = '';
+  document.getElementById('apStarterAnswerPanel').style.display = '';
+  setTimeout(() => { document.getElementById('apStarterAnswerText').focus(); }, 50);
+}
+document.querySelectorAll('input[name="apStarterMode"]').forEach(r => {
+  r.addEventListener('change', () => {
+    const mode = document.querySelector('input[name="apStarterMode"]:checked').value;
+    document.getElementById('apStarterAnswerWrap').style.display = (mode === 'exact') ? '' : 'none';
+  });
+});
 document.getElementById('apAddStarterBtn').addEventListener('click', () => {
-  const v = document.getElementById('apNewStarter').value.trim();
-  if (!v || state.starter_questions.length >= 8) return;
-  state.starter_questions.push(v);
+  const inp = document.getElementById('apNewStarter');
+  const v = inp.value.trim();
+  if (!v) return;
+  if (AP_BASE_STARTERS_LOWER.includes(v.toLowerCase())) { inp.value = ''; return; }
+  if (state.starter_questions.some(q => (q || '').trim().toLowerCase() === v.toLowerCase())) { inp.value = ''; toast('Esa pregunta ya está en la lista.', 'error'); return; }
+  if (state.starter_questions.length >= 5) { toast('Máximo 5 preguntas sugeridas.', 'error'); return; }
+  _apStarterOpenAnswerPanel(v);
+});
+document.getElementById('apStarterCancelBtn').addEventListener('click', () => {
+  _apStarterCloseAnswerPanel();
+});
+document.getElementById('apStarterSaveBtn').addEventListener('click', async () => {
+  const question = _apStarterPending;
+  if (!question) { _apStarterCloseAnswerPanel(); return; }
+  const mode = document.querySelector('input[name="apStarterMode"]:checked').value;
+  let answer = '';
+  if (mode === 'exact') {
+    answer = document.getElementById('apStarterAnswerText').value.trim();
+    if (!answer) { toast('Escribe la respuesta exacta o elige la otra opción.', 'error'); return; }
+  }
+  state.starter_questions.push(question);
   document.getElementById('apNewStarter').value = '';
   renderStarters();
   renderRightPreview();
   scheduleAutoSave(150);
+  if (mode === 'exact') {
+    try {
+      await api('/auth/app/qa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, answer, tags: ['_starter'] }),
+      });
+      toast('Sugerencia guardada con respuesta exacta.', 'success');
+      try { loadQA(); } catch {}
+    } catch (err) {
+      toast('Sugerencia añadida, pero no se pudo guardar la respuesta: ' + err.message, 'error');
+    }
+  } else {
+    toast('Sugerencia guardada. La IA responderá con su conocimiento.', 'success');
+  }
+  _apStarterCloseAnswerPanel();
 });
 document.getElementById('apNewStarter').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('apAddStarterBtn').click();
@@ -2074,7 +2197,7 @@ document.getElementById('kbAddUrlBtn').addEventListener('click', async () => {
   const btn = document.getElementById('kbAddUrlBtn');
   btn.disabled = true; btn.textContent = 'Analizando...';
   try {
-    await api('/auth/app/knowledge/url', {
+    const kbRes = await api('/auth/app/knowledge/url', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2083,9 +2206,13 @@ document.getElementById('kbAddUrlBtn').addEventListener('click', async () => {
         replace: !!document.getElementById('kbReplace').checked,
       }),
     });
-    toast('URL añadida al conocimiento', 'success');
+    const qaCount = (kbRes && Number(kbRes.qa_created)) || 0;
+    toast(qaCount
+      ? `URL añadida — ${qaCount} pregunta${qaCount === 1 ? '' : 's'} frecuente${qaCount === 1 ? '' : 's'} detectada${qaCount === 1 ? '' : 's'}.`
+      : 'URL añadida al conocimiento', 'success');
     document.getElementById('kbUrl').value = '';
     loadKnowledge();
+    if (qaCount) { try { loadQA(); } catch {} }
   } catch (err) { toast(err.message, 'error'); }
   finally { btn.disabled = false; btn.textContent = 'Analizar y añadir'; }
 });
@@ -2121,12 +2248,13 @@ async function loadQA() {
   list.innerHTML = '<div class="panel-sub" style="margin:0;">Cargando…</div>';
   try {
     const data = await api('/auth/app/qa');
-    if (!data.items.length) {
+    const items = (data.items || []).filter(qa => !(qa.tags || []).includes('_starter'));
+    if (!items.length) {
       list.innerHTML = '<div class="panel-sub" style="margin:0;">Sin Q&A todavía. Añade respuestas a preguntas frecuentes para guiar mejor al bot.</div>';
       return;
     }
     list.innerHTML = '';
-    data.items.forEach(qa => {
+    items.forEach(qa => {
       const row = document.createElement('div');
       row.className = 'chat-row';
       row.innerHTML = `
@@ -2146,8 +2274,8 @@ async function loadQA() {
         document.getElementById('qaEditingId').value = qa.id;
         document.getElementById('qaQuestion').value = qa.question;
         document.getElementById('qaAnswer').value = qa.answer;
-        document.getElementById('qaTags').value = (qa.tags || []).join(', ');
-        document.getElementById('qaFormCard').style.display = '';
+        document.getElementById('qaTags').value = (qa.tags || []).filter(t => t !== '_starter').join(', ');
+        openQAPanel();
       });
       row.querySelector('[data-delete]').addEventListener('click', async () => {
         if (!confirm('¿Eliminar esta Q&A?')) return;
@@ -2160,13 +2288,20 @@ async function loadQA() {
     list.innerHTML = `<div class="panel-sub" style="margin:0;">${escapeHtml(err.message)}</div>`;
   }
 }
+function openQAPanel() {
+  document.getElementById('qaFormCard').classList.add('open');
+  setTimeout(() => { document.getElementById('qaQuestion').focus(); }, 200);
+}
+function closeQAPanel() {
+  document.getElementById('qaFormCard').classList.remove('open');
+}
 document.getElementById('qaAddBtn').addEventListener('click', () => {
   document.getElementById('qaFormTitle').textContent = 'Nueva Q&A';
   ['qaEditingId','qaQuestion','qaAnswer','qaTags'].forEach(id => { document.getElementById(id).value = ''; });
-  document.getElementById('qaFormCard').style.display = '';
-  document.getElementById('qaQuestion').focus();
+  openQAPanel();
 });
-document.getElementById('qaCancelBtn').addEventListener('click', () => { document.getElementById('qaFormCard').style.display = 'none'; });
+document.getElementById('qaCancelBtn').addEventListener('click', closeQAPanel);
+document.getElementById('qaPanelClose').addEventListener('click', closeQAPanel);
 document.getElementById('qaSaveBtn').addEventListener('click', async () => {
   const editing = document.getElementById('qaEditingId').value;
   const payload = {
@@ -2190,7 +2325,7 @@ document.getElementById('qaSaveBtn').addEventListener('click', async () => {
       });
     }
     toast('Q&A guardada', 'success');
-    document.getElementById('qaFormCard').style.display = 'none';
+    closeQAPanel();
     loadQA();
   } catch (err) { toast(err.message, 'error'); }
 });
@@ -2877,9 +3012,41 @@ document.getElementById('instCopyBtn').addEventListener('click', e => copy(docum
 async function loadCuenta() {
   try {
     const me = await api('/auth/me');
-    document.getElementById('cuentaNombre').value = me.name || me.nombre || '';
+    document.getElementById('cuentaNombre').value = me.display_name || me.name || me.nombre || '';
     document.getElementById('cuentaEmail').value = me.email || '';
   } catch(e) { toast(e.message, 'error'); }
+}
+
+async function mountAdminImpersonationBanner() {
+  // Stealth: solo se monta si el navegador del admin tiene la marca local
+  // (puesta por admin_ui al pulsar "Acceder"). El cliente final nunca ve nada.
+  let adminMark = null;
+  try { adminMark = localStorage.getItem('vantelia_admin_impersonating'); } catch {}
+  if (adminMark !== '1') return;
+  try {
+    const me = await api('/auth/me');
+    if (!me || !me.as_admin_session) {
+      try { localStorage.removeItem('vantelia_admin_impersonating'); } catch {}
+      return;
+    }
+    if (document.getElementById('vanteliaAdminPill')) return;
+    const pill = document.createElement('button');
+    pill.id = 'vanteliaAdminPill';
+    pill.type = 'button';
+    pill.title = `Admin: ${(me.impersonator_email || 'admin')}. Click para salir.`;
+    pill.textContent = '↩';
+    pill.style.cssText = 'position:fixed;bottom:14px;left:14px;z-index:9999;width:30px;height:30px;border-radius:50%;background:rgba(11,19,43,0.6);color:rgba(255,200,87,0.7);border:1px solid rgba(255,255,255,0.15);cursor:pointer;font-size:0.95rem;line-height:1;padding:0;opacity:0.55;transition:opacity .15s ease;';
+    pill.addEventListener('mouseenter', () => { pill.style.opacity = '1'; });
+    pill.addEventListener('mouseleave', () => { pill.style.opacity = '0.55'; });
+    pill.addEventListener('click', async () => {
+      try { await api('/admin/impersonate/end', { method: 'POST' }); } catch {}
+      try { localStorage.removeItem('vantelia_admin_impersonating'); } catch {}
+      window.location.href = '/dashboard';
+    });
+    document.body.appendChild(pill);
+  } catch {
+    // /auth/me failed — silencioso.
+  }
 }
 document.getElementById('cuentaSavePerfilBtn').addEventListener('click', async () => {
   try {
@@ -2909,6 +3076,7 @@ document.getElementById('cuentaLogoutBtn').addEventListener('click', async () =>
 
 // ── Init ──────────────────────────────────────────────────────────────
 (async function init() {
+  mountAdminImpersonationBanner();
   await Promise.all([loadOverview(), loadDeploy(), loadAppearance()]);
   loadInstalacion();
   mountVanteliaWidget();

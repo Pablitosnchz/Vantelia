@@ -898,6 +898,8 @@ if (googleError) {
     ? 'El registro de nuevas cuentas esta deshabilitado.'
     : googleError === 'state_expired'
     ? 'La sesión de Google expiró (puede ocurrir tras un reinicio del servidor). Inténtalo de nuevo.'
+    : googleError === 'email_account'
+    ? 'Esta cuenta se creo con correo y contrasena. Inicia sesion con tu contrasena.'
     : 'No se pudo iniciar sesión con Google. Inténtalo de nuevo.';
   setStatus(target, msg, 'error');
 }

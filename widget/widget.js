@@ -14,6 +14,7 @@ async function init() {
     branding_text: "Powered by Vantelia",
     contact_email: "",
     contact_phone: "",
+    starter_questions: [],
   };
 
   try {

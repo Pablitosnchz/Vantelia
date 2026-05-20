@@ -270,6 +270,46 @@ def test_public_client_config_enforces_allowed_origin(client: TestClient):
     assert allowed.json()["nombre"] == "Agencia IA Demo"
 
 
+def test_public_client_config_includes_base_starters_with_booking(
+    client: TestClient, api_module
+):
+    """/cliente/{id} fuses BASE_STARTERS with extras. Booking enabled → all 3 base."""
+    api_module.CONFIG_CLIENTES["demo"]["starter_questions"] = ["¿Cuanto cuesta?", "¿Hay parking?"]
+    resp = client.get("/cliente/demo", headers={"Origin": "http://testserver"})
+    assert resp.status_code == 200
+    starters = resp.json()["starter_questions"]
+    assert starters[:3] == ["Agendar cita", "Información servicios", "Preguntas frecuentes"]
+    assert "¿Cuanto cuesta?" in starters
+    assert "¿Hay parking?" in starters
+    assert len(starters) == 5
+
+
+def test_public_client_config_omits_agendar_when_booking_disabled(
+    client: TestClient, api_module
+):
+    """When booking disabled, 'Agendar cita' must not appear in /cliente/{id} starters."""
+    api_module.CONFIG_CLIENTES["demo"]["booking"]["enabled"] = False
+    api_module.CONFIG_CLIENTES["demo"]["starter_questions"] = []
+    try:
+        resp = client.get("/cliente/demo", headers={"Origin": "http://testserver"})
+        assert resp.status_code == 200
+        starters = resp.json()["starter_questions"]
+        assert "Agendar cita" not in starters
+        assert "Información servicios" in starters
+        assert "Preguntas frecuentes" in starters
+    finally:
+        api_module.CONFIG_CLIENTES["demo"]["booking"]["enabled"] = True
+
+
+def test_persist_strips_base_from_extras(client: TestClient, api_module):
+    """Base entries submitted by client are filtered out before persisting."""
+    api_module.CONFIG_CLIENTES["demo"]["starter_questions"] = []
+    saved = api_module._strip_base_from_extras(
+        ["Agendar cita", "Información servicios", "¿Cuanto cuesta?", "Preguntas frecuentes", "¿Hacen envios?"]
+    )
+    assert saved == ["¿Cuanto cuesta?", "¿Hacen envios?"]
+
+
 def test_admin_token_protects_client_list(client: TestClient):
     forbidden = client.get("/admin/clientes")
     allowed = client.get("/admin/clientes", headers={"Authorization": "Bearer test-admin-token"})
@@ -288,6 +328,25 @@ def test_login_creates_portal_session(client: TestClient):
     assert response.status_code == 200
     assert response.json()["user"]["role"] == "admin"
     assert "vantelia_portal_session" in response.cookies
+
+
+def test_login_google_signup_account_prompts_google(client: TestClient, api_module):
+    email = f"google_login_{uuid.uuid4().hex[:8]}@example.com"
+    api_module._create_user_self_serve(
+        email=email,
+        display_name="Google Login",
+        google_sub="google-sub-" + uuid.uuid4().hex,
+        signup_source="google",
+        email_verified=True,
+    )
+
+    response = client.post(
+        "/auth/login",
+        json={"email": email, "password": "not-the-google-password"},
+    )
+
+    assert response.status_code == 409
+    assert "Google" in response.json()["detail"]
 
 
 def test_portal_can_delete_professional(client: TestClient):
@@ -1814,6 +1873,61 @@ def test_google_oauth_start_redirects_when_configured(client: TestClient, api_mo
     assert "scope=openid%20email%20profile" in location
 
 
+def test_google_oauth_rejects_email_signup_account(client: TestClient, api_module, monkeypatch):
+    email = f"email_google_{uuid.uuid4().hex[:8]}@example.com"
+    user = api_module._create_user_self_serve(
+        email=email,
+        password="secret-pass-123",
+        display_name="Email User",
+        signup_source="email",
+    )
+    state = api_module._oauth_create_state(intent="login")
+    monkeypatch.setattr(api_module, "GOOGLE_CLIENT_ID", "fake-id.apps.googleusercontent.com")
+    monkeypatch.setattr(api_module, "GOOGLE_CLIENT_SECRET", "fake-secret")
+    monkeypatch.setattr(api_module, "GOOGLE_REDIRECT_URI", "https://app.test/auth/google/callback")
+
+    class FakeGoogleResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, *args, **kwargs):
+            return FakeGoogleResponse({"access_token": "fake-access"})
+
+        async def get(self, *args, **kwargs):
+            return FakeGoogleResponse({
+                "sub": "google-sub-" + uuid.uuid4().hex,
+                "email": email,
+                "name": "Email User",
+                "picture": "",
+            })
+
+    monkeypatch.setattr(api_module.httpx, "AsyncClient", FakeAsyncClient)
+    response = client.get(
+        f"/auth/google/callback?code=fake-code&state={state}",
+        follow_redirects=False,
+    )
+
+    assert response.status_code in (302, 307)
+    assert response.headers["location"] == "/acceso?google_error=email_account"
+    assert api_module._get_user_by_id(user["id"])["google_sub"] == ""
+
+
 def _signup_and_get_cookie(client: TestClient, email: str, password: str = "secret-pass-123", name: str = "Wizard User"):
     resp = client.post(
         "/auth/signup",
@@ -1899,7 +2013,7 @@ def test_onboarding_full_wizard_flow(client: TestClient, api_module, monkeypatch
     learn_data = learn.json()
     assert learn_data["cliente_id"] == cliente_id
     assert learn_data["detected_business_name"] == "Cliente Auto"
-    assert len(learn_data["suggested_starters"]) == 4
+    assert learn_data["suggested_starters"] == []
     # info.txt got written with the scraper output
     info_path = Path(os.environ["VANTELIA_DATA_DIR"]) / cliente_id / "info.txt"
     assert "CLIENTE AUTO" in info_path.read_text(encoding="utf-8")
@@ -2005,7 +2119,7 @@ def test_app_appearance_get_and_update(client: TestClient, api_module, monkeypat
     assert initial.status_code == 200
     initial_data = initial.json()
     assert initial_data["cliente_id"] == cliente_id
-    assert len(initial_data["starter_questions"]) == 4
+    assert initial_data["starter_questions"] == []
 
     update = client.post(
         "/auth/app/appearance",
@@ -2147,6 +2261,54 @@ def test_app_qa_crud_persists_in_info_txt(client: TestClient, api_module, monkey
     assert "PREGUNTAS FRECUENTES (PANEL)" not in info_path.read_text(encoding="utf-8")
 
 
+def test_chat_faq_uses_panel_qa_and_caps_four(client: TestClient, api_module):
+    qa_ids = [f"qa_test_faq_{i}_{uuid.uuid4().hex}" for i in range(5)]
+    with api_module._get_db_connection() as connection:
+        for i, qa_id in enumerate(qa_ids):
+            created_at = (datetime(2026, 1, 1) + timedelta(seconds=i)).isoformat()
+            connection.execute(
+                """
+                INSERT INTO kb_qa (id, cliente_id, question, answer, tags_json, created_at, updated_at, created_by_user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    qa_id,
+                    "demo",
+                    f"Pregunta frecuente {i + 1}?",
+                    f"Respuesta frecuente {i + 1}.",
+                    "[]",
+                    created_at,
+                    created_at,
+                    "",
+                ),
+            )
+        connection.commit()
+    try:
+        response = client.post(
+            "/chat",
+            json={
+                "cliente_id": "demo",
+                "mensaje": "Muestrame las preguntas frecuentes principales",
+                "session_id": "s_test_chat_faq_panel",
+            },
+            headers={"Origin": "http://testserver"},
+        )
+    finally:
+        with api_module._get_db_connection() as connection:
+            connection.execute(
+                f"DELETE FROM kb_qa WHERE id IN ({','.join('?' for _ in qa_ids)})",
+                qa_ids,
+            )
+            connection.commit()
+
+    assert response.status_code == 200, response.text
+    text = response.json()["respuesta"]
+    assert text.count("Pregunta frecuente") == 4
+    assert "Pregunta frecuente 5?" in text
+    assert "Pregunta frecuente 2?" in text
+    assert "Pregunta frecuente 1?" not in text
+
+
 def test_app_knowledge_text_appended_to_info(client: TestClient, api_module, monkeypatch):
     cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot KB")
     info_path = Path(os.environ["VANTELIA_DATA_DIR"]) / cliente_id / "info.txt"
@@ -2182,6 +2344,58 @@ def test_app_knowledge_url_invokes_scraper(client: TestClient, api_module, monke
     after = info_path.read_text(encoding="utf-8")
     assert "Web: https://otra.example" in after
     assert len(after) > len(before)
+
+    duplicate = client.post(
+        "/auth/app/knowledge/url",
+        json={"url": "https://otra.example/", "just_this_page": True, "replace": False},
+        cookies=cookies,
+    )
+    assert duplicate.status_code == 409
+
+
+def test_app_knowledge_url_caps_derived_auto_qa(client: TestClient, api_module, monkeypatch):
+    cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot KB QA Cap")
+
+    class ManyDerivedFaqResult(_FakeOnboardingResult):
+        normalized_url = "https://faq-cap.example"
+        faq_source = "derived"
+        faq_pairs = [
+            (f"Pregunta derivada {idx}?", f"Respuesta derivada {idx}.")
+            for idx in range(25)
+        ]
+
+    monkeypatch.setattr(api_module, "run_onboarding", lambda **kwargs: ManyDerivedFaqResult())
+    resp = client.post(
+        "/auth/app/knowledge/url",
+        json={"url": "https://faq-cap.example", "just_this_page": True, "replace": False},
+        cookies=cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["qa_created"] == 5
+    listed = client.get("/auth/app/qa", cookies=cookies)
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 5
+
+
+def test_app_knowledge_url_keeps_literal_auto_qa(client: TestClient, api_module, monkeypatch):
+    cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot KB QA Literal")
+
+    class LiteralFaqResult(_FakeOnboardingResult):
+        normalized_url = "https://faq-literal.example"
+        faq_source = "literal"
+        faq_pairs = [
+            (f"Pregunta literal {idx}?", f"Respuesta literal {idx}.")
+            for idx in range(12)
+        ]
+
+    monkeypatch.setattr(api_module, "run_onboarding", lambda **kwargs: LiteralFaqResult())
+    resp = client.post(
+        "/auth/app/knowledge/url",
+        json={"url": "https://faq-literal.example", "just_this_page": True, "replace": False},
+        cookies=cookies,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["qa_created"] == 12
 
 
 def test_app_tune_get_and_post(client: TestClient, api_module, monkeypatch):
@@ -2541,6 +2755,218 @@ def test_admin_assign_owner_404_for_missing_user(client: TestClient, api_module)
         headers={"Authorization": "Bearer test-admin-token"},
     )
     assert resp.status_code == 404
+
+
+def test_admin_stats_overview_returns_kpis(client: TestClient, api_module):
+    """/admin/stats/overview devuelve KPIs y tablas para el dashboard admin."""
+    no_auth = client.get("/admin/stats/overview")
+    assert no_auth.status_code == 401
+
+    resp = client.get(
+        "/admin/stats/overview",
+        headers={"Authorization": "Bearer test-admin-token"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    for key in [
+        "clientes_total",
+        "clientes_activos",
+        "clientes_demo",
+        "clientes_sin_owner",
+        "mensajes_mes",
+        "mensajes_quota_mes",
+        "top_clientes",
+        "altas_recientes",
+        "churn_riesgo",
+        "generated_at",
+    ]:
+        assert key in data
+    assert isinstance(data["top_clientes"], list)
+    assert isinstance(data["altas_recientes"], list)
+    assert isinstance(data["churn_riesgo"], list)
+
+
+def test_admin_clientes_returns_enriched_owner_info(client: TestClient, api_module):
+    """/admin/clientes now exposes owner_email/plan/messages_quota."""
+    cliente_id = "enrich_test_" + uuid.uuid4().hex[:6]
+    normalized = api_module._normalize_client_config(cliente_id, {
+        "nombre": "Enrich Test",
+        "color": "#00b1d9",
+        "icono": "ET",
+        "bienvenida": "Hola.",
+        "allowed_origins": [],
+        "booking": {"enabled": False},
+        "whatsapp": {"enabled": False},
+    })
+    with api_module.state_lock:
+        next_configs = dict(api_module.CONFIG_CLIENTES)
+        next_configs[cliente_id] = normalized
+        api_module._update_runtime_configs(next_configs)
+    api_module._persist_configs_to_disk(next_configs)
+    owner_email = f"enrich_{uuid.uuid4().hex[:8]}@example.com"
+    api_module._create_user_self_serve(
+        email=owner_email,
+        password="secret-pass-123",
+        display_name="Enrich Owner",
+    )
+    resp = client.post(
+        f"/admin/clientes/{cliente_id}/assign-owner",
+        json={"email": owner_email, "plan": "free"},
+        headers={"Authorization": "Bearer test-admin-token"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    listing = client.get(
+        "/admin/clientes", headers={"Authorization": "Bearer test-admin-token"}
+    )
+    assert listing.status_code == 200
+    rows = listing.json()
+    target = next(r for r in rows if r["cliente_id"] == cliente_id)
+    assert target["owner_email"] == owner_email
+    assert target["plan"] == "free"
+    assert "messages_quota" in target
+
+
+def test_admin_impersonate_rejects_without_owner(client: TestClient, api_module):
+    cliente_id = "noowner_test_" + uuid.uuid4().hex[:6]
+    normalized = api_module._normalize_client_config(cliente_id, {
+        "nombre": "Sin Owner",
+        "color": "#00b1d9",
+        "icono": "SO",
+        "bienvenida": "Hola.",
+        "allowed_origins": [],
+        "booking": {"enabled": False},
+        "whatsapp": {"enabled": False},
+    })
+    with api_module.state_lock:
+        next_configs = dict(api_module.CONFIG_CLIENTES)
+        next_configs[cliente_id] = normalized
+        api_module._update_runtime_configs(next_configs)
+    api_module._persist_configs_to_disk(next_configs)
+    resp = client.post(
+        f"/admin/clientes/{cliente_id}/impersonate",
+        headers={"Authorization": "Bearer test-admin-token"},
+    )
+    assert resp.status_code == 409
+
+
+def test_admin_impersonate_flow_sets_cookie_and_blocks_password(
+    client: TestClient, api_module
+):
+    cliente_id = "imp_test_" + uuid.uuid4().hex[:6]
+    normalized = api_module._normalize_client_config(cliente_id, {
+        "nombre": "Imp Test",
+        "color": "#00b1d9",
+        "icono": "IT",
+        "bienvenida": "Hola.",
+        "allowed_origins": [],
+        "booking": {"enabled": False},
+        "whatsapp": {"enabled": False},
+    })
+    with api_module.state_lock:
+        next_configs = dict(api_module.CONFIG_CLIENTES)
+        next_configs[cliente_id] = normalized
+        api_module._update_runtime_configs(next_configs)
+    api_module._persist_configs_to_disk(next_configs)
+    owner_email = f"imp_owner_{uuid.uuid4().hex[:8]}@example.com"
+    api_module._create_user_self_serve(
+        email=owner_email,
+        password="secret-pass-123",
+        display_name="Imp Owner",
+    )
+    assigned = client.post(
+        f"/admin/clientes/{cliente_id}/assign-owner",
+        json={"email": owner_email, "plan": "free"},
+        headers={"Authorization": "Bearer test-admin-token"},
+    )
+    assert assigned.status_code == 200, assigned.text
+
+    # Without admin auth → 401
+    no_auth = client.post(f"/admin/clientes/{cliente_id}/impersonate")
+    assert no_auth.status_code == 401
+
+    impersonate = client.post(
+        f"/admin/clientes/{cliente_id}/impersonate",
+        headers={"Authorization": "Bearer test-admin-token"},
+    )
+    assert impersonate.status_code == 200, impersonate.text
+    data = impersonate.json()
+    assert data["target_email"] == owner_email
+    assert data["expires_in_minutes"] >= 5
+    cookie = impersonate.cookies.get(api_module.PORTAL_COOKIE_NAME)
+    assert cookie
+
+    # Calling /auth/me with the impersonation cookie reveals the flag.
+    me = client.get("/auth/me", cookies={api_module.PORTAL_COOKIE_NAME: cookie})
+    assert me.status_code == 200
+    body = me.json()
+    assert body["as_admin_session"] is True
+    assert "@bearer-token" in body["impersonator_email"] or "@" in body["impersonator_email"]
+    assert body["email"] == owner_email
+
+    # Password change blocked while impersonated.
+    blocked = client.post(
+        "/auth/password/change",
+        cookies={api_module.PORTAL_COOKIE_NAME: cookie},
+        json={"current_password": "secret-pass-123", "new_password": "another-pass-456"},
+    )
+    assert blocked.status_code == 403
+
+    # End impersonation clears the cookie.
+    end = client.post(
+        "/admin/impersonate/end",
+        cookies={api_module.PORTAL_COOKIE_NAME: cookie},
+    )
+    assert end.status_code == 200
+    after_end = client.get("/auth/me", cookies={api_module.PORTAL_COOKIE_NAME: cookie})
+    assert after_end.status_code == 401
+
+
+def test_admin_cliente_audit_returns_impersonations(client: TestClient, api_module):
+    cliente_id = "audit_test_" + uuid.uuid4().hex[:6]
+    normalized = api_module._normalize_client_config(cliente_id, {
+        "nombre": "Audit Test",
+        "color": "#00b1d9",
+        "icono": "AT",
+        "bienvenida": "Hola.",
+        "allowed_origins": [],
+        "booking": {"enabled": False},
+        "whatsapp": {"enabled": False},
+    })
+    with api_module.state_lock:
+        next_configs = dict(api_module.CONFIG_CLIENTES)
+        next_configs[cliente_id] = normalized
+        api_module._update_runtime_configs(next_configs)
+    api_module._persist_configs_to_disk(next_configs)
+    owner_email = f"audit_owner_{uuid.uuid4().hex[:8]}@example.com"
+    api_module._create_user_self_serve(
+        email=owner_email,
+        password="secret-pass-123",
+        display_name="Audit Owner",
+    )
+    assigned = client.post(
+        f"/admin/clientes/{cliente_id}/assign-owner",
+        json={"email": owner_email, "plan": "free"},
+        headers={"Authorization": "Bearer test-admin-token"},
+    )
+    assert assigned.status_code == 200, assigned.text
+    impersonate = client.post(
+        f"/admin/clientes/{cliente_id}/impersonate",
+        headers={"Authorization": "Bearer test-admin-token"},
+    )
+    assert impersonate.status_code == 200, impersonate.text
+
+    audit = client.get(
+        f"/admin/clientes/{cliente_id}/audit",
+        headers={"Authorization": "Bearer test-admin-token"},
+    )
+    assert audit.status_code == 200, audit.text
+    data = audit.json()
+    assert data["cliente_id"] == cliente_id
+    assert data["items"]
+    assert data["items"][0]["admin_email"]
+    assert data["items"][0]["started_at"]
+    assert data["items"][0]["ended_at"] == ""
 
 
 def test_self_serve_period_reset_on_month_boundary(api_module):

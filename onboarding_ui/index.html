@@ -251,6 +251,15 @@
       flex: 1; background: transparent; border: 0; color: var(--text); outline: none;
       font-family: var(--font); font-size: 0.88rem;
     }
+    .starter-chip input:disabled {
+      color: var(--text); opacity: 0.95; -webkit-text-fill-color: var(--text); cursor: default;
+    }
+    .starter-chip-base { background: rgba(0,177,217,0.08); border-color: rgba(0,177,217,0.35); }
+    .starter-pill {
+      font-size: 0.7rem; color: var(--soft);
+      border: 1px solid var(--line); padding: 2px 8px; border-radius: 999px;
+      white-space: nowrap; flex-shrink: 0;
+    }
     .starter-chip button {
       background: transparent; border: 0; color: var(--soft-2); cursor: pointer;
       font-size: 1.2rem; line-height: 1; padding: 0 4px;
@@ -279,8 +288,13 @@
     .demo-tip { color: var(--soft); font-size: 0.88rem; max-width: 480px; }
 
     /* ── Vista USE IT ── */
-    .deploy-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 22px; }
-    @media (max-width: 720px) { .deploy-row { grid-template-columns: 1fr; } }
+    .deploy-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+      width: min(100%, 760px);
+      margin: 22px auto 0;
+    }
     .deploy-card {
       background: rgba(7,16,31,0.5); border: 1px solid var(--line);
       border-radius: 14px; padding: 18px;
@@ -299,14 +313,23 @@
       padding: 8px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.84rem;
     }
     .copy-btn:hover { background: var(--accent); color: #0B132B; }
+    .share-card { padding: 16px 18px; }
     .link-row {
-      display: flex; align-items: center; gap: 8px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
       background: rgba(7,16,31,0.6); border: 1px solid var(--line);
       padding: 10px 12px; border-radius: 10px;
       font-size: 0.85rem; word-break: break-all;
     }
-    .link-row a { color: var(--accent); text-decoration: none; flex: 1; }
+    .link-row a { color: var(--accent); text-decoration: none; min-width: 0; overflow-wrap: anywhere; }
     .link-row a:hover { text-decoration: underline; }
+    .link-row .copy-btn { margin-top: 0; min-width: 92px; }
+    @media (max-width: 560px) {
+      .link-row { grid-template-columns: 1fr; }
+      .link-row .copy-btn { width: 100%; }
+    }
 
     .final-cta { text-align: center; margin-top: 28px; }
     .final-cta .btn-primary { padding: 14px 32px; font-size: 1rem; }
@@ -431,7 +454,21 @@
     </div>
     <div class="sub-panel">
       <h3>Preguntas sugeridas</h3>
-      <p style="color:var(--soft); font-size:0.83rem; margin-bottom:12px;">Aparecen como botones rápidos en el chat. Edítalas o añade nuevas.</p>
+      <p style="color:var(--soft); font-size:0.83rem; margin-bottom:12px;">Aparecen como botones rapidos en el chat. Las 3 primeras son fijas. No generamos mas sugerencias automaticamente; puedes anadir hasta 5 propias.</p>
+      <div class="starter-list" id="starterBaseList" style="margin-bottom:6px;">
+        <div class="starter-chip starter-chip-base">
+          <input type="text" value="Agendar cita" disabled readonly />
+          <span class="starter-pill">Predeterminada</span>
+        </div>
+        <div class="starter-chip starter-chip-base">
+          <input type="text" value="Información servicios" disabled readonly />
+          <span class="starter-pill">Predeterminada</span>
+        </div>
+        <div class="starter-chip starter-chip-base">
+          <input type="text" value="Preguntas frecuentes" disabled readonly />
+          <span class="starter-pill">Predeterminada</span>
+        </div>
+      </div>
       <div class="starter-list" id="starterList"></div>
       <div class="add-starter-row">
         <input type="text" id="newStarter" placeholder="Añadir pregunta..." maxlength="140" />
@@ -485,12 +522,12 @@
       <div class="code-block" id="snippetBlock"></div>
       <button class="copy-btn" id="copySnippetBtn" type="button">Copiar código</button>
     </div>
-    <div class="deploy-card">
+    <div class="deploy-card share-card">
       <h3>Compartir enlace</h3>
       <p>Para emails, QR o redes. Cualquiera con este enlace puede chatear.</p>
       <div class="link-row">
         <a id="shareLink" href="#" target="_blank" rel="noreferrer"></a>
-        <button class="copy-btn" id="copyLinkBtn" type="button" style="margin-top:0;">Copiar</button>
+        <button class="copy-btn" id="copyLinkBtn" type="button">Copiar</button>
       </div>
     </div>
   </div>
@@ -667,7 +704,7 @@ async function submitLearn() {
     state.website_url = url;
     state.bienvenida = data.suggested_welcome || `Hola, soy el asistente de ${state.nombre}. ¿En qué puedo ayudarte?`;
     state.prompt_extra = data.suggested_prompt_extra || '';
-    state.starter_questions = (data.suggested_starters || []).slice(0, 8);
+    state.starter_questions = [];
     document.getElementById('bienvenida').value = state.bienvenida;
     document.getElementById('promptExtra').value = state.prompt_extra;
     renderStarters();
@@ -691,8 +728,8 @@ async function submitPersonality() {
   try {
     const cleaned = state.starter_questions
       .map(s => (s || '').trim())
-      .filter(s => s.length > 0)
-      .slice(0, 8);
+      .filter(s => s.length > 0 && !BASE_STARTERS_LOWER.includes(s.toLowerCase()))
+      .slice(0, 5);
     state.starter_questions = cleaned;
     await api('/onboarding/personality', {
       method: 'POST',
@@ -778,11 +815,20 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   window.location.href = '/acceso';
 });
 
+const BASE_STARTERS_LOWER = ['agendar cita', 'información servicios', 'informacion servicios', 'preguntas frecuentes'];
 document.getElementById('addStarterBtn').addEventListener('click', () => {
   const inp = document.getElementById('newStarter');
   const v = inp.value.trim();
   if (!v) return;
-  if (state.starter_questions.length >= 8) return;
+  if (BASE_STARTERS_LOWER.includes(v.toLowerCase())) {
+    inp.value = '';
+    return;
+  }
+  if (state.starter_questions.some(q => (q || '').trim().toLowerCase() === v.toLowerCase())) {
+    inp.value = '';
+    return;
+  }
+  if (state.starter_questions.length >= 5) return;
   state.starter_questions.push(v);
   inp.value = '';
   renderStarters();

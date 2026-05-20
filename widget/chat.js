@@ -87,23 +87,45 @@ export function agregarMensaje(texto, tipo) {
   return div;
 }
 
-export function agregarAccionesIniciales() {
+function buildShortLabel(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) return "";
+  if (trimmed.length <= 32) return trimmed;
+  const cut = trimmed.slice(0, 32);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > 12 ? cut.slice(0, lastSpace) : cut).trimEnd() + "…";
+}
+
+export function agregarAccionesIniciales(starterQuestions) {
   const msgs = document.getElementById("ia-w-msgs");
   if (!msgs || document.getElementById("ia-w-start-actions")) return null;
+
+  const fromClient = Array.isArray(starterQuestions)
+    ? starterQuestions
+        .map((q) => String(q || "").trim())
+        .filter(Boolean)
+        .slice(0, 8)
+    : [];
+
+  const actions = fromClient.length
+    ? fromClient.map((q) => ({ label: buildShortLabel(q), message: q }))
+    : DEFAULT_QUICK_ACTIONS.slice();
+
+  if (!actions.length) return null;
 
   const div = document.createElement("div");
   div.className = "ia-msg bot ia-action-card";
   div.id = "ia-w-start-actions";
   div.innerHTML = `
     <p><strong>¿Qué quieres hacer ahora?</strong></p>
-    <p>Puedo ayudarte a resolver dudas, comparar opciones, estimar precio o encontrar la mejor recomendación antes de hablar con el equipo.</p>
+    <p>Elige una pregunta rápida o escríbeme la tuya.</p>
     <div class="ia-action-grid">
-      <button type="button" data-quick-message="Quiero agendar una cita">Agendar cita</button>
-      <button type="button" data-quick-message="Muestrame las preguntas frecuentes principales">Preguntas frecuentes</button>
-      <button type="button" data-quick-message="Quiero informacion sobre servicios disponibles">Informacion servicios</button>
-      <button type="button" data-quick-message="Recomiendame el servicio que mejor encaja con mi caso">Recomendar servicio</button>
-      <button type="button" data-quick-message="Quiero comparar servicios antes de decidir">Comparar servicios</button>
-      <button type="button" data-quick-message="Ayudame a estimar precio, tiempo o alcance aproximado">Estimar precio</button>
+      ${actions
+        .map(
+          (action) =>
+            `<button type="button" data-quick-message="${escapeHtml(action.message)}">${escapeHtml(action.label)}</button>`
+        )
+        .join("")}
     </div>
   `;
 
