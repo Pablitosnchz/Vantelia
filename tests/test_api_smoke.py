@@ -59,6 +59,8 @@ def api_module(tmp_path_factory: pytest.TempPathFactory):
                         "telefono": "+34 600000000",
                     },
                     "branding": {"powered_by": "Powered by Vantelia"},
+                    "plan": "business",
+                    "subscription": {"plan": "business", "status": "active"},
                     "whatsapp": {
                         "enabled": True,
                         "phone_number_id": "1234567890",
@@ -100,12 +102,12 @@ def api_module(tmp_path_factory: pytest.TempPathFactory):
             "WHATSAPP_APP_SECRET": "",
             "STRIPE_SECRET_KEY": "sk_test_dummy",
             "STRIPE_WEBHOOK_SECRET": "",
-            "STRIPE_PRICE_WEB": "price_test_web",
-            "STRIPE_PRICE_WHATSAPP": "price_test_whatsapp",
-            "STRIPE_PRICE_COMPLETO": "price_test_completo",
-            "STRIPE_PRICE_WEB_ANNUAL": "price_test_web_annual",
-            "STRIPE_PRICE_WHATSAPP_ANNUAL": "price_test_whatsapp_annual",
-            "STRIPE_PRICE_COMPLETO_ANNUAL": "price_test_completo_annual",
+            "STRIPE_PRICE_STARTER": "price_test_starter",
+            "STRIPE_PRICE_PRO": "price_test_pro",
+            "STRIPE_PRICE_BUSINESS": "price_test_business",
+            "STRIPE_PRICE_STARTER_ANNUAL": "price_test_starter_annual",
+            "STRIPE_PRICE_PRO_ANNUAL": "price_test_pro_annual",
+            "STRIPE_PRICE_BUSINESS_ANNUAL": "price_test_business_annual",
             "OUTREACH_DB_PATH": str(storage_dir / "outreach" / "outreach.db"),
             "OUTREACH_TRACKING_SECRET": "test-outreach-secret",
             "OUTREACH_TRACKING_BASE_URL": "https://app.test.local",
@@ -423,11 +425,10 @@ def test_admin_client_portal_has_full_plan_capabilities(client: TestClient, api_
     assert subscription.status_code == 200
     sub = subscription.json()
     assert sub["admin_override"] is True
-    assert sub["plan"] != "completo"
-    assert sub["effective_plan"] == "completo"
+    assert sub["effective_plan"] == "business"
     assert sub["features"]["branding_customization"] is True
     assert sub["features"]["csv_export"] is True
-    assert sub["features"]["max_professionals"] == 5
+    assert sub["features"]["max_professionals"] is None
 
     export_response = client.get("/auth/bookings/export", params={"cliente_id": "demo"}, cookies=cookies)
     assert export_response.status_code == 200
@@ -710,7 +711,7 @@ def test_public_stripe_checkout_builds_subscription_session(client: TestClient, 
 
     response = client.post(
         "/subscription/checkout",
-        json={"plan": "whatsapp", "billing_period": "monthly"},
+        json={"plan": "pro", "billing_period": "monthly"},
     )
 
     assert response.status_code == 200
@@ -720,9 +721,9 @@ def test_public_stripe_checkout_builds_subscription_session(client: TestClient, 
     }
     payload = _FakeStripeSessionApi.last_create_payload
     assert payload["mode"] == "subscription"
-    assert payload["line_items"] == [{"price": "price_test_whatsapp", "quantity": 1}]
-    assert payload["client_reference_id"] == "public:whatsapp:monthly"
-    assert payload["metadata"] == {"source": "public_plans", "plan": "whatsapp", "billing_period": "monthly"}
+    assert payload["line_items"] == [{"price": "price_test_pro", "quantity": 1}]
+    assert payload["client_reference_id"] == "public:pro:monthly"
+    assert payload["metadata"] == {"source": "public_plans", "plan": "pro", "billing_period": "monthly"}
     assert payload["subscription_data"]["trial_period_days"] == 30
     assert payload["subscription_data"]["metadata"] == payload["metadata"]
     assert [field["key"] for field in payload["custom_fields"]] == ["website", "empresa", "ianame"]
@@ -811,7 +812,7 @@ def test_lifetime_subscription_does_not_refresh_from_stripe(client: TestClient, 
     api_module.stripe = _FakeStripeWithSubscription
     api_module._set_client_subscription(
         "demo",
-        plan="completo",
+        plan="business",
         status="active",
         stripe_customer_id="cus_test_demo",
         stripe_subscription_id="sub_test_lifetime",
@@ -822,7 +823,7 @@ def test_lifetime_subscription_does_not_refresh_from_stripe(client: TestClient, 
 
     payload = api_module._build_subscription_public("demo").model_dump()
 
-    assert payload["plan"] == "completo"
+    assert payload["plan"] == "business"
     assert payload["lifetime"] is True
     assert payload["renews_at"] == ""
 

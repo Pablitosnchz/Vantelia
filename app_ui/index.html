@@ -502,24 +502,50 @@
     }
     .drawer-overlay.open { display: block; }
 
-    /* ── Calendar ── */
-    .cal-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-    .cal-nav h3 { flex: 1; text-align: center; font-family: var(--font-title); font-size: 1rem; }
-    .cal-nav button { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); padding: 6px 14px; border-radius: 8px; cursor: pointer; }
-    .cal-nav button:hover { border-color: var(--accent); color: var(--accent); }
-    .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; }
-    .cal-hdr { text-align: center; font-size: 0.72rem; color: var(--soft-2); text-transform: uppercase; letter-spacing: .06em; padding: 4px 0; }
-    .cal-day {
-      min-height: 60px; border-radius: 10px; padding: 6px;
-      background: rgba(255,255,255,0.02); border: 1px solid transparent;
-      cursor: pointer; transition: all .1s ease;
+    /* ── Calendar (Google-style) ── */
+    .gcal-header { display:flex; align-items:center; gap:10px; padding:0 0 16px 0; }
+    .gcal-month-title { font-family:var(--font-title); font-size:1.2rem; font-weight:400; color:var(--text); margin:0; flex:1; }
+    .gcal-btn-today {
+      background:transparent; border:1px solid var(--line); color:var(--text);
+      padding:5px 14px; border-radius:6px; font-size:0.82rem; cursor:pointer; transition:background .15s;
     }
-    .cal-day:hover { border-color: var(--accent); background: var(--accent-soft); }
-    .cal-day.today { border-color: var(--accent-2); }
-    .cal-day.other-month .cal-day-num { color: var(--soft-2); }
-    .cal-day-num { font-size: 0.8rem; font-weight: 600; margin-bottom: 3px; }
-    .cal-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin: 1px 0; }
-    .cal-dot-count { font-size: 0.68rem; color: var(--accent); }
+    .gcal-btn-today:hover { background:rgba(255,255,255,0.06); }
+    .gcal-nav-btn {
+      background:transparent; border:none; color:var(--soft); font-size:1.4rem; line-height:1;
+      width:30px; height:30px; border-radius:50%; cursor:pointer;
+      display:flex; align-items:center; justify-content:center; transition:background .15s;
+    }
+    .gcal-nav-btn:hover { background:rgba(255,255,255,0.07); color:var(--text); }
+    .gcal-grid-wrap { border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+    .gcal-grid { display:grid; grid-template-columns:repeat(7,1fr); }
+    .gcal-day-hdr {
+      text-align:center; font-size:0.7rem; font-weight:600; letter-spacing:.07em;
+      text-transform:uppercase; color:var(--soft-2);
+      padding:9px 0; border-bottom:1px solid var(--line); background:rgba(255,255,255,0.015);
+    }
+    .gcal-day {
+      min-height:90px; padding:5px 5px 3px; position:relative; overflow:hidden;
+      border-right:1px solid var(--line); border-bottom:1px solid var(--line);
+      cursor:pointer; transition:background .1s;
+    }
+    .gcal-day:nth-child(7n) { border-right:none; }
+    .gcal-day:hover { background:rgba(255,255,255,0.03); }
+    .gcal-day.other-month { opacity:.3; pointer-events:none; }
+    .gcal-day-num {
+      font-size:0.78rem; font-weight:500; color:var(--soft);
+      width:24px; height:24px; display:flex; align-items:center; justify-content:center;
+      border-radius:50%; margin-bottom:3px;
+    }
+    .gcal-day.today .gcal-day-num { background:var(--accent,#00d1ff); color:#000; font-weight:700; }
+    .gcal-event-pill {
+      display:block; width:100%; margin-bottom:2px; padding:2px 6px; border-radius:4px;
+      font-size:0.7rem; font-weight:500; color:#fff; cursor:pointer;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.9;
+      transition:opacity .1s;
+    }
+    .gcal-event-pill:hover { opacity:1; }
+    .gcal-more { font-size:0.68rem; color:var(--accent); padding:1px 3px; cursor:pointer; display:block; }
+    .gcal-more:hover { text-decoration:underline; }
 
     /* ── Accordion ── */
     .accordion { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
@@ -554,7 +580,7 @@
     .side-panel {
       position: fixed; top: 0; right: -360px; width: 340px; height: 100%;
       background: var(--panel); border-left: 1px solid var(--line);
-      z-index: 108; display: flex; flex-direction: column;
+      z-index: 110; display: flex; flex-direction: column;
       transition: right .25s cubic-bezier(.4,0,.2,1);
       box-shadow: -12px 0 40px rgba(0,0,0,0.4);
       overflow-y: auto;
@@ -573,7 +599,7 @@
     .booking-drawer {
       position: fixed; top: 0; right: -440px; width: 420px; height: 100%;
       background: var(--panel); border-left: 1px solid var(--line);
-      z-index: 108; flex-direction: column;
+      z-index: 110; flex-direction: column;
       transition: right .25s cubic-bezier(.4,0,.2,1);
       box-shadow: -12px 0 40px rgba(0,0,0,0.4);
       display: flex;
@@ -607,6 +633,43 @@
       .main { padding: 16px; }
       .bot-fab { bottom: 80px; right: 16px; }
     }
+
+    /* ── Booking toggle ── */
+    .booking-toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; padding: 14px 18px;
+      background: var(--panel-2); border: 1px solid var(--line);
+      border-radius: 12px; margin-bottom: 20px; cursor: pointer;
+    }
+    .booking-toggle-row .toggle-info strong { font-size: 0.95rem; display: block; margin-bottom: 2px; }
+    .booking-toggle-row .toggle-info span { font-size: 0.82rem; color: var(--soft); }
+    .toggle-switch {
+      flex-shrink: 0; width: 44px; height: 24px;
+      appearance: none; -webkit-appearance: none;
+      background: rgba(255,255,255,0.12); border-radius: 12px;
+      position: relative; cursor: pointer; transition: background .2s;
+    }
+    .toggle-switch:checked { background: var(--accent, #00d1ff); }
+    .toggle-switch::after {
+      content: ''; position: absolute;
+      top: 3px; left: 3px; width: 18px; height: 18px;
+      background: #fff; border-radius: 50%; transition: left .2s;
+    }
+    .toggle-switch:checked::after { left: 23px; }
+
+    /* ── Agenda disabled overlay ── */
+    .agenda-blocked-overlay {
+      display: none; position: absolute; inset: 0; z-index: 10;
+      background: rgba(7,16,31,0.72);
+      border-radius: 16px;
+      align-items: center; justify-content: center; flex-direction: column;
+      gap: 12px; text-align: center; padding: 32px;
+    }
+    .agenda-blocked-overlay.visible { display: flex; }
+    .agenda-blocked-overlay p { color: var(--soft); font-size: 0.9rem; margin: 0; }
+    .agenda-blocked-overlay strong { font-size: 1rem; color: var(--text); }
+    .page-agenda-wrap { position: relative; }
+    .nav-item.booking-nav-disabled { opacity: 0.35; pointer-events: none; }
   </style>
 </head>
 <body>
@@ -1001,9 +1064,17 @@
     </div>
 
     <div class="panel-card" style="margin-top:18px;">
-      <h2>Vista previa del conocimiento</h2>
-      <p class="panel-sub">Primeros 1200 caracteres de lo que el bot lee como contexto.</p>
-      <pre id="kbExcerpt" style="margin-top:10px; padding:14px; background:#07101f; border:1px solid var(--line); border-radius:10px; font-family:'Courier New',monospace; font-size:0.78rem; color:var(--soft); white-space:pre-wrap; word-wrap:break-word; max-height:320px; overflow:auto;"></pre>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:4px;">
+        <h2 style="margin:0;">Vista previa del conocimiento</h2>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-ghost" id="kbEditBtn" type="button">Editar conocimiento</button>
+          <button class="btn btn-primary" id="kbSaveEditBtn" type="button" style="display:none;">Guardar y reindexar</button>
+          <button class="btn btn-ghost" id="kbCancelEditBtn" type="button" style="display:none;">Cancelar</button>
+        </div>
+      </div>
+      <p class="panel-sub" id="kbPreviewSub">Todo el contenido que el asistente usa como contexto.</p>
+      <pre id="kbExcerpt" style="margin-top:10px; padding:14px; background:#07101f; border:1px solid var(--line); border-radius:10px; font-family:'Courier New',monospace; font-size:0.78rem; color:var(--soft); white-space:pre-wrap; word-wrap:break-word; max-height:520px; overflow:auto;"></pre>
+      <textarea id="kbEditTxt" class="field-textarea" maxlength="120000" style="display:none; margin-top:10px; min-height:400px; font-family:'Courier New',monospace; font-size:0.78rem;"></textarea>
     </div>
   </section>
 
@@ -1144,6 +1215,13 @@
 
   <!-- CITAS -->
   <section class="page" id="page-citas">
+    <label class="booking-toggle-row" id="bookingToggleRow">
+      <div class="toggle-info">
+        <strong>Citas activadas</strong>
+        <span>La IA puede agendar citas. Desactívalo para deshabilitar toda la agenda.</span>
+      </div>
+      <input type="checkbox" class="toggle-switch" id="bookingEnabledToggle" checked />
+    </label>
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;">
       <div class="filter-chips" id="citasQuickFilters">
         <div class="filter-chip active" data-period="all">Todas</div>
@@ -1176,13 +1254,16 @@
     </div>
 
     <!-- Vista Calendario (por defecto) -->
-    <div id="citasCalView" class="panel-card">
-      <div class="cal-nav">
-        <button id="calPrev">&#8592;</button>
-        <h3 id="calTitle">Mayo 2026</h3>
-        <button id="calNext">&#8594;</button>
+    <div id="citasCalView">
+      <div class="gcal-header">
+        <button class="gcal-btn-today" id="calToday">Hoy</button>
+        <button class="gcal-nav-btn" id="calPrev">&#8249;</button>
+        <button class="gcal-nav-btn" id="calNext">&#8250;</button>
+        <h2 class="gcal-month-title" id="calTitle">Mayo 2026</h2>
       </div>
-      <div class="cal-grid" id="calGrid"></div>
+      <div class="gcal-grid-wrap">
+        <div class="gcal-grid" id="calGrid"></div>
+      </div>
     </div>
 
     <!-- Vista Lista -->
@@ -1197,7 +1278,12 @@
   </section>
 
   <!-- EQUIPO -->
-  <section class="page" id="page-equipo">
+  <section class="page page-agenda-wrap" id="page-equipo">
+    <div class="agenda-blocked-overlay" id="overlayEquipo">
+      <strong>Sección desactivada</strong>
+      <p>Activa las citas para configurar el equipo de profesionales.</p>
+      <button class="btn btn-primary" onclick="setTab('citas')">Ir a Citas</button>
+    </div>
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;">
       <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600;">Equipo</h2>
       <button class="btn btn-primary" id="equipoNewBtn" style="margin-left:auto;">+ Nuevo profesional</button>
@@ -1206,7 +1292,12 @@
   </section>
 
   <!-- HORARIOS -->
-  <section class="page" id="page-horarios">
+  <section class="page page-agenda-wrap" id="page-horarios">
+    <div class="agenda-blocked-overlay" id="overlayHorarios">
+      <strong>Sección desactivada</strong>
+      <p>Activa las citas para configurar los horarios y bloqueos.</p>
+      <button class="btn btn-primary" onclick="setTab('citas')">Ir a Citas</button>
+    </div>
     <div class="panel-card">
       <h2>Horarios</h2>
       <p class="panel-sub">Configura disponibilidad general o por profesional.</p>
@@ -1261,7 +1352,12 @@
   </section>
 
   <!-- MENSAJES -->
-  <section class="page" id="page-mensajes">
+  <section class="page page-agenda-wrap" id="page-mensajes">
+    <div class="agenda-blocked-overlay" id="overlayMensajes">
+      <strong>Sección desactivada</strong>
+      <p>Activa las citas para personalizar las plantillas de email.</p>
+      <button class="btn btn-primary" onclick="setTab('citas')">Ir a Citas</button>
+    </div>
     <div class="panel-card">
       <h2>Plantillas de email automático</h2>
       <p class="panel-sub">Personaliza los mensajes que se envían al cliente en cada evento de agenda.</p>
@@ -1451,6 +1547,7 @@ const state = {
   prompt_extra: '',
   starter_questions: [],
   allowed_origins: [],
+  bookingEnabled: true,
   install_snippet: '',
   share_link: '',
   demo_url: '',
@@ -1594,6 +1691,39 @@ async function loadDeploy() {
   }
 }
 
+function _applyBookingEnabledState(enabled) {
+  const AGENDA_TABS = ['equipo', 'horarios', 'mensajes'];
+  AGENDA_TABS.forEach(tab => {
+    document.querySelector(`.nav-item[data-tab="${tab}"]`)?.classList.toggle('booking-nav-disabled', !enabled);
+    const overlayId = 'overlay' + tab.charAt(0).toUpperCase() + tab.slice(1);
+    document.getElementById(overlayId)?.classList.toggle('visible', !enabled);
+  });
+  const row = document.getElementById('bookingToggleRow');
+  if (row) {
+    row.style.borderColor = enabled ? '' : 'rgba(255,100,100,0.4)';
+    row.querySelector('.toggle-info span').textContent = enabled
+      ? 'La IA puede agendar citas. Desactívalo para deshabilitar toda la agenda.'
+      : 'Las citas están desactivadas. La IA no puede agendar ni aparece el botón de cita.';
+  }
+}
+
+document.getElementById('bookingEnabledToggle').addEventListener('change', async (e) => {
+  const enabled = e.target.checked;
+  try {
+    await api('/auth/app/appearance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_enabled: enabled }),
+    });
+    state.bookingEnabled = enabled;
+    _applyBookingEnabledState(enabled);
+    toast(enabled ? 'Citas activadas.' : 'Citas desactivadas. La IA no podrá agendar.', 'success');
+  } catch (err) {
+    e.target.checked = !enabled;
+    toast(err.message, 'error');
+  }
+});
+
 async function loadAppearance() {
   try {
     const data = await api('/auth/app/appearance');
@@ -1611,6 +1741,9 @@ async function loadAppearance() {
       .filter(q => q && !AP_BASE_STARTERS_LOWER.includes((q || '').trim().toLowerCase()))
       .slice(0, 5);
     state.allowed_origins = data.allowed_origins || [];
+    state.bookingEnabled = data.booking_enabled !== false;
+    _applyBookingEnabledState(state.bookingEnabled);
+    document.getElementById('bookingEnabledToggle').checked = state.bookingEnabled;
 
     const accentValue = state.accent_color || '#00F5D4';
     document.getElementById('apAccent').value = accentValue;
@@ -2152,13 +2285,35 @@ document.getElementById('ldSaveBtn').addEventListener('click', async () => {
 });
 
 // ── KNOWLEDGE ─────────────────────────────────────────────────────────
+let _kbFullContent = '';
+
+function _kbEnterEditMode() {
+  document.getElementById('kbExcerpt').style.display = 'none';
+  document.getElementById('kbEditTxt').style.display = 'block';
+  document.getElementById('kbEditTxt').value = _kbFullContent;
+  document.getElementById('kbEditBtn').style.display = 'none';
+  document.getElementById('kbSaveEditBtn').style.display = '';
+  document.getElementById('kbCancelEditBtn').style.display = '';
+  document.getElementById('kbPreviewSub').textContent = 'Edita el contenido directamente. Al guardar, el asistente se reindexa con los nuevos datos.';
+}
+
+function _kbExitEditMode() {
+  document.getElementById('kbExcerpt').style.display = 'block';
+  document.getElementById('kbEditTxt').style.display = 'none';
+  document.getElementById('kbEditBtn').style.display = '';
+  document.getElementById('kbSaveEditBtn').style.display = 'none';
+  document.getElementById('kbCancelEditBtn').style.display = 'none';
+  document.getElementById('kbPreviewSub').textContent = 'Todo el contenido que el asistente usa como contexto.';
+}
+
 async function loadKnowledge() {
   const list = document.getElementById('kbList');
   list.innerHTML = '<div class="panel-sub" style="margin:0;">Cargando…</div>';
   try {
     const data = await api('/auth/app/knowledge');
     document.getElementById('kbChars').textContent = (data.info_chars || 0).toLocaleString();
-    document.getElementById('kbExcerpt').textContent = data.info_excerpt || '(vacío)';
+    document.getElementById('kbExcerpt').textContent = data.info_full || data.info_excerpt || '(vacío)';
+    _kbFullContent = data.info_full || data.info_excerpt || '';
     if (!data.items.length) {
       list.innerHTML = '<div class="panel-sub" style="margin:0;">Sin fuentes adicionales. La base inicial viene del wizard.</div>';
       return;
@@ -2240,6 +2395,23 @@ document.getElementById('kbReindexBtn').addEventListener('click', async () => {
     toast('Índice regenerado', 'success');
     loadKnowledge();
   } catch (err) { toast(err.message, 'error'); }
+});
+document.getElementById('kbEditBtn').addEventListener('click', () => _kbEnterEditMode());
+document.getElementById('kbCancelEditBtn').addEventListener('click', () => _kbExitEditMode());
+document.getElementById('kbSaveEditBtn').addEventListener('click', async () => {
+  const txt = document.getElementById('kbEditTxt').value.trim();
+  if (!txt) { toast('El contenido no puede estar vacío.', 'error'); return; }
+  const btn = document.getElementById('kbSaveEditBtn');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    await api('/auth/brain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ info_txt: txt }) });
+    toast('Conocimiento guardado y reindexado.', 'success');
+    _kbFullContent = txt;
+    document.getElementById('kbExcerpt').textContent = txt;
+    document.getElementById('kbChars').textContent = txt.length.toLocaleString();
+    _kbExitEditMode();
+  } catch (err) { toast(err.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Guardar y reindexar'; }
 });
 
 // ── Q&A ───────────────────────────────────────────────────────────────
@@ -2533,34 +2705,72 @@ async function loadCitas() {
   const now = new Date();
   if (!citasState.calYear) { citasState.calYear = now.getFullYear(); citasState.calMonth = now.getMonth(); }
   const isCalView = document.getElementById('citasCalView').style.display !== 'none';
-  if (isCalView) renderCalendar(); else await fetchCitasList();
+  if (isCalView) { await fetchCitasCalData(); renderCalendar(); } else await fetchCitasList();
+}
+
+async function fetchCitasCalData() {
+  const y = citasState.calYear, m = citasState.calMonth;
+  const from = `${y}-${String(m+1).padStart(2,'0')}-01`;
+  const lastDay = new Date(y, m+1, 0).getDate();
+  const to = `${y}-${String(m+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  try {
+    const data = await api(`/auth/bookings?date_from=${from}&date_to=${to}&limit=200`);
+    citasState.calData = data.items || [];
+  } catch { citasState.calData = []; }
+}
+
+function _switchToListView() {
+  document.getElementById('citasCalView').style.display = 'none';
+  document.getElementById('citasListView').style.display = '';
+  document.getElementById('citasViewList').classList.replace('btn-ghost','btn-primary');
+  document.getElementById('citasViewCal').classList.replace('btn-primary','btn-ghost');
+}
+
+function _syncPeriodChips() {
+  document.querySelectorAll('#citasQuickFilters .filter-chip').forEach(c =>
+    c.classList.toggle('active', c.dataset.period === citasState.period)
+  );
 }
 
 async function fetchCitasList() {
+  _switchToListView();
   const cont = document.getElementById('citasListContent');
   cont.innerHTML = '<div class="panel-sub">Cargando…</div>';
-  const prof = document.getElementById('citasFiltProf').value;
+  const prof   = document.getElementById('citasFiltProf').value;
   const estado = document.getElementById('citasFiltEstado').value;
-  const desde = document.getElementById('citasFiltDesde').value;
-  const hasta = document.getElementById('citasFiltHasta').value;
+  const desde  = document.getElementById('citasFiltDesde').value;
+  const hasta  = document.getElementById('citasFiltHasta').value;
   const period = citasState.period;
 
   let params = `limit=${citasState.pageSize}&offset=${citasState.page * citasState.pageSize}`;
-  if (prof) params += `&employee_id=${encodeURIComponent(prof)}`;
-  if (estado) params += `&status=${encodeURIComponent(estado)}`;
-  if (desde) params += `&date_from=${desde}`;
-  if (hasta) params += `&date_to=${hasta}`;
-  if (period === 'today') { const d = new Date().toISOString().slice(0,10); params += `&date_from=${d}&date_to=${d}`; }
-  else if (period === 'tomorrow') { const d = new Date(Date.now()+86400000).toISOString().slice(0,10); params += `&date_from=${d}&date_to=${d}`; }
-  else if (period === 'week') { const from = new Date().toISOString().slice(0,10); const to = new Date(Date.now()+7*86400000).toISOString().slice(0,10); params += `&date_from=${from}&date_to=${to}`; }
-  else if (period === 'upcoming') { params += `&date_from=${new Date().toISOString().slice(0,10)}`; }
+  if (prof)   params += `&employee_id=${encodeURIComponent(prof)}`;
+  if (estado) params += `&estado=${encodeURIComponent(estado)}`;
+
+  // period chips tienen prioridad sobre fechas manuales
+  if (period === 'today') {
+    const d = new Date().toISOString().slice(0,10);
+    params += `&date_from=${d}&date_to=${d}`;
+  } else if (period === 'tomorrow') {
+    const d = new Date(Date.now()+86400000).toISOString().slice(0,10);
+    params += `&date_from=${d}&date_to=${d}`;
+  } else if (period === 'week') {
+    const from = new Date().toISOString().slice(0,10);
+    const to   = new Date(Date.now()+7*86400000).toISOString().slice(0,10);
+    params += `&date_from=${from}&date_to=${to}`;
+  } else if (period === 'upcoming') {
+    params += `&date_from=${new Date().toISOString().slice(0,10)}`;
+  } else {
+    // 'all' — usar fechas manuales si las hay
+    if (desde) params += `&date_from=${desde}`;
+    if (hasta) params += `&date_to=${hasta}`;
+  }
 
   try {
     const data = await api('/auth/bookings?' + params);
     const items = data.items || data || [];
     citasState.total = data.total || items.length;
     cont.innerHTML = '';
-    if (!items.length) { cont.innerHTML = '<div class="panel-sub">Sin citas con estos filtros.</div>'; }
+    if (!items.length) { cont.innerHTML = '<div class="panel-sub">Sin citas con estos filtros.</div>'; return; }
     items.forEach(b => cont.appendChild(buildCitaRow(b)));
     const info = document.getElementById('citasPageInfo');
     info.textContent = `${citasState.page * citasState.pageSize + 1}–${Math.min((citasState.page+1)*citasState.pageSize, citasState.total)} de ${citasState.total}`;
@@ -2572,48 +2782,72 @@ async function fetchCitasList() {
 function buildCitaRow(b) {
   const row = document.createElement('div');
   row.className = 'panel-card';
-  row.style.cssText = 'padding:14px; background:var(--panel-2);';
-  const fecha = b.datetime || b.date || b.start_time || '';
-  const fmtDate = fecha ? new Date(fecha).toLocaleString('es-ES', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '–';
+  row.style.cssText = 'padding:16px 18px; background:var(--panel-2); margin-bottom:10px;';
+
+  const startAt = b.start_at || b.fecha;
+  const dt = startAt ? new Date(startAt) : null;
+  const fmtDate = dt ? dt.toLocaleDateString('es-ES', { weekday:'short', day:'2-digit', month:'short', year:'numeric' }) : (b.fecha || '–');
+  const fmtTime = dt ? dt.toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : (b.hora || '');
+
+  const statusLabels = { pending:'Pendiente', confirmed:'Confirmada', cancelled:'Cancelada', completed:'Completada' };
   const statusMap = { pending:'badge-pending', confirmed:'badge-confirmed', cancelled:'badge-cancelled', completed:'badge-completed' };
+
+  const bid = b.booking_id || b.id || '';
+
   row.innerHTML = `
-    <div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">
-      <div style="flex:1; min-width:0;">
-        <div style="font-weight:600; margin-bottom:4px;">${escapeHtml(b.client_name || b.name || '(cliente)')}</div>
-        <div class="panel-sub" style="margin:0;">${escapeHtml(b.service_name || b.service || '')} · ${escapeHtml(b.employee_name || b.professional || '')} · ${fmtDate}</div>
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:200px; display:flex; flex-direction:column; gap:6px;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span style="font-weight:700; font-size:1rem;">${escapeHtml(b.nombre || b.client_name || b.name || '(cliente)')}</span>
+          <span class="badge ${statusMap[b.estado || b.status] || ''}">${escapeHtml(statusLabels[b.estado || b.status] || b.estado || b.status || 'pendiente')}</span>
+        </div>
+        <div style="font-size:0.88rem; color:var(--text); font-weight:500;">
+          📅 ${escapeHtml(fmtDate)}${fmtTime ? ' · ' + escapeHtml(fmtTime) : ''}
+        </div>
+        <div style="font-size:0.84rem; color:var(--soft); display:flex; flex-wrap:wrap; gap:12px;">
+          ${b.servicio || b.service_name || b.service ? `<span>🛎 ${escapeHtml(b.servicio || b.service_name || b.service)}</span>` : ''}
+          ${b.employee_name || b.professional ? `<span>👤 ${escapeHtml(b.employee_name || b.professional)}</span>` : ''}
+        </div>
+        <div style="font-size:0.82rem; color:var(--soft-2); display:flex; flex-wrap:wrap; gap:12px;">
+          ${b.email ? `<span>✉ ${escapeHtml(b.email)}</span>` : ''}
+          ${b.telefono ? `<span>📞 ${escapeHtml(b.telefono)}</span>` : ''}
+        </div>
+        ${b.manage_url ? `<div style="margin-top:2px;"><a href="${escapeHtml(b.manage_url)}" target="_blank" rel="noopener" style="font-size:0.79rem; color:var(--accent); text-decoration:none;">🔗 Enlace de gestión del cliente</a></div>` : ''}
       </div>
-      <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
-        <span class="badge ${statusMap[b.status] || ''}">${escapeHtml(b.status || 'pending')}</span>
-        ${b.status !== 'cancelled' && b.status !== 'completed' ? `<button class="btn btn-ghost" data-cancel="${escapeHtml(b.id)}" style="padding:4px 10px; font-size:0.78rem;">Cancelar</button>` : ''}
-        ${b.status !== 'cancelled' && b.status !== 'completed' ? `<button class="btn btn-ghost" data-resched="${escapeHtml(b.id)}" style="padding:4px 10px; font-size:0.78rem;">Reprogramar</button>` : ''}
+      <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end; flex-shrink:0;">
+        ${b.can_reschedule !== false && (b.estado || b.status) !== 'cancelled' && (b.estado || b.status) !== 'completed' ? `<button class="btn btn-ghost" data-resched="${escapeHtml(bid)}" style="padding:5px 12px; font-size:0.8rem;">Reprogramar</button>` : ''}
+        ${b.can_cancel !== false && (b.estado || b.status) !== 'cancelled' && (b.estado || b.status) !== 'completed' ? `<button class="btn btn-ghost" data-cancel="${escapeHtml(bid)}" style="padding:5px 12px; font-size:0.8rem; color:var(--danger,#f55); border-color:var(--danger,#f55);">Cancelar</button>` : ''}
       </div>
     </div>
-    <div id="confirm-${escapeHtml(b.id)}" style="display:none; margin-top:10px; display:none; align-items:center; gap:8px; background:var(--danger-soft); padding:8px 12px; border-radius:8px;">
-      <span style="flex:1; font-size:0.84rem; color:var(--danger);">¿Cancelar esta cita?</span>
-      <button class="btn" style="background:var(--danger); color:#fff; padding:4px 12px; font-size:0.78rem;" data-confirm-cancel="${escapeHtml(b.id)}">Sí, cancelar</button>
-      <button class="btn btn-ghost" style="padding:4px 10px; font-size:0.78rem;" data-dismiss-cancel="${escapeHtml(b.id)}">No</button>
+    <div id="confirm-${escapeHtml(bid)}" style="display:none; margin-top:10px; align-items:center; gap:8px; background:rgba(255,80,80,0.08); padding:8px 12px; border-radius:8px;">
+      <span style="flex:1; font-size:0.84rem; color:var(--danger,#f55);">¿Cancelar esta cita?</span>
+      <button class="btn" style="background:var(--danger,#f55); color:#fff; padding:4px 12px; font-size:0.78rem;" data-confirm-cancel="${escapeHtml(bid)}">Sí, cancelar</button>
+      <button class="btn btn-ghost" style="padding:4px 10px; font-size:0.78rem;" data-dismiss-cancel="${escapeHtml(bid)}">No</button>
     </div>`;
-  const cancelBtn = row.querySelector(`[data-cancel="${b.id}"]`);
+
+  const cancelBtn = row.querySelector(`[data-cancel="${bid}"]`);
   if (cancelBtn) cancelBtn.addEventListener('click', () => {
-    const conf = row.querySelector(`#confirm-${b.id}`); conf.style.display = 'flex';
+    row.querySelector(`#confirm-${bid}`).style.display = 'flex';
   });
-  const confBtn = row.querySelector(`[data-confirm-cancel="${b.id}"]`);
+  const confBtn = row.querySelector(`[data-confirm-cancel="${bid}"]`);
   if (confBtn) confBtn.addEventListener('click', async () => {
-    try { await api(`/auth/bookings/${b.id}/cancel`, { method:'POST' }); toast('Cita cancelada', 'success'); fetchCitasList(); }
+    try { await api(`/auth/bookings/${bid}/cancel`, { method:'POST' }); toast('Cita cancelada', 'success'); fetchCitasList(); }
     catch(e) { toast(e.message, 'error'); }
   });
-  const dismissBtn = row.querySelector(`[data-dismiss-cancel="${b.id}"]`);
-  if (dismissBtn) dismissBtn.addEventListener('click', () => { row.querySelector(`#confirm-${b.id}`).style.display = 'none'; });
-  const reschedBtn = row.querySelector(`[data-resched="${b.id}"]`);
+  const dismissBtn = row.querySelector(`[data-dismiss-cancel="${bid}"]`);
+  if (dismissBtn) dismissBtn.addEventListener('click', () => { row.querySelector(`#confirm-${bid}`).style.display = 'none'; });
+  const reschedBtn = row.querySelector(`[data-resched="${bid}"]`);
   if (reschedBtn) reschedBtn.addEventListener('click', () => openReschedDrawer(b));
   return row;
 }
 
 async function openReschedDrawer(b) {
-  document.getElementById('reschedBookingId').value = b.id;
+  const bid = b.booking_id || b.id || '';
+  document.getElementById('reschedBookingId').value = bid;
   document.getElementById('reschedSlotSelected').value = '';
-  document.getElementById('reschedDesc').textContent = `Cita de ${b.client_name || b.name || '(cliente)'} — ${b.service_name || ''}`;
-  document.getElementById('reschedDate').value = (b.datetime || b.date || '').slice(0,10);
+  document.getElementById('reschedDesc').textContent = `Cita de ${b.nombre || b.client_name || b.name || '(cliente)'} — ${b.servicio || b.service_name || ''}`;
+  const dateRef = b.start_at || b.fecha || b.datetime || b.date || '';
+  document.getElementById('reschedDate').value = dateRef.slice(0,10);
   document.getElementById('reschedConfirmBtn').disabled = true;
   document.getElementById('reschedDrawer').classList.add('open');
   document.getElementById('reschedOverlay').classList.add('open');
@@ -2627,16 +2861,18 @@ async function loadReschedSlots() {
   slotsDiv.innerHTML = '<div class="panel-sub">Cargando huecos…</div>';
   try {
     const data = await api(`/disponibilidad?cliente_id=${state.cliente_id}&fecha=${date}`);
-    const slots = data.slots || data || [];
+    const allSlots = data.slots || data || [];
+    const slots = allSlots.filter(s => s.disponible !== false);
     slotsDiv.innerHTML = '';
     if (!slots.length) { slotsDiv.innerHTML = '<div class="panel-sub">Sin huecos disponibles ese día.</div>'; return; }
     slots.forEach(s => {
+      const hora = s.hora || s.time || String(s);
       const btn = document.createElement('button');
-      btn.className = 'filter-chip'; btn.textContent = s.time || s;
+      btn.className = 'filter-chip'; btn.textContent = hora;
       btn.addEventListener('click', () => {
         slotsDiv.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
         btn.classList.add('active');
-        document.getElementById('reschedSlotSelected').value = s.datetime || (date + 'T' + (s.time || s));
+        document.getElementById('reschedSlotSelected').value = s.datetime || (date + 'T' + hora + ':00');
         document.getElementById('reschedConfirmBtn').disabled = false;
       });
       slotsDiv.appendChild(btn);
@@ -2659,71 +2895,106 @@ document.getElementById('reschedConfirmBtn').addEventListener('click', async () 
 document.getElementById('reschedClose').addEventListener('click', () => { document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
 document.getElementById('reschedOverlay').addEventListener('click', () => { document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
 
-document.getElementById('citasViewCal').addEventListener('click', () => {
+document.getElementById('citasViewCal').addEventListener('click', async () => {
   document.getElementById('citasCalView').style.display = '';
   document.getElementById('citasListView').style.display = 'none';
   document.getElementById('citasViewCal').classList.replace('btn-ghost', 'btn-primary');
   document.getElementById('citasViewList').classList.replace('btn-primary', 'btn-ghost');
-  renderCalendar();
+  await fetchCitasCalData(); renderCalendar();
 });
-document.getElementById('citasViewList').addEventListener('click', () => {
-  document.getElementById('citasCalView').style.display = 'none';
-  document.getElementById('citasListView').style.display = '';
-  document.getElementById('citasViewList').classList.replace('btn-ghost', 'btn-primary');
-  document.getElementById('citasViewCal').classList.replace('btn-primary', 'btn-ghost');
-  fetchCitasList();
-});
+document.getElementById('citasViewList').addEventListener('click', () => { citasState.page = 0; fetchCitasList(); });
 document.getElementById('citasPrevPage').addEventListener('click', () => { citasState.page--; fetchCitasList(); });
 document.getElementById('citasNextPage').addEventListener('click', () => { citasState.page++; fetchCitasList(); });
+// Dropdowns y fechas — disparan fetch al cambiar
+['citasFiltProf','citasFiltEstado'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    citasState.page = 0; fetchCitasList();
+  });
+});
+['citasFiltDesde','citasFiltHasta'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    // al tocar fechas manuales, desactivar period chip y poner 'all'
+    citasState.period = 'all'; _syncPeriodChips();
+    citasState.page = 0; fetchCitasList();
+  });
+});
+
 document.getElementById('citasFiltLimpiar').addEventListener('click', () => {
   ['citasFiltProf','citasFiltEstado'].forEach(id => document.getElementById(id).value = '');
   ['citasFiltDesde','citasFiltHasta'].forEach(id => document.getElementById(id).value = '');
   citasState.period = 'all'; citasState.page = 0;
-  document.querySelectorAll('#citasQuickFilters .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.period === 'all'));
-  fetchCitasList();
+  _syncPeriodChips(); fetchCitasList();
 });
+
 document.querySelectorAll('#citasQuickFilters .filter-chip').forEach(chip => {
   chip.addEventListener('click', () => {
     citasState.period = chip.dataset.period; citasState.page = 0;
-    document.querySelectorAll('#citasQuickFilters .filter-chip').forEach(c => c.classList.toggle('active', c === chip));
-    fetchCitasList();
+    // limpiar fechas manuales al usar un chip de periodo
+    ['citasFiltDesde','citasFiltHasta'].forEach(id => document.getElementById(id).value = '');
+    _syncPeriodChips(); fetchCitasList();
   });
 });
+
+const CAL_STATUS_COLORS = { confirmed:'#0ea5e9', pending:'#f59e0b', completed:'#10b981', cancelled:'#6b7280' };
 
 function renderCalendar() {
   const y = citasState.calYear, m = citasState.calMonth;
   const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   document.getElementById('calTitle').textContent = `${monthNames[m]} ${y}`;
   const grid = document.getElementById('calGrid');
-  grid.innerHTML = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d => `<div class="cal-hdr">${d}</div>`).join('');
+  grid.innerHTML = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d => `<div class="gcal-day-hdr">${d}</div>`).join('');
+
   const first = new Date(y, m, 1);
   const startDay = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(y, m+1, 0).getDate();
   const today = new Date();
+
   for (let i = 0; i < startDay; i++) {
     const prev = new Date(y, m, -startDay + i + 1);
-    const d = document.createElement('div'); d.className = 'cal-day other-month';
-    d.innerHTML = `<div class="cal-day-num">${prev.getDate()}</div>`;
-    grid.appendChild(d);
+    const cell = document.createElement('div'); cell.className = 'gcal-day other-month';
+    cell.innerHTML = `<div class="gcal-day-num">${prev.getDate()}</div>`;
+    grid.appendChild(cell);
   }
+
   for (let day = 1; day <= daysInMonth; day++) {
-    const d = document.createElement('div'); d.className = 'cal-day';
-    if (y === today.getFullYear() && m === today.getMonth() && day === today.getDate()) d.classList.add('today');
+    const cell = document.createElement('div'); cell.className = 'gcal-day';
     const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const count = (citasState.calData || []).filter(b => (b.datetime||b.date||'').slice(0,10) === dateStr).length;
-    d.innerHTML = `<div class="cal-day-num">${day}</div>${count ? `<div class="cal-dot"></div><div class="cal-dot-count">${count}</div>` : ''}`;
-    d.addEventListener('click', () => {
+    if (y === today.getFullYear() && m === today.getMonth() && day === today.getDate()) cell.classList.add('today');
+
+    const dayBookings = (citasState.calData || []).filter(b =>
+      (b.start_at || b.fecha || b.datetime || b.date || '').slice(0, 10) === dateStr
+    );
+
+    const MAX_PILLS = 3;
+    const visible = dayBookings.slice(0, MAX_PILLS);
+    const extra = dayBookings.length - MAX_PILLS;
+
+    let html = `<div class="gcal-day-num">${day}</div>`;
+    visible.forEach(b => {
+      const dt = b.start_at ? new Date(b.start_at) : null;
+      const hora = b.hora || (dt ? dt.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'}) : '');
+      const label = [hora, escapeHtml(b.nombre || '')].filter(Boolean).join(' ');
+      const color = CAL_STATUS_COLORS[b.estado || b.status] || CAL_STATUS_COLORS.pending;
+      html += `<span class="gcal-event-pill" style="background:${color}" title="${escapeHtml(b.nombre||'')} — ${escapeHtml(b.servicio||'')} ${hora}">${label}</span>`;
+    });
+    if (extra > 0) html += `<span class="gcal-more">+${extra} más</span>`;
+
+    cell.innerHTML = html;
+    cell.addEventListener('click', () => {
       document.getElementById('citasFiltDesde').value = dateStr;
       document.getElementById('citasFiltHasta').value = dateStr;
       document.getElementById('citasCalView').style.display = 'none';
       document.getElementById('citasListView').style.display = '';
+      document.getElementById('citasViewList').classList.replace('btn-ghost','btn-primary');
+      document.getElementById('citasViewCal').classList.replace('btn-primary','btn-ghost');
       citasState.page = 0; fetchCitasList();
     });
-    grid.appendChild(d);
+    grid.appendChild(cell);
   }
 }
-document.getElementById('calPrev').addEventListener('click', () => { citasState.calMonth--; if (citasState.calMonth < 0) { citasState.calMonth = 11; citasState.calYear--; } renderCalendar(); });
-document.getElementById('calNext').addEventListener('click', () => { citasState.calMonth++; if (citasState.calMonth > 11) { citasState.calMonth = 0; citasState.calYear++; } renderCalendar(); });
+document.getElementById('calPrev').addEventListener('click', async () => { citasState.calMonth--; if (citasState.calMonth < 0) { citasState.calMonth = 11; citasState.calYear--; } await fetchCitasCalData(); renderCalendar(); });
+document.getElementById('calNext').addEventListener('click', async () => { citasState.calMonth++; if (citasState.calMonth > 11) { citasState.calMonth = 0; citasState.calYear++; } await fetchCitasCalData(); renderCalendar(); });
+document.getElementById('calToday').addEventListener('click', async () => { const n = new Date(); citasState.calYear = n.getFullYear(); citasState.calMonth = n.getMonth(); await fetchCitasCalData(); renderCalendar(); });
 
 // ── EQUIPO ────────────────────────────────────────────────────────────
 let allServices = [];
@@ -2773,23 +3044,55 @@ function loadCitasProfSelect(emps) {
 }
 
 function openEquipoPanel(emp) {
+  const isDefault = !!(emp?.raw?.is_default);
   document.getElementById('equipoEditId').value = emp ? emp.id : '';
-  document.getElementById('equipoPanelTitle').textContent = emp ? 'Editar profesional' : 'Nuevo profesional';
+  document.getElementById('equipoPanelTitle').textContent = isDefault ? 'Agenda general' : (emp ? 'Editar profesional' : 'Nuevo profesional');
   document.getElementById('equipoNombre').value = emp ? emp.name : '';
   document.getElementById('equipoRol').value = emp ? (emp.role||'') : '';
   document.getElementById('equipoColor').value = emp ? (emp.color||'#00D1FF') : '#00D1FF';
   document.getElementById('equipoColorText').value = emp ? (emp.color||'#00D1FF') : '#00D1FF';
   document.getElementById('equipoActivo').checked = emp ? !!emp.active : true;
-  const servCheck = document.getElementById('equipoServicesCheck');
-  servCheck.innerHTML = '';
-  allServices.forEach(s => {
-    const assigned = emp && emp.service_ids ? emp.service_ids.includes(s.id) : false;
-    const lbl = document.createElement('label');
-    lbl.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:0.84rem; color:var(--soft);';
-    lbl.innerHTML = `<input type="checkbox" value="${escapeHtml(s.id)}" ${assigned?'checked':''} /> ${escapeHtml(s.name)}`;
-    servCheck.appendChild(lbl);
-  });
-  document.getElementById('equipoDeleteBtn').style.display = emp ? '' : 'none';
+
+  // Activo: oculto para la agenda general (siempre activa)
+  const activoLabel = document.getElementById('equipoActivo')?.closest('label');
+  if (activoLabel) activoLabel.style.display = isDefault ? 'none' : '';
+
+  // Servicios: bloqueados para la agenda general
+  const servicesSection = document.getElementById('equipoServicesCheck').closest('.field');
+  const allServicesLabel = document.getElementById('equipoAllServices')?.closest('label');
+  if (isDefault) {
+    if (servicesSection) servicesSection.style.display = 'none';
+    if (allServicesLabel) allServicesLabel.style.display = 'none';
+    const note = document.getElementById('equipoDefaultNote') || (() => {
+      const d = document.createElement('div');
+      d.id = 'equipoDefaultNote';
+      d.style.cssText = 'font-size:0.82rem; color:var(--soft-2); padding:8px 10px; background:rgba(255,255,255,0.04); border-radius:8px; margin-bottom:12px;';
+      d.textContent = 'La agenda general atiende todos los servicios y no puede eliminarse. Puedes editar su nombre y rol.';
+      servicesSection?.parentNode?.insertBefore(d, servicesSection);
+      return d;
+    })();
+    note.style.display = '';
+  } else {
+    if (servicesSection) servicesSection.style.display = '';
+    if (allServicesLabel) allServicesLabel.style.display = '';
+    document.getElementById('equipoDefaultNote')?.remove();
+    const servCheck = document.getElementById('equipoServicesCheck');
+    servCheck.innerHTML = '';
+    const empServiceIds = emp ? (emp.service_ids || emp.raw?.service_ids || []) : [];
+    allServices.forEach(s => {
+      const assigned = empServiceIds.includes(s.id);
+      const lbl = document.createElement('label');
+      lbl.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:0.84rem; color:var(--soft); margin-bottom:4px;';
+      lbl.innerHTML = `<input type="checkbox" value="${escapeHtml(s.id)}" ${assigned?'checked':''} /> ${escapeHtml(s.nombre || s.name || s.id)}`;
+      servCheck.appendChild(lbl);
+    });
+    if (!allServices.length) {
+      document.getElementById('equipoServicesCheck').innerHTML = '<div style="font-size:0.82rem; color:var(--soft-2);">Sin servicios configurados en la base de conocimiento.</div>';
+    }
+  }
+
+  // Eliminar: oculto para la agenda general
+  document.getElementById('equipoDeleteBtn').style.display = (emp && !isDefault) ? '' : 'none';
   document.getElementById('equipoPanel').classList.add('open');
   document.getElementById('equipoOverlay').classList.add('open');
 }
@@ -2802,18 +3105,22 @@ document.getElementById('equipoColorText').addEventListener('input', e => { if (
 
 document.getElementById('equipoSaveBtn').addEventListener('click', async () => {
   const id = document.getElementById('equipoEditId').value;
-  const payload = {
-    name: document.getElementById('equipoNombre').value.trim(),
-    role: document.getElementById('equipoRol').value.trim(),
-    color: document.getElementById('equipoColor').value,
-    active: document.getElementById('equipoActivo').checked,
-    service_ids: [...document.querySelectorAll('#equipoServicesCheck input:checked')].map(c => c.value),
-  };
-  if (!payload.name) { toast('El nombre es obligatorio.', 'error'); return; }
+  const isDefault = !!document.getElementById('equipoDefaultNote');
+  const name = document.getElementById('equipoNombre').value.trim();
+  if (!name) { toast('El nombre es obligatorio.', 'error'); return; }
+  const payload = isDefault
+    ? { name, role: document.getElementById('equipoRol').value.trim(), color: document.getElementById('equipoColor').value, active: true }
+    : {
+        name,
+        role: document.getElementById('equipoRol').value.trim(),
+        color: document.getElementById('equipoColor').value,
+        active: document.getElementById('equipoActivo').checked,
+        service_ids: [...document.querySelectorAll('#equipoServicesCheck input:checked')].map(c => c.value),
+      };
   try {
-    if (id) await api(`/auth/employees/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    if (id) await api(`/auth/employees/${id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     else await api('/auth/employees', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    toast('Profesional guardado', 'success');
+    toast('Guardado correctamente.', 'success');
     document.getElementById('equipoPanel').classList.remove('open'); document.getElementById('equipoOverlay').classList.remove('open');
     loadEquipo();
   } catch(e) { toast(e.message, 'error'); }

@@ -221,90 +221,25 @@ def _resolve_widget_starters(config: Dict[str, Any]) -> List[str]:
     return fused
 
 # ─── Planes y suscripciones ───────────────────────────────────────────
-PLAN_DEFAULT = "web"
-PLAN_VALID = {"web", "whatsapp", "completo"}
+PLAN_DEFAULT = "free"
 
-# Slugs anteriores → nuevos (compat hacia atrás para suscripciones existentes y configs)
-PLAN_LEGACY_ALIASES: Dict[str, str] = {
-    "esencial": "web",
-    "pro": "whatsapp",
-    "empresa": "completo",
+# Aliases de planes legacy → self-serve actuales
+_PLAN_LEGACY_ALIASES: Dict[str, str] = {
+    "web": "starter", "esencial": "free",
+    "whatsapp": "pro", "pro": "pro",
+    "completo": "business", "empresa": "business",
 }
 
 
 def _normalize_plan_slug(plan: str) -> str:
     p = (plan or "").strip().lower()
-    return PLAN_LEGACY_ALIASES.get(p, p)
+    return _PLAN_LEGACY_ALIASES.get(p, p)
 
-
-PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
-    "web": {
-        "label": "Web",
-        "monthly_conversations": 500,
-        "monthly_bookings": 50,
-        "max_professionals": 1,
-        "max_users": 1,
-        "max_extra_documents": 0,
-        "branding_customization": False,
-        "whatsapp_enabled": False,
-        "csv_export": False,
-        "multi_branch": False,
-        "crm_integration": False,
-        "show_powered_by": True,
-        "price_eur": 49,
-    },
-    "whatsapp": {
-        "label": "WhatsApp",
-        "monthly_conversations": 1000,
-        "monthly_bookings": 200,
-        "max_professionals": 1,
-        "max_users": 1,
-        "max_extra_documents": 0,
-        "branding_customization": False,
-        "whatsapp_enabled": True,
-        "csv_export": False,
-        "multi_branch": False,
-        "crm_integration": False,
-        "show_powered_by": True,
-        "price_eur": 79,
-    },
-    "completo": {
-        "label": "Completo",
-        "monthly_conversations": 2500,
-        "monthly_bookings": 500,
-        "max_professionals": 5,
-        "max_users": 3,
-        "max_extra_documents": 50,
-        "branding_customization": True,
-        "whatsapp_enabled": True,
-        "csv_export": True,
-        "multi_branch": False,
-        "crm_integration": False,
-        "show_powered_by": False,
-        "price_eur": 89,
-    },
-}
 
 # Stripe
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "").strip()
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
-STRIPE_PRICE_WEB = os.getenv("STRIPE_PRICE_WEB", "").strip()
-STRIPE_PRICE_WHATSAPP = os.getenv("STRIPE_PRICE_WHATSAPP", "").strip()
-STRIPE_PRICE_COMPLETO = os.getenv("STRIPE_PRICE_COMPLETO", "").strip()
-STRIPE_PRICE_BY_PLAN = {
-    "web": STRIPE_PRICE_WEB,
-    "whatsapp": STRIPE_PRICE_WHATSAPP,
-    "completo": STRIPE_PRICE_COMPLETO,
-}
-STRIPE_PRICE_WEB_ANNUAL = os.getenv("STRIPE_PRICE_WEB_ANNUAL", "").strip()
-STRIPE_PRICE_WHATSAPP_ANNUAL = os.getenv("STRIPE_PRICE_WHATSAPP_ANNUAL", "").strip()
-STRIPE_PRICE_COMPLETO_ANNUAL = os.getenv("STRIPE_PRICE_COMPLETO_ANNUAL", "").strip()
-STRIPE_PRICE_ANNUAL_BY_PLAN = {
-    "web": STRIPE_PRICE_WEB_ANNUAL,
-    "whatsapp": STRIPE_PRICE_WHATSAPP_ANNUAL,
-    "completo": STRIPE_PRICE_COMPLETO_ANNUAL,
-}
 
 # Self-serve plans (Vantelia 2.0)
 STRIPE_PRICE_STARTER = os.getenv("STRIPE_PRICE_STARTER", "").strip()
@@ -356,6 +291,73 @@ SELF_SERVE_PLANS: Dict[str, Dict[str, Any]] = {
         "features": ["chat", "uploads", "branding", "leads_export", "booking", "live_chat", "qa", "tune", "whatsapp", "integrations"],
         "stripe_price_monthly": STRIPE_PRICE_BUSINESS,
         "stripe_price_annual": STRIPE_PRICE_BUSINESS_ANNUAL,
+    },
+}
+
+
+PLAN_VALID: set = set(SELF_SERVE_PLANS.keys())
+
+# Límites operativos por plan (fusiona con SELF_SERVE_PLANS)
+PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
+    "free": {
+        "label": "Free",
+        "monthly_conversations": int(os.getenv("PLAN_FREE_QUOTA", "50")),
+        "monthly_bookings": 0,
+        "max_professionals": 1,
+        "max_users": 1,
+        "max_extra_documents": 0,
+        "branding_customization": False,
+        "whatsapp_enabled": False,
+        "csv_export": False,
+        "multi_branch": False,
+        "crm_integration": False,
+        "show_powered_by": True,
+        "price_eur": 0,
+    },
+    "starter": {
+        "label": "Starter",
+        "monthly_conversations": int(os.getenv("PLAN_STARTER_QUOTA", "1000")),
+        "monthly_bookings": 100,
+        "max_professionals": 1,
+        "max_users": 1,
+        "max_extra_documents": 5,
+        "branding_customization": True,
+        "whatsapp_enabled": False,
+        "csv_export": True,
+        "multi_branch": False,
+        "crm_integration": False,
+        "show_powered_by": False,
+        "price_eur": int(os.getenv("PLAN_STARTER_PRICE_EUR", "19")),
+    },
+    "pro": {
+        "label": "Pro",
+        "monthly_conversations": int(os.getenv("PLAN_PRO_QUOTA", "5000")),
+        "monthly_bookings": 500,
+        "max_professionals": 3,
+        "max_users": 2,
+        "max_extra_documents": 20,
+        "branding_customization": True,
+        "whatsapp_enabled": False,
+        "csv_export": True,
+        "multi_branch": False,
+        "crm_integration": False,
+        "show_powered_by": False,
+        "price_eur": int(os.getenv("PLAN_PRO_PRICE_EUR", "49")),
+    },
+    "business": {
+        "label": "Business",
+        "monthly_conversations": int(os.getenv("PLAN_BUSINESS_QUOTA", "25000")),
+        "monthly_bookings": None,
+        "max_professionals": None,
+        "max_users": None,
+        "max_extra_documents": None,
+        "branding_customization": True,
+        "whatsapp_enabled": True,
+        "csv_export": True,
+        "multi_branch": True,
+        "crm_integration": True,
+        "show_powered_by": False,
+        "price_eur": int(os.getenv("PLAN_BUSINESS_PRICE_EUR", "149")),
     },
 }
 
@@ -574,8 +576,7 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
 
     incoming_subscription = payload.get("subscription") if isinstance(payload.get("subscription"), dict) else {}
     explicit_plan = payload.get("plan") or incoming_subscription.get("plan")
-    inferred_default_plan = "whatsapp" if payload.get("whatsapp", {}).get("enabled", False) else PLAN_DEFAULT
-    plan = _normalize_plan_slug(explicit_plan or inferred_default_plan)
+    plan = _normalize_plan_slug(explicit_plan or PLAN_DEFAULT)
     if plan not in PLAN_VALID:
         plan = PLAN_DEFAULT
     subscription = dict(incoming_subscription)
@@ -2556,6 +2557,7 @@ class AppAppearancePayload(BaseModel):
     prompt_extra: Optional[str] = Field(default=None, max_length=4000)
     starter_questions: Optional[List[str]] = None
     allowed_origins: Optional[List[str]] = None
+    booking_enabled: Optional[bool] = None
 
 
 class AppAppearanceResponse(BaseModel):
@@ -2572,6 +2574,7 @@ class AppAppearanceResponse(BaseModel):
     prompt_extra: str
     starter_questions: List[str] = Field(default_factory=list)
     allowed_origins: List[str] = Field(default_factory=list)
+    booking_enabled: bool = True
 
 
 # --- Vantelia 2.0 dashboard - Sem 4 (Leads, Q&A, Knowledge, Tune AI, Live Chat) ---
@@ -2644,6 +2647,7 @@ class AppKnowledgeListResponse(BaseModel):
     items: List[AppKnowledgeItem]
     info_chars: int = 0
     info_excerpt: str = ""
+    info_full: str = ""
 
 
 class AppKnowledgeTextPayload(BaseModel):
@@ -2988,6 +2992,7 @@ class PortalBookingSummary(BaseModel):
     employee_name: str = ""
     nombre: str
     email: str
+    telefono: str = ""
     servicio: str
     fecha: str
     hora: str
@@ -4298,7 +4303,7 @@ def _send_checkout_welcome_email(
     clean_name = _sanitize_text(display_name) or _sanitize_text(company_name) or "Cliente"
     clean_company = _sanitize_text(company_name) or clean_name
     clean_ai_name = _sanitize_text(ai_name) or "Asistente Vantelia"
-    plan_label = PLAN_LIMITS.get(plan, {}).get("label") or plan.title()
+    plan_label = _plan_limits(plan).get("label") or plan.title()
     period_label = "mensual" if billing_period == "monthly" else "anual"
     subject = "Tu alta en Vantelia esta lista"
 
@@ -4431,7 +4436,7 @@ def _send_payment_failed_emails(
     customer_id: str,
     subscription_id: str,
 ) -> None:
-    plan_label = PLAN_LIMITS.get(plan, {}).get("label") or plan.title() or "-"
+    plan_label = _plan_limits(plan).get("label") or plan.title() or "-"
     next_attempt_label = next_attempt_iso or "Sin nuevo intento programado"
     invoice_link = hosted_invoice_url or "https://app.vantelia.es/portal"
     support_email = PORTAL_SUPPORT_EMAIL or DEFAULT_VANTELIA_SUPPORT_EMAIL or "soporte@vantelia.es"
@@ -4517,9 +4522,9 @@ def _send_checkout_admin_notification(
 ) -> None:
     if not CONSULTA_NOTIFICATION_EMAIL:
         return
-    plan_label = PLAN_LIMITS.get(plan, {}).get("label") or plan.title()
+    plan_label = _plan_limits(plan).get("label") or plan.title()
     period_label = "mensual" if billing_period == "monthly" else "anual"
-    price_eur = PLAN_LIMITS.get(plan, {}).get("price_eur") or "-"
+    price_eur = _plan_limits(plan).get("price_eur") or "-"
     subject = f"Nueva alta Vantelia: {company_name} ({plan_label})"
     text_body = (
         f"Nuevo cliente dado de alta automaticamente desde Stripe Checkout.\n\n"
@@ -5050,10 +5055,29 @@ def _portal_ai_config_from_client_config(cliente_id: str) -> PortalAiConfigPubli
 def _client_subscription(cliente_id: str) -> Dict[str, Any]:
     config = CONFIG_CLIENTES.get(cliente_id) or {}
     sub = config.get("subscription") or {}
+
+    # Self-serve users store their plan in the DB. DB takes precedence over config.json.
+    db_sub = db_subscription_for_cliente(cliente_id)
+    if db_sub:
+        db_plan = _normalize_plan_slug(db_sub["plan"] or PLAN_DEFAULT)
+        if db_plan not in PLAN_VALID:
+            db_plan = PLAN_DEFAULT
+        return {
+            "plan": db_plan,
+            "status": str(db_sub["status"] or "active"),
+            "started_at": str(db_sub["current_period_start"] or ""),
+            "renews_at": str(db_sub["current_period_end"] or ""),
+            "canceled_at": "",
+            "stripe_customer_id": str(db_sub["stripe_customer_id"] or ""),
+            "stripe_subscription_id": str(db_sub["stripe_subscription_id"] or ""),
+            "billing_period": "monthly",
+            "lifetime": bool(db_sub["cancel_at_period_end"] == 0 and (db_sub["stripe_subscription_id"] or "") == "" and db_plan != "free"),
+        }
+
     plan = _normalize_plan_slug(sub.get("plan") or config.get("plan") or PLAN_DEFAULT)
     if plan not in PLAN_VALID:
         plan = PLAN_DEFAULT
-    return {
+    return {  # noqa: RET504
         "plan": plan,
         "status": str(sub.get("status") or "active"),
         "started_at": str(sub.get("started_at") or ""),
@@ -5071,7 +5095,8 @@ def _client_plan(cliente_id: str) -> str:
 
 
 def _plan_limits(plan: str) -> Dict[str, Any]:
-    return PLAN_LIMITS.get(plan) or PLAN_LIMITS[PLAN_DEFAULT]
+    normalized = _normalize_plan_slug(plan)
+    return PLAN_LIMITS.get(normalized) or PLAN_LIMITS[PLAN_DEFAULT]
 
 
 def _plan_feature(cliente_id: str, feature: str) -> Any:
@@ -5196,7 +5221,7 @@ def _build_subscription_public(cliente_id: str, *, admin_override: bool = False)
     if not sub.get("lifetime"):
         sub = _refresh_subscription_from_stripe(cliente_id, sub)
     plan = sub["plan"]
-    effective_plan = "completo" if admin_override else plan
+    effective_plan = "business" if admin_override else plan
     limits = _plan_limits(effective_plan)
     actual_limits = _plan_limits(plan)
     period_start, period_end = _current_billing_period()
@@ -5219,15 +5244,15 @@ def _build_subscription_public(cliente_id: str, *, admin_override: bool = False)
         max_users=limits.get("max_users"),
         max_extra_documents=limits.get("max_extra_documents"),
     )
-    available = []
-    for plan_id in ("web", "whatsapp", "completo"):
-        info = PLAN_LIMITS[plan_id]
-        available.append({
-            "plan": plan_id,
-            "label": info["label"],
-            "price_eur": info["price_eur"],
-            "is_current": plan_id == plan,
-        })
+    available = [
+        {
+            "plan": pid,
+            "label": PLAN_LIMITS[pid]["label"],
+            "price_eur": PLAN_LIMITS[pid]["price_eur"],
+            "is_current": pid == plan,
+        }
+        for pid in ("starter", "pro", "business")
+    ]
     return SubscriptionPublic(
         plan=plan,
         plan_label=str(actual_limits.get("label") or plan.title()),
@@ -5260,8 +5285,8 @@ def _set_client_subscription(cliente_id: str, **fields: Any) -> None:
         else:
             sub[key] = value
     config["subscription"] = sub
-    if "plan" in fields and fields.get("plan") in PLAN_VALID:
-        config["plan"] = fields["plan"]
+    if "plan" in fields and _normalize_plan_slug(str(fields.get("plan") or "")) in PLAN_VALID:
+        config["plan"] = _normalize_plan_slug(str(fields["plan"]))
     _persist_configs_to_disk(next_configs)
     _update_runtime_configs(next_configs)
 
@@ -5283,12 +5308,13 @@ def _stripe_price_for_plan(plan: str, billing_period: str = "monthly") -> Tuple[
     if normalized_plan not in PLAN_VALID:
         raise HTTPException(status_code=400, detail="Plan no valido.")
 
+    plan_def = _self_serve_plan(normalized_plan)
     normalized_period = str(billing_period or "monthly").strip().lower()
     if normalized_period in {"annual", "yearly", "year"}:
-        price_id = STRIPE_PRICE_ANNUAL_BY_PLAN.get(normalized_plan, "")
+        price_id = plan_def.get("stripe_price_annual", "")
         period = "annual"
     elif normalized_period in {"monthly", "month", ""}:
-        price_id = STRIPE_PRICE_BY_PLAN.get(normalized_plan, "")
+        price_id = plan_def.get("stripe_price_monthly", "")
         period = "monthly"
     else:
         raise HTTPException(status_code=400, detail="Periodo de facturacion no valido.")
@@ -7221,12 +7247,25 @@ def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
         contact_lines.append(f"- Web: {contacto['web']}")
     contact_block = "\n".join(contact_lines) if contact_lines else "- (no configurados; deriva al equipo humano cuando los pidan)"
 
-    booking_rule = (
-        f"Si el usuario pide reservar, agendar, coger cita, ver huecos o iniciar una solicitud de cita, anade al final {BOOKING_SENTINEL}. "
-        f"No lo anadas en consultas informativas normales."
-        if booking_enabled
-        else f"La reserva online NO esta habilitada para {nombre_empresa}. No prometas agendar ni anadas {BOOKING_SENTINEL}; deriva a contacto humano si quieren cita."
-    )
+    if booking_enabled:
+        booking_rule = (
+            f"Si el usuario pide reservar, agendar, coger cita, ver huecos o iniciar una solicitud de cita, anade al final {BOOKING_SENTINEL}. "
+            f"No lo anadas en consultas informativas normales."
+        )
+    else:
+        contact_hint = ""
+        if contacto.get("telefono") or contacto.get("email"):
+            parts = []
+            if contacto.get("telefono"):
+                parts.append(f"llamando al {contacto['telefono']}")
+            if contacto.get("email"):
+                parts.append(f"escribiendo a {contacto['email']}")
+            contact_hint = f" Indica que pueden ponerse en contacto {' o '.join(parts)} para gestionar su cita."
+        booking_rule = (
+            f"La reserva online NO esta habilitada para {nombre_empresa}. "
+            f"No prometas agendar ni anadas {BOOKING_SENTINEL}. "
+            f"Si el usuario pide cita, reserva, hueco o menciona agendar, responde que la reserva online no esta disponible y derívalo al contacto humano.{contact_hint}"
+        )
 
     booking_window_line = ""
     if booking_enabled:
@@ -7311,7 +7350,7 @@ EXPERIENCIA TIPO MENU INTERACTIVO
 26. Si la consulta del usuario es ambigua o termina un flujo, ofrece tambien volver al menu principal.
 27. Usa emojis con moderacion (📅 cita, 💬 dudas, 🛍️ productos, ⭐ recomendacion, ⚖️ comparar, 💶 precio). Maximo 1-2 por respuesta.
 28. Mensajes cortos y claros, formato conversacional, listas con "· **Titulo:** ..." cuando enumeres opciones o pasos.
-29. En el flujo "agendar" cita por chat (sin formulario): pregunta UNA cosa por mensaje en orden fecha → hora → nombre. Tras tener los tres, confirma resumen y añade {BOOKING_SENTINEL}.
+{"29. En el flujo 'agendar' cita por chat (sin formulario): pregunta UNA cosa por mensaje en orden fecha → hora → nombre. Tras tener los tres, confirma resumen y añade " + BOOKING_SENTINEL + "." if booking_enabled else "29. IMPORTANTE: la reserva online esta DESACTIVADA. Si el usuario menciona citas, reservas o agendar, NO preguntes por fecha ni hora ni nombre, NO inicies ningun flujo de agenda. Responde unicamente que la reserva online no esta disponible y proporciona los datos de contacto del bloque 'Datos de contacto verificados'."}
 """.strip()
 
 
@@ -9477,6 +9516,7 @@ def _portal_booking_summary_from_row(
         employee_name=data["employee_name"],
         nombre=data["nombre"],
         email=data["email"],
+        telefono=data.get("telefono", ""),
         servicio=data["servicio"],
         fecha=data["fecha"],
         hora=data["hora"],
@@ -11264,6 +11304,7 @@ async def app_appearance_get(
         prompt_extra=cfg.get("prompt_extra", ""),
         starter_questions=list(starters),
         allowed_origins=list(cfg.get("allowed_origins", [])),
+        booking_enabled=bool(cfg.get("booking", {}).get("enabled", True)),
     )
 
 
@@ -11318,6 +11359,10 @@ async def app_appearance_post(
                 _sanitize_text(q)[:140] for q in data.starter_questions if _sanitize_text(q)
             ]
             cfg["starter_questions"] = _strip_base_from_extras(sanitized)
+        if data.booking_enabled is not None:
+            if not isinstance(cfg.get("booking"), dict):
+                cfg["booking"] = {}
+            cfg["booking"]["enabled"] = bool(data.booking_enabled)
         next_configs[cliente_id] = cfg
         _update_runtime_configs(next_configs)
     _persist_configs_to_disk(next_configs)
@@ -11329,10 +11374,13 @@ async def app_appearance_post(
             _cleanup_orphan_starter_qa(cliente_id, cfg.get("starter_questions", []))
         except Exception as exc:  # noqa: BLE001
             logger.warning("No se pudo limpiar Q&A huerfanas de starters %s: %s", cliente_id, exc)
-    # Invalidate llama-index cache so the next chat re-reads info.txt if prompt changed.
+    # Invalidate llama-index cache and active sessions so the next chat rebuilds the prompt.
     try:
         with state_lock:
             indices.pop(cliente_id, None)
+            stale = [sid for sid, s in sesiones.items() if s.cliente_id == cliente_id]
+            for sid in stale:
+                sesiones.pop(sid, None)
     except NameError:
         pass
     return await app_appearance_get(user)
@@ -11839,6 +11887,7 @@ async def app_knowledge_list(
         items=[_kb_row_to_public(r) for r in rows],
         info_chars=len(info),
         info_excerpt=info[:1200],
+        info_full=info,
     )
 
 
@@ -12900,8 +12949,8 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
                 fields = {"status": status_str or "active", "stripe_subscription_id": sub_id}
                 if renews_at:
                     fields["renews_at"] = renews_at
-                if plan and plan in PLAN_VALID:
-                    fields["plan"] = plan
+                if plan and _normalize_plan_slug(plan) in PLAN_VALID:
+                    fields["plan"] = _normalize_plan_slug(plan)
                 _set_client_subscription(cid, **fields)
                 logger.info("Suscripción actualizada %s · status=%s", cid, status_str)
         elif event_type == "customer.subscription.deleted":

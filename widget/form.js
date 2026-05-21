@@ -121,7 +121,7 @@ async function cargarServicios() {
 
 async function cargarProfesionales() {
   const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/profesionales/${WIDGET_CONFIG.clienteId}`);
-  employees = Array.isArray(data.items) ? data.items : [];
+  employees = (Array.isArray(data.items) ? data.items : []).filter(e => !e.is_default);
 }
 
 function fillServiceOptions(select) {
@@ -157,16 +157,31 @@ function fillServiceOptions(select) {
 function fillEmployeeOptions(select, wrap) {
   if (!select || !wrap) return;
 
-  if (employees.length <= 1) {
+  if (!employees.length) {
     wrap.classList.add("hidden");
-    const first = employees[0];
-    citaData.employeeId = first && !first.is_default ? (first.employee_id || "") : "";
-    citaData.employeeName = first && !first.is_default ? (first.name || "") : "";
+    citaData.employeeId = "";
+    citaData.employeeName = "";
     return;
   }
 
   wrap.classList.remove("hidden");
-  select.innerHTML = '<option value="">Aleatorio</option>';
+
+  if (employees.length === 1) {
+    // Un solo profesional: preseleccionado, sin opción "Aleatorio"
+    const emp = employees[0];
+    select.innerHTML = "";
+    const option = document.createElement("option");
+    option.value = emp.employee_id;
+    option.textContent = emp.role_label ? `${emp.name} - ${emp.role_label}` : emp.name;
+    option.selected = true;
+    select.appendChild(option);
+    citaData.employeeId = emp.employee_id;
+    citaData.employeeName = emp.name;
+    return;
+  }
+
+  // 2+ profesionales: selector libre con opción "Sin preferencia"
+  select.innerHTML = '<option value="">Sin preferencia</option>';
   employees.forEach((employee) => {
     const option = document.createElement("option");
     option.value = employee.employee_id;
@@ -176,7 +191,7 @@ function fillEmployeeOptions(select, wrap) {
     select.appendChild(option);
   });
   citaData.employeeId = "";
-  citaData.employeeName = "Aleatorio";
+  citaData.employeeName = "Sin preferencia";
 }
 
 function toggleStep(step) {
@@ -298,7 +313,7 @@ function renderResumen() {
     <div class="ia-resumen-row"><span>Email</span><span>${escapeHtml(citaData.email)}</span></div>
     <div class="ia-resumen-row"><span>Telefono</span><span>${escapeHtml(citaData.telefono)}</span></div>
     ${
-      employees.length > 1 && citaData.employeeName
+      citaData.employeeName
         ? `<div class="ia-resumen-row"><span>Profesional</span><span>${escapeHtml(citaData.employeeName)}</span></div>`
         : ""
     }
