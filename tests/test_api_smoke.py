@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import importlib
 import json
 import os
@@ -141,9 +143,24 @@ class _FakeStripeCheckout:
     Session = _FakeStripeSessionApi
 
 
+class _FakeStripeWebhook:
+    @staticmethod
+    def construct_event(payload, sig_header, secret):
+        if isinstance(payload, bytes):
+            payload = payload.decode("utf-8")
+        return json.loads(payload)
+
+
+class _FakeStripeError:
+    class SignatureVerificationError(Exception):
+        pass
+
+
 class _FakeStripe:
     api_key = ""
     checkout = _FakeStripeCheckout()
+    Webhook = _FakeStripeWebhook
+    error = _FakeStripeError
 
 
 class _FakeStripeSubscriptionApi:
@@ -190,6 +207,72 @@ def test_healthcheck_reports_runtime_status(client: TestClient):
     assert payload["checks"]["config"] == "ok"
     assert payload["checks"]["database"] == "ok"
     assert payload["clientes_configurados"] == 1
+
+
+def test_security_headers_are_sent(client: TestClient):
+    response = client.get("/health")
+
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert "max-age=31536000" in response.headers["strict-transport-security"]
+
+
+def test_new_booking_config_defaults_to_sunday_closed(api_module):
+    normalized = api_module._normalize_client_config(
+        "nuevo_cliente",
+        {
+            "nombre": "Nuevo Cliente",
+            "icono": "NC",
+            "color": "#00b1d9",
+            "bienvenida": "Hola, soy el asistente.",
+            "prompt_extra": "",
+            "booking": {"enabled": True},
+        },
+    )
+
+    assert normalized["booking"]["closed_weekdays"] == [6]
+    assert all(normalized["booking"]["message_template_enabled"].values())
+
+
+def test_unrestricted_employee_accepts_generic_service_name(api_module):
+    employee = next(row for row in api_module._list_public_employee_rows("demo") if row["is_default"])
+
+    assert api_module._service_name_allowed_for_employee("demo", employee, "Consulta general") is True
+
+
+def test_service_extraction_keeps_scraper_descriptions(api_module):
+    demo_services = api_module._extract_services_from_info("demo")
+    assert demo_services[0]["nombre"] == "Auditoria IA"
+    assert "Categoria: Consultoria" in demo_services[0]["descripcion"]
+    assert "Precio: A medida" in demo_services[0]["descripcion"]
+
+    cliente_id = f"svc_{uuid.uuid4().hex[:8]}"
+    client_dir = api_module.DATA_DIR / cliente_id
+    client_dir.mkdir(parents=True, exist_ok=True)
+    (client_dir / "info.txt").write_text(
+        "\n".join(
+            [
+                "SERVICIOS Y PRECIOS:",
+                "1. Asistente IA Web",
+                "- Precio: 49 EUR al mes",
+                "- Incluye widget IA embebido y agenda online.",
+                "",
+                "2. Asistente IA WhatsApp",
+                "- Precio: 79 EUR al mes",
+                "- Incluye flujo de cita por WhatsApp.",
+                "",
+                "PREGUNTAS FRECUENTES:",
+                "P: Algo?",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    services = api_module._extract_services_from_info(cliente_id)
+    assert [item["nombre"] for item in services] == ["Asistente IA Web", "Asistente IA WhatsApp"]
+    assert "Precio: 49 EUR al mes" in services[0]["descripcion"]
+    assert "agenda online" in services[0]["descripcion"]
 
 
 def test_self_serve_schema_v2_is_provisioned(client: TestClient, api_module):
@@ -272,6 +355,22 @@ def test_public_client_config_enforces_allowed_origin(client: TestClient):
     assert allowed.json()["nombre"] == "Agencia IA Demo"
 
 
+def test_cors_preflight_allows_app_methods_and_credentials(client: TestClient):
+    response = client.options(
+        "/auth/app/leads/lead_test",
+        headers={
+            "Origin": "http://testserver",
+            "Access-Control-Request-Method": "DELETE",
+        },
+    )
+
+    assert response.status_code == 204
+    assert response.headers["access-control-allow-origin"] == "http://testserver"
+    assert response.headers["access-control-allow-credentials"] == "true"
+    assert "DELETE" in response.headers["access-control-allow-methods"]
+    assert "PATCH" in response.headers["access-control-allow-methods"]
+
+
 def test_public_client_config_includes_base_starters_with_booking(
     client: TestClient, api_module
 ):
@@ -332,6 +431,23 @@ def test_login_creates_portal_session(client: TestClient):
     assert "vantelia_portal_session" in response.cookies
 
 
+def test_cookie_authenticated_post_rejects_foreign_origin(client: TestClient, api_module):
+    user = api_module._get_user_by_email("admin@example.com")
+    raw_session = api_module._create_auth_session(user["id"])
+
+    response = client.post(
+        "/auth/profile",
+        json={"display_name": "Admin Test", "email": "admin@example.com"},
+        headers={
+            "Cookie": f"vantelia_portal_session={raw_session}",
+            "Origin": "https://evil.example",
+        },
+    )
+
+    assert response.status_code == 403
+    assert "Origen no autorizado" in response.json()["detail"]
+
+
 def test_login_google_signup_account_prompts_google(client: TestClient, api_module):
     email = f"google_login_{uuid.uuid4().hex[:8]}@example.com"
     api_module._create_user_self_serve(
@@ -349,6 +465,65 @@ def test_login_google_signup_account_prompts_google(client: TestClient, api_modu
 
     assert response.status_code == 409
     assert "Google" in response.json()["detail"]
+
+
+def test_portal_can_update_professional_schedule(client: TestClient):
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "admin@example.com", "password": "test-password-123"},
+    )
+    assert login_response.status_code == 200
+    cookies = {"vantelia_portal_session": login_response.cookies["vantelia_portal_session"]}
+
+    create_response = client.post(
+        "/auth/employees",
+        params={"cliente_id": "demo"},
+        cookies=cookies,
+        json={
+            "name": "Profesional Horario",
+            "role_label": "Pruebas",
+            "color": "#00b1d9",
+            "is_active": True,
+            "timezone": "Europe/Madrid",
+            "slot_minutes": 30,
+            "day_start": "09:00",
+            "day_end": "10:00",
+            "closed_weekdays": [],
+            "service_ids": [],
+        },
+    )
+    assert create_response.status_code == 200, create_response.text
+    employee_id = create_response.json()["employee_id"]
+    try:
+        update_response = client.post(
+            f"/auth/schedule/employee/{employee_id}",
+            params={"cliente_id": "demo"},
+            cookies=cookies,
+            json={
+                "enabled": True,
+                "timezone": "Europe/Madrid",
+                "slot_minutes": 45,
+                "day_start": "11:00",
+                "day_end": "15:30",
+                "closed_weekdays": [0, 2],
+            },
+        )
+        assert update_response.status_code == 200, update_response.text
+        schedule = update_response.json()
+        assert schedule["slot_minutes"] == 45
+        assert schedule["day_start"] == "11:00"
+        assert schedule["day_end"] == "15:30"
+        assert schedule["closed_weekdays"] == [0, 2]
+
+        get_response = client.get(
+            f"/auth/schedule/employee/{employee_id}",
+            params={"cliente_id": "demo"},
+            cookies=cookies,
+        )
+        assert get_response.status_code == 200
+        assert get_response.json()["slot_minutes"] == 45
+    finally:
+        client.delete(f"/auth/employees/{employee_id}", params={"cliente_id": "demo"}, cookies=cookies)
 
 
 def test_portal_can_delete_professional(client: TestClient):
@@ -659,7 +834,8 @@ def test_chat_response_normalizes_literal_newlines_and_menu_footer(api_module):
     assert cleaned.endswith("Escribe **menú** para volver al menú principal.")
 
 
-def test_whatsapp_webhook_uses_same_chat_storage(client: TestClient):
+def test_whatsapp_webhook_uses_same_chat_storage(client: TestClient, api_module, monkeypatch):
+    monkeypatch.setattr(api_module, "WHATSAPP_APP_SECRET", "test-whatsapp-app-secret")
     verify_response = client.get(
         "/whatsapp/webhook/demo",
         params={
@@ -668,29 +844,34 @@ def test_whatsapp_webhook_uses_same_chat_storage(client: TestClient):
             "hub.challenge": "challenge-ok",
         },
     )
+    body = json.dumps({
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "metadata": {"phone_number_id": "1234567890"},
+                            "messages": [
+                                {
+                                    "id": "wamid.test-message-1",
+                                    "from": "34600000000",
+                                    "type": "text",
+                                    "text": {"body": "Quiero pedir cita"},
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        ]
+    }).encode("utf-8")
+    signature = "sha256=" + hmac.new(
+        b"test-whatsapp-app-secret", body, hashlib.sha256
+    ).hexdigest()
     webhook_response = client.post(
         "/whatsapp/webhook/demo",
-        json={
-            "entry": [
-                {
-                    "changes": [
-                        {
-                            "value": {
-                                "metadata": {"phone_number_id": "1234567890"},
-                                "messages": [
-                                    {
-                                        "id": "wamid.test-message-1",
-                                        "from": "34600000000",
-                                        "type": "text",
-                                        "text": {"body": "Quiero pedir cita"},
-                                    }
-                                ],
-                            }
-                        }
-                    ]
-                }
-            ]
-        },
+        content=body,
+        headers={"content-type": "application/json", "x-hub-signature-256": signature},
     )
     chats_response = client.get(
         "/admin/chats?cliente_id=demo",
@@ -761,11 +942,13 @@ def test_analytics_events_are_recorded_and_visible_to_admin(client: TestClient):
     assert payload["recent"][0]["event_name"] == "demo_submit"
 
 
-def test_stripe_webhook_activates_client_subscription(client: TestClient, api_module):
+def test_stripe_webhook_activates_client_subscription(client: TestClient, api_module, monkeypatch):
     api_module.stripe = _FakeStripe
+    monkeypatch.setattr(api_module, "STRIPE_WEBHOOK_SECRET", "whsec_test_dummy")
 
     response = client.post(
         "/webhooks/stripe",
+        headers={"stripe-signature": "t=1,v1=test"},
         json={
             "type": "checkout.session.completed",
             "data": {
@@ -830,6 +1013,7 @@ def test_lifetime_subscription_does_not_refresh_from_stripe(client: TestClient, 
 
 def test_public_stripe_webhook_creates_client_with_alta_express(client: TestClient, api_module, monkeypatch):
     api_module.stripe = _FakeStripe
+    monkeypatch.setattr(api_module, "STRIPE_WEBHOOK_SECRET", "whsec_test_dummy")
     captured_welcome = {}
     monkeypatch.setattr(api_module, "OPENAI_API_KEY", "sk-test-onboarding")
     monkeypatch.setattr(api_module, "run_onboarding", lambda **kwargs: _FakeOnboardingResult())
@@ -838,6 +1022,7 @@ def test_public_stripe_webhook_creates_client_with_alta_express(client: TestClie
 
     response = client.post(
         "/webhooks/stripe",
+        headers={"stripe-signature": "t=1,v1=test"},
         json={
             "type": "checkout.session.completed",
             "data": {
@@ -2430,6 +2615,113 @@ def test_app_tune_get_and_post(client: TestClient, api_module, monkeypatch):
     assert silent.json()["chat_model"] == "gpt-4o"  # unchanged
 
 
+def test_app_services_update_rewrites_info_txt(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Services")
+
+    initial = client.get("/auth/app/services", cookies=cookies)
+    assert initial.status_code == 200
+    assert initial.json()["items"]
+
+    updated = client.post(
+        "/auth/app/services",
+        cookies=cookies,
+        json={
+            "items": [
+                {"nombre": "Consultoria IA", "descripcion": "Diagnostico y plan de accion."},
+                {"nombre": "Automatizacion CRM", "descripcion": "Flujos de captacion y seguimiento."},
+            ]
+        },
+    )
+
+    assert updated.status_code == 200, updated.text
+    names = [item["nombre"] for item in updated.json()["items"]]
+    assert names == ["Consultoria IA", "Automatizacion CRM"]
+    info_txt = api_module._read_info_txt(cliente_id)
+    assert "SERVICIOS Y PRECIOS:" in info_txt
+    assert "- Servicio: Consultoria IA" in info_txt
+    assert "Diagnostico y plan de accion." in info_txt
+
+    public_services = api_module._public_services_for_booking(cliente_id, "")
+    assert [item["nombre"] for item in public_services] == names
+
+
+def test_message_templates_preview_and_partial_save(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Messages")
+
+    schedule = client.get("/auth/schedule", cookies=cookies)
+    assert schedule.status_code == 200
+    assert all(schedule.json()["message_template_enabled"].values())
+    assert schedule.json()["closed_weekdays"] == [6]
+
+    saved = client.post(
+        "/auth/schedule",
+        cookies=cookies,
+        json={"message_templates": {"confirmed": "Texto confirmado desde mensajes."}},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["closed_weekdays"] == [6]
+    assert all(saved.json()["message_template_enabled"].values())
+
+    preview = client.post(
+        "/auth/schedule/message-preview",
+        cookies=cookies,
+        json={"template_key": "confirmacion", "content": "Texto legacy para preview."},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["kind"] == "confirmed"
+    assert "Texto legacy para preview." in preview.json()["text_body"]
+
+
+def test_app_whatsapp_settings_and_plan_gate(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, email = _signup_and_wizard(client, api_module, monkeypatch, name="Bot WhatsApp")
+    user = api_module._get_user_by_email(email)
+    assert user is not None
+
+    initial = client.get("/auth/app/whatsapp", cookies=cookies)
+    assert initial.status_code == 200
+    assert initial.json()["enabled"] is False
+    assert initial.json()["webhook_url"].endswith(f"/whatsapp/webhook/{cliente_id}")
+    assert initial.json()["verify_token"] == "test-whatsapp-token"
+
+    saved_disabled = client.post(
+        "/auth/app/whatsapp",
+        cookies=cookies,
+        json={
+            "enabled": False,
+            "phone_number_id": "999123",
+            "access_token_env": "WHATSAPP_ACCESS_TOKEN_TEST",
+            "verify_token_env": "",
+        },
+    )
+    assert saved_disabled.status_code == 200, saved_disabled.text
+    assert saved_disabled.json()["phone_number_id"] == "999123"
+    assert saved_disabled.json()["enabled"] is False
+
+    blocked = client.post(
+        "/auth/app/whatsapp",
+        cookies=cookies,
+        json={"enabled": True, "phone_number_id": "999123"},
+    )
+    assert blocked.status_code == 403
+
+    with api_module._get_db_connection() as connection:
+        connection.execute(
+            "UPDATE subscriptions SET plan = 'business', messages_quota = 25000 WHERE user_id = ?",
+            (user["id"],),
+        )
+        connection.commit()
+
+    enabled = client.post(
+        "/auth/app/whatsapp",
+        cookies=cookies,
+        json={"enabled": True, "phone_number_id": "999123"},
+    )
+    assert enabled.status_code == 200, enabled.text
+    assert enabled.json()["enabled"] is True
+    assert enabled.json()["plan_allows_whatsapp"] is True
+    assert api_module.CONFIG_CLIENTES[cliente_id]["whatsapp"]["enabled"] is True
+
+
 def test_app_livechat_402_when_free_plan(client: TestClient, api_module, monkeypatch):
     cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Free")
     resp = client.get("/auth/app/livechat", cookies=cookies)
@@ -2486,6 +2778,7 @@ def test_app_billing_checkout_creates_stripe_session(client: TestClient, api_mod
             "/auth/app/billing/checkout",
             json={"plan": "pro", "billing_period": "monthly"},
             cookies=cookies,
+            headers={"X-Forwarded-Host": "evil.example", "X-Forwarded-Proto": "https"},
         )
         assert resp.status_code == 200, resp.text
         data = resp.json()
@@ -2496,6 +2789,8 @@ def test_app_billing_checkout_creates_stripe_session(client: TestClient, api_mod
         assert sent["metadata"]["source"] == "self_serve"
         assert sent["metadata"]["plan"] == "pro"
         assert sent["client_reference_id"].startswith("self_serve:usr_")
+        assert sent["success_url"].startswith("https://app.test.local/")
+        assert sent["cancel_url"].startswith("https://app.test.local/")
     finally:
         api_module.SELF_SERVE_PLANS["pro"]["stripe_price_monthly"] = ""
 
@@ -2504,6 +2799,7 @@ def test_stripe_webhook_activates_self_serve_subscription(client: TestClient, ap
     cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot WebhookSS")
     monkeypatch.setattr(api_module, "stripe", _FakeStripe)
     monkeypatch.setattr(api_module, "STRIPE_SECRET_KEY", "sk_test_real")
+    monkeypatch.setattr(api_module, "STRIPE_WEBHOOK_SECRET", "whsec_test_dummy")
     # Look up the user id we just signed up.
     state = client.get("/onboarding/state", cookies=cookies).json()
     user_row = api_module._get_user_by_id(
@@ -2530,7 +2826,11 @@ def test_stripe_webhook_activates_self_serve_subscription(client: TestClient, ap
             }
         },
     }
-    response = client.post("/webhooks/stripe", json=payload)
+    response = client.post(
+        "/webhooks/stripe",
+        headers={"stripe-signature": "t=1,v1=test"},
+        json=payload,
+    )
     assert response.status_code == 200
     assert response.json()["received"] is True
 

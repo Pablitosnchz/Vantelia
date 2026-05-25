@@ -2490,11 +2490,8 @@ tbody tr:last-child td { border-bottom: none; }
           <div class="actions cw-advanced-tabs" id="orAdvancedTabs">
             <button class="ghost small" type="button" data-outreach-tab="autopilot">Hoy <span class="or-tab-badge" data-badge="autopilot" style="display:none;"></span></button>
             <button class="ghost small" type="button" data-outreach-tab="prospects">Prospects <span class="or-tab-badge" data-badge="prospects" style="display:none;"></span></button>
-<<<<<<< HEAD
             <button class="ghost small" type="button" data-outreach-tab="autonomous">Automatizacion <span class="or-tab-badge" data-badge="autonomous" style="display:none;"></span></button>
-=======
             <button class="ghost small" type="button" data-outreach-tab="manual-email">Emails manuales</button>
->>>>>>> 701337050c7a8fc3c486ea9c08d6417b03539f63
             <button class="ghost small" type="button" data-outreach-tab="campaigns">Campanas</button>
             <button class="ghost small" type="button" data-outreach-tab="templates">Mensajes</button>
             <button class="ghost small" type="button" data-outreach-tab="suppressions">Bajas <span class="or-tab-badge" data-badge="suppressions" style="display:none;"></span></button>
@@ -8281,11 +8278,10 @@ a {
       ORQ("#orImportBtn").addEventListener("click", () => ORQ("#orImportFile").click());
       ORQ("#orImportFile").addEventListener("change", (ev) => { if (ev.target.files[0]) importCsv(ev.target.files[0]); });
       function openNewProspectModal() {
-        console.log("[outreach] open new prospect modal");
         ["orNpEmail","orNpBusiness","orNpContact","orNpNiche","orNpCity","orNpPhone","orNpWebsite","orNpNotes"].forEach((id) => { const el = ORQ("#"+id); if (el) el.value = ""; });
         const err = ORQ("#orNewProspectErr"); if (err) err.textContent = "";
         const m = ORQ("#orNewProspectModal");
-        if (!m) { alert("Error: modal #orNewProspectModal no esta en el DOM. Recarga con Ctrl+Shift+R."); return; }
+        if (!m) { return; }
         m.setAttribute("aria-hidden", "false");
         m.style.display = "flex";
         setTimeout(() => { const e = ORQ("#orNpEmail"); if (e) e.focus(); }, 50);

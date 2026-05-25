@@ -1,19 +1,27 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="es">
 
 <head>
-<!-- Google tag (gtag.js) -->
+<!-- Google tag (gtag.js) with Consent Mode denied by default -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-Q7KTBVD92P"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
+  gtag('consent', 'default', {
+    analytics_storage: 'denied',
+    ad_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+    wait_for_update: 500
+  });
   gtag('js', new Date());
-  gtag('config', 'G-Q7KTBVD92P');
-</script>  <meta charset="utf-8">
+  gtag('config', 'G-Q7KTBVD92P', { anonymize_ip: true });
+</script>
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Preguntas frecuentes | Asistente IA Vantelia (Free/Starter/Pro/Business)</title>
+  <title>Preguntas frecuentes | Asistente IA Vantelia</title>
   <meta name="description"
-    content="Respuestas a las dudas habituales sobre el asistente IA Vantelia: plan gratis, planes Starter/Pro/Business, setup, RAG, WhatsApp Business, integración en web y datos en Europa.">
+    content="Respuestas claras sobre Vantelia: setup, planes, RAG, agenda, WhatsApp Business, Live Chat, seguridad y datos en Europa. Todo lo que necesitas saber antes de crear tu asistente IA.">
   <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
   <meta name="theme-color" content="#0B132B">
   <meta name="author" content="Vantelia">
@@ -22,188 +30,449 @@
   <link rel="apple-touch-icon" href="/assets/img/favicon.png">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Vantelia">
-  <meta property="og:title" content="Preguntas frecuentes | Asistente IA Vantelia (Free/Starter/Pro/Business)">
+  <meta property="og:title" content="Preguntas frecuentes | Asistente IA Vantelia">
   <meta property="og:description"
-    content="Plan gratis, planes Starter/Pro/Business, setup, RAG, WhatsApp Business, integración en web y datos en Europa.">
+    content="Setup, planes, agenda, WhatsApp, Live Chat, seguridad y datos en Europa. Respuestas claras sobre Vantelia.">
   <meta property="og:url" content="https://www.vantelia.es/faq/">
   <meta property="og:image" content="https://www.vantelia.es/assets/img/fondo-desktop.png">
   <meta property="og:locale" content="es_ES">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Preguntas frecuentes | Asistente IA Vantelia">
   <meta name="twitter:description"
-    content="Plan gratis, Starter/Pro/Business, setup, RAG, WhatsApp Business, web y datos en Europa.">
+    content="Setup, planes, agenda, WhatsApp, Live Chat, seguridad y datos en Europa.">
   <meta name="twitter:image" content="https://www.vantelia.es/assets/img/fondo-desktop.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preload" as="image" href="/assets/img/fondo-web.png" fetchpriority="high">
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/home.css?v=cookies-20260504">
+  <link rel="stylesheet" href="/assets/css/home.css?v=20260522-rebuild">
   <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@graph": [
-    {
-      "@type": "Organization",
-      "@id": "https://www.vantelia.es/#org"
-    },
+    { "@type": "Organization", "@id": "https://www.vantelia.es/#org" },
     {
       "@type": "BreadcrumbList",
       "itemListElement": [
-        {
-          "@type": "ListItem",
-          "position": 1,
-          "name": "Inicio",
-          "item": "https://www.vantelia.es/"
-        },
-        {
-          "@type": "ListItem",
-          "position": 2,
-          "name": "FAQ",
-          "item": "https://www.vantelia.es/faq/"
-        }
+        { "@type": "ListItem", "position": 1, "name": "Inicio", "item": "https://www.vantelia.es/" },
+        { "@type": "ListItem", "position": 2, "name": "FAQ", "item": "https://www.vantelia.es/faq/" }
       ]
     },
     {
       "@type": "WebPage",
       "url": "https://www.vantelia.es/faq/",
-      "name": "Preguntas Frecuentes sobre IA y Marketing B2B | Vantelia",
-      "description": "Respuestas a las preguntas más frecuentes sobre los servicios de IA, asistentes inteligentes, marketing digital y automatización de Vantelia para empresas B2B.",
+      "name": "Preguntas frecuentes | Asistente IA Vantelia",
+      "description": "Respuestas claras sobre Vantelia: setup, planes, agenda, WhatsApp Business, seguridad y datos en Europa.",
       "inLanguage": "es-ES",
-      "isPartOf": {
-        "@id": "https://www.vantelia.es/#website"
-      },
-      "publisher": {
-        "@id": "https://www.vantelia.es/#org"
-      }
+      "isPartOf": { "@id": "https://www.vantelia.es/#website" },
+      "publisher": { "@id": "https://www.vantelia.es/#org" }
     },
     {
       "@type": "FAQPage",
       "url": "https://www.vantelia.es/faq/",
       "mainEntity": [
-        {
-          "@type": "Question",
-          "name": "¿Qué incluye una auditoría inicial con Vantelia?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Revisamos captación, conversión, automatización, contenidos, analítica y fricciones operativas. El resultado es una hoja de ruta con prioridades reales, no un informe genérico de recomendaciones."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "¿El asistente IA funciona con cualquier tipo de web?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Sí. Se instala con una línea de código en cualquier web (WordPress, Webflow, Shopify o cualquier otra). El alta express analiza tu web y deja el asistente listo en horas."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "¿Cuánto tarda en verse valor en un proyecto?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Para el asistente IA, normalmente en la primera semana. Para SEO y estrategia de contenidos, priorizamos quick wins desde las primeras fases. El crecimiento estructural llega en 3-6 meses."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "¿Trabajáis solo IA o también marketing digital completo?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Trabajamos ambas capas. La IA es una palanca muy potente, pero la conectamos con SEO, paid media, CRO, contenido, CRM y seguimiento comercial para que genere impacto real."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "¿Podéis colaborar con equipos internos o agencias existentes?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Sí. Podemos actuar como partner estratégico, capa de ejecución especializada o apoyo a equipos internos que necesitan acelerar una parte concreta del sistema."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "¿Y si solo necesito el asistente IA o solo el SEO?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Encaja perfectamente. Empezamos por una necesidad concreta y, si tiene sentido, escalamos hacia un sistema más completo. No hay mínimos artificiales ni paquetes forzados."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "¿Cómo se entrena el asistente con la información de mi empresa?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "El alta express lee tu web automáticamente y monta el asistente con tu información real. Puedes añadir documentos extra y el asistente se actualiza sin que tengas que tocar nada técnico."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "¿El asistente IA puede gestionar reservas y citas?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Sí. El asistente conversa con el cliente, consulta tu disponibilidad real y reserva la cita. Notifica por email a las dos partes y envía recordatorios antes de la visita."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "¿Cumple con el RGPD y la normativa europea?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Sí. Datos almacenados en servidores europeos, control de qué webs pueden usar tu asistente, gestión de accesos y cumplimiento RGPD desde el diseño de la plataforma."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "¿Qué presupuesto necesito para empezar?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Puedes empezar con Free, sin tarjeta y con 50 mensajes al mes para siempre. Los planes de pago son Starter por 19€/mes (1.000 mensajes), Pro por 49€/mes (5.000 mensajes) y Business por 149€/mes (25.000 mensajes). Pagas mes a mes desde el portal, sin permanencia y con opcion anual con dos meses gratis."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "¿Hay permanencia o cuota de alta?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "No. Todos los planes son mes a mes y la alta express está incluida sin coste extra. Puedes cambiar o cancelar cuando quieras desde el portal."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "¿Qué diferencia hay entre Free, Starter, Pro y Business?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Free sirve para probar el asistente. Starter añade documentos, personalización de marca y exportación de leads. Pro suma reservas, Live Chat, Q&A y Tune AI avanzado. Business añade WhatsApp Business, integraciones y más volumen."
-          }
-        }
+        { "@type": "Question", "name": "¿Cómo creo mi asistente IA con Vantelia?", "acceptedAnswer": { "@type": "Answer", "text": "Te registras gratis en app.vantelia.es/acceso, pasas un wizard de 5 pasos (nombre, URL de tu web, tono, branding) y en 2 minutos tu asistente está activo. Sin tarjeta y sin instalar nada." } },
+        { "@type": "Question", "name": "¿Cuánto tarda el setup completo?", "acceptedAnswer": { "@type": "Answer", "text": "Menos de 2 minutos en el wizard más 30-90 segundos de scrape de tu web. En cuanto termina tienes el snippet de instalación listo para pegar en tu sitio." } },
+        { "@type": "Question", "name": "¿Necesito conocimientos técnicos?", "acceptedAnswer": { "@type": "Answer", "text": "No. El wizard es 100% visual y solo necesitas pegar una línea de código en tu web. Si usas WordPress, Shopify o similares lo haces desde el panel de tu CMS sin tocar archivos." } },
+        { "@type": "Question", "name": "¿Funciona con cualquier tipo de web?", "acceptedAnswer": { "@type": "Answer", "text": "Sí. Una línea de script funciona en WordPress, Webflow, Shopify, Wix, Framer, Squarespace o webs hechas a medida. También puedes compartir un enlace público sin instalar nada." } },
+        { "@type": "Question", "name": "¿Cómo aprende el asistente sobre mi negocio?", "acceptedAnswer": { "@type": "Answer", "text": "Le indicas la URL de tu web y Vantelia analiza automáticamente hasta 12 páginas extrayendo servicios, precios y FAQs. Entrena el RAG solo. Puedes refinarlo después subiendo documentos o añadiendo Q&A manuales." } },
+        { "@type": "Question", "name": "¿Puedo subir mis propios documentos?", "acceptedAnswer": { "@type": "Answer", "text": "Sí desde el plan Starter (19€/mes). Puedes subir PDFs, textos o URLs adicionales que el asistente leerá y usará para responder. Útil para catálogos, políticas internas o tarifas." } },
+        { "@type": "Question", "name": "¿El asistente gestiona reservas y citas?", "acceptedAnswer": { "@type": "Answer", "text": "Sí desde el plan Pro (49€/mes). El asistente consulta tu disponibilidad real, propone hueco al cliente y reserva la cita. Envía recordatorios automáticos 24h y 2h antes. El cliente puede reprogramar o cancelar con un clic." } },
+        { "@type": "Question", "name": "¿Puedo personalizar logo, colores y tono?", "acceptedAnswer": { "@type": "Answer", "text": "Sí desde Starter. Cambias logo, colores corporativos, mensaje de bienvenida y tono de respuesta (formal, cercano, técnico). El widget se adapta visualmente a tu marca." } },
+        { "@type": "Question", "name": "¿Tiene Live Chat humano?", "acceptedAnswer": { "@type": "Answer", "text": "Sí desde el plan Pro. Cuando el asistente detecta una consulta compleja o el cliente lo pide, releva la conversación a un agente humano de tu equipo desde el panel." } },
+        { "@type": "Question", "name": "¿En qué idiomas habla el asistente?", "acceptedAnswer": { "@type": "Answer", "text": "Detecta el idioma del visitante y responde acorde. Funciona en español, inglés, francés, alemán, portugués, italiano y catalán entre otros. El RAG se entrena con tu contenido original." } },
+        { "@type": "Question", "name": "¿Funciona también en WhatsApp?", "acceptedAnswer": { "@type": "Answer", "text": "Sí desde el plan Business (149€/mes). Conectamos el mismo asistente al WhatsApp Business de tu empresa. Te activamos la integración gratis: solo necesitas tu número y en 24h responde por WhatsApp con las mismas respuestas y agenda." } },
+        { "@type": "Question", "name": "¿Qué necesito para activar WhatsApp Business?", "acceptedAnswer": { "@type": "Answer", "text": "Un número dedicado y cuenta de WhatsApp Business. Si no la tienes, te guiamos durante el onboarding del plan Business. La configuración técnica con Meta la hacemos nosotros." } },
+        { "@type": "Question", "name": "¿Cómo funciona el plan Free?", "acceptedAnswer": { "@type": "Answer", "text": "50 mensajes al mes para siempre, sin tarjeta y sin trial que caduca. Incluye widget, aprendizaje desde tu web, panel con métricas y soporte por comunidad. Ideal para validar." } },
+        { "@type": "Question", "name": "¿Qué pasa si supero el límite de mensajes?", "acceptedAnswer": { "@type": "Answer", "text": "Te avisamos antes de llegar al tope. No bloqueamos el asistente sin avisar: te proponemos subir de plan o cobrar el exceso por unidades, según prefieras." } },
+        { "@type": "Question", "name": "¿Hay permanencia o cuota de alta?", "acceptedAnswer": { "@type": "Answer", "text": "No. Todos los planes son mes a mes y cancelas desde el portal de Stripe cuando quieras. La alta express está incluida sin coste extra. Si pagas anual tienes 2 meses gratis." } },
+        { "@type": "Question", "name": "¿Puedo cambiar de plan más adelante?", "acceptedAnswer": { "@type": "Answer", "text": "Sí. Subes o bajas de plan cuando quieras desde el portal. El cambio se aplica al siguiente ciclo de facturación sin perder datos ni configuración." } },
+        { "@type": "Question", "name": "¿Cumple con el RGPD y la normativa europea?", "acceptedAnswer": { "@type": "Answer", "text": "Sí. Datos almacenados en servidores europeos, control de qué dominios pueden usar tu asistente, gestión granular de accesos y cumplimiento RGPD desde el diseño de la plataforma." } },
+        { "@type": "Question", "name": "¿Otros clientes pueden ver mis datos?", "acceptedAnswer": { "@type": "Answer", "text": "No. Cada cliente tiene su espacio independiente con su propio cerebro RAG y conversaciones aisladas. Los datos jamás se mezclan entre cuentas." } },
+        { "@type": "Question", "name": "¿Qué soporte incluye cada plan?", "acceptedAnswer": { "@type": "Answer", "text": "Free: soporte por comunidad. Starter: soporte por email. Pro: soporte prioritario por email. Business: soporte prioritario 24h con SLA reforzado y canal directo." } }
       ]
     }
   ]
 }
   </script>
+
+  <style>
+    /* ============================================================
+       /faq/ — estilos premium con animaciones y filtros
+       ============================================================ */
+
+    .faq-hero {
+      position: relative;
+      padding: 130px 0 50px;
+      overflow: hidden;
+      text-align: center;
+    }
+    .faq-hero .shell { position: relative; z-index: 2; }
+    .faq-hero .hero-orb {
+      position: absolute; border-radius: 50%; pointer-events: none;
+    }
+    .faq-hero .orb-1 {
+      width: 620px; height: 620px;
+      background: radial-gradient(circle, rgba(0,209,255,.07) 0%, transparent 70%);
+      top: -200px; right: -120px;
+      animation: orbFloat 10s ease-in-out infinite;
+    }
+    .faq-hero .orb-2 {
+      width: 460px; height: 460px;
+      background: radial-gradient(circle, rgba(0,245,212,.06) 0%, transparent 70%);
+      bottom: -160px; left: -100px;
+      animation: orbFloat 13s ease-in-out infinite reverse;
+    }
+    @keyframes orbFloat {
+      0%,100% { transform: translateY(0) scale(1); }
+      50%     { transform: translateY(-28px) scale(1.04); }
+    }
+    .faq-hero h1 {
+      font-size: clamp(2.4rem, 5.2vw, 4.2rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      margin: 22px auto 18px;
+      max-width: 880px;
+    }
+    .faq-hero .hero-lead {
+      max-width: 620px;
+      margin: 0 auto 32px;
+      font-size: 1.06rem;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    /* Search bar */
+    .faq-search-wrap {
+      max-width: 580px;
+      margin: 0 auto 14px;
+      position: relative;
+    }
+    .faq-search {
+      width: 100%;
+      height: 56px;
+      padding: 0 56px 0 52px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color .3s, background .3s, box-shadow .3s;
+    }
+    .faq-search:focus {
+      border-color: rgba(0,209,255,.45);
+      background: rgba(0,209,255,.05);
+      box-shadow: 0 0 0 4px rgba(0,209,255,.10);
+    }
+    .faq-search::placeholder { color: var(--muted-2); }
+    .faq-search-icon {
+      position: absolute; left: 22px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted-2);
+      pointer-events: none;
+    }
+    .faq-search-clear {
+      position: absolute; right: 14px; top: 50%;
+      transform: translateY(-50%);
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.06);
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      transition: background .2s, color .2s;
+    }
+    .faq-search-clear:hover { background: rgba(255,255,255,.12); color: var(--text); }
+    .faq-search-clear.visible { display: inline-flex; }
+
+    /* Category pills */
+    .faq-cats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      max-width: 880px;
+      margin: 20px auto 0;
+    }
+    .faq-cat {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 16px;
+      background: rgba(255,255,255,.03);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .25s;
+      letter-spacing: .01em;
+    }
+    .faq-cat:hover {
+      color: var(--text);
+      border-color: rgba(0,209,255,.28);
+      background: rgba(0,209,255,.04);
+    }
+    .faq-cat.active {
+      background: linear-gradient(135deg, rgba(0,209,255,.18), rgba(0,245,212,.10));
+      border-color: rgba(0,209,255,.40);
+      color: var(--text);
+    }
+    .faq-cat .cat-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 20px;
+      padding: 0 6px;
+      background: rgba(0,209,255,.12);
+      color: var(--primary);
+      border-radius: 999px;
+      font-size: .72rem;
+      font-weight: 700;
+    }
+    .faq-cat.active .cat-count {
+      background: rgba(0,209,255,.28);
+      color: #fff;
+    }
+
+    /* FAQ content */
+    .faq-content {
+      padding: 24px 0 80px;
+    }
+    .faq-stack {
+      max-width: 880px;
+      margin: 0 auto;
+      display: grid;
+      gap: 12px;
+    }
+    .faq-row {
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(255,255,255,.025);
+      overflow: hidden;
+      transition: border-color .3s, transform .3s, box-shadow .3s, opacity .3s;
+      animation: faqFadeIn .55s cubic-bezier(.22,1,.36,1) backwards;
+    }
+    .faq-row::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 16px;
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(0,209,255,.35), rgba(0,245,212,.18) 50%, transparent);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .35s;
+    }
+    .faq-row:hover {
+      border-color: rgba(0,209,255,.28);
+      transform: translateY(-2px);
+      box-shadow: 0 18px 38px -28px rgba(0,209,255,.45);
+    }
+    .faq-row.open::before { opacity: 1; }
+    .faq-row.open {
+      background: linear-gradient(180deg, rgba(0,209,255,.05) 0%, rgba(255,255,255,.02) 100%);
+    }
+    .faq-row.hidden { display: none; }
+
+    @keyframes faqFadeIn {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .faq-row .faq-q {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 44px 1fr 36px;
+      gap: 16px;
+      align-items: center;
+      padding: 20px 22px;
+      background: none;
+      border: none;
+      color: var(--text);
+      font-family: var(--font-d);
+      font-size: 1rem;
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
+      letter-spacing: -0.005em;
+      line-height: 1.35;
+    }
+    .faq-row .q-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px; height: 34px;
+      border-radius: 10px;
+      background: rgba(0,209,255,.10);
+      color: var(--primary);
+      font-family: var(--font-d);
+      font-size: .78rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+      transition: background .3s, color .3s, transform .35s;
+    }
+    .faq-row.open .q-num {
+      background: linear-gradient(135deg, #00D1FF, #00F5D4);
+      color: #0B132B;
+      transform: scale(1.06);
+    }
+    .faq-row .q-chev {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform .4s cubic-bezier(.34,1.56,.64,1), border-color .3s, background .3s, color .3s;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .faq-row.open .q-chev {
+      transform: rotate(180deg);
+      border-color: rgba(0,209,255,.35);
+      background: rgba(0,209,255,.10);
+      color: var(--primary);
+    }
+    .faq-row .faq-a {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height .45s cubic-bezier(.4,0,.2,1);
+    }
+    .faq-row.open .faq-a { max-height: 520px; }
+    .faq-row .faq-a-in {
+      padding: 0 22px 22px 82px;
+      color: var(--muted);
+      font-size: .96rem;
+      line-height: 1.72;
+      animation: faqContentIn .4s ease both;
+      animation-delay: .08s;
+    }
+    .faq-row.open .faq-a-in { animation-play-state: running; }
+    @keyframes faqContentIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .faq-a-in a {
+      color: var(--primary);
+      font-weight: 600;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    /* Category section labels */
+    .faq-cat-label {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 28px 0 6px;
+      padding-top: 16px;
+      font-family: var(--font-d);
+      font-size: .82rem;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--muted-2);
+      animation: faqFadeIn .5s ease backwards;
+    }
+    .faq-cat-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, var(--border), transparent);
+    }
+    .faq-cat-label .cat-ico {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: rgba(0,209,255,.10);
+      color: var(--primary);
+    }
+    .faq-cat-label:first-of-type { margin-top: 0; padding-top: 0; }
+
+    /* Empty state */
+    .faq-empty {
+      max-width: 480px;
+      margin: 36px auto;
+      padding: 32px 24px;
+      text-align: center;
+      border: 1px dashed var(--border);
+      border-radius: 16px;
+      color: var(--muted);
+      display: none;
+    }
+    .faq-empty.visible { display: block; }
+    .faq-empty h3 {
+      font-family: var(--font-d);
+      font-size: 1.1rem;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .faq-empty p { font-size: .92rem; line-height: 1.6; }
+
+    /* Counter chip */
+    .faq-counter {
+      text-align: center;
+      margin: 22px auto 0;
+      color: var(--muted-2);
+      font-size: .82rem;
+      letter-spacing: .04em;
+    }
+
+    /* Responsive */
+    @media (max-width: 720px) {
+      .faq-hero { padding: 110px 0 30px; }
+      .faq-row .faq-q {
+        grid-template-columns: 36px 1fr 30px;
+        gap: 12px;
+        padding: 16px 16px;
+        font-size: .94rem;
+      }
+      .faq-row .q-num { width: 30px; height: 30px; font-size: .72rem; }
+      .faq-row .q-chev { width: 30px; height: 30px; }
+      .faq-row .faq-a-in {
+        padding: 0 16px 18px 64px;
+        font-size: .92rem;
+      }
+      .faq-cat { padding: 8px 13px; font-size: .80rem; }
+    }
+    @media (max-width: 480px) {
+      .faq-row .faq-a-in { padding-left: 16px; }
+    }
+  </style>
 </head>
 
 <body>
-  <!-- Cursor ambient glow (desktop) -->
   <div id="cursor-glow" aria-hidden="true"></div>
 
   <header class="site-header" id="site-header">
     <div class="shell nav-inner">
       <a href="/" class="brand" aria-label="Vantelia · Inicio">
-        <img src="/assets/img/logo-letra.png?v=cookies-20260504"
-          alt="Logo Vantelia · Agencia de IA y Marketing B2B" width="200" height="48" fetchpriority="high"
-          decoding="async">
+        <img src="/assets/img/logo-letra.webp?v=20260522-rebuild"
+          alt="Logo Vantelia" width="200" height="48" fetchpriority="high" decoding="async">
       </a>
       <nav aria-label="Navegación principal">
         <ul class="nav-links">
-          <li><a href="/servicios/">Servicios</a></li>
+          <li><a href="/">Inicio</a></li>
           <li><a href="/planes/">Planes</a></li>
-          <li><a href="/plataforma/">Plataforma</a></li>
-          <li><a href="/demo/">Demo</a></li>
-          <li><a href="/resultados/">Resultados</a></li>
-          <li><a href="/faq/" aria-current="page">FAQ</a></li>
+          <li><a href="/faq/">Preguntas frecuentes</a></li>
         </ul>
       </nav>
       <div style="display:flex;gap:10px;align-items:center" class="nav-cta">
@@ -219,13 +488,10 @@
   </header>
 
   <div class="mobile-menu" id="mobile-menu" role="dialog" aria-label="Menú de navegación">
-    <button class="mobile-close" id="mobile-close" aria-label="Cerrar menú">✕</button>
-    <a href="/servicios/" class="mm-link">Servicios</a>
+    <button class="mobile-close" id="mobile-close" aria-label="Cerrar menú">?</button>
+    <a href="/" class="mm-link">Inicio</a>
     <a href="/planes/" class="mm-link">Planes</a>
-    <a href="/plataforma/" class="mm-link">Plataforma</a>
-    <a href="/demo/" class="mm-link">Demo</a>
-    <a href="/resultados/" class="mm-link">Resultados</a>
-    <a href="/faq/" class="mm-link">FAQ</a>
+    <a href="/faq/" class="mm-link">Preguntas frecuentes</a>
     <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener"
       style="margin-top:8px;font-size:1rem;height:48px;padding:0 28px">
       <span class="dot-live"></span>Acceso plataforma
@@ -234,159 +500,368 @@
     <a href="/consultas/" class="btn btn-ghost btn-lg" style="margin-top:8px">Consulta gratuita</a>
   </div>
 
-  <section class="subpage-hero" aria-label="Cabecera de página">
+  <!-- -------------- HERO + BUSCADOR -------------- -->
+  <section class="faq-hero" aria-label="Cabecera FAQ">
     <div class="hero-bg" aria-hidden="true"></div>
+    <div class="hero-orb orb-1" aria-hidden="true"></div>
+    <div class="hero-orb orb-2" aria-hidden="true"></div>
+
     <div class="shell">
-      <nav class="breadcrumbs" aria-label="Migas de pan"><a href="/">Inicio</a> <span class="sep"
-          aria-hidden="true">/</span> <span aria-current="page">FAQ</span></nav>
-      <div class="hero-badge">
-        <span class="badge-dot" aria-hidden="true"></span>
-        FAQ · Preguntas frecuentes
+      <nav class="breadcrumbs" aria-label="Migas de pan"
+        style="justify-content:center;display:flex;margin-bottom:18px">
+        <a href="/">Inicio</a> <span class="sep" aria-hidden="true">/</span>
+        <span aria-current="page">Preguntas frecuentes</span>
+      </nav>
+
+      <div style="display:flex;justify-content:center;margin-bottom:6px">
+        <div class="hero-badge">
+          <span class="badge-dot" aria-hidden="true"></span>
+          19 respuestas claras · actualizadas mayo 2026
+        </div>
       </div>
-      <h1>Todo lo que necesitas saber <span class="gradient-text">antes de empezar</span>.</h1>
-      <p class="hero-lead">Respuestas directas sobre el asistente IA Vantelia: planes, setup, integración en tu web,
-        WhatsApp Business, datos en Europa y todo lo que sueles preguntar antes de crear tu cuenta.</p>
-      <div class="hero-actions"><a href="https://app.vantelia.es/acceso" class="btn btn-primary btn-lg" target="_blank" rel="noopener">Crea tu bot gratis →</a><a
-          href="/consultas/" class="btn btn-ghost btn-lg">Hablar con un experto</a></div>
+
+      <h1>¿Tienes una duda? <span class="gradient-text">La respondemos aquí.</span></h1>
+      <p class="hero-lead">
+        Setup, planes, agenda, WhatsApp, Live Chat, seguridad y datos en Europa.
+        Filtra por categoría o busca lo que necesites.
+      </p>
+
+      <!-- Cats -->
+      <div class="faq-cats" role="tablist" aria-label="Categorías">
+        <button type="button" class="faq-cat active" data-cat="all" role="tab" aria-selected="true">
+          Todas <span class="cat-count" data-cat-key="all">19</span>
+        </button>
+        <button type="button" class="faq-cat" data-cat="empezar" role="tab" aria-selected="false">
+          Empezar <span class="cat-count" data-cat-key="empezar">4</span>
+        </button>
+        <button type="button" class="faq-cat" data-cat="funciones" role="tab" aria-selected="false">
+          Funcionalidades <span class="cat-count" data-cat-key="funciones">6</span>
+        </button>
+        <button type="button" class="faq-cat" data-cat="whatsapp" role="tab" aria-selected="false">
+          WhatsApp <span class="cat-count" data-cat-key="whatsapp">2</span>
+        </button>
+        <button type="button" class="faq-cat" data-cat="planes" role="tab" aria-selected="false">
+          Planes y precio <span class="cat-count" data-cat-key="planes">4</span>
+        </button>
+        <button type="button" class="faq-cat" data-cat="seguridad" role="tab" aria-selected="false">
+          Seguridad <span class="cat-count" data-cat-key="seguridad">2</span>
+        </button>
+        <button type="button" class="faq-cat" data-cat="soporte" role="tab" aria-selected="false">
+          Soporte <span class="cat-count" data-cat-key="soporte">1</span>
+        </button>
+      </div>
+
+      <p class="faq-counter" id="faqCounter" aria-live="polite">Mostrando 19 preguntas</p>
     </div>
   </section>
 
   <div class="glow-line" aria-hidden="true"></div>
 
-  <section class="section" aria-label="Preguntas frecuentes">
+  <!-- -------------- LISTA -------------- -->
+  <section class="faq-content" aria-label="Lista de preguntas">
     <div class="shell">
-      <div class="section-head centered reveal" style="margin-inline:auto;text-align:center">
-        <span class="eyebrow">FAQ</span>
-        <h2>Preguntas frecuentes.</h2>
-        <p style="color:var(--muted);font-size:1.04rem;line-height:1.7;max-width:680px;margin:0 auto">Lo que más nos
-          preguntan sobre IA aplicada, marketing B2B y automatización empresarial.</p>
+      <div class="faq-stack" id="faqStack">
+
+        <!-- EMPEZAR -->
+        <div class="faq-cat-label" data-cat-label="empezar">
+          <span class="cat-ico" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+          </span>
+          Empezar
+        </div>
+
+        <article class="faq-row" data-cat="empezar" style="animation-delay:.05s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">01</span>
+            <span class="q-text">¿Cómo creo mi asistente IA con Vantelia?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Te registras gratis en <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">app.vantelia.es/acceso</a>, pasas un wizard de 5 pasos (nombre, URL de tu web, tono, branding) y en 2 minutos tu asistente está activo. Sin tarjeta y sin instalar nada.
+          </div></div>
+        </article>
+
+        <article class="faq-row" data-cat="empezar" style="animation-delay:.10s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">02</span>
+            <span class="q-text">¿Cuánto tarda el setup completo?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Menos de 2 minutos en el wizard más 30-90 segundos de scrape de tu web. En cuanto termina tienes el snippet de instalación listo para pegar en tu sitio.
+          </div></div>
+        </article>
+
+        <article class="faq-row" data-cat="empezar" style="animation-delay:.15s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">03</span>
+            <span class="q-text">¿Necesito conocimientos técnicos?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            No. El wizard es 100% visual y solo necesitas pegar una línea de código en tu web. Si usas WordPress, Shopify o similares lo haces desde el panel de tu CMS sin tocar archivos.
+          </div></div>
+        </article>
+
+        <article class="faq-row" data-cat="empezar" style="animation-delay:.20s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">04</span>
+            <span class="q-text">¿Funciona con cualquier tipo de web?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Sí. Una línea de script funciona en WordPress, Webflow, Shopify, Wix, Framer, Squarespace o webs hechas a medida. También puedes compartir un enlace público sin instalar nada.
+          </div></div>
+        </article>
+
+        <!-- FUNCIONALIDADES -->
+        <div class="faq-cat-label" data-cat-label="funciones">
+          <span class="cat-ico" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+          </span>
+          Funcionalidades
+        </div>
+
+        <article class="faq-row" data-cat="funciones" style="animation-delay:.05s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">05</span>
+            <span class="q-text">¿Cómo aprende el asistente sobre mi negocio?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Le indicas la URL de tu web y Vantelia analiza automáticamente hasta 12 páginas extrayendo servicios, precios y FAQs. Entrena el RAG solo. Puedes refinarlo después subiendo documentos o añadiendo Q&amp;A manuales.
+          </div></div>
+        </article>
+
+        <article class="faq-row" data-cat="funciones" style="animation-delay:.10s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">06</span>
+            <span class="q-text">¿Puedo subir mis propios documentos?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Sí desde el plan Starter (19€/mes). Puedes subir PDFs, textos o URLs adicionales que el asistente leerá y usará para responder. Útil para catálogos, políticas internas o tarifas.
+          </div></div>
+        </article>
+
+        <article class="faq-row" data-cat="funciones" style="animation-delay:.15s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">07</span>
+            <span class="q-text">¿El asistente gestiona reservas y citas?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Sí desde el plan Pro (49€/mes). El asistente consulta tu disponibilidad real, propone hueco al cliente y reserva la cita. Envía recordatorios automáticos 24h y 2h antes. El cliente puede reprogramar o cancelar con un clic.
+          </div></div>
+        </article>
+
+        <article class="faq-row" data-cat="funciones" style="animation-delay:.20s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">08</span>
+            <span class="q-text">¿Puedo personalizar logo, colores y tono?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Sí desde Starter. Cambias logo, colores corporativos, mensaje de bienvenida y tono de respuesta (formal, cercano, técnico). El widget se adapta visualmente a tu marca.
+          </div></div>
+        </article>
+
+        <article class="faq-row" data-cat="funciones" style="animation-delay:.25s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">09</span>
+            <span class="q-text">¿Tiene Live Chat humano?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Sí desde el plan Pro. Cuando el asistente detecta una consulta compleja o el cliente lo pide, releva la conversación a un agente humano de tu equipo desde el panel.
+          </div></div>
+        </article>
+
+        <article class="faq-row" data-cat="funciones" style="animation-delay:.30s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">10</span>
+            <span class="q-text">¿En qué idiomas habla el asistente?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Detecta el idioma del visitante y responde acorde. Funciona en español, inglés, francés, alemán, portugués, italiano y catalán entre otros. El RAG se entrena con tu contenido original.
+          </div></div>
+        </article>
+
+        <!-- WHATSAPP -->
+        <div class="faq-cat-label" data-cat-label="whatsapp">
+          <span class="cat-ico" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.5 14.4c-.3-.1-1.7-.8-2-.9-.3-.1-.5-.1-.7.1-.2.3-.7.9-.9 1.1-.2.2-.3.2-.6.1-.3-.1-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6.1-.1.3-.4.4-.5.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5-.1-.1-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1 2.8 1.2 3c.1.2 2 3.1 4.9 4.3 2.9 1.2 2.9.8 3.4.8.5 0 1.7-.7 1.9-1.4.2-.7.2-1.3.2-1.4-.1-.1-.3-.1-.5-.3zM12 2a10 10 0 0 0-8.5 15.2L2 22l4.9-1.3A10 10 0 1 0 12 2z"/></svg>
+          </span>
+          WhatsApp
+        </div>
+
+        <article class="faq-row" data-cat="whatsapp" style="animation-delay:.05s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">11</span>
+            <span class="q-text">¿Funciona también en WhatsApp?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Sí desde el plan Business (149€/mes). Conectamos el mismo asistente al WhatsApp Business de tu empresa. Te activamos la integración gratis: solo necesitas tu número y en 24h responde por WhatsApp con las mismas respuestas y agenda.
+          </div></div>
+        </article>
+
+        <article class="faq-row" data-cat="whatsapp" style="animation-delay:.10s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">12</span>
+            <span class="q-text">¿Qué necesito para activar WhatsApp Business?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Un número dedicado y cuenta de WhatsApp Business. Si no la tienes, te guiamos durante el onboarding del plan Business. La configuración técnica con Meta la hacemos nosotros.
+          </div></div>
+        </article>
+
+        <!-- PLANES -->
+        <div class="faq-cat-label" data-cat-label="planes">
+          <span class="cat-ico" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </span>
+          Planes y precio
+        </div>
+
+        <article class="faq-row" data-cat="planes" style="animation-delay:.05s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">13</span>
+            <span class="q-text">¿Cómo funciona el plan Free?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            50 mensajes al mes para siempre, sin tarjeta y sin trial que caduca. Incluye widget, aprendizaje desde tu web, panel con métricas y soporte por comunidad. Ideal para validar antes de pasar a un plan de pago. <a href="/planes/">Ver todos los planes ?</a>
+          </div></div>
+        </article>
+
+        <article class="faq-row" data-cat="planes" style="animation-delay:.10s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">14</span>
+            <span class="q-text">¿Qué pasa si supero el límite de mensajes?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Te avisamos antes de llegar al tope. No bloqueamos el asistente sin avisar: te proponemos subir de plan o cobrar el exceso por unidades, según prefieras.
+          </div></div>
+        </article>
+
+        <article class="faq-row" data-cat="planes" style="animation-delay:.15s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">15</span>
+            <span class="q-text">¿Hay permanencia o cuota de alta?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            No. Todos los planes son mes a mes y cancelas desde el portal de Stripe cuando quieras. La alta express está incluida sin coste extra. Si pagas anual tienes 2 meses gratis.
+          </div></div>
+        </article>
+
+        <article class="faq-row" data-cat="planes" style="animation-delay:.20s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">16</span>
+            <span class="q-text">¿Puedo cambiar de plan más adelante?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Sí. Subes o bajas de plan cuando quieras desde el portal. El cambio se aplica al siguiente ciclo de facturación sin perder datos ni configuración.
+          </div></div>
+        </article>
+
+        <!-- SEGURIDAD -->
+        <div class="faq-cat-label" data-cat-label="seguridad">
+          <span class="cat-ico" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v7c0 4.7 3.2 9.1 8 10 4.8-.9 8-5.3 8-10V5l-8-3z"/></svg>
+          </span>
+          Seguridad y datos
+        </div>
+
+        <article class="faq-row" data-cat="seguridad" style="animation-delay:.05s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">17</span>
+            <span class="q-text">¿Cumple con el RGPD y la normativa europea?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Sí. Datos almacenados en servidores europeos, control de qué dominios pueden usar tu asistente, gestión granular de accesos y cumplimiento RGPD desde el diseño de la plataforma. <a href="/legal/privacidad/">Ver política de privacidad ?</a>
+          </div></div>
+        </article>
+
+        <article class="faq-row" data-cat="seguridad" style="animation-delay:.10s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">18</span>
+            <span class="q-text">¿Otros clientes pueden ver mis datos?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            No. Cada cliente tiene su espacio independiente con su propio cerebro RAG y conversaciones aisladas. Los datos jamás se mezclan entre cuentas.
+          </div></div>
+        </article>
+
+        <!-- SOPORTE -->
+        <div class="faq-cat-label" data-cat-label="soporte">
+          <span class="cat-ico" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/></svg>
+          </span>
+          Soporte
+        </div>
+
+        <article class="faq-row" data-cat="soporte" style="animation-delay:.05s">
+          <button class="faq-q" aria-expanded="false">
+            <span class="q-num">19</span>
+            <span class="q-text">¿Qué soporte incluye cada plan?</span>
+            <span class="q-chev" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </button>
+          <div class="faq-a"><div class="faq-a-in">
+            Free: soporte por comunidad. Starter: soporte por email. Pro: soporte prioritario por email. Business: soporte prioritario 24h con SLA reforzado y canal directo.
+          </div></div>
+        </article>
+
       </div>
-      <div class="faq-list">
-        <div class="faq-item">
-          <button class="faq-btn" aria-expanded="false">
-            ¿Qué incluye una auditoría inicial con Vantelia?
-            <span class="faq-chev" aria-hidden="true">▾</span>
-          </button>
-          <div class="faq-ans">
-            <div class="faq-ans-in">Revisamos captación, conversión, automatización, contenidos, analítica y fricciones
-              operativas. El resultado es una hoja de ruta con prioridades reales, no un informe genérico de
-              recomendaciones.</div>
-          </div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-btn" aria-expanded="false">
-            ¿El asistente IA funciona con cualquier tipo de web?
-            <span class="faq-chev" aria-hidden="true">▾</span>
-          </button>
-          <div class="faq-ans">
-            <div class="faq-ans-in">Sí. Se instala con una línea de código en cualquier web (WordPress, Webflow, Shopify
-              o cualquier otra). El alta express analiza tu web y deja el asistente listo en horas.</div>
-          </div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-btn" aria-expanded="false">
-            ¿Cuánto tarda en verse valor en un proyecto?
-            <span class="faq-chev" aria-hidden="true">▾</span>
-          </button>
-          <div class="faq-ans">
-            <div class="faq-ans-in">Para el asistente IA, normalmente en la primera semana. Para SEO y estrategia de
-              contenidos, priorizamos quick wins desde las primeras fases. El crecimiento estructural llega en 3-6
-              meses.</div>
-          </div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-btn" aria-expanded="false">
-            ¿Trabajáis solo IA o también marketing digital completo?
-            <span class="faq-chev" aria-hidden="true">▾</span>
-          </button>
-          <div class="faq-ans">
-            <div class="faq-ans-in">Trabajamos ambas capas. La IA es una palanca muy potente, pero la conectamos con
-              SEO, paid media, CRO, contenido, CRM y seguimiento comercial para que genere impacto real.</div>
-          </div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-btn" aria-expanded="false">
-            ¿Podéis colaborar con equipos internos o agencias existentes?
-            <span class="faq-chev" aria-hidden="true">▾</span>
-          </button>
-          <div class="faq-ans">
-            <div class="faq-ans-in">Sí. Podemos actuar como partner estratégico, capa de ejecución especializada o apoyo
-              a equipos internos que necesitan acelerar una parte concreta del sistema.</div>
-          </div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-btn" aria-expanded="false">
-            ¿Y si solo necesito el asistente IA o solo el SEO?
-            <span class="faq-chev" aria-hidden="true">▾</span>
-          </button>
-          <div class="faq-ans">
-            <div class="faq-ans-in">Encaja perfectamente. Empezamos por una necesidad concreta y, si tiene sentido,
-              escalamos hacia un sistema más completo. No hay mínimos artificiales ni paquetes forzados.</div>
-          </div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-btn" aria-expanded="false">
-            ¿Cómo se entrena el asistente con la información de mi empresa?
-            <span class="faq-chev" aria-hidden="true">▾</span>
-          </button>
-          <div class="faq-ans">
-            <div class="faq-ans-in">El alta express lee tu web automáticamente y monta el asistente con tu información
-              real. Puedes añadir documentos extra y el asistente se actualiza sin que tengas que tocar nada técnico.
-            </div>
-          </div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-btn" aria-expanded="false">
-            ¿El asistente IA puede gestionar reservas y citas?
-            <span class="faq-chev" aria-hidden="true">▾</span>
-          </button>
-          <div class="faq-ans">
-            <div class="faq-ans-in">Sí. El asistente conversa con el cliente, consulta tu disponibilidad real y reserva
-              la cita. Notifica por email a las dos partes y envía recordatorios antes de la visita.</div>
-          </div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-btn" aria-expanded="false">
-            ¿Cumple con el RGPD y la normativa europea?
-            <span class="faq-chev" aria-hidden="true">▾</span>
-          </button>
-          <div class="faq-ans">
-            <div class="faq-ans-in">Sí. Datos almacenados en servidores europeos, control de qué webs pueden usar tu
-              asistente, gestión de accesos y cumplimiento RGPD desde el diseño de la plataforma.</div>
-          </div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-btn" aria-expanded="false">
-            ¿Qué presupuesto necesito para empezar?
-            <span class="faq-chev" aria-hidden="true">▾</span>
-          </button>
-          <div class="faq-ans">
-            <div class="faq-ans-in">Puedes empezar con Free, sin tarjeta y con 50 mensajes al mes. Los planes de pago son
-              Starter por 19€/mes, Pro por 49€/mes y Business por 149€/mes. Todos con 1 mes gratis y sin permanencia. Puedes ver el detalle en la <a href="/planes/">página
-                de planes</a>. La consulta inicial es gratuita y sirve para recomendarte el plan adecuado.</div>
-          </div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-btn" aria-expanded="false">
-            ¿Hay permanencia o cuota de alta?
-            <span class="faq-chev" aria-hidden="true">▾</span>
-          </button>
-          <div class="faq-ans">
-            <div class="faq-ans-in">No. Todos los planes son mes a mes y la alta express está incluida sin coste extra.
-              Puedes cambiar o cancelar cuando quieras desde el portal.</div>
-          </div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-btn" aria-expanded="false">
-            ¿Qué diferencia hay entre Free, Starter, Pro y Business?
-            <span class="faq-chev" aria-hidden="true">▾</span>
-          </button>
-          <div class="faq-ans">
-            <div class="faq-ans-in">Free sirve para probar el asistente. Starter añade documentos, personalización de marca
-              y exportación de leads. Pro suma reservas, Live Chat, Q&A y Tune AI avanzado. Business añade WhatsApp
-              Business, integraciones y más volumen.</div>
-          </div>
-        </div>
+
+      <div class="faq-empty" id="faqEmpty">
+        <h3>Sin resultados</h3>
+        <p>No encontramos preguntas para tu búsqueda. Prueba con otro término o <a href="/consultas/" style="color:var(--primary);font-weight:600">pregúntanos directamente</a>.</p>
       </div>
     </div>
   </section>
@@ -396,13 +871,13 @@
     <div class="shell">
       <div class="cta-inner reveal">
         <span class="eyebrow">¿Empezamos?</span>
-        <h2>Pruebalo gratis. Lo entiendes mejor en 2 minutos que en una llamada.</h2>
+        <h2>Pruébalo gratis. Lo entiendes mejor en 2 minutos que en una llamada.</h2>
         <p>
           50 mensajes/mes sin tarjeta, wizard guiado, snippet listo para tu web. Si prefieres
           que te ayudemos con onboarding personalizado, también puedes hablar con nosotros.
         </p>
         <div class="cta-actions" style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
-          <a href="https://app.vantelia.es/acceso" class="btn btn-primary btn-lg" target="_blank" rel="noopener">Crea tu bot gratis →</a>
+          <a href="https://app.vantelia.es/acceso" class="btn btn-primary btn-lg" target="_blank" rel="noopener">Crea tu bot gratis ?</a>
           <a href="/consultas/" class="btn btn-ghost btn-lg">Hablar con un experto</a>
         </div>
         <p class="cta-note">Sin tarjeta · sin permanencia · datos en Europa</p>
@@ -415,55 +890,49 @@
       <div class="footer-grid">
         <div class="footer-brand">
           <div class="footer-logo">
-            <span class="brand-name">Vantelia</span>
+            <img src="/assets/img/logo-letra.webp" alt="Vantelia" height="30" loading="lazy" decoding="async">
           </div>
           <p class="footer-desc">
-            Asistentes inteligentes para empresas. Atienden, recomienden y agendan por ti,
-            mientras tu equipo se centra en lo importante.
+            Asistente IA embebible para tu web. Setup en 2 minutos, aprende de tu contenido
+            y atiende a tus clientes 24/7. Hecho en España, datos en Europa.
           </p>
           <div class="footer-social" aria-label="Redes sociales">
             <a href="https://linkedin.com/company/vantelia" class="social-a" aria-label="LinkedIn"
               rel="noopener noreferrer" target="_blank">in</a>
-            <a href="/consultas/" class="social-a" aria-label="Solicitar consulta">✉</a>
+            <a href="/consultas/" class="social-a" aria-label="Solicitar consulta">?</a>
           </div>
         </div>
+
         <div class="footer-col">
-          <div class="col-title">Producto</div>
+          <div class="col-title">Navegación</div>
           <div class="col-links">
-            <a href="/servicios/">Servicios</a>
+            <a href="/">Inicio</a>
             <a href="/planes/">Planes</a>
-            <a href="/plataforma/">Plataforma</a>
-            <a href="/demo/">Demo</a>
-            <a href="/resultados/">Resultados</a>
+            <a href="/faq/">Preguntas frecuentes</a>
             <a href="/consultas/">Consulta gratuita</a>
           </div>
         </div>
-        <div class="footer-col">
-          <div class="col-title">Empresa</div>
-          <div class="col-links">
-            <a href="/nosotros/">Nosotros</a>
-            <a href="/faq/">Preguntas frecuentes</a>
-            <a href="/consultas/">Solicitar consulta</a>
-          </div>
-        </div>
+
         <div class="footer-col">
           <div class="col-title">Plataforma</div>
           <div class="col-links">
-            <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso clientes</a>
-            <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso administradores</a>
+            <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso plataforma</a>
+            <a href="https://app.vantelia.es/acceso?signup=1" target="_blank" rel="noopener">Crea tu bot gratis</a>
           </div>
         </div>
+
         <div class="footer-col">
           <div class="col-title">Legal</div>
           <div class="col-links">
             <a href="/legal/privacidad/">Política de privacidad</a>
             <a href="/legal/terminos/">Términos de uso</a>
             <a href="/legal/cookies/">Política de cookies</a>
-          <a href="#" onclick="event.preventDefault();window.openCookiePreferences&&window.openCookiePreferences()">Preferencias cookies</a>
+            <a href="#" onclick="event.preventDefault();window.openCookiePreferences&&window.openCookiePreferences()">Preferencias cookies</a>
             <a href="/legal/ia-responsable/">IA responsable</a>
           </div>
         </div>
       </div>
+
       <div class="footer-bottom">
         <p>© 2026 Vantelia · Todos los derechos reservados</p>
         <p class="footer-locale">Hecho en España · ES</p>
@@ -471,8 +940,74 @@
     </div>
   </footer>
 
-  <script src="/assets/js/home.js?v=cookies-20260504" defer></script>
-  <script src="https://app.vantelia.es/widget/widget.min.js?v=1777977261" data-api="https://app.vantelia.es"
+  <script src="/assets/js/home.js?v=20260525-cookies2" defer></script>
+
+  <script>
+    (function(){
+      var rows = Array.prototype.slice.call(document.querySelectorAll('.faq-row'));
+      var labels = Array.prototype.slice.call(document.querySelectorAll('.faq-cat-label'));
+      var cats = Array.prototype.slice.call(document.querySelectorAll('.faq-cat'));
+      var counter = document.getElementById('faqCounter');
+      var empty = document.getElementById('faqEmpty');
+      var activeCat = 'all';
+
+      // Accordion toggle
+      rows.forEach(function(row){
+        var btn = row.querySelector('.faq-q');
+        btn.addEventListener('click', function(){
+          var open = row.classList.contains('open');
+          // Optional: close others for a cleaner UX
+          rows.forEach(function(r){
+            if (r !== row) {
+              r.classList.remove('open');
+              var b = r.querySelector('.faq-q');
+              if (b) b.setAttribute('aria-expanded', 'false');
+            }
+          });
+          row.classList.toggle('open', !open);
+          btn.setAttribute('aria-expanded', !open ? 'true' : 'false');
+        });
+      });
+
+      function applyFilters(){
+        var visibleByCat = {};
+        var totalVisible = 0;
+
+        rows.forEach(function(row){
+          var cat = row.getAttribute('data-cat');
+          var show = (activeCat === 'all' || cat === activeCat);
+          row.classList.toggle('hidden', !show);
+          if (show) {
+            visibleByCat[cat] = (visibleByCat[cat] || 0) + 1;
+            totalVisible++;
+          }
+        });
+
+        labels.forEach(function(lab){
+          var key = lab.getAttribute('data-cat-label');
+          var hide = !visibleByCat[key];
+          lab.style.display = hide ? 'none' : '';
+        });
+
+        counter.textContent = totalVisible === 0
+          ? 'Sin coincidencias'
+          : (totalVisible === 1 ? 'Mostrando 1 pregunta' : 'Mostrando ' + totalVisible + ' preguntas');
+
+        empty.classList.toggle('visible', totalVisible === 0);
+      }
+
+      cats.forEach(function(c){
+        c.addEventListener('click', function(){
+          cats.forEach(function(x){ x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
+          c.classList.add('active'); c.setAttribute('aria-selected', 'true');
+          activeCat = c.getAttribute('data-cat');
+          applyFilters();
+        });
+      });
+    })();
+  </script>
+
+  <script src="https://app.vantelia.es/widget/widget.min.js?v=20260522-rebuild" data-api="https://app.vantelia.es"
     data-client="Vantelia" data-position="right"></script>
 
 </body>

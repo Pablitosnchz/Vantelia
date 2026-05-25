@@ -21,6 +21,16 @@
     return !!(consent && consent.analytics);
   }
 
+  function applyGoogleConsent(state) {
+    if (typeof window.gtag !== 'function') return;
+    window.gtag('consent', 'update', {
+      analytics_storage: state && state.analytics ? 'granted' : 'denied',
+      ad_storage: state && state.marketing ? 'granted' : 'denied',
+      ad_user_data: state && state.marketing ? 'granted' : 'denied',
+      ad_personalization: state && state.marketing ? 'granted' : 'denied',
+    });
+  }
+
   function cleanPayload(payload) {
     const out = {};
     Object.keys(payload || {}).forEach((key) => {
@@ -44,9 +54,9 @@
 
     window.dataLayer = window.dataLayer || [];
     window.dataLayer.push(event);
-    sendServerEvent(event);
 
     if (hasAnalyticsConsent()) {
+      sendServerEvent(event);
       if (typeof window.gtag === 'function') {
         const { event: _eventName, ...params } = event;
         window.gtag('event', eventName, params);
@@ -194,15 +204,34 @@
   const menu = document.getElementById('mobile-menu');
   const close = document.getElementById('mobile-close');
   if (!toggle || !menu || !close) return;
+  let lastFocused = null;
+  const focusableSelector = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  menu.setAttribute('aria-hidden', 'true');
+  menu.setAttribute('aria-modal', 'true');
+
+  function focusableItems() {
+    return Array.from(menu.querySelectorAll(focusableSelector)).filter(el => el.offsetParent !== null);
+  }
+
   function openMenu() {
+    lastFocused = document.activeElement;
     menu.classList.add('open');
+    menu.setAttribute('aria-hidden', 'false');
     toggle.setAttribute('aria-expanded', 'true');
     document.body.classList.add('mobile-nav-open');
+    const first = focusableItems()[0] || close;
+    first.focus({ preventScroll: true });
   }
   function closeMenu() {
+    const wasOpen = menu.classList.contains('open');
     menu.classList.remove('open');
+    menu.setAttribute('aria-hidden', 'true');
     toggle.setAttribute('aria-expanded', 'false');
     document.body.classList.remove('mobile-nav-open');
+    if (wasOpen && lastFocused && typeof lastFocused.focus === 'function') {
+      lastFocused.focus({ preventScroll: true });
+    }
   }
   toggle.addEventListener('click', () => {
     if (menu.classList.contains('open')) closeMenu();
@@ -210,7 +239,24 @@
   });
   close.addEventListener('click', closeMenu);
   menu.querySelectorAll('a').forEach(a => a.addEventListener('click', closeMenu));
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeMenu();
+      return;
+    }
+    if (e.key !== 'Tab' || !menu.classList.contains('open')) return;
+    const items = focusableItems();
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
   window.addEventListener('resize', () => { if (window.innerWidth > 768) closeMenu(); }, { passive: true });
 })();
 
@@ -304,6 +350,16 @@
   const STORAGE_KEY = 'vantelia_cookie_consent_v1';
   const PRIVACY_URL = '/legal/cookies/';
 
+  function applyGoogleConsent(state) {
+    if (typeof window.gtag !== 'function') return;
+    window.gtag('consent', 'update', {
+      analytics_storage: state && state.analytics ? 'granted' : 'denied',
+      ad_storage: state && state.marketing ? 'granted' : 'denied',
+      ad_user_data: state && state.marketing ? 'granted' : 'denied',
+      ad_personalization: state && state.marketing ? 'granted' : 'denied',
+    });
+  }
+
   function readConsent() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -328,7 +384,15 @@
       analytics: !!state.analytics,
       marketing: !!state.marketing,
     };
-    document.dispatchEvent(new CustomEvent('vantelia:consent', { detail: window.vanteliaConsent }));
+    try { applyGoogleConsent(window.vanteliaConsent); } catch (_) { }
+    try {
+      document.dispatchEvent(new CustomEvent('vantelia:consent', { detail: window.vanteliaConsent }));
+    } catch (_) { }
+  }
+
+  function closeWithConsent(wrap, state) {
+    if (wrap && typeof wrap.remove === 'function') wrap.remove();
+    writeConsent(state);
   }
 
   function injectStyles() {
@@ -415,12 +479,10 @@
       </div>
     `;
     wrap.querySelector('.cc-accept').addEventListener('click', () => {
-      writeConsent({ analytics: true, marketing: true });
-      wrap.remove();
+      closeWithConsent(wrap, { analytics: true, marketing: true });
     });
     wrap.querySelector('.cc-reject').addEventListener('click', () => {
-      writeConsent({ analytics: false, marketing: false });
-      wrap.remove();
+      closeWithConsent(wrap, { analytics: false, marketing: false });
     });
     document.body.appendChild(wrap);
   }
@@ -432,6 +494,7 @@
         analytics: !!existing.analytics,
         marketing: !!existing.marketing,
       };
+      applyGoogleConsent(window.vanteliaConsent);
       return;
     }
     build();
@@ -448,5 +511,209 @@
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
+  }
+})();
+
+/* ════════════════════════════════════════════════
+   Hero mockup widget — chat loop (3 flujos)
+   ════════════════════════════════════════════════ */
+(function () {
+  var chat = document.getElementById('mwChat');
+  if (!chat) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  function scrollChat() { chat.scrollTop = chat.scrollHeight; }
+  function addBubble(who, text) {
+    var b = document.createElement('div');
+    b.className = 'mw-bubble ' + who;
+    if (who === 'confirm') b.innerHTML = text; else b.textContent = text;
+    chat.appendChild(b); scrollChat(); return b;
+  }
+  function showTyping(ms, cb) {
+    var t = document.createElement('div');
+    t.className = 'mw-bubble typing';
+    t.innerHTML = '<span></span><span></span><span></span>';
+    chat.appendChild(t); scrollChat();
+    setTimeout(function () { t.remove(); cb(); }, ms);
+  }
+  function buildOptions() {
+    var card = document.createElement('div');
+    card.className = 'mw-card';
+    card.innerHTML = '<p class="mw-card-title">¿En qué te ayudo?</p><div class="mw-opts"></div>';
+    var box = card.querySelector('.mw-opts');
+    [
+      { icon: '📅', label: 'Agendar cita' },
+      { icon: '📦', label: 'Información de productos' },
+      { icon: '❓', label: 'Preguntas frecuentes' }
+    ].forEach(function (it) {
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'mw-opt';
+      btn.innerHTML = '<em>' + it.icon + '</em> <span>' + it.label + '</span>';
+      box.appendChild(btn);
+    });
+    chat.appendChild(card); scrollChat();
+    return card.querySelectorAll('.mw-opt');
+  }
+  function buildCalendar() {
+    var card = document.createElement('div');
+    card.className = 'mw-card';
+    card.innerHTML = '<p class="mw-card-title">📅 Elige día</p><div class="mw-cal"></div>';
+    var cal = card.querySelector('.mw-cal');
+    [
+      { dow: 'Lun', n: 19, dis: true },
+      { dow: 'Mar', n: 20, dis: false },
+      { dow: 'Mié', n: 21, dis: false },
+      { dow: 'Jue', n: 22, dis: false },
+      { dow: 'Vie', n: 23, dis: false },
+      { dow: 'Sáb', n: 24, dis: true },
+      { dow: 'Dom', n: 25, dis: true },
+      { dow: 'Lun', n: 26, dis: false }
+    ].forEach(function (d) {
+      var el = document.createElement('div');
+      el.className = 'mw-cal-day' + (d.dis ? ' is-disabled' : '');
+      el.innerHTML = d.dow + '<b>' + d.n + '</b>';
+      el.dataset.label = d.dow + ' ' + d.n;
+      cal.appendChild(el);
+    });
+    chat.appendChild(card); scrollChat();
+    return card.querySelectorAll('.mw-cal-day:not(.is-disabled)');
+  }
+  function buildSlots(dayLabel) {
+    var card = document.createElement('div');
+    card.className = 'mw-card';
+    card.innerHTML = '<p class="mw-card-title">🕐 Huecos disponibles</p><p class="mw-card-sub">' + dayLabel + '</p><div class="mw-slots"></div>';
+    var box = card.querySelector('.mw-slots');
+    ['10:00','11:30','12:30','17:00','18:30'].forEach(function (h) {
+      var s = document.createElement('span');
+      s.className = 'mw-slot'; s.textContent = h;
+      box.appendChild(s);
+    });
+    chat.appendChild(card); scrollChat();
+    return card.querySelectorAll('.mw-slot');
+  }
+  function buildPlans() {
+    var card = document.createElement('div');
+    card.className = 'mw-card';
+    card.innerHTML = '<p class="mw-card-title">💎 Planes Vantelia</p><p class="mw-card-sub">Sin permanencia. Cancelas cuando quieras.</p><div class="mw-plans"></div>';
+    var box = card.querySelector('.mw-plans');
+    [
+      { name:'Free', price:'0€', feat:'50 msg/mes · widget web' },
+      { name:'Starter', price:'19€', feat:'1.000 msg · leads · reservas' },
+      { name:'Pro', price:'49€', feat:'5.000 msg · WhatsApp · Live Chat', tag:'Popular' },
+      { name:'Business', price:'149€', feat:'Ilimitado · soporte prioritario' }
+    ].forEach(function (p) {
+      var row = document.createElement('div');
+      row.className = 'mw-plan';
+      var tag = p.tag ? '<span class="mw-plan-tag">' + p.tag + '</span>' : '';
+      row.innerHTML = tag + '<div><span class="mw-plan-name">' + p.name + '</span><br><span class="mw-plan-feat">' + p.feat + '</span></div><span class="mw-plan-price">' + p.price + '/mes</span>';
+      box.appendChild(row);
+    });
+    chat.appendChild(card); scrollChat();
+  }
+  function buildFaqList(items) {
+    var card = document.createElement('div');
+    card.className = 'mw-card';
+    card.innerHTML = '<p class="mw-card-title">❓ Preguntas frecuentes</p><div class="mw-faq-list"></div>';
+    var box = card.querySelector('.mw-faq-list');
+    items.forEach(function (q) {
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'mw-faq-q'; btn.textContent = q;
+      box.appendChild(btn);
+    });
+    chat.appendChild(card); scrollChat();
+    return card.querySelectorAll('.mw-faq-q');
+  }
+  function clickWithDelay(el, ms, cb) {
+    setTimeout(function () {
+      el.classList.add('is-clicked');
+      setTimeout(cb, 420);
+    }, ms);
+  }
+
+  function flowAgenda(done) {
+    chat.innerHTML = '';
+    addBubble('bot', 'Hola 👋 Soy el asistente de Vantelia. ¿En qué te ayudo?');
+    setTimeout(function () {
+      var opts = buildOptions();
+      clickWithDelay(opts[0], 1400, function () {
+        addBubble('user', 'Agendar cita');
+        showTyping(900, function () {
+          var cal = buildCalendar();
+          clickWithDelay(cal[2], 1300, function () {
+            var picked = cal[2].dataset.label;
+            addBubble('user', picked);
+            showTyping(800, function () {
+              var sl = buildSlots(picked);
+              clickWithDelay(sl[2], 1100, function () {
+                var hour = sl[2].textContent;
+                addBubble('user', hour);
+                showTyping(900, function () {
+                  addBubble('confirm', '✅ <b>Cita confirmada</b><br>' + picked + ' · ' + hour + '<br><small>Te enviamos un email con los detalles.</small>');
+                  setTimeout(done, 3200);
+                });
+              });
+            });
+          });
+        });
+      });
+    }, 1200);
+  }
+  function flowProductos(done) {
+    chat.innerHTML = '';
+    addBubble('bot', '¡Hola! ¿Te ayudo con algo más?');
+    setTimeout(function () {
+      var opts = buildOptions();
+      clickWithDelay(opts[1], 1400, function () {
+        addBubble('user', 'Información de productos');
+        showTyping(1000, function () {
+          addBubble('bot', 'Estos son nuestros planes. El más elegido es Pro:');
+          setTimeout(function () { buildPlans(); setTimeout(done, 4200); }, 600);
+        });
+      });
+    }, 1100);
+  }
+  function flowFaq(done) {
+    chat.innerHTML = '';
+    addBubble('bot', '¿En qué te ayudo?');
+    setTimeout(function () {
+      var opts = buildOptions();
+      clickWithDelay(opts[2], 1400, function () {
+        addBubble('user', 'Preguntas frecuentes');
+        showTyping(800, function () {
+          var faqs = buildFaqList([
+            '¿Cuánto tarda en montarse?',
+            '¿Necesito saber programar?',
+            '¿Cómo se activa WhatsApp?',
+            '¿Puedo cancelar cuando quiera?'
+          ]);
+          clickWithDelay(faqs[2], 1400, function () {
+            addBubble('user', '¿Cómo se activa WhatsApp?');
+            showTyping(1000, function () {
+              addBubble('bot', 'Lo activamos nosotros gratis 🎁 Nos das tu número de WhatsApp Business y en menos de 24h tu asistente ya responde por WhatsApp.');
+              setTimeout(done, 3400);
+            });
+          });
+        });
+      });
+    }, 1100);
+  }
+  function loopAll() {
+    flowAgenda(function () {
+      flowProductos(function () {
+        flowFaq(function () { loopAll(); });
+      });
+    });
+  }
+
+  if ('IntersectionObserver' in window) {
+    var started = false;
+    var io2 = new IntersectionObserver(function (ents) {
+      ents.forEach(function (e) {
+        if (e.isIntersecting && !started) { started = true; loopAll(); io2.disconnect(); }
+      });
+    }, { threshold: 0.2 });
+    io2.observe(chat);
+  } else {
+    loopAll();
   }
 })();

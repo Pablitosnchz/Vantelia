@@ -1,14 +1,22 @@
 <!doctype html>
 <html lang="es">
 <head>
-<!-- Google tag (gtag.js) -->
+<!-- Google tag (gtag.js) with Consent Mode denied by default -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-Q7KTBVD92P"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
+  gtag('consent', 'default', {
+    analytics_storage: 'denied',
+    ad_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+    wait_for_update: 500
+  });
   gtag('js', new Date());
-  gtag('config', 'G-Q7KTBVD92P');
-</script>  <meta charset="utf-8">
+  gtag('config', 'G-Q7KTBVD92P', { anonymize_ip: true });
+</script>
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Política de privacidad | Vantelia</title>
   <meta name="description" content="Política de privacidad de Vantelia conforme a RGPD: tratamiento de datos en sistemas de IA, derechos del usuario, encargados y plazos.">
@@ -27,7 +35,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/home.css?v=cookies-20260504">
+  <link rel="stylesheet" href="/assets/css/home.css?v=20260522-rebuild">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -58,17 +66,14 @@
 <header class="site-header" id="site-header">
   <div class="shell nav-inner">
     <a href="/" class="brand" aria-label="Vantelia · Inicio">
-      <img src="/assets/img/logo-letra.png?v=cookies-20260504" alt="Logo Vantelia · Agencia de IA y Marketing B2B" width="200" height="48" fetchpriority="high" decoding="async">
+      <img src="/assets/img/logo-letra.webp?v=20260522-rebuild" alt="Logo Vantelia · Asistente IA self-serve para empresas" width="200" height="48" fetchpriority="high" decoding="async">
     </a>
     <nav aria-label="Navegación principal">
       <ul class="nav-links">
-        <li><a href="/servicios/">Servicios</a></li>
-        <li><a href="/planes/">Planes</a></li>
-        <li><a href="/plataforma/">Plataforma</a></li>
-        <li><a href="/demo/">Demo</a></li>
-        <li><a href="/resultados/">Resultados</a></li>
-        <li><a href="/faq/">FAQ</a></li>
-      </ul>
+          <li><a href="/">Inicio</a></li>
+          <li><a href="/planes/">Planes</a></li>
+          <li><a href="/faq/">Preguntas frecuentes</a></li>
+        </ul>
     </nav>
     <div style="display:flex;gap:10px;align-items:center" class="nav-cta">
       <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener">
@@ -83,13 +88,10 @@
 </header>
 
 <div class="mobile-menu" id="mobile-menu" role="dialog" aria-label="Menú de navegación">
-  <button class="mobile-close" id="mobile-close" aria-label="Cerrar menú">✕</button>
-  <a href="/servicios/"  class="mm-link">Servicios</a>
-  <a href="/planes/"     class="mm-link">Planes</a>
-  <a href="/plataforma/" class="mm-link">Plataforma</a>
-  <a href="/demo/" class="mm-link">Demo</a>
-  <a href="/resultados/" class="mm-link">Resultados</a>
-  <a href="/faq/"        class="mm-link">FAQ</a>
+  <button class="mobile-close" id="mobile-close" aria-label="Cerrar menú">?</button>
+  <a href="/" class="mm-link">Inicio</a>
+    <a href="/planes/" class="mm-link">Planes</a>
+    <a href="/faq/" class="mm-link">Preguntas frecuentes</a>
   <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener" style="margin-top:8px;font-size:1rem;height:48px;padding:0 28px">
     <span class="dot-live"></span>Acceso plataforma
   </a>
@@ -99,7 +101,7 @@
 <main class="legal-page" aria-label="Política de privacidad | Vantelia">
   <div class="shell">
     <article>
-      
+
 <h1>Política de privacidad</h1>
 <p class="legal-meta">Última actualización: 30 de abril de 2026 · Versión 2.0 · Conforme a RGPD (UE 2016/679) y LOPDGDD (LO 3/2018)</p>
 
@@ -234,65 +236,60 @@
 </main>
 
 <footer class="site-footer" aria-label="Pie de página">
-  <div class="shell">
-    <div class="footer-grid">
-      <div class="footer-brand">
-        <div class="footer-logo">
-          <span class="brand-name">Vantelia</span>
+    <div class="shell">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="footer-logo">
+            <img src="/assets/img/logo-letra.webp" alt="Vantelia" height="30" loading="lazy" decoding="async">
+          </div>
+          <p class="footer-desc">
+            Asistente IA embebible para tu web. Setup en 2 minutos, aprende de tu contenido
+            y atiende a tus clientes 24/7. Hecho en España, datos en Europa.
+          </p>
+          <div class="footer-social" aria-label="Redes sociales">
+            <a href="https://linkedin.com/company/vantelia" class="social-a" aria-label="LinkedIn"
+              rel="noopener noreferrer" target="_blank">in</a>
+            <a href="/consultas/" class="social-a" aria-label="Solicitar consulta">?</a>
+          </div>
         </div>
-        <p class="footer-desc">
-          Asistentes inteligentes para empresas. Atienden, recomienden y agendan por ti,
-          mientras tu equipo se centra en lo importante.
-        </p>
-        <div class="footer-social" aria-label="Redes sociales">
-          <a href="https://linkedin.com/company/vantelia" class="social-a" aria-label="LinkedIn" rel="noopener noreferrer" target="_blank">in</a>
-          <a href="/consultas/" class="social-a" aria-label="Solicitar consulta">✉</a>
-        </div>
-      </div>
-      <div class="footer-col">
-        <div class="col-title">Producto</div>
-        <div class="col-links">
-          <a href="/servicios/">Servicios</a>
-          <a href="/planes/">Planes</a>
-          <a href="/plataforma/">Plataforma</a>
-          <a href="/demo/">Demo</a>
-          <a href="/resultados/">Resultados</a>
-          <a href="/consultas/">Consulta gratuita</a>
-        </div>
-      </div>
-      <div class="footer-col">
-        <div class="col-title">Empresa</div>
-        <div class="col-links">
-          <a href="/nosotros/">Nosotros</a>
-          <a href="/faq/">Preguntas frecuentes</a>
-          <a href="/consultas/">Solicitar consulta</a>
-        </div>
-      </div>
-      <div class="footer-col">
-        <div class="col-title">Plataforma</div>
-        <div class="col-links">
-          <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso clientes</a>
-          <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso administradores</a>
-        </div>
-      </div>
-      <div class="footer-col">
-        <div class="col-title">Legal</div>
-        <div class="col-links">
-          <a href="/legal/privacidad/">Política de privacidad</a>
-          <a href="/legal/terminos/">Términos de uso</a>
-          <a href="/legal/cookies/">Política de cookies</a>
-          <a href="#" onclick="event.preventDefault();window.openCookiePreferences&&window.openCookiePreferences()">Preferencias cookies</a>
-          <a href="/legal/ia-responsable/">IA responsable</a>
-        </div>
-      </div>
-    </div>
-    <div class="footer-bottom">
-      <p>© 2026 Vantelia · Todos los derechos reservados</p>
-      <p class="footer-locale">Hecho en España · ES</p>
-    </div>
-  </div>
-</footer>
 
-<script src="/assets/js/home.js?v=cookies-20260504" defer></script>
+        <div class="footer-col">
+          <div class="col-title">Navegación</div>
+          <div class="col-links">
+            <a href="/">Inicio</a>
+            <a href="/planes/">Planes</a>
+            <a href="/faq/">Preguntas frecuentes</a>
+            <a href="/consultas/">Consulta gratuita</a>
+          </div>
+        </div>
+
+        <div class="footer-col">
+          <div class="col-title">Plataforma</div>
+          <div class="col-links">
+            <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso plataforma</a>
+            <a href="https://app.vantelia.es/acceso?signup=1" target="_blank" rel="noopener">Crea tu bot gratis</a>
+          </div>
+        </div>
+
+        <div class="footer-col">
+          <div class="col-title">Legal</div>
+          <div class="col-links">
+            <a href="/legal/privacidad/">Política de privacidad</a>
+            <a href="/legal/terminos/">Términos de uso</a>
+            <a href="/legal/cookies/">Política de cookies</a>
+            <a href="#" onclick="event.preventDefault();window.openCookiePreferences&&window.openCookiePreferences()">Preferencias cookies</a>
+            <a href="/legal/ia-responsable/">IA responsable</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <p>© 2026 Vantelia · Todos los derechos reservados</p>
+        <p class="footer-locale">Hecho en España · ES</p>
+      </div>
+    </div>
+  </footer>
+
+<script src="/assets/js/home.js?v=20260525-cookies2" defer></script>
 </body>
 </html>

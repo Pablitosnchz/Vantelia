@@ -146,37 +146,15 @@ def pick_opener(stage: str, p: IGProspect) -> tuple[str, str]:
     return template.format(first=p.display_name, biz=p.business_label), variant
 
 
-def make_demo_slug(username: str, full_name: str = "") -> str:
-    """Slug determinista compatible con sistema demo existente.
-
-    Espejo de make_demo_slug en outreach pero con username como semilla
-    (no hay email). Misma forma: {slug-biz}-{hash6}.
-    """
-    seed = f"ig:{(username or '').lower().strip()}"
-    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:6]
-    base = (full_name or username or "").lower().strip()
-    safe = "".join(c if c.isalnum() or c == "-" else "-" for c in base).strip("-")
-    safe = "-".join(filter(None, safe.split("-")))[:40] or "demo"
-    return f"{safe}-{digest}"
-
-
-def demo_url(stage: str, p: IGProspect) -> str:
-    base = os.getenv("OUTREACH_DEMO_BASE_URL", "").strip().rstrip("/")
-    if not base:
-        base = os.getenv("APP_BASE_URL", "").strip().rstrip("/")
-    if not base:
-        base = "https://app.vantelia.es"
-    slug = make_demo_slug(p.username, p.full_name)
-    params = {
-        "utm_source": "instagram",
-        "utm_medium": "dm",
-        "utm_campaign": f"ig_{stage}",
-    }
-    return f"{base}/d/{slug}?{urlencode(params)}"
-
-
 def fallback_cta_url() -> str:
+    """CTA secundario: enlace de calendario si existe, en caso contrario vacio."""
     return os.getenv("OUTREACH_CALENDAR_URL", "").strip()
+
+
+def public_site_url() -> str:
+    """Landing publica de Vantelia para CTA por defecto cuando no hay calendar."""
+    base = os.getenv("APP_PUBLIC_URL", "").strip().rstrip("/") or "https://www.vantelia.es"
+    return f"{base}/?utm_source=instagram&utm_medium=dm"
 
 
 # ----------------------- Renderers -----------------------
@@ -189,25 +167,29 @@ def _truncate(text: str, limit: int = MAX_DM_CHARS) -> str:
     return text[: limit - 1].rstrip() + "..."
 
 
+def _primary_cta() -> str:
+    return fallback_cta_url() or public_site_url()
+
+
 def render_cold(p: IGProspect) -> tuple[str, str]:
     opener, variant = pick_opener("cold", p)
     hook = niche_hook(p)
-    cta = demo_url("cold", p)
-    body = f"{opener}. {hook}. te he preparado una demo personalizada, mira: {cta}"
+    cta = _primary_cta()
+    body = f"{opener}. {hook}. si te encaja, te cuento como funciona en 1 mensaje: {cta}"
     return _truncate(body), variant
 
 
 def render_fu1(p: IGProspect) -> tuple[str, str]:
     opener, variant = pick_opener("fu1", p)
-    cta = demo_url("fu1", p)
-    body = f"{opener}. por si no lo viste, te dejo la demo que prepare para {p.business_label}: {cta}"
+    cta = _primary_cta()
+    body = f"{opener}. por si te perdiste el primero. para {p.business_label} encaja bien: {cta}"
     return _truncate(body), variant
 
 
 def render_fu2(p: IGProspect) -> tuple[str, str]:
     opener, variant = pick_opener("fu2", p)
-    cta = demo_url("fu2", p)
-    body = f"{opener}. ultimo intento. ejemplo concreto de como quedaria en {p.business_label}: {cta}"
+    cta = _primary_cta()
+    body = f"{opener}. ultimo aviso. si te interesa probarlo en {p.business_label}, escribeme aqui o pasate por: {cta}"
     return _truncate(body), variant
 
 

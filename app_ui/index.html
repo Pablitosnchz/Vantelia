@@ -546,6 +546,25 @@
     .gcal-event-pill:hover { opacity:1; }
     .gcal-more { font-size:0.68rem; color:var(--accent); padding:1px 3px; cursor:pointer; display:block; }
     .gcal-more:hover { text-decoration:underline; }
+    .gcal-day.closed {
+      background: linear-gradient(180deg, rgba(239,68,68,0.045), rgba(239,68,68,0.015));
+      box-shadow: inset 0 0 0 1px rgba(239,68,68,0.58);
+    }
+    .gcal-day.closed:hover { background: rgba(239,68,68,0.07); }
+    .gcal-day.closed .gcal-day-num { color:#fecaca; }
+    .gcal-day-tag {
+      display:block; width:max-content; max-width:100%; margin:2px 0 4px; padding:1px 7px; border-radius:999px;
+      font-size:0.64rem; font-weight:650; letter-spacing:.04em; text-transform:uppercase;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .gcal-day-tag.closed { background:rgba(239,68,68,0.12); color:#fecaca; border:1px solid rgba(239,68,68,0.32); }
+    .gcal-day.blocked {
+      background: linear-gradient(180deg, rgba(245,158,11,0.05), rgba(245,158,11,0.015));
+      box-shadow: inset 0 0 0 1px rgba(245,158,11,0.6);
+    }
+    .gcal-day.blocked:hover { background: rgba(245,158,11,0.09); }
+    .gcal-day.closed.blocked { box-shadow: inset 0 0 0 1px rgba(245,158,11,0.62), inset 3px 0 0 rgba(239,68,68,0.72); }
+    .gcal-day-tag.blocked { background:rgba(245,158,11,0.13); color:#fde68a; border:1px solid rgba(245,158,11,0.38); }
 
     /* ── Accordion ── */
     .accordion { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
@@ -693,10 +712,6 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
     <span>Chats</span>
   </div>
-  <div class="nav-item" data-tab="leads">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-    <span>Leads</span>
-  </div>
   <div class="nav-item" data-tab="knowledge">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
     <span>Conocimiento</span>
@@ -708,6 +723,10 @@
   <div class="nav-item" data-tab="tune">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
     <span>Tune AI</span>
+  </div>
+  <div class="nav-item" data-tab="whatsapp">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 11.7a8.5 8.5 0 0 1-12.4 7.5L3 20.5l1.4-4.9A8.5 8.5 0 1 1 20.5 11.7z"/><path d="M8.8 8.2c.2-.5.5-.5.8-.5h.6c.2 0 .5.1.6.4l.7 1.7c.1.3.1.5-.1.7l-.4.5c-.1.2-.2.4 0 .6.4.7 1 1.3 1.7 1.8.2.1.4.1.6-.1l.6-.5c.2-.2.4-.2.7-.1l1.6.8c.3.1.4.4.4.7 0 .6-.3 1.2-.8 1.5-.6.4-1.6.5-3.2-.2-2.1-.9-3.8-2.6-4.7-4.7-.7-1.6-.6-2.6-.2-3.2z"/></svg>
+    <span>WhatsApp</span>
   </div>
   <div class="nav-item" data-tab="appearance">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="4.93" y1="4.93" x2="9.17" y2="9.17"/><line x1="14.83" y1="14.83" x2="19.07" y2="19.07"/><line x1="14.83" y1="9.17" x2="19.07" y2="4.93"/><line x1="9.17" y1="14.83" x2="4.93" y2="19.07"/></svg>
@@ -793,11 +812,6 @@
           <div class="sub">/ <span id="stMsgQuota">50</span> · plan <span id="stPlan">free</span></div>
         </div>
         <div class="progress"><div class="progress-bar" id="stMsgBar" style="width:0%"></div></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
-        <div class="label">Leads generados</div>
-        <div class="row"><div class="value" id="stLeads">0</div></div>
       </div>
       <div class="stat-card">
         <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
@@ -995,39 +1009,6 @@
     </div>
   </section>
 
-  <!-- LEADS -->
-  <section class="page" id="page-leads">
-    <div class="panel-card">
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-        <h2 style="margin:0;">Leads capturados</h2>
-        <div style="margin-left:auto; display:flex; gap:8px;">
-          <input class="field-input" id="ldSearch" placeholder="Buscar..." style="width:220px;" />
-          <a class="btn btn-ghost" id="ldExportBtn" href="/auth/app/leads/export.csv">Exportar CSV</a>
-          <button class="btn btn-primary" id="ldAddBtn" type="button">+ Añadir manual</button>
-        </div>
-      </div>
-      <p class="panel-sub">Personas que han contactado a través del chat. Total: <span id="ldTotal">0</span>.</p>
-      <div id="ldList" style="margin-top:12px;"></div>
-    </div>
-
-    <div class="panel-card" id="ldFormCard" style="display:none; margin-top:18px;">
-      <h2>Nuevo lead manual</h2>
-      <p class="panel-sub">Usa esto si recibes un contacto fuera del chat (email, teléfono).</p>
-      <div class="form-row">
-        <div class="field"><label class="field-label">Nombre</label><input class="field-input" id="ldName" maxlength="200" /></div>
-        <div class="field"><label class="field-label">Email</label><input class="field-input" id="ldEmail" type="email" maxlength="200" /></div>
-        <div class="field"><label class="field-label">Teléfono</label><input class="field-input" id="ldPhone" maxlength="80" /></div>
-      </div>
-      <div class="form-row">
-        <div class="field" style="flex:1 1 100%;"><label class="field-label">Mensaje</label><textarea class="field-textarea" id="ldMessage" maxlength="4000"></textarea></div>
-      </div>
-      <div style="display:flex; gap:10px; margin-top:14px;">
-        <button class="btn btn-primary" id="ldSaveBtn" type="button">Guardar lead</button>
-        <button class="btn btn-ghost" id="ldCancelBtn" type="button">Cancelar</button>
-      </div>
-    </div>
-  </section>
-
   <!-- KNOWLEDGE -->
   <section class="page" id="page-knowledge">
     <div class="panel-card">
@@ -1080,7 +1061,7 @@
 
   <!-- Q&A -->
   <section class="page" id="page-qa">
-    <div class="panel-card">
+    <div class="panel-card" id="starterPanel">
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
         <h2 style="margin:0;">Preguntas sugeridas</h2>
       </div>
@@ -1128,7 +1109,7 @@
       </div>
     </div>
 
-    <div class="panel-card" style="margin-top:18px;">
+    <div class="panel-card">
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
         <h2 style="margin:0;">Preguntas y respuestas</h2>
         <div style="margin-left:auto;">
@@ -1145,9 +1126,22 @@
   <section class="page" id="page-tune">
     <div class="panel-card">
       <h2>Tune AI</h2>
-      <p class="panel-sub">Ajustes avanzados del modelo. Si dudas, deja los valores por defecto.</p>
+      <p class="panel-sub">Controla los botones que ve el visitante y el catalogo real que usa la IA para responder y para el formulario de citas.</p>
+      <div id="tnStarterMount" style="margin-top:16px;"></div>
+      <div style="margin-top:24px; padding-top:18px; border-top:1px solid var(--line);">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px;">
+          <h3 style="margin:0; font-size:1rem;">Servicios-productos</h3>
+          <button class="btn btn-ghost" id="tnAddServiceBtn" type="button">+ Anadir</button>
+        </div>
+        <p class="panel-sub">Catalogo real del negocio. Esta lista se guarda en la base de conocimiento y es la que usa la IA para responder y para mostrar opciones al pedir cita.</p>
+        <div id="tnServicesList" style="display:flex; flex-direction:column; gap:10px; margin-top:12px;"></div>
+        <div style="display:flex; gap:10px; margin-top:14px;">
+          <button class="btn btn-primary" id="tnSaveServicesBtn" type="button">Guardar servicios-productos</button>
+          <button class="btn btn-ghost" id="tnReloadBtn" type="button">Descartar</button>
+        </div>
+      </div>
 
-      <div class="form-row">
+      <div class="form-row" style="display:none;">
         <div class="field" style="flex:1 1 100%;">
           <label class="field-label">Instrucciones del sistema (system prompt)</label>
           <textarea class="field-textarea" id="tnPromptExtra" maxlength="8000" style="min-height:200px;"></textarea>
@@ -1155,7 +1149,7 @@
         </div>
       </div>
 
-      <div class="form-row">
+      <div class="form-row" style="display:none;">
         <div class="field" style="flex: 1 1 220px;">
           <label class="field-label">Modelo</label>
           <select class="field-input" id="tnModel"></select>
@@ -1168,10 +1162,119 @@
         </div>
       </div>
 
-      <div style="display:flex; gap:10px; margin-top:18px;">
-        <button class="btn btn-primary" id="tnSaveBtn" type="button">Guardar configuración</button>
-        <button class="btn btn-ghost" id="tnReloadBtn" type="button">Descartar</button>
+      <div style="display:none; gap:10px; margin-top:18px;">
+        <button class="btn btn-primary" id="tnSaveAdvancedBtn" type="button">Guardar configuración</button>
+        <button class="btn btn-ghost" id="tnReloadAdvancedBtn" type="button">Descartar</button>
       </div>
+    </div>
+  </section>
+
+  <!-- WHATSAPP -->
+  <section class="page" id="page-whatsapp">
+    <div class="panel-card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0;">WhatsApp</h2>
+          <p class="panel-sub">Tu asistente respondiendo en WhatsApp Business.</p>
+        </div>
+        <span class="pro-pill" id="waStatusPill" style="background:var(--accent-soft); color:var(--accent);">Cargando</span>
+      </div>
+
+      <div id="waPlanNotice" class="panel-sub" style="display:none; margin-top:14px; padding:12px; border:1px solid rgba(245,158,11,0.35); border-radius:10px; background:rgba(245,158,11,0.08); color:#fde68a;">
+        Tu plan actual no incluye WhatsApp. Puedes solicitar la activación, pero necesitarás un plan con WhatsApp para que el asistente empiece a responder.
+        <button class="btn btn-ghost" id="waGoBillingBtn" type="button" style="margin-left:10px; padding:6px 10px;">Ver planes</button>
+      </div>
+
+      <!-- Hero asistido -->
+      <div style="margin-top:20px; padding:24px; border-radius:14px; background:linear-gradient(135deg, rgba(37,211,102,0.10), rgba(7,16,31,0.55)); border:1px solid rgba(37,211,102,0.28);">
+        <div style="display:flex; align-items:center; gap:14px; margin-bottom:10px;">
+          <div style="width:48px; height:48px; border-radius:50%; background:#25D366; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="#0d1d11" xmlns="http://www.w3.org/2000/svg"><path d="M19.05 4.91A9.82 9.82 0 0 0 12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.27-1.38a9.9 9.9 0 0 0 4.71 1.2h.01c5.46 0 9.91-4.45 9.91-9.91a9.82 9.82 0 0 0-2.9-7zm-7.01 15.24h-.01a8.23 8.23 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.19-.31a8.21 8.21 0 0 1-1.26-4.38c0-4.54 3.7-8.23 8.24-8.23 2.2 0 4.27.86 5.83 2.42a8.18 8.18 0 0 1 2.41 5.82c0 4.54-3.7 8.23-8.24 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.24-.64.81-.79.97-.14.16-.29.18-.54.06-.25-.12-1.04-.38-1.99-1.22-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.76-1.85-.2-.49-.4-.42-.56-.43-.14-.01-.31-.01-.47-.01-.16 0-.43.06-.66.31-.23.25-.86.84-.86 2.05 0 1.21.88 2.38 1 2.55.12.16 1.74 2.66 4.22 3.73.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.08.14-1.18-.06-.1-.22-.16-.47-.28z"/></svg>
+          </div>
+          <div>
+            <h3 style="margin:0; font-family:var(--font-title); font-size:1.15rem;">Lo conectamos por ti, gratis</h3>
+            <p class="panel-sub" style="margin:2px 0 0;">Sin tocar Meta. Sin código. Sin esperas largas.</p>
+          </div>
+        </div>
+        <p style="color:var(--soft); font-size:0.92rem; line-height:1.55; margin:6px 0 16px;">Dinos tu número de WhatsApp Business y el equipo de Vantelia se encarga de toda la configuración técnica. En menos de 24 horas hábiles tendrás el asistente respondiendo a tus clientes en WhatsApp.</p>
+
+        <div class="field">
+          <label class="field-label">Tu número de WhatsApp Business</label>
+          <input class="field-input" id="waUserPhone" type="tel" placeholder="+34 600 123 456" autocomplete="tel" />
+        </div>
+        <div class="field" style="margin-top:10px;">
+          <label class="field-label">Comentarios (opcional)</label>
+          <textarea class="field-textarea" id="waUserNotes" rows="2" placeholder="Ej: prefiero que me llaméis por la mañana, ya tengo cuenta Meta Business..." style="min-height:60px;"></textarea>
+        </div>
+        <div style="display:flex; gap:12px; margin-top:14px; flex-wrap:wrap; align-items:center;">
+          <button class="btn btn-primary" id="waRequestBtn" type="button" style="background:#25D366; border-color:#25D366; color:#0d1d11; font-weight:600;">Solicitar activación gratuita</button>
+          <span class="panel-sub" style="margin:0;">Te respondemos en menos de 24h hábiles.</span>
+        </div>
+      </div>
+
+      <div id="waChecklist" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:18px;"></div>
+
+      <details id="waAdvancedBox" style="margin-top:22px; padding:14px 16px; border:1px solid var(--line); border-radius:12px; background:rgba(7,16,31,0.4);">
+        <summary style="cursor:pointer; font-weight:600; color:var(--soft);">¿Tienes conocimientos técnicos? Configúralo tú mismo</summary>
+        <p class="panel-sub" style="margin-top:10px;">Esta sección es para clientes con experiencia en Meta Developers y la API de WhatsApp Cloud. Si no estás seguro, mejor usa la solicitud de arriba.</p>
+
+        <div style="margin-top:16px; display:grid; gap:14px;">
+          <div style="padding:16px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.45);">
+            <div style="font-weight:700;">1. Copia estos datos en Meta</div>
+            <p class="panel-sub" style="margin-top:4px;">En Meta Developers, entra en WhatsApp &gt; Configuration y pega estos dos valores.</p>
+            <label class="field-label">Callback URL</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input class="field-input" id="waWebhookUrl" readonly />
+              <button class="btn btn-ghost" id="waCopyWebhookBtn" type="button">Copiar</button>
+            </div>
+            <label class="field-label" style="margin-top:12px;">Verify token</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input class="field-input" id="waVerifyToken" readonly />
+              <button class="btn btn-ghost" id="waCopyVerifyBtn" type="button">Copiar</button>
+            </div>
+            <p class="panel-sub" id="waTokenStatus" style="margin-top:6px;"></p>
+          </div>
+
+          <div style="padding:16px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.45);">
+            <div style="font-weight:700;">2. Pega el Phone Number ID</div>
+            <p class="panel-sub" style="margin-top:4px;">En Meta, abre WhatsApp &gt; API Setup y copia el numero llamado Phone Number ID. No es tu telefono, es un ID largo de Meta.</p>
+            <div class="field">
+              <label class="field-label">Phone Number ID</label>
+              <input class="field-input" id="waPhoneNumberId" placeholder="Ej: 123456789012345" maxlength="120" />
+            </div>
+          </div>
+
+          <div style="padding:16px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.45);">
+            <div style="font-weight:700;">3. Activa el canal</div>
+            <p class="panel-sub" style="margin-top:4px;">Cuando Meta acepte la verificación y el token de envío esté listo, activa WhatsApp aquí.</p>
+            <label style="display:flex; align-items:center; gap:12px; margin-top:10px; cursor:pointer;">
+              <input type="checkbox" id="waEnabled" />
+              <span><b>WhatsApp activo</b><br><span class="panel-sub" style="margin:0;">El asistente responderá y podrá iniciar el flujo de citas por WhatsApp.</span></span>
+            </label>
+          </div>
+
+          <div style="padding:14px 16px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.35);">
+            <div style="font-weight:600;">Variables del servidor (opcional)</div>
+            <p class="panel-sub" style="margin-top:4px;">Solo si Vantelia te ha dado nombres específicos de variables.</p>
+            <div class="form-row" style="margin-top:10px;">
+              <div class="field">
+                <label class="field-label">Variable del token de envío</label>
+                <input class="field-input" id="waAccessTokenEnv" placeholder="WHATSAPP_ACCESS_TOKEN_CLIENTE" maxlength="120" />
+              </div>
+              <div class="field">
+                <label class="field-label">Variable del token de verificación</label>
+                <input class="field-input" id="waVerifyTokenEnv" placeholder="WHATSAPP_VERIFY_TOKEN_CLIENTE" maxlength="120" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;">
+          <button class="btn btn-primary" id="waSaveBtn" type="button">Guardar conexión</button>
+          <button class="btn btn-ghost" id="waCopySetupBtn" type="button">Copiar resumen para soporte</button>
+          <button class="btn btn-ghost" id="waReloadBtn" type="button">Descartar cambios</button>
+        </div>
+      </details>
     </div>
   </section>
 
@@ -1305,14 +1408,11 @@
         <select class="field-input" id="horProf" style="width:auto; flex:0 0 240px;">
           <option value="">Horario general</option>
         </select>
-        <label style="display:flex; align-items:center; gap:8px; color:var(--soft); font-size:0.88rem;">
-          <input type="checkbox" id="horEnabled" /> Habilitar horario
-        </label>
       </div>
       <div class="form-row">
         <div class="field"><label class="field-label">Hora inicio</label><input type="time" class="field-input" id="horStart" /></div>
         <div class="field"><label class="field-label">Hora fin</label><input type="time" class="field-input" id="horEnd" /></div>
-        <div class="field"><label class="field-label">Duración slot (min)</label><input type="number" class="field-input" id="horSlot" min="5" max="240" /></div>
+        <div class="field"><label class="field-label">Duración de cada cita (min)</label><input type="number" class="field-input" id="horSlot" min="5" max="240" value="30" /></div>
         <div class="field"><label class="field-label">Zona horaria</label><input type="text" class="field-input" id="horTz" placeholder="Europe/Madrid" /></div>
       </div>
       <div style="margin-top:14px;">
@@ -1555,7 +1655,7 @@ const state = {
   session_id: 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
 };
 
-const TABS = ['overview','chats','leads','knowledge','qa','tune','appearance','deploy','billing','citas','equipo','horarios','mensajes','instalacion','cuenta'];
+const TABS = ['overview','chats','knowledge','qa','tune','whatsapp','appearance','deploy','billing','citas','equipo','horarios','mensajes','instalacion','cuenta'];
 const billingState = { period: 'monthly', plans: [], current: 'free', portal: false };
 
 function formatDetail(d) {
@@ -1598,7 +1698,6 @@ function setTab(tab) {
     document.getElementById('page-locked').classList.add('active');
     document.getElementById('pageTitle').textContent = 'Próximamente';
     document.getElementById('lockedTitle').textContent = ({
-      leads: 'Leads',
       livechat: 'Live Chat',
       links: 'Links / Docs',
       text: 'Texto',
@@ -1616,18 +1715,18 @@ function setTab(tab) {
   document.getElementById('page-' + tab).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.getAttribute('data-tab') === tab));
   const titles = {
-    overview:'Overview', chats:'Chats', leads:'Leads',
-    knowledge:'Conocimiento', qa:'Q&A', tune:'Tune AI',
+    overview:'Overview', chats:'Chats',
+    knowledge:'Conocimiento', qa:'Q&A', tune:'Tune AI', whatsapp:'WhatsApp',
     appearance:'Apariencia', deploy:'Deploy', billing:'Suscripción',
     citas:'Citas', equipo:'Equipo', horarios:'Horarios',
     mensajes:'Mensajes automáticos', instalacion:'Instalación', cuenta:'Cuenta',
   };
   document.getElementById('pageTitle').textContent = titles[tab] || 'Panel';
   if (tab === 'chats')      loadChats();
-  if (tab === 'leads')      loadLeads();
   if (tab === 'knowledge')  loadKnowledge();
   if (tab === 'qa')         loadQA();
   if (tab === 'tune')       loadTune();
+  if (tab === 'whatsapp')   loadWhatsApp();
   if (tab === 'billing')    loadBilling();
   if (tab === 'citas')      loadCitas();
   if (tab === 'equipo')     loadEquipo();
@@ -1666,7 +1765,6 @@ async function loadOverview() {
     document.getElementById('stPlan').textContent = data.subscription.plan;
     const pct = Math.min(100, Math.round(100 * data.subscription.messages_used / Math.max(1, data.subscription.messages_quota)));
     document.getElementById('stMsgBar').style.width = pct + '%';
-    document.getElementById('stLeads').textContent = data.stats.leads_generated;
     document.getElementById('stTrainBytes').textContent = (data.stats.training_chars || 0).toLocaleString();
     document.getElementById('stSessTotal').textContent = data.stats.chat_sessions_total;
   } catch (err) {
@@ -2212,78 +2310,6 @@ document.getElementById('rpInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') sendPreviewMessage(document.getElementById('rpInput').value);
 });
 
-// ── LEADS ─────────────────────────────────────────────────────────────
-let leadsSearchTimer = null;
-async function loadLeads() {
-  const list = document.getElementById('ldList');
-  list.innerHTML = '<div class="panel-sub" style="margin:0;">Cargando…</div>';
-  try {
-    const q = (document.getElementById('ldSearch').value || '').trim();
-    const url = q ? `/auth/app/leads?q=${encodeURIComponent(q)}&page_size=50` : '/auth/app/leads?page_size=50';
-    const data = await api(url);
-    document.getElementById('ldTotal').textContent = data.total;
-    if (!data.items.length) {
-      list.innerHTML = '<div class="panel-sub" style="margin:0;">Aún sin leads. Aparecerán aquí cuando tu bot capture contactos.</div>';
-      return;
-    }
-    list.innerHTML = '';
-    data.items.forEach(lead => {
-      const row = document.createElement('div');
-      row.className = 'chat-row';
-      const when = lead.created_at ? new Date(lead.created_at).toLocaleString() : '';
-      row.innerHTML = `
-        <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
-          <div style="flex:1; min-width:0;">
-            <div style="font-weight:600;">${escapeHtml(lead.name || lead.email || lead.phone || '(sin nombre)')}</div>
-            <div class="preview">${escapeHtml(lead.email || '')} ${lead.phone ? '· ' + escapeHtml(lead.phone) : ''}</div>
-            <div class="preview" style="margin-top:4px;">${escapeHtml((lead.message || '').slice(0, 200))}</div>
-          </div>
-          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-            <div class="when">${escapeHtml(when)}</div>
-            <button class="btn btn-ghost" data-lead-id="${escapeHtml(lead.id)}" style="padding:4px 10px; font-size:0.78rem;">Eliminar</button>
-          </div>
-        </div>`;
-      row.querySelector('button[data-lead-id]').addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if (!confirm('¿Eliminar este lead?')) return;
-        try { await api('/auth/app/leads/' + encodeURIComponent(lead.id), { method: 'DELETE' }); toast('Lead eliminado', 'success'); loadLeads(); }
-        catch (err) { toast(err.message, 'error'); }
-      });
-      list.appendChild(row);
-    });
-  } catch (err) {
-    list.innerHTML = `<div class="panel-sub" style="margin:0;">${escapeHtml(err.message)}</div>`;
-  }
-}
-document.getElementById('ldSearch').addEventListener('input', () => {
-  clearTimeout(leadsSearchTimer);
-  leadsSearchTimer = setTimeout(loadLeads, 220);
-});
-document.getElementById('ldAddBtn').addEventListener('click', () => {
-  document.getElementById('ldFormCard').style.display = '';
-  ['ldName','ldEmail','ldPhone','ldMessage'].forEach(id => { document.getElementById(id).value = ''; });
-  document.getElementById('ldName').focus();
-});
-document.getElementById('ldCancelBtn').addEventListener('click', () => { document.getElementById('ldFormCard').style.display = 'none'; });
-document.getElementById('ldSaveBtn').addEventListener('click', async () => {
-  try {
-    await api('/auth/app/leads', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: document.getElementById('ldName').value.trim(),
-        email: document.getElementById('ldEmail').value.trim(),
-        phone: document.getElementById('ldPhone').value.trim(),
-        message: document.getElementById('ldMessage').value.trim(),
-        source: 'manual',
-      }),
-    });
-    toast('Lead guardado', 'success');
-    document.getElementById('ldFormCard').style.display = 'none';
-    loadLeads();
-  } catch (err) { toast(err.message, 'error'); }
-});
-
 // ── KNOWLEDGE ─────────────────────────────────────────────────────────
 let _kbFullContent = '';
 
@@ -2505,24 +2531,82 @@ document.getElementById('qaSaveBtn').addEventListener('click', async () => {
 // ── TUNE AI ───────────────────────────────────────────────────────────
 async function loadTune() {
   try {
-    const data = await api('/auth/app/tune');
-    document.getElementById('tnPromptExtra').value = data.prompt_extra || '';
-    const sel = document.getElementById('tnModel');
-    sel.innerHTML = '';
-    (data.available_models || []).forEach(m => {
-      const opt = document.createElement('option');
-      opt.value = m; opt.textContent = m;
-      if (m === data.chat_model) opt.selected = true;
-      sel.appendChild(opt);
-    });
-    document.getElementById('tnTemperature').value = data.temperature;
-    document.getElementById('tnTempValue').textContent = data.temperature.toFixed(1);
+    moveStarterPanelToTune();
+    await loadTuneServices();
   } catch (err) { toast(err.message, 'error'); }
 }
+
+function moveStarterPanelToTune() {
+  const panel = document.getElementById('starterPanel');
+  const mount = document.getElementById('tnStarterMount');
+  if (!panel || !mount || panel.parentElement === mount) return;
+  panel.style.marginTop = '0';
+  mount.appendChild(panel);
+}
+
+let tuneServices = [];
+
+async function loadTuneServices() {
+  const list = document.getElementById('tnServicesList');
+  if (!list) return;
+  list.innerHTML = '<div class="panel-sub" style="margin:0;">Cargando servicios...</div>';
+  const data = await api('/auth/app/services');
+  tuneServices = (data.items || []).map(item => ({
+    nombre: item.nombre || '',
+    descripcion: item.descripcion || '',
+  }));
+  renderTuneServices();
+}
+
+function renderTuneServices() {
+  const list = document.getElementById('tnServicesList');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!tuneServices.length) {
+    list.innerHTML = '<div class="panel-sub" style="margin:0;">No hay servicios/productos detectados todavia. Anade los que quieras que use la IA.</div>';
+    return;
+  }
+  tuneServices.forEach((item, index) => {
+    const row = document.createElement('div');
+    row.className = 'chat-row';
+    row.style.cssText = 'display:grid; grid-template-columns:minmax(180px,0.8fr) minmax(220px,1.2fr) auto; gap:10px; align-items:start;';
+    row.innerHTML = `
+      <input class="field-input" data-field="nombre" maxlength="160" placeholder="Nombre del servicio/producto" value="${escapeHtml(item.nombre)}" />
+      <textarea class="field-textarea" data-field="descripcion" maxlength="800" placeholder="Descripcion breve, precio, condiciones..." style="min-height:44px;">${escapeHtml(item.descripcion || '')}</textarea>
+      <button class="btn btn-ghost" type="button" data-remove style="padding:8px 10px;">Quitar</button>`;
+    row.querySelector('[data-field="nombre"]').addEventListener('input', e => { tuneServices[index].nombre = e.target.value; });
+    row.querySelector('[data-field="descripcion"]').addEventListener('input', e => { tuneServices[index].descripcion = e.target.value; });
+    row.querySelector('[data-remove]').addEventListener('click', () => {
+      tuneServices.splice(index, 1);
+      renderTuneServices();
+    });
+    list.appendChild(row);
+  });
+}
+
+document.getElementById('tnAddServiceBtn').addEventListener('click', () => {
+  tuneServices.push({ nombre: '', descripcion: '' });
+  renderTuneServices();
+});
+document.getElementById('tnSaveServicesBtn').addEventListener('click', async () => {
+  const items = tuneServices
+    .map(item => ({ nombre: (item.nombre || '').trim(), descripcion: (item.descripcion || '').trim() }))
+    .filter(item => item.nombre);
+  try {
+    await api('/auth/app/services', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    });
+    toast('Servicios-productos guardados', 'success');
+    await loadTuneServices();
+    try { loadKnowledge(); } catch {}
+  } catch (err) { toast(err.message, 'error'); }
+});
 document.getElementById('tnTemperature').addEventListener('input', e => {
   document.getElementById('tnTempValue').textContent = Number(e.target.value).toFixed(1);
 });
-document.getElementById('tnSaveBtn').addEventListener('click', async () => {
+document.getElementById('tnSaveAdvancedBtn')?.addEventListener('click', async () => {
   try {
     await api('/auth/app/tune', {
       method: 'POST',
@@ -2538,6 +2622,148 @@ document.getElementById('tnSaveBtn').addEventListener('click', async () => {
   } catch (err) { toast(err.message, 'error'); }
 });
 document.getElementById('tnReloadBtn').addEventListener('click', loadTune);
+
+let whatsappState = {};
+
+function renderWhatsAppChecklist(data) {
+  const items = [
+    {
+      ok: !!data.plan_allows_whatsapp,
+      title: 'Plan con WhatsApp',
+      text: data.plan_allows_whatsapp ? 'Tu plan permite activar este canal.' : 'Necesitas cambiar de plan para activarlo.',
+    },
+    {
+      ok: !!data.verify_token_configured,
+      title: 'Verify token',
+      text: data.verify_token_configured ? 'Listo para verificar el webhook en Meta.' : 'Pendiente de configurar en servidor.',
+    },
+    {
+      ok: !!data.phone_number_id,
+      title: 'Phone Number ID',
+      text: data.phone_number_id ? 'Numero de Meta guardado.' : 'Pega el ID que aparece en Meta.',
+    },
+    {
+      ok: !!data.access_token_configured,
+      title: 'Token de envio',
+      text: data.access_token_configured ? 'Listo para responder mensajes.' : 'Pendiente de configurar por soporte.',
+    },
+  ];
+  const wrap = document.getElementById('waChecklist');
+  wrap.innerHTML = items.map(item => `
+    <div style="padding:12px; border:1px solid ${item.ok ? 'rgba(0,245,212,0.3)' : 'rgba(245,158,11,0.32)'}; border-radius:10px; background:${item.ok ? 'rgba(0,245,212,0.06)' : 'rgba(245,158,11,0.07)'};">
+      <div style="display:flex; align-items:center; gap:8px; font-weight:700;">
+        <span style="min-width:22px; height:18px; padding:0 5px; display:inline-flex; align-items:center; justify-content:center; border-radius:999px; background:${item.ok ? 'rgba(0,245,212,0.18)' : 'rgba(245,158,11,0.18)'}; color:${item.ok ? 'var(--success)' : '#fde68a'}; font-size:0.68rem;">${item.ok ? 'OK' : '!'}</span>
+        ${escapeHtml(item.title)}
+      </div>
+      <div class="panel-sub" style="margin:6px 0 0;">${escapeHtml(item.text)}</div>
+    </div>
+  `).join('');
+}
+
+function renderWhatsApp(data) {
+  whatsappState = data || {};
+  document.getElementById('waEnabled').checked = !!data.enabled;
+  document.getElementById('waPhoneNumberId').value = data.phone_number_id || '';
+  document.getElementById('waAccessTokenEnv').value = data.access_token_env || '';
+  document.getElementById('waVerifyTokenEnv').value = data.verify_token_env || '';
+  document.getElementById('waWebhookUrl').value = data.webhook_url || '';
+  document.getElementById('waVerifyToken').value = data.verify_token || '';
+
+  const pill = document.getElementById('waStatusPill');
+  pill.textContent = data.status_label || 'Desactivado';
+  const statusColor = data.status === 'ready'
+    ? ['rgba(0,245,212,0.15)', 'var(--success)']
+    : data.status === 'disabled'
+      ? ['rgba(255,255,255,0.06)', 'var(--soft)']
+      : ['rgba(245,158,11,0.14)', '#fde68a'];
+  pill.style.background = statusColor[0];
+  pill.style.color = statusColor[1];
+
+  document.getElementById('waPlanNotice').style.display = data.plan_allows_whatsapp ? 'none' : '';
+  renderWhatsAppChecklist(data);
+  const tokenLines = [];
+  tokenLines.push(data.verify_token_configured ? 'Este token ya esta listo para verificar en Meta.' : 'El verify token aun no esta configurado en el servidor.');
+  tokenLines.push(data.access_token_configured ? 'El token de envio esta listo.' : 'El token de envio lo tiene que configurar soporte antes de activar.');
+  document.getElementById('waTokenStatus').textContent = tokenLines.join(' ');
+}
+
+async function loadWhatsApp() {
+  try {
+    const data = await api('/auth/app/whatsapp');
+    renderWhatsApp(data);
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function copyFieldValue(id) {
+  const value = document.getElementById(id).value || '';
+  if (!value) { toast('No hay nada que copiar.', 'error'); return; }
+  await navigator.clipboard.writeText(value);
+  toast('Copiado', 'success');
+}
+
+document.getElementById('waCopyWebhookBtn').addEventListener('click', () => copyFieldValue('waWebhookUrl'));
+document.getElementById('waCopyVerifyBtn').addEventListener('click', () => copyFieldValue('waVerifyToken'));
+document.getElementById('waCopySetupBtn').addEventListener('click', async () => {
+  const summary = [
+    `Bot: ${state.nombre || state.cliente_id}`,
+    `Cliente ID: ${state.cliente_id}`,
+    `Estado: ${whatsappState.status_label || 'Desactivado'}`,
+    `Callback URL: ${document.getElementById('waWebhookUrl').value || ''}`,
+    `Verify token: ${document.getElementById('waVerifyToken').value || ''}`,
+    `Phone Number ID: ${document.getElementById('waPhoneNumberId').value || ''}`,
+    `Plan permite WhatsApp: ${whatsappState.plan_allows_whatsapp ? 'si' : 'no'}`,
+    `Token envio configurado: ${whatsappState.access_token_configured ? 'si' : 'no'}`,
+  ].join('\n');
+  await navigator.clipboard.writeText(summary);
+  toast('Resumen copiado', 'success');
+});
+document.getElementById('waGoBillingBtn').addEventListener('click', () => setTab('billing'));
+document.getElementById('waReloadBtn').addEventListener('click', loadWhatsApp);
+document.getElementById('waRequestBtn').addEventListener('click', () => {
+  const phone = (document.getElementById('waUserPhone').value || '').trim();
+  const notes = (document.getElementById('waUserNotes').value || '').trim();
+  if (!phone) { toast('Indica tu número de WhatsApp Business antes de solicitar la activación.', 'error'); return; }
+  const empresa = state.nombre || state.cliente_id;
+  const userEmail = (document.getElementById('userEmail')?.textContent || '').trim();
+  const userName = (document.getElementById('userName')?.textContent || '').trim();
+  const subject = `Activar WhatsApp para ${empresa}`;
+  const bodyLines = [
+    'Hola equipo Vantelia,',
+    '',
+    'Quiero activar el asistente de IA en mi WhatsApp Business. Estos son mis datos:',
+    '',
+    `• Empresa: ${empresa}`,
+    `• Cliente ID: ${state.cliente_id}`,
+    `• Contacto: ${userName || '(sin nombre)'} — ${userEmail || '(sin email)'}`,
+    `• Número WhatsApp Business: ${phone}`,
+  ];
+  if (notes) { bodyLines.push('', 'Comentarios:', notes); }
+  bodyLines.push('', 'Gracias.');
+  const mailto = `mailto:info@vantelia.es?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyLines.join('\n'))}`;
+  window.location.href = mailto;
+  toast('Abriendo tu cliente de correo…', 'success');
+});
+document.getElementById('waSaveBtn').addEventListener('click', async () => {
+  const enabled = document.getElementById('waEnabled').checked;
+  if (enabled && whatsappState.plan_allows_whatsapp === false) {
+    toast('Tu plan actual no incluye WhatsApp.', 'error');
+    return;
+  }
+  try {
+    const data = await api('/auth/app/whatsapp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enabled,
+        phone_number_id: document.getElementById('waPhoneNumberId').value.trim(),
+        access_token_env: document.getElementById('waAccessTokenEnv').value.trim(),
+        verify_token_env: document.getElementById('waVerifyTokenEnv').value.trim(),
+      }),
+    });
+    renderWhatsApp(data);
+    toast('Conexion de WhatsApp guardada', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+});
 
 // ── BILLING ───────────────────────────────────────────────────────────
 async function loadBilling() {
@@ -2596,7 +2822,6 @@ function renderPlansGrid() {
       chat: 'Chat web',
       uploads: 'Subir documentos',
       branding: 'Marca personalizada',
-      leads_export: 'Exportar leads CSV',
       booking: 'Reservas / agenda',
       live_chat: 'Live Chat humano',
       qa: 'Q&A manual',
@@ -2612,7 +2837,7 @@ function renderPlansGrid() {
       <div style="margin-top:8px;"><b style="font-family:var(--font-title); font-size:1.6rem;">${price}€</b><span style="color:var(--soft);">${period}</span></div>
       <div style="color:var(--soft); font-size:0.86rem; margin-top:4px;">${p.messages_quota.toLocaleString()} mensajes/mes</div>
       <ul style="margin-top:12px; padding-left:16px; color:var(--soft); font-size:0.84rem;">
-        ${p.features.map(f => `<li>${escapeHtml(featuresMap[f] || f)}</li>`).join('')}
+        ${p.features.filter(f => f !== 'leads_export').map(f => `<li>${escapeHtml(featuresMap[f] || f)}</li>`).join('')}
       </ul>
       <div style="margin-top:14px;" data-action-slot></div>
     `;
@@ -2699,7 +2924,7 @@ function mountVanteliaWidget() {
 function reloadBotDrawer() { mountVanteliaWidget(); }
 
 // ── CITAS ─────────────────────────────────────────────────────────────
-const citasState = { page: 0, pageSize: 20, total: 0, period: 'all', calYear: null, calMonth: null, calData: [] };
+const citasState = { page: 0, pageSize: 20, total: 0, period: 'all', calYear: null, calMonth: null, calData: [], calClosedDays: [], calBlocks: [] };
 
 async function loadCitas() {
   const now = new Date();
@@ -2713,10 +2938,25 @@ async function fetchCitasCalData() {
   const from = `${y}-${String(m+1).padStart(2,'0')}-01`;
   const lastDay = new Date(y, m+1, 0).getDate();
   const to = `${y}-${String(m+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  const profId = document.getElementById('citasFiltProf')?.value || '';
   try {
-    const data = await api(`/auth/bookings?date_from=${from}&date_to=${to}&limit=200`);
+    const profParam = profId ? `&employee_id=${encodeURIComponent(profId)}` : '';
+    const data = await api(`/auth/bookings?date_from=${from}&date_to=${to}&limit=200${profParam}`);
     citasState.calData = data.items || [];
   } catch { citasState.calData = []; }
+  try {
+    const sched = await api(profId ? `/auth/schedule/employee/${encodeURIComponent(profId)}` : '/auth/schedule');
+    const cd = sched?.closed_weekdays ?? sched?.closed_days ?? [];
+    citasState.calClosedDays = Array.isArray(cd) ? cd.map(n => parseInt(n)) : [];
+    citasState.calBlocks = Array.isArray(sched?.blocks) ? sched.blocks : [];
+  } catch { citasState.calClosedDays = []; citasState.calBlocks = []; }
+}
+
+async function refreshCitasCalendarIfVisible() {
+  const cal = document.getElementById('citasCalView');
+  if (!cal || cal.style.display === 'none') return;
+  await fetchCitasCalData();
+  renderCalendar();
 }
 
 function _switchToListView() {
@@ -2961,6 +3201,18 @@ function renderCalendar() {
     const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     if (y === today.getFullYear() && m === today.getMonth() && day === today.getDate()) cell.classList.add('today');
 
+    const cellDate = new Date(y, m, day);
+    const dow = (cellDate.getDay() + 6) % 7;
+    const isClosed = (citasState.calClosedDays || []).includes(dow);
+    const matchingBlock = (citasState.calBlocks || []).find(b => {
+      const s = ((b.start_date || b.fecha) || '').slice(0,10);
+      const e = ((b.end_date || b.fecha_fin || b.start_date || b.fecha) || '').slice(0,10);
+      return s && dateStr >= s && dateStr <= e;
+    });
+
+    if (isClosed) cell.classList.add('closed');
+    if (matchingBlock) cell.classList.add('blocked');
+
     const dayBookings = (citasState.calData || []).filter(b =>
       (b.start_at || b.fecha || b.datetime || b.date || '').slice(0, 10) === dateStr
     );
@@ -2970,6 +3222,11 @@ function renderCalendar() {
     const extra = dayBookings.length - MAX_PILLS;
 
     let html = `<div class="gcal-day-num">${day}</div>`;
+    if (isClosed) html += `<span class="gcal-day-tag closed">Cerrado</span>`;
+    if (matchingBlock) {
+      const reason = ((matchingBlock.reason || matchingBlock.motivo) || '').trim() || 'Bloqueado';
+      html += `<span class="gcal-day-tag blocked" title="${escapeHtml(reason)}">${escapeHtml(reason)}</span>`;
+    }
     visible.forEach(b => {
       const dt = b.start_at ? new Date(b.start_at) : null;
       const hora = b.hora || (dt ? dt.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'}) : '');
@@ -2998,6 +3255,16 @@ document.getElementById('calToday').addEventListener('click', async () => { cons
 
 // ── EQUIPO ────────────────────────────────────────────────────────────
 let allServices = [];
+
+function normalizeEmployeeItems(raw) {
+  const items = Array.isArray(raw) ? raw : (raw?.items || []);
+  return items.map(item => ({
+    id: item.employee_id || item.id,
+    name: item.name || '',
+    raw: item,
+  })).filter(item => item.id);
+}
+
 async function loadEquipo() {
   const grid = document.getElementById('equipoGrid');
   grid.innerHTML = '<div class="panel-sub">Cargando…</div>';
@@ -3039,8 +3306,9 @@ async function loadEquipo() {
 
 function loadCitasProfSelect(emps) {
   const sel = document.getElementById('citasFiltProf');
+  const items = normalizeEmployeeItems(emps);
   while (sel.options.length > 1) sel.remove(1);
-  (emps||[]).forEach(e => { const o = document.createElement('option'); o.value = e.id; o.textContent = e.name; sel.appendChild(o); });
+  items.forEach(e => { const o = document.createElement('option'); o.value = e.id; o.textContent = e.name; sel.appendChild(o); });
 }
 
 function openEquipoPanel(emp) {
@@ -3142,29 +3410,35 @@ document.getElementById('equipoDeleteBtn').addEventListener('click', async () =>
 // ── HORARIOS ──────────────────────────────────────────────────────────
 function loadHorariosProfSelect(emps) {
   const sel = document.getElementById('horProf');
+  const items = normalizeEmployeeItems(emps);
   while (sel.options.length > 1) sel.remove(1);
-  (emps||[]).forEach(e => { const o = document.createElement('option'); o.value = e.id; o.textContent = e.name; sel.appendChild(o); });
+  items.forEach(e => { const o = document.createElement('option'); o.value = e.id; o.textContent = e.name; sel.appendChild(o); });
 }
 
-async function loadHorarios() {
+async function loadHorarios(selectedProfId) {
+  const profId = selectedProfId ?? (document.getElementById('horProf')?.value || '');
   try {
-    const [data, emps] = await Promise.all([api('/auth/schedule'), api('/auth/employees').catch(() => [])]);
+    const scheduleUrl = profId ? `/auth/schedule/employee/${encodeURIComponent(profId)}` : '/auth/schedule';
+    const [data, empsRaw] = await Promise.all([api(scheduleUrl), api('/auth/employees').catch(() => ({ items: [] }))]);
+    const emps = normalizeEmployeeItems(empsRaw);
     loadHorariosProfSelect(emps);
+    if (profId && emps.some(emp => emp.id === profId)) document.getElementById('horProf').value = profId;
     fillHorarioForm(data);
     renderBloqueos(data.blocks || []);
   } catch(e) { toast(e.message, 'error'); }
 }
 
 function fillHorarioForm(data) {
-  document.getElementById('horEnabled').checked = !!data.enabled;
-  document.getElementById('horStart').value = data.start_time || '09:00';
-  document.getElementById('horEnd').value = data.end_time || '18:00';
-  document.getElementById('horSlot').value = data.slot_duration || 30;
+  document.getElementById('horStart').value = data.day_start || data.start_time || '09:00';
+  document.getElementById('horEnd').value = data.day_end || data.end_time || '18:00';
+  document.getElementById('horSlot').value = data.slot_minutes || data.slot_duration || 30;
   document.getElementById('horTz').value = data.timezone || 'Europe/Madrid';
-  const closed = data.closed_days || [];
+  const closedRaw = data.closed_weekdays || data.closed_days || [];
+  const closed = closedRaw.map(n => parseInt(n));
   document.querySelectorAll('#horDays input[type=checkbox]').forEach(cb => {
-    cb.checked = closed.includes(parseInt(cb.value));
-    cb.closest('label').classList.toggle('active', closed.includes(parseInt(cb.value)));
+    const v = parseInt(cb.value);
+    cb.checked = closed.includes(v);
+    cb.closest('label').classList.toggle('active', closed.includes(v));
   });
 }
 
@@ -3173,11 +3447,27 @@ function renderBloqueos(blocks) {
   list.innerHTML = '';
   if (!blocks.length) { list.innerHTML = '<div class="panel-sub">Sin bloqueos activos.</div>'; return; }
   blocks.forEach(b => {
+    const id = b.block_id || b.id || '';
+    const employeeId = b.employee_id || '';
+    const start = b.fecha || b.start_date || '';
+    const end = b.fecha_fin || b.end_date || start;
+    const reason = b.motivo || b.reason || '';
+    const hIni = b.hora_inicio || '';
+    const hFin = b.hora_fin || '';
+    const horaTxt = (hIni && hFin) ? ` (${escapeHtml(hIni)}–${escapeHtml(hFin)})` : '';
     const row = document.createElement('div'); row.className = 'chat-row';
     row.style.cssText = 'padding:10px 14px; display:flex; align-items:center; gap:10px;';
-    row.innerHTML = `<div style="flex:1;"><b>${escapeHtml(b.start_date||'')} – ${escapeHtml(b.end_date||b.start_date||'')}</b> <span class="panel-sub" style="margin:0;">${escapeHtml(b.reason||'')}</span></div><button class="btn btn-ghost" data-block-id="${escapeHtml(b.id)}" style="padding:4px 10px; font-size:0.78rem;">Eliminar</button>`;
+    row.innerHTML = `<div style="flex:1;"><b>${escapeHtml(start)} – ${escapeHtml(end)}${horaTxt}</b> <span class="panel-sub" style="margin:0;">${escapeHtml(reason)}</span></div><button class="btn btn-ghost" data-block-id="${escapeHtml(id)}" style="padding:4px 10px; font-size:0.78rem;">Eliminar</button>`;
     row.querySelector('[data-block-id]').addEventListener('click', async () => {
-      try { await api(`/auth/schedule/blocks/${b.id}`, { method:'DELETE' }); toast('Bloqueo eliminado', 'success'); loadHorarios(); }
+      const url = employeeId
+        ? `/auth/employees/${encodeURIComponent(employeeId)}/blocks/${encodeURIComponent(id)}`
+        : `/auth/schedule/blocks/${encodeURIComponent(id)}`;
+      try {
+        await api(url, { method:'DELETE' });
+        toast('Bloqueo eliminado', 'success');
+        loadHorarios(document.getElementById('horProf').value);
+        refreshCitasCalendarIfVisible();
+      }
       catch(e) { toast(e.message, 'error'); }
     });
     list.appendChild(row);
@@ -3191,76 +3481,129 @@ document.querySelectorAll('#horDays label').forEach(lbl => {
 document.getElementById('horSaveBtn').addEventListener('click', async () => {
   const closed = [...document.querySelectorAll('#horDays input:checked')].map(cb => parseInt(cb.value));
   const profId = document.getElementById('horProf').value;
+  const enabledNow = (typeof state !== 'undefined' && state && state.bookingEnabled === false) ? false : true;
   const payload = {
-    enabled: document.getElementById('horEnabled').checked,
-    start_time: document.getElementById('horStart').value,
-    end_time: document.getElementById('horEnd').value,
-    slot_duration: parseInt(document.getElementById('horSlot').value) || 30,
+    enabled: enabledNow,
+    day_start: document.getElementById('horStart').value,
+    day_end: document.getElementById('horEnd').value,
+    slot_minutes: parseInt(document.getElementById('horSlot').value) || 30,
     timezone: document.getElementById('horTz').value.trim() || 'Europe/Madrid',
-    closed_days: closed,
+    closed_weekdays: closed,
   };
-  const url = profId ? `/auth/schedule/employee/${profId}` : '/auth/schedule';
-  try { await api(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); toast('Horario guardado', 'success'); }
+  const url = profId ? `/auth/schedule/employee/${encodeURIComponent(profId)}` : '/auth/schedule';
+  try {
+    await api(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    toast('Horario guardado', 'success');
+    loadHorarios(profId);
+    refreshCitasCalendarIfVisible();
+  }
   catch(e) { toast(e.message, 'error'); }
 });
 
 document.getElementById('horProf').addEventListener('change', async () => {
   const profId = document.getElementById('horProf').value;
-  const url = profId ? `/auth/schedule/employee/${profId}` : '/auth/schedule';
+  const url = profId ? `/auth/schedule/employee/${encodeURIComponent(profId)}` : '/auth/schedule';
   try { const data = await api(url); fillHorarioForm(data); renderBloqueos(data.blocks||[]); }
   catch(e) { toast(e.message, 'error'); }
 });
 
 document.getElementById('horBlockAddBtn').addEventListener('click', async () => {
+  const profId = document.getElementById('horProf').value;
+  const fecha = document.getElementById('horBlockStart').value;
+  const fechaFin = document.getElementById('horBlockEnd').value;
+  const horaIni = document.getElementById('horBlockHStart').value || '00:00';
+  const horaFin = document.getElementById('horBlockHEnd').value || '23:59';
+  if (!fecha) { toast('Indica la fecha de inicio.', 'error'); return; }
   const payload = {
-    start_date: document.getElementById('horBlockStart').value,
-    end_date: document.getElementById('horBlockEnd').value,
-    start_time: document.getElementById('horBlockHStart').value || null,
-    end_time: document.getElementById('horBlockHEnd').value || null,
-    reason: document.getElementById('horBlockReason').value.trim(),
+    fecha,
+    fecha_fin: fechaFin || '',
+    hora_inicio: horaIni,
+    hora_fin: horaFin,
+    motivo: document.getElementById('horBlockReason').value.trim(),
   };
-  if (!payload.start_date) { toast('Indica la fecha de inicio.', 'error'); return; }
-  try { await api('/auth/schedule/blocks', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); toast('Bloqueo añadido', 'success'); loadHorarios(); }
-  catch(e) { toast(e.message, 'error'); }
+  try {
+    const url = profId ? `/auth/employees/${encodeURIComponent(profId)}/blocks` : '/auth/schedule/blocks';
+    await api(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    toast('Bloqueo añadido', 'success');
+    ['horBlockStart','horBlockEnd','horBlockHStart','horBlockHEnd','horBlockReason'].forEach(id => document.getElementById(id).value = '');
+    loadHorarios(profId);
+    refreshCitasCalendarIfVisible();
+  } catch(e) { toast(e.message, 'error'); }
 });
 
 // ── MENSAJES ──────────────────────────────────────────────────────────
 const MSG_TEMPLATES = [
   { key:'confirmacion', label:'Confirmación de cita' },
-  { key:'recordatorio_24h', label:'Recordatorio 24 horas antes' },
-  { key:'recordatorio_2h', label:'Recordatorio 2 horas antes' },
-  { key:'cancelada', label:'Cita cancelada' },
-  { key:'reprogramada', label:'Cita reprogramada' },
+  { key:'reminder_24h', label:'Recordatorio 24 horas antes' },
+  { key:'reminder_2h', label:'Recordatorio 2 horas antes' },
+  { key:'cancelled', label:'Cita cancelada' },
+  { key:'rescheduled', label:'Cita reprogramada' },
 ];
 let mensajesData = {};
+let mensajesEnabled = {};
+let mensajesSchedule = {};
 
 async function loadMensajes() {
   try {
     const data = await api('/auth/schedule');
     mensajesData = data.message_templates || {};
+    mensajesEnabled = data.message_template_enabled || {};
+    mensajesSchedule = data || {};
     renderMensajesAccordions();
   } catch(e) { toast(e.message, 'error'); }
+}
+
+function msgBackendKey(key) {
+  return ({
+    confirmacion: 'confirmed',
+    recordatorio_24h: 'reminder_24h',
+    recordatorio_2h: 'reminder_2h',
+    cancelada: 'cancelled',
+    reprogramada: 'rescheduled',
+  })[key] || key;
+}
+
+function buildMensajesPayload() {
+  const message_templates = {};
+  const message_template_enabled = {};
+  MSG_TEMPLATES.forEach(tpl => {
+    const key = msgBackendKey(tpl.key);
+    message_templates[key] = document.querySelector(`.msg-content[data-key="${tpl.key}"]`)?.value || mensajesData[key] || '';
+    message_template_enabled[key] = !!(document.querySelector(`.msg-enabled[data-key="${tpl.key}"]`)?.checked);
+  });
+  return {
+    enabled: mensajesSchedule.enabled !== false,
+    timezone: mensajesSchedule.timezone || 'Europe/Madrid',
+    slot_minutes: parseInt(mensajesSchedule.slot_minutes || mensajesSchedule.slot_duration || 30) || 30,
+    day_start: mensajesSchedule.day_start || mensajesSchedule.start_time || '09:00',
+    day_end: mensajesSchedule.day_end || mensajesSchedule.end_time || '18:00',
+    closed_weekdays: mensajesSchedule.closed_weekdays || mensajesSchedule.closed_days || [],
+    message_templates,
+    message_template_enabled,
+  };
 }
 
 function renderMensajesAccordions() {
   const cont = document.getElementById('mensajesAccordions');
   cont.innerHTML = '';
   MSG_TEMPLATES.forEach(tpl => {
-    const cfg = mensajesData[tpl.key] || {};
+    const key = msgBackendKey(tpl.key);
+    const content = mensajesData[key] || '';
+    const enabled = mensajesEnabled[key] !== false;
     const acc = document.createElement('div'); acc.className = 'accordion';
     acc.innerHTML = `
       <div class="accordion-head">
         <b>${escapeHtml(tpl.label)}</b>
-        <span style="font-size:0.78rem; color:${cfg.enabled?'var(--success)':'var(--soft-2)'};">${cfg.enabled?'Activo':'Inactivo'}</span>
+        <span class="msg-status" data-key="${tpl.key}" style="font-size:0.78rem; color:${enabled?'var(--success)':'var(--soft-2)'};">${enabled?'Activo':'Inactivo'}</span>
         <svg class="accordion-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
       <div class="accordion-body">
         <label style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:0.88rem; color:var(--soft);">
-          <input type="checkbox" class="msg-enabled" data-key="${tpl.key}" ${cfg.enabled?'checked':''} /> Habilitar este mensaje
+          <input type="checkbox" class="msg-enabled" data-key="${tpl.key}" ${enabled?'checked':''} /> Habilitar este mensaje
         </label>
         <label class="field-label">Contenido</label>
-        <textarea class="field-textarea msg-content" data-key="${tpl.key}" maxlength="500" style="min-height:80px;">${escapeHtml(cfg.content||'')}</textarea>
-        <div style="font-size:0.74rem; color:var(--soft-2); margin-top:4px; text-align:right;" class="msg-counter" data-key="${tpl.key}">${(cfg.content||'').length}/500</div>
+        <textarea class="field-textarea msg-content" data-key="${tpl.key}" maxlength="500" style="min-height:80px;">${escapeHtml(content)}</textarea>
+        <div style="font-size:0.74rem; color:var(--soft-2); margin-top:4px; text-align:right;" class="msg-counter" data-key="${tpl.key}">${content.length}/500</div>
         <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center;">
           <button class="btn btn-ghost msg-preview-btn" data-key="${tpl.key}" style="padding:7px 14px; font-size:0.82rem;">Preview</button>
           <input type="email" class="field-input msg-test-email" data-key="${tpl.key}" placeholder="email@prueba.com" style="width:auto; flex:1 1 180px;" />
@@ -3272,20 +3615,24 @@ function renderMensajesAccordions() {
     acc.querySelector('.msg-content').addEventListener('input', e => {
       acc.querySelector(`.msg-counter[data-key="${tpl.key}"]`).textContent = e.target.value.length + '/500';
     });
+    acc.querySelector('.msg-enabled').addEventListener('change', e => {
+      const status = acc.querySelector(`.msg-status[data-key="${tpl.key}"]`);
+      status.textContent = e.target.checked ? 'Activo' : 'Inactivo';
+      status.style.color = e.target.checked ? 'var(--success)' : 'var(--soft-2)';
+    });
     acc.querySelector('.msg-preview-btn').addEventListener('click', async () => {
-      const content = acc.querySelector(`.msg-content[data-key="${tpl.key}"]`).value;
       const out = acc.querySelector(`.msg-preview-out[data-key="${tpl.key}"]`);
       try {
-        const r = await api('/auth/schedule/message-preview', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ template_key: tpl.key, content }) });
-        out.textContent = r.preview || r.html || JSON.stringify(r); out.style.display = '';
+        const r = await api('/auth/schedule/message-preview', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ kind: msgBackendKey(tpl.key), schedule: buildMensajesPayload() }) });
+        out.textContent = `${r.subject || ''}\n\n${r.text_body || ''}`.trim() || JSON.stringify(r);
+        out.style.display = '';
       } catch(e) { toast(e.message, 'error'); }
     });
     acc.querySelector('.msg-test-btn').addEventListener('click', async () => {
       const email = acc.querySelector(`.msg-test-email[data-key="${tpl.key}"]`).value.trim();
-      const content = acc.querySelector(`.msg-content[data-key="${tpl.key}"]`).value;
       if (!email) { toast('Indica un email de prueba.', 'error'); return; }
       try {
-        await api('/auth/schedule/message-test', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ template_key: tpl.key, content, test_email: email }) });
+        await api('/auth/schedule/message-test', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ kind: msgBackendKey(tpl.key), schedule: buildMensajesPayload(), target_email: email }) });
         toast('Email de prueba enviado', 'success');
       } catch(e) { toast(e.message, 'error'); }
     });
@@ -3294,15 +3641,8 @@ function renderMensajesAccordions() {
 }
 
 document.getElementById('mensajesGuardarBtn').addEventListener('click', async () => {
-  const templates = {};
-  MSG_TEMPLATES.forEach(tpl => {
-    templates[tpl.key] = {
-      enabled: !!(document.querySelector(`.msg-enabled[data-key="${tpl.key}"]`)?.checked),
-      content: document.querySelector(`.msg-content[data-key="${tpl.key}"]`)?.value || '',
-    };
-  });
   try {
-    await api('/auth/schedule', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ message_templates: templates }) });
+    await api('/auth/schedule', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(buildMensajesPayload()) });
     toast('Plantillas guardadas', 'success'); loadMensajes();
   } catch(e) { toast(e.message, 'error'); }
 });
@@ -3385,6 +3725,7 @@ document.getElementById('cuentaLogoutBtn').addEventListener('click', async () =>
 (async function init() {
   mountAdminImpersonationBanner();
   await Promise.all([loadOverview(), loadDeploy(), loadAppearance()]);
+  moveStarterPanelToTune();
   loadInstalacion();
   mountVanteliaWidget();
 })();

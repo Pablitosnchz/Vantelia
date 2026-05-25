@@ -134,6 +134,7 @@ REMINDER_24H_HOURS = int(os.getenv("REMINDER_24H_HOURS", "24"))
 REMINDER_2H_HOURS = int(os.getenv("REMINDER_2H_HOURS", "2"))
 REMINDER_RUN_INTERVAL_MINUTES = int(os.getenv("REMINDER_RUN_INTERVAL_MINUTES", "30"))
 BOOKING_AUTO_COMPLETE_HOURS = int(os.getenv("BOOKING_AUTO_COMPLETE_HOURS", "24"))
+MANAGE_TOKEN_VALID_DAYS_AFTER_DATE = int(os.getenv("MANAGE_TOKEN_VALID_DAYS_AFTER_DATE", "30"))
 PASSWORD_RESET_TOKEN_HOURS = int(os.getenv("PASSWORD_RESET_TOKEN_HOURS", "2"))
 PASSWORD_RESET_RESEND_SECONDS = int(os.getenv("PASSWORD_RESET_RESEND_SECONDS", "60"))
 PORTAL_COOKIE_NAME = os.getenv("PORTAL_COOKIE_NAME", "vantelia_portal_session").strip() or "vantelia_portal_session"
@@ -396,6 +397,15 @@ DEFAULT_MESSAGE_TEMPLATE_ENABLED = {
     "rescheduled": True,
 }
 
+MESSAGE_KIND_ALIASES = {
+    "confirmacion": "confirmed",
+    "confirmación": "confirmed",
+    "recordatorio_24h": "reminder_24h",
+    "recordatorio_2h": "reminder_2h",
+    "cancelada": "cancelled",
+    "reprogramada": "rescheduled",
+}
+
 
 @dataclass
 class SessionState:
@@ -635,7 +645,7 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
             "slot_minutes": int(booking.get("slot_minutes", 30)),
             "day_start": _sanitize_text(booking.get("day_start", "09:00")) or "09:00",
             "day_end": _sanitize_text(booking.get("day_end", "18:00")) or "18:00",
-            "closed_weekdays": booking.get("closed_weekdays", [0]),
+            "closed_weekdays": booking.get("closed_weekdays", [6]),
             "provider": "internal",
             "webhook_env": _sanitize_text(booking.get("webhook_env", "")),
             "webhook_url": _normalize_optional_http_url(booking.get("webhook_url", "")),
@@ -696,7 +706,7 @@ def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
             "slot_minutes": int(config.get("booking", {}).get("slot_minutes", 30)),
             "day_start": config.get("booking", {}).get("day_start", "09:00"),
             "day_end": config.get("booking", {}).get("day_end", "18:00"),
-            "closed_weekdays": list(config.get("booking", {}).get("closed_weekdays", [0])),
+            "closed_weekdays": list(config.get("booking", {}).get("closed_weekdays", [6])),
             "provider": "internal",
             "webhook_env": config.get("booking", {}).get("webhook_env", ""),
             "webhook_url": config.get("booking", {}).get("webhook_url", ""),
@@ -1910,7 +1920,7 @@ _setup_llama_index()
 app = FastAPI(
     title="Vantelia Embedded Chat API",
     description="Backend multiempresa para chat embebible con RAG y flujo profesional de leads.",
-    version="2.0.0",
+    version="1.0.0",
 )
 
 
@@ -1921,6 +1931,18 @@ async def _no_cache_widget_bundle(request: Request, call_next):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+    return response
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next: Any) -> Response:
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if _configured_public_base_url().startswith("https://"):
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response
 
 
@@ -2175,8 +2197,9 @@ async def shutdown_background_services() -> None:
 def _build_cors_headers(origin: str) -> Dict[str, str]:
     return {
         "Access-Control-Allow-Origin": origin,
-        "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
+        "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
         "Access-Control-Allow-Headers": "Authorization, Content-Type",
+        "Access-Control-Allow-Credentials": "true",
         "Vary": "Origin",
     }
 
@@ -2681,6 +2704,45 @@ class AppTuneResponse(BaseModel):
     available_models: List[str] = Field(default_factory=list)
 
 
+class AppServiceProduct(BaseModel):
+    id: str = ""
+    nombre: str = Field(min_length=1, max_length=160)
+    descripcion: str = Field(default="", max_length=800)
+
+
+class AppServicesResponse(BaseModel):
+    cliente_id: str
+    items: List[AppServiceProduct] = Field(default_factory=list)
+    info_chars: int = 0
+
+
+class AppServicesPayload(BaseModel):
+    items: List[AppServiceProduct] = Field(default_factory=list, max_length=80)
+
+
+class AppWhatsAppPayload(BaseModel):
+    enabled: Optional[bool] = None
+    phone_number_id: Optional[str] = Field(default=None, max_length=120)
+    access_token_env: Optional[str] = Field(default=None, max_length=120)
+    verify_token_env: Optional[str] = Field(default=None, max_length=120)
+
+
+class AppWhatsAppResponse(BaseModel):
+    ok: bool = True
+    cliente_id: str
+    enabled: bool = False
+    phone_number_id: str = ""
+    access_token_env: str = ""
+    verify_token_env: str = ""
+    webhook_url: str = ""
+    verify_token: str = ""
+    plan_allows_whatsapp: bool = False
+    access_token_configured: bool = False
+    verify_token_configured: bool = False
+    status: str = "disabled"
+    status_label: str = "Desactivado"
+
+
 class AppLiveChatSession(BaseModel):
     id: str
     chat_session_id: str
@@ -2943,8 +3005,8 @@ class PortalScheduleUpdatePayload(BaseModel):
     day_start: str = Field(default="09:00", min_length=5, max_length=5)
     day_end: str = Field(default="18:00", min_length=5, max_length=5)
     closed_weekdays: List[int] = Field(default_factory=list)
-    message_templates: Dict[str, str] = Field(default_factory=dict)
-    message_template_enabled: Dict[str, bool] = Field(default_factory=dict)
+    message_templates: Optional[Dict[str, str]] = None
+    message_template_enabled: Optional[Dict[str, bool]] = None
 
 
 class PortalAgendaBlockPayload(BaseModel):
@@ -3066,9 +3128,12 @@ class PortalDashboardResponse(BaseModel):
 
 
 class PortalMessagePreviewPayload(BaseModel):
-    kind: str = Field(min_length=3, max_length=40)
-    schedule: PortalScheduleUpdatePayload
+    kind: str = Field(default="", max_length=40)
+    schedule: Optional[PortalScheduleUpdatePayload] = None
     target_email: Optional[EmailStr] = None
+    template_key: str = Field(default="", max_length=40)
+    content: str = Field(default="", max_length=500)
+    test_email: Optional[EmailStr] = None
 
 
 class PortalMessagePreviewResponse(BaseModel):
@@ -3332,7 +3397,7 @@ def _public_services_for_booking(cliente_id: str, employee_id: str = "") -> List
 
     public_rows = _list_public_employee_rows(cliente_id, include_inactive=False)
     if not public_rows:
-        return []
+        return _extract_services_from_info(cliente_id)
 
     all_services = _extract_services_from_info(cliente_id)
     if any(not _employee_service_ids_from_row(row, cliente_id) for row in public_rows):
@@ -3745,7 +3810,7 @@ def _provision_self_serve_cliente(
         "contacto": {"email": "", "telefono": ""},
         "branding": {"powered_by": "Powered by Vantelia"},
         "whatsapp": {"enabled": False},
-        "booking": {"enabled": False},
+        "booking": {"enabled": True},
         "plan": "free",
     }
     normalized = _normalize_client_config(cliente_id, base_config)
@@ -3774,6 +3839,7 @@ def _provision_self_serve_cliente(
             (cliente_id, owner_user_id),
         )
         connection.commit()
+    _ensure_default_employees_for_all_clients()
     # init wizard state
     _write_onboarding_state(cliente_id, {"step": "learn", "started_at": _utc_now_iso()})
     return cliente_id
@@ -3853,11 +3919,10 @@ def _claim_cliente_id(claim_token: str, user_id: str, *, source: str = "claim_de
 
 
 def _mark_outreach_prospect_as_client_for_cliente(cliente_id: str, user_email: str) -> None:
-    """If outreach is configured and the prospect that triggered this demo is
-    discoverable, flip its status to 'client'. Lookup strategies (best-effort,
-    in order): exact match on prospects.email = user_email; match on
-    contacto.email saved in the cliente config; demo_slug match in the prospects
-    table. Anything missing is silently skipped."""
+    """If outreach is configured and the prospect is discoverable, flip its
+    status to 'client'. Lookup: exact match on prospects.email = user_email or
+    on the contacto.email saved in the cliente config. Anything missing is
+    silently skipped."""
     cfg = CONFIG_CLIENTES.get(cliente_id, {})
     candidate_emails: List[str] = []
     if user_email:
@@ -3879,15 +3944,6 @@ def _mark_outreach_prospect_as_client_for_cliente(cliente_id: str, user_email: s
                     "WHERE LOWER(email) = ? AND status NOT IN ('client', 'lost')",
                     (now_iso, email),
                 )
-            # demo_slug suffix may map (the slug includes a sha256 prefix from
-            # outreach Phase 2; we don't reverse it, just try direct match on
-            # any prospects.demo_slug embedded in cliente_id).
-            conn.execute(
-                "UPDATE prospects SET status = 'client', updated_at = ? "
-                "WHERE demo_slug != '' AND ? LIKE '%' || demo_slug || '%' "
-                "AND status NOT IN ('client', 'lost')",
-                (now_iso, cliente_id),
-            )
             conn.commit()
     except sqlite3.Error as exc:
         logger.warning("Outreach DB no accesible para marcar client: %s", exc)
@@ -4697,9 +4753,17 @@ def _send_email_message(
 
 
 def _preferred_public_base_url(request: Optional[Request] = None) -> str:
-    if request is not None:
-        return _public_base_url(request)
-    return APP_BASE_URL
+    return _configured_public_base_url() or (_public_base_url(request) if request is not None else "")
+
+
+def _configured_public_base_url() -> str:
+    if not APP_BASE_URL:
+        return ""
+    try:
+        return _normalize_origin_value(APP_BASE_URL)
+    except RuntimeError:
+        logger.warning("APP_BASE_URL invalida; se usara la URL de la peticion.")
+        return ""
 
 
 def _strip_origin(value: str) -> str:
@@ -5034,6 +5098,36 @@ def _portal_schedule_from_config(cliente_id: str) -> PortalSchedulePublic:
         blocks=[
             _serialize_agenda_block(row)
             for row in _list_agenda_blocks(cliente_id, employee_id="", date_from=today, date_to=future_limit)
+        ],
+    )
+
+
+def _portal_schedule_from_employee(cliente_id: str, employee_id: str) -> PortalSchedulePublic:
+    row = _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
+    schedule = _employee_schedule_from_row(row)
+    booking = _get_client_config(cliente_id)["booking"]
+    today = _utc_now().date().isoformat()
+    future_limit = (_utc_now() + timedelta(days=180)).date().isoformat()
+    return PortalSchedulePublic(
+        enabled=bool(row["is_active"]),
+        timezone=schedule["timezone"],
+        slot_minutes=schedule["slot_minutes"],
+        day_start=schedule["day_start"],
+        day_end=schedule["day_end"],
+        closed_weekdays=schedule["closed_weekdays"],
+        message_templates=_normalize_message_templates(booking.get("message_templates", {})),
+        message_template_enabled=_normalize_message_template_enabled(
+            booking.get("message_template_enabled", {}),
+            booking.get("message_templates", {}),
+        ),
+        blocks=[
+            _serialize_agenda_block(block)
+            for block in _list_agenda_blocks(
+                cliente_id,
+                employee_id=employee_id,
+                date_from=today,
+                date_to=future_limit,
+            )
         ],
     )
 
@@ -5720,26 +5814,82 @@ def _update_portal_brain(cliente_id: str, data: PortalBrainPayload) -> PortalBra
 
 
 def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) -> PortalSchedulePublic:
-    start = _parse_time(data.day_start).strftime("%H:%M")
-    end = _parse_time(data.day_end).strftime("%H:%M")
-    if start >= end:
-        raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio.")
-    closed_weekdays = sorted({int(day) for day in data.closed_weekdays if 0 <= int(day) <= 6})
-    if len(closed_weekdays) != len(set(data.closed_weekdays)):
-        closed_weekdays = sorted(set(closed_weekdays))
-
     next_configs = copy.deepcopy(CONFIG_CLIENTES)
     config = next_configs.get(cliente_id)
     if not config:
         raise HTTPException(status_code=404, detail="Cliente no configurado")
-    previous_closed_weekdays = {
-        int(day)
-        for day in config.get("booking", {}).get("closed_weekdays", [])
-        if isinstance(day, int) and 0 <= day <= 6
-    }
+    booking = dict(config.get("booking", {}))
+    raw_fields_set = getattr(data, "model_fields_set", None)
+    if raw_fields_set is None:
+        raw_fields_set = getattr(data, "__fields_set__", set())
+    fields_set = set(raw_fields_set)
+    schedule_fields = {"enabled", "timezone", "slot_minutes", "day_start", "day_end", "closed_weekdays"}
+    should_update_schedule = bool(fields_set & schedule_fields) or (
+        data.message_templates is None and data.message_template_enabled is None
+    )
+    if should_update_schedule:
+        start = _parse_time(data.day_start).strftime("%H:%M")
+        end = _parse_time(data.day_end).strftime("%H:%M")
+        if start >= end:
+            raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio.")
+        closed_weekdays = sorted({int(day) for day in data.closed_weekdays if 0 <= int(day) <= 6})
+        if len(closed_weekdays) != len(set(data.closed_weekdays)):
+            closed_weekdays = sorted(set(closed_weekdays))
+        previous_closed_weekdays = {
+            int(day)
+            for day in config.get("booking", {}).get("closed_weekdays", [])
+            if isinstance(day, int) and 0 <= day <= 6
+        }
+        newly_closed_weekdays = set(closed_weekdays) - previous_closed_weekdays
+        if newly_closed_weekdays:
+            conflicts = _booking_conflicts_for_closed_weekdays(cliente_id, newly_closed_weekdays)
+            if conflicts:
+                raise HTTPException(
+                    status_code=409,
+                    detail=_booking_conflict_message(
+                        conflicts,
+                        "Hay citas activas en los dias que quieres cerrar. Cancelalas o reprogramalas antes de guardar.",
+                    ),
+                )
+        booking.update(
+            {
+                "enabled": bool(data.enabled),
+                "timezone": _sanitize_text(data.timezone) or DEFAULT_TIMEZONE,
+                "slot_minutes": int(data.slot_minutes),
+                "day_start": start,
+                "day_end": end,
+                "closed_weekdays": closed_weekdays,
+            }
+        )
+    if data.message_templates is not None:
+        booking["message_templates"] = _normalize_message_templates(data.message_templates)
+    if data.message_template_enabled is not None:
+        booking["message_template_enabled"] = _normalize_message_template_enabled(
+            data.message_template_enabled,
+            data.message_templates,
+        )
+    config["booking"] = booking
+    _validate_single_client_runtime(cliente_id, config)
+    _persist_configs_to_disk(next_configs)
+    _update_runtime_configs(next_configs)
+    return _portal_schedule_from_config(cliente_id)
+
+
+def _update_employee_schedule(cliente_id: str, employee_id: str, data: PortalScheduleUpdatePayload) -> PortalSchedulePublic:
+    row = _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
+    start = _parse_time(data.day_start).strftime("%H:%M")
+    end = _parse_time(data.day_end).strftime("%H:%M")
+    if start >= end:
+        raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio.")
+    closed_weekdays = _normalize_closed_weekdays_list(data.closed_weekdays)
+    previous_closed_weekdays = set(_employee_closed_weekdays_from_row(row))
     newly_closed_weekdays = set(closed_weekdays) - previous_closed_weekdays
     if newly_closed_weekdays:
-        conflicts = _booking_conflicts_for_closed_weekdays(cliente_id, newly_closed_weekdays)
+        conflicts = _booking_conflicts_for_closed_weekdays(
+            cliente_id,
+            newly_closed_weekdays,
+            employee_id=employee_id,
+        )
         if conflicts:
             raise HTTPException(
                 status_code=409,
@@ -5748,27 +5898,26 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
                     "Hay citas activas en los dias que quieres cerrar. Cancelalas o reprogramalas antes de guardar.",
                 ),
             )
-    booking = dict(config.get("booking", {}))
-    booking.update(
-        {
-            "enabled": bool(data.enabled),
-            "timezone": _sanitize_text(data.timezone) or DEFAULT_TIMEZONE,
-            "slot_minutes": int(data.slot_minutes),
-            "day_start": start,
-            "day_end": end,
-            "closed_weekdays": closed_weekdays,
-            "message_templates": _normalize_message_templates(data.message_templates),
-            "message_template_enabled": _normalize_message_template_enabled(
-                data.message_template_enabled,
-                data.message_templates,
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            UPDATE employees
+            SET timezone = ?, slot_minutes = ?, day_start = ?, day_end = ?, closed_weekdays_json = ?, updated_at = ?
+            WHERE id = ? AND cliente_id = ?
+            """,
+            (
+                _sanitize_text(data.timezone) or DEFAULT_TIMEZONE,
+                int(data.slot_minutes),
+                start,
+                end,
+                json.dumps(closed_weekdays),
+                _utc_now_iso(),
+                employee_id,
+                cliente_id,
             ),
-        }
-    )
-    config["booking"] = booking
-    _validate_single_client_runtime(cliente_id, config)
-    _persist_configs_to_disk(next_configs)
-    _update_runtime_configs(next_configs)
-    return _portal_schedule_from_config(cliente_id)
+        )
+        connection.commit()
+    return _portal_schedule_from_employee(cliente_id, employee_id)
 
 
 def _serialize_portal_employee(row: sqlite3.Row) -> PortalEmployeePublic:
@@ -6889,7 +7038,7 @@ def _default_admin_payload(cliente_id: str) -> AdminClientePayload:
             "Habla con tono profesional, mantente dentro del contexto del negocio y "
             "deriva al equipo humano cuando falte informacion."
         ),
-        allowed_origins=["https://www.vantelia.es"],
+        allowed_origins=["https://www.vantelia.es", "https://vantelia.es"],
         contacto_email="",
         contacto_telefono="",
         branding_text="Powered by Vantelia",
@@ -7064,6 +7213,10 @@ def _forwarded_header_value(raw_value: str) -> str:
 
 
 def _public_base_url(request: Request) -> str:
+    configured_base_url = _configured_public_base_url()
+    if configured_base_url:
+        return configured_base_url
+
     forwarded_proto = _forwarded_header_value(request.headers.get("x-forwarded-proto", ""))
     forwarded_host = _forwarded_header_value(request.headers.get("x-forwarded-host", ""))
     forwarded_port = _forwarded_header_value(request.headers.get("x-forwarded-port", ""))
@@ -7101,6 +7254,20 @@ def _enforce_allowed_origin(request: Request, cliente_id: str) -> None:
         raise HTTPException(status_code=403, detail="Dominio no autorizado para este cliente")
 
 
+def _enforce_session_cookie_origin(request: Request, portal_session: Optional[str]) -> None:
+    if not portal_session or request.method.upper() in {"GET", "HEAD", "OPTIONS"}:
+        return
+    request_origin = _request_origin(request)
+    if not request_origin:
+        return
+    app_origin = _normalize_origin_value(_public_base_url(request))
+    if request_origin != app_origin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Origen no autorizado para una accion autenticada.",
+        )
+
+
 def _get_authenticated_portal_user_or_none(
     portal_session: Optional[str],
 ) -> Optional[sqlite3.Row]:
@@ -7110,8 +7277,10 @@ def _get_authenticated_portal_user_or_none(
 
 
 def _require_authenticated_portal_user(
+    request: Request,
     portal_session: Optional[str] = Cookie(default=None, alias=PORTAL_COOKIE_NAME),
 ) -> sqlite3.Row:
+    _enforce_session_cookie_origin(request, portal_session)
     user = _get_authenticated_portal_user_or_none(portal_session)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesion no valida o expirada.")
@@ -8586,9 +8755,27 @@ def _get_booking_provider(config: Dict[str, Any]) -> str:
 
 def _normalize_message_kind(kind: str) -> str:
     normalized = _sanitize_text(kind).lower()
+    normalized = MESSAGE_KIND_ALIASES.get(normalized, normalized)
     if normalized not in DEFAULT_MESSAGE_TEMPLATES:
         raise HTTPException(status_code=400, detail="Tipo de plantilla no valido.")
     return normalized
+
+
+def _schedule_preview_payload_from_config(cliente_id: str) -> PortalScheduleUpdatePayload:
+    booking = _get_client_config(cliente_id).get("booking", {})
+    return PortalScheduleUpdatePayload(
+        enabled=bool(booking.get("enabled", True)),
+        timezone=_sanitize_text(booking.get("timezone", DEFAULT_TIMEZONE)) or DEFAULT_TIMEZONE,
+        slot_minutes=int(booking.get("slot_minutes", 30)),
+        day_start=_sanitize_text(booking.get("day_start", "09:00")) or "09:00",
+        day_end=_sanitize_text(booking.get("day_end", "18:00")) or "18:00",
+        closed_weekdays=_normalize_closed_weekdays_list(booking.get("closed_weekdays", [])),
+        message_templates=_normalize_message_templates(booking.get("message_templates", {})),
+        message_template_enabled=_normalize_message_template_enabled(
+            booking.get("message_template_enabled", {}),
+            booking.get("message_templates", {}),
+        ),
+    )
 
 
 def _sample_booking_preview_slot(schedule: PortalScheduleUpdatePayload) -> Tuple[str, str]:
@@ -8768,8 +8955,14 @@ def _booking_message_preview(
     payload: PortalMessagePreviewPayload,
     request: Optional[Request] = None,
 ) -> PortalMessagePreviewResponse:
-    kind = _normalize_message_kind(payload.kind)
-    booking_row, context, manage_url = _booking_preview_context(cliente_id, payload.schedule, request)
+    kind = _normalize_message_kind(payload.kind or payload.template_key)
+    schedule = payload.schedule or _schedule_preview_payload_from_config(cliente_id)
+    legacy_content = _sanitize_text(payload.content, allow_multiline=True)
+    if legacy_content:
+        templates = _normalize_message_templates(schedule.message_templates or {})
+        templates[kind] = legacy_content[:500]
+        schedule.message_templates = templates
+    booking_row, context, manage_url = _booking_preview_context(cliente_id, schedule, request)
     subject = _booking_email_subject(kind, context["company_name"], booking_row)
     text_body, html_body = _booking_email_bodies(
         booking_row,
@@ -9702,10 +9895,34 @@ def _load_booking_or_404(booking_id: str) -> sqlite3.Row:
     return row
 
 
+def _manage_token_still_valid(row: sqlite3.Row) -> bool:
+    try:
+        booking_date = (row["booking_date"] or "").strip()
+        if booking_date:
+            base = datetime.strptime(booking_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            cutoff = base + timedelta(days=MANAGE_TOKEN_VALID_DAYS_AFTER_DATE)
+        else:
+            created_at = (row["created_at"] or "").strip()
+            if not created_at:
+                return True
+            base = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            if base.tzinfo is None:
+                base = base.replace(tzinfo=timezone.utc)
+            cutoff = base + timedelta(days=90)
+        return datetime.now(timezone.utc) <= cutoff
+    except Exception:
+        return True
+
+
 def _load_booking_by_token_or_404(manage_token: str) -> sqlite3.Row:
     row = _get_booking_row_by_token(manage_token)
     if not row:
         raise HTTPException(status_code=404, detail="No se ha encontrado la reserva.")
+    if not _manage_token_still_valid(row):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Este enlace de gestión ha caducado. Contacta con el negocio si necesitas modificar la cita.",
+        )
     return row
 
 
@@ -10392,6 +10609,30 @@ def _extract_services_from_info(cliente_id: str) -> List[Dict[str, str]]:
     contenido = ruta_info.read_text(encoding="utf-8")
     servicios: List[Dict[str, str]] = []
     en_seccion = False
+    current: Optional[Dict[str, str]] = None
+    current_category = ""
+
+    def start_service(nombre: str) -> None:
+        nonlocal current
+        service_id = _normalize_service_id(nombre)
+        if not service_id:
+            current = None
+            return
+        current = {"id": service_id, "nombre": nombre.strip(), "descripcion": ""}
+        if current_category:
+            current["descripcion"] = f"Categoria: {current_category}"
+        servicios.append(current)
+
+    def append_detail(label: str, text: str) -> None:
+        if not current:
+            return
+        clean = _sanitize_text(str(text or ""), allow_multiline=True).strip()
+        if not clean:
+            return
+        prefix = _sanitize_text(str(label or "")).strip()
+        detail = f"{prefix}: {clean}" if prefix else clean
+        existing = str(current.get("descripcion") or "").strip()
+        current["descripcion"] = f"{existing}\n{detail}".strip() if existing else detail
 
     for linea in contenido.splitlines():
         valor = linea.strip()
@@ -10410,22 +10651,85 @@ def _extract_services_from_info(cliente_id: str) -> List[Dict[str, str]]:
         if not en_seccion:
             continue
 
-        if valor.startswith("- ") and valor.endswith(":"):
-            nombre = valor[2:-1].strip()
-        elif valor.startswith("- Servicio:"):
-            nombre = valor.split(":", 1)[1].strip()
-        else:
+        numbered_match = re.match(r"^\d+[\.)]\s+(.+)$", valor)
+        if numbered_match:
+            start_service(numbered_match.group(1).strip())
             continue
 
-        service_id = _normalize_service_id(nombre)
-        if service_id:
-            servicios.append({"id": service_id, "nombre": nombre})
+        if valor.startswith("- Servicio:"):
+            start_service(valor.split(":", 1)[1].strip())
+            continue
+
+        if valor.startswith("- ") and valor.endswith(":"):
+            current_category = valor[2:-1].strip()
+            current = None
+            continue
+
+        if lower.startswith("- descripcion:") or lower.startswith("- descripción:"):
+            append_detail("Descripcion", valor.split(":", 1)[1].strip())
+            continue
+
+        detail_match = re.match(r"^-\s*([^:]{1,60}):\s*(.+)$", valor)
+        if detail_match:
+            append_detail(detail_match.group(1).strip(), detail_match.group(2).strip())
+            continue
+
+        if valor.startswith("- "):
+            append_detail("", valor[2:].strip())
+            continue
+
+        if valor and current:
+            append_detail("", valor)
+            continue
 
     unique: Dict[str, Dict[str, str]] = {}
     for servicio in servicios:
+        servicio["descripcion"] = _sanitize_text(servicio.get("descripcion", ""), allow_multiline=True)[:800]
         unique[servicio["id"]] = servicio
 
     return list(unique.values())
+
+
+def _services_info_section(items: List[Dict[str, str]]) -> str:
+    lines = ["SERVICIOS Y PRECIOS:"]
+    cleaned: Dict[str, Dict[str, str]] = {}
+    for item in items:
+        nombre = _sanitize_text(str(item.get("nombre") or item.get("name") or ""))[:160]
+        if not nombre:
+            continue
+        service_id = _normalize_service_id(nombre)
+        if not service_id:
+            continue
+        descripcion = _sanitize_text(str(item.get("descripcion") or item.get("description") or ""), allow_multiline=True)[:800]
+        cleaned[service_id] = {"nombre": nombre, "descripcion": descripcion}
+    for item in cleaned.values():
+        lines.append(f"- Servicio: {item['nombre']}")
+        if item["descripcion"]:
+            desc = " ".join(item["descripcion"].splitlines())
+            lines.append(f"  - Descripcion: {desc}")
+    return "\n".join(lines)
+
+
+def _replace_services_section(info_txt: str, items: List[Dict[str, str]]) -> str:
+    section = _services_info_section(items)
+    lines = (info_txt or "").splitlines()
+    start = None
+    for idx, line in enumerate(lines):
+        if line.strip().lower().startswith("servicios y precios"):
+            start = idx
+            break
+    if start is None:
+        base = (info_txt or "").rstrip()
+        return (base + "\n\n" + section + "\n").lstrip()
+
+    end = len(lines)
+    for idx in range(start + 1, len(lines)):
+        value = lines[idx].strip()
+        if value and value.endswith(":") and value.upper() == value and len(value) > 3:
+            end = idx
+            break
+    next_lines = lines[:start] + section.splitlines() + lines[end:]
+    return "\n".join(next_lines).strip() + "\n"
 
 
 def _services_for_employee(cliente_id: str, employee_row: Optional[sqlite3.Row]) -> List[Dict[str, str]]:
@@ -10442,6 +10746,8 @@ def _services_for_employee(cliente_id: str, employee_row: Optional[sqlite3.Row])
 def _service_name_allowed_for_employee(cliente_id: str, employee_row: sqlite3.Row, service_name: str) -> bool:
     normalized_name = _sanitize_text(service_name)
     if not normalized_name:
+        return True
+    if not _employee_service_ids_from_row(employee_row, cliente_id):
         return True
     allowed_services = _services_for_employee(cliente_id, employee_row)
     if not allowed_services:
@@ -10523,7 +10829,11 @@ async def root() -> Dict[str, Any]:
 
 
 @app.post("/auth/login", response_model=AuthLoginResponse)
-async def auth_login(data: AuthLoginPayload) -> Response:
+async def auth_login(data: AuthLoginPayload, request: Request) -> Response:
+    client_ip = request.client.host if request.client else "unknown"
+    email_norm = _normalize_email(data.email)
+    _check_rate_limit(f"login-ip:{client_ip}", 10)
+    _check_rate_limit(f"login-email:{email_norm}", 5)
     user = _get_user_by_email(data.email)
     if not user or not user["is_active"]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No encontramos ninguna cuenta con ese correo.")
@@ -12095,6 +12405,130 @@ async def app_tune_post(
     return await app_tune_get(user)
 
 
+@app.get("/auth/app/services", response_model=AppServicesResponse)
+async def app_services_get(
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> AppServicesResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    info_txt = _read_info(cliente_id)
+    items = [
+        AppServiceProduct(
+            id=item.get("id", ""),
+            nombre=item.get("nombre", ""),
+            descripcion=item.get("descripcion", ""),
+        )
+        for item in _extract_services_from_info(cliente_id)
+    ]
+    return AppServicesResponse(cliente_id=cliente_id, items=items, info_chars=len(info_txt))
+
+
+@app.post("/auth/app/services", response_model=AppServicesResponse)
+async def app_services_post(
+    data: AppServicesPayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> AppServicesResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    unique: Dict[str, Dict[str, str]] = {}
+    for item in data.items:
+        nombre = _sanitize_text(item.nombre)[:160]
+        if not nombre:
+            continue
+        service_id = _normalize_service_id(nombre)
+        if not service_id:
+            continue
+        unique[service_id] = {
+            "nombre": nombre,
+            "descripcion": _sanitize_text(item.descripcion, allow_multiline=True)[:800],
+        }
+    info_txt = _replace_services_section(_read_info(cliente_id), list(unique.values()))
+    _write_info(cliente_id, info_txt)
+    return await app_services_get(user)
+
+
+def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResponse:
+    cfg = _get_client_config(cliente_id)
+    wa = dict(cfg.get("whatsapp", {}) or {})
+    webhook_url = f"{_public_base_url(request).rstrip('/')}/whatsapp/webhook/{cliente_id}"
+    plan_allows = bool(_plan_feature(cliente_id, "whatsapp_enabled"))
+    access_token = _whatsapp_access_token_for_client(cliente_id)
+    verify_token = _whatsapp_verify_token_for_client(cliente_id)
+    enabled = bool(wa.get("enabled", False))
+    phone_number_id = str(wa.get("phone_number_id", "") or "").strip()
+    if enabled and plan_allows and phone_number_id and access_token:
+        status_value = "ready"
+        status_label = "Conectado"
+    elif enabled and not plan_allows:
+        status_value = "plan_required"
+        status_label = "Requiere plan con WhatsApp"
+    elif enabled and not phone_number_id:
+        status_value = "missing_phone"
+        status_label = "Falta Phone Number ID"
+    elif enabled and not access_token:
+        status_value = "missing_token"
+        status_label = "Falta token de envio en servidor"
+    else:
+        status_value = "disabled"
+        status_label = "Desactivado"
+    return AppWhatsAppResponse(
+        cliente_id=cliente_id,
+        enabled=enabled,
+        phone_number_id=phone_number_id,
+        access_token_env=str(wa.get("access_token_env", "") or ""),
+        verify_token_env=str(wa.get("verify_token_env", "") or ""),
+        webhook_url=webhook_url,
+        verify_token=verify_token,
+        plan_allows_whatsapp=plan_allows,
+        access_token_configured=bool(access_token),
+        verify_token_configured=bool(verify_token),
+        status=status_value,
+        status_label=status_label,
+    )
+
+
+@app.get("/auth/app/whatsapp", response_model=AppWhatsAppResponse)
+async def app_whatsapp_get(
+    request: Request,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> AppWhatsAppResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    return _app_whatsapp_response(cliente_id, request)
+
+
+@app.post("/auth/app/whatsapp", response_model=AppWhatsAppResponse)
+async def app_whatsapp_post(
+    data: AppWhatsAppPayload,
+    request: Request,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> AppWhatsAppResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    with state_lock:
+        next_configs = copy.deepcopy(CONFIG_CLIENTES)
+        cfg = next_configs.get(cliente_id, {})
+        wa = dict(cfg.get("whatsapp", {}) or {})
+        if data.phone_number_id is not None:
+            wa["phone_number_id"] = _sanitize_text(data.phone_number_id)[:120]
+        if data.access_token_env is not None:
+            wa["access_token_env"] = _sanitize_text(data.access_token_env)[:120]
+        if data.verify_token_env is not None:
+            wa["verify_token_env"] = _sanitize_text(data.verify_token_env)[:120]
+        if data.enabled is not None:
+            if data.enabled:
+                if not _plan_feature(cliente_id, "whatsapp_enabled"):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="WhatsApp esta disponible en los planes WhatsApp y Completo.",
+                    )
+                if not str(wa.get("phone_number_id", "") or "").strip():
+                    raise HTTPException(status_code=400, detail="Indica el Phone Number ID de WhatsApp.")
+            wa["enabled"] = bool(data.enabled)
+        cfg["whatsapp"] = wa
+        next_configs[cliente_id] = cfg
+        _validate_single_client_runtime(cliente_id, _normalize_client_config(cliente_id, cfg))
+        _update_runtime_configs(next_configs)
+    _persist_configs_to_disk(next_configs)
+    return _app_whatsapp_response(cliente_id, request)
+
+
 # --- Sem 4: Live Chat (Pro gate stub) --------------------------------------
 
 def _user_plan(user: sqlite3.Row) -> str:
@@ -12333,6 +12767,25 @@ async def auth_update_schedule(
     return _update_client_schedule(_portal_client_id_or_403(user, cliente_id), data)
 
 
+@app.get("/auth/schedule/employee/{employee_id}", response_model=PortalSchedulePublic)
+async def auth_employee_schedule(
+    employee_id: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PortalSchedulePublic:
+    return _portal_schedule_from_employee(_portal_client_id_or_403(user, cliente_id), employee_id)
+
+
+@app.post("/auth/schedule/employee/{employee_id}", response_model=PortalSchedulePublic)
+async def auth_update_employee_schedule(
+    employee_id: str,
+    data: PortalScheduleUpdatePayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PortalSchedulePublic:
+    return _update_employee_schedule(_portal_client_id_or_403(user, cliente_id), employee_id, data)
+
+
 @app.post("/auth/schedule/message-preview", response_model=PortalMessagePreviewResponse)
 async def auth_schedule_message_preview(
     data: PortalMessagePreviewPayload,
@@ -12352,7 +12805,7 @@ async def auth_schedule_message_test(
 ) -> AuthSimpleResponse:
     target_client_id = _portal_client_id_or_403(user, cliente_id)
     preview = _booking_message_preview(target_client_id, data, request)
-    target_email = str(data.target_email or user["email"] or "").strip()
+    target_email = str(data.target_email or data.test_email or user["email"] or "").strip()
     if not target_email:
         raise HTTPException(status_code=400, detail="Indica un email donde enviar la prueba.")
     _send_email_message(target_email, preview.subject, preview.text_body, preview.html_body)
@@ -12784,15 +13237,21 @@ async def auth_subscription_portal(
 async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) -> Dict[str, Any]:
     if not _stripe_configured():
         raise HTTPException(status_code=503, detail="Stripe no configurado.")
+    if not STRIPE_WEBHOOK_SECRET:
+        logger.error("Stripe webhook recibido pero STRIPE_WEBHOOK_SECRET no está configurado; rechazando por seguridad.")
+        raise HTTPException(status_code=503, detail="Stripe webhook secret no configurado.")
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature", "")
+    if not sig_header:
+        logger.warning("Stripe webhook recibido sin cabecera stripe-signature; rechazando.")
+        raise HTTPException(status_code=400, detail="Falta firma del webhook.")
     try:
-        if STRIPE_WEBHOOK_SECRET:
-            event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-        else:
-            event = json.loads(payload.decode("utf-8"))
+        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    except stripe.error.SignatureVerificationError as exc:
+        logger.warning("Stripe webhook firma inválida: %s", exc)
+        raise HTTPException(status_code=400, detail="Firma del webhook inválida.") from exc
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Stripe webhook signature/JSON error: %s", exc)
+        logger.warning("Stripe webhook payload error: %s", exc)
         raise HTTPException(status_code=400, detail="Webhook payload inválido.") from exc
 
     event_type = event.get("type") if isinstance(event, dict) else event["type"]
@@ -13196,7 +13655,10 @@ async def app_entry(
         .replace("__USER_NAME__", escape(user["display_name"]))
         .replace("__CLIENTE_ID__", escape(user["cliente_id"]))
     )
-    return HTMLResponse(html)
+    return HTMLResponse(
+        html,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"},
+    )
 
 
 @app.get("/signup", include_in_schema=False)
@@ -15227,13 +15689,22 @@ def _mark_whatsapp_message_if_new(
 
 def _verify_whatsapp_signature(raw_body: bytes, signature_header: str) -> None:
     if not WHATSAPP_APP_SECRET:
-        return
+        logger.error(
+            "WhatsApp webhook recibido pero WHATSAPP_APP_SECRET no esta configurado; "
+            "rechazando por seguridad."
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="WhatsApp webhook secret no configurado.",
+        )
+    if not signature_header:
+        raise HTTPException(status_code=403, detail="Falta firma de WhatsApp.")
     expected = "sha256=" + hmac.new(
         WHATSAPP_APP_SECRET.encode("utf-8"),
         raw_body,
         hashlib.sha256,
     ).hexdigest()
-    if not signature_header or not hmac.compare_digest(expected, signature_header):
+    if not hmac.compare_digest(expected, signature_header):
         raise HTTPException(status_code=403, detail="Firma de WhatsApp invalida.")
 
 
@@ -20656,7 +21127,6 @@ try:
         IGProspect,
         render as ig_render,
         igme_deep_link as ig_deep_link,
-        make_demo_slug as ig_make_demo_slug,
     )
     from instagram_discover import (  # type: ignore
         IGProfile,
@@ -21051,7 +21521,6 @@ def instagram_get_prospect(username: str):
         "prospect": _ig_row_dict(row),
         "sends": [_ig_row_dict(s) for s in sends],
         "events": [_ig_row_dict(e) for e in events],
-        "demo_slug": ig_make_demo_slug(user, row["full_name"] or ""),
     }
 
 

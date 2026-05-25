@@ -1,10 +1,4 @@
 User-agent: *
 Allow: /
 
-User-agent: Googlebot-Image
-Disallow: /assets/img/resumen.png
-Disallow: /assets/img/resumen.webp
-Disallow: /assets/img/prototipo-web.png
-Disallow: /assets/img/prototipo-web.webp
-
 Sitemap: https://www.vantelia.es/sitemap.xml

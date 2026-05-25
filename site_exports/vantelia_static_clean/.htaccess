@@ -14,7 +14,7 @@ RewriteCond %{HTTP_HOST} !^www\. [NC]
 RewriteRule ^ https://www.%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 
 # ── Redirecciones legacy (URLs antiguas eliminadas) ──────
-RewriteRule ^testimonios(?:/index\.html)?/?$       https://www.vantelia.es/resultados/  [R=301,L]
+RewriteRule ^testimonios(?:/index\.html)?/?$       https://www.vantelia.es/             [R=301,L]
 RewriteRule ^noticias(?:/index\.html)?/?$          https://www.vantelia.es/             [R=301,L]
 RewriteRule ^seo-para-empresas-b2b(?:/index\.html)?/?$              https://www.vantelia.es/servicios/ [R=301,L]
 RewriteRule ^consultoria-ia-para-empresas(?:/index\.html)?/?$       https://www.vantelia.es/servicios/ [R=301,L]
@@ -37,6 +37,11 @@ RewriteRule ^tendencias-en-ia-y-marketing-digital-para-2024(?:/index\.html)?/?$ 
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteCond %{REQUEST_URI} !/$
 RewriteRule ^ %{REQUEST_URI}/ [R=301,L]
+
+# ── Páginas obsoletas redirigidas (limpieza 2026-05-22) ──
+RewriteRule ^plataforma(?:/index\.html)?/?$ https://www.vantelia.es/planes/   [R=301,L]
+RewriteRule ^resultados(?:/index\.html)?/?$ https://www.vantelia.es/          [R=301,L]
+RewriteRule ^nosotros(?:/index\.html)?/?$   https://www.vantelia.es/          [R=301,L]
 
 Redirect 301 /contacto  /consultas/
 Redirect 301 /contacto/ /consultas/
@@ -72,4 +77,7 @@ ErrorDocument 404 /404.html
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "SAMEORIGIN"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Strict-Transport-Security "max-age=31536000"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+  Header always set X-Permitted-Cross-Domain-Policies "none"
 </IfModule>

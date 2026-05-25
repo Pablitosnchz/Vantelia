@@ -419,11 +419,6 @@
     <p class="field-help">Tarda 30-90 segundos. Analizamos hasta 12 páginas y generamos el conocimiento base.</p>
   </div>
 
-  <label style="display:flex; align-items:center; gap:8px; margin-top:14px; color:var(--soft); font-size:0.86rem; cursor:pointer;">
-    <input type="checkbox" id="justOnePage" />
-    <span>Solo esta página (más rápido, menos contexto)</span>
-  </label>
-
   <div class="actions">
     <button class="btn btn-ghost" id="learnBackBtn" type="button">← Atrás</button>
     <button class="btn btn-primary" id="learnNextBtn" type="button">
@@ -503,6 +498,7 @@
       <span class="btn-spinner"></span>
     </button>
   </div>
+  <div class="status-msg" id="tryStatus" aria-live="polite"></div>
 </div>
 
 <!-- ─── STEP 5: USE IT ─── -->
@@ -698,7 +694,7 @@ async function submitLearn() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         website_url: url,
-        just_this_page: !!document.getElementById('justOnePage').checked,
+        just_this_page: false,
       }),
     });
     state.website_url = url;
@@ -758,7 +754,7 @@ async function finalizeWizard() {
     state.share_link = data.share_link;
     showStep('use');
   } catch (err) {
-    alert(err.message);
+    setStatus('tryStatus', err.message, 'error');
   } finally {
     setLoading('tryNextBtn', false);
   }

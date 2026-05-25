@@ -248,7 +248,7 @@ No enviar emails reales en pruebas. Usa entornos o credenciales dummy.
 WhatsApp reutiliza la misma logica de chat/RAG y guardado de conversaciones. Puntos sensibles:
 
 - Verificacion webhook con `WHATSAPP_VERIFY_TOKEN`.
-- Validacion de firma con `WHATSAPP_APP_SECRET` si esta configurado.
+- Validacion de firma con `WHATSAPP_APP_SECRET` obligatoria (rechaza 503 si vacio, 403 si firma invalida).
 - Mapeo phone number id -> cliente con `WHATSAPP_PHONE_CLIENT_MAP` o config por cliente.
 - Token global `WHATSAPP_ACCESS_TOKEN` o variable especifica por cliente.
 - No responder si el cliente no esta habilitado o no se puede resolver con seguridad.
@@ -304,28 +304,6 @@ Tokens firmados HMAC-SHA256 con `OUTREACH_TRACKING_SECRET`. Si secret vacio o `O
 - `IMAP_HOST`/`IMAP_PORT`/`IMAP_USER`/`IMAP_PASSWORD`/`IMAP_FOLDER`/`IMAP_USE_SSL`: poller IMAP de respuestas. Cuando matchea (por `In-Reply-To` con `sends.message_id` o por remitente conocido) registra evento `reply`, marca `prospects.status='replied'` y los siguientes stages (`fu1/fu2/breakup`) se saltan automaticamente. Filtra autoresponders (Auto-Submitted, asuntos "Out of office"). Implementado en `scripts/outreach_imap.py` y arrancado por `_outreach_imap_worker` en `api.py`.
 - `OUTREACH_IMAP_INTERVAL_MINUTES`: intervalo del poller (default 10).
 - `OUTREACH_IMAP_LOOKBACK_DAYS`: ventana IMAP en cada pasada (default 14).
-
-### Fase 2 (mayo 2026): Demo personalizada por prospect
-
-- Endpoint publico `GET /d/{slug}` (sin auth, `noindex,nofollow`) renderiza una landing oscura con headline tipo "Hola Ana, asi funcionaria Vantelia en {business} ({city})" + FAQs adaptadas al niche + CTA de calendario y widget Vantelia embebido apuntando a `OUTREACH_DEMO_CLIENT_ID` (default `demo`).
-- Slug deterministico: `make_demo_slug(email, business_name)` → `{slugified-business}-{sha256(email)[:6]}`. Migracion `prospects.demo_slug` + indice. Se popula en bulk/create/import (panel y CSV) y CLI.
-- CTAs de cold/fu1/fu2 ahora apuntan al link `/d/{slug}` como boton primario y al calendario (`OUTREACH_CALENDAR_URL`) como secundario. Si ninguna URL esta configurada, recae en CTA `mailto:info@vantelia.es` clasico.
-- Visitar la demo registra evento `demo_visit` en `outreach.events`. Hot leads suma `demo_visit*12` (reciente) y `demo_visit*6` (historico) al score → un visitante de la demo aparece arriba del todo. Tabla del widget muestra columna "Demo".
-- Variables `.env`: `OUTREACH_DEMO_BASE_URL` (publico), `OUTREACH_DEMO_CLIENT_ID` (cerebro RAG), `OUTREACH_BOOKING_CLIENTE_ID` (agenda interna para reservar 15 min), `OUTREACH_CALENDAR_URL` (fallback externo).
-- Si la demo va a recibir trafico real, asegurate de que el `cliente_id` configurado existe en `config.json` y tiene `data/<id>/info.txt` poblado, y que `allowed_origins` incluye `app.vantelia.es` (para que el widget cargue dentro de la propia demo).
-
-#### Booking interno: cliente "vantelia" en config.json
-
-`OUTREACH_BOOKING_CLIENTE_ID` apunta a un cliente real de `config.json` que actua de "agenda de Pablo". Cuando esta configurado, `/d/{slug}` incluye selector de fecha + huecos libres y reserva directamente via `/agendar` (sin Calendly/cal.com).
-
-Pasos minimos para crear el cliente "vantelia":
-1. Anadir entrada en `config.json` con `cliente_id` (ej. `vantelia`), `nombre`, `bienvenida` neutros.
-2. `allowed_origins` debe incluir `https://app.vantelia.es` (la demo se sirve desde ahi y hace fetch a `/disponibilidad` y `/agendar`).
-3. `booking.enabled = true`. Definir `timezone` (`Europe/Madrid`), horario laboral, slot duration 15 min y proveedor interno.
-4. Anadir un servicio "Demo 15 min" con esa duracion.
-5. `data/vantelia/info.txt` puede ser minimo o vacio (no se usa para RAG en este flujo).
-
-Si el cliente no existe o tiene `booking.enabled=false`, la pagina `/d/{slug}` esconde la seccion `#agenda` y el CTA principal recae en `OUTREACH_CALENDAR_URL` o `mailto:`. Sin downtime.
 
 ### Fase 4 (mayo 2026): Subjects A/B + proof line
 
@@ -404,7 +382,7 @@ Modo agresivo (Playwright + sesion IG) bajo flag `IG_AUTOSEND_ENABLED=false`. Ac
 
 ### Componentes
 
-- `scripts/instagram_templates.py`: copy por stage (cold/fu1/fu2/breakup) con variantes A/B estables, niche hook (dental, estetica, fisio, gimnasio, restaurante, hotel, etc.), CTA a `/d/{demo_slug}` reusando logica de demo.
+- `scripts/instagram_templates.py`: copy por stage (cold/fu1/fu2/breakup) con variantes A/B estables, niche hook (dental, estetica, fisio, gimnasio, restaurante, hotel, etc.), CTA a `OUTREACH_CALENDAR_URL` con fallback a la landing publica `https://www.vantelia.es`.
 - `scripts/instagram_discover.py`: Graph API (Business Discovery) si hay `IG_GRAPH_TOKEN`+`IG_BUSINESS_ACCOUNT_ID`. Fallback scrape publico read-only de `instagram.com/{user}/` con rate limit 1 req/2s. Sin login.
 - `scripts/instagram_campaign.py`: CLI espejo de outreach_campaign (import, discover, preview, draft, send, followup, suppress, stats). Schema en `storage/instagram/instagram.db`.
 - `scripts/instagram_replies.py`: poller Graph API para mensajes entrantes de cuenta business propia. Marca prospects como `replied`.

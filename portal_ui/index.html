@@ -1447,11 +1447,11 @@ select {
   overflow: hidden;
   display: flex; flex-direction: column;
 }
-.ai-widget-head { 
+.ai-widget-head {
   background: linear-gradient(135deg, var(--ai-c2), var(--ai-c1));
   padding: 12px 14px;
   color: #fff;
-  display: flex; align-items: center; gap: 10px; 
+  display: flex; align-items: center; gap: 10px;
 }
 .ai-widget-avatar {
   width: 38px; height: 38px; border-radius: 50%;
@@ -1914,6 +1914,18 @@ tbody tr:hover { background: var(--surface-2); }
             <button class="nav-button" type="button" data-scroll-target="aiBlock">
               <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
               <span class="nav-text"><strong>IA</strong><span>Bienvenida, tono e identidad</span></span>
+            </button>
+            <button class="nav-button" type="button" data-scroll-target="qaBlock">
+              <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 9a3 3 0 1 1 4.5 2.6c-.6.4-1 1-1 1.7v.7"></path><circle cx="12" cy="17" r="1"></circle><rect x="3" y="3" width="18" height="18" rx="3"></rect></svg></span>
+              <span class="nav-text"><strong>Preguntas y respuestas</strong><span>Q&amp;A manuales que aprende la IA</span></span>
+            </button>
+            <button class="nav-button" type="button" data-scroll-target="tuneBlock">
+              <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"></path><path d="M1 14h6M9 8h6M17 16h6"></path></svg></span>
+              <span class="nav-text"><strong>Tune AI</strong><span>Modelo, temperatura y prompt avanzado</span></span>
+            </button>
+            <button class="nav-button" type="button" data-scroll-target="livechatBlock">
+              <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"></path><circle cx="9" cy="11" r="1"></circle><circle cx="13" cy="11" r="1"></circle><circle cx="17" cy="11" r="1"></circle></svg></span>
+              <span class="nav-text"><strong>Live Chat</strong><span>Relevo humano de conversaciones</span></span>
             </button>
             <button class="nav-button" type="button" data-scroll-target="accountBlock">
               <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9.5 12l1.8 1.8L15 10"></path></svg></span>
@@ -2810,6 +2822,103 @@ tbody tr:hover { background: var(--surface-2); }
           </div>
         </section>
 
+        <section class="card panel hidden" id="qaBlock">
+          <div class="panel-header">
+            <div>
+              <h3>Preguntas y respuestas (Q&amp;A)</h3>
+              <div class="muted">Anade respuestas manuales que la IA aprende automaticamente y usa cuando le preguntan algo parecido. Util para precios, politicas o casos repetidos.</div>
+            </div>
+            <button id="refreshQaBtn" class="secondary small" type="button">Refrescar</button>
+          </div>
+
+          <div class="subcard">
+            <div class="panel-header">
+              <div>
+                <h3>Nueva pregunta y respuesta</h3>
+                <div class="muted">Al guardar, se anade al cerebro y la IA empieza a usarla en menos de un minuto.</div>
+              </div>
+            </div>
+            <label>
+              Pregunta
+              <input id="qaQuestionInput" type="text" maxlength="400" placeholder="Ej: Cuanto cuesta una limpieza dental?" />
+            </label>
+            <label>
+              Respuesta
+              <textarea id="qaAnswerInput" maxlength="4000" placeholder="Respuesta clara y concreta. La IA la adaptara al tono del usuario."></textarea>
+            </label>
+            <label>
+              Etiquetas (opcional, separadas por coma)
+              <input id="qaTagsInput" type="text" maxlength="200" placeholder="precios, dental, faq" />
+            </label>
+            <div class="row">
+              <button id="qaCreateBtn" class="primary small" type="button">Guardar Q&amp;A</button>
+              <button id="qaClearBtn" class="ghost small" type="button">Limpiar</button>
+            </div>
+            <div class="slot-status" id="qaCreateStatus"></div>
+          </div>
+
+          <div class="subcard">
+            <div class="panel-header">
+              <div>
+                <h3>Q&amp;A guardadas</h3>
+                <div class="muted" id="qaCountLabel">Cargando...</div>
+              </div>
+            </div>
+            <div id="qaList" class="qa-list">
+              <div class="empty">Cargando preguntas y respuestas...</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card panel hidden" id="tuneBlock">
+          <div class="panel-header">
+            <div>
+              <h3>Tune AI avanzado</h3>
+              <div class="muted">Ajustes finos del modelo. Si no sabes que hacen estos campos, dejalos como estan. Cambios mal calibrados pueden empeorar las respuestas.</div>
+            </div>
+            <button id="refreshTuneBtn" class="secondary small" type="button">Refrescar</button>
+          </div>
+
+          <div class="subcard">
+            <div class="grid">
+              <label>
+                Modelo de chat
+                <select id="tuneModelSelect"></select>
+                <span class="muted" style="font-size:11.5px;margin-top:4px;display:block">Modelos mas capaces consumen mas mensajes/mes. Recomendado: gpt-4o-mini.</span>
+              </label>
+              <label>
+                Temperatura (<span id="tuneTempValue">0.20</span>)
+                <input id="tuneTempInput" type="range" min="0" max="2" step="0.05" value="0.2" />
+                <span class="muted" style="font-size:11.5px;margin-top:4px;display:block">0 = respuestas predecibles, 2 = creativas. Para B2B mantén 0.1-0.4.</span>
+              </label>
+            </div>
+            <label>
+              Prompt extra (instrucciones avanzadas del sistema)
+              <textarea id="tunePromptExtra" maxlength="8000" placeholder="Instrucciones que se anaden al prompt base. Ej: No menciones competidores. Cita siempre la URL del catalogo cuando hables de productos."></textarea>
+            </label>
+            <div class="row">
+              <button id="tuneSaveBtn" class="primary small" type="button">Guardar Tune AI</button>
+            </div>
+            <div class="slot-status" id="tuneStatus">No se ha cargado la configuracion todavia.</div>
+          </div>
+        </section>
+
+        <section class="card panel hidden" id="livechatBlock">
+          <div class="panel-header">
+            <div>
+              <h3>Live Chat (relevo humano)</h3>
+              <div class="muted">Sesiones donde el visitante ha pedido hablar con una persona o la IA ha detectado que necesita ayuda humana. Disponible en plan Pro o superior.</div>
+            </div>
+            <button id="refreshLivechatBtn" class="secondary small" type="button">Refrescar</button>
+          </div>
+          <div class="subcard">
+            <div id="livechatStatus" class="slot-status">Cargando sesiones...</div>
+            <div id="livechatList" class="livechat-list">
+              <div class="empty">No hay sesiones de Live Chat.</div>
+            </div>
+          </div>
+        </section>
+
       </main>
     </div>
   </div>
@@ -3059,6 +3168,28 @@ tbody tr:hover { background: var(--surface-2); }
       brainInfoTxt: document.getElementById("brainInfoTxt"),
       saveBrainBtn: document.getElementById("saveBrainBtn"),
       brainStatus: document.getElementById("brainStatus"),
+      qaBlock: document.getElementById("qaBlock"),
+      qaQuestionInput: document.getElementById("qaQuestionInput"),
+      qaAnswerInput: document.getElementById("qaAnswerInput"),
+      qaTagsInput: document.getElementById("qaTagsInput"),
+      qaCreateBtn: document.getElementById("qaCreateBtn"),
+      qaClearBtn: document.getElementById("qaClearBtn"),
+      qaCreateStatus: document.getElementById("qaCreateStatus"),
+      qaCountLabel: document.getElementById("qaCountLabel"),
+      qaList: document.getElementById("qaList"),
+      refreshQaBtn: document.getElementById("refreshQaBtn"),
+      tuneBlock: document.getElementById("tuneBlock"),
+      tuneModelSelect: document.getElementById("tuneModelSelect"),
+      tuneTempInput: document.getElementById("tuneTempInput"),
+      tuneTempValue: document.getElementById("tuneTempValue"),
+      tunePromptExtra: document.getElementById("tunePromptExtra"),
+      tuneSaveBtn: document.getElementById("tuneSaveBtn"),
+      tuneStatus: document.getElementById("tuneStatus"),
+      refreshTuneBtn: document.getElementById("refreshTuneBtn"),
+      livechatBlock: document.getElementById("livechatBlock"),
+      livechatStatus: document.getElementById("livechatStatus"),
+      livechatList: document.getElementById("livechatList"),
+      refreshLivechatBtn: document.getElementById("refreshLivechatBtn"),
       blockMode: document.getElementById("blockMode"),
       blockDateStart: document.getElementById("blockDateStart"),
       blockDateEndWrap: document.getElementById("blockDateEndWrap"),
@@ -3754,8 +3885,8 @@ tbody tr:hover { background: var(--surface-2); }
       let normalizedView = String(view || "").trim().toLowerCase();
       if (normalizedView === "seguridad") normalizedView = "cuenta";
       const allowedViews = isPortalAdminClientView()
-        ? ["citas", "hoy", "metricas", "suscripcion", "instalacion", "conversaciones", "profesionales", "horario", "bloqueos", "mensajes", "ia"]
-        : ["citas", "hoy", "metricas", "suscripcion", "instalacion", "conversaciones", "profesionales", "cuenta", "horario", "bloqueos", "mensajes", "ia"];
+        ? ["citas", "hoy", "metricas", "suscripcion", "instalacion", "conversaciones", "profesionales", "horario", "bloqueos", "mensajes", "ia", "qa", "tune", "livechat"]
+        : ["citas", "hoy", "metricas", "suscripcion", "instalacion", "conversaciones", "profesionales", "cuenta", "horario", "bloqueos", "mensajes", "ia", "qa", "tune", "livechat"];
       const nextView = allowedViews.includes(normalizedView)
         ? normalizedView
         : "citas";
@@ -3773,6 +3904,9 @@ tbody tr:hover { background: var(--surface-2); }
         bloqueos: el.blocksBlock,
         mensajes: el.messagesBlock,
         ia: el.aiBlock,
+        qa: el.qaBlock,
+        tune: el.tuneBlock,
+        livechat: el.livechatBlock,
       };
       Object.entries(viewTargets).forEach(([key, target]) => {
         target.classList.toggle("hidden", key !== nextView);
@@ -3781,6 +3915,9 @@ tbody tr:hover { background: var(--surface-2); }
         button.classList.toggle("active", button.dataset.scrollTarget === viewTargets[nextView].id);
       });
       viewTargets[nextView].scrollIntoView({ behavior: "smooth", block: "start" });
+      if (nextView === "qa") { loadQa().catch((err) => setStatus(err.message, "error")); }
+      if (nextView === "tune") { loadTune().catch((err) => setStatus(err.message, "error")); }
+      if (nextView === "livechat") { loadLivechat().catch((err) => setStatus(err.message, "error")); }
     }
 
     function renderAccountForm(user) {
@@ -3869,17 +4006,17 @@ tbody tr:hover { background: var(--surface-2); }
       el.aiIcono.value = config?.icono || "AI";
       el.aiWelcome.value = config?.bienvenida || "Hola, soy tu asistente virtual. En que puedo ayudarte hoy?";
       el.aiPromptExtra.value = config?.prompt_extra || "";
-      
+
       const titleInput = document.getElementById("aiTitle");
       const colorPrimary = document.getElementById("aiColorPrimary");
       const colorAccent = document.getElementById("aiColorAccent");
       const brandingText = document.getElementById("aiBrandingText");
-      
+
       if (titleInput) titleInput.value = config?.nombre || "";
       if (colorPrimary) colorPrimary.value = config?.color || "#00D1FF";
       if (colorAccent) colorAccent.value = config?.accent_color || "#00F5D4";
       if (brandingText) brandingText.value = config?.branding_text || "Powered by Vantelia";
-      
+
       const logoImg = document.getElementById("aiPreviewLogo");
       const iconSpan = document.getElementById("aiPreviewIcon");
       if (config?.logo_url && logoImg && iconSpan) {
@@ -3910,7 +4047,7 @@ tbody tr:hover { background: var(--surface-2); }
       const colorAccent = document.getElementById("aiColorAccent");
       const brandingText = document.getElementById("aiBrandingText");
       const logoImg = document.getElementById("aiPreviewLogo");
-      
+
       let logoUrl = undefined;
       if (logoImg && !logoImg.hidden && logoImg.src && logoImg.src.startsWith("data:image")) {
         logoUrl = logoImg.src;
@@ -4836,13 +4973,13 @@ tbody tr:hover { background: var(--surface-2); }
           const isCancelled = booking.estado === "cancelled";
           const isPast = booking.estado === "completed";
           const statusClass = isCancelled ? "is-cancelled" : (isPast ? "is-past" : "is-booked");
-          const estadoLabel = booking.estado === "confirmed" ? "Confirmada" : 
-                              booking.estado === "pending_review" ? "Pendiente" : 
-                              booking.estado === "cancelled" ? "Cancelada" : 
+          const estadoLabel = booking.estado === "confirmed" ? "Confirmada" :
+                              booking.estado === "pending_review" ? "Pendiente" :
+                              booking.estado === "cancelled" ? "Cancelada" :
                               booking.estado === "completed" ? "Completada" : escapeHtml(booking.estado || "-");
-          const badgeClass = booking.estado === "confirmed" ? "badge-confirmed" : 
-                             booking.estado === "pending_review" ? "badge-pending" : 
-                             booking.estado === "cancelled" ? "badge-cancelled" : 
+          const badgeClass = booking.estado === "confirmed" ? "badge-confirmed" :
+                             booking.estado === "pending_review" ? "badge-pending" :
+                             booking.estado === "cancelled" ? "badge-cancelled" :
                              booking.estado === "completed" ? "badge-completed" : "badge-completed";
 
           const card = document.createElement("article");
@@ -5207,19 +5344,19 @@ tbody tr:hover { background: var(--surface-2); }
         const hora = escapeHtml(booking.hora || "");
         const label = escapeHtml(`${employeeName} - ${booking.servicio || "Consulta"} - ${formatDateLabel(booking)}`);
         const item = document.createElement("article");
-        
+
         const isCancelled = booking.estado === "cancelled";
         const isPast = booking.estado === "completed";
         const statusClass = isCancelled ? "is-cancelled" : (isPast ? "is-past" : "is-booked");
-        const estadoLabel = booking.estado === "confirmed" ? "Confirmada" : 
-                            booking.estado === "pending_review" ? "Pendiente" : 
-                            booking.estado === "cancelled" ? "Cancelada" : 
+        const estadoLabel = booking.estado === "confirmed" ? "Confirmada" :
+                            booking.estado === "pending_review" ? "Pendiente" :
+                            booking.estado === "cancelled" ? "Cancelada" :
                             booking.estado === "completed" ? "Completada" : escapeHtml(booking.estado || "-");
-        const badgeClass = booking.estado === "confirmed" ? "badge-confirmed" : 
-                           booking.estado === "pending_review" ? "badge-pending" : 
-                           booking.estado === "cancelled" ? "badge-cancelled" : 
+        const badgeClass = booking.estado === "confirmed" ? "badge-confirmed" :
+                           booking.estado === "pending_review" ? "badge-pending" :
+                           booking.estado === "cancelled" ? "badge-cancelled" :
                            booking.estado === "completed" ? "badge-completed" : "badge-completed";
-                           
+
         item.className = `day-agenda-item ${statusClass}`;
         item.innerHTML = `
           <div class="day-agenda-time">${escapeHtml(booking.hora || "--:--")}</div>
@@ -5688,6 +5825,9 @@ tbody tr:hover { background: var(--surface-2); }
           blocksBlock: "bloqueos",
           messagesBlock: "mensajes",
           aiBlock: "ia",
+          qaBlock: "qa",
+          tuneBlock: "tune",
+          livechatBlock: "livechat",
         };
         setPortalView(targetToView[button.dataset.scrollTarget] || "citas");
       });
@@ -5705,6 +5845,213 @@ tbody tr:hover { background: var(--surface-2); }
     [el.aiIcono, el.aiWelcome, el.aiPromptExtra].forEach((field) => {
       field.addEventListener("input", () => renderAiPreview());
     });
+
+    // ─────────────────────────────────────────────────────────
+    // Q&A manuales (/auth/app/qa)
+    // ─────────────────────────────────────────────────────────
+    function parseTagsInput(raw) {
+      return String(raw || "")
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .slice(0, 10);
+    }
+
+    function renderQaList(items) {
+      if (!Array.isArray(items) || items.length === 0) {
+        el.qaList.innerHTML = '<div class="empty">Todavia no has anadido ninguna pregunta. Crea la primera arriba.</div>';
+        return;
+      }
+      el.qaList.innerHTML = items.map((item) => {
+        const tagsHtml = (item.tags || [])
+          .filter((t) => t && t !== "_starter")
+          .map((t) => `<span class="pill" style="margin-right:4px">${escapeHtml(t)}</span>`)
+          .join("");
+        const safeId = escapeHtml(item.id || "");
+        return `
+          <div class="subcard" data-qa-id="${safeId}" style="margin-bottom:12px">
+            <div style="display:flex;align-items:flex-start;gap:12px;justify-content:space-between">
+              <div style="flex:1">
+                <strong>${escapeHtml(item.question || "")}</strong>
+                <div class="muted" style="white-space:pre-wrap;margin-top:6px">${escapeHtml(item.answer || "")}</div>
+                <div style="margin-top:8px">${tagsHtml}</div>
+              </div>
+              <button class="danger small" type="button" data-qa-delete="${safeId}">Eliminar</button>
+            </div>
+          </div>`;
+      }).join("");
+      el.qaList.querySelectorAll("[data-qa-delete]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-qa-delete");
+          deleteQa(id).catch((err) => setStatus(err.message, "error"));
+        });
+      });
+    }
+
+    async function loadQa() {
+      el.qaCountLabel.textContent = "Cargando...";
+      try {
+        const data = await api("/auth/app/qa");
+        const items = Array.isArray(data?.items) ? data.items : [];
+        el.qaCountLabel.textContent = items.length === 1 ? "1 pregunta guardada" : `${items.length} preguntas guardadas`;
+        renderQaList(items);
+      } catch (err) {
+        el.qaCountLabel.textContent = "Error al cargar.";
+        el.qaList.innerHTML = `<div class="empty">${escapeHtml(err.message || "Error al cargar Q&A.")}</div>`;
+        throw err;
+      }
+    }
+
+    async function createQa() {
+      const question = el.qaQuestionInput.value.trim();
+      const answer = el.qaAnswerInput.value.trim();
+      if (!question || !answer) {
+        el.qaCreateStatus.textContent = "Indica pregunta y respuesta.";
+        return;
+      }
+      el.qaCreateStatus.textContent = "Guardando...";
+      try {
+        await api("/auth/app/qa", {
+          method: "POST",
+          body: JSON.stringify({
+            question,
+            answer,
+            tags: parseTagsInput(el.qaTagsInput.value),
+          }),
+        });
+        el.qaCreateStatus.textContent = "Guardada. La IA empezara a usarla pronto.";
+        el.qaQuestionInput.value = "";
+        el.qaAnswerInput.value = "";
+        el.qaTagsInput.value = "";
+        await loadQa();
+      } catch (err) {
+        el.qaCreateStatus.textContent = err.message || "Error guardando.";
+        throw err;
+      }
+    }
+
+    async function deleteQa(id) {
+      if (!id) return;
+      if (!window.confirm("Eliminar esta pregunta? La IA dejara de usarla.")) return;
+      await api(`/auth/app/qa/${encodeURIComponent(id)}`, { method: "DELETE" });
+      await loadQa();
+    }
+
+    el.qaCreateBtn.addEventListener("click", () => createQa().catch((err) => setStatus(err.message, "error")));
+    el.qaClearBtn.addEventListener("click", () => {
+      el.qaQuestionInput.value = "";
+      el.qaAnswerInput.value = "";
+      el.qaTagsInput.value = "";
+      el.qaCreateStatus.textContent = "";
+    });
+    el.refreshQaBtn.addEventListener("click", () => loadQa().catch((err) => setStatus(err.message, "error")));
+
+    // ─────────────────────────────────────────────────────────
+    // Tune AI (/auth/app/tune)
+    // ─────────────────────────────────────────────────────────
+    async function loadTune() {
+      el.tuneStatus.textContent = "Cargando configuracion...";
+      try {
+        const data = await api("/auth/app/tune");
+        const models = Array.isArray(data?.available_models) ? data.available_models : [];
+        el.tuneModelSelect.innerHTML = models
+          .map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`)
+          .join("");
+        el.tuneModelSelect.value = data.chat_model || (models[0] || "");
+        const temp = Number(data.temperature ?? 0.2);
+        el.tuneTempInput.value = String(temp);
+        el.tuneTempValue.textContent = temp.toFixed(2);
+        el.tunePromptExtra.value = data.prompt_extra || "";
+        el.tuneStatus.textContent = `Modelo actual: ${data.chat_model || "(desconocido)"} · Temperatura ${temp.toFixed(2)}`;
+      } catch (err) {
+        el.tuneStatus.textContent = err.message || "Error cargando Tune AI.";
+        throw err;
+      }
+    }
+
+    async function saveTune() {
+      el.tuneStatus.textContent = "Guardando...";
+      try {
+        const payload = {
+          prompt_extra: el.tunePromptExtra.value,
+          chat_model: el.tuneModelSelect.value,
+          temperature: Number(el.tuneTempInput.value),
+        };
+        const data = await api("/auth/app/tune", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        const temp = Number(data.temperature ?? 0.2);
+        el.tuneStatus.textContent = `Guardado. Modelo: ${data.chat_model} · Temperatura ${temp.toFixed(2)}`;
+      } catch (err) {
+        el.tuneStatus.textContent = err.message || "Error guardando.";
+        throw err;
+      }
+    }
+
+    el.tuneTempInput.addEventListener("input", () => {
+      el.tuneTempValue.textContent = Number(el.tuneTempInput.value).toFixed(2);
+    });
+    el.tuneSaveBtn.addEventListener("click", () => saveTune().catch((err) => setStatus(err.message, "error")));
+    el.refreshTuneBtn.addEventListener("click", () => loadTune().catch((err) => setStatus(err.message, "error")));
+
+    // ─────────────────────────────────────────────────────────
+    // Live Chat (/auth/app/livechat)
+    // ─────────────────────────────────────────────────────────
+    function formatLivechatDate(value) {
+      if (!value) return "—";
+      try {
+        const d = new Date(value);
+        if (isNaN(d.getTime())) return value;
+        return d.toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" });
+      } catch (_e) {
+        return value;
+      }
+    }
+
+    function renderLivechatList(items) {
+      if (!Array.isArray(items) || items.length === 0) {
+        el.livechatList.innerHTML = '<div class="empty">No hay sesiones de Live Chat. Cuando un visitante pida hablar con un humano apareceran aqui.</div>';
+        return;
+      }
+      el.livechatList.innerHTML = items.map((item) => {
+        const status = String(item.status || "pending").toLowerCase();
+        const tone = status === "claimed" ? "success" : status === "closed" ? "muted" : "warning";
+        return `
+          <div class="subcard" style="margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+              <div>
+                <strong>${escapeHtml(item.chat_session_id || item.id)}</strong>
+                <div class="muted" style="margin-top:4px">Iniciada: ${escapeHtml(formatLivechatDate(item.started_at))}</div>
+                ${item.claimed_at ? `<div class="muted">Asignada: ${escapeHtml(formatLivechatDate(item.claimed_at))}</div>` : ""}
+              </div>
+              <span class="pill ${tone}">${escapeHtml(status)}</span>
+            </div>
+          </div>`;
+      }).join("");
+    }
+
+    async function loadLivechat() {
+      el.livechatStatus.textContent = "Cargando sesiones...";
+      try {
+        const items = await api("/auth/app/livechat");
+        el.livechatStatus.textContent = items.length === 0
+          ? "Sin sesiones activas."
+          : `${items.length} sesiones recientes.`;
+        renderLivechatList(items);
+      } catch (err) {
+        const msg = err.message || "Error cargando Live Chat.";
+        if (/Pro/i.test(msg) || /402/.test(msg)) {
+          el.livechatStatus.textContent = "Live Chat requiere plan Pro o superior.";
+          el.livechatList.innerHTML = '<div class="empty">Mejora a Pro desde la sección Suscripcion para activar el relevo humano.</div>';
+        } else {
+          el.livechatStatus.textContent = msg;
+          el.livechatList.innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
+        }
+      }
+    }
+
+    el.refreshLivechatBtn.addEventListener("click", () => loadLivechat().catch((err) => setStatus(err.message, "error")));
     el.previewTemplateBtn.addEventListener("click", () =>
       previewMessageTemplate().catch((error) => setStatus(error.message, "error"))
     );
