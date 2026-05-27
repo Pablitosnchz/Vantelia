@@ -2858,55 +2858,94 @@ tbody tr:last-child td { border-bottom: none; }
             <div id="orAutopilotBox" style="display:none;"></div>
           </div>
 
-          <!-- Modo automático -->
+          <!-- Automatizacion outbound (modo autonomo) -->
           <div data-outreach-panel="autonomous" class="outreach-panel">
-            <div id="orAutonomousActiveBanner" style="display:none;margin-bottom:14px;padding:12px 16px;border-radius:10px;background:#dc2626;color:#fff;font-size:13px;">
-              <strong>Autopiloto activo.</strong> El sistema descubre empresas en España y envia cold + follow-ups automaticamente.
-            </div>
-            <div class="card" style="padding:18px;margin-bottom:14px;">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
-                <div>
-                  <strong style="font-size:16px;">Autopiloto outbound</strong>
-                  <p class="muted" style="margin:4px 0 0;font-size:12px;">Activa todo: discovery, cold y follow-ups automaticos.</p>
-                  <p class="muted" style="margin:4px 0 0;font-size:11px;" id="orAutonomousEnvWarning"></p>
+
+            <!-- 1. Control principal -->
+            <div class="card" style="padding:20px;margin-bottom:14px;">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:200px;">
+                  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <strong style="font-size:17px;">Autopiloto outbound</strong>
+                    <span id="orAutonomousStatusPill" class="or-status-pill warn">Cargando</span>
+                  </div>
+                  <p class="muted" style="margin:5px 0 0;font-size:13px;" id="orAutonomousStatusMsg">Cargando estado...</p>
+                  <p id="orAutonomousEnvWarning" style="margin:4px 0 0;font-size:11px;color:#b45309;"></p>
                 </div>
-                <button type="button" id="orAutonomousToggle" style="min-width:140px;padding:10px 18px;border-radius:10px;border:0;font-weight:700;font-size:14px;cursor:pointer;">Cargando...</button>
+                <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap;">
+                  <button type="button" id="orAutonomousTickBtn" class="ghost small">▶ Ejecutar ahora</button>
+                  <button type="button" id="orAutonomousToggle" style="min-width:140px;padding:9px 18px;border-radius:10px;border:0;font-weight:700;font-size:14px;cursor:pointer;background:#9ca3af;color:#fff;">Cargando...</button>
+                </div>
               </div>
               <div id="orAutonomousDiagnostics" style="margin-top:14px;display:none;"></div>
             </div>
-            <div class="card" style="padding:18px;margin-bottom:14px;">
-              <strong style="font-size:14px;">Maximo de empresas nuevas al dia</strong>
-              <p class="muted" style="margin:4px 0 0;font-size:12px;">Tope del descubrimiento + cold. Follow-ups van sin limite.</p>
-              <div style="display:flex;gap:10px;align-items:end;margin-top:12px;flex-wrap:wrap;">
-                <label style="flex:0 0 220px;">Tope diario<input id="orAutonomousTargetCompaniesInput" type="number" min="1" max="200" value="20" /></label>
-                <button class="secondary small" type="button" id="orAutonomousSaveBtn">Guardar</button>
+
+            <!-- 2. Configuracion -->
+            <div class="card" style="padding:20px;margin-bottom:14px;">
+              <strong style="font-size:15px;">Configuracion</strong>
+              <p class="muted" style="margin:4px 0 0;font-size:12px;">Solo ajusta esto. Sectores, ciudades y secuencia van automaticos.</p>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-top:16px;">
+                <div>
+                  <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Empresas a contactar por dia</label>
+                  <div style="display:flex;gap:8px;align-items:center;">
+                    <input id="orAutonomousTargetCompaniesInput" type="number" min="1" max="200" value="20" style="width:90px;" />
+                    <button class="secondary small" type="button" id="orAutonomousSaveBtn">Guardar</button>
+                  </div>
+                  <p class="muted" style="margin:6px 0 0;font-size:11px;">Controla discovery + cold. Follow-ups van sin limite.</p>
+                </div>
+                <div>
+                  <label style="font-size:13px;font-weight:600;display:block;margin-bottom:10px;">Modo</label>
+                  <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;margin-bottom:12px;line-height:1.4;">
+                    <input type="checkbox" id="orAutonomousDiscoveryCheckbox" style="margin-top:2px;flex-shrink:0;" />
+                    <span>
+                      <strong>Descubrir empresas nuevas</strong><br>
+                      <span class="muted" style="font-size:11px;">Busca negocios en España automaticamente (Google + OSM). Si ya tienes prospects importados, puedes desactivar.</span>
+                    </span>
+                  </label>
+                  <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;line-height:1.4;">
+                    <input type="checkbox" id="orAutonomousAutoFu" style="margin-top:2px;flex-shrink:0;" />
+                    <span>
+                      <strong>Follow-ups automaticos</strong><br>
+                      <span class="muted" style="font-size:11px;">Envia fu1, fu2 y breakup segun los intervalos de dias configurados.</span>
+                    </span>
+                  </label>
+                </div>
               </div>
-              <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer;font-size:13px;">
-                <input type="checkbox" id="orAutonomousDiscoveryCheckbox" />
-                <span><strong>Descubrir empresas nuevas</strong> <span class="muted" style="font-size:12px;">— si desmarcas, no descubre nadie nuevo pero sigue mandando cold pendientes y follow-ups.</span></span>
-              </label>
             </div>
-            <div class="card" style="padding:14px;margin-bottom:14px;">
+
+            <!-- 3. Stats en vivo -->
+            <div class="card" style="padding:16px;margin-bottom:14px;">
               <strong style="font-size:14px;">Estado en vivo</strong>
-              <div class="stat-grid" style="grid-template-columns:repeat(6,1fr);margin-top:10px;">
-                <div class="stat"><strong id="orAutonomousTargetCompanies">-</strong><span>Objetivo empresas</span></div>
+              <div class="stat-grid" style="grid-template-columns:repeat(6,1fr);margin-top:12px;">
+                <div class="stat"><strong id="orAutonomousTargetCompanies">-</strong><span>Objetivo/dia</span></div>
                 <div class="stat"><strong id="orAutonomousColdToday">-</strong><span>Cold hoy / cap</span></div>
                 <div class="stat"><strong id="orAutonomousImported">-</strong><span>Nuevos 24h</span></div>
-                <div class="stat"><strong id="orAutonomousValid">-</strong><span>Validos pendientes</span></div>
+                <div class="stat"><strong id="orAutonomousValid">-</strong><span>Pendientes cold</span></div>
                 <div class="stat"><strong id="orAutonomousFollowups">-</strong><span>Follow-ups 24h</span></div>
                 <div class="stat"><strong id="orAutonomousLastRun">-</strong><span>Ultima ronda</span></div>
               </div>
             </div>
-            <div class="card" style="padding:14px;margin-bottom:14px;">
+
+            <!-- 4. Log de actividad -->
+            <div class="card" style="padding:16px;">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
                 <div>
-                  <strong style="font-size:14px;">Actividad del autopiloto</strong>
-                  <p class="muted" style="margin:3px 0 0;font-size:11px;">Auto-refresh cada 12s. Hora Europe/Madrid.</p>
+                  <strong style="font-size:14px;">Actividad</strong>
+                  <p class="muted" style="margin:3px 0 0;font-size:11px;">Auto-refresh cada 12s · hora Europe/Madrid.</p>
                 </div>
-                <button class="ghost small" type="button" id="orAutonomousLogRefresh">Actualizar log</button>
+                <div class="actions">
+                  <select id="orAutonomousLogLevel" style="font-size:12px;padding:4px 8px;">
+                    <option value="">Todos</option>
+                    <option value="success">Solo OK</option>
+                    <option value="warning">Avisos+</option>
+                    <option value="error">Errores</option>
+                  </select>
+                  <button class="ghost small" type="button" id="orAutonomousLogClear">Limpiar vista</button>
+                  <button class="ghost small" type="button" id="orAutonomousLogRefresh">Actualizar</button>
+                </div>
               </div>
               <input type="checkbox" id="orAutonomousLogAuto" checked style="display:none;" />
-              <div id="orAutonomousLogBox" style="margin-top:12px;max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fbfcfe;">
+              <div id="orAutonomousLogBox" style="margin-top:12px;max-height:500px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fbfcfe;">
                 <div class="muted" style="padding:14px;font-size:12px;">Cargando actividad...</div>
               </div>
               <div class="muted" style="margin-top:6px;font-size:11px;" id="orAutonomousLogMeta"></div>
@@ -6779,86 +6818,90 @@ a {
         }
       }
       function renderAutonomous(d) {
-        const banner = ORQ("#orAutonomousActiveBanner");
-        if (banner) banner.style.display = d.enabled ? "block" : "none";
+        // Status pill + mensaje
+        const pill = ORQ("#orAutonomousStatusPill");
+        const statusMsg = ORQ("#orAutonomousStatusMsg");
+        if (pill && statusMsg) {
+          const activeTick = d.active_tick || null;
+          const blockers = d.blockers || [];
+          if (activeTick) {
+            pill.textContent = "En ronda";
+            pill.className = "or-status-pill run";
+            const target = activeTick.current_target ? ` · ${escapeHtml(activeTick.current_target.sector || "")} / ${escapeHtml(activeTick.current_target.city || "")}` : "";
+            statusMsg.textContent = (activeTick.message || "Ronda en curso") + target;
+          } else if (d.enabled && d.ready) {
+            pill.textContent = "Activo";
+            pill.className = "or-status-pill ok";
+            statusMsg.textContent = "Listo. La próxima ronda contactara empresas automaticamente.";
+          } else if (d.enabled && blockers.length) {
+            pill.textContent = "Bloqueado";
+            pill.className = "or-status-pill err";
+            statusMsg.textContent = "Requiere accion: " + blockers.map(escapeHtml).join(" · ");
+          } else if (d.enabled) {
+            pill.textContent = "Activo";
+            pill.className = "or-status-pill warn";
+            statusMsg.textContent = "Activo. Revisa la configuracion antes de esperar envios.";
+          } else {
+            pill.textContent = "Pausado";
+            pill.className = "or-status-pill warn";
+            statusMsg.textContent = "Modo automatico pausado. Activa para comenzar.";
+          }
+        }
+        // Env warning
         const envWarn = ORQ("#orAutonomousEnvWarning");
-        if (envWarn) envWarn.textContent = d.env_enabled ? "" : "⚠️ OUTREACH_AUTONOMOUS_ENABLED no está activado en el VPS. El worker no correrá hasta que el env esté en true.";
+        if (envWarn) envWarn.textContent = d.env_enabled ? "" : "⚠️ OUTREACH_AUTONOMOUS_ENABLED no está activado en el VPS. El worker no correrá hasta activarlo.";
+        // Toggle button
         const tog = ORQ("#orAutonomousToggle");
         if (tog) {
           tog.textContent = d.enabled ? "● Activo · pausar" : "○ Pausado · activar";
           tog.style.background = d.enabled ? "#16a34a" : "#9ca3af";
           tog.style.color = "#fff";
         }
+        // Diagnostics
         const diag = ORQ("#orAutonomousDiagnostics");
         if (diag) {
           const checks = [
-            { ok: !!d.env_enabled,    label: "OUTREACH_AUTONOMOUS_ENABLED (VPS)" },
-            { ok: !!d.enabled,        label: "Activado en panel" },
-            { ok: !!d.smtp_ok,        label: "SMTP configurado" },
-            { ok: !!d.google_places_ok, label: "Google Places API key opcional" },
-            { ok: true, label: `Rotacion España (${d.targets_count || 0} combos)` },
+            { ok: !!d.env_enabled,       label: "OUTREACH_AUTONOMOUS_ENABLED (VPS)" },
+            { ok: !!d.enabled,           label: "Activado en panel" },
+            { ok: !!d.smtp_ok,           label: "SMTP configurado" },
+            { ok: !!d.google_places_ok,  label: "Google Places API (opcional)" },
+            { ok: true,                  label: `Rotacion automatica España (${d.targets_count || 0} combos)` },
           ];
           const chips = checks.map((c) => {
             const color = c.ok ? "#16a34a" : "#dc2626";
             const bg = c.ok ? "#dcfce7" : "#fee2e2";
-            const icon = c.ok ? "✓" : "✗";
-            return `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:14px;font-size:11px;color:${color};background:${bg};font-weight:600;">${icon} ${escapeHtml(c.label)}</span>`;
+            return `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:14px;font-size:11px;color:${color};background:${bg};font-weight:600;">${c.ok ? "✓" : "✗"} ${escapeHtml(c.label)}</span>`;
           }).join("");
-          const ready = !!d.ready;
-          const activeTick = d.active_tick || null;
-          let tickBanner = "";
-          if (activeTick) {
-            const started = activeTick.started_at ? fmtMadrid(activeTick.started_at) : "-";
-            const source = activeTick.source || "desconocido";
-            const step = activeTick.step || activeTick.status || "en curso";
-            const msg = activeTick.message || "Ronda en curso";
-            const target = activeTick.current_target
-              ? ` · ${escapeHtml(activeTick.current_target.sector || "")} / ${escapeHtml(activeTick.current_target.city || "")}`
-              : "";
-            tickBanner = `<div style="padding:8px 12px;border-radius:8px;background:#e0f2fe;color:#075985;font-size:12px;margin-bottom:8px;"><strong>Ronda en curso.</strong> ${escapeHtml(msg)}<br><span class="muted" style="font-size:11px;">ID ${escapeHtml(activeTick.tick_id || "-")} · origen ${escapeHtml(source)} · paso ${escapeHtml(step)} · inicio ${escapeHtml(started)}${target}</span></div>`;
+          let extra = "";
+          if (d.active_tick) {
+            const at = d.active_tick;
+            extra = `<div style="padding:8px 12px;border-radius:8px;background:#e0f2fe;color:#075985;font-size:12px;margin-bottom:8px;"><strong>Ronda en curso.</strong> ${escapeHtml(at.message || "Trabajando")} <span class="muted" style="font-size:11px;">· paso: ${escapeHtml(at.step || at.status || "-")} · inicio: ${escapeHtml(at.started_at ? fmtMadrid(at.started_at) : "-")}</span></div>`;
+          } else if (d.blockers && d.blockers.length) {
+            extra = `<div style="padding:8px 12px;border-radius:8px;background:#fef3c7;color:#92400e;font-size:12px;margin-bottom:8px;"><strong>No enviara todavia.</strong> Bloqueado: ${d.blockers.map(escapeHtml).join(" · ")}</div>`;
+          } else if (d.enabled && d.ready) {
+            extra = `<div style="padding:8px 12px;border-radius:8px;background:#dcfce7;color:#065f46;font-size:12px;font-weight:600;margin-bottom:8px;">✓ Listo. El sistema contactara ${d.target_companies || d.daily_new_target || 20} empresas/dia.</div>`;
           }
-          const banner = ready
-            ? '<div style="padding:8px 12px;border-radius:8px;background:#dcfce7;color:#065f46;font-size:12px;font-weight:600;margin-bottom:8px;">✓ Listo. Pulsa activar y contactara el numero de empresas configurado, con sectores y ciudades automaticos.</div>'
-            : (d.blockers && d.blockers.length
-                ? `<div style="padding:8px 12px;border-radius:8px;background:#fef3c7;color:#92400e;font-size:12px;margin-bottom:8px;"><strong>No enviará todavía.</strong> Bloqueado por: ${d.blockers.map(escapeHtml).join(" · ")}</div>`
-                : '');
-          diag.innerHTML = tickBanner + banner + `<div style="display:flex;flex-wrap:wrap;gap:6px;">${chips}</div>`;
+          diag.innerHTML = extra + `<div style="display:flex;flex-wrap:wrap;gap:6px;">${chips}</div>`;
           diag.style.display = "";
         }
+        // Stats
         if (ORQ("#orAutonomousTargetCompanies")) ORQ("#orAutonomousTargetCompanies").textContent = d.target_companies || d.daily_new_target || "-";
         if (ORQ("#orAutonomousTargetCompaniesInput")) ORQ("#orAutonomousTargetCompaniesInput").value = d.target_companies || d.daily_new_target || 20;
-        if (ORQ("#orAutonomousColdToday")) ORQ("#orAutonomousColdToday").textContent = `${d.stats.cold_today}/${d.daily_cold_cap}`;
-        if (ORQ("#orAutonomousImported")) ORQ("#orAutonomousImported").textContent = d.stats.imported_24h;
-        if (ORQ("#orAutonomousValid")) ORQ("#orAutonomousValid").textContent = d.stats.valid_candidates || 0;
-        if (ORQ("#orAutonomousFollowups")) ORQ("#orAutonomousFollowups").textContent = d.stats.followups_24h || 0;
-        if (ORQ("#orAutonomousLastRun")) ORQ("#orAutonomousLastRun").textContent = d.last_discovery_at ? new Date(d.last_discovery_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) : "Nunca";
-        const autoSummary = ORQ("#orAutonomousAutoTargetsSummary");
-        if (autoSummary) {
-          autoSummary.textContent = d.auto_targets_enabled
-            ? `Automatico: ${d.targets_count || 0} combinaciones activas por España.`
-            : `Usando ${d.manual_targets_count || 0} objetivos manuales heredados.`;
-        }
+        if (ORQ("#orAutonomousColdToday")) ORQ("#orAutonomousColdToday").textContent = `${(d.stats || {}).cold_today || 0}/${d.daily_cold_cap || "-"}`;
+        if (ORQ("#orAutonomousImported")) ORQ("#orAutonomousImported").textContent = (d.stats || {}).imported_24h || 0;
+        if (ORQ("#orAutonomousValid")) ORQ("#orAutonomousValid").textContent = (d.stats || {}).valid_candidates || 0;
+        if (ORQ("#orAutonomousFollowups")) ORQ("#orAutonomousFollowups").textContent = (d.stats || {}).followups_24h || 0;
+        if (ORQ("#orAutonomousLastRun")) ORQ("#orAutonomousLastRun").textContent = d.last_discovery_at ? fmtMadrid(d.last_discovery_at) : "Nunca";
+        // Checkboxes
         const discOn = d.discovery_enabled !== false;
         const discChk = ORQ("#orAutonomousDiscoveryCheckbox");
         if (discChk) discChk.checked = discOn;
+        if (ORQ("#orAutonomousAutoFu")) ORQ("#orAutonomousAutoFu").checked = !!d.auto_followups;
+        // followup days (usados por otros panels)
         orState.followupDays = Object.assign({ fu1: 4, fu2: 5, breakup: 6 }, d.followup_days || {});
         if (ORQ("#orFollowupFu1Days")) ORQ("#orFollowupFu1Days").value = orState.followupDays.fu1;
         if (ORQ("#orFollowupFu2Days")) ORQ("#orFollowupFu2Days").value = orState.followupDays.fu2;
         if (ORQ("#orFollowupBreakupDays")) ORQ("#orFollowupBreakupDays").value = orState.followupDays.breakup;
-        if (ORQ("#orAutonomousAutoFu")) ORQ("#orAutonomousAutoFu").checked = d.auto_followups;
-        const body = ORQ("#orAutonomousTargetsBody");
-        const count = ORQ("#orAutonomousTargetsCount");
-        const targets = d.active_targets || d.generated_targets || d.targets || [];
-        if (count) count.textContent = `${targets.length} combo${targets.length === 1 ? "" : "s"}`;
-        if (body) {
-          if (!targets.length) {
-            body.innerHTML = '<tr><td colspan="3" class="empty">Sin objetivos generados.</td></tr>';
-          } else {
-            body.innerHTML = targets.map((t, i) =>
-              `<tr><td>${escapeHtml(t.sector)}</td><td>${escapeHtml(t.city)}</td><td style="text-align:right;"><span class="muted">${t.manual ? "Manual" : "Auto"}</span></td></tr>`
-            ).join("");
-          }
-        }
       }
       async function saveAutonomousConfig(patch) {
         try {
@@ -6923,11 +6966,15 @@ a {
         ORQ("#orAutonomousSaveBtn")?.addEventListener("click", () => {
           saveAutonomousConfig({
             target_companies: parseInt(ORQ("#orAutonomousTargetCompaniesInput").value, 10) || 20,
-            auto_followups: true,
+            auto_followups: !!ORQ("#orAutonomousAutoFu")?.checked,
+            discovery_enabled: !!ORQ("#orAutonomousDiscoveryCheckbox")?.checked,
           });
         });
         ORQ("#orAutonomousDiscoveryCheckbox")?.addEventListener("change", async (e) => {
           await saveAutonomousConfig({ discovery_enabled: !!e.target.checked });
+        });
+        ORQ("#orAutonomousAutoFu")?.addEventListener("change", async (e) => {
+          await saveAutonomousConfig({ auto_followups: !!e.target.checked });
         });
         ORQ("#orAutonomousLogRefresh")?.addEventListener("click", () => loadAutopilotLog(true));
         ORQ("#orAutonomousLogClear")?.addEventListener("click", () => {

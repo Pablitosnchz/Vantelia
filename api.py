@@ -20740,22 +20740,35 @@ def _outreach_autonomous_tick_inner() -> None:
                                f"Cap diario alcanzado: {sent_today}/{daily_cold_cap}",
                                {"sent_today": sent_today, "daily_cold_cap": daily_cold_cap})
             else:
+                total_new = conn.execute(
+                    "SELECT COUNT(*) AS c FROM prospects WHERE COALESCE(status,'new')='new' AND email NOT IN (SELECT email FROM suppressions)"
+                ).fetchone()["c"]
+                already_cold = conn.execute(
+                    "SELECT COUNT(*) AS c FROM prospects WHERE COALESCE(status,'new')='new' AND email IN (SELECT email FROM sends WHERE mode='send' AND stage='cold') AND email NOT IN (SELECT email FROM suppressions)"
+                ).fetchone()["c"]
+                if already_cold > 0:
+                    _autopilot_log(
+                        "info", "cold_already_contacted",
+                        f"{already_cold} empresa(s) ya contactadas anteriormente, saltadas",
+                        {"already_cold": already_cold, "total_new_status": total_new},
+                    )
                 rows = conn.execute(
                     """SELECT email FROM prospects
                        WHERE COALESCE(status,'new')='new'
-                         AND (source LIKE '%autopilot%' OR tags LIKE '%autopilot%')
                          AND email NOT IN (SELECT email FROM suppressions)
-                         AND email NOT IN (SELECT email FROM sends WHERE mode='send')
-                       ORDER BY created_at ASC
+                         AND email NOT IN (SELECT email FROM sends WHERE mode='send' AND stage='cold')
+                       ORDER BY score DESC, created_at ASC
                        LIMIT ?""",
                     (n,),
                 ).fetchall()
                 cold_emails = [r["email"] for r in rows]
                 if not cold_emails:
-                    log("cold skip: 0 prospects nuevos elegibles")
-                    _outreach_tick_state_update("cold_skip_no_prospects", "Cold omitido: 0 prospects nuevos elegibles")
-                    _autopilot_log("info", "cold_skip_no_prospects",
-                                   "Cold omitido: 0 prospects nuevos elegibles")
+                    skip_msg = f"Cold omitido: 0 prospects elegibles (total status=new: {total_new}, ya contactados: {already_cold})"
+                    log(f"cold skip: 0 prospects elegibles (total new: {total_new}, ya contactados: {already_cold})")
+                    _outreach_tick_state_update("cold_skip_no_prospects", skip_msg,
+                                               detail={"total_new": total_new, "already_cold": already_cold})
+                    _autopilot_log("info", "cold_skip_no_prospects", skip_msg,
+                                   {"total_new": total_new, "already_cold": already_cold})
                 else:
                     params = {
                         "stage": "cold",
