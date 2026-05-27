@@ -135,17 +135,17 @@ def _personal_line_html(p: Prospect) -> str:
 # "consulta rapida", signos de admiracion, mayusculas).
 
 SUBJECTS_COLD_A = [
-    "una pregunta sobre {business}",
+    "{first_or_team}, cuantas llamadas con las mismas preguntas?",
     "cuantas veces repite tu equipo lo mismo?",
     "{business}: os llegan preguntas fuera de horario?",
-    "algo util para {business}",
+    "{first_or_team}, esto encaja?",
 ]
 
 SUBJECTS_COLD_B = [
-    "para {business}",
-    "{first_or_team}, cuantas llamadas con las mismas preguntas?",
-    "idea rapida para {business}",
-    "esto puede ayudar a {business}",
+    "antes de cerrar la semana, {first_or_team}",
+    "{first_or_team}, una idea para {business}",
+    "{business}: 30 segundos",
+    "esto puede ahorrar tiempo a {business}",
 ]
 
 SUBJECTS_FU1_A = [

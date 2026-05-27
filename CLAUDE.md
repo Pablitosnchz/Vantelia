@@ -287,14 +287,14 @@ Modulo separado para captar clientes B2B mediante email outbound multi-touch.
 - `GET /track/open/{token}.gif`: pixel 1x1 + log de open.
 - `GET /track/click/{token}?u=URL`: redirect 302 + log de click. Solo permite redirect a hosts en `OUTREACH_TRACKING_ALLOWED_HOSTS`.
 
-Tokens firmados HMAC-SHA256 con `OUTREACH_TRACKING_SECRET`. Si secret vacio o `OUTREACH_TRACKING_DISABLED=true`, el tracking se desactiva sin romper el envio.
+Tokens firmados HMAC-SHA256 con `OUTREACH_TRACKING_SECRET`. Tracking es opt-in: requiere `OUTREACH_TRACKING_ENABLED=true` ademas de `OUTREACH_TRACKING_SECRET` y `OUTREACH_TRACKING_BASE_URL`. Si falta cualquiera de las tres, el tracking se desactiva sin romper el envio.
 
 ### Variables de entorno
 
 - `OUTREACH_DB_PATH`: ruta SQLite. Default `storage/outreach/outreach.db`.
 - `OUTREACH_TRACKING_SECRET`: secreto HMAC. **Obligatorio** para activar tracking.
 - `OUTREACH_TRACKING_BASE_URL`: URL publica de la API (ej. `https://app.vantelia.es`).
-- `OUTREACH_TRACKING_DISABLED`: `true` para desactivar pixel y reescritura de links.
+- `OUTREACH_TRACKING_ENABLED`: `true` para activar pixel + reescritura de links. **Sin esta var, tracking desactivado aunque secret y base_url esten set.**
 - `OUTREACH_UNSUBSCRIBE_EMAIL`: buzon que recibe BAJA (default `baja@vantelia.es`).
 - `OUTREACH_BCC`: bcc opcional para todos los envios.
 - `OUTREACH_DOMAIN_DAILY_CAP`: tope diario por dominio destinatario (default 3).
