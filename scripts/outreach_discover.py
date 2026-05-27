@@ -205,7 +205,6 @@ def _robots_allows(url: str) -> bool:
 
 def _normalize_email(email: str) -> str:
     from urllib.parse import unquote
-
     return unquote(email).strip().lower()
 
 
