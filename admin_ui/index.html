@@ -1818,7 +1818,7 @@ tbody tr:last-child td { border-bottom: none; }
         </button>
         <button class="nav-button" type="button" data-nav-view="outreach">
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11v2a2 2 0 0 0 2 2h1l4 4V5L6 9H5a2 2 0 0 0-2 2z"></path><path d="M16 8a5 5 0 0 1 0 8"></path><path d="M19 5a9 9 0 0 1 0 14"></path></svg></span>
-          <span class="nav-text"><strong>Captacion</strong><span>Outbound, demos y leads</span></span>
+          <span class="nav-text"><strong>Captacion</strong><span>Embudo self-service</span></span>
         </button>
         <button class="nav-button" type="button" data-nav-view="instagram">
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="1"></circle></svg></span>
@@ -2469,8 +2469,8 @@ tbody tr:last-child td { border-bottom: none; }
         <section class="card panel">
           <div class="section-header">
             <div>
-              <h2>Captacion</h2>
-              <p>Vista operativa de captacion: estado, acciones pendientes, leads calientes y errores.</p>
+              <h2>Captacion self-service</h2>
+              <p>Embudo de crecimiento: visita web, click en crear bot gratis, registro, bot creado, prueba, instalacion y pago.</p>
             </div>
             <div class="actions">
               <span id="cwAutosaveLabel" class="cw-autosave">Borrador guardado</span>
@@ -2488,12 +2488,12 @@ tbody tr:last-child td { border-bottom: none; }
           </div>
 
           <div class="actions cw-advanced-tabs" id="orAdvancedTabs">
-            <button class="ghost small" type="button" data-outreach-tab="autopilot">Hoy <span class="or-tab-badge" data-badge="autopilot" style="display:none;"></span></button>
-            <button class="ghost small" type="button" data-outreach-tab="prospects">Prospects <span class="or-tab-badge" data-badge="prospects" style="display:none;"></span></button>
-            <button class="ghost small" type="button" data-outreach-tab="autonomous">Automatizacion <span class="or-tab-badge" data-badge="autonomous" style="display:none;"></span></button>
-            <button class="ghost small" type="button" data-outreach-tab="manual-email">Emails manuales</button>
-            <button class="ghost small" type="button" data-outreach-tab="campaigns">Campanas</button>
-            <button class="ghost small" type="button" data-outreach-tab="templates">Mensajes</button>
+            <button class="ghost small" type="button" data-outreach-tab="autopilot">Embudo <span class="or-tab-badge" data-badge="autopilot" style="display:none;"></span></button>
+            <button class="ghost small" type="button" data-outreach-tab="prospects">Prospects outbound <span class="or-tab-badge" data-badge="prospects" style="display:none;"></span></button>
+            <button class="ghost small" type="button" data-outreach-tab="autonomous">Automatizacion outbound <span class="or-tab-badge" data-badge="autonomous" style="display:none;"></span></button>
+            <button class="ghost small" type="button" data-outreach-tab="manual-email">Emails outbound</button>
+            <button class="ghost small" type="button" data-outreach-tab="campaigns">Campanas registro</button>
+            <button class="ghost small" type="button" data-outreach-tab="templates">Copy self-service</button>
             <button class="ghost small" type="button" data-outreach-tab="suppressions">Bajas <span class="or-tab-badge" data-badge="suppressions" style="display:none;"></span></button>
           </div>
           <style>
@@ -2510,7 +2510,20 @@ tbody tr:last-child td { border-bottom: none; }
             .or-status-pill.err { color:#991b1b; background:#fee2e2; }
             .or-error-list { margin-top:10px; display:flex; flex-direction:column; gap:8px; font-size:12px; }
             .or-error-item { padding:8px 10px; border:1px solid #fecaca; border-radius:8px; background:#fff7f7; color:#7f1d1d; }
+            .ss-hero { padding:18px; margin-bottom:14px; border:1px solid var(--accent-line); background:linear-gradient(180deg,#f8fcff,#fff); }
+            .ss-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:14px; }
+            .ss-kpi { padding:12px; border:1px solid #e4eaf2; border-radius:8px; background:#fff; min-height:82px; }
+            .ss-kpi strong { display:block; font-size:24px; color:#0f172a; line-height:1.1; }
+            .ss-kpi span { display:block; margin-top:5px; font-size:11px; color:#64748b; font-weight:700; text-transform:uppercase; }
+            .ss-grid { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(280px,.7fr); gap:14px; margin-bottom:14px; }
+            .ss-funnel-step { display:grid; grid-template-columns:170px minmax(0,1fr) 70px 58px; gap:10px; align-items:center; padding:8px 0; border-bottom:1px solid #eef2f7; font-size:13px; }
+            .ss-funnel-step .bar { height:12px; border-radius:999px; background:#e2e8f0; overflow:hidden; }
+            .ss-funnel-step .bar span { display:block; height:100%; border-radius:999px; background:#00a9cc; }
+            .ss-list { display:flex; flex-direction:column; gap:8px; }
+            .ss-list-item { padding:10px 12px; border:1px solid #e4eaf2; border-radius:8px; background:#fff; font-size:13px; }
+            .ss-action-title { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
             @media (max-width: 920px) { .or-ops-grid { grid-template-columns:1fr; } }
+            @media (max-width: 920px) { .ss-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } .ss-grid { grid-template-columns:1fr; } .ss-funnel-step { grid-template-columns:1fr; } }
           </style>
 
           <div class="campaign-wizard outreach-panel" data-outreach-panel="campaigns" id="campaignWizard">
@@ -2518,7 +2531,7 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="cw-card-header">
                 <div>
                   <h3>Campanas activas</h3>
-                  <p>Controla campanas separadas, etapas, progreso, metricas y follow-ups desde aqui.</p>
+                  <p>Controla campanas que llevan al registro directo: crea tu bot gratis en 2 minutos.</p>
                 </div>
                 <button class="ghost small" type="button" id="cwRefreshCampaignsBtn">Actualizar</button>
               </div>
@@ -2530,8 +2543,8 @@ tbody tr:last-child td { border-bottom: none; }
             <div class="cw-shell">
               <div class="cw-topbar">
                 <div>
-                  <h3>Campaign Wizard</h3>
-                  <p>Busca, revisa, prueba y lanza una campana cold outreach desde un solo flujo.</p>
+                  <h3>Campanas a registro</h3>
+                  <p>Busca negocios, revisa candidatos y lanza mensajes con CTA directo a crear el bot gratis.</p>
                 </div>
                 <div class="pills">
                   <span class="pill accent" id="cwSelectedPill">0 seleccionados</span>
@@ -2540,7 +2553,7 @@ tbody tr:last-child td { border-bottom: none; }
               </div>
               <div class="cw-steps" aria-label="Pasos de campana">
                 <button class="cw-step active" type="button" data-cw-step-btn="search"><span class="cw-step-num">1</span><span class="cw-step-text"><strong>Buscar</strong><span>Empresas objetivo</span></span></button>
-                <button class="cw-step" type="button" data-cw-step-btn="review"><span class="cw-step-num">2</span><span class="cw-step-text"><strong>Revisar</strong><span>Seleccionar leads</span></span></button>
+                <button class="cw-step" type="button" data-cw-step-btn="review"><span class="cw-step-num">2</span><span class="cw-step-text"><strong>Revisar</strong><span>Seleccionar negocios</span></span></button>
                 <button class="cw-step" type="button" data-cw-step-btn="template"><span class="cw-step-num">3</span><span class="cw-step-text"><strong>Plantilla</strong><span>Preview y variables</span></span></button>
                 <button class="cw-step" type="button" data-cw-step-btn="test"><span class="cw-step-num">4</span><span class="cw-step-text"><strong>Prueba</strong><span>Email de test</span></span></button>
                 <button class="cw-step" type="button" data-cw-step-btn="launch"><span class="cw-step-num">5</span><span class="cw-step-text"><strong>Lanzar</strong><span>Resumen final</span></span></button>
@@ -2601,13 +2614,79 @@ tbody tr:last-child td { border-bottom: none; }
                     <div class="actions"><button class="ghost" type="button" data-cw-prev="test">Atras</button><button class="secondary" type="button" id="cwLaunchBtn">Lanzar campana</button></div>
                   </div>
                 </div>
-                <aside class="cw-card"><h4>Metricas basicas</h4><div class="cw-side-stat"><strong id="cwMetricSent">-</strong><span>Enviados</span></div><div class="cw-side-stat"><strong id="cwMetricOpen">-</strong><span>Abiertos</span></div><div class="cw-side-stat"><strong id="cwMetricReplies">-</strong><span>Respuestas</span></div><div class="cw-side-stat"><strong id="cwMetricReady">0</strong><span>Leads listos</span></div><p class="muted">El wizard guarda tu borrador en este navegador y usa jobs async para scraping y envio.</p></aside>
+                <aside class="cw-card"><h4>Metricas basicas</h4><div class="cw-side-stat"><strong id="cwMetricSent">-</strong><span>Enviados</span></div><div class="cw-side-stat"><strong id="cwMetricOpen">-</strong><span>Abiertos</span></div><div class="cw-side-stat"><strong id="cwMetricReplies">-</strong><span>Respuestas</span></div><div class="cw-side-stat"><strong id="cwMetricReady">0</strong><span>Negocios listos</span></div><p class="muted">El wizard guarda tu borrador y debe apuntar al registro self-service, no a demos manuales.</p></aside>
               </div>
             </div>
           </div>
 
           <!-- Autopilot -->
           <div data-outreach-panel="autopilot" class="outreach-panel active">
+
+            <div class="card ss-hero">
+              <div class="ss-action-title">
+                <div>
+                  <strong style="font-size:18px;">Embudo self-service</strong>
+                  <p class="muted" style="margin:4px 0 0;font-size:12px;">De visita a pago: mide donde se atasca la gente que quiere crear su bot gratis en menos de 2 minutos.</p>
+                </div>
+                <div class="actions">
+                  <a class="ghost small" href="https://app.vantelia.es/acceso?signup=1" target="_blank" rel="noopener">Abrir registro</a>
+                  <button class="secondary small" type="button" id="ssRefreshBtn">Actualizar embudo</button>
+                </div>
+              </div>
+              <div class="ss-kpis">
+                <div class="ss-kpi"><strong id="ssVisits">-</strong><span>Visitas web</span></div>
+                <div class="ss-kpi"><strong id="ssCtaClicks">-</strong><span>Clicks crear bot</span></div>
+                <div class="ss-kpi"><strong id="ssSignups">-</strong><span>Registros</span></div>
+                <div class="ss-kpi"><strong id="ssBots">-</strong><span>Bots creados</span></div>
+                <div class="ss-kpi"><strong id="ssActivated">-</strong><span>Primer mensaje</span></div>
+                <div class="ss-kpi"><strong id="ssSnippet">-</strong><span>Snippet copiado</span></div>
+                <div class="ss-kpi"><strong id="ssUpgradeStarted">-</strong><span>Upgrade iniciado</span></div>
+                <div class="ss-kpi"><strong id="ssUpgradeCompleted">-</strong><span>Pago completado</span></div>
+              </div>
+            </div>
+
+            <div class="ss-grid">
+              <div class="card" style="padding:16px;">
+                <div class="ss-action-title">
+                  <div>
+                    <strong>Conversion por etapa</strong>
+                    <p class="muted" style="margin:3px 0 0;font-size:12px;">Visita web -> registro -> bot creado -> prueba -> instalacion -> upgrade.</p>
+                  </div>
+                  <span class="pill info" id="ssWindowLabel">30 dias</span>
+                </div>
+                <div id="ssFunnelBars" style="margin-top:8px;"><div class="muted">Cargando embudo...</div></div>
+              </div>
+              <div class="card" style="padding:16px;">
+                <strong>Acciones para hoy</strong>
+                <div id="ssActions" class="ss-list" style="margin-top:10px;"><div class="muted">Cargando...</div></div>
+              </div>
+            </div>
+
+            <div class="ss-grid">
+              <div class="card" style="padding:16px;">
+                <div class="ss-action-title">
+                  <div>
+                    <strong>Campanas y fuentes</strong>
+                    <p class="muted" style="margin:3px 0 0;font-size:12px;">Que trae clicks, registros y bots creados.</p>
+                  </div>
+                </div>
+                <div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+                  <div><strong style="font-size:13px;">Clicks a registro</strong><div id="ssCampaigns" class="ss-list" style="margin-top:8px;"></div></div>
+                  <div><strong style="font-size:13px;">Registros</strong><div id="ssSources" class="ss-list" style="margin-top:8px;"></div></div>
+                  <div><strong style="font-size:13px;">Bots creados</strong><div id="ssBotSources" class="ss-list" style="margin-top:8px;"></div></div>
+                </div>
+              </div>
+              <div class="card" style="padding:16px;">
+                <strong>Ultima actividad</strong>
+                <div id="ssRecent" class="ss-list" style="margin-top:10px;"><div class="muted">Cargando...</div></div>
+              </div>
+            </div>
+
+            <details style="margin-bottom:14px;">
+              <summary class="ghost small" style="cursor:pointer;display:inline-flex;gap:6px;align-items:center;padding:6px 12px;">
+                Herramientas outbound heredadas
+              </summary>
+              <div style="margin-top:14px;">
 
             <!-- Banner respuestas nuevas -->
             <div id="orRepliesBanner" style="display:none;margin-bottom:14px;padding:14px 18px;border-radius:10px;background:linear-gradient(135deg,#a855f7,#6366f1);color:#fff;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
@@ -2772,6 +2851,9 @@ tbody tr:last-child td { border-bottom: none; }
               </div>
             </details>
 
+              </div>
+            </details>
+
             <!-- Autopilot status box (oculto, solo para renderAutopilot) -->
             <div id="orAutopilotBox" style="display:none;"></div>
           </div>
@@ -2779,92 +2861,55 @@ tbody tr:last-child td { border-bottom: none; }
           <!-- Modo automático -->
           <div data-outreach-panel="autonomous" class="outreach-panel">
             <div id="orAutonomousActiveBanner" style="display:none;margin-bottom:14px;padding:12px 16px;border-radius:10px;background:#dc2626;color:#fff;font-size:13px;">
-              ⚠️ <strong>Modo automático activo.</strong> El sistema envía cold y follow-ups sin confirmación manual. Vigila el dashboard.
+              <strong>Autopiloto activo.</strong> El sistema descubre empresas en España y envia cold + follow-ups automaticamente.
             </div>
             <div class="card" style="padding:18px;margin-bottom:14px;">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
                 <div>
-                  <strong style="font-size:16px;">Captación pasiva</strong>
-                  <p class="muted" style="margin:4px 0 0;font-size:12px;">El sistema busca prospects, los importa y lanza cold + follow-ups automáticamente.</p>
+                  <strong style="font-size:16px;">Autopiloto outbound</strong>
+                  <p class="muted" style="margin:4px 0 0;font-size:12px;">Activa todo: discovery, cold y follow-ups automaticos.</p>
                   <p class="muted" style="margin:4px 0 0;font-size:11px;" id="orAutonomousEnvWarning"></p>
                 </div>
                 <button type="button" id="orAutonomousToggle" style="min-width:140px;padding:10px 18px;border-radius:10px;border:0;font-weight:700;font-size:14px;cursor:pointer;">Cargando...</button>
               </div>
               <div id="orAutonomousDiagnostics" style="margin-top:14px;display:none;"></div>
             </div>
+            <div class="card" style="padding:18px;margin-bottom:14px;">
+              <strong style="font-size:14px;">Maximo de empresas nuevas al dia</strong>
+              <p class="muted" style="margin:4px 0 0;font-size:12px;">Tope del descubrimiento + cold. Follow-ups van sin limite.</p>
+              <div style="display:flex;gap:10px;align-items:end;margin-top:12px;flex-wrap:wrap;">
+                <label style="flex:0 0 220px;">Tope diario<input id="orAutonomousTargetCompaniesInput" type="number" min="1" max="200" value="20" /></label>
+                <button class="secondary small" type="button" id="orAutonomousSaveBtn">Guardar</button>
+              </div>
+              <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer;font-size:13px;">
+                <input type="checkbox" id="orAutonomousDiscoveryCheckbox" />
+                <span><strong>Descubrir empresas nuevas</strong> <span class="muted" style="font-size:12px;">— si desmarcas, no descubre nadie nuevo pero sigue mandando cold pendientes y follow-ups.</span></span>
+              </label>
+            </div>
             <div class="card" style="padding:14px;margin-bottom:14px;">
               <strong style="font-size:14px;">Estado en vivo</strong>
-              <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-top:10px;">
+              <div class="stat-grid" style="grid-template-columns:repeat(6,1fr);margin-top:10px;">
+                <div class="stat"><strong id="orAutonomousTargetCompanies">-</strong><span>Objetivo empresas</span></div>
                 <div class="stat"><strong id="orAutonomousColdToday">-</strong><span>Cold hoy / cap</span></div>
                 <div class="stat"><strong id="orAutonomousImported">-</strong><span>Nuevos 24h</span></div>
-                <div class="stat"><strong id="orAutonomousLastRun">-</strong><span>Última ronda</span></div>
-              </div>
-              <div class="actions" style="margin-top:10px;">
-                <button class="ghost small" type="button" id="orAutonomousTickBtn">Ejecutar ronda ahora</button>
-                <button class="ghost small" type="button" id="orAutonomousRefresh">Actualizar</button>
+                <div class="stat"><strong id="orAutonomousValid">-</strong><span>Validos pendientes</span></div>
+                <div class="stat"><strong id="orAutonomousFollowups">-</strong><span>Follow-ups 24h</span></div>
+                <div class="stat"><strong id="orAutonomousLastRun">-</strong><span>Ultima ronda</span></div>
               </div>
             </div>
             <div class="card" style="padding:14px;margin-bottom:14px;">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
                 <div>
-                  <strong style="font-size:14px;">Actividad del modo automático</strong>
-                  <p class="muted" style="margin:3px 0 0;font-size:11px;">Eventos recientes del worker: discovery, importaciones, envíos, errores. Hora Europe/Madrid.</p>
+                  <strong style="font-size:14px;">Actividad del autopiloto</strong>
+                  <p class="muted" style="margin:3px 0 0;font-size:11px;">Auto-refresh cada 12s. Hora Europe/Madrid.</p>
                 </div>
-                <div class="actions" style="margin:0;">
-                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
-                    <input type="checkbox" id="orAutonomousLogAuto" checked />
-                    Auto-refresh 12s
-                  </label>
-                  <select id="orAutonomousLogLevel" style="font-size:12px;padding:4px 8px;">
-                    <option value="">Todos los niveles</option>
-                    <option value="info">Info</option>
-                    <option value="success">Éxito</option>
-                    <option value="warning">Aviso</option>
-                    <option value="error">Error</option>
-                  </select>
-                  <button class="ghost small" type="button" id="orAutonomousLogRefresh">Actualizar log</button>
-                  <button class="ghost small" type="button" id="orAutonomousLogClear">Limpiar vista</button>
-                </div>
+                <button class="ghost small" type="button" id="orAutonomousLogRefresh">Actualizar log</button>
               </div>
+              <input type="checkbox" id="orAutonomousLogAuto" checked style="display:none;" />
               <div id="orAutonomousLogBox" style="margin-top:12px;max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fbfcfe;">
                 <div class="muted" style="padding:14px;font-size:12px;">Cargando actividad...</div>
               </div>
               <div class="muted" style="margin-top:6px;font-size:11px;" id="orAutonomousLogMeta"></div>
-            </div>
-            <div class="card" style="padding:14px;margin-bottom:14px;">
-              <strong style="font-size:14px;">Configuración</strong>
-              <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px;">
-                <label>Nuevos a importar/día<input id="orAutonomousDailyNew" type="number" min="1" max="200" value="20" /></label>
-                <label>Tope cold enviados/día<input id="orAutonomousDailyCold" type="number" min="1" max="200" value="30" /></label>
-                <label>Dias cold -> FU1<input id="orFollowupFu1Days" type="number" min="0" max="90" value="4" /></label>
-                <label>Dias FU1 -> FU2<input id="orFollowupFu2Days" type="number" min="0" max="90" value="5" /></label>
-                <label>Dias FU2 -> cierre<input id="orFollowupBreakupDays" type="number" min="0" max="90" value="6" /></label>
-                <label style="display:flex;flex-direction:column;gap:4px;">Auto follow-ups
-                  <span><input id="orAutonomousAutoFu" type="checkbox" /> Aprobar follow-ups solo</span>
-                </label>
-              </div>
-              <div class="actions" style="margin-top:10px;">
-                <button class="secondary small" type="button" id="orAutonomousSaveBtn">Guardar</button>
-              </div>
-            </div>
-            <div class="card" style="padding:14px;">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
-                <strong style="font-size:14px;">Objetivos de búsqueda (sector + ciudad)</strong>
-                <span class="muted" style="font-size:11px;" id="orAutonomousTargetsCount">0 combos</span>
-              </div>
-              <div style="overflow:auto;max-height:280px;border:1px solid var(--line);border-radius:10px;">
-                <table style="width:100%;border-collapse:collapse;font-size:13px;">
-                  <thead style="position:sticky;top:0;background:#f6f8fb;">
-                    <tr><th style="text-align:left;padding:8px;">Sector</th><th style="text-align:left;padding:8px;">Ciudad</th><th style="width:60px;"></th></tr>
-                  </thead>
-                  <tbody id="orAutonomousTargetsBody"><tr><td colspan="3" class="empty">Sin objetivos.</td></tr></tbody>
-                </table>
-              </div>
-              <div class="grid" style="grid-template-columns:1fr 1fr auto;gap:8px;margin-top:10px;align-items:end;">
-                <label>Sector<input id="orAutonomousNewSector" type="text" placeholder="clinica dental" /></label>
-                <label>Ciudad<input id="orAutonomousNewCity" type="text" placeholder="Torrejón de Ardoz" /></label>
-                <button class="secondary small" type="button" id="orAutonomousAddTargetBtn">Añadir</button>
-              </div>
             </div>
           </div>
 
@@ -6673,7 +6718,7 @@ a {
         ORALL("[data-outreach-panel]").forEach((p) => {
           p.classList.toggle("active", p.dataset.outreachPanel === tab);
         });
-        if (tab === "autopilot") { loadStats(); loadAutopilot(); loadAutonomousConfig(); loadRecentAutopilotErrors(); loadHotLeads(); loadFollowupQueue(); loadAbStats(); loadGA4Stats(); loadNextAction(); }
+        if (tab === "autopilot") { loadSelfServiceFunnel(); loadStats(); loadAutopilot(); loadAutonomousConfig(); loadRecentAutopilotErrors(); loadHotLeads(); loadFollowupQueue(); loadAbStats(); loadGA4Stats(); loadNextAction(); }
         if (tab === "prospects") loadProspects();
         if (tab === "campaigns") { loadWizardCampaigns(); loadJobs(); startJobsPolling(); } else { stopJobsPolling(); }
         if (tab === "manual-email") renderManualEmailPreview();
@@ -6751,7 +6796,7 @@ a {
             { ok: !!d.enabled,        label: "Activado en panel" },
             { ok: !!d.smtp_ok,        label: "SMTP configurado" },
             { ok: !!d.google_places_ok, label: "Google Places API key opcional" },
-            { ok: (d.targets_count || 0) > 0, label: `Objetivos configurados (${d.targets_count || 0})` },
+            { ok: true, label: `Rotacion España (${d.targets_count || 0} combos)` },
           ];
           const chips = checks.map((c) => {
             const color = c.ok ? "#16a34a" : "#dc2626";
@@ -6773,40 +6818,46 @@ a {
             tickBanner = `<div style="padding:8px 12px;border-radius:8px;background:#e0f2fe;color:#075985;font-size:12px;margin-bottom:8px;"><strong>Ronda en curso.</strong> ${escapeHtml(msg)}<br><span class="muted" style="font-size:11px;">ID ${escapeHtml(activeTick.tick_id || "-")} · origen ${escapeHtml(source)} · paso ${escapeHtml(step)} · inicio ${escapeHtml(started)}${target}</span></div>`;
           }
           const banner = ready
-            ? '<div style="padding:8px 12px;border-radius:8px;background:#dcfce7;color:#065f46;font-size:12px;font-weight:600;margin-bottom:8px;">✓ Listo para captar. El worker hará un tick automático y enviará si hay candidatos.</div>'
+            ? '<div style="padding:8px 12px;border-radius:8px;background:#dcfce7;color:#065f46;font-size:12px;font-weight:600;margin-bottom:8px;">✓ Listo. Pulsa activar y contactara el numero de empresas configurado, con sectores y ciudades automaticos.</div>'
             : (d.blockers && d.blockers.length
                 ? `<div style="padding:8px 12px;border-radius:8px;background:#fef3c7;color:#92400e;font-size:12px;margin-bottom:8px;"><strong>No enviará todavía.</strong> Bloqueado por: ${d.blockers.map(escapeHtml).join(" · ")}</div>`
                 : '');
           diag.innerHTML = tickBanner + banner + `<div style="display:flex;flex-wrap:wrap;gap:6px;">${chips}</div>`;
           diag.style.display = "";
         }
-        ORQ("#orAutonomousColdToday").textContent = `${d.stats.cold_today}/${d.daily_cold_cap}`;
-        ORQ("#orAutonomousImported").textContent = d.stats.imported_24h;
-        ORQ("#orAutonomousLastRun").textContent = d.last_discovery_at ? new Date(d.last_discovery_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) : "Nunca";
-        ORQ("#orAutonomousDailyNew").value = d.daily_new_target;
-        ORQ("#orAutonomousDailyCold").value = d.daily_cold_cap;
+        if (ORQ("#orAutonomousTargetCompanies")) ORQ("#orAutonomousTargetCompanies").textContent = d.target_companies || d.daily_new_target || "-";
+        if (ORQ("#orAutonomousTargetCompaniesInput")) ORQ("#orAutonomousTargetCompaniesInput").value = d.target_companies || d.daily_new_target || 20;
+        if (ORQ("#orAutonomousColdToday")) ORQ("#orAutonomousColdToday").textContent = `${d.stats.cold_today}/${d.daily_cold_cap}`;
+        if (ORQ("#orAutonomousImported")) ORQ("#orAutonomousImported").textContent = d.stats.imported_24h;
+        if (ORQ("#orAutonomousValid")) ORQ("#orAutonomousValid").textContent = d.stats.valid_candidates || 0;
+        if (ORQ("#orAutonomousFollowups")) ORQ("#orAutonomousFollowups").textContent = d.stats.followups_24h || 0;
+        if (ORQ("#orAutonomousLastRun")) ORQ("#orAutonomousLastRun").textContent = d.last_discovery_at ? new Date(d.last_discovery_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) : "Nunca";
+        const autoSummary = ORQ("#orAutonomousAutoTargetsSummary");
+        if (autoSummary) {
+          autoSummary.textContent = d.auto_targets_enabled
+            ? `Automatico: ${d.targets_count || 0} combinaciones activas por España.`
+            : `Usando ${d.manual_targets_count || 0} objetivos manuales heredados.`;
+        }
+        const discOn = d.discovery_enabled !== false;
+        const discChk = ORQ("#orAutonomousDiscoveryCheckbox");
+        if (discChk) discChk.checked = discOn;
         orState.followupDays = Object.assign({ fu1: 4, fu2: 5, breakup: 6 }, d.followup_days || {});
-        ORQ("#orFollowupFu1Days").value = orState.followupDays.fu1;
-        ORQ("#orFollowupFu2Days").value = orState.followupDays.fu2;
-        ORQ("#orFollowupBreakupDays").value = orState.followupDays.breakup;
-        ORQ("#orAutonomousAutoFu").checked = d.auto_followups;
+        if (ORQ("#orFollowupFu1Days")) ORQ("#orFollowupFu1Days").value = orState.followupDays.fu1;
+        if (ORQ("#orFollowupFu2Days")) ORQ("#orFollowupFu2Days").value = orState.followupDays.fu2;
+        if (ORQ("#orFollowupBreakupDays")) ORQ("#orFollowupBreakupDays").value = orState.followupDays.breakup;
+        if (ORQ("#orAutonomousAutoFu")) ORQ("#orAutonomousAutoFu").checked = d.auto_followups;
         const body = ORQ("#orAutonomousTargetsBody");
-        const targets = d.targets || [];
-        ORQ("#orAutonomousTargetsCount").textContent = `${targets.length} combo${targets.length === 1 ? "" : "s"}`;
-        if (!targets.length) {
-          body.innerHTML = '<tr><td colspan="3" class="empty">Sin objetivos. Añade abajo.</td></tr>';
-        } else {
-          body.innerHTML = targets.map((t, i) =>
-            `<tr><td>${escapeHtml(t.sector)}</td><td>${escapeHtml(t.city)}</td><td style="text-align:right;"><button class="ghost small" type="button" data-target-remove="${i}">Quitar</button></td></tr>`
-          ).join("");
-          body.querySelectorAll("[data-target-remove]").forEach((b) => {
-            b.addEventListener("click", () => {
-              const idx = parseInt(b.dataset.targetRemove, 10);
-              const next = (_autonomousState.targets || []).slice();
-              next.splice(idx, 1);
-              saveAutonomousConfig({ targets: next });
-            });
-          });
+        const count = ORQ("#orAutonomousTargetsCount");
+        const targets = d.active_targets || d.generated_targets || d.targets || [];
+        if (count) count.textContent = `${targets.length} combo${targets.length === 1 ? "" : "s"}`;
+        if (body) {
+          if (!targets.length) {
+            body.innerHTML = '<tr><td colspan="3" class="empty">Sin objetivos generados.</td></tr>';
+          } else {
+            body.innerHTML = targets.map((t, i) =>
+              `<tr><td>${escapeHtml(t.sector)}</td><td>${escapeHtml(t.city)}</td><td style="text-align:right;"><span class="muted">${t.manual ? "Manual" : "Auto"}</span></td></tr>`
+            ).join("");
+          }
         }
       }
       async function saveAutonomousConfig(patch) {
@@ -6841,7 +6892,8 @@ a {
           }
           const turningOn = !_autonomousState.enabled;
           if (turningOn) {
-            const ok = window.confirm("Activar modo automatico? El sistema enviara cold y follow-ups sin confirmacion.");
+            const target = ORQ("#orAutonomousTargetCompaniesInput")?.value || _autonomousState.target_companies || 20;
+            const ok = window.confirm(`Activar autopiloto para contactar ${target} empresas? El sistema descubrira negocios en España y enviara cold + follow-ups automaticamente.`);
             if (!ok) return;
           }
           await saveAutonomousConfig({ enabled: turningOn });
@@ -6870,26 +6922,12 @@ a {
         ORQ("#orAutonomousTickBtn")?.addEventListener("click", runAutonomousTickFromPanel);
         ORQ("#orAutonomousSaveBtn")?.addEventListener("click", () => {
           saveAutonomousConfig({
-            daily_new_target: parseInt(ORQ("#orAutonomousDailyNew").value, 10),
-            daily_cold_cap: parseInt(ORQ("#orAutonomousDailyCold").value, 10),
-            followup_days: {
-              fu1: parseInt(ORQ("#orFollowupFu1Days").value, 10) || 0,
-              fu2: parseInt(ORQ("#orFollowupFu2Days").value, 10) || 0,
-              breakup: parseInt(ORQ("#orFollowupBreakupDays").value, 10) || 0,
-            },
-            auto_followups: !!ORQ("#orAutonomousAutoFu").checked,
+            target_companies: parseInt(ORQ("#orAutonomousTargetCompaniesInput").value, 10) || 20,
+            auto_followups: true,
           });
         });
-        ORQ("#orAutonomousAddTargetBtn")?.addEventListener("click", () => {
-          const sector = ORQ("#orAutonomousNewSector").value.trim();
-          const city = ORQ("#orAutonomousNewCity").value.trim();
-          if (!sector || !city) { cwToast("Sector y ciudad obligatorios.", "error"); return; }
-          const next = (_autonomousState?.targets || []).slice();
-          if (next.find((t) => t.sector === sector && t.city === city)) { cwToast("Ya existe ese combo.", "info"); return; }
-          next.push({ sector, city });
-          saveAutonomousConfig({ targets: next });
-          ORQ("#orAutonomousNewSector").value = "";
-          ORQ("#orAutonomousNewCity").value = "";
+        ORQ("#orAutonomousDiscoveryCheckbox")?.addEventListener("change", async (e) => {
+          await saveAutonomousConfig({ discovery_enabled: !!e.target.checked });
         });
         ORQ("#orAutonomousLogRefresh")?.addEventListener("click", () => loadAutopilotLog(true));
         ORQ("#orAutonomousLogClear")?.addEventListener("click", () => {
@@ -6993,6 +7031,114 @@ a {
       }
 
       // ----- Dashboard -----
+      function ssNum(value) {
+        return Number(value || 0).toLocaleString("es-ES");
+      }
+
+      function ssSetText(selector, value) {
+        const el = ORQ(selector);
+        if (el) el.textContent = value;
+      }
+
+      function ssMetricRow(label, value, right) {
+        return `<div class="ss-list-item" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <span>${escapeHtml(label || "-")}</span>
+          <strong>${escapeHtml(String(value ?? "-"))}</strong>
+          ${right ? `<span class="muted">${escapeHtml(String(right))}</span>` : ""}
+        </div>`;
+      }
+
+      function renderSelfServiceFunnel(data) {
+        const k = data.kpis || {};
+        ssSetText("#ssVisits", ssNum(k.website_visits));
+        ssSetText("#ssCtaClicks", ssNum(k.free_bot_clicks));
+        ssSetText("#ssSignups", ssNum(k.signups));
+        ssSetText("#ssBots", ssNum(k.bots_created));
+        ssSetText("#ssActivated", ssNum(k.activated_bots));
+        ssSetText("#ssSnippet", ssNum(k.snippet_copied));
+        ssSetText("#ssUpgradeStarted", ssNum(k.upgrades_started));
+        ssSetText("#ssUpgradeCompleted", ssNum(k.upgrades_completed));
+        ssSetText("#ssWindowLabel", `${data.days || 30} dias`);
+
+        const funnel = data.funnel || [];
+        const max = Math.max(1, ...funnel.map((step) => Number(step.value || 0)));
+        const bars = ORQ("#ssFunnelBars");
+        if (bars) {
+          bars.innerHTML = funnel.map((step) => {
+            const value = Number(step.value || 0);
+            const width = Math.max(3, Math.round((value / max) * 100));
+            const prev = Number(step.conversion_from_previous_pct || 0);
+            return `<div class="ss-funnel-step">
+              <strong>${escapeHtml(step.label)}</strong>
+              <div class="bar" title="${prev}% desde la etapa anterior"><span style="width:${width}%"></span></div>
+              <span style="text-align:right;font-weight:700;">${ssNum(value)}</span>
+              <span class="muted" style="text-align:right;">${prev}%</span>
+            </div>`;
+          }).join("") || '<div class="muted">Sin datos de embudo todavia.</div>';
+        }
+
+        const actions = ORQ("#ssActions");
+        if (actions) {
+          actions.innerHTML = (data.actions || []).map((item) => `
+            <div class="ss-list-item">
+              <strong>${escapeHtml(item.title || "Accion")}</strong>
+              <p class="muted" style="margin:4px 0 0;font-size:12px;">${escapeHtml(item.detail || "")}</p>
+            </div>
+          `).join("") || '<div class="muted">Sin acciones pendientes.</div>';
+        }
+
+        const campaigns = ORQ("#ssCampaigns");
+        if (campaigns) {
+          campaigns.innerHTML = (data.campaigns || []).map((item) =>
+            ssMetricRow(item.source, item.clicks)
+          ).join("") || '<div class="muted">Sin clicks trackeados.</div>';
+        }
+        const sources = ORQ("#ssSources");
+        if (sources) {
+          sources.innerHTML = (data.sources || []).map((item) =>
+            ssMetricRow(item.source, item.total)
+          ).join("") || '<div class="muted">Sin registros todavia.</div>';
+        }
+        const botSources = ORQ("#ssBotSources");
+        if (botSources) {
+          botSources.innerHTML = (data.bot_sources || []).map((item) =>
+            ssMetricRow(item.source, item.total)
+          ).join("") || '<div class="muted">Sin bots nuevos.</div>';
+        }
+
+        const recent = ORQ("#ssRecent");
+        if (recent) {
+          const signups = (data.recent_signups || []).map((item) => ({
+            title: item.display_name || item.email,
+            detail: `${item.email || ""} ${item.bot_name ? "- " + item.bot_name : ""}`,
+            when: item.created_at || "",
+          }));
+          const bots = (data.recent_bots || []).map((item) => ({
+            title: item.nombre || item.cliente_id,
+            detail: `${item.owner_email || "sin email"} - ${item.plan || "free"}`,
+            when: item.created_at || "",
+          }));
+          const combined = signups.concat(bots).slice(0, 8);
+          recent.innerHTML = combined.map((item) => `
+            <div class="ss-list-item">
+              <strong>${escapeHtml(item.title || "-")}</strong>
+              <p class="muted" style="margin:4px 0 0;font-size:12px;">${escapeHtml(item.detail || "")}</p>
+              <span class="muted" style="font-size:11px;">${escapeHtml(item.when || "")}</span>
+            </div>
+          `).join("") || '<div class="muted">Sin actividad reciente.</div>';
+        }
+      }
+
+      async function loadSelfServiceFunnel() {
+        try {
+          const data = await orFetch("/admin/self-service-funnel?days=30");
+          renderSelfServiceFunnel(data);
+        } catch (err) {
+          const bars = ORQ("#ssFunnelBars");
+          if (bars) bars.innerHTML = `<div class="status error">${escapeHtml(err.message)}</div>`;
+        }
+      }
+
       async function loadStats() {
         try {
           const data = await orFetch("/admin/outreach/stats");
@@ -8262,6 +8408,7 @@ a {
       if (_imapBtn) _imapBtn.addEventListener("click", () => imapPollNow(_imapBtn));
       const _abRefreshBtn = ORQ("#orAbRefresh");
       if (_abRefreshBtn) _abRefreshBtn.addEventListener("click", loadAbStats);
+      ORQ("#ssRefreshBtn")?.addEventListener("click", loadSelfServiceFunnel);
       const _abStageSel = ORQ("#orAbStage");
       if (_abStageSel) _abStageSel.addEventListener("change", loadAbStats);
       ORQ("#orApplyFilters").addEventListener("click", () => {
@@ -8367,7 +8514,7 @@ a {
         prevSetView(view);
         if (view === "outreach") {
           if (!orState.loaded) { setOutreachTab("autopilot"); orState.loaded = true; }
-          else { loadStats(); loadAutopilot(); loadHotLeads(); loadFollowupQueue(); loadAbStats(); }
+          else { loadSelfServiceFunnel(); loadStats(); loadAutopilot(); loadHotLeads(); loadFollowupQueue(); loadAbStats(); }
         } else {
           stopJobsPolling();
         }

@@ -2795,6 +2795,11 @@ class BillingCheckoutResponse(BaseModel):
     checkout_url: str
 
 
+class AppTrackEventPayload(BaseModel):
+    event: str = Field(min_length=2, max_length=80, pattern=r"^[a-zA-Z0-9_.:-]+$")
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
 class BillingPortalResponse(BaseModel):
     ok: bool
     portal_url: str
@@ -10877,7 +10882,7 @@ async def auth_logout(
 # --- Vantelia 2.0 self-serve auth (Sem 2) ---
 
 @app.post("/auth/signup", response_model=AuthSignupResponse)
-async def auth_signup(data: AuthSignupPayload) -> Response:
+async def auth_signup(data: AuthSignupPayload, request: Request) -> Response:
     if not SIGNUP_ENABLED:
         raise HTTPException(status_code=403, detail="Registro deshabilitado.")
     email_norm = _normalize_email(data.email)
@@ -10904,6 +10909,18 @@ async def auth_signup(data: AuthSignupPayload) -> Response:
         ok=True,
         user=_serialize_auth_user(new_user),
         redirect_to=redirect_to,
+    )
+    _try_record_analytics_event(
+        {
+            "event": "selfserve_signup",
+            "event_source": "vantelia_app",
+            "signup_source": "email",
+            "user_id": new_user["id"],
+            "widget_client_id": new_user["cliente_id"] or "",
+            "cliente_id": new_user["cliente_id"] or "",
+            "status": "claimed" if redirect_to == "/app" else "new",
+        },
+        request,
     )
     response = JSONResponse(payload.model_dump())
     _set_portal_cookie(response, raw_token)
@@ -11060,6 +11077,7 @@ async def onboarding_state(
 @app.post("/onboarding/start", response_model=OnboardingStartResponse)
 async def onboarding_start(
     data: OnboardingStartPayload,
+    request: Request,
     user: sqlite3.Row = Depends(_require_self_serve_user),
 ) -> OnboardingStartResponse:
     existing_cliente = (user["cliente_id"] or "").strip()
@@ -11072,6 +11090,18 @@ async def onboarding_start(
             step=state.get("step", "learn"),
         )
     cliente_id = _provision_self_serve_cliente(owner_user_id=user["id"], nombre=data.nombre)
+    _try_record_analytics_event(
+        {
+            "event": "bot_created",
+            "event_source": "vantelia_app",
+            "widget_client_id": cliente_id,
+            "cliente_id": cliente_id,
+            "user_id": user["id"],
+            "bot_name": data.nombre,
+            "source": "self_serve",
+        },
+        request,
+    )
     return OnboardingStartResponse(cliente_id=cliente_id, nombre=data.nombre, step="learn")
 
 
@@ -11581,6 +11611,38 @@ async def app_deploy(
         share_link=share_link,
         qr_data_url="",
     )
+
+
+@app.post("/auth/app/track")
+async def app_track_event(
+    data: AppTrackEventPayload,
+    request: Request,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    cliente_id = (user["cliente_id"] or "").strip()
+    allowed_events = {
+        "bot_preview_message",
+        "snippet_copied",
+        "share_link_copied",
+        "demo_url_copied",
+        "install_tab_opened",
+    }
+    if data.event not in allowed_events:
+        raise HTTPException(status_code=400, detail="Evento de app no permitido.")
+    metadata = {
+        key: value
+        for key, value in (data.metadata or {}).items()
+        if key in _ANALYTICS_ALLOWED_KEYS
+    }
+    payload: Dict[str, Any] = {
+        "event": data.event,
+        "event_source": "vantelia_app",
+        "widget_client_id": cliente_id,
+        "cliente_id": cliente_id,
+        "user_id": user["id"],
+        **metadata,
+    }
+    return _record_analytics_event(payload, request)
 
 
 @app.get("/auth/app/appearance", response_model=AppAppearanceResponse)
@@ -12684,6 +12746,20 @@ async def app_billing_checkout(
     except Exception as exc:  # noqa: BLE001
         logger.error("Stripe checkout self-serve fallo user=%s plan=%s: %s", user["id"], plan["slug"], exc)
         raise HTTPException(status_code=502, detail="No se pudo iniciar el checkout.") from exc
+    _try_record_analytics_event(
+        {
+            "event": "upgrade_started",
+            "event_source": "vantelia_app",
+            "widget_client_id": user["cliente_id"] or "",
+            "cliente_id": user["cliente_id"] or "",
+            "user_id": user["id"],
+            "plan": plan["slug"],
+            "billing_period": data.billing_period,
+            "checkout_session_id": session.id or "",
+            "source": "self_serve",
+        },
+        request,
+    )
     return BillingCheckoutResponse(ok=True, checkout_url=session.url or "")
 
 
@@ -13969,6 +14045,14 @@ _ANALYTICS_ALLOWED_KEYS = {
     "lead_type",
     "checkout_session_id",
     "checkout_status",
+    "action",
+    "surface",
+    "step",
+    "signup_source",
+    "user_id",
+    "cliente_id",
+    "bot_name",
+    "message_previewed",
 }
 
 
@@ -17204,6 +17288,244 @@ async def admin_analytics(days: int = 30, limit: int = 80) -> Dict[str, Any]:
     }
 
 
+@app.get("/admin/self-service-funnel", dependencies=[Depends(_require_admin_token)])
+async def admin_self_service_funnel(days: int = 30) -> Dict[str, Any]:
+    days = max(1, min(int(days or 30), 365))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since_iso = since.replace(tzinfo=None).isoformat(timespec="seconds") + "Z"
+
+    def pct(part: int, total: int) -> int:
+        return int(round((part / total) * 100)) if total else 0
+
+    with _get_db_connection() as connection:
+        events = connection.execute(
+            """
+            SELECT event_name, event_source, cliente_id, session_id, page_path,
+                   page_url, metadata_json, created_at
+            FROM analytics_events
+            WHERE created_at >= ?
+            ORDER BY id DESC
+            """,
+            (since_iso,),
+        ).fetchall()
+        signups = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM users WHERE role = 'client' AND created_at >= ?",
+                (since_iso,),
+            ).fetchone()[0]
+        )
+        bots_created = int(
+            connection.execute(
+                """
+                SELECT COUNT(*) FROM clientes
+                WHERE owner_user_id <> '' AND created_at >= ?
+                """,
+                (since_iso,),
+            ).fetchone()[0]
+        )
+        activated_by_chat = int(
+            connection.execute(
+                """
+                SELECT COUNT(DISTINCT c.cliente_id)
+                FROM clientes c
+                JOIN chat_messages m ON m.cliente_id = c.cliente_id
+                WHERE c.owner_user_id <> ''
+                  AND m.role IN ('assistant', 'bot')
+                  AND m.created_at >= ?
+                """,
+                (since_iso,),
+            ).fetchone()[0]
+        )
+        paid_subscriptions = int(
+            connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM subscriptions
+                WHERE plan <> 'free'
+                  AND status IN ('active', 'trialing')
+                  AND (created_at >= ? OR updated_at >= ?)
+                """,
+                (since_iso, since_iso),
+            ).fetchone()[0]
+        )
+        sources = connection.execute(
+            """
+            SELECT COALESCE(NULLIF(signup_source, ''), 'unknown') AS source, COUNT(*) AS total
+            FROM users
+            WHERE role = 'client' AND created_at >= ?
+            GROUP BY COALESCE(NULLIF(signup_source, ''), 'unknown')
+            ORDER BY total DESC, source ASC
+            LIMIT 8
+            """,
+            (since_iso,),
+        ).fetchall()
+        bot_sources = connection.execute(
+            """
+            SELECT COALESCE(NULLIF(source, ''), 'unknown') AS source, COUNT(*) AS total
+            FROM clientes
+            WHERE owner_user_id <> '' AND created_at >= ?
+            GROUP BY COALESCE(NULLIF(source, ''), 'unknown')
+            ORDER BY total DESC, source ASC
+            LIMIT 8
+            """,
+            (since_iso,),
+        ).fetchall()
+        recent_signups = connection.execute(
+            """
+            SELECT u.email, u.display_name, u.signup_source, u.cliente_id, u.created_at,
+                   c.nombre AS bot_name, c.website_url
+            FROM users u
+            LEFT JOIN clientes c ON c.cliente_id = u.cliente_id
+            WHERE u.role = 'client' AND u.created_at >= ?
+            ORDER BY u.created_at DESC
+            LIMIT 8
+            """,
+            (since_iso,),
+        ).fetchall()
+        recent_bots = connection.execute(
+            """
+            SELECT c.cliente_id, c.nombre, c.website_url, c.plan, c.source, c.created_at,
+                   u.email AS owner_email
+            FROM clientes c
+            LEFT JOIN users u ON u.id = c.owner_user_id
+            WHERE c.owner_user_id <> '' AND c.created_at >= ?
+            ORDER BY c.created_at DESC
+            LIMIT 8
+            """,
+            (since_iso,),
+        ).fetchall()
+
+    event_counts: Dict[str, int] = {}
+    site_visit_keys = set()
+    cta_clicks = 0
+    registered_clicks = 0
+    snippet_copied = 0
+    preview_messages = 0
+    preview_client_ids = set()
+    upgrades_started = 0
+    checkout_completed_events = 0
+    campaign_clicks: Dict[str, int] = {}
+    for row in events:
+        name = row["event_name"]
+        event_counts[name] = event_counts.get(name, 0) + 1
+        if row["event_source"] == "vantelia_site":
+            visit_key = row["session_id"] or row["page_url"] or row["page_path"] or str(row["created_at"])
+            site_visit_keys.add(visit_key)
+        try:
+            meta = json.loads(row["metadata_json"] or "{}")
+        except json.JSONDecodeError:
+            meta = {}
+        cta_href = str(meta.get("cta_href") or row["page_url"] or "")
+        source = str(meta.get("utm_source") or meta.get("source") or row["event_source"] or "direct")
+        if name in {"plan_signup_clicked", "plan_cta_click", "portal_access_click", "create_bot_cta_click", "free_bot_cta_click"}:
+            cta_clicks += 1
+            campaign_clicks[source] = campaign_clicks.get(source, 0) + 1
+            if "/acceso" in cta_href or "app.vantelia.es" in cta_href:
+                registered_clicks += 1
+        if name == "selfserve_signup":
+            signups = max(signups, event_counts[name])
+        if name == "bot_preview_message":
+            preview_messages += 1
+            if row["cliente_id"]:
+                preview_client_ids.add(row["cliente_id"])
+        if name == "snippet_copied":
+            snippet_copied += 1
+        if name in {"upgrade_started", "checkout_started", "checkout_redirect"}:
+            upgrades_started += 1
+        if name == "checkout_completed":
+            checkout_completed_events += 1
+
+    website_visits = len(site_visit_keys) or sum(
+        total for event, total in event_counts.items() if event in {"page_view", "site_page_view"}
+    )
+    free_bot_clicks = registered_clicks or cta_clicks
+    activated_bots = max(activated_by_chat, len(preview_client_ids))
+    upgrades_completed = max(paid_subscriptions, checkout_completed_events)
+    funnel = [
+        {"key": "visits", "label": "Visitas web", "value": website_visits},
+        {"key": "cta_clicks", "label": "Clicks Crea tu bot gratis", "value": free_bot_clicks},
+        {"key": "signups", "label": "Registros", "value": signups},
+        {"key": "bots_created", "label": "Bots creados", "value": bots_created},
+        {"key": "activated", "label": "Primer mensaje probado", "value": activated_bots},
+        {"key": "snippet_copied", "label": "Snippet copiado", "value": snippet_copied},
+        {"key": "upgrades_started", "label": "Upgrade iniciado", "value": upgrades_started},
+        {"key": "upgrades_completed", "label": "Pago completado", "value": upgrades_completed},
+    ]
+    for idx, step in enumerate(funnel):
+        previous = funnel[idx - 1]["value"] if idx else step["value"]
+        step["conversion_from_previous_pct"] = pct(int(step["value"]), int(previous))
+        step["conversion_from_visit_pct"] = pct(int(step["value"]), website_visits)
+
+    actions: List[Dict[str, str]] = []
+    if website_visits and free_bot_clicks < max(1, int(website_visits * 0.08)):
+        actions.append({
+            "title": "Subir clicks al registro",
+            "detail": "Revisa CTAs visibles y repite 'Crea tu bot gratis en 2 minutos' en las paginas con mas trafico.",
+        })
+    if signups and bots_created < signups:
+        actions.append({
+            "title": "Recuperar registros sin bot",
+            "detail": "Envia un email corto llevando al wizard: pega tu URL y termina el bot gratis.",
+        })
+    if bots_created and activated_bots < bots_created:
+        actions.append({
+            "title": "Empujar la primera prueba",
+            "detail": "Prioriza onboarding y emails que pidan probar una pregunta real del negocio.",
+        })
+    if activated_bots and snippet_copied < activated_bots:
+        actions.append({
+            "title": "Acelerar instalacion",
+            "detail": "Haz mas visible el boton de copiar codigo y ofrece guia rapida por CMS.",
+        })
+    if snippet_copied and upgrades_completed == 0:
+        actions.append({
+            "title": "Convertir activacion en pago",
+            "detail": "Muestra limites del plan gratis y CTA de upgrade justo despues de instalar.",
+        })
+    if not actions:
+        actions.append({
+            "title": "Escalar lo que ya funciona",
+            "detail": "Duplica las campanas que traen registros y mejora el paso con peor conversion.",
+        })
+
+    campaign_rows = [
+        {"source": source, "clicks": total}
+        for source, total in sorted(campaign_clicks.items(), key=lambda item: (-item[1], item[0]))[:8]
+    ]
+
+    return {
+        "days": days,
+        "since": since_iso,
+        "funnel": funnel,
+        "kpis": {
+            "website_visits": website_visits,
+            "free_bot_clicks": free_bot_clicks,
+            "signups": signups,
+            "bots_created": bots_created,
+            "activated_bots": activated_bots,
+            "snippet_copied": snippet_copied,
+            "upgrades_started": upgrades_started,
+            "upgrades_completed": upgrades_completed,
+            "visit_to_signup_pct": pct(signups, website_visits),
+            "signup_to_bot_pct": pct(bots_created, signups),
+            "bot_to_activation_pct": pct(activated_bots, bots_created),
+            "activation_to_install_pct": pct(snippet_copied, activated_bots),
+            "install_to_paid_pct": pct(upgrades_completed, snippet_copied),
+        },
+        "sources": [{"source": row["source"], "total": row["total"]} for row in sources],
+        "bot_sources": [{"source": row["source"], "total": row["total"]} for row in bot_sources],
+        "campaigns": campaign_rows,
+        "recent_signups": [dict(row) for row in recent_signups],
+        "recent_bots": [dict(row) for row in recent_bots],
+        "actions": actions,
+        "tracking": {
+            "snippet_copied": snippet_copied > 0,
+            "preview_messages": preview_messages > 0,
+            "upgrade_started": upgrades_started > 0,
+        },
+    }
+
+
 # =====================================================================
 # === OUTREACH ========================================================
 # Panel de captacion B2B. SQLite separado en storage/outreach/outreach.db.
@@ -17838,6 +18160,11 @@ def _outreach_ensure_autopilot_config_columns(conn: sqlite3.Connection) -> None:
                 "ALTER TABLE autopilot_config ADD COLUMN followup_days_json TEXT DEFAULT '{\"fu1\":4,\"fu2\":5,\"breakup\":6}'"
             )
             conn.commit()
+        if "discovery_enabled" not in existing:
+            conn.execute(
+                "ALTER TABLE autopilot_config ADD COLUMN discovery_enabled INTEGER DEFAULT 1"
+            )
+            conn.commit()
     except sqlite3.OperationalError:
         pass
 
@@ -18249,10 +18576,12 @@ def outreach_autopilot_run(payload: OutreachAutopilotSendPayload):
 class AutopilotConfigPayload(BaseModel):
     enabled: Optional[bool] = None
     targets: Optional[List[Dict[str, str]]] = None
+    target_companies: Optional[int] = None
     daily_new_target: Optional[int] = None
     daily_cold_cap: Optional[int] = None
     auto_followups: Optional[bool] = None
     followup_days: Optional[Dict[str, int]] = None
+    discovery_enabled: Optional[bool] = None
 
 
 def _autopilot_config_row(conn) -> Dict[str, Any]:
@@ -18273,6 +18602,37 @@ def _autopilot_config_row(conn) -> Dict[str, Any]:
     imported_24h = conn.execute(
         "SELECT COUNT(*) AS c FROM prospects WHERE (source LIKE '%autopilot%' OR tags LIKE '%autopilot%') AND created_at >= datetime('now','-1 day')"
     ).fetchone()["c"]
+    valid_candidates = conn.execute(
+        """
+        SELECT COUNT(*) AS c FROM prospects
+        WHERE (source LIKE '%autopilot%' OR tags LIKE '%autopilot%')
+          AND email <> '' AND website <> ''
+          AND email NOT IN (SELECT email FROM suppressions)
+          AND email NOT IN (SELECT email FROM sends WHERE mode='send')
+        """
+    ).fetchone()["c"]
+    pending_followups = conn.execute(
+        """
+        SELECT COUNT(DISTINCT p.email) AS c
+        FROM prospects p
+        JOIN sends s ON s.email = p.email AND s.mode='send'
+        WHERE (p.source LIKE '%autopilot%' OR p.tags LIKE '%autopilot%')
+          AND COALESCE(p.status,'') NOT IN ('replied','client','lost')
+          AND p.email NOT IN (SELECT email FROM suppressions)
+        """
+    ).fetchone()["c"]
+    sent_24h = conn.execute(
+        "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND sent_at >= datetime('now','-1 day')"
+    ).fetchone()["c"]
+    followups_24h = conn.execute(
+        "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND stage IN ('fu1','fu2','breakup') AND sent_at >= datetime('now','-1 day')"
+    ).fetchone()["c"]
+    replies_30d = conn.execute(
+        "SELECT COUNT(DISTINCT email) AS c FROM events WHERE type='reply' AND ts >= datetime('now','-30 day')"
+    ).fetchone()["c"]
+    clicks_30d = conn.execute(
+        "SELECT COUNT(*) AS c FROM events WHERE type='click' AND ts >= datetime('now','-30 day')"
+    ).fetchone()["c"]
     try:
         smtp_settings = outreach_smtp_settings()
         smtp_ok = bool(smtp_settings.get("host") and smtp_settings.get("from_email"))
@@ -18281,7 +18641,14 @@ def _autopilot_config_row(conn) -> Dict[str, Any]:
     env_enabled = os.getenv("OUTREACH_AUTONOMOUS_ENABLED", "").lower() == "true"
     google_ok = bool(os.getenv("GOOGLE_PLACES_API_KEY", "").strip())
     targets_count = len(targets)
+    target_companies = _autopilot_target_companies(row["daily_new_target"] or 20)
+    generated_targets = _autopilot_generated_targets(target_companies)
+    active_targets = _autopilot_targets_for_run(targets, target_companies)
     enabled_db = bool(row["enabled"])
+    try:
+        discovery_enabled = bool(row["discovery_enabled"]) if "discovery_enabled" in row.keys() else True
+    except Exception:
+        discovery_enabled = True
     blockers: List[str] = []
     if not env_enabled:
         blockers.append("OUTREACH_AUTONOMOUS_ENABLED no está 'true' en el VPS")
@@ -18291,15 +18658,17 @@ def _autopilot_config_row(conn) -> Dict[str, Any]:
         blockers.append("SMTP no configurado (no se pueden enviar emails)")
     if False and not google_ok:
         blockers.append("GOOGLE_PLACES_API_KEY vacía (no hay discovery)")
-    if not targets_count:
-        blockers.append("Sin objetivos sector/ciudad configurados")
     tick_state = _outreach_tick_state_snapshot()
     return {
         "enabled": enabled_db,
         "targets": targets,
-        "daily_new_target": int(row["daily_new_target"] or 20),
-        "daily_cold_cap": int(row["daily_cold_cap"] or 30),
+        "generated_targets": generated_targets,
+        "active_targets": active_targets,
+        "target_companies": target_companies,
+        "daily_new_target": target_companies,
+        "daily_cold_cap": int(row["daily_cold_cap"] or target_companies),
         "auto_followups": bool(row["auto_followups"]),
+        "discovery_enabled": discovery_enabled,
         "followup_days": followup_days,
         "last_discovery_at": row["last_discovery_at"] or "",
         "last_cold_at": row["last_cold_at"] or "",
@@ -18307,7 +18676,9 @@ def _autopilot_config_row(conn) -> Dict[str, Any]:
         "env_enabled": env_enabled,
         "smtp_ok": smtp_ok,
         "google_places_ok": google_ok,
-        "targets_count": targets_count,
+        "targets_count": len(active_targets),
+        "manual_targets_count": targets_count,
+        "auto_targets_enabled": targets_count == 0,
         "ready": (env_enabled and enabled_db and smtp_ok),
         "blockers": blockers,
         "active_tick": tick_state if outreach_autonomous_tick_lock.locked() else None,
@@ -18315,6 +18686,12 @@ def _autopilot_config_row(conn) -> Dict[str, Any]:
         "stats": {
             "cold_today": sent_today,
             "imported_24h": imported_24h,
+            "valid_candidates": valid_candidates,
+            "pending_followups": pending_followups,
+            "sent_24h": sent_24h,
+            "followups_24h": followups_24h,
+            "replies_30d": replies_30d,
+            "clicks_30d": clicks_30d,
         },
     }
 
@@ -18343,12 +18720,18 @@ def outreach_autopilot_config_put(payload: AutopilotConfigPayload):
             if s and c:
                 clean_targets.append({"sector": s, "city": c})
         fields.append("targets_json=?"); params.append(json.dumps(clean_targets, ensure_ascii=False))
-    if payload.daily_new_target is not None:
+    if payload.target_companies is not None:
+        target_companies = _autopilot_target_companies(payload.target_companies)
+        fields.append("daily_new_target=?"); params.append(target_companies)
+        fields.append("daily_cold_cap=?"); params.append(target_companies)
+    if payload.daily_new_target is not None and payload.target_companies is None:
         fields.append("daily_new_target=?"); params.append(max(1, min(200, int(payload.daily_new_target))))
-    if payload.daily_cold_cap is not None:
+    if payload.daily_cold_cap is not None and payload.target_companies is None:
         fields.append("daily_cold_cap=?"); params.append(max(1, min(200, int(payload.daily_cold_cap))))
     if payload.auto_followups is not None:
         fields.append("auto_followups=?"); params.append(1 if payload.auto_followups else 0)
+    if payload.discovery_enabled is not None:
+        fields.append("discovery_enabled=?"); params.append(1 if payload.discovery_enabled else 0)
     if payload.followup_days is not None:
         followup_days = _outreach_normalize_followup_days(payload.followup_days)
         fields.append("followup_days_json=?"); params.append(json.dumps(followup_days, ensure_ascii=False))
@@ -18374,10 +18757,18 @@ def outreach_autopilot_config_put(payload: AutopilotConfigPayload):
         _autopilot_log("info", "targets_updated",
                        f"Objetivos actualizados ({result.get('targets_count', 0)} combos)",
                        {"targets": result.get("targets", [])})
+    if payload.target_companies is not None:
+        _autopilot_log("info", "target_companies_updated",
+                       f"Objetivo actualizado: contactar {result.get('target_companies', 0)} empresas",
+                       {"target_companies": result.get("target_companies", 0)})
     if payload.followup_days is not None:
         _autopilot_log("info", "followup_days_updated",
                        "Tiempos de follow-up actualizados",
                        {"followup_days": result.get("followup_days", {})})
+    if payload.discovery_enabled is not None:
+        _autopilot_log("info", "discovery_enabled_updated",
+                       f"Discovery {'activado' if payload.discovery_enabled else 'desactivado'} desde el panel",
+                       {"discovery_enabled": bool(payload.discovery_enabled)})
     return result
 
 
@@ -19272,6 +19663,7 @@ def _outreach_create_campaign(
     force_window: bool,
     status: str = "draft",
     job_id: int = 0,
+    skip_existing: bool = False,
 ) -> int:
     now = _outreach_now()
     unique_emails = list(dict.fromkeys(email.lower().strip() for email in emails if email and "@" in email))
@@ -19285,14 +19677,22 @@ def _outreach_create_campaign(
             unique_emails,
         ).fetchall()
         if existing:
-            examples = ", ".join(
-                f"{r['email']} ({r['campaign_name'] or 'campana #' + str(r['campaign_id'])})"
-                for r in existing[:5]
-            )
-            raise HTTPException(
-                status_code=409,
-                detail=f"{len(existing)} email(s) ya pertenecen a otra campana: {examples}",
-            )
+            if skip_existing:
+                existing_set = {r["email"] for r in existing}
+                unique_emails = [email for email in unique_emails if email not in existing_set]
+                logger.warning(
+                    "_outreach_create_campaign skip_existing: omitidos %d emails ya en campana",
+                    len(existing_set),
+                )
+            else:
+                examples = ", ".join(
+                    f"{r['email']} ({r['campaign_name'] or 'campana #' + str(r['campaign_id'])})"
+                    for r in existing[:5]
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"{len(existing)} email(s) ya pertenecen a otra campana: {examples}",
+                )
     sender = str(settings.get("from_email") or "")
     tracking = int(bool((not OUTREACH_TRACKING_DISABLED) and OUTREACH_TRACKING_SECRET and OUTREACH_TRACKING_BASE_URL))
     cur = conn.execute(
@@ -19852,6 +20252,97 @@ OUTREACH_AUTONOMOUS_CHAIN_KEYWORDS = (
     "donte group", "asisa", "dkv", "mapfre", "adeslas",
 )
 
+OUTREACH_AUTOPILOT_SECTORS = [
+    "clinica dental",
+    "clinica estetica",
+    "fisioterapia",
+    "centro de psicologia",
+    "academia de ingles",
+    "autoescuela",
+    "taller mecanico",
+    "restaurante",
+    "inmobiliaria",
+    "asesoria fiscal",
+    "despacho abogados",
+    "peluqueria",
+    "centro veterinario",
+    "cerrajeria",
+    "empresa de reformas",
+]
+
+OUTREACH_AUTOPILOT_CITIES = [
+    "Madrid", "Barcelona", "Valencia", "Sevilla", "Zaragoza", "Malaga", "Murcia", "Palma",
+    "Las Palmas de Gran Canaria", "Bilbao", "Alicante", "Cordoba", "Valladolid", "Vigo",
+    "Gijon", "Hospitalet de Llobregat", "A Coruna", "Granada", "Vitoria-Gasteiz", "Elche",
+    "Oviedo", "Badalona", "Cartagena", "Terrassa", "Jerez de la Frontera", "Sabadell",
+    "Mostoles", "Alcala de Henares", "Pamplona", "Fuenlabrada", "Almeria", "Leganes",
+    "Donostia", "Burgos", "Santander", "Castellon de la Plana", "Albacete", "Getafe",
+    "Logrono", "Badajoz", "Salamanca", "Huelva", "Lleida", "Tarragona", "Leon", "Cadiz",
+    "Jaen", "Ourense", "Torrejon de Ardoz", "Alcorcon", "Reus", "Girona",
+]
+
+
+def _autopilot_target_companies(value: Any) -> int:
+    try:
+        return max(1, min(200, int(value or 20)))
+    except Exception:
+        return 20
+
+
+def _autopilot_generated_targets(target_count: int, max_targets: int = 18) -> List[Dict[str, str]]:
+    """Rotacion determinista de ciudades/sectores. Evita pedir ciudad o sector al admin."""
+    target_count = _autopilot_target_companies(target_count)
+    limit = max(4, min(max_targets, max(6, target_count * 2)))
+    today_seed = datetime.now(timezone.utc).strftime("%Y%m%d")
+    seed_int = int(hashlib.sha256(today_seed.encode("utf-8")).hexdigest(), 16)
+    combos: List[Dict[str, str]] = []
+    seen = set()
+    city_count = len(OUTREACH_AUTOPILOT_CITIES)
+    sector_count = len(OUTREACH_AUTOPILOT_SECTORS)
+    for i in range(city_count * sector_count):
+        city = OUTREACH_AUTOPILOT_CITIES[(seed_int + i * 7) % city_count]
+        sector = OUTREACH_AUTOPILOT_SECTORS[(seed_int // 17 + i * 5) % sector_count]
+        key = (sector.lower(), city.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        combos.append({"sector": sector, "city": city, "auto": "spain"})
+        if len(combos) >= limit:
+            break
+    return combos
+
+
+def _autopilot_targets_for_run(configured_targets: List[Dict[str, str]], target_count: int) -> List[Dict[str, str]]:
+    clean = []
+    for target in configured_targets or []:
+        sector = str(target.get("sector") or "").strip()
+        city = str(target.get("city") or "").strip()
+        if sector and city:
+            clean.append({"sector": sector, "city": city, "manual": "1"})
+    return clean or _autopilot_generated_targets(target_count)
+
+
+def _autonomous_company_score(company: Any) -> int:
+    email = (getattr(company, "email", "") or "").strip()
+    website = (getattr(company, "website", "") or "").strip()
+    phone = (getattr(company, "phone", "") or "").strip()
+    name = (getattr(company, "business_name", "") or "").strip()
+    niche = f"{getattr(company, 'niche', '')} {getattr(company, 'service_hint', '')}".lower()
+    score = 0
+    if email and "@" in email:
+        score += 35
+    if website.startswith(("http://", "https://")):
+        score += 30
+    if _autonomous_email_is_personal(email):
+        score += 10
+    if phone:
+        score += 5
+    if any(token in niche for token in ("clinic", "dental", "estet", "fisio", "academ", "taller", "restaurant", "inmobili", "asesor", "abogad", "peluquer", "veterin", "reforma")):
+        score += 15
+    if name and not _autonomous_is_chain(name):
+        score += 5
+    return min(score, 100)
+
 
 def _autonomous_is_chain(name: str) -> bool:
     n = (name or "").lower()
@@ -19980,13 +20471,24 @@ def _outreach_autonomous_tick_inner() -> None:
             daily_new_target = int(row["daily_new_target"] or 20)
             daily_cold_cap = int(row["daily_cold_cap"] or 30)
             auto_followups = bool(row["auto_followups"])
+            try:
+                discovery_enabled = bool(row["discovery_enabled"]) if "discovery_enabled" in row.keys() else True
+            except Exception:
+                discovery_enabled = True
             followup_days = _outreach_config_followup_days(conn)
             last_discovery_at = row["last_discovery_at"] or ""
+        target_companies = _autopilot_target_companies(daily_new_target)
+        daily_new_target = target_companies
+        daily_cold_cap = _autopilot_target_companies(daily_cold_cap or target_companies)
+        targets = _autopilot_targets_for_run(targets, target_companies)
         config_detail = {
             "targets_count": len(targets),
+            "auto_targets": not any(t.get("manual") for t in targets),
+            "target_companies": target_companies,
             "daily_new_target": daily_new_target,
             "daily_cold_cap": daily_cold_cap,
             "auto_followups": auto_followups,
+            "discovery_enabled": discovery_enabled,
             "followup_days": followup_days,
         }
         _outreach_tick_state_update(
@@ -20018,6 +20520,12 @@ def _outreach_autonomous_tick_inner() -> None:
 
         # ---- DISCOVERY ----
         run_discovery = True
+        if not discovery_enabled:
+            log("discovery+cold skip: discovery_enabled=false en config")
+            _outreach_tick_state_update("discovery_disabled", "Discovery y cold omitidos: desactivados en panel")
+            _autopilot_log("info", "discovery_disabled",
+                           "Discovery y cold omitidos: desactivados en panel")
+            run_discovery = False
         google_key = os.getenv("GOOGLE_PLACES_API_KEY", "").strip() or "osm-fallback"
         if run_discovery and not google_key:
             log("discovery skip: GOOGLE_PLACES_API_KEY vacío")
@@ -20137,16 +20645,26 @@ def _outreach_autonomous_tick_inner() -> None:
                                 continue
                             if _autonomous_is_chain(getattr(c, "business_name", "")):
                                 continue
+                            score = _autonomous_company_score(c)
+                            if score < int(os.getenv("OUTREACH_AUTONOMOUS_MIN_SCORE", "60") or 60):
+                                _autopilot_log(
+                                    "info",
+                                    "discovery_score_skip",
+                                    f"Saltado {getattr(c, 'business_name', '') or email}: score {score}",
+                                    {"email": email, "score": score, "sector": sector, "city": city},
+                                )
+                                continue
                             payload = c.as_csv_row()
                             payload["email"] = email
+                            payload["score"] = score
                             payload["tags"] = (payload.get("tags") or "") + (",autopilot" if payload.get("tags") else "autopilot")
                             payload["source"] = (payload.get("source") or "autopilot")
                             payload["now"] = now_iso
                             try:
                                 cur = conn.execute(
                                     """INSERT OR IGNORE INTO prospects (email, business_name, contact_name, niche, website,
-                                       service_hint, city, phone, tags, source, created_at, updated_at)
-                                       VALUES (:email,:business_name,:contact_name,:niche,:website,:service_hint,:city,:phone,:tags,:source,:now,:now)""",
+                                       service_hint, city, phone, tags, source, score, created_at, updated_at)
+                                       VALUES (:email,:business_name,:contact_name,:niche,:website,:service_hint,:city,:phone,:tags,:source,:score,:now,:now)""",
                                     payload,
                                 )
                                 if cur.rowcount:
@@ -20275,7 +20793,8 @@ def _outreach_autonomous_tick_inner() -> None:
 
         # ---- FOLLOW-UPS ----
         if auto_followups:
-            params = {"max": 10, "send": True, "delay": 70.0, "jitter": 25.0, "autopilot": True, "followup_days": followup_days}
+            followup_cap = max(1, int(os.getenv("OUTREACH_AUTONOMOUS_FOLLOWUP_CAP", "10000") or 10000))
+            params = {"max": followup_cap, "send": True, "delay": 70.0, "jitter": 25.0, "autopilot": True, "followup_days": followup_days}
             with _outreach_db() as conn:
                 cur = conn.execute(
                     "INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES (?,?,?,?,?)",
@@ -20288,11 +20807,11 @@ def _outreach_autonomous_tick_inner() -> None:
             _outreach_tick_state_update(
                 "followups_launched",
                 f"Follow-ups lanzado: job #{fu_job_id}",
-                detail={"job_id": fu_job_id, "max": 10},
+                detail={"job_id": fu_job_id, "max": followup_cap},
             )
             _autopilot_log("success", "followups_launched",
                            f"Follow-ups lanzado: job #{fu_job_id}",
-                           {"job_id": fu_job_id, "max": 10})
+                           {"job_id": fu_job_id, "max": followup_cap})
         else:
             _outreach_tick_state_update("followups_skip_disabled", "Follow-ups omitidos: auto_followups desactivado en config")
             _autopilot_log("info", "followups_skip_disabled",
@@ -20453,6 +20972,7 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                 force_window=bool(params.get("force_window")),
                 status="running",
                 job_id=job_id,
+                skip_existing=bool(params.get("autopilot")),
             )
             params["campaign_id"] = campaign_id
             conn.execute(

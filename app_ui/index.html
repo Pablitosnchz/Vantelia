@@ -1678,6 +1678,14 @@ async function api(path, opts) {
   return data;
 }
 
+function trackAppEvent(event, metadata) {
+  api('/auth/app/track', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event, metadata: metadata || {} }),
+  }).catch(() => {});
+}
+
 function toast(msg, type) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -2079,6 +2087,11 @@ async function sendPreviewMessage(text) {
     b.textContent = (resp.respuesta || resp.message || '').replace(/\[MOSTRAR_FORMULARIO\]/g, '').trim() || '(sin respuesta)';
     body.appendChild(b);
     body.scrollTop = body.scrollHeight;
+    trackAppEvent('bot_preview_message', {
+      surface: 'right_panel_preview',
+      message_length: text.length,
+      response_length: b.textContent.length,
+    });
   } catch (err) {
     const b = document.createElement('div');
     b.className = 'chat-msg bot';
@@ -2297,9 +2310,18 @@ async function copy(text, btn) {
     btn.textContent = 'Copia manual';
   }
 }
-document.getElementById('depCopySnippet').addEventListener('click', e => copy(state.install_snippet, e.target));
-document.getElementById('depCopyShare').addEventListener('click',   e => copy(state.share_link,     e.target));
-document.getElementById('copyDemoBtn').addEventListener('click',    e => copy(state.demo_url,       e.target));
+document.getElementById('depCopySnippet').addEventListener('click', async e => {
+  await copy(state.install_snippet, e.target);
+  trackAppEvent('snippet_copied', { surface: 'deploy' });
+});
+document.getElementById('depCopyShare').addEventListener('click', async e => {
+  await copy(state.share_link, e.target);
+  trackAppEvent('share_link_copied', { surface: 'deploy' });
+});
+document.getElementById('copyDemoBtn').addEventListener('click', async e => {
+  await copy(state.demo_url, e.target);
+  trackAppEvent('demo_url_copied', { surface: 'overview' });
+});
 document.getElementById('depMailSnippet').addEventListener('click', () => {
   const body = encodeURIComponent(`Hola, este es el código de instalación de mi asistente Vantelia. Por favor, añádelo justo antes de </body> en mi web:\n\n${state.install_snippet}`);
   window.location.href = `mailto:?subject=Código de instalación Vantelia&body=${body}`;

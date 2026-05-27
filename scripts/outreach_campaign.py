@@ -560,7 +560,8 @@ def _template_vars(p: Prospect, unsub: str, stage: str) -> dict[str, str]:
         "signature_html": signature_html(stage),
         "footer_html": footer_html(unsub),
         "footer_text": footer_text(unsub),
-        "cta_html": cta_button_html("Ver mi demo preparada (1 min)", demo_url_with_utm(stage, p)),
+        "cta_url": demo_url_with_utm(stage, p),
+        "cta_html": cta_button_html("Crear bot gratis en 2 min", demo_url_with_utm(stage, p)),
     }
 
 

@@ -1220,7 +1220,7 @@ def test_outreach_preflight_renders_html_even_when_wizard_email_not_imported(cli
     assert data["counts"]["real_candidates"] == 0
     assert data["counts"]["skipped"]["missing_email"] == 1
     assert data["html_active"] is True
-    assert "Ver cómo quedaría en" in data["html"]
+    assert "Crear bot gratis" in data["html"]
 
 
 def test_outreach_email_uses_prefilled_demo_link(client: TestClient, api_module):
@@ -1234,13 +1234,15 @@ def test_outreach_email_uses_prefilled_demo_link(client: TestClient, api_module)
         city="Madrid",
     )
     url = demo_url_with_utm("cold", prospect)
+    assert url.startswith("https://app.vantelia.es/acceso?")
+    assert "signup=1" in url
     assert "utm_source=outreach" in url
     assert "empresa=Clinica+Demo+Norte" in url
     assert "email=prefill.demo%40example.com" in url
     assert "web=https%3A%2F%2Fclinicademo.test" in url
 
     _subject, text, html = render("cold", prospect, "baja@vantelia.es")
-    assert "He preparado un ejemplo de como quedaria" in text
+    assert "crear gratis su asistente IA en menos de 2 minutos" in text
     assert "empresa=Clinica+Demo+Norte" in html
 
 
@@ -1629,6 +1631,31 @@ def test_autopilot_config_followup_days_control_queue_readiness(client: TestClie
             "/admin/outreach/autopilot-config",
             headers=_admin_headers(),
             json={"followup_days": {"fu1": 4, "fu2": 5, "breakup": 6}},
+        )
+
+
+def test_autopilot_config_one_button_target_generates_spain_targets(client: TestClient):
+    try:
+        resp = client.put(
+            "/admin/outreach/autopilot-config",
+            headers=_admin_headers(),
+            json={"target_companies": 12, "targets": []},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["target_companies"] == 12
+        assert data["daily_new_target"] == 12
+        assert data["daily_cold_cap"] == 12
+        assert data["auto_targets_enabled"] is True
+        assert data["targets"] == []
+        assert len(data["generated_targets"]) >= 4
+        assert len(data["active_targets"]) == len(data["generated_targets"])
+        assert all(item["sector"] and item["city"] for item in data["active_targets"])
+    finally:
+        client.put(
+            "/admin/outreach/autopilot-config",
+            headers=_admin_headers(),
+            json={"target_companies": 20},
         )
 
 
@@ -2279,6 +2306,45 @@ def test_app_overview_returns_stats_for_self_serve_user(client: TestClient, api_
     assert "training_chars" in data["stats"]
     # training_chars > 0 because the fake onboarding wrote info.txt
     assert data["stats"]["training_chars"] > 0
+
+
+def test_self_service_funnel_tracks_activation_and_install(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Funnel")
+    site_click = client.post(
+        "/analytics/event",
+        json={
+            "event": "plan_signup_clicked",
+            "event_source": "vantelia_site",
+            "page_path": "/planes/",
+            "page_url": "https://www.vantelia.es/planes/",
+            "cta_href": "https://app.vantelia.es/acceso?signup=1",
+            "source": "pytest",
+        },
+    )
+    preview = client.post(
+        "/auth/app/track",
+        cookies=cookies,
+        json={"event": "bot_preview_message", "metadata": {"surface": "right_panel_preview", "message_length": 14}},
+    )
+    snippet = client.post(
+        "/auth/app/track",
+        cookies=cookies,
+        json={"event": "snippet_copied", "metadata": {"surface": "deploy"}},
+    )
+    dashboard = client.get("/admin/self-service-funnel?days=30", headers=_admin_headers())
+
+    assert site_click.status_code == 200
+    assert preview.status_code == 200
+    assert snippet.status_code == 200
+    assert dashboard.status_code == 200, dashboard.text
+    payload = dashboard.json()
+    assert payload["kpis"]["free_bot_clicks"] >= 1
+    assert payload["kpis"]["signups"] >= 1
+    assert payload["kpis"]["bots_created"] >= 1
+    assert payload["kpis"]["activated_bots"] >= 1
+    assert payload["kpis"]["snippet_copied"] >= 1
+    assert any(step["key"] == "snippet_copied" for step in payload["funnel"])
+    assert any(item["cliente_id"] == cliente_id for item in payload["recent_bots"])
 
 
 def test_app_overview_400_when_no_cliente(client: TestClient, api_module):

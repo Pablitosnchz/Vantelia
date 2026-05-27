@@ -135,39 +135,39 @@ def _personal_line_html(p: Prospect) -> str:
 # "consulta rapida", signos de admiracion, mayusculas).
 
 SUBJECTS_COLD_A = [
-    "duda sobre {business}",
-    "5 min, {first_or_team}?",
-    "{business} y la web",
-    "pregunta rapida {first_or_team}",
+    "una pregunta sobre {business}",
+    "cuantas veces repite tu equipo lo mismo?",
+    "{business}: os llegan preguntas fuera de horario?",
+    "algo util para {business}",
 ]
 
 SUBJECTS_COLD_B = [
-    "una idea para {business}",
-    "{first_or_team}, esto encaja?",
-    "{business} - una pregunta",
-    "antes de cerrar la semana, {first_or_team}",
+    "para {business}",
+    "{first_or_team}, cuantas llamadas con las mismas preguntas?",
+    "idea rapida para {business}",
+    "esto puede ayudar a {business}",
 ]
 
 SUBJECTS_FU1_A = [
-    "lo dejo aqui {first_or_team}",
+    "por si no llegaste",
     "re: {business}",
-    "ultima por aqui",
+    "{first_or_team}, lo viste?",
 ]
 
 SUBJECTS_FU1_B = [
-    "{first_or_team}, lo viste?",
-    "vuelvo con esto {first_or_team}",
-    "{business} - sigue en pie",
+    "vuelvo un momento {first_or_team}",
+    "{business} - lo dejo aqui",
+    "por si te perdiste el anterior",
 ]
 
 SUBJECTS_FU2_A = [
-    "ejemplo de 30 segundos para {business}",
-    "{business} - mira esto",
+    "mira como queda para {business}",
+    "{business}: 30 segundos",
 ]
 
 SUBJECTS_FU2_B = [
-    "te dejo el esquema {first_or_team}",
-    "{business}: como quedaria",
+    "lo tienes listo {first_or_team}",
+    "{business}: asi funciona",
 ]
 
 SUBJECTS_BREAKUP_A = [
@@ -223,6 +223,8 @@ def pick_subject_with_variant(stage: str, p: Prospect) -> tuple[str, str]:
 
 
 VANTELIA_SIGNATURE = {
+    "sender_name": "Pablo",
+    "sender_role": "Fundador, Vantelia",
     "company_name": "Vantelia",
     "phone": "+34 675 802 001",
     "phone_href": "+34675802001",
@@ -238,48 +240,45 @@ VANTELIA_SIGNATURE = {
 
 
 SIGNATURE_TEXT = (
-    f"{VANTELIA_SIGNATURE['company_name']}\n"
-    f"{VANTELIA_SIGNATURE['phone']}\n"
-    f"{VANTELIA_SIGNATURE['email']}\n"
+    f"{VANTELIA_SIGNATURE['sender_name']}\n"
+    f"{VANTELIA_SIGNATURE['sender_role']}\n"
+    f"{VANTELIA_SIGNATURE['phone']} · {VANTELIA_SIGNATURE['email']}\n"
     f"{VANTELIA_SIGNATURE['website']}\n"
-    f"{VANTELIA_SIGNATURE['address']}\n"
 )
 
 
 def signature_html(stage: str) -> str:
-    # Firma corporativa compatible con clientes de email: tabla simple e inline styles.
-    signature = VANTELIA_SIGNATURE
+    s = VANTELIA_SIGNATURE
     return (
         '<table role="presentation" cellpadding="0" cellspacing="0" '
-        'style="width:100%;max-width:560px;margin-top:16px;border-top:1px solid #e5e7eb;'
-        'padding-top:18px;font-family:Arial,Helvetica,sans-serif;">'
-        '<tr>'
-        '<td style="padding:0 0 12px 0;">'
-        f'<img src="{html_lib.escape(signature["logo_url"], quote=True)}" '
-        f'alt="{html_lib.escape(signature["company_name"], quote=True)}" '
-        'style="display:block;max-width:150px;height:auto;border:0;">'
-        '</td>'
-        '</tr>'
+        'style="width:100%;max-width:560px;margin-top:20px;border-top:2px solid #e5e7eb;'
+        'padding-top:16px;font-family:Arial,Helvetica,sans-serif;">'
+        '<tr><td style="padding-bottom:10px;">'
+        f'<img src="{html_lib.escape(s["logo_url"], quote=True)}" '
+        f'alt="{html_lib.escape(s["company_name"], quote=True)}" '
+        'style="display:block;max-width:120px;height:auto;border:0;">'
+        '</td></tr>'
         '<tr>'
         '<td style="font-size:14px;line-height:1.6;color:#1f2937;">'
-        f'<strong style="font-size:15px;color:#111827;">{html_lib.escape(signature["company_name"])}</strong><br>'
-        f'<a href="tel:{html_lib.escape(signature["phone_href"], quote=True)}" '
-        f'style="color:#00a9cc;text-decoration:none;font-weight:700;">{html_lib.escape(signature["phone"])}</a><br>'
-        f'<a href="mailto:{html_lib.escape(signature["email"], quote=True)}" '
-        f'style="color:#00a9cc;text-decoration:none;font-weight:700;">{html_lib.escape(signature["email"])}</a><br>'
-        f'<a href="{html_lib.escape(signature["website"], quote=True)}" '
-        f'style="color:#00a9cc;text-decoration:none;font-weight:700;">{html_lib.escape(signature["website_label"])}</a><br>'
-        f'<span style="color:#6b7280;">{html_lib.escape(signature["address"])}</span>'
+        f'<strong style="font-size:15px;color:#111827;">{html_lib.escape(s["sender_name"])}</strong>'
+        f'<span style="color:#6b7280;font-size:13px;"> — {html_lib.escape(s["sender_role"])}</span><br>'
+        f'<a href="tel:{html_lib.escape(s["phone_href"], quote=True)}" '
+        f'style="color:#00a9cc;text-decoration:none;">{html_lib.escape(s["phone"])}</a>'
+        f' · <a href="mailto:{html_lib.escape(s["email"], quote=True)}" '
+        f'style="color:#00a9cc;text-decoration:none;">{html_lib.escape(s["email"])}</a><br>'
+        f'<a href="{html_lib.escape(s["website"], quote=True)}" '
+        f'style="color:#00a9cc;text-decoration:none;font-weight:600;">{html_lib.escape(s["website_label"])}</a>'
+        f'<span style="color:#9ca3af;font-size:12px;"> · {html_lib.escape(s["address"])}</span>'
         '</td>'
         '</tr>'
         '</table>'
     )
 
 
-DEMO_REPLY_SUBJECT = "Demo gratuita Vantelia"
+DEMO_REPLY_SUBJECT = "Crear bot gratis Vantelia"
 DEMO_REPLY_BODY = (
     "Buenas,\n\n"
-    "Me interesa. Preparame la demo gratuita sin compromiso.\n\n"
+    "Me interesa crear el bot gratis para mi web.\n\n"
     "Gracias."
 )
 
@@ -298,7 +297,7 @@ def demo_reply_mailto(to_email: str | None = None) -> str:
     )
 
 
-DEMO_PAGE_URL = "https://www.vantelia.es/demo/"
+DEMO_PAGE_URL = os.getenv("OUTREACH_SIGNUP_URL", "https://app.vantelia.es/acceso").strip() or "https://app.vantelia.es/acceso"
 
 
 def _demo_sector_for_prospect(p: Prospect) -> str:
@@ -322,6 +321,7 @@ def _demo_sector_for_prospect(p: Prospect) -> str:
 
 def demo_url_with_utm(stage: str, p: Prospect | None = None) -> str:
     params = {
+        "signup": "1",
         "utm_source": "outreach",
         "utm_medium": "email",
         "utm_campaign": stage,
@@ -333,7 +333,8 @@ def demo_url_with_utm(stage: str, p: Prospect | None = None) -> str:
             "email": p.email or "",
             "web": p.website or "",
         })
-    return f"{DEMO_PAGE_URL}?{urlencode({k: v for k, v in params.items() if v})}"
+    separator = "&" if "?" in DEMO_PAGE_URL else "?"
+    return f"{DEMO_PAGE_URL}{separator}{urlencode({k: v for k, v in params.items() if v})}"
 
 
 def calendar_url() -> str:
@@ -430,7 +431,7 @@ def _booking_minutes() -> int:
 def _cta_block(primary_text: str, stage: str = "cold", p: Prospect | None = None) -> tuple[str, str]:
     """Devuelve (text_cta, html_cta). CTA con UTM por stage para analytics."""
     if p and p.business_name:
-        primary_text = f"Ver cómo quedaría en {p.business_name}"
+        primary_text = f"Crear bot gratis para {p.business_name}"
     utm_url = demo_url_with_utm(stage, p)
     book = calendar_url()
     minutes = _booking_minutes()
@@ -458,14 +459,16 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
         f'<p style="margin:0 0 14px 0;">{html_lib.escape(proof_final)}</p>' if proof_final else ""
     )
     subject, _variant = pick_subject_with_variant("cold", p)
-    cta_text, cta_html = _cta_block("Ver mi demo preparada (1 min)", "cold", p)
+    cta_text, cta_html = _cta_block("Crear mi bot gratis en 2 min", "cold", p)
     text = (
         f"{p.greeting}\n\n"
         f"{personal_text}"
-        f"Soy Pablo, de Vantelia. Monto asistentes IA en web y WhatsApp para que "
-        f"{task}, sin que tu equipo escriba lo mismo cada dia.\n\n"
+        f"Soy Pablo, de Vantelia. Hemos cambiado el enfoque: ya no hace falta pedir una demo ni esperar a que alguien la monte.\n\n"
+        f"Ahora cualquier negocio puede crear gratis su asistente IA en menos de 2 minutos: pegas la URL de la web, "
+        f"Vantelia lee el contenido, genera el bot y lo puedes probar antes de instalarlo.\n\n"
+        f"Para {p.business_name} encaja especialmente para {task}, sin que tu equipo repita las mismas respuestas cada dia.\n\n"
         f"{proof_text}"
-        f"He preparado un ejemplo de como quedaria para {p.business_name}; puedes verlo en un clic.\n"
+        f"El plan gratuito incluye 50 mensajes/mes y no pide tarjeta.\n"
         f"{cta_text}\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
@@ -474,11 +477,13 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     inner = (
         f'<p>{html_lib.escape(p.greeting)}</p>'
         f'{personal_html}'
-        f'<p>Soy Pablo, de Vantelia. Monto asistentes IA en web y WhatsApp para que '
-        f'{html_lib.escape(task)}, sin que tu equipo escriba lo mismo cada dia.</p>'
+        f'<p>Soy Pablo, de Vantelia. Hemos cambiado el enfoque: ya no hace falta pedir una demo ni esperar a que alguien la monte.</p>'
+        f'<p>Ahora cualquier negocio puede crear gratis su asistente IA en menos de 2 minutos: pega la URL de la web, '
+        f'Vantelia lee el contenido, genera el bot y lo puedes probar antes de instalarlo.</p>'
+        f'<p>Para {html_lib.escape(p.business_name)} encaja especialmente para {html_lib.escape(task)}, '
+        f'sin que tu equipo repita las mismas respuestas cada dia.</p>'
         f'{proof_html}'
-        f'<p>He preparado un ejemplo de como quedaria para '
-        f'{html_lib.escape(p.business_name)}; puedes verlo en un clic.</p>'
+        f'<p>El plan gratuito incluye 50 mensajes/mes y no pide tarjeta.</p>'
         f'{cta_html}'
         f'{signature_html("cold")}'
         f'{footer_html(unsubscribe_mailto)}'
@@ -489,11 +494,13 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     personal_line = _personal_line_text(p)
     personal_text = f"{personal_line}\n\n" if personal_line else ""
-    cta_text, cta_html = _cta_block("Abrir demo preparada (1 min)", "fu1", p)
+    cta_text, cta_html = _cta_block("Crear bot gratis en 2 min", "fu1", p)
     text = (
         f"{p.greeting}\n\n"
         f"{personal_text}"
-        f"Te escribi hace unos dias. Por si no lo viste, te dejo el ejemplo de como quedaria para {p.business_name}.\n"
+        f"Te escribi hace unos dias. Por si no lo viste: Vantelia ya funciona en modo self-service.\n\n"
+        f"Puedes crear el bot de {p.business_name} gratis pegando vuestra URL. El sistema lee la web, genera el asistente y te deja probarlo antes de copiar el snippet.\n\n"
+        f"Sin llamada, sin tarjeta y sin esperar a que preparemos nada manualmente.\n"
         f"{cta_text}\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
@@ -502,8 +509,10 @@ def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     inner = (
         f'<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{html_lib.escape(p.greeting)}</p>'
         f'{personal_html}'
-        f'<p style="margin:0 0 14px 0;">Te escribi hace unos dias. Por si no lo viste, '
-        f'te dejo el ejemplo de como quedaria para {html_lib.escape(p.business_name)}.</p>'
+        f'<p style="margin:0 0 14px 0;">Te escribi hace unos dias. Por si no lo viste: Vantelia ya funciona en modo self-service.</p>'
+        f'<p style="margin:0 0 14px 0;">Puedes crear el bot de {html_lib.escape(p.business_name)} gratis pegando vuestra URL. '
+        f'El sistema lee la web, genera el asistente y te deja probarlo antes de copiar el snippet.</p>'
+        f'<p style="margin:0 0 14px 0;">Sin llamada, sin tarjeta y sin esperar a que preparemos nada manualmente.</p>'
         f'{cta_html}'
         f'{signature_html("fu1")}'
         f'{footer_html(unsubscribe_mailto)}'
@@ -515,12 +524,16 @@ def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     personal_line = _personal_line_text(p)
     personal_text = f"{personal_line}\n\n" if personal_line else ""
-    cta_text, cta_html = _cta_block("Abrir demo preparada (1 min)", "fu2", p)
+    task, _outcome, _proof = niche_copy(p.niche, p.service_hint)
+    cta_text, cta_html = _cta_block("Probar el flujo gratis", "fu2", p)
     text = (
         f"{p.greeting}\n\n"
         f"{personal_text}"
-        f"Ultimo intento. He preparado el ejemplo especifico para {p.business_name}: "
-        f"como responderia el asistente, que preguntas cubriria y como captaria datos.\n\n"
+        f"Te dejo el flujo exacto para probarlo sin hablar con ventas:\n\n"
+        f"1. Pegas la URL de {p.business_name}.\n"
+        f"2. Vantelia lee la web y genera el bot.\n"
+        f"3. Lo pruebas y, si encaja, copias el snippet en vuestra web.\n\n"
+        f"Sirve para {task} y empezar a medir si convierte visitas en conversaciones reales.\n\n"
         f"{cta_text}\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
@@ -529,9 +542,13 @@ def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     inner = (
         f'<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{html_lib.escape(p.greeting)}</p>'
         f'{personal_html}'
-        f'<p style="margin:0 0 14px 0;">Ultimo intento. He preparado el ejemplo especifico para '
-        f'{html_lib.escape(p.business_name)}: como responderia el asistente, '
-        f'que preguntas cubriria y como captaria datos.</p>'
+        f'<p style="margin:0 0 14px 0;">Te dejo el flujo exacto para probarlo sin hablar con ventas:</p>'
+        f'<ol style="margin:0 0 14px 18px;padding:0;">'
+        f'<li>Pegas la URL de {html_lib.escape(p.business_name)}.</li>'
+        f'<li>Vantelia lee la web y genera el bot.</li>'
+        f'<li>Lo pruebas y, si encaja, copias el snippet en vuestra web.</li>'
+        f'</ol>'
+        f'<p style="margin:0 0 14px 0;">Sirve para {html_lib.escape(task)} y empezar a medir si convierte visitas en conversaciones reales.</p>'
         f'{cta_html}'
         f'{signature_html("fu2")}'
         f'{footer_html(unsubscribe_mailto)}'
@@ -543,11 +560,12 @@ def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 def render_breakup(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     personal_line = _personal_line_text(p)
     personal_text = f"{personal_line}\n\n" if personal_line else ""
+    cta_text, cta_html = _cta_block("Crear bot gratis", "breakup", p)
     text = (
         f"{p.greeting}\n\n"
         f"{personal_text}"
-        f"Lo dejo por ahora para no insistir. Si en otro momento te interesa, "
-        f"responde a este correo y lo preparo.\n\n"
+        f"Lo dejo por ahora para no insistir. Si en otro momento os interesa, podeis crear el bot gratis directamente desde aqui:\n"
+        f"{cta_text}\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
@@ -556,7 +574,8 @@ def render_breakup(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]
         f'<p style="margin:0 0 16px 0;font-size:16px;color:#0B132B;">{html_lib.escape(p.greeting)}</p>'
         f'{personal_html}'
         f'<p style="margin:0 0 14px 0;">Lo dejo por ahora para no insistir. '
-        f'Si en otro momento te interesa, responde a este correo y lo preparo.</p>'
+        f'Si en otro momento os interesa, podeis crear el bot gratis directamente desde aqui.</p>'
+        f'{cta_html}'
         f'{signature_html("breakup")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
