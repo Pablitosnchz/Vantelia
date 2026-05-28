@@ -300,19 +300,18 @@ def discover_real(
                 handle = _extract_ig_handle_from_website(website, http)
                 if not handle or handle in seen_handles or handle in suppressed:
                     continue
-                time.sleep(rate_limit_sec)
-                meta = _fetch_ig_profile_meta(handle, http)
-                if not meta.get("ok"):
-                    continue
-                if min_followers > 0 and meta.get("followers", 0) < min_followers:
-                    continue
+                # IG bloquea fetch publico sin login (302 + 429). No verificamos
+                # bio aqui — confiamos en Places + handle valido + no chain.
+                # La verificacion real ocurre al abrir el perfil con Playwright
+                # autenticado en el autosend.
+                bio_snippet = ""
                 cand = IGCandidate(
                     username=handle,
                     business_name=name,
                     niche=sector,
                     city=city,
                     website=website,
-                    bio_snippet=meta.get("bio", "")[:240],
+                    bio_snippet=bio_snippet,
                     place_rating=rating,
                 )
                 out.append(cand)
