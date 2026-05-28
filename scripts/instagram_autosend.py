@@ -185,9 +185,10 @@ def save_session_from_cookies(
     ds_user_id = (ds_user_id or "").strip()
     if not sessionid or not csrftoken or not ds_user_id:
         raise ValueError("Faltan cookies obligatorias: sessionid, csrftoken, ds_user_id")
-    # Validacion ligera de formato.
-    if ":" not in sessionid:
-        raise ValueError("Formato sessionid inesperado (esperaba '<uid>%3A...').")
+    # Validacion ligera: sessionid suele tener separador ':' o '%3A'.
+    sep_ok = (":" in sessionid) or ("%3A" in sessionid.upper())
+    if not sep_ok or len(sessionid) < 20:
+        raise ValueError("Formato sessionid inesperado. Copia el valor completo de la cookie.")
 
     target = state_path or _session_path()
     _ensure_session_dir(target)
