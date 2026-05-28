@@ -312,8 +312,16 @@ def _debug_screenshot(page, username: str, tag: str) -> None:
 
 
 def _count_message_bubbles(page) -> int:
-    """Cuenta burbujas de mensaje en thread. Robusto a cambios de markup IG."""
+    """Cuenta burbujas de mensaje en thread. Robusto a cambios markup IG.
+
+    IG renderiza texto de cada mensaje dentro de divs/spans con dir="auto"
+    (mas estable que clases CSS dinamicas). El composer NO usa dir="auto"
+    sino contenteditable. Si hay >=1 div[dir="auto"] en la zona del chat,
+    asumimos historial previo.
+    """
     selectors = [
+        'div[dir="auto"]',
+        'span[dir="auto"]',
         'div[role="row"]',
         'div[data-testid="message-container"]',
         'div[data-block="message"]',
@@ -327,6 +335,25 @@ def _count_message_bubbles(page) -> int:
         except Exception:
             continue
     return best
+
+
+def _already_contacted(page) -> bool:
+    """Detecta si ya hay historial de mensajes con este usuario.
+
+    Senyales acumulativas:
+    - URL contiene /direct/t/ Y hay >=2 divs dir=auto visibles
+    - O directamente hay >=3 burbujas detectadas
+    """
+    try:
+        url = page.url or ""
+    except Exception:
+        url = ""
+    bubbles = _count_message_bubbles(page)
+    if "/direct/t/" in url and bubbles >= 2:
+        return True
+    if bubbles >= 3:
+        return True
+    return False
 
 
 def _verify_sent(page, message: str, baseline: int, composer, timeout_sec: int = 12) -> bool:
@@ -506,6 +533,11 @@ def _send_one(page, username: str, message: str) -> bool:
         pass
     # Usa page.keyboard.type tras focus para evitar Locator.type timeout en
     # contenteditable raros. Escribe al elemento activo.
+    # Si ya hay historial en este thread → ya contactado → skip (no spam).
+    if _already_contacted(page):
+        _debug_screenshot(page, username, "03_already_contacted")
+        raise RuntimeError("ya_contactado")
+
     # Baseline ANTES de escribir: cuantas burbujas hay ahora.
     baseline_bubbles = _count_message_bubbles(page)
 
@@ -597,8 +629,21 @@ def autosend_drafts(drafts: Iterable[Dict[str, Any]], dry_run: bool = False) -> 
                     _mark_send_state(conn, send_id, "draft", "no_enviado")
             except Exception as exc:
                 err = str(exc)[:200]
-                logger.warning("autosend FAIL -> @%s: %s", username, err)
-                _mark_send_state(conn, send_id, "skipped", f"autosend:{err}")
+                if "ya_contactado" in err:
+                    logger.info("autosend SKIP -> @%s: ya contactado previamente", username)
+                    _mark_send_state(conn, send_id, "skipped", "ya_contactado")
+                    # Marcar prospect para no reintentar
+                    try:
+                        conn.execute(
+                            "UPDATE ig_prospects SET status='contacted', updated_at=? WHERE username=?",
+                            (_now_iso(), username),
+                        )
+                        conn.commit()
+                    except Exception:
+                        pass
+                else:
+                    logger.warning("autosend FAIL -> @%s: %s", username, err)
+                    _mark_send_state(conn, send_id, "skipped", f"autosend:{err}")
                 if "sesion_expirada" in err:
                     break
             # Refrescar storage state por si IG rota cookies.
