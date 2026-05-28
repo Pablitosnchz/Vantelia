@@ -439,14 +439,14 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         <div class="no-account-body">
           <p class="no-account-title">No encontramos esa cuenta</p>
-          <p class="no-account-sub">¿Es la primera vez que accedes? Puedes crear tu cuenta ahora.</p>
-          <button class="btn-primary no-account-cta" id="promptCreateBtn" type="button">Crear cuenta gratis</button>
+          <p class="no-account-sub">¿Es la primera vez que accedes? Crea gratis tu asistente IA y pega tu web para probarlo.</p>
+          <button class="btn-primary no-account-cta" id="promptCreateBtn" type="button">Crea gratis tu asistente IA</button>
         </div>
       </div>
 
       <div class="switch-mode">
         ¿No tienes cuenta?
-        <button class="link-btn" id="showSignupBtn" type="button">Crear cuenta gratis</button>
+        <button class="link-btn" id="showSignupBtn" type="button">Crea gratis tu asistente IA</button>
       </div>
     </div>
 
@@ -491,7 +491,7 @@
       </label>
 
       <button class="btn-primary" id="signupBtn" type="button">
-        <span class="btn-text">Crear cuenta gratis</span>
+        <span class="btn-text">Crea gratis tu asistente IA</span>
         <span class="btn-spinner" aria-hidden="true"></span>
       </button>
 
@@ -600,7 +600,7 @@ const urlParams  = new URLSearchParams(window.location.search);
 const state = {
   view:                   urlParams.get('reset_token')
                             ? 'reset'
-                            : (urlParams.get('claim') ? 'signup' : 'login'),
+                            : ((urlParams.get('claim') || urlParams.get('signup') === '1' || urlParams.get('mode') === 'signup') ? 'signup' : 'login'),
   resetToken:             (urlParams.get('reset_token') || '').trim(),
   nextUrl:                (urlParams.get('next') || '').trim(),
   claim:                  (urlParams.get('claim') || '').trim(),
@@ -692,10 +692,28 @@ async function api(path, opts) {
   return data;
 }
 
+function trackAccessEvent(event, payload) {
+  try {
+    fetch('/analytics/event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({
+        event,
+        event_source: 'vantelia_app',
+        page_path: window.location.pathname,
+        page_url: window.location.href,
+        source: 'access_ui',
+        ...(payload || {}),
+      }),
+    }).catch(() => {});
+  } catch (_) {}
+}
+
 // ── Gestión de vistas ───────────────────────────────────────────────
 const viewConfig = {
   login:  { el: el.loginView,  title: 'Acceso al portal',      subtitle: 'Introduce tus credenciales para continuar.' },
-  signup: { el: el.signupView, title: 'Crea tu cuenta',        subtitle: 'Empieza gratis. 50 mensajes/mes sin tarjeta.' },
+  signup: { el: el.signupView, title: 'Crea gratis tu asistente IA', subtitle: 'Pega tu web y pruebalo en 2 minutos. 50 mensajes/mes sin tarjeta.' },
   forgot: { el: el.forgotView, title: 'Recuperar contraseña',  subtitle: 'Introduce tu correo y te enviamos un enlace seguro.' },
   reset:  { el: el.resetView,  title: 'Nueva contraseña',      subtitle: 'Define tu nueva contraseña para recuperar el acceso.' },
 };
@@ -786,6 +804,7 @@ async function signup() {
   if (!pw || pw.length < 8) { setStatus(el.signupStatus, 'Contraseña mínima 8 caracteres.', 'error'); return; }
   setStatus(el.signupStatus, 'Creando cuenta...', 'info');
   setLoading(el.signupBtn, true);
+  trackAccessEvent('signup_clicked', { cta_label: 'Crear cuenta gratis', cta_href: window.location.href });
   try {
     const payload = {
       email,
@@ -808,6 +827,9 @@ async function signup() {
 }
 
 function startGoogle(intent) {
+  if ((intent || 'login') === 'signup') {
+    trackAccessEvent('signup_clicked', { cta_label: 'Crear cuenta con Google', signup_source: 'google' });
+  }
   const next = state.nextUrl ? `&next=${encodeURIComponent(state.nextUrl)}` : '';
   const claim = state.claim ? `&claim=${encodeURIComponent(state.claim)}` : '';
   window.location.href = `/auth/google/start?intent=${encodeURIComponent(intent || 'login')}${next}${claim}`;
@@ -865,9 +887,13 @@ el.loginBtn.addEventListener('click',      login);
 el.signupBtn.addEventListener('click',     signup);
 el.googleLoginBtn.addEventListener('click', () => startGoogle('login'));
 el.googleSignupBtn.addEventListener('click',() => startGoogle('signup'));
-el.showSignupBtn.addEventListener('click',  () => { setView('signup'); setStatus(el.signupStatus, '', null); });
+el.showSignupBtn.addEventListener('click',  () => {
+  trackAccessEvent('signup_clicked', { cta_label: 'Crear cuenta gratis', source: 'access_switch' });
+  setView('signup'); setStatus(el.signupStatus, '', null);
+});
 el.promptCreateBtn.addEventListener('click', () => {
   const emailVal = el.email.value.trim();
+  trackAccessEvent('signup_clicked', { cta_label: 'Crear cuenta gratis', source: 'no_account_prompt' });
   setView('signup');
   setStatus(el.signupStatus, '', null);
   if (emailVal) el.signupEmail.value = emailVal;
@@ -892,6 +918,13 @@ el.resetPasswordConfirm.addEventListener('keydown', e => { if (e.key === 'Enter'
 setView(state.view);
 renderForgotBtn();
 if (state.view === 'reset') setStatus(el.resetStatus, 'Define tu nueva contraseña para recuperar el acceso.', 'info');
+trackAccessEvent('landing_view', { page_type: 'access', step: state.view });
+if (state.view === 'signup') {
+  trackAccessEvent('signup_clicked', {
+    cta_label: 'Vista registro',
+    source: urlParams.get('claim') ? 'claim' : (urlParams.get('signup') === '1' ? 'signup_param' : 'direct_signup'),
+  });
+}
 if (googleError) {
   const target = state.view === 'signup' ? el.signupStatus : el.loginStatus;
   const msg = googleError === 'signup_disabled'

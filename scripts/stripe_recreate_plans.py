@@ -1,4 +1,4 @@
-"""Crea productos y precios nuevos para los planes Web/WhatsApp/Completo.
+"""Crea productos y precios nuevos para los planes Starter/Pro/Business.
 
 Lee STRIPE_SECRET_KEY desde .env, archiva precios anteriores que estén
 en STRIPE_PRICE_* del .env, y crea nuevos productos + precios mensuales y
@@ -40,11 +40,17 @@ def main() -> int:
 
     old_price_keys = [
         "STRIPE_PRICE_ESENCIAL",
+        "STRIPE_PRICE_WEB",
         "STRIPE_PRICE_PRO",
+        "STRIPE_PRICE_WHATSAPP",
         "STRIPE_PRICE_EMPRESA",
+        "STRIPE_PRICE_COMPLETO",
         "STRIPE_PRICE_ESENCIAL_ANNUAL",
+        "STRIPE_PRICE_WEB_ANNUAL",
         "STRIPE_PRICE_PRO_ANNUAL",
+        "STRIPE_PRICE_WHATSAPP_ANNUAL",
         "STRIPE_PRICE_EMPRESA_ANNUAL",
+        "STRIPE_PRICE_COMPLETO_ANNUAL",
     ]
     for k in old_price_keys:
         old_id = env.get(k, "").strip()
@@ -58,25 +64,25 @@ def main() -> int:
 
     plans = [
         {
-            "key": "web",
-            "name": "Vantelia · Plan Web",
-            "description": "Asistente IA en tu web (widget). 1 mes gratis.",
+            "key": "starter",
+            "name": "Vantelia · Starter",
+            "description": "Asistente IA con leads, documentos y marca personalizada.",
+            "monthly_eur": 19,
+            "annual_eur": 190,
+        },
+        {
+            "key": "pro",
+            "name": "Vantelia · Pro",
+            "description": "Asistente IA con reservas, agenda integrada y Live Chat.",
             "monthly_eur": 49,
-            "annual_monthly_eur": 42,
+            "annual_eur": 490,
         },
         {
-            "key": "whatsapp",
-            "name": "Vantelia · Plan WhatsApp",
-            "description": "Asistente IA en WhatsApp Business. 1 mes gratis.",
-            "monthly_eur": 79,
-            "annual_monthly_eur": 67,
-        },
-        {
-            "key": "completo",
-            "name": "Vantelia · Plan Completo",
-            "description": "Asistente IA en web + WhatsApp con un solo cerebro. 1 mes gratis.",
-            "monthly_eur": 89,
-            "annual_monthly_eur": 76,
+            "key": "business",
+            "name": "Vantelia · Business",
+            "description": "Asistente IA omnicanal con WhatsApp, integraciones y alto volumen.",
+            "monthly_eur": 149,
+            "annual_eur": 1490,
         },
     ]
 
@@ -97,7 +103,7 @@ def main() -> int:
             nickname=f"{p['key']}-monthly",
             metadata={"plan": p["key"], "billing_period": "monthly"},
         )
-        a_unit = p["annual_monthly_eur"] * 12 * 100
+        a_unit = p["annual_eur"] * 100
         a = stripe.Price.create(
             product=product.id,
             currency="eur",
@@ -109,7 +115,7 @@ def main() -> int:
         out[f"STRIPE_PRICE_{p['key'].upper()}"] = m.id
         out[f"STRIPE_PRICE_{p['key'].upper()}_ANNUAL"] = a.id
         print(f"    monthly  {m.id}  ({p['monthly_eur']}€/mes)")
-        print(f"    annual   {a.id}  ({p['annual_monthly_eur']*12}€/año = {p['annual_monthly_eur']}€/mes)")
+        print(f"    annual   {a.id}  ({p['annual_eur']}€/año)")
 
     print("\n=== Pega esto en .env ===")
     for k, v in out.items():

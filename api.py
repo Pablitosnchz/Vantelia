@@ -2430,7 +2430,7 @@ class AuthUserPublic(BaseModel):
     role: str
     cliente_id: str = ""
     plan: str = PLAN_DEFAULT
-    plan_label: str = "Web"
+    plan_label: str = "Free"
     last_login_at: str = ""
     as_admin_session: bool = False
     impersonator_email: str = ""
@@ -4603,7 +4603,7 @@ def _send_checkout_admin_notification(
         f"  Stripe customer: {customer_id or '-'}\n"
         f"  Stripe subscription: {subscription_id or '-'}\n"
         f"  Stripe session: {session_id or '-'}\n"
-        f"  Trial: 30 dias gratis\n\n"
+        f"  Condiciones: sin permanencia. IVA no incluido.\n\n"
         f"Panel: https://app.vantelia.es/dashboard\n"
     )
     html_body = (
@@ -4619,7 +4619,7 @@ def _send_checkout_admin_notification(
         f"<tr><td><strong>Stripe customer</strong></td><td>{escape(customer_id or '-')}</td></tr>"
         f"<tr><td><strong>Stripe subscription</strong></td><td>{escape(subscription_id or '-')}</td></tr>"
         f"<tr><td><strong>Stripe session</strong></td><td>{escape(session_id or '-')}</td></tr>"
-        f"<tr><td><strong>Trial</strong></td><td>30 dias gratis</td></tr>"
+        f"<tr><td><strong>Condiciones</strong></td><td>Sin permanencia. IVA no incluido.</td></tr>"
         f"</table>"
         f"<p><a href='https://app.vantelia.es/dashboard'>Abrir panel admin</a></p>"
     )
@@ -10923,6 +10923,18 @@ async def auth_signup(data: AuthSignupPayload, request: Request) -> Response:
         },
         request,
     )
+    _try_record_analytics_event(
+        {
+            "event": "signup_completed",
+            "event_source": "vantelia_app",
+            "signup_source": "email",
+            "user_id": new_user["id"],
+            "widget_client_id": new_user["cliente_id"] or "",
+            "cliente_id": new_user["cliente_id"] or "",
+            "status": "claimed" if redirect_to == "/app" else "new",
+        },
+        request,
+    )
     response = JSONResponse(payload.model_dump())
     _set_portal_cookie(response, raw_token)
     return response
@@ -11003,6 +11015,7 @@ async def auth_google_callback(
         raise HTTPException(status_code=400, detail="Google no devolvio identificadores.")
 
     user = _get_user_by_google_sub(google_sub) or _get_user_by_email(email)
+    created_google_user = False
     if user and not user["google_sub"]:
         return RedirectResponse("/acceso?google_error=email_account")
     if not user:
@@ -11016,6 +11029,7 @@ async def auth_google_callback(
             signup_source="google",
             email_verified=True,
         )
+        created_google_user = True
 
     with _get_db_connection() as connection:
         connection.execute(
@@ -11038,6 +11052,19 @@ async def auth_google_callback(
     redirect_target = "/onboarding" if not (fresh and fresh["cliente_id"]) else "/app"
     response = RedirectResponse(redirect_target)
     _set_portal_cookie(response, raw_token)
+    if created_google_user:
+        _try_record_analytics_event(
+            {
+                "event": "signup_completed",
+                "event_source": "vantelia_app",
+                "signup_source": "google",
+                "user_id": user["id"],
+                "widget_client_id": (fresh["cliente_id"] if fresh else "") or "",
+                "cliente_id": (fresh["cliente_id"] if fresh else "") or "",
+                "status": "claimed" if redirect_target == "/app" else "new",
+            },
+            request,
+        )
     return response
 
 
@@ -11433,7 +11460,7 @@ async def auth_export_bookings(
         _require_plan_feature(
             target_client_id,
             "csv_export",
-            "La exportacion CSV esta disponible en el plan Completo.",
+            "La exportacion CSV esta disponible desde el plan Starter.",
         )
     rows, _ = _list_booking_rows(
         cliente_id=target_client_id,
@@ -11623,10 +11650,13 @@ async def app_track_event(
     cliente_id = (user["cliente_id"] or "").strip()
     allowed_events = {
         "bot_preview_message",
+        "first_chat_tested",
         "snippet_copied",
         "share_link_copied",
         "demo_url_copied",
         "install_tab_opened",
+        "pricing_viewed",
+        "upgrade_clicked",
     }
     if data.event not in allowed_events:
         raise HTTPException(status_code=400, detail="Evento de app no permitido.")
@@ -12579,7 +12609,7 @@ async def app_whatsapp_post(
                 if not _plan_feature(cliente_id, "whatsapp_enabled"):
                     raise HTTPException(
                         status_code=403,
-                        detail="WhatsApp esta disponible en los planes WhatsApp y Completo.",
+                        detail="WhatsApp esta disponible en el plan Business.",
                     )
                 if not str(wa.get("phone_number_id", "") or "").strip():
                     raise HTTPException(status_code=400, detail="Indica el Phone Number ID de WhatsApp.")
@@ -12747,6 +12777,20 @@ async def app_billing_checkout(
     except Exception as exc:  # noqa: BLE001
         logger.error("Stripe checkout self-serve fallo user=%s plan=%s: %s", user["id"], plan["slug"], exc)
         raise HTTPException(status_code=502, detail="No se pudo iniciar el checkout.") from exc
+    _try_record_analytics_event(
+        {
+            "event": "checkout_started",
+            "event_source": "vantelia_app",
+            "widget_client_id": user["cliente_id"] or "",
+            "cliente_id": user["cliente_id"] or "",
+            "user_id": user["id"],
+            "plan": plan["slug"],
+            "billing_period": data.billing_period,
+            "checkout_session_id": session.id or "",
+            "source": "self_serve",
+        },
+        request,
+    )
     _try_record_analytics_event(
         {
             "event": "upgrade_started",
@@ -13225,7 +13269,6 @@ async def public_subscription_checkout(
             client_reference_id=f"public:{plan}:{billing_period}",
             metadata={"source": "public_plans", "plan": plan, "billing_period": billing_period},
             subscription_data={
-                "trial_period_days": 30,
                 "metadata": {"source": "public_plans", "plan": plan, "billing_period": billing_period},
             },
             custom_fields=_stripe_onboarding_custom_fields(),
@@ -13740,7 +13783,7 @@ async def app_entry(
 
 @app.get("/signup", include_in_schema=False)
 async def signup_entry() -> Response:
-    return RedirectResponse("/acceso")
+    return RedirectResponse("/acceso?signup=1")
 
 
 @app.get("/portal", include_in_schema=False)
@@ -14049,6 +14092,7 @@ _ANALYTICS_ALLOWED_KEYS = {
     "action",
     "surface",
     "step",
+    "page_type",
     "signup_source",
     "user_id",
     "cliente_id",
@@ -15669,7 +15713,7 @@ def _resolve_whatsapp_client_id(phone_number_id: str, forced_cliente_id: str = "
         _require_plan_feature(
             forced_cliente_id,
             "whatsapp_enabled",
-            "WhatsApp esta disponible en los planes WhatsApp y Completo.",
+            "WhatsApp esta disponible en el plan Business.",
         )
         return forced_cliente_id
 
@@ -15684,7 +15728,7 @@ def _resolve_whatsapp_client_id(phone_number_id: str, forced_cliente_id: str = "
     _require_plan_feature(
         cliente_id,
         "whatsapp_enabled",
-        "WhatsApp esta disponible en los planes WhatsApp y Completo.",
+        "WhatsApp esta disponible en el plan Business.",
     )
     return cliente_id
 
@@ -17271,6 +17315,13 @@ async def admin_analytics(days: int = 30, limit: int = 80) -> Dict[str, Any]:
         "since": since_iso,
         "total_events": total,
         "kpis": {
+            "landing_view": key_events.get("landing_view", 0),
+            "signup_clicked": key_events.get("signup_clicked", 0),
+            "signup_completed": key_events.get("signup_completed", 0),
+            "bot_created": key_events.get("bot_created", 0),
+            "first_chat_tested": key_events.get("first_chat_tested", 0),
+            "pricing_viewed": key_events.get("pricing_viewed", 0),
+            "upgrade_clicked": key_events.get("upgrade_clicked", 0),
             "demo_submits": key_events.get("demo_submit", 0),
             "demo_generated": key_events.get("demo_generated", 0),
             "checkout_started": key_events.get("checkout_started", 0),
@@ -17409,7 +17460,7 @@ async def admin_self_service_funnel(days: int = 30) -> Dict[str, Any]:
     for row in events:
         name = row["event_name"]
         event_counts[name] = event_counts.get(name, 0) + 1
-        if row["event_source"] == "vantelia_site":
+        if row["event_source"] == "vantelia_site" or name in {"landing_view", "pricing_viewed"}:
             visit_key = row["session_id"] or row["page_url"] or row["page_path"] or str(row["created_at"])
             site_visit_keys.add(visit_key)
         try:
@@ -17418,26 +17469,32 @@ async def admin_self_service_funnel(days: int = 30) -> Dict[str, Any]:
             meta = {}
         cta_href = str(meta.get("cta_href") or row["page_url"] or "")
         source = str(meta.get("utm_source") or meta.get("source") or row["event_source"] or "direct")
-        if name in {"plan_signup_clicked", "plan_cta_click", "portal_access_click", "create_bot_cta_click", "free_bot_cta_click"}:
+        if name in {"signup_clicked", "plan_signup_clicked", "plan_cta_click", "portal_access_click", "create_bot_cta_click", "free_bot_cta_click"}:
             cta_clicks += 1
             campaign_clicks[source] = campaign_clicks.get(source, 0) + 1
             if "/acceso" in cta_href or "app.vantelia.es" in cta_href:
                 registered_clicks += 1
-        if name == "selfserve_signup":
+        if name in {"signup_completed", "selfserve_signup"}:
             signups = max(signups, event_counts[name])
-        if name == "bot_preview_message":
+        if name in {"first_chat_tested", "bot_preview_message"}:
             preview_messages += 1
             if row["cliente_id"]:
                 preview_client_ids.add(row["cliente_id"])
         if name == "snippet_copied":
             snippet_copied += 1
-        if name in {"upgrade_started", "checkout_started", "checkout_redirect"}:
+        if name in {"upgrade_clicked", "upgrade_started", "checkout_started", "checkout_redirect"}:
             upgrades_started += 1
         if name == "checkout_completed":
             checkout_completed_events += 1
 
+    upgrades_started = max(
+        event_counts.get("upgrade_clicked", 0),
+        event_counts.get("upgrade_started", 0),
+        event_counts.get("checkout_started", 0),
+        event_counts.get("checkout_redirect", 0),
+    )
     website_visits = len(site_visit_keys) or sum(
-        total for event, total in event_counts.items() if event in {"page_view", "site_page_view"}
+        total for event, total in event_counts.items() if event in {"landing_view", "page_view", "site_page_view"}
     )
     free_bot_clicks = registered_clicks or cta_clicks
     activated_bots = max(activated_by_chat, len(preview_client_ids))
@@ -17447,7 +17504,7 @@ async def admin_self_service_funnel(days: int = 30) -> Dict[str, Any]:
         {"key": "cta_clicks", "label": "Clicks Crea tu bot gratis", "value": free_bot_clicks},
         {"key": "signups", "label": "Registros", "value": signups},
         {"key": "bots_created", "label": "Bots creados", "value": bots_created},
-        {"key": "activated", "label": "Primer mensaje probado", "value": activated_bots},
+        {"key": "activated", "label": "Primer chat probado", "value": activated_bots},
         {"key": "snippet_copied", "label": "Snippet copiado", "value": snippet_copied},
         {"key": "upgrades_started", "label": "Upgrade iniciado", "value": upgrades_started},
         {"key": "upgrades_completed", "label": "Pago completado", "value": upgrades_completed},
@@ -17520,6 +17577,15 @@ async def admin_self_service_funnel(days: int = 30) -> Dict[str, Any]:
         "recent_bots": [dict(row) for row in recent_bots],
         "actions": actions,
         "tracking": {
+            "landing_view": event_counts.get("landing_view", 0) > 0,
+            "signup_clicked": event_counts.get("signup_clicked", 0) > 0 or cta_clicks > 0,
+            "signup_completed": event_counts.get("signup_completed", 0) > 0 or signups > 0,
+            "bot_created": event_counts.get("bot_created", 0) > 0 or bots_created > 0,
+            "first_chat_tested": event_counts.get("first_chat_tested", 0) > 0 or preview_messages > 0,
+            "pricing_viewed": event_counts.get("pricing_viewed", 0) > 0,
+            "upgrade_clicked": event_counts.get("upgrade_clicked", 0) > 0 or upgrades_started > 0,
+            "checkout_started": event_counts.get("checkout_started", 0) > 0,
+            "checkout_completed": event_counts.get("checkout_completed", 0) > 0 or upgrades_completed > 0,
             "snippet_copied": snippet_copied > 0,
             "preview_messages": preview_messages > 0,
             "upgrade_started": upgrades_started > 0,
@@ -18103,7 +18169,7 @@ def _outreach_followup_body(row: sqlite3.Row, priority: int, signals: Dict[str, 
             "Para hacerlo facil: si me respondes \"si\", la preparo yo con vuestra web y te mando un enlace privado. "
             "Sin llamada y sin compromiso.\n\n"
             f"Tambien puedes generarla aqui, ya con los datos cargados:\n{demo_url}\n\n"
-            "Si te encaja, la dejamos 30 dias funcionando y luego decides.\n\n"
+            "Si te encaja, puedes empezar con el plan Free gratis para siempre o subir al plan que necesites.\n\n"
             "Un saludo,\nPablo"
         )
     if priority == 2:
@@ -18239,7 +18305,7 @@ def _outreach_action_for_item(
             "next_action": "manual_reply",
             "next_action_label": "Responder personalmente",
             "action_reason": "Ya respondio; toca convertir conversacion en piloto.",
-            "expected_state": "consulta o piloto 30 dias",
+            "expected_state": "consulta, alta Free o plan de pago",
             "requires_approval": False,
         }
     if status_value in ("client", "lost"):
@@ -23069,7 +23135,7 @@ def _ig_autopilot_run_once() -> Dict[str, Any]:
         # Drafts cold hasta cap diario
         today = datetime.now(timezone.utc).date().isoformat()
         sent_today = conn.execute(
-            "SELECT COUNT(*) AS c FROM ig_sends WHERE mode IN ('sent','sent_auto','draft') AND substr(coalesce(sent_at,drafted_at),1,10)=?",
+            "SELECT COUNT(*) AS c FROM ig_sends WHERE mode IN ('sent','sent_auto','draft','sending') AND substr(coalesce(sent_at,drafted_at),1,10)=?",
             (today,),
         ).fetchone()["c"]
         cap = int(row["daily_outreach_cap"] or 25)
@@ -23262,6 +23328,12 @@ def _ig_campaign_create_draft(prospect_row: Dict[str, Any]) -> Optional[int]:
     except ImportError:
         variant = "A"
     with _instagram_db() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM ig_sends WHERE username=? AND stage='cold' LIMIT 1",
+            (prospect_row["username"],),
+        ).fetchone()
+        if existing:
+            return None
         cur = conn.execute(
             """INSERT INTO ig_sends (username, stage, variant, message_text, mode, ready, drafted_at)
                VALUES (?,?,?,?,?,?,?)""",
@@ -23281,14 +23353,14 @@ def _ig_campaign_create_draft(prospect_row: Dict[str, Any]) -> Optional[int]:
 
 
 def _ig_campaign_fetch_eligible_prospects(limit: int) -> List[Dict[str, Any]]:
-    """Prospects que aun no tienen draft pendiente ni envio previo."""
+    """Prospects que aun no tienen ningun intento de DM previo."""
     with _instagram_db() as conn:
         rows = conn.execute(
             """SELECT p.* FROM ig_prospects p
                WHERE p.status IN ('new','queued')
                  AND p.source LIKE 'campaign%'
                  AND p.username NOT IN (SELECT username FROM ig_suppressions)
-                 AND p.username NOT IN (SELECT username FROM ig_sends WHERE mode IN ('draft','sent','sent_auto'))
+                 AND p.username NOT IN (SELECT username FROM ig_sends)
                ORDER BY p.created_at ASC
                LIMIT ?""",
             (limit,),
@@ -23894,6 +23966,12 @@ def _tk_create_draft(prospect_row: Dict[str, Any]) -> Optional[int]:
     except ImportError:
         variant = "A"
     with _tk_db() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM tk_sends WHERE username=? AND stage='cold' LIMIT 1",
+            (prospect_row["username"],),
+        ).fetchone()
+        if existing:
+            return None
         cur = conn.execute(
             """INSERT INTO tk_sends (username, stage, variant, message_text, mode, ready, drafted_at)
                VALUES (?,?,?,?,?,?,?)""",
@@ -23919,12 +23997,28 @@ def _tk_fetch_eligible_prospects(limit: int) -> List[Dict[str, Any]]:
                WHERE p.status IN ('new','queued')
                  AND p.source LIKE 'campaign%'
                  AND p.username NOT IN (SELECT username FROM tk_suppressions)
-                 AND p.username NOT IN (SELECT username FROM tk_sends WHERE mode IN ('draft','sent','sent_auto'))
+                 AND p.username NOT IN (SELECT username FROM tk_sends)
                ORDER BY p.created_at ASC
                LIMIT ?""",
             (limit,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def _tk_last_autosend_error() -> str:
+    try:
+        with _tk_db() as conn:
+            row = conn.execute(
+                """SELECT username, skip_reason
+                   FROM tk_sends
+                   WHERE mode='skipped' AND COALESCE(skip_reason,'')<>''
+                   ORDER BY id DESC LIMIT 1"""
+            ).fetchone()
+            if row:
+                return f"@{row['username']}: {row['skip_reason']}"
+    except Exception:
+        pass
+    return ""
 
 
 def _tk_campaign_iteration(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -23938,6 +24032,7 @@ def _tk_campaign_iteration(state: Dict[str, Any]) -> Dict[str, Any]:
 
     pending_drafts = int(state.get("pending_drafts") or 0)
     pool_target = int(target * 1.5)
+    campaign_status = str(state.get("status") or "")
 
     if discovered < pool_target:
         _tk_campaign_update(status="discovering")
@@ -23960,7 +24055,7 @@ def _tk_campaign_iteration(state: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("[tk-campaign] discovery: %s candidatos, %s nuevos", len(candidates), added)
         return {"action": "discovery", "added": added}
 
-    if pending_drafts < remaining and pending_drafts < 10:
+    if campaign_status != "sending" and pending_drafts < remaining and pending_drafts < 10:
         eligible = _tk_fetch_eligible_prospects(min(10 - pending_drafts, remaining - pending_drafts))
         drafted = 0
         for p in eligible:
@@ -23983,7 +24078,9 @@ def _tk_campaign_iteration(state: Dict[str, Any]) -> Dict[str, Any]:
             sent = autosend_drafts(drafts, dry_run=False)
             logger.info("[tk-campaign] autosend: %s/1 enviado", sent)
             if sent == 0:
-                return {"action": "send_failed"}
+                reason = _tk_last_autosend_error() or "autosend no pudo enviar el DM"
+                _tk_campaign_update(status="paused", error_msg=f"Envio pausado: {reason}")
+                return {"action": "error", "reason": "send_failed"}
             return {"action": "sent", "count": sent}
         except RuntimeError as exc:
             err = str(exc)[:200]
@@ -23991,10 +24088,16 @@ def _tk_campaign_iteration(state: Dict[str, Any]) -> Dict[str, Any]:
                 _tk_campaign_update(status="paused", error_msg=f"sesion expirada: {err}")
                 return {"action": "error", "reason": "session_expired"}
             logger.warning("[tk-campaign] autosend RuntimeError: %s", err)
+            _tk_campaign_update(status="paused", error_msg=f"autosend fallo: {err}")
             return {"action": "error", "reason": err}
         except Exception as exc:  # noqa: BLE001
             logger.warning("[tk-campaign] autosend error: %s", exc)
+            _tk_campaign_update(status="paused", error_msg=f"autosend error: {str(exc)[:160]}")
             return {"action": "error", "reason": str(exc)[:120]}
+
+    if pending_drafts > 0 and not tk_is_autosend_enabled():
+        _tk_campaign_update(status="paused", error_msg="TK_AUTOSEND_ENABLED=false en env")
+        return {"action": "error", "reason": "autosend_disabled"}
 
     return {"action": "idle"}
 

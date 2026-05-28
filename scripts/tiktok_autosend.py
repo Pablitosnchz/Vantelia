@@ -100,6 +100,44 @@ def _mark_send_state(conn: sqlite3.Connection, send_id: int, mode: str, error: s
     conn.commit()
 
 
+def _claim_send_attempt(conn: sqlite3.Connection, send_id: int) -> Optional[sqlite3.Row]:
+    """Reserve a draft before opening TikTok so resume never sends it twice."""
+    row = conn.execute(
+        "SELECT * FROM tk_sends WHERE id=? AND mode='draft' AND ready=1",
+        (send_id,),
+    ).fetchone()
+    if not row:
+        return None
+    prior = conn.execute(
+        """SELECT 1 FROM tk_sends
+           WHERE username=? AND id<>? AND mode IN ('sent','sent_auto','sending')
+           LIMIT 1""",
+        (row["username"], send_id),
+    ).fetchone()
+    now = _now_iso()
+    if prior:
+        conn.execute(
+            "UPDATE tk_sends SET mode='skipped', ready=0, skip_reason=? WHERE id=?",
+            ("ya_contactado", send_id),
+        )
+        conn.execute(
+            "INSERT INTO tk_events (username, type, stage, data_json, ts) VALUES (?,?,?,?,?)",
+            (row["username"], "skip", row["stage"], "ya_contactado", now),
+        )
+        conn.commit()
+        return None
+    conn.execute(
+        "UPDATE tk_sends SET mode='sending', ready=0, skip_reason='' WHERE id=?",
+        (send_id,),
+    )
+    conn.execute(
+        "INSERT INTO tk_events (username, type, stage, ts) VALUES (?,?,?,?)",
+        (row["username"], "send_attempt", row["stage"], now),
+    )
+    conn.commit()
+    return conn.execute("SELECT * FROM tk_sends WHERE id=?", (send_id,)).fetchone()
+
+
 def _human_delay() -> None:
     mn = float(os.getenv("TK_AUTOSEND_MIN_DELAY_SEC", "60") or 60)
     mx = float(os.getenv("TK_AUTOSEND_MAX_DELAY_SEC", "240") or 240)
@@ -334,11 +372,17 @@ def _send_one(page, username: str, message: str) -> bool:
 
     # Click boton "Mensaje" / "Message"
     message_selectors = [
+        '[data-e2e*="message" i]',
+        'button[data-e2e*="message" i]',
+        'a[href*="/messages"]',
+        'button:has-text("Enviar mensaje")',
         'button:has-text("Mensaje")',
         'button:has-text("Message")',
+        'button:has-text("Send message")',
         'div[role="button"]:has-text("Mensaje")',
         'div[role="button"]:has-text("Message")',
         'a:has-text("Mensaje")',
+        'a:has-text("Message")',
     ]
     clicked = False
     for sel in message_selectors:
@@ -351,10 +395,8 @@ def _send_one(page, username: str, message: str) -> bool:
         except Exception:
             continue
     if not clicked:
-        # Fallback: ir directo a /messages/
-        page.goto("https://www.tiktok.com/messages/", wait_until="domcontentloaded", timeout=20000)
-        page.wait_for_timeout(random.randint(2000, 4000))
-        _dismiss_overlays(page)
+        _debug_screenshot(page, username, "02_no_message_button")
+        raise RuntimeError("dm_no_disponible_o_boton_no_encontrado")
 
     _debug_screenshot(page, username, "02_chat_open")
 
@@ -481,6 +523,10 @@ def autosend_drafts(drafts: Iterable[Dict[str, Any]], dry_run: bool = False) -> 
             message = draft.get("message") or ""
             if not send_id or not username or not message:
                 continue
+            claimed = _claim_send_attempt(conn, send_id)
+            if not claimed:
+                logger.info("autosend SKIP -> @%s (send_id=%s): ya no elegible", username, send_id)
+                continue
             try:
                 ok = _send_one(page, username, message)
                 if ok:
@@ -513,6 +559,19 @@ def fetch_pending_drafts(limit: int) -> List[Dict[str, Any]]:
             """SELECT id, username, stage, variant, message_text AS message
                FROM tk_sends
                WHERE mode='draft' AND ready=1
+               AND NOT EXISTS (
+                 SELECT 1 FROM tk_sends done
+                 WHERE done.username=tk_sends.username
+                   AND done.id<>tk_sends.id
+                   AND done.mode IN ('sent','sent_auto','sending')
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM tk_sends earlier
+                 WHERE earlier.username=tk_sends.username
+                   AND earlier.mode='draft'
+                   AND earlier.ready=1
+                   AND earlier.id<tk_sends.id
+               )
                ORDER BY id ASC
                LIMIT ?""",
             (max(1, limit),),

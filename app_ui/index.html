@@ -2092,6 +2092,23 @@ async function sendPreviewMessage(text) {
       message_length: text.length,
       response_length: b.textContent.length,
     });
+    try {
+      const key = 'vantelia_first_chat_tested_' + (state.cliente_id || 'bot');
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1');
+        trackAppEvent('first_chat_tested', {
+          surface: 'right_panel_preview',
+          message_length: text.length,
+          response_length: b.textContent.length,
+        });
+      }
+    } catch (_) {
+      trackAppEvent('first_chat_tested', {
+        surface: 'right_panel_preview',
+        message_length: text.length,
+        response_length: b.textContent.length,
+      });
+    }
   } catch (err) {
     const b = document.createElement('div');
     b.className = 'chat-msg bot';
@@ -2819,6 +2836,7 @@ async function loadBilling() {
       : 'Disponible cuando tengas una suscripción de pago activa.';
 
     renderPlansGrid();
+    trackAppEvent('pricing_viewed', { surface: 'billing' });
   } catch (err) { toast(err.message, 'error'); }
 }
 
@@ -2885,6 +2903,11 @@ function renderPlansGrid() {
 async function startCheckout(planSlug) {
   try {
     const payload = { plan: planSlug, billing_period: billingState.period };
+    trackAppEvent('upgrade_clicked', {
+      surface: 'billing',
+      plan: planSlug,
+      billing_period: billingState.period,
+    });
     // Support ?coupon=XXX in URL for server-side coupon injection (e.g. internal testing).
     const couponFromUrl = new URLSearchParams(window.location.search).get('coupon');
     if (couponFromUrl) payload.coupon = couponFromUrl;

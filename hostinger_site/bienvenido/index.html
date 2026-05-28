@@ -457,7 +457,7 @@
 
     <div class="welcome-badge">
       <span class="dot" aria-hidden="true"></span>
-      <span id="badgePlanText">Plan activo · 30 días gratis</span>
+      <span id="badgePlanText">Plan activo</span>
     </div>
 
     <h1>Bienvenido a <span class="gradient-text">Vantelia</span>.</h1>
@@ -472,7 +472,7 @@
         <div class="plan-name-line" id="planNameLine">Plan</div>
         <div class="plan-price-info" id="planPriceInfo">Sin permanencia · Cancelable cuando quieras</div>
       </div>
-      <div class="trial-pill">30 días gratis</div>
+      <div class="trial-pill">Sin permanencia</div>
     </div>
   </div>
 </section>
@@ -492,8 +492,8 @@
       <article class="timeline-card done">
         <div class="step-icon">?</div>
         <div>
-          <h4>Pago confirmado</h4>
-          <p>Hemos recibido tu pago. La prueba gratuita de 30 días está activa. No se te cobra durante este periodo.</p>
+          <h4>Alta confirmada</h4>
+          <p>Hemos recibido tu alta. Tu suscripción queda activa desde hoy y puedes cancelarla cuando quieras desde el portal.</p>
           <span class="step-pill">Completado</span>
         </div>
       </article>
@@ -552,12 +552,12 @@
         </li>
         <li>
           <span class="check-mini" aria-hidden="true">4</span>
-          <span>Puedes <strong>cancelar en cualquier momento</strong> antes de que termine la prueba sin coste, desde el portal en "Gestionar facturación".</span>
+          <span>Puedes <strong>cancelar en cualquier momento</strong> desde el portal en "Gestionar facturación". La cancelación evita nuevas renovaciones.</span>
         </li>
       </ul>
 
       <div class="billing-info">
-        <strong id="billingDateLabel">Tu primer cobro</strong> sería el <strong id="billingDate">en 30 días</strong> si no cancelas antes. <strong id="billingAmount"></strong> Puedes cancelar sin coste hasta esa fecha.
+        <strong id="billingDateLabel">Tu próxima renovación</strong> será el <strong id="billingDate">según tu periodo de facturación</strong>. <strong id="billingAmount"></strong> Puedes cancelar antes de esa fecha.
       </div>
 
       <div class="welcome-ctas">
@@ -620,7 +620,7 @@
     <div class="welcome-faq">
       <details>
         <summary>¿Cuándo empieza el cobro?</summary>
-        <div class="faq-body">El cobro empieza al final de los 30 días de prueba gratuita. Si no cancelas antes, el primer cargo se hace automáticamente en la tarjeta que registraste en Stripe. Si cancelas, no hay cargo.</div>
+        <div class="faq-body">El primer cobro se realiza en Stripe al contratar Starter, Pro o Business. Después, la suscripción se renueva automáticamente según el periodo elegido hasta que la canceles.</div>
       </details>
       <details>
         <summary>¿Cómo cancelo?</summary>
@@ -701,9 +701,10 @@
 <script>
 (function () {
   const PLAN_DATA = {
-    web:      { label: 'Web',      monthly: 49, annual: 42 },
-    whatsapp: { label: 'WhatsApp', monthly: 79, annual: 67 },
-    completo: { label: 'Completo', monthly: 89, annual: 76 }
+    free:     { label: 'Free',     monthly: 0, annualTotal: 0 },
+    starter:  { label: 'Starter',  monthly: 19, annualTotal: 190 },
+    pro:      { label: 'Pro',      monthly: 49, annualTotal: 490 },
+    business: { label: 'Business', monthly: 149, annualTotal: 1490 }
   };
 
   function fmtDate(d) {
@@ -713,38 +714,44 @@
   const params = new URLSearchParams(window.location.search);
   const checkoutSessionId = String(params.get('session') || '').trim();
   const planRaw = String(params.get('plan') || '').toLowerCase().trim();
-  const planSafe = PLAN_DATA[planRaw] ? planRaw : 'web';
+  const legacyPlanMap = { web: 'starter', whatsapp: 'pro', completo: 'business' };
+  const normalizedPlan = legacyPlanMap[planRaw] || planRaw;
+  const planSafe = PLAN_DATA[normalizedPlan] ? normalizedPlan : 'starter';
   const period = String(params.get('period') || 'monthly').toLowerCase().trim() === 'annual' ? 'annual' : 'monthly';
   const data = PLAN_DATA[planSafe];
 
   const periodLabel = period === 'annual' ? 'anual' : 'mensual';
-  const priceVal = period === 'annual' ? data.annual : data.monthly;
+  const priceLabel = period === 'annual' ? `${data.annualTotal}€/año` : `${data.monthly}€/mes`;
 
   const planNameEl = document.getElementById('planNameLine');
   if (planNameEl) {
-    planNameEl.textContent = `Plan ${data.label} · ${priceVal}€/mes (${periodLabel})`;
+    planNameEl.textContent = `Plan ${data.label} · ${priceLabel} (${periodLabel})`;
   }
 
   const badgeEl = document.getElementById('badgePlanText');
   if (badgeEl) {
-    badgeEl.textContent = `Plan ${data.label} activo · 30 días gratis`;
+    badgeEl.textContent = `Plan ${data.label} activo`;
   }
 
   const billingDate = new Date();
-  billingDate.setDate(billingDate.getDate() + 30);
+  if (period === 'annual') {
+    billingDate.setFullYear(billingDate.getFullYear() + 1);
+  } else {
+    billingDate.setMonth(billingDate.getMonth() + 1);
+  }
   const billingDateEl = document.getElementById('billingDate');
   if (billingDateEl) billingDateEl.textContent = `el ${fmtDate(billingDate)}`;
 
   const billingAmountEl = document.getElementById('billingAmount');
   if (billingAmountEl) {
     if (period === 'annual') {
-      billingAmountEl.textContent = ` Importe estimado: ${data.annual * 12}€/año (${data.annual}€/mes equivalente).`;
+      billingAmountEl.textContent = ` Importe de renovación: ${data.annualTotal}€/año.`;
     } else {
-      billingAmountEl.textContent = ` Importe: ${data.monthly}€/mes.`;
+      billingAmountEl.textContent = ` Importe de renovación: ${data.monthly}€/mes.`;
     }
   }
 
-  if (planSafe === 'whatsapp' || planSafe === 'completo') {
+  if (planSafe === 'business') {
     const stepWa = document.getElementById('step-whatsapp');
     if (stepWa) stepWa.style.display = '';
     const note = document.getElementById('whatsappNote');
@@ -753,9 +760,7 @@
 
   const lead = document.getElementById('welcomeLead');
   if (lead) {
-    if (planSafe === 'whatsapp') {
-      lead.textContent = 'Tu asistente IA para WhatsApp se está preparando. Te contactamos pronto para activar tu número de WhatsApp Business.';
-    } else if (planSafe === 'completo') {
+    if (planSafe === 'business') {
       lead.textContent = 'Tu asistente IA para web y WhatsApp se está configurando. En unos minutos recibirás tu acceso al portal.';
     }
   }

@@ -110,6 +110,44 @@ def _mark_send_state(conn: sqlite3.Connection, send_id: int, mode: str, error: s
     conn.commit()
 
 
+def _claim_send_attempt(conn: sqlite3.Connection, send_id: int) -> Optional[sqlite3.Row]:
+    """Reserve a draft before opening IG so resume never sends it twice."""
+    row = conn.execute(
+        "SELECT * FROM ig_sends WHERE id=? AND mode='draft' AND ready=1",
+        (send_id,),
+    ).fetchone()
+    if not row:
+        return None
+    prior = conn.execute(
+        """SELECT 1 FROM ig_sends
+           WHERE username=? AND id<>? AND mode IN ('sent','sent_auto','sending')
+           LIMIT 1""",
+        (row["username"], send_id),
+    ).fetchone()
+    now = _now_iso()
+    if prior:
+        conn.execute(
+            "UPDATE ig_sends SET mode='skipped', ready=0, skip_reason=? WHERE id=?",
+            ("ya_contactado", send_id),
+        )
+        conn.execute(
+            "INSERT INTO ig_events (username, type, stage, data_json, ts) VALUES (?,?,?,?,?)",
+            (row["username"], "skip", row["stage"], "ya_contactado", now),
+        )
+        conn.commit()
+        return None
+    conn.execute(
+        "UPDATE ig_sends SET mode='sending', ready=0, skip_reason='' WHERE id=?",
+        (send_id,),
+    )
+    conn.execute(
+        "INSERT INTO ig_events (username, type, stage, ts) VALUES (?,?,?,?)",
+        (row["username"], "send_attempt", row["stage"], now),
+    )
+    conn.commit()
+    return conn.execute("SELECT * FROM ig_sends WHERE id=?", (send_id,)).fetchone()
+
+
 def _human_delay() -> None:
     mn = float(os.getenv("IG_AUTOSEND_MIN_DELAY_SEC", "45") or 45)
     mx = float(os.getenv("IG_AUTOSEND_MAX_DELAY_SEC", "180") or 180)
@@ -543,9 +581,8 @@ def _send_one(page, username: str, message: str) -> bool:
     except Exception:
         pass
     # Usa page.keyboard.type tras focus para evitar Locator.type timeout en
-    # contenteditable raros. Escribe al elemento activo.
-    # La DB ya filtra usernames con sends previos (draft/sent/sent_auto), asi
-    # que double-DM por nuestro sistema no ocurre. La deteccion por bubble count
+    # contenteditable raros. Escribe al elemento activo. El draft ya esta
+    # reservado como "sending", asi que una reanudacion no lo coge otra vez.
     # daba falsos positivos por header/perfil → eliminada.
     baseline_bubbles = _count_message_bubbles(page)
 
@@ -627,6 +664,10 @@ def autosend_drafts(drafts: Iterable[Dict[str, Any]], dry_run: bool = False) -> 
             message = draft.get("message") or ""
             if not send_id or not username or not message:
                 continue
+            claimed = _claim_send_attempt(conn, send_id)
+            if not claimed:
+                logger.info("autosend SKIP -> @%s (send_id=%s): ya no elegible", username, send_id)
+                continue
             try:
                 ok = _send_one(page, username, message)
                 if ok:
@@ -673,6 +714,19 @@ def fetch_pending_drafts(limit: int) -> List[Dict[str, Any]]:
             """SELECT id, username, stage, variant, message_text AS message
                FROM ig_sends
                WHERE mode='draft' AND ready=1
+               AND NOT EXISTS (
+                 SELECT 1 FROM ig_sends done
+                 WHERE done.username=ig_sends.username
+                   AND done.id<>ig_sends.id
+                   AND done.mode IN ('sent','sent_auto','sending')
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM ig_sends earlier
+                 WHERE earlier.username=ig_sends.username
+                   AND earlier.mode='draft'
+                   AND earlier.ready=1
+                   AND earlier.id<ig_sends.id
+               )
                ORDER BY id ASC
                LIMIT ?""",
             (max(1, limit),),

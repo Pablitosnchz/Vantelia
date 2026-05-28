@@ -490,6 +490,9 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
         f"{p.greeting}\n\n"
         f"Soy Pablo, fundador de Vantelia. Te escribo porque hacemos chats para negocios "
         f"como {name} que responden por vosotros cuando estais ocupados o cerrados.\n\n"
+        f"Ahora cualquier negocio puede crear gratis su asistente IA en menos de 2 minutos: "
+        f"pega la URL de la web, Vantelia lee el contenido, genera el bot y lo deja listo "
+        f"para probar.\n\n"
         f"{f'{opener} ' if opener else ''}"
         f"He preparado uno de ejemplo concreto para vosotros — puedes chatear con el ahora "
         f"mismo y ver como funciona sin registrarte ni dar ningun dato:\n"
@@ -504,6 +507,9 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
         f'<p>{html_lib.escape(p.greeting)}</p>'
         f'<p>Soy Pablo, fundador de Vantelia. Te escribo porque hacemos chats para negocios '
         f'como {html_lib.escape(name)} que responden por vosotros cuando estais ocupados o cerrados.</p>'
+        f'<p>Ahora cualquier negocio puede crear gratis su asistente IA en menos de 2 minutos: '
+        f'pega la URL de la web, Vantelia lee el contenido, genera el bot y lo deja listo '
+        f'para probar.</p>'
         f'{opener_html}'
         f'<p>He preparado uno de ejemplo concreto para vosotros — puedes chatear con el ahora '
         f'mismo y ver como funciona <strong>sin registrarte ni dar ningun dato</strong>:</p>'

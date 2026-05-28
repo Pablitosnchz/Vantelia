@@ -386,8 +386,8 @@
       <rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/>
     </svg>
   </div>
-  <h1 class="wiz-title">¿Cómo llamamos a tu asistente?</h1>
-  <p class="wiz-subtitle">Solo para que tú lo encuentres luego. Lo puedes cambiar cuando quieras.</p>
+  <h1 class="wiz-title">Crea gratis tu asistente IA</h1>
+  <p class="wiz-subtitle">Primero ponle nombre. Después pega tu web y lo podrás probar en 2 minutos.</p>
 
   <div class="field">
     <label class="field-label" for="botName">Nombre del bot o negocio</label>
@@ -396,7 +396,7 @@
 
   <div class="actions" style="justify-content: flex-end;">
     <button class="btn btn-primary" id="nameNextBtn" type="button">
-      <span class="btn-text">Continuar →</span>
+      <span class="btn-text">Crear asistente gratis →</span>
       <span class="btn-spinner"></span>
     </button>
   </div>
@@ -410,8 +410,8 @@
       <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
     </svg>
   </div>
-  <h1 class="wiz-title">¿De dónde aprenderá?</h1>
-  <p class="wiz-subtitle">Indica la web de tu negocio. Vantelia analizará las páginas y aprenderá los servicios, precios y FAQs.</p>
+  <h1 class="wiz-title">Pega tu web</h1>
+  <p class="wiz-subtitle">Vantelia analizará tu negocio y preparará un asistente IA que puedas probar al momento.</p>
 
   <div class="field">
     <label class="field-label" for="learnUrl">URL de tu web</label>
@@ -422,7 +422,7 @@
   <div class="actions">
     <button class="btn btn-ghost" id="learnBackBtn" type="button">← Atrás</button>
     <button class="btn btn-primary" id="learnNextBtn" type="button">
-      <span class="btn-text">Empezar a aprender</span>
+      <span class="btn-text">Pegar mi web y probarlo</span>
       <span class="btn-spinner"></span>
     </button>
   </div>
@@ -574,6 +574,14 @@ async function api(path, opts) {
   return data;
 }
 
+function trackOnboardingEvent(event, metadata) {
+  api('/auth/app/track', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event, metadata: metadata || {} }),
+  }).catch(() => {});
+}
+
 function setStatus(id, msg, type) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -649,6 +657,20 @@ function renderTryStep() {
   s.setAttribute('data-vantelia-preview', '1');
   document.body.appendChild(s);
 }
+
+document.addEventListener('vantelia:widget', (event) => {
+  const detail = event.detail || {};
+  if (detail.event !== 'widget_message_sent') return;
+  try {
+    const key = 'vantelia_onboarding_first_chat_' + (state.cliente_id || 'bot');
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, '1');
+  } catch (_) {}
+  trackOnboardingEvent('first_chat_tested', {
+    surface: 'onboarding_widget',
+    message_length: detail.message_length || 0,
+  });
+});
 
 function renderUseStep() {
   document.getElementById('snippetBlock').textContent = state.install_snippet || '';
@@ -833,8 +855,14 @@ document.getElementById('newStarter').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('addStarterBtn').click();
 });
 
-document.getElementById('copySnippetBtn').addEventListener('click', e => copy(state.install_snippet, e.target));
-document.getElementById('copyLinkBtn').addEventListener('click',    e => copy(state.share_link, e.target));
+document.getElementById('copySnippetBtn').addEventListener('click', e => {
+  trackOnboardingEvent('snippet_copied', { surface: 'onboarding_use' });
+  copy(state.install_snippet, e.target);
+});
+document.getElementById('copyLinkBtn').addEventListener('click', e => {
+  trackOnboardingEvent('share_link_copied', { surface: 'onboarding_use' });
+  copy(state.share_link, e.target);
+});
 
 document.getElementById('botName').addEventListener('keydown', e => { if (e.key === 'Enter') submitName(); });
 document.getElementById('learnUrl').addEventListener('keydown', e => { if (e.key === 'Enter') submitLearn(); });
