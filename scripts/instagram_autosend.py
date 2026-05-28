@@ -329,25 +329,50 @@ def _count_message_bubbles(page) -> int:
     return best
 
 
-def _verify_sent(page, message: str, baseline: int, timeout_sec: int = 12) -> bool:
-    """Tras Enter, verifica que aumento el numero de burbujas Y el texto aparece
-    en una burbuja (no en composer)."""
-    snippet = (message or "").strip().split("\n", 1)[0][:50]
-    if len(snippet) < 6:
-        return False
+def _verify_sent(page, message: str, baseline: int, composer, timeout_sec: int = 12) -> bool:
+    """Verifica envio tras Send. Heuristicas en orden de fiabilidad:
+    1) Burbujas crecieron Y texto aparece en burbuja → seguro
+    2) Composer vacio tras Enter → IG consumio el input → muy probable
+    3) Burbujas crecieron sin match exacto → probable (markup cambio)
+    """
+    snippet = (message or "").strip().split("\n", 1)[0][:40]
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
         try:
             current = _count_message_bubbles(page)
             grew = current > baseline
-            if grew:
-                # Burbujas suelen tener dir="auto" y contienen el texto.
+            # Composer vacio = enviado
+            composer_empty = False
+            try:
+                txt = (composer.text_content() or "").strip()
+                composer_empty = len(txt) < 3
+            except Exception:
+                pass
+            if grew and snippet and len(snippet) >= 6:
                 hit = page.locator(f'div[dir="auto"]:has-text("{snippet}")').count()
                 if hit >= 1:
                     return True
+            if composer_empty:
+                # Doble check: no debe haber modal de error visible.
+                err_modal = False
+                for err_sel in ('div[role="dialog"]:has-text("Error")',
+                                'div[role="alert"]',
+                                'div:has-text("Something went wrong")',
+                                'div:has-text("Algo salio mal")'):
+                    try:
+                        if page.locator(err_sel).first.count() > 0 and page.locator(err_sel).first.is_visible():
+                            err_modal = True
+                            break
+                    except Exception:
+                        continue
+                if not err_modal:
+                    return True
+            if grew:
+                # Sin match exacto pero burbujas crecieron → asumir enviado.
+                return True
         except Exception:
             pass
-        time.sleep(0.6)
+        time.sleep(0.5)
     return False
 
 
@@ -491,7 +516,7 @@ def _send_one(page, username: str, message: str) -> bool:
     _debug_screenshot(page, username, "05_after_send")
 
     # Verifica que aparecio nueva burbuja con el texto.
-    if not _verify_sent(page, message, baseline_bubbles, timeout_sec=12):
+    if not _verify_sent(page, message, baseline_bubbles, composer, timeout_sec=12):
         _debug_screenshot(page, username, "06_verify_fail")
         raise RuntimeError("envio_no_verificado")
 
