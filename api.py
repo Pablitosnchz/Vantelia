@@ -23668,6 +23668,696 @@ async def _ig_shutdown_workers() -> None:
 # === END INSTAGRAM ===================================================
 
 
+# =====================================================================
+# === TIKTOK ==========================================================
+# Captacion via TikTok DMs. Mismo flujo que IG campaign:
+# discovery (Places + web scrape handle) → drafts → autosend Playwright.
+# =====================================================================
+
+TK_DEFAULT_DB = Path(os.getenv("TK_DB_PATH", str(STORAGE_DIR / "tiktok" / "tiktok.db")))
+TK_AVAILABLE = False
+tk_campaign_stop = threading.Event()
+tk_campaign_thread: Optional[threading.Thread] = None
+
+try:
+    # Verifica solo que los modulos esten importables.
+    import importlib as _tk_importlib
+    _tk_importlib.import_module("tiktok_templates_v2")
+    _tk_importlib.import_module("tiktok_discover")
+    TK_AVAILABLE = True
+except Exception as _tk_err:  # noqa: BLE001
+    logger.warning(f"Modulo tiktok no disponible: {_tk_err}")
+    TK_AVAILABLE = False
+
+
+def _tk_env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name, "").strip().lower()
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    if raw in ("0", "false", "no", "off"):
+        return False
+    return default
+
+
+def _tk_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _tk_db():
+    TK_DEFAULT_DB.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(TK_DEFAULT_DB))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _tk_row_dict(row) -> Dict[str, Any]:
+    return dict(row) if row else {}
+
+
+def tk_is_autosend_enabled() -> bool:
+    return _tk_env_bool("TK_AUTOSEND_ENABLED", False)
+
+
+def _tk_migrate() -> None:
+    """Crea tablas TK si no existen."""
+    with _tk_db() as conn:
+        conn.executescript("""
+        CREATE TABLE IF NOT EXISTS tk_prospects (
+            username TEXT PRIMARY KEY,
+            business_name TEXT DEFAULT '',
+            niche TEXT DEFAULT '',
+            city TEXT DEFAULT '',
+            website TEXT DEFAULT '',
+            bio TEXT DEFAULT '',
+            source TEXT DEFAULT '',
+            status TEXT DEFAULT 'new',
+            last_contacted_at TEXT DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS tk_sends (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            stage TEXT DEFAULT 'cold',
+            variant TEXT DEFAULT '',
+            message_text TEXT NOT NULL,
+            mode TEXT DEFAULT 'draft',
+            ready INTEGER DEFAULT 1,
+            drafted_at TEXT DEFAULT '',
+            sent_at TEXT DEFAULT '',
+            skip_reason TEXT DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_tk_sends_user ON tk_sends(username);
+        CREATE INDEX IF NOT EXISTS idx_tk_sends_mode ON tk_sends(mode);
+        CREATE TABLE IF NOT EXISTS tk_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            type TEXT NOT NULL,
+            stage TEXT DEFAULT '',
+            data_json TEXT DEFAULT '',
+            ts TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_tk_events_user ON tk_events(username);
+        CREATE TABLE IF NOT EXISTS tk_suppressions (
+            username TEXT PRIMARY KEY,
+            reason TEXT DEFAULT '',
+            added_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS tk_dm_templates_v2 (
+            variant TEXT PRIMARY KEY,
+            body TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS tk_campaign (
+            id INTEGER PRIMARY KEY CHECK (id=1),
+            target_count INTEGER DEFAULT 30,
+            status TEXT DEFAULT 'idle',
+            discovered_count INTEGER DEFAULT 0,
+            sent_count INTEGER DEFAULT 0,
+            replied_count INTEGER DEFAULT 0,
+            started_at TEXT DEFAULT '',
+            updated_at TEXT DEFAULT '',
+            completed_at TEXT DEFAULT '',
+            error_msg TEXT DEFAULT ''
+        );
+        INSERT OR IGNORE INTO tk_campaign (id) VALUES (1);
+        """)
+        conn.commit()
+
+
+class TKCampaignStart(BaseModel):
+    target_count: int = Field(30, ge=1, le=200)
+
+
+class TKSessionCookies(BaseModel):
+    sessionid: str = Field(..., min_length=10)
+    sessionid_ss: str = ""
+    tt_csrf_token: str = ""
+    ms_token: str = ""
+    ttwid: str = ""
+
+
+class TKDmTemplatesPayload(BaseModel):
+    variant_a: Optional[str] = None
+    variant_b: Optional[str] = None
+    variant_c: Optional[str] = None
+
+
+class TKSuppressRequest(BaseModel):
+    username: str = Field(..., min_length=1)
+    reason: str = "manual"
+
+
+def _tk_resolve_username(raw: str) -> str:
+    return (raw or "").lstrip("@").strip().lower()
+
+
+def _tk_campaign_state() -> Dict[str, Any]:
+    if not TK_AVAILABLE:
+        return {"available": False}
+    _tk_migrate()
+    with _tk_db() as conn:
+        row = conn.execute("SELECT * FROM tk_campaign WHERE id=1").fetchone()
+        cfg = _tk_row_dict(row)
+        cfg["discovered_count"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_prospects WHERE source LIKE 'campaign%'"
+        ).fetchone()["c"]
+        cfg["sent_count"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_sends WHERE mode='sent_auto'"
+        ).fetchone()["c"]
+        cfg["replied_count"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_prospects WHERE status='replied'"
+        ).fetchone()["c"]
+        cfg["pending_drafts"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_sends WHERE mode='draft' AND ready=1"
+        ).fetchone()["c"]
+    cfg["worker_alive"] = bool(tk_campaign_thread and tk_campaign_thread.is_alive())
+    return cfg
+
+
+def _tk_campaign_update(**fields: Any) -> None:
+    if not fields:
+        return
+    parts = [f"{k}=?" for k in fields.keys()]
+    parts.append("updated_at=?")
+    params = list(fields.values()) + [_tk_now()]
+    with _tk_db() as conn:
+        conn.execute(f"UPDATE tk_campaign SET {', '.join(parts)} WHERE id=1", params)
+        conn.commit()
+
+
+def _tk_render_dm(prospect: Dict[str, Any]) -> str:
+    try:
+        from tiktok_templates_v2 import render_natural  # type: ignore
+    except ImportError:
+        return "Hola, soy Pablo de Vantelia. Te escribo por curiosidad."
+    return render_natural(
+        username=prospect.get("username", ""),
+        business_name=prospect.get("business_name", "") or "",
+        niche=prospect.get("niche", "") or "",
+        city=prospect.get("city", "") or "",
+        db_path=str(TK_DEFAULT_DB),
+    )
+
+
+def _tk_insert_candidates(candidates: List[Any]) -> int:
+    if not candidates:
+        return 0
+    now = _tk_now()
+    added = 0
+    with _tk_db() as conn:
+        for c in candidates:
+            try:
+                cur = conn.execute(
+                    """INSERT OR IGNORE INTO tk_prospects
+                       (username, business_name, bio, niche, city, website, source, status, created_at, updated_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    (c.normalized_username(), c.business_name, c.bio_snippet,
+                     c.niche, c.city, c.website, c.source, "new", now, now),
+                )
+                if cur.rowcount:
+                    added += 1
+            except Exception as exc:
+                logger.warning("tk_campaign insert %s: %s", getattr(c, "username", "?"), exc)
+        conn.commit()
+    return added
+
+
+def _tk_create_draft(prospect_row: Dict[str, Any]) -> Optional[int]:
+    text = _tk_render_dm(prospect_row)
+    if not text or len(text) < 30:
+        return None
+    now = _tk_now()
+    try:
+        from tiktok_templates_v2 import pick_variant  # type: ignore
+        variant = pick_variant(prospect_row.get("username", ""))
+    except ImportError:
+        variant = "A"
+    with _tk_db() as conn:
+        cur = conn.execute(
+            """INSERT INTO tk_sends (username, stage, variant, message_text, mode, ready, drafted_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (prospect_row["username"], "cold", variant, text, "draft", 1, now),
+        )
+        send_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        conn.execute(
+            "INSERT INTO tk_events (username, type, stage, ts) VALUES (?,?,?,?)",
+            (prospect_row["username"], "draft", "cold", now),
+        )
+        conn.execute(
+            "UPDATE tk_prospects SET status='queued', updated_at=? WHERE username=? AND status='new'",
+            (now, prospect_row["username"]),
+        )
+        conn.commit()
+    return int(send_id)
+
+
+def _tk_fetch_eligible_prospects(limit: int) -> List[Dict[str, Any]]:
+    with _tk_db() as conn:
+        rows = conn.execute(
+            """SELECT p.* FROM tk_prospects p
+               WHERE p.status IN ('new','queued')
+                 AND p.source LIKE 'campaign%'
+                 AND p.username NOT IN (SELECT username FROM tk_suppressions)
+                 AND p.username NOT IN (SELECT username FROM tk_sends WHERE mode IN ('draft','sent','sent_auto'))
+               ORDER BY p.created_at ASC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _tk_campaign_iteration(state: Dict[str, Any]) -> Dict[str, Any]:
+    target = int(state.get("target_count") or 30)
+    sent_count = int(state.get("sent_count") or 0)
+    discovered = int(state.get("discovered_count") or 0)
+    remaining = max(0, target - sent_count)
+    if remaining <= 0:
+        _tk_campaign_update(status="completed", completed_at=_tk_now())
+        return {"action": "completed"}
+
+    pending_drafts = int(state.get("pending_drafts") or 0)
+    pool_target = int(target * 1.5)
+
+    if discovered < pool_target:
+        _tk_campaign_update(status="discovering")
+        try:
+            from tiktok_discover import discover_real  # type: ignore
+        except ImportError as exc:
+            _tk_campaign_update(status="paused", error_msg=f"discover no disponible: {exc}")
+            return {"action": "error", "reason": "discover_module_missing"}
+        with _tk_db() as conn:
+            suppressed = {r["username"] for r in conn.execute(
+                "SELECT username FROM tk_suppressions").fetchall()}
+            known = {r["username"] for r in conn.execute(
+                "SELECT username FROM tk_prospects").fetchall()}
+        need = min(15, pool_target - discovered)
+        candidates = discover_real(
+            target_count=need, suppressed=suppressed, known=known,
+            log=lambda msg: logger.info("[tk-campaign] %s", msg),
+        )
+        added = _tk_insert_candidates(candidates)
+        logger.info("[tk-campaign] discovery: %s candidatos, %s nuevos", len(candidates), added)
+        return {"action": "discovery", "added": added}
+
+    if pending_drafts < remaining and pending_drafts < 10:
+        eligible = _tk_fetch_eligible_prospects(min(10 - pending_drafts, remaining - pending_drafts))
+        drafted = 0
+        for p in eligible:
+            if _tk_create_draft(p):
+                drafted += 1
+        logger.info("[tk-campaign] drafts: %s nuevos", drafted)
+        return {"action": "draft", "drafted": drafted}
+
+    if pending_drafts > 0 and tk_is_autosend_enabled():
+        try:
+            from tiktok_autosend import fetch_pending_drafts, autosend_drafts  # type: ignore
+        except ImportError:
+            _tk_campaign_update(status="paused", error_msg="autosend no disponible")
+            return {"action": "error", "reason": "autosend_missing"}
+        _tk_campaign_update(status="sending")
+        drafts = fetch_pending_drafts(1)
+        if not drafts:
+            return {"action": "idle_no_drafts"}
+        try:
+            sent = autosend_drafts(drafts, dry_run=False)
+            logger.info("[tk-campaign] autosend: %s/1 enviado", sent)
+            if sent == 0:
+                return {"action": "send_failed"}
+            return {"action": "sent", "count": sent}
+        except RuntimeError as exc:
+            err = str(exc)[:200]
+            if "Sesion TikTok" in err or "sesion_expirada" in err:
+                _tk_campaign_update(status="paused", error_msg=f"sesion expirada: {err}")
+                return {"action": "error", "reason": "session_expired"}
+            logger.warning("[tk-campaign] autosend RuntimeError: %s", err)
+            return {"action": "error", "reason": err}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[tk-campaign] autosend error: %s", exc)
+            return {"action": "error", "reason": str(exc)[:120]}
+
+    return {"action": "idle"}
+
+
+def _tk_campaign_worker() -> None:
+    logger.info("[tk-campaign] worker iniciado")
+    while not tk_campaign_stop.is_set():
+        try:
+            if not TK_AVAILABLE:
+                tk_campaign_stop.wait(60)
+                continue
+            state = _tk_campaign_state()
+            status = state.get("status", "idle")
+            if status not in ("discovering", "sending"):
+                tk_campaign_stop.wait(45)
+                continue
+            res = _tk_campaign_iteration(state)
+            action = (res or {}).get("action", "")
+            if action == "sent":
+                mn = int(os.getenv("TK_AUTOSEND_MIN_DELAY_SEC", "60") or 60)
+                mx = int(os.getenv("TK_AUTOSEND_MAX_DELAY_SEC", "240") or 240)
+                if mx < mn:
+                    mx = mn + 30
+                tk_campaign_stop.wait(random.uniform(mn, mx))
+            elif action == "completed":
+                logger.info("[tk-campaign] objetivo alcanzado")
+                tk_campaign_stop.wait(60)
+            elif action == "error":
+                tk_campaign_stop.wait(180)
+            else:
+                tk_campaign_stop.wait(20)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[tk-campaign] loop error: %s", exc)
+            tk_campaign_stop.wait(60)
+
+
+# ----- Endpoints campaign -----
+
+@app.get("/admin/tiktok/campaign", dependencies=[Depends(_require_admin_token)])
+def tiktok_campaign_get():
+    state = _tk_campaign_state()
+    try:
+        from tiktok_autosend import session_info  # type: ignore
+        session = session_info()
+    except Exception:
+        session = {"connected": False}
+    return {"campaign": state, "session": session,
+            "autosend_enabled": tk_is_autosend_enabled() if TK_AVAILABLE else False,
+            "autonomous_autosend": _tk_env_bool("TK_AUTONOMOUS_AUTOSEND", False)}
+
+
+@app.post("/admin/tiktok/campaign/start", dependencies=[Depends(_require_admin_token)])
+def tiktok_campaign_start(payload: TKCampaignStart):
+    if not TK_AVAILABLE:
+        raise HTTPException(503, "Modulo TikTok no disponible")
+    if not tk_is_autosend_enabled():
+        raise HTTPException(412, "TK_AUTOSEND_ENABLED=false en env")
+    try:
+        from tiktok_autosend import session_info  # type: ignore
+        if not session_info().get("connected"):
+            raise HTTPException(412, "Sesion TikTok no conectada. Pega cookies primero.")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    _tk_migrate()
+    _tk_campaign_update(
+        target_count=int(payload.target_count),
+        status="discovering",
+        error_msg="",
+        started_at=_tk_now(),
+        completed_at="",
+    )
+    return {"ok": True, "state": _tk_campaign_state()}
+
+
+@app.post("/admin/tiktok/campaign/pause", dependencies=[Depends(_require_admin_token)])
+def tiktok_campaign_pause():
+    _tk_migrate()
+    _tk_campaign_update(status="paused")
+    return {"ok": True, "state": _tk_campaign_state()}
+
+
+@app.post("/admin/tiktok/campaign/resume", dependencies=[Depends(_require_admin_token)])
+def tiktok_campaign_resume():
+    if not tk_is_autosend_enabled():
+        raise HTTPException(412, "TK_AUTOSEND_ENABLED=false en env")
+    _tk_migrate()
+    state = _tk_campaign_state()
+    next_status = "sending" if (state.get("pending_drafts") or 0) > 0 else "discovering"
+    _tk_campaign_update(status=next_status, error_msg="")
+    return {"ok": True, "state": _tk_campaign_state()}
+
+
+# ----- Sesion / cookies -----
+
+@app.get("/admin/tiktok/autosend/status", dependencies=[Depends(_require_admin_token)])
+def tiktok_autosend_status():
+    try:
+        from tiktok_autosend import session_info  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/tiktok_autosend.py no disponible")
+    return {
+        "autosend_enabled": tk_is_autosend_enabled(),
+        "autonomous_autosend": _tk_env_bool("TK_AUTONOMOUS_AUTOSEND", False),
+        "session": session_info(),
+    }
+
+
+@app.post("/admin/tiktok/autosend/connect", dependencies=[Depends(_require_admin_token)])
+def tiktok_autosend_connect(payload: TKSessionCookies):
+    try:
+        from tiktok_autosend import save_session_from_cookies, session_info  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/tiktok_autosend.py no disponible")
+    try:
+        path = save_session_from_cookies(
+            sessionid=payload.sessionid,
+            sessionid_ss=payload.sessionid_ss,
+            tt_csrf_token=payload.tt_csrf_token,
+            ms_token=payload.ms_token,
+            ttwid=payload.ttwid,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"ok": True, "saved_at": str(path), "session": session_info()}
+
+
+@app.post("/admin/tiktok/autosend/disconnect", dependencies=[Depends(_require_admin_token)])
+def tiktok_autosend_disconnect():
+    try:
+        from tiktok_autosend import clear_session  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/tiktok_autosend.py no disponible")
+    removed = clear_session()
+    return {"ok": True, "removed": removed}
+
+
+@app.post("/admin/tiktok/autosend/test", dependencies=[Depends(_require_admin_token)])
+def tiktok_autosend_test():
+    try:
+        from tiktok_autosend import session_info  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/tiktok_autosend.py no disponible")
+    info = session_info()
+    if not info.get("connected"):
+        return {"ok": False, "reason": "sin_sesion"}
+    sessionid = ""
+    try:
+        state_path = Path(info.get("path") or "")
+        if state_path.exists():
+            data = json.loads(state_path.read_text(encoding="utf-8"))
+            for c in data.get("cookies", []):
+                if c.get("name") == "sessionid":
+                    sessionid = c.get("value") or ""
+                    break
+    except Exception as exc:
+        raise HTTPException(500, f"No se pudo leer sesion: {exc}")
+    if not sessionid:
+        return {"ok": False, "reason": "sin_sessionid"}
+    cookies = {"sessionid": sessionid}
+    headers = {
+        "User-Agent": os.getenv("TK_AUTOSEND_USER_AGENT",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
+        "Accept-Language": "es-ES,es;q=0.9",
+    }
+    try:
+        with httpx.Client(timeout=10.0, follow_redirects=True) as client:
+            r = client.get("https://www.tiktok.com/foryou", cookies=cookies, headers=headers)
+        ok = r.status_code == 200 and ("tiktok" in (r.text or "").lower())
+        return {"ok": ok, "status_code": r.status_code, "session": info,
+                "hint": "Cookies validas" if ok else "Cookies caducadas. Reconecta."}
+    except Exception as exc:
+        return {"ok": False, "reason": f"http_error: {exc}", "session": info}
+
+
+# ----- DM templates editor -----
+
+def _tk_dm_default(variant: str) -> str:
+    try:
+        from tiktok_templates_v2 import render_natural  # type: ignore
+        return render_natural(
+            username=f"demo_{variant.lower()}",
+            business_name="Clinica Sonrisa",
+            niche="clinica dental",
+            city="Madrid",
+            variant=variant,
+        )
+    except Exception:
+        return ""
+
+
+@app.get("/admin/tiktok/dm-templates", dependencies=[Depends(_require_admin_token)])
+def tiktok_dm_templates_get():
+    _tk_migrate()
+    out = {"A": "", "B": "", "C": ""}
+    with _tk_db() as conn:
+        rows = conn.execute("SELECT variant, body FROM tk_dm_templates_v2").fetchall()
+        for r in rows:
+            v = (r["variant"] or "").upper()
+            if v in out:
+                out[v] = r["body"] or ""
+    defaults = {v: _tk_dm_default(v) for v in ("A", "B", "C")}
+    placeholders_help = ""
+    try:
+        from tiktok_templates_v2 import PLACEHOLDERS_HELP  # type: ignore
+        placeholders_help = PLACEHOLDERS_HELP
+    except Exception:
+        pass
+    return {"templates": out, "defaults": defaults, "placeholders_help": placeholders_help}
+
+
+@app.put("/admin/tiktok/dm-templates", dependencies=[Depends(_require_admin_token)])
+def tiktok_dm_templates_put(payload: TKDmTemplatesPayload):
+    _tk_migrate()
+    now = _tk_now()
+    data = {"A": payload.variant_a, "B": payload.variant_b, "C": payload.variant_c}
+    saved: List[str] = []
+    with _tk_db() as conn:
+        for variant, body in data.items():
+            if body is None:
+                continue
+            body_clean = body.strip()
+            if body_clean:
+                conn.execute(
+                    """INSERT INTO tk_dm_templates_v2 (variant, body, updated_at)
+                       VALUES (?,?,?)
+                       ON CONFLICT(variant) DO UPDATE SET body=excluded.body, updated_at=excluded.updated_at""",
+                    (variant, body_clean, now),
+                )
+                saved.append(variant)
+            else:
+                conn.execute("DELETE FROM tk_dm_templates_v2 WHERE variant=?", (variant,))
+                saved.append(variant + " (reset)")
+        conn.commit()
+    return {"ok": True, "saved": saved}
+
+
+@app.post("/admin/tiktok/dm-templates/preview", dependencies=[Depends(_require_admin_token)])
+def tiktok_dm_templates_preview(variant: str = "A",
+                                 business_name: str = "Clinica Sonrisa",
+                                 niche: str = "clinica dental",
+                                 city: str = "Madrid"):
+    try:
+        from tiktok_templates_v2 import render_natural  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "tiktok_templates_v2 no disponible")
+    text = render_natural(
+        username=f"preview_{variant.lower()}",
+        business_name=business_name,
+        niche=niche,
+        city=city,
+        variant=variant.upper(),
+        db_path=str(TK_DEFAULT_DB),
+    )
+    return {"variant": variant.upper(), "text": text}
+
+
+# ----- Suppressions / stats / prospects -----
+
+@app.get("/admin/tiktok/stats", dependencies=[Depends(_require_admin_token)])
+def tiktok_stats():
+    _tk_migrate()
+    today = datetime.now(timezone.utc).date().isoformat()
+    with _tk_db() as conn:
+        sent_today = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_sends WHERE mode='sent_auto' AND substr(sent_at,1,10)=?",
+            (today,),
+        ).fetchone()["c"]
+        sent_total = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_sends WHERE mode='sent_auto'"
+        ).fetchone()["c"]
+        replies = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_prospects WHERE status='replied'"
+        ).fetchone()["c"]
+        drafts = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_sends WHERE mode='draft' AND ready=1"
+        ).fetchone()["c"]
+        prospects = conn.execute("SELECT COUNT(*) AS c FROM tk_prospects").fetchone()["c"]
+    return {"totals": {"prospects": prospects, "sent_today": sent_today,
+                       "sent_total": sent_total, "replies_unique": replies,
+                       "drafts_pending": drafts}}
+
+
+@app.post("/admin/tiktok/suppress", dependencies=[Depends(_require_admin_token)])
+def tiktok_suppress(payload: TKSuppressRequest):
+    user = _tk_resolve_username(payload.username)
+    if not user:
+        raise HTTPException(400, "username invalido")
+    _tk_migrate()
+    with _tk_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO tk_suppressions (username, reason, added_at) VALUES (?,?,?)",
+            (user, payload.reason or "manual", _tk_now()),
+        )
+        conn.execute(
+            "UPDATE tk_prospects SET status='dnc', updated_at=? WHERE username=?",
+            (_tk_now(), user),
+        )
+        conn.commit()
+    return {"ok": True, "username": user}
+
+
+@app.delete("/admin/tiktok/suppress/{username}", dependencies=[Depends(_require_admin_token)])
+def tiktok_remove_suppress(username: str):
+    user = _tk_resolve_username(username)
+    _tk_migrate()
+    with _tk_db() as conn:
+        conn.execute("DELETE FROM tk_suppressions WHERE username=?", (user,))
+        conn.commit()
+    return {"ok": True}
+
+
+@app.get("/admin/tiktok/suppressions", dependencies=[Depends(_require_admin_token)])
+def tiktok_list_suppressions(limit: int = 200):
+    _tk_migrate()
+    with _tk_db() as conn:
+        rows = conn.execute(
+            "SELECT username, reason, added_at FROM tk_suppressions ORDER BY added_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return {"items": [dict(r) for r in rows]}
+
+
+@app.get("/admin/tiktok/prospects", dependencies=[Depends(_require_admin_token)])
+def tiktok_prospects(limit: int = 100, status: str = ""):
+    _tk_migrate()
+    q = "SELECT * FROM tk_prospects"
+    params: List[Any] = []
+    if status:
+        q += " WHERE status=?"
+        params.append(status)
+    q += " ORDER BY created_at DESC LIMIT ?"
+    params.append(limit)
+    with _tk_db() as conn:
+        rows = conn.execute(q, params).fetchall()
+    return {"items": [dict(r) for r in rows]}
+
+
+# ----- Worker startup/shutdown -----
+
+@app.on_event("startup")
+async def _tk_startup_workers() -> None:
+    global tk_campaign_thread
+    if TK_AVAILABLE:
+        try:
+            _tk_migrate()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("tk_campaign migrate fallo: %s", exc)
+        if not tk_campaign_thread or not tk_campaign_thread.is_alive():
+            tk_campaign_stop.clear()
+            tk_campaign_thread = threading.Thread(target=_tk_campaign_worker, name="vantelia-tk-campaign", daemon=True)
+            tk_campaign_thread.start()
+
+
+@app.on_event("shutdown")
+async def _tk_shutdown_workers() -> None:
+    tk_campaign_stop.set()
+
+
+# === END TIKTOK ======================================================
+
+
 if __name__ == "__main__":
     import uvicorn
 

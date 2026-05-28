@@ -1824,6 +1824,10 @@ tbody tr:last-child td { border-bottom: none; }
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="1"></circle></svg></span>
           <span class="nav-text"><strong>Instagram</strong><span>Captacion via DM</span></span>
         </button>
+        <button class="nav-button" type="button" data-nav-view="tiktok">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v12.5a3 3 0 1 1-3-3"></path><path d="M9 3c0 3 2.5 5.5 5.5 5.5"></path></svg></span>
+          <span class="nav-text"><strong>TikTok</strong><span>Captacion via DM</span></span>
+        </button>
         <button class="nav-button" type="button" data-nav-view="security">
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9.5 12l1.8 1.8L15 10"></path></svg></span>
           <span class="nav-text"><strong>Seguridad</strong><span>Sesion y contrasena</span></span>
@@ -2437,6 +2441,189 @@ tbody tr:last-child td { border-bottom: none; }
           <button id="openAiDrawerBtn" class="secondary" type="button">Abrir configuracion</button>
         </div>
       </section>
+      </section>
+
+      <section class="dashboard-view" data-view="tiktok">
+        <section class="card panel">
+          <div class="section-header">
+            <div>
+              <h2>Captacion TikTok</h2>
+              <p>Mismo flujo que Instagram. Define objetivo, conecta cookies, pulsa Empezar.</p>
+            </div>
+            <div class="actions">
+              <span id="tkSessionPill" class="pill"></span>
+              <button class="ghost small" type="button" id="tkRefreshBtn">Actualizar</button>
+            </div>
+          </div>
+
+          <div class="actions cw-advanced-tabs">
+            <button class="ghost small active" type="button" data-tk-tab="dashboard">Hoy</button>
+            <button class="ghost small" type="button" data-tk-tab="config">Configuracion</button>
+            <button class="ghost small" type="button" data-tk-tab="templates">Mensajes</button>
+            <button class="ghost small" type="button" data-tk-tab="suppressions">Bajas</button>
+          </div>
+
+          <div class="outreach-panel active" data-tk-panel="dashboard">
+            <div class="grid-4" style="margin-top:12px;">
+              <div class="stat-card"><strong id="tkStatSentToday">0</strong><span>DMs hoy</span></div>
+              <div class="stat-card"><strong id="tkStatSentTotal">0</strong><span>Total enviados</span></div>
+              <div class="stat-card"><strong id="tkStatReplies">0</strong><span>Respuestas</span></div>
+              <div class="stat-card"><strong id="tkStatDrafts">0</strong><span>En cola</span></div>
+            </div>
+            <div class="card panel" style="padding:12px;margin-top:14px;">
+              <strong>Prospects recientes</strong>
+              <div id="tkProspectsList" class="muted" style="margin-top:8px;">cargando...</div>
+            </div>
+          </div>
+
+          <div class="outreach-panel" data-tk-panel="config" style="display:none;">
+            <div id="tkCampaignCard" class="card" style="padding:18px;margin-bottom:14px;border:2px solid #cbd5e1;background:#f8fafc;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:240px;">
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <span id="tkCampStateDot" style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#94a3b8;"></span>
+                    <strong id="tkCampStateText" style="font-size:20px;">Cargando...</strong>
+                  </div>
+                  <p class="muted" id="tkCampHint" style="margin:6px 0 0;font-size:12px;">Define objetivo y pulsa Empezar. Discovery → drafts → envio.</p>
+                </div>
+              </div>
+              <div style="margin-top:14px;background:#e2e8f0;border-radius:10px;overflow:hidden;height:14px;position:relative;">
+                <div id="tkCampProgressBar" style="height:100%;background:linear-gradient(90deg,#10b981,#059669);width:0%;transition:width 0.4s;"></div>
+              </div>
+              <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;font-size:13px;">
+                <span><strong id="tkCampSent">0</strong> contactados / <strong id="tkCampTarget">0</strong> objetivo</span>
+                <span class="muted" id="tkCampPct">0%</span>
+              </div>
+              <div style="margin-top:14px;display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+                <label style="font-size:12px;display:flex;flex-direction:column;gap:4px;">
+                  Numero de clientes objetivo
+                  <input id="tkCampTargetInput" type="number" min="1" max="200" value="30" style="width:120px;font-size:18px;font-weight:600;text-align:center;padding:6px;" />
+                </label>
+                <button id="tkCampStartBtn" class="secondary" type="button" style="font-size:15px;padding:10px 26px;">EMPEZAR CAPTACIÓN</button>
+                <button id="tkCampPauseBtn" class="ghost small" type="button" style="display:none;">Pausar</button>
+                <button id="tkCampResumeBtn" class="ghost small" type="button" style="display:none;">Reanudar</button>
+              </div>
+              <div id="tkCampStats" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;font-size:12px;">
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Descubiertos</span>
+                  <strong id="tkCampDiscovered" style="font-size:18px;">-</strong>
+                </div>
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">En cola</span>
+                  <strong id="tkCampPending" style="font-size:18px;">-</strong>
+                </div>
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Respuestas</span>
+                  <strong id="tkCampReplied" style="font-size:18px;">-</strong>
+                </div>
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Sesion TT</span>
+                  <strong id="tkCampSession" style="font-size:13px;">-</strong>
+                </div>
+              </div>
+              <p id="tkCampMsg" class="muted" style="margin:8px 0 0;font-size:12px;"></p>
+            </div>
+            <div class="card" style="padding:14px;margin-bottom:14px;background:#fffbeb;border:1px solid #fde68a;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:260px;">
+                  <strong style="font-size:14px;">Sesion TikTok (envio automatico)</strong>
+                  <p class="muted" style="margin:4px 0 0;font-size:12px;">
+                    Pega tus cookies de TikTok para que el VPS envie los DMs solo. Caducan periodicamente, reconecta.
+                    <strong>Recomendado: cuenta secundaria.</strong> Riesgo bloqueo TikTok al automatizar DMs.
+                  </p>
+                </div>
+                <div id="tkAutosendStatusBadge" class="muted" style="font-size:12px;text-align:right;min-width:160px;">Cargando...</div>
+              </div>
+              <details style="margin-top:10px;">
+                <summary style="cursor:pointer;font-size:12px;color:#92400e;">Como sacar las cookies (1 vez, 2 min)</summary>
+                <ol style="font-size:12px;line-height:1.7;margin:8px 0 0 18px;color:#475569;">
+                  <li>Abre <code>tiktok.com</code> en tu navegador, logueado con la cuenta a usar.</li>
+                  <li>F12 → Application (Chrome) o Almacenamiento (Firefox).</li>
+                  <li>Cookies → <code>https://www.tiktok.com</code>.</li>
+                  <li>Copia: <code>sessionid</code> obligatoria + opcional <code>sessionid_ss</code>, <code>tt_csrf_token</code>, <code>msToken</code>, <code>ttwid</code>.</li>
+                  <li>Pegalos abajo y pulsa <strong>Conectar</strong>.</li>
+                </ol>
+              </details>
+              <div class="grid-2" style="margin-top:10px;gap:8px;">
+                <label style="font-size:12px;">sessionid (obligatoria)<input id="tkSessionid" type="password" autocomplete="off" /></label>
+                <label style="font-size:12px;">sessionid_ss<input id="tkSessionidSs" type="password" autocomplete="off" /></label>
+                <label style="font-size:12px;">tt_csrf_token<input id="tkCsrfToken" type="text" autocomplete="off" /></label>
+                <label style="font-size:12px;">msToken<input id="tkMsToken" type="text" autocomplete="off" /></label>
+                <label style="font-size:12px;">ttwid<input id="tkTtwid" type="text" autocomplete="off" /></label>
+              </div>
+              <div class="actions" style="margin-top:10px;gap:8px;flex-wrap:wrap;">
+                <button class="secondary small" type="button" id="tkAutosendConnectBtn">Conectar</button>
+                <button class="ghost small" type="button" id="tkAutosendTestBtn">Probar sesion</button>
+                <button class="ghost small" type="button" id="tkAutosendDisconnectBtn" style="color:#b91c1c;">Desconectar</button>
+                <span id="tkAutosendMsg" class="muted" style="font-size:12px;"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="outreach-panel" data-tk-panel="templates" style="display:none;">
+            <div class="card" style="padding:14px;margin-top:12px;">
+              <strong>Plantillas de DM</strong>
+              <p class="muted" style="margin:4px 0 0;font-size:12px;">
+                3 variantes A/B/C estables por hash de username. Vacio = default codificado.
+                Placeholders: <code>{business_name}</code>, <code>{city}</code>, <code>{niche}</code>, <code>{observed}</code>, <code>{you}</code>.
+              </p>
+            </div>
+            <div class="grid-3" style="margin-top:12px;gap:12px;">
+              <div class="card" style="padding:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <strong>Variante A</strong>
+                  <button class="ghost small" type="button" data-tktpl-reset="A">Restaurar default</button>
+                </div>
+                <textarea id="tkTplA" rows="14" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-top:6px;"></textarea>
+                <div style="margin-top:8px;">
+                  <button class="ghost small" type="button" data-tktpl-preview="A">Preview</button>
+                  <pre data-tktpl-preview-out="A" style="display:none;background:#0f172a;color:#cbd5f5;padding:10px;border-radius:6px;font-size:11px;white-space:pre-wrap;margin-top:6px;"></pre>
+                </div>
+              </div>
+              <div class="card" style="padding:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <strong>Variante B</strong>
+                  <button class="ghost small" type="button" data-tktpl-reset="B">Restaurar default</button>
+                </div>
+                <textarea id="tkTplB" rows="14" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-top:6px;"></textarea>
+                <div style="margin-top:8px;">
+                  <button class="ghost small" type="button" data-tktpl-preview="B">Preview</button>
+                  <pre data-tktpl-preview-out="B" style="display:none;background:#0f172a;color:#cbd5f5;padding:10px;border-radius:6px;font-size:11px;white-space:pre-wrap;margin-top:6px;"></pre>
+                </div>
+              </div>
+              <div class="card" style="padding:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <strong>Variante C</strong>
+                  <button class="ghost small" type="button" data-tktpl-reset="C">Restaurar default</button>
+                </div>
+                <textarea id="tkTplC" rows="14" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-top:6px;"></textarea>
+                <div style="margin-top:8px;">
+                  <button class="ghost small" type="button" data-tktpl-preview="C">Preview</button>
+                  <pre data-tktpl-preview-out="C" style="display:none;background:#0f172a;color:#cbd5f5;padding:10px;border-radius:6px;font-size:11px;white-space:pre-wrap;margin-top:6px;"></pre>
+                </div>
+              </div>
+            </div>
+            <div class="actions" style="margin-top:12px;">
+              <button class="secondary" type="button" id="tkTplSaveBtn">Guardar plantillas</button>
+              <span id="tkTplMsg" class="muted" style="font-size:12px;"></span>
+            </div>
+          </div>
+
+          <div class="outreach-panel" data-tk-panel="suppressions" style="display:none;">
+            <div class="actions" style="margin-top:12px;">
+              <input id="tkSupUsername" placeholder="@cuenta" />
+              <input id="tkSupReason" placeholder="razon" />
+              <button class="secondary small" type="button" id="tkSupAddBtn">Suprimir</button>
+              <button class="ghost small" type="button" id="tkSupRefreshBtn">Refrescar</button>
+            </div>
+            <div style="margin-top:12px;">
+              <table style="width:100%;font-size:13px;">
+                <thead><tr><th>Username</th><th>Razon</th><th>Fecha</th><th></th></tr></thead>
+                <tbody id="tkSupBody"><tr><td colspan="4" class="muted">Cargando bajas...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
       </section>
 
       <section class="dashboard-view" data-view="security">
@@ -3694,6 +3881,8 @@ tbody tr:last-child td { border-bottom: none; }
         loadStatsOverview().catch((error) => showStatus(error.message, "error"));
       } else if (nextView === "instagram") {
         try { window.__igInit && window.__igInit(); } catch(e) { console.warn(e); }
+      } else if (nextView === "tiktok") {
+        try { window.__tkInit && window.__tkInit(); } catch(e) { console.warn(e); }
       }
     }
 
@@ -9618,6 +9807,270 @@ a {
       };
     })();
     // === END INSTAGRAM PANEL ====================================
+
+    // === TIKTOK PANEL ===========================================
+    (function() {
+      const TKQ = (sel) => document.querySelector(sel);
+      const TKALL = (sel) => document.querySelectorAll(sel);
+      let tkState = { tab: "dashboard", loaded: false };
+      let _tkPollTimer = null;
+
+      async function tkFetch(url, opts) {
+        opts = opts || {};
+        opts.credentials = "include";
+        opts.headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+        const r = await fetch(url, opts);
+        if (!r.ok) {
+          let msg = r.statusText;
+          try { const e = await r.json(); msg = e.detail || e.message || msg; } catch (e) {}
+          throw new Error(msg);
+        }
+        return r.json();
+      }
+
+      function setTkTab(tab) {
+        tkState.tab = tab;
+        TKALL("[data-tk-tab]").forEach(b => b.classList.toggle("active", b.dataset.tkTab === tab));
+        TKALL("[data-tk-panel]").forEach(p => {
+          const isActive = p.dataset.tkPanel === tab;
+          p.classList.toggle("active", isActive);
+          p.style.display = isActive ? "" : "none";
+        });
+        if (tab === "dashboard") loadTkStats();
+        if (tab === "config") { loadTkCampaign(); loadTkAutosendStatus(); startTkPolling(); } else { stopTkPolling(); }
+        if (tab === "templates") loadTkTemplates();
+        if (tab === "suppressions") loadTkSuppressions();
+      }
+
+      const TK_STATE_META = {
+        idle: { label: "PARADO", dot: "#94a3b8", color: "#475569" },
+        discovering: { label: "BUSCANDO PROSPECTS", dot: "#3b82f6", color: "#1e40af" },
+        sending: { label: "ENVIANDO DMs", dot: "#10b981", color: "#047857" },
+        paused: { label: "PAUSADO", dot: "#f59e0b", color: "#92400e" },
+        completed: { label: "OBJETIVO ALCANZADO", dot: "#22c55e", color: "#15803d" },
+      };
+
+      async function loadTkStats() {
+        try {
+          const d = await tkFetch("/admin/tiktok/stats");
+          const t = d.totals || {};
+          if (TKQ("#tkStatSentToday")) TKQ("#tkStatSentToday").textContent = t.sent_today || 0;
+          if (TKQ("#tkStatSentTotal")) TKQ("#tkStatSentTotal").textContent = t.sent_total || 0;
+          if (TKQ("#tkStatReplies")) TKQ("#tkStatReplies").textContent = t.replies_unique || 0;
+          if (TKQ("#tkStatDrafts")) TKQ("#tkStatDrafts").textContent = t.drafts_pending || 0;
+          const p = await tkFetch("/admin/tiktok/prospects?limit=8");
+          const items = p.items || [];
+          const box = TKQ("#tkProspectsList");
+          if (box) {
+            if (!items.length) box.innerHTML = '<p class="muted">Aun sin prospects.</p>';
+            else box.innerHTML = items.map(x => `<div class="ig-row"><div class="ig-main"><strong>@${x.username}</strong><span class="muted">${x.business_name || ""} · ${x.niche || ""} · ${x.city || ""}</span></div><span class="pill">${x.status}</span></div>`).join("");
+          }
+        } catch (err) {
+          if (TKQ("#tkProspectsList")) TKQ("#tkProspectsList").textContent = "Error: " + err.message;
+        }
+      }
+
+      async function loadTkCampaign() {
+        try {
+          const data = await tkFetch("/admin/tiktok/campaign");
+          const c = data.campaign || {};
+          const status = c.status || "idle";
+          const meta = TK_STATE_META[status] || TK_STATE_META.idle;
+          const target = c.target_count || 0;
+          const sent = c.sent_count || 0;
+          const pct = target > 0 ? Math.min(100, Math.round((sent / target) * 100)) : 0;
+          TKQ("#tkCampStateDot").style.background = meta.dot;
+          TKQ("#tkCampStateText").textContent = meta.label;
+          TKQ("#tkCampStateText").style.color = meta.color;
+          TKQ("#tkCampProgressBar").style.width = pct + "%";
+          TKQ("#tkCampSent").textContent = sent;
+          TKQ("#tkCampTarget").textContent = target;
+          TKQ("#tkCampPct").textContent = pct + "%";
+          TKQ("#tkCampDiscovered").textContent = c.discovered_count || 0;
+          TKQ("#tkCampPending").textContent = c.pending_drafts || 0;
+          TKQ("#tkCampReplied").textContent = c.replied_count || 0;
+          const sess = data.session || {};
+          if (sess.connected) {
+            TKQ("#tkCampSession").textContent = "Conectada";
+            TKQ("#tkCampSession").style.color = "#047857";
+          } else {
+            TKQ("#tkCampSession").innerHTML = '<span style="color:#b91c1c;">Sin sesion</span>';
+          }
+          const startBtn = TKQ("#tkCampStartBtn");
+          const pauseBtn = TKQ("#tkCampPauseBtn");
+          const resumeBtn = TKQ("#tkCampResumeBtn");
+          const tIn = TKQ("#tkCampTargetInput");
+          if (status === "idle" || status === "completed") {
+            startBtn.style.display = ""; startBtn.textContent = status === "completed" ? "EMPEZAR NUEVA" : "EMPEZAR CAPTACIÓN";
+            pauseBtn.style.display = "none"; resumeBtn.style.display = "none"; tIn.disabled = false;
+          } else if (status === "paused") {
+            startBtn.style.display = "none"; pauseBtn.style.display = "none"; resumeBtn.style.display = ""; tIn.disabled = false;
+          } else {
+            startBtn.style.display = "none"; pauseBtn.style.display = ""; resumeBtn.style.display = "none"; tIn.disabled = true;
+          }
+          if (document.activeElement !== tIn && target > 0) tIn.value = target;
+          const err = (c.error_msg || "").trim();
+          TKQ("#tkCampMsg").textContent = err ? `Aviso: ${err}` : "";
+          TKQ("#tkCampMsg").style.color = err ? "#b91c1c" : "#64748b";
+        } catch (err) {
+          TKQ("#tkCampStateText").textContent = "Error: " + err.message;
+        }
+      }
+
+      async function tkCampStart() {
+        const target = parseInt(TKQ("#tkCampTargetInput").value || "30", 10);
+        if (!target || target < 1 || target > 200) { TKQ("#tkCampMsg").innerHTML = '<span style="color:#b91c1c;">Objetivo 1-200.</span>'; return; }
+        if (!confirm(`Empezar captacion TikTok para ${target} clientes? Se enviaran DMs reales.`)) return;
+        const btn = TKQ("#tkCampStartBtn"); btn.disabled = true;
+        TKQ("#tkCampMsg").textContent = "Arrancando...";
+        try {
+          await tkFetch("/admin/tiktok/campaign/start", { method: "POST", body: JSON.stringify({ target_count: target }) });
+          TKQ("#tkCampMsg").textContent = "Iniciada. Empieza a buscar."; TKQ("#tkCampMsg").style.color = "#047857";
+        } catch (err) { TKQ("#tkCampMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`; }
+        btn.disabled = false; await loadTkCampaign();
+      }
+
+      async function tkCampPause() {
+        try { await tkFetch("/admin/tiktok/campaign/pause", { method: "POST" }); } catch (err) { TKQ("#tkCampMsg").innerHTML = `<span style="color:#b91c1c;">${err.message}</span>`; }
+        await loadTkCampaign();
+      }
+      async function tkCampResume() {
+        try { await tkFetch("/admin/tiktok/campaign/resume", { method: "POST" }); } catch (err) { TKQ("#tkCampMsg").innerHTML = `<span style="color:#b91c1c;">${err.message}</span>`; }
+        await loadTkCampaign();
+      }
+
+      function startTkPolling() {
+        stopTkPolling();
+        _tkPollTimer = setInterval(() => {
+          const panel = document.querySelector('[data-tk-panel="config"]');
+          if (!panel || panel.style.display === "none") return;
+          loadTkCampaign();
+        }, 8000);
+      }
+      function stopTkPolling() { if (_tkPollTimer) { clearInterval(_tkPollTimer); _tkPollTimer = null; } }
+
+      async function loadTkAutosendStatus() {
+        const badge = TKQ("#tkAutosendStatusBadge"); if (!badge) return;
+        try {
+          const data = await tkFetch("/admin/tiktok/autosend/status");
+          const s = data.session || {};
+          if (s.connected) {
+            const saved = s.saved_at ? new Date(s.saved_at).toLocaleDateString("es-ES") : "?";
+            badge.innerHTML = `<span style="color:#047857;">● Conectada</span><br/><span style="font-size:11px;color:#64748b;">guardada ${saved}</span>`;
+          } else {
+            badge.innerHTML = `<span style="color:#b91c1c;">● Sin sesion</span><br/><span style="font-size:11px;color:#64748b;">${s.reason || "pega cookies"}</span>`;
+          }
+        } catch (err) { badge.innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`; }
+      }
+
+      async function tkAutosendConnect() {
+        const sessionid = TKQ("#tkSessionid").value.trim();
+        const sessionid_ss = TKQ("#tkSessionidSs").value.trim();
+        const tt_csrf_token = TKQ("#tkCsrfToken").value.trim();
+        const ms_token = TKQ("#tkMsToken").value.trim();
+        const ttwid = TKQ("#tkTtwid").value.trim();
+        const msg = TKQ("#tkAutosendMsg");
+        if (!sessionid) { msg.textContent = "Falta sessionid (obligatoria)"; msg.style.color = "#b91c1c"; return; }
+        msg.textContent = "Conectando..."; msg.style.color = "#64748b";
+        try {
+          await tkFetch("/admin/tiktok/autosend/connect", { method: "POST",
+            body: JSON.stringify({ sessionid, sessionid_ss, tt_csrf_token, ms_token, ttwid }) });
+          msg.textContent = "Cookies guardadas. Probando..."; msg.style.color = "#047857";
+          ["#tkSessionid","#tkSessionidSs","#tkCsrfToken","#tkMsToken","#tkTtwid"].forEach(s => TKQ(s).value = "");
+          await tkAutosendTest();
+        } catch (err) { msg.textContent = `Error: ${err.message}`; msg.style.color = "#b91c1c"; }
+        loadTkAutosendStatus();
+      }
+
+      async function tkAutosendTest() {
+        const msg = TKQ("#tkAutosendMsg");
+        msg.textContent = "Probando contra TikTok..."; msg.style.color = "#64748b";
+        try {
+          const data = await tkFetch("/admin/tiktok/autosend/test", { method: "POST" });
+          if (data.ok) { msg.textContent = `OK. HTTP ${data.status_code}.`; msg.style.color = "#047857"; }
+          else { msg.textContent = `Sesion invalida: ${data.reason || data.hint || "?"}`; msg.style.color = "#b91c1c"; }
+        } catch (err) { msg.textContent = `Error: ${err.message}`; msg.style.color = "#b91c1c"; }
+        loadTkAutosendStatus();
+      }
+
+      async function tkAutosendDisconnect() {
+        if (!confirm("Borrar sesion TikTok guardada?")) return;
+        const msg = TKQ("#tkAutosendMsg");
+        try { await tkFetch("/admin/tiktok/autosend/disconnect", { method: "POST" }); msg.textContent = "Sesion borrada."; msg.style.color = "#64748b"; }
+        catch (err) { msg.textContent = `Error: ${err.message}`; msg.style.color = "#b91c1c"; }
+        loadTkAutosendStatus();
+      }
+
+      async function loadTkTemplates() {
+        try {
+          const data = await tkFetch("/admin/tiktok/dm-templates");
+          const t = data.templates || {}; const defs = data.defaults || {};
+          for (const v of ["A","B","C"]) {
+            const el = TKQ("#tkTpl" + v);
+            if (el && document.activeElement !== el) {
+              el.value = t[v] || "";
+              if (!t[v]) el.placeholder = "Vacio = default:\n\n" + (defs[v] || "");
+            }
+          }
+        } catch (err) { TKQ("#tkTplMsg").innerHTML = `<span style="color:#b91c1c;">${err.message}</span>`; }
+      }
+
+      async function tkTplSave() {
+        const body = { variant_a: TKQ("#tkTplA").value, variant_b: TKQ("#tkTplB").value, variant_c: TKQ("#tkTplC").value };
+        TKQ("#tkTplMsg").textContent = "Guardando...";
+        try { const res = await tkFetch("/admin/tiktok/dm-templates", { method: "PUT", body: JSON.stringify(body) }); TKQ("#tkTplMsg").textContent = "Guardado: " + (res.saved || []).join(", "); TKQ("#tkTplMsg").style.color = "#047857"; }
+        catch (err) { TKQ("#tkTplMsg").innerHTML = `<span style="color:#b91c1c;">${err.message}</span>`; }
+      }
+      async function tkTplPreview(v) {
+        const out = document.querySelector(`[data-tktpl-preview-out="${v}"]`);
+        out.style.display = ""; out.textContent = "Generando...";
+        try {
+          const body = { variant_a: v==="A"?TKQ("#tkTplA").value:null, variant_b: v==="B"?TKQ("#tkTplB").value:null, variant_c: v==="C"?TKQ("#tkTplC").value:null };
+          await tkFetch("/admin/tiktok/dm-templates", { method: "PUT", body: JSON.stringify(body) });
+          const res = await tkFetch(`/admin/tiktok/dm-templates/preview?variant=${v}`, { method: "POST" });
+          out.textContent = res.text || "(vacio)";
+        } catch (err) { out.textContent = "Error: " + err.message; }
+      }
+      function tkTplReset(v) { if (!confirm(`Restaurar variante ${v} al default?`)) return; TKQ("#tkTpl" + v).value = ""; tkTplSave(); }
+
+      async function loadTkSuppressions() {
+        try {
+          const data = await tkFetch("/admin/tiktok/suppressions");
+          const items = data.items || [];
+          const body = TKQ("#tkSupBody");
+          if (!items.length) body.innerHTML = '<tr><td colspan="4" class="muted">Sin bajas.</td></tr>';
+          else body.innerHTML = items.map(x => `<tr><td>@${x.username}</td><td>${x.reason || ""}</td><td>${(x.added_at||"").slice(0,10)}</td><td><button class="ghost small" data-tk-sup-del="${x.username}">Quitar</button></td></tr>`).join("");
+          body.querySelectorAll("[data-tk-sup-del]").forEach(b => b.addEventListener("click", async () => { try { await tkFetch(`/admin/tiktok/suppress/${b.dataset.tkSupDel}`, { method: "DELETE" }); loadTkSuppressions(); } catch (e) { alert(e.message); } }));
+        } catch (err) { TKQ("#tkSupBody").innerHTML = `<tr><td colspan="4" style="color:#b91c1c;">${err.message}</td></tr>`; }
+      }
+      async function tkSupAdd() {
+        const username = TKQ("#tkSupUsername").value.trim();
+        const reason = TKQ("#tkSupReason").value.trim() || "manual";
+        if (!username) return;
+        try { await tkFetch("/admin/tiktok/suppress", { method: "POST", body: JSON.stringify({ username, reason }) }); TKQ("#tkSupUsername").value = ""; TKQ("#tkSupReason").value = ""; loadTkSuppressions(); }
+        catch (err) { alert(err.message); }
+      }
+
+      TKALL("[data-tk-tab]").forEach(b => b.addEventListener("click", () => setTkTab(b.dataset.tkTab)));
+      TKQ("#tkRefreshBtn")?.addEventListener("click", () => { loadTkStats(); loadTkCampaign(); });
+      TKQ("#tkCampStartBtn")?.addEventListener("click", tkCampStart);
+      TKQ("#tkCampPauseBtn")?.addEventListener("click", tkCampPause);
+      TKQ("#tkCampResumeBtn")?.addEventListener("click", tkCampResume);
+      TKQ("#tkAutosendConnectBtn")?.addEventListener("click", tkAutosendConnect);
+      TKQ("#tkAutosendTestBtn")?.addEventListener("click", tkAutosendTest);
+      TKQ("#tkAutosendDisconnectBtn")?.addEventListener("click", tkAutosendDisconnect);
+      TKQ("#tkTplSaveBtn")?.addEventListener("click", tkTplSave);
+      document.querySelectorAll("[data-tktpl-preview]").forEach(b => b.addEventListener("click", () => tkTplPreview(b.dataset.tktplPreview)));
+      document.querySelectorAll("[data-tktpl-reset]").forEach(b => b.addEventListener("click", () => tkTplReset(b.dataset.tktplReset)));
+      TKQ("#tkSupAddBtn")?.addEventListener("click", tkSupAdd);
+      TKQ("#tkSupRefreshBtn")?.addEventListener("click", loadTkSuppressions);
+
+      window.__tkInit = function() {
+        if (!tkState.loaded) { setTkTab("dashboard"); tkState.loaded = true; }
+        else { loadTkStats(); }
+      };
+    })();
+    // === END TIKTOK PANEL ===========================================
   </script>
 </body>
 </html>
