@@ -280,20 +280,75 @@ def login_interactive(state_path: Optional[Path] = None) -> Path:
     return target
 
 
+def _dismiss_overlays(page) -> None:
+    """Cierra cookie banners + modales 'Save info'/'Turn on notifications' que bloquean UI."""
+    dismiss_texts = [
+        "Permitir todas las cookies", "Allow all cookies", "Accept all",
+        "Aceptar", "Ahora no", "Not Now", "Not now",
+        "Cerrar", "Close", "Mas tarde",
+    ]
+    for txt in dismiss_texts:
+        try:
+            loc = page.locator(f'button:has-text("{txt}")').first
+            if loc.count() > 0 and loc.is_visible():
+                loc.click(timeout=2000)
+                page.wait_for_timeout(random.randint(300, 800))
+        except Exception:
+            continue
+
+
+def _debug_screenshot(page, username: str, tag: str) -> None:
+    if not _env_bool("IG_AUTOSEND_DEBUG", False):
+        return
+    try:
+        debug_dir = Path(os.getenv("IG_AUTOSEND_DEBUG_DIR", "storage/instagram/debug"))
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        path = debug_dir / f"{ts}_{username}_{tag}.png"
+        page.screenshot(path=str(path), full_page=False)
+        logger.info("debug screenshot: %s", path)
+    except Exception as exc:
+        logger.warning("screenshot fail: %s", exc)
+
+
+def _verify_sent(page, message: str, timeout_sec: int = 8) -> bool:
+    """Tras Enter, busca el texto enviado en el thread (burbuja propia)."""
+    snippet = (message or "").strip().split("\n", 1)[0][:60]
+    if len(snippet) < 8:
+        return False
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        try:
+            # Las burbujas de mensaje tienen role="none" en wrappers, pero el texto
+            # esta dentro de divs. Buscamos coincidencia exacta de snippet.
+            count = page.locator(f'div:has-text("{snippet}")').count()
+            if count >= 2:  # 1 = composer mismo, >=2 = burbuja + composer/vacio
+                return True
+        except Exception:
+            pass
+        time.sleep(0.5)
+    return False
+
+
 def _send_one(page, username: str, message: str) -> bool:
-    """Open user profile → click Message → type → send. Returns True if sent."""
+    """Open user profile → click Message → type → send + verify. Raises on fail."""
     username = username.lstrip("@").strip()
     if not username:
         return False
+
+    # Estrategia: ir directo a ig.me/m/{user} con text prefilled. Mas robusto que
+    # navegar perfil y buscar boton "Enviar mensaje" (selector cambia mucho).
     profile_url = f"https://www.instagram.com/{username}/"
     page.goto(profile_url, wait_until="domcontentloaded", timeout=30000)
     page.wait_for_timeout(random.randint(1500, 3500))
 
-    # Some profiles redirect to login → session expired.
     if "/accounts/login" in page.url:
         raise RuntimeError("sesion_expirada")
 
-    # Click "Message" button. Selectors change often — try several.
+    _dismiss_overlays(page)
+    _debug_screenshot(page, username, "01_profile")
+
+    # Click boton mensaje.
     message_selectors = [
         'div[role="button"]:has-text("Enviar mensaje")',
         'div[role="button"]:has-text("Message")',
@@ -305,49 +360,82 @@ def _send_one(page, username: str, message: str) -> bool:
     for sel in message_selectors:
         try:
             loc = page.locator(sel).first
-            if loc.count() > 0:
+            if loc.count() > 0 and loc.is_visible():
                 loc.click(timeout=4000)
                 clicked = True
                 break
         except Exception:
             continue
     if not clicked:
-        # Fallback: ig.me deep link with prefilled text
+        # Fallback: ig.me deep link.
         deep = f"https://ig.me/m/{username}"
         page.goto(deep, wait_until="domcontentloaded", timeout=20000)
-        page.wait_for_timeout(random.randint(2000, 4000))
+        page.wait_for_timeout(random.randint(2500, 4500))
+        _dismiss_overlays(page)
 
-    # Esperar el textarea del chat.
-    textarea_selectors = [
-        'div[role="textbox"][contenteditable="true"]',
-        'textarea[placeholder*="ensaje"]',
-        'div[aria-label*="ensaje"]',
-    ]
+    _debug_screenshot(page, username, "02_chat_open")
+
+    # Localiza composer (textbox contenteditable visible).
     composer = None
     deadline = time.time() + 20
     while time.time() < deadline and composer is None:
-        for sel in textarea_selectors:
-            try:
-                loc = page.locator(sel).first
-                if loc.count() > 0 and loc.is_visible():
-                    composer = loc
-                    break
-            except Exception:
-                continue
+        try:
+            candidates = page.locator('div[role="textbox"][contenteditable="true"], textarea[placeholder*="ensaje"], textarea[placeholder*="essage"], div[aria-label*="ensaje"], div[aria-label*="essage"]')
+            n = candidates.count()
+            for i in range(n):
+                loc = candidates.nth(i)
+                try:
+                    if loc.is_visible():
+                        composer = loc
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
         if composer is None:
             page.wait_for_timeout(500)
 
     if composer is None:
+        _debug_screenshot(page, username, "03_no_composer")
         raise RuntimeError("composer_no_encontrado")
 
+    # Foco + escribe.
     composer.click()
     page.wait_for_timeout(random.randint(400, 1100))
+    # Limpia por si hay texto residual del ig.me prefill.
+    try:
+        page.keyboard.press("Control+A")
+        page.wait_for_timeout(150)
+        page.keyboard.press("Delete")
+        page.wait_for_timeout(200)
+    except Exception:
+        pass
     composer.type(message, **_typing_kwargs())
-    page.wait_for_timeout(random.randint(800, 2200))
+    page.wait_for_timeout(random.randint(900, 2400))
+    _debug_screenshot(page, username, "04_typed")
 
-    # Enviar con Enter (los DMs IG aceptan Enter para enviar).
-    page.keyboard.press("Enter")
-    page.wait_for_timeout(random.randint(1500, 3000))
+    # Enviar. Intento: boton Send/Enviar si existe, fallback Enter.
+    sent_via_button = False
+    for sel in ('div[role="button"]:has-text("Enviar")', 'div[role="button"]:has-text("Send")',
+                'button[type="submit"]'):
+        try:
+            btn = page.locator(sel).first
+            if btn.count() > 0 and btn.is_visible() and btn.is_enabled():
+                btn.click(timeout=2000)
+                sent_via_button = True
+                break
+        except Exception:
+            continue
+    if not sent_via_button:
+        page.keyboard.press("Enter")
+    page.wait_for_timeout(random.randint(1800, 3200))
+    _debug_screenshot(page, username, "05_after_send")
+
+    # Verifica que el mensaje aparece en el thread como burbuja propia.
+    if not _verify_sent(page, message, timeout_sec=10):
+        _debug_screenshot(page, username, "06_verify_fail")
+        raise RuntimeError("envio_no_verificado")
+
     return True
 
 
