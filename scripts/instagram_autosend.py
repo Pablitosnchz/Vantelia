@@ -311,22 +311,43 @@ def _debug_screenshot(page, username: str, tag: str) -> None:
         logger.warning("screenshot fail: %s", exc)
 
 
-def _verify_sent(page, message: str, timeout_sec: int = 8) -> bool:
-    """Tras Enter, busca el texto enviado en el thread (burbuja propia)."""
-    snippet = (message or "").strip().split("\n", 1)[0][:60]
-    if len(snippet) < 8:
+def _count_message_bubbles(page) -> int:
+    """Cuenta burbujas de mensaje en thread. Robusto a cambios de markup IG."""
+    selectors = [
+        'div[role="row"]',
+        'div[data-testid="message-container"]',
+        'div[data-block="message"]',
+    ]
+    best = 0
+    for sel in selectors:
+        try:
+            n = page.locator(sel).count()
+            if n > best:
+                best = n
+        except Exception:
+            continue
+    return best
+
+
+def _verify_sent(page, message: str, baseline: int, timeout_sec: int = 12) -> bool:
+    """Tras Enter, verifica que aumento el numero de burbujas Y el texto aparece
+    en una burbuja (no en composer)."""
+    snippet = (message or "").strip().split("\n", 1)[0][:50]
+    if len(snippet) < 6:
         return False
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
         try:
-            # Las burbujas de mensaje tienen role="none" en wrappers, pero el texto
-            # esta dentro de divs. Buscamos coincidencia exacta de snippet.
-            count = page.locator(f'div:has-text("{snippet}")').count()
-            if count >= 2:  # 1 = composer mismo, >=2 = burbuja + composer/vacio
-                return True
+            current = _count_message_bubbles(page)
+            grew = current > baseline
+            if grew:
+                # Burbujas suelen tener dir="auto" y contienen el texto.
+                hit = page.locator(f'div[dir="auto"]:has-text("{snippet}")').count()
+                if hit >= 1:
+                    return True
         except Exception:
             pass
-        time.sleep(0.5)
+        time.sleep(0.6)
     return False
 
 
@@ -434,15 +455,24 @@ def _send_one(page, username: str, message: str) -> bool:
         pass
     # Usa page.keyboard.type tras focus para evitar Locator.type timeout en
     # contenteditable raros. Escribe al elemento activo.
+    # Baseline ANTES de escribir: cuantas burbujas hay ahora.
+    baseline_bubbles = _count_message_bubbles(page)
+
     typing_delay = _typing_kwargs().get("delay", 60)
     page.keyboard.type(message, delay=typing_delay)
     page.wait_for_timeout(random.randint(900, 2400))
     _debug_screenshot(page, username, "04_typed")
 
-    # Enviar. Intento: boton Send/Enviar si existe, fallback Enter.
+    # Enviar. Intento: boton Send/Enviar si existe (visible enabled), luego composer.press Enter.
     sent_via_button = False
-    for sel in ('div[role="button"]:has-text("Enviar")', 'div[role="button"]:has-text("Send")',
-                'button[type="submit"]'):
+    send_button_selectors = [
+        'div[role="button"][aria-label*="nviar" i]',
+        'div[role="button"][aria-label*="end" i]',
+        'div[role="button"]:has-text("Enviar")',
+        'div[role="button"]:has-text("Send")',
+        'button[type="submit"]',
+    ]
+    for sel in send_button_selectors:
         try:
             btn = page.locator(sel).first
             if btn.count() > 0 and btn.is_visible() and btn.is_enabled():
@@ -452,12 +482,16 @@ def _send_one(page, username: str, message: str) -> bool:
         except Exception:
             continue
     if not sent_via_button:
-        page.keyboard.press("Enter")
-    page.wait_for_timeout(random.randint(1800, 3200))
+        # composer.press("Enter") asegura el evento llega al elemento correcto.
+        try:
+            composer.press("Enter")
+        except Exception:
+            page.keyboard.press("Enter")
+    page.wait_for_timeout(random.randint(2000, 3500))
     _debug_screenshot(page, username, "05_after_send")
 
-    # Verifica que el mensaje aparece en el thread como burbuja propia.
-    if not _verify_sent(page, message, timeout_sec=10):
+    # Verifica que aparecio nueva burbuja con el texto.
+    if not _verify_sent(page, message, baseline_bubbles, timeout_sec=12):
         _debug_screenshot(page, username, "06_verify_fail")
         raise RuntimeError("envio_no_verificado")
 
