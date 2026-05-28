@@ -23350,15 +23350,15 @@ def _ig_campaign_run_iteration(state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _ig_campaign_worker() -> None:
-    """Worker autonomo. Lee status DB y avanza la campana."""
+    """Worker autonomo. Lee status DB y avanza la campana.
+
+    NO chequea ventana laboral — el user controla con boton Empezar/Pausar.
+    """
     logger.info("[ig-campaign] worker iniciado")
     while not ig_campaign_stop.is_set():
         try:
             if not IG_AVAILABLE:
                 ig_campaign_stop.wait(60)
-                continue
-            if not _ig_in_window():
-                ig_campaign_stop.wait(120)
                 continue
             state = _ig_campaign_state()
             status = state.get("status", "idle")
