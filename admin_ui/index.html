@@ -3155,7 +3155,7 @@ tbody tr:last-child td { border-bottom: none; }
           <div class="section-header">
             <div>
               <h2>Captacion Instagram</h2>
-              <p>CRM ligero para registrar DMs, priorizar follow-ups y ver que usuarios estan calientes.</p>
+              <p>Autopiloto envia DMs solo. Tu monitorizas stats y respondes leads calientes.</p>
             </div>
             <div class="actions">
               <span id="igAutosendBadge" class="pill" style="display:none;">Autosend ON</span>
@@ -3165,16 +3165,12 @@ tbody tr:last-child td { border-bottom: none; }
             </div>
           </div>
 
-          <div id="igComplianceBanner" style="background:#0b132b;color:#cbd5f5;padding:10px 12px;border-radius:8px;margin:8px 0 12px 0;font-size:13px;line-height:1.5;">
-            <strong>Modo asistido compliant.</strong> Captacion Instagram opera con deep links ig.me y envio manual.
-            Cumple ToS Meta. <span id="igAutosendWarn" style="display:none;color:#fca5a5;">Modo agresivo activo: riesgo bloqueo cuenta IG, usa cuenta secundaria.</span>
+          <div id="igAutosendWarn" style="display:none;background:#451a03;color:#fca5a5;padding:8px 12px;border-radius:8px;margin:8px 0 12px 0;font-size:12px;">
+            Autosend agresivo activo. Riesgo bloqueo Meta. Usa cuenta secundaria.
           </div>
 
           <div class="actions cw-advanced-tabs">
             <button class="ghost small active" type="button" data-ig-tab="dashboard">Hoy</button>
-            <button class="ghost small" type="button" data-ig-tab="manual">Registrar contacto</button>
-            <button class="ghost small" type="button" data-ig-tab="prospects">Prospects IG</button>
-            <button class="ghost small" type="button" data-ig-tab="drafts">Seguimientos <span class="or-tab-badge" id="igDraftsBadge" style="display:none;"></span></button>
             <button class="ghost small" type="button" data-ig-tab="templates">Mensajes</button>
             <button class="ghost small" type="button" data-ig-tab="autopilot">Configuracion</button>
             <button class="ghost small" type="button" data-ig-tab="suppressions">Bajas</button>
@@ -3182,118 +3178,27 @@ tbody tr:last-child td { border-bottom: none; }
 
           <div class="outreach-panel active" data-ig-panel="dashboard">
             <div class="grid-4" style="margin-top:12px;">
-              <div class="stat-card"><strong id="igStatSent">0</strong><span>Contactos hoy</span></div>
+              <div class="stat-card"><strong id="igStatSent">0</strong><span>DMs hoy</span></div>
               <div class="stat-card"><strong id="igOpsSentWeek">0</strong><span>Ultimos 7 dias</span></div>
-              <div class="stat-card"><strong id="igOpsFollowupsDue">0</strong><span>Follow-ups vencidos</span></div>
               <div class="stat-card"><strong id="igStatReplies">0</strong><span>Respuestas</span></div>
+              <div class="stat-card"><strong id="igOpsFollowupsDue">0</strong><span>Follow-ups vencidos</span></div>
             </div>
             <div class="grid-2" style="margin-top:14px;">
-              <div class="card panel" style="padding:12px;">
-                <div class="section-header" style="margin-bottom:8px;">
-                  <div><strong>Acciones pendientes</strong><p class="muted">Usuarios a los que toca escribir hoy.</p></div>
-                  <button class="ghost small" type="button" id="igTodayRegisterBtn">Registrar contacto</button>
-                </div>
-                <div id="igTodayFollowups" class="muted">cargando...</div>
-              </div>
               <div class="card panel" style="padding:12px;">
                 <strong>Leads calientes</strong>
+                <p class="muted" style="margin:2px 0 8px;font-size:12px;">Han abierto/clicado y aun no han respondido.</p>
                 <div id="igHotLeadsBox" class="muted">cargando...</div>
               </div>
-            </div>
-            <div class="grid-2" style="margin-top:14px;">
               <div class="card panel" style="padding:12px;">
                 <strong>Estado del embudo</strong>
-                <div id="igFunnelBox" class="muted">cargando...</div>
-              </div>
-              <div class="card panel" style="padding:12px;">
-                <strong>Actividad reciente</strong>
-                <div id="igRecentActivity" class="muted">cargando...</div>
+                <div id="igFunnelBox" class="muted" style="margin-top:8px;">cargando...</div>
               </div>
             </div>
-          </div>
-
-          <div class="outreach-panel" data-ig-panel="manual" style="display:none;">
-            <div class="grid-2" style="margin-top:12px;">
-              <div class="card panel" style="padding:14px;">
-                <div class="section-header">
-                  <div><strong>Registrar contacto</strong><p class="muted">Pega el usuario y el mensaje que acabas de enviar o recibir.</p></div>
-                </div>
-                <div class="grid-2" style="margin-top:10px;">
-                  <label>Usuario IG *<input id="igManualUsername" placeholder="@clinica_demo" /></label>
-                  <label>Etapa
-                    <select id="igManualStage">
-                      <option value="">Inferir automaticamente</option>
-                      <option value="cold">Primer contacto</option>
-                      <option value="fu1">Follow-up 1</option>
-                      <option value="fu2">Follow-up 2</option>
-                      <option value="breakup">Cierre</option>
-                      <option value="respuesta">Respuesta recibida</option>
-                      <option value="interesado">Interesado</option>
-                      <option value="perdido">Perdido</option>
-                    </select>
-                  </label>
-                  <label>Nombre<input id="igManualFullName" placeholder="Clinica Demo" /></label>
-                  <label>Fecha/hora<input id="igManualAt" type="datetime-local" /></label>
-                  <label>Nicho<input id="igManualNiche" placeholder="estetica" /></label>
-                  <label>Ciudad<input id="igManualCity" placeholder="Madrid" /></label>
-                  <label style="grid-column:1/-1;">Mensaje *
-                    <textarea id="igManualMessage" rows="5" placeholder="Mensaje que has enviado o respuesta que te han dado"></textarea>
-                  </label>
-                  <label style="grid-column:1/-1;">Notas
-                    <textarea id="igManualNotes" rows="2" placeholder="Contexto interno opcional"></textarea>
-                  </label>
-                </div>
-                <div class="actions" style="margin-top:10px;">
-                  <button class="secondary" type="button" id="igManualSaveBtn">Guardar contacto</button>
-                  <button class="ghost small" type="button" id="igManualOpenIgBtn">Abrir IG</button>
-                  <span id="igManualStatus" class="muted"></span>
-                </div>
-              </div>
-              <div class="card panel" style="padding:14px;">
-                <strong>Que automatiza</strong>
-                <div class="ig-list" style="margin-top:10px;">
-                  <div class="ig-row"><span>Normaliza @usuario y evita duplicados</span><strong>OK</strong></div>
-                  <div class="ig-row"><span>Guarda historico de mensajes y eventos</span><strong>OK</strong></div>
-                  <div class="ig-row"><span>Calcula proximo follow-up</span><strong>OK</strong></div>
-                  <div class="ig-row"><span>Actualiza estadisticas de Hoy</span><strong>OK</strong></div>
-                </div>
-              </div>
+            <div class="card panel" style="padding:12px;margin-top:14px;">
+              <strong>Actividad reciente</strong>
+              <div id="igRecentActivity" class="muted" style="margin-top:8px;">cargando...</div>
             </div>
-          </div>
-
-          <div class="outreach-panel" data-ig-panel="drafts" style="display:none;">
-            <div class="card panel" style="padding:12px;margin-top:12px;">
-              <div class="section-header">
-                <div><strong>Follow-ups listos</strong><p class="muted">Copia o abre el DM sugerido. Al volver, puedes marcarlo como enviado.</p></div>
-                <button class="ghost small" type="button" id="igFollowupsRefreshBtn">Refrescar</button>
-              </div>
-              <div id="igFollowupQueue" class="muted">cargando...</div>
-            </div>
-            <div class="actions" style="margin-top:12px;">
-              <select id="igDraftsStageFilter"><option value="">todos los stages</option><option value="cold">cold</option><option value="fu1">fu1</option><option value="fu2">fu2</option><option value="breakup">breakup</option></select>
-              <input id="igDraftsNiche" placeholder="filtrar niche..." />
-              <input id="igDraftsCity" placeholder="filtrar ciudad..." />
-              <button class="secondary small" type="button" id="igDraftsRefreshBtn">Refrescar</button>
-              <button class="ghost small" type="button" id="igGenerateColdBtn">+ Generar drafts cold</button>
-              <button class="ghost small" type="button" id="igGenerateFu1Btn">+ Follow-up fu1</button>
-              <button class="ghost small" type="button" id="igGenerateFu2Btn">+ Follow-up fu2</button>
-            </div>
-            <p class="muted" style="margin-top:8px;">Boton <strong>Enviar DM</strong> abre Instagram con texto prellenado. Despues marca como enviado al volver al panel.</p>
-            <div id="igDraftsList" style="margin-top:12px;display:grid;grid-template-columns:1fr;gap:12px;"></div>
-          </div>
-
-          <div class="outreach-panel" data-ig-panel="prospects" style="display:none;">
-            <div class="actions" style="margin-top:12px;">
-              <input id="igProspectsQ" placeholder="buscar @usuario, nombre o bio..." />
-              <select id="igProspectsStatus"><option value="">cualquier estado</option><option value="new">new</option><option value="queued">queued</option><option value="contacted">contacted</option><option value="replied">replied</option><option value="client">client</option><option value="lost">lost</option><option value="dnc">dnc</option></select>
-              <input id="igProspectsNiche" placeholder="niche" />
-              <input id="igProspectsCity" placeholder="ciudad" />
-              <button class="secondary small" type="button" id="igProspectsRefreshBtn">Filtrar</button>
-              <button class="ghost small" type="button" id="igProspectsAddBtn">+ Nuevo prospect</button>
-              <a class="ghost small" href="/admin/instagram/export.csv">Exportar CSV</a>
-            </div>
-            <div id="igProspectsTable" style="margin-top:12px;"></div>
-            <div id="igProspectsPager" class="muted" style="margin-top:8px;"></div>
+            <div id="igTodayFollowups" style="display:none;"></div>
           </div>
 
           <div class="outreach-panel" data-ig-panel="templates" style="display:none;">
@@ -8675,8 +8580,6 @@ a {
           p.style.display = isActive ? "" : "none";
         });
         if (tab === "dashboard") { loadStats(); loadOpsSummary(); loadHotLeads(); }
-        if (tab === "drafts") { loadFollowupQueue(); loadDrafts(); }
-        if (tab === "prospects") loadProspects();
         if (tab === "templates") loadTemplates();
         if (tab === "autopilot") { loadAutopilot(); loadIgAutosendStatus(); }
         if (tab === "suppressions") loadSuppressions();
