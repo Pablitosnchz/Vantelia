@@ -8780,22 +8780,31 @@ a {
         try {
           const data = await igFetch("/admin/instagram/stats");
           const t = data.totals || {};
-          if (IGQ("#igStatProspects")) IGQ("#igStatProspects").textContent = t.prospects || 0;
-          if (IGQ("#igStatDrafts")) IGQ("#igStatDrafts").textContent = t.drafts_pending || 0;
-          if (IGQ("#igStatSent")) IGQ("#igStatSent").textContent = t.sent_today || 0;
-          if (IGQ("#igStatReplies")) IGQ("#igStatReplies").textContent = t.replies_unique || 0;
+          const set = (sel, val) => { const el = IGQ(sel); if (el) el.textContent = val; };
+          set("#igStatProspects", t.prospects || 0);
+          set("#igStatDrafts", t.drafts_pending || 0);
+          set("#igStatSent", t.sent_today || 0);
+          set("#igStatReplies", t.replies_unique || 0);
           const f = data.funnel || {};
-          IGQ("#igFunnelBox").innerHTML = ["cold","fu1","fu2","breakup"].map(s => `
-            <div class="ig-row">
-              <span>${igStageLabel(s)}</span>
-              <strong>${f[s] || 0}</strong>
-            </div>`).join("");
-          if (data.autosend_enabled) { IGQ("#igAutosendBadge").style.display = ""; IGQ("#igAutosendWarn").style.display = ""; }
-          else { IGQ("#igAutosendBadge").style.display = "none"; IGQ("#igAutosendWarn").style.display = "none"; }
-          IGQ("#igWindowBadge").textContent = data.in_window ? "ventana laboral" : "fuera de ventana";
-          IGQ("#igWindowBadge").className = "pill " + (data.in_window ? "success" : "warn");
-          if (t.drafts_pending) { IGQ("#igDraftsBadge").textContent = t.drafts_pending; IGQ("#igDraftsBadge").style.display = ""; }
-          else IGQ("#igDraftsBadge").style.display = "none";
+          const funnel = IGQ("#igFunnelBox");
+          if (funnel) {
+            funnel.innerHTML = ["cold","fu1","fu2","breakup"].map(s => `
+              <div class="ig-row"><span>${igStageLabel(s)}</span><strong>${f[s] || 0}</strong></div>`).join("");
+          }
+          const badge = IGQ("#igAutosendBadge");
+          const warn = IGQ("#igAutosendWarn");
+          if (badge) badge.style.display = data.autosend_enabled ? "" : "none";
+          if (warn) warn.style.display = data.autosend_enabled ? "" : "none";
+          const win = IGQ("#igWindowBadge");
+          if (win) {
+            win.textContent = data.in_window ? "ventana laboral" : "fuera de ventana";
+            win.className = "pill " + (data.in_window ? "success" : "warn");
+          }
+          const draftsBadge = IGQ("#igDraftsBadge");
+          if (draftsBadge) {
+            if (t.drafts_pending) { draftsBadge.textContent = t.drafts_pending; draftsBadge.style.display = ""; }
+            else draftsBadge.style.display = "none";
+          }
         } catch (e) { igStatus(e.message, "error"); }
       }
 
@@ -9066,22 +9075,26 @@ a {
         try {
           const data = await igFetch("/admin/instagram/ops-summary");
           const t = data.totals || {};
-          if (IGQ("#igOpsSentWeek")) IGQ("#igOpsSentWeek").textContent = t.sent_week || 0;
-          if (IGQ("#igOpsFollowupsDue")) IGQ("#igOpsFollowupsDue").textContent = t.followups_due || 0;
+          const sentWeek = IGQ("#igOpsSentWeek"); if (sentWeek) sentWeek.textContent = t.sent_week || 0;
+          const fuDue = IGQ("#igOpsFollowupsDue"); if (fuDue) fuDue.textContent = t.followups_due || 0;
           const due = data.followups_due || [];
-          IGQ("#igTodayFollowups").innerHTML = due.length ? due.map(item => `
-            <div class="ig-row">
-              <div class="ig-main">
-                <strong>@${escapeHtml(item.username)}</strong>
-                <span class="muted">${escapeHtml(igStageLabel(item.next_stage))} ${item.next_followup_at ? "- " + igDate(item.next_followup_at) : ""}</span>
-              </div>
-              <button class="ghost small" type="button" data-ig-followup-open="${escapeHtml(item.username)}" data-stage="${escapeHtml(item.next_stage)}" data-message="${escapeHtml(item.suggested_message || "")}">Abrir</button>
-            </div>`).join("") : igEmpty("Sin follow-ups vencidos ahora.");
-          IGQ("#igTodayFollowups")?.querySelectorAll("[data-ig-followup-open]").forEach(btn => {
-            btn.addEventListener("click", () => openSuggestedFollowup(btn.dataset.igFollowupOpen, btn.dataset.stage, btn.dataset.message));
-          });
+          const followups = IGQ("#igTodayFollowups");
+          if (followups) {
+            followups.innerHTML = due.length ? due.map(item => `
+              <div class="ig-row">
+                <div class="ig-main">
+                  <strong>@${escapeHtml(item.username)}</strong>
+                  <span class="muted">${escapeHtml(igStageLabel(item.next_stage))} ${item.next_followup_at ? "- " + igDate(item.next_followup_at) : ""}</span>
+                </div>
+                <button class="ghost small" type="button" data-ig-followup-open="${escapeHtml(item.username)}" data-stage="${escapeHtml(item.next_stage)}" data-message="${escapeHtml(item.suggested_message || "")}">Abrir</button>
+              </div>`).join("") : igEmpty("Sin follow-ups vencidos ahora.");
+            followups.querySelectorAll("[data-ig-followup-open]").forEach(btn => {
+              btn.addEventListener("click", () => openSuggestedFollowup(btn.dataset.igFollowupOpen, btn.dataset.stage, btn.dataset.message));
+            });
+          }
           const recent = data.recent_activity || [];
-          IGQ("#igRecentActivity").innerHTML = recent.length ? recent.map(ev => `
+          const recentEl = IGQ("#igRecentActivity");
+          if (recentEl) recentEl.innerHTML = recent.length ? recent.map(ev => `
             <div class="ig-row">
               <div class="ig-main">
                 <strong>@${escapeHtml(ev.username)}</strong>
