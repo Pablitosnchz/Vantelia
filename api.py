@@ -22942,10 +22942,19 @@ def instagram_autopilot_get():
             "SELECT COUNT(*) AS c FROM ig_sends WHERE mode IN ('sent','sent_auto') AND substr(sent_at,1,10)=?",
             (today,),
         ).fetchone()["c"]
+        cfg["autosent_today"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM ig_sends WHERE mode='sent_auto' AND substr(sent_at,1,10)=?",
+            (today,),
+        ).fetchone()["c"]
         cfg["drafts_pending"] = conn.execute(
             "SELECT COUNT(*) AS c FROM ig_sends WHERE mode='draft' AND ready=1"
         ).fetchone()["c"]
-    return {"config": cfg, "autosend_enabled": ig_is_autosend_enabled(), "autonomous_enabled": _ig_env_bool("IG_AUTONOMOUS_ENABLED", False)}
+    db_cap = int(cfg.get("daily_outreach_cap") or 0)
+    env_cap = int(os.getenv("IG_AUTOSEND_DAILY_CAP", "20") or 20)
+    cfg["effective_daily_cap"] = db_cap if db_cap > 0 else env_cap
+    return {"config": cfg, "autosend_enabled": ig_is_autosend_enabled(),
+            "autonomous_enabled": _ig_env_bool("IG_AUTONOMOUS_ENABLED", False),
+            "autonomous_autosend": _ig_env_bool("IG_AUTONOMOUS_AUTOSEND", False)}
 
 
 @app.put("/admin/instagram/autopilot-config", dependencies=[Depends(_require_admin_token)])
@@ -23063,15 +23072,33 @@ def _ig_autopilot_run_once() -> Dict[str, Any]:
     # ---- AUTOSEND AUTOMATICO ----
     # Solo si IG_AUTOSEND_ENABLED=true + IG_AUTONOMOUS_AUTOSEND=true. Riesgo ban Meta.
     autosend_on = ig_is_autosend_enabled() and _ig_env_bool("IG_AUTONOMOUS_AUTOSEND", False)
-    if autosend_on and (stats["drafted_cold"] or stats["drafted_fu"]):
+    if autosend_on:
         try:
             from instagram_autosend import autosend_drafts, fetch_pending_drafts  # type: ignore
-            cap = int(os.getenv("IG_AUTOSEND_DAILY_CAP", "20") or 20)
-            pending = fetch_pending_drafts(cap)
-            if pending:
-                sent = autosend_drafts(pending, dry_run=False)
-                stats["autosent"] = int(sent or 0)
-                logger.info("IG autopilot: autosend envio %s/%s drafts", sent, len(pending))
+            # Cap: DB.daily_outreach_cap (panel) tiene prioridad; fallback env IG_AUTOSEND_DAILY_CAP.
+            try:
+                db_cap = int((row["daily_outreach_cap"] if row else 0) or 0)
+            except Exception:
+                db_cap = 0
+            env_cap = int(os.getenv("IG_AUTOSEND_DAILY_CAP", "20") or 20)
+            cap = db_cap if db_cap > 0 else env_cap
+            # Cuenta enviados hoy con autosend para respetar tope diario.
+            today = datetime.now(timezone.utc).date().isoformat()
+            with _instagram_db() as conn:
+                sent_today_auto = conn.execute(
+                    "SELECT COUNT(*) AS c FROM ig_sends WHERE mode='sent_auto' AND substr(coalesce(sent_at,drafted_at),1,10)=?",
+                    (today,),
+                ).fetchone()["c"]
+            remaining = max(0, cap - int(sent_today_auto or 0))
+            if remaining > 0:
+                pending = fetch_pending_drafts(remaining)
+                if pending:
+                    sent = autosend_drafts(pending, dry_run=False)
+                    stats["autosent"] = int(sent or 0)
+                    logger.info("IG autopilot: autosend envio %s/%s drafts (cap %s, ya enviados %s)",
+                                sent, len(pending), cap, sent_today_auto)
+            else:
+                logger.info("IG autopilot: cap diario alcanzado (%s/%s).", sent_today_auto, cap)
         except ImportError:
             logger.warning("IG autopilot: instagram_autosend o playwright no disponible.")
         except Exception as exc:  # noqa: BLE001

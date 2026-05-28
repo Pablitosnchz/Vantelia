@@ -3207,6 +3207,39 @@ tbody tr:last-child td { border-bottom: none; }
           </div>
 
           <div class="outreach-panel" data-ig-panel="autopilot" style="display:none;">
+            <div id="igMasterCard" class="card" style="padding:16px;margin-bottom:14px;border:2px solid #cbd5e1;background:#f8fafc;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:240px;">
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <span id="igMasterStateDot" style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#94a3b8;"></span>
+                    <strong id="igMasterStateText" style="font-size:18px;">Cargando estado...</strong>
+                  </div>
+                  <p class="muted" style="margin:6px 0 0;font-size:12px;" id="igMasterHint">Activar envia DMs automaticos respetando el tope diario.</p>
+                </div>
+                <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+                  <label style="font-size:12px;display:flex;flex-direction:column;gap:4px;">
+                    DMs maximos al dia
+                    <input id="igMasterDailyCap" type="number" min="1" max="100" value="5" style="width:90px;font-size:16px;font-weight:600;text-align:center;" />
+                  </label>
+                  <button id="igMasterToggleBtn" class="secondary" type="button" style="font-size:15px;padding:10px 20px;">Activar</button>
+                </div>
+              </div>
+              <div id="igMasterStats" style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;font-size:12px;">
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Enviados hoy</span>
+                  <strong id="igMasterSentToday" style="font-size:18px;">-</strong> / <span id="igMasterCapShown">-</span>
+                </div>
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">En cola</span>
+                  <strong id="igMasterPending" style="font-size:18px;">-</strong>
+                </div>
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Sesion IG</span>
+                  <strong id="igMasterSession" style="font-size:13px;">-</strong>
+                </div>
+              </div>
+              <p id="igMasterMsg" class="muted" style="margin:8px 0 0;font-size:12px;"></p>
+            </div>
             <div class="card" style="padding:14px;margin-bottom:14px;background:#fffbeb;border:1px solid #fde68a;">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
                 <div style="flex:1;min-width:260px;">
@@ -3242,20 +3275,20 @@ tbody tr:last-child td { border-bottom: none; }
                 <span id="igAutosendMsg" class="muted" style="font-size:12px;"></span>
               </div>
             </div>
-            <div class="section-header">
-              <div><strong>Configuracion Instagram</strong><p class="muted">Automatizacion asistida. El envio real sigue siendo manual salvo modo agresivo opt-in.</p></div>
-              <label class="switch"><input id="igAutoEnabled" type="checkbox" /> Activo</label>
-            </div>
-            <div class="grid-3" style="margin-top:10px;">
-              <label>Target diario nuevos<input id="igAutoDailyNew" type="number" min="1" max="200" value="15" /></label>
-              <label>Cap diario outreach<input id="igAutoDailyCap" type="number" min="1" max="200" value="25" /></label>
-              <label class="checkbox"><input id="igAutoFollowups" type="checkbox" /> Auto follow-ups</label>
-            </div>
-            <label>Targets JSON (lista de {usernames, niche, city})
-              <textarea id="igAutoTargets" rows="6" placeholder='[{"usernames":["c1","c2"],"niche":"dental","city":"Madrid"}]'></textarea>
-            </label>
+            <details style="margin-top:8px;">
+              <summary style="cursor:pointer;font-size:12px;color:#64748b;">Opciones avanzadas (seeds + follow-ups)</summary>
+              <input id="igAutoEnabled" type="checkbox" style="display:none;" />
+              <div class="grid-3" style="margin-top:10px;">
+                <label>Target diario nuevos<input id="igAutoDailyNew" type="number" min="1" max="200" value="15" /></label>
+                <label>Cap diario outreach<input id="igAutoDailyCap" type="number" min="1" max="200" value="25" style="display:none;" /></label>
+                <label class="checkbox"><input id="igAutoFollowups" type="checkbox" checked /> Auto follow-ups</label>
+              </div>
+              <label>Targets JSON (lista de {usernames, niche, city})
+                <textarea id="igAutoTargets" rows="6" placeholder='[{"usernames":["c1","c2"],"niche":"dental","city":"Madrid"}]'></textarea>
+              </label>
+            </details>
             <div class="actions">
-              <button class="secondary small" type="button" id="igAutoSaveBtn">Guardar</button>
+              <button class="secondary small" type="button" id="igAutoSaveBtn" style="display:none;">Guardar</button>
               <button class="ghost small" type="button" id="igAutoTickBtn">Ejecutar ronda ahora</button>
               <span id="igAutoStatus" class="muted"></span>
             </div>
@@ -8581,8 +8614,93 @@ a {
         });
         if (tab === "dashboard") { loadStats(); loadOpsSummary(); loadHotLeads(); }
         if (tab === "templates") loadTemplates();
-        if (tab === "autopilot") { loadAutopilot(); loadIgAutosendStatus(); }
+        if (tab === "autopilot") { loadAutopilot(); loadIgAutosendStatus(); loadIgMaster(); }
         if (tab === "suppressions") loadSuppressions();
+      }
+
+      let _igMasterState = { enabled: false, cap: 5, session: false };
+
+      async function loadIgMaster() {
+        try {
+          const [cfg, sessionData] = await Promise.all([
+            igFetch("/admin/instagram/autopilot-config"),
+            igFetch("/admin/instagram/autosend/status"),
+          ]);
+          const c = cfg.config || {};
+          const session = (sessionData.session || {}).connected;
+          const enabled = !!c.enabled;
+          const cap = c.effective_daily_cap || 5;
+          const sentToday = c.autosent_today || 0;
+          const pending = c.drafts_pending || 0;
+          _igMasterState = { enabled, cap, session };
+
+          const dot = IGQ("#igMasterStateDot");
+          const txt = IGQ("#igMasterStateText");
+          const btn = IGQ("#igMasterToggleBtn");
+          const hint = IGQ("#igMasterHint");
+          const capInput = IGQ("#igMasterDailyCap");
+          if (!enabled) {
+            dot.style.background = "#94a3b8";
+            txt.textContent = "PARADO";
+            txt.style.color = "#475569";
+            btn.textContent = "Activar";
+            btn.className = "secondary";
+            hint.textContent = "Activar inicia envio automatico de DMs respetando el tope diario.";
+          } else {
+            dot.style.background = "#10b981";
+            txt.textContent = "ACTIVO";
+            txt.style.color = "#047857";
+            btn.textContent = "Pausar";
+            btn.className = "ghost";
+            hint.textContent = "Enviando DMs en ventana laboral con delays humanos.";
+          }
+          if (document.activeElement !== capInput) capInput.value = cap;
+          IGQ("#igMasterSentToday").textContent = sentToday;
+          IGQ("#igMasterCapShown").textContent = cap;
+          IGQ("#igMasterPending").textContent = pending;
+          const sessEl = IGQ("#igMasterSession");
+          if (session) {
+            sessEl.textContent = "Conectada";
+            sessEl.style.color = "#047857";
+          } else {
+            sessEl.innerHTML = '<span style="color:#b91c1c;">Sin sesion</span>';
+          }
+          if (enabled && !session) {
+            IGQ("#igMasterMsg").innerHTML = '<span style="color:#b91c1c;">Falta sesion IG. Pega cookies abajo.</span>';
+          } else {
+            IGQ("#igMasterMsg").textContent = "";
+          }
+        } catch (err) {
+          IGQ("#igMasterStateText").textContent = "Error: " + err.message;
+        }
+      }
+
+      async function igMasterToggle() {
+        const newCap = parseInt(IGQ("#igMasterDailyCap").value || "5", 10);
+        if (!newCap || newCap < 1 || newCap > 100) {
+          IGQ("#igMasterMsg").innerHTML = '<span style="color:#b91c1c;">Cap diario debe ser 1-100.</span>';
+          return;
+        }
+        const turningOn = !_igMasterState.enabled;
+        if (turningOn && !_igMasterState.session) {
+          IGQ("#igMasterMsg").innerHTML = '<span style="color:#b91c1c;">Conecta sesion IG primero (pega cookies abajo).</span>';
+          return;
+        }
+        if (turningOn && !confirm(`Activar envio automatico? Se enviaran hasta ${newCap} DMs/dia reales. Riesgo bloqueo IG si usas cuenta principal.`)) return;
+        const btn = IGQ("#igMasterToggleBtn");
+        btn.disabled = true;
+        IGQ("#igMasterMsg").textContent = "Guardando...";
+        try {
+          await igFetch("/admin/instagram/autopilot-config", { method: "PUT",
+            body: JSON.stringify({ enabled: turningOn, daily_outreach_cap: newCap, auto_followups: true }) });
+          IGQ("#igMasterMsg").textContent = turningOn ? "Activado." : "Pausado.";
+          IGQ("#igMasterMsg").style.color = "#047857";
+        } catch (err) {
+          IGQ("#igMasterMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+        }
+        btn.disabled = false;
+        await loadIgMaster();
+        await loadAutopilot();
       }
 
       async function loadIgAutosendStatus() {
@@ -9219,6 +9337,7 @@ a {
       IGQ("#igAutosendConnectBtn")?.addEventListener("click", igAutosendConnect);
       IGQ("#igAutosendTestBtn")?.addEventListener("click", igAutosendTest);
       IGQ("#igAutosendDisconnectBtn")?.addEventListener("click", igAutosendDisconnect);
+      IGQ("#igMasterToggleBtn")?.addEventListener("click", igMasterToggle);
       IGQ("#igSupAddBtn")?.addEventListener("click", addSuppression);
       IGQ("#igSupRefreshBtn")?.addEventListener("click", loadSuppressions);
 
