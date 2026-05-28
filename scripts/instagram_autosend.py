@@ -357,75 +357,86 @@ def _already_contacted(page) -> bool:
 
 
 def _verify_sent(page, message: str, baseline: int, composer, timeout_sec: int = 12) -> bool:
-    """Verifica envio tras Send. Senyales en orden de fiabilidad:
+    """Verifica envio. Estrategia laxa para no marcar como fallo cuando IG si mando.
 
-    1) URL contiene /direct/t/ → estamos en thread DM = 100% enviado.
-    2) Texto enviado YA NO esta en composer → IG consumio input.
-    3) Burbujas crecieron y texto aparece en burbuja.
-    4) Composer vacio + sin modal error.
+    Espera unos segundos tras Enter. Si NO hay modal de error visible y
+    paso al menos 3s en URL /direct/t/ → asumimos enviado.
+
+    Tambien checks especificos:
+    - texto del mensaje YA NO en composer
+    - burbujas crecieron y texto en burbuja (match exacto)
     """
     snippet = (message or "").strip().split("\n", 1)[0][:40]
-    message_full_stripped = (message or "").strip().replace("\n", " ")[:100]
-    deadline = time.time() + timeout_sec
+    message_full = (message or "").strip().replace("\n", " ")
+    start_ts = time.time()
+    deadline = start_ts + timeout_sec
+    last_composer_text = None
     while time.time() < deadline:
         try:
-            # 1) URL thread = definitivo
             try:
                 cur_url = page.url or ""
             except Exception:
                 cur_url = ""
-            if "/direct/t/" in cur_url:
-                return True
 
-            # 2) Texto del composer YA no contiene el mensaje
+            # Composer text actual
             composer_text = ""
             try:
                 composer_text = (composer.text_content() or "").strip()
             except Exception:
                 pass
-            composer_clean = len(composer_text) < 3
-            composer_lost_msg = (
-                bool(message_full_stripped)
-                and message_full_stripped[:30] not in composer_text.replace("\n", " ")
-            )
+            if last_composer_text is None:
+                last_composer_text = composer_text
 
-            # 3) Burbujas + texto coincidente
+            # 1) composer perdio el mensaje → IG lo envio
+            if message_full and len(message_full) > 30:
+                first_chunk = message_full[:30].lower()
+                if first_chunk not in composer_text.lower().replace("\n", " "):
+                    # Check sin modal de error
+                    if not _has_error_modal(page):
+                        return True
+
+            # 2) burbujas + texto en burbuja
             try:
                 current = _count_message_bubbles(page)
             except Exception:
                 current = 0
-            grew = current > baseline
-
-            if snippet and len(snippet) >= 6:
+            grew = current > baseline + 1  # margen, head info puede sumar
+            if grew and snippet and len(snippet) >= 6:
                 try:
                     hit = page.locator(f'div[dir="auto"]:has-text("{snippet}")').count()
-                    if hit >= 1 and grew:
+                    if hit >= 1:
                         return True
                 except Exception:
                     pass
 
-            # 4) Composer vacio o perdio el mensaje + sin error modal
-            if composer_clean or composer_lost_msg:
-                err_modal = False
-                for err_sel in ('div[role="dialog"]:has-text("Error")',
-                                'div[role="alert"]',
-                                'div:has-text("Something went wrong")',
-                                'div:has-text("Algo salio mal")'):
-                    try:
-                        loc = page.locator(err_sel).first
-                        if loc.count() > 0 and loc.is_visible():
-                            err_modal = True
-                            break
-                    except Exception:
-                        continue
-                if not err_modal:
+            # 3) En /direct/t/ desde hace ≥3s, sin error modal, composer no vuelve a tener nuestro mensaje
+            elapsed = time.time() - start_ts
+            if elapsed >= 3.5 and "/direct/t/" in cur_url and not _has_error_modal(page):
+                # Verifica que el composer no esta mostrando el mensaje completo
+                if message_full[:30].lower() not in composer_text.lower():
                     return True
-
-            if grew:
-                return True
         except Exception:
             pass
         time.sleep(0.5)
+    return False
+
+
+def _has_error_modal(page) -> bool:
+    """Detecta modales de error de IG."""
+    for err_sel in (
+        'div[role="dialog"]:has-text("Error")',
+        'div[role="alert"]',
+        'div:has-text("Something went wrong")',
+        'div:has-text("Algo salio mal")',
+        'div:has-text("Inténtalo de nuevo")',
+        'div:has-text("Try again")',
+    ):
+        try:
+            loc = page.locator(err_sel).first
+            if loc.count() > 0 and loc.is_visible():
+                return True
+        except Exception:
+            continue
     return False
 
 
@@ -533,12 +544,9 @@ def _send_one(page, username: str, message: str) -> bool:
         pass
     # Usa page.keyboard.type tras focus para evitar Locator.type timeout en
     # contenteditable raros. Escribe al elemento activo.
-    # Si ya hay historial en este thread → ya contactado → skip (no spam).
-    if _already_contacted(page):
-        _debug_screenshot(page, username, "03_already_contacted")
-        raise RuntimeError("ya_contactado")
-
-    # Baseline ANTES de escribir: cuantas burbujas hay ahora.
+    # La DB ya filtra usernames con sends previos (draft/sent/sent_auto), asi
+    # que double-DM por nuestro sistema no ocurre. La deteccion por bubble count
+    # daba falsos positivos por header/perfil → eliminada.
     baseline_bubbles = _count_message_bubbles(page)
 
     typing_delay = _typing_kwargs().get("delay", 60)
