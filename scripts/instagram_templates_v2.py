@@ -94,41 +94,70 @@ def render_natural(
     city: str = "",
     variant: Optional[str] = None,
 ) -> str:
-    """Devuelve el texto del DM cold para este prospect."""
+    """Devuelve el texto del DM cold para este prospect.
+
+    Todas las variantes abren con "Soy Pablo de Vantelia" + referencia
+    personal a algo del perfil. Tono cercano, sin pinta de bot.
+    """
     v = variant or pick_variant(username)
     name = _clean_name(business_name)
     short_niche = _niche_short(niche)
     city_clean = (city or "").strip()
 
-    # Frase de apertura segun lo que tengamos.
+    # Referencia personal segun datos disponibles.
     if name and len(name) >= 3:
-        ref = name
-    elif short_niche:
-        ref = f"vuestro {short_niche}"
+        you = name
     else:
-        ref = "vuestra cuenta"
+        you = "vosotros"
+
+    # Detalle concreto que justifica el "he visto vuestro perfil".
+    if name and city_clean:
+        observed = f"vuestro perfil de {name} en {city_clean}"
+    elif name:
+        observed = f"el perfil de {name}"
+    elif short_niche and city_clean:
+        observed = f"vuestro perfil de {short_niche} en {city_clean}"
+    elif short_niche:
+        observed = f"vuestro perfil del {short_niche}"
+    else:
+        observed = "vuestro perfil"
 
     if v == "A":
-        line1 = f"hey, vi {ref}"
-        if city_clean:
-            line1 += f" por {city_clean}"
-        line2 = "tengo curiosidad, ¿quien os contesta los dms y consultas cuando estais a tope o fuera de horario?"
-        line3 = "monto un asistente IA que responde 24/7, agenda citas y filtra leads. lo uso ya con clinicas y centros parecidos al vuestro y les esta ayudando bastante."
-        line4 = "si te interesa te paso un demo de 2 min, sin compromiso. y si no, sin problema."
-        return f"{line1}\n\n{line2}\n\n{line3}\n\n{line4}"
+        p1 = f"Hola, soy Pablo de Vantelia. He visto {observed} y me ha gustado bastante lo que hacéis."
+        p2 = (
+            f"Os escribo porque trabajo con negocios como el vuestro montando "
+            f"un asistente IA que responde DMs, consultas de la web y agenda citas "
+            f"cuando no estáis. Funciona 24/7 y suena como una persona, no como un bot tipico."
+        )
+        p3 = (
+            "¿Te interesa que te enseñe en 2 min cómo quedaría con "
+            f"{you}? Es un demo rapido, sin compromiso ni nada por medio."
+        )
+        return f"{p1}\n\n{p2}\n\n{p3}"
 
     if v == "B":
-        opener = f"hola, soy pablo"
-        if city_clean:
-            opener += f". paso por {city_clean} estos dias y vi {ref}"
+        p1 = f"Hola! Soy Pablo, fundador de Vantelia. Me he topado con {observed} y me he quedado mirandolo un rato."
+        if short_niche:
+            mention = f"Veo que sois {short_niche}"
+            if city_clean:
+                mention += f" en {city_clean}"
+            mention += ", y suelo trabajar con perfiles parecidos al vuestro."
         else:
-            opener += f". vi {ref} y me llamo la atencion"
-        line2 = f"¿como gestionais las consultas que llegan por dm o web fuera de horario? muchos {short_niche or 'negocios'} con buen volumen pierden citas por no contestar a tiempo."
-        line3 = "hago una herramienta IA que se encarga de eso. responde como una persona y agenda en vuestra agenda. ¿te mando un demo rapido?"
-        return f"{opener}.\n\n{line2}\n\n{line3}"
+            mention = "Me ha llamado la atencion lo que mostrais."
+        p2 = (
+            f"{mention} Lo que monto es un asistente IA que contesta los DMs y "
+            f"consultas que os llegan fuera de horario, filtra leads y agenda citas sin que "
+            f"tengais que estar pendientes."
+        )
+        p3 = "¿Te paso un demo de 2 min para que veas como funcionaria con vosotros? Si no os encaja, sin problema."
+        return f"{p1}\n\n{p2}\n\n{p3}"
 
     # Variant C
-    opener = f"buenas, equipo de {name if name else (short_niche or 'la cuenta')}"
-    line2 = "una duda: ¿cuantas consultas se os escapan por no responder rapido? lo digo xq estoy haciendo un asistente IA para negocios pequenos que contesta dms, agenda citas y no se le escapa ningun lead."
-    line3 = "si quieres te ensenyo en 2 min como funcionaria con vosotros. nada de venta agresiva, solo enseñarlo."
-    return f"{opener},\n\n{line2}\n\n{line3}"
+    p1 = f"Hola, soy Pablo de Vantelia. He estado viendo {observed} y queria escribiros directamente sin rodeos."
+    p2 = (
+        f"Hago asistentes IA para negocios como {you}. La idea es sencilla: "
+        f"contesta los DMs, mensajes de la web y consultas cuando no estais, "
+        f"agenda las citas en vuestra agenda y os deja solo los leads que de verdad merecen la pena."
+    )
+    p3 = "Si os pica la curiosidad, os mando un demo de 2 min y lo veis vosotros mismos. Sin venta agresiva, prometido."
+    return f"{p1}\n\n{p2}\n\n{p3}"
