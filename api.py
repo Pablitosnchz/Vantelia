@@ -23532,7 +23532,10 @@ def instagram_campaign_resume():
     if not ig_is_autosend_enabled():
         raise HTTPException(412, "IG_AUTOSEND_ENABLED=false en env")
     _ig_campaign_migrate()
-    _ig_campaign_update(status="discovering", error_msg="")
+    # Resume: si hay drafts pendientes, va directo a sending; si no, discovering.
+    state = _ig_campaign_state()
+    next_status = "sending" if (state.get("pending_drafts") or 0) > 0 else "discovering"
+    _ig_campaign_update(status=next_status, error_msg="")
     return {"ok": True, "state": _ig_campaign_state()}
 
 
