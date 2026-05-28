@@ -106,39 +106,75 @@ def _is_valid_handle(handle: str) -> bool:
 
 
 def _places_search(sector: str, city: str, api_key: str, http: httpx.Client) -> List[dict]:
-    """Google Places Text Search (legacy). Devuelve hasta 20 negocios."""
+    """Google Places API (New) Text Search. Devuelve negocios con website + rating ya incluidos."""
     try:
-        r = http.get(
-            "https://maps.googleapis.com/maps/api/place/textsearch/json",
-            params={"query": f"{sector} en {city}", "language": "es", "region": "es", "key": api_key},
-            timeout=12.0,
+        field_mask = ",".join([
+            "places.id",
+            "places.displayName",
+            "places.websiteUri",
+            "places.rating",
+            "places.userRatingCount",
+            "places.formattedAddress",
+            "places.types",
+        ])
+        r = http.post(
+            "https://places.googleapis.com/v1/places:searchText",
+            headers={
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": api_key,
+                "X-Goog-FieldMask": field_mask,
+            },
+            json={
+                "textQuery": f"{sector} en {city}",
+                "languageCode": "es",
+                "regionCode": "ES",
+                "pageSize": 20,
+            },
+            timeout=15.0,
         )
         if r.status_code != 200:
+            try:
+                err_txt = r.text[:200]
+            except Exception:
+                err_txt = ""
+            import logging as _log
+            _log.getLogger("instagram_discover_v2").warning(
+                "Places (New) HTTP %s para '%s en %s': %s",
+                r.status_code, sector, city, err_txt,
+            )
             return []
-        data = r.json()
-        return data.get("results") or []
-    except Exception:
+        data = r.json() or {}
+        results: List[dict] = []
+        for p in data.get("places", []):
+            dn = p.get("displayName") or {}
+            name = dn.get("text") if isinstance(dn, dict) else ""
+            results.append({
+                "place_id": p.get("id", ""),
+                "name": name or "",
+                "website": p.get("websiteUri", "") or "",
+                "rating": float(p.get("rating") or 0.0),
+                "user_ratings_total": int(p.get("userRatingCount") or 0),
+                "formatted_address": p.get("formattedAddress", "") or "",
+            })
+        return results
+    except Exception as exc:
+        import logging as _log
+        _log.getLogger("instagram_discover_v2").warning(
+            "Places (New) exception para '%s en %s': %s", sector, city, exc,
+        )
         return []
 
 
-def _place_details(place_id: str, api_key: str, http: httpx.Client) -> Optional[dict]:
-    """Pide detalles del place para sacar website."""
-    try:
-        r = http.get(
-            "https://maps.googleapis.com/maps/api/place/details/json",
-            params={
-                "place_id": place_id,
-                "fields": "name,website,rating,formatted_address,user_ratings_total",
-                "language": "es",
-                "key": api_key,
-            },
-            timeout=10.0,
-        )
-        if r.status_code != 200:
-            return None
-        return (r.json() or {}).get("result")
-    except Exception:
+def _place_details(place: dict, api_key: str, http: httpx.Client) -> Optional[dict]:
+    """Con Places API (New), website ya viene en la respuesta de search.
+    Esta funcion queda como passthrough para mantener compat con el flujo."""
+    if not place:
         return None
+    return {
+        "name": place.get("name", ""),
+        "website": place.get("website", ""),
+        "rating": place.get("rating", 0),
+    }
 
 
 def _extract_ig_handle_from_website(url: str, http: httpx.Client) -> Optional[str]:
@@ -251,15 +287,14 @@ def discover_real(
             for place in places[:12]:
                 if len(out) >= target_count:
                     break
-                place_id = place.get("place_id")
                 name = (place.get("name") or "").strip()
                 rating = float(place.get("rating") or 0.0)
                 if rating and rating < 3.5:
                     continue
                 if _is_chain(name):
                     continue
-                details = _place_details(place_id, api_key, http) if place_id else None
-                website = (details or {}).get("website", "") or ""
+                # Places API (New) ya devuelve website en search → no hace falta details.
+                website = (place.get("website") or "").strip()
                 if not website:
                     continue
                 handle = _extract_ig_handle_from_website(website, http)
