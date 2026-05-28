@@ -20600,6 +20600,31 @@ def _outreach_autonomous_tick_inner() -> None:
                            "Discovery omitido: sin objetivos sector/ciudad")
             run_discovery = False
 
+        # Early-exit: si pool de cold elegibles ya cubre el objetivo, SKIP discovery
+        # y pasa directo a cold. Asi el dia siguiente que se reactiva, continua donde
+        # se quedo en vez de seguir descubriendo de mas.
+        pool_target = daily_new_target
+        with _outreach_db() as conn:
+            pool_size = conn.execute(
+                """SELECT COUNT(*) AS c FROM prospects
+                   WHERE COALESCE(status,'new')='new'
+                     AND email NOT IN (SELECT email FROM suppressions)
+                     AND email NOT IN (SELECT email FROM sends WHERE mode='send' AND stage='cold')"""
+            ).fetchone()["c"]
+        if run_discovery and pool_size >= pool_target:
+            log(f"discovery skip: pool {pool_size} >= objetivo {pool_target}, pasando a cold")
+            _outreach_tick_state_update(
+                "discovery_pool_full",
+                f"Discovery omitido: pool {pool_size} >= objetivo {pool_target}",
+                detail={"pool_size": pool_size, "pool_target": pool_target},
+            )
+            _autopilot_log(
+                "info", "discovery_pool_full",
+                f"Discovery omitido: ya hay {pool_size} prospects listos para cold (objetivo {pool_target})",
+                {"pool_size": pool_size, "pool_target": pool_target},
+            )
+            run_discovery = False
+
         if run_discovery:
             try:
                 from outreach_discover import discover_companies  # type: ignore
