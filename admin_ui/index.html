@@ -3172,6 +3172,7 @@ tbody tr:last-child td { border-bottom: none; }
           <div class="actions cw-advanced-tabs">
             <button class="ghost small active" type="button" data-ig-tab="dashboard">Hoy</button>
             <button class="ghost small" type="button" data-ig-tab="autopilot">Configuracion</button>
+            <button class="ghost small" type="button" data-ig-tab="dmtemplates">Mensajes</button>
             <button class="ghost small" type="button" data-ig-tab="suppressions">Bajas</button>
           </div>
 
@@ -3324,6 +3325,55 @@ tbody tr:last-child td { border-bottom: none; }
               <pre id="igDiscLog" style="display:none;background:#0f172a;color:#cbd5f5;font-size:12px;padding:10px;border-radius:8px;max-height:240px;overflow:auto;white-space:pre-wrap;margin-top:10px;"></pre>
               <div id="igJobsList" class="ig-list" style="margin-top:12px;"></div>
             </details>
+          </div>
+
+          <div class="outreach-panel" data-ig-panel="dmtemplates" style="display:none;">
+            <div class="card" style="padding:14px;margin-top:12px;">
+              <strong>Plantillas de DM</strong>
+              <p class="muted" style="margin:4px 0 0;font-size:12px;">
+                3 variantes A/B/C. Cada prospect recibe siempre la misma variante (hash estable por username).
+                Vacio = usar plantilla por defecto. Placeholders: <code>{business_name}</code>, <code>{city}</code>, <code>{niche}</code>, <code>{observed}</code>, <code>{you}</code>.
+              </p>
+            </div>
+            <div id="igDmTplGrid" class="grid-3" style="margin-top:12px;gap:12px;">
+              <div class="card" style="padding:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <strong>Variante A</strong>
+                  <button class="ghost small" type="button" data-igtpl-reset="A">Restaurar default</button>
+                </div>
+                <textarea id="igTplA" rows="14" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-top:6px;" placeholder="Vacio = default"></textarea>
+                <div style="margin-top:8px;">
+                  <button class="ghost small" type="button" data-igtpl-preview="A">Preview</button>
+                  <pre data-igtpl-preview-out="A" style="display:none;background:#0f172a;color:#cbd5f5;padding:10px;border-radius:6px;font-size:11px;white-space:pre-wrap;margin-top:6px;"></pre>
+                </div>
+              </div>
+              <div class="card" style="padding:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <strong>Variante B</strong>
+                  <button class="ghost small" type="button" data-igtpl-reset="B">Restaurar default</button>
+                </div>
+                <textarea id="igTplB" rows="14" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-top:6px;" placeholder="Vacio = default"></textarea>
+                <div style="margin-top:8px;">
+                  <button class="ghost small" type="button" data-igtpl-preview="B">Preview</button>
+                  <pre data-igtpl-preview-out="B" style="display:none;background:#0f172a;color:#cbd5f5;padding:10px;border-radius:6px;font-size:11px;white-space:pre-wrap;margin-top:6px;"></pre>
+                </div>
+              </div>
+              <div class="card" style="padding:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <strong>Variante C</strong>
+                  <button class="ghost small" type="button" data-igtpl-reset="C">Restaurar default</button>
+                </div>
+                <textarea id="igTplC" rows="14" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-top:6px;" placeholder="Vacio = default"></textarea>
+                <div style="margin-top:8px;">
+                  <button class="ghost small" type="button" data-igtpl-preview="C">Preview</button>
+                  <pre data-igtpl-preview-out="C" style="display:none;background:#0f172a;color:#cbd5f5;padding:10px;border-radius:6px;font-size:11px;white-space:pre-wrap;margin-top:6px;"></pre>
+                </div>
+              </div>
+            </div>
+            <div class="actions" style="margin-top:12px;">
+              <button class="secondary" type="button" id="igTplSaveBtn">Guardar plantillas</button>
+              <span id="igTplMsg" class="muted" style="font-size:12px;"></span>
+            </div>
           </div>
 
           <div class="outreach-panel" data-ig-panel="suppressions" style="display:none;">
@@ -8622,6 +8672,7 @@ a {
         if (tab === "dashboard") { loadStats(); loadOpsSummary(); loadHotLeads(); }
         if (tab === "templates") loadTemplates();
         if (tab === "autopilot") { loadIgCampaign(); loadIgAutosendStatus(); startIgCampaignPolling(); } else { stopIgCampaignPolling(); }
+        if (tab === "dmtemplates") loadIgDmTemplates();
         if (tab === "suppressions") loadSuppressions();
       }
 
@@ -8742,6 +8793,68 @@ a {
       }
       function stopIgCampaignPolling() {
         if (_igCampaignPollTimer) { clearInterval(_igCampaignPollTimer); _igCampaignPollTimer = null; }
+      }
+
+      let _igTplDefaults = { A: "", B: "", C: "" };
+
+      async function loadIgDmTemplates() {
+        try {
+          const data = await igFetch("/admin/instagram/dm-templates");
+          const t = data.templates || {};
+          _igTplDefaults = data.defaults || {};
+          for (const v of ["A","B","C"]) {
+            const el = IGQ("#igTpl" + v);
+            if (el && document.activeElement !== el) {
+              el.value = t[v] || "";
+              if (!t[v]) el.placeholder = "Vacio = usar default:\n\n" + (_igTplDefaults[v] || "");
+            }
+          }
+        } catch (err) {
+          IGQ("#igTplMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+        }
+      }
+
+      async function igTplSave() {
+        const body = {
+          variant_a: IGQ("#igTplA").value,
+          variant_b: IGQ("#igTplB").value,
+          variant_c: IGQ("#igTplC").value,
+        };
+        IGQ("#igTplMsg").textContent = "Guardando...";
+        try {
+          const res = await igFetch("/admin/instagram/dm-templates", { method: "PUT",
+            body: JSON.stringify(body) });
+          IGQ("#igTplMsg").textContent = "Guardado: " + (res.saved || []).join(", ");
+          IGQ("#igTplMsg").style.color = "#047857";
+        } catch (err) {
+          IGQ("#igTplMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+        }
+      }
+
+      async function igTplPreview(variant) {
+        const out = document.querySelector(`[data-igtpl-preview-out="${variant}"]`);
+        out.style.display = "";
+        out.textContent = "Generando...";
+        try {
+          // Guardar el body actual sin pisar nada antes del preview
+          const body = {
+            variant_a: variant === "A" ? IGQ("#igTplA").value : null,
+            variant_b: variant === "B" ? IGQ("#igTplB").value : null,
+            variant_c: variant === "C" ? IGQ("#igTplC").value : null,
+          };
+          await igFetch("/admin/instagram/dm-templates", { method: "PUT",
+            body: JSON.stringify(body) });
+          const res = await igFetch(`/admin/instagram/dm-templates/preview?variant=${variant}`, { method: "POST" });
+          out.textContent = res.text || "(vacio)";
+        } catch (err) {
+          out.textContent = "Error: " + err.message;
+        }
+      }
+
+      function igTplReset(variant) {
+        if (!confirm(`Restaurar variante ${variant} al default?`)) return;
+        IGQ("#igTpl" + variant).value = "";
+        igTplSave();
       }
 
       // Legacy compat (no usado, conservado para no romper)
@@ -9492,6 +9605,9 @@ a {
       IGQ("#igCampStartBtn")?.addEventListener("click", igCampStart);
       IGQ("#igCampPauseBtn")?.addEventListener("click", igCampPause);
       IGQ("#igCampResumeBtn")?.addEventListener("click", igCampResume);
+      IGQ("#igTplSaveBtn")?.addEventListener("click", igTplSave);
+      document.querySelectorAll("[data-igtpl-preview]").forEach(b => b.addEventListener("click", () => igTplPreview(b.dataset.igtplPreview)));
+      document.querySelectorAll("[data-igtpl-reset]").forEach(b => b.addEventListener("click", () => igTplReset(b.dataset.igtplReset)));
       IGQ("#igSupAddBtn")?.addEventListener("click", addSuppression);
       IGQ("#igSupRefreshBtn")?.addEventListener("click", loadSuppressions);
 

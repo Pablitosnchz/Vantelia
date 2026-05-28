@@ -23197,6 +23197,7 @@ def _ig_campaign_render_dm(prospect: Dict[str, Any]) -> str:
         business_name=prospect.get("business_name", "") or "",
         niche=prospect.get("niche", "") or "",
         city=prospect.get("city", "") or "",
+        db_path=str(IG_DEFAULT_DB),
     )
 
 
@@ -23428,6 +23429,102 @@ def instagram_campaign_pause():
     _ig_campaign_migrate()
     _ig_campaign_update(status="paused")
     return {"ok": True, "state": _ig_campaign_state()}
+
+
+class InstagramDmTemplatesPayload(BaseModel):
+    variant_a: Optional[str] = None
+    variant_b: Optional[str] = None
+    variant_c: Optional[str] = None
+
+
+def _ig_dm_templates_ensure() -> None:
+    with _instagram_db() as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS ig_dm_templates_v2 (
+            variant TEXT PRIMARY KEY,
+            body TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )""")
+        conn.commit()
+
+
+def _ig_dm_default(variant: str) -> str:
+    try:
+        from instagram_templates_v2 import render_natural  # type: ignore
+        return render_natural(
+            username=f"demo_{variant.lower()}",
+            business_name="Clinica Sonrisa",
+            niche="clinica dental",
+            city="Madrid",
+            variant=variant,
+        )
+    except Exception:
+        return ""
+
+
+@app.get("/admin/instagram/dm-templates", dependencies=[Depends(_require_admin_token)])
+def instagram_dm_templates_get():
+    _ig_dm_templates_ensure()
+    out = {"A": "", "B": "", "C": ""}
+    with _instagram_db() as conn:
+        rows = conn.execute("SELECT variant, body FROM ig_dm_templates_v2").fetchall()
+        for r in rows:
+            v = (r["variant"] or "").upper()
+            if v in out:
+                out[v] = r["body"] or ""
+    defaults = {v: _ig_dm_default(v) for v in ("A", "B", "C")}
+    placeholders_help = ""
+    try:
+        from instagram_templates_v2 import PLACEHOLDERS_HELP  # type: ignore
+        placeholders_help = PLACEHOLDERS_HELP
+    except Exception:
+        pass
+    return {"templates": out, "defaults": defaults, "placeholders_help": placeholders_help}
+
+
+@app.put("/admin/instagram/dm-templates", dependencies=[Depends(_require_admin_token)])
+def instagram_dm_templates_put(payload: InstagramDmTemplatesPayload):
+    _ig_dm_templates_ensure()
+    now = _instagram_now()
+    data = {"A": payload.variant_a, "B": payload.variant_b, "C": payload.variant_c}
+    saved: List[str] = []
+    with _instagram_db() as conn:
+        for variant, body in data.items():
+            if body is None:
+                continue
+            body_clean = body.strip()
+            if body_clean:
+                conn.execute(
+                    """INSERT INTO ig_dm_templates_v2 (variant, body, updated_at)
+                       VALUES (?,?,?)
+                       ON CONFLICT(variant) DO UPDATE SET body=excluded.body, updated_at=excluded.updated_at""",
+                    (variant, body_clean, now),
+                )
+                saved.append(variant)
+            else:
+                conn.execute("DELETE FROM ig_dm_templates_v2 WHERE variant=?", (variant,))
+                saved.append(variant + " (reset)")
+        conn.commit()
+    return {"ok": True, "saved": saved}
+
+
+@app.post("/admin/instagram/dm-templates/preview", dependencies=[Depends(_require_admin_token)])
+def instagram_dm_templates_preview(variant: str = "A",
+                                    business_name: str = "Clinica Sonrisa",
+                                    niche: str = "clinica dental",
+                                    city: str = "Madrid"):
+    try:
+        from instagram_templates_v2 import render_natural  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "templates_v2 no disponible")
+    text = render_natural(
+        username=f"preview_{variant.lower()}",
+        business_name=business_name,
+        niche=niche,
+        city=city,
+        variant=variant.upper(),
+        db_path=str(IG_DEFAULT_DB),
+    )
+    return {"variant": variant.upper(), "text": text}
 
 
 @app.post("/admin/instagram/campaign/resume", dependencies=[Depends(_require_admin_token)])

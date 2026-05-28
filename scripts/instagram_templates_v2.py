@@ -17,6 +17,10 @@ from typing import Optional
 
 
 VARIANTS = ["A", "B", "C"]
+PLACEHOLDERS_HELP = (
+    "Placeholders disponibles: {business_name}, {city}, {niche}, {observed}, {you}. "
+    "Usa \\n para saltos de linea."
+)
 
 
 def _clean_name(name: str) -> str:
@@ -87,17 +91,38 @@ def _niche_short(niche: str) -> str:
     return mapping.get(n, n or "negocio")
 
 
+def _load_override(variant: str, db_path: str) -> Optional[str]:
+    """Lee override del usuario desde DB. Devuelve None si no hay."""
+    try:
+        import sqlite3
+        with sqlite3.connect(db_path) as c:
+            c.execute(
+                """CREATE TABLE IF NOT EXISTS ig_dm_templates_v2 (
+                    variant TEXT PRIMARY KEY,
+                    body TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )"""
+            )
+            row = c.execute("SELECT body FROM ig_dm_templates_v2 WHERE variant=?", (variant,)).fetchone()
+            if row and row[0] and row[0].strip():
+                return row[0]
+    except Exception:
+        return None
+    return None
+
+
 def render_natural(
     username: str,
     business_name: str = "",
     niche: str = "",
     city: str = "",
     variant: Optional[str] = None,
+    db_path: Optional[str] = None,
 ) -> str:
     """Devuelve el texto del DM cold para este prospect.
 
-    Todas las variantes abren con "Soy Pablo de Vantelia" + referencia
-    personal a algo del perfil. Tono cercano, sin pinta de bot.
+    Si hay override guardado en DB para la variante, lo usa con sustitucion de
+    placeholders. Si no, usa la plantilla codificada (variantes A/B/C naturales).
     """
     v = variant or pick_variant(username)
     name = _clean_name(business_name)
@@ -121,6 +146,18 @@ def render_natural(
         observed = f"vuestro perfil del {short_niche}"
     else:
         observed = "vuestro perfil"
+
+    # Override del usuario si existe.
+    if db_path:
+        override = _load_override(v, db_path)
+        if override:
+            return (override
+                    .replace("\\n", "\n")
+                    .replace("{business_name}", name or "vosotros")
+                    .replace("{city}", city_clean or "")
+                    .replace("{niche}", short_niche or "negocio")
+                    .replace("{observed}", observed)
+                    .replace("{you}", you))
 
     if v == "A":
         p1 = f"Hola, soy Pablo de Vantelia. He visto {observed} y me ha gustado bastante lo que hacéis."
