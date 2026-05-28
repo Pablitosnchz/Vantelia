@@ -104,8 +104,8 @@ def _mark_send_state(conn: sqlite3.Connection, send_id: int, mode: str, error: s
             (mode, (error or "autosend_error")[:120], send_id),
         )
         conn.execute(
-            "INSERT INTO ig_events (username, type, stage, ts, meta) VALUES (?,?,?,?,?)",
-            (row["username"], "send_error", row["stage"], now, error[:240]),
+            "INSERT INTO ig_events (username, type, stage, data_json, ts) VALUES (?,?,?,?,?)",
+            (row["username"], "send_error", row["stage"], (error or "")[:240], now),
         )
     conn.commit()
 
@@ -375,34 +375,56 @@ def _send_one(page, username: str, message: str) -> bool:
 
     _debug_screenshot(page, username, "02_chat_open")
 
-    # Localiza composer (textbox contenteditable visible).
+    # Localiza composer del chat (no la search bar). Filtros priorizados:
+    # 1) aria-label contiene "Mensaje" o "Message" (exclusivo composer DM)
+    # 2) placeholder textarea con "Mensaje"/"Message"
+    # 3) Lexical editor (IG nuevo composer)
+    # 4) Fallback genérico contenteditable visible (excluye los de cabecera con aria-label "Buscar")
     composer = None
-    deadline = time.time() + 20
+    deadline = time.time() + 25
+    composer_selectors = [
+        'div[role="textbox"][contenteditable="true"][aria-label*="ensaje" i]',
+        'div[role="textbox"][contenteditable="true"][aria-label*="essage" i]',
+        'div[contenteditable="true"][data-lexical-editor="true"]',
+        'textarea[placeholder*="ensaje" i]',
+        'textarea[placeholder*="essage" i]',
+        'div[role="textbox"][contenteditable="true"]:not([aria-label*="uscar" i]):not([aria-label*="earch" i])',
+    ]
     while time.time() < deadline and composer is None:
-        try:
-            candidates = page.locator('div[role="textbox"][contenteditable="true"], textarea[placeholder*="ensaje"], textarea[placeholder*="essage"], div[aria-label*="ensaje"], div[aria-label*="essage"]')
-            n = candidates.count()
-            for i in range(n):
-                loc = candidates.nth(i)
-                try:
-                    if loc.is_visible():
-                        composer = loc
-                        break
-                except Exception:
-                    continue
-        except Exception:
-            pass
+        for sel in composer_selectors:
+            try:
+                candidates = page.locator(sel)
+                n = min(candidates.count(), 5)
+                for i in range(n):
+                    loc = candidates.nth(i)
+                    try:
+                        if loc.is_visible():
+                            box = loc.bounding_box()
+                            # composer del chat suele estar en mitad-baja de viewport (>250px Y)
+                            if box and box.get("y", 0) > 250:
+                                composer = loc
+                                break
+                    except Exception:
+                        continue
+                if composer is not None:
+                    break
+            except Exception:
+                continue
         if composer is None:
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(600)
 
     if composer is None:
         _debug_screenshot(page, username, "03_no_composer")
         raise RuntimeError("composer_no_encontrado")
 
-    # Foco + escribe.
-    composer.click()
+    # Foco. Usar focus() en vez de click() para evitar abrir menus.
+    try:
+        composer.scroll_into_view_if_needed(timeout=3000)
+    except Exception:
+        pass
+    composer.click(timeout=5000)
     page.wait_for_timeout(random.randint(400, 1100))
-    # Limpia por si hay texto residual del ig.me prefill.
+    # Limpia por si hay prefill del ig.me deep link.
     try:
         page.keyboard.press("Control+A")
         page.wait_for_timeout(150)
@@ -410,7 +432,10 @@ def _send_one(page, username: str, message: str) -> bool:
         page.wait_for_timeout(200)
     except Exception:
         pass
-    composer.type(message, **_typing_kwargs())
+    # Usa page.keyboard.type tras focus para evitar Locator.type timeout en
+    # contenteditable raros. Escribe al elemento activo.
+    typing_delay = _typing_kwargs().get("delay", 60)
+    page.keyboard.type(message, delay=typing_delay)
     page.wait_for_timeout(random.randint(900, 2400))
     _debug_screenshot(page, username, "04_typed")
 
