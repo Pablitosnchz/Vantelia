@@ -330,45 +330,71 @@ def _count_message_bubbles(page) -> int:
 
 
 def _verify_sent(page, message: str, baseline: int, composer, timeout_sec: int = 12) -> bool:
-    """Verifica envio tras Send. Heuristicas en orden de fiabilidad:
-    1) Burbujas crecieron Y texto aparece en burbuja → seguro
-    2) Composer vacio tras Enter → IG consumio el input → muy probable
-    3) Burbujas crecieron sin match exacto → probable (markup cambio)
+    """Verifica envio tras Send. Senyales en orden de fiabilidad:
+
+    1) URL contiene /direct/t/ → estamos en thread DM = 100% enviado.
+    2) Texto enviado YA NO esta en composer → IG consumio input.
+    3) Burbujas crecieron y texto aparece en burbuja.
+    4) Composer vacio + sin modal error.
     """
     snippet = (message or "").strip().split("\n", 1)[0][:40]
+    message_full_stripped = (message or "").strip().replace("\n", " ")[:100]
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
         try:
-            current = _count_message_bubbles(page)
-            grew = current > baseline
-            # Composer vacio = enviado
-            composer_empty = False
+            # 1) URL thread = definitivo
             try:
-                txt = (composer.text_content() or "").strip()
-                composer_empty = len(txt) < 3
+                cur_url = page.url or ""
+            except Exception:
+                cur_url = ""
+            if "/direct/t/" in cur_url:
+                return True
+
+            # 2) Texto del composer YA no contiene el mensaje
+            composer_text = ""
+            try:
+                composer_text = (composer.text_content() or "").strip()
             except Exception:
                 pass
-            if grew and snippet and len(snippet) >= 6:
-                hit = page.locator(f'div[dir="auto"]:has-text("{snippet}")').count()
-                if hit >= 1:
-                    return True
-            if composer_empty:
-                # Doble check: no debe haber modal de error visible.
+            composer_clean = len(composer_text) < 3
+            composer_lost_msg = (
+                bool(message_full_stripped)
+                and message_full_stripped[:30] not in composer_text.replace("\n", " ")
+            )
+
+            # 3) Burbujas + texto coincidente
+            try:
+                current = _count_message_bubbles(page)
+            except Exception:
+                current = 0
+            grew = current > baseline
+
+            if snippet and len(snippet) >= 6:
+                try:
+                    hit = page.locator(f'div[dir="auto"]:has-text("{snippet}")').count()
+                    if hit >= 1 and grew:
+                        return True
+                except Exception:
+                    pass
+
+            # 4) Composer vacio o perdio el mensaje + sin error modal
+            if composer_clean or composer_lost_msg:
                 err_modal = False
                 for err_sel in ('div[role="dialog"]:has-text("Error")',
                                 'div[role="alert"]',
                                 'div:has-text("Something went wrong")',
                                 'div:has-text("Algo salio mal")'):
                     try:
-                        if page.locator(err_sel).first.count() > 0 and page.locator(err_sel).first.is_visible():
+                        loc = page.locator(err_sel).first
+                        if loc.count() > 0 and loc.is_visible():
                             err_modal = True
                             break
                     except Exception:
                         continue
                 if not err_modal:
                     return True
+
             if grew:
-                # Sin match exacto pero burbujas crecieron → asumir enviado.
                 return True
         except Exception:
             pass
