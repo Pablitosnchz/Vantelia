@@ -8693,8 +8693,20 @@ a {
         try {
           await igFetch("/admin/instagram/autopilot-config", { method: "PUT",
             body: JSON.stringify({ enabled: turningOn, daily_outreach_cap: newCap, auto_followups: true }) });
-          IGQ("#igMasterMsg").textContent = turningOn ? "Activado." : "Pausado.";
-          IGQ("#igMasterMsg").style.color = "#047857";
+          if (turningOn) {
+            IGQ("#igMasterMsg").textContent = "Activado. Lanzando primera ronda...";
+            IGQ("#igMasterMsg").style.color = "#047857";
+            try {
+              const tick = await igFetch("/admin/instagram/autopilot-tick", { method: "POST" });
+              const st = tick.stats || {};
+              IGQ("#igMasterMsg").textContent = `Activado. Ronda lanzada: ${st.autosent || 0} DMs enviados, ${st.drafted_cold || 0} drafts nuevos.`;
+            } catch (e2) {
+              IGQ("#igMasterMsg").textContent = `Activado. Ronda manual fallo: ${e2.message}. Proximo tick automatico en 60 min.`;
+            }
+          } else {
+            IGQ("#igMasterMsg").textContent = "Pausado.";
+            IGQ("#igMasterMsg").style.color = "#047857";
+          }
         } catch (err) {
           IGQ("#igMasterMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
         }
