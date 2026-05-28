@@ -427,6 +427,35 @@ python scripts/instagram_campaign.py stats
 
 `IG_DB_PATH`, `IG_GRAPH_TOKEN`, `IG_BUSINESS_ACCOUNT_ID`, `IG_AUTOSEND_ENABLED`, `IG_AUTONOMOUS_ENABLED`, `IG_AUTONOMOUS_TICK_MINUTES`, `IG_AUTONOMOUS_DISCOVERY_HOURS`, `IG_RESPECT_WINDOW`, `IG_START_HOUR`, `IG_END_HOUR`, `IG_SKIP_WEEKEND`, `IG_PUBLIC_RATE_LIMIT_SEC`, `IG_REPLIES_INTERVAL_MINUTES`.
 
+### Autosend Playwright (opt-in agresivo)
+
+`scripts/instagram_autosend.py` implementa el envio automatico real via Playwright + sesion persistente. **Solo activar con cuenta IG secundaria** — viola ToS Meta y puede provocar ban.
+
+Setup:
+
+```powershell
+pip install playwright==1.47.0
+python -m playwright install chromium
+# Generar sesion (interactivo, requiere ver navegador):
+python scripts/instagram_autosend.py login
+# Verificar:
+python scripts/instagram_autosend.py status
+```
+
+Env vars para activar el modo full-autonomo:
+
+- `IG_AUTOSEND_ENABLED=true` — habilita endpoint `/admin/instagram/send` + CLI.
+- `IG_AUTONOMOUS_AUTOSEND=true` — autopilot dispara autosend tras crear drafts (sin intervencion).
+- `IG_SESSION_PATH` — JSON storage state (default `storage/instagram/session.json`).
+- `IG_USERNAME`, `IG_PASSWORD` — solo para `login` interactivo.
+- `IG_AUTOSEND_HEADLESS` — default `true`. Pon `false` para depurar.
+- `IG_AUTOSEND_DAILY_CAP` — DMs reales/dia (default 20). Recomendado 10-20 cuenta nueva.
+- `IG_AUTOSEND_MIN_DELAY_SEC` / `IG_AUTOSEND_MAX_DELAY_SEC` — delay entre DMs (default 45/180s).
+- `IG_AUTOSEND_TYPING_MIN_MS` / `IG_AUTOSEND_TYPING_MAX_MS` — delay teclado humano (default 35/120ms).
+- `IG_AUTOSEND_USER_AGENT` — UA opcional.
+
+Drafts enviados → `mode='sent_auto'` (no `'sent'`). Fallos → `mode='skipped'` con `skip_reason`. Si sesion expira, autosend aborta el ciclo y deja drafts pendientes para reintento manual o tras nuevo `login`.
+
 ### Compliance
 
 - Scrape publico solo lee bio/og:description, sin login, rate-limited.

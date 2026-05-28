@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import os
+import random
 import re
 import secrets
 import shutil
@@ -20257,17 +20258,62 @@ OUTREACH_AUTOPILOT_SECTORS = [
     "clinica estetica",
     "fisioterapia",
     "centro de psicologia",
-    "academia de ingles",
-    "autoescuela",
-    "taller mecanico",
-    "restaurante",
-    "inmobiliaria",
-    "asesoria fiscal",
-    "despacho abogados",
-    "peluqueria",
+    "logopeda",
+    "podologo",
+    "optica",
+    "clinica veterinaria",
     "centro veterinario",
+    "academia de ingles",
+    "academia oposiciones",
+    "academia refuerzo escolar",
+    "autoescuela",
+    "escuela infantil",
+    "guarderia",
+    "taller mecanico",
+    "taller chapa y pintura",
+    "restaurante",
+    "cafeteria",
+    "hotel boutique",
+    "inmobiliaria",
+    "agencia de viajes",
+    "asesoria fiscal",
+    "asesoria laboral",
+    "gestoria",
+    "despacho abogados",
+    "notaria",
+    "arquitecto",
+    "consultoria informatica",
+    "agencia marketing digital",
+    "peluqueria",
+    "barberia",
+    "centro de estetica",
+    "centro depilacion laser",
+    "centro de unas",
     "cerrajeria",
     "empresa de reformas",
+    "empresa de mudanzas",
+    "empresa de limpieza",
+    "carpinteria",
+    "fontaneria",
+    "electricista",
+    "gimnasio",
+    "estudio pilates",
+    "centro yoga",
+    "academia danza",
+    "academia musica",
+    "residencia mayores",
+    "centro dia mayores",
+    "ayuda a domicilio",
+    "clinica nutricion",
+    "centro fertilidad",
+    "clinica capilar",
+    "ortodoncia",
+    "centro auditivo",
+    "tienda informatica",
+    "joyeria",
+    "floristeria",
+    "tintoreria",
+    "agencia seguros",
 ]
 
 OUTREACH_AUTOPILOT_CITIES = [
@@ -20279,6 +20325,13 @@ OUTREACH_AUTOPILOT_CITIES = [
     "Donostia", "Burgos", "Santander", "Castellon de la Plana", "Albacete", "Getafe",
     "Logrono", "Badajoz", "Salamanca", "Huelva", "Lleida", "Tarragona", "Leon", "Cadiz",
     "Jaen", "Ourense", "Torrejon de Ardoz", "Alcorcon", "Reus", "Girona",
+    "Santa Cruz de Tenerife", "San Sebastian de los Reyes", "Mataro", "Marbella",
+    "Algeciras", "Toledo", "Caceres", "Lugo", "Pontevedra", "Roquetas de Mar",
+    "Avila", "Segovia", "Merida", "Ferrol", "Manresa", "Ciudad Real", "Vilanova i la Geltru",
+    "Mijas", "Estepona", "Benidorm", "Pozuelo de Alarcon", "Las Rozas", "Majadahonda",
+    "Boadilla del Monte", "Rivas-Vaciamadrid", "Coslada", "San Fernando", "El Puerto de Santa Maria",
+    "Chiclana de la Frontera", "Talavera de la Reina", "Lorca", "Cuenca", "Soria",
+    "Teruel", "Huesca", "Guadalajara", "Palencia", "Zamora", "Vic",
 ]
 
 
@@ -20290,23 +20343,30 @@ def _autopilot_target_companies(value: Any) -> int:
 
 
 def _autopilot_generated_targets(target_count: int, max_targets: int = 18) -> List[Dict[str, str]]:
-    """Rotacion determinista de ciudades/sectores. Evita pedir ciudad o sector al admin."""
+    """Rotacion aleatoria por toda Espana. Distinta en cada ronda.
+
+    - Sin seed fija: cada tick saca combos diferentes.
+    - Cap 2 apariciones por sector y por ciudad → reparto amplio.
+    - Cubre toda Espana con ~80 ciudades y ~60 sectores B2B.
+    """
     target_count = _autopilot_target_companies(target_count)
     limit = max(4, min(max_targets, max(6, target_count * 2)))
-    today_seed = datetime.now(timezone.utc).strftime("%Y%m%d")
-    seed_int = int(hashlib.sha256(today_seed.encode("utf-8")).hexdigest(), 16)
+    rng = random.SystemRandom()
+    all_combos = [(s, c) for s in OUTREACH_AUTOPILOT_SECTORS for c in OUTREACH_AUTOPILOT_CITIES]
+    rng.shuffle(all_combos)
+    max_per_sector = max(1, limit // 6)
+    max_per_city = max(1, limit // 6)
+    sector_count: Dict[str, int] = {}
+    city_count: Dict[str, int] = {}
     combos: List[Dict[str, str]] = []
-    seen = set()
-    city_count = len(OUTREACH_AUTOPILOT_CITIES)
-    sector_count = len(OUTREACH_AUTOPILOT_SECTORS)
-    for i in range(city_count * sector_count):
-        city = OUTREACH_AUTOPILOT_CITIES[(seed_int + i * 7) % city_count]
-        sector = OUTREACH_AUTOPILOT_SECTORS[(seed_int // 17 + i * 5) % sector_count]
-        key = (sector.lower(), city.lower())
-        if key in seen:
+    for sector, city in all_combos:
+        if sector_count.get(sector, 0) >= max_per_sector:
             continue
-        seen.add(key)
+        if city_count.get(city, 0) >= max_per_city:
+            continue
         combos.append({"sector": sector, "city": city, "auto": "spain"})
+        sector_count[sector] = sector_count.get(sector, 0) + 1
+        city_count[city] = city_count.get(city, 0) + 1
         if len(combos) >= limit:
             break
     return combos
@@ -20637,13 +20697,19 @@ def _outreach_autonomous_tick_inner() -> None:
                     companies = companies[:remaining_import_budget]
                     # Conexión corta solo para los INSERT de esta ciudad.
                     with _outreach_db() as conn:
+                        no_email_count = 0
+                        chain_count = 0
+                        duplicate_count = 0
                         for c in companies:
                             email = (getattr(c, "email", "") or "").lower().strip()
                             if not email:
+                                no_email_count += 1
                                 continue
                             if email in known or email in suppressed:
+                                duplicate_count += 1
                                 continue
                             if _autonomous_is_chain(getattr(c, "business_name", "")):
+                                chain_count += 1
                                 continue
                             score = _autonomous_company_score(c)
                             if score < int(os.getenv("OUTREACH_AUTONOMOUS_MIN_SCORE", "60") or 60):
@@ -20676,11 +20742,34 @@ def _outreach_autonomous_tick_inner() -> None:
                                                f"Error insertando {email}: {exc}",
                                                {"email": email})
                         conn.commit()
-                    log(f"discovery {sector}/{city}: {discovered_count} encontrados, {len(companies)} nuevos tras dedupe, {added} importados")
+                    if no_email_count:
+                        _autopilot_log(
+                            "warning",
+                            "discovery_no_email_skip",
+                            f"{sector} · {city}: {no_email_count} empresas sin email descartadas",
+                            {"sector": sector, "city": city, "no_email": no_email_count,
+                             "total_after_dedupe": len(companies)},
+                        )
+                    if duplicate_count:
+                        _autopilot_log(
+                            "info",
+                            "discovery_duplicate_skip",
+                            f"{sector} · {city}: {duplicate_count} duplicados (ya en DB o suprimidos)",
+                            {"sector": sector, "city": city, "duplicates": duplicate_count},
+                        )
+                    if chain_count:
+                        _autopilot_log(
+                            "info",
+                            "discovery_chain_skip",
+                            f"{sector} · {city}: {chain_count} descartadas por cadena conocida",
+                            {"sector": sector, "city": city, "chains": chain_count},
+                        )
+                    log(f"discovery {sector}/{city}: {discovered_count} encontrados, {len(companies)} nuevos tras dedupe, {added} importados (sin_email={no_email_count}, dup={duplicate_count}, chain={chain_count})")
                     _outreach_tick_state_update(
                         "discovery_target_done",
                         f"{sector} · {city}: {len(companies)} encontrados, {added} importados",
-                        detail={"sector": sector, "city": city, "found": discovered_count, "new_after_dedupe": len(companies), "imported": added},
+                        detail={"sector": sector, "city": city, "found": discovered_count, "new_after_dedupe": len(companies), "imported": added,
+                                "no_email": no_email_count, "duplicates": duplicate_count, "chains": chain_count},
                         current_target={"sector": sector, "city": city},
                         imported_total=imported_total + added,
                     )
@@ -20688,7 +20777,8 @@ def _outreach_autonomous_tick_inner() -> None:
                         "success" if added > 0 else "info",
                         "discovery_target_done",
                         f"{sector} · {city}: {len(companies)} encontrados, {added} importados",
-                        {"sector": sector, "city": city, "found": discovered_count, "new_after_dedupe": len(companies), "imported": added},
+                        {"sector": sector, "city": city, "found": discovered_count, "new_after_dedupe": len(companies), "imported": added,
+                         "no_email": no_email_count, "duplicates": duplicate_count, "chains": chain_count},
                     )
                     imported_total += added
                 # Actualizar timestamp solo al final, conexión nueva y breve.
@@ -21795,6 +21885,14 @@ class InstagramSendRequest(BaseModel):
     dry_run: bool = True
 
 
+class InstagramSessionCookies(BaseModel):
+    sessionid: str = Field(..., min_length=10)
+    csrftoken: str = Field(..., min_length=10)
+    ds_user_id: str = Field(..., min_length=1)
+    mid: str = ""
+    rur: str = ""
+
+
 class InstagramSuppressRequest(BaseModel):
     username: str = Field(..., min_length=1)
     reason: str = "manual"
@@ -22618,6 +22716,96 @@ def instagram_autosend(payload: InstagramSendRequest, background_tasks: Backgrou
     return {"ok": True, "queued": len(drafts), "dry_run": payload.dry_run}
 
 
+# ----- Sesion Instagram (cookies pegadas desde navegador) -----
+
+
+@app.get("/admin/instagram/autosend/status", dependencies=[Depends(_require_admin_token)])
+def instagram_autosend_status():
+    try:
+        from instagram_autosend import session_info  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/instagram_autosend.py no disponible.")
+    return {
+        "autosend_enabled": ig_is_autosend_enabled(),
+        "autonomous_autosend": _ig_env_bool("IG_AUTONOMOUS_AUTOSEND", False),
+        "session": session_info(),
+    }
+
+
+@app.post("/admin/instagram/autosend/connect", dependencies=[Depends(_require_admin_token)])
+def instagram_autosend_connect(payload: InstagramSessionCookies):
+    try:
+        from instagram_autosend import save_session_from_cookies, session_info  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/instagram_autosend.py no disponible.")
+    try:
+        path = save_session_from_cookies(
+            sessionid=payload.sessionid,
+            csrftoken=payload.csrftoken,
+            ds_user_id=payload.ds_user_id,
+            mid=payload.mid,
+            rur=payload.rur,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"ok": True, "saved_at": str(path), "session": session_info()}
+
+
+@app.post("/admin/instagram/autosend/disconnect", dependencies=[Depends(_require_admin_token)])
+def instagram_autosend_disconnect():
+    try:
+        from instagram_autosend import clear_session  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/instagram_autosend.py no disponible.")
+    removed = clear_session()
+    return {"ok": True, "removed": removed}
+
+
+@app.post("/admin/instagram/autosend/test", dependencies=[Depends(_require_admin_token)])
+def instagram_autosend_test():
+    """Comprueba si la sesion guardada sigue valida pidiendo /accounts/edit/ a IG."""
+    try:
+        from instagram_autosend import session_info  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/instagram_autosend.py no disponible.")
+    info = session_info()
+    if not info.get("connected"):
+        return {"ok": False, "reason": "sin_sesion"}
+    sessionid = ""
+    csrftoken = ""
+    ds_user_id = info.get("ds_user_id") or ""
+    try:
+        state_path = Path(info.get("path") or "")
+        if state_path.exists():
+            data = json.loads(state_path.read_text(encoding="utf-8"))
+            for c in data.get("cookies", []):
+                if c.get("name") == "sessionid":
+                    sessionid = c.get("value") or ""
+                elif c.get("name") == "csrftoken":
+                    csrftoken = c.get("value") or ""
+    except Exception as exc:
+        raise HTTPException(500, f"No se pudo leer sesion: {exc}")
+    if not sessionid:
+        return {"ok": False, "reason": "sin_sessionid"}
+    cookies = {"sessionid": sessionid, "csrftoken": csrftoken, "ds_user_id": ds_user_id}
+    headers = {
+        "User-Agent": os.getenv("IG_AUTOSEND_USER_AGENT",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
+        "Accept-Language": "es-ES,es;q=0.9",
+        "X-IG-App-ID": "936619743392459",
+    }
+    try:
+        with httpx.Client(timeout=10.0, follow_redirects=False) as client:
+            r = client.get("https://www.instagram.com/api/v1/accounts/edit/web_form_data/",
+                           cookies=cookies, headers=headers)
+        ok = r.status_code == 200 and "username" in (r.text or "")
+        return {"ok": ok, "status_code": r.status_code,
+                "session": info,
+                "hint": "Cookies validas" if ok else "Cookies caducadas o cuenta bloqueada. Reconecta."}
+    except Exception as exc:
+        return {"ok": False, "reason": f"http_error: {exc}", "session": info}
+
+
 # ----- Suppressions -----
 
 
@@ -22785,8 +22973,8 @@ def instagram_autopilot_put(payload: InstagramAutopilotPayload):
 
 
 def _ig_autopilot_run_once() -> Dict[str, Any]:
-    """Una pasada autopilot. Discovery (si toca) + drafts (si toca)."""
-    stats = {"discovered": 0, "drafted_cold": 0, "drafted_fu": 0, "skipped": ""}
+    """Una pasada autopilot. Discovery (si toca) + drafts + autosend (si toca)."""
+    stats = {"discovered": 0, "drafted_cold": 0, "drafted_fu": 0, "autosent": 0, "skipped": ""}
     if not IG_AVAILABLE:
         stats["skipped"] = "ig_unavailable"
         return stats
@@ -22871,6 +23059,23 @@ def _ig_autopilot_run_once() -> Dict[str, Any]:
                     stats["drafted_fu"] += 1
 
         conn.commit()
+
+    # ---- AUTOSEND AUTOMATICO ----
+    # Solo si IG_AUTOSEND_ENABLED=true + IG_AUTONOMOUS_AUTOSEND=true. Riesgo ban Meta.
+    autosend_on = ig_is_autosend_enabled() and _ig_env_bool("IG_AUTONOMOUS_AUTOSEND", False)
+    if autosend_on and (stats["drafted_cold"] or stats["drafted_fu"]):
+        try:
+            from instagram_autosend import autosend_drafts, fetch_pending_drafts  # type: ignore
+            cap = int(os.getenv("IG_AUTOSEND_DAILY_CAP", "20") or 20)
+            pending = fetch_pending_drafts(cap)
+            if pending:
+                sent = autosend_drafts(pending, dry_run=False)
+                stats["autosent"] = int(sent or 0)
+                logger.info("IG autopilot: autosend envio %s/%s drafts", sent, len(pending))
+        except ImportError:
+            logger.warning("IG autopilot: instagram_autosend o playwright no disponible.")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("IG autopilot: autosend error: %s", exc)
     return stats
 
 

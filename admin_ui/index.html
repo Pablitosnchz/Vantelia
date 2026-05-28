@@ -3302,6 +3302,41 @@ tbody tr:last-child td { border-bottom: none; }
           </div>
 
           <div class="outreach-panel" data-ig-panel="autopilot" style="display:none;">
+            <div class="card" style="padding:14px;margin-bottom:14px;background:#fffbeb;border:1px solid #fde68a;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:260px;">
+                  <strong style="font-size:14px;">Sesion Instagram (envio automatico)</strong>
+                  <p class="muted" style="margin:4px 0 0;font-size:12px;">
+                    Pega tus cookies de Instagram para que el VPS envie los DMs solo. Caducan ~3 meses, reconecta cuando pase.
+                    <strong>Recomendado: cuenta secundaria.</strong> Riesgo de bloqueo Meta al automatizar DMs.
+                  </p>
+                </div>
+                <div id="igAutosendStatusBadge" class="muted" style="font-size:12px;text-align:right;min-width:160px;">Cargando...</div>
+              </div>
+              <details style="margin-top:10px;">
+                <summary style="cursor:pointer;font-size:12px;color:#92400e;">Como sacar las cookies (1 vez, 2 min)</summary>
+                <ol style="font-size:12px;line-height:1.7;margin:8px 0 0 18px;color:#475569;">
+                  <li>Abre <code>instagram.com</code> en tu navegador, logueado con la cuenta que vas a usar.</li>
+                  <li>Pulsa F12 → pestana <strong>Application</strong> (Chrome) o <strong>Almacenamiento</strong> (Firefox).</li>
+                  <li>Cookies → <code>https://www.instagram.com</code>.</li>
+                  <li>Copia los valores de: <code>sessionid</code>, <code>csrftoken</code>, <code>ds_user_id</code> (y opcional <code>mid</code>, <code>rur</code>).</li>
+                  <li>Pegalos abajo y pulsa <strong>Conectar</strong>.</li>
+                </ol>
+              </details>
+              <div class="grid-2" style="margin-top:10px;gap:8px;">
+                <label style="font-size:12px;">sessionid<input id="igAutosendSessionid" type="password" placeholder="12345678%3AabCdEf..." autocomplete="off" /></label>
+                <label style="font-size:12px;">csrftoken<input id="igAutosendCsrftoken" type="text" placeholder="abc123..." autocomplete="off" /></label>
+                <label style="font-size:12px;">ds_user_id<input id="igAutosendDsUserId" type="text" placeholder="12345678" autocomplete="off" /></label>
+                <label style="font-size:12px;">mid (opcional)<input id="igAutosendMid" type="text" autocomplete="off" /></label>
+                <label style="font-size:12px;">rur (opcional)<input id="igAutosendRur" type="text" autocomplete="off" /></label>
+              </div>
+              <div class="actions" style="margin-top:10px;gap:8px;flex-wrap:wrap;">
+                <button class="secondary small" type="button" id="igAutosendConnectBtn">Conectar</button>
+                <button class="ghost small" type="button" id="igAutosendTestBtn">Probar sesion</button>
+                <button class="ghost small" type="button" id="igAutosendDisconnectBtn" style="color:#b91c1c;">Desconectar</button>
+                <span id="igAutosendMsg" class="muted" style="font-size:12px;"></span>
+              </div>
+            </div>
             <div class="section-header">
               <div><strong>Configuracion Instagram</strong><p class="muted">Automatizacion asistida. El envio real sigue siendo manual salvo modo agresivo opt-in.</p></div>
               <label class="switch"><input id="igAutoEnabled" type="checkbox" /> Activo</label>
@@ -8643,8 +8678,81 @@ a {
         if (tab === "drafts") { loadFollowupQueue(); loadDrafts(); }
         if (tab === "prospects") loadProspects();
         if (tab === "templates") loadTemplates();
-        if (tab === "autopilot") loadAutopilot();
+        if (tab === "autopilot") { loadAutopilot(); loadIgAutosendStatus(); }
         if (tab === "suppressions") loadSuppressions();
+      }
+
+      async function loadIgAutosendStatus() {
+        const badge = IGQ("#igAutosendStatusBadge");
+        if (!badge) return;
+        try {
+          const data = await igFetch("/admin/instagram/autosend/status");
+          const s = data.session || {};
+          if (s.connected) {
+            const saved = s.saved_at ? new Date(s.saved_at).toLocaleDateString("es-ES") : "?";
+            const auto = data.autonomous_autosend ? "AUTO ON" : "auto OFF";
+            badge.innerHTML = `<span style="color:#047857;">● Conectada</span><br/><span style="font-size:11px;color:#64748b;">guardada ${saved} · ${auto}</span>`;
+          } else {
+            badge.innerHTML = `<span style="color:#b91c1c;">● Sin sesion</span><br/><span style="font-size:11px;color:#64748b;">${s.reason || "pega cookies abajo"}</span>`;
+          }
+        } catch (err) {
+          badge.innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+        }
+      }
+
+      async function igAutosendConnect() {
+        const sessionid = IGQ("#igAutosendSessionid").value.trim();
+        const csrftoken = IGQ("#igAutosendCsrftoken").value.trim();
+        const ds_user_id = IGQ("#igAutosendDsUserId").value.trim();
+        const mid = IGQ("#igAutosendMid").value.trim();
+        const rur = IGQ("#igAutosendRur").value.trim();
+        const msg = IGQ("#igAutosendMsg");
+        if (!sessionid || !csrftoken || !ds_user_id) {
+          msg.textContent = "Faltan sessionid, csrftoken o ds_user_id"; msg.style.color = "#b91c1c"; return;
+        }
+        msg.textContent = "Conectando..."; msg.style.color = "#64748b";
+        try {
+          await igFetch("/admin/instagram/autosend/connect", { method: "POST",
+            body: JSON.stringify({ sessionid, csrftoken, ds_user_id, mid, rur }) });
+          msg.textContent = "Cookies guardadas. Probando..."; msg.style.color = "#047857";
+          IGQ("#igAutosendSessionid").value = "";
+          IGQ("#igAutosendCsrftoken").value = "";
+          IGQ("#igAutosendDsUserId").value = "";
+          IGQ("#igAutosendMid").value = "";
+          IGQ("#igAutosendRur").value = "";
+          await igAutosendTest();
+        } catch (err) {
+          msg.textContent = `Error: ${err.message}`; msg.style.color = "#b91c1c";
+        }
+        loadIgAutosendStatus();
+      }
+
+      async function igAutosendTest() {
+        const msg = IGQ("#igAutosendMsg");
+        msg.textContent = "Probando sesion contra Instagram..."; msg.style.color = "#64748b";
+        try {
+          const data = await igFetch("/admin/instagram/autosend/test", { method: "POST" });
+          if (data.ok) {
+            msg.textContent = `OK. Cookies validas (HTTP ${data.status_code}).`; msg.style.color = "#047857";
+          } else {
+            msg.textContent = `Sesion invalida: ${data.reason || data.hint || "desconocido"}`; msg.style.color = "#b91c1c";
+          }
+        } catch (err) {
+          msg.textContent = `Error: ${err.message}`; msg.style.color = "#b91c1c";
+        }
+        loadIgAutosendStatus();
+      }
+
+      async function igAutosendDisconnect() {
+        if (!confirm("Borrar sesion IG guardada? Tendras que pegar cookies de nuevo.")) return;
+        const msg = IGQ("#igAutosendMsg");
+        try {
+          await igFetch("/admin/instagram/autosend/disconnect", { method: "POST" });
+          msg.textContent = "Sesion borrada."; msg.style.color = "#64748b";
+        } catch (err) {
+          msg.textContent = `Error: ${err.message}`; msg.style.color = "#b91c1c";
+        }
+        loadIgAutosendStatus();
       }
 
       async function loadStats() {
@@ -9205,6 +9313,9 @@ a {
       IGQ("#igJobsRefreshBtn")?.addEventListener("click", loadJobs);
       IGQ("#igAutoSaveBtn")?.addEventListener("click", saveAutopilot);
       IGQ("#igAutoTickBtn")?.addEventListener("click", tickAutopilot);
+      IGQ("#igAutosendConnectBtn")?.addEventListener("click", igAutosendConnect);
+      IGQ("#igAutosendTestBtn")?.addEventListener("click", igAutosendTest);
+      IGQ("#igAutosendDisconnectBtn")?.addEventListener("click", igAutosendDisconnect);
       IGQ("#igSupAddBtn")?.addEventListener("click", addSuppression);
       IGQ("#igSupRefreshBtn")?.addEventListener("click", loadSuppressions);
 
