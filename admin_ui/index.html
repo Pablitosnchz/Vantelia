@@ -3171,7 +3171,6 @@ tbody tr:last-child td { border-bottom: none; }
 
           <div class="actions cw-advanced-tabs">
             <button class="ghost small active" type="button" data-ig-tab="dashboard">Hoy</button>
-            <button class="ghost small" type="button" data-ig-tab="templates">Mensajes</button>
             <button class="ghost small" type="button" data-ig-tab="autopilot">Configuracion</button>
             <button class="ghost small" type="button" data-ig-tab="suppressions">Bajas</button>
           </div>
@@ -3201,44 +3200,52 @@ tbody tr:last-child td { border-bottom: none; }
             <div id="igTodayFollowups" style="display:none;"></div>
           </div>
 
-          <div class="outreach-panel" data-ig-panel="templates" style="display:none;">
-            <p class="muted" style="margin-top:12px;">Overrides opcionales del copy por stage. Vacio = usar default de scripts/instagram_templates.py.</p>
-            <div id="igTemplatesEditor"></div>
-          </div>
-
           <div class="outreach-panel" data-ig-panel="autopilot" style="display:none;">
-            <div id="igMasterCard" class="card" style="padding:16px;margin-bottom:14px;border:2px solid #cbd5e1;background:#f8fafc;">
+            <div id="igCampaignCard" class="card" style="padding:18px;margin-bottom:14px;border:2px solid #cbd5e1;background:#f8fafc;">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
                 <div style="flex:1;min-width:240px;">
                   <div style="display:flex;align-items:center;gap:10px;">
-                    <span id="igMasterStateDot" style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#94a3b8;"></span>
-                    <strong id="igMasterStateText" style="font-size:18px;">Cargando estado...</strong>
+                    <span id="igCampStateDot" style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#94a3b8;"></span>
+                    <strong id="igCampStateText" style="font-size:20px;">Cargando...</strong>
                   </div>
-                  <p class="muted" style="margin:6px 0 0;font-size:12px;" id="igMasterHint">Activar envia DMs automaticos respetando el tope diario.</p>
-                </div>
-                <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
-                  <label style="font-size:12px;display:flex;flex-direction:column;gap:4px;">
-                    DMs maximos al dia
-                    <input id="igMasterDailyCap" type="number" min="1" max="100" value="5" style="width:90px;font-size:16px;font-weight:600;text-align:center;" />
-                  </label>
-                  <button id="igMasterToggleBtn" class="secondary" type="button" style="font-size:15px;padding:10px 20px;">Activar</button>
+                  <p class="muted" id="igCampHint" style="margin:6px 0 0;font-size:12px;">Define objetivo y pulsa Empezar. El sistema descubre, contacta y para al alcanzar el numero.</p>
                 </div>
               </div>
-              <div id="igMasterStats" style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;font-size:12px;">
+              <div style="margin-top:14px;background:#e2e8f0;border-radius:10px;overflow:hidden;height:14px;position:relative;">
+                <div id="igCampProgressBar" style="height:100%;background:linear-gradient(90deg,#10b981,#059669);width:0%;transition:width 0.4s;"></div>
+              </div>
+              <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;font-size:13px;">
+                <span><strong id="igCampSent">0</strong> contactados / <strong id="igCampTarget">0</strong> objetivo</span>
+                <span class="muted" id="igCampPct">0%</span>
+              </div>
+              <div style="margin-top:14px;display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+                <label style="font-size:12px;display:flex;flex-direction:column;gap:4px;">
+                  Numero de clientes objetivo
+                  <input id="igCampTargetInput" type="number" min="1" max="200" value="30" style="width:120px;font-size:18px;font-weight:600;text-align:center;padding:6px;" />
+                </label>
+                <button id="igCampStartBtn" class="secondary" type="button" style="font-size:15px;padding:10px 26px;">EMPEZAR CAPTACIÓN</button>
+                <button id="igCampPauseBtn" class="ghost small" type="button" style="display:none;">Pausar</button>
+                <button id="igCampResumeBtn" class="ghost small" type="button" style="display:none;">Reanudar</button>
+              </div>
+              <div id="igCampStats" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;font-size:12px;">
                 <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
-                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Enviados hoy</span>
-                  <strong id="igMasterSentToday" style="font-size:18px;">-</strong> / <span id="igMasterCapShown">-</span>
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Descubiertos</span>
+                  <strong id="igCampDiscovered" style="font-size:18px;">-</strong>
                 </div>
                 <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
                   <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">En cola</span>
-                  <strong id="igMasterPending" style="font-size:18px;">-</strong>
+                  <strong id="igCampPending" style="font-size:18px;">-</strong>
+                </div>
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Respuestas</span>
+                  <strong id="igCampReplied" style="font-size:18px;">-</strong>
                 </div>
                 <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
                   <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Sesion IG</span>
-                  <strong id="igMasterSession" style="font-size:13px;">-</strong>
+                  <strong id="igCampSession" style="font-size:13px;">-</strong>
                 </div>
               </div>
-              <p id="igMasterMsg" class="muted" style="margin:8px 0 0;font-size:12px;"></p>
+              <p id="igCampMsg" class="muted" style="margin:8px 0 0;font-size:12px;"></p>
             </div>
             <div class="card" style="padding:14px;margin-bottom:14px;background:#fffbeb;border:1px solid #fde68a;">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
@@ -8614,12 +8621,131 @@ a {
         });
         if (tab === "dashboard") { loadStats(); loadOpsSummary(); loadHotLeads(); }
         if (tab === "templates") loadTemplates();
-        if (tab === "autopilot") { loadAutopilot(); loadIgAutosendStatus(); loadIgMaster(); }
+        if (tab === "autopilot") { loadIgCampaign(); loadIgAutosendStatus(); startIgCampaignPolling(); } else { stopIgCampaignPolling(); }
         if (tab === "suppressions") loadSuppressions();
       }
 
-      let _igMasterState = { enabled: false, cap: 5, session: false };
+      let _igCampaignPollTimer = null;
+      const IG_CAMP_STATE_META = {
+        idle: { label: "PARADO", dot: "#94a3b8", color: "#475569" },
+        discovering: { label: "BUSCANDO PROSPECTS", dot: "#3b82f6", color: "#1e40af" },
+        sending: { label: "ENVIANDO DMs", dot: "#10b981", color: "#047857" },
+        paused: { label: "PAUSADO", dot: "#f59e0b", color: "#92400e" },
+        completed: { label: "OBJETIVO ALCANZADO", dot: "#22c55e", color: "#15803d" },
+      };
 
+      async function loadIgCampaign() {
+        try {
+          const data = await igFetch("/admin/instagram/campaign");
+          const c = data.campaign || {};
+          const status = c.status || "idle";
+          const meta = IG_CAMP_STATE_META[status] || IG_CAMP_STATE_META.idle;
+          const target = c.target_count || 0;
+          const sent = c.sent_count || 0;
+          const pct = target > 0 ? Math.min(100, Math.round((sent / target) * 100)) : 0;
+          IGQ("#igCampStateDot").style.background = meta.dot;
+          IGQ("#igCampStateText").textContent = meta.label;
+          IGQ("#igCampStateText").style.color = meta.color;
+          IGQ("#igCampProgressBar").style.width = pct + "%";
+          IGQ("#igCampSent").textContent = sent;
+          IGQ("#igCampTarget").textContent = target;
+          IGQ("#igCampPct").textContent = pct + "%";
+          IGQ("#igCampDiscovered").textContent = c.discovered_count || 0;
+          IGQ("#igCampPending").textContent = c.pending_drafts || 0;
+          IGQ("#igCampReplied").textContent = c.replied_count || 0;
+          const sess = data.session || {};
+          if (sess.connected) {
+            IGQ("#igCampSession").textContent = "Conectada";
+            IGQ("#igCampSession").style.color = "#047857";
+          } else {
+            IGQ("#igCampSession").innerHTML = '<span style="color:#b91c1c;">Sin sesion</span>';
+          }
+          const startBtn = IGQ("#igCampStartBtn");
+          const pauseBtn = IGQ("#igCampPauseBtn");
+          const resumeBtn = IGQ("#igCampResumeBtn");
+          const targetInput = IGQ("#igCampTargetInput");
+          if (status === "idle" || status === "completed") {
+            startBtn.style.display = "";
+            startBtn.textContent = status === "completed" ? "EMPEZAR NUEVA" : "EMPEZAR CAPTACIÓN";
+            pauseBtn.style.display = "none";
+            resumeBtn.style.display = "none";
+            targetInput.disabled = false;
+          } else if (status === "paused") {
+            startBtn.style.display = "none";
+            pauseBtn.style.display = "none";
+            resumeBtn.style.display = "";
+            targetInput.disabled = false;
+          } else {
+            startBtn.style.display = "none";
+            pauseBtn.style.display = "";
+            resumeBtn.style.display = "none";
+            targetInput.disabled = true;
+          }
+          if (document.activeElement !== targetInput && target > 0) {
+            targetInput.value = target;
+          }
+          const err = (c.error_msg || "").trim();
+          IGQ("#igCampMsg").textContent = err ? `Aviso: ${err}` : "";
+          IGQ("#igCampMsg").style.color = err ? "#b91c1c" : "#64748b";
+        } catch (err) {
+          IGQ("#igCampStateText").textContent = "Error: " + err.message;
+        }
+      }
+
+      async function igCampStart() {
+        const target = parseInt(IGQ("#igCampTargetInput").value || "30", 10);
+        if (!target || target < 1 || target > 200) {
+          IGQ("#igCampMsg").innerHTML = '<span style="color:#b91c1c;">Objetivo debe ser 1-200.</span>';
+          return;
+        }
+        if (!confirm(`Empezar captacion automatica para ${target} clientes? Se enviaran DMs reales desde tu cuenta IG.`)) return;
+        const btn = IGQ("#igCampStartBtn");
+        btn.disabled = true;
+        IGQ("#igCampMsg").textContent = "Arrancando...";
+        try {
+          await igFetch("/admin/instagram/campaign/start", { method: "POST",
+            body: JSON.stringify({ target_count: target }) });
+          IGQ("#igCampMsg").textContent = "Campana iniciada. El sistema empieza a buscar.";
+          IGQ("#igCampMsg").style.color = "#047857";
+        } catch (err) {
+          IGQ("#igCampMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+        }
+        btn.disabled = false;
+        await loadIgCampaign();
+      }
+
+      async function igCampPause() {
+        try {
+          await igFetch("/admin/instagram/campaign/pause", { method: "POST" });
+        } catch (err) {
+          IGQ("#igCampMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+        }
+        await loadIgCampaign();
+      }
+
+      async function igCampResume() {
+        try {
+          await igFetch("/admin/instagram/campaign/resume", { method: "POST" });
+        } catch (err) {
+          IGQ("#igCampMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+        }
+        await loadIgCampaign();
+      }
+
+      function startIgCampaignPolling() {
+        stopIgCampaignPolling();
+        _igCampaignPollTimer = setInterval(() => {
+          const panel = document.querySelector('[data-ig-panel="autopilot"]');
+          if (!panel || panel.style.display === "none") return;
+          loadIgCampaign();
+        }, 8000);
+      }
+      function stopIgCampaignPolling() {
+        if (_igCampaignPollTimer) { clearInterval(_igCampaignPollTimer); _igCampaignPollTimer = null; }
+      }
+
+      // Legacy compat (no usado, conservado para no romper)
+      let _igMasterState = { enabled: false, cap: 5, session: false };
       async function loadIgMaster() {
         try {
           const [cfg, sessionData] = await Promise.all([
@@ -9363,6 +9489,9 @@ a {
       IGQ("#igAutosendTestBtn")?.addEventListener("click", igAutosendTest);
       IGQ("#igAutosendDisconnectBtn")?.addEventListener("click", igAutosendDisconnect);
       IGQ("#igMasterToggleBtn")?.addEventListener("click", igMasterToggle);
+      IGQ("#igCampStartBtn")?.addEventListener("click", igCampStart);
+      IGQ("#igCampPauseBtn")?.addEventListener("click", igCampPause);
+      IGQ("#igCampResumeBtn")?.addEventListener("click", igCampResume);
       IGQ("#igSupAddBtn")?.addEventListener("click", addSuppression);
       IGQ("#igSupRefreshBtn")?.addEventListener("click", loadSuppressions);
 

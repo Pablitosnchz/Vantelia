@@ -23112,6 +23112,333 @@ def instagram_autopilot_tick():
     return {"ok": True, "stats": stats, "ts": _instagram_now()}
 
 
+# =====================================================================
+# === CAMPAIGN v2: discovery real + DMs naturales + 1 boton Empezar  ==
+# =====================================================================
+
+ig_campaign_stop = threading.Event()
+ig_campaign_thread: Optional[threading.Thread] = None
+_IG_CAMPAIGN_STATUSES = {"idle", "discovering", "sending", "paused", "completed"}
+
+
+class InstagramCampaignStart(BaseModel):
+    target_count: int = Field(30, ge=1, le=200)
+
+
+def _ig_campaign_migrate() -> None:
+    """Crea tabla ig_campaign si no existe (singleton id=1)."""
+    if not IG_AVAILABLE:
+        return
+    with _instagram_db() as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS ig_campaign (
+            id INTEGER PRIMARY KEY CHECK (id=1),
+            target_count INTEGER DEFAULT 30,
+            status TEXT DEFAULT 'idle',
+            discovered_count INTEGER DEFAULT 0,
+            sent_count INTEGER DEFAULT 0,
+            replied_count INTEGER DEFAULT 0,
+            started_at TEXT DEFAULT '',
+            updated_at TEXT DEFAULT '',
+            completed_at TEXT DEFAULT '',
+            error_msg TEXT DEFAULT ''
+        )""")
+        conn.execute("INSERT OR IGNORE INTO ig_campaign (id) VALUES (1)")
+        conn.commit()
+
+
+def _ig_campaign_state() -> Dict[str, Any]:
+    if not IG_AVAILABLE:
+        return {"available": False}
+    _ig_campaign_migrate()
+    with _instagram_db() as conn:
+        row = conn.execute("SELECT * FROM ig_campaign WHERE id=1").fetchone()
+        cfg = dict(row) if row else {}
+        # contadores reales de DB (no confiar solo en campaign columns).
+        cfg["discovered_count"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM ig_prospects WHERE source LIKE 'campaign%'"
+        ).fetchone()["c"]
+        cfg["sent_count"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM ig_sends WHERE mode='sent_auto'"
+        ).fetchone()["c"]
+        cfg["replied_count"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM ig_prospects WHERE status='replied'"
+        ).fetchone()["c"]
+        cfg["pending_drafts"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM ig_sends WHERE mode='draft' AND ready=1"
+        ).fetchone()["c"]
+    cfg["worker_alive"] = bool(ig_campaign_thread and ig_campaign_thread.is_alive())
+    return cfg
+
+
+def _ig_campaign_update(**fields: Any) -> None:
+    if not fields:
+        return
+    parts = [f"{k}=?" for k in fields.keys()]
+    parts.append("updated_at=?")
+    params = list(fields.values()) + [_instagram_now()]
+    with _instagram_db() as conn:
+        conn.execute(f"UPDATE ig_campaign SET {', '.join(parts)} WHERE id=1", params)
+        conn.commit()
+
+
+def _ig_campaign_should_run() -> bool:
+    with _instagram_db() as conn:
+        row = conn.execute("SELECT status FROM ig_campaign WHERE id=1").fetchone()
+    return bool(row and row["status"] in ("discovering", "sending"))
+
+
+def _ig_campaign_render_dm(prospect: Dict[str, Any]) -> str:
+    try:
+        from instagram_templates_v2 import render_natural  # type: ignore
+    except ImportError:
+        return f"Hola, te escribo desde Vantelia. Hacemos asistentes IA para negocios como el vuestro. ¿Hablamos?"
+    return render_natural(
+        username=prospect.get("username", ""),
+        business_name=prospect.get("business_name", "") or "",
+        niche=prospect.get("niche", "") or "",
+        city=prospect.get("city", "") or "",
+    )
+
+
+def _ig_campaign_insert_candidates(candidates: List[Any]) -> int:
+    """Inserta candidatos en ig_prospects con source=campaign_discover. Devuelve nuevos."""
+    if not candidates:
+        return 0
+    now = _instagram_now()
+    added = 0
+    with _instagram_db() as conn:
+        for c in candidates:
+            try:
+                cur = conn.execute(
+                    """INSERT OR IGNORE INTO ig_prospects
+                       (username, full_name, bio, niche, city, website, source, status, created_at, updated_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    (c.normalized_username(), c.business_name, c.bio_snippet,
+                     c.niche, c.city, c.website, c.source, "new", now, now),
+                )
+                if cur.rowcount:
+                    added += 1
+            except Exception as exc:
+                logger.warning("ig_campaign insert %s: %s", getattr(c, "username", "?"), exc)
+        conn.commit()
+    return added
+
+
+def _ig_campaign_create_draft(prospect_row: Dict[str, Any]) -> Optional[int]:
+    """Crea un draft cold con texto natural para este prospect. Devuelve send_id."""
+    text = _ig_campaign_render_dm(prospect_row)
+    if not text or len(text) < 30:
+        return None
+    now = _instagram_now()
+    try:
+        from instagram_templates_v2 import pick_variant  # type: ignore
+        variant = pick_variant(prospect_row.get("username", ""))
+    except ImportError:
+        variant = "A"
+    with _instagram_db() as conn:
+        cur = conn.execute(
+            """INSERT INTO ig_sends (username, stage, variant, message_text, mode, ready, drafted_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (prospect_row["username"], "cold", variant, text, "draft", 1, now),
+        )
+        send_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        conn.execute(
+            "INSERT INTO ig_events (username, type, stage, ts) VALUES (?,?,?,?)",
+            (prospect_row["username"], "draft", "cold", now),
+        )
+        conn.execute(
+            "UPDATE ig_prospects SET status='queued', updated_at=? WHERE username=? AND status='new'",
+            (now, prospect_row["username"]),
+        )
+        conn.commit()
+    return int(send_id)
+
+
+def _ig_campaign_fetch_eligible_prospects(limit: int) -> List[Dict[str, Any]]:
+    """Prospects que aun no tienen draft pendiente ni envio previo."""
+    with _instagram_db() as conn:
+        rows = conn.execute(
+            """SELECT p.* FROM ig_prospects p
+               WHERE p.status IN ('new','queued')
+                 AND p.source LIKE 'campaign%'
+                 AND p.username NOT IN (SELECT username FROM ig_suppressions)
+                 AND p.username NOT IN (SELECT username FROM ig_sends WHERE mode IN ('draft','sent','sent_auto'))
+               ORDER BY p.created_at ASC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _ig_campaign_run_iteration(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Una iteracion del loop: discover si falta + create drafts + autosend uno."""
+    target = int(state.get("target_count") or 30)
+    sent_count = int(state.get("sent_count") or 0)
+    discovered = int(state.get("discovered_count") or 0)
+    remaining = max(0, target - sent_count)
+    if remaining <= 0:
+        _ig_campaign_update(status="completed", completed_at=_instagram_now())
+        return {"action": "completed"}
+
+    pending_drafts = int(state.get("pending_drafts") or 0)
+
+    # 1) Discovery si pool de candidatos < target * 1.5
+    pool_target = int(target * 1.5)
+    if discovered < pool_target:
+        _ig_campaign_update(status="discovering")
+        try:
+            from instagram_discover_v2 import discover_real  # type: ignore
+        except ImportError as exc:
+            _ig_campaign_update(status="paused", error_msg=f"discover_v2 no disponible: {exc}")
+            return {"action": "error", "reason": "discover_module_missing"}
+        with _instagram_db() as conn:
+            suppressed = {r["username"] for r in conn.execute(
+                "SELECT username FROM ig_suppressions").fetchall()}
+            known = {r["username"] for r in conn.execute(
+                "SELECT username FROM ig_prospects").fetchall()}
+        need = min(15, pool_target - discovered)
+        candidates = discover_real(
+            target_count=need, suppressed=suppressed, known=known,
+            log=lambda msg: logger.info("[ig-campaign] %s", msg),
+        )
+        added = _ig_campaign_insert_candidates(candidates)
+        logger.info("[ig-campaign] discovery: %s candidatos, %s nuevos en DB", len(candidates), added)
+        return {"action": "discovery", "added": added}
+
+    # 2) Crear drafts si quedan envios pendientes y pocas en cola
+    if pending_drafts < remaining and pending_drafts < 10:
+        eligible = _ig_campaign_fetch_eligible_prospects(min(10 - pending_drafts, remaining - pending_drafts))
+        drafted = 0
+        for p in eligible:
+            sid = _ig_campaign_create_draft(p)
+            if sid:
+                drafted += 1
+        logger.info("[ig-campaign] drafts: %s nuevos (pending ahora %s)", drafted, pending_drafts + drafted)
+        return {"action": "draft", "drafted": drafted}
+
+    # 3) Autosend uno
+    if pending_drafts > 0 and ig_is_autosend_enabled():
+        try:
+            from instagram_autosend import fetch_pending_drafts, autosend_drafts  # type: ignore
+        except ImportError:
+            _ig_campaign_update(status="paused", error_msg="autosend module no disponible")
+            return {"action": "error", "reason": "autosend_missing"}
+        _ig_campaign_update(status="sending")
+        drafts = fetch_pending_drafts(1)
+        if not drafts:
+            return {"action": "idle_no_drafts"}
+        try:
+            sent = autosend_drafts(drafts, dry_run=False)
+            logger.info("[ig-campaign] autosend: %s/1 enviado", sent)
+            if sent == 0:
+                # autosend retorna 0 si falla → revisa si fue sesion expirada
+                return {"action": "send_failed"}
+            return {"action": "sent", "count": sent}
+        except RuntimeError as exc:
+            err = str(exc)[:200]
+            if "Sesion IG invalida" in err or "sesion_expirada" in err:
+                _ig_campaign_update(status="paused", error_msg=f"sesion expirada: {err}")
+                return {"action": "error", "reason": "session_expired"}
+            logger.warning("[ig-campaign] autosend RuntimeError: %s", err)
+            return {"action": "error", "reason": err}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[ig-campaign] autosend error: %s", exc)
+            return {"action": "error", "reason": str(exc)[:120]}
+
+    return {"action": "idle"}
+
+
+def _ig_campaign_worker() -> None:
+    """Worker autonomo. Lee status DB y avanza la campana."""
+    logger.info("[ig-campaign] worker iniciado")
+    while not ig_campaign_stop.is_set():
+        try:
+            if not IG_AVAILABLE:
+                ig_campaign_stop.wait(60)
+                continue
+            if not _ig_in_window():
+                ig_campaign_stop.wait(120)
+                continue
+            state = _ig_campaign_state()
+            status = state.get("status", "idle")
+            if status not in ("discovering", "sending"):
+                ig_campaign_stop.wait(45)
+                continue
+            res = _ig_campaign_run_iteration(state)
+            action = (res or {}).get("action", "")
+            if action == "sent":
+                # Delay humano entre envios
+                mn = int(os.getenv("IG_AUTOSEND_MIN_DELAY_SEC", "60") or 60)
+                mx = int(os.getenv("IG_AUTOSEND_MAX_DELAY_SEC", "240") or 240)
+                if mx < mn:
+                    mx = mn + 30
+                ig_campaign_stop.wait(random.uniform(mn, mx))
+            elif action == "completed":
+                logger.info("[ig-campaign] objetivo alcanzado")
+                ig_campaign_stop.wait(60)
+            elif action == "error":
+                ig_campaign_stop.wait(180)
+            else:
+                ig_campaign_stop.wait(20)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[ig-campaign] loop error: %s", exc)
+            ig_campaign_stop.wait(60)
+
+
+@app.get("/admin/instagram/campaign", dependencies=[Depends(_require_admin_token)])
+def instagram_campaign_get():
+    state = _ig_campaign_state()
+    try:
+        from instagram_autosend import session_info  # type: ignore
+        session = session_info()
+    except Exception:
+        session = {"connected": False}
+    return {"campaign": state, "session": session,
+            "autosend_enabled": ig_is_autosend_enabled() if IG_AVAILABLE else False,
+            "autonomous_autosend": _ig_env_bool("IG_AUTONOMOUS_AUTOSEND", False)}
+
+
+@app.post("/admin/instagram/campaign/start", dependencies=[Depends(_require_admin_token)])
+def instagram_campaign_start(payload: InstagramCampaignStart):
+    if not IG_AVAILABLE:
+        raise HTTPException(503, "Modulo instagram no disponible")
+    if not ig_is_autosend_enabled():
+        raise HTTPException(412, "IG_AUTOSEND_ENABLED=false en env")
+    try:
+        from instagram_autosend import session_info  # type: ignore
+        if not session_info().get("connected"):
+            raise HTTPException(412, "Sesion IG no conectada. Pega cookies primero.")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    _ig_campaign_migrate()
+    _ig_campaign_update(
+        target_count=int(payload.target_count),
+        status="discovering",
+        error_msg="",
+        started_at=_instagram_now(),
+        completed_at="",
+    )
+    return {"ok": True, "state": _ig_campaign_state()}
+
+
+@app.post("/admin/instagram/campaign/pause", dependencies=[Depends(_require_admin_token)])
+def instagram_campaign_pause():
+    _ig_campaign_migrate()
+    _ig_campaign_update(status="paused")
+    return {"ok": True, "state": _ig_campaign_state()}
+
+
+@app.post("/admin/instagram/campaign/resume", dependencies=[Depends(_require_admin_token)])
+def instagram_campaign_resume():
+    if not ig_is_autosend_enabled():
+        raise HTTPException(412, "IG_AUTOSEND_ENABLED=false en env")
+    _ig_campaign_migrate()
+    _ig_campaign_update(status="discovering", error_msg="")
+    return {"ok": True, "state": _ig_campaign_state()}
+
+
 # ----- Manual reply mark -----
 
 
@@ -23187,7 +23514,7 @@ def _ig_autopilot_worker() -> None:
 
 @app.on_event("startup")
 async def _ig_startup_workers() -> None:
-    global ig_replies_thread, ig_autopilot_thread
+    global ig_replies_thread, ig_autopilot_thread, ig_campaign_thread
     if IG_REPLIES_AVAILABLE and (not ig_replies_thread or not ig_replies_thread.is_alive()):
         ig_replies_stop.clear()
         ig_replies_thread = threading.Thread(target=_ig_replies_worker, name="vantelia-ig-replies", daemon=True)
@@ -23196,12 +23523,21 @@ async def _ig_startup_workers() -> None:
         ig_autopilot_stop.clear()
         ig_autopilot_thread = threading.Thread(target=_ig_autopilot_worker, name="vantelia-ig-autopilot", daemon=True)
         ig_autopilot_thread.start()
+    if IG_AVAILABLE and (not ig_campaign_thread or not ig_campaign_thread.is_alive()):
+        try:
+            _ig_campaign_migrate()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ig_campaign migrate fallo: %s", exc)
+        ig_campaign_stop.clear()
+        ig_campaign_thread = threading.Thread(target=_ig_campaign_worker, name="vantelia-ig-campaign", daemon=True)
+        ig_campaign_thread.start()
 
 
 @app.on_event("shutdown")
 async def _ig_shutdown_workers() -> None:
     ig_replies_stop.set()
     ig_autopilot_stop.set()
+    ig_campaign_stop.set()
 
 
 # === END INSTAGRAM ===================================================
