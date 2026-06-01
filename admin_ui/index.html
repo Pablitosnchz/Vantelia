@@ -1818,7 +1818,7 @@ tbody tr:last-child td { border-bottom: none; }
         </button>
         <button class="nav-button" type="button" data-nav-view="outreach">
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11v2a2 2 0 0 0 2 2h1l4 4V5L6 9H5a2 2 0 0 0-2 2z"></path><path d="M16 8a5 5 0 0 1 0 8"></path><path d="M19 5a9 9 0 0 1 0 14"></path></svg></span>
-          <span class="nav-text"><strong>Captacion</strong><span>Embudo self-service</span></span>
+          <span class="nav-text"><strong>Captacion</strong><span>Dashboard outbound</span></span>
         </button>
         <button class="nav-button" type="button" data-nav-view="instagram">
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="1"></circle></svg></span>
@@ -2651,31 +2651,28 @@ tbody tr:last-child td { border-bottom: none; }
           <div class="section-header">
             <div>
               <h2>Captacion self-service</h2>
-              <p>Embudo de crecimiento: visita web, click en crear bot gratis, registro, bot creado, prueba, instalacion y pago.</p>
+              <p>Dashboard de captacion: outbound, demo, alta, activacion e ingresos en una vista simple.</p>
             </div>
             <div class="actions">
-              <span id="cwAutosaveLabel" class="cw-autosave">Borrador guardado</span>
-              <button class="ghost small" type="button" id="cwResetBtn">Reiniciar wizard</button>
+              <span id="cwAutosaveLabel" class="cw-autosave" style="display:none;">Borrador guardado</span>
+              <button class="ghost small" type="button" id="cwResetBtn" style="display:none;">Reiniciar wizard</button>
               <button class="ghost small" type="button" id="cwAdvancedToggle" hidden>Herramientas avanzadas</button>
               <span style="display:none">
               <button class="ghost small" type="button" data-outreach-tab="autopilot">Autopiloto</button>
               <button class="ghost small" type="button" data-outreach-tab="prospects">Prospects</button>
-              <button class="ghost small" type="button" data-outreach-tab="campaigns">Campañas</button>
               <button class="ghost small" type="button" data-outreach-tab="discovery">Discovery</button>
               <button class="ghost small" type="button" data-outreach-tab="templates">Plantillas</button>
-              <button class="ghost small" type="button" data-outreach-tab="suppressions">Bajas</button>
               </span>
             </div>
           </div>
 
           <div class="actions cw-advanced-tabs" id="orAdvancedTabs">
-            <button class="ghost small" type="button" data-outreach-tab="autopilot">Embudo <span class="or-tab-badge" data-badge="autopilot" style="display:none;"></span></button>
+            <button class="ghost small" type="button" data-outreach-tab="autopilot">Dashboard <span class="or-tab-badge" data-badge="autopilot" style="display:none;"></span></button>
             <button class="ghost small" type="button" data-outreach-tab="prospects">Prospects outbound <span class="or-tab-badge" data-badge="prospects" style="display:none;"></span></button>
             <button class="ghost small" type="button" data-outreach-tab="autonomous">Automatizacion outbound <span class="or-tab-badge" data-badge="autonomous" style="display:none;"></span></button>
-            <button class="ghost small" type="button" data-outreach-tab="manual-email">Emails outbound</button>
-            <button class="ghost small" type="button" data-outreach-tab="campaigns">Campanas registro</button>
-            <button class="ghost small" type="button" data-outreach-tab="templates">Copy self-service</button>
-            <button class="ghost small" type="button" data-outreach-tab="suppressions">Bajas <span class="or-tab-badge" data-badge="suppressions" style="display:none;"></span></button>
+            <button class="ghost small" type="button" data-outreach-tab="email-test">Email prueba</button>
+            <button class="ghost small" type="button" data-outreach-tab="discovery">Discovery</button>
+            <button class="ghost small" type="button" data-outreach-tab="templates">Plantillas</button>
           </div>
           <style>
             .or-tab-badge { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 6px; margin-left:4px; border-radius:10px; background:var(--accent); color:#fff; font-size:11px; font-weight:700; vertical-align:middle; }
@@ -2703,8 +2700,10 @@ tbody tr:last-child td { border-bottom: none; }
             .ss-list { display:flex; flex-direction:column; gap:8px; }
             .ss-list-item { padding:10px 12px; border:1px solid #e4eaf2; border-radius:8px; background:#fff; font-size:13px; }
             .ss-action-title { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+            .ss-dashboard-stack { display:flex; flex-direction:column; gap:14px; margin-top:14px; }
+            .or-template-test-grid { display:grid; grid-template-columns:minmax(0,0.9fr) minmax(320px,1.1fr); gap:14px; align-items:start; }
             @media (max-width: 920px) { .or-ops-grid { grid-template-columns:1fr; } }
-            @media (max-width: 920px) { .ss-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } .ss-grid { grid-template-columns:1fr; } .ss-funnel-step { grid-template-columns:1fr; } }
+            @media (max-width: 920px) { .ss-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } .ss-grid, .or-template-test-grid { grid-template-columns:1fr; } .ss-funnel-step { grid-template-columns:1fr; } }
           </style>
 
           <div class="campaign-wizard outreach-panel" data-outreach-panel="campaigns" id="campaignWizard">
@@ -2806,12 +2805,12 @@ tbody tr:last-child td { border-bottom: none; }
             <div class="card ss-hero">
               <div class="ss-action-title">
                 <div>
-                  <strong style="font-size:18px;">Embudo self-service</strong>
-                  <p class="muted" style="margin:4px 0 0;font-size:12px;">De email a demo y de demo a pago: mide donde se atasca la gente que quiere probar su bot gratis.</p>
+                  <strong style="font-size:18px;">Dashboard self-service</strong>
+                  <p class="muted" style="margin:4px 0 0;font-size:12px;">De email a demo y de demo a pago: mide donde se atasca la captacion.</p>
                 </div>
                 <div class="actions">
                   <a class="ghost small" href="https://www.vantelia.es/demo/" target="_blank" rel="noopener">Abrir demo</a>
-                  <button class="secondary small" type="button" id="ssRefreshBtn">Actualizar embudo</button>
+                  <button class="secondary small" type="button" id="ssRefreshBtn">Actualizar dashboard</button>
                 </div>
               </div>
               <div id="orOutreachHealth" style="display:none;margin-top:12px;"></div>
@@ -2836,7 +2835,7 @@ tbody tr:last-child td { border-bottom: none; }
                   </div>
                   <span class="pill info" id="ssWindowLabel">30 dias</span>
                 </div>
-                <div id="ssFunnelBars" style="margin-top:8px;"><div class="muted">Cargando embudo...</div></div>
+                <div id="ssFunnelBars" style="margin-top:8px;"><div class="muted">Cargando dashboard...</div></div>
               </div>
               <div class="card" style="padding:16px;">
                 <strong>Acciones para hoy</strong>
@@ -2848,7 +2847,7 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="card" style="padding:16px;">
                 <div class="ss-action-title">
                   <div>
-                    <strong>Campanas y fuentes</strong>
+                    <strong>Fuentes y conversion</strong>
                     <p class="muted" style="margin:3px 0 0;font-size:12px;">Que trae clicks, registros y bots creados.</p>
                   </div>
                 </div>
@@ -2864,11 +2863,7 @@ tbody tr:last-child td { border-bottom: none; }
               </div>
             </div>
 
-            <details style="margin-bottom:14px;">
-              <summary class="ghost small" style="cursor:pointer;display:inline-flex;gap:6px;align-items:center;padding:6px 12px;">
-                Herramientas outbound heredadas
-              </summary>
-              <div style="margin-top:14px;">
+            <div class="ss-dashboard-stack">
 
             <!-- Banner respuestas nuevas -->
             <div id="orRepliesBanner" style="display:none;margin-bottom:14px;padding:14px 18px;border-radius:10px;background:linear-gradient(135deg,#a855f7,#6366f1);color:#fff;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
@@ -2923,8 +2918,8 @@ tbody tr:last-child td { border-bottom: none; }
             <div class="card" style="padding:14px 18px;margin-bottom:14px;">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
                 <div>
-                  <strong style="font-size:15px;">Resumen general</strong>
-                  <p class="muted" style="margin:2px 0 0;font-size:12px;">Volumen, bajas y salud de los ultimos dias.</p>
+                  <strong style="font-size:15px;">Resumen outbound</strong>
+                  <p class="muted" style="margin:2px 0 0;font-size:12px;">Volumen, interes y salud de los ultimos dias.</p>
                 </div>
                 <div class="actions">
                   <button class="ghost small" type="button" id="orAutopilotRefresh">Actualizar</button>
@@ -2932,7 +2927,7 @@ tbody tr:last-child td { border-bottom: none; }
                 </div>
               </div>
               <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);">
-                <div class="stat"><strong id="orSuppressed">-</strong><span>Bajas</span></div>
+                <div class="stat"><strong id="orSentTotal">-</strong><span>Enviados total</span></div>
                 <div class="stat"><strong id="orTodayReadyFu">-</strong><span>Follow-ups listos</span></div>
                 <div class="stat"><strong id="orTodayHotLeads">-</strong><span>Leads calientes</span></div>
                 <div class="stat"><strong id="orTodayErrors">-</strong><span>Errores recientes</span></div>
@@ -2995,7 +2990,7 @@ tbody tr:last-child td { border-bottom: none; }
                     <p class="muted" style="font-size:12px;margin:4px 0 0;">Envíos (azul) · Respuestas (naranja)</p>
                   </div>
                   <div class="card" style="padding:14px;">
-                    <strong>Embudo</strong>
+                    <strong>Secuencia email</strong>
                     <div id="orFunnel" style="margin-top:10px;"></div>
                     <strong style="display:block;margin-top:14px;">Top nichos</strong>
                     <div id="orTopNiches" style="margin-top:6px;font-size:13px;"></div>
@@ -3032,9 +3027,7 @@ tbody tr:last-child td { border-bottom: none; }
                 </div>
               </div>
             </details>
-
-              </div>
-            </details>
+            </div>
 
             <!-- Autopilot status box (oculto, solo para renderAutopilot) -->
             <div id="orAutopilotBox" style="display:none;"></div>
@@ -3226,28 +3219,27 @@ tbody tr:last-child td { border-bottom: none; }
             </div>
           </div>
 
-          <!-- Campaigns -->
-          <div data-outreach-panel="campaigns" class="outreach-panel">
+          <!-- Email prueba -->
+          <div data-outreach-panel="email-test" class="outreach-panel">
             <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end;">
-              <label>Stage
-                <select id="orSendStage">
+              <label>Plantilla
+                <select id="orTestStage">
                   <option value="cold">cold</option>
                   <option value="fu1">fu1</option>
                   <option value="fu2">fu2</option>
                   <option value="breakup">breakup</option>
                 </select>
               </label>
-              <label>Max envios<input id="orSendMax" type="number" min="1" max="200" value="10" /></label>
-              <label>Dias minimos<input id="orSendAfterDays" type="number" min="0" max="60" value="4" /></label>
-              <label>Test-to (opcional)<input id="orSendTestTo" type="email" placeholder="tu@email.com" /></label>
-              <label>Email concreto (opcional)<input id="orSendOnlyEmail" type="email" /></label>
-              <label class="checkbox-line"><input id="orSendForceWindow" type="checkbox" /> Ignorar ventana</label>
+              <label>Email destino<input id="orTestTo" type="email" placeholder="tu@email.com" /></label>
+              <label>Prospect de muestra (opcional)<input id="orTestSampleEmail" type="email" placeholder="contacto@empresa.es" /></label>
             </div>
             <div class="actions" style="margin-top:10px;">
-              <button class="ghost small" type="button" id="orDryRunBtn">Dry-run</button>
-              <button class="secondary small" type="button" id="orSendRealBtn">Enviar real</button>
-              <span class="muted" style="font-size:12px;align-self:center;">Dry-run no envía nada. Enviar real con test-to: solo a esa dirección. Enviar real sin test-to: a prospects reales.</span>
+              <button class="ghost small" type="button" id="orTestPreviewBtn">Actualizar preview</button>
+              <button class="secondary small" type="button" id="orSendTestTemplateBtn">Enviar prueba</button>
+              <span id="orTestStatus" class="muted" style="font-size:12px;align-self:center;">Usa las mismas plantillas que los envios cold/fu1/fu2/breakup.</span>
             </div>
+            <div class="status" id="orTestSubject" style="margin-top:12px;">Subject: -</div>
+            <iframe id="orTestPreviewFrame" style="width:100%;height:560px;border:1px solid #e4eaf2;border-radius:10px;background:#f9fbfd;margin-top:10px;"></iframe>
             <h3 style="margin-top:18px;">Jobs recientes</h3>
             <div id="orJobsList" style="display:flex;flex-direction:column;gap:8px;max-height:460px;overflow:auto;"></div>
           </div>
@@ -3280,7 +3272,7 @@ tbody tr:last-child td { border-bottom: none; }
 
           <!-- Templates -->
           <div data-outreach-panel="templates" class="outreach-panel">
-            <p class="muted" style="font-size:13px;">Override por stage. Vacio = usa la plantilla por defecto del codigo. Variables: {first_name}, {business}, {city}, {niche}, {service_hint}, {website}.</p>
+            <p class="muted" style="font-size:13px;">Plantillas para todos los envios outbound: cold, fu1, fu2 y breakup. Vacio = usa la plantilla por defecto del codigo. Variables: {first_name}, {business}, {city}, {niche}, {service_hint}, {website}, {cta_url}, {signature_html}.</p>
             <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px;">
               <div>
                 <label>Stage
@@ -3295,8 +3287,8 @@ tbody tr:last-child td { border-bottom: none; }
                 <label>Body texto plano<textarea id="orTplText" rows="10"></textarea></label>
                 <label>Body HTML<textarea id="orTplHtml" rows="10"></textarea></label>
                 <div class="actions">
-                  <button class="secondary small" type="button" id="orTplSaveBtn">Guardar override</button>
-                  <button class="ghost small" type="button" id="orTplResetBtn">Borrar override</button>
+                  <button class="secondary small" type="button" id="orTplSaveBtn">Guardar plantilla</button>
+                  <button class="ghost small" type="button" id="orTplResetBtn">Usar default</button>
                 </div>
               </div>
               <div>
@@ -3306,26 +3298,6 @@ tbody tr:last-child td { border-bottom: none; }
                   <iframe id="orTplPreviewFrame" style="width:100%;height:560px;border:1px solid #e4eaf2;border-radius:10px;background:#f9fbfd;"></iframe>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <!-- Suppressions -->
-          <div data-outreach-panel="suppressions" class="outreach-panel">
-            <div class="grid" style="grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">
-              <label>Email<input id="orSupEmail" type="email" /></label>
-              <label>Motivo<input id="orSupReason" type="text" value="manual" /></label>
-              <button class="secondary small" type="button" id="orSupAddBtn">Anadir baja</button>
-            </div>
-            <div style="overflow:auto;max-height:480px;border:1px solid #e4eaf2;border-radius:10px;margin-top:10px;">
-              <table style="width:100%;border-collapse:collapse;font-size:13px;">
-                <thead style="position:sticky;top:0;background:#f6f8fb;">
-                  <tr><th style="text-align:left;padding:8px;">Email</th>
-                      <th style="text-align:left;padding:8px;">Motivo</th>
-                      <th style="text-align:left;padding:8px;">Fecha</th>
-                      <th></th></tr>
-                </thead>
-                <tbody id="orSupBody"></tbody>
-              </table>
             </div>
           </div>
 
@@ -6973,10 +6945,9 @@ a {
         });
         if (tab === "autopilot") { loadSelfServiceFunnel(); loadStats(); loadAutopilot(); loadAutonomousConfig(); loadRecentAutopilotErrors(); loadHotLeads(); loadFollowupQueue(); loadAbStats(); loadGA4Stats(); loadNextAction(); }
         if (tab === "prospects") loadProspects();
-        if (tab === "campaigns") { loadWizardCampaigns(); loadJobs(); startJobsPolling(); } else { stopJobsPolling(); }
+        if (tab === "email-test") { loadTemplates().then(renderTemplateTestPreview).catch(() => renderTemplateTestPreview()); loadJobs(); startJobsPolling(); } else { stopJobsPolling(); }
         if (tab === "manual-email") renderManualEmailPreview();
         if (tab === "templates") loadTemplates();
-        if (tab === "suppressions") loadSuppressions();
         if (tab === "autonomous") loadAutonomousConfig();
       }
 
@@ -7409,6 +7380,7 @@ a {
           if (ORQ("#orSentWeek")) ORQ("#orSentWeek").textContent = t.sent_week;
           if (ORQ("#orReplyRate")) ORQ("#orReplyRate").textContent = t.reply_rate_pct + "%";
           if (ORQ("#orSuppressed")) ORQ("#orSuppressed").textContent = t.suppressed;
+          if (ORQ("#orSentTotal")) ORQ("#orSentTotal").textContent = t.sent_total;
           if (ORQ("#orTodayProspects")) ORQ("#orTodayProspects").textContent = t.prospects;
           if (ORQ("#orTodaySentToday")) ORQ("#orTodaySentToday").textContent = t.sent_today;
           if (ORQ("#orTodaySentWeek")) ORQ("#orTodaySentWeek").textContent = t.sent_week;
@@ -8229,7 +8201,83 @@ a {
         } catch (err) { showStatus(err.message, "error"); }
       }
 
-      // ----- Campaigns / jobs -----
+      // ----- Email prueba / jobs -----
+      function templateTestStatus(message, type = "info") {
+        const el = ORQ("#orTestStatus");
+        if (!el) return;
+        el.textContent = message || "";
+        el.style.color = type === "error" ? "var(--danger)" : (type === "ok" ? "var(--success)" : "var(--soft)");
+      }
+
+      async function renderTemplateTestPreview() {
+        const frame = ORQ("#orTestPreviewFrame");
+        if (!frame) return;
+        const stage = ORQ("#orTestStage")?.value || "cold";
+        const sampleEmail = ORQ("#orTestSampleEmail")?.value.trim() || "";
+        try {
+          let data;
+          if (sampleEmail && orDiscEmailRe.test(sampleEmail)) {
+            data = await orFetch("/admin/outreach/prospects/" + encodeURIComponent(sampleEmail) + "/render?stage=" + encodeURIComponent(stage));
+          } else {
+            if (!orTemplatesCache) {
+              const tpl = await orFetch("/admin/outreach/templates");
+              orTemplatesCache = tpl.overrides || {};
+            }
+            const o = (orTemplatesCache && orTemplatesCache[stage]) || {};
+            data = await orFetch("/admin/outreach/templates/preview", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                stage,
+                subject_pool: o.subject_pool || "",
+                body_text: o.body_text || "",
+                body_html: o.body_html || "",
+              }),
+            });
+          }
+          ORQ("#orTestSubject").innerHTML = "Subject: <strong>" + escapeHtml(data.subject || "") + "</strong>";
+          const doc = frame.contentDocument || frame.contentWindow.document;
+          doc.open(); doc.write(data.html || ""); doc.close();
+          templateTestStatus(sampleEmail ? "Preview con prospect real." : "Preview con datos de muestra.", "info");
+        } catch (err) {
+          ORQ("#orTestSubject").textContent = "Error preview: " + err.message;
+          templateTestStatus(err.message, "error");
+        }
+      }
+
+      async function sendTemplateTestEmail() {
+        const stage = ORQ("#orTestStage")?.value || "cold";
+        const testTo = ORQ("#orTestTo")?.value.trim() || "";
+        const sampleEmail = ORQ("#orTestSampleEmail")?.value.trim() || "";
+        if (!orDiscEmailRe.test(testTo)) { templateTestStatus("Introduce un email destino valido.", "error"); return; }
+        if (sampleEmail && !orDiscEmailRe.test(sampleEmail)) { templateTestStatus("El prospect de muestra no parece un email valido.", "error"); return; }
+        const btn = ORQ("#orSendTestTemplateBtn");
+        const oldText = btn?.textContent || "Enviar prueba";
+        if (btn) { btn.disabled = true; btn.textContent = "Enviando..."; }
+        templateTestStatus("Encolando email de prueba...", "info");
+        try {
+          const data = await orFetch("/admin/outreach/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              stage,
+              max: 1,
+              dry_run: false,
+              test_to: testTo,
+              email: sampleEmail,
+              force_window: true,
+            }),
+          });
+          templateTestStatus(`Prueba en cola. Job #${data.job_id}`, "ok");
+          loadJobs();
+        } catch (err) {
+          templateTestStatus(err.message || "No se pudo enviar la prueba.", "error");
+        } finally {
+          if (btn) { btn.disabled = false; btn.textContent = oldText; }
+        }
+      }
+
+      // ----- Jobs legacy -----
       async function launchSend(dryRun) {
         const body = {
           stage: ORQ("#orSendStage").value,
@@ -8635,7 +8683,7 @@ a {
               body_html: ORQ("#orTplHtml").value,
             })
           });
-          showStatus("Override guardado", "ok"); loadTemplates();
+          showStatus("Plantilla guardada", "ok"); loadTemplates();
         } catch (err) { showStatus(err.message, "error"); }
       }
       async function resetTemplate() {
@@ -8643,7 +8691,7 @@ a {
         await orFetch("/admin/outreach/templates", {
           method:"PUT", headers:{"Content-Type":"application/json"},
           body: JSON.stringify({ stage, subject_pool:"", body_text:"", body_html:"" }) });
-        showStatus("Override borrado", "ok"); loadTemplates();
+        showStatus("Plantilla por defecto restaurada", "ok"); loadTemplates();
       }
 
       // ----- Suppressions -----
@@ -8683,7 +8731,7 @@ a {
       }
 
       // ----- Wiring -----
-      wireWizard();
+      // Wizard de campanas retirado del panel visible; el autopiloto gestiona los envios reales.
       wireAutonomous();
       initManualEmailEditor();
       ORALL("[data-outreach-tab]").forEach((btn) => btn.addEventListener("click", () => setOutreachTab(btn.dataset.outreachTab)));
@@ -8777,16 +8825,20 @@ a {
         _npModal.addEventListener("click", (ev) => { if (ev.target.id === "orNewProspectModal") closeNewProspectModal(); });
         _npModal.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.target.tagName !== "TEXTAREA") { ev.preventDefault(); saveNewProspect(); } if (ev.key === "Escape") closeNewProspectModal(); });
       } else console.warn("[outreach] orNewProspectModal not found");
-      ORQ("#orDryRunBtn").addEventListener("click", () => launchSend(true));
-      ORQ("#orSendRealBtn").addEventListener("click", () => launchSend(false));
-      ORQ("#orDiscRunBtn").addEventListener("click", runDiscovery);
-      ORQ("#orTplStage").addEventListener("change", fillTemplateForm);
-      ORQ("#orTplHtml").addEventListener("input", renderTemplatePreview);
-      ORQ("#orTplText").addEventListener("input", renderTemplatePreview);
-      ORQ("#orTplSubjects").addEventListener("input", renderTemplatePreview);
-      ORQ("#orTplSaveBtn").addEventListener("click", saveTemplate);
-      ORQ("#orTplResetBtn").addEventListener("click", resetTemplate);
-      ORQ("#orSupAddBtn").addEventListener("click", addSuppression);
+      ORQ("#orDryRunBtn")?.addEventListener("click", () => launchSend(true));
+      ORQ("#orSendRealBtn")?.addEventListener("click", () => launchSend(false));
+      ORQ("#orTestStage")?.addEventListener("change", renderTemplateTestPreview);
+      ORQ("#orTestSampleEmail")?.addEventListener("input", renderTemplateTestPreview);
+      ORQ("#orTestPreviewBtn")?.addEventListener("click", renderTemplateTestPreview);
+      ORQ("#orSendTestTemplateBtn")?.addEventListener("click", sendTemplateTestEmail);
+      ORQ("#orDiscRunBtn")?.addEventListener("click", runDiscovery);
+      ORQ("#orTplStage")?.addEventListener("change", fillTemplateForm);
+      ORQ("#orTplHtml")?.addEventListener("input", renderTemplatePreview);
+      ORQ("#orTplText")?.addEventListener("input", renderTemplatePreview);
+      ORQ("#orTplSubjects")?.addEventListener("input", renderTemplatePreview);
+      ORQ("#orTplSaveBtn")?.addEventListener("click", saveTemplate);
+      ORQ("#orTplResetBtn")?.addEventListener("click", resetTemplate);
+      ORQ("#orSupAddBtn")?.addEventListener("click", addSuppression);
       ORQ("#orDrawerCloseBtn").addEventListener("click", () => { ORQ("#orDrawer").style.display = "none"; });
       ORQ("#orDrawer").addEventListener("click", (ev) => { if (ev.target.id === "orDrawer") ORQ("#orDrawer").style.display = "none"; });
       ORQ("#orSendPreviewClose").addEventListener("click", () => { ORQ("#orSendPreview").style.display = "none"; });
