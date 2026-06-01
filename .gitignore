@@ -20,3 +20,4 @@ storage/*/
 backups/
 outreach/*.csv
 !outreach/*.example.csv
+.tools/

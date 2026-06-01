@@ -151,33 +151,37 @@ SUBJECTS_COLD_B = [
 SUBJECTS_FU1_A = [
     "por si no llegaste",
     "re: {business}",
-    "{first_or_team}, lo viste?",
+    "un minuto, {first_or_team}",
 ]
 
 SUBJECTS_FU1_B = [
-    "vuelvo un momento {first_or_team}",
-    "{business} - lo dejo aqui",
-    "por si te perdiste el anterior",
+    "por si no llegaste",
+    "re: {business}",
+    "un minuto, {first_or_team}",
 ]
 
 SUBJECTS_FU2_A = [
-    "mira como queda para {business}",
-    "{business}: 30 segundos",
+    "{business}: lo que se pierden sin esto",
+    "esto lo monta cualquiera en 2 min",
+    "para {business}: consultas respondidas solas",
 ]
 
 SUBJECTS_FU2_B = [
-    "lo tienes listo {first_or_team}",
-    "{business}: asi funciona",
+    "{business}: lo que se pierden sin esto",
+    "esto lo monta cualquiera en 2 min",
+    "para {business}: consultas respondidas solas",
 ]
 
 SUBJECTS_BREAKUP_A = [
+    "ultimo mensaje, {first_or_team}",
     "cierro el hilo",
-    "{business}: lo dejo aqui",
+    "te dejo tranquilo",
 ]
 
 SUBJECTS_BREAKUP_B = [
-    "ultima vez, {first_or_team}",
-    "te dejo tranquilo, {first_or_team}",
+    "ultimo mensaje, {first_or_team}",
+    "cierro el hilo",
+    "te dejo tranquilo",
 ]
 
 # Compatibilidad hacia atras: codigo antiguo importa SUBJECTS_*.
@@ -473,20 +477,21 @@ def _cta_block(primary_text: str, stage: str = "cold", p: Prospect | None = None
 
 
 def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
-    task, _outcome, niche_proof = niche_copy(p.niche, p.service_hint)
     env_proof = _proof_line()
-    proof_final = env_proof if env_proof else niche_proof
-    opener = niche_opener(p)
     name = p.business_name
     subject, _variant = pick_subject_with_variant("cold", p)
-    cta_text, cta_html = _cta_block("Probar el chat de " + name + " (gratis)", "cold", p)
-    website_line = "Somos vantelia.es — chats que responden por tu negocio cuando tu equipo no puede."
-    proof_text = f"\n{proof_final}\n" if proof_final else ""
+    cta_text, cta_html = _cta_block(f"Crear el bot de {name} gratis", "cold", p)
+    opener = niche_opener(p)
+    opener_html = (
+        f'<p style="margin:0 0 14px 0;">{html_lib.escape(opener)}</p>'
+        if opener else ""
+    )
     proof_html = (
         f'<p style="margin:0 0 14px 0;color:#4b5563;font-style:italic;">'
-        f'{html_lib.escape(proof_final)}</p>'
-        if proof_final else ""
+        f'{html_lib.escape(env_proof)}</p>'
+        if env_proof else ""
     )
+    proof_text = f"\n{env_proof}\n" if env_proof else ""
     text = (
         f"{p.greeting}\n\n"
         f"Soy Pablo, fundador de Vantelia. Te escribo porque hacemos chats para negocios "
@@ -498,12 +503,10 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
         f"He dejado una demo preparada con vuestros datos para que la revises en un minuto. "
         f"Si la web esta incluida, Vantelia la usara para personalizar el asistente antes de abrirlo:\n"
         f"{cta_text}\n"
-        f"{proof_text}\n"
-        f"{website_line}\n\n"
+        f"{proof_text}"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
-    opener_html = f'<p>{html_lib.escape(opener)}</p>' if opener else ""
     inner = (
         f'<p>{html_lib.escape(p.greeting)}</p>'
         f'<p>Soy Pablo, fundador de Vantelia. Te escribo porque hacemos chats para negocios '
@@ -516,9 +519,6 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
         f'Si la web esta incluida, Vantelia la usara para personalizar el asistente antes de abrirlo:</p>'
         f'{cta_html}'
         f'{proof_html}'
-        f'<p style="color:#6b7280;font-size:13px;">'
-        f'<a href="https://vantelia.es" style="color:#6b7280;">vantelia.es</a> '
-        f'— chats que responden por tu negocio cuando tu equipo no puede.</p>'
         f'{signature_html("cold")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
@@ -527,7 +527,7 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 
 def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     name = p.business_name
-    cta_text, cta_html = _cta_block("Chatear con el bot de " + name, "fu1", p)
+    cta_text, cta_html = _cta_block("Empezar gratis", "fu1", p)
     text = (
         f"{p.greeting}\n\n"
         f"Te escribi hace unos dias (soy Pablo, de Vantelia — vantelia.es).\n\n"
@@ -556,7 +556,7 @@ def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     task, _outcome, _ = niche_copy(p.niche, p.service_hint)
     name = p.business_name
-    cta_text, cta_html = _cta_block("Probar el chat gratis", "fu2", p)
+    cta_text, cta_html = _cta_block("Probarlo gratis ahora", "fu2", p)
     text = (
         f"{p.greeting}\n\n"
         f"Ultimo mensaje de mi parte (Pablo, Vantelia — vantelia.es).\n\n"
@@ -571,9 +571,9 @@ def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     )
     inner = (
         f'<p>{html_lib.escape(p.greeting)}</p>'
-        f'<p>Ultimo mensaje de mi parte '
-        f'(Pablo, <a href="https://vantelia.es" style="color:#00a9cc;">Vantelia</a>).</p>'
-        f'<p>El chat que prepare para {html_lib.escape(name)}:</p>'
+        f'<p>Ultimo intento, lo prometo '
+        f'(Pablo, de <a href="https://vantelia.es" style="color:#00a9cc;">Vantelia</a>).</p>'
+        f'<p>Negocios como {html_lib.escape(name)} usan Vantelia para:</p>'
         f'<ul style="margin:0 0 16px 0;padding-left:20px;line-height:2;">'
         f'<li>Responde preguntas sobre {html_lib.escape(task)}</li>'
         f'<li>Funciona las 24 horas, tambien cuando estais cerrados</li>'
@@ -590,7 +590,7 @@ def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 
 def render_breakup(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     name = p.business_name
-    cta_text, cta_html = _cta_block("Probarlo cuando quieras", "breakup", p)
+    cta_text, cta_html = _cta_block("Crear mi bot gratis", "breakup", p)
     text = (
         f"{p.greeting}\n\n"
         f"Lo dejo por aqui, no te escribire mas.\n\n"
