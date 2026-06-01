@@ -140,6 +140,73 @@
       }
     }
   },
+  "demo_auto_vibes_studio_8b12ca": {
+    "nombre": "Vibes Studio",
+    "plan": "completo",
+    "subscription": {
+      "plan": "completo"
+    },
+    "icono": "VS",
+    "color": "#1A1A2E",
+    "accent_color": "#C9A84C",
+    "logo_url": "",
+    "bienvenida": "Hola, soy el asistente de Vibes Studio. Puedo ayudarte con info sobre servicios, precios y reservar tu cita.",
+    "prompt_extra": "Habla con tono cercano, moderno y directo. Eres el asistente de una barberia de referencia en Pontevedra. Si te preguntan por precios exactos, indica que varian segun el servicio y que pueden preguntar directamente o reservar cita. Deriva al equipo si falta informacion.",
+    "allowed_origins": [
+      "https://app.vantelia.es",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:5500",
+      "http://localhost:8000"
+    ],
+    "contacto": {
+      "email": "",
+      "telefono": "663230732"
+    },
+    "branding": {
+      "powered_by": "Powered by Vantelia"
+    },
+    "whatsapp": {
+      "enabled": false,
+      "phone_number_id": "",
+      "access_token_env": "",
+      "verify_token_env": ""
+    },
+    "booking": {
+      "enabled": true,
+      "timezone": "Europe/Madrid",
+      "slot_minutes": 30,
+      "day_start": "10:00",
+      "day_end": "20:00",
+      "closed_weekdays": [0, 6],
+      "provider": "internal",
+      "webhook_env": "WEBHOOK_DEFAULT",
+      "webhook_url": "",
+      "calendly_user_env": "",
+      "calendly_event_type_env": "",
+      "calendly_location_kind": "",
+      "calendly_location_value": "",
+      "google_calendar_id": "",
+      "google_calendar_id_env": "",
+      "google_service_account_path": "",
+      "google_service_account_env": "",
+      "success_message": "Tu cita en Vibes Studio ha quedado registrada. Adri o el equipo te confirmaran el hueco en breve.",
+      "message_templates": {
+        "confirmed": "Tu cita en Vibes Studio ha quedado confirmada. Debajo tienes los detalles y tu enlace para gestionarla si necesitas cambiar algo.",
+        "reminder_24h": "Te recordamos que manana tienes cita en Vibes Studio. Si necesitas ajustarla, usa tu enlace de gestion.",
+        "reminder_2h": "Tu cita en Vibes Studio empieza en menos de 2 horas. Te dejamos los detalles y el enlace de gestion.",
+        "cancelled": "Tu cita en Vibes Studio ha sido cancelada. Puedes reservar otra cuando quieras.",
+        "rescheduled": "Tu cita en Vibes Studio se ha actualizado. Revisa los nuevos datos en tu enlace de gestion."
+      },
+      "message_template_enabled": {
+        "confirmed": true,
+        "reminder_24h": true,
+        "reminder_2h": true,
+        "cancelled": true,
+        "rescheduled": true
+      }
+    }
+  },
   "Vantelia": {
     "nombre": "Vantelia",
     "plan": "completo",

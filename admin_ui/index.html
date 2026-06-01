@@ -2872,9 +2872,15 @@ tbody tr:last-child td { border-bottom: none; }
                   <p class="muted" style="margin:5px 0 0;font-size:13px;" id="orAutonomousStatusMsg">Cargando estado...</p>
                   <p id="orAutonomousEnvWarning" style="margin:4px 0 0;font-size:11px;color:#b45309;"></p>
                 </div>
-                <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap;">
-                  <button type="button" id="orAutonomousTickBtn" class="ghost small">▶ Ejecutar ahora</button>
-                  <button type="button" id="orAutonomousToggle" style="min-width:140px;padding:9px 18px;border-radius:10px;border:0;font-weight:700;font-size:14px;cursor:pointer;background:#9ca3af;color:#fff;">Cargando...</button>
+                <div style="display:flex;gap:8px;align-items:flex-start;flex-shrink:0;flex-wrap:wrap;">
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                    <button type="button" id="orAutonomousTickBtn" class="ghost small">▶ Ejecutar ahora</button>
+                    <span style="font-size:10px;color:#6b7280;">Lanza una ronda inmediata</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                    <button type="button" id="orAutonomousToggle" style="min-width:140px;padding:9px 18px;border-radius:10px;border:0;font-weight:700;font-size:14px;cursor:pointer;background:#9ca3af;color:#fff;">Cargando...</button>
+                    <span style="font-size:10px;color:#6b7280;">Activa el scheduler (cada hora)</span>
+                  </div>
                 </div>
               </div>
               <div id="orAutonomousDiagnostics" style="margin-top:14px;display:none;"></div>
@@ -2886,12 +2892,12 @@ tbody tr:last-child td { border-bottom: none; }
               <p class="muted" style="margin:4px 0 0;font-size:12px;">Solo ajusta esto. Sectores, ciudades y secuencia van automaticos.</p>
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-top:16px;">
                 <div>
-                  <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Empresas a contactar por dia</label>
+                  <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Empresas nuevas a descubrir</label>
                   <div style="display:flex;gap:8px;align-items:center;">
                     <input id="orAutonomousTargetCompaniesInput" type="number" min="1" max="200" value="20" style="width:90px;" />
                     <button class="secondary small" type="button" id="orAutonomousSaveBtn">Guardar</button>
                   </div>
-                  <p class="muted" style="margin:6px 0 0;font-size:11px;">Controla discovery + cold. Follow-ups van sin limite.</p>
+                  <p class="muted" style="margin:6px 0 0;font-size:11px;">Solo aplica si "Descubrir" está activado. Los follow-ups se envían sin límite.</p>
                 </div>
                 <div>
                   <label style="font-size:13px;font-weight:600;display:block;margin-bottom:10px;">Modo</label>
@@ -2899,14 +2905,14 @@ tbody tr:last-child td { border-bottom: none; }
                     <input type="checkbox" id="orAutonomousDiscoveryCheckbox" style="margin-top:2px;flex-shrink:0;" />
                     <span>
                       <strong>Descubrir empresas nuevas</strong><br>
-                      <span class="muted" style="font-size:11px;">Busca negocios en España automaticamente (Google + OSM). Si ya tienes prospects importados, puedes desactivar.</span>
+                      <span class="muted" style="font-size:11px;">Busca N empresas nuevas (no contactadas antes) y envía el primer cold a cada una. N = el número configurado a la izquierda.</span>
                     </span>
                   </label>
                   <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;line-height:1.4;">
                     <input type="checkbox" id="orAutonomousAutoFu" style="margin-top:2px;flex-shrink:0;" />
                     <span>
                       <strong>Follow-ups automaticos</strong><br>
-                      <span class="muted" style="font-size:11px;">Envia fu1, fu2 y breakup segun los intervalos de dias configurados.</span>
+                      <span class="muted" style="font-size:11px;">Envía todos los cold pendientes + FU1 + FU2 + breakup. Sin límite de cap. Se ejecuta antes que el discovery.</span>
                     </span>
                   </label>
                 </div>
@@ -2917,9 +2923,9 @@ tbody tr:last-child td { border-bottom: none; }
             <div class="card" style="padding:16px;margin-bottom:14px;">
               <strong style="font-size:14px;">Estado en vivo</strong>
               <div class="stat-grid" style="grid-template-columns:repeat(6,1fr);margin-top:12px;">
-                <div class="stat"><strong id="orAutonomousTargetCompanies">-</strong><span>Objetivo/dia</span></div>
-                <div class="stat"><strong id="orAutonomousColdToday">-</strong><span>Cold hoy / cap</span></div>
-                <div class="stat"><strong id="orAutonomousImported">-</strong><span>Nuevos 24h</span></div>
+                <div class="stat"><strong id="orAutonomousTargetCompanies">-</strong><span>Empresas/ronda</span></div>
+                <div class="stat"><strong id="orAutonomousColdToday">-</strong><span>Cold enviados hoy</span></div>
+                <div class="stat"><strong id="orAutonomousImported">-</strong><span>Importados 24h</span></div>
                 <div class="stat"><strong id="orAutonomousValid">-</strong><span>Pendientes cold</span></div>
                 <div class="stat"><strong id="orAutonomousFollowups">-</strong><span>Follow-ups 24h</span></div>
                 <div class="stat"><strong id="orAutonomousLastRun">-</strong><span>Ultima ronda</span></div>
@@ -3098,31 +3104,56 @@ tbody tr:last-child td { border-bottom: none; }
 
           <!-- Templates -->
           <div data-outreach-panel="templates" class="outreach-panel">
-            <p class="muted" style="font-size:13px;">Override por stage. Vacio = usa la plantilla por defecto del codigo. Variables: {first_name}, {business}, {city}, {niche}, {service_hint}, {website}.</p>
+            <!-- cabecera -->
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+              <div>
+                <strong style="font-size:15px;">Plantillas de email</strong>
+                <p class="muted" style="margin:4px 0 0;font-size:12px;">Edita el copy de cada etapa. Variables disponibles: <code>{business}</code>, <code>{first_name}</code>, <code>{city}</code>, <code>{niche}</code>, <code>{task}</code>, <code>{cta_url}</code>, <code>{cta_html}</code>, <code>{signature_html}</code>.</p>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <select id="orTplStage" style="font-size:13px;">
+                  <option value="cold">1. Cold (primer contacto)</option>
+                  <option value="fu1">2. Follow-up 1</option>
+                  <option value="fu2">3. Follow-up 2</option>
+                  <option value="breakup">4. Breakup (ultimo intento)</option>
+                </select>
+                <span id="orTplStatusBadge" style="font-size:11px;padding:2px 8px;border-radius:99px;background:#fef3c7;color:#92400e;font-weight:600;display:none;">Sin guardar</span>
+                <span id="orTplOverrideBadge" style="font-size:11px;padding:2px 8px;border-radius:99px;background:#dcfce7;color:#065f46;font-weight:600;display:none;">Personalizada</span>
+              </div>
+            </div>
+
             <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px;">
               <div>
-                <label>Stage
-                  <select id="orTplStage">
-                    <option value="cold">cold</option>
-                    <option value="fu1">fu1</option>
-                    <option value="fu2">fu2</option>
-                    <option value="breakup">breakup</option>
-                  </select>
-                </label>
-                <label>Subject pool (uno por linea)<textarea id="orTplSubjects" rows="4"></textarea></label>
-                <label>Body texto plano<textarea id="orTplText" rows="10"></textarea></label>
-                <label>Body HTML<textarea id="orTplHtml" rows="10"></textarea></label>
-                <div class="actions">
-                  <button class="secondary small" type="button" id="orTplSaveBtn">Guardar override</button>
-                  <button class="ghost small" type="button" id="orTplResetBtn">Borrar override</button>
+                <!-- subject -->
+                <div style="margin-bottom:12px;">
+                  <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Asuntos posibles <span class="muted" style="font-weight:400;">(uno por linea — se elige aleatoriamente)</span></label>
+                  <textarea id="orTplSubjects" rows="4" style="width:100%;font-size:13px;" placeholder="una pregunta sobre {business}&#10;algo para {business}"></textarea>
                 </div>
+                <!-- body text -->
+                <div style="margin-bottom:12px;">
+                  <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Cuerpo texto plano <span class="muted" style="font-weight:400;">(para clientes de email sin HTML)</span></label>
+                  <textarea id="orTplText" rows="10" style="width:100%;font-size:12px;font-family:monospace;"></textarea>
+                </div>
+                <!-- body html -->
+                <div style="margin-bottom:12px;">
+                  <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Cuerpo HTML <span class="muted" style="font-weight:400;">(si está vacio se usa el texto plano)</span></label>
+                  <textarea id="orTplHtml" rows="12" style="width:100%;font-size:12px;font-family:monospace;"></textarea>
+                </div>
+                <!-- actions -->
+                <div class="actions">
+                  <button class="secondary" type="button" id="orTplSaveBtn">Guardar plantilla</button>
+                  <button class="ghost small" type="button" id="orTplLoadDefaultBtn">Recargar por defecto</button>
+                  <button class="ghost small" type="button" id="orTplResetBtn" style="color:#b91c1c;">Borrar personalización</button>
+                </div>
+                <p class="muted" style="margin:8px 0 0;font-size:11px;" id="orTplSaveHint">Guarda para que los proximos envios usen esta plantilla.</p>
               </div>
               <div>
-                <strong>Preview</strong>
-                <div style="margin-top:6px;">
-                  <div id="orTplPreviewSubject" style="font-size:13px;color:#637c8e;margin-bottom:6px;">Subject: <em>(escribe para previsualizar)</em></div>
-                  <iframe id="orTplPreviewFrame" style="width:100%;height:560px;border:1px solid #e4eaf2;border-radius:10px;background:#f9fbfd;"></iframe>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                  <strong style="font-size:13px;">Vista previa</strong>
+                  <span class="muted" style="font-size:11px;">Con empresa de ejemplo</span>
                 </div>
+                <div id="orTplPreviewSubject" style="font-size:13px;color:#637c8e;margin-bottom:6px;padding:6px 10px;background:#f1f5f9;border-radius:6px;">Asunto: <em>(cargando...)</em></div>
+                <iframe id="orTplPreviewFrame" style="width:100%;height:600px;border:1px solid #e4eaf2;border-radius:10px;background:#f9fbfd;"></iframe>
               </div>
             </div>
           </div>
@@ -6936,7 +6967,7 @@ a {
           const turningOn = !_autonomousState.enabled;
           if (turningOn) {
             const target = ORQ("#orAutonomousTargetCompaniesInput")?.value || _autonomousState.target_companies || 20;
-            const ok = window.confirm(`Activar autopiloto para contactar ${target} empresas? El sistema descubrira negocios en España y enviara cold + follow-ups automaticamente.`);
+            const ok = window.confirm(`Activar autopiloto?\n\nCada hora ejecutará una ronda automática según los checkboxes activos:\n• Follow-ups: cold pendientes + FU1 + FU2 + breakup (sin límite)\n• Descubrir: busca ${target} empresas nuevas y les envía el cold\n\nPuedes pausarlo en cualquier momento con el mismo botón.`);
             if (!ok) return;
           }
           await saveAutonomousConfig({ enabled: turningOn });
@@ -8339,21 +8370,45 @@ a {
 
       // ----- Templates -----
       let orTemplatesCache = null;
+      let orTemplatesDefaults = {};
+
       async function loadTemplates() {
         try {
           const data = await orFetch("/admin/outreach/templates");
           orTemplatesCache = data.overrides || {};
+          orTemplatesDefaults = data.defaults || {};
           fillTemplateForm();
         } catch (err) { showStatus(err.message, "error"); }
       }
-      function fillTemplateForm() {
+
+      function _tplHasOverride(stage) {
+        const o = orTemplatesCache && orTemplatesCache[stage];
+        return !!(o && (o.subject_pool || o.body_text || o.body_html));
+      }
+
+      function fillTemplateForm(useDefault) {
         const stage = ORQ("#orTplStage").value;
-        const o = orTemplatesCache[stage] || {};
-        ORQ("#orTplSubjects").value = o.subject_pool || "";
-        ORQ("#orTplText").value = o.body_text || "";
-        ORQ("#orTplHtml").value = o.body_html || "";
+        const hasOverride = _tplHasOverride(stage);
+        const src = (!useDefault && hasOverride)
+          ? orTemplatesCache[stage]
+          : (orTemplatesDefaults[stage] || {});
+        ORQ("#orTplSubjects").value = src.subject_pool || "";
+        ORQ("#orTplText").value     = src.body_text    || "";
+        ORQ("#orTplHtml").value     = src.body_html    || "";
+        // badges
+        const statusBadge   = ORQ("#orTplStatusBadge");
+        const overrideBadge = ORQ("#orTplOverrideBadge");
+        if (statusBadge)   statusBadge.style.display   = (!hasOverride || useDefault) ? "" : "none";
+        if (overrideBadge) overrideBadge.style.display = (hasOverride && !useDefault) ? "" : "none";
+        const hint = ORQ("#orTplSaveHint");
+        if (hint) {
+          hint.textContent = hasOverride && !useDefault
+            ? "Esta plantilla esta guardada y activa para envios."
+            : "Editando plantilla base. Guarda para activarla en los proximos envios.";
+        }
         renderTemplatePreview();
       }
+
       let orTplPreviewTimer = null;
       async function renderTemplatePreview() {
         if (orTplPreviewTimer) clearTimeout(orTplPreviewTimer);
@@ -8368,7 +8423,7 @@ a {
                 body_html: ORQ("#orTplHtml").value,
               })
             });
-            ORQ("#orTplPreviewSubject").innerHTML = "Subject: <strong>" + escapeHtml(data.subject || "") + "</strong>";
+            ORQ("#orTplPreviewSubject").innerHTML = "Asunto: <strong>" + escapeHtml(data.subject || "") + "</strong>";
             const iframe = ORQ("#orTplPreviewFrame");
             const doc = iframe.contentDocument || iframe.contentWindow.document;
             doc.open(); doc.write(data.html || ""); doc.close();
@@ -8377,27 +8432,42 @@ a {
           }
         }, 350);
       }
+
       async function saveTemplate() {
         const stage = ORQ("#orTplStage").value;
+        const subj  = ORQ("#orTplSubjects").value.trim();
+        const text  = ORQ("#orTplText").value.trim();
+        const html  = ORQ("#orTplHtml").value.trim();
+        if (!subj && !text && !html) {
+          showStatus("Escribe algo antes de guardar.", "error");
+          return;
+        }
         try {
           await orFetch("/admin/outreach/templates", {
             method:"PUT", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({
-              stage,
-              subject_pool: ORQ("#orTplSubjects").value,
-              body_text: ORQ("#orTplText").value,
-              body_html: ORQ("#orTplHtml").value,
-            })
+            body: JSON.stringify({ stage, subject_pool: subj, body_text: text, body_html: html })
           });
-          showStatus("Override guardado", "ok"); loadTemplates();
+          showStatus("Plantilla guardada — los proximos envios la usaran.", "ok");
+          await loadTemplates();
         } catch (err) { showStatus(err.message, "error"); }
       }
+
       async function resetTemplate() {
         const stage = ORQ("#orTplStage").value;
-        await orFetch("/admin/outreach/templates", {
-          method:"PUT", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({ stage, subject_pool:"", body_text:"", body_html:"" }) });
-        showStatus("Override borrado", "ok"); loadTemplates();
+        if (!_tplHasOverride(stage)) { showStatus("No hay plantilla personalizada para este stage.", "info"); return; }
+        if (!window.confirm("Borrar la plantilla personalizada de este stage? Los envios usaran la plantilla base del sistema.")) return;
+        try {
+          await orFetch("/admin/outreach/templates/" + stage, { method:"DELETE" });
+          showStatus("Personalizacion eliminada. Usando plantilla base.", "ok");
+          await loadTemplates();
+        } catch (err) {
+          // Fallback: PUT vacio
+          await orFetch("/admin/outreach/templates", {
+            method:"PUT", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ stage, subject_pool:"", body_text:"", body_html:"" }) });
+          showStatus("Personalizacion eliminada.", "ok");
+          await loadTemplates();
+        }
       }
 
       // ----- Suppressions -----
@@ -8534,12 +8604,13 @@ a {
       ORQ("#orDryRunBtn").addEventListener("click", () => launchSend(true));
       ORQ("#orSendRealBtn").addEventListener("click", () => launchSend(false));
       ORQ("#orDiscRunBtn").addEventListener("click", runDiscovery);
-      ORQ("#orTplStage").addEventListener("change", fillTemplateForm);
+      ORQ("#orTplStage").addEventListener("change", () => fillTemplateForm(false));
       ORQ("#orTplHtml").addEventListener("input", renderTemplatePreview);
       ORQ("#orTplText").addEventListener("input", renderTemplatePreview);
       ORQ("#orTplSubjects").addEventListener("input", renderTemplatePreview);
       ORQ("#orTplSaveBtn").addEventListener("click", saveTemplate);
       ORQ("#orTplResetBtn").addEventListener("click", resetTemplate);
+      ORQ("#orTplLoadDefaultBtn").addEventListener("click", () => fillTemplateForm(true));
       ORQ("#orSupAddBtn").addEventListener("click", addSuppression);
       ORQ("#orDrawerCloseBtn").addEventListener("click", () => { ORQ("#orDrawer").style.display = "none"; });
       ORQ("#orDrawer").addEventListener("click", (ev) => { if (ev.target.id === "orDrawer") ORQ("#orDrawer").style.display = "none"; });
@@ -8642,7 +8713,7 @@ a {
         if (tab === "dashboard") { loadStats(); loadOpsSummary(); loadHotLeads(); }
         if (tab === "drafts") { loadFollowupQueue(); loadDrafts(); }
         if (tab === "prospects") loadProspects();
-        if (tab === "templates") loadTemplates();
+        if (tab === "templates") loadIgTemplates();
         if (tab === "autopilot") loadAutopilot();
         if (tab === "suppressions") loadSuppressions();
       }
@@ -9064,7 +9135,7 @@ a {
       }
 
       // ----- Templates -----
-      async function loadTemplates() {
+      async function loadIgTemplates() {
         try {
           const data = await igFetch("/admin/instagram/templates");
           const stages = data.stages || ["cold","fu1","fu2","breakup"];

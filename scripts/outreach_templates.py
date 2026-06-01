@@ -135,49 +135,53 @@ def _personal_line_html(p: Prospect) -> str:
 # "consulta rapida", signos de admiracion, mayusculas).
 
 SUBJECTS_COLD_A = [
-    "una pregunta sobre {business}",
-    "cuantas veces repite tu equipo lo mismo?",
-    "{business}: os llegan preguntas fuera de horario?",
-    "algo util para {business}",
+    "tu web puede responder sola",
+    "{business}: esto te puede ahorrar tiempo",
+    "sin tecnico, en 2 minutos",
+    "para {business}",
 ]
 
 SUBJECTS_COLD_B = [
-    "para {business}",
-    "{first_or_team}, cuantas llamadas con las mismas preguntas?",
-    "idea rapida para {business}",
-    "esto puede ayudar a {business}",
+    "tu web puede atender clientes sin ti",
+    "{business}: tu negocio, disponible 24h",
+    "crea tu bot sin saber programar",
+    "algo para {business}",
 ]
 
 SUBJECTS_FU1_A = [
     "por si no llegaste",
     "re: {business}",
-    "{first_or_team}, lo viste?",
+    "un minuto, {first_or_team}",
 ]
 
 SUBJECTS_FU1_B = [
-    "vuelvo un momento {first_or_team}",
-    "{business} - lo dejo aqui",
-    "por si te perdiste el anterior",
+    "por si no llegaste",
+    "re: {business}",
+    "un minuto, {first_or_team}",
 ]
 
 SUBJECTS_FU2_A = [
-    "mira como queda para {business}",
-    "{business}: 30 segundos",
+    "{business}: lo que se pierden sin esto",
+    "esto lo monta cualquiera en 2 min",
+    "para {business}: consultas respondidas solas",
 ]
 
 SUBJECTS_FU2_B = [
-    "lo tienes listo {first_or_team}",
-    "{business}: asi funciona",
+    "{business}: lo que se pierden sin esto",
+    "esto lo monta cualquiera en 2 min",
+    "para {business}: consultas respondidas solas",
 ]
 
 SUBJECTS_BREAKUP_A = [
+    "ultimo mensaje, {first_or_team}",
     "cierro el hilo",
-    "{business}: lo dejo aqui",
+    "te dejo tranquilo",
 ]
 
 SUBJECTS_BREAKUP_B = [
-    "ultima vez, {first_or_team}",
-    "te dejo tranquilo, {first_or_team}",
+    "ultimo mensaje, {first_or_team}",
+    "cierro el hilo",
+    "te dejo tranquilo",
 ]
 
 # Compatibilidad hacia atras: codigo antiguo importa SUBJECTS_*.
@@ -472,46 +476,50 @@ def _cta_block(primary_text: str, stage: str = "cold", p: Prospect | None = None
 
 
 def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
-    task, _outcome, niche_proof = niche_copy(p.niche, p.service_hint)
     env_proof = _proof_line()
-    proof_final = env_proof if env_proof else niche_proof
-    opener = niche_opener(p)
     name = p.business_name
     subject, _variant = pick_subject_with_variant("cold", p)
-    cta_text, cta_html = _cta_block("Probar el chat de " + name + " (gratis)", "cold", p)
-    website_line = "Somos vantelia.es — chats que responden por tu negocio cuando tu equipo no puede."
-    proof_text = f"\n{proof_final}\n" if proof_final else ""
+    cta_text, cta_html = _cta_block(f"Crear el bot de {name} gratis", "cold", p)
     proof_html = (
         f'<p style="margin:0 0 14px 0;color:#4b5563;font-style:italic;">'
-        f'{html_lib.escape(proof_final)}</p>'
-        if proof_final else ""
+        f'{html_lib.escape(env_proof)}</p>'
+        if env_proof else ""
     )
+    proof_text = f"\n{env_proof}\n" if env_proof else ""
     text = (
         f"{p.greeting}\n\n"
-        f"Soy Pablo, fundador de Vantelia. Te escribo porque hacemos chats para negocios "
-        f"como {name} que responden por vosotros cuando estais ocupados o cerrados.\n\n"
-        f"{f'{opener} ' if opener else ''}"
-        f"He preparado uno de ejemplo concreto para vosotros — puedes chatear con el ahora "
-        f"mismo y ver como funciona sin registrarte ni dar ningun dato:\n"
+        f"Soy Pablo, de Vantelia.\n\n"
+        f"Tenemos un chat que puedes poner en la web de {name} para que responda a tus clientes "
+        f"solo — cuando estas ocupado, cuando estais cerrados, cuando no podeis atender el telefono.\n\n"
+        f"El bot puede:\n"
+        f"→ Responder preguntas sobre tus productos y servicios\n"
+        f"→ Agendar citas y reservas directamente desde la web\n"
+        f"→ Atender consultas las 24 horas, cualquier dia\n"
+        f"→ Recoger los datos del cliente para que vosotros hagais el seguimiento\n\n"
+        f"No hace falta saber programar. Lo configuras tu mismo en 2 minutos.\n"
+        f"Gratis. Sin tarjeta. Sin contratos.\n\n"
         f"{cta_text}\n"
-        f"{proof_text}\n"
-        f"{website_line}\n\n"
+        f"{proof_text}"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
-    opener_html = f'<p>{html_lib.escape(opener)}</p>' if opener else ""
     inner = (
         f'<p>{html_lib.escape(p.greeting)}</p>'
-        f'<p>Soy Pablo, fundador de Vantelia. Te escribo porque hacemos chats para negocios '
-        f'como {html_lib.escape(name)} que responden por vosotros cuando estais ocupados o cerrados.</p>'
-        f'{opener_html}'
-        f'<p>He preparado uno de ejemplo concreto para vosotros — puedes chatear con el ahora '
-        f'mismo y ver como funciona <strong>sin registrarte ni dar ningun dato</strong>:</p>'
+        f'<p>Soy Pablo, de <a href="https://vantelia.es" style="color:#00a9cc;">Vantelia</a>.</p>'
+        f'<p>Tenemos un chat que puedes poner en la web de {html_lib.escape(name)} para que '
+        f'responda a tus clientes solo — cuando estas ocupado, cuando estais cerrados, '
+        f'cuando no podeis atender el telefono.</p>'
+        f'<p>El bot puede:</p>'
+        f'<ul style="margin:0 0 16px 0;padding-left:20px;line-height:2;">'
+        f'<li>Responder preguntas sobre tus productos y servicios</li>'
+        f'<li>Agendar citas y reservas directamente desde la web</li>'
+        f'<li>Atender consultas las 24 horas, cualquier dia</li>'
+        f'<li>Recoger los datos del cliente para que vosotros hagais el seguimiento</li>'
+        f'</ul>'
+        f'<p><strong>No hace falta saber programar.</strong> Lo configuras tu mismo en 2 minutos.<br>'
+        f'Gratis. Sin tarjeta. Sin contratos.</p>'
         f'{cta_html}'
         f'{proof_html}'
-        f'<p style="color:#6b7280;font-size:13px;">'
-        f'<a href="https://vantelia.es" style="color:#6b7280;">vantelia.es</a> '
-        f'— chats que responden por tu negocio cuando tu equipo no puede.</p>'
         f'{signature_html("cold")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
@@ -520,94 +528,104 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 
 def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     name = p.business_name
-    cta_text, cta_html = _cta_block("Chatear con el bot de " + name, "fu1", p)
+    cta_text, cta_html = _cta_block("Empezar gratis", "fu1", p)
     text = (
         f"{p.greeting}\n\n"
-        f"Te escribi hace unos dias (soy Pablo, de Vantelia — vantelia.es).\n\n"
-        f"Por si no llegaste: tengo un chat hecho especificamente para {name} "
-        f"que atiende a tus clientes las 24 horas. "
-        f"Puedes probarlo ahora mismo sin registrarte:\n"
+        f"Vuelvo un momento (soy Pablo, de Vantelia).\n\n"
+        f"Te escribi hace unos dias sobre poner un chat en la web de {name} "
+        f"que atienda a tus clientes solo — responde dudas, agenda citas, "
+        f"informa de precios y servicios, recoge datos de contacto.\n\n"
+        f"Todo sin que vosotros tengais que estar pendientes. "
+        f"Y sin necesitar ningun conocimiento tecnico para montarlo.\n\n"
+        f"Solo pulsa el boton, rellena 4 datos sobre tu negocio y en 2 minutos esta funcionando:\n\n"
         f"{cta_text}\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
     inner = (
         f'<p>{html_lib.escape(p.greeting)}</p>'
-        f'<p>Te escribi hace unos dias '
-        f'(soy Pablo, de <a href="https://vantelia.es" style="color:#00a9cc;">Vantelia</a>).</p>'
-        f'<p>Por si no llegaste: tengo un chat hecho especificamente para {html_lib.escape(name)} '
-        f'que atiende a tus clientes las 24 horas. '
-        f'Puedes probarlo ahora mismo sin registrarte:</p>'
+        f'<p>Vuelvo un momento (soy Pablo, de '
+        f'<a href="https://vantelia.es" style="color:#00a9cc;">Vantelia</a>).</p>'
+        f'<p>Te escribi hace unos dias sobre poner un chat en la web de {html_lib.escape(name)} '
+        f'que atienda a tus clientes solo — responde dudas, agenda citas, '
+        f'informa de precios y servicios, recoge datos de contacto.</p>'
+        f'<p>Todo sin que vosotros tengais que estar pendientes. '
+        f'Y <strong>sin necesitar ningun conocimiento tecnico</strong> para montarlo.</p>'
+        f'<p>Solo pulsa el boton, rellena 4 datos sobre tu negocio y en 2 minutos esta funcionando:</p>'
         f'{cta_html}'
         f'{signature_html("fu1")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
-    preheader = f"Chat para {name} listo. Pruebalo sin registrarte."
+    preheader = f"Agenda citas, responde dudas, informa de precios. Solo. Sin tecnico."
     return pick_subject("fu1", p), text, html_shell(inner, preheader=preheader)
 
 
 def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     task, _outcome, _ = niche_copy(p.niche, p.service_hint)
     name = p.business_name
-    cta_text, cta_html = _cta_block("Probar el chat gratis", "fu2", p)
+    cta_text, cta_html = _cta_block("Probarlo gratis ahora", "fu2", p)
     text = (
         f"{p.greeting}\n\n"
-        f"Ultimo mensaje de mi parte (Pablo, Vantelia — vantelia.es).\n\n"
-        f"El chat que prepare para {name}:\n\n"
-        f"- Responde preguntas sobre {task}\n"
-        f"- Funciona las 24 horas, tambien cuando estais cerrados\n"
-        f"- Se prueba gratis, sin tarjeta ni registro\n\n"
-        f"Solo hay que darle al boton y ya puedes hablar con el:\n"
+        f"Ultimo intento, lo prometo (Pablo, de Vantelia).\n\n"
+        f"Negocios como {name} usan Vantelia para:\n\n"
+        f"→ Responder a clientes a las 10 de la noche sin estar pendiente\n"
+        f"→ Agendar citas automaticamente desde la web, sin llamadas\n"
+        f"→ Informar de productos, precios y servicios en tiempo real\n"
+        f"→ No perder consultas cuando el telefono esta ocupado o estais cerrados\n\n"
+        f"Cualquier persona del equipo lo monta en 2 minutos, sin tocar codigo. "
+        f"14 dias gratis, sin tarjeta:\n\n"
         f"{cta_text}\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
     inner = (
         f'<p>{html_lib.escape(p.greeting)}</p>'
-        f'<p>Ultimo mensaje de mi parte '
-        f'(Pablo, <a href="https://vantelia.es" style="color:#00a9cc;">Vantelia</a>).</p>'
-        f'<p>El chat que prepare para {html_lib.escape(name)}:</p>'
+        f'<p>Ultimo intento, lo prometo '
+        f'(Pablo, de <a href="https://vantelia.es" style="color:#00a9cc;">Vantelia</a>).</p>'
+        f'<p>Negocios como {html_lib.escape(name)} usan Vantelia para:</p>'
         f'<ul style="margin:0 0 16px 0;padding-left:20px;line-height:2;">'
-        f'<li>Responde preguntas sobre {html_lib.escape(task)}</li>'
-        f'<li>Funciona las 24 horas, tambien cuando estais cerrados</li>'
-        f'<li>Se prueba gratis, sin tarjeta ni registro</li>'
+        f'<li>Responder a clientes a las 10 de la noche sin estar pendiente</li>'
+        f'<li>Agendar citas automaticamente desde la web, sin llamadas</li>'
+        f'<li>Informar de productos, precios y servicios en tiempo real</li>'
+        f'<li>No perder consultas cuando el telefono esta ocupado o estais cerrados</li>'
         f'</ul>'
-        f'<p>Solo hay que darle al boton y ya puedes hablar con el:</p>'
+        f'<p>Cualquier persona del equipo lo monta en 2 minutos, sin tocar codigo. '
+        f'<strong>14 dias gratis, sin tarjeta:</strong></p>'
         f'{cta_html}'
         f'{signature_html("fu2")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
-    preheader = f"Chat para {name}. Gratis, sin registro, en un clic."
+    preheader = f"Agenda citas, informa de precios, atiende 24h. 14 dias gratis."
     return pick_subject("fu2", p), text, html_shell(inner, preheader=preheader)
 
 
 def render_breakup(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     name = p.business_name
-    cta_text, cta_html = _cta_block("Probarlo cuando quieras", "breakup", p)
+    cta_text, cta_html = _cta_block("Crear mi bot gratis", "breakup", p)
     text = (
         f"{p.greeting}\n\n"
-        f"Lo dejo por aqui, no te escribire mas.\n\n"
-        f"Si algun dia queréis probar como funciona un chat automatico en vuestra web, "
-        f"el de {name} sigue disponible en vantelia.es. "
-        f"Un clic, charlas con el, y ves si tiene sentido para vosotros. "
-        f"Sin registro, sin compromiso.\n"
+        f"Ultimo mensaje, te lo juro.\n\n"
+        f"Si algun dia quieres que tu web responda preguntas, informe de tus servicios "
+        f"y agende citas sola — sin que vosotros tengais que estar pendientes, "
+        f"sin tecnico, sin saber programar — entra en vantelia.es y en 2 minutos "
+        f"esta funcionando. Gratis, sin tarjeta.\n\n"
         f"{cta_text}\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
     )
     inner = (
         f'<p>{html_lib.escape(p.greeting)}</p>'
-        f'<p>Lo dejo por aqui, no te escribire mas.</p>'
-        f'<p>Si algun dia quereis probar como funciona un chat automatico en vuestra web, '
-        f'el de {html_lib.escape(name)} sigue disponible en '
-        f'<a href="https://vantelia.es" style="color:#00a9cc;">vantelia.es</a>. '
-        f'Un clic, charlas con el, y ves si tiene sentido para vosotros. '
-        f'Sin registro, sin compromiso.</p>'
+        f'<p>Ultimo mensaje, te lo juro.</p>'
+        f'<p>Si algun dia quieres que tu web responda preguntas, informe de tus servicios '
+        f'y agende citas sola — sin que vosotros tengais que estar pendientes, '
+        f'sin tecnico, sin saber programar — entra en '
+        f'<a href="https://vantelia.es" style="color:#00a9cc;">vantelia.es</a> '
+        f'y en 2 minutos esta funcionando. <strong>Gratis, sin tarjeta.</strong></p>'
         f'{cta_html}'
         f'{signature_html("breakup")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
-    preheader = f"Sin registro ni compromiso. El chat de {name} sigue disponible."
+    preheader = "Responde, agenda, informa. Solo. Sin tecnico. Gratis."
     return pick_subject("breakup", p), text, html_shell(inner, preheader=preheader)
 
 

@@ -19353,7 +19353,31 @@ def outreach_get_templates():
     with _outreach_db() as conn:
         rows = conn.execute("SELECT * FROM templates_overrides").fetchall()
     overrides = {r["stage"]: dict(r) for r in rows}
-    return {"stages": OUTREACH_STAGES, "overrides": overrides}
+
+    # Render defaults with placeholder variables so the panel can pre-populate the form
+    defaults: dict = {}
+    if OUTREACH_AVAILABLE:
+        _placeholder = OutreachProspect(
+            email="demo@example.com",
+            business_name="{business}",
+            contact_name="{first_name}",
+            niche="{niche}",
+            city="{city}",
+            service_hint="{service_hint}",
+            website="{website}",
+        )
+        for _stage in OUTREACH_STAGES:
+            try:
+                _subj, _text, _html = outreach_render(_stage, _placeholder, "{unsubscribe}")
+                defaults[_stage] = {
+                    "subject_pool": _subj,
+                    "body_text": _text,
+                    "body_html": _html,
+                }
+            except Exception:
+                pass
+
+    return {"stages": OUTREACH_STAGES, "overrides": overrides, "defaults": defaults}
 
 
 @app.put("/admin/outreach/templates", dependencies=[Depends(_require_admin_token)])
@@ -20435,404 +20459,278 @@ def _outreach_start_autonomous_tick(*, source: str = "panel", log_overlap: bool 
     return True
 
 
-def _outreach_autonomous_tick_inner() -> None:
+def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
     log = lambda msg: logger.info("[autopilot] %s", msg)
     log_err = lambda msg: logger.error("[autopilot] %s", msg)
     env_on = os.getenv("OUTREACH_AUTONOMOUS_ENABLED", "").lower() == "true"
-    tick_state = _outreach_tick_state_update("start", "Ronda iniciada")
-    _autopilot_log("info", "tick_start", "Ronda iniciada")
+    _outreach_tick_state_update("start", "Ronda iniciada")
+    _autopilot_log("info", "tick_start", "▶ Ronda iniciada")
     if not env_on:
-        log("disabled por env OUTREACH_AUTONOMOUS_ENABLED")
-        _outreach_tick_state_update("skip_env_disabled", "Ronda detenida: OUTREACH_AUTONOMOUS_ENABLED no está en true")
-        _autopilot_log("warning", "skip_env_disabled", "Ronda detenida: OUTREACH_AUTONOMOUS_ENABLED no está en true",
-                       {"env_var": "OUTREACH_AUTONOMOUS_ENABLED"})
-        _autopilot_log("info", "tick_end", "Ronda terminada (sin acciones)")
+        _autopilot_log("warning", "skip_env_disabled", "OUTREACH_AUTONOMOUS_ENABLED no está en true en el VPS")
         return
     if not OUTREACH_AVAILABLE:
-        log("OUTREACH_AVAILABLE=False, skip")
-        _outreach_tick_state_update("skip_module_unavailable", "Módulo outreach no disponible", status="error")
         _autopilot_log("error", "skip_module_unavailable", "Módulo outreach no disponible")
-        _autopilot_log("info", "tick_end", "Ronda terminada (sin acciones)")
         return
     try:
         with _outreach_db() as conn:
             row = conn.execute("SELECT * FROM autopilot_config WHERE id=1").fetchone()
             if not row:
-                log("config row no existe, skip")
-                _outreach_tick_state_update("skip_no_config", "Sin fila de configuración en autopilot_config")
-                _autopilot_log("warning", "skip_no_config", "Sin fila de configuración en autopilot_config")
-                _autopilot_log("info", "tick_end", "Ronda terminada (sin acciones)")
+                _autopilot_log("warning", "skip_no_config", "Sin configuración en autopilot_config")
                 return
             enabled = bool(row["enabled"])
             try:
                 targets = json.loads(row["targets_json"] or "[]")
             except Exception:
                 targets = []
-            daily_new_target = int(row["daily_new_target"] or 20)
-            daily_cold_cap = int(row["daily_cold_cap"] or 30)
-            auto_followups = bool(row["auto_followups"])
+            daily_new_target = _autopilot_target_companies(row["daily_new_target"] or 50)
             try:
                 discovery_enabled = bool(row["discovery_enabled"]) if "discovery_enabled" in row.keys() else True
             except Exception:
                 discovery_enabled = True
+            auto_followups = bool(row["auto_followups"])
             followup_days = _outreach_config_followup_days(conn)
-            last_discovery_at = row["last_discovery_at"] or ""
-        target_companies = _autopilot_target_companies(daily_new_target)
-        daily_new_target = target_companies
-        daily_cold_cap = _autopilot_target_companies(daily_cold_cap or target_companies)
-        targets = _autopilot_targets_for_run(targets, target_companies)
-        config_detail = {
-            "targets_count": len(targets),
-            "auto_targets": not any(t.get("manual") for t in targets),
-            "target_companies": target_companies,
-            "daily_new_target": daily_new_target,
-            "daily_cold_cap": daily_cold_cap,
-            "auto_followups": auto_followups,
-            "discovery_enabled": discovery_enabled,
-            "followup_days": followup_days,
-        }
-        _outreach_tick_state_update(
-            "config_loaded",
-            f"Configuracion cargada: {len(targets)} objetivos, cold cap {daily_cold_cap}/dia",
-            detail=config_detail,
-            targets_count=len(targets),
-        )
-        _autopilot_log(
-            "info",
-            "tick_config_loaded",
-            f"Configuracion cargada: {len(targets)} objetivos, cold cap {daily_cold_cap}/dia",
-            config_detail,
-        )
+
         if not enabled:
-            log("disabled en DB, skip")
-            _outreach_tick_state_update("skip_disabled_db", "Modo automático pausado en panel")
-            _autopilot_log("warning", "skip_disabled_db", "Modo automático pausado en panel")
-            _autopilot_log("info", "tick_end", "Ronda terminada (sin acciones)")
+            _autopilot_log("info", "skip_disabled_db", "Autopiloto pausado en panel")
             return
         if not _autonomous_within_window():
-            log("fuera de ventana laboral, skip")
-            _outreach_tick_state_update("skip_off_hours", "Fuera de ventana laboral configurada")
-            _autopilot_log("info", "skip_off_hours", "Fuera de ventana laboral configurada",
-                           {"start_hour": os.getenv("OUTREACH_START_HOUR", "9"),
-                            "end_hour": os.getenv("OUTREACH_END_HOUR", "19")})
-            _autopilot_log("info", "tick_end", "Ronda terminada (sin acciones)")
+            h_start = os.getenv("OUTREACH_START_HOUR", "9")
+            h_end = os.getenv("OUTREACH_END_HOUR", "19")
+            _autopilot_log("info", "skip_off_hours", f"Fuera de ventana laboral ({h_start}h–{h_end}h)")
             return
 
-        # ---- DISCOVERY ----
-        run_discovery = True
-        if not discovery_enabled:
-            log("discovery+cold skip: discovery_enabled=false en config")
-            _outreach_tick_state_update("discovery_disabled", "Discovery y cold omitidos: desactivados en panel")
-            _autopilot_log("info", "discovery_disabled",
-                           "Discovery y cold omitidos: desactivados en panel")
-            run_discovery = False
-        google_key = os.getenv("GOOGLE_PLACES_API_KEY", "").strip() or "osm-fallback"
-        if run_discovery and not google_key:
-            log("discovery skip: GOOGLE_PLACES_API_KEY vacío")
-            _outreach_tick_state_update("discovery_skip_no_api_key", "Discovery omitido: GOOGLE_PLACES_API_KEY no configurada")
-            _autopilot_log("warning", "discovery_skip_no_api_key",
-                           "Discovery omitido: GOOGLE_PLACES_API_KEY no configurada")
-            run_discovery = False
-        if run_discovery and not targets:
-            log("discovery skip: sin targets configurados")
-            _outreach_tick_state_update("discovery_skip_no_targets", "Discovery omitido: sin objetivos sector/ciudad")
-            _autopilot_log("warning", "discovery_skip_no_targets",
-                           "Discovery omitido: sin objetivos sector/ciudad")
-            run_discovery = False
+        # Ambos desactivados → nada que hacer
+        if not auto_followups and not discovery_enabled:
+            _autopilot_log("warning", "skip_nothing_to_do",
+                           "Nada que hacer: activa al menos un checkbox (Follow-ups o Discovery)")
+            _outreach_tick_state_update("nothing_to_do", "Sin acciones: activa al menos un checkbox")
+            return
 
-        if run_discovery:
+        _autopilot_log("info", "tick_config",
+                       f"Follow-ups automáticos: {'✓' if auto_followups else '✗'}  |  "
+                       f"Descubrir empresas: {'✓' if discovery_enabled else '✗'}  |  "
+                       f"Empresas nuevas objetivo: {daily_new_target}",
+                       {"auto_followups": auto_followups, "discovery_enabled": discovery_enabled,
+                        "daily_new_target": daily_new_target})
+
+        settings = outreach_smtp_settings()
+        smtp_ok = bool(settings.get("host") and settings.get("from_email"))
+        if not smtp_ok:
+            _autopilot_log("warning", "smtp_not_configured", "SMTP no configurado — no se puede enviar")
+            _outreach_tick_state_update("smtp_not_configured", "SMTP no configurado")
+            return
+
+        # ---- PASO 1: FOLLOW-UPS (cold pendientes + fu1 + fu2 + breakup) ----
+        if auto_followups:
+            _outreach_tick_state_update("followups_start", "Enviando cold pendientes y follow-ups...")
+
+            # Cold pendientes: todos los prospects sin cold enviado, sin límite de cap
+            with _outreach_db() as conn:
+                already_cold = conn.execute(
+                    "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND stage='cold'"
+                ).fetchone()["c"]
+                cold_rows = conn.execute(
+                    """SELECT email FROM prospects
+                       WHERE COALESCE(status,'new')='new'
+                         AND email NOT IN (SELECT email FROM suppressions)
+                         AND email NOT IN (SELECT email FROM sends WHERE mode='send' AND stage='cold')
+                       ORDER BY score DESC, created_at ASC"""
+                ).fetchall()
+            cold_emails = [r["email"] for r in cold_rows]
+
+            if cold_emails:
+                _autopilot_log("info", "cold_pending",
+                               f"Cold: {len(cold_emails)} prospects pendientes "
+                               f"({already_cold} ya contactados anteriormente, saltados)",
+                               {"pending": len(cold_emails), "already_cold": already_cold})
+                params_cold = {
+                    "stage": "cold", "emails": cold_emails, "max": len(cold_emails),
+                    "send": True, "dry_run": False, "delay": 70.0, "jitter": 25.0,
+                    "force_window": False, "campaign_name": "Autopilot", "autopilot": True,
+                }
+                with _outreach_db() as conn:
+                    cur = conn.execute(
+                        "INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES (?,?,?,?,?)",
+                        ("send", "queued", json.dumps(params_cold), "", _outreach_now()),
+                    )
+                    cold_job_id = int(cur.lastrowid)
+                    conn.execute("UPDATE autopilot_config SET last_cold_at=?, updated_at=? WHERE id=1",
+                                 (_outreach_now(), _outreach_now()))
+                    conn.commit()
+                threading.Thread(target=_outreach_run_send_job, args=(cold_job_id, params_cold), daemon=True).start()
+                _autopilot_log("success", "cold_launched",
+                               f"Cold: {len(cold_emails)} emails encolados",
+                               {"job_id": cold_job_id, "count": len(cold_emails)})
+            else:
+                _autopilot_log("info", "cold_skip",
+                               f"Cold: sin prospects pendientes "
+                               f"({already_cold} ya contactados anteriormente)")
+
+            # FU1, FU2, Breakup (sin límite)
+            params_fu = {
+                "max": 99999, "send": True, "delay": 70.0, "jitter": 25.0,
+                "autopilot": True, "followup_days": followup_days,
+            }
+            with _outreach_db() as conn:
+                cur = conn.execute(
+                    "INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES (?,?,?,?,?)",
+                    ("autopilot", "queued", json.dumps(params_fu), "", _outreach_now()),
+                )
+                fu_job_id = int(cur.lastrowid)
+                conn.commit()
+            threading.Thread(target=_outreach_run_autopilot_job, args=(fu_job_id, params_fu), daemon=True).start()
+            _autopilot_log("info", "followups_launched",
+                           "FU1 / FU2 / Breakup: job lanzado en segundo plano",
+                           {"job_id": fu_job_id})
+            _outreach_tick_state_update("followups_launched", "Follow-ups lanzados en segundo plano")
+
+        # ---- PASO 2: DISCOVERY + COLD A NUEVAS EMPRESAS ----
+        if discovery_enabled:
+            _outreach_tick_state_update("discovery_start", "Descubriendo empresas nuevas...")
+            targets_for_run = _autopilot_targets_for_run(targets, daily_new_target)
+
+            if not targets_for_run:
+                _autopilot_log("warning", "discovery_no_targets",
+                               "Discovery: sin sectores/ciudades (se usará rotación automática de España)")
+                targets_for_run = _autopilot_generated_targets(daily_new_target)
+
             try:
                 from outreach_discover import discover_companies  # type: ignore
             except Exception as exc:
-                log_err(f"discovery: módulo no disponible ({exc})")
-                _autopilot_log("error", "discovery_module_error",
-                               f"Discovery: módulo no disponible ({exc})")
-                discover_companies = None
+                _autopilot_log("error", "discovery_module_error", f"Discovery: módulo no disponible ({exc})")
+                discover_companies = None  # type: ignore
+
             if discover_companies is not None:
                 imported_total = 0
-                # Cargar conjuntos conocidos UNA vez sin retener conexión.
+                new_emails: List[str] = []
                 with _outreach_db() as conn:
-                    known = {r["email"] for r in conn.execute("SELECT email FROM prospects").fetchall()}
-                    suppressed = {r["email"] for r in conn.execute("SELECT email FROM suppressions").fetchall()}
-                for t in targets:
-                    remaining_import_budget = max(0, daily_new_target - imported_total)
-                    if remaining_import_budget <= 0:
-                        _outreach_tick_state_update(
-                            "discovery_budget_reached",
-                            f"Discovery detenido: objetivo de {daily_new_target} prospects nuevos alcanzado",
-                            detail={"imported_total": imported_total, "daily_new_target": daily_new_target},
-                            imported_total=imported_total,
-                        )
-                        _autopilot_log(
-                            "info",
-                            "discovery_budget_reached",
-                            f"Discovery detenido: objetivo de {daily_new_target} prospects nuevos alcanzado",
-                            {"imported_total": imported_total, "daily_new_target": daily_new_target},
-                        )
+                    known: set = {r["email"] for r in conn.execute("SELECT email FROM prospects").fetchall()}
+                    suppressed: set = {r["email"] for r in conn.execute("SELECT email FROM suppressions").fetchall()}
+
+                for t in targets_for_run:
+                    if imported_total >= daily_new_target:
+                        _autopilot_log("info", "discovery_budget_reached",
+                                       f"Discovery: objetivo de {daily_new_target} empresas alcanzado")
                         break
                     sector = (t.get("sector") or "").strip()
                     city = (t.get("city") or "").strip()
                     if not sector or not city:
                         continue
-                    _outreach_tick_state_update(
-                        "discovery_run",
-                        f"Buscando empresas: {sector} · {city}",
-                        detail={"sector": sector, "city": city, "imported_total": imported_total},
-                        current_target={"sector": sector, "city": city},
-                        imported_total=imported_total,
-                    )
-                    _autopilot_log("info", "discovery_run",
-                                   f"Buscando empresas: {sector} · {city}",
+                    remaining = max(0, daily_new_target - imported_total)
+                    _outreach_tick_state_update("discovery_run", f"Buscando: {sector} · {city}",
+                                               current_target={"sector": sector, "city": city})
+                    _autopilot_log("info", "discovery_run", f"Buscando: {sector} · {city}",
                                    {"sector": sector, "city": city})
-                    # network I/O FUERA de cualquier transacción: no bloquea la DB para otros writers.
                     try:
                         raw_cap = max(10, min(80, int(os.getenv("OUTREACH_DISCOVERY_RAW_MAX", "30"))))
                         scrape_cap = max(0, min(80, int(os.getenv("OUTREACH_DISCOVERY_EMAIL_SCRAPES", "8"))))
-                        raw_max = max(10, min(raw_cap, remaining_import_budget * 3))
-                        email_scrape_limit = min(scrape_cap, max(3, remaining_import_budget * 2))
                         companies = discover_companies(
-                            sector=sector,
-                            ciudad=city,
-                            max_results=raw_max,
-                            extract_emails=True,
-                            source="auto",
-                            email_target=remaining_import_budget,
-                            max_email_scrapes=email_scrape_limit,
+                            sector=sector, ciudad=city,
+                            max_results=max(10, min(raw_cap, remaining * 3)),
+                            extract_emails=True, source="auto",
+                            email_target=remaining,
+                            max_email_scrapes=min(scrape_cap, max(3, remaining * 2)),
                         )
-                        discovery_metrics = getattr(discover_companies, "last_metrics", {}) or {}
                     except Exception as exc:
                         log_err(f"discovery {sector}/{city}: {exc}")
-                        _outreach_tick_state_update(
-                            "discovery_error",
-                            f"Discovery {sector}/{city}: {exc}",
-                            detail={"sector": sector, "city": city, "error": str(exc)[:240]},
-                        )
-                        _autopilot_log("error", "discovery_error",
-                                       f"Discovery {sector}/{city}: {exc}",
+                        _autopilot_log("error", "discovery_error", f"Error en {sector}/{city}: {exc}",
                                        {"sector": sector, "city": city})
                         continue
-                    discovered_count = len(companies)
+
+                    found_count = len(companies)
                     with _outreach_db() as conn:
                         companies = _outreach_filter_new_discoveries(conn, companies)
-                    new_after_filter = len(companies)
-                    companies = companies[:daily_new_target]
-                    skipped_existing = discovered_count - new_after_filter
-                    if skipped_existing:
-                        _autopilot_log(
-                            "info",
-                            "discovery_dedupe_skip",
-                            f"{sector} · {city}: {skipped_existing} duplicados/ya existentes omitidos",
-                            {"sector": sector, "city": city, "skipped": skipped_existing},
-                        )
-                    if discovery_metrics:
-                        _autopilot_log(
-                            "info",
-                            "discovery_metrics",
-                            f"{sector} · {city}: Places {discovery_metrics.get('places_raw', 0)}, OSM {discovery_metrics.get('osm_raw', 0)}, dedupe {discovery_metrics.get('deduped', 0)}, queries {len(discovery_metrics.get('queries') or [])}",
-                            {"sector": sector, "city": city, **discovery_metrics},
-                        )
+                    skipped = found_count - len(companies)
+
                     now_iso = _outreach_now()
                     added = 0
-                    remaining_import_budget = max(0, daily_new_target - imported_total)
-                    companies = companies[:remaining_import_budget]
-                    # Conexión corta solo para los INSERT de esta ciudad.
+                    min_score = int(os.getenv("OUTREACH_AUTONOMOUS_MIN_SCORE", "60") or 60)
                     with _outreach_db() as conn:
-                        for c in companies:
+                        for c in companies[:remaining]:
                             email = (getattr(c, "email", "") or "").lower().strip()
-                            if not email:
-                                continue
-                            if email in known or email in suppressed:
+                            if not email or email in known or email in suppressed:
                                 continue
                             if _autonomous_is_chain(getattr(c, "business_name", "")):
                                 continue
                             score = _autonomous_company_score(c)
-                            if score < int(os.getenv("OUTREACH_AUTONOMOUS_MIN_SCORE", "60") or 60):
-                                _autopilot_log(
-                                    "info",
-                                    "discovery_score_skip",
-                                    f"Saltado {getattr(c, 'business_name', '') or email}: score {score}",
-                                    {"email": email, "score": score, "sector": sector, "city": city},
-                                )
+                            if score < min_score:
                                 continue
                             payload = c.as_csv_row()
-                            payload["email"] = email
-                            payload["score"] = score
-                            payload["tags"] = (payload.get("tags") or "") + (",autopilot" if payload.get("tags") else "autopilot")
-                            payload["source"] = (payload.get("source") or "autopilot")
-                            payload["now"] = now_iso
+                            payload.update({
+                                "email": email, "score": score, "now": now_iso,
+                                "tags": "autopilot", "source": "autopilot",
+                            })
                             try:
                                 cur = conn.execute(
-                                    """INSERT OR IGNORE INTO prospects (email, business_name, contact_name, niche, website,
-                                       service_hint, city, phone, tags, source, score, created_at, updated_at)
-                                       VALUES (:email,:business_name,:contact_name,:niche,:website,:service_hint,:city,:phone,:tags,:source,:score,:now,:now)""",
+                                    """INSERT OR IGNORE INTO prospects
+                                       (email, business_name, contact_name, niche, website, service_hint,
+                                        city, phone, tags, source, score, created_at, updated_at)
+                                       VALUES (:email,:business_name,:contact_name,:niche,:website,:service_hint,
+                                               :city,:phone,:tags,:source,:score,:now,:now)""",
                                     payload,
                                 )
                                 if cur.rowcount:
                                     known.add(email)
+                                    new_emails.append(email)
                                     added += 1
                             except Exception as exc:
                                 log_err(f"insert {email}: {exc}")
-                                _autopilot_log("error", "discovery_insert_error",
-                                               f"Error insertando {email}: {exc}",
-                                               {"email": email})
                         conn.commit()
-                    log(f"discovery {sector}/{city}: {discovered_count} encontrados, {len(companies)} nuevos tras dedupe, {added} importados")
-                    _outreach_tick_state_update(
-                        "discovery_target_done",
-                        f"{sector} · {city}: {len(companies)} encontrados, {added} importados",
-                        detail={"sector": sector, "city": city, "found": discovered_count, "new_after_dedupe": len(companies), "imported": added},
-                        current_target={"sector": sector, "city": city},
-                        imported_total=imported_total + added,
-                    )
+
+                    imported_total += added
                     _autopilot_log(
                         "success" if added > 0 else "info",
                         "discovery_target_done",
-                        f"{sector} · {city}: {len(companies)} encontrados, {added} importados",
-                        {"sector": sector, "city": city, "found": discovered_count, "new_after_dedupe": len(companies), "imported": added},
+                        f"{sector} · {city}: {added} importadas"
+                        + (f" ({skipped} ya conocidas, saltadas)" if skipped else ""),
+                        {"sector": sector, "city": city, "found": found_count,
+                         "imported": added, "skipped_existing": skipped},
                     )
-                    imported_total += added
-                # Actualizar timestamp solo al final, conexión nueva y breve.
+
                 with _outreach_db() as conn:
-                    conn.execute(
-                        "UPDATE autopilot_config SET last_discovery_at=?, updated_at=? WHERE id=1",
-                        (_outreach_now(), _outreach_now()),
-                    )
+                    conn.execute("UPDATE autopilot_config SET last_discovery_at=?, updated_at=? WHERE id=1",
+                                 (_outreach_now(), _outreach_now()))
                     conn.commit()
-                log(f"discovery total importados: {imported_total}")
-                _outreach_tick_state_update(
-                    "discovery_done",
-                    f"Discovery completado: {imported_total} prospects nuevos importados",
-                    detail={"imported_total": imported_total},
-                    imported_total=imported_total,
-                )
+
                 _autopilot_log(
                     "success" if imported_total > 0 else "info",
                     "discovery_done",
-                    f"Discovery completado: {imported_total} prospects nuevos importados",
+                    f"Discovery: {imported_total} empresas nuevas importadas"
+                    + (f", cold encolado para {len(new_emails)}" if new_emails else ""),
                     {"imported_total": imported_total},
                 )
+                _outreach_tick_state_update("discovery_done",
+                                            f"Discovery: {imported_total} empresas importadas")
 
-        # ---- COLD AUTOMÁTICO ----
-        settings = outreach_smtp_settings()
-        smtp_ok = bool(settings.get("host") and settings.get("from_email"))
-        if not smtp_ok:
-            log("cold/followups skip: SMTP no configurado")
-            _outreach_tick_state_update("smtp_not_configured", "Cold y follow-ups omitidos: SMTP no configurado")
-            _autopilot_log("warning", "smtp_not_configured",
-                           "Cold y follow-ups omitidos: SMTP no configurado")
-            _autopilot_log("info", "tick_end", "Ronda terminada (sin envíos)")
-            return
-
-        with _outreach_db() as conn:
-            sent_today = conn.execute(
-                "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND stage='cold' AND date(sent_at)=date('now')"
-            ).fetchone()["c"]
-            remaining = daily_cold_cap - int(sent_today or 0)
-            n = max(0, min(remaining, daily_new_target))
-            if n <= 0:
-                log(f"cold skip: cap diario alcanzado ({sent_today}/{daily_cold_cap})")
-                _outreach_tick_state_update(
-                    "cold_cap_reached",
-                    f"Cap diario alcanzado: {sent_today}/{daily_cold_cap}",
-                    detail={"sent_today": sent_today, "daily_cold_cap": daily_cold_cap},
-                )
-                _autopilot_log("warning", "cold_cap_reached",
-                               f"Cap diario alcanzado: {sent_today}/{daily_cold_cap}",
-                               {"sent_today": sent_today, "daily_cold_cap": daily_cold_cap})
-            else:
-                total_new = conn.execute(
-                    "SELECT COUNT(*) AS c FROM prospects WHERE COALESCE(status,'new')='new' AND email NOT IN (SELECT email FROM suppressions)"
-                ).fetchone()["c"]
-                already_cold = conn.execute(
-                    "SELECT COUNT(*) AS c FROM prospects WHERE COALESCE(status,'new')='new' AND email IN (SELECT email FROM sends WHERE mode='send' AND stage='cold') AND email NOT IN (SELECT email FROM suppressions)"
-                ).fetchone()["c"]
-                if already_cold > 0:
-                    _autopilot_log(
-                        "info", "cold_already_contacted",
-                        f"{already_cold} empresa(s) ya contactadas anteriormente, saltadas",
-                        {"already_cold": already_cold, "total_new_status": total_new},
-                    )
-                rows = conn.execute(
-                    """SELECT email FROM prospects
-                       WHERE COALESCE(status,'new')='new'
-                         AND email NOT IN (SELECT email FROM suppressions)
-                         AND email NOT IN (SELECT email FROM sends WHERE mode='send' AND stage='cold')
-                       ORDER BY score DESC, created_at ASC
-                       LIMIT ?""",
-                    (n,),
-                ).fetchall()
-                cold_emails = [r["email"] for r in rows]
-                if not cold_emails:
-                    skip_msg = f"Cold omitido: 0 prospects elegibles (total status=new: {total_new}, ya contactados: {already_cold})"
-                    log(f"cold skip: 0 prospects elegibles (total new: {total_new}, ya contactados: {already_cold})")
-                    _outreach_tick_state_update("cold_skip_no_prospects", skip_msg,
-                                               detail={"total_new": total_new, "already_cold": already_cold})
-                    _autopilot_log("info", "cold_skip_no_prospects", skip_msg,
-                                   {"total_new": total_new, "already_cold": already_cold})
-                else:
-                    params = {
-                        "stage": "cold",
-                        "emails": cold_emails,
-                        "max": len(cold_emails),
-                        "send": True,
-                        "dry_run": False,
-                        "delay": 70.0,
-                        "jitter": 25.0,
-                        "force_window": False,
-                        "campaign_name": "Autopilot cold",
-                        "autopilot": True,
+                # Cold solo a las recién descubiertas
+                if new_emails:
+                    params_disc = {
+                        "stage": "cold", "emails": new_emails, "max": len(new_emails),
+                        "send": True, "dry_run": False, "delay": 70.0, "jitter": 25.0,
+                        "force_window": False, "campaign_name": "Autopilot discovery", "autopilot": True,
                     }
-                    cur = conn.execute(
-                        "INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES (?,?,?,?,?)",
-                        ("send", "queued", json.dumps(params), "", _outreach_now()),
-                    )
-                    cold_job_id = cur.lastrowid
-                    conn.execute(
-                        "UPDATE autopilot_config SET last_cold_at=?, updated_at=? WHERE id=1",
-                        (_outreach_now(), _outreach_now()),
-                    )
-                    conn.commit()
-                    threading.Thread(target=_outreach_run_send_job, args=(cold_job_id, params), daemon=True).start()
-                    log(f"cold lanzado: job #{cold_job_id} con {len(cold_emails)} prospects")
-                    _outreach_tick_state_update(
-                        "cold_launched",
-                        f"Cold lanzado: job #{cold_job_id} con {len(cold_emails)} prospects",
-                        detail={"job_id": cold_job_id, "count": len(cold_emails), "sent_today": sent_today, "daily_cold_cap": daily_cold_cap},
-                    )
-                    _autopilot_log("success", "cold_launched",
-                                   f"Cold lanzado: job #{cold_job_id} con {len(cold_emails)} prospects",
-                                   {"job_id": cold_job_id, "count": len(cold_emails),
-                                    "sent_today": sent_today, "daily_cold_cap": daily_cold_cap})
+                    with _outreach_db() as conn:
+                        cur = conn.execute(
+                            "INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES (?,?,?,?,?)",
+                            ("send", "queued", json.dumps(params_disc), "", _outreach_now()),
+                        )
+                        disc_job_id = int(cur.lastrowid)
+                        conn.execute("UPDATE autopilot_config SET last_cold_at=?, updated_at=? WHERE id=1",
+                                     (_outreach_now(), _outreach_now()))
+                        conn.commit()
+                    threading.Thread(target=_outreach_run_send_job, args=(disc_job_id, params_disc), daemon=True).start()
+                    _autopilot_log("success", "discovery_cold_launched",
+                                   f"Cold a empresas descubiertas: {len(new_emails)} emails encolados",
+                                   {"job_id": disc_job_id, "count": len(new_emails)})
+                else:
+                    _autopilot_log("info", "discovery_cold_skip",
+                                   "Cold discovery: ninguna empresa nueva con email válido")
 
-        # ---- FOLLOW-UPS ----
-        if auto_followups:
-            followup_cap = max(1, int(os.getenv("OUTREACH_AUTONOMOUS_FOLLOWUP_CAP", "10000") or 10000))
-            params = {"max": followup_cap, "send": True, "delay": 70.0, "jitter": 25.0, "autopilot": True, "followup_days": followup_days}
-            with _outreach_db() as conn:
-                cur = conn.execute(
-                    "INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES (?,?,?,?,?)",
-                    ("autopilot", "queued", json.dumps(params), "", _outreach_now()),
-                )
-                fu_job_id = cur.lastrowid
-                conn.commit()
-            threading.Thread(target=_outreach_run_autopilot_job, args=(fu_job_id, params), daemon=True).start()
-            log(f"follow-ups lanzado: job #{fu_job_id}")
-            _outreach_tick_state_update(
-                "followups_launched",
-                f"Follow-ups lanzado: job #{fu_job_id}",
-                detail={"job_id": fu_job_id, "max": followup_cap},
-            )
-            _autopilot_log("success", "followups_launched",
-                           f"Follow-ups lanzado: job #{fu_job_id}",
-                           {"job_id": fu_job_id, "max": followup_cap})
-        else:
-            _outreach_tick_state_update("followups_skip_disabled", "Follow-ups omitidos: auto_followups desactivado en config")
-            _autopilot_log("info", "followups_skip_disabled",
-                           "Follow-ups omitidos: auto_followups desactivado en config")
-        _autopilot_log("info", "tick_end", "Ronda terminada")
+        _autopilot_log("info", "tick_end", "◀ Ronda completada")
+        _outreach_tick_state_update("done", "Ronda completada")
     except Exception as exc:
         log_err(f"tick falló: {exc}")
-        _outreach_tick_state_update("tick_error", f"Ronda falló: {exc}", {"exception": str(exc)}, status="error")
+        _outreach_tick_state_update("tick_error", f"Ronda falló: {exc}", status="error")
         _autopilot_log("error", "tick_error", f"Ronda falló: {exc}", {"exception": str(exc)})
 
 
