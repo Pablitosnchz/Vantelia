@@ -78,13 +78,13 @@
         { "@type": "Question", "name": "¿Funciona con cualquier tipo de web?", "acceptedAnswer": { "@type": "Answer", "text": "Sí. Una línea de script funciona en WordPress, Webflow, Shopify, Wix, Framer, Squarespace o webs hechas a medida. También puedes compartir un enlace público sin instalar nada." } },
         { "@type": "Question", "name": "¿Cómo aprende el asistente sobre mi negocio?", "acceptedAnswer": { "@type": "Answer", "text": "Le indicas la URL de tu web y Vantelia analiza automáticamente hasta 12 páginas extrayendo servicios, precios y FAQs. Entrena el RAG solo. Puedes refinarlo después subiendo documentos o añadiendo Q&A manuales." } },
         { "@type": "Question", "name": "¿Puedo subir mis propios documentos?", "acceptedAnswer": { "@type": "Answer", "text": "Sí desde el plan Starter (19€/mes). Puedes subir PDFs, textos o URLs adicionales que el asistente leerá y usará para responder. Útil para catálogos, políticas internas o tarifas." } },
-        { "@type": "Question", "name": "¿El asistente gestiona reservas y citas?", "acceptedAnswer": { "@type": "Answer", "text": "Sí desde el plan Pro (49€/mes). El asistente consulta tu disponibilidad real, propone hueco al cliente y reserva la cita. Envía recordatorios automáticos 24h y 2h antes. El cliente puede reprogramar o cancelar con un clic." } },
+        { "@type": "Question", "name": "¿El asistente gestiona reservas y citas?", "acceptedAnswer": { "@type": "Answer", "text": "Sí. Free incluye 10 citas al mes, Starter 100, Pro 500 y Business citas ilimitadas. El asistente consulta tu disponibilidad real, propone hueco al cliente y reserva la cita." } },
         { "@type": "Question", "name": "¿Puedo personalizar logo, colores y tono?", "acceptedAnswer": { "@type": "Answer", "text": "Sí desde Starter. Cambias logo, colores corporativos, mensaje de bienvenida y tono de respuesta (formal, cercano, técnico). El widget se adapta visualmente a tu marca." } },
         { "@type": "Question", "name": "¿Tiene Live Chat humano?", "acceptedAnswer": { "@type": "Answer", "text": "Sí desde el plan Pro. Cuando el asistente detecta una consulta compleja o el cliente lo pide, releva la conversación a un agente humano de tu equipo desde el panel." } },
         { "@type": "Question", "name": "¿En qué idiomas habla el asistente?", "acceptedAnswer": { "@type": "Answer", "text": "Detecta el idioma del visitante y responde acorde. Funciona en español, inglés, francés, alemán, portugués, italiano y catalán entre otros. El RAG se entrena con tu contenido original." } },
         { "@type": "Question", "name": "¿Funciona también en WhatsApp?", "acceptedAnswer": { "@type": "Answer", "text": "Sí desde el plan Business (149€/mes). Conectamos el mismo asistente al WhatsApp Business de tu empresa. Te activamos la integración gratis: solo necesitas tu número y en 24h responde por WhatsApp con las mismas respuestas y agenda." } },
         { "@type": "Question", "name": "¿Qué necesito para activar WhatsApp Business?", "acceptedAnswer": { "@type": "Answer", "text": "Un número dedicado y cuenta de WhatsApp Business. Si no la tienes, te guiamos durante el onboarding del plan Business. La configuración técnica con Meta la hacemos nosotros." } },
-        { "@type": "Question", "name": "¿Cómo funciona el plan Free?", "acceptedAnswer": { "@type": "Answer", "text": "50 mensajes al mes para siempre, sin tarjeta y sin caducidad. Incluye widget, aprendizaje desde tu web, panel con métricas y soporte por comunidad. Ideal para validar." } },
+        { "@type": "Question", "name": "¿Cómo funciona el plan Free?", "acceptedAnswer": { "@type": "Answer", "text": "50 mensajes y 10 citas al mes para siempre, sin tarjeta y sin caducidad. Incluye widget, aprendizaje desde tu web, panel con métricas y soporte por comunidad. Ideal para validar." } },
         { "@type": "Question", "name": "¿Qué pasa si supero el límite de mensajes?", "acceptedAnswer": { "@type": "Answer", "text": "Te avisamos antes de llegar al tope. No bloqueamos el asistente sin avisar: te proponemos subir de plan o cobrar el exceso por unidades, según prefieras." } },
         { "@type": "Question", "name": "¿Hay permanencia o cuota de alta?", "acceptedAnswer": { "@type": "Answer", "text": "No. Todos los planes son mes a mes y cancelas desde el portal de Stripe cuando quieras. La alta express está incluida sin coste extra. Si pagas anual tienes 2 meses gratis." } },
         { "@type": "Question", "name": "¿Puedo cambiar de plan más adelante?", "acceptedAnswer": { "@type": "Answer", "text": "Sí. Subes o bajas de plan cuando quieras desde el portal. El cambio se aplica al siguiente ciclo de facturación sin perder datos ni configuración." } },
@@ -472,6 +472,7 @@
         <ul class="nav-links">
           <li><a href="/">Inicio</a></li>
           <li><a href="/planes/">Planes</a></li>
+          <li><a href="/demo/">Demo</a></li>
           <li><a href="/faq/">Preguntas frecuentes</a></li>
         </ul>
       </nav>
@@ -491,6 +492,7 @@
     <button class="mobile-close" id="mobile-close" aria-label="Cerrar menú">?</button>
     <a href="/" class="mm-link">Inicio</a>
     <a href="/planes/" class="mm-link">Planes</a>
+    <a href="/demo/" class="mm-link">Demo</a>
     <a href="/faq/" class="mm-link">Preguntas frecuentes</a>
     <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener"
       style="margin-top:8px;font-size:1rem;height:48px;padding:0 28px">
@@ -665,7 +667,7 @@
             </span>
           </button>
           <div class="faq-a"><div class="faq-a-in">
-            Sí desde el plan Pro (49€/mes). El asistente consulta tu disponibilidad real, propone hueco al cliente y reserva la cita. Envía recordatorios automáticos 24h y 2h antes. El cliente puede reprogramar o cancelar con un clic.
+            Sí. Free incluye 10 citas al mes, Starter 100, Pro 500 y Business citas ilimitadas. El asistente consulta tu disponibilidad real, propone hueco al cliente y reserva la cita.
           </div></div>
         </article>
 
@@ -759,7 +761,7 @@
             </span>
           </button>
           <div class="faq-a"><div class="faq-a-in">
-            50 mensajes al mes para siempre, sin tarjeta y sin caducidad. Incluye widget, aprendizaje desde tu web, panel con métricas y soporte por comunidad. Ideal para validar antes de pasar a un plan de pago. <a href="/planes/">Ver todos los planes ?</a>
+            50 mensajes y 10 citas al mes para siempre, sin tarjeta y sin caducidad. Incluye widget, aprendizaje desde tu web, panel con métricas y soporte por comunidad. Ideal para validar antes de pasar a un plan de pago. <a href="/planes/">Ver todos los planes ?</a>
           </div></div>
         </article>
 
@@ -873,11 +875,11 @@
         <span class="eyebrow">¿Empezamos?</span>
         <h2>Pruébalo gratis. Lo entiendes mejor en 2 minutos que en una llamada.</h2>
         <p>
-          50 mensajes/mes sin tarjeta, wizard guiado, snippet listo para tu web. Si prefieres
+          50 mensajes y 10 citas/mes sin tarjeta, wizard guiado, snippet listo para tu web. Si prefieres
           que te ayudemos con onboarding personalizado, también puedes hablar con nosotros.
         </p>
         <div class="cta-actions" style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
-          <a href="https://app.vantelia.es/acceso" class="btn btn-primary btn-lg" target="_blank" rel="noopener">Crea tu bot gratis ?</a>
+          <a href="https://app.vantelia.es/acceso" class="btn btn-primary btn-lg" target="_blank" rel="noopener">Crea tu bot gratis</a>
           <a href="/consultas/" class="btn btn-ghost btn-lg">Hablar con un experto</a>
         </div>
         <p class="cta-note">Sin tarjeta · sin permanencia · datos en Europa</p>
@@ -1007,8 +1009,8 @@
     })();
   </script>
 
-  <script src="https://app.vantelia.es/widget/widget.min.js?v=20260522-rebuild" data-api="https://app.vantelia.es"
-    data-client="Vantelia" data-position="right"></script>
+  <script src="https://app.vantelia.es/widget/widget.min.js?v=1779723841" data-api="https://app.vantelia.es"
+    data-client="van" data-position="right"></script>
 
 </body>
 

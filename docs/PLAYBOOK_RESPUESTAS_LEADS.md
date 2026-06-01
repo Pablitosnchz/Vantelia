@@ -32,9 +32,9 @@ Hola,
 
 Te lo explico corto:
 
-- Gratis — 0€. 50 mensajes al mes.
-- Starter — 19€/mes. 1.000 mensajes al mes.
-- Pro — 49€/mes. 5.000 mensajes al mes + reservas + chat en vivo.
+- Gratis — 0€. 50 mensajes y 10 citas al mes.
+- Starter — 19€/mes. 1.000 mensajes y 100 citas al mes.
+- Pro — 49€/mes. 5.000 mensajes y 500 citas al mes + chat en vivo.
 - Business — 149€/mes. 25.000 mensajes + WhatsApp.
 
 Sin permanencia, cancelas cuando quieras.

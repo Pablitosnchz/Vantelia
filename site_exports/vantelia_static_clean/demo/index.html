@@ -381,6 +381,12 @@
       font-weight: 750;
       text-decoration: none;
     }
+    .form-status-action.primary {
+      border-color: rgba(0, 245, 212, 0.55);
+      background: #00f5d4;
+      color: #07111f;
+      box-shadow: 0 10px 26px rgba(0, 245, 212, 0.18);
+    }
 
     .demo-promise {
       max-width: 760px;
@@ -480,6 +486,7 @@
         <ul class="nav-links">
           <li><a href="/">Inicio</a></li>
           <li><a href="/planes/">Planes</a></li>
+          <li><a href="/demo/">Demo</a></li>
           <li><a href="/faq/">Preguntas frecuentes</a></li>
         </ul>
       </nav>
@@ -499,6 +506,7 @@
     <button class="mobile-close" id="mobile-close" aria-label="Cerrar menú">?</button>
     <a href="/" class="mm-link">Inicio</a>
     <a href="/planes/" class="mm-link">Planes</a>
+    <a href="/demo/" class="mm-link">Demo</a>
     <a href="/faq/" class="mm-link">Preguntas frecuentes</a>
     <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener"
       style="margin-top:8px;font-size:1rem;height:48px;padding:0 28px">
@@ -519,7 +527,7 @@
 
       <div class="hero-badge">
         <span class="badge-dot" aria-hidden="true"></span>
-        Demo en vivo · Tu propia IA · 1 hora gratis
+        Demo en vivo · Tu propia IA · 7 dias gratis
       </div>
 
       <h1>Pega tu web y prueba tu asistente IA<br>en <span class="gradient-text">menos de 1 minuto</span></h1>
@@ -589,7 +597,7 @@
         <div id="demo-form-status" class="form-status" role="status" aria-live="polite"></div>
 
         <p class="form-note">
-          La demo está activa <strong>1 hora</strong> y luego se borra automáticamente. Al generarla aceptas
+          La demo está activa <strong>7 dias</strong> y luego se borra automáticamente. Al generarla aceptas
           nuestra <a href="/legal/privacidad/">política de privacidad</a>. Solo usamos tu email para enviarte la
           demo y, si quieres, contactar.
         </p>
@@ -719,6 +727,19 @@
         }
       }
 
+      function formatDuration(seconds) {
+        var totalMinutes = Math.max(1, Math.round((seconds || 3600) / 60));
+        if (totalMinutes >= 1440) {
+          var days = Math.round(totalMinutes / 1440);
+          return days === 1 ? '1 dia' : days + ' dias';
+        }
+        if (totalMinutes >= 60) {
+          var hours = Math.round(totalMinutes / 60);
+          return hours === 1 ? '1 hora' : hours + ' horas';
+        }
+        return totalMinutes === 1 ? '1 minuto' : totalMinutes + ' minutos';
+      }
+
       function getParam(names) {
         var search = (window.location.search || '').replace(/&amp;/g, '&');
         var params = new URLSearchParams(search);
@@ -842,9 +863,13 @@
             return;
           }
           var url = result.body.demo_url;
+          var claimId = result.body && result.body.cliente_id ? String(result.body.cliente_id) : '';
+          var claimUrl = claimId ? '/acceso?mode=signup&claim=' + encodeURIComponent(claimId) : '/acceso?mode=signup';
           var minutes = Math.max(1, Math.round((result.body.expires_in_seconds || 3600) / 60));
+          var durationLabel = formatDuration(result.body.expires_in_seconds || 3600);
           window.vanteliaTrack && window.vanteliaTrack('demo_generated', {
             demo_url: url,
+            claim_url: claimUrl,
             expires_in_minutes: minutes
           });
           window.vanteliaTrack && window.vanteliaTrack('lead_created', {
@@ -852,14 +877,16 @@
             sector: data.sector,
             has_website_url: !!data.website_url,
             demo_url: url,
+            claim_url: claimUrl,
             expires_in_minutes: minutes
           });
           showStatus('success', statusCard(
             'Demo lista',
-            'Tu asistente IA se ha generado correctamente',
-            demoWindow ? 'Se ha abierto en una pestana nueva. Estara disponible durante ' + minutes + ' minutos.'
-              : 'Tu navegador ha bloqueado la pestana nueva. Puedes abrirla desde el boton inferior. Estara disponible durante ' + minutes + ' minutos.',
-            '<a class="form-status-action" href="' + url + '" target="_blank" rel="noopener">Abrir demo</a><a class="form-status-action" href="/consultas/">Pedir consulta</a>'
+            'Tu bot ya esta creado. El siguiente paso es activarlo gratis.',
+            (demoWindow ? 'Se ha abierto en una pestana nueva. ' : 'Tu navegador ha bloqueado la pestana nueva. ') +
+              'Si te gusta, reclama esta misma demo para guardarla en tu cuenta e instalarla en tu web. Estara disponible durante ' + durationLabel + '.',
+            '<a class="form-status-action primary" href="' + claimUrl + '" onclick="window.vanteliaTrack && window.vanteliaTrack(\'demo_claim_clicked\',{demo_url:\'' + url + '\',claim_url:\'' + claimUrl + '\'});">Activar gratis</a>' +
+              '<a class="form-status-action" href="' + url + '" target="_blank" rel="noopener" onclick="window.vanteliaTrack && window.vanteliaTrack(\'demo_open_clicked\',{demo_url:\'' + url + '\'});">Abrir demo</a>'
           ));
           if (demoWindow && !demoWindow.closed) {
             demoWindow.location.href = url;

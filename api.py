@@ -197,15 +197,16 @@ def _strip_base_from_extras(items: Any) -> List[str]:
     return out
 
 
-def _resolve_widget_starters(config: Dict[str, Any]) -> List[str]:
+def _resolve_widget_starters(config: Dict[str, Any], *, booking_enabled: Optional[bool] = None) -> List[str]:
     """Fuse BASE_STARTERS with cliente's manual extras.
 
     Returns base first (filtered by booking_enabled), then dedup-extras.
     Cap MAX_TOTAL_STARTERS. Single source of truth for what widget renders
     and what the IA expects in its system prompt.
     """
-    booking_cfg = config.get("booking") if isinstance(config, dict) else None
-    booking_enabled = bool(booking_cfg.get("enabled")) if isinstance(booking_cfg, dict) else False
+    if booking_enabled is None:
+        booking_cfg = config.get("booking") if isinstance(config, dict) else None
+        booking_enabled = bool(booking_cfg.get("enabled")) if isinstance(booking_cfg, dict) else False
 
     base = [b["text"] for b in BASE_STARTERS if booking_enabled or not b["needs_booking"]]
     extras = _strip_base_from_extras(config.get("starter_questions"))
@@ -252,7 +253,7 @@ STRIPE_PRICE_PRO_ANNUAL = os.getenv("STRIPE_PRICE_PRO_ANNUAL", "").strip()
 STRIPE_PRICE_BUSINESS_ANNUAL = os.getenv("STRIPE_PRICE_BUSINESS_ANNUAL", "").strip()
 
 # Plan definitions for self-serve.
-# Features: chat=always, booking=pro+, whatsapp=business, livechat=pro+, custom_branding=starter+.
+# Features: chat=always, booking=free+, whatsapp=business, livechat=pro+, custom_branding=starter+.
 SELF_SERVE_PLANS: Dict[str, Dict[str, Any]] = {
     "free": {
         "slug": "free",
@@ -260,7 +261,7 @@ SELF_SERVE_PLANS: Dict[str, Dict[str, Any]] = {
         "price_monthly_eur": 0,
         "price_annual_eur": 0,
         "messages_quota": int(os.getenv("PLAN_FREE_QUOTA", "50")),
-        "features": ["chat"],
+        "features": ["chat", "booking"],
         "stripe_price_monthly": "",
         "stripe_price_annual": "",
     },
@@ -270,7 +271,7 @@ SELF_SERVE_PLANS: Dict[str, Dict[str, Any]] = {
         "price_monthly_eur": int(os.getenv("PLAN_STARTER_PRICE_EUR", "19")),
         "price_annual_eur": int(os.getenv("PLAN_STARTER_PRICE_ANNUAL_EUR", "190")),
         "messages_quota": int(os.getenv("PLAN_STARTER_QUOTA", "1000")),
-        "features": ["chat", "uploads", "branding", "leads_export"],
+        "features": ["chat", "uploads", "branding", "leads_export", "booking"],
         "stripe_price_monthly": STRIPE_PRICE_STARTER,
         "stripe_price_annual": STRIPE_PRICE_STARTER_ANNUAL,
     },
@@ -304,7 +305,7 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
     "free": {
         "label": "Free",
         "monthly_conversations": int(os.getenv("PLAN_FREE_QUOTA", "50")),
-        "monthly_bookings": 0,
+        "monthly_bookings": 10,
         "max_professionals": 1,
         "max_users": 1,
         "max_extra_documents": 0,
@@ -2231,1102 +2232,119 @@ async def dynamic_cors_middleware(request: Request, call_next: Any) -> Response:
     return response
 
 
-class MensajeChat(BaseModel):
-    cliente_id: str = Field(min_length=2, max_length=80)
-    mensaje: str = Field(min_length=1, max_length=2000)
-    session_id: Optional[str] = Field(default=None, max_length=128)
-
-
-class DatosCita(BaseModel):
-    cliente_id: str = Field(min_length=2, max_length=80)
-    nombre: str = Field(min_length=2, max_length=80)
-    email: EmailStr
-    telefono: str = Field(default="", max_length=30)
-    servicio: str = Field(default="", max_length=120)
-    employee_id: str = Field(default="", max_length=80)
-    fecha: str = Field(min_length=10, max_length=10)
-    hora: str = Field(min_length=5, max_length=5)
-    notas: str = Field(default="", max_length=500)
-
-
-class RespuestaChat(BaseModel):
-    respuesta: str
-    mostrar_formulario: bool
-    session_id: str
-    intent: str = ""
-    quick_actions: List[Dict[str, str]] = Field(default_factory=list)
-
-
-class WhatsAppWebhookStatus(BaseModel):
-    status: str
-    processed: int = 0
-
-
-class ChatSessionSummary(BaseModel):
-    session_id: str
-    cliente_id: str
-    origin: str = ""
-    started_at: str
-    last_message_at: str
-    message_count: int
-    intents: List[str] = Field(default_factory=list)
-    last_message: str = ""
-
-
-class ChatMessagePublic(BaseModel):
-    message_id: int
-    role: str
-    content: str
-    intent: str = ""
-    created_at: str
-
-
-class ChatSessionDetail(BaseModel):
-    session: ChatSessionSummary
-    messages: List[ChatMessagePublic]
-
-
-class ConfigPublicaCliente(BaseModel):
-    nombre: str
-    icono: str
-    color: str
-    accent_color: str = ""
-    logo_url: str = ""
-    launcher_shape: str = "circle"
-    launcher_size: int = 60
-    bienvenida: str
-    booking_enabled: bool
-    branding_text: str
-    contact_email: str
-    contact_phone: str
-    starter_questions: List[str] = Field(default_factory=list)
-
-
-class SlotDisponibilidad(BaseModel):
-    hora: str
-    disponible: bool
-
-
-class RespuestaDisponibilidad(BaseModel):
-    fecha: str
-    timezone: str
-    employee_id: str = ""
-    slots: List[SlotDisponibilidad]
-
-
-class RespuestaAgendado(BaseModel):
-    ok: bool
-    booking_id: str
-    estado: str
-    mensaje: str
-    employee_id: str = ""
-    employee_name: str = ""
-    provider_name: str = "internal"
-    provider_booking_id: str = ""
-    provider_booking_url: str = ""
-    manage_url: str = ""
-
-
-class BookingDetailPublic(BaseModel):
-    booking_id: str
-    cliente_id: str
-    empresa: str
-    employee_id: str = ""
-    employee_name: str = ""
-    nombre: str
-    email: str
-    telefono: str
-    servicio: str
-    notas: str = ""
-    fecha: str
-    hora: str
-    timezone: str
-    estado: str
-    provider_name: str
-    provider_booking_url: str = ""
-    manage_url: str = ""
-    contact_email: str = ""
-    contact_phone: str = ""
-    available_services: List[Dict[str, str]] = Field(default_factory=list)
-
-
-class BookingActionResponse(BaseModel):
-    ok: bool
-    booking_id: str
-    estado: str
-    mensaje: str
-    employee_id: str = ""
-    employee_name: str = ""
-    manage_url: str = ""
-    provider_booking_url: str = ""
-
-
-class BookingReschedulePayload(BaseModel):
-    employee_id: str = Field(default="", max_length=80)
-    fecha: str = Field(min_length=10, max_length=10)
-    hora: str = Field(min_length=5, max_length=5)
-
-
-class BookingCancelPayload(BaseModel):
-    motivo: str = Field(default="", max_length=500)
-
-
-class BookingUpdatePayload(BaseModel):
-    nombre: str = Field(min_length=2, max_length=80)
-    email: EmailStr
-    telefono: str = Field(default="", max_length=30)
-    servicio: str = Field(default="", max_length=120)
-    employee_id: str = Field(default="", max_length=80)
-    fecha: str = Field(min_length=10, max_length=10)
-    hora: str = Field(min_length=5, max_length=5)
-    notas: str = Field(default="", max_length=500)
-
-
-class AdminBookingResumen(BaseModel):
-    booking_id: str
-    cliente_id: str
-    empresa: str
-    employee_id: str = ""
-    employee_name: str = ""
-    nombre: str
-    email: str
-    telefono: str
-    servicio: str
-    fecha: str
-    hora: str
-    timezone: str
-    estado: str
-    provider_name: str
-    provider_status: str
-    provider_booking_id: str = ""
-    provider_booking_url: str = ""
-    manage_url: str = ""
-    created_at: str
-    confirmed_at: str = ""
-    cancelled_at: str = ""
-    rescheduled_at: str = ""
-    confirmation_email_sent_at: str = ""
-    reminder_24h_sent_at: str = ""
-    reminder_2h_sent_at: str = ""
-    customer_email_status: str = ""
-
-
-class AdminReminderRunResult(BaseModel):
-    processed: int
-    sent_24h: int
-    sent_2h: int
-    failed: int
-
-
-class AuthLoginPayload(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=200)
-
-
-class AuthUserPublic(BaseModel):
-    user_id: str
-    email: str
-    display_name: str
-    role: str
-    cliente_id: str = ""
-    plan: str = PLAN_DEFAULT
-    plan_label: str = "Free"
-    last_login_at: str = ""
-    as_admin_session: bool = False
-    impersonator_email: str = ""
-
-
-class AuthLoginResponse(BaseModel):
-    ok: bool
-    user: AuthUserPublic
-    redirect_to: str
-
-
-class AuthSimpleResponse(BaseModel):
-    ok: bool
-    message: str
-    retry_after_seconds: int = 0
-
-
-# --- Vantelia 2.0 self-serve signup + wizard onboarding (Sem 2) ---
-
-class AuthSignupPayload(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=200)
-    display_name: str = Field(min_length=1, max_length=120)
-    marketing_optin: bool = False
-    claim: Optional[str] = Field(default=None, max_length=120)
-
-
-class AuthSignupResponse(BaseModel):
-    ok: bool
-    user: AuthUserPublic
-    redirect_to: str
-
-
-class OnboardingStartPayload(BaseModel):
-    nombre: str = Field(min_length=1, max_length=120, description="Nombre del bot")
-
-
-class OnboardingStartResponse(BaseModel):
-    cliente_id: str
-    nombre: str
-    step: str = "learn"
-
-
-class OnboardingLearnPayload(BaseModel):
-    website_url: Optional[str] = Field(default=None, max_length=400)
-    just_this_page: bool = False
-    tono: str = "Profesional y cercano"
-    idioma: str = "Espanol"
-    max_paginas: int = Field(default=12, ge=1, le=30)
-
-
-class OnboardingLearnResponse(BaseModel):
-    ok: bool
-    cliente_id: str
-    detected_business_name: str = ""
-    info_excerpt: str = ""
-    suggested_welcome: str = ""
-    suggested_prompt_extra: str = ""
-    suggested_starters: List[str] = Field(default_factory=list)
-    pages_indexed: int = 0
-
-
-class OnboardingPersonalityPayload(BaseModel):
-    bienvenida: str = Field(min_length=1, max_length=600)
-    prompt_extra: str = Field(default="", max_length=4000)
-    starter_questions: List[str] = Field(default_factory=list, max_length=8)
-
-
-class OnboardingPersonalityResponse(BaseModel):
-    ok: bool
-    cliente_id: str
-    bienvenida: str
-    prompt_extra: str
-    starter_questions: List[str]
-
-
-class OnboardingFinalizeResponse(BaseModel):
-    ok: bool
-    cliente_id: str
-    install_snippet: str
-    widget_script_url: str
-    demo_url: str
-    share_link: str
-    dashboard_url: str
-
-
-class OnboardingStateResponse(BaseModel):
-    cliente_id: str = ""
-    nombre: str = ""
-    website_url: str = ""
-    step: str = "name"
-    bienvenida: str = ""
-    prompt_extra: str = ""
-    starter_questions: List[str] = Field(default_factory=list)
-    has_kb: bool = False
-
-
-# --- Vantelia 2.0 dashboard nuevo (Sem 3) ---
-
-class AppOverviewSubscription(BaseModel):
-    plan: str = "free"
-    status: str = "active"
-    messages_quota: int = 50
-    messages_used: int = 0
-    cancel_at_period_end: bool = False
-    current_period_end: str = ""
-
-
-class AppOverviewStats(BaseModel):
-    users_today: int = 0
-    messages_today: int = 0
-    messages_period: int = 0
-    leads_generated: int = 0
-    training_chars: int = 0
-    chat_sessions_total: int = 0
-    countries: List[Dict[str, Any]] = Field(default_factory=list)
-
-
-class AppOverviewResponse(BaseModel):
-    cliente_id: str
-    nombre: str
-    color: str = "#00b1d9"
-    icono: str = "AI"
-    bienvenida: str = ""
-    subscription: AppOverviewSubscription
-    stats: AppOverviewStats
-
-
-class AppDeployResponse(BaseModel):
-    cliente_id: str
-    install_snippet: str
-    widget_script_url: str
-    api_base_url: str
-    demo_url: str
-    share_link: str
-    qr_data_url: str = ""
-
-
-class AppAppearancePayload(BaseModel):
-    nombre: Optional[str] = Field(default=None, max_length=120)
-    color: Optional[str] = Field(default=None, max_length=7)
-    accent_color: Optional[str] = Field(default=None, max_length=7)
-    icono: Optional[str] = Field(default=None, max_length=12)
-    logo_url: Optional[str] = Field(default=None, max_length=2000000)
-    launcher_shape: Optional[str] = Field(default=None, max_length=16)
-    launcher_size: Optional[int] = Field(default=None, ge=48, le=320)
-    bienvenida: Optional[str] = Field(default=None, max_length=600)
-    prompt_extra: Optional[str] = Field(default=None, max_length=4000)
-    starter_questions: Optional[List[str]] = None
-    allowed_origins: Optional[List[str]] = None
-    booking_enabled: Optional[bool] = None
-
-
-class AppAppearanceResponse(BaseModel):
-    ok: bool
-    cliente_id: str
-    nombre: str
-    color: str
-    accent_color: str = ""
-    icono: str
-    logo_url: str = ""
-    launcher_shape: str = "circle"
-    launcher_size: int = 60
-    bienvenida: str
-    prompt_extra: str
-    starter_questions: List[str] = Field(default_factory=list)
-    allowed_origins: List[str] = Field(default_factory=list)
-    booking_enabled: bool = True
-
-
-# --- Vantelia 2.0 dashboard - Sem 4 (Leads, Q&A, Knowledge, Tune AI, Live Chat) ---
-
-class AppLeadPublic(BaseModel):
-    id: str
-    name: str = ""
-    email: str = ""
-    phone: str = ""
-    message: str = ""
-    source: str = "chat"
-    session_id: str = ""
-    created_at: str
-
-
-class AppLeadPayload(BaseModel):
-    name: str = Field(default="", max_length=200)
-    email: str = Field(default="", max_length=200)
-    phone: str = Field(default="", max_length=80)
-    message: str = Field(default="", max_length=4000)
-    source: str = Field(default="manual", max_length=40)
-    session_id: str = Field(default="", max_length=200)
-
-
-class AppLeadsListResponse(BaseModel):
-    items: List[AppLeadPublic]
-    total: int
-    page: int
-    page_size: int
-
-
-class AppQAItem(BaseModel):
-    id: str
-    question: str
-    answer: str
-    tags: List[str] = Field(default_factory=list)
-    created_at: str
-    updated_at: str
-
-
-class AppQAPayload(BaseModel):
-    question: str = Field(min_length=2, max_length=400)
-    answer: str = Field(min_length=2, max_length=4000)
-    tags: List[str] = Field(default_factory=list, max_length=10)
-
-
-class AppQAUpdatePayload(BaseModel):
-    question: Optional[str] = Field(default=None, max_length=400)
-    answer: Optional[str] = Field(default=None, max_length=4000)
-    tags: Optional[List[str]] = Field(default=None, max_length=10)
-
-
-class AppQAListResponse(BaseModel):
-    items: List[AppQAItem]
-    total: int
-
-
-class AppKnowledgeItem(BaseModel):
-    id: str
-    source: str
-    filename: str = ""
-    source_url: str = ""
-    size_bytes: int = 0
-    indexed_at: str = ""
-    uploaded_at: str
-    qa_created: int = 0
-
-
-class AppKnowledgeListResponse(BaseModel):
-    items: List[AppKnowledgeItem]
-    info_chars: int = 0
-    info_excerpt: str = ""
-    info_full: str = ""
-
-
-class AppKnowledgeTextPayload(BaseModel):
-    title: str = Field(default="", max_length=200)
-    content: str = Field(min_length=2, max_length=20000)
-
-
-class AppKnowledgeUrlPayload(BaseModel):
-    url: str = Field(min_length=4, max_length=400)
-    just_this_page: bool = False
-    replace: bool = False  # if true, replace info.txt; if false, append
-
-
-class AppKnowledgeReindexResponse(BaseModel):
-    ok: bool
-    cliente_id: str
-    info_chars: int
-
-
-class AppTunePayload(BaseModel):
-    prompt_extra: Optional[str] = Field(default=None, max_length=8000)
-    chat_model: Optional[str] = Field(default=None, max_length=80)
-    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
-
-
-class AppTuneResponse(BaseModel):
-    cliente_id: str
-    prompt_extra: str
-    chat_model: str
-    temperature: float
-    available_models: List[str] = Field(default_factory=list)
-
-
-class AppServiceProduct(BaseModel):
-    id: str = ""
-    nombre: str = Field(min_length=1, max_length=160)
-    descripcion: str = Field(default="", max_length=800)
-
-
-class AppServicesResponse(BaseModel):
-    cliente_id: str
-    items: List[AppServiceProduct] = Field(default_factory=list)
-    info_chars: int = 0
-
-
-class AppServicesPayload(BaseModel):
-    items: List[AppServiceProduct] = Field(default_factory=list, max_length=80)
-
-
-class AppWhatsAppPayload(BaseModel):
-    enabled: Optional[bool] = None
-    phone_number_id: Optional[str] = Field(default=None, max_length=120)
-    access_token_env: Optional[str] = Field(default=None, max_length=120)
-    verify_token_env: Optional[str] = Field(default=None, max_length=120)
-
-
-class AppWhatsAppResponse(BaseModel):
-    ok: bool = True
-    cliente_id: str
-    enabled: bool = False
-    phone_number_id: str = ""
-    access_token_env: str = ""
-    verify_token_env: str = ""
-    webhook_url: str = ""
-    verify_token: str = ""
-    plan_allows_whatsapp: bool = False
-    access_token_configured: bool = False
-    verify_token_configured: bool = False
-    status: str = "disabled"
-    status_label: str = "Desactivado"
-
-
-class AppLiveChatSession(BaseModel):
-    id: str
-    chat_session_id: str
-    status: str
-    started_at: str
-    claimed_at: str = ""
-    agent_user_id: str = ""
-
-
-# --- Vantelia 2.0 billing (Sem 5) ---
-
-class BillingPlanTier(BaseModel):
-    slug: str
-    label: str
-    price_monthly_eur: int
-    price_annual_eur: int
-    messages_quota: int
-    features: List[str]
-    has_monthly_price_id: bool = False
-    has_annual_price_id: bool = False
-    is_current: bool = False
-
-
-class BillingSubscriptionPublic(BaseModel):
-    plan: str
-    status: str
-    messages_quota: int
-    messages_used: int
-    messages_remaining: int
-    cancel_at_period_end: bool
-    current_period_start: str = ""
-    current_period_end: str = ""
-    stripe_customer_id: str = ""
-
-
-class BillingStateResponse(BaseModel):
-    subscription: BillingSubscriptionPublic
-    plans: List[BillingPlanTier]
-    portal_available: bool = False
-
-
-class BillingCheckoutPayload(BaseModel):
-    plan: str = Field(min_length=2, max_length=40)
-    billing_period: str = Field(default="monthly", pattern=r"^(monthly|annual)$")
-    coupon: Optional[str] = Field(default=None, max_length=80)
-
-
-class BillingCheckoutResponse(BaseModel):
-    ok: bool
-    checkout_url: str
-
-
-class AppTrackEventPayload(BaseModel):
-    event: str = Field(min_length=2, max_length=80, pattern=r"^[a-zA-Z0-9_.:-]+$")
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-
-
-class BillingPortalResponse(BaseModel):
-    ok: bool
-    portal_url: str
-
-
-class ConsultaLeadPayload(BaseModel):
-    nombre: str = Field(min_length=1, max_length=120)
-    email: EmailStr
-    telefono: Optional[str] = Field(default=None, max_length=40)
-    empresa: Optional[str] = Field(default=None, max_length=120)
-    servicio: Optional[str] = Field(default=None, max_length=80)
-    mensaje: Optional[str] = Field(default=None, max_length=2000)
-
-
-_DEMO_SECTOR_DEFAULTS: dict[str, tuple[str, str]] = {
-    "Clínica / Salud": (
-        "Centro médico especializado en atención a pacientes.",
-        "Primera consulta\nRevisión general\nTratamientos especializados",
-    ),
-    "Restaurante / Hostelería": (
-        "Restaurante con cocina de calidad y atención personalizada.",
-        "Menú del día\nCarta a la carta\nReservas de grupo",
-    ),
-    "Inmobiliaria": (
-        "Agencia inmobiliaria con amplia cartera de pisos y locales.",
-        "Compra de vivienda\nAlquiler\nAsesoramiento hipotecario",
-    ),
-    "Servicios profesionales": (
-        "Empresa de servicios profesionales con equipo experto.",
-        "Consulta inicial\nAsesoramiento\nGestión de proyectos",
-    ),
-    "Belleza y estética": (
-        "Centro de belleza y estética con tratamientos personalizados.",
-        "Corte y peinado\nTratamientos faciales\nManicura y pedicura",
-    ),
-    "Talleres y reparación": (
-        "Taller especializado en reparación y mantenimiento.",
-        "Diagnóstico\nReparación\nMantenimiento preventivo",
-    ),
-    "Educación / Academias": (
-        "Academia con cursos presenciales y online.",
-        "Clases particulares\nCursos grupales\nPreparación de exámenes",
-    ),
-    "Comercio / Retail": (
-        "Comercio con amplia selección de productos.",
-        "Productos disponibles\nEnvíos y devoluciones\nAtención al cliente",
-    ),
-    "Tecnología / SaaS": (
-        "Empresa de tecnología con soluciones digitales.",
-        "Demo del producto\nPlanes y precios\nSoporte técnico",
-    ),
-}
-
-
-class DemoGeneratePayload(BaseModel):
-    nombre_empresa: str = Field(min_length=1, max_length=120)
-    sector: str = Field(min_length=1, max_length=60)
-    email: EmailStr
-    descripcion: Optional[str] = Field(default=None, max_length=1500)
-    servicios: Optional[str] = Field(default=None, max_length=1500)
-    horario: Optional[str] = Field(default=None, max_length=200)
-    color: Optional[str] = Field(default=None, max_length=20)
-    website_url: Optional[str] = Field(default=None, max_length=300)
-
-
-class DemoGenerateResponse(BaseModel):
-    ok: bool = True
-    cliente_id: str
-    demo_url: str
-    expires_at: str
-    expires_in_seconds: int
-
-
-class SubscriptionUsage(BaseModel):
-    conversations: int = 0
-    conversations_limit: Optional[int] = None
-    bookings: int = 0
-    bookings_limit: Optional[int] = None
-    period_start: str = ""
-    period_end: str = ""
-
-
-class SubscriptionFeatures(BaseModel):
-    branding_customization: bool = False
-    whatsapp_enabled: bool = False
-    csv_export: bool = False
-    multi_branch: bool = False
-    crm_integration: bool = False
-    show_powered_by: bool = True
-    max_professionals: Optional[int] = 1
-    max_users: Optional[int] = 1
-    max_extra_documents: Optional[int] = 0
-
-
-class SubscriptionPublic(BaseModel):
-    plan: str
-    plan_label: str
-    effective_plan: str = ""
-    effective_plan_label: str = ""
-    admin_override: bool = False
-    status: str
-    price_eur: int
-    lifetime: bool = False
-    renews_at: str = ""
-    started_at: str = ""
-    canceled_at: str = ""
-    stripe_customer_id: str = ""
-    stripe_subscription_id: str = ""
-    features: SubscriptionFeatures
-    usage: SubscriptionUsage
-    available_plans: List[Dict[str, Any]] = Field(default_factory=list)
-
-
-class SubscriptionCheckoutPayload(BaseModel):
-    plan: str = Field(min_length=1, max_length=20)
-    billing_period: str = Field(default="monthly", max_length=20)
-    success_url: Optional[str] = Field(default=None, max_length=500)
-    cancel_url: Optional[str] = Field(default=None, max_length=500)
-
-
-class SubscriptionCheckoutResponse(BaseModel):
-    url: str
-    session_id: str = ""
-
-
-class PublicCheckoutStatusResponse(BaseModel):
-    status: str
-    message: str = ""
-    cliente_id: str = ""
-    portal_enter_url: str = ""
-
-
-class SubscriptionPortalResponse(BaseModel):
-    url: str
-
-
-class AuthManagedUser(BaseModel):
-    user_id: str
-    email: str
-    display_name: str
-    role: str
-    cliente_id: str = ""
-    is_active: bool
-    created_at: str
-    last_login_at: str = ""
-
-
-class AuthManagedUsersResponse(BaseModel):
-    items: List[AuthManagedUser]
-    total: int
-
-
-class AuthPasswordChangePayload(BaseModel):
-    current_password: str = Field(min_length=8, max_length=200)
-    new_password: str = Field(min_length=8, max_length=200)
-
-
-class AuthPasswordForgotPayload(BaseModel):
-    email: EmailStr
-
-
-class AuthPasswordResetPayload(BaseModel):
-    token: str = Field(min_length=20, max_length=255)
-    new_password: str = Field(min_length=8, max_length=200)
-
-
-class AuthProfileUpdatePayload(BaseModel):
-    display_name: str = Field(min_length=2, max_length=120)
-    email: EmailStr
-
-
-class PortalAiConfigPayload(BaseModel):
-    icono: str = Field(default="AI", max_length=12)
-    bienvenida: str = Field(min_length=5, max_length=400)
-    prompt_extra: str = Field(default="", max_length=2000)
-    nombre: Optional[str] = Field(default=None, max_length=120)
-    color: Optional[str] = Field(default=None, max_length=7)
-    accent_color: Optional[str] = Field(default=None, max_length=7)
-    branding_text: Optional[str] = Field(default=None, max_length=120)
-    logo_url: Optional[str] = Field(default=None, max_length=2000000)
-
-
-class PortalAiConfigPublic(BaseModel):
-    nombre: str
-    icono: str
-    color: str
-    accent_color: str = ""
-    logo_url: str = ""
-    bienvenida: str
-    prompt_extra: str
-    branding_text: str = "Powered by Vantelia"
-
-
-class PortalBrainPayload(BaseModel):
-    info_txt: str = Field(default="", max_length=120000)
-
-
-class PortalBrainPublic(BaseModel):
-    info_txt: str
-    reindexed: bool = False
-    reindex_error: str = ""
-
-
-class PortalScheduleUpdatePayload(BaseModel):
-    enabled: bool = True
-    timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
-    slot_minutes: int = Field(default=30, ge=5, le=240)
-    day_start: str = Field(default="09:00", min_length=5, max_length=5)
-    day_end: str = Field(default="18:00", min_length=5, max_length=5)
-    closed_weekdays: List[int] = Field(default_factory=list)
-    message_templates: Optional[Dict[str, str]] = None
-    message_template_enabled: Optional[Dict[str, bool]] = None
-
-
-class PortalAgendaBlockPayload(BaseModel):
-    fecha: str = Field(min_length=10, max_length=10)
-    fecha_fin: str = Field(default="", max_length=10)
-    hora_inicio: str = Field(min_length=5, max_length=5)
-    hora_fin: str = Field(min_length=5, max_length=5)
-    motivo: str = Field(default="", max_length=160)
-
-
-class PortalAgendaBlock(BaseModel):
-    block_id: str
-    employee_id: str = ""
-    fecha: str
-    hora_inicio: str
-    hora_fin: str
-    motivo: str = ""
-    created_at: str = ""
-
-
-class PortalSchedulePublic(BaseModel):
-    enabled: bool
-    timezone: str
-    slot_minutes: int
-    day_start: str
-    day_end: str
-    closed_weekdays: List[int]
-    message_templates: Dict[str, str]
-    message_template_enabled: Dict[str, bool]
-    blocks: List[PortalAgendaBlock]
-
-
-class PortalAgendaBlockCreateResponse(BaseModel):
-    items: List[PortalAgendaBlock]
-    created_count: int
-    skipped_count: int
-    date_from: str
-    date_to: str
-
-
-class PortalBookingSummary(BaseModel):
-    booking_id: str
-    empresa: str
-    employee_id: str = ""
-    employee_name: str = ""
-    nombre: str
-    email: str
-    telefono: str = ""
-    servicio: str
-    fecha: str
-    hora: str
-    timezone: str
-    estado: str
-    provider_name: str
-    provider_booking_url: str = ""
-    manage_url: str = ""
-    contact_email: str = ""
-    contact_phone: str = ""
-    start_at: str = ""
-    can_cancel: bool = True
-    can_reschedule: bool = True
-
-
-class PortalBookingsResponse(BaseModel):
-    items: List[PortalBookingSummary]
-    total: int
-    limit: int
-    offset: int
-    scope: str
-
-
-class PortalEmployeePayload(BaseModel):
-    name: str = Field(min_length=2, max_length=120)
-    role_label: str = Field(default="", max_length=80)
-    color: str = Field(default="#00b1d9", min_length=7, max_length=7)
-    is_active: bool = True
-    timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
-    slot_minutes: int = Field(default=30, ge=5, le=240)
-    day_start: str = Field(default="09:00", min_length=5, max_length=5)
-    day_end: str = Field(default="18:00", min_length=5, max_length=5)
-    closed_weekdays: List[int] = Field(default_factory=list)
-    service_ids: List[str] = Field(default_factory=list)
-
-
-class PortalEmployeePublic(BaseModel):
-    employee_id: str
-    cliente_id: str
-    name: str
-    role_label: str = ""
-    color: str = "#00b1d9"
-    is_active: bool = True
-    is_default: bool = False
-    timezone: str = DEFAULT_TIMEZONE
-    slot_minutes: int = 30
-    day_start: str = "09:00"
-    day_end: str = "18:00"
-    closed_weekdays: List[int] = Field(default_factory=list)
-    service_ids: List[str] = Field(default_factory=list)
-    allows_all_services: bool = True
-    bookings_today: int = 0
-    bookings_upcoming: int = 0
-    blocks: List[PortalAgendaBlock] = Field(default_factory=list)
-
-
-class PortalEmployeesResponse(BaseModel):
-    items: List[PortalEmployeePublic]
-
-
-class PortalDashboardResponse(BaseModel):
-    user: AuthUserPublic
-    stats: Dict[str, Any]
-    bookings_upcoming: List[PortalBookingSummary]
-    bookings_today: List[PortalBookingSummary] = Field(default_factory=list)
-    today_blocks: List[PortalAgendaBlock] = Field(default_factory=list)
-    install_snippet: str = ""
-    widget_script_url: str = ""
-    api_base_url: str = ""
-    demo_url: str = ""
-
-
-class PortalMessagePreviewPayload(BaseModel):
-    kind: str = Field(default="", max_length=40)
-    schedule: Optional[PortalScheduleUpdatePayload] = None
-    target_email: Optional[EmailStr] = None
-    template_key: str = Field(default="", max_length=40)
-    content: str = Field(default="", max_length=500)
-    test_email: Optional[EmailStr] = None
-
-
-class PortalMessagePreviewResponse(BaseModel):
-    kind: str
-    subject: str
-    text_body: str
-    html_body: str
-    target_email: str = ""
-    enabled: bool
-
-
-class BookingAuditEntry(BaseModel):
-    audit_id: int
-    booking_id: str
-    event_type: str
-    title: str
-    detail: str = ""
-    created_at: str
-    source: str = ""
-    actor: str = ""
-
-
-class BookingAuditResponse(BaseModel):
-    items: List[BookingAuditEntry]
-
-
-class PortalCreateUserPayload(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=200)
-    display_name: str = Field(min_length=2, max_length=120)
-    cliente_id: str = Field(default="", max_length=80)
-    role: str = Field(default="client", max_length=20)
-
-
-class AdminClientePayload(BaseModel):
-    nombre: str = Field(min_length=2, max_length=120)
-    icono: str = Field(default="AI", max_length=12)
-    color: str = Field(default="#00b1d9", min_length=7, max_length=7)
-    accent_color: Optional[str] = Field(default=None, max_length=7)
-    logo_url: Optional[str] = Field(default=None, max_length=2000000)
-    bienvenida: str = Field(min_length=5, max_length=400)
-    prompt_extra: str = Field(default="", max_length=2000)
-    allowed_origins: List[str] = Field(default_factory=list)
-    contacto_email: str = Field(default="", max_length=120)
-    contacto_telefono: str = Field(default="", max_length=40)
-    branding_text: str = Field(default="Powered by Vantelia", max_length=120)
-    whatsapp_enabled: bool = False
-    whatsapp_phone_number_id: str = Field(default="", max_length=120)
-    whatsapp_access_token_env: str = Field(default="", max_length=120)
-    whatsapp_verify_token_env: str = Field(default="", max_length=120)
-    booking_enabled: bool = True
-    booking_timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
-    booking_slot_minutes: int = Field(default=30, ge=5, le=240)
-    booking_day_start: str = Field(default="09:00", min_length=5, max_length=5)
-    booking_day_end: str = Field(default="18:00", min_length=5, max_length=5)
-    booking_closed_weekdays: List[int] = Field(default_factory=lambda: [6])
-    booking_provider: str = Field(default="internal", max_length=40)
-    booking_webhook_env: str = Field(default="", max_length=80)
-    booking_webhook_url: str = Field(default="", max_length=400)
-    booking_calendly_user_env: str = Field(default="", max_length=80)
-    booking_calendly_event_type_env: str = Field(default="", max_length=80)
-    booking_calendly_location_kind: str = Field(default="", max_length=60)
-    booking_calendly_location_value: str = Field(default="", max_length=200)
-    booking_google_calendar_id: str = Field(default="", max_length=200)
-    booking_google_calendar_id_env: str = Field(default="", max_length=80)
-    booking_google_service_account_path: str = Field(default="", max_length=400)
-    booking_google_service_account_env: str = Field(default="", max_length=80)
-    booking_google_service_account_json: str = Field(default="", max_length=20000)
-    booking_success_message: str = Field(
-        default="Tu solicitud de cita ha quedado registrada correctamente.",
-        max_length=400,
-    )
-    info_txt: str = Field(default="", max_length=120000)
-    reindex_after_save: bool = True
-
-
-class AdminClienteResumen(BaseModel):
-    cliente_id: str
-    nombre: str
-    owner_user_id: str = ""
-    owner_email: str = ""
-    owner_display_name: str = ""
-    owner_last_login_at: str = ""
-    owner_created_at: str = ""
-    cliente_created_at: str = ""
-    plan: str = ""
-    messages_used: int = 0
-    messages_quota: int = 0
-    booking_enabled: bool = False
-    booking_provider: str = "internal"
-    booking_timezone: str = DEFAULT_TIMEZONE
-    booking_day_start: str = "09:00"
-    booking_day_end: str = "18:00"
-    allowed_origins: List[str]
-    contacto_email: str = ""
-    contacto_telefono: str = ""
-    branding_text: str = ""
-    whatsapp_enabled: bool = False
-    whatsapp_phone_number_id: str = ""
-    has_info_file: bool
-    info_file_size: int = 0
-    bookings_total: int = 0
-    bookings_pending: int = 0
-    is_demo: bool = False
-    demo_expires_at: str = ""
-    demo_expires_in_seconds: int = 0
-    subscription_plan: str = ""
-    subscription_status: str = ""
-    stripe_subscription_id: str = ""
-
-
-class AdminClienteDetalle(BaseModel):
-    cliente_id: str
-    config: AdminClientePayload
-    install_snippet: str
-    widget_script_url: str
-    api_base_url: str
-    demo_url: str
-
-
-class AdminClienteSaveResult(BaseModel):
-    status: str
-    cliente_id: str
-    reindexed: bool
-    reindex_error: str
-    install_snippet: str
-    widget_script_url: str
-    api_base_url: str
-    demo_url: str
-
-
-class AdminClienteAuditEntry(BaseModel):
-    admin_email: str
-    started_at: str
-    ended_at: str = ""
-    ip: str = ""
-    user_agent: str = ""
-    duration_seconds: Optional[int] = None
-
-
-class AdminClienteAuditResponse(BaseModel):
-    cliente_id: str
-    items: List[AdminClienteAuditEntry]
-
-
-class AdminImpersonateResponse(BaseModel):
-    ok: bool
-    cliente_id: str
-    target_user_id: str
-    target_email: str
-    expires_in_minutes: int
-    redirect_url: str
-
-
-class AdminImpersonateEndResponse(BaseModel):
-    ok: bool
-    admin_redirect_url: str = "/dashboard"
-
-
-class AdminAltaExpressPayload(BaseModel):
-    website_url: str = Field(min_length=4, max_length=400)
-    cliente_id: str = Field(min_length=2, max_length=80)
-    nombre_bot: str = Field(default="Clara", min_length=2, max_length=40)
-    tono: str = Field(default="Profesional y cercano", min_length=4, max_length=80)
-    idioma: str = Field(default="Español", min_length=4, max_length=40)
-    max_paginas: int = Field(default=12, ge=1, le=30)
-    color: str = Field(default="#00b1d9", min_length=7, max_length=7)
-    booking_enabled: bool = True
-    booking_timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
-    auto_save: bool = True
-    reindex_after_save: bool = True
-
-
-class AdminAltaExpressResponse(BaseModel):
-    cliente_id: str
-    detected_business_name: str
-    normalized_url: str
-    links_found: int
-    config: AdminClientePayload
-    saved: bool
-    reindexed: bool
-    reindex_error: str
-    install_snippet: str
-    widget_script_url: str
-    api_base_url: str
-    demo_url: str
-
+from api_models import (
+    MensajeChat,
+    DatosCita,
+    RespuestaChat,
+    WhatsAppWebhookStatus,
+    ChatSessionSummary,
+    ChatMessagePublic,
+    ChatSessionDetail,
+    ConfigPublicaCliente,
+    SlotDisponibilidad,
+    RespuestaDisponibilidad,
+    RespuestaAgendado,
+    BookingDetailPublic,
+    BookingActionResponse,
+    BookingReschedulePayload,
+    BookingCancelPayload,
+    BookingUpdatePayload,
+    AdminBookingResumen,
+    AdminReminderRunResult,
+    AuthLoginPayload,
+    AuthUserPublic,
+    AuthLoginResponse,
+    AuthSimpleResponse,
+    AuthSignupPayload,
+    AuthSignupResponse,
+    OnboardingStartPayload,
+    OnboardingStartResponse,
+    OnboardingLearnPayload,
+    OnboardingLearnResponse,
+    OnboardingPersonalityPayload,
+    OnboardingPersonalityResponse,
+    OnboardingFinalizeResponse,
+    OnboardingStateResponse,
+    AppOverviewSubscription,
+    AppOverviewStats,
+    AppOverviewResponse,
+    AppDeployResponse,
+    AppAppearancePayload,
+    AppAppearanceResponse,
+    AppLeadPublic,
+    AppLeadPayload,
+    AppLeadsListResponse,
+    AppQAItem,
+    AppQAPayload,
+    AppQAUpdatePayload,
+    AppQAListResponse,
+    AppKnowledgeItem,
+    AppKnowledgeListResponse,
+    AppKnowledgeTextPayload,
+    AppKnowledgeUrlPayload,
+    AppKnowledgeReindexResponse,
+    AppTunePayload,
+    AppTuneResponse,
+    AppServiceProduct,
+    AppServicesResponse,
+    AppServicesPayload,
+    AppWhatsAppPayload,
+    AppWhatsAppResponse,
+    AppLiveChatSession,
+    BillingPlanTier,
+    BillingSubscriptionPublic,
+    BillingStateResponse,
+    BillingCheckoutPayload,
+    BillingCheckoutResponse,
+    AppTrackEventPayload,
+    BillingPortalResponse,
+    ConsultaLeadPayload,
+    DemoGeneratePayload,
+    DemoGenerateResponse,
+    SubscriptionUsage,
+    SubscriptionFeatures,
+    SubscriptionPublic,
+    SubscriptionCheckoutPayload,
+    SubscriptionCheckoutResponse,
+    PublicCheckoutStatusResponse,
+    SubscriptionPortalResponse,
+    AuthManagedUser,
+    AuthManagedUsersResponse,
+    AuthPasswordChangePayload,
+    AuthPasswordForgotPayload,
+    AuthPasswordResetPayload,
+    AuthProfileUpdatePayload,
+    PortalAiConfigPayload,
+    PortalAiConfigPublic,
+    PortalBrainPayload,
+    PortalBrainPublic,
+    PortalScheduleUpdatePayload,
+    PortalAgendaBlockPayload,
+    PortalAgendaBlock,
+    PortalSchedulePublic,
+    PortalAgendaBlockCreateResponse,
+    PortalBookingSummary,
+    PortalBookingsResponse,
+    PortalEmployeePayload,
+    PortalEmployeePublic,
+    PortalEmployeesResponse,
+    PortalDashboardResponse,
+    PortalMessagePreviewPayload,
+    PortalMessagePreviewResponse,
+    BookingAuditEntry,
+    BookingAuditResponse,
+    PortalCreateUserPayload,
+    AdminClientePayload,
+    AdminClienteResumen,
+    AdminClienteDetalle,
+    AdminClienteSaveResult,
+    AdminClienteAuditEntry,
+    AdminClienteAuditResponse,
+    AdminImpersonateResponse,
+    AdminImpersonateEndResponse,
+    AdminAltaExpressPayload,
+    AdminAltaExpressResponse,
+)
 
 def _list_employee_rows(cliente_id: str, *, include_inactive: bool = True) -> List[sqlite3.Row]:
     clauses = ["cliente_id = ?"]
@@ -5203,6 +4221,30 @@ def _plan_feature(cliente_id: str, feature: str) -> Any:
     return _plan_limits(_client_plan(cliente_id)).get(feature)
 
 
+def _client_booking_plan_enabled(cliente_id: str) -> bool:
+    """Whether booking is available in the client's effective plan."""
+    owner = db_get_client_owner(cliente_id)
+    if owner:
+        sub = db_get_subscription_for_user(owner)
+        plan = _normalize_plan_slug(sub["plan"] if sub else PLAN_DEFAULT)
+        return "booking" in (_self_serve_plan(plan).get("features") or [])
+
+    booking_limit = _plan_limits(_client_plan(cliente_id)).get("monthly_bookings")
+    if booking_limit is None:
+        return True
+    try:
+        return int(booking_limit) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _booking_plan_unavailable_error() -> HTTPException:
+    return HTTPException(
+        status_code=403,
+        detail="Las reservas online no estan incluidas en el plan actual. Actualiza a un plan con agenda para activar esta funcion.",
+    )
+
+
 def _require_plan_feature(cliente_id: str, feature: str, error_message: str) -> None:
     if not _plan_feature(cliente_id, feature):
         raise HTTPException(status_code=403, detail=error_message)
@@ -6306,6 +5348,17 @@ def _invalidate_client_runtime(cliente_id: str) -> None:
 DEMO_TENANT_PREFIX = "demo_auto_"
 DEMO_TTL_SECONDS = int(os.getenv("DEMO_TENANT_TTL_SECONDS", "3600"))
 
+# Defaults de descripcion/servicios por sector cuando no hay scraping ni datos.
+# El scraping de la web sobrescribe esto; el fallback generico cubre sectores no listados.
+_DEMO_SECTOR_DEFAULTS: Dict[str, tuple] = {
+    "centro de masajes": ("Centro de masajes y bienestar.", "Masajes terapeuticos, relajantes y descontracturantes. Reserva de sesiones."),
+    "clinica dental": ("Clinica dental.", "Revisiones, limpiezas, ortodoncia, implantes y estetica dental."),
+    "clinica estetica": ("Centro de estetica y belleza.", "Tratamientos faciales, corporales y de belleza."),
+    "fisioterapia": ("Clinica de fisioterapia.", "Fisioterapia, rehabilitacion y recuperacion de lesiones."),
+    "peluqueria": ("Peluqueria y salon de belleza.", "Corte, color, peinado y tratamientos capilares."),
+    "centro veterinario": ("Centro veterinario.", "Consultas, vacunaciones, cirugia y urgencias veterinarias."),
+}
+
 
 def _demo_registry_path() -> Path:
     return DATA_DIR / "demo_tenants.json"
@@ -6408,11 +5461,11 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
         f'<section class="claim-banner">'
         f'  <div class="claim-banner-inner">'
         f'    <div class="claim-text">'
-        f'      <strong>¿Te gusta lo que ves?</strong>'
-        f'      <span>Reclama este asistente, conéctalo a tu web y empieza gratis. Sin tarjeta.</span>'
+        f'      <strong>Tu asistente ya esta listo</strong>'
+        f'      <span>Guardalo en tu cuenta, copia el snippet e instalalo en tu web. Sin tarjeta.</span>'
         f'    </div>'
-        f'    <a class="claim-cta" href="/acceso?mode=signup&amp;claim={cliente_safe}">'
-        f'      Reclamar este bot →'
+        f'    <a class="claim-cta" data-claim-cta="1" href="/acceso?mode=signup&amp;claim={cliente_safe}">'
+        f'      Activar gratis e instalar'
         f'    </a>'
         f'  </div>'
         f'</section>'
@@ -6520,22 +5573,22 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
     }}
 
     .claim-banner {{
-      max-width: 720px;
-      margin: 0 auto 24px;
+      max-width: 880px;
+      margin: 0 auto 28px;
       animation: fadeUp 0.7s ease both;
     }}
     .claim-banner-inner {{
-      background: linear-gradient(135deg, rgba(0,209,255,0.14), rgba(0,245,212,0.10));
-      border: 1px solid rgba(0,245,212,0.35);
+      background: linear-gradient(135deg, rgba(0,245,212,0.17), rgba(0,177,217,0.12));
+      border: 1px solid rgba(0,245,212,0.46);
       border-radius: var(--radius-md);
-      padding: 16px 20px;
+      padding: 18px 20px;
       display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
       justify-content: space-between;
-      box-shadow: 0 12px 32px rgba(0,209,255,0.18);
+      box-shadow: 0 18px 44px rgba(0,209,255,0.2);
     }}
     .claim-text {{ flex: 1 1 320px; min-width: 0; line-height: 1.5; }}
-    .claim-text strong {{ display: block; font-size: 15px; color: var(--ink); }}
-    .claim-text span {{ display: block; color: var(--soft); font-size: 13px; margin-top: 2px; }}
+    .claim-text strong {{ display: block; font-size: 16px; color: var(--ink); }}
+    .claim-text span {{ display: block; color: var(--soft); font-size: 13.5px; margin-top: 2px; }}
     .claim-cta {{
       display: inline-flex; align-items: center; gap: 8px;
       padding: 11px 18px;
@@ -6968,6 +6021,23 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
         return true;
       }}
 
+      function trackDemoEvent(event, payload) {{
+        try {{
+          fetch("/analytics/event", {{
+            method: "POST",
+            headers: {{ "Content-Type": "application/json" }},
+            keepalive: true,
+            body: JSON.stringify(Object.assign({{
+              event: event,
+              event_source: "demo_page",
+              page_path: window.location.pathname,
+              page_url: window.location.href,
+              cliente_id: "{cliente_safe}"
+            }}, payload || {{}}))
+          }}).catch(function () {{}});
+        }} catch (_) {{}}
+      }}
+
       function sendToWidget(message) {{
         whenWidgetReady(function () {{
           openWidget();
@@ -7000,6 +6070,13 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
           openWidget();
           flashWidget();
           hidePointer();
+        }});
+      }});
+
+      document.querySelector("[data-claim-cta]")?.addEventListener("click", function (ev) {{
+        trackDemoEvent("demo_claim_clicked", {{
+          cta_label: "Activar gratis e instalar",
+          cta_href: ev.currentTarget.href
         }});
       }});
 
@@ -7396,7 +6473,8 @@ def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
     branding = config.get("branding", {})
     booking_cfg = config.get("booking", {})
 
-    starter_questions = _resolve_widget_starters(config)
+    booking_enabled = bool(config["booking"]["enabled"]) and _client_booking_plan_enabled(cliente_id)
+    starter_questions = _resolve_widget_starters(config, booking_enabled=booking_enabled)
     if starter_questions:
         starter_lines = "\n".join(f"- {q}" for q in starter_questions)
         starter_block = (
@@ -12695,12 +11773,14 @@ def _build_plan_tiers(current_plan_slug: str) -> List[BillingPlanTier]:
     out: List[BillingPlanTier] = []
     for slug in ["free", "starter", "pro", "business"]:
         plan = SELF_SERVE_PLANS[slug]
+        limits = _plan_limits(slug)
         out.append(BillingPlanTier(
             slug=plan["slug"],
             label=plan["label"],
             price_monthly_eur=int(plan["price_monthly_eur"]),
             price_annual_eur=int(plan["price_annual_eur"]),
             messages_quota=int(plan["messages_quota"]),
+            bookings_quota=limits.get("monthly_bookings"),
             features=list(plan["features"]),
             has_monthly_price_id=bool(plan["stripe_price_monthly"]),
             has_annual_price_id=bool(plan["stripe_price_annual"]),
@@ -12752,6 +11832,9 @@ async def app_billing_checkout(
         customer_kwargs["customer_email"] = user["email"]
     session_kwargs: Dict[str, Any] = {
         "mode": "subscription",
+        # Si el total recurrente queda en 0 (p.ej. cupon 100% forever), Stripe
+        # no pide tarjeta. Para planes de pago normales sigue exigiendola.
+        "payment_method_collection": "if_required",
         "line_items": [{"price": price_id, "quantity": 1}],
         "success_url": f"{api_base}/app?billing=success&plan={plan['slug']}",
         "cancel_url": f"{api_base}/app?billing=cancel",
@@ -13234,6 +12317,7 @@ async def auth_subscription_checkout(
             billing_address_collection="required",
             phone_number_collection={"enabled": True},
             tax_id_collection={"enabled": True},
+            payment_method_collection="if_required",
             allow_promotion_codes=True,
             **customer_kwargs,
         )
@@ -13275,6 +12359,7 @@ async def public_subscription_checkout(
             billing_address_collection="required",
             phone_number_collection={"enabled": True},
             tax_id_collection={"enabled": True},
+            payment_method_collection="if_required",
             allow_promotion_codes=True,
         )
     except Exception as exc:  # noqa: BLE001
@@ -15074,7 +14159,8 @@ async def info_cliente(cliente_id: str, request: Request) -> ConfigPublicaClient
     else:
         launcher_size = max(120, min(280, launcher_size))
 
-    starter_questions = _resolve_widget_starters(config)
+    booking_enabled = bool(config["booking"]["enabled"]) and _client_booking_plan_enabled(cliente_id)
+    starter_questions = _resolve_widget_starters(config, booking_enabled=booking_enabled)
 
     return ConfigPublicaCliente(
         nombre=config["nombre"],
@@ -15085,7 +14171,7 @@ async def info_cliente(cliente_id: str, request: Request) -> ConfigPublicaClient
         launcher_shape=launcher_shape,
         launcher_size=launcher_size,
         bienvenida=config["bienvenida"],
-        booking_enabled=config["booking"]["enabled"],
+        booking_enabled=booking_enabled,
         branding_text=branding.get("powered_by", "Powered by Vantelia"),
         contact_email=contacto.get("email", ""),
         contact_phone=contacto.get("telefono", ""),
@@ -15180,6 +14266,8 @@ async def disponibilidad(
 
     if not config["booking"]["enabled"]:
         raise HTTPException(status_code=404, detail="La reserva online no esta habilitada para este cliente.")
+    if not _client_booking_plan_enabled(cliente_id):
+        raise _booking_plan_unavailable_error()
 
     selected_day = _parse_date(fecha)
     _validate_booking_window(cliente_id, selected_day)
@@ -15230,6 +14318,8 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
 
     if not config["booking"]["enabled"]:
         raise HTTPException(status_code=404, detail="La reserva online no esta habilitada para este cliente.")
+    if not _client_booking_plan_enabled(data.cliente_id):
+        raise _booking_plan_unavailable_error()
 
     # Plan: límite mensual de citas
     _require_active_subscription(data.cliente_id)
@@ -15488,7 +14578,7 @@ async def _process_chat_message(
         intent=commercial_intent,
     )
     client_config = _get_client_config(cliente_id)
-    booking_enabled = bool(client_config["booking"]["enabled"])
+    booking_enabled = bool(client_config["booking"]["enabled"]) and _client_booking_plan_enabled(cliente_id)
     nombre_empresa = client_config.get("nombre", "")
 
     if _message_is_greeting(message) or _message_requests_menu(message):
@@ -17910,6 +17000,9 @@ def outreach_stats():
 
         opens = conn.execute("SELECT COUNT(*) AS c FROM events WHERE type='open'").fetchone()["c"]
         clicks = conn.execute("SELECT COUNT(*) AS c FROM events WHERE type='click'").fetchone()["c"]
+        unique_clicks = conn.execute(
+            "SELECT COUNT(DISTINCT email) AS c FROM events WHERE type='click'"
+        ).fetchone()["c"]
         vantelia_clicks = conn.execute(
             """SELECT COUNT(*) AS c FROM events
                WHERE type='click' AND (
@@ -18007,9 +17100,45 @@ def outreach_stats():
             stage: per_stage.get(stage, 0) for stage in OUTREACH_STAGES
         }
 
+        sample_prospect = OutreachProspect(
+            email="test@clinicadental.es",
+            business_name="Clinica Dental Madrid",
+            niche="clinica dental",
+            city="Madrid",
+            website="https://clinicadental.es",
+        )
+        primary_cta_url = outreach_demo_url_with_utm("cold", sample_prospect)
+        parsed_cta = urlparse(primary_cta_url)
+        parsed_tracking = urlparse(OUTREACH_TRACKING_BASE_URL)
+        cta_path = (parsed_cta.path or "").lower()
+        cta_destination = "demo" if parsed_cta.hostname in {"vantelia.es", "www.vantelia.es"} and cta_path.startswith("/demo") else "signup" if parsed_cta.hostname == "app.vantelia.es" and cta_path.startswith("/acceso") else "other"
+        tracking_active = bool(OUTREACH_AVAILABLE and OUTREACH_TRACKING_SECRET and OUTREACH_TRACKING_BASE_URL and not OUTREACH_TRACKING_DISABLED)
+        primary_cta_tracked = bool(tracking_active and not primary_cta_url.startswith(f"{OUTREACH_TRACKING_BASE_URL}/track/"))
+        health_alerts = []
+        if cta_destination != "demo":
+            health_alerts.append({
+                "level": "danger",
+                "code": "cta_not_demo",
+                "message": "El CTA principal de outreach no apunta a /demo/. Puede estar llevando prospects al registro antes de ver valor.",
+            })
+        if not tracking_active:
+            health_alerts.append({
+                "level": "warning",
+                "code": "tracking_off",
+                "message": "El tracking de aperturas/clicks no esta activo.",
+            })
+        elif not primary_cta_tracked:
+            health_alerts.append({
+                "level": "warning",
+                "code": "cta_untracked",
+                "message": "El CTA principal no se envolveria con tracking de click.",
+            })
+
     open_rate = (unique_opens / sent_distinct * 100) if sent_distinct else 0.0
     reply_intent_rate = (unique_reply_intents / sent_distinct * 100) if sent_distinct else 0.0
     reply_rate = (unique_replies / sent_distinct * 100) if sent_distinct else 0.0
+    click_rate = (unique_clicks / sent_distinct * 100) if sent_distinct else 0.0
+    open_to_click_rate = (unique_clicks / unique_opens * 100) if unique_opens else 0.0
 
     return {
         "totals": {
@@ -18023,6 +17152,7 @@ def outreach_stats():
             "opens_total": opens,
             "opens_unique": unique_opens,
             "clicks_total": clicks,
+            "clicks_unique": unique_clicks,
             "vantelia_clicks_total": vantelia_clicks,
             "vantelia_clicks_unique": unique_vantelia_clicks,
             "reply_intents_total": reply_intents,
@@ -18030,13 +17160,23 @@ def outreach_stats():
             "replies_total": replies,
             "replies_unique": unique_replies,
             "open_rate_pct": round(open_rate, 1),
+            "click_rate_pct": round(click_rate, 1),
+            "open_to_click_rate_pct": round(open_to_click_rate, 1),
             "reply_intent_rate_pct": round(reply_intent_rate, 1),
             "reply_rate_pct": round(reply_rate, 1),
         },
         "tracking": {
-            "active": bool(OUTREACH_AVAILABLE and OUTREACH_TRACKING_SECRET and OUTREACH_TRACKING_BASE_URL and not OUTREACH_TRACKING_DISABLED),
+            "active": tracking_active,
             "base_url": OUTREACH_TRACKING_BASE_URL,
         },
+        "primary_cta": {
+            "url": primary_cta_url,
+            "host": parsed_cta.hostname or "",
+            "destination": cta_destination,
+            "tracking_host": parsed_tracking.hostname or "",
+            "tracked": primary_cta_tracked,
+        },
+        "health_alerts": health_alerts,
         "funnel": funnel,
         "daily": {
             "sends": [{"day": r["day"], "c": r["c"]} for r in daily_sends],
@@ -20151,6 +19291,76 @@ def _job_finish(conn: sqlite3.Connection, job_id: int, status: str) -> None:
     conn.commit()
 
 
+def _outreach_smtp_ratelimit_reason(exc: BaseException) -> str:
+    raw = str(exc)
+    msg = raw.lower()
+    if (
+        "ratelimit" in msg
+        or "rate limit" in msg
+        or "too many" in msg
+        or "quota" in msg
+        or "throttl" in msg
+        or "hostinger_out_ratelimit" in msg
+        or ("451" in msg and ("limit" in msg or "temporar" in msg))
+    ):
+        return raw[:300]
+    return ""
+
+
+def _outreach_autocapture_is_paused(conn: sqlite3.Connection) -> bool:
+    try:
+        row = conn.execute("SELECT enabled FROM autopilot_config WHERE id=1").fetchone()
+        return bool(row and not bool(row["enabled"]))
+    except Exception:
+        return False
+
+
+def _outreach_pause_autocapture_for_smtp_limit(
+    conn: sqlite3.Connection,
+    *,
+    reason: str,
+    job_id: int = 0,
+    campaign_id: int = 0,
+    email: str = "",
+    stage: str = "",
+) -> None:
+    now = _outreach_now()
+    detail = {
+        "reason": reason[:300],
+        "job_id": job_id,
+        "campaign_id": campaign_id,
+        "email": email,
+        "stage": stage,
+    }
+    try:
+        conn.execute("UPDATE autopilot_config SET enabled=0, updated_at=? WHERE id=1", (now,))
+    except Exception:
+        pass
+    try:
+        conn.execute(
+            "UPDATE campaigns SET status='paused', updated_at=? WHERE status='running'",
+            (now,),
+        )
+    except Exception:
+        pass
+    try:
+        conn.commit()
+    except Exception:
+        pass
+    _outreach_tick_state_update(
+        "smtp_ratelimit_paused",
+        "Autocaptacion pausada: el SMTP ha devuelto rate limit",
+        detail=detail,
+        status="error",
+    )
+    _autopilot_log(
+        "error",
+        "smtp_ratelimit_autopause",
+        "Autocaptacion pausada automaticamente por rate limit SMTP",
+        detail,
+    )
+
+
 def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
     """Hilo en background: envía follow-ups pendientes (fu1→fu2→breakup) hasta max total."""
     db_path = Path(os.getenv("OUTREACH_DB_PATH", str(OUTREACH_DEFAULT_DB)))
@@ -20192,6 +19402,10 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
             _job_log(conn, job_id, f"{stage}: {len(candidates)} candidatos")
 
             for p in candidates:
+                if is_autopilot and _outreach_autocapture_is_paused(conn):
+                    _job_log(conn, job_id, "Autocaptacion pausada. El job se detiene.")
+                    _job_finish(conn, job_id, "done")
+                    return
                 if sent_total >= max_total:
                     break
                 if conn.execute("SELECT 1 FROM suppressions WHERE email=?", (p.email,)).fetchone():
@@ -20252,6 +19466,18 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
                     outreach_smtp_send(msg, settings)
                 except Exception as send_err:  # noqa: BLE001
                     _job_log(conn, job_id, f"ERROR {p.email}: {send_err}")
+                    limit_reason = _outreach_smtp_ratelimit_reason(send_err)
+                    if limit_reason:
+                        _job_log(conn, job_id, "RATE LIMIT SMTP detectado. Pausando autocaptacion y deteniendo job.")
+                        _outreach_pause_autocapture_for_smtp_limit(
+                            conn,
+                            reason=limit_reason,
+                            job_id=job_id,
+                            email=p.email,
+                            stage=stage,
+                        )
+                        _job_finish(conn, job_id, "error")
+                        return
                     if is_autopilot:
                         _autopilot_log("error", "email_failed",
                                        f"Fallo SMTP a {p.email}: {send_err}",
@@ -21178,6 +20404,16 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
 
         sent_count = 0
         for idx, p in enumerate(candidates, 1):
+            if is_autopilot and _outreach_autocapture_is_paused(conn):
+                _job_log(conn, job_id, "Autocaptacion pausada. El job se detiene.")
+                if campaign_id:
+                    conn.execute(
+                        "UPDATE campaigns SET status='paused', updated_at=? WHERE id=?",
+                        (_outreach_now(), campaign_id),
+                    )
+                    conn.commit()
+                _job_finish(conn, job_id, "done")
+                return
             if campaign_id and params.get("send"):
                 status_row = conn.execute("SELECT status FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
                 if status_row and status_row["status"] == "paused":
@@ -21286,6 +20522,7 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
             try:
                 outreach_smtp_send(msg, settings)
             except Exception as err:  # noqa: BLE001
+                limit_reason = _outreach_smtp_ratelimit_reason(err)
                 if campaign_id and mode == "send":
                     conn.execute(
                         "UPDATE campaign_members SET status='error', skip_reason=?, updated_at=? WHERE campaign_id=? AND email=?",
@@ -21293,6 +20530,18 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                     )
                     conn.commit()
                 _job_log(conn, job_id, f"ERROR {recipient}: {err}")
+                if limit_reason:
+                    _job_log(conn, job_id, "RATE LIMIT SMTP detectado. Pausando autocaptacion y deteniendo job.")
+                    _outreach_pause_autocapture_for_smtp_limit(
+                        conn,
+                        reason=limit_reason,
+                        job_id=job_id,
+                        campaign_id=campaign_id,
+                        email=recipient,
+                        stage=stage,
+                    )
+                    _job_finish(conn, job_id, "error")
+                    return
                 if is_autopilot:
                     _autopilot_log("error", "email_failed",
                                    f"Fallo SMTP a {recipient}: {err}",

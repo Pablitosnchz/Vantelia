@@ -442,6 +442,19 @@ def smtp_send(msg: EmailMessage, settings: dict[str, object]) -> None:
         smtp.send_message(msg)
 
 
+def is_smtp_ratelimit_error(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return (
+        "ratelimit" in msg
+        or "rate limit" in msg
+        or "too many" in msg
+        or "quota" in msg
+        or "throttl" in msg
+        or "hostinger_out_ratelimit" in msg
+        or ("451" in msg and ("limit" in msg or "temporar" in msg))
+    )
+
+
 # -------------------- Ventana horaria & throttle --------------------
 
 def in_business_window() -> tuple[bool, str]:
@@ -500,7 +513,24 @@ def fetch_candidates(
           AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email = p.email)
           AND NOT EXISTS (SELECT 1 FROM events ev WHERE ev.email = p.email AND ev.type = 'reply')
           AND COALESCE(p.status, '') NOT IN ('replied', 'client', 'lost')
-        ORDER BY p.created_at ASC
+        ORDER BY
+          CASE
+            WHEN lower(COALESCE(p.niche,'') || ' ' || COALESCE(p.service_hint,'') || ' ' || COALESCE(p.tags,'')) LIKE '%dental%'
+              OR lower(COALESCE(p.niche,'') || ' ' || COALESCE(p.service_hint,'') || ' ' || COALESCE(p.tags,'')) LIKE '%clinica%'
+              OR lower(COALESCE(p.niche,'') || ' ' || COALESCE(p.service_hint,'') || ' ' || COALESCE(p.tags,'')) LIKE '%clínica%'
+              OR lower(COALESCE(p.niche,'') || ' ' || COALESCE(p.service_hint,'') || ' ' || COALESCE(p.tags,'')) LIKE '%fisio%'
+              OR lower(COALESCE(p.niche,'') || ' ' || COALESCE(p.service_hint,'') || ' ' || COALESCE(p.tags,'')) LIKE '%psico%'
+              OR lower(COALESCE(p.niche,'') || ' ' || COALESCE(p.service_hint,'') || ' ' || COALESCE(p.tags,'')) LIKE '%abog%'
+              OR lower(COALESCE(p.niche,'') || ' ' || COALESCE(p.service_hint,'') || ' ' || COALESCE(p.tags,'')) LIKE '%asesor%'
+              OR lower(COALESCE(p.niche,'') || ' ' || COALESCE(p.service_hint,'') || ' ' || COALESCE(p.tags,'')) LIKE '%gestor%'
+            THEN 0
+            WHEN lower(COALESCE(p.niche,'') || ' ' || COALESCE(p.service_hint,'') || ' ' || COALESCE(p.tags,'')) LIKE '%peluquer%'
+              OR lower(COALESCE(p.niche,'') || ' ' || COALESCE(p.service_hint,'') || ' ' || COALESCE(p.tags,'')) LIKE '%barber%'
+            THEN 2
+            ELSE 1
+          END ASC,
+          COALESCE(p.score, 0) DESC,
+          p.created_at ASC
         LIMIT ?
         """
         rows = conn.execute(sql, (limit,)).fetchall()
@@ -516,7 +546,14 @@ def fetch_candidates(
         AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email = p.email)
         AND NOT EXISTS (SELECT 1 FROM events ev WHERE ev.email = p.email AND ev.type = 'reply')
         AND COALESCE(p.status, '') NOT IN ('replied', 'client', 'lost')
-        ORDER BY p.created_at ASC
+        ORDER BY
+          CASE
+            WHEN EXISTS (SELECT 1 FROM events ev2 WHERE ev2.email=p.email AND ev2.type IN ('demo_generated','click','reply_intent')) THEN 0
+            WHEN EXISTS (SELECT 1 FROM events ev3 WHERE ev3.email=p.email AND ev3.type='open') THEN 1
+            ELSE 2
+          END ASC,
+          COALESCE(p.score, 0) DESC,
+          p.created_at ASC
         LIMIT ?
         """
         rows = conn.execute(sql, (prev_stage, cutoff, stage, limit)).fetchall()
@@ -751,6 +788,9 @@ def _send_loop(args: argparse.Namespace, stage: str) -> int:
                 smtp_send(msg, settings)
             except Exception as err:  # noqa: BLE001
                 print(f"  ERROR enviando a {recipient}: {err}")
+                if is_smtp_ratelimit_error(err):
+                    print("  RATE LIMIT SMTP detectado. Deteniendo envio para proteger reputacion.")
+                    return 5
                 if args.stop_on_error:
                     return 4
                 continue

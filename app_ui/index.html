@@ -91,8 +91,23 @@
     }
     .topbar {
       display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: 24px;
+      margin-bottom: 24px; gap: 12px;
     }
+    .topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .nav-burger {
+      display: none;
+      align-items: center; justify-content: center;
+      width: 40px; height: 40px; flex-shrink: 0;
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 10px; color: var(--text); cursor: pointer; padding: 0;
+    }
+    .nav-burger:hover { background: rgba(255,255,255,0.05); }
+    .nav-burger svg { width: 20px; height: 20px; }
+    .nav-backdrop {
+      display: none; position: fixed; inset: 0;
+      background: rgba(4,8,16,0.6); z-index: 115;
+    }
+    .nav-backdrop.open { display: block; }
     .page-title {
       font-family: var(--font-title);
       font-size: 1.4rem; font-weight: 600; letter-spacing: -.01em;
@@ -647,9 +662,19 @@
     }
     @media (max-width: 768px) {
       .rail { display: none; }
-      .sidebar { position: fixed; left: -270px; top: 0; height: 100%; z-index: 120; transition: left .25s ease; }
+      .sidebar { position: fixed; left: -290px; top: 0; height: 100%; width: 270px; min-width: 270px; z-index: 120; transition: left .25s ease; box-shadow: 0 0 40px rgba(0,0,0,0.5); }
       .sidebar.mobile-open { left: 0; }
+      .nav-burger { display: inline-flex; }
+      .sidebar-toggle { display: none; }
+      .sidebar.collapsed { width: 270px; min-width: 270px; padding: 22px 16px; }
+      .sidebar.collapsed .sidebar-section,
+      .sidebar.collapsed .nav-item span,
+      .sidebar.collapsed .pro-pill { display: revert; }
+      .sidebar.collapsed .nav-item { justify-content: flex-start; padding: 9px 12px; }
       .main { padding: 16px; }
+      .topbar { margin-bottom: 18px; }
+      .page-title { font-size: 1.2rem; }
+      .user-chip .meta span { max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .bot-fab { bottom: 80px; right: 16px; }
     }
 
@@ -771,11 +796,17 @@
     <span>Cuenta</span>
   </div>
 </aside>
+<div class="nav-backdrop" id="navBackdrop"></div>
 
 <!-- Main -->
 <main class="main">
   <div class="topbar">
-    <div class="page-title" id="pageTitle">Overview</div>
+    <div class="topbar-left">
+      <button class="nav-burger" id="navBurger" type="button" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="page-title" id="pageTitle">Overview</div>
+    </div>
     <div class="user-menu" id="userMenu">
       <div class="user-chip" id="userChip">
         <div class="avatar" id="userAvatar">U</div>
@@ -1748,8 +1779,29 @@ document.querySelectorAll('.nav-item').forEach(n => {
   n.addEventListener('click', () => {
     const tab = n.getAttribute('data-tab');
     setTab(tab);
+    closeMobileNav();
   });
 });
+
+// ── Mobile nav drawer ─────────────────────────────────────────────────
+function isMobileNav() { return window.matchMedia('(max-width: 768px)').matches; }
+function openMobileNav() {
+  document.getElementById('sidebar').classList.add('mobile-open');
+  document.getElementById('navBackdrop').classList.add('open');
+  document.getElementById('navBurger')?.setAttribute('aria-expanded', 'true');
+}
+function closeMobileNav() {
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  document.getElementById('navBackdrop').classList.remove('open');
+  document.getElementById('navBurger')?.setAttribute('aria-expanded', 'false');
+}
+document.getElementById('navBurger')?.addEventListener('click', () => {
+  if (document.getElementById('sidebar').classList.contains('mobile-open')) closeMobileNav();
+  else openMobileNav();
+});
+document.getElementById('navBackdrop')?.addEventListener('click', closeMobileNav);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMobileNav(); });
+window.addEventListener('resize', () => { if (!isMobileNav()) closeMobileNav(); });
 
 // ── Data loaders ──────────────────────────────────────────────────────
 async function loadOverview() {
@@ -2876,6 +2928,7 @@ function renderPlansGrid() {
       </div>
       <div style="margin-top:8px;"><b style="font-family:var(--font-title); font-size:1.6rem;">${price}€</b><span style="color:var(--soft);">${period}</span></div>
       <div style="color:var(--soft); font-size:0.86rem; margin-top:4px;">${p.messages_quota.toLocaleString()} mensajes/mes</div>
+      ${p.bookings_quota === null ? '<div style="color:var(--soft); font-size:0.86rem; margin-top:4px;">Citas ilimitadas</div>' : (Number(p.bookings_quota || 0) > 0 ? `<div style="color:var(--soft); font-size:0.86rem; margin-top:4px;">${Number(p.bookings_quota).toLocaleString()} citas/mes</div>` : '')}
       <ul style="margin-top:12px; padding-left:16px; color:var(--soft); font-size:0.84rem;">
         ${p.features.filter(f => f !== 'leads_export').map(f => `<li>${escapeHtml(featuresMap[f] || f)}</li>`).join('')}
       </ul>

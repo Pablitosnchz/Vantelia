@@ -618,8 +618,8 @@
     card.innerHTML = '<p class="mw-card-title">💎 Planes Vantelia</p><p class="mw-card-sub">Sin permanencia. Cancelas cuando quieras.</p><div class="mw-plans"></div>';
     var box = card.querySelector('.mw-plans');
     [
-      { name:'Free', price:'0€', feat:'50 msg/mes · widget web' },
-      { name:'Starter', price:'19€', feat:'1.000 msg · leads · reservas' },
+      { name:'Free', price:'0€', feat:'50 msg · 10 citas/mes' },
+      { name:'Starter', price:'19€', feat:'1.000 msg · 100 citas/mes' },
       { name:'Pro', price:'49€', feat:'5.000 msg · WhatsApp · Live Chat', tag:'Popular' },
       { name:'Business', price:'149€', feat:'Ilimitado · soporte prioritario' }
     ].forEach(function (p) {

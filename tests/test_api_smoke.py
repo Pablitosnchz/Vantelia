@@ -755,11 +755,14 @@ def test_chat_disponibilidad_proximo_lunes_uses_real_slots(client: TestClient):
 
 
 def test_chat_disponibilidad_manana_tarde_filters_period(client: TestClient):
+    # "proximo lunes" es siempre laborable (demo solo cierra domingos), asi el test
+    # no depende del dia real de ejecucion: si "manana" cae en domingo el bot
+    # responde "cerrados" en lugar de filtrar por periodo.
     response = client.post(
         "/chat",
         json={
             "cliente_id": "demo",
-            "mensaje": "Hay hueco manana por la tarde?",
+            "mensaje": "Hay hueco el proximo lunes por la tarde?",
             "session_id": "s_test_chat_availability_tomorrow_afternoon",
         },
         headers={"Origin": "http://testserver"},
@@ -1247,7 +1250,8 @@ def test_outreach_preflight_renders_html_even_when_wizard_email_not_imported(cli
     assert data["counts"]["real_candidates"] == 0
     assert data["counts"]["skipped"]["missing_email"] == 1
     assert data["html_active"] is True
-    assert "Crear bot gratis" in data["html"]
+    assert "Generar demo gratis" in data["html"]
+    assert "www.vantelia.es/demo/" in data["html"]
 
 
 def test_outreach_email_uses_prefilled_demo_link(client: TestClient, api_module):
@@ -1261,8 +1265,8 @@ def test_outreach_email_uses_prefilled_demo_link(client: TestClient, api_module)
         city="Madrid",
     )
     url = demo_url_with_utm("cold", prospect)
-    assert url.startswith("https://app.vantelia.es/acceso?")
-    assert "signup=1" in url
+    assert url.startswith("https://www.vantelia.es/demo/?")
+    assert "signup=1" not in url
     assert "utm_source=outreach" in url
     assert "empresa=Clinica+Demo+Norte" in url
     assert "email=prefill.demo%40example.com" in url
@@ -1270,6 +1274,7 @@ def test_outreach_email_uses_prefilled_demo_link(client: TestClient, api_module)
 
     _subject, text, html = render("cold", prospect, "baja@vantelia.es")
     assert "crear gratis su asistente IA en menos de 2 minutos" in text
+    assert "demo preparada" in text
     assert "empresa=Clinica+Demo+Norte" in html
 
 
@@ -3161,6 +3166,19 @@ def test_chat_enforces_self_serve_quota(client: TestClient, api_module, monkeypa
 
 # ── Sem 6: Bridge captacion (claim) + migracion legacy ─────────────────
 
+def test_self_serve_free_plan_exposes_booking_with_ten_booking_quota(client: TestClient, api_module, monkeypatch):
+    _, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Free Booking")
+    api_module.CONFIG_CLIENTES[cliente_id].setdefault("allowed_origins", []).append("http://testserver")
+    api_module.CONFIG_CLIENTES[cliente_id].setdefault("booking", {})["enabled"] = True
+
+    config_resp = client.get(f"/cliente/{cliente_id}", headers={"Origin": "http://testserver"})
+    assert config_resp.status_code == 200, config_resp.text
+    config_data = config_resp.json()
+    assert config_data["booking_enabled"] is True
+    assert "Agendar cita" in config_data["starter_questions"]
+    assert api_module._plan_limits("free")["monthly_bookings"] == 10
+
+
 def _create_demo_tenant_for_test(api_module, suffix: str = "claimme") -> str:
     """Provision a demo_auto_* cliente in CONFIG_CLIENTES + demo_tenants.json,
     matching what /demo/generate would have created at outreach time. Returns
@@ -3285,14 +3303,15 @@ def test_demo_page_shows_claim_banner_for_demo_auto(client: TestClient, api_modu
         headers={"Origin": "http://testserver"},
     )
     assert resp.status_code == 200
-    assert "Reclamar este bot" in resp.text
+    assert "Activar gratis e instalar" in resp.text
+    assert "Tu asistente ya esta listo" in resp.text
     assert f"claim={cliente_id}" in resp.text
 
 
 def test_demo_page_no_claim_banner_for_legacy_client(client: TestClient, api_module):
     resp = client.get("/demo/demo", headers={"Origin": "http://testserver"})
     assert resp.status_code == 200
-    assert "Reclamar este bot" not in resp.text
+    assert 'data-claim-cta="1"' not in resp.text
 
 
 def test_admin_assign_owner_links_legacy_cliente(client: TestClient, api_module):

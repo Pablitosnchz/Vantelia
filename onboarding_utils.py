@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlparse
 
@@ -103,24 +104,67 @@ def fetch_html(target_url: str) -> str:
     return response.text
 
 
+_BRAND_SEP_RE = re.compile(r"[|·•∙—–\-:~]+")
+_BRAND_ALLOWED = " &.,'/áéíóúüñçàèìòùâêîôûäëïöÁÉÍÓÚÜÑ"
+
+
+def _brand_norm(s: str) -> str:
+    s = unicodedata.normalize("NFKD", s or "")
+    return "".join(c for c in s.lower() if c.isalnum())
+
+
+def _clean_brand_segment(seg: str) -> str:
+    seg = unicodedata.normalize("NFKC", seg or "")
+    seg = "".join(ch for ch in seg if ch.isalnum() or ch in _BRAND_ALLOWED)
+    seg = re.sub(r"\s+", " ", seg).strip(" -.,/&")
+    return seg
+
+
 def infer_company_name(base_url: str, html: str) -> str:
+    """Extrae solo el nombre de marca del <title>/og tags.
+
+    Estrategia: toma og:site_name > og:title > <title>, parte por separadores
+    (- | : · etc), y elige el segmento que mejor casa con el dominio
+    (thenookmadrid -> "The Nook", vantelia -> "Vantelia"). Si nada casa,
+    devuelve el segmento mas corto con pinta de nombre. Limpia emojis y simbolos.
+    """
     soup = BeautifulSoup(html, "html.parser")
 
-    og_title = soup.find("meta", attrs={"property": "og:title"})
-    if og_title and og_title.get("content", "").strip():
-        return og_title["content"].strip()
-
-    if soup.title and soup.title.string and soup.title.string.strip():
-        title = soup.title.string.strip()
-        for separator in ("|", "-", "·", "—", "–"):
-            if separator in title:
-                left = title.split(separator, 1)[0].strip()
-                if left:
-                    return left
-        return title
+    candidate = ""
+    site_name = soup.find("meta", attrs={"property": "og:site_name"})
+    if site_name and (site_name.get("content") or "").strip():
+        candidate = site_name["content"].strip()
+    if not candidate:
+        og_title = soup.find("meta", attrs={"property": "og:title"})
+        if og_title and (og_title.get("content") or "").strip():
+            candidate = og_title["content"].strip()
+    if not candidate and soup.title and soup.title.string and soup.title.string.strip():
+        candidate = soup.title.string.strip()
 
     domain = urlparse(base_url).netloc.replace("www.", "")
-    base_name = domain.split(".")[0].replace("-", " ").replace("_", " ").strip()
+    domain_root = domain.split(".")[0] if domain else ""
+    domain_norm = _brand_norm(domain_root)
+
+    if candidate:
+        segments = [_clean_brand_segment(s) for s in _BRAND_SEP_RE.split(candidate)]
+        segments = [s for s in segments if s]
+        if segments:
+            # 1) segmento que casa con el dominio: senal mas fuerte de marca.
+            domain_matches = [
+                s for s in segments
+                if len(_brand_norm(s)) >= 3 and domain_norm
+                and (_brand_norm(s) in domain_norm or domain_norm in _brand_norm(s))
+            ]
+            if domain_matches:
+                return min(domain_matches, key=len)[:120]
+            # 2) fallback: segmento mas corto con pinta de nombre (<=4 palabras).
+            segments.sort(key=lambda x: (len(x.split()) > 4, len(x)))
+            return segments[0][:120]
+        cleaned = _clean_brand_segment(candidate)
+        if cleaned:
+            return cleaned[:120]
+
+    base_name = domain_root.replace("-", " ").replace("_", " ").strip()
     return base_name.title() or "Empresa"
 
 

@@ -295,7 +295,7 @@ def demo_reply_mailto(to_email: str | None = None) -> str:
     )
 
 
-DEMO_PAGE_URL = os.getenv("OUTREACH_SIGNUP_URL", "https://app.vantelia.es/acceso").strip() or "https://app.vantelia.es/acceso"
+DEMO_PAGE_URL = os.getenv("OUTREACH_SIGNUP_URL", "https://www.vantelia.es/demo/").strip() or "https://www.vantelia.es/demo/"
 
 
 def _demo_sector_for_prospect(p: Prospect) -> str:
@@ -319,11 +319,12 @@ def _demo_sector_for_prospect(p: Prospect) -> str:
 
 def demo_url_with_utm(stage: str, p: Prospect | None = None) -> str:
     params = {
-        "signup": "1",
         "utm_source": "outreach",
         "utm_medium": "email",
         "utm_campaign": stage,
     }
+    if "app.vantelia.es/acceso" in DEMO_PAGE_URL:
+        params["signup"] = "1"
     if p:
         params.update({
             "empresa": p.business_name or "",
@@ -454,7 +455,7 @@ def _booking_minutes() -> int:
 def _cta_block(primary_text: str, stage: str = "cold", p: Prospect | None = None) -> tuple[str, str]:
     """Devuelve (text_cta, html_cta). CTA con UTM por stage para analytics."""
     if p and p.business_name:
-        primary_text = f"Crear bot gratis para {p.business_name}"
+        primary_text = f"Generar demo gratis para {p.business_name}"
     utm_url = demo_url_with_utm(stage, p)
     book = calendar_url()
     minutes = _booking_minutes()
@@ -494,8 +495,8 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
         f"pega la URL de la web, Vantelia lee el contenido, genera el bot y lo deja listo "
         f"para probar.\n\n"
         f"{f'{opener} ' if opener else ''}"
-        f"He preparado uno de ejemplo concreto para vosotros — puedes chatear con el ahora "
-        f"mismo y ver como funciona sin registrarte ni dar ningun dato:\n"
+        f"He dejado una demo preparada con vuestros datos para que la revises en un minuto. "
+        f"Si la web esta incluida, Vantelia la usara para personalizar el asistente antes de abrirlo:\n"
         f"{cta_text}\n"
         f"{proof_text}\n"
         f"{website_line}\n\n"
@@ -511,8 +512,8 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
         f'pega la URL de la web, Vantelia lee el contenido, genera el bot y lo deja listo '
         f'para probar.</p>'
         f'{opener_html}'
-        f'<p>He preparado uno de ejemplo concreto para vosotros — puedes chatear con el ahora '
-        f'mismo y ver como funciona <strong>sin registrarte ni dar ningun dato</strong>:</p>'
+        f'<p>He dejado una demo preparada con vuestros datos para que la revises en un minuto. '
+        f'Si la web esta incluida, Vantelia la usara para personalizar el asistente antes de abrirlo:</p>'
         f'{cta_html}'
         f'{proof_html}'
         f'<p style="color:#6b7280;font-size:13px;">'
@@ -532,7 +533,7 @@ def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
         f"Te escribi hace unos dias (soy Pablo, de Vantelia — vantelia.es).\n\n"
         f"Por si no llegaste: tengo un chat hecho especificamente para {name} "
         f"que atiende a tus clientes las 24 horas. "
-        f"Puedes probarlo ahora mismo sin registrarte:\n"
+        f"Te dejo el formulario ya cargado para generar la demo:\n"
         f"{cta_text}\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
@@ -543,12 +544,12 @@ def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
         f'(soy Pablo, de <a href="https://vantelia.es" style="color:#00a9cc;">Vantelia</a>).</p>'
         f'<p>Por si no llegaste: tengo un chat hecho especificamente para {html_lib.escape(name)} '
         f'que atiende a tus clientes las 24 horas. '
-        f'Puedes probarlo ahora mismo sin registrarte:</p>'
+        f'Te dejo el formulario ya cargado para generar la demo:</p>'
         f'{cta_html}'
         f'{signature_html("fu1")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
-    preheader = f"Chat para {name} listo. Pruebalo sin registrarte."
+    preheader = f"Demo para {name} preparada. Revisala en un minuto."
     return pick_subject("fu1", p), text, html_shell(inner, preheader=preheader)
 
 
@@ -562,8 +563,8 @@ def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
         f"El chat que prepare para {name}:\n\n"
         f"- Responde preguntas sobre {task}\n"
         f"- Funciona las 24 horas, tambien cuando estais cerrados\n"
-        f"- Se prueba gratis, sin tarjeta ni registro\n\n"
-        f"Solo hay que darle al boton y ya puedes hablar con el:\n"
+        f"- Se genera gratis y sin tarjeta\n\n"
+        f"Solo hay que darle al boton, revisar los datos y generar la demo:\n"
         f"{cta_text}\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
@@ -576,14 +577,14 @@ def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
         f'<ul style="margin:0 0 16px 0;padding-left:20px;line-height:2;">'
         f'<li>Responde preguntas sobre {html_lib.escape(task)}</li>'
         f'<li>Funciona las 24 horas, tambien cuando estais cerrados</li>'
-        f'<li>Se prueba gratis, sin tarjeta ni registro</li>'
+        f'<li>Se genera gratis y sin tarjeta</li>'
         f'</ul>'
-        f'<p>Solo hay que darle al boton y ya puedes hablar con el:</p>'
+        f'<p>Solo hay que darle al boton, revisar los datos y generar la demo:</p>'
         f'{cta_html}'
         f'{signature_html("fu2")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
-    preheader = f"Chat para {name}. Gratis, sin registro, en un clic."
+    preheader = f"Demo para {name}. Gratis, sin tarjeta, lista para generar."
     return pick_subject("fu2", p), text, html_shell(inner, preheader=preheader)
 
 
@@ -595,8 +596,8 @@ def render_breakup(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]
         f"Lo dejo por aqui, no te escribire mas.\n\n"
         f"Si algun dia queréis probar como funciona un chat automatico en vuestra web, "
         f"el de {name} sigue disponible en vantelia.es. "
-        f"Un clic, charlas con el, y ves si tiene sentido para vosotros. "
-        f"Sin registro, sin compromiso.\n"
+        f"Un clic, revisas los datos y generas una demo para ver si tiene sentido. "
+        f"Sin tarjeta, sin compromiso.\n"
         f"{cta_text}\n\n"
         f"{SIGNATURE_TEXT}"
         f"{footer_text(unsubscribe_mailto)}"
@@ -607,13 +608,13 @@ def render_breakup(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]
         f'<p>Si algun dia quereis probar como funciona un chat automatico en vuestra web, '
         f'el de {html_lib.escape(name)} sigue disponible en '
         f'<a href="https://vantelia.es" style="color:#00a9cc;">vantelia.es</a>. '
-        f'Un clic, charlas con el, y ves si tiene sentido para vosotros. '
-        f'Sin registro, sin compromiso.</p>'
+        f'Un clic, revisas los datos y generas una demo para ver si tiene sentido. '
+        f'Sin tarjeta, sin compromiso.</p>'
         f'{cta_html}'
         f'{signature_html("breakup")}'
         f'{footer_html(unsubscribe_mailto)}'
     )
-    preheader = f"Sin registro ni compromiso. El chat de {name} sigue disponible."
+    preheader = f"Sin tarjeta ni compromiso. La demo de {name} sigue disponible."
     return pick_subject("breakup", p), text, html_shell(inner, preheader=preheader)
 
 
@@ -681,8 +682,8 @@ def apply_tracking(html_body: str, email: str, stage: str, base_url: str, secret
 
     def _rewrite(match: re.Match[str]) -> str:
         quote_char, url, end_quote = match.group(1), match.group(2), match.group(3)
-        # No reescribir el propio dominio de tracking ni mailto/anchors
-        if base in url:
+        # No reescribir enlaces que ya son del propio tracker.
+        if url.startswith(f"{base}/track/"):
             return match.group(0)
         wrapped = f"{base}/track/click/{token}?u={quote(html_lib.unescape(url), safe='')}"
         return f"href={quote_char}{wrapped}{end_quote}"

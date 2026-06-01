@@ -2712,7 +2712,7 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="cw-card-header">
                 <div>
                   <h3>Campanas activas</h3>
-                  <p>Controla campanas que llevan al registro directo: crea tu bot gratis en 2 minutos.</p>
+                  <p>Controla campanas que llevan a una demo prefillada antes del registro.</p>
                 </div>
                 <button class="ghost small" type="button" id="cwRefreshCampaignsBtn">Actualizar</button>
               </div>
@@ -2724,8 +2724,8 @@ tbody tr:last-child td { border-bottom: none; }
             <div class="cw-shell">
               <div class="cw-topbar">
                 <div>
-                  <h3>Campanas a registro</h3>
-                  <p>Busca negocios, revisa candidatos y lanza mensajes con CTA directo a crear el bot gratis.</p>
+                  <h3>Campanas a demo</h3>
+                  <p>Busca negocios, revisa candidatos y lanza mensajes con CTA directo a generar una demo prefillada.</p>
                 </div>
                 <div class="pills">
                   <span class="pill accent" id="cwSelectedPill">0 seleccionados</span>
@@ -2795,7 +2795,7 @@ tbody tr:last-child td { border-bottom: none; }
                     <div class="actions"><button class="ghost" type="button" data-cw-prev="test">Atras</button><button class="secondary" type="button" id="cwLaunchBtn">Lanzar campana</button></div>
                   </div>
                 </div>
-                <aside class="cw-card"><h4>Metricas basicas</h4><div class="cw-side-stat"><strong id="cwMetricSent">-</strong><span>Enviados</span></div><div class="cw-side-stat"><strong id="cwMetricOpen">-</strong><span>Abiertos</span></div><div class="cw-side-stat"><strong id="cwMetricReplies">-</strong><span>Respuestas</span></div><div class="cw-side-stat"><strong id="cwMetricReady">0</strong><span>Negocios listos</span></div><p class="muted">El wizard guarda tu borrador y debe apuntar al registro self-service, no a demos manuales.</p></aside>
+                <aside class="cw-card"><h4>Metricas basicas</h4><div class="cw-side-stat"><strong id="cwMetricSent">-</strong><span>Enviados</span></div><div class="cw-side-stat"><strong id="cwMetricOpen">-</strong><span>Abiertos</span></div><div class="cw-side-stat"><strong id="cwMetricReplies">-</strong><span>Respuestas</span></div><div class="cw-side-stat"><strong id="cwMetricReady">0</strong><span>Negocios listos</span></div><p class="muted">El wizard guarda tu borrador y debe apuntar a una demo prefillada antes del registro.</p></aside>
               </div>
             </div>
           </div>
@@ -2807,13 +2807,14 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="ss-action-title">
                 <div>
                   <strong style="font-size:18px;">Embudo self-service</strong>
-                  <p class="muted" style="margin:4px 0 0;font-size:12px;">De visita a pago: mide donde se atasca la gente que quiere crear su bot gratis en menos de 2 minutos.</p>
+                  <p class="muted" style="margin:4px 0 0;font-size:12px;">De email a demo y de demo a pago: mide donde se atasca la gente que quiere probar su bot gratis.</p>
                 </div>
                 <div class="actions">
-                  <a class="ghost small" href="https://app.vantelia.es/acceso?signup=1" target="_blank" rel="noopener">Abrir registro</a>
+                  <a class="ghost small" href="https://www.vantelia.es/demo/" target="_blank" rel="noopener">Abrir demo</a>
                   <button class="secondary small" type="button" id="ssRefreshBtn">Actualizar embudo</button>
                 </div>
               </div>
+              <div id="orOutreachHealth" style="display:none;margin-top:12px;"></div>
               <div class="ss-kpis">
                 <div class="ss-kpi"><strong id="ssVisits">-</strong><span>Visitas web</span></div>
                 <div class="ss-kpi"><strong id="ssCtaClicks">-</strong><span>Clicks crear bot</span></div>
@@ -7419,7 +7420,39 @@ a {
           renderFunnel(data.funnel, t.sent_distinct);
           renderTopNiches(data.top_niches);
           renderVanteliaClickers(data.vantelia_clickers || []);
+          renderOutreachHealth(data);
         } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      function renderOutreachHealth(data) {
+        const box = ORQ("#orOutreachHealth");
+        if (!box) return;
+        const alerts = data.health_alerts || [];
+        const cta = data.primary_cta || {};
+        const totals = data.totals || {};
+        const softAlerts = [];
+        if ((totals.opens_unique || 0) >= 20 && (totals.open_to_click_rate_pct || 0) < 12) {
+          softAlerts.push({
+            level: "warning",
+            message: `Aperturas sanas, pero click tras apertura bajo (${totals.open_to_click_rate_pct || 0}%). Revisa promesa, CTA y nicho antes de subir volumen.`,
+          });
+        }
+        const items = alerts.concat(softAlerts);
+        const levelColor = (level) => level === "danger"
+          ? "border:#fecaca;background:#fff1f2;color:#7f1d1d;"
+          : "border:#fed7aa;background:#fff7ed;color:#7c2d12;";
+        const ctaLine = cta.url
+          ? `<div style="font-size:11px;color:#475569;margin-top:6px;overflow-wrap:anywhere;">CTA actual: <strong>${escapeHtml(cta.destination || "desconocido")}</strong> · ${escapeHtml(cta.url)} · tracking ${cta.tracked ? "OK" : "NO"}</div>`
+          : "";
+        if (!items.length) {
+          box.style.display = "";
+          box.innerHTML = `<div style="padding:10px 12px;border:1px solid #bbf7d0;background:#f0fdf4;color:#14532d;border-radius:8px;font-size:12px;font-weight:600;">Flujo outreach sano: CTA a demo y tracking activo.${ctaLine}</div>`;
+          return;
+        }
+        box.style.display = "";
+        box.innerHTML = items.map((a) =>
+          `<div style="padding:10px 12px;margin-top:8px;border-radius:8px;font-size:12px;font-weight:600;${levelColor(a.level)}">${escapeHtml(a.message)}${ctaLine}</div>`
+        ).join("");
       }
 
       function renderChart(daily) {
