@@ -1,9 +1,9 @@
 {
   "Clinica_Saga": {
     "nombre": "Clinica Saga",
-    "plan": "web",
+    "plan": "starter",
     "subscription": {
-      "plan": "web"
+      "plan": "starter"
     },
     "icono": "CS",
     "color": "#2E86AB",
@@ -71,9 +71,9 @@
   },
   "demo": {
     "nombre": "Agencia IA Demo",
-    "plan": "web",
+    "plan": "free",
     "subscription": {
-      "plan": "web"
+      "plan": "free"
     },
     "icono": "AI",
     "color": "#00b1d9",
@@ -209,9 +209,9 @@
   },
   "Vantelia": {
     "nombre": "Vantelia",
-    "plan": "completo",
+    "plan": "business",
     "subscription": {
-      "plan": "completo",
+      "plan": "business",
       "status": "active",
       "lifetime": true,
       "billing_period": "lifetime"
@@ -221,7 +221,7 @@
     "accent_color": "",
     "logo_url": "",
     "bienvenida": "Hola, soy el asistente de Vantelia. Puedo resolver dudas sobre nuestros planes, generar una demo y ayudarte a solicitar una consulta.",
-    "prompt_extra": "Habla con tono profesional, claro y cercano. Prioriza llevar al usuario a una consulta gratuita, una demo o el plan adecuado. No inventes precios ni condiciones fuera de la base documental. Si preguntan precios, tarifas o planes, responde en version corta: 3 bullets con plan, precio y encaje; anade solo que hay 30 dias gratis, sin permanencia e IVA no incluido. No uses tabla larga salvo que el usuario la pida expresamente.",
+    "prompt_extra": "Habla con tono profesional, claro y cercano. Prioriza llevar al usuario a crear su bot gratis, pedir una consulta gratuita o elegir el plan adecuado. No inventes precios ni condiciones fuera de la base documental. Si preguntan precios, tarifas o planes, responde en version corta con Free 0 EUR/mes, Starter 19 EUR/mes, Pro 49 EUR/mes y Business 149 EUR/mes; indica que Free es gratis para siempre, los planes de pago son sin permanencia e IVA no incluido. No prometas pruebas gratuitas generales salvo que el usuario pregunte por un codigo promocional concreto. No uses tabla larga salvo que el usuario la pida expresamente.",
     "allowed_origins": [
       "https://vantelia.es",
       "https://www.vantelia.es",

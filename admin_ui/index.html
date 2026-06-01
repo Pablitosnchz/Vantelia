@@ -1824,6 +1824,10 @@ tbody tr:last-child td { border-bottom: none; }
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="1"></circle></svg></span>
           <span class="nav-text"><strong>Instagram</strong><span>Captacion via DM</span></span>
         </button>
+        <button class="nav-button" type="button" data-nav-view="tiktok">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v12.5a3 3 0 1 1-3-3"></path><path d="M9 3c0 3 2.5 5.5 5.5 5.5"></path></svg></span>
+          <span class="nav-text"><strong>TikTok</strong><span>Captacion via DM</span></span>
+        </button>
         <button class="nav-button" type="button" data-nav-view="security">
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9.5 12l1.8 1.8L15 10"></path></svg></span>
           <span class="nav-text"><strong>Seguridad</strong><span>Sesion y contrasena</span></span>
@@ -2036,9 +2040,6 @@ tbody tr:last-child td { border-bottom: none; }
             <button class="filter-chip" type="button" data-client-plan="starter">Starter</button>
             <button class="filter-chip" type="button" data-client-plan="pro">Pro</button>
             <button class="filter-chip" type="button" data-client-plan="business">Business</button>
-            <button class="filter-chip" type="button" data-client-plan="web">Web</button>
-            <button class="filter-chip" type="button" data-client-plan="whatsapp">WhatsApp</button>
-            <button class="filter-chip" type="button" data-client-plan="completo">Completo</button>
           </div>
           <div class="filter-row">
             <span class="filter-label">Estado</span>
@@ -2151,9 +2152,6 @@ tbody tr:last-child td { border-bottom: none; }
                     <option value="starter">starter</option>
                     <option value="pro">pro</option>
                     <option value="business">business</option>
-                    <option value="web">web</option>
-                    <option value="whatsapp">whatsapp</option>
-                    <option value="completo">completo</option>
                   </select>
                 </label>
               </div>
@@ -2439,6 +2437,189 @@ tbody tr:last-child td { border-bottom: none; }
       </section>
       </section>
 
+      <section class="dashboard-view" data-view="tiktok">
+        <section class="card panel">
+          <div class="section-header">
+            <div>
+              <h2>Captacion TikTok</h2>
+              <p>Mismo flujo que Instagram. Define objetivo, conecta cookies, pulsa Empezar.</p>
+            </div>
+            <div class="actions">
+              <span id="tkSessionPill" class="pill"></span>
+              <button class="ghost small" type="button" id="tkRefreshBtn">Actualizar</button>
+            </div>
+          </div>
+
+          <div class="actions cw-advanced-tabs">
+            <button class="ghost small active" type="button" data-tk-tab="dashboard">Hoy</button>
+            <button class="ghost small" type="button" data-tk-tab="config">Configuracion</button>
+            <button class="ghost small" type="button" data-tk-tab="templates">Mensajes</button>
+            <button class="ghost small" type="button" data-tk-tab="suppressions">Bajas</button>
+          </div>
+
+          <div class="outreach-panel active" data-tk-panel="dashboard">
+            <div class="grid-4" style="margin-top:12px;">
+              <div class="stat-card"><strong id="tkStatSentToday">0</strong><span>DMs hoy</span></div>
+              <div class="stat-card"><strong id="tkStatSentTotal">0</strong><span>Total enviados</span></div>
+              <div class="stat-card"><strong id="tkStatReplies">0</strong><span>Respuestas</span></div>
+              <div class="stat-card"><strong id="tkStatDrafts">0</strong><span>En cola</span></div>
+            </div>
+            <div class="card panel" style="padding:12px;margin-top:14px;">
+              <strong>Prospects recientes</strong>
+              <div id="tkProspectsList" class="muted" style="margin-top:8px;">cargando...</div>
+            </div>
+          </div>
+
+          <div class="outreach-panel" data-tk-panel="config" style="display:none;">
+            <div id="tkCampaignCard" class="card" style="padding:18px;margin-bottom:14px;border:2px solid #cbd5e1;background:#f8fafc;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:240px;">
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <span id="tkCampStateDot" style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#94a3b8;"></span>
+                    <strong id="tkCampStateText" style="font-size:20px;">Cargando...</strong>
+                  </div>
+                  <p class="muted" id="tkCampHint" style="margin:6px 0 0;font-size:12px;">Define objetivo y pulsa Empezar. Discovery → drafts → envio.</p>
+                </div>
+              </div>
+              <div style="margin-top:14px;background:#e2e8f0;border-radius:10px;overflow:hidden;height:14px;position:relative;">
+                <div id="tkCampProgressBar" style="height:100%;background:linear-gradient(90deg,#10b981,#059669);width:0%;transition:width 0.4s;"></div>
+              </div>
+              <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;font-size:13px;">
+                <span><strong id="tkCampSent">0</strong> contactados / <strong id="tkCampTarget">0</strong> objetivo</span>
+                <span class="muted" id="tkCampPct">0%</span>
+              </div>
+              <div style="margin-top:14px;display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+                <label style="font-size:12px;display:flex;flex-direction:column;gap:4px;">
+                  Numero de clientes objetivo
+                  <input id="tkCampTargetInput" type="number" min="1" max="200" value="30" style="width:120px;font-size:18px;font-weight:600;text-align:center;padding:6px;" />
+                </label>
+                <button id="tkCampStartBtn" class="secondary" type="button" style="font-size:15px;padding:10px 26px;">EMPEZAR CAPTACIÓN</button>
+                <button id="tkCampPauseBtn" class="ghost small" type="button" style="display:none;">Pausar</button>
+                <button id="tkCampResumeBtn" class="ghost small" type="button" style="display:none;">Reanudar</button>
+              </div>
+              <div id="tkCampStats" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;font-size:12px;">
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Descubiertos</span>
+                  <strong id="tkCampDiscovered" style="font-size:18px;">-</strong>
+                </div>
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">En cola</span>
+                  <strong id="tkCampPending" style="font-size:18px;">-</strong>
+                </div>
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Respuestas</span>
+                  <strong id="tkCampReplied" style="font-size:18px;">-</strong>
+                </div>
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Sesion TT</span>
+                  <strong id="tkCampSession" style="font-size:13px;">-</strong>
+                </div>
+              </div>
+              <p id="tkCampMsg" class="muted" style="margin:8px 0 0;font-size:12px;"></p>
+            </div>
+            <div class="card" style="padding:14px;margin-bottom:14px;background:#fffbeb;border:1px solid #fde68a;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:260px;">
+                  <strong style="font-size:14px;">Sesion TikTok (envio automatico)</strong>
+                  <p class="muted" style="margin:4px 0 0;font-size:12px;">
+                    Pega tus cookies de TikTok para que el VPS envie los DMs solo. Caducan periodicamente, reconecta.
+                    <strong>Recomendado: cuenta secundaria.</strong> Riesgo bloqueo TikTok al automatizar DMs.
+                  </p>
+                </div>
+                <div id="tkAutosendStatusBadge" class="muted" style="font-size:12px;text-align:right;min-width:160px;">Cargando...</div>
+              </div>
+              <details style="margin-top:10px;">
+                <summary style="cursor:pointer;font-size:12px;color:#92400e;">Como sacar las cookies (1 vez, 2 min)</summary>
+                <ol style="font-size:12px;line-height:1.7;margin:8px 0 0 18px;color:#475569;">
+                  <li>Abre <code>tiktok.com</code> en tu navegador, logueado con la cuenta a usar.</li>
+                  <li>F12 → Application (Chrome) o Almacenamiento (Firefox).</li>
+                  <li>Cookies → <code>https://www.tiktok.com</code>.</li>
+                  <li>Copia: <code>sessionid</code> obligatoria + opcional <code>sessionid_ss</code>, <code>tt_csrf_token</code>, <code>msToken</code>, <code>ttwid</code>.</li>
+                  <li>Pegalos abajo y pulsa <strong>Conectar</strong>.</li>
+                </ol>
+              </details>
+              <div class="grid-2" style="margin-top:10px;gap:8px;">
+                <label style="font-size:12px;">sessionid (obligatoria)<input id="tkSessionid" type="password" autocomplete="off" /></label>
+                <label style="font-size:12px;">sessionid_ss<input id="tkSessionidSs" type="password" autocomplete="off" /></label>
+                <label style="font-size:12px;">tt_csrf_token<input id="tkCsrfToken" type="text" autocomplete="off" /></label>
+                <label style="font-size:12px;">msToken<input id="tkMsToken" type="text" autocomplete="off" /></label>
+                <label style="font-size:12px;">ttwid<input id="tkTtwid" type="text" autocomplete="off" /></label>
+              </div>
+              <div class="actions" style="margin-top:10px;gap:8px;flex-wrap:wrap;">
+                <button class="secondary small" type="button" id="tkAutosendConnectBtn">Conectar</button>
+                <button class="ghost small" type="button" id="tkAutosendTestBtn">Probar sesion</button>
+                <button class="ghost small" type="button" id="tkAutosendDisconnectBtn" style="color:#b91c1c;">Desconectar</button>
+                <span id="tkAutosendMsg" class="muted" style="font-size:12px;"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="outreach-panel" data-tk-panel="templates" style="display:none;">
+            <div class="card" style="padding:14px;margin-top:12px;">
+              <strong>Plantillas de DM</strong>
+              <p class="muted" style="margin:4px 0 0;font-size:12px;">
+                3 variantes A/B/C estables por hash de username. Vacio = default codificado.
+                Placeholders: <code>{business_name}</code>, <code>{city}</code>, <code>{niche}</code>, <code>{observed}</code>, <code>{you}</code>.
+              </p>
+            </div>
+            <div class="grid-3" style="margin-top:12px;gap:12px;">
+              <div class="card" style="padding:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <strong>Variante A</strong>
+                  <button class="ghost small" type="button" data-tktpl-reset="A">Restaurar default</button>
+                </div>
+                <textarea id="tkTplA" rows="14" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-top:6px;"></textarea>
+                <div style="margin-top:8px;">
+                  <button class="ghost small" type="button" data-tktpl-preview="A">Preview</button>
+                  <pre data-tktpl-preview-out="A" style="display:none;background:#0f172a;color:#cbd5f5;padding:10px;border-radius:6px;font-size:11px;white-space:pre-wrap;margin-top:6px;"></pre>
+                </div>
+              </div>
+              <div class="card" style="padding:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <strong>Variante B</strong>
+                  <button class="ghost small" type="button" data-tktpl-reset="B">Restaurar default</button>
+                </div>
+                <textarea id="tkTplB" rows="14" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-top:6px;"></textarea>
+                <div style="margin-top:8px;">
+                  <button class="ghost small" type="button" data-tktpl-preview="B">Preview</button>
+                  <pre data-tktpl-preview-out="B" style="display:none;background:#0f172a;color:#cbd5f5;padding:10px;border-radius:6px;font-size:11px;white-space:pre-wrap;margin-top:6px;"></pre>
+                </div>
+              </div>
+              <div class="card" style="padding:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <strong>Variante C</strong>
+                  <button class="ghost small" type="button" data-tktpl-reset="C">Restaurar default</button>
+                </div>
+                <textarea id="tkTplC" rows="14" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-top:6px;"></textarea>
+                <div style="margin-top:8px;">
+                  <button class="ghost small" type="button" data-tktpl-preview="C">Preview</button>
+                  <pre data-tktpl-preview-out="C" style="display:none;background:#0f172a;color:#cbd5f5;padding:10px;border-radius:6px;font-size:11px;white-space:pre-wrap;margin-top:6px;"></pre>
+                </div>
+              </div>
+            </div>
+            <div class="actions" style="margin-top:12px;">
+              <button class="secondary" type="button" id="tkTplSaveBtn">Guardar plantillas</button>
+              <span id="tkTplMsg" class="muted" style="font-size:12px;"></span>
+            </div>
+          </div>
+
+          <div class="outreach-panel" data-tk-panel="suppressions" style="display:none;">
+            <div class="actions" style="margin-top:12px;">
+              <input id="tkSupUsername" placeholder="@cuenta" />
+              <input id="tkSupReason" placeholder="razon" />
+              <button class="secondary small" type="button" id="tkSupAddBtn">Suprimir</button>
+              <button class="ghost small" type="button" id="tkSupRefreshBtn">Refrescar</button>
+            </div>
+            <div style="margin-top:12px;">
+              <table style="width:100%;font-size:13px;">
+                <thead><tr><th>Username</th><th>Razon</th><th>Fecha</th><th></th></tr></thead>
+                <tbody id="tkSupBody"><tr><td colspan="4" class="muted">Cargando bajas...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </section>
+
       <section class="dashboard-view" data-view="security">
         <section class="card panel security-card" id="securityCard">
           <div class="section-header">
@@ -2531,7 +2712,7 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="cw-card-header">
                 <div>
                   <h3>Campanas activas</h3>
-                  <p>Controla campanas que llevan al registro directo: crea tu bot gratis en 2 minutos.</p>
+                  <p>Controla campanas que llevan a una demo prefillada antes del registro.</p>
                 </div>
                 <button class="ghost small" type="button" id="cwRefreshCampaignsBtn">Actualizar</button>
               </div>
@@ -2543,8 +2724,8 @@ tbody tr:last-child td { border-bottom: none; }
             <div class="cw-shell">
               <div class="cw-topbar">
                 <div>
-                  <h3>Campanas a registro</h3>
-                  <p>Busca negocios, revisa candidatos y lanza mensajes con CTA directo a crear el bot gratis.</p>
+                  <h3>Campanas a demo</h3>
+                  <p>Busca negocios, revisa candidatos y lanza mensajes con CTA directo a generar una demo prefillada.</p>
                 </div>
                 <div class="pills">
                   <span class="pill accent" id="cwSelectedPill">0 seleccionados</span>
@@ -2614,7 +2795,7 @@ tbody tr:last-child td { border-bottom: none; }
                     <div class="actions"><button class="ghost" type="button" data-cw-prev="test">Atras</button><button class="secondary" type="button" id="cwLaunchBtn">Lanzar campana</button></div>
                   </div>
                 </div>
-                <aside class="cw-card"><h4>Metricas basicas</h4><div class="cw-side-stat"><strong id="cwMetricSent">-</strong><span>Enviados</span></div><div class="cw-side-stat"><strong id="cwMetricOpen">-</strong><span>Abiertos</span></div><div class="cw-side-stat"><strong id="cwMetricReplies">-</strong><span>Respuestas</span></div><div class="cw-side-stat"><strong id="cwMetricReady">0</strong><span>Negocios listos</span></div><p class="muted">El wizard guarda tu borrador y debe apuntar al registro self-service, no a demos manuales.</p></aside>
+                <aside class="cw-card"><h4>Metricas basicas</h4><div class="cw-side-stat"><strong id="cwMetricSent">-</strong><span>Enviados</span></div><div class="cw-side-stat"><strong id="cwMetricOpen">-</strong><span>Abiertos</span></div><div class="cw-side-stat"><strong id="cwMetricReplies">-</strong><span>Respuestas</span></div><div class="cw-side-stat"><strong id="cwMetricReady">0</strong><span>Negocios listos</span></div><p class="muted">El wizard guarda tu borrador y debe apuntar a una demo prefillada antes del registro.</p></aside>
               </div>
             </div>
           </div>
@@ -2626,13 +2807,14 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="ss-action-title">
                 <div>
                   <strong style="font-size:18px;">Embudo self-service</strong>
-                  <p class="muted" style="margin:4px 0 0;font-size:12px;">De visita a pago: mide donde se atasca la gente que quiere crear su bot gratis en menos de 2 minutos.</p>
+                  <p class="muted" style="margin:4px 0 0;font-size:12px;">De email a demo y de demo a pago: mide donde se atasca la gente que quiere probar su bot gratis.</p>
                 </div>
                 <div class="actions">
-                  <a class="ghost small" href="https://app.vantelia.es/acceso?signup=1" target="_blank" rel="noopener">Abrir registro</a>
+                  <a class="ghost small" href="https://www.vantelia.es/demo/" target="_blank" rel="noopener">Abrir demo</a>
                   <button class="secondary small" type="button" id="ssRefreshBtn">Actualizar embudo</button>
                 </div>
               </div>
+              <div id="orOutreachHealth" style="display:none;margin-top:12px;"></div>
               <div class="ss-kpis">
                 <div class="ss-kpi"><strong id="ssVisits">-</strong><span>Visitas web</span></div>
                 <div class="ss-kpi"><strong id="ssCtaClicks">-</strong><span>Clicks crear bot</span></div>
@@ -3186,7 +3368,7 @@ tbody tr:last-child td { border-bottom: none; }
           <div class="section-header">
             <div>
               <h2>Captacion Instagram</h2>
-              <p>CRM ligero para registrar DMs, priorizar follow-ups y ver que usuarios estan calientes.</p>
+              <p>Autopiloto envia DMs solo. Tu monitorizas stats y respondes leads calientes.</p>
             </div>
             <div class="actions">
               <span id="igAutosendBadge" class="pill" style="display:none;">Autosend ON</span>
@@ -3196,157 +3378,138 @@ tbody tr:last-child td { border-bottom: none; }
             </div>
           </div>
 
-          <div id="igComplianceBanner" style="background:#0b132b;color:#cbd5f5;padding:10px 12px;border-radius:8px;margin:8px 0 12px 0;font-size:13px;line-height:1.5;">
-            <strong>Modo asistido compliant.</strong> Captacion Instagram opera con deep links ig.me y envio manual.
-            Cumple ToS Meta. <span id="igAutosendWarn" style="display:none;color:#fca5a5;">Modo agresivo activo: riesgo bloqueo cuenta IG, usa cuenta secundaria.</span>
+          <div id="igAutosendWarn" style="display:none;background:#451a03;color:#fca5a5;padding:8px 12px;border-radius:8px;margin:8px 0 12px 0;font-size:12px;">
+            Autosend agresivo activo. Riesgo bloqueo Meta. Usa cuenta secundaria.
           </div>
 
           <div class="actions cw-advanced-tabs">
             <button class="ghost small active" type="button" data-ig-tab="dashboard">Hoy</button>
-            <button class="ghost small" type="button" data-ig-tab="manual">Registrar contacto</button>
-            <button class="ghost small" type="button" data-ig-tab="prospects">Prospects IG</button>
-            <button class="ghost small" type="button" data-ig-tab="drafts">Seguimientos <span class="or-tab-badge" id="igDraftsBadge" style="display:none;"></span></button>
-            <button class="ghost small" type="button" data-ig-tab="templates">Mensajes</button>
             <button class="ghost small" type="button" data-ig-tab="autopilot">Configuracion</button>
+            <button class="ghost small" type="button" data-ig-tab="dmtemplates">Mensajes</button>
             <button class="ghost small" type="button" data-ig-tab="suppressions">Bajas</button>
           </div>
 
           <div class="outreach-panel active" data-ig-panel="dashboard">
             <div class="grid-4" style="margin-top:12px;">
-              <div class="stat-card"><strong id="igStatSent">0</strong><span>Contactos hoy</span></div>
+              <div class="stat-card"><strong id="igStatSent">0</strong><span>DMs hoy</span></div>
               <div class="stat-card"><strong id="igOpsSentWeek">0</strong><span>Ultimos 7 dias</span></div>
-              <div class="stat-card"><strong id="igOpsFollowupsDue">0</strong><span>Follow-ups vencidos</span></div>
               <div class="stat-card"><strong id="igStatReplies">0</strong><span>Respuestas</span></div>
+              <div class="stat-card"><strong id="igOpsFollowupsDue">0</strong><span>Follow-ups vencidos</span></div>
             </div>
             <div class="grid-2" style="margin-top:14px;">
-              <div class="card panel" style="padding:12px;">
-                <div class="section-header" style="margin-bottom:8px;">
-                  <div><strong>Acciones pendientes</strong><p class="muted">Usuarios a los que toca escribir hoy.</p></div>
-                  <button class="ghost small" type="button" id="igTodayRegisterBtn">Registrar contacto</button>
-                </div>
-                <div id="igTodayFollowups" class="muted">cargando...</div>
-              </div>
               <div class="card panel" style="padding:12px;">
                 <strong>Leads calientes</strong>
+                <p class="muted" style="margin:2px 0 8px;font-size:12px;">Han abierto/clicado y aun no han respondido.</p>
                 <div id="igHotLeadsBox" class="muted">cargando...</div>
               </div>
-            </div>
-            <div class="grid-2" style="margin-top:14px;">
               <div class="card panel" style="padding:12px;">
                 <strong>Estado del embudo</strong>
-                <div id="igFunnelBox" class="muted">cargando...</div>
-              </div>
-              <div class="card panel" style="padding:12px;">
-                <strong>Actividad reciente</strong>
-                <div id="igRecentActivity" class="muted">cargando...</div>
+                <div id="igFunnelBox" class="muted" style="margin-top:8px;">cargando...</div>
               </div>
             </div>
-          </div>
-
-          <div class="outreach-panel" data-ig-panel="manual" style="display:none;">
-            <div class="grid-2" style="margin-top:12px;">
-              <div class="card panel" style="padding:14px;">
-                <div class="section-header">
-                  <div><strong>Registrar contacto</strong><p class="muted">Pega el usuario y el mensaje que acabas de enviar o recibir.</p></div>
-                </div>
-                <div class="grid-2" style="margin-top:10px;">
-                  <label>Usuario IG *<input id="igManualUsername" placeholder="@clinica_demo" /></label>
-                  <label>Etapa
-                    <select id="igManualStage">
-                      <option value="">Inferir automaticamente</option>
-                      <option value="cold">Primer contacto</option>
-                      <option value="fu1">Follow-up 1</option>
-                      <option value="fu2">Follow-up 2</option>
-                      <option value="breakup">Cierre</option>
-                      <option value="respuesta">Respuesta recibida</option>
-                      <option value="interesado">Interesado</option>
-                      <option value="perdido">Perdido</option>
-                    </select>
-                  </label>
-                  <label>Nombre<input id="igManualFullName" placeholder="Clinica Demo" /></label>
-                  <label>Fecha/hora<input id="igManualAt" type="datetime-local" /></label>
-                  <label>Nicho<input id="igManualNiche" placeholder="estetica" /></label>
-                  <label>Ciudad<input id="igManualCity" placeholder="Madrid" /></label>
-                  <label style="grid-column:1/-1;">Mensaje *
-                    <textarea id="igManualMessage" rows="5" placeholder="Mensaje que has enviado o respuesta que te han dado"></textarea>
-                  </label>
-                  <label style="grid-column:1/-1;">Notas
-                    <textarea id="igManualNotes" rows="2" placeholder="Contexto interno opcional"></textarea>
-                  </label>
-                </div>
-                <div class="actions" style="margin-top:10px;">
-                  <button class="secondary" type="button" id="igManualSaveBtn">Guardar contacto</button>
-                  <button class="ghost small" type="button" id="igManualOpenIgBtn">Abrir IG</button>
-                  <span id="igManualStatus" class="muted"></span>
-                </div>
-              </div>
-              <div class="card panel" style="padding:14px;">
-                <strong>Que automatiza</strong>
-                <div class="ig-list" style="margin-top:10px;">
-                  <div class="ig-row"><span>Normaliza @usuario y evita duplicados</span><strong>OK</strong></div>
-                  <div class="ig-row"><span>Guarda historico de mensajes y eventos</span><strong>OK</strong></div>
-                  <div class="ig-row"><span>Calcula proximo follow-up</span><strong>OK</strong></div>
-                  <div class="ig-row"><span>Actualiza estadisticas de Hoy</span><strong>OK</strong></div>
-                </div>
-              </div>
+            <div class="card panel" style="padding:12px;margin-top:14px;">
+              <strong>Actividad reciente</strong>
+              <div id="igRecentActivity" class="muted" style="margin-top:8px;">cargando...</div>
             </div>
-          </div>
-
-          <div class="outreach-panel" data-ig-panel="drafts" style="display:none;">
-            <div class="card panel" style="padding:12px;margin-top:12px;">
-              <div class="section-header">
-                <div><strong>Follow-ups listos</strong><p class="muted">Copia o abre el DM sugerido. Al volver, puedes marcarlo como enviado.</p></div>
-                <button class="ghost small" type="button" id="igFollowupsRefreshBtn">Refrescar</button>
-              </div>
-              <div id="igFollowupQueue" class="muted">cargando...</div>
-            </div>
-            <div class="actions" style="margin-top:12px;">
-              <select id="igDraftsStageFilter"><option value="">todos los stages</option><option value="cold">cold</option><option value="fu1">fu1</option><option value="fu2">fu2</option><option value="breakup">breakup</option></select>
-              <input id="igDraftsNiche" placeholder="filtrar niche..." />
-              <input id="igDraftsCity" placeholder="filtrar ciudad..." />
-              <button class="secondary small" type="button" id="igDraftsRefreshBtn">Refrescar</button>
-              <button class="ghost small" type="button" id="igGenerateColdBtn">+ Generar drafts cold</button>
-              <button class="ghost small" type="button" id="igGenerateFu1Btn">+ Follow-up fu1</button>
-              <button class="ghost small" type="button" id="igGenerateFu2Btn">+ Follow-up fu2</button>
-            </div>
-            <p class="muted" style="margin-top:8px;">Boton <strong>Enviar DM</strong> abre Instagram con texto prellenado. Despues marca como enviado al volver al panel.</p>
-            <div id="igDraftsList" style="margin-top:12px;display:grid;grid-template-columns:1fr;gap:12px;"></div>
-          </div>
-
-          <div class="outreach-panel" data-ig-panel="prospects" style="display:none;">
-            <div class="actions" style="margin-top:12px;">
-              <input id="igProspectsQ" placeholder="buscar @usuario, nombre o bio..." />
-              <select id="igProspectsStatus"><option value="">cualquier estado</option><option value="new">new</option><option value="queued">queued</option><option value="contacted">contacted</option><option value="replied">replied</option><option value="client">client</option><option value="lost">lost</option><option value="dnc">dnc</option></select>
-              <input id="igProspectsNiche" placeholder="niche" />
-              <input id="igProspectsCity" placeholder="ciudad" />
-              <button class="secondary small" type="button" id="igProspectsRefreshBtn">Filtrar</button>
-              <button class="ghost small" type="button" id="igProspectsAddBtn">+ Nuevo prospect</button>
-              <a class="ghost small" href="/admin/instagram/export.csv">Exportar CSV</a>
-            </div>
-            <div id="igProspectsTable" style="margin-top:12px;"></div>
-            <div id="igProspectsPager" class="muted" style="margin-top:8px;"></div>
-          </div>
-
-          <div class="outreach-panel" data-ig-panel="templates" style="display:none;">
-            <p class="muted" style="margin-top:12px;">Overrides opcionales del copy por stage. Vacio = usar default de scripts/instagram_templates.py.</p>
-            <div id="igTemplatesEditor"></div>
+            <div id="igTodayFollowups" style="display:none;"></div>
           </div>
 
           <div class="outreach-panel" data-ig-panel="autopilot" style="display:none;">
-            <div class="section-header">
-              <div><strong>Configuracion Instagram</strong><p class="muted">Automatizacion asistida. El envio real sigue siendo manual salvo modo agresivo opt-in.</p></div>
-              <label class="switch"><input id="igAutoEnabled" type="checkbox" /> Activo</label>
+            <div id="igCampaignCard" class="card" style="padding:18px;margin-bottom:14px;border:2px solid #cbd5e1;background:#f8fafc;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:240px;">
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <span id="igCampStateDot" style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#94a3b8;"></span>
+                    <strong id="igCampStateText" style="font-size:20px;">Cargando...</strong>
+                  </div>
+                  <p class="muted" id="igCampHint" style="margin:6px 0 0;font-size:12px;">Define objetivo y pulsa Empezar. El sistema descubre, contacta y para al alcanzar el numero.</p>
+                </div>
+              </div>
+              <div style="margin-top:14px;background:#e2e8f0;border-radius:10px;overflow:hidden;height:14px;position:relative;">
+                <div id="igCampProgressBar" style="height:100%;background:linear-gradient(90deg,#10b981,#059669);width:0%;transition:width 0.4s;"></div>
+              </div>
+              <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;font-size:13px;">
+                <span><strong id="igCampSent">0</strong> contactados / <strong id="igCampTarget">0</strong> objetivo</span>
+                <span class="muted" id="igCampPct">0%</span>
+              </div>
+              <div style="margin-top:14px;display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+                <label style="font-size:12px;display:flex;flex-direction:column;gap:4px;">
+                  Numero de clientes objetivo
+                  <input id="igCampTargetInput" type="number" min="1" max="200" value="30" style="width:120px;font-size:18px;font-weight:600;text-align:center;padding:6px;" />
+                </label>
+                <button id="igCampStartBtn" class="secondary" type="button" style="font-size:15px;padding:10px 26px;">EMPEZAR CAPTACIÓN</button>
+                <button id="igCampPauseBtn" class="ghost small" type="button" style="display:none;">Pausar</button>
+                <button id="igCampResumeBtn" class="ghost small" type="button" style="display:none;">Reanudar</button>
+              </div>
+              <div id="igCampStats" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;font-size:12px;">
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Descubiertos</span>
+                  <strong id="igCampDiscovered" style="font-size:18px;">-</strong>
+                </div>
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">En cola</span>
+                  <strong id="igCampPending" style="font-size:18px;">-</strong>
+                </div>
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Respuestas</span>
+                  <strong id="igCampReplied" style="font-size:18px;">-</strong>
+                </div>
+                <div style="padding:8px;background:white;border-radius:6px;border:1px solid #e2e8f0;">
+                  <span class="muted" style="display:block;font-size:10px;text-transform:uppercase;">Sesion IG</span>
+                  <strong id="igCampSession" style="font-size:13px;">-</strong>
+                </div>
+              </div>
+              <p id="igCampMsg" class="muted" style="margin:8px 0 0;font-size:12px;"></p>
             </div>
-            <div class="grid-3" style="margin-top:10px;">
-              <label>Target diario nuevos<input id="igAutoDailyNew" type="number" min="1" max="200" value="15" /></label>
-              <label>Cap diario outreach<input id="igAutoDailyCap" type="number" min="1" max="200" value="25" /></label>
-              <label class="checkbox"><input id="igAutoFollowups" type="checkbox" /> Auto follow-ups</label>
+            <div class="card" style="padding:14px;margin-bottom:14px;background:#fffbeb;border:1px solid #fde68a;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:260px;">
+                  <strong style="font-size:14px;">Sesion Instagram (envio automatico)</strong>
+                  <p class="muted" style="margin:4px 0 0;font-size:12px;">
+                    Pega tus cookies de Instagram para que el VPS envie los DMs solo. Caducan ~3 meses, reconecta cuando pase.
+                    <strong>Recomendado: cuenta secundaria.</strong> Riesgo de bloqueo Meta al automatizar DMs.
+                  </p>
+                </div>
+                <div id="igAutosendStatusBadge" class="muted" style="font-size:12px;text-align:right;min-width:160px;">Cargando...</div>
+              </div>
+              <details style="margin-top:10px;">
+                <summary style="cursor:pointer;font-size:12px;color:#92400e;">Como sacar las cookies (1 vez, 2 min)</summary>
+                <ol style="font-size:12px;line-height:1.7;margin:8px 0 0 18px;color:#475569;">
+                  <li>Abre <code>instagram.com</code> en tu navegador, logueado con la cuenta que vas a usar.</li>
+                  <li>Pulsa F12 → pestana <strong>Application</strong> (Chrome) o <strong>Almacenamiento</strong> (Firefox).</li>
+                  <li>Cookies → <code>https://www.instagram.com</code>.</li>
+                  <li>Copia los valores de: <code>sessionid</code>, <code>csrftoken</code>, <code>ds_user_id</code> (y opcional <code>mid</code>, <code>rur</code>).</li>
+                  <li>Pegalos abajo y pulsa <strong>Conectar</strong>.</li>
+                </ol>
+              </details>
+              <div class="grid-2" style="margin-top:10px;gap:8px;">
+                <label style="font-size:12px;">sessionid<input id="igAutosendSessionid" type="password" placeholder="12345678%3AabCdEf..." autocomplete="off" /></label>
+                <label style="font-size:12px;">csrftoken<input id="igAutosendCsrftoken" type="text" placeholder="abc123..." autocomplete="off" /></label>
+                <label style="font-size:12px;">ds_user_id<input id="igAutosendDsUserId" type="text" placeholder="12345678" autocomplete="off" /></label>
+                <label style="font-size:12px;">mid (opcional)<input id="igAutosendMid" type="text" autocomplete="off" /></label>
+                <label style="font-size:12px;">rur (opcional)<input id="igAutosendRur" type="text" autocomplete="off" /></label>
+              </div>
+              <div class="actions" style="margin-top:10px;gap:8px;flex-wrap:wrap;">
+                <button class="secondary small" type="button" id="igAutosendConnectBtn">Conectar</button>
+                <button class="ghost small" type="button" id="igAutosendTestBtn">Probar sesion</button>
+                <button class="ghost small" type="button" id="igAutosendDisconnectBtn" style="color:#b91c1c;">Desconectar</button>
+                <span id="igAutosendMsg" class="muted" style="font-size:12px;"></span>
+              </div>
             </div>
-            <label>Targets JSON (lista de {usernames, niche, city})
-              <textarea id="igAutoTargets" rows="6" placeholder='[{"usernames":["c1","c2"],"niche":"dental","city":"Madrid"}]'></textarea>
-            </label>
+            <details style="margin-top:8px;">
+              <summary style="cursor:pointer;font-size:12px;color:#64748b;">Opciones avanzadas (seeds + follow-ups)</summary>
+              <input id="igAutoEnabled" type="checkbox" style="display:none;" />
+              <div class="grid-3" style="margin-top:10px;">
+                <label>Target diario nuevos<input id="igAutoDailyNew" type="number" min="1" max="200" value="15" /></label>
+                <label>Cap diario outreach<input id="igAutoDailyCap" type="number" min="1" max="200" value="25" style="display:none;" /></label>
+                <label class="checkbox"><input id="igAutoFollowups" type="checkbox" checked /> Auto follow-ups</label>
+              </div>
+              <label>Targets JSON (lista de {usernames, niche, city})
+                <textarea id="igAutoTargets" rows="6" placeholder='[{"usernames":["c1","c2"],"niche":"dental","city":"Madrid"}]'></textarea>
+              </label>
+            </details>
             <div class="actions">
-              <button class="secondary small" type="button" id="igAutoSaveBtn">Guardar</button>
+              <button class="secondary small" type="button" id="igAutoSaveBtn" style="display:none;">Guardar</button>
               <button class="ghost small" type="button" id="igAutoTickBtn">Ejecutar ronda ahora</button>
               <span id="igAutoStatus" class="muted"></span>
             </div>
@@ -3375,6 +3538,55 @@ tbody tr:last-child td { border-bottom: none; }
               <pre id="igDiscLog" style="display:none;background:#0f172a;color:#cbd5f5;font-size:12px;padding:10px;border-radius:8px;max-height:240px;overflow:auto;white-space:pre-wrap;margin-top:10px;"></pre>
               <div id="igJobsList" class="ig-list" style="margin-top:12px;"></div>
             </details>
+          </div>
+
+          <div class="outreach-panel" data-ig-panel="dmtemplates" style="display:none;">
+            <div class="card" style="padding:14px;margin-top:12px;">
+              <strong>Plantillas de DM</strong>
+              <p class="muted" style="margin:4px 0 0;font-size:12px;">
+                3 variantes A/B/C. Cada prospect recibe siempre la misma variante (hash estable por username).
+                Vacio = usar plantilla por defecto. Placeholders: <code>{business_name}</code>, <code>{city}</code>, <code>{niche}</code>, <code>{observed}</code>, <code>{you}</code>.
+              </p>
+            </div>
+            <div id="igDmTplGrid" class="grid-3" style="margin-top:12px;gap:12px;">
+              <div class="card" style="padding:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <strong>Variante A</strong>
+                  <button class="ghost small" type="button" data-igtpl-reset="A">Restaurar default</button>
+                </div>
+                <textarea id="igTplA" rows="14" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-top:6px;" placeholder="Vacio = default"></textarea>
+                <div style="margin-top:8px;">
+                  <button class="ghost small" type="button" data-igtpl-preview="A">Preview</button>
+                  <pre data-igtpl-preview-out="A" style="display:none;background:#0f172a;color:#cbd5f5;padding:10px;border-radius:6px;font-size:11px;white-space:pre-wrap;margin-top:6px;"></pre>
+                </div>
+              </div>
+              <div class="card" style="padding:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <strong>Variante B</strong>
+                  <button class="ghost small" type="button" data-igtpl-reset="B">Restaurar default</button>
+                </div>
+                <textarea id="igTplB" rows="14" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-top:6px;" placeholder="Vacio = default"></textarea>
+                <div style="margin-top:8px;">
+                  <button class="ghost small" type="button" data-igtpl-preview="B">Preview</button>
+                  <pre data-igtpl-preview-out="B" style="display:none;background:#0f172a;color:#cbd5f5;padding:10px;border-radius:6px;font-size:11px;white-space:pre-wrap;margin-top:6px;"></pre>
+                </div>
+              </div>
+              <div class="card" style="padding:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <strong>Variante C</strong>
+                  <button class="ghost small" type="button" data-igtpl-reset="C">Restaurar default</button>
+                </div>
+                <textarea id="igTplC" rows="14" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-top:6px;" placeholder="Vacio = default"></textarea>
+                <div style="margin-top:8px;">
+                  <button class="ghost small" type="button" data-igtpl-preview="C">Preview</button>
+                  <pre data-igtpl-preview-out="C" style="display:none;background:#0f172a;color:#cbd5f5;padding:10px;border-radius:6px;font-size:11px;white-space:pre-wrap;margin-top:6px;"></pre>
+                </div>
+              </div>
+            </div>
+            <div class="actions" style="margin-top:12px;">
+              <button class="secondary" type="button" id="igTplSaveBtn">Guardar plantillas</button>
+              <span id="igTplMsg" class="muted" style="font-size:12px;"></span>
+            </div>
           </div>
 
           <div class="outreach-panel" data-ig-panel="suppressions" style="display:none;">
@@ -3695,6 +3907,8 @@ tbody tr:last-child td { border-bottom: none; }
         loadStatsOverview().catch((error) => showStatus(error.message, "error"));
       } else if (nextView === "instagram") {
         try { window.__igInit && window.__igInit(); } catch(e) { console.warn(e); }
+      } else if (nextView === "tiktok") {
+        try { window.__tkInit && window.__tkInit(); } catch(e) { console.warn(e); }
       }
     }
 
@@ -7237,7 +7451,39 @@ a {
           renderFunnel(data.funnel, t.sent_distinct);
           renderTopNiches(data.top_niches);
           renderVanteliaClickers(data.vantelia_clickers || []);
+          renderOutreachHealth(data);
         } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      function renderOutreachHealth(data) {
+        const box = ORQ("#orOutreachHealth");
+        if (!box) return;
+        const alerts = data.health_alerts || [];
+        const cta = data.primary_cta || {};
+        const totals = data.totals || {};
+        const softAlerts = [];
+        if ((totals.opens_unique || 0) >= 20 && (totals.open_to_click_rate_pct || 0) < 12) {
+          softAlerts.push({
+            level: "warning",
+            message: `Aperturas sanas, pero click tras apertura bajo (${totals.open_to_click_rate_pct || 0}%). Revisa promesa, CTA y nicho antes de subir volumen.`,
+          });
+        }
+        const items = alerts.concat(softAlerts);
+        const levelColor = (level) => level === "danger"
+          ? "border:#fecaca;background:#fff1f2;color:#7f1d1d;"
+          : "border:#fed7aa;background:#fff7ed;color:#7c2d12;";
+        const ctaLine = cta.url
+          ? `<div style="font-size:11px;color:#475569;margin-top:6px;overflow-wrap:anywhere;">CTA actual: <strong>${escapeHtml(cta.destination || "desconocido")}</strong> · ${escapeHtml(cta.url)} · tracking ${cta.tracked ? "OK" : "NO"}</div>`
+          : "";
+        if (!items.length) {
+          box.style.display = "";
+          box.innerHTML = `<div style="padding:10px 12px;border:1px solid #bbf7d0;background:#f0fdf4;color:#14532d;border-radius:8px;font-size:12px;font-weight:600;">Flujo outreach sano: CTA a demo y tracking activo.${ctaLine}</div>`;
+          return;
+        }
+        box.style.display = "";
+        box.innerHTML = items.map((a) =>
+          `<div style="padding:10px 12px;margin-top:8px;border-radius:8px;font-size:12px;font-weight:600;${levelColor(a.level)}">${escapeHtml(a.message)}${ctaLine}</div>`
+        ).join("");
       }
 
       function renderChart(daily) {
@@ -8711,33 +8957,392 @@ a {
           p.style.display = isActive ? "" : "none";
         });
         if (tab === "dashboard") { loadStats(); loadOpsSummary(); loadHotLeads(); }
-        if (tab === "drafts") { loadFollowupQueue(); loadDrafts(); }
-        if (tab === "prospects") loadProspects();
-        if (tab === "templates") loadIgTemplates();
-        if (tab === "autopilot") loadAutopilot();
+        if (tab === "templates") loadTemplates();
+        if (tab === "autopilot") { loadIgCampaign(); loadIgAutosendStatus(); startIgCampaignPolling(); } else { stopIgCampaignPolling(); }
+        if (tab === "dmtemplates") loadIgDmTemplates();
         if (tab === "suppressions") loadSuppressions();
+      }
+
+      let _igCampaignPollTimer = null;
+      const IG_CAMP_STATE_META = {
+        idle: { label: "PARADO", dot: "#94a3b8", color: "#475569" },
+        discovering: { label: "BUSCANDO PROSPECTS", dot: "#3b82f6", color: "#1e40af" },
+        sending: { label: "ENVIANDO DMs", dot: "#10b981", color: "#047857" },
+        paused: { label: "PAUSADO", dot: "#f59e0b", color: "#92400e" },
+        completed: { label: "OBJETIVO ALCANZADO", dot: "#22c55e", color: "#15803d" },
+      };
+
+      async function loadIgCampaign() {
+        try {
+          const data = await igFetch("/admin/instagram/campaign");
+          const c = data.campaign || {};
+          const status = c.status || "idle";
+          const meta = IG_CAMP_STATE_META[status] || IG_CAMP_STATE_META.idle;
+          const target = c.target_count || 0;
+          const sent = c.sent_count || 0;
+          const pct = target > 0 ? Math.min(100, Math.round((sent / target) * 100)) : 0;
+          IGQ("#igCampStateDot").style.background = meta.dot;
+          IGQ("#igCampStateText").textContent = meta.label;
+          IGQ("#igCampStateText").style.color = meta.color;
+          IGQ("#igCampProgressBar").style.width = pct + "%";
+          IGQ("#igCampSent").textContent = sent;
+          IGQ("#igCampTarget").textContent = target;
+          IGQ("#igCampPct").textContent = pct + "%";
+          IGQ("#igCampDiscovered").textContent = c.discovered_count || 0;
+          IGQ("#igCampPending").textContent = c.pending_drafts || 0;
+          IGQ("#igCampReplied").textContent = c.replied_count || 0;
+          const sess = data.session || {};
+          if (sess.connected) {
+            IGQ("#igCampSession").textContent = "Conectada";
+            IGQ("#igCampSession").style.color = "#047857";
+          } else {
+            IGQ("#igCampSession").innerHTML = '<span style="color:#b91c1c;">Sin sesion</span>';
+          }
+          const startBtn = IGQ("#igCampStartBtn");
+          const pauseBtn = IGQ("#igCampPauseBtn");
+          const resumeBtn = IGQ("#igCampResumeBtn");
+          const targetInput = IGQ("#igCampTargetInput");
+          if (status === "idle" || status === "completed") {
+            startBtn.style.display = "";
+            startBtn.textContent = status === "completed" ? "EMPEZAR NUEVA" : "EMPEZAR CAPTACIÓN";
+            pauseBtn.style.display = "none";
+            resumeBtn.style.display = "none";
+            targetInput.disabled = false;
+          } else if (status === "paused") {
+            startBtn.style.display = "none";
+            pauseBtn.style.display = "none";
+            resumeBtn.style.display = "";
+            targetInput.disabled = false;
+          } else {
+            startBtn.style.display = "none";
+            pauseBtn.style.display = "";
+            resumeBtn.style.display = "none";
+            targetInput.disabled = true;
+          }
+          if (document.activeElement !== targetInput && target > 0) {
+            targetInput.value = target;
+          }
+          const err = (c.error_msg || "").trim();
+          IGQ("#igCampMsg").textContent = err ? `Aviso: ${err}` : "";
+          IGQ("#igCampMsg").style.color = err ? "#b91c1c" : "#64748b";
+        } catch (err) {
+          IGQ("#igCampStateText").textContent = "Error: " + err.message;
+        }
+      }
+
+      async function igCampStart() {
+        const target = parseInt(IGQ("#igCampTargetInput").value || "30", 10);
+        if (!target || target < 1 || target > 200) {
+          IGQ("#igCampMsg").innerHTML = '<span style="color:#b91c1c;">Objetivo debe ser 1-200.</span>';
+          return;
+        }
+        if (!confirm(`Empezar captacion automatica para ${target} clientes? Se enviaran DMs reales desde tu cuenta IG.`)) return;
+        const btn = IGQ("#igCampStartBtn");
+        btn.disabled = true;
+        IGQ("#igCampMsg").textContent = "Arrancando...";
+        try {
+          await igFetch("/admin/instagram/campaign/start", { method: "POST",
+            body: JSON.stringify({ target_count: target }) });
+          IGQ("#igCampMsg").textContent = "Campana iniciada. El sistema empieza a buscar.";
+          IGQ("#igCampMsg").style.color = "#047857";
+        } catch (err) {
+          IGQ("#igCampMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+        }
+        btn.disabled = false;
+        await loadIgCampaign();
+      }
+
+      async function igCampPause() {
+        try {
+          await igFetch("/admin/instagram/campaign/pause", { method: "POST" });
+        } catch (err) {
+          IGQ("#igCampMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+        }
+        await loadIgCampaign();
+      }
+
+      async function igCampResume() {
+        try {
+          await igFetch("/admin/instagram/campaign/resume", { method: "POST" });
+        } catch (err) {
+          IGQ("#igCampMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+        }
+        await loadIgCampaign();
+      }
+
+      function startIgCampaignPolling() {
+        stopIgCampaignPolling();
+        _igCampaignPollTimer = setInterval(() => {
+          const panel = document.querySelector('[data-ig-panel="autopilot"]');
+          if (!panel || panel.style.display === "none") return;
+          loadIgCampaign();
+        }, 8000);
+      }
+      function stopIgCampaignPolling() {
+        if (_igCampaignPollTimer) { clearInterval(_igCampaignPollTimer); _igCampaignPollTimer = null; }
+      }
+
+      let _igTplDefaults = { A: "", B: "", C: "" };
+
+      async function loadIgDmTemplates() {
+        try {
+          const data = await igFetch("/admin/instagram/dm-templates");
+          const t = data.templates || {};
+          _igTplDefaults = data.defaults || {};
+          for (const v of ["A","B","C"]) {
+            const el = IGQ("#igTpl" + v);
+            if (el && document.activeElement !== el) {
+              el.value = t[v] || "";
+              if (!t[v]) el.placeholder = "Vacio = usar default:\n\n" + (_igTplDefaults[v] || "");
+            }
+          }
+        } catch (err) {
+          IGQ("#igTplMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+        }
+      }
+
+      async function igTplSave() {
+        const body = {
+          variant_a: IGQ("#igTplA").value,
+          variant_b: IGQ("#igTplB").value,
+          variant_c: IGQ("#igTplC").value,
+        };
+        IGQ("#igTplMsg").textContent = "Guardando...";
+        try {
+          const res = await igFetch("/admin/instagram/dm-templates", { method: "PUT",
+            body: JSON.stringify(body) });
+          IGQ("#igTplMsg").textContent = "Guardado: " + (res.saved || []).join(", ");
+          IGQ("#igTplMsg").style.color = "#047857";
+        } catch (err) {
+          IGQ("#igTplMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+        }
+      }
+
+      async function igTplPreview(variant) {
+        const out = document.querySelector(`[data-igtpl-preview-out="${variant}"]`);
+        out.style.display = "";
+        out.textContent = "Generando...";
+        try {
+          // Guardar el body actual sin pisar nada antes del preview
+          const body = {
+            variant_a: variant === "A" ? IGQ("#igTplA").value : null,
+            variant_b: variant === "B" ? IGQ("#igTplB").value : null,
+            variant_c: variant === "C" ? IGQ("#igTplC").value : null,
+          };
+          await igFetch("/admin/instagram/dm-templates", { method: "PUT",
+            body: JSON.stringify(body) });
+          const res = await igFetch(`/admin/instagram/dm-templates/preview?variant=${variant}`, { method: "POST" });
+          out.textContent = res.text || "(vacio)";
+        } catch (err) {
+          out.textContent = "Error: " + err.message;
+        }
+      }
+
+      function igTplReset(variant) {
+        if (!confirm(`Restaurar variante ${variant} al default?`)) return;
+        IGQ("#igTpl" + variant).value = "";
+        igTplSave();
+      }
+
+      // Legacy compat (no usado, conservado para no romper)
+      let _igMasterState = { enabled: false, cap: 5, session: false };
+      async function loadIgMaster() {
+        try {
+          const [cfg, sessionData] = await Promise.all([
+            igFetch("/admin/instagram/autopilot-config"),
+            igFetch("/admin/instagram/autosend/status"),
+          ]);
+          const c = cfg.config || {};
+          const session = (sessionData.session || {}).connected;
+          const enabled = !!c.enabled;
+          const cap = c.effective_daily_cap || 5;
+          const sentToday = c.autosent_today || 0;
+          const pending = c.drafts_pending || 0;
+          _igMasterState = { enabled, cap, session };
+
+          const dot = IGQ("#igMasterStateDot");
+          const txt = IGQ("#igMasterStateText");
+          const btn = IGQ("#igMasterToggleBtn");
+          const hint = IGQ("#igMasterHint");
+          const capInput = IGQ("#igMasterDailyCap");
+          if (!enabled) {
+            dot.style.background = "#94a3b8";
+            txt.textContent = "PARADO";
+            txt.style.color = "#475569";
+            btn.textContent = "Activar";
+            btn.className = "secondary";
+            hint.textContent = "Activar inicia envio automatico de DMs respetando el tope diario.";
+          } else {
+            dot.style.background = "#10b981";
+            txt.textContent = "ACTIVO";
+            txt.style.color = "#047857";
+            btn.textContent = "Pausar";
+            btn.className = "ghost";
+            hint.textContent = "Enviando DMs en ventana laboral con delays humanos.";
+          }
+          if (document.activeElement !== capInput) capInput.value = cap;
+          IGQ("#igMasterSentToday").textContent = sentToday;
+          IGQ("#igMasterCapShown").textContent = cap;
+          IGQ("#igMasterPending").textContent = pending;
+          const sessEl = IGQ("#igMasterSession");
+          if (session) {
+            sessEl.textContent = "Conectada";
+            sessEl.style.color = "#047857";
+          } else {
+            sessEl.innerHTML = '<span style="color:#b91c1c;">Sin sesion</span>';
+          }
+          if (enabled && !session) {
+            IGQ("#igMasterMsg").innerHTML = '<span style="color:#b91c1c;">Falta sesion IG. Pega cookies abajo.</span>';
+          } else {
+            IGQ("#igMasterMsg").textContent = "";
+          }
+        } catch (err) {
+          IGQ("#igMasterStateText").textContent = "Error: " + err.message;
+        }
+      }
+
+      async function igMasterToggle() {
+        const newCap = parseInt(IGQ("#igMasterDailyCap").value || "5", 10);
+        if (!newCap || newCap < 1 || newCap > 100) {
+          IGQ("#igMasterMsg").innerHTML = '<span style="color:#b91c1c;">Cap diario debe ser 1-100.</span>';
+          return;
+        }
+        const turningOn = !_igMasterState.enabled;
+        if (turningOn && !_igMasterState.session) {
+          IGQ("#igMasterMsg").innerHTML = '<span style="color:#b91c1c;">Conecta sesion IG primero (pega cookies abajo).</span>';
+          return;
+        }
+        if (turningOn && !confirm(`Activar envio automatico? Se enviaran hasta ${newCap} DMs/dia reales. Riesgo bloqueo IG si usas cuenta principal.`)) return;
+        const btn = IGQ("#igMasterToggleBtn");
+        btn.disabled = true;
+        IGQ("#igMasterMsg").textContent = "Guardando...";
+        try {
+          await igFetch("/admin/instagram/autopilot-config", { method: "PUT",
+            body: JSON.stringify({ enabled: turningOn, daily_outreach_cap: newCap, auto_followups: true }) });
+          if (turningOn) {
+            IGQ("#igMasterMsg").textContent = "Activado. Lanzando primera ronda...";
+            IGQ("#igMasterMsg").style.color = "#047857";
+            try {
+              const tick = await igFetch("/admin/instagram/autopilot-tick", { method: "POST" });
+              const st = tick.stats || {};
+              IGQ("#igMasterMsg").textContent = `Activado. Ronda lanzada: ${st.autosent || 0} DMs enviados, ${st.drafted_cold || 0} drafts nuevos.`;
+            } catch (e2) {
+              IGQ("#igMasterMsg").textContent = `Activado. Ronda manual fallo: ${e2.message}. Proximo tick automatico en 60 min.`;
+            }
+          } else {
+            IGQ("#igMasterMsg").textContent = "Pausado.";
+            IGQ("#igMasterMsg").style.color = "#047857";
+          }
+        } catch (err) {
+          IGQ("#igMasterMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+        }
+        btn.disabled = false;
+        await loadIgMaster();
+        await loadAutopilot();
+      }
+
+      async function loadIgAutosendStatus() {
+        const badge = IGQ("#igAutosendStatusBadge");
+        if (!badge) return;
+        try {
+          const data = await igFetch("/admin/instagram/autosend/status");
+          const s = data.session || {};
+          if (s.connected) {
+            const saved = s.saved_at ? new Date(s.saved_at).toLocaleDateString("es-ES") : "?";
+            const auto = data.autonomous_autosend ? "AUTO ON" : "auto OFF";
+            badge.innerHTML = `<span style="color:#047857;">● Conectada</span><br/><span style="font-size:11px;color:#64748b;">guardada ${saved} · ${auto}</span>`;
+          } else {
+            badge.innerHTML = `<span style="color:#b91c1c;">● Sin sesion</span><br/><span style="font-size:11px;color:#64748b;">${s.reason || "pega cookies abajo"}</span>`;
+          }
+        } catch (err) {
+          badge.innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+        }
+      }
+
+      async function igAutosendConnect() {
+        const sessionid = IGQ("#igAutosendSessionid").value.trim();
+        const csrftoken = IGQ("#igAutosendCsrftoken").value.trim();
+        const ds_user_id = IGQ("#igAutosendDsUserId").value.trim();
+        const mid = IGQ("#igAutosendMid").value.trim();
+        const rur = IGQ("#igAutosendRur").value.trim();
+        const msg = IGQ("#igAutosendMsg");
+        if (!sessionid || !csrftoken || !ds_user_id) {
+          msg.textContent = "Faltan sessionid, csrftoken o ds_user_id"; msg.style.color = "#b91c1c"; return;
+        }
+        msg.textContent = "Conectando..."; msg.style.color = "#64748b";
+        try {
+          await igFetch("/admin/instagram/autosend/connect", { method: "POST",
+            body: JSON.stringify({ sessionid, csrftoken, ds_user_id, mid, rur }) });
+          msg.textContent = "Cookies guardadas. Probando..."; msg.style.color = "#047857";
+          IGQ("#igAutosendSessionid").value = "";
+          IGQ("#igAutosendCsrftoken").value = "";
+          IGQ("#igAutosendDsUserId").value = "";
+          IGQ("#igAutosendMid").value = "";
+          IGQ("#igAutosendRur").value = "";
+          await igAutosendTest();
+        } catch (err) {
+          msg.textContent = `Error: ${err.message}`; msg.style.color = "#b91c1c";
+        }
+        loadIgAutosendStatus();
+      }
+
+      async function igAutosendTest() {
+        const msg = IGQ("#igAutosendMsg");
+        msg.textContent = "Probando sesion contra Instagram..."; msg.style.color = "#64748b";
+        try {
+          const data = await igFetch("/admin/instagram/autosend/test", { method: "POST" });
+          if (data.ok) {
+            msg.textContent = `OK. Cookies validas (HTTP ${data.status_code}).`; msg.style.color = "#047857";
+          } else {
+            msg.textContent = `Sesion invalida: ${data.reason || data.hint || "desconocido"}`; msg.style.color = "#b91c1c";
+          }
+        } catch (err) {
+          msg.textContent = `Error: ${err.message}`; msg.style.color = "#b91c1c";
+        }
+        loadIgAutosendStatus();
+      }
+
+      async function igAutosendDisconnect() {
+        if (!confirm("Borrar sesion IG guardada? Tendras que pegar cookies de nuevo.")) return;
+        const msg = IGQ("#igAutosendMsg");
+        try {
+          await igFetch("/admin/instagram/autosend/disconnect", { method: "POST" });
+          msg.textContent = "Sesion borrada."; msg.style.color = "#64748b";
+        } catch (err) {
+          msg.textContent = `Error: ${err.message}`; msg.style.color = "#b91c1c";
+        }
+        loadIgAutosendStatus();
       }
 
       async function loadStats() {
         try {
           const data = await igFetch("/admin/instagram/stats");
           const t = data.totals || {};
-          if (IGQ("#igStatProspects")) IGQ("#igStatProspects").textContent = t.prospects || 0;
-          if (IGQ("#igStatDrafts")) IGQ("#igStatDrafts").textContent = t.drafts_pending || 0;
-          if (IGQ("#igStatSent")) IGQ("#igStatSent").textContent = t.sent_today || 0;
-          if (IGQ("#igStatReplies")) IGQ("#igStatReplies").textContent = t.replies_unique || 0;
+          const set = (sel, val) => { const el = IGQ(sel); if (el) el.textContent = val; };
+          set("#igStatProspects", t.prospects || 0);
+          set("#igStatDrafts", t.drafts_pending || 0);
+          set("#igStatSent", t.sent_today || 0);
+          set("#igStatReplies", t.replies_unique || 0);
           const f = data.funnel || {};
-          IGQ("#igFunnelBox").innerHTML = ["cold","fu1","fu2","breakup"].map(s => `
-            <div class="ig-row">
-              <span>${igStageLabel(s)}</span>
-              <strong>${f[s] || 0}</strong>
-            </div>`).join("");
-          if (data.autosend_enabled) { IGQ("#igAutosendBadge").style.display = ""; IGQ("#igAutosendWarn").style.display = ""; }
-          else { IGQ("#igAutosendBadge").style.display = "none"; IGQ("#igAutosendWarn").style.display = "none"; }
-          IGQ("#igWindowBadge").textContent = data.in_window ? "ventana laboral" : "fuera de ventana";
-          IGQ("#igWindowBadge").className = "pill " + (data.in_window ? "success" : "warn");
-          if (t.drafts_pending) { IGQ("#igDraftsBadge").textContent = t.drafts_pending; IGQ("#igDraftsBadge").style.display = ""; }
-          else IGQ("#igDraftsBadge").style.display = "none";
+          const funnel = IGQ("#igFunnelBox");
+          if (funnel) {
+            funnel.innerHTML = ["cold","fu1","fu2","breakup"].map(s => `
+              <div class="ig-row"><span>${igStageLabel(s)}</span><strong>${f[s] || 0}</strong></div>`).join("");
+          }
+          const badge = IGQ("#igAutosendBadge");
+          const warn = IGQ("#igAutosendWarn");
+          if (badge) badge.style.display = data.autosend_enabled ? "" : "none";
+          if (warn) warn.style.display = data.autosend_enabled ? "" : "none";
+          const win = IGQ("#igWindowBadge");
+          if (win) {
+            win.textContent = data.in_window ? "ventana laboral" : "fuera de ventana";
+            win.className = "pill " + (data.in_window ? "success" : "warn");
+          }
+          const draftsBadge = IGQ("#igDraftsBadge");
+          if (draftsBadge) {
+            if (t.drafts_pending) { draftsBadge.textContent = t.drafts_pending; draftsBadge.style.display = ""; }
+            else draftsBadge.style.display = "none";
+          }
         } catch (e) { igStatus(e.message, "error"); }
       }
 
@@ -9008,22 +9613,26 @@ a {
         try {
           const data = await igFetch("/admin/instagram/ops-summary");
           const t = data.totals || {};
-          if (IGQ("#igOpsSentWeek")) IGQ("#igOpsSentWeek").textContent = t.sent_week || 0;
-          if (IGQ("#igOpsFollowupsDue")) IGQ("#igOpsFollowupsDue").textContent = t.followups_due || 0;
+          const sentWeek = IGQ("#igOpsSentWeek"); if (sentWeek) sentWeek.textContent = t.sent_week || 0;
+          const fuDue = IGQ("#igOpsFollowupsDue"); if (fuDue) fuDue.textContent = t.followups_due || 0;
           const due = data.followups_due || [];
-          IGQ("#igTodayFollowups").innerHTML = due.length ? due.map(item => `
-            <div class="ig-row">
-              <div class="ig-main">
-                <strong>@${escapeHtml(item.username)}</strong>
-                <span class="muted">${escapeHtml(igStageLabel(item.next_stage))} ${item.next_followup_at ? "- " + igDate(item.next_followup_at) : ""}</span>
-              </div>
-              <button class="ghost small" type="button" data-ig-followup-open="${escapeHtml(item.username)}" data-stage="${escapeHtml(item.next_stage)}" data-message="${escapeHtml(item.suggested_message || "")}">Abrir</button>
-            </div>`).join("") : igEmpty("Sin follow-ups vencidos ahora.");
-          IGQ("#igTodayFollowups")?.querySelectorAll("[data-ig-followup-open]").forEach(btn => {
-            btn.addEventListener("click", () => openSuggestedFollowup(btn.dataset.igFollowupOpen, btn.dataset.stage, btn.dataset.message));
-          });
+          const followups = IGQ("#igTodayFollowups");
+          if (followups) {
+            followups.innerHTML = due.length ? due.map(item => `
+              <div class="ig-row">
+                <div class="ig-main">
+                  <strong>@${escapeHtml(item.username)}</strong>
+                  <span class="muted">${escapeHtml(igStageLabel(item.next_stage))} ${item.next_followup_at ? "- " + igDate(item.next_followup_at) : ""}</span>
+                </div>
+                <button class="ghost small" type="button" data-ig-followup-open="${escapeHtml(item.username)}" data-stage="${escapeHtml(item.next_stage)}" data-message="${escapeHtml(item.suggested_message || "")}">Abrir</button>
+              </div>`).join("") : igEmpty("Sin follow-ups vencidos ahora.");
+            followups.querySelectorAll("[data-ig-followup-open]").forEach(btn => {
+              btn.addEventListener("click", () => openSuggestedFollowup(btn.dataset.igFollowupOpen, btn.dataset.stage, btn.dataset.message));
+            });
+          }
           const recent = data.recent_activity || [];
-          IGQ("#igRecentActivity").innerHTML = recent.length ? recent.map(ev => `
+          const recentEl = IGQ("#igRecentActivity");
+          if (recentEl) recentEl.innerHTML = recent.length ? recent.map(ev => `
             <div class="ig-row">
               <div class="ig-main">
                 <strong>@${escapeHtml(ev.username)}</strong>
@@ -9276,6 +9885,16 @@ a {
       IGQ("#igJobsRefreshBtn")?.addEventListener("click", loadJobs);
       IGQ("#igAutoSaveBtn")?.addEventListener("click", saveAutopilot);
       IGQ("#igAutoTickBtn")?.addEventListener("click", tickAutopilot);
+      IGQ("#igAutosendConnectBtn")?.addEventListener("click", igAutosendConnect);
+      IGQ("#igAutosendTestBtn")?.addEventListener("click", igAutosendTest);
+      IGQ("#igAutosendDisconnectBtn")?.addEventListener("click", igAutosendDisconnect);
+      IGQ("#igMasterToggleBtn")?.addEventListener("click", igMasterToggle);
+      IGQ("#igCampStartBtn")?.addEventListener("click", igCampStart);
+      IGQ("#igCampPauseBtn")?.addEventListener("click", igCampPause);
+      IGQ("#igCampResumeBtn")?.addEventListener("click", igCampResume);
+      IGQ("#igTplSaveBtn")?.addEventListener("click", igTplSave);
+      document.querySelectorAll("[data-igtpl-preview]").forEach(b => b.addEventListener("click", () => igTplPreview(b.dataset.igtplPreview)));
+      document.querySelectorAll("[data-igtpl-reset]").forEach(b => b.addEventListener("click", () => igTplReset(b.dataset.igtplReset)));
       IGQ("#igSupAddBtn")?.addEventListener("click", addSuppression);
       IGQ("#igSupRefreshBtn")?.addEventListener("click", loadSuppressions);
 
@@ -9286,6 +9905,270 @@ a {
       };
     })();
     // === END INSTAGRAM PANEL ====================================
+
+    // === TIKTOK PANEL ===========================================
+    (function() {
+      const TKQ = (sel) => document.querySelector(sel);
+      const TKALL = (sel) => document.querySelectorAll(sel);
+      let tkState = { tab: "dashboard", loaded: false };
+      let _tkPollTimer = null;
+
+      async function tkFetch(url, opts) {
+        opts = opts || {};
+        opts.credentials = "include";
+        opts.headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+        const r = await fetch(url, opts);
+        if (!r.ok) {
+          let msg = r.statusText;
+          try { const e = await r.json(); msg = e.detail || e.message || msg; } catch (e) {}
+          throw new Error(msg);
+        }
+        return r.json();
+      }
+
+      function setTkTab(tab) {
+        tkState.tab = tab;
+        TKALL("[data-tk-tab]").forEach(b => b.classList.toggle("active", b.dataset.tkTab === tab));
+        TKALL("[data-tk-panel]").forEach(p => {
+          const isActive = p.dataset.tkPanel === tab;
+          p.classList.toggle("active", isActive);
+          p.style.display = isActive ? "" : "none";
+        });
+        if (tab === "dashboard") loadTkStats();
+        if (tab === "config") { loadTkCampaign(); loadTkAutosendStatus(); startTkPolling(); } else { stopTkPolling(); }
+        if (tab === "templates") loadTkTemplates();
+        if (tab === "suppressions") loadTkSuppressions();
+      }
+
+      const TK_STATE_META = {
+        idle: { label: "PARADO", dot: "#94a3b8", color: "#475569" },
+        discovering: { label: "BUSCANDO PROSPECTS", dot: "#3b82f6", color: "#1e40af" },
+        sending: { label: "ENVIANDO DMs", dot: "#10b981", color: "#047857" },
+        paused: { label: "PAUSADO", dot: "#f59e0b", color: "#92400e" },
+        completed: { label: "OBJETIVO ALCANZADO", dot: "#22c55e", color: "#15803d" },
+      };
+
+      async function loadTkStats() {
+        try {
+          const d = await tkFetch("/admin/tiktok/stats");
+          const t = d.totals || {};
+          if (TKQ("#tkStatSentToday")) TKQ("#tkStatSentToday").textContent = t.sent_today || 0;
+          if (TKQ("#tkStatSentTotal")) TKQ("#tkStatSentTotal").textContent = t.sent_total || 0;
+          if (TKQ("#tkStatReplies")) TKQ("#tkStatReplies").textContent = t.replies_unique || 0;
+          if (TKQ("#tkStatDrafts")) TKQ("#tkStatDrafts").textContent = t.drafts_pending || 0;
+          const p = await tkFetch("/admin/tiktok/prospects?limit=8");
+          const items = p.items || [];
+          const box = TKQ("#tkProspectsList");
+          if (box) {
+            if (!items.length) box.innerHTML = '<p class="muted">Aun sin prospects.</p>';
+            else box.innerHTML = items.map(x => `<div class="ig-row"><div class="ig-main"><strong>@${x.username}</strong><span class="muted">${x.business_name || ""} · ${x.niche || ""} · ${x.city || ""}</span></div><span class="pill">${x.status}</span></div>`).join("");
+          }
+        } catch (err) {
+          if (TKQ("#tkProspectsList")) TKQ("#tkProspectsList").textContent = "Error: " + err.message;
+        }
+      }
+
+      async function loadTkCampaign() {
+        try {
+          const data = await tkFetch("/admin/tiktok/campaign");
+          const c = data.campaign || {};
+          const status = c.status || "idle";
+          const meta = TK_STATE_META[status] || TK_STATE_META.idle;
+          const target = c.target_count || 0;
+          const sent = c.sent_count || 0;
+          const pct = target > 0 ? Math.min(100, Math.round((sent / target) * 100)) : 0;
+          TKQ("#tkCampStateDot").style.background = meta.dot;
+          TKQ("#tkCampStateText").textContent = meta.label;
+          TKQ("#tkCampStateText").style.color = meta.color;
+          TKQ("#tkCampProgressBar").style.width = pct + "%";
+          TKQ("#tkCampSent").textContent = sent;
+          TKQ("#tkCampTarget").textContent = target;
+          TKQ("#tkCampPct").textContent = pct + "%";
+          TKQ("#tkCampDiscovered").textContent = c.discovered_count || 0;
+          TKQ("#tkCampPending").textContent = c.pending_drafts || 0;
+          TKQ("#tkCampReplied").textContent = c.replied_count || 0;
+          const sess = data.session || {};
+          if (sess.connected) {
+            TKQ("#tkCampSession").textContent = "Conectada";
+            TKQ("#tkCampSession").style.color = "#047857";
+          } else {
+            TKQ("#tkCampSession").innerHTML = '<span style="color:#b91c1c;">Sin sesion</span>';
+          }
+          const startBtn = TKQ("#tkCampStartBtn");
+          const pauseBtn = TKQ("#tkCampPauseBtn");
+          const resumeBtn = TKQ("#tkCampResumeBtn");
+          const tIn = TKQ("#tkCampTargetInput");
+          if (status === "idle" || status === "completed") {
+            startBtn.style.display = ""; startBtn.textContent = status === "completed" ? "EMPEZAR NUEVA" : "EMPEZAR CAPTACIÓN";
+            pauseBtn.style.display = "none"; resumeBtn.style.display = "none"; tIn.disabled = false;
+          } else if (status === "paused") {
+            startBtn.style.display = "none"; pauseBtn.style.display = "none"; resumeBtn.style.display = ""; tIn.disabled = false;
+          } else {
+            startBtn.style.display = "none"; pauseBtn.style.display = ""; resumeBtn.style.display = "none"; tIn.disabled = true;
+          }
+          if (document.activeElement !== tIn && target > 0) tIn.value = target;
+          const err = (c.error_msg || "").trim();
+          TKQ("#tkCampMsg").textContent = err ? `Aviso: ${err}` : "";
+          TKQ("#tkCampMsg").style.color = err ? "#b91c1c" : "#64748b";
+        } catch (err) {
+          TKQ("#tkCampStateText").textContent = "Error: " + err.message;
+        }
+      }
+
+      async function tkCampStart() {
+        const target = parseInt(TKQ("#tkCampTargetInput").value || "30", 10);
+        if (!target || target < 1 || target > 200) { TKQ("#tkCampMsg").innerHTML = '<span style="color:#b91c1c;">Objetivo 1-200.</span>'; return; }
+        if (!confirm(`Empezar captacion TikTok para ${target} clientes? Se enviaran DMs reales.`)) return;
+        const btn = TKQ("#tkCampStartBtn"); btn.disabled = true;
+        TKQ("#tkCampMsg").textContent = "Arrancando...";
+        try {
+          await tkFetch("/admin/tiktok/campaign/start", { method: "POST", body: JSON.stringify({ target_count: target }) });
+          TKQ("#tkCampMsg").textContent = "Iniciada. Empieza a buscar."; TKQ("#tkCampMsg").style.color = "#047857";
+        } catch (err) { TKQ("#tkCampMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`; }
+        btn.disabled = false; await loadTkCampaign();
+      }
+
+      async function tkCampPause() {
+        try { await tkFetch("/admin/tiktok/campaign/pause", { method: "POST" }); } catch (err) { TKQ("#tkCampMsg").innerHTML = `<span style="color:#b91c1c;">${err.message}</span>`; }
+        await loadTkCampaign();
+      }
+      async function tkCampResume() {
+        try { await tkFetch("/admin/tiktok/campaign/resume", { method: "POST" }); } catch (err) { TKQ("#tkCampMsg").innerHTML = `<span style="color:#b91c1c;">${err.message}</span>`; }
+        await loadTkCampaign();
+      }
+
+      function startTkPolling() {
+        stopTkPolling();
+        _tkPollTimer = setInterval(() => {
+          const panel = document.querySelector('[data-tk-panel="config"]');
+          if (!panel || panel.style.display === "none") return;
+          loadTkCampaign();
+        }, 8000);
+      }
+      function stopTkPolling() { if (_tkPollTimer) { clearInterval(_tkPollTimer); _tkPollTimer = null; } }
+
+      async function loadTkAutosendStatus() {
+        const badge = TKQ("#tkAutosendStatusBadge"); if (!badge) return;
+        try {
+          const data = await tkFetch("/admin/tiktok/autosend/status");
+          const s = data.session || {};
+          if (s.connected) {
+            const saved = s.saved_at ? new Date(s.saved_at).toLocaleDateString("es-ES") : "?";
+            badge.innerHTML = `<span style="color:#047857;">● Conectada</span><br/><span style="font-size:11px;color:#64748b;">guardada ${saved}</span>`;
+          } else {
+            badge.innerHTML = `<span style="color:#b91c1c;">● Sin sesion</span><br/><span style="font-size:11px;color:#64748b;">${s.reason || "pega cookies"}</span>`;
+          }
+        } catch (err) { badge.innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`; }
+      }
+
+      async function tkAutosendConnect() {
+        const sessionid = TKQ("#tkSessionid").value.trim();
+        const sessionid_ss = TKQ("#tkSessionidSs").value.trim();
+        const tt_csrf_token = TKQ("#tkCsrfToken").value.trim();
+        const ms_token = TKQ("#tkMsToken").value.trim();
+        const ttwid = TKQ("#tkTtwid").value.trim();
+        const msg = TKQ("#tkAutosendMsg");
+        if (!sessionid) { msg.textContent = "Falta sessionid (obligatoria)"; msg.style.color = "#b91c1c"; return; }
+        msg.textContent = "Conectando..."; msg.style.color = "#64748b";
+        try {
+          await tkFetch("/admin/tiktok/autosend/connect", { method: "POST",
+            body: JSON.stringify({ sessionid, sessionid_ss, tt_csrf_token, ms_token, ttwid }) });
+          msg.textContent = "Cookies guardadas. Probando..."; msg.style.color = "#047857";
+          ["#tkSessionid","#tkSessionidSs","#tkCsrfToken","#tkMsToken","#tkTtwid"].forEach(s => TKQ(s).value = "");
+          await tkAutosendTest();
+        } catch (err) { msg.textContent = `Error: ${err.message}`; msg.style.color = "#b91c1c"; }
+        loadTkAutosendStatus();
+      }
+
+      async function tkAutosendTest() {
+        const msg = TKQ("#tkAutosendMsg");
+        msg.textContent = "Probando contra TikTok..."; msg.style.color = "#64748b";
+        try {
+          const data = await tkFetch("/admin/tiktok/autosend/test", { method: "POST" });
+          if (data.ok) { msg.textContent = `OK. HTTP ${data.status_code}.`; msg.style.color = "#047857"; }
+          else { msg.textContent = `Sesion invalida: ${data.reason || data.hint || "?"}`; msg.style.color = "#b91c1c"; }
+        } catch (err) { msg.textContent = `Error: ${err.message}`; msg.style.color = "#b91c1c"; }
+        loadTkAutosendStatus();
+      }
+
+      async function tkAutosendDisconnect() {
+        if (!confirm("Borrar sesion TikTok guardada?")) return;
+        const msg = TKQ("#tkAutosendMsg");
+        try { await tkFetch("/admin/tiktok/autosend/disconnect", { method: "POST" }); msg.textContent = "Sesion borrada."; msg.style.color = "#64748b"; }
+        catch (err) { msg.textContent = `Error: ${err.message}`; msg.style.color = "#b91c1c"; }
+        loadTkAutosendStatus();
+      }
+
+      async function loadTkTemplates() {
+        try {
+          const data = await tkFetch("/admin/tiktok/dm-templates");
+          const t = data.templates || {}; const defs = data.defaults || {};
+          for (const v of ["A","B","C"]) {
+            const el = TKQ("#tkTpl" + v);
+            if (el && document.activeElement !== el) {
+              el.value = t[v] || "";
+              if (!t[v]) el.placeholder = "Vacio = default:\n\n" + (defs[v] || "");
+            }
+          }
+        } catch (err) { TKQ("#tkTplMsg").innerHTML = `<span style="color:#b91c1c;">${err.message}</span>`; }
+      }
+
+      async function tkTplSave() {
+        const body = { variant_a: TKQ("#tkTplA").value, variant_b: TKQ("#tkTplB").value, variant_c: TKQ("#tkTplC").value };
+        TKQ("#tkTplMsg").textContent = "Guardando...";
+        try { const res = await tkFetch("/admin/tiktok/dm-templates", { method: "PUT", body: JSON.stringify(body) }); TKQ("#tkTplMsg").textContent = "Guardado: " + (res.saved || []).join(", "); TKQ("#tkTplMsg").style.color = "#047857"; }
+        catch (err) { TKQ("#tkTplMsg").innerHTML = `<span style="color:#b91c1c;">${err.message}</span>`; }
+      }
+      async function tkTplPreview(v) {
+        const out = document.querySelector(`[data-tktpl-preview-out="${v}"]`);
+        out.style.display = ""; out.textContent = "Generando...";
+        try {
+          const body = { variant_a: v==="A"?TKQ("#tkTplA").value:null, variant_b: v==="B"?TKQ("#tkTplB").value:null, variant_c: v==="C"?TKQ("#tkTplC").value:null };
+          await tkFetch("/admin/tiktok/dm-templates", { method: "PUT", body: JSON.stringify(body) });
+          const res = await tkFetch(`/admin/tiktok/dm-templates/preview?variant=${v}`, { method: "POST" });
+          out.textContent = res.text || "(vacio)";
+        } catch (err) { out.textContent = "Error: " + err.message; }
+      }
+      function tkTplReset(v) { if (!confirm(`Restaurar variante ${v} al default?`)) return; TKQ("#tkTpl" + v).value = ""; tkTplSave(); }
+
+      async function loadTkSuppressions() {
+        try {
+          const data = await tkFetch("/admin/tiktok/suppressions");
+          const items = data.items || [];
+          const body = TKQ("#tkSupBody");
+          if (!items.length) body.innerHTML = '<tr><td colspan="4" class="muted">Sin bajas.</td></tr>';
+          else body.innerHTML = items.map(x => `<tr><td>@${x.username}</td><td>${x.reason || ""}</td><td>${(x.added_at||"").slice(0,10)}</td><td><button class="ghost small" data-tk-sup-del="${x.username}">Quitar</button></td></tr>`).join("");
+          body.querySelectorAll("[data-tk-sup-del]").forEach(b => b.addEventListener("click", async () => { try { await tkFetch(`/admin/tiktok/suppress/${b.dataset.tkSupDel}`, { method: "DELETE" }); loadTkSuppressions(); } catch (e) { alert(e.message); } }));
+        } catch (err) { TKQ("#tkSupBody").innerHTML = `<tr><td colspan="4" style="color:#b91c1c;">${err.message}</td></tr>`; }
+      }
+      async function tkSupAdd() {
+        const username = TKQ("#tkSupUsername").value.trim();
+        const reason = TKQ("#tkSupReason").value.trim() || "manual";
+        if (!username) return;
+        try { await tkFetch("/admin/tiktok/suppress", { method: "POST", body: JSON.stringify({ username, reason }) }); TKQ("#tkSupUsername").value = ""; TKQ("#tkSupReason").value = ""; loadTkSuppressions(); }
+        catch (err) { alert(err.message); }
+      }
+
+      TKALL("[data-tk-tab]").forEach(b => b.addEventListener("click", () => setTkTab(b.dataset.tkTab)));
+      TKQ("#tkRefreshBtn")?.addEventListener("click", () => { loadTkStats(); loadTkCampaign(); });
+      TKQ("#tkCampStartBtn")?.addEventListener("click", tkCampStart);
+      TKQ("#tkCampPauseBtn")?.addEventListener("click", tkCampPause);
+      TKQ("#tkCampResumeBtn")?.addEventListener("click", tkCampResume);
+      TKQ("#tkAutosendConnectBtn")?.addEventListener("click", tkAutosendConnect);
+      TKQ("#tkAutosendTestBtn")?.addEventListener("click", tkAutosendTest);
+      TKQ("#tkAutosendDisconnectBtn")?.addEventListener("click", tkAutosendDisconnect);
+      TKQ("#tkTplSaveBtn")?.addEventListener("click", tkTplSave);
+      document.querySelectorAll("[data-tktpl-preview]").forEach(b => b.addEventListener("click", () => tkTplPreview(b.dataset.tktplPreview)));
+      document.querySelectorAll("[data-tktpl-reset]").forEach(b => b.addEventListener("click", () => tkTplReset(b.dataset.tktplReset)));
+      TKQ("#tkSupAddBtn")?.addEventListener("click", tkSupAdd);
+      TKQ("#tkSupRefreshBtn")?.addEventListener("click", loadTkSuppressions);
+
+      window.__tkInit = function() {
+        if (!tkState.loaded) { setTkTab("dashboard"); tkState.loaded = true; }
+        else { loadTkStats(); }
+      };
+    })();
+    // === END TIKTOK PANEL ===========================================
   </script>
 </body>
 </html>

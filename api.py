@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import os
+import random
 import re
 import secrets
 import shutil
@@ -196,15 +197,16 @@ def _strip_base_from_extras(items: Any) -> List[str]:
     return out
 
 
-def _resolve_widget_starters(config: Dict[str, Any]) -> List[str]:
+def _resolve_widget_starters(config: Dict[str, Any], *, booking_enabled: Optional[bool] = None) -> List[str]:
     """Fuse BASE_STARTERS with cliente's manual extras.
 
     Returns base first (filtered by booking_enabled), then dedup-extras.
     Cap MAX_TOTAL_STARTERS. Single source of truth for what widget renders
     and what the IA expects in its system prompt.
     """
-    booking_cfg = config.get("booking") if isinstance(config, dict) else None
-    booking_enabled = bool(booking_cfg.get("enabled")) if isinstance(booking_cfg, dict) else False
+    if booking_enabled is None:
+        booking_cfg = config.get("booking") if isinstance(config, dict) else None
+        booking_enabled = bool(booking_cfg.get("enabled")) if isinstance(booking_cfg, dict) else False
 
     base = [b["text"] for b in BASE_STARTERS if booking_enabled or not b["needs_booking"]]
     extras = _strip_base_from_extras(config.get("starter_questions"))
@@ -251,7 +253,7 @@ STRIPE_PRICE_PRO_ANNUAL = os.getenv("STRIPE_PRICE_PRO_ANNUAL", "").strip()
 STRIPE_PRICE_BUSINESS_ANNUAL = os.getenv("STRIPE_PRICE_BUSINESS_ANNUAL", "").strip()
 
 # Plan definitions for self-serve.
-# Features: chat=always, booking=pro+, whatsapp=business, livechat=pro+, custom_branding=starter+.
+# Features: chat=always, booking=free+, whatsapp=business, livechat=pro+, custom_branding=starter+.
 SELF_SERVE_PLANS: Dict[str, Dict[str, Any]] = {
     "free": {
         "slug": "free",
@@ -259,7 +261,7 @@ SELF_SERVE_PLANS: Dict[str, Dict[str, Any]] = {
         "price_monthly_eur": 0,
         "price_annual_eur": 0,
         "messages_quota": int(os.getenv("PLAN_FREE_QUOTA", "50")),
-        "features": ["chat"],
+        "features": ["chat", "booking"],
         "stripe_price_monthly": "",
         "stripe_price_annual": "",
     },
@@ -269,7 +271,7 @@ SELF_SERVE_PLANS: Dict[str, Dict[str, Any]] = {
         "price_monthly_eur": int(os.getenv("PLAN_STARTER_PRICE_EUR", "19")),
         "price_annual_eur": int(os.getenv("PLAN_STARTER_PRICE_ANNUAL_EUR", "190")),
         "messages_quota": int(os.getenv("PLAN_STARTER_QUOTA", "1000")),
-        "features": ["chat", "uploads", "branding", "leads_export"],
+        "features": ["chat", "uploads", "branding", "leads_export", "booking"],
         "stripe_price_monthly": STRIPE_PRICE_STARTER,
         "stripe_price_annual": STRIPE_PRICE_STARTER_ANNUAL,
     },
@@ -303,7 +305,7 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
     "free": {
         "label": "Free",
         "monthly_conversations": int(os.getenv("PLAN_FREE_QUOTA", "50")),
-        "monthly_bookings": 0,
+        "monthly_bookings": 10,
         "max_professionals": 1,
         "max_users": 1,
         "max_extra_documents": 0,
@@ -2230,1102 +2232,119 @@ async def dynamic_cors_middleware(request: Request, call_next: Any) -> Response:
     return response
 
 
-class MensajeChat(BaseModel):
-    cliente_id: str = Field(min_length=2, max_length=80)
-    mensaje: str = Field(min_length=1, max_length=2000)
-    session_id: Optional[str] = Field(default=None, max_length=128)
-
-
-class DatosCita(BaseModel):
-    cliente_id: str = Field(min_length=2, max_length=80)
-    nombre: str = Field(min_length=2, max_length=80)
-    email: EmailStr
-    telefono: str = Field(default="", max_length=30)
-    servicio: str = Field(default="", max_length=120)
-    employee_id: str = Field(default="", max_length=80)
-    fecha: str = Field(min_length=10, max_length=10)
-    hora: str = Field(min_length=5, max_length=5)
-    notas: str = Field(default="", max_length=500)
-
-
-class RespuestaChat(BaseModel):
-    respuesta: str
-    mostrar_formulario: bool
-    session_id: str
-    intent: str = ""
-    quick_actions: List[Dict[str, str]] = Field(default_factory=list)
-
-
-class WhatsAppWebhookStatus(BaseModel):
-    status: str
-    processed: int = 0
-
-
-class ChatSessionSummary(BaseModel):
-    session_id: str
-    cliente_id: str
-    origin: str = ""
-    started_at: str
-    last_message_at: str
-    message_count: int
-    intents: List[str] = Field(default_factory=list)
-    last_message: str = ""
-
-
-class ChatMessagePublic(BaseModel):
-    message_id: int
-    role: str
-    content: str
-    intent: str = ""
-    created_at: str
-
-
-class ChatSessionDetail(BaseModel):
-    session: ChatSessionSummary
-    messages: List[ChatMessagePublic]
-
-
-class ConfigPublicaCliente(BaseModel):
-    nombre: str
-    icono: str
-    color: str
-    accent_color: str = ""
-    logo_url: str = ""
-    launcher_shape: str = "circle"
-    launcher_size: int = 60
-    bienvenida: str
-    booking_enabled: bool
-    branding_text: str
-    contact_email: str
-    contact_phone: str
-    starter_questions: List[str] = Field(default_factory=list)
-
-
-class SlotDisponibilidad(BaseModel):
-    hora: str
-    disponible: bool
-
-
-class RespuestaDisponibilidad(BaseModel):
-    fecha: str
-    timezone: str
-    employee_id: str = ""
-    slots: List[SlotDisponibilidad]
-
-
-class RespuestaAgendado(BaseModel):
-    ok: bool
-    booking_id: str
-    estado: str
-    mensaje: str
-    employee_id: str = ""
-    employee_name: str = ""
-    provider_name: str = "internal"
-    provider_booking_id: str = ""
-    provider_booking_url: str = ""
-    manage_url: str = ""
-
-
-class BookingDetailPublic(BaseModel):
-    booking_id: str
-    cliente_id: str
-    empresa: str
-    employee_id: str = ""
-    employee_name: str = ""
-    nombre: str
-    email: str
-    telefono: str
-    servicio: str
-    notas: str = ""
-    fecha: str
-    hora: str
-    timezone: str
-    estado: str
-    provider_name: str
-    provider_booking_url: str = ""
-    manage_url: str = ""
-    contact_email: str = ""
-    contact_phone: str = ""
-    available_services: List[Dict[str, str]] = Field(default_factory=list)
-
-
-class BookingActionResponse(BaseModel):
-    ok: bool
-    booking_id: str
-    estado: str
-    mensaje: str
-    employee_id: str = ""
-    employee_name: str = ""
-    manage_url: str = ""
-    provider_booking_url: str = ""
-
-
-class BookingReschedulePayload(BaseModel):
-    employee_id: str = Field(default="", max_length=80)
-    fecha: str = Field(min_length=10, max_length=10)
-    hora: str = Field(min_length=5, max_length=5)
-
-
-class BookingCancelPayload(BaseModel):
-    motivo: str = Field(default="", max_length=500)
-
-
-class BookingUpdatePayload(BaseModel):
-    nombre: str = Field(min_length=2, max_length=80)
-    email: EmailStr
-    telefono: str = Field(default="", max_length=30)
-    servicio: str = Field(default="", max_length=120)
-    employee_id: str = Field(default="", max_length=80)
-    fecha: str = Field(min_length=10, max_length=10)
-    hora: str = Field(min_length=5, max_length=5)
-    notas: str = Field(default="", max_length=500)
-
-
-class AdminBookingResumen(BaseModel):
-    booking_id: str
-    cliente_id: str
-    empresa: str
-    employee_id: str = ""
-    employee_name: str = ""
-    nombre: str
-    email: str
-    telefono: str
-    servicio: str
-    fecha: str
-    hora: str
-    timezone: str
-    estado: str
-    provider_name: str
-    provider_status: str
-    provider_booking_id: str = ""
-    provider_booking_url: str = ""
-    manage_url: str = ""
-    created_at: str
-    confirmed_at: str = ""
-    cancelled_at: str = ""
-    rescheduled_at: str = ""
-    confirmation_email_sent_at: str = ""
-    reminder_24h_sent_at: str = ""
-    reminder_2h_sent_at: str = ""
-    customer_email_status: str = ""
-
-
-class AdminReminderRunResult(BaseModel):
-    processed: int
-    sent_24h: int
-    sent_2h: int
-    failed: int
-
-
-class AuthLoginPayload(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=200)
-
-
-class AuthUserPublic(BaseModel):
-    user_id: str
-    email: str
-    display_name: str
-    role: str
-    cliente_id: str = ""
-    plan: str = PLAN_DEFAULT
-    plan_label: str = "Web"
-    last_login_at: str = ""
-    as_admin_session: bool = False
-    impersonator_email: str = ""
-
-
-class AuthLoginResponse(BaseModel):
-    ok: bool
-    user: AuthUserPublic
-    redirect_to: str
-
-
-class AuthSimpleResponse(BaseModel):
-    ok: bool
-    message: str
-    retry_after_seconds: int = 0
-
-
-# --- Vantelia 2.0 self-serve signup + wizard onboarding (Sem 2) ---
-
-class AuthSignupPayload(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=200)
-    display_name: str = Field(min_length=1, max_length=120)
-    marketing_optin: bool = False
-    claim: Optional[str] = Field(default=None, max_length=120)
-
-
-class AuthSignupResponse(BaseModel):
-    ok: bool
-    user: AuthUserPublic
-    redirect_to: str
-
-
-class OnboardingStartPayload(BaseModel):
-    nombre: str = Field(min_length=1, max_length=120, description="Nombre del bot")
-
-
-class OnboardingStartResponse(BaseModel):
-    cliente_id: str
-    nombre: str
-    step: str = "learn"
-
-
-class OnboardingLearnPayload(BaseModel):
-    website_url: Optional[str] = Field(default=None, max_length=400)
-    just_this_page: bool = False
-    tono: str = "Profesional y cercano"
-    idioma: str = "Espanol"
-    max_paginas: int = Field(default=12, ge=1, le=30)
-
-
-class OnboardingLearnResponse(BaseModel):
-    ok: bool
-    cliente_id: str
-    detected_business_name: str = ""
-    info_excerpt: str = ""
-    suggested_welcome: str = ""
-    suggested_prompt_extra: str = ""
-    suggested_starters: List[str] = Field(default_factory=list)
-    pages_indexed: int = 0
-
-
-class OnboardingPersonalityPayload(BaseModel):
-    bienvenida: str = Field(min_length=1, max_length=600)
-    prompt_extra: str = Field(default="", max_length=4000)
-    starter_questions: List[str] = Field(default_factory=list, max_length=8)
-
-
-class OnboardingPersonalityResponse(BaseModel):
-    ok: bool
-    cliente_id: str
-    bienvenida: str
-    prompt_extra: str
-    starter_questions: List[str]
-
-
-class OnboardingFinalizeResponse(BaseModel):
-    ok: bool
-    cliente_id: str
-    install_snippet: str
-    widget_script_url: str
-    demo_url: str
-    share_link: str
-    dashboard_url: str
-
-
-class OnboardingStateResponse(BaseModel):
-    cliente_id: str = ""
-    nombre: str = ""
-    website_url: str = ""
-    step: str = "name"
-    bienvenida: str = ""
-    prompt_extra: str = ""
-    starter_questions: List[str] = Field(default_factory=list)
-    has_kb: bool = False
-
-
-# --- Vantelia 2.0 dashboard nuevo (Sem 3) ---
-
-class AppOverviewSubscription(BaseModel):
-    plan: str = "free"
-    status: str = "active"
-    messages_quota: int = 50
-    messages_used: int = 0
-    cancel_at_period_end: bool = False
-    current_period_end: str = ""
-
-
-class AppOverviewStats(BaseModel):
-    users_today: int = 0
-    messages_today: int = 0
-    messages_period: int = 0
-    leads_generated: int = 0
-    training_chars: int = 0
-    chat_sessions_total: int = 0
-    countries: List[Dict[str, Any]] = Field(default_factory=list)
-
-
-class AppOverviewResponse(BaseModel):
-    cliente_id: str
-    nombre: str
-    color: str = "#00b1d9"
-    icono: str = "AI"
-    bienvenida: str = ""
-    subscription: AppOverviewSubscription
-    stats: AppOverviewStats
-
-
-class AppDeployResponse(BaseModel):
-    cliente_id: str
-    install_snippet: str
-    widget_script_url: str
-    api_base_url: str
-    demo_url: str
-    share_link: str
-    qr_data_url: str = ""
-
-
-class AppAppearancePayload(BaseModel):
-    nombre: Optional[str] = Field(default=None, max_length=120)
-    color: Optional[str] = Field(default=None, max_length=7)
-    accent_color: Optional[str] = Field(default=None, max_length=7)
-    icono: Optional[str] = Field(default=None, max_length=12)
-    logo_url: Optional[str] = Field(default=None, max_length=2000000)
-    launcher_shape: Optional[str] = Field(default=None, max_length=16)
-    launcher_size: Optional[int] = Field(default=None, ge=48, le=320)
-    bienvenida: Optional[str] = Field(default=None, max_length=600)
-    prompt_extra: Optional[str] = Field(default=None, max_length=4000)
-    starter_questions: Optional[List[str]] = None
-    allowed_origins: Optional[List[str]] = None
-    booking_enabled: Optional[bool] = None
-
-
-class AppAppearanceResponse(BaseModel):
-    ok: bool
-    cliente_id: str
-    nombre: str
-    color: str
-    accent_color: str = ""
-    icono: str
-    logo_url: str = ""
-    launcher_shape: str = "circle"
-    launcher_size: int = 60
-    bienvenida: str
-    prompt_extra: str
-    starter_questions: List[str] = Field(default_factory=list)
-    allowed_origins: List[str] = Field(default_factory=list)
-    booking_enabled: bool = True
-
-
-# --- Vantelia 2.0 dashboard - Sem 4 (Leads, Q&A, Knowledge, Tune AI, Live Chat) ---
-
-class AppLeadPublic(BaseModel):
-    id: str
-    name: str = ""
-    email: str = ""
-    phone: str = ""
-    message: str = ""
-    source: str = "chat"
-    session_id: str = ""
-    created_at: str
-
-
-class AppLeadPayload(BaseModel):
-    name: str = Field(default="", max_length=200)
-    email: str = Field(default="", max_length=200)
-    phone: str = Field(default="", max_length=80)
-    message: str = Field(default="", max_length=4000)
-    source: str = Field(default="manual", max_length=40)
-    session_id: str = Field(default="", max_length=200)
-
-
-class AppLeadsListResponse(BaseModel):
-    items: List[AppLeadPublic]
-    total: int
-    page: int
-    page_size: int
-
-
-class AppQAItem(BaseModel):
-    id: str
-    question: str
-    answer: str
-    tags: List[str] = Field(default_factory=list)
-    created_at: str
-    updated_at: str
-
-
-class AppQAPayload(BaseModel):
-    question: str = Field(min_length=2, max_length=400)
-    answer: str = Field(min_length=2, max_length=4000)
-    tags: List[str] = Field(default_factory=list, max_length=10)
-
-
-class AppQAUpdatePayload(BaseModel):
-    question: Optional[str] = Field(default=None, max_length=400)
-    answer: Optional[str] = Field(default=None, max_length=4000)
-    tags: Optional[List[str]] = Field(default=None, max_length=10)
-
-
-class AppQAListResponse(BaseModel):
-    items: List[AppQAItem]
-    total: int
-
-
-class AppKnowledgeItem(BaseModel):
-    id: str
-    source: str
-    filename: str = ""
-    source_url: str = ""
-    size_bytes: int = 0
-    indexed_at: str = ""
-    uploaded_at: str
-    qa_created: int = 0
-
-
-class AppKnowledgeListResponse(BaseModel):
-    items: List[AppKnowledgeItem]
-    info_chars: int = 0
-    info_excerpt: str = ""
-    info_full: str = ""
-
-
-class AppKnowledgeTextPayload(BaseModel):
-    title: str = Field(default="", max_length=200)
-    content: str = Field(min_length=2, max_length=20000)
-
-
-class AppKnowledgeUrlPayload(BaseModel):
-    url: str = Field(min_length=4, max_length=400)
-    just_this_page: bool = False
-    replace: bool = False  # if true, replace info.txt; if false, append
-
-
-class AppKnowledgeReindexResponse(BaseModel):
-    ok: bool
-    cliente_id: str
-    info_chars: int
-
-
-class AppTunePayload(BaseModel):
-    prompt_extra: Optional[str] = Field(default=None, max_length=8000)
-    chat_model: Optional[str] = Field(default=None, max_length=80)
-    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
-
-
-class AppTuneResponse(BaseModel):
-    cliente_id: str
-    prompt_extra: str
-    chat_model: str
-    temperature: float
-    available_models: List[str] = Field(default_factory=list)
-
-
-class AppServiceProduct(BaseModel):
-    id: str = ""
-    nombre: str = Field(min_length=1, max_length=160)
-    descripcion: str = Field(default="", max_length=800)
-
-
-class AppServicesResponse(BaseModel):
-    cliente_id: str
-    items: List[AppServiceProduct] = Field(default_factory=list)
-    info_chars: int = 0
-
-
-class AppServicesPayload(BaseModel):
-    items: List[AppServiceProduct] = Field(default_factory=list, max_length=80)
-
-
-class AppWhatsAppPayload(BaseModel):
-    enabled: Optional[bool] = None
-    phone_number_id: Optional[str] = Field(default=None, max_length=120)
-    access_token_env: Optional[str] = Field(default=None, max_length=120)
-    verify_token_env: Optional[str] = Field(default=None, max_length=120)
-
-
-class AppWhatsAppResponse(BaseModel):
-    ok: bool = True
-    cliente_id: str
-    enabled: bool = False
-    phone_number_id: str = ""
-    access_token_env: str = ""
-    verify_token_env: str = ""
-    webhook_url: str = ""
-    verify_token: str = ""
-    plan_allows_whatsapp: bool = False
-    access_token_configured: bool = False
-    verify_token_configured: bool = False
-    status: str = "disabled"
-    status_label: str = "Desactivado"
-
-
-class AppLiveChatSession(BaseModel):
-    id: str
-    chat_session_id: str
-    status: str
-    started_at: str
-    claimed_at: str = ""
-    agent_user_id: str = ""
-
-
-# --- Vantelia 2.0 billing (Sem 5) ---
-
-class BillingPlanTier(BaseModel):
-    slug: str
-    label: str
-    price_monthly_eur: int
-    price_annual_eur: int
-    messages_quota: int
-    features: List[str]
-    has_monthly_price_id: bool = False
-    has_annual_price_id: bool = False
-    is_current: bool = False
-
-
-class BillingSubscriptionPublic(BaseModel):
-    plan: str
-    status: str
-    messages_quota: int
-    messages_used: int
-    messages_remaining: int
-    cancel_at_period_end: bool
-    current_period_start: str = ""
-    current_period_end: str = ""
-    stripe_customer_id: str = ""
-
-
-class BillingStateResponse(BaseModel):
-    subscription: BillingSubscriptionPublic
-    plans: List[BillingPlanTier]
-    portal_available: bool = False
-
-
-class BillingCheckoutPayload(BaseModel):
-    plan: str = Field(min_length=2, max_length=40)
-    billing_period: str = Field(default="monthly", pattern=r"^(monthly|annual)$")
-    coupon: Optional[str] = Field(default=None, max_length=80)
-
-
-class BillingCheckoutResponse(BaseModel):
-    ok: bool
-    checkout_url: str
-
-
-class AppTrackEventPayload(BaseModel):
-    event: str = Field(min_length=2, max_length=80, pattern=r"^[a-zA-Z0-9_.:-]+$")
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-
-
-class BillingPortalResponse(BaseModel):
-    ok: bool
-    portal_url: str
-
-
-class ConsultaLeadPayload(BaseModel):
-    nombre: str = Field(min_length=1, max_length=120)
-    email: EmailStr
-    telefono: Optional[str] = Field(default=None, max_length=40)
-    empresa: Optional[str] = Field(default=None, max_length=120)
-    servicio: Optional[str] = Field(default=None, max_length=80)
-    mensaje: Optional[str] = Field(default=None, max_length=2000)
-
-
-_DEMO_SECTOR_DEFAULTS: dict[str, tuple[str, str]] = {
-    "Clínica / Salud": (
-        "Centro médico especializado en atención a pacientes.",
-        "Primera consulta\nRevisión general\nTratamientos especializados",
-    ),
-    "Restaurante / Hostelería": (
-        "Restaurante con cocina de calidad y atención personalizada.",
-        "Menú del día\nCarta a la carta\nReservas de grupo",
-    ),
-    "Inmobiliaria": (
-        "Agencia inmobiliaria con amplia cartera de pisos y locales.",
-        "Compra de vivienda\nAlquiler\nAsesoramiento hipotecario",
-    ),
-    "Servicios profesionales": (
-        "Empresa de servicios profesionales con equipo experto.",
-        "Consulta inicial\nAsesoramiento\nGestión de proyectos",
-    ),
-    "Belleza y estética": (
-        "Centro de belleza y estética con tratamientos personalizados.",
-        "Corte y peinado\nTratamientos faciales\nManicura y pedicura",
-    ),
-    "Talleres y reparación": (
-        "Taller especializado en reparación y mantenimiento.",
-        "Diagnóstico\nReparación\nMantenimiento preventivo",
-    ),
-    "Educación / Academias": (
-        "Academia con cursos presenciales y online.",
-        "Clases particulares\nCursos grupales\nPreparación de exámenes",
-    ),
-    "Comercio / Retail": (
-        "Comercio con amplia selección de productos.",
-        "Productos disponibles\nEnvíos y devoluciones\nAtención al cliente",
-    ),
-    "Tecnología / SaaS": (
-        "Empresa de tecnología con soluciones digitales.",
-        "Demo del producto\nPlanes y precios\nSoporte técnico",
-    ),
-}
-
-
-class DemoGeneratePayload(BaseModel):
-    nombre_empresa: str = Field(min_length=1, max_length=120)
-    sector: str = Field(min_length=1, max_length=60)
-    email: EmailStr
-    descripcion: Optional[str] = Field(default=None, max_length=1500)
-    servicios: Optional[str] = Field(default=None, max_length=1500)
-    horario: Optional[str] = Field(default=None, max_length=200)
-    color: Optional[str] = Field(default=None, max_length=20)
-    website_url: Optional[str] = Field(default=None, max_length=300)
-
-
-class DemoGenerateResponse(BaseModel):
-    ok: bool = True
-    cliente_id: str
-    demo_url: str
-    expires_at: str
-    expires_in_seconds: int
-
-
-class SubscriptionUsage(BaseModel):
-    conversations: int = 0
-    conversations_limit: Optional[int] = None
-    bookings: int = 0
-    bookings_limit: Optional[int] = None
-    period_start: str = ""
-    period_end: str = ""
-
-
-class SubscriptionFeatures(BaseModel):
-    branding_customization: bool = False
-    whatsapp_enabled: bool = False
-    csv_export: bool = False
-    multi_branch: bool = False
-    crm_integration: bool = False
-    show_powered_by: bool = True
-    max_professionals: Optional[int] = 1
-    max_users: Optional[int] = 1
-    max_extra_documents: Optional[int] = 0
-
-
-class SubscriptionPublic(BaseModel):
-    plan: str
-    plan_label: str
-    effective_plan: str = ""
-    effective_plan_label: str = ""
-    admin_override: bool = False
-    status: str
-    price_eur: int
-    lifetime: bool = False
-    renews_at: str = ""
-    started_at: str = ""
-    canceled_at: str = ""
-    stripe_customer_id: str = ""
-    stripe_subscription_id: str = ""
-    features: SubscriptionFeatures
-    usage: SubscriptionUsage
-    available_plans: List[Dict[str, Any]] = Field(default_factory=list)
-
-
-class SubscriptionCheckoutPayload(BaseModel):
-    plan: str = Field(min_length=1, max_length=20)
-    billing_period: str = Field(default="monthly", max_length=20)
-    success_url: Optional[str] = Field(default=None, max_length=500)
-    cancel_url: Optional[str] = Field(default=None, max_length=500)
-
-
-class SubscriptionCheckoutResponse(BaseModel):
-    url: str
-    session_id: str = ""
-
-
-class PublicCheckoutStatusResponse(BaseModel):
-    status: str
-    message: str = ""
-    cliente_id: str = ""
-    portal_enter_url: str = ""
-
-
-class SubscriptionPortalResponse(BaseModel):
-    url: str
-
-
-class AuthManagedUser(BaseModel):
-    user_id: str
-    email: str
-    display_name: str
-    role: str
-    cliente_id: str = ""
-    is_active: bool
-    created_at: str
-    last_login_at: str = ""
-
-
-class AuthManagedUsersResponse(BaseModel):
-    items: List[AuthManagedUser]
-    total: int
-
-
-class AuthPasswordChangePayload(BaseModel):
-    current_password: str = Field(min_length=8, max_length=200)
-    new_password: str = Field(min_length=8, max_length=200)
-
-
-class AuthPasswordForgotPayload(BaseModel):
-    email: EmailStr
-
-
-class AuthPasswordResetPayload(BaseModel):
-    token: str = Field(min_length=20, max_length=255)
-    new_password: str = Field(min_length=8, max_length=200)
-
-
-class AuthProfileUpdatePayload(BaseModel):
-    display_name: str = Field(min_length=2, max_length=120)
-    email: EmailStr
-
-
-class PortalAiConfigPayload(BaseModel):
-    icono: str = Field(default="AI", max_length=12)
-    bienvenida: str = Field(min_length=5, max_length=400)
-    prompt_extra: str = Field(default="", max_length=2000)
-    nombre: Optional[str] = Field(default=None, max_length=120)
-    color: Optional[str] = Field(default=None, max_length=7)
-    accent_color: Optional[str] = Field(default=None, max_length=7)
-    branding_text: Optional[str] = Field(default=None, max_length=120)
-    logo_url: Optional[str] = Field(default=None, max_length=2000000)
-
-
-class PortalAiConfigPublic(BaseModel):
-    nombre: str
-    icono: str
-    color: str
-    accent_color: str = ""
-    logo_url: str = ""
-    bienvenida: str
-    prompt_extra: str
-    branding_text: str = "Powered by Vantelia"
-
-
-class PortalBrainPayload(BaseModel):
-    info_txt: str = Field(default="", max_length=120000)
-
-
-class PortalBrainPublic(BaseModel):
-    info_txt: str
-    reindexed: bool = False
-    reindex_error: str = ""
-
-
-class PortalScheduleUpdatePayload(BaseModel):
-    enabled: bool = True
-    timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
-    slot_minutes: int = Field(default=30, ge=5, le=240)
-    day_start: str = Field(default="09:00", min_length=5, max_length=5)
-    day_end: str = Field(default="18:00", min_length=5, max_length=5)
-    closed_weekdays: List[int] = Field(default_factory=list)
-    message_templates: Optional[Dict[str, str]] = None
-    message_template_enabled: Optional[Dict[str, bool]] = None
-
-
-class PortalAgendaBlockPayload(BaseModel):
-    fecha: str = Field(min_length=10, max_length=10)
-    fecha_fin: str = Field(default="", max_length=10)
-    hora_inicio: str = Field(min_length=5, max_length=5)
-    hora_fin: str = Field(min_length=5, max_length=5)
-    motivo: str = Field(default="", max_length=160)
-
-
-class PortalAgendaBlock(BaseModel):
-    block_id: str
-    employee_id: str = ""
-    fecha: str
-    hora_inicio: str
-    hora_fin: str
-    motivo: str = ""
-    created_at: str = ""
-
-
-class PortalSchedulePublic(BaseModel):
-    enabled: bool
-    timezone: str
-    slot_minutes: int
-    day_start: str
-    day_end: str
-    closed_weekdays: List[int]
-    message_templates: Dict[str, str]
-    message_template_enabled: Dict[str, bool]
-    blocks: List[PortalAgendaBlock]
-
-
-class PortalAgendaBlockCreateResponse(BaseModel):
-    items: List[PortalAgendaBlock]
-    created_count: int
-    skipped_count: int
-    date_from: str
-    date_to: str
-
-
-class PortalBookingSummary(BaseModel):
-    booking_id: str
-    empresa: str
-    employee_id: str = ""
-    employee_name: str = ""
-    nombre: str
-    email: str
-    telefono: str = ""
-    servicio: str
-    fecha: str
-    hora: str
-    timezone: str
-    estado: str
-    provider_name: str
-    provider_booking_url: str = ""
-    manage_url: str = ""
-    contact_email: str = ""
-    contact_phone: str = ""
-    start_at: str = ""
-    can_cancel: bool = True
-    can_reschedule: bool = True
-
-
-class PortalBookingsResponse(BaseModel):
-    items: List[PortalBookingSummary]
-    total: int
-    limit: int
-    offset: int
-    scope: str
-
-
-class PortalEmployeePayload(BaseModel):
-    name: str = Field(min_length=2, max_length=120)
-    role_label: str = Field(default="", max_length=80)
-    color: str = Field(default="#00b1d9", min_length=7, max_length=7)
-    is_active: bool = True
-    timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
-    slot_minutes: int = Field(default=30, ge=5, le=240)
-    day_start: str = Field(default="09:00", min_length=5, max_length=5)
-    day_end: str = Field(default="18:00", min_length=5, max_length=5)
-    closed_weekdays: List[int] = Field(default_factory=list)
-    service_ids: List[str] = Field(default_factory=list)
-
-
-class PortalEmployeePublic(BaseModel):
-    employee_id: str
-    cliente_id: str
-    name: str
-    role_label: str = ""
-    color: str = "#00b1d9"
-    is_active: bool = True
-    is_default: bool = False
-    timezone: str = DEFAULT_TIMEZONE
-    slot_minutes: int = 30
-    day_start: str = "09:00"
-    day_end: str = "18:00"
-    closed_weekdays: List[int] = Field(default_factory=list)
-    service_ids: List[str] = Field(default_factory=list)
-    allows_all_services: bool = True
-    bookings_today: int = 0
-    bookings_upcoming: int = 0
-    blocks: List[PortalAgendaBlock] = Field(default_factory=list)
-
-
-class PortalEmployeesResponse(BaseModel):
-    items: List[PortalEmployeePublic]
-
-
-class PortalDashboardResponse(BaseModel):
-    user: AuthUserPublic
-    stats: Dict[str, Any]
-    bookings_upcoming: List[PortalBookingSummary]
-    bookings_today: List[PortalBookingSummary] = Field(default_factory=list)
-    today_blocks: List[PortalAgendaBlock] = Field(default_factory=list)
-    install_snippet: str = ""
-    widget_script_url: str = ""
-    api_base_url: str = ""
-    demo_url: str = ""
-
-
-class PortalMessagePreviewPayload(BaseModel):
-    kind: str = Field(default="", max_length=40)
-    schedule: Optional[PortalScheduleUpdatePayload] = None
-    target_email: Optional[EmailStr] = None
-    template_key: str = Field(default="", max_length=40)
-    content: str = Field(default="", max_length=500)
-    test_email: Optional[EmailStr] = None
-
-
-class PortalMessagePreviewResponse(BaseModel):
-    kind: str
-    subject: str
-    text_body: str
-    html_body: str
-    target_email: str = ""
-    enabled: bool
-
-
-class BookingAuditEntry(BaseModel):
-    audit_id: int
-    booking_id: str
-    event_type: str
-    title: str
-    detail: str = ""
-    created_at: str
-    source: str = ""
-    actor: str = ""
-
-
-class BookingAuditResponse(BaseModel):
-    items: List[BookingAuditEntry]
-
-
-class PortalCreateUserPayload(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=200)
-    display_name: str = Field(min_length=2, max_length=120)
-    cliente_id: str = Field(default="", max_length=80)
-    role: str = Field(default="client", max_length=20)
-
-
-class AdminClientePayload(BaseModel):
-    nombre: str = Field(min_length=2, max_length=120)
-    icono: str = Field(default="AI", max_length=12)
-    color: str = Field(default="#00b1d9", min_length=7, max_length=7)
-    accent_color: Optional[str] = Field(default=None, max_length=7)
-    logo_url: Optional[str] = Field(default=None, max_length=2000000)
-    bienvenida: str = Field(min_length=5, max_length=400)
-    prompt_extra: str = Field(default="", max_length=2000)
-    allowed_origins: List[str] = Field(default_factory=list)
-    contacto_email: str = Field(default="", max_length=120)
-    contacto_telefono: str = Field(default="", max_length=40)
-    branding_text: str = Field(default="Powered by Vantelia", max_length=120)
-    whatsapp_enabled: bool = False
-    whatsapp_phone_number_id: str = Field(default="", max_length=120)
-    whatsapp_access_token_env: str = Field(default="", max_length=120)
-    whatsapp_verify_token_env: str = Field(default="", max_length=120)
-    booking_enabled: bool = True
-    booking_timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
-    booking_slot_minutes: int = Field(default=30, ge=5, le=240)
-    booking_day_start: str = Field(default="09:00", min_length=5, max_length=5)
-    booking_day_end: str = Field(default="18:00", min_length=5, max_length=5)
-    booking_closed_weekdays: List[int] = Field(default_factory=lambda: [6])
-    booking_provider: str = Field(default="internal", max_length=40)
-    booking_webhook_env: str = Field(default="", max_length=80)
-    booking_webhook_url: str = Field(default="", max_length=400)
-    booking_calendly_user_env: str = Field(default="", max_length=80)
-    booking_calendly_event_type_env: str = Field(default="", max_length=80)
-    booking_calendly_location_kind: str = Field(default="", max_length=60)
-    booking_calendly_location_value: str = Field(default="", max_length=200)
-    booking_google_calendar_id: str = Field(default="", max_length=200)
-    booking_google_calendar_id_env: str = Field(default="", max_length=80)
-    booking_google_service_account_path: str = Field(default="", max_length=400)
-    booking_google_service_account_env: str = Field(default="", max_length=80)
-    booking_google_service_account_json: str = Field(default="", max_length=20000)
-    booking_success_message: str = Field(
-        default="Tu solicitud de cita ha quedado registrada correctamente.",
-        max_length=400,
-    )
-    info_txt: str = Field(default="", max_length=120000)
-    reindex_after_save: bool = True
-
-
-class AdminClienteResumen(BaseModel):
-    cliente_id: str
-    nombre: str
-    owner_user_id: str = ""
-    owner_email: str = ""
-    owner_display_name: str = ""
-    owner_last_login_at: str = ""
-    owner_created_at: str = ""
-    cliente_created_at: str = ""
-    plan: str = ""
-    messages_used: int = 0
-    messages_quota: int = 0
-    booking_enabled: bool = False
-    booking_provider: str = "internal"
-    booking_timezone: str = DEFAULT_TIMEZONE
-    booking_day_start: str = "09:00"
-    booking_day_end: str = "18:00"
-    allowed_origins: List[str]
-    contacto_email: str = ""
-    contacto_telefono: str = ""
-    branding_text: str = ""
-    whatsapp_enabled: bool = False
-    whatsapp_phone_number_id: str = ""
-    has_info_file: bool
-    info_file_size: int = 0
-    bookings_total: int = 0
-    bookings_pending: int = 0
-    is_demo: bool = False
-    demo_expires_at: str = ""
-    demo_expires_in_seconds: int = 0
-    subscription_plan: str = ""
-    subscription_status: str = ""
-    stripe_subscription_id: str = ""
-
-
-class AdminClienteDetalle(BaseModel):
-    cliente_id: str
-    config: AdminClientePayload
-    install_snippet: str
-    widget_script_url: str
-    api_base_url: str
-    demo_url: str
-
-
-class AdminClienteSaveResult(BaseModel):
-    status: str
-    cliente_id: str
-    reindexed: bool
-    reindex_error: str
-    install_snippet: str
-    widget_script_url: str
-    api_base_url: str
-    demo_url: str
-
-
-class AdminClienteAuditEntry(BaseModel):
-    admin_email: str
-    started_at: str
-    ended_at: str = ""
-    ip: str = ""
-    user_agent: str = ""
-    duration_seconds: Optional[int] = None
-
-
-class AdminClienteAuditResponse(BaseModel):
-    cliente_id: str
-    items: List[AdminClienteAuditEntry]
-
-
-class AdminImpersonateResponse(BaseModel):
-    ok: bool
-    cliente_id: str
-    target_user_id: str
-    target_email: str
-    expires_in_minutes: int
-    redirect_url: str
-
-
-class AdminImpersonateEndResponse(BaseModel):
-    ok: bool
-    admin_redirect_url: str = "/dashboard"
-
-
-class AdminAltaExpressPayload(BaseModel):
-    website_url: str = Field(min_length=4, max_length=400)
-    cliente_id: str = Field(min_length=2, max_length=80)
-    nombre_bot: str = Field(default="Clara", min_length=2, max_length=40)
-    tono: str = Field(default="Profesional y cercano", min_length=4, max_length=80)
-    idioma: str = Field(default="Español", min_length=4, max_length=40)
-    max_paginas: int = Field(default=12, ge=1, le=30)
-    color: str = Field(default="#00b1d9", min_length=7, max_length=7)
-    booking_enabled: bool = True
-    booking_timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
-    auto_save: bool = True
-    reindex_after_save: bool = True
-
-
-class AdminAltaExpressResponse(BaseModel):
-    cliente_id: str
-    detected_business_name: str
-    normalized_url: str
-    links_found: int
-    config: AdminClientePayload
-    saved: bool
-    reindexed: bool
-    reindex_error: str
-    install_snippet: str
-    widget_script_url: str
-    api_base_url: str
-    demo_url: str
-
+from api_models import (
+    MensajeChat,
+    DatosCita,
+    RespuestaChat,
+    WhatsAppWebhookStatus,
+    ChatSessionSummary,
+    ChatMessagePublic,
+    ChatSessionDetail,
+    ConfigPublicaCliente,
+    SlotDisponibilidad,
+    RespuestaDisponibilidad,
+    RespuestaAgendado,
+    BookingDetailPublic,
+    BookingActionResponse,
+    BookingReschedulePayload,
+    BookingCancelPayload,
+    BookingUpdatePayload,
+    AdminBookingResumen,
+    AdminReminderRunResult,
+    AuthLoginPayload,
+    AuthUserPublic,
+    AuthLoginResponse,
+    AuthSimpleResponse,
+    AuthSignupPayload,
+    AuthSignupResponse,
+    OnboardingStartPayload,
+    OnboardingStartResponse,
+    OnboardingLearnPayload,
+    OnboardingLearnResponse,
+    OnboardingPersonalityPayload,
+    OnboardingPersonalityResponse,
+    OnboardingFinalizeResponse,
+    OnboardingStateResponse,
+    AppOverviewSubscription,
+    AppOverviewStats,
+    AppOverviewResponse,
+    AppDeployResponse,
+    AppAppearancePayload,
+    AppAppearanceResponse,
+    AppLeadPublic,
+    AppLeadPayload,
+    AppLeadsListResponse,
+    AppQAItem,
+    AppQAPayload,
+    AppQAUpdatePayload,
+    AppQAListResponse,
+    AppKnowledgeItem,
+    AppKnowledgeListResponse,
+    AppKnowledgeTextPayload,
+    AppKnowledgeUrlPayload,
+    AppKnowledgeReindexResponse,
+    AppTunePayload,
+    AppTuneResponse,
+    AppServiceProduct,
+    AppServicesResponse,
+    AppServicesPayload,
+    AppWhatsAppPayload,
+    AppWhatsAppResponse,
+    AppLiveChatSession,
+    BillingPlanTier,
+    BillingSubscriptionPublic,
+    BillingStateResponse,
+    BillingCheckoutPayload,
+    BillingCheckoutResponse,
+    AppTrackEventPayload,
+    BillingPortalResponse,
+    ConsultaLeadPayload,
+    DemoGeneratePayload,
+    DemoGenerateResponse,
+    SubscriptionUsage,
+    SubscriptionFeatures,
+    SubscriptionPublic,
+    SubscriptionCheckoutPayload,
+    SubscriptionCheckoutResponse,
+    PublicCheckoutStatusResponse,
+    SubscriptionPortalResponse,
+    AuthManagedUser,
+    AuthManagedUsersResponse,
+    AuthPasswordChangePayload,
+    AuthPasswordForgotPayload,
+    AuthPasswordResetPayload,
+    AuthProfileUpdatePayload,
+    PortalAiConfigPayload,
+    PortalAiConfigPublic,
+    PortalBrainPayload,
+    PortalBrainPublic,
+    PortalScheduleUpdatePayload,
+    PortalAgendaBlockPayload,
+    PortalAgendaBlock,
+    PortalSchedulePublic,
+    PortalAgendaBlockCreateResponse,
+    PortalBookingSummary,
+    PortalBookingsResponse,
+    PortalEmployeePayload,
+    PortalEmployeePublic,
+    PortalEmployeesResponse,
+    PortalDashboardResponse,
+    PortalMessagePreviewPayload,
+    PortalMessagePreviewResponse,
+    BookingAuditEntry,
+    BookingAuditResponse,
+    PortalCreateUserPayload,
+    AdminClientePayload,
+    AdminClienteResumen,
+    AdminClienteDetalle,
+    AdminClienteSaveResult,
+    AdminClienteAuditEntry,
+    AdminClienteAuditResponse,
+    AdminImpersonateResponse,
+    AdminImpersonateEndResponse,
+    AdminAltaExpressPayload,
+    AdminAltaExpressResponse,
+)
 
 def _list_employee_rows(cliente_id: str, *, include_inactive: bool = True) -> List[sqlite3.Row]:
     clauses = ["cliente_id = ?"]
@@ -4602,7 +3621,7 @@ def _send_checkout_admin_notification(
         f"  Stripe customer: {customer_id or '-'}\n"
         f"  Stripe subscription: {subscription_id or '-'}\n"
         f"  Stripe session: {session_id or '-'}\n"
-        f"  Trial: 30 dias gratis\n\n"
+        f"  Condiciones: sin permanencia. IVA no incluido.\n\n"
         f"Panel: https://app.vantelia.es/dashboard\n"
     )
     html_body = (
@@ -4618,7 +3637,7 @@ def _send_checkout_admin_notification(
         f"<tr><td><strong>Stripe customer</strong></td><td>{escape(customer_id or '-')}</td></tr>"
         f"<tr><td><strong>Stripe subscription</strong></td><td>{escape(subscription_id or '-')}</td></tr>"
         f"<tr><td><strong>Stripe session</strong></td><td>{escape(session_id or '-')}</td></tr>"
-        f"<tr><td><strong>Trial</strong></td><td>30 dias gratis</td></tr>"
+        f"<tr><td><strong>Condiciones</strong></td><td>Sin permanencia. IVA no incluido.</td></tr>"
         f"</table>"
         f"<p><a href='https://app.vantelia.es/dashboard'>Abrir panel admin</a></p>"
     )
@@ -5200,6 +4219,30 @@ def _plan_limits(plan: str) -> Dict[str, Any]:
 
 def _plan_feature(cliente_id: str, feature: str) -> Any:
     return _plan_limits(_client_plan(cliente_id)).get(feature)
+
+
+def _client_booking_plan_enabled(cliente_id: str) -> bool:
+    """Whether booking is available in the client's effective plan."""
+    owner = db_get_client_owner(cliente_id)
+    if owner:
+        sub = db_get_subscription_for_user(owner)
+        plan = _normalize_plan_slug(sub["plan"] if sub else PLAN_DEFAULT)
+        return "booking" in (_self_serve_plan(plan).get("features") or [])
+
+    booking_limit = _plan_limits(_client_plan(cliente_id)).get("monthly_bookings")
+    if booking_limit is None:
+        return True
+    try:
+        return int(booking_limit) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _booking_plan_unavailable_error() -> HTTPException:
+    return HTTPException(
+        status_code=403,
+        detail="Las reservas online no estan incluidas en el plan actual. Actualiza a un plan con agenda para activar esta funcion.",
+    )
 
 
 def _require_plan_feature(cliente_id: str, feature: str, error_message: str) -> None:
@@ -6305,6 +5348,17 @@ def _invalidate_client_runtime(cliente_id: str) -> None:
 DEMO_TENANT_PREFIX = "demo_auto_"
 DEMO_TTL_SECONDS = int(os.getenv("DEMO_TENANT_TTL_SECONDS", "3600"))
 
+# Defaults de descripcion/servicios por sector cuando no hay scraping ni datos.
+# El scraping de la web sobrescribe esto; el fallback generico cubre sectores no listados.
+_DEMO_SECTOR_DEFAULTS: Dict[str, tuple] = {
+    "centro de masajes": ("Centro de masajes y bienestar.", "Masajes terapeuticos, relajantes y descontracturantes. Reserva de sesiones."),
+    "clinica dental": ("Clinica dental.", "Revisiones, limpiezas, ortodoncia, implantes y estetica dental."),
+    "clinica estetica": ("Centro de estetica y belleza.", "Tratamientos faciales, corporales y de belleza."),
+    "fisioterapia": ("Clinica de fisioterapia.", "Fisioterapia, rehabilitacion y recuperacion de lesiones."),
+    "peluqueria": ("Peluqueria y salon de belleza.", "Corte, color, peinado y tratamientos capilares."),
+    "centro veterinario": ("Centro veterinario.", "Consultas, vacunaciones, cirugia y urgencias veterinarias."),
+}
+
 
 def _demo_registry_path() -> Path:
     return DATA_DIR / "demo_tenants.json"
@@ -6407,11 +5461,11 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
         f'<section class="claim-banner">'
         f'  <div class="claim-banner-inner">'
         f'    <div class="claim-text">'
-        f'      <strong>¿Te gusta lo que ves?</strong>'
-        f'      <span>Reclama este asistente, conéctalo a tu web y empieza gratis. Sin tarjeta.</span>'
+        f'      <strong>Tu asistente ya esta listo</strong>'
+        f'      <span>Guardalo en tu cuenta, copia el snippet e instalalo en tu web. Sin tarjeta.</span>'
         f'    </div>'
-        f'    <a class="claim-cta" href="/acceso?mode=signup&amp;claim={cliente_safe}">'
-        f'      Reclamar este bot →'
+        f'    <a class="claim-cta" data-claim-cta="1" href="/acceso?mode=signup&amp;claim={cliente_safe}">'
+        f'      Activar gratis e instalar'
         f'    </a>'
         f'  </div>'
         f'</section>'
@@ -6519,22 +5573,22 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
     }}
 
     .claim-banner {{
-      max-width: 720px;
-      margin: 0 auto 24px;
+      max-width: 880px;
+      margin: 0 auto 28px;
       animation: fadeUp 0.7s ease both;
     }}
     .claim-banner-inner {{
-      background: linear-gradient(135deg, rgba(0,209,255,0.14), rgba(0,245,212,0.10));
-      border: 1px solid rgba(0,245,212,0.35);
+      background: linear-gradient(135deg, rgba(0,245,212,0.17), rgba(0,177,217,0.12));
+      border: 1px solid rgba(0,245,212,0.46);
       border-radius: var(--radius-md);
-      padding: 16px 20px;
+      padding: 18px 20px;
       display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
       justify-content: space-between;
-      box-shadow: 0 12px 32px rgba(0,209,255,0.18);
+      box-shadow: 0 18px 44px rgba(0,209,255,0.2);
     }}
     .claim-text {{ flex: 1 1 320px; min-width: 0; line-height: 1.5; }}
-    .claim-text strong {{ display: block; font-size: 15px; color: var(--ink); }}
-    .claim-text span {{ display: block; color: var(--soft); font-size: 13px; margin-top: 2px; }}
+    .claim-text strong {{ display: block; font-size: 16px; color: var(--ink); }}
+    .claim-text span {{ display: block; color: var(--soft); font-size: 13.5px; margin-top: 2px; }}
     .claim-cta {{
       display: inline-flex; align-items: center; gap: 8px;
       padding: 11px 18px;
@@ -6967,6 +6021,23 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
         return true;
       }}
 
+      function trackDemoEvent(event, payload) {{
+        try {{
+          fetch("/analytics/event", {{
+            method: "POST",
+            headers: {{ "Content-Type": "application/json" }},
+            keepalive: true,
+            body: JSON.stringify(Object.assign({{
+              event: event,
+              event_source: "demo_page",
+              page_path: window.location.pathname,
+              page_url: window.location.href,
+              cliente_id: "{cliente_safe}"
+            }}, payload || {{}}))
+          }}).catch(function () {{}});
+        }} catch (_) {{}}
+      }}
+
       function sendToWidget(message) {{
         whenWidgetReady(function () {{
           openWidget();
@@ -6999,6 +6070,13 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
           openWidget();
           flashWidget();
           hidePointer();
+        }});
+      }});
+
+      document.querySelector("[data-claim-cta]")?.addEventListener("click", function (ev) {{
+        trackDemoEvent("demo_claim_clicked", {{
+          cta_label: "Activar gratis e instalar",
+          cta_href: ev.currentTarget.href
         }});
       }});
 
@@ -7395,7 +6473,8 @@ def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
     branding = config.get("branding", {})
     booking_cfg = config.get("booking", {})
 
-    starter_questions = _resolve_widget_starters(config)
+    booking_enabled = bool(config["booking"]["enabled"]) and _client_booking_plan_enabled(cliente_id)
+    starter_questions = _resolve_widget_starters(config, booking_enabled=booking_enabled)
     if starter_questions:
         starter_lines = "\n".join(f"- {q}" for q in starter_questions)
         starter_block = (
@@ -10922,6 +10001,18 @@ async def auth_signup(data: AuthSignupPayload, request: Request) -> Response:
         },
         request,
     )
+    _try_record_analytics_event(
+        {
+            "event": "signup_completed",
+            "event_source": "vantelia_app",
+            "signup_source": "email",
+            "user_id": new_user["id"],
+            "widget_client_id": new_user["cliente_id"] or "",
+            "cliente_id": new_user["cliente_id"] or "",
+            "status": "claimed" if redirect_to == "/app" else "new",
+        },
+        request,
+    )
     response = JSONResponse(payload.model_dump())
     _set_portal_cookie(response, raw_token)
     return response
@@ -11002,6 +10093,7 @@ async def auth_google_callback(
         raise HTTPException(status_code=400, detail="Google no devolvio identificadores.")
 
     user = _get_user_by_google_sub(google_sub) or _get_user_by_email(email)
+    created_google_user = False
     if user and not user["google_sub"]:
         return RedirectResponse("/acceso?google_error=email_account")
     if not user:
@@ -11015,6 +10107,7 @@ async def auth_google_callback(
             signup_source="google",
             email_verified=True,
         )
+        created_google_user = True
 
     with _get_db_connection() as connection:
         connection.execute(
@@ -11037,6 +10130,19 @@ async def auth_google_callback(
     redirect_target = "/onboarding" if not (fresh and fresh["cliente_id"]) else "/app"
     response = RedirectResponse(redirect_target)
     _set_portal_cookie(response, raw_token)
+    if created_google_user:
+        _try_record_analytics_event(
+            {
+                "event": "signup_completed",
+                "event_source": "vantelia_app",
+                "signup_source": "google",
+                "user_id": user["id"],
+                "widget_client_id": (fresh["cliente_id"] if fresh else "") or "",
+                "cliente_id": (fresh["cliente_id"] if fresh else "") or "",
+                "status": "claimed" if redirect_target == "/app" else "new",
+            },
+            request,
+        )
     return response
 
 
@@ -11432,7 +10538,7 @@ async def auth_export_bookings(
         _require_plan_feature(
             target_client_id,
             "csv_export",
-            "La exportacion CSV esta disponible en el plan Completo.",
+            "La exportacion CSV esta disponible desde el plan Starter.",
         )
     rows, _ = _list_booking_rows(
         cliente_id=target_client_id,
@@ -11622,10 +10728,13 @@ async def app_track_event(
     cliente_id = (user["cliente_id"] or "").strip()
     allowed_events = {
         "bot_preview_message",
+        "first_chat_tested",
         "snippet_copied",
         "share_link_copied",
         "demo_url_copied",
         "install_tab_opened",
+        "pricing_viewed",
+        "upgrade_clicked",
     }
     if data.event not in allowed_events:
         raise HTTPException(status_code=400, detail="Evento de app no permitido.")
@@ -12578,7 +11687,7 @@ async def app_whatsapp_post(
                 if not _plan_feature(cliente_id, "whatsapp_enabled"):
                     raise HTTPException(
                         status_code=403,
-                        detail="WhatsApp esta disponible en los planes WhatsApp y Completo.",
+                        detail="WhatsApp esta disponible en el plan Business.",
                     )
                 if not str(wa.get("phone_number_id", "") or "").strip():
                     raise HTTPException(status_code=400, detail="Indica el Phone Number ID de WhatsApp.")
@@ -12664,12 +11773,14 @@ def _build_plan_tiers(current_plan_slug: str) -> List[BillingPlanTier]:
     out: List[BillingPlanTier] = []
     for slug in ["free", "starter", "pro", "business"]:
         plan = SELF_SERVE_PLANS[slug]
+        limits = _plan_limits(slug)
         out.append(BillingPlanTier(
             slug=plan["slug"],
             label=plan["label"],
             price_monthly_eur=int(plan["price_monthly_eur"]),
             price_annual_eur=int(plan["price_annual_eur"]),
             messages_quota=int(plan["messages_quota"]),
+            bookings_quota=limits.get("monthly_bookings"),
             features=list(plan["features"]),
             has_monthly_price_id=bool(plan["stripe_price_monthly"]),
             has_annual_price_id=bool(plan["stripe_price_annual"]),
@@ -12721,6 +11832,9 @@ async def app_billing_checkout(
         customer_kwargs["customer_email"] = user["email"]
     session_kwargs: Dict[str, Any] = {
         "mode": "subscription",
+        # Si el total recurrente queda en 0 (p.ej. cupon 100% forever), Stripe
+        # no pide tarjeta. Para planes de pago normales sigue exigiendola.
+        "payment_method_collection": "if_required",
         "line_items": [{"price": price_id, "quantity": 1}],
         "success_url": f"{api_base}/app?billing=success&plan={plan['slug']}",
         "cancel_url": f"{api_base}/app?billing=cancel",
@@ -12746,6 +11860,20 @@ async def app_billing_checkout(
     except Exception as exc:  # noqa: BLE001
         logger.error("Stripe checkout self-serve fallo user=%s plan=%s: %s", user["id"], plan["slug"], exc)
         raise HTTPException(status_code=502, detail="No se pudo iniciar el checkout.") from exc
+    _try_record_analytics_event(
+        {
+            "event": "checkout_started",
+            "event_source": "vantelia_app",
+            "widget_client_id": user["cliente_id"] or "",
+            "cliente_id": user["cliente_id"] or "",
+            "user_id": user["id"],
+            "plan": plan["slug"],
+            "billing_period": data.billing_period,
+            "checkout_session_id": session.id or "",
+            "source": "self_serve",
+        },
+        request,
+    )
     _try_record_analytics_event(
         {
             "event": "upgrade_started",
@@ -13189,6 +12317,7 @@ async def auth_subscription_checkout(
             billing_address_collection="required",
             phone_number_collection={"enabled": True},
             tax_id_collection={"enabled": True},
+            payment_method_collection="if_required",
             allow_promotion_codes=True,
             **customer_kwargs,
         )
@@ -13224,13 +12353,13 @@ async def public_subscription_checkout(
             client_reference_id=f"public:{plan}:{billing_period}",
             metadata={"source": "public_plans", "plan": plan, "billing_period": billing_period},
             subscription_data={
-                "trial_period_days": 30,
                 "metadata": {"source": "public_plans", "plan": plan, "billing_period": billing_period},
             },
             custom_fields=_stripe_onboarding_custom_fields(),
             billing_address_collection="required",
             phone_number_collection={"enabled": True},
             tax_id_collection={"enabled": True},
+            payment_method_collection="if_required",
             allow_promotion_codes=True,
         )
     except Exception as exc:  # noqa: BLE001
@@ -13739,7 +12868,7 @@ async def app_entry(
 
 @app.get("/signup", include_in_schema=False)
 async def signup_entry() -> Response:
-    return RedirectResponse("/acceso")
+    return RedirectResponse("/acceso?signup=1")
 
 
 @app.get("/portal", include_in_schema=False)
@@ -14048,6 +13177,7 @@ _ANALYTICS_ALLOWED_KEYS = {
     "action",
     "surface",
     "step",
+    "page_type",
     "signup_source",
     "user_id",
     "cliente_id",
@@ -15029,7 +14159,8 @@ async def info_cliente(cliente_id: str, request: Request) -> ConfigPublicaClient
     else:
         launcher_size = max(120, min(280, launcher_size))
 
-    starter_questions = _resolve_widget_starters(config)
+    booking_enabled = bool(config["booking"]["enabled"]) and _client_booking_plan_enabled(cliente_id)
+    starter_questions = _resolve_widget_starters(config, booking_enabled=booking_enabled)
 
     return ConfigPublicaCliente(
         nombre=config["nombre"],
@@ -15040,7 +14171,7 @@ async def info_cliente(cliente_id: str, request: Request) -> ConfigPublicaClient
         launcher_shape=launcher_shape,
         launcher_size=launcher_size,
         bienvenida=config["bienvenida"],
-        booking_enabled=config["booking"]["enabled"],
+        booking_enabled=booking_enabled,
         branding_text=branding.get("powered_by", "Powered by Vantelia"),
         contact_email=contacto.get("email", ""),
         contact_phone=contacto.get("telefono", ""),
@@ -15135,6 +14266,8 @@ async def disponibilidad(
 
     if not config["booking"]["enabled"]:
         raise HTTPException(status_code=404, detail="La reserva online no esta habilitada para este cliente.")
+    if not _client_booking_plan_enabled(cliente_id):
+        raise _booking_plan_unavailable_error()
 
     selected_day = _parse_date(fecha)
     _validate_booking_window(cliente_id, selected_day)
@@ -15185,6 +14318,8 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
 
     if not config["booking"]["enabled"]:
         raise HTTPException(status_code=404, detail="La reserva online no esta habilitada para este cliente.")
+    if not _client_booking_plan_enabled(data.cliente_id):
+        raise _booking_plan_unavailable_error()
 
     # Plan: límite mensual de citas
     _require_active_subscription(data.cliente_id)
@@ -15443,7 +14578,7 @@ async def _process_chat_message(
         intent=commercial_intent,
     )
     client_config = _get_client_config(cliente_id)
-    booking_enabled = bool(client_config["booking"]["enabled"])
+    booking_enabled = bool(client_config["booking"]["enabled"]) and _client_booking_plan_enabled(cliente_id)
     nombre_empresa = client_config.get("nombre", "")
 
     if _message_is_greeting(message) or _message_requests_menu(message):
@@ -15668,7 +14803,7 @@ def _resolve_whatsapp_client_id(phone_number_id: str, forced_cliente_id: str = "
         _require_plan_feature(
             forced_cliente_id,
             "whatsapp_enabled",
-            "WhatsApp esta disponible en los planes WhatsApp y Completo.",
+            "WhatsApp esta disponible en el plan Business.",
         )
         return forced_cliente_id
 
@@ -15683,7 +14818,7 @@ def _resolve_whatsapp_client_id(phone_number_id: str, forced_cliente_id: str = "
     _require_plan_feature(
         cliente_id,
         "whatsapp_enabled",
-        "WhatsApp esta disponible en los planes WhatsApp y Completo.",
+        "WhatsApp esta disponible en el plan Business.",
     )
     return cliente_id
 
@@ -17270,6 +16405,13 @@ async def admin_analytics(days: int = 30, limit: int = 80) -> Dict[str, Any]:
         "since": since_iso,
         "total_events": total,
         "kpis": {
+            "landing_view": key_events.get("landing_view", 0),
+            "signup_clicked": key_events.get("signup_clicked", 0),
+            "signup_completed": key_events.get("signup_completed", 0),
+            "bot_created": key_events.get("bot_created", 0),
+            "first_chat_tested": key_events.get("first_chat_tested", 0),
+            "pricing_viewed": key_events.get("pricing_viewed", 0),
+            "upgrade_clicked": key_events.get("upgrade_clicked", 0),
             "demo_submits": key_events.get("demo_submit", 0),
             "demo_generated": key_events.get("demo_generated", 0),
             "checkout_started": key_events.get("checkout_started", 0),
@@ -17408,7 +16550,7 @@ async def admin_self_service_funnel(days: int = 30) -> Dict[str, Any]:
     for row in events:
         name = row["event_name"]
         event_counts[name] = event_counts.get(name, 0) + 1
-        if row["event_source"] == "vantelia_site":
+        if row["event_source"] == "vantelia_site" or name in {"landing_view", "pricing_viewed"}:
             visit_key = row["session_id"] or row["page_url"] or row["page_path"] or str(row["created_at"])
             site_visit_keys.add(visit_key)
         try:
@@ -17417,26 +16559,32 @@ async def admin_self_service_funnel(days: int = 30) -> Dict[str, Any]:
             meta = {}
         cta_href = str(meta.get("cta_href") or row["page_url"] or "")
         source = str(meta.get("utm_source") or meta.get("source") or row["event_source"] or "direct")
-        if name in {"plan_signup_clicked", "plan_cta_click", "portal_access_click", "create_bot_cta_click", "free_bot_cta_click"}:
+        if name in {"signup_clicked", "plan_signup_clicked", "plan_cta_click", "portal_access_click", "create_bot_cta_click", "free_bot_cta_click"}:
             cta_clicks += 1
             campaign_clicks[source] = campaign_clicks.get(source, 0) + 1
             if "/acceso" in cta_href or "app.vantelia.es" in cta_href:
                 registered_clicks += 1
-        if name == "selfserve_signup":
+        if name in {"signup_completed", "selfserve_signup"}:
             signups = max(signups, event_counts[name])
-        if name == "bot_preview_message":
+        if name in {"first_chat_tested", "bot_preview_message"}:
             preview_messages += 1
             if row["cliente_id"]:
                 preview_client_ids.add(row["cliente_id"])
         if name == "snippet_copied":
             snippet_copied += 1
-        if name in {"upgrade_started", "checkout_started", "checkout_redirect"}:
+        if name in {"upgrade_clicked", "upgrade_started", "checkout_started", "checkout_redirect"}:
             upgrades_started += 1
         if name == "checkout_completed":
             checkout_completed_events += 1
 
+    upgrades_started = max(
+        event_counts.get("upgrade_clicked", 0),
+        event_counts.get("upgrade_started", 0),
+        event_counts.get("checkout_started", 0),
+        event_counts.get("checkout_redirect", 0),
+    )
     website_visits = len(site_visit_keys) or sum(
-        total for event, total in event_counts.items() if event in {"page_view", "site_page_view"}
+        total for event, total in event_counts.items() if event in {"landing_view", "page_view", "site_page_view"}
     )
     free_bot_clicks = registered_clicks or cta_clicks
     activated_bots = max(activated_by_chat, len(preview_client_ids))
@@ -17446,7 +16594,7 @@ async def admin_self_service_funnel(days: int = 30) -> Dict[str, Any]:
         {"key": "cta_clicks", "label": "Clicks Crea tu bot gratis", "value": free_bot_clicks},
         {"key": "signups", "label": "Registros", "value": signups},
         {"key": "bots_created", "label": "Bots creados", "value": bots_created},
-        {"key": "activated", "label": "Primer mensaje probado", "value": activated_bots},
+        {"key": "activated", "label": "Primer chat probado", "value": activated_bots},
         {"key": "snippet_copied", "label": "Snippet copiado", "value": snippet_copied},
         {"key": "upgrades_started", "label": "Upgrade iniciado", "value": upgrades_started},
         {"key": "upgrades_completed", "label": "Pago completado", "value": upgrades_completed},
@@ -17519,6 +16667,15 @@ async def admin_self_service_funnel(days: int = 30) -> Dict[str, Any]:
         "recent_bots": [dict(row) for row in recent_bots],
         "actions": actions,
         "tracking": {
+            "landing_view": event_counts.get("landing_view", 0) > 0,
+            "signup_clicked": event_counts.get("signup_clicked", 0) > 0 or cta_clicks > 0,
+            "signup_completed": event_counts.get("signup_completed", 0) > 0 or signups > 0,
+            "bot_created": event_counts.get("bot_created", 0) > 0 or bots_created > 0,
+            "first_chat_tested": event_counts.get("first_chat_tested", 0) > 0 or preview_messages > 0,
+            "pricing_viewed": event_counts.get("pricing_viewed", 0) > 0,
+            "upgrade_clicked": event_counts.get("upgrade_clicked", 0) > 0 or upgrades_started > 0,
+            "checkout_started": event_counts.get("checkout_started", 0) > 0,
+            "checkout_completed": event_counts.get("checkout_completed", 0) > 0 or upgrades_completed > 0,
             "snippet_copied": snippet_copied > 0,
             "preview_messages": preview_messages > 0,
             "upgrade_started": upgrades_started > 0,
@@ -17843,6 +17000,9 @@ def outreach_stats():
 
         opens = conn.execute("SELECT COUNT(*) AS c FROM events WHERE type='open'").fetchone()["c"]
         clicks = conn.execute("SELECT COUNT(*) AS c FROM events WHERE type='click'").fetchone()["c"]
+        unique_clicks = conn.execute(
+            "SELECT COUNT(DISTINCT email) AS c FROM events WHERE type='click'"
+        ).fetchone()["c"]
         vantelia_clicks = conn.execute(
             """SELECT COUNT(*) AS c FROM events
                WHERE type='click' AND (
@@ -17940,9 +17100,45 @@ def outreach_stats():
             stage: per_stage.get(stage, 0) for stage in OUTREACH_STAGES
         }
 
+        sample_prospect = OutreachProspect(
+            email="test@clinicadental.es",
+            business_name="Clinica Dental Madrid",
+            niche="clinica dental",
+            city="Madrid",
+            website="https://clinicadental.es",
+        )
+        primary_cta_url = outreach_demo_url_with_utm("cold", sample_prospect)
+        parsed_cta = urlparse(primary_cta_url)
+        parsed_tracking = urlparse(OUTREACH_TRACKING_BASE_URL)
+        cta_path = (parsed_cta.path or "").lower()
+        cta_destination = "demo" if parsed_cta.hostname in {"vantelia.es", "www.vantelia.es"} and cta_path.startswith("/demo") else "signup" if parsed_cta.hostname == "app.vantelia.es" and cta_path.startswith("/acceso") else "other"
+        tracking_active = bool(OUTREACH_AVAILABLE and OUTREACH_TRACKING_SECRET and OUTREACH_TRACKING_BASE_URL and not OUTREACH_TRACKING_DISABLED)
+        primary_cta_tracked = bool(tracking_active and not primary_cta_url.startswith(f"{OUTREACH_TRACKING_BASE_URL}/track/"))
+        health_alerts = []
+        if cta_destination != "demo":
+            health_alerts.append({
+                "level": "danger",
+                "code": "cta_not_demo",
+                "message": "El CTA principal de outreach no apunta a /demo/. Puede estar llevando prospects al registro antes de ver valor.",
+            })
+        if not tracking_active:
+            health_alerts.append({
+                "level": "warning",
+                "code": "tracking_off",
+                "message": "El tracking de aperturas/clicks no esta activo.",
+            })
+        elif not primary_cta_tracked:
+            health_alerts.append({
+                "level": "warning",
+                "code": "cta_untracked",
+                "message": "El CTA principal no se envolveria con tracking de click.",
+            })
+
     open_rate = (unique_opens / sent_distinct * 100) if sent_distinct else 0.0
     reply_intent_rate = (unique_reply_intents / sent_distinct * 100) if sent_distinct else 0.0
     reply_rate = (unique_replies / sent_distinct * 100) if sent_distinct else 0.0
+    click_rate = (unique_clicks / sent_distinct * 100) if sent_distinct else 0.0
+    open_to_click_rate = (unique_clicks / unique_opens * 100) if unique_opens else 0.0
 
     return {
         "totals": {
@@ -17956,6 +17152,7 @@ def outreach_stats():
             "opens_total": opens,
             "opens_unique": unique_opens,
             "clicks_total": clicks,
+            "clicks_unique": unique_clicks,
             "vantelia_clicks_total": vantelia_clicks,
             "vantelia_clicks_unique": unique_vantelia_clicks,
             "reply_intents_total": reply_intents,
@@ -17963,13 +17160,23 @@ def outreach_stats():
             "replies_total": replies,
             "replies_unique": unique_replies,
             "open_rate_pct": round(open_rate, 1),
+            "click_rate_pct": round(click_rate, 1),
+            "open_to_click_rate_pct": round(open_to_click_rate, 1),
             "reply_intent_rate_pct": round(reply_intent_rate, 1),
             "reply_rate_pct": round(reply_rate, 1),
         },
         "tracking": {
-            "active": bool(OUTREACH_AVAILABLE and OUTREACH_TRACKING_SECRET and OUTREACH_TRACKING_BASE_URL and not OUTREACH_TRACKING_DISABLED),
+            "active": tracking_active,
             "base_url": OUTREACH_TRACKING_BASE_URL,
         },
+        "primary_cta": {
+            "url": primary_cta_url,
+            "host": parsed_cta.hostname or "",
+            "destination": cta_destination,
+            "tracking_host": parsed_tracking.hostname or "",
+            "tracked": primary_cta_tracked,
+        },
+        "health_alerts": health_alerts,
         "funnel": funnel,
         "daily": {
             "sends": [{"day": r["day"], "c": r["c"]} for r in daily_sends],
@@ -18102,7 +17309,7 @@ def _outreach_followup_body(row: sqlite3.Row, priority: int, signals: Dict[str, 
             "Para hacerlo facil: si me respondes \"si\", la preparo yo con vuestra web y te mando un enlace privado. "
             "Sin llamada y sin compromiso.\n\n"
             f"Tambien puedes generarla aqui, ya con los datos cargados:\n{demo_url}\n\n"
-            "Si te encaja, la dejamos 30 dias funcionando y luego decides.\n\n"
+            "Si te encaja, puedes empezar con el plan Free gratis para siempre o subir al plan que necesites.\n\n"
             "Un saludo,\nPablo"
         )
     if priority == 2:
@@ -18238,7 +17445,7 @@ def _outreach_action_for_item(
             "next_action": "manual_reply",
             "next_action_label": "Responder personalmente",
             "action_reason": "Ya respondio; toca convertir conversacion en piloto.",
-            "expected_state": "consulta o piloto 30 dias",
+            "expected_state": "consulta, alta Free o plan de pago",
             "requires_approval": False,
         }
     if status_value in ("client", "lost"):
@@ -20108,6 +19315,76 @@ def _job_finish(conn: sqlite3.Connection, job_id: int, status: str) -> None:
     conn.commit()
 
 
+def _outreach_smtp_ratelimit_reason(exc: BaseException) -> str:
+    raw = str(exc)
+    msg = raw.lower()
+    if (
+        "ratelimit" in msg
+        or "rate limit" in msg
+        or "too many" in msg
+        or "quota" in msg
+        or "throttl" in msg
+        or "hostinger_out_ratelimit" in msg
+        or ("451" in msg and ("limit" in msg or "temporar" in msg))
+    ):
+        return raw[:300]
+    return ""
+
+
+def _outreach_autocapture_is_paused(conn: sqlite3.Connection) -> bool:
+    try:
+        row = conn.execute("SELECT enabled FROM autopilot_config WHERE id=1").fetchone()
+        return bool(row and not bool(row["enabled"]))
+    except Exception:
+        return False
+
+
+def _outreach_pause_autocapture_for_smtp_limit(
+    conn: sqlite3.Connection,
+    *,
+    reason: str,
+    job_id: int = 0,
+    campaign_id: int = 0,
+    email: str = "",
+    stage: str = "",
+) -> None:
+    now = _outreach_now()
+    detail = {
+        "reason": reason[:300],
+        "job_id": job_id,
+        "campaign_id": campaign_id,
+        "email": email,
+        "stage": stage,
+    }
+    try:
+        conn.execute("UPDATE autopilot_config SET enabled=0, updated_at=? WHERE id=1", (now,))
+    except Exception:
+        pass
+    try:
+        conn.execute(
+            "UPDATE campaigns SET status='paused', updated_at=? WHERE status='running'",
+            (now,),
+        )
+    except Exception:
+        pass
+    try:
+        conn.commit()
+    except Exception:
+        pass
+    _outreach_tick_state_update(
+        "smtp_ratelimit_paused",
+        "Autocaptacion pausada: el SMTP ha devuelto rate limit",
+        detail=detail,
+        status="error",
+    )
+    _autopilot_log(
+        "error",
+        "smtp_ratelimit_autopause",
+        "Autocaptacion pausada automaticamente por rate limit SMTP",
+        detail,
+    )
+
+
 def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
     """Hilo en background: envía follow-ups pendientes (fu1→fu2→breakup) hasta max total."""
     db_path = Path(os.getenv("OUTREACH_DB_PATH", str(OUTREACH_DEFAULT_DB)))
@@ -20149,6 +19426,10 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
             _job_log(conn, job_id, f"{stage}: {len(candidates)} candidatos")
 
             for p in candidates:
+                if is_autopilot and _outreach_autocapture_is_paused(conn):
+                    _job_log(conn, job_id, "Autocaptacion pausada. El job se detiene.")
+                    _job_finish(conn, job_id, "done")
+                    return
                 if sent_total >= max_total:
                     break
                 if conn.execute("SELECT 1 FROM suppressions WHERE email=?", (p.email,)).fetchone():
@@ -20209,6 +19490,18 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
                     outreach_smtp_send(msg, settings)
                 except Exception as send_err:  # noqa: BLE001
                     _job_log(conn, job_id, f"ERROR {p.email}: {send_err}")
+                    limit_reason = _outreach_smtp_ratelimit_reason(send_err)
+                    if limit_reason:
+                        _job_log(conn, job_id, "RATE LIMIT SMTP detectado. Pausando autocaptacion y deteniendo job.")
+                        _outreach_pause_autocapture_for_smtp_limit(
+                            conn,
+                            reason=limit_reason,
+                            job_id=job_id,
+                            email=p.email,
+                            stage=stage,
+                        )
+                        _job_finish(conn, job_id, "error")
+                        return
                     if is_autopilot:
                         _autopilot_log("error", "email_failed",
                                        f"Fallo SMTP a {p.email}: {send_err}",
@@ -20281,17 +19574,62 @@ OUTREACH_AUTOPILOT_SECTORS = [
     "clinica estetica",
     "fisioterapia",
     "centro de psicologia",
-    "academia de ingles",
-    "autoescuela",
-    "taller mecanico",
-    "restaurante",
-    "inmobiliaria",
-    "asesoria fiscal",
-    "despacho abogados",
-    "peluqueria",
+    "logopeda",
+    "podologo",
+    "optica",
+    "clinica veterinaria",
     "centro veterinario",
+    "academia de ingles",
+    "academia oposiciones",
+    "academia refuerzo escolar",
+    "autoescuela",
+    "escuela infantil",
+    "guarderia",
+    "taller mecanico",
+    "taller chapa y pintura",
+    "restaurante",
+    "cafeteria",
+    "hotel boutique",
+    "inmobiliaria",
+    "agencia de viajes",
+    "asesoria fiscal",
+    "asesoria laboral",
+    "gestoria",
+    "despacho abogados",
+    "notaria",
+    "arquitecto",
+    "consultoria informatica",
+    "agencia marketing digital",
+    "peluqueria",
+    "barberia",
+    "centro de estetica",
+    "centro depilacion laser",
+    "centro de unas",
     "cerrajeria",
     "empresa de reformas",
+    "empresa de mudanzas",
+    "empresa de limpieza",
+    "carpinteria",
+    "fontaneria",
+    "electricista",
+    "gimnasio",
+    "estudio pilates",
+    "centro yoga",
+    "academia danza",
+    "academia musica",
+    "residencia mayores",
+    "centro dia mayores",
+    "ayuda a domicilio",
+    "clinica nutricion",
+    "centro fertilidad",
+    "clinica capilar",
+    "ortodoncia",
+    "centro auditivo",
+    "tienda informatica",
+    "joyeria",
+    "floristeria",
+    "tintoreria",
+    "agencia seguros",
 ]
 
 OUTREACH_AUTOPILOT_CITIES = [
@@ -20303,6 +19641,13 @@ OUTREACH_AUTOPILOT_CITIES = [
     "Donostia", "Burgos", "Santander", "Castellon de la Plana", "Albacete", "Getafe",
     "Logrono", "Badajoz", "Salamanca", "Huelva", "Lleida", "Tarragona", "Leon", "Cadiz",
     "Jaen", "Ourense", "Torrejon de Ardoz", "Alcorcon", "Reus", "Girona",
+    "Santa Cruz de Tenerife", "San Sebastian de los Reyes", "Mataro", "Marbella",
+    "Algeciras", "Toledo", "Caceres", "Lugo", "Pontevedra", "Roquetas de Mar",
+    "Avila", "Segovia", "Merida", "Ferrol", "Manresa", "Ciudad Real", "Vilanova i la Geltru",
+    "Mijas", "Estepona", "Benidorm", "Pozuelo de Alarcon", "Las Rozas", "Majadahonda",
+    "Boadilla del Monte", "Rivas-Vaciamadrid", "Coslada", "San Fernando", "El Puerto de Santa Maria",
+    "Chiclana de la Frontera", "Talavera de la Reina", "Lorca", "Cuenca", "Soria",
+    "Teruel", "Huesca", "Guadalajara", "Palencia", "Zamora", "Vic",
 ]
 
 
@@ -20314,23 +19659,30 @@ def _autopilot_target_companies(value: Any) -> int:
 
 
 def _autopilot_generated_targets(target_count: int, max_targets: int = 18) -> List[Dict[str, str]]:
-    """Rotacion determinista de ciudades/sectores. Evita pedir ciudad o sector al admin."""
+    """Rotacion aleatoria por toda Espana. Distinta en cada ronda.
+
+    - Sin seed fija: cada tick saca combos diferentes.
+    - Cap 2 apariciones por sector y por ciudad → reparto amplio.
+    - Cubre toda Espana con ~80 ciudades y ~60 sectores B2B.
+    """
     target_count = _autopilot_target_companies(target_count)
     limit = max(4, min(max_targets, max(6, target_count * 2)))
-    today_seed = datetime.now(timezone.utc).strftime("%Y%m%d")
-    seed_int = int(hashlib.sha256(today_seed.encode("utf-8")).hexdigest(), 16)
+    rng = random.SystemRandom()
+    all_combos = [(s, c) for s in OUTREACH_AUTOPILOT_SECTORS for c in OUTREACH_AUTOPILOT_CITIES]
+    rng.shuffle(all_combos)
+    max_per_sector = max(1, limit // 6)
+    max_per_city = max(1, limit // 6)
+    sector_count: Dict[str, int] = {}
+    city_count: Dict[str, int] = {}
     combos: List[Dict[str, str]] = []
-    seen = set()
-    city_count = len(OUTREACH_AUTOPILOT_CITIES)
-    sector_count = len(OUTREACH_AUTOPILOT_SECTORS)
-    for i in range(city_count * sector_count):
-        city = OUTREACH_AUTOPILOT_CITIES[(seed_int + i * 7) % city_count]
-        sector = OUTREACH_AUTOPILOT_SECTORS[(seed_int // 17 + i * 5) % sector_count]
-        key = (sector.lower(), city.lower())
-        if key in seen:
+    for sector, city in all_combos:
+        if sector_count.get(sector, 0) >= max_per_sector:
             continue
-        seen.add(key)
+        if city_count.get(city, 0) >= max_per_city:
+            continue
         combos.append({"sector": sector, "city": city, "auto": "spain"})
+        sector_count[sector] = sector_count.get(sector, 0) + 1
+        city_count[city] = city_count.get(city, 0) + 1
         if len(combos) >= limit:
             break
     return combos
@@ -20594,6 +19946,32 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                                "Discovery: sin sectores/ciudades (se usará rotación automática de España)")
                 targets_for_run = _autopilot_generated_targets(daily_new_target)
 
+        # Early-exit: si pool de cold elegibles ya cubre el objetivo, SKIP discovery
+        # y pasa directo a cold. Asi el dia siguiente que se reactiva, continua donde
+        # se quedo en vez de seguir descubriendo de mas.
+        pool_target = daily_new_target
+        with _outreach_db() as conn:
+            pool_size = conn.execute(
+                """SELECT COUNT(*) AS c FROM prospects
+                   WHERE COALESCE(status,'new')='new'
+                     AND email NOT IN (SELECT email FROM suppressions)
+                     AND email NOT IN (SELECT email FROM sends WHERE mode='send' AND stage='cold')"""
+            ).fetchone()["c"]
+        if run_discovery and pool_size >= pool_target:
+            log(f"discovery skip: pool {pool_size} >= objetivo {pool_target}, pasando a cold")
+            _outreach_tick_state_update(
+                "discovery_pool_full",
+                f"Discovery omitido: pool {pool_size} >= objetivo {pool_target}",
+                detail={"pool_size": pool_size, "pool_target": pool_target},
+            )
+            _autopilot_log(
+                "info", "discovery_pool_full",
+                f"Discovery omitido: ya hay {pool_size} prospects listos para cold (objetivo {pool_target})",
+                {"pool_size": pool_size, "pool_target": pool_target},
+            )
+            run_discovery = False
+
+        if run_discovery:
             try:
                 from outreach_discover import discover_companies  # type: ignore
             except Exception as exc:
@@ -20646,11 +20024,19 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                     added = 0
                     min_score = int(os.getenv("OUTREACH_AUTONOMOUS_MIN_SCORE", "60") or 60)
                     with _outreach_db() as conn:
-                        for c in companies[:remaining]:
+                        no_email_count = 0
+                        chain_count = 0
+                        duplicate_count = 0
+                        for c in companies:
                             email = (getattr(c, "email", "") or "").lower().strip()
-                            if not email or email in known or email in suppressed:
+                            if not email:
+                                no_email_count += 1
+                                continue
+                            if email in known or email in suppressed:
+                                duplicate_count += 1
                                 continue
                             if _autonomous_is_chain(getattr(c, "business_name", "")):
+                                chain_count += 1
                                 continue
                             score = _autonomous_company_score(c)
                             if score < min_score:
@@ -20676,15 +20062,43 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                             except Exception as exc:
                                 log_err(f"insert {email}: {exc}")
                         conn.commit()
-
-                    imported_total += added
+                    if no_email_count:
+                        _autopilot_log(
+                            "warning",
+                            "discovery_no_email_skip",
+                            f"{sector} · {city}: {no_email_count} empresas sin email descartadas",
+                            {"sector": sector, "city": city, "no_email": no_email_count,
+                             "total_after_dedupe": len(companies)},
+                        )
+                    if duplicate_count:
+                        _autopilot_log(
+                            "info",
+                            "discovery_duplicate_skip",
+                            f"{sector} · {city}: {duplicate_count} duplicados (ya en DB o suprimidos)",
+                            {"sector": sector, "city": city, "duplicates": duplicate_count},
+                        )
+                    if chain_count:
+                        _autopilot_log(
+                            "info",
+                            "discovery_chain_skip",
+                            f"{sector} · {city}: {chain_count} descartadas por cadena conocida",
+                            {"sector": sector, "city": city, "chains": chain_count},
+                        )
+                    log(f"discovery {sector}/{city}: {discovered_count} encontrados, {len(companies)} nuevos tras dedupe, {added} importados (sin_email={no_email_count}, dup={duplicate_count}, chain={chain_count})")
+                    _outreach_tick_state_update(
+                        "discovery_target_done",
+                        f"{sector} · {city}: {len(companies)} encontrados, {added} importados",
+                        detail={"sector": sector, "city": city, "found": discovered_count, "new_after_dedupe": len(companies), "imported": added,
+                                "no_email": no_email_count, "duplicates": duplicate_count, "chains": chain_count},
+                        current_target={"sector": sector, "city": city},
+                        imported_total=imported_total + added,
+                    )
                     _autopilot_log(
                         "success" if added > 0 else "info",
                         "discovery_target_done",
-                        f"{sector} · {city}: {added} importadas"
-                        + (f" ({skipped} ya conocidas, saltadas)" if skipped else ""),
-                        {"sector": sector, "city": city, "found": found_count,
-                         "imported": added, "skipped_existing": skipped},
+                        f"{sector} · {city}: {len(companies)} encontrados, {added} importados",
+                        {"sector": sector, "city": city, "found": discovered_count, "new_after_dedupe": len(companies), "imported": added,
+                         "no_email": no_email_count, "duplicates": duplicate_count, "chains": chain_count},
                     )
 
                 with _outreach_db() as conn:
@@ -20895,6 +20309,16 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
 
         sent_count = 0
         for idx, p in enumerate(candidates, 1):
+            if is_autopilot and _outreach_autocapture_is_paused(conn):
+                _job_log(conn, job_id, "Autocaptacion pausada. El job se detiene.")
+                if campaign_id:
+                    conn.execute(
+                        "UPDATE campaigns SET status='paused', updated_at=? WHERE id=?",
+                        (_outreach_now(), campaign_id),
+                    )
+                    conn.commit()
+                _job_finish(conn, job_id, "done")
+                return
             if campaign_id and params.get("send"):
                 status_row = conn.execute("SELECT status FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
                 if status_row and status_row["status"] == "paused":
@@ -21003,6 +20427,7 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
             try:
                 outreach_smtp_send(msg, settings)
             except Exception as err:  # noqa: BLE001
+                limit_reason = _outreach_smtp_ratelimit_reason(err)
                 if campaign_id and mode == "send":
                     conn.execute(
                         "UPDATE campaign_members SET status='error', skip_reason=?, updated_at=? WHERE campaign_id=? AND email=?",
@@ -21010,6 +20435,18 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                     )
                     conn.commit()
                 _job_log(conn, job_id, f"ERROR {recipient}: {err}")
+                if limit_reason:
+                    _job_log(conn, job_id, "RATE LIMIT SMTP detectado. Pausando autocaptacion y deteniendo job.")
+                    _outreach_pause_autocapture_for_smtp_limit(
+                        conn,
+                        reason=limit_reason,
+                        job_id=job_id,
+                        campaign_id=campaign_id,
+                        email=recipient,
+                        stage=stage,
+                    )
+                    _job_finish(conn, job_id, "error")
+                    return
                 if is_autopilot:
                     _autopilot_log("error", "email_failed",
                                    f"Fallo SMTP a {recipient}: {err}",
@@ -21691,6 +21128,14 @@ class InstagramSendRequest(BaseModel):
     stage: str = "cold"
     max: int = 10
     dry_run: bool = True
+
+
+class InstagramSessionCookies(BaseModel):
+    sessionid: str = Field(..., min_length=10)
+    csrftoken: str = Field(..., min_length=10)
+    ds_user_id: str = Field(..., min_length=1)
+    mid: str = ""
+    rur: str = ""
 
 
 class InstagramSuppressRequest(BaseModel):
@@ -22516,6 +21961,96 @@ def instagram_autosend(payload: InstagramSendRequest, background_tasks: Backgrou
     return {"ok": True, "queued": len(drafts), "dry_run": payload.dry_run}
 
 
+# ----- Sesion Instagram (cookies pegadas desde navegador) -----
+
+
+@app.get("/admin/instagram/autosend/status", dependencies=[Depends(_require_admin_token)])
+def instagram_autosend_status():
+    try:
+        from instagram_autosend import session_info  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/instagram_autosend.py no disponible.")
+    return {
+        "autosend_enabled": ig_is_autosend_enabled(),
+        "autonomous_autosend": _ig_env_bool("IG_AUTONOMOUS_AUTOSEND", False),
+        "session": session_info(),
+    }
+
+
+@app.post("/admin/instagram/autosend/connect", dependencies=[Depends(_require_admin_token)])
+def instagram_autosend_connect(payload: InstagramSessionCookies):
+    try:
+        from instagram_autosend import save_session_from_cookies, session_info  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/instagram_autosend.py no disponible.")
+    try:
+        path = save_session_from_cookies(
+            sessionid=payload.sessionid,
+            csrftoken=payload.csrftoken,
+            ds_user_id=payload.ds_user_id,
+            mid=payload.mid,
+            rur=payload.rur,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"ok": True, "saved_at": str(path), "session": session_info()}
+
+
+@app.post("/admin/instagram/autosend/disconnect", dependencies=[Depends(_require_admin_token)])
+def instagram_autosend_disconnect():
+    try:
+        from instagram_autosend import clear_session  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/instagram_autosend.py no disponible.")
+    removed = clear_session()
+    return {"ok": True, "removed": removed}
+
+
+@app.post("/admin/instagram/autosend/test", dependencies=[Depends(_require_admin_token)])
+def instagram_autosend_test():
+    """Comprueba si la sesion guardada sigue valida pidiendo /accounts/edit/ a IG."""
+    try:
+        from instagram_autosend import session_info  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/instagram_autosend.py no disponible.")
+    info = session_info()
+    if not info.get("connected"):
+        return {"ok": False, "reason": "sin_sesion"}
+    sessionid = ""
+    csrftoken = ""
+    ds_user_id = info.get("ds_user_id") or ""
+    try:
+        state_path = Path(info.get("path") or "")
+        if state_path.exists():
+            data = json.loads(state_path.read_text(encoding="utf-8"))
+            for c in data.get("cookies", []):
+                if c.get("name") == "sessionid":
+                    sessionid = c.get("value") or ""
+                elif c.get("name") == "csrftoken":
+                    csrftoken = c.get("value") or ""
+    except Exception as exc:
+        raise HTTPException(500, f"No se pudo leer sesion: {exc}")
+    if not sessionid:
+        return {"ok": False, "reason": "sin_sessionid"}
+    cookies = {"sessionid": sessionid, "csrftoken": csrftoken, "ds_user_id": ds_user_id}
+    headers = {
+        "User-Agent": os.getenv("IG_AUTOSEND_USER_AGENT",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
+        "Accept-Language": "es-ES,es;q=0.9",
+        "X-IG-App-ID": "936619743392459",
+    }
+    try:
+        with httpx.Client(timeout=10.0, follow_redirects=False) as client:
+            r = client.get("https://www.instagram.com/api/v1/accounts/edit/web_form_data/",
+                           cookies=cookies, headers=headers)
+        ok = r.status_code == 200 and "username" in (r.text or "")
+        return {"ok": ok, "status_code": r.status_code,
+                "session": info,
+                "hint": "Cookies validas" if ok else "Cookies caducadas o cuenta bloqueada. Reconecta."}
+    except Exception as exc:
+        return {"ok": False, "reason": f"http_error: {exc}", "session": info}
+
+
 # ----- Suppressions -----
 
 
@@ -22652,10 +22187,19 @@ def instagram_autopilot_get():
             "SELECT COUNT(*) AS c FROM ig_sends WHERE mode IN ('sent','sent_auto') AND substr(sent_at,1,10)=?",
             (today,),
         ).fetchone()["c"]
+        cfg["autosent_today"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM ig_sends WHERE mode='sent_auto' AND substr(sent_at,1,10)=?",
+            (today,),
+        ).fetchone()["c"]
         cfg["drafts_pending"] = conn.execute(
             "SELECT COUNT(*) AS c FROM ig_sends WHERE mode='draft' AND ready=1"
         ).fetchone()["c"]
-    return {"config": cfg, "autosend_enabled": ig_is_autosend_enabled(), "autonomous_enabled": _ig_env_bool("IG_AUTONOMOUS_ENABLED", False)}
+    db_cap = int(cfg.get("daily_outreach_cap") or 0)
+    env_cap = int(os.getenv("IG_AUTOSEND_DAILY_CAP", "20") or 20)
+    cfg["effective_daily_cap"] = db_cap if db_cap > 0 else env_cap
+    return {"config": cfg, "autosend_enabled": ig_is_autosend_enabled(),
+            "autonomous_enabled": _ig_env_bool("IG_AUTONOMOUS_ENABLED", False),
+            "autonomous_autosend": _ig_env_bool("IG_AUTONOMOUS_AUTOSEND", False)}
 
 
 @app.put("/admin/instagram/autopilot-config", dependencies=[Depends(_require_admin_token)])
@@ -22683,8 +22227,8 @@ def instagram_autopilot_put(payload: InstagramAutopilotPayload):
 
 
 def _ig_autopilot_run_once() -> Dict[str, Any]:
-    """Una pasada autopilot. Discovery (si toca) + drafts (si toca)."""
-    stats = {"discovered": 0, "drafted_cold": 0, "drafted_fu": 0, "skipped": ""}
+    """Una pasada autopilot. Discovery (si toca) + drafts + autosend (si toca)."""
+    stats = {"discovered": 0, "drafted_cold": 0, "drafted_fu": 0, "autosent": 0, "skipped": ""}
     if not IG_AVAILABLE:
         stats["skipped"] = "ig_unavailable"
         return stats
@@ -22745,7 +22289,7 @@ def _ig_autopilot_run_once() -> Dict[str, Any]:
         # Drafts cold hasta cap diario
         today = datetime.now(timezone.utc).date().isoformat()
         sent_today = conn.execute(
-            "SELECT COUNT(*) AS c FROM ig_sends WHERE mode IN ('sent','sent_auto','draft') AND substr(coalesce(sent_at,drafted_at),1,10)=?",
+            "SELECT COUNT(*) AS c FROM ig_sends WHERE mode IN ('sent','sent_auto','draft','sending') AND substr(coalesce(sent_at,drafted_at),1,10)=?",
             (today,),
         ).fetchone()["c"]
         cap = int(row["daily_outreach_cap"] or 25)
@@ -22769,6 +22313,41 @@ def _ig_autopilot_run_once() -> Dict[str, Any]:
                     stats["drafted_fu"] += 1
 
         conn.commit()
+
+    # ---- AUTOSEND AUTOMATICO ----
+    # Solo si IG_AUTOSEND_ENABLED=true + IG_AUTONOMOUS_AUTOSEND=true. Riesgo ban Meta.
+    autosend_on = ig_is_autosend_enabled() and _ig_env_bool("IG_AUTONOMOUS_AUTOSEND", False)
+    if autosend_on:
+        try:
+            from instagram_autosend import autosend_drafts, fetch_pending_drafts  # type: ignore
+            # Cap: DB.daily_outreach_cap (panel) tiene prioridad; fallback env IG_AUTOSEND_DAILY_CAP.
+            try:
+                db_cap = int((row["daily_outreach_cap"] if row else 0) or 0)
+            except Exception:
+                db_cap = 0
+            env_cap = int(os.getenv("IG_AUTOSEND_DAILY_CAP", "20") or 20)
+            cap = db_cap if db_cap > 0 else env_cap
+            # Cuenta enviados hoy con autosend para respetar tope diario.
+            today = datetime.now(timezone.utc).date().isoformat()
+            with _instagram_db() as conn:
+                sent_today_auto = conn.execute(
+                    "SELECT COUNT(*) AS c FROM ig_sends WHERE mode='sent_auto' AND substr(coalesce(sent_at,drafted_at),1,10)=?",
+                    (today,),
+                ).fetchone()["c"]
+            remaining = max(0, cap - int(sent_today_auto or 0))
+            if remaining > 0:
+                pending = fetch_pending_drafts(remaining)
+                if pending:
+                    sent = autosend_drafts(pending, dry_run=False)
+                    stats["autosent"] = int(sent or 0)
+                    logger.info("IG autopilot: autosend envio %s/%s drafts (cap %s, ya enviados %s)",
+                                sent, len(pending), cap, sent_today_auto)
+            else:
+                logger.info("IG autopilot: cap diario alcanzado (%s/%s).", sent_today_auto, cap)
+        except ImportError:
+            logger.warning("IG autopilot: instagram_autosend o playwright no disponible.")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("IG autopilot: autosend error: %s", exc)
     return stats
 
 
@@ -22776,6 +22355,439 @@ def _ig_autopilot_run_once() -> Dict[str, Any]:
 def instagram_autopilot_tick():
     stats = _ig_autopilot_run_once()
     return {"ok": True, "stats": stats, "ts": _instagram_now()}
+
+
+# =====================================================================
+# === CAMPAIGN v2: discovery real + DMs naturales + 1 boton Empezar  ==
+# =====================================================================
+
+ig_campaign_stop = threading.Event()
+ig_campaign_thread: Optional[threading.Thread] = None
+_IG_CAMPAIGN_STATUSES = {"idle", "discovering", "sending", "paused", "completed"}
+
+
+class InstagramCampaignStart(BaseModel):
+    target_count: int = Field(30, ge=1, le=200)
+
+
+def _ig_campaign_migrate() -> None:
+    """Crea tabla ig_campaign si no existe (singleton id=1)."""
+    if not IG_AVAILABLE:
+        return
+    with _instagram_db() as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS ig_campaign (
+            id INTEGER PRIMARY KEY CHECK (id=1),
+            target_count INTEGER DEFAULT 30,
+            status TEXT DEFAULT 'idle',
+            discovered_count INTEGER DEFAULT 0,
+            sent_count INTEGER DEFAULT 0,
+            replied_count INTEGER DEFAULT 0,
+            started_at TEXT DEFAULT '',
+            updated_at TEXT DEFAULT '',
+            completed_at TEXT DEFAULT '',
+            error_msg TEXT DEFAULT ''
+        )""")
+        conn.execute("INSERT OR IGNORE INTO ig_campaign (id) VALUES (1)")
+        conn.commit()
+
+
+def _ig_campaign_state() -> Dict[str, Any]:
+    if not IG_AVAILABLE:
+        return {"available": False}
+    _ig_campaign_migrate()
+    with _instagram_db() as conn:
+        row = conn.execute("SELECT * FROM ig_campaign WHERE id=1").fetchone()
+        cfg = dict(row) if row else {}
+        # contadores reales de DB (no confiar solo en campaign columns).
+        cfg["discovered_count"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM ig_prospects WHERE source LIKE 'campaign%'"
+        ).fetchone()["c"]
+        cfg["sent_count"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM ig_sends WHERE mode='sent_auto'"
+        ).fetchone()["c"]
+        cfg["replied_count"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM ig_prospects WHERE status='replied'"
+        ).fetchone()["c"]
+        cfg["pending_drafts"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM ig_sends WHERE mode='draft' AND ready=1"
+        ).fetchone()["c"]
+    cfg["worker_alive"] = bool(ig_campaign_thread and ig_campaign_thread.is_alive())
+    return cfg
+
+
+def _ig_campaign_update(**fields: Any) -> None:
+    if not fields:
+        return
+    parts = [f"{k}=?" for k in fields.keys()]
+    parts.append("updated_at=?")
+    params = list(fields.values()) + [_instagram_now()]
+    with _instagram_db() as conn:
+        conn.execute(f"UPDATE ig_campaign SET {', '.join(parts)} WHERE id=1", params)
+        conn.commit()
+
+
+def _ig_campaign_should_run() -> bool:
+    with _instagram_db() as conn:
+        row = conn.execute("SELECT status FROM ig_campaign WHERE id=1").fetchone()
+    return bool(row and row["status"] in ("discovering", "sending"))
+
+
+def _ig_campaign_render_dm(prospect: Dict[str, Any]) -> str:
+    try:
+        from instagram_templates_v2 import render_natural  # type: ignore
+    except ImportError:
+        return f"Hola, te escribo desde Vantelia. Hacemos asistentes IA para negocios como el vuestro. ¿Hablamos?"
+    return render_natural(
+        username=prospect.get("username", ""),
+        business_name=prospect.get("business_name", "") or "",
+        niche=prospect.get("niche", "") or "",
+        city=prospect.get("city", "") or "",
+        db_path=str(IG_DEFAULT_DB),
+    )
+
+
+def _ig_campaign_insert_candidates(candidates: List[Any]) -> int:
+    """Inserta candidatos en ig_prospects con source=campaign_discover. Devuelve nuevos."""
+    if not candidates:
+        return 0
+    now = _instagram_now()
+    added = 0
+    with _instagram_db() as conn:
+        for c in candidates:
+            try:
+                cur = conn.execute(
+                    """INSERT OR IGNORE INTO ig_prospects
+                       (username, full_name, bio, niche, city, website, source, status, created_at, updated_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    (c.normalized_username(), c.business_name, c.bio_snippet,
+                     c.niche, c.city, c.website, c.source, "new", now, now),
+                )
+                if cur.rowcount:
+                    added += 1
+            except Exception as exc:
+                logger.warning("ig_campaign insert %s: %s", getattr(c, "username", "?"), exc)
+        conn.commit()
+    return added
+
+
+def _ig_campaign_create_draft(prospect_row: Dict[str, Any]) -> Optional[int]:
+    """Crea un draft cold con texto natural para este prospect. Devuelve send_id."""
+    text = _ig_campaign_render_dm(prospect_row)
+    if not text or len(text) < 30:
+        return None
+    now = _instagram_now()
+    try:
+        from instagram_templates_v2 import pick_variant  # type: ignore
+        variant = pick_variant(prospect_row.get("username", ""))
+    except ImportError:
+        variant = "A"
+    with _instagram_db() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM ig_sends WHERE username=? AND stage='cold' LIMIT 1",
+            (prospect_row["username"],),
+        ).fetchone()
+        if existing:
+            return None
+        cur = conn.execute(
+            """INSERT INTO ig_sends (username, stage, variant, message_text, mode, ready, drafted_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (prospect_row["username"], "cold", variant, text, "draft", 1, now),
+        )
+        send_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        conn.execute(
+            "INSERT INTO ig_events (username, type, stage, ts) VALUES (?,?,?,?)",
+            (prospect_row["username"], "draft", "cold", now),
+        )
+        conn.execute(
+            "UPDATE ig_prospects SET status='queued', updated_at=? WHERE username=? AND status='new'",
+            (now, prospect_row["username"]),
+        )
+        conn.commit()
+    return int(send_id)
+
+
+def _ig_campaign_fetch_eligible_prospects(limit: int) -> List[Dict[str, Any]]:
+    """Prospects que aun no tienen ningun intento de DM previo."""
+    with _instagram_db() as conn:
+        rows = conn.execute(
+            """SELECT p.* FROM ig_prospects p
+               WHERE p.status IN ('new','queued')
+                 AND p.source LIKE 'campaign%'
+                 AND p.username NOT IN (SELECT username FROM ig_suppressions)
+                 AND p.username NOT IN (SELECT username FROM ig_sends)
+               ORDER BY p.created_at ASC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _ig_campaign_run_iteration(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Una iteracion del loop: discover si falta + create drafts + autosend uno."""
+    target = int(state.get("target_count") or 30)
+    sent_count = int(state.get("sent_count") or 0)
+    discovered = int(state.get("discovered_count") or 0)
+    remaining = max(0, target - sent_count)
+    if remaining <= 0:
+        _ig_campaign_update(status="completed", completed_at=_instagram_now())
+        return {"action": "completed"}
+
+    pending_drafts = int(state.get("pending_drafts") or 0)
+
+    # 1) Discovery si pool de candidatos < target * 1.5
+    pool_target = int(target * 1.5)
+    if discovered < pool_target:
+        _ig_campaign_update(status="discovering")
+        try:
+            from instagram_discover_v2 import discover_real  # type: ignore
+        except ImportError as exc:
+            _ig_campaign_update(status="paused", error_msg=f"discover_v2 no disponible: {exc}")
+            return {"action": "error", "reason": "discover_module_missing"}
+        with _instagram_db() as conn:
+            suppressed = {r["username"] for r in conn.execute(
+                "SELECT username FROM ig_suppressions").fetchall()}
+            known = {r["username"] for r in conn.execute(
+                "SELECT username FROM ig_prospects").fetchall()}
+        need = min(15, pool_target - discovered)
+        candidates = discover_real(
+            target_count=need, suppressed=suppressed, known=known,
+            log=lambda msg: logger.info("[ig-campaign] %s", msg),
+        )
+        added = _ig_campaign_insert_candidates(candidates)
+        logger.info("[ig-campaign] discovery: %s candidatos, %s nuevos en DB", len(candidates), added)
+        return {"action": "discovery", "added": added}
+
+    # 2) Crear drafts si quedan envios pendientes y pocas en cola
+    if pending_drafts < remaining and pending_drafts < 10:
+        eligible = _ig_campaign_fetch_eligible_prospects(min(10 - pending_drafts, remaining - pending_drafts))
+        drafted = 0
+        for p in eligible:
+            sid = _ig_campaign_create_draft(p)
+            if sid:
+                drafted += 1
+        logger.info("[ig-campaign] drafts: %s nuevos (pending ahora %s)", drafted, pending_drafts + drafted)
+        return {"action": "draft", "drafted": drafted}
+
+    # 3) Autosend uno
+    if pending_drafts > 0 and ig_is_autosend_enabled():
+        try:
+            from instagram_autosend import fetch_pending_drafts, autosend_drafts  # type: ignore
+        except ImportError:
+            _ig_campaign_update(status="paused", error_msg="autosend module no disponible")
+            return {"action": "error", "reason": "autosend_missing"}
+        _ig_campaign_update(status="sending")
+        drafts = fetch_pending_drafts(1)
+        if not drafts:
+            return {"action": "idle_no_drafts"}
+        try:
+            sent = autosend_drafts(drafts, dry_run=False)
+            logger.info("[ig-campaign] autosend: %s/1 enviado", sent)
+            if sent == 0:
+                # autosend retorna 0 si falla → revisa si fue sesion expirada
+                return {"action": "send_failed"}
+            return {"action": "sent", "count": sent}
+        except RuntimeError as exc:
+            err = str(exc)[:200]
+            if "Sesion IG invalida" in err or "sesion_expirada" in err:
+                _ig_campaign_update(status="paused", error_msg=f"sesion expirada: {err}")
+                return {"action": "error", "reason": "session_expired"}
+            logger.warning("[ig-campaign] autosend RuntimeError: %s", err)
+            return {"action": "error", "reason": err}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[ig-campaign] autosend error: %s", exc)
+            return {"action": "error", "reason": str(exc)[:120]}
+
+    return {"action": "idle"}
+
+
+def _ig_campaign_worker() -> None:
+    """Worker autonomo. Lee status DB y avanza la campana.
+
+    NO chequea ventana laboral — el user controla con boton Empezar/Pausar.
+    """
+    logger.info("[ig-campaign] worker iniciado")
+    while not ig_campaign_stop.is_set():
+        try:
+            if not IG_AVAILABLE:
+                ig_campaign_stop.wait(60)
+                continue
+            state = _ig_campaign_state()
+            status = state.get("status", "idle")
+            if status not in ("discovering", "sending"):
+                ig_campaign_stop.wait(45)
+                continue
+            res = _ig_campaign_run_iteration(state)
+            action = (res or {}).get("action", "")
+            if action == "sent":
+                # Delay humano entre envios
+                mn = int(os.getenv("IG_AUTOSEND_MIN_DELAY_SEC", "60") or 60)
+                mx = int(os.getenv("IG_AUTOSEND_MAX_DELAY_SEC", "240") or 240)
+                if mx < mn:
+                    mx = mn + 30
+                ig_campaign_stop.wait(random.uniform(mn, mx))
+            elif action == "completed":
+                logger.info("[ig-campaign] objetivo alcanzado")
+                ig_campaign_stop.wait(60)
+            elif action == "error":
+                ig_campaign_stop.wait(180)
+            else:
+                ig_campaign_stop.wait(20)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[ig-campaign] loop error: %s", exc)
+            ig_campaign_stop.wait(60)
+
+
+@app.get("/admin/instagram/campaign", dependencies=[Depends(_require_admin_token)])
+def instagram_campaign_get():
+    state = _ig_campaign_state()
+    try:
+        from instagram_autosend import session_info  # type: ignore
+        session = session_info()
+    except Exception:
+        session = {"connected": False}
+    return {"campaign": state, "session": session,
+            "autosend_enabled": ig_is_autosend_enabled() if IG_AVAILABLE else False,
+            "autonomous_autosend": _ig_env_bool("IG_AUTONOMOUS_AUTOSEND", False)}
+
+
+@app.post("/admin/instagram/campaign/start", dependencies=[Depends(_require_admin_token)])
+def instagram_campaign_start(payload: InstagramCampaignStart):
+    if not IG_AVAILABLE:
+        raise HTTPException(503, "Modulo instagram no disponible")
+    if not ig_is_autosend_enabled():
+        raise HTTPException(412, "IG_AUTOSEND_ENABLED=false en env")
+    try:
+        from instagram_autosend import session_info  # type: ignore
+        if not session_info().get("connected"):
+            raise HTTPException(412, "Sesion IG no conectada. Pega cookies primero.")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    _ig_campaign_migrate()
+    _ig_campaign_update(
+        target_count=int(payload.target_count),
+        status="discovering",
+        error_msg="",
+        started_at=_instagram_now(),
+        completed_at="",
+    )
+    return {"ok": True, "state": _ig_campaign_state()}
+
+
+@app.post("/admin/instagram/campaign/pause", dependencies=[Depends(_require_admin_token)])
+def instagram_campaign_pause():
+    _ig_campaign_migrate()
+    _ig_campaign_update(status="paused")
+    return {"ok": True, "state": _ig_campaign_state()}
+
+
+class InstagramDmTemplatesPayload(BaseModel):
+    variant_a: Optional[str] = None
+    variant_b: Optional[str] = None
+    variant_c: Optional[str] = None
+
+
+def _ig_dm_templates_ensure() -> None:
+    with _instagram_db() as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS ig_dm_templates_v2 (
+            variant TEXT PRIMARY KEY,
+            body TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )""")
+        conn.commit()
+
+
+def _ig_dm_default(variant: str) -> str:
+    try:
+        from instagram_templates_v2 import render_natural  # type: ignore
+        return render_natural(
+            username=f"demo_{variant.lower()}",
+            business_name="Clinica Sonrisa",
+            niche="clinica dental",
+            city="Madrid",
+            variant=variant,
+        )
+    except Exception:
+        return ""
+
+
+@app.get("/admin/instagram/dm-templates", dependencies=[Depends(_require_admin_token)])
+def instagram_dm_templates_get():
+    _ig_dm_templates_ensure()
+    out = {"A": "", "B": "", "C": ""}
+    with _instagram_db() as conn:
+        rows = conn.execute("SELECT variant, body FROM ig_dm_templates_v2").fetchall()
+        for r in rows:
+            v = (r["variant"] or "").upper()
+            if v in out:
+                out[v] = r["body"] or ""
+    defaults = {v: _ig_dm_default(v) for v in ("A", "B", "C")}
+    placeholders_help = ""
+    try:
+        from instagram_templates_v2 import PLACEHOLDERS_HELP  # type: ignore
+        placeholders_help = PLACEHOLDERS_HELP
+    except Exception:
+        pass
+    return {"templates": out, "defaults": defaults, "placeholders_help": placeholders_help}
+
+
+@app.put("/admin/instagram/dm-templates", dependencies=[Depends(_require_admin_token)])
+def instagram_dm_templates_put(payload: InstagramDmTemplatesPayload):
+    _ig_dm_templates_ensure()
+    now = _instagram_now()
+    data = {"A": payload.variant_a, "B": payload.variant_b, "C": payload.variant_c}
+    saved: List[str] = []
+    with _instagram_db() as conn:
+        for variant, body in data.items():
+            if body is None:
+                continue
+            body_clean = body.strip()
+            if body_clean:
+                conn.execute(
+                    """INSERT INTO ig_dm_templates_v2 (variant, body, updated_at)
+                       VALUES (?,?,?)
+                       ON CONFLICT(variant) DO UPDATE SET body=excluded.body, updated_at=excluded.updated_at""",
+                    (variant, body_clean, now),
+                )
+                saved.append(variant)
+            else:
+                conn.execute("DELETE FROM ig_dm_templates_v2 WHERE variant=?", (variant,))
+                saved.append(variant + " (reset)")
+        conn.commit()
+    return {"ok": True, "saved": saved}
+
+
+@app.post("/admin/instagram/dm-templates/preview", dependencies=[Depends(_require_admin_token)])
+def instagram_dm_templates_preview(variant: str = "A",
+                                    business_name: str = "Clinica Sonrisa",
+                                    niche: str = "clinica dental",
+                                    city: str = "Madrid"):
+    try:
+        from instagram_templates_v2 import render_natural  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "templates_v2 no disponible")
+    text = render_natural(
+        username=f"preview_{variant.lower()}",
+        business_name=business_name,
+        niche=niche,
+        city=city,
+        variant=variant.upper(),
+        db_path=str(IG_DEFAULT_DB),
+    )
+    return {"variant": variant.upper(), "text": text}
+
+
+@app.post("/admin/instagram/campaign/resume", dependencies=[Depends(_require_admin_token)])
+def instagram_campaign_resume():
+    if not ig_is_autosend_enabled():
+        raise HTTPException(412, "IG_AUTOSEND_ENABLED=false en env")
+    _ig_campaign_migrate()
+    # Resume: si hay drafts pendientes, va directo a sending; si no, discovering.
+    state = _ig_campaign_state()
+    next_status = "sending" if (state.get("pending_drafts") or 0) > 0 else "discovering"
+    _ig_campaign_update(status=next_status, error_msg="")
+    return {"ok": True, "state": _ig_campaign_state()}
 
 
 # ----- Manual reply mark -----
@@ -22853,7 +22865,7 @@ def _ig_autopilot_worker() -> None:
 
 @app.on_event("startup")
 async def _ig_startup_workers() -> None:
-    global ig_replies_thread, ig_autopilot_thread
+    global ig_replies_thread, ig_autopilot_thread, ig_campaign_thread
     if IG_REPLIES_AVAILABLE and (not ig_replies_thread or not ig_replies_thread.is_alive()):
         ig_replies_stop.clear()
         ig_replies_thread = threading.Thread(target=_ig_replies_worker, name="vantelia-ig-replies", daemon=True)
@@ -22862,15 +22874,745 @@ async def _ig_startup_workers() -> None:
         ig_autopilot_stop.clear()
         ig_autopilot_thread = threading.Thread(target=_ig_autopilot_worker, name="vantelia-ig-autopilot", daemon=True)
         ig_autopilot_thread.start()
+    if IG_AVAILABLE and (not ig_campaign_thread or not ig_campaign_thread.is_alive()):
+        try:
+            _ig_campaign_migrate()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ig_campaign migrate fallo: %s", exc)
+        ig_campaign_stop.clear()
+        ig_campaign_thread = threading.Thread(target=_ig_campaign_worker, name="vantelia-ig-campaign", daemon=True)
+        ig_campaign_thread.start()
 
 
 @app.on_event("shutdown")
 async def _ig_shutdown_workers() -> None:
     ig_replies_stop.set()
     ig_autopilot_stop.set()
+    ig_campaign_stop.set()
 
 
 # === END INSTAGRAM ===================================================
+
+
+# =====================================================================
+# === TIKTOK ==========================================================
+# Captacion via TikTok DMs. Mismo flujo que IG campaign:
+# discovery (Places + web scrape handle) → drafts → autosend Playwright.
+# =====================================================================
+
+TK_DEFAULT_DB = Path(os.getenv("TK_DB_PATH", str(STORAGE_DIR / "tiktok" / "tiktok.db")))
+TK_AVAILABLE = False
+tk_campaign_stop = threading.Event()
+tk_campaign_thread: Optional[threading.Thread] = None
+
+try:
+    # Verifica solo que los modulos esten importables.
+    import importlib as _tk_importlib
+    _tk_importlib.import_module("tiktok_templates_v2")
+    _tk_importlib.import_module("tiktok_discover")
+    TK_AVAILABLE = True
+except Exception as _tk_err:  # noqa: BLE001
+    logger.warning(f"Modulo tiktok no disponible: {_tk_err}")
+    TK_AVAILABLE = False
+
+
+def _tk_env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name, "").strip().lower()
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    if raw in ("0", "false", "no", "off"):
+        return False
+    return default
+
+
+def _tk_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _tk_db():
+    TK_DEFAULT_DB.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(TK_DEFAULT_DB))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _tk_row_dict(row) -> Dict[str, Any]:
+    return dict(row) if row else {}
+
+
+def tk_is_autosend_enabled() -> bool:
+    return _tk_env_bool("TK_AUTOSEND_ENABLED", False)
+
+
+def _tk_migrate() -> None:
+    """Crea tablas TK si no existen."""
+    with _tk_db() as conn:
+        conn.executescript("""
+        CREATE TABLE IF NOT EXISTS tk_prospects (
+            username TEXT PRIMARY KEY,
+            business_name TEXT DEFAULT '',
+            niche TEXT DEFAULT '',
+            city TEXT DEFAULT '',
+            website TEXT DEFAULT '',
+            bio TEXT DEFAULT '',
+            source TEXT DEFAULT '',
+            status TEXT DEFAULT 'new',
+            last_contacted_at TEXT DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS tk_sends (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            stage TEXT DEFAULT 'cold',
+            variant TEXT DEFAULT '',
+            message_text TEXT NOT NULL,
+            mode TEXT DEFAULT 'draft',
+            ready INTEGER DEFAULT 1,
+            drafted_at TEXT DEFAULT '',
+            sent_at TEXT DEFAULT '',
+            skip_reason TEXT DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_tk_sends_user ON tk_sends(username);
+        CREATE INDEX IF NOT EXISTS idx_tk_sends_mode ON tk_sends(mode);
+        CREATE TABLE IF NOT EXISTS tk_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            type TEXT NOT NULL,
+            stage TEXT DEFAULT '',
+            data_json TEXT DEFAULT '',
+            ts TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_tk_events_user ON tk_events(username);
+        CREATE TABLE IF NOT EXISTS tk_suppressions (
+            username TEXT PRIMARY KEY,
+            reason TEXT DEFAULT '',
+            added_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS tk_dm_templates_v2 (
+            variant TEXT PRIMARY KEY,
+            body TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS tk_campaign (
+            id INTEGER PRIMARY KEY CHECK (id=1),
+            target_count INTEGER DEFAULT 30,
+            status TEXT DEFAULT 'idle',
+            discovered_count INTEGER DEFAULT 0,
+            sent_count INTEGER DEFAULT 0,
+            replied_count INTEGER DEFAULT 0,
+            started_at TEXT DEFAULT '',
+            updated_at TEXT DEFAULT '',
+            completed_at TEXT DEFAULT '',
+            error_msg TEXT DEFAULT ''
+        );
+        INSERT OR IGNORE INTO tk_campaign (id) VALUES (1);
+        """)
+        conn.commit()
+
+
+class TKCampaignStart(BaseModel):
+    target_count: int = Field(30, ge=1, le=200)
+
+
+class TKSessionCookies(BaseModel):
+    sessionid: str = Field(..., min_length=10)
+    sessionid_ss: str = ""
+    tt_csrf_token: str = ""
+    ms_token: str = ""
+    ttwid: str = ""
+
+
+class TKDmTemplatesPayload(BaseModel):
+    variant_a: Optional[str] = None
+    variant_b: Optional[str] = None
+    variant_c: Optional[str] = None
+
+
+class TKSuppressRequest(BaseModel):
+    username: str = Field(..., min_length=1)
+    reason: str = "manual"
+
+
+def _tk_resolve_username(raw: str) -> str:
+    return (raw or "").lstrip("@").strip().lower()
+
+
+def _tk_campaign_state() -> Dict[str, Any]:
+    if not TK_AVAILABLE:
+        return {"available": False}
+    _tk_migrate()
+    with _tk_db() as conn:
+        row = conn.execute("SELECT * FROM tk_campaign WHERE id=1").fetchone()
+        cfg = _tk_row_dict(row)
+        cfg["discovered_count"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_prospects WHERE source LIKE 'campaign%'"
+        ).fetchone()["c"]
+        cfg["sent_count"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_sends WHERE mode='sent_auto'"
+        ).fetchone()["c"]
+        cfg["replied_count"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_prospects WHERE status='replied'"
+        ).fetchone()["c"]
+        cfg["pending_drafts"] = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_sends WHERE mode='draft' AND ready=1"
+        ).fetchone()["c"]
+    cfg["worker_alive"] = bool(tk_campaign_thread and tk_campaign_thread.is_alive())
+    return cfg
+
+
+def _tk_campaign_update(**fields: Any) -> None:
+    if not fields:
+        return
+    parts = [f"{k}=?" for k in fields.keys()]
+    parts.append("updated_at=?")
+    params = list(fields.values()) + [_tk_now()]
+    with _tk_db() as conn:
+        conn.execute(f"UPDATE tk_campaign SET {', '.join(parts)} WHERE id=1", params)
+        conn.commit()
+
+
+def _tk_render_dm(prospect: Dict[str, Any]) -> str:
+    try:
+        from tiktok_templates_v2 import render_natural  # type: ignore
+    except ImportError:
+        return "Hola, soy Pablo de Vantelia. Te escribo por curiosidad."
+    return render_natural(
+        username=prospect.get("username", ""),
+        business_name=prospect.get("business_name", "") or "",
+        niche=prospect.get("niche", "") or "",
+        city=prospect.get("city", "") or "",
+        db_path=str(TK_DEFAULT_DB),
+    )
+
+
+def _tk_insert_candidates(candidates: List[Any]) -> int:
+    if not candidates:
+        return 0
+    now = _tk_now()
+    added = 0
+    with _tk_db() as conn:
+        for c in candidates:
+            try:
+                cur = conn.execute(
+                    """INSERT OR IGNORE INTO tk_prospects
+                       (username, business_name, bio, niche, city, website, source, status, created_at, updated_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    (c.normalized_username(), c.business_name, c.bio_snippet,
+                     c.niche, c.city, c.website, c.source, "new", now, now),
+                )
+                if cur.rowcount:
+                    added += 1
+            except Exception as exc:
+                logger.warning("tk_campaign insert %s: %s", getattr(c, "username", "?"), exc)
+        conn.commit()
+    return added
+
+
+def _tk_create_draft(prospect_row: Dict[str, Any]) -> Optional[int]:
+    text = _tk_render_dm(prospect_row)
+    if not text or len(text) < 30:
+        return None
+    now = _tk_now()
+    try:
+        from tiktok_templates_v2 import pick_variant  # type: ignore
+        variant = pick_variant(prospect_row.get("username", ""))
+    except ImportError:
+        variant = "A"
+    with _tk_db() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM tk_sends WHERE username=? AND stage='cold' LIMIT 1",
+            (prospect_row["username"],),
+        ).fetchone()
+        if existing:
+            return None
+        cur = conn.execute(
+            """INSERT INTO tk_sends (username, stage, variant, message_text, mode, ready, drafted_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (prospect_row["username"], "cold", variant, text, "draft", 1, now),
+        )
+        send_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        conn.execute(
+            "INSERT INTO tk_events (username, type, stage, ts) VALUES (?,?,?,?)",
+            (prospect_row["username"], "draft", "cold", now),
+        )
+        conn.execute(
+            "UPDATE tk_prospects SET status='queued', updated_at=? WHERE username=? AND status='new'",
+            (now, prospect_row["username"]),
+        )
+        conn.commit()
+    return int(send_id)
+
+
+def _tk_fetch_eligible_prospects(limit: int) -> List[Dict[str, Any]]:
+    with _tk_db() as conn:
+        rows = conn.execute(
+            """SELECT p.* FROM tk_prospects p
+               WHERE p.status IN ('new','queued')
+                 AND p.source LIKE 'campaign%'
+                 AND p.username NOT IN (SELECT username FROM tk_suppressions)
+                 AND p.username NOT IN (SELECT username FROM tk_sends)
+               ORDER BY p.created_at ASC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _tk_last_autosend_error() -> str:
+    try:
+        with _tk_db() as conn:
+            row = conn.execute(
+                """SELECT username, skip_reason
+                   FROM tk_sends
+                   WHERE mode='skipped' AND COALESCE(skip_reason,'')<>''
+                   ORDER BY id DESC LIMIT 1"""
+            ).fetchone()
+            if row:
+                return f"@{row['username']}: {row['skip_reason']}"
+    except Exception:
+        pass
+    return ""
+
+
+def _tk_campaign_iteration(state: Dict[str, Any]) -> Dict[str, Any]:
+    target = int(state.get("target_count") or 30)
+    sent_count = int(state.get("sent_count") or 0)
+    discovered = int(state.get("discovered_count") or 0)
+    remaining = max(0, target - sent_count)
+    if remaining <= 0:
+        _tk_campaign_update(status="completed", completed_at=_tk_now())
+        return {"action": "completed"}
+
+    pending_drafts = int(state.get("pending_drafts") or 0)
+    pool_target = int(target * 1.5)
+    campaign_status = str(state.get("status") or "")
+
+    if discovered < pool_target:
+        _tk_campaign_update(status="discovering")
+        try:
+            from tiktok_discover import discover_real  # type: ignore
+        except ImportError as exc:
+            _tk_campaign_update(status="paused", error_msg=f"discover no disponible: {exc}")
+            return {"action": "error", "reason": "discover_module_missing"}
+        with _tk_db() as conn:
+            suppressed = {r["username"] for r in conn.execute(
+                "SELECT username FROM tk_suppressions").fetchall()}
+            known = {r["username"] for r in conn.execute(
+                "SELECT username FROM tk_prospects").fetchall()}
+        need = min(15, pool_target - discovered)
+        candidates = discover_real(
+            target_count=need, suppressed=suppressed, known=known,
+            log=lambda msg: logger.info("[tk-campaign] %s", msg),
+        )
+        added = _tk_insert_candidates(candidates)
+        logger.info("[tk-campaign] discovery: %s candidatos, %s nuevos", len(candidates), added)
+        return {"action": "discovery", "added": added}
+
+    if campaign_status != "sending" and pending_drafts < remaining and pending_drafts < 10:
+        eligible = _tk_fetch_eligible_prospects(min(10 - pending_drafts, remaining - pending_drafts))
+        drafted = 0
+        for p in eligible:
+            if _tk_create_draft(p):
+                drafted += 1
+        logger.info("[tk-campaign] drafts: %s nuevos", drafted)
+        return {"action": "draft", "drafted": drafted}
+
+    if pending_drafts > 0 and tk_is_autosend_enabled():
+        try:
+            from tiktok_autosend import fetch_pending_drafts, autosend_drafts  # type: ignore
+        except ImportError:
+            _tk_campaign_update(status="paused", error_msg="autosend no disponible")
+            return {"action": "error", "reason": "autosend_missing"}
+        _tk_campaign_update(status="sending")
+        drafts = fetch_pending_drafts(1)
+        if not drafts:
+            return {"action": "idle_no_drafts"}
+        try:
+            sent = autosend_drafts(drafts, dry_run=False)
+            logger.info("[tk-campaign] autosend: %s/1 enviado", sent)
+            if sent == 0:
+                reason = _tk_last_autosend_error() or "autosend no pudo enviar el DM"
+                _tk_campaign_update(status="paused", error_msg=f"Envio pausado: {reason}")
+                return {"action": "error", "reason": "send_failed"}
+            return {"action": "sent", "count": sent}
+        except RuntimeError as exc:
+            err = str(exc)[:200]
+            if "Sesion TikTok" in err or "sesion_expirada" in err:
+                _tk_campaign_update(status="paused", error_msg=f"sesion expirada: {err}")
+                return {"action": "error", "reason": "session_expired"}
+            logger.warning("[tk-campaign] autosend RuntimeError: %s", err)
+            _tk_campaign_update(status="paused", error_msg=f"autosend fallo: {err}")
+            return {"action": "error", "reason": err}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[tk-campaign] autosend error: %s", exc)
+            _tk_campaign_update(status="paused", error_msg=f"autosend error: {str(exc)[:160]}")
+            return {"action": "error", "reason": str(exc)[:120]}
+
+    if pending_drafts > 0 and not tk_is_autosend_enabled():
+        _tk_campaign_update(status="paused", error_msg="TK_AUTOSEND_ENABLED=false en env")
+        return {"action": "error", "reason": "autosend_disabled"}
+
+    return {"action": "idle"}
+
+
+def _tk_campaign_worker() -> None:
+    logger.info("[tk-campaign] worker iniciado")
+    while not tk_campaign_stop.is_set():
+        try:
+            if not TK_AVAILABLE:
+                tk_campaign_stop.wait(60)
+                continue
+            state = _tk_campaign_state()
+            status = state.get("status", "idle")
+            if status not in ("discovering", "sending"):
+                tk_campaign_stop.wait(45)
+                continue
+            res = _tk_campaign_iteration(state)
+            action = (res or {}).get("action", "")
+            if action == "sent":
+                mn = int(os.getenv("TK_AUTOSEND_MIN_DELAY_SEC", "60") or 60)
+                mx = int(os.getenv("TK_AUTOSEND_MAX_DELAY_SEC", "240") or 240)
+                if mx < mn:
+                    mx = mn + 30
+                tk_campaign_stop.wait(random.uniform(mn, mx))
+            elif action == "completed":
+                logger.info("[tk-campaign] objetivo alcanzado")
+                tk_campaign_stop.wait(60)
+            elif action == "error":
+                tk_campaign_stop.wait(180)
+            else:
+                tk_campaign_stop.wait(20)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[tk-campaign] loop error: %s", exc)
+            tk_campaign_stop.wait(60)
+
+
+# ----- Endpoints campaign -----
+
+@app.get("/admin/tiktok/campaign", dependencies=[Depends(_require_admin_token)])
+def tiktok_campaign_get():
+    state = _tk_campaign_state()
+    try:
+        from tiktok_autosend import session_info  # type: ignore
+        session = session_info()
+    except Exception:
+        session = {"connected": False}
+    return {"campaign": state, "session": session,
+            "autosend_enabled": tk_is_autosend_enabled() if TK_AVAILABLE else False,
+            "autonomous_autosend": _tk_env_bool("TK_AUTONOMOUS_AUTOSEND", False)}
+
+
+@app.post("/admin/tiktok/campaign/start", dependencies=[Depends(_require_admin_token)])
+def tiktok_campaign_start(payload: TKCampaignStart):
+    if not TK_AVAILABLE:
+        raise HTTPException(503, "Modulo TikTok no disponible")
+    if not tk_is_autosend_enabled():
+        raise HTTPException(412, "TK_AUTOSEND_ENABLED=false en env")
+    try:
+        from tiktok_autosend import session_info  # type: ignore
+        if not session_info().get("connected"):
+            raise HTTPException(412, "Sesion TikTok no conectada. Pega cookies primero.")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    _tk_migrate()
+    _tk_campaign_update(
+        target_count=int(payload.target_count),
+        status="discovering",
+        error_msg="",
+        started_at=_tk_now(),
+        completed_at="",
+    )
+    return {"ok": True, "state": _tk_campaign_state()}
+
+
+@app.post("/admin/tiktok/campaign/pause", dependencies=[Depends(_require_admin_token)])
+def tiktok_campaign_pause():
+    _tk_migrate()
+    _tk_campaign_update(status="paused")
+    return {"ok": True, "state": _tk_campaign_state()}
+
+
+@app.post("/admin/tiktok/campaign/resume", dependencies=[Depends(_require_admin_token)])
+def tiktok_campaign_resume():
+    if not tk_is_autosend_enabled():
+        raise HTTPException(412, "TK_AUTOSEND_ENABLED=false en env")
+    _tk_migrate()
+    state = _tk_campaign_state()
+    next_status = "sending" if (state.get("pending_drafts") or 0) > 0 else "discovering"
+    _tk_campaign_update(status=next_status, error_msg="")
+    return {"ok": True, "state": _tk_campaign_state()}
+
+
+# ----- Sesion / cookies -----
+
+@app.get("/admin/tiktok/autosend/status", dependencies=[Depends(_require_admin_token)])
+def tiktok_autosend_status():
+    try:
+        from tiktok_autosend import session_info  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/tiktok_autosend.py no disponible")
+    return {
+        "autosend_enabled": tk_is_autosend_enabled(),
+        "autonomous_autosend": _tk_env_bool("TK_AUTONOMOUS_AUTOSEND", False),
+        "session": session_info(),
+    }
+
+
+@app.post("/admin/tiktok/autosend/connect", dependencies=[Depends(_require_admin_token)])
+def tiktok_autosend_connect(payload: TKSessionCookies):
+    try:
+        from tiktok_autosend import save_session_from_cookies, session_info  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/tiktok_autosend.py no disponible")
+    try:
+        path = save_session_from_cookies(
+            sessionid=payload.sessionid,
+            sessionid_ss=payload.sessionid_ss,
+            tt_csrf_token=payload.tt_csrf_token,
+            ms_token=payload.ms_token,
+            ttwid=payload.ttwid,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"ok": True, "saved_at": str(path), "session": session_info()}
+
+
+@app.post("/admin/tiktok/autosend/disconnect", dependencies=[Depends(_require_admin_token)])
+def tiktok_autosend_disconnect():
+    try:
+        from tiktok_autosend import clear_session  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/tiktok_autosend.py no disponible")
+    removed = clear_session()
+    return {"ok": True, "removed": removed}
+
+
+@app.post("/admin/tiktok/autosend/test", dependencies=[Depends(_require_admin_token)])
+def tiktok_autosend_test():
+    try:
+        from tiktok_autosend import session_info  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "scripts/tiktok_autosend.py no disponible")
+    info = session_info()
+    if not info.get("connected"):
+        return {"ok": False, "reason": "sin_sesion"}
+    sessionid = ""
+    try:
+        state_path = Path(info.get("path") or "")
+        if state_path.exists():
+            data = json.loads(state_path.read_text(encoding="utf-8"))
+            for c in data.get("cookies", []):
+                if c.get("name") == "sessionid":
+                    sessionid = c.get("value") or ""
+                    break
+    except Exception as exc:
+        raise HTTPException(500, f"No se pudo leer sesion: {exc}")
+    if not sessionid:
+        return {"ok": False, "reason": "sin_sessionid"}
+    cookies = {"sessionid": sessionid}
+    headers = {
+        "User-Agent": os.getenv("TK_AUTOSEND_USER_AGENT",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
+        "Accept-Language": "es-ES,es;q=0.9",
+    }
+    try:
+        with httpx.Client(timeout=10.0, follow_redirects=True) as client:
+            r = client.get("https://www.tiktok.com/foryou", cookies=cookies, headers=headers)
+        ok = r.status_code == 200 and ("tiktok" in (r.text or "").lower())
+        return {"ok": ok, "status_code": r.status_code, "session": info,
+                "hint": "Cookies validas" if ok else "Cookies caducadas. Reconecta."}
+    except Exception as exc:
+        return {"ok": False, "reason": f"http_error: {exc}", "session": info}
+
+
+# ----- DM templates editor -----
+
+def _tk_dm_default(variant: str) -> str:
+    try:
+        from tiktok_templates_v2 import render_natural  # type: ignore
+        return render_natural(
+            username=f"demo_{variant.lower()}",
+            business_name="Clinica Sonrisa",
+            niche="clinica dental",
+            city="Madrid",
+            variant=variant,
+        )
+    except Exception:
+        return ""
+
+
+@app.get("/admin/tiktok/dm-templates", dependencies=[Depends(_require_admin_token)])
+def tiktok_dm_templates_get():
+    _tk_migrate()
+    out = {"A": "", "B": "", "C": ""}
+    with _tk_db() as conn:
+        rows = conn.execute("SELECT variant, body FROM tk_dm_templates_v2").fetchall()
+        for r in rows:
+            v = (r["variant"] or "").upper()
+            if v in out:
+                out[v] = r["body"] or ""
+    defaults = {v: _tk_dm_default(v) for v in ("A", "B", "C")}
+    placeholders_help = ""
+    try:
+        from tiktok_templates_v2 import PLACEHOLDERS_HELP  # type: ignore
+        placeholders_help = PLACEHOLDERS_HELP
+    except Exception:
+        pass
+    return {"templates": out, "defaults": defaults, "placeholders_help": placeholders_help}
+
+
+@app.put("/admin/tiktok/dm-templates", dependencies=[Depends(_require_admin_token)])
+def tiktok_dm_templates_put(payload: TKDmTemplatesPayload):
+    _tk_migrate()
+    now = _tk_now()
+    data = {"A": payload.variant_a, "B": payload.variant_b, "C": payload.variant_c}
+    saved: List[str] = []
+    with _tk_db() as conn:
+        for variant, body in data.items():
+            if body is None:
+                continue
+            body_clean = body.strip()
+            if body_clean:
+                conn.execute(
+                    """INSERT INTO tk_dm_templates_v2 (variant, body, updated_at)
+                       VALUES (?,?,?)
+                       ON CONFLICT(variant) DO UPDATE SET body=excluded.body, updated_at=excluded.updated_at""",
+                    (variant, body_clean, now),
+                )
+                saved.append(variant)
+            else:
+                conn.execute("DELETE FROM tk_dm_templates_v2 WHERE variant=?", (variant,))
+                saved.append(variant + " (reset)")
+        conn.commit()
+    return {"ok": True, "saved": saved}
+
+
+@app.post("/admin/tiktok/dm-templates/preview", dependencies=[Depends(_require_admin_token)])
+def tiktok_dm_templates_preview(variant: str = "A",
+                                 business_name: str = "Clinica Sonrisa",
+                                 niche: str = "clinica dental",
+                                 city: str = "Madrid"):
+    try:
+        from tiktok_templates_v2 import render_natural  # type: ignore
+    except ImportError:
+        raise HTTPException(503, "tiktok_templates_v2 no disponible")
+    text = render_natural(
+        username=f"preview_{variant.lower()}",
+        business_name=business_name,
+        niche=niche,
+        city=city,
+        variant=variant.upper(),
+        db_path=str(TK_DEFAULT_DB),
+    )
+    return {"variant": variant.upper(), "text": text}
+
+
+# ----- Suppressions / stats / prospects -----
+
+@app.get("/admin/tiktok/stats", dependencies=[Depends(_require_admin_token)])
+def tiktok_stats():
+    _tk_migrate()
+    today = datetime.now(timezone.utc).date().isoformat()
+    with _tk_db() as conn:
+        sent_today = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_sends WHERE mode='sent_auto' AND substr(sent_at,1,10)=?",
+            (today,),
+        ).fetchone()["c"]
+        sent_total = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_sends WHERE mode='sent_auto'"
+        ).fetchone()["c"]
+        replies = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_prospects WHERE status='replied'"
+        ).fetchone()["c"]
+        drafts = conn.execute(
+            "SELECT COUNT(*) AS c FROM tk_sends WHERE mode='draft' AND ready=1"
+        ).fetchone()["c"]
+        prospects = conn.execute("SELECT COUNT(*) AS c FROM tk_prospects").fetchone()["c"]
+    return {"totals": {"prospects": prospects, "sent_today": sent_today,
+                       "sent_total": sent_total, "replies_unique": replies,
+                       "drafts_pending": drafts}}
+
+
+@app.post("/admin/tiktok/suppress", dependencies=[Depends(_require_admin_token)])
+def tiktok_suppress(payload: TKSuppressRequest):
+    user = _tk_resolve_username(payload.username)
+    if not user:
+        raise HTTPException(400, "username invalido")
+    _tk_migrate()
+    with _tk_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO tk_suppressions (username, reason, added_at) VALUES (?,?,?)",
+            (user, payload.reason or "manual", _tk_now()),
+        )
+        conn.execute(
+            "UPDATE tk_prospects SET status='dnc', updated_at=? WHERE username=?",
+            (_tk_now(), user),
+        )
+        conn.commit()
+    return {"ok": True, "username": user}
+
+
+@app.delete("/admin/tiktok/suppress/{username}", dependencies=[Depends(_require_admin_token)])
+def tiktok_remove_suppress(username: str):
+    user = _tk_resolve_username(username)
+    _tk_migrate()
+    with _tk_db() as conn:
+        conn.execute("DELETE FROM tk_suppressions WHERE username=?", (user,))
+        conn.commit()
+    return {"ok": True}
+
+
+@app.get("/admin/tiktok/suppressions", dependencies=[Depends(_require_admin_token)])
+def tiktok_list_suppressions(limit: int = 200):
+    _tk_migrate()
+    with _tk_db() as conn:
+        rows = conn.execute(
+            "SELECT username, reason, added_at FROM tk_suppressions ORDER BY added_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return {"items": [dict(r) for r in rows]}
+
+
+@app.get("/admin/tiktok/prospects", dependencies=[Depends(_require_admin_token)])
+def tiktok_prospects(limit: int = 100, status: str = ""):
+    _tk_migrate()
+    q = "SELECT * FROM tk_prospects"
+    params: List[Any] = []
+    if status:
+        q += " WHERE status=?"
+        params.append(status)
+    q += " ORDER BY created_at DESC LIMIT ?"
+    params.append(limit)
+    with _tk_db() as conn:
+        rows = conn.execute(q, params).fetchall()
+    return {"items": [dict(r) for r in rows]}
+
+
+# ----- Worker startup/shutdown -----
+
+@app.on_event("startup")
+async def _tk_startup_workers() -> None:
+    global tk_campaign_thread
+    if TK_AVAILABLE:
+        try:
+            _tk_migrate()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("tk_campaign migrate fallo: %s", exc)
+        if not tk_campaign_thread or not tk_campaign_thread.is_alive():
+            tk_campaign_stop.clear()
+            tk_campaign_thread = threading.Thread(target=_tk_campaign_worker, name="vantelia-tk-campaign", daemon=True)
+            tk_campaign_thread.start()
+
+
+@app.on_event("shutdown")
+async def _tk_shutdown_workers() -> None:
+    tk_campaign_stop.set()
+
+
+# === END TIKTOK ======================================================
 
 
 if __name__ == "__main__":

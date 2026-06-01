@@ -389,7 +389,7 @@ def fetch_candidates(
 ) -> list[sqlite3.Row]:
     """Devuelve prospects elegibles para ese stage.
 
-    cold: sin sends previos en cold y status not in (replied, client, lost, dnc).
+    cold: sin ningun intento previo y status not in (replied, client, lost, dnc).
     fuX:  ultimo send anterior con stage previo, >=after_days desde ese send,
           sin reply, sin send en este stage.
     """
@@ -411,10 +411,7 @@ def fetch_candidates(
         rows = conn.execute(
             """SELECT p.* FROM ig_prospects p
                WHERE NOT EXISTS (
-                 SELECT 1 FROM ig_sends s WHERE s.username=p.username AND s.stage='cold' AND s.mode IN ('sent','sent_auto')
-               )
-               AND NOT EXISTS (
-                 SELECT 1 FROM ig_sends s WHERE s.username=p.username AND s.stage='cold' AND s.mode='draft' AND s.ready=1
+                 SELECT 1 FROM ig_sends s WHERE s.username=p.username
                )
                ORDER BY p.score DESC, p.created_at ASC"""
         ).fetchall()
@@ -427,7 +424,7 @@ def fetch_candidates(
                  SELECT 1 FROM ig_sends s WHERE s.username=p.username AND s.stage=? AND s.mode IN ('sent','sent_auto') AND s.sent_at<=?
                )
                AND NOT EXISTS (
-                 SELECT 1 FROM ig_sends s WHERE s.username=p.username AND s.stage=? AND s.mode IN ('sent','sent_auto','draft')
+                 SELECT 1 FROM ig_sends s WHERE s.username=p.username AND s.stage=?
                )
                ORDER BY p.score DESC, p.created_at ASC""",
             (prev_stage, cutoff, stage),
@@ -449,6 +446,12 @@ def fetch_candidates(
 
 def create_draft(conn: sqlite3.Connection, row: sqlite3.Row, stage: str) -> dict:
     p = _row_to_prospect(row)
+    existing = conn.execute(
+        "SELECT id FROM ig_sends WHERE username=? AND stage=? LIMIT 1",
+        (p.username, stage),
+    ).fetchone()
+    if existing:
+        raise ValueError(f"Ya existe un intento para @{p.username} en stage={stage}")
     message, variant = render(stage, p)
     conn.execute(
         """INSERT INTO ig_sends (username, stage, variant, message_text, mode, ready, drafted_at)

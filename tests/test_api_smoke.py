@@ -254,13 +254,13 @@ def test_service_extraction_keeps_scraper_descriptions(api_module):
         "\n".join(
             [
                 "SERVICIOS Y PRECIOS:",
-                "1. Asistente IA Web",
-                "- Precio: 49 EUR al mes",
-                "- Incluye widget IA embebido y agenda online.",
+                "1. Starter",
+                "- Precio: 19 EUR al mes",
+                "- Incluye leads, documentos y personalizacion de marca.",
                 "",
-                "2. Asistente IA WhatsApp",
-                "- Precio: 79 EUR al mes",
-                "- Incluye flujo de cita por WhatsApp.",
+                "2. Pro",
+                "- Precio: 49 EUR al mes",
+                "- Incluye reservas, agenda integrada y Live Chat.",
                 "",
                 "PREGUNTAS FRECUENTES:",
                 "P: Algo?",
@@ -270,9 +270,36 @@ def test_service_extraction_keeps_scraper_descriptions(api_module):
     )
 
     services = api_module._extract_services_from_info(cliente_id)
-    assert [item["nombre"] for item in services] == ["Asistente IA Web", "Asistente IA WhatsApp"]
-    assert "Precio: 49 EUR al mes" in services[0]["descripcion"]
-    assert "agenda online" in services[0]["descripcion"]
+    assert [item["nombre"] for item in services] == ["Starter", "Pro"]
+    assert "Precio: 19 EUR al mes" in services[0]["descripcion"]
+    assert "personalizacion de marca" in services[0]["descripcion"]
+
+
+def test_vantelia_commercial_brain_matches_public_pricing():
+    info = (REPO_ROOT / "data" / "Vantelia" / "info.txt").read_text(encoding="utf-8")
+
+    for expected in (
+        "1. Free",
+        "Precio: 0 EUR al mes",
+        "2. Starter",
+        "Precio: 19 EUR al mes",
+        "3. Pro",
+        "Precio: 49 EUR al mes",
+        "4. Business",
+        "Precio: 149 EUR al mes",
+        "Free es gratis para siempre",
+    ):
+        assert expected in info
+
+    for forbidden in (
+        "Asistente IA Web",
+        "Asistente IA WhatsApp",
+        "Plan Completo",
+        "Precio: 79 EUR",
+        "Precio: 89 EUR",
+        "30 dias gratis",
+    ):
+        assert forbidden not in info
 
 
 def test_self_serve_schema_v2_is_provisioned(client: TestClient, api_module):
@@ -728,11 +755,14 @@ def test_chat_disponibilidad_proximo_lunes_uses_real_slots(client: TestClient):
 
 
 def test_chat_disponibilidad_manana_tarde_filters_period(client: TestClient):
+    # "proximo lunes" es siempre laborable (demo solo cierra domingos), asi el test
+    # no depende del dia real de ejecucion: si "manana" cae en domingo el bot
+    # responde "cerrados" en lugar de filtrar por periodo.
     response = client.post(
         "/chat",
         json={
             "cliente_id": "demo",
-            "mensaje": "Hay hueco manana por la tarde?",
+            "mensaje": "Hay hueco el proximo lunes por la tarde?",
             "session_id": "s_test_chat_availability_tomorrow_afternoon",
         },
         headers={"Origin": "http://testserver"},
@@ -905,7 +935,7 @@ def test_public_stripe_checkout_builds_subscription_session(client: TestClient, 
     assert payload["line_items"] == [{"price": "price_test_pro", "quantity": 1}]
     assert payload["client_reference_id"] == "public:pro:monthly"
     assert payload["metadata"] == {"source": "public_plans", "plan": "pro", "billing_period": "monthly"}
-    assert payload["subscription_data"]["trial_period_days"] == 30
+    assert "trial_period_days" not in payload["subscription_data"]
     assert payload["subscription_data"]["metadata"] == payload["metadata"]
     assert [field["key"] for field in payload["custom_fields"]] == ["website", "empresa", "ianame"]
     assert payload["billing_address_collection"] == "required"
@@ -1220,7 +1250,8 @@ def test_outreach_preflight_renders_html_even_when_wizard_email_not_imported(cli
     assert data["counts"]["real_candidates"] == 0
     assert data["counts"]["skipped"]["missing_email"] == 1
     assert data["html_active"] is True
-    assert "Crear bot gratis" in data["html"]
+    assert "Generar demo gratis" in data["html"]
+    assert "www.vantelia.es/demo/" in data["html"]
 
 
 def test_outreach_email_uses_prefilled_demo_link(client: TestClient, api_module):
@@ -1234,15 +1265,16 @@ def test_outreach_email_uses_prefilled_demo_link(client: TestClient, api_module)
         city="Madrid",
     )
     url = demo_url_with_utm("cold", prospect)
-    assert url.startswith("https://app.vantelia.es/acceso?")
-    assert "signup=1" in url
+    assert url.startswith("https://www.vantelia.es/demo/?")
+    assert "signup=1" not in url
     assert "utm_source=outreach" in url
     assert "empresa=Clinica+Demo+Norte" in url
     assert "email=prefill.demo%40example.com" in url
     assert "web=https%3A%2F%2Fclinicademo.test" in url
 
     _subject, text, html = render("cold", prospect, "baja@vantelia.es")
-    assert len(text) > 100
+    assert "crear gratis su asistente IA en menos de 2 minutos" in text
+    assert "demo preparada" in text
     assert "empresa=Clinica+Demo+Norte" in html
 
 
@@ -1919,6 +1951,159 @@ def test_instagram_draft_generation_no_network(client: TestClient, api_module):
     client.delete("/admin/instagram/prospects/demo_draft_user", headers=_admin_headers())
 
 
+def test_instagram_draft_generation_skips_prior_dm_attempt(client: TestClient, api_module):
+    headers = {**_admin_headers(), "Content-Type": "application/json"}
+    blocked_user = "resume_blocked_user"
+    fresh_user = "resume_fresh_user"
+    for username in (blocked_user, fresh_user):
+        created = client.post(
+            "/admin/instagram/prospects",
+            headers=headers,
+            json={
+                "username": username,
+                "full_name": username.replace("_", " ").title(),
+                "niche": "estetica",
+                "city": "Madrid",
+                "followers_count": 700,
+                "score": 90,
+            },
+        )
+        assert created.status_code == 200, created.text
+
+    with api_module._instagram_db() as conn:
+        now = api_module._instagram_now()
+        conn.execute(
+            """INSERT INTO ig_sends (username, stage, variant, message_text, mode, ready, drafted_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (blocked_user, "cold", "A", "dm ya intentado", "sending", 0, now),
+        )
+        conn.commit()
+
+    resp = client.post(
+        "/admin/instagram/draft",
+        headers=headers,
+        json={"stage": "cold", "max": 50, "after_days": 0},
+    )
+    assert resp.status_code == 200, resp.text
+    usernames = {d["username"] for d in resp.json()["drafts"]}
+    assert blocked_user not in usernames
+    assert fresh_user in usernames
+
+
+def test_instagram_autosend_claim_skips_draft_on_resume(client: TestClient, api_module, monkeypatch):
+    scripts_dir = REPO_ROOT / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    monkeypatch.setenv("IG_DB_PATH", str(api_module._instagram_db_path()))
+    sys.modules.pop("instagram_autosend", None)
+    instagram_autosend = importlib.import_module("instagram_autosend")
+
+    username = "resume_claim_user"
+    with api_module._instagram_db() as conn:
+        now = api_module._instagram_now()
+        conn.execute(
+            """INSERT OR IGNORE INTO ig_prospects
+               (username, full_name, niche, city, status, source, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (username, "Resume Claim User", "estetica", "Madrid", "queued", "test", now, now),
+        )
+        conn.execute(
+            """INSERT INTO ig_sends (username, stage, variant, message_text, mode, ready, drafted_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (username, "cold", "A", "hola desde test", "draft", 1, now),
+        )
+        send_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        conn.commit()
+
+    before = instagram_autosend.fetch_pending_drafts(20)
+    assert any(d["id"] == send_id for d in before)
+
+    with api_module._instagram_db() as conn:
+        claimed = instagram_autosend._claim_send_attempt(conn, send_id)  # type: ignore[attr-defined]
+    assert claimed is not None
+
+    after = instagram_autosend.fetch_pending_drafts(20)
+    assert all(d["id"] != send_id for d in after)
+    with api_module._instagram_db() as conn:
+        row = conn.execute("SELECT mode, ready FROM ig_sends WHERE id=?", (send_id,)).fetchone()
+    assert row["mode"] == "sending"
+    assert row["ready"] == 0
+
+
+def test_tiktok_autosend_claim_skips_draft_on_resume(client: TestClient, api_module, monkeypatch):
+    scripts_dir = REPO_ROOT / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    monkeypatch.setenv("TK_DB_PATH", str(api_module.TK_DEFAULT_DB))
+    sys.modules.pop("tiktok_autosend", None)
+    tiktok_autosend = importlib.import_module("tiktok_autosend")
+
+    api_module._tk_migrate()
+    username = "tk_resume_claim_user"
+    with api_module._tk_db() as conn:
+        now = api_module._tk_now()
+        conn.execute(
+            """INSERT OR IGNORE INTO tk_prospects
+               (username, business_name, niche, city, status, source, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (username, "TK Resume Claim User", "estetica", "Madrid", "queued", "test", now, now),
+        )
+        conn.execute(
+            """INSERT INTO tk_sends (username, stage, variant, message_text, mode, ready, drafted_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (username, "cold", "A", "hola desde test", "draft", 1, now),
+        )
+        send_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        conn.commit()
+
+    assert any(d["id"] == send_id for d in tiktok_autosend.fetch_pending_drafts(20))
+    with api_module._tk_db() as conn:
+        claimed = tiktok_autosend._claim_send_attempt(conn, send_id)  # type: ignore[attr-defined]
+    assert claimed is not None
+    assert all(d["id"] != send_id for d in tiktok_autosend.fetch_pending_drafts(20))
+
+    with api_module._tk_db() as conn:
+        row = conn.execute("SELECT mode, ready FROM tk_sends WHERE id=?", (send_id,)).fetchone()
+    assert row["mode"] == "sending"
+    assert row["ready"] == 0
+
+
+def test_tiktok_campaign_pauses_when_autosend_cannot_send(client: TestClient, api_module, monkeypatch):
+    scripts_dir = REPO_ROOT / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    monkeypatch.setenv("TK_AUTOSEND_ENABLED", "true")
+    monkeypatch.setenv("TK_DB_PATH", str(api_module.TK_DEFAULT_DB))
+    sys.modules.pop("tiktok_autosend", None)
+    tiktok_autosend = importlib.import_module("tiktok_autosend")
+
+    api_module._tk_migrate()
+    username = "tk_send_fail_user"
+    with api_module._tk_db() as conn:
+        now = api_module._tk_now()
+        conn.execute(
+            """INSERT OR IGNORE INTO tk_prospects
+               (username, business_name, niche, city, status, source, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (username, "TK Send Fail User", "estetica", "Madrid", "queued", "campaign_test", now, now),
+        )
+        conn.execute(
+            """INSERT INTO tk_sends (username, stage, variant, message_text, mode, ready, drafted_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (username, "cold", "A", "hola desde test", "draft", 1, now),
+        )
+        conn.commit()
+
+    monkeypatch.setattr(tiktok_autosend, "autosend_drafts", lambda drafts, dry_run=False: 0)
+    state = {"target_count": 30, "sent_count": 0, "discovered_count": 45, "pending_drafts": 1, "status": "sending"}
+    result = api_module._tk_campaign_iteration(state)
+    assert result["action"] == "error"
+
+    current = api_module._tk_campaign_state()
+    assert current["status"] == "paused"
+    assert "Envio pausado" in current["error_msg"]
+
+
 def test_instagram_manual_contact_creates_timeline_and_summary(client: TestClient):
     old_ts = "2026-01-01T10:00:00+00:00"
     resp = client.post(
@@ -2310,10 +2495,31 @@ def test_app_overview_returns_stats_for_self_serve_user(client: TestClient, api_
 
 def test_self_service_funnel_tracks_activation_and_install(client: TestClient, api_module, monkeypatch):
     cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Funnel")
+    landing = client.post(
+        "/analytics/event",
+        json={
+            "event": "landing_view",
+            "event_source": "vantelia_site",
+            "page_path": "/",
+            "page_url": "https://www.vantelia.es/",
+            "session_id": f"s_{uuid.uuid4().hex[:16]}",
+            "page_type": "home",
+        },
+    )
+    pricing = client.post(
+        "/analytics/event",
+        json={
+            "event": "pricing_viewed",
+            "event_source": "vantelia_site",
+            "page_path": "/planes/",
+            "page_url": "https://www.vantelia.es/planes/",
+            "session_id": f"s_{uuid.uuid4().hex[:16]}",
+        },
+    )
     site_click = client.post(
         "/analytics/event",
         json={
-            "event": "plan_signup_clicked",
+            "event": "signup_clicked",
             "event_source": "vantelia_site",
             "page_path": "/planes/",
             "page_url": "https://www.vantelia.es/planes/",
@@ -2331,13 +2537,34 @@ def test_self_service_funnel_tracks_activation_and_install(client: TestClient, a
         cookies=cookies,
         json={"event": "snippet_copied", "metadata": {"surface": "deploy"}},
     )
+    first_chat = client.post(
+        "/auth/app/track",
+        cookies=cookies,
+        json={"event": "first_chat_tested", "metadata": {"surface": "right_panel_preview", "message_length": 14}},
+    )
+    upgrade = client.post(
+        "/auth/app/track",
+        cookies=cookies,
+        json={"event": "upgrade_clicked", "metadata": {"surface": "billing", "plan": "pro", "billing_period": "monthly"}},
+    )
     dashboard = client.get("/admin/self-service-funnel?days=30", headers=_admin_headers())
 
+    assert landing.status_code == 200
+    assert pricing.status_code == 200
     assert site_click.status_code == 200
     assert preview.status_code == 200
     assert snippet.status_code == 200
+    assert first_chat.status_code == 200
+    assert upgrade.status_code == 200
     assert dashboard.status_code == 200, dashboard.text
     payload = dashboard.json()
+    assert payload["tracking"]["landing_view"] is True
+    assert payload["tracking"]["signup_clicked"] is True
+    assert payload["tracking"]["signup_completed"] is True
+    assert payload["tracking"]["bot_created"] is True
+    assert payload["tracking"]["first_chat_tested"] is True
+    assert payload["tracking"]["pricing_viewed"] is True
+    assert payload["tracking"]["upgrade_clicked"] is True
     assert payload["kpis"]["free_bot_clicks"] >= 1
     assert payload["kpis"]["signups"] >= 1
     assert payload["kpis"]["bots_created"] >= 1
@@ -2857,6 +3084,11 @@ def test_app_billing_checkout_creates_stripe_session(client: TestClient, api_mod
         assert sent["client_reference_id"].startswith("self_serve:usr_")
         assert sent["success_url"].startswith("https://app.test.local/")
         assert sent["cancel_url"].startswith("https://app.test.local/")
+        with api_module._get_db_connection() as connection:
+            rows = connection.execute(
+                "SELECT event_name FROM analytics_events WHERE event_name IN ('checkout_started','upgrade_started')"
+            ).fetchall()
+        assert {row["event_name"] for row in rows} >= {"checkout_started", "upgrade_started"}
     finally:
         api_module.SELF_SERVE_PLANS["pro"]["stripe_price_monthly"] = ""
 
@@ -2933,6 +3165,19 @@ def test_chat_enforces_self_serve_quota(client: TestClient, api_module, monkeypa
 
 
 # ── Sem 6: Bridge captacion (claim) + migracion legacy ─────────────────
+
+def test_self_serve_free_plan_exposes_booking_with_ten_booking_quota(client: TestClient, api_module, monkeypatch):
+    _, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Free Booking")
+    api_module.CONFIG_CLIENTES[cliente_id].setdefault("allowed_origins", []).append("http://testserver")
+    api_module.CONFIG_CLIENTES[cliente_id].setdefault("booking", {})["enabled"] = True
+
+    config_resp = client.get(f"/cliente/{cliente_id}", headers={"Origin": "http://testserver"})
+    assert config_resp.status_code == 200, config_resp.text
+    config_data = config_resp.json()
+    assert config_data["booking_enabled"] is True
+    assert "Agendar cita" in config_data["starter_questions"]
+    assert api_module._plan_limits("free")["monthly_bookings"] == 10
+
 
 def _create_demo_tenant_for_test(api_module, suffix: str = "claimme") -> str:
     """Provision a demo_auto_* cliente in CONFIG_CLIENTES + demo_tenants.json,
@@ -3058,14 +3303,15 @@ def test_demo_page_shows_claim_banner_for_demo_auto(client: TestClient, api_modu
         headers={"Origin": "http://testserver"},
     )
     assert resp.status_code == 200
-    assert "Reclamar este bot" in resp.text
+    assert "Activar gratis e instalar" in resp.text
+    assert "Tu asistente ya esta listo" in resp.text
     assert f"claim={cliente_id}" in resp.text
 
 
 def test_demo_page_no_claim_banner_for_legacy_client(client: TestClient, api_module):
     resp = client.get("/demo/demo", headers={"Origin": "http://testserver"})
     assert resp.status_code == 200
-    assert "Reclamar este bot" not in resp.text
+    assert 'data-claim-cta="1"' not in resp.text
 
 
 def test_admin_assign_owner_links_legacy_cliente(client: TestClient, api_module):

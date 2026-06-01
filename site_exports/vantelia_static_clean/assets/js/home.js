@@ -5,6 +5,7 @@
   const DEBUG_KEY = 'vantelia_analytics_debug';
   const CONSENT_KEY = 'vantelia_cookie_consent_v1';
   const SERVER_ENDPOINT = window.VANTELIA_ANALYTICS_ENDPOINT || 'https://app.vantelia.es/analytics/event';
+  const PAGE_SESSION_ID = 'pv_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
 
   function readConsent() {
     if (window.vanteliaConsent) return window.vanteliaConsent;
@@ -48,15 +49,16 @@
       event_source: 'vantelia_site',
       page_path: window.location.pathname,
       page_url: window.location.href,
+      session_id: PAGE_SESSION_ID,
       timestamp: new Date().toISOString(),
       ...cleanPayload(payload || {}),
     };
 
     window.dataLayer = window.dataLayer || [];
     window.dataLayer.push(event);
+    sendServerEvent(event);
 
     if (hasAnalyticsConsent()) {
-      sendServerEvent(event);
       if (typeof window.gtag === 'function') {
         const { event: _eventName, ...params } = event;
         window.gtag('event', eventName, params);
@@ -108,6 +110,13 @@
         plan: link.getAttribute('data-plan') || '',
         plan_label: link.getAttribute('data-plan-label') || '',
       });
+      track('signup_clicked', {
+        cta_label: label,
+        cta_href: href,
+        plan: link.getAttribute('data-plan') || '',
+        plan_label: link.getAttribute('data-plan-label') || '',
+        source: 'pricing_card',
+      });
     } else if (link.hasAttribute && link.hasAttribute('data-open-chat')) {
       track('chat_consultation_cta_click', {
         cta_label: label,
@@ -119,6 +128,7 @@
       track('consultation_cta_click', { cta_label: label, cta_href: href });
     } else if (href.includes('app.vantelia.es/acceso')) {
       track('portal_access_click', { cta_label: label, cta_href: href });
+      track('signup_clicked', { cta_label: label, cta_href: href, source: 'site_cta' });
     }
   }, true);
 
@@ -128,6 +138,17 @@
   });
 
   window.vanteliaTrack = track;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const path = window.location.pathname || '/';
+    track('landing_view', {
+      source: 'page_load',
+      page_type: path === '/' ? 'home' : path.replace(/^\/|\/$/g, '') || 'home',
+    });
+    if (/\/planes\/?$/i.test(path)) {
+      track('pricing_viewed', { source: 'page_load' });
+    }
+  });
 })();
 
 /* Particle canvas (only when canvas exists) */
@@ -597,8 +618,8 @@
     card.innerHTML = '<p class="mw-card-title">💎 Planes Vantelia</p><p class="mw-card-sub">Sin permanencia. Cancelas cuando quieras.</p><div class="mw-plans"></div>';
     var box = card.querySelector('.mw-plans');
     [
-      { name:'Free', price:'0€', feat:'50 msg/mes · widget web' },
-      { name:'Starter', price:'19€', feat:'1.000 msg · leads · reservas' },
+      { name:'Free', price:'0€', feat:'50 msg · 10 citas/mes' },
+      { name:'Starter', price:'19€', feat:'1.000 msg · 100 citas/mes' },
       { name:'Pro', price:'49€', feat:'5.000 msg · WhatsApp · Live Chat', tag:'Popular' },
       { name:'Business', price:'149€', feat:'Ilimitado · soporte prioritario' }
     ].forEach(function (p) {
