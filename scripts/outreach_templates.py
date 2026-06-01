@@ -481,6 +481,11 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
     name = p.business_name
     subject, _variant = pick_subject_with_variant("cold", p)
     cta_text, cta_html = _cta_block(f"Crear el bot de {name} gratis", "cold", p)
+    opener = p.niche_hook or ""
+    opener_html = (
+        f'<p style="margin:0 0 14px 0;">{html_lib.escape(opener)}</p>'
+        if opener else ""
+    )
     proof_html = (
         f'<p style="margin:0 0 14px 0;color:#4b5563;font-style:italic;">'
         f'{html_lib.escape(env_proof)}</p>'
