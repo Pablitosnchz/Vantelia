@@ -1,4 +1,72 @@
 {
+  "van": {
+    "nombre": "Van",
+    "plan": "free",
+    "subscription": {
+      "plan": "free"
+    },
+    "icono": "VA",
+    "color": "#1f6feb",
+    "accent_color": "#1190d0",
+    "logo_url": "",
+    "bienvenida": "Hola, soy Van, el asistente de Vantelia. En que puedo ayudarte hoy?",
+    "prompt_extra": "Habla con tono profesional y cercano. Responde solo con informacion del negocio. Si no sabes algo, ofrece contactar con el equipo humano.",
+    "allowed_origins": [
+      "https://www.vantelia.es",
+      "https://app.vantelia.es",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:5500",
+      "http://localhost:8000"
+    ],
+    "contacto": {
+      "email": "",
+      "telefono": ""
+    },
+    "branding": {
+      "powered_by": "Powered by Vantelia"
+    },
+    "whatsapp": {
+      "enabled": false,
+      "phone_number_id": "",
+      "access_token_env": "",
+      "verify_token_env": ""
+    },
+    "booking": {
+      "enabled": true,
+      "timezone": "Europe/Madrid",
+      "slot_minutes": 30,
+      "day_start": "09:00",
+      "day_end": "18:00",
+      "closed_weekdays": [6],
+      "provider": "internal",
+      "webhook_env": "",
+      "webhook_url": "",
+      "calendly_user_env": "",
+      "calendly_event_type_env": "",
+      "calendly_location_kind": "",
+      "calendly_location_value": "",
+      "google_calendar_id": "",
+      "google_calendar_id_env": "",
+      "google_service_account_path": "",
+      "google_service_account_env": "",
+      "success_message": "Tu solicitud de cita ha quedado registrada correctamente.",
+      "message_templates": {
+        "confirmed": "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.",
+        "reminder_24h": "Te recordamos que manana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
+        "reminder_2h": "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.",
+        "cancelled": "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.",
+        "rescheduled": "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla."
+      },
+      "message_template_enabled": {
+        "confirmed": true,
+        "reminder_24h": true,
+        "reminder_2h": true,
+        "cancelled": true,
+        "rescheduled": true
+      }
+    }
+  },
   "Clinica_Saga": {
     "nombre": "Clinica Saga",
     "plan": "starter",
