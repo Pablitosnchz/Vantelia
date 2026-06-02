@@ -9694,6 +9694,15 @@ _DEMO_FALLBACK_SERVICES = [
 def _demo_service_names(cliente_id: str) -> List[str]:
     names: List[str] = []
     try:
+        for service in _catalog_services(cliente_id):
+            nombre = str(service.get("nombre") or "").strip()
+            if nombre and nombre not in names:
+                names.append(nombre)
+    except Exception:  # noqa: BLE001
+        names = []
+    if names:
+        return names[:12]
+    try:
         for service in _extract_services_from_info(cliente_id):
             nombre = str(service.get("nombre") or "").strip()
             if nombre and nombre not in names:

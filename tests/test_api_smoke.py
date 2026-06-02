@@ -520,6 +520,57 @@ def test_admin_demo_agenda_seed_and_purge(client: TestClient, api_module):
     assert _counts() == (0, 0)
 
 
+def test_demo_agenda_uses_visible_services_catalog(client: TestClient, api_module):
+    headers = {"Authorization": "Bearer test-admin-token"}
+    cliente_id = "demo"
+    db_path = api_module.DB_PATH
+    client_dir = api_module.DATA_DIR / cliente_id
+    info_path = client_dir / "info.txt"
+    original_info = info_path.read_text(encoding="utf-8")
+    try:
+        info_path.write_text(
+            "\n".join(
+                [
+                    "SERVICIOS Y PRECIOS:",
+                    "- Masaje visible / 60 EUR / 55 min",
+                    "- Bonos de 5 sesiones: 12% dto.",
+                    "",
+                    "PREGUNTAS FRECUENTES:",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("DELETE FROM services WHERE cliente_id = ?", (cliente_id,))
+            conn.execute(
+                """
+                INSERT INTO services
+                    (cliente_id, slug, name, duration_minutes, price_cents, description, is_active, sort_order, created_at, updated_at)
+                VALUES (?, 'masaje_visible', 'Masaje visible', 55, 6000, '', 1, 0, 'now', 'now')
+                """,
+                (cliente_id,),
+            )
+            conn.commit()
+
+        gen = client.post(f"/admin/clientes/{cliente_id}/demo-agenda", headers=headers)
+        assert gen.status_code == 200, gen.text
+        with sqlite3.connect(db_path) as conn:
+            services = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT DISTINCT servicio FROM bookings WHERE cliente_id = ? AND source = ?",
+                    (cliente_id, api_module.DEMO_BOOKING_SOURCE),
+                ).fetchall()
+            }
+        assert services == {"Masaje visible"}
+    finally:
+        info_path.write_text(original_info, encoding="utf-8")
+        api_module._purge_demo_agenda(cliente_id)
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("DELETE FROM services WHERE cliente_id = ?", (cliente_id,))
+            conn.commit()
+
+
 def _seed_past_booking(api_module, status: str = "confirmed") -> str:
     booking_id = uuid.uuid4().hex
     start = datetime.utcnow() - timedelta(hours=2)
