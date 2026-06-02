@@ -1561,11 +1561,11 @@
       <button class="btn btn-primary" onclick="setTab('citas')">Ir a Citas</button>
     </div>
     <div class="panel-card">
-      <h2>Recordatorios automáticos</h2>
-      <p class="panel-sub">Personaliza los avisos de agenda y elige si cada recordatorio se envía por email, WhatsApp o SMS.</p>
+      <h2>Recordatorios y avisos</h2>
+      <p class="panel-sub">Personaliza los avisos de agenda y elige si cada uno se envía por email, WhatsApp o SMS.</p>
       <div id="mensajesAccordions" style="margin-top:14px;"></div>
       <div style="margin-top:18px;">
-        <button class="btn btn-primary" id="mensajesGuardarBtn">Guardar recordatorios</button>
+        <button class="btn btn-primary" id="mensajesGuardarBtn">Guardar avisos</button>
       </div>
     </div>
   </section>
@@ -1867,7 +1867,7 @@ function setTab(tab) {
     knowledge:'Conocimiento', qa:'Q&A', tune:'Tune AI', whatsapp:'WhatsApp',
     appearance:'Apariencia', deploy:'Deploy', billing:'Suscripción',
     citas:'Citas', equipo:'Equipo', servicios:'Servicios', horarios:'Horarios',
-    mensajes:'Recordatorios', instalacion:'Instalación', cuenta:'Cuenta',
+    mensajes:'Recordatorios y avisos', instalacion:'Instalación', cuenta:'Cuenta',
   };
   document.getElementById('pageTitle').textContent = titles[tab] || 'Panel';
   if (tab === 'chats')      loadChats();
@@ -4088,11 +4088,11 @@ document.getElementById('horBlockAddBtn').addEventListener('click', async () => 
 
 // ── MENSAJES ──────────────────────────────────────────────────────────
 const MSG_TEMPLATES = [
-  { key:'confirmacion', label:'Confirmación de cita', channels:false },
+  { key:'confirmacion', label:'Confirmación de cita', channels:true },
   { key:'reminder_24h', label:'Recordatorio 24 horas antes', channels:true },
   { key:'reminder_2h', label:'Recordatorio 2 horas antes', channels:true },
-  { key:'cancelled', label:'Cita cancelada', channels:false },
-  { key:'rescheduled', label:'Cita reprogramada', channels:false },
+  { key:'cancelled', label:'Cita cancelada', channels:true },
+  { key:'rescheduled', label:'Cita reprogramada', channels:true },
 ];
 let mensajesData = {};
 let mensajesEnabled = {};
@@ -4181,7 +4181,7 @@ function renderMsgChannels(tpl, key) {
     .map(part => `${part.label}: ${msgChannelMeta(part.key).reason || 'No disponible.'}`);
   return `
     <div style="margin:12px 0;">
-      <label class="field-label">Canales del recordatorio</label>
+      <label class="field-label">Canales del aviso</label>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">${controls}</div>
       ${notices.length ? `<div style="font-size:0.74rem; color:var(--soft-2); margin-top:6px;">${escapeHtml(notices.join(' · '))}</div>` : ''}
     </div>`;
@@ -4248,7 +4248,7 @@ function renderMensajesAccordions() {
 document.getElementById('mensajesGuardarBtn').addEventListener('click', async () => {
   try {
     await api('/auth/schedule', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(buildMensajesPayload()) });
-    toast('Recordatorios guardados', 'success'); loadMensajes();
+    toast('Avisos guardados', 'success'); loadMensajes();
   } catch(e) { toast(e.message, 'error'); }
 });
 

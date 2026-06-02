@@ -446,11 +446,12 @@ DEFAULT_MESSAGE_TEMPLATE_ENABLED = {
     "rescheduled": True,
 }
 
-REMINDER_MESSAGE_KINDS = {"reminder_24h", "reminder_2h"}
-
 DEFAULT_MESSAGE_TEMPLATE_CHANNELS = {
+    "confirmed": {"email": True, "whatsapp": False, "sms": False},
     "reminder_24h": {"email": True, "whatsapp": False, "sms": False},
     "reminder_2h": {"email": True, "whatsapp": False, "sms": False},
+    "cancelled": {"email": True, "whatsapp": False, "sms": False},
+    "rescheduled": {"email": True, "whatsapp": False, "sms": False},
 }
 
 MESSAGE_KIND_ALIASES = {
@@ -582,7 +583,7 @@ def _normalize_message_template_channels(raw_channels: Any) -> Dict[str, Dict[st
     channels = {key: dict(value) for key, value in DEFAULT_MESSAGE_TEMPLATE_CHANNELS.items()}
     if not isinstance(raw_channels, dict):
         return channels
-    for kind in REMINDER_MESSAGE_KINDS:
+    for kind in DEFAULT_MESSAGE_TEMPLATE_CHANNELS:
         raw_value = raw_channels.get(kind)
         if not isinstance(raw_value, dict):
             for raw_key, target_key in MESSAGE_KIND_ALIASES.items():
@@ -8567,6 +8568,8 @@ def _booking_message_text_for_channel(
     booking_row: sqlite3.Row,
     kind: str,
     request: Optional[Request] = None,
+    *,
+    extra_message: str = "",
 ) -> str:
     config = _get_client_config(booking_row["cliente_id"])
     text_body, _ = _booking_email_bodies(
@@ -8577,6 +8580,7 @@ def _booking_message_text_for_channel(
         config.get("contacto", {}).get("email", ""),
         config.get("contacto", {}).get("telefono", ""),
         config.get("booking", {}).get("message_templates", {}),
+        extra_message,
     )
     return text_body
 
@@ -8585,6 +8589,8 @@ async def _send_booking_whatsapp_reminder(
     booking_row: sqlite3.Row,
     kind: str,
     request: Optional[Request] = None,
+    *,
+    extra_message: str = "",
 ) -> bool:
     config = _get_client_config(booking_row["cliente_id"])
     whatsapp_cfg = config.get("whatsapp", {}) or {}
@@ -8596,7 +8602,7 @@ async def _send_booking_whatsapp_reminder(
         cliente_id=booking_row["cliente_id"],
         phone_number_id=phone_number_id,
         to_number=to_number,
-        text=_booking_message_text_for_channel(booking_row, kind, request),
+        text=_booking_message_text_for_channel(booking_row, kind, request, extra_message=extra_message),
     )
 
 
@@ -8604,6 +8610,8 @@ async def _send_booking_sms_reminder(
     booking_row: sqlite3.Row,
     kind: str,
     request: Optional[Request] = None,
+    *,
+    extra_message: str = "",
 ) -> bool:
     config = _get_client_config(booking_row["cliente_id"])
     voice_cfg = config.get("voice", {}) or {}
@@ -8619,7 +8627,7 @@ async def _send_booking_sms_reminder(
     return await _send_twilio_sms(
         to_number,
         from_number,
-        _booking_message_text_for_channel(booking_row, kind, request),
+        _booking_message_text_for_channel(booking_row, kind, request, extra_message=extra_message),
     )
 
 
@@ -10368,9 +10376,9 @@ async def _update_booking_details(
     )
     refreshed = _load_booking_or_404(booking_row["id"])
     try:
-        await _send_booking_email_by_kind(refreshed, "rescheduled" if slot_changed else "confirmed", request)
+        await _send_booking_reminder_by_kind(refreshed, "rescheduled" if slot_changed else "confirmed", request)
     except Exception as exc:  # noqa: BLE001
-        logger.error("No se ha podido enviar el email de actualizacion %s: %s", refreshed["id"], exc)
+        logger.error("No se ha podido enviar el aviso de actualizacion %s: %s", refreshed["id"], exc)
 
     return BookingActionResponse(
         ok=True,
@@ -10420,9 +10428,9 @@ async def _cancel_booking_core(
     )
     refreshed = _load_booking_or_404(booking_id)
     try:
-        await _send_booking_email_by_kind(refreshed, "cancelled", request, extra_message=cancel_reason)
+        await _send_booking_reminder_by_kind(refreshed, "cancelled", request, extra_message=cancel_reason)
     except Exception as exc:  # noqa: BLE001
-        logger.error("No se pudo enviar email de cancelacion %s: %s", booking_id, exc)
+        logger.error("No se pudo enviar aviso de cancelacion %s: %s", booking_id, exc)
     return refreshed
 
 
@@ -10817,9 +10825,22 @@ async def _send_booking_reminder_by_kind(
     request: Optional[Request] = None,
     *,
     sent_column: str = "",
+    extra_message: str = "",
+    respect_enabled: bool = True,
 ) -> None:
+    if kind not in DEFAULT_MESSAGE_TEMPLATE_CHANNELS:
+        await _send_booking_email_by_kind(
+            booking_row,
+            kind,
+            request,
+            sent_column=sent_column,
+            extra_message=extra_message,
+            respect_enabled=respect_enabled,
+        )
+        return
+
     config = _get_client_config(booking_row["cliente_id"])
-    if not _booking_email_enabled(config, kind):
+    if respect_enabled and not _booking_email_enabled(config, kind):
         if sent_column:
             _mark_booking_email_result(
                 booking_row["id"],
@@ -10830,7 +10851,7 @@ async def _send_booking_reminder_by_kind(
         _record_booking_audit(
             booking_row["id"],
             booking_row["cliente_id"],
-            "booking_reminder_skipped",
+            "booking_email_skipped",
             {"kind": kind, "reason": "disabled"},
         )
         return
@@ -10854,14 +10875,14 @@ async def _send_booking_reminder_by_kind(
         _record_booking_audit(
             booking_row["id"],
             booking_row["cliente_id"],
-            "booking_reminder_skipped",
+            "booking_email_skipped",
             {"kind": kind, "reason": "no_channels"},
         )
         return
 
     if channels.get("email"):
         try:
-            _send_booking_email(booking_row, kind, request)
+            _send_booking_email(booking_row, kind, request, extra_message=extra_message)
             sent_channels.append("email")
         except Exception as exc:  # noqa: BLE001
             failed_channels["email"] = str(exc)
@@ -10871,7 +10892,12 @@ async def _send_booking_reminder_by_kind(
             skipped_channels["whatsapp"] = str(availability.get("whatsapp", {}).get("reason", "No disponible."))
         else:
             try:
-                if await _send_booking_whatsapp_reminder(booking_row, kind, request):
+                if await _send_booking_whatsapp_reminder(
+                    booking_row,
+                    kind,
+                    request,
+                    extra_message=extra_message,
+                ):
                     sent_channels.append("whatsapp")
                 else:
                     failed_channels["whatsapp"] = "No se pudo entregar WhatsApp o falta telefono valido."
@@ -10883,7 +10909,12 @@ async def _send_booking_reminder_by_kind(
             skipped_channels["sms"] = str(availability.get("sms", {}).get("reason", "No disponible."))
         else:
             try:
-                if await _send_booking_sms_reminder(booking_row, kind, request):
+                if await _send_booking_sms_reminder(
+                    booking_row,
+                    kind,
+                    request,
+                    extra_message=extra_message,
+                ):
                     sent_channels.append("sms")
                 else:
                     failed_channels["sms"] = "No se pudo entregar SMS o falta telefono valido."
@@ -10902,18 +10933,19 @@ async def _send_booking_reminder_by_kind(
         _record_booking_audit(
             booking_row["id"],
             booking_row["cliente_id"],
-            "booking_reminder_sent",
+            "booking_email_sent",
             {
                 "kind": kind,
                 "channels": sent_channels,
                 "skipped": skipped_channels,
                 "failed": failed_channels,
+                "extra_message": bool(extra_message),
             },
         )
         return
 
     raise RuntimeError(
-        "No se ha podido enviar el recordatorio por ningun canal: "
+        "No se ha podido enviar el aviso por ningun canal: "
         + "; ".join(f"{name}: {err}" for name, err in failed_channels.items())
     )
 
@@ -13805,14 +13837,14 @@ async def auth_create_booking(
     booking_row = _get_booking_row_by_id(booking_id)
     if booking_row and email:
         try:
-            await _send_booking_email_by_kind(
+            await _send_booking_reminder_by_kind(
                 booking_row,
                 "confirmed",
                 request,
                 sent_column="confirmation_email_sent_at",
             )
         except Exception as exc:  # noqa: BLE001
-            logger.error("No se ha podido enviar el email de la cita manual %s: %s", booking_id, exc)
+            logger.error("No se ha podido enviar el aviso de la cita manual %s: %s", booking_id, exc)
             _mark_booking_email_result(booking_id, status="failed", error=str(exc))
 
     return BookingActionResponse(
@@ -13869,14 +13901,14 @@ async def auth_cancel_booking(
     )
     refreshed = _load_booking_or_404(booking_id)
     try:
-        await _send_booking_email_by_kind(
+        await _send_booking_reminder_by_kind(
             refreshed,
             "cancelled",
             request,
             extra_message=cancel_reason,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.error("No se ha podido enviar el email de cancelacion %s: %s", refreshed["id"], exc)
+        logger.error("No se ha podido enviar el aviso de cancelacion %s: %s", refreshed["id"], exc)
     return BookingActionResponse(
         ok=True,
         booking_id=booking_id,
@@ -15730,9 +15762,9 @@ async def admin_cancel_booking(booking_id: str, request: Request) -> BookingActi
     _record_booking_audit(booking_id, booking_row["cliente_id"], "booking_cancelled", {"source": "admin"})
     refreshed = _load_booking_or_404(booking_id)
     try:
-        await _send_booking_email_by_kind(refreshed, "cancelled", request)
+        await _send_booking_reminder_by_kind(refreshed, "cancelled", request)
     except Exception as exc:  # noqa: BLE001
-        logger.error("No se ha podido enviar el email de cancelacion %s: %s", booking_id, exc)
+        logger.error("No se ha podido enviar el aviso de cancelacion %s: %s", booking_id, exc)
     return BookingActionResponse(
         ok=True,
         booking_id=booking_id,
@@ -15882,9 +15914,9 @@ async def booking_manage_cancel(manage_token: str, request: Request) -> BookingA
     )
     refreshed = _load_booking_by_token_or_404(manage_token)
     try:
-        await _send_booking_email_by_kind(refreshed, "cancelled", request)
+        await _send_booking_reminder_by_kind(refreshed, "cancelled", request)
     except Exception as exc:  # noqa: BLE001
-        logger.error("No se ha podido enviar el email de cancelacion %s: %s", refreshed["id"], exc)
+        logger.error("No se ha podido enviar el aviso de cancelacion %s: %s", refreshed["id"], exc)
     return BookingActionResponse(
         ok=True,
         booking_id=refreshed["id"],
@@ -16295,14 +16327,14 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
     if booking_row:
         email_status_key = "confirmed"
         try:
-            await _send_booking_email_by_kind(
+            await _send_booking_reminder_by_kind(
                 booking_row,
                 email_status_key,
                 request,
                 sent_column="confirmation_email_sent_at",
             )
         except Exception as exc:  # noqa: BLE001
-            logger.error("No se ha podido enviar el email de booking %s: %s", booking_id, exc)
+            logger.error("No se ha podido enviar el aviso de booking %s: %s", booking_id, exc)
             _mark_booking_email_result(
                 booking_id,
                 status="failed",
@@ -17461,11 +17493,11 @@ async def _wa_create_booking(
         booking_row = _get_booking_row_by_id(booking_id)
         if booking_row:
             try:
-                await _send_booking_email_by_kind(
+                await _send_booking_reminder_by_kind(
                     booking_row, "confirmed", request, sent_column="confirmation_email_sent_at",
                 )
             except Exception as exc:  # noqa: BLE001
-                logger.error("Error enviando email confirmacion WA %s: %s", booking_id, exc)
+                logger.error("Error enviando aviso confirmacion WA %s: %s", booking_id, exc)
 
     except HTTPException as exc:
         await _send_whatsapp_text(
