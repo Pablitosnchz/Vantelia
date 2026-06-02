@@ -126,7 +126,7 @@ class BookingDetailPublic(BaseModel):
     manage_url: str = ""
     contact_email: str = ""
     contact_phone: str = ""
-    available_services: List[Dict[str, str]] = Field(default_factory=list)
+    available_services: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class BookingActionResponse(BaseModel):
@@ -148,6 +148,53 @@ class BookingReschedulePayload(BaseModel):
 
 class BookingCancelPayload(BaseModel):
     motivo: str = Field(default="", max_length=500)
+
+
+class BookingAttendancePayload(BaseModel):
+    attended: bool
+
+
+class ServicePublic(BaseModel):
+    id: str
+    nombre: str
+    descripcion: str = ""
+    duration_minutes: int = 30
+    price_cents: int = 0
+    price_label: str = ""
+    is_active: bool = True
+
+
+class ServicesResponse(BaseModel):
+    items: List[ServicePublic]
+
+
+class ServicePayload(BaseModel):
+    nombre: str = Field(min_length=1, max_length=120)
+    duration_minutes: int = Field(default=30, ge=5, le=600)
+    price_cents: int = Field(default=0, ge=0, le=10_000_000)
+    descripcion: str = Field(default="", max_length=500)
+    is_active: bool = True
+    sort_order: int = Field(default=0, ge=0, le=9999)
+
+
+class ServiceUpdatePayload(BaseModel):
+    nombre: Optional[str] = Field(default=None, max_length=120)
+    duration_minutes: Optional[int] = Field(default=None, ge=5, le=600)
+    price_cents: Optional[int] = Field(default=None, ge=0, le=10_000_000)
+    descripcion: Optional[str] = Field(default=None, max_length=500)
+    is_active: Optional[bool] = None
+    sort_order: Optional[int] = Field(default=None, ge=0, le=9999)
+
+
+class StaffBookingCreatePayload(BaseModel):
+    nombre: str = Field(min_length=1, max_length=120)
+    email: str = Field(default="", max_length=200)
+    telefono: str = Field(default="", max_length=40)
+    servicio: str = Field(default="", max_length=160)
+    employee_id: str = Field(default="", max_length=80)
+    fecha: str = Field(min_length=10, max_length=10)
+    hora: str = Field(min_length=5, max_length=5)
+    notas: str = Field(default="", max_length=1000)
 
 
 class BookingUpdatePayload(BaseModel):
@@ -852,10 +899,12 @@ class PortalBookingSummary(BaseModel):
     contact_email: str = ""
     contact_phone: str = ""
     booking_code: str = ""
+    completed_source: str = ""
     start_at: str = ""
     end_at: str = ""
     can_cancel: bool = True
     can_reschedule: bool = True
+    can_mark_attendance: bool = False
 
 
 class PortalBookingsResponse(BaseModel):

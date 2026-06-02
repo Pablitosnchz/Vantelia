@@ -85,6 +85,16 @@ npm run build
 python -m py_compile api.py auto_onboarding.py onboarding_utils.py
 ```
 
+QA E2E manual del portal (entorno AISLADO, no toca datos reales) — recorre todo
+lo que un cliente puede hacer (agenda web/portal/WhatsApp, servicios, IA, cerebro,
+Q&A, apariencia, leads, billing, equipo, horarios, asistencia, chats...). Crea
+config/storage/data temporales y un usuario cliente con plan business. Sale con
+codigo 1 si hay BUGs (500 o fallo real). Usar para probar "como usuario real":
+
+```powershell
+python scripts/qa_e2e.py
+```
+
 Backup local:
 
 ```powershell
@@ -242,6 +252,12 @@ El sistema soporta agenda interna por cliente. Antes de tocar booking, revisar:
 - Cancelacion, reprogramacion y timeline/auditoria.
 - Emails transaccionales y recordatorios.
 - Tests en `tests/test_api_smoke.py`.
+
+Catalogo de servicios con duracion y precio: tabla `services` (PK `cliente_id+slug`; slug = id normalizado del nombre, compatible con `employees.service_ids_json`). Se siembra desde `info.txt` la primera vez (`_ensure_services_seeded`). El parser `_extract_services_from_info` extrae el precio de la web (lineas "Precio:"/"Tarifa:" → `_parse_price_to_cents`, soporta "45 €", "60,50", "1.250 €", "A consultar"=0) y la duracion si aparece ("Duracion: 45 min"/"1 h" → `_parse_duration_minutes_text`); si no hay duracion, **30 min por defecto**. El prompt de onboarding (`onboarding_utils.py`) pide el formato Servicio/Precio/Duracion/Detalle por servicio. Endpoints portal (sesion; admin con `?cliente_id=`): `GET/POST /auth/services`, `PATCH/DELETE /auth/services/{slug}`. `GET /servicios/{cliente_id}` (publico) y `/disponibilidad` devuelven `duration_minutes` + `price_cents`/`price_label`. La disponibilidad es por intervalos: un servicio de N min ocupa N min sobre el grid (`slot_minutes` = paso) en TODOS los canales (widget, portal, WhatsApp); helpers `_service_duration_minutes`, `_booked_intervals`, `_interval_overlaps`. La cita guarda `service_id` + `service_price_cents` (snapshot). El email de confirmacion muestra "Servicio · N min · precio". UI: pestana "Servicios" en el portal + selector con duracion/precio en Nueva cita y en el widget. Editar un servicio no cambia su slug (mantiene enlaces). Tras tocar servicios/duracion, `npm run build` para el widget.
+
+Alta manual de cita desde el portal (walk-in / telefono): `POST /auth/bookings` (sesion portal; admin requiere `?cliente_id=`). Valida ventana + hueco libre del profesional, crea `confirmed` con `source='portal_manual'`, envia email de confirmacion si hay email. En la UI: boton "+ Nueva cita" y click en hueco vacio de la vista Dia (prefija fecha/hora/profesional).
+
+Estados de cita: `pending_review`, `confirmed`, `cancelled`, `completed`, `no_show`. Tras pasar la hora, `_auto_complete_past_bookings` pasa confirmadas/pendientes a `completed` con `completed_source='auto'` (presunta asistencia). El staff confirma asistencia real en el portal (vista Día → detalle): `POST /auth/bookings/{id}/attendance` `{attended: bool}` marca `completed`/`no_show` con `completed_source='manual'`; es corregible (auto→no_show, etc.). El badge distingue auto vs confirmado manual. `_portal_stats_for_user` expone `completed`, `no_show` y `attendance_rate`; el portal muestra la tira en la pestaña Citas.
 
 No enviar emails reales en pruebas. Usa entornos o credenciales dummy.
 

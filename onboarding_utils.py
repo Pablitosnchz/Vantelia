@@ -17,7 +17,7 @@ MODEL_CONTEXT_LIMIT = 160000
 REQUEST_TIMEOUT = 14
 MAX_PREVIEW_PAGES = 80
 DEFAULT_ONBOARDING_MODEL = os.getenv("ONBOARDING_MODEL", "gpt-4o-mini")
-MAX_DERIVED_FAQ_PAIRS = 5
+MAX_AUTO_FAQ_PAIRS = 5
 
 PRIORITY_SLUGS = (
     "faq", "faqs", "preguntas", "preguntas-frecuentes", "ayuda", "help", "soporte", "support",
@@ -365,6 +365,29 @@ def _faq_pairs_from_jsonld(items: list[dict]) -> list[tuple[str, str]]:
 
 
 _FAQ_CONTAINER_RE = re.compile(r"accordion|faq|toggle|collapse|question|preg", re.I)
+_FAQ_BAD_TEXT_RE = re.compile(
+    r"\b(cookie|cookies|consent|preferencias|estadisticas|estadísticas|marketing|"
+    r"google fonts|wordfence|almacenamiento|acceso tecnico|acceso técnico|"
+    r"funcional funcional|siempre activo)\b",
+    re.I,
+)
+_FAQ_QUESTION_START_RE = re.compile(
+    r"^(¿?\s*)?(que|qué|como|cómo|cuando|cuándo|donde|dónde|cual|cuál|"
+    r"cuanto|cuánto|puedo|podemos|hay|teneis|tenéis|ofrecen|hacen|"
+    r"se puede|necesito|tengo|debo|cancelo|reservo|agendo)\b",
+    re.I,
+)
+
+
+def _looks_like_faq_pair(question: str, answer: str) -> bool:
+    q = re.sub(r"\s+", " ", question or "").strip()
+    a = re.sub(r"\s+", " ", answer or "").strip()
+    if not (6 <= len(q) <= 300 and 8 <= len(a) <= 4000):
+        return False
+    joined = f"{q} {a}"
+    if _FAQ_BAD_TEXT_RE.search(joined):
+        return False
+    return "?" in q or bool(_FAQ_QUESTION_START_RE.search(q))
 
 
 def _faq_pairs_from_dom(soup: BeautifulSoup) -> list[tuple[str, str]]:
@@ -387,7 +410,7 @@ def _faq_pairs_from_dom(soup: BeautifulSoup) -> list[tuple[str, str]]:
     def _push(q: str, a: str) -> None:
         q = _clean_q(q)
         a = re.sub(r"\s+", " ", a or "").strip()
-        if not q or not a:
+        if not _looks_like_faq_pair(q, a):
             return
         key = q.lower()
         if key in seen:
@@ -567,7 +590,7 @@ def collect_site_content(base_url: str, max_paginas: int) -> tuple[list[str], st
         for q, a in (p.get("faq") or []):
             q_clean = re.sub(r"\s+", " ", (q or "")).strip()
             a_clean = re.sub(r"\s+", " ", (a or "")).strip()
-            if not q_clean or not a_clean:
+            if not _looks_like_faq_pair(q_clean, a_clean):
                 continue
             key = q_clean.lower()
             if key in seen_faq:
@@ -588,7 +611,7 @@ def collect_site_content(base_url: str, max_paginas: int) -> tuple[list[str], st
     aggregate = {
         "emails": sorted(all_emails)[:10],
         "phones": sorted(all_phones)[:10],
-        "faq_pairs": all_faq[:60],
+        "faq_pairs": all_faq[:MAX_AUTO_FAQ_PAIRS],
     }
 
     return links, all_text, detected_business_name, aggregate
@@ -664,7 +687,11 @@ HORARIOS:
 - Notas:
 
 SERVICIOS Y PRECIOS:
-- (Lista TODOS los servicios/planes/productos visibles. Para cada uno: Categoria / Servicio / Precio / Detalle.)
+- (Lista TODOS los servicios/planes/productos visibles en la web. Para CADA servicio usa este formato exacto, una linea por campo:)
+- Servicio: <nombre del servicio>
+  - Precio: <precio tal cual aparece en la web, p.ej. "45 €" o "Desde 30 €". Si no hay precio visible escribe "A consultar">
+  - Duracion: <duracion si aparece, p.ej. "45 min" o "1 h". Si no aparece, OMITE esta linea>
+  - Detalle: <descripcion breve del servicio>
 
 PROCESO COMERCIAL Y OPERATIVO:
 - Como funciona la atencion:
@@ -850,7 +877,7 @@ def run_onboarding(
         final_pairs = literal_pairs
         faq_source = "literal"
     else:
-        final_pairs = _parse_faq_section(info_txt)[:MAX_DERIVED_FAQ_PAIRS]
+        final_pairs = _parse_faq_section(info_txt)[:MAX_AUTO_FAQ_PAIRS]
         faq_source = "derived" if final_pairs else "none"
 
     # Strip LLM-rendered FAQ body so the only source of truth for FAQs is the

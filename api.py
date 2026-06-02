@@ -1026,6 +1026,9 @@ def _init_database() -> None:
                 customer_email_status TEXT NOT NULL DEFAULT '',
                 customer_email_last_error TEXT NOT NULL DEFAULT '',
                 booking_code TEXT NOT NULL DEFAULT '',
+                completed_source TEXT NOT NULL DEFAULT '',
+                service_id TEXT NOT NULL DEFAULT '',
+                service_price_cents INTEGER NOT NULL DEFAULT 0,
                 source TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )
@@ -1090,6 +1093,12 @@ def _init_database() -> None:
             )
         if "booking_code" not in columns:
             connection.execute("ALTER TABLE bookings ADD COLUMN booking_code TEXT NOT NULL DEFAULT ''")
+        if "completed_source" not in columns:
+            connection.execute("ALTER TABLE bookings ADD COLUMN completed_source TEXT NOT NULL DEFAULT ''")
+        if "service_id" not in columns:
+            connection.execute("ALTER TABLE bookings ADD COLUMN service_id TEXT NOT NULL DEFAULT ''")
+        if "service_price_cents" not in columns:
+            connection.execute("ALTER TABLE bookings ADD COLUMN service_price_cents INTEGER NOT NULL DEFAULT 0")
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_bookings_lookup
@@ -1186,6 +1195,29 @@ def _init_database() -> None:
             """
             CREATE INDEX IF NOT EXISTS idx_agenda_blocks_lookup
             ON agenda_blocks(cliente_id, employee_id, block_date, start_time)
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS services (
+                cliente_id TEXT NOT NULL,
+                slug TEXT NOT NULL,
+                name TEXT NOT NULL,
+                duration_minutes INTEGER NOT NULL DEFAULT 30,
+                price_cents INTEGER NOT NULL DEFAULT 0,
+                description TEXT NOT NULL DEFAULT '',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY (cliente_id, slug)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_services_lookup
+            ON services(cliente_id, is_active, sort_order, name)
             """
         )
         agenda_columns = {
@@ -2375,6 +2407,12 @@ from api_models import (
     BookingActionResponse,
     BookingReschedulePayload,
     BookingCancelPayload,
+    BookingAttendancePayload,
+    StaffBookingCreatePayload,
+    ServicePublic,
+    ServicesResponse,
+    ServicePayload,
+    ServiceUpdatePayload,
     BookingUpdatePayload,
     AdminBookingResumen,
     AdminReminderRunResult,
@@ -2541,16 +2579,134 @@ def _resolve_employee_for_booking(
     return row
 
 
-def _public_services_for_booking(cliente_id: str, employee_id: str = "") -> List[Dict[str, str]]:
+# ---------------------------------------------------------------------------
+# Catalogo de servicios (duracion + precio) por cliente
+# ---------------------------------------------------------------------------
+
+def _format_price_cents(cents: int) -> str:
+    cents = int(cents or 0)
+    if cents <= 0:
+        return ""
+    if cents % 100 == 0:
+        return f"{cents // 100} €"
+    return (f"{cents / 100:.2f}").replace(".", ",") + " €"
+
+
+def _service_row_to_public(row: sqlite3.Row) -> Dict[str, Any]:
+    price_cents = int(row["price_cents"] or 0)
+    return {
+        "id": row["slug"],
+        "nombre": row["name"],
+        "descripcion": row["description"] or "",
+        "duration_minutes": int(row["duration_minutes"] or 0),
+        "price_cents": price_cents,
+        "price_label": _format_price_cents(price_cents),
+        "is_active": bool(row["is_active"]),
+    }
+
+
+def _services_count(cliente_id: str) -> int:
+    with _get_db_connection() as connection:
+        return int(
+            connection.execute(
+                "SELECT COUNT(*) FROM services WHERE cliente_id = ?", (cliente_id,)
+            ).fetchone()[0]
+        )
+
+
+def _ensure_services_seeded(cliente_id: str) -> None:
+    """Siembra el catalogo desde info.txt si esta vacio (duracion = slot del
+    cliente, precio 0). Idempotente; mantiene los slug que ya usan los empleados."""
+    if _services_count(cliente_id) > 0:
+        return
+    seeded = _extract_services_from_info(cliente_id)
+    if not seeded:
+        return
+    now = _utc_now_iso()
+    with _get_db_connection() as connection:
+        for idx, svc in enumerate(seeded):
+            slug = _normalize_service_id(svc.get("nombre") or svc.get("id") or "")
+            if not slug:
+                continue
+            duration = int(svc.get("duration_minutes") or 0) or 30
+            price_cents = int(svc.get("price_cents") or 0)
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO services
+                (cliente_id, slug, name, duration_minutes, price_cents, description, is_active, sort_order, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                """,
+                (
+                    cliente_id, slug, _sanitize_text(svc.get("nombre") or slug),
+                    duration, price_cents, _sanitize_text(svc.get("descripcion") or "", allow_multiline=True),
+                    idx, now, now,
+                ),
+            )
+        connection.commit()
+
+
+def _list_service_rows(cliente_id: str, *, include_inactive: bool = False) -> List[sqlite3.Row]:
+    _ensure_services_seeded(cliente_id)
+    clauses = ["cliente_id = ?"]
+    params: List[Any] = [cliente_id]
+    if not include_inactive:
+        clauses.append("is_active = 1")
+    with _get_db_connection() as connection:
+        return connection.execute(
+            "SELECT * FROM services WHERE " + " AND ".join(clauses)
+            + " ORDER BY sort_order ASC, name COLLATE NOCASE ASC",
+            tuple(params),
+        ).fetchall()
+
+
+def _catalog_services(cliente_id: str, *, include_inactive: bool = False) -> List[Dict[str, Any]]:
+    return [_service_row_to_public(r) for r in _list_service_rows(cliente_id, include_inactive=include_inactive)]
+
+
+def _get_service_row(cliente_id: str, slug: str) -> Optional[sqlite3.Row]:
+    if not slug:
+        return None
+    with _get_db_connection() as connection:
+        return connection.execute(
+            "SELECT * FROM services WHERE cliente_id = ? AND slug = ? LIMIT 1",
+            (cliente_id, slug),
+        ).fetchone()
+
+
+def _find_service_by_name(cliente_id: str, name: str) -> Optional[sqlite3.Row]:
+    name_clean = _sanitize_text(name or "")
+    if not name_clean:
+        return None
+    row = _get_service_row(cliente_id, _normalize_service_id(name_clean))
+    if row:
+        return row
+    for candidate in _list_service_rows(cliente_id, include_inactive=True):
+        if _sanitize_text(candidate["name"]).lower() == name_clean.lower():
+            return candidate
+    return None
+
+
+def _service_duration_minutes(
+    cliente_id: str, servicio_name: str, employee_row: Optional[sqlite3.Row] = None
+) -> int:
+    row = _find_service_by_name(cliente_id, servicio_name) if servicio_name else None
+    if row and int(row["duration_minutes"] or 0) > 0:
+        return int(row["duration_minutes"])
+    if employee_row is not None:
+        return int(_employee_schedule_from_row(employee_row)["slot_minutes"])
+    return int(_employee_defaults_for_client(cliente_id).get("slot_minutes", 30) or 30)
+
+
+def _public_services_for_booking(cliente_id: str, employee_id: str = "") -> List[Dict[str, Any]]:
     if employee_id:
         employee_row = _get_employee_row(employee_id, cliente_id=cliente_id)
         return _services_for_employee(cliente_id, employee_row)
 
     public_rows = _list_public_employee_rows(cliente_id, include_inactive=False)
+    all_services = _catalog_services(cliente_id)
     if not public_rows:
-        return _extract_services_from_info(cliente_id)
+        return all_services
 
-    all_services = _extract_services_from_info(cliente_id)
     if any(not _employee_service_ids_from_row(row, cliente_id) for row in public_rows):
         return all_services
 
@@ -4851,6 +5007,7 @@ def _create_client_from_public_checkout(
     payload.contacto_email = customer.get("email", "")
     payload.contacto_telefono = customer.get("phone", "")
     save_result = _save_admin_client_payload(cliente_id, payload, request)
+    _seed_qa_from_onboarding(cliente_id, result)
     _ensure_default_employees_for_all_clients()
     _set_client_subscription(
         cliente_id,
@@ -8090,6 +8247,22 @@ def _booking_email_bodies(
     extra_message: str = "",
 ) -> Tuple[str, str]:
     service_name = booking_row["servicio"] or "Consulta"
+    try:
+        _svc_price_cents = int(booking_row["service_price_cents"] or 0)
+    except (KeyError, IndexError):
+        _svc_price_cents = 0
+    try:
+        _has_start = bool(booking_row["start_at"])
+    except (KeyError, IndexError):
+        _has_start = False
+    _svc_bits: List[str] = []
+    _svc_duration = _booking_row_duration_min(booking_row, booking_row["cliente_id"]) if _has_start else 0
+    if _svc_duration:
+        _svc_bits.append(f"{_svc_duration} min")
+    _svc_price_label = _format_price_cents(_svc_price_cents)
+    if _svc_price_label:
+        _svc_bits.append(_svc_price_label)
+    service_suffix = f" ({' · '.join(_svc_bits)})" if _svc_bits else ""
     when_text = _booking_datetime_display(booking_row)
     try:
         booking_code = (booking_row["booking_code"] or "").strip()
@@ -8142,7 +8315,7 @@ def _booking_email_bodies(
         f"{intro}\n\n"
         f"{codigo_line}"
         f"Empresa: {company_name}\n"
-        f"Servicio: {service_name}\n"
+        f"Servicio: {service_name}{service_suffix}\n"
         f"Fecha y hora: {when_text}\n"
         f"Zona horaria: {booking_row['timezone']}\n"
         f"{manage_line}"
@@ -8178,7 +8351,7 @@ def _booking_email_bodies(
         )
         + f'<ul style="margin:0 0 12px;padding-left:20px;line-height:1.8;">'
         f"<li><strong>Empresa:</strong> {escape(company_name)}</li>"
-        f"<li><strong>Servicio:</strong> {escape(service_name)}</li>"
+        f"<li><strong>Servicio:</strong> {escape(service_name + service_suffix)}</li>"
         f"<li><strong>Fecha y hora:</strong> {escape(when_text)}</li>"
         f"<li><strong>Zona horaria:</strong> {escape(booking_row['timezone'])}</li>"
         f"</ul>"
@@ -8288,12 +8461,14 @@ def _booking_start_end(
     hora: str,
     *,
     employee_id: str = "",
+    duration_minutes: Optional[int] = None,
 ) -> Tuple[datetime, datetime]:
     employee_row = _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
     schedule = _employee_schedule_from_row(employee_row)
     tzinfo = ZoneInfo(schedule["timezone"])
     start_local = datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M").replace(tzinfo=tzinfo)
-    end_local = start_local + timedelta(minutes=int(schedule["slot_minutes"]))
+    minutes = int(duration_minutes or schedule["slot_minutes"]) or int(schedule["slot_minutes"])
+    end_local = start_local + timedelta(minutes=minutes)
     return start_local, end_local
 
 
@@ -8894,6 +9069,10 @@ def _serialize_booking_row(row: sqlite3.Row, request: Optional[Request] = None) 
         "provider_booking_url": row["provider_booking_url"] or "",
         "manage_url": _booking_row_manage_url(row, request),
         "booking_code": row["booking_code"] or "",
+        "completed_source": row["completed_source"] or "",
+        "service_id": row["service_id"] or "",
+        "service_price_cents": int(row["service_price_cents"] or 0),
+        "service_price_label": _format_price_cents(int(row["service_price_cents"] or 0)),
         "start_at": row["start_at"] or "",
         "end_at": row["end_at"] or "",
         "created_at": row["created_at"],
@@ -8929,7 +9108,9 @@ def _validate_booking_window(cliente_id: str, selected_day: datetime) -> None:
         )
 
 
-def _build_slots_for_day(cliente_id: str, fecha: str, *, employee_id: str = "") -> List[str]:
+def _build_slots_for_day(
+    cliente_id: str, fecha: str, *, employee_id: str = "", duration_minutes: Optional[int] = None
+) -> List[str]:
     config = _get_client_config(cliente_id)
     if not config["booking"]["enabled"]:
         return []
@@ -8944,21 +9125,81 @@ def _build_slots_for_day(cliente_id: str, fecha: str, *, employee_id: str = "") 
     start_dt = datetime.combine(selected_day.date(), _parse_time(booking_cfg["day_start"]).time())
     end_dt = datetime.combine(selected_day.date(), _parse_time(booking_cfg["day_end"]).time())
     slot_minutes = booking_cfg["slot_minutes"]
+    span = int(duration_minutes or slot_minutes) or slot_minutes
 
     if end_dt <= start_dt:
         raise HTTPException(status_code=500, detail="Configuracion horaria invalida para este cliente")
 
+    # Paso del grid = slot_minutes; el hueco debe caber la duracion completa.
     slots: List[str] = []
     current = start_dt
-    while current + timedelta(minutes=slot_minutes) <= end_dt:
+    while current + timedelta(minutes=span) <= end_dt:
         slots.append(current.strftime("%H:%M"))
         current += timedelta(minutes=slot_minutes)
 
     return slots
 
 
-async def _available_slots_for_day(cliente_id: str, fecha: str, *, employee_id: str = "") -> List[str]:
-    return _build_slots_for_day(cliente_id, fecha, employee_id=employee_id)
+async def _available_slots_for_day(
+    cliente_id: str, fecha: str, *, employee_id: str = "", duration_minutes: Optional[int] = None
+) -> List[str]:
+    return _build_slots_for_day(cliente_id, fecha, employee_id=employee_id, duration_minutes=duration_minutes)
+
+
+def _time_to_min(value: Any) -> Optional[int]:
+    parts = str(value or "").split(":")
+    if len(parts) < 2 or not parts[0].isdigit() or not parts[1].isdigit():
+        return None
+    return int(parts[0]) * 60 + int(parts[1])
+
+
+def _booking_row_duration_min(row: sqlite3.Row, cliente_id: str) -> int:
+    start_at, end_at = row["start_at"], row["end_at"]
+    if start_at and end_at:
+        try:
+            ds = datetime.fromisoformat(start_at.replace("Z", "+00:00"))
+            de = datetime.fromisoformat(end_at.replace("Z", "+00:00"))
+            minutes = int((de - ds).total_seconds() // 60)
+            if minutes > 0:
+                return minutes
+        except ValueError:
+            pass
+    return _service_duration_minutes(cliente_id, row["servicio"] or "")
+
+
+def _booked_intervals(
+    cliente_id: str, fecha: str, *, employee_id: str = "", exclude_booking_id: str = ""
+) -> List[Tuple[int, int]]:
+    intervals: List[Tuple[int, int]] = []
+    for row in _active_booking_rows_for_day(cliente_id, fecha, employee_id=employee_id):
+        if exclude_booking_id and row["id"] == exclude_booking_id:
+            continue
+        start_min = _time_to_min(row["booking_time"])
+        if start_min is None:
+            continue
+        intervals.append((start_min, start_min + _booking_row_duration_min(row, cliente_id)))
+    return intervals
+
+
+def _blocked_intervals(cliente_id: str, fecha: str, *, employee_id: str = "") -> List[Tuple[int, int]]:
+    intervals: List[Tuple[int, int]] = []
+    for row in _list_agenda_blocks(
+        cliente_id,
+        employee_id=employee_id or "",
+        include_general=bool(employee_id),
+        date_from=fecha,
+        date_to=fecha,
+    ):
+        start_min = _time_to_min(row["start_time"])
+        end_min = _time_to_min(row["end_time"])
+        if start_min is None or end_min is None:
+            continue
+        intervals.append((start_min, end_min))
+    return intervals
+
+
+def _interval_overlaps(start_min: int, end_min: int, intervals: List[Tuple[int, int]]) -> bool:
+    return any(start_min < iv_end and end_min > iv_start for iv_start, iv_end in intervals)
 
 
 def _booked_slots(
@@ -9107,11 +9348,21 @@ def _blocked_slots(cliente_id: str, fecha: str, *, employee_id: str = "") -> Set
     return blocked
 
 
-async def _booking_slot_available(cliente_id: str, fecha: str, hora: str, *, employee_id: str = "") -> bool:
-    return (
-        hora in await _available_slots_for_day(cliente_id, fecha, employee_id=employee_id)
-        and hora not in _booked_slots(cliente_id, fecha, employee_id=employee_id)
-        and hora not in _blocked_slots(cliente_id, fecha, employee_id=employee_id)
+async def _booking_slot_available(
+    cliente_id: str, fecha: str, hora: str, *, employee_id: str = "", duration_minutes: Optional[int] = None
+) -> bool:
+    employee_row = _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
+    dur = int(duration_minutes or _employee_schedule_from_row(employee_row)["slot_minutes"])
+    start_min = _time_to_min(hora)
+    if start_min is None:
+        return False
+    grid = await _available_slots_for_day(cliente_id, fecha, employee_id=employee_id, duration_minutes=dur)
+    if hora not in grid:
+        return False
+    end_min = start_min + dur
+    return not (
+        _interval_overlaps(start_min, end_min, _booked_intervals(cliente_id, fecha, employee_id=employee_id))
+        or _interval_overlaps(start_min, end_min, _blocked_intervals(cliente_id, fecha, employee_id=employee_id))
     )
 
 
@@ -9122,17 +9373,23 @@ async def _booking_slot_available_for_reschedule(
     *,
     employee_id: str = "",
     exclude_booking_id: str,
+    duration_minutes: Optional[int] = None,
 ) -> bool:
-    booked = _booked_slots(
-        cliente_id,
-        fecha,
-        employee_id=employee_id,
-        exclude_booking_id=exclude_booking_id,
-    )
-    return (
-        hora in await _available_slots_for_day(cliente_id, fecha, employee_id=employee_id)
-        and hora not in booked
-        and hora not in _blocked_slots(cliente_id, fecha, employee_id=employee_id)
+    employee_row = _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
+    dur = int(duration_minutes or _employee_schedule_from_row(employee_row)["slot_minutes"])
+    start_min = _time_to_min(hora)
+    if start_min is None:
+        return False
+    grid = await _available_slots_for_day(cliente_id, fecha, employee_id=employee_id, duration_minutes=dur)
+    if hora not in grid:
+        return False
+    end_min = start_min + dur
+    return not (
+        _interval_overlaps(
+            start_min, end_min,
+            _booked_intervals(cliente_id, fecha, employee_id=employee_id, exclude_booking_id=exclude_booking_id),
+        )
+        or _interval_overlaps(start_min, end_min, _blocked_intervals(cliente_id, fecha, employee_id=employee_id))
     )
 
 
@@ -9172,9 +9429,9 @@ def _store_booking(record: Dict[str, Any]) -> None:
                 confirmed_at, cancelled_at, rescheduled_at, rescheduled_from_booking_id,
                 confirmation_email_sent_at, reminder_24h_sent_at, reminder_2h_sent_at,
                 customer_email_status, customer_email_last_error, booking_code,
-                source, created_at
+                service_id, service_price_cents, source, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record["id"],
@@ -9207,6 +9464,8 @@ def _store_booking(record: Dict[str, Any]) -> None:
                 record["customer_email_status"],
                 record["customer_email_last_error"],
                 record["booking_code"],
+                record.get("service_id", ""),
+                int(record.get("service_price_cents", 0) or 0),
                 record["source"],
                 record["created_at"],
             ),
@@ -9530,7 +9789,10 @@ def _portal_booking_summary_from_row(
     status_value = data["estado"]
     start_at_dt = _from_utc_iso(data["start_at"])
     is_past = bool(start_at_dt and start_at_dt < _utc_now())
-    can_edit = status_value not in {"cancelled", "completed"} and not is_past
+    can_edit = status_value not in {"cancelled", "completed", "no_show"} and not is_past
+    # La asistencia se marca en citas pasadas no canceladas; permite tambien
+    # corregir una completada-auto -> no_show (o viceversa) despues.
+    can_mark_attendance = status_value != "cancelled" and (is_past or status_value in {"completed", "no_show"})
     return PortalBookingSummary(
         booking_id=data["booking_id"],
         empresa=data["empresa"],
@@ -9550,10 +9812,12 @@ def _portal_booking_summary_from_row(
         contact_email=data["contact_email"],
         contact_phone=data["contact_phone"],
         booking_code=data.get("booking_code", ""),
+        completed_source=data.get("completed_source", ""),
         start_at=data["start_at"],
         end_at=data["end_at"],
         can_cancel=can_edit,
         can_reschedule=can_edit,
+        can_mark_attendance=can_mark_attendance,
     )
 
 
@@ -9707,16 +9971,29 @@ def _portal_stats_for_user(user: sqlite3.Row, cliente_id_override: str = "") -> 
             FROM bookings
             WHERE cliente_id = ?
               AND (
-                status IN ('cancelled', 'completed')
+                status IN ('cancelled', 'completed', 'no_show')
                 OR (start_at <> '' AND start_at < ?)
               )
             """,
             (target_client_id, _utc_now_iso()),
         ).fetchone()[0]
+        completed = connection.execute(
+            "SELECT COUNT(*) FROM bookings WHERE cliente_id = ? AND status = 'completed'",
+            (target_client_id,),
+        ).fetchone()[0]
+        no_show = connection.execute(
+            "SELECT COUNT(*) FROM bookings WHERE cliente_id = ? AND status = 'no_show'",
+            (target_client_id,),
+        ).fetchone()[0]
+        attendance_total = completed + no_show
+        attendance_rate = round(completed * 100 / attendance_total, 1) if attendance_total else None
         return {
             "total_bookings": total_bookings,
             "upcoming": upcoming,
             "history": history,
+            "completed": completed,
+            "no_show": no_show,
+            "attendance_rate": attendance_rate,
             "empresa": _get_client_config(target_client_id)["nombre"] if target_client_id else "",
         }
 
@@ -9804,6 +10081,8 @@ async def _update_booking_details(
         raise HTTPException(status_code=409, detail="No se puede modificar una cita cancelada.")
     if booking_row["status"] == "completed":
         raise HTTPException(status_code=409, detail="No se puede modificar una cita completada.")
+    if booking_row["status"] == "no_show":
+        raise HTTPException(status_code=409, detail="No se puede modificar una cita marcada como no asistida.")
 
     booking_date_dt = _parse_date(data.fecha)
     _validate_booking_window(booking_row["cliente_id"], booking_date_dt)
@@ -9819,6 +10098,10 @@ async def _update_booking_details(
             status_code=400,
             detail="El servicio seleccionado no esta disponible para ese profesional.",
         )
+    service_row = _find_service_by_name(booking_row["cliente_id"], data.servicio)
+    service_duration = _service_duration_minutes(booking_row["cliente_id"], data.servicio, target_employee)
+    service_id = service_row["slug"] if service_row else ""
+    service_price = int(service_row["price_cents"]) if service_row else 0
     employee_changed = (target_employee["id"] or "") != (booking_row["employee_id"] or "")
     slot_changed = (
         booking_date != booking_row["booking_date"]
@@ -9832,6 +10115,7 @@ async def _update_booking_details(
         booking_time,
         employee_id=target_employee["id"],
         exclude_booking_id=booking_row["id"],
+        duration_minutes=service_duration,
     ):
         raise HTTPException(status_code=409, detail="Ese horario ya no esta disponible. Elige otro tramo.")
 
@@ -9840,6 +10124,7 @@ async def _update_booking_details(
         booking_date,
         booking_time,
         employee_id=target_employee["id"],
+        duration_minutes=service_duration,
     )
     provider_result = (
         await _reschedule_provider_booking(booking_row, fecha=booking_date, hora=booking_time)
@@ -9866,6 +10151,8 @@ async def _update_booking_details(
         "booking_time": booking_time,
         "start_at": _to_utc_iso(start_local),
         "end_at": _to_utc_iso(end_local),
+        "service_id": service_id,
+        "service_price_cents": service_price,
         "status": "confirmed",
         "provider_status": provider_result.status,
         "provider_booking_id": provider_result.provider_booking_id,
@@ -10141,12 +10428,12 @@ def _booking_manage_page(booking: BookingDetailPublic, *, viewer: str = "custome
     const slotGrid = document.getElementById("slot-grid");
     const sectionCards = Array.from(document.querySelectorAll(".section-card"));
     const chooserButtons = Array.from(document.querySelectorAll("[data-panel-target]"));
-    if (BOOKING.estado === "cancelled" || BOOKING.estado === "completed") {{
+    if (BOOKING.estado === "cancelled" || BOOKING.estado === "completed" || BOOKING.estado === "no_show") {{
       if (actionChooser) actionChooser.style.display = "none";
       reschedulePanel.style.display = "none";
       statusEl.textContent = BOOKING.estado === "cancelled"
         ? "Esta cita ya esta cancelada y no admite cambios desde este enlace."
-        : "Esta cita ya esta completada y no admite cambios desde este enlace.";
+        : "Esta cita ya esta cerrada y no admite cambios desde este enlace.";
     }}
     function openPanel(panelId) {{
       sectionCards.forEach((section) => {{
@@ -10368,7 +10655,7 @@ def _auto_complete_past_bookings() -> int:
         ).fetchall()
         for row in rows:
             connection.execute(
-                "UPDATE bookings SET status = 'completed' WHERE id = ?",
+                "UPDATE bookings SET status = 'completed', completed_source = 'auto' WHERE id = ?",
                 (row["id"],),
             )
             connection.execute(
@@ -10496,7 +10783,46 @@ async def _create_provider_booking(
     )
 
 
-def _extract_services_from_info(cliente_id: str) -> List[Dict[str, str]]:
+def _parse_price_to_cents(text: str) -> int:
+    """Extrae un precio (en centimos) de un texto libre tipo '40€', '60,50',
+    '1.250 €', 'desde 30'. Devuelve 0 si no hay numero ('a consultar', 'gratis')."""
+    match = re.search(r"\d[\d.,]*", str(text or ""))
+    if not match:
+        return 0
+    raw = match.group(0)
+    if "," in raw and "." in raw:
+        raw = raw.replace(".", "").replace(",", ".")
+    elif "," in raw:
+        raw = raw.replace(",", ".")
+    elif raw.count(".") > 1:
+        raw = raw.replace(".", "")
+    elif "." in raw:
+        _, _, dec = raw.partition(".")
+        if len(dec) == 3:  # '1.250' = separador de miles, no decimal
+            raw = raw.replace(".", "")
+    try:
+        value = float(raw)
+    except ValueError:
+        return 0
+    if value <= 0:
+        return 0
+    return int(round(value * 100))
+
+
+def _parse_duration_minutes_text(text: str) -> int:
+    """Extrae una duracion en minutos de un texto ('45 min', '1h', '1h 30')."""
+    s = str(text or "").lower()
+    total = 0
+    match_h = re.search(r"(\d+)\s*(?:h|hora|horas)\b", s)
+    match_m = re.search(r"(\d+)\s*(?:min|minuto|minutos|')", s)
+    if match_h:
+        total += int(match_h.group(1)) * 60
+    if match_m:
+        total += int(match_m.group(1))
+    return total if total > 0 else 0
+
+
+def _extract_services_from_info(cliente_id: str) -> List[Dict[str, Any]]:
     ruta_info = DATA_DIR / cliente_id / "info.txt"
     if not ruta_info.exists():
         return []
@@ -10513,7 +10839,7 @@ def _extract_services_from_info(cliente_id: str) -> List[Dict[str, str]]:
         if not service_id:
             current = None
             return
-        current = {"id": service_id, "nombre": nombre.strip(), "descripcion": ""}
+        current = {"id": service_id, "nombre": nombre.strip(), "descripcion": "", "price_cents": 0, "duration_minutes": 0}
         if current_category:
             current["descripcion"] = f"Categoria: {current_category}"
         servicios.append(current)
@@ -10525,6 +10851,15 @@ def _extract_services_from_info(cliente_id: str) -> List[Dict[str, str]]:
         if not clean:
             return
         prefix = _sanitize_text(str(label or "")).strip()
+        prefix_lower = prefix.lower()
+        if ("precio" in prefix_lower or "tarifa" in prefix_lower) and not current.get("price_cents"):
+            cents = _parse_price_to_cents(clean)
+            if cents:
+                current["price_cents"] = cents
+        if ("duracion" in prefix_lower or "duración" in prefix_lower) and not current.get("duration_minutes"):
+            minutes = _parse_duration_minutes_text(clean)
+            if minutes:
+                current["duration_minutes"] = minutes
         detail = f"{prefix}: {clean}" if prefix else clean
         existing = str(current.get("descripcion") or "").strip()
         current["descripcion"] = f"{existing}\n{detail}".strip() if existing else detail
@@ -10627,8 +10962,8 @@ def _replace_services_section(info_txt: str, items: List[Dict[str, str]]) -> str
     return "\n".join(next_lines).strip() + "\n"
 
 
-def _services_for_employee(cliente_id: str, employee_row: Optional[sqlite3.Row]) -> List[Dict[str, str]]:
-    services = _extract_services_from_info(cliente_id)
+def _services_for_employee(cliente_id: str, employee_row: Optional[sqlite3.Row]) -> List[Dict[str, Any]]:
+    services = _catalog_services(cliente_id)
     if not employee_row:
         return services
     service_ids = _employee_service_ids_from_row(employee_row, cliente_id)
@@ -10646,7 +10981,7 @@ def _service_name_allowed_for_employee(cliente_id: str, employee_row: sqlite3.Ro
         return True
     allowed_services = _services_for_employee(cliente_id, employee_row)
     if not allowed_services:
-        return not _extract_services_from_info(cliente_id)
+        return not _catalog_services(cliente_id)
     return any(_sanitize_text(service.get("nombre")) == normalized_name for service in allowed_services)
 
 
@@ -10661,11 +10996,20 @@ async def _public_slot_sets_for_day(
     for employee_row in _list_public_employee_rows(cliente_id, include_inactive=False):
         if servicio and not _service_name_allowed_for_employee(cliente_id, employee_row, servicio):
             continue
-        employee_slots = await _available_slots_for_day(cliente_id, fecha, employee_id=employee_row["id"])
-        occupied = _booked_slots(cliente_id, fecha, employee_id=employee_row["id"])
-        occupied.update(_blocked_slots(cliente_id, fecha, employee_id=employee_row["id"]))
+        dur = _service_duration_minutes(cliente_id, servicio, employee_row)
+        employee_slots = await _available_slots_for_day(
+            cliente_id, fecha, employee_id=employee_row["id"], duration_minutes=dur
+        )
+        booked = _booked_intervals(cliente_id, fecha, employee_id=employee_row["id"])
+        blocked = _blocked_intervals(cliente_id, fecha, employee_id=employee_row["id"])
         all_slots.update(employee_slots)
-        available_slots.update(slot for slot in employee_slots if slot not in occupied)
+        for slot in employee_slots:
+            start_min = _time_to_min(slot)
+            if start_min is None:
+                continue
+            end_min = start_min + dur
+            if not _interval_overlaps(start_min, end_min, booked) and not _interval_overlaps(start_min, end_min, blocked):
+                available_slots.add(slot)
     return all_slots, available_slots
 
 
@@ -10701,7 +11045,8 @@ async def _resolve_public_booking_employee(
 
     available_candidates: List[sqlite3.Row] = []
     for row in candidates:
-        if await _booking_slot_available(cliente_id, fecha, hora, employee_id=row["id"]):
+        dur = _service_duration_minutes(cliente_id, servicio, row)
+        if await _booking_slot_available(cliente_id, fecha, hora, employee_id=row["id"], duration_minutes=dur):
             available_candidates.append(row)
 
     if not available_candidates:
@@ -11061,7 +11406,7 @@ async def onboarding_learn(
             result.info_txt,
             user["id"],
             explicit_pairs=explicit_pairs,
-            max_pairs=(None if faq_source == "literal" else 5),
+            max_pairs=AUTO_QA_MAX_PAIRS,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Auto-Q&A en onboarding fallo para %s: %s", cliente_id, exc)
@@ -12100,6 +12445,31 @@ def _extract_faq_pairs_from_info(info_txt: str) -> List[Tuple[str, str]]:
     return pairs[:50]
 
 
+_AUTO_QA_BAD_TEXT_RE = re.compile(
+    r"\b(cookie|cookies|consent|preferencias|estadisticas|estadísticas|marketing|"
+    r"google fonts|wordfence|almacenamiento|acceso tecnico|acceso técnico|"
+    r"funcional funcional|siempre activo)\b",
+    re.IGNORECASE,
+)
+_AUTO_QA_QUESTION_START_RE = re.compile(
+    r"^(¿?\s*)?(que|qué|como|cómo|cuando|cuándo|donde|dónde|cual|cuál|"
+    r"cuanto|cuánto|puedo|podemos|hay|teneis|tenéis|ofrecen|hacen|"
+    r"se puede|necesito|tengo|debo|cancelo|reservo|agendo)\b",
+    re.IGNORECASE,
+)
+AUTO_QA_MAX_PAIRS = 5
+
+
+def _looks_like_auto_qa_pair(question: str, answer: str) -> bool:
+    q = re.sub(r"\s+", " ", question or "").strip()
+    a = re.sub(r"\s+", " ", answer or "").strip()
+    if not (6 <= len(q) <= 300 and 8 <= len(a) <= 4000):
+        return False
+    if _AUTO_QA_BAD_TEXT_RE.search(f"{q} {a}"):
+        return False
+    return "?" in q or bool(_AUTO_QA_QUESTION_START_RE.search(q))
+
+
 def _autocreate_qa_from_info(
     cliente_id: str,
     info_txt: str,
@@ -12124,6 +12494,7 @@ def _autocreate_qa_from_info(
         and a
         and "sin preguntas frecuentes" not in q.lower()
         and not q.strip().startswith("(")
+        and _looks_like_auto_qa_pair(q, a)
     ]
     if not pairs:
         return 0
@@ -12166,6 +12537,26 @@ def _autocreate_qa_from_info(
     if created:
         _maybe_regenerate_info_with_qa(cliente_id)
     return created
+
+
+def _seed_qa_from_onboarding(cliente_id: str, result: Any, user_id: Any = "") -> int:
+    """Siembra kb_qa con las FAQ extraidas por el scraper. run_onboarding() quita
+    la seccion FAQ del info.txt y la devuelve en result.faq_pairs, asi que CUALQUIER
+    flujo que regenere el cerebro (rebrain, alta-express, Stripe) debe llamar a esto
+    o las preguntas frecuentes quedarian vacias en el panel."""
+    try:
+        pairs = list(getattr(result, "faq_pairs", []) or [])
+        src = str(getattr(result, "faq_source", "") or "").lower()
+        return _autocreate_qa_from_info(
+            cliente_id,
+            getattr(result, "info_txt", "") or "",
+            user_id,
+            explicit_pairs=pairs,
+            max_pairs=AUTO_QA_MAX_PAIRS,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Auto-Q&A desde onboarding fallo para %s: %s", cliente_id, exc)
+        return 0
 
 
 @app.get("/auth/app/knowledge", response_model=AppKnowledgeListResponse)
@@ -12303,7 +12694,7 @@ async def app_knowledge_add_url(
             result.info_txt,
             user["id"],
             explicit_pairs=explicit_pairs,
-            max_pairs=(5 if faq_source != "literal" else None),
+            max_pairs=AUTO_QA_MAX_PAIRS,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Auto-Q&A extraction failed for %s: %s", cliente_id, exc)
@@ -12865,12 +13256,16 @@ async def auth_list_employees(
     return _portal_employees_for_client(_portal_client_id_or_403(user, cliente_id))
 
 
-@app.get("/auth/services")
+@app.get("/auth/services", response_model=ServicesResponse)
 async def auth_list_services(
     cliente_id: str = "",
+    include_inactive: bool = True,
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
-) -> Dict[str, List[Dict[str, str]]]:
-    return {"items": _extract_services_from_info(_portal_client_id_or_403(user, cliente_id))}
+) -> ServicesResponse:
+    target_client_id = _portal_client_id_or_403(user, cliente_id)
+    return ServicesResponse(
+        items=[ServicePublic(**svc) for svc in _catalog_services(target_client_id, include_inactive=include_inactive)]
+    )
 
 
 @app.post("/auth/employees", response_model=PortalEmployeePublic)
@@ -12947,6 +13342,145 @@ async def auth_delete_employee_block(
     return AuthSimpleResponse(ok=True, message="Bloqueo del profesional eliminado correctamente.")
 
 
+@app.post("/auth/bookings", response_model=BookingActionResponse)
+async def auth_create_booking(
+    data: StaffBookingCreatePayload,
+    request: Request,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> BookingActionResponse:
+    """Alta manual de cita desde el portal (walk-in / cita por telefono)."""
+    target_client_id = _portal_client_id_or_403(user, cliente_id)
+    config = _get_client_config(target_client_id)
+    if not config["booking"]["enabled"]:
+        raise HTTPException(status_code=409, detail="La agenda no esta activada para este cliente.")
+
+    booking_date_dt = _parse_date(data.fecha)
+    _validate_booking_window(target_client_id, booking_date_dt)
+    booking_date = booking_date_dt.strftime("%Y-%m-%d")
+    booking_time = _parse_time(data.hora).strftime("%H:%M")
+    nombre = _sanitize_text(data.nombre)
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre del cliente es obligatorio.")
+    email = _sanitize_text(data.email)
+    telefono = _sanitize_text(data.telefono)
+    servicio = _sanitize_text(data.servicio)
+    notas = _sanitize_text(data.notas, allow_multiline=True)
+
+    employee_row = _resolve_employee_for_booking(target_client_id, data.employee_id, require_active=False)
+    service_row = _find_service_by_name(target_client_id, servicio)
+    service_duration = _service_duration_minutes(target_client_id, servicio, employee_row)
+    service_id = service_row["slug"] if service_row else ""
+    service_price = int(service_row["price_cents"]) if service_row else 0
+
+    # Limites de plan (salvo override admin del portal).
+    if not _is_admin_client_portal_override(user, cliente_id):
+        _require_active_subscription(target_client_id)
+        booking_limit = _plan_limits(_client_plan(target_client_id)).get("monthly_bookings")
+        if booking_limit is not None and _count_bookings_this_month(target_client_id) >= int(booking_limit):
+            raise HTTPException(
+                status_code=429,
+                detail="Se ha alcanzado el limite mensual de citas del plan.",
+            )
+
+    if not await _booking_slot_available(
+        target_client_id, booking_date, booking_time,
+        employee_id=employee_row["id"], duration_minutes=service_duration,
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Ese horario no esta disponible para el profesional seleccionado.",
+        )
+
+    booking_id = f"bk_{secrets.token_urlsafe(10)}"
+    manage_token = _generate_manage_token()
+    created_at = _utc_now_iso()
+    start_local, end_local = _booking_start_end(
+        target_client_id, booking_date, booking_time,
+        employee_id=employee_row["id"], duration_minutes=service_duration,
+    )
+    booking_timezone = employee_row["timezone"] or config["booking"]["timezone"]
+
+    record = {
+        "id": booking_id,
+        "cliente_id": target_client_id,
+        "employee_id": employee_row["id"],
+        "employee_name": employee_row["name"],
+        "nombre": nombre,
+        "email": email,
+        "telefono": telefono,
+        "servicio": servicio,
+        "booking_date": booking_date,
+        "booking_time": booking_time,
+        "notas": notas,
+        "status": "confirmed",
+        "provider_name": "internal",
+        "provider_status": "internal",
+        "provider_booking_id": "",
+        "provider_booking_url": "",
+        "manage_token": manage_token,
+        "timezone": booking_timezone,
+        "start_at": _to_utc_iso(start_local),
+        "end_at": _to_utc_iso(end_local),
+        "confirmed_at": created_at,
+        "cancelled_at": "",
+        "rescheduled_at": "",
+        "rescheduled_from_booking_id": "",
+        "confirmation_email_sent_at": "",
+        "reminder_24h_sent_at": "",
+        "reminder_2h_sent_at": "",
+        "customer_email_status": "",
+        "customer_email_last_error": "",
+        "service_id": service_id,
+        "service_price_cents": service_price,
+        "source": "portal_manual",
+        "created_at": created_at,
+    }
+    try:
+        _store_booking(record)
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ese horario acaba de ocuparse. Elige otro tramo.",
+        ) from exc
+    _record_booking_audit(
+        booking_id,
+        target_client_id,
+        "booking_created",
+        {
+            "status": "confirmed",
+            "source": "portal_manual",
+            "role": user["role"],
+            "user_id": user["id"],
+            "employee_id": employee_row["id"],
+            "employee_name": employee_row["name"],
+        },
+    )
+
+    booking_row = _get_booking_row_by_id(booking_id)
+    if booking_row and email:
+        try:
+            await _send_booking_email_by_kind(
+                booking_row,
+                "confirmed",
+                request,
+                sent_column="confirmation_email_sent_at",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error("No se ha podido enviar el email de la cita manual %s: %s", booking_id, exc)
+            _mark_booking_email_result(booking_id, status="failed", error=str(exc))
+
+    return BookingActionResponse(
+        ok=True,
+        booking_id=booking_id,
+        estado="confirmed",
+        mensaje="Cita creada correctamente.",
+        employee_id=employee_row["id"],
+        employee_name=employee_row["name"],
+        manage_url=_build_booking_manage_url(manage_token, request),
+    )
+
+
 @app.post("/auth/bookings/{booking_id}/cancel", response_model=BookingActionResponse)
 async def auth_cancel_booking(
     booking_id: str,
@@ -13003,6 +13537,47 @@ async def auth_cancel_booking(
         booking_id=booking_id,
         estado="cancelled",
         mensaje="La cita ha sido cancelada correctamente.",
+        manage_url=_booking_row_manage_url(refreshed, request),
+        provider_booking_url=refreshed["provider_booking_url"] or "",
+    )
+
+
+@app.post("/auth/bookings/{booking_id}/attendance", response_model=BookingActionResponse)
+async def auth_mark_booking_attendance(
+    booking_id: str,
+    data: BookingAttendancePayload,
+    request: Request,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> BookingActionResponse:
+    booking_row = _load_booking_or_404(booking_id)
+    if user["role"] != "admin" and booking_row["cliente_id"] != user["cliente_id"]:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
+    if booking_row["status"] == "cancelled":
+        raise HTTPException(status_code=409, detail="No se puede marcar la asistencia de una cita cancelada.")
+    start_at = booking_row["start_at"] or ""
+    if start_at:
+        start_dt = _from_utc_iso(start_at)
+        if start_dt and start_dt > _utc_now():
+            raise HTTPException(status_code=409, detail="La cita aun no ha ocurrido; no se puede marcar la asistencia.")
+    new_status = "completed" if data.attended else "no_show"
+    _update_booking_record(booking_id, status=new_status, completed_source="manual")
+    _record_booking_audit(
+        booking_id,
+        booking_row["cliente_id"],
+        "booking_completed" if data.attended else "booking_no_show",
+        {
+            "source": "portal",
+            "role": user["role"],
+            "user_id": user["id"],
+            "attended": bool(data.attended),
+        },
+    )
+    refreshed = _load_booking_or_404(booking_id)
+    return BookingActionResponse(
+        ok=True,
+        booking_id=booking_id,
+        estado=new_status,
+        mensaje="Cita marcada como realizada." if data.attended else "Cita marcada como no asistida.",
         manage_url=_booking_row_manage_url(refreshed, request),
         provider_booking_url=refreshed["provider_booking_url"] or "",
     )
@@ -13778,6 +14353,7 @@ async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGene
     detected_business_name = empresa_clean
     info_txt = manual_info
     allowed_origins: List[str] = []
+    scrape_result = None
 
     base_app = (APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
     allowed_origins.append(base_app)
@@ -13858,6 +14434,8 @@ async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGene
 
     try:
         await asyncio.to_thread(_save_admin_client_payload, cliente_id, payload, request)
+        if scrape_result is not None:
+            _seed_qa_from_onboarding(cliente_id, scrape_result)
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -14285,6 +14863,7 @@ async def admin_alta_express(
     save_result = None
     if data.auto_save:
         save_result = _save_admin_client_payload(cliente_id, payload, request)
+        _seed_qa_from_onboarding(cliente_id, result)
 
     return AdminAltaExpressResponse(
         cliente_id=cliente_id,
@@ -15139,14 +15718,25 @@ async def disponibilidad(
     try:
         if employee_id:
             employee_row = _resolve_employee_for_booking(cliente_id, employee_id)
-            slots = await _available_slots_for_day(cliente_id, fecha, employee_id=employee_row["id"])
-            occupied = _booked_slots(cliente_id, fecha, employee_id=employee_row["id"])
-            occupied.update(_blocked_slots(cliente_id, fecha, employee_id=employee_row["id"]))
+            dur = _service_duration_minutes(cliente_id, _sanitize_text(servicio), employee_row)
+            slots = await _available_slots_for_day(
+                cliente_id, fecha, employee_id=employee_row["id"], duration_minutes=dur
+            )
+            booked = _booked_intervals(cliente_id, fecha, employee_id=employee_row["id"])
+            blocked = _blocked_intervals(cliente_id, fecha, employee_id=employee_row["id"])
+
+            def _slot_free(hora: str) -> bool:
+                start_min = _time_to_min(hora)
+                if start_min is None:
+                    return False
+                end_min = start_min + dur
+                return not _interval_overlaps(start_min, end_min, booked) and not _interval_overlaps(start_min, end_min, blocked)
+
             return RespuestaDisponibilidad(
                 fecha=fecha,
                 timezone=employee_row["timezone"] or config["booking"]["timezone"],
                 employee_id=employee_row["id"],
-                slots=[SlotDisponibilidad(hora=hora, disponible=hora not in occupied) for hora in slots],
+                slots=[SlotDisponibilidad(hora=hora, disponible=_slot_free(hora)) for hora in slots],
             )
 
         all_slots, available_slots = await _public_slot_sets_for_day(
@@ -15213,6 +15803,20 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
         servicio=servicio,
     )
 
+    service_row = _find_service_by_name(data.cliente_id, servicio)
+    service_duration = _service_duration_minutes(data.cliente_id, servicio, employee_row)
+    service_id = service_row["slug"] if service_row else ""
+    service_price = int(service_row["price_cents"]) if service_row else 0
+
+    if not await _booking_slot_available(
+        data.cliente_id, booking_date, booking_time,
+        employee_id=employee_row["id"], duration_minutes=service_duration,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ese horario ya no esta disponible. Elige otro tramo.",
+        )
+
     booking_id = f"bk_{secrets.token_urlsafe(10)}"
     manage_token = _generate_manage_token()
     created_at = _utc_now_iso()
@@ -15222,6 +15826,7 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
         booking_date,
         booking_time,
         employee_id=employee_row["id"],
+        duration_minutes=service_duration,
     )
     booking_timezone = employee_row["timezone"] or config["booking"]["timezone"]
 
@@ -15316,6 +15921,8 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
         "reminder_2h_sent_at": "",
         "customer_email_status": "",
         "customer_email_last_error": "",
+        "service_id": service_id,
+        "service_price_cents": service_price,
         "source": "widget",
         "created_at": created_at,
     }
@@ -15378,10 +15985,98 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
 
 
 @app.get("/servicios/{cliente_id}")
-async def servicios(cliente_id: str, request: Request, employee_id: str = "") -> Dict[str, List[Dict[str, str]]]:
+async def servicios(cliente_id: str, request: Request, employee_id: str = "") -> Dict[str, List[Dict[str, Any]]]:
     _assert_valid_client_id(cliente_id)
     _enforce_allowed_origin(request, cliente_id)
     return {"servicios": _public_services_for_booking(cliente_id, employee_id)}
+
+
+@app.post("/auth/services", response_model=ServicePublic)
+async def auth_create_service(
+    data: ServicePayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> ServicePublic:
+    target_client_id = _portal_client_id_or_403(user, cliente_id)
+    _ensure_services_seeded(target_client_id)
+    name = _sanitize_text(data.nombre)
+    slug = _normalize_service_id(name)
+    if not name or not slug:
+        raise HTTPException(status_code=400, detail="Nombre de servicio invalido.")
+    if _get_service_row(target_client_id, slug):
+        raise HTTPException(status_code=409, detail="Ya existe un servicio con ese nombre.")
+    now = _utc_now_iso()
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO services
+            (cliente_id, slug, name, duration_minutes, price_cents, description, is_active, sort_order, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                target_client_id, slug, name, int(data.duration_minutes), int(data.price_cents),
+                _sanitize_text(data.descripcion, allow_multiline=True),
+                1 if data.is_active else 0, int(data.sort_order), now, now,
+            ),
+        )
+        connection.commit()
+    return ServicePublic(**_service_row_to_public(_get_service_row(target_client_id, slug)))
+
+
+@app.patch("/auth/services/{slug}", response_model=ServicePublic)
+async def auth_update_service(
+    slug: str,
+    data: ServiceUpdatePayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> ServicePublic:
+    target_client_id = _portal_client_id_or_403(user, cliente_id)
+    row = _get_service_row(target_client_id, slug)
+    if not row:
+        raise HTTPException(status_code=404, detail="Servicio no encontrado.")
+    updates: Dict[str, Any] = {}
+    if data.nombre is not None:
+        name = _sanitize_text(data.nombre)
+        if not name:
+            raise HTTPException(status_code=400, detail="Nombre de servicio invalido.")
+        updates["name"] = name
+    if data.duration_minutes is not None:
+        updates["duration_minutes"] = int(data.duration_minutes)
+    if data.price_cents is not None:
+        updates["price_cents"] = int(data.price_cents)
+    if data.descripcion is not None:
+        updates["description"] = _sanitize_text(data.descripcion, allow_multiline=True)
+    if data.is_active is not None:
+        updates["is_active"] = 1 if data.is_active else 0
+    if data.sort_order is not None:
+        updates["sort_order"] = int(data.sort_order)
+    if updates:
+        updates["updated_at"] = _utc_now_iso()
+        assignments = ", ".join(f"{col} = ?" for col in updates)
+        with _get_db_connection() as connection:
+            connection.execute(
+                f"UPDATE services SET {assignments} WHERE cliente_id = ? AND slug = ?",
+                (*updates.values(), target_client_id, slug),
+            )
+            connection.commit()
+    return ServicePublic(**_service_row_to_public(_get_service_row(target_client_id, slug)))
+
+
+@app.delete("/auth/services/{slug}", response_model=AuthSimpleResponse)
+async def auth_delete_service(
+    slug: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> AuthSimpleResponse:
+    target_client_id = _portal_client_id_or_403(user, cliente_id)
+    if not _get_service_row(target_client_id, slug):
+        raise HTTPException(status_code=404, detail="Servicio no encontrado.")
+    with _get_db_connection() as connection:
+        connection.execute(
+            "DELETE FROM services WHERE cliente_id = ? AND slug = ?", (target_client_id, slug)
+        )
+        connection.commit()
+    return AuthSimpleResponse(ok=True, message="Servicio eliminado.")
 
 
 def _emphasize_structured_headings(text: str) -> str:
@@ -16294,26 +16989,32 @@ async def _wa_create_booking(
     request: Request,
 ) -> bool:
     try:
-        if not await _booking_slot_available(cliente_id, flow.fecha, flow.hora, employee_id=flow.employee_id):
-            await _send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
-                text="⚠️ Ese hueco ya no esta disponible. Escribe *agendar* para empezar de nuevo.",
-            )
-            return False
-
         booking_dt = _parse_date(flow.fecha)
         _validate_booking_window(cliente_id, booking_dt)
 
         employee_row = _resolve_employee_for_booking(cliente_id, flow.employee_id)
         booking_cfg = _employee_schedule_from_row(employee_row)
         tz_name = booking_cfg.get("timezone") or DEFAULT_TIMEZONE
-        slot_minutes = int(booking_cfg.get("slot_minutes", 30) or 30)
+        service_row = _find_service_by_name(cliente_id, flow.servicio)
+        service_duration = _service_duration_minutes(cliente_id, flow.servicio, employee_row)
+        service_id = service_row["slug"] if service_row else ""
+        service_price = int(service_row["price_cents"]) if service_row else 0
+
+        if not await _booking_slot_available(
+            cliente_id, flow.fecha, flow.hora, employee_id=flow.employee_id, duration_minutes=service_duration
+        ):
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+                text="⚠️ Ese hueco ya no esta disponible. Escribe *agendar* para empezar de nuevo.",
+            )
+            return False
+
         try:
             tz = ZoneInfo(tz_name)
         except Exception:
             tz = timezone.utc
         start_local = datetime.fromisoformat(f"{flow.fecha}T{flow.hora}:00").replace(tzinfo=tz)
-        end_local = start_local + timedelta(minutes=slot_minutes)
+        end_local = start_local + timedelta(minutes=service_duration)
 
         booking_id = secrets.token_urlsafe(16)
         manage_token = secrets.token_urlsafe(24)
@@ -16386,6 +17087,8 @@ async def _wa_create_booking(
             "reminder_2h_sent_at": "",
             "customer_email_status": "",
             "customer_email_last_error": "",
+            "service_id": service_id,
+            "service_price_cents": service_price,
             "source": "whatsapp",
             "created_at": created_at,
         }
@@ -17286,6 +17989,8 @@ async def regenerar_cerebro(cliente_id: str, data: Optional[AdminRebrainPayload]
         raise HTTPException(status_code=502, detail=f"Fallo el scraper: {exc}") from exc
 
     _write_info_txt(cliente_id, result.info_txt)
+    # Sembrar Q&A del panel desde las FAQ scrapeadas (run_onboarding las saca del info.txt).
+    _seed_qa_from_onboarding(cliente_id, result)
 
     reindexed = False
     reindex_error = ""

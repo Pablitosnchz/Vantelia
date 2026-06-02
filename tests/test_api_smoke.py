@@ -483,6 +483,253 @@ def test_admin_demo_agenda_seed_and_purge(client: TestClient, api_module):
     assert _counts() == (0, 0)
 
 
+def _seed_past_booking(api_module, status: str = "confirmed") -> str:
+    booking_id = uuid.uuid4().hex
+    start = datetime.utcnow() - timedelta(hours=2)
+    end = start + timedelta(minutes=30)
+    iso = lambda d: d.isoformat(timespec="seconds") + "Z"
+    api_module._store_booking({
+        "id": booking_id, "cliente_id": "demo", "employee_id": "", "employee_name": "",
+        "nombre": "Cliente Prueba", "email": "prueba@example.com", "telefono": "",
+        "servicio": "Consulta", "booking_date": start.date().isoformat(),
+        "booking_time": start.strftime("%H:%M"), "notas": "", "status": status,
+        "provider_name": "internal", "provider_status": status, "provider_booking_id": "",
+        "provider_booking_url": "", "manage_token": f"mg_{booking_id}", "timezone": "Europe/Madrid",
+        "start_at": iso(start), "end_at": iso(end),
+        "confirmed_at": iso(start) if status == "confirmed" else "", "cancelled_at": "",
+        "rescheduled_at": "", "rescheduled_from_booking_id": "", "confirmation_email_sent_at": "",
+        "reminder_24h_sent_at": "", "reminder_2h_sent_at": "", "customer_email_status": "",
+        "customer_email_last_error": "", "source": "test", "created_at": iso(start),
+    })
+    return booking_id
+
+
+def test_booking_attendance_marks_completed_and_no_show(client: TestClient, api_module):
+    user = api_module._get_user_by_email("admin@example.com")
+    raw_session = api_module._create_auth_session(user["id"])
+    cookies = {"vantelia_portal_session": raw_session}
+
+    booking_id = _seed_past_booking(api_module)
+
+    def _db_state():
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            return conn.execute(
+                "SELECT status, completed_source FROM bookings WHERE id = ?", (booking_id,)
+            ).fetchone()
+
+    # No-show.
+    r = client.post(f"/auth/bookings/{booking_id}/attendance", json={"attended": False}, cookies=cookies)
+    assert r.status_code == 200
+    assert r.json()["estado"] == "no_show"
+    assert _db_state() == ("no_show", "manual")
+
+    # Corregir a realizada.
+    r = client.post(f"/auth/bookings/{booking_id}/attendance", json={"attended": True}, cookies=cookies)
+    assert r.status_code == 200
+    assert r.json()["estado"] == "completed"
+    assert _db_state() == ("completed", "manual")
+
+    # Stats de cliente exponen asistencia.
+    stats = client.get("/auth/dashboard", params={"cliente_id": "demo"}, cookies=cookies).json()["stats"]
+    assert "completed" in stats and "no_show" in stats and "attendance_rate" in stats
+
+    # No se puede marcar asistencia de una cancelada.
+    cancelled_id = _seed_past_booking(api_module, status="cancelled")
+    r = client.post(f"/auth/bookings/{cancelled_id}/attendance", json={"attended": True}, cookies=cookies)
+    assert r.status_code == 409
+
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM bookings WHERE id IN (?, ?)", (booking_id, cancelled_id))
+        conn.commit()
+
+
+def test_staff_can_create_booking_manually(client: TestClient, api_module):
+    user = api_module._get_user_by_email("admin@example.com")
+    raw_session = api_module._create_auth_session(user["id"])
+    cookies = {"vantelia_portal_session": raw_session}
+
+    target = datetime.utcnow().date() + timedelta(days=2)
+    while target.weekday() == 6:  # domingo cerrado en demo
+        target += timedelta(days=1)
+    fecha = target.isoformat()
+
+    r = client.post(
+        "/auth/bookings",
+        params={"cliente_id": "demo"},
+        cookies=cookies,
+        json={
+            "nombre": "Walk In", "email": "", "telefono": "600111222", "servicio": "",
+            "employee_id": "", "fecha": fecha, "hora": "09:00", "notas": "manual",
+        },
+    )
+    assert r.status_code == 200, r.text
+    booking_id = r.json()["booking_id"]
+    assert r.json()["estado"] == "confirmed"
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT status, source, nombre FROM bookings WHERE id = ?", (booking_id,)
+        ).fetchone()
+    assert row == ("confirmed", "portal_manual", "Walk In")
+
+    # Mismo hueco/profesional otra vez -> conflicto.
+    r2 = client.post(
+        "/auth/bookings",
+        params={"cliente_id": "demo"},
+        cookies=cookies,
+        json={
+            "nombre": "Otro", "email": "", "telefono": "", "servicio": "",
+            "employee_id": "", "fecha": fecha, "hora": "09:00", "notas": "",
+        },
+    )
+    assert r2.status_code == 409
+
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM bookings WHERE id = ?", (booking_id,))
+        conn.commit()
+
+
+def test_service_price_and_duration_parsing(api_module):
+    assert api_module._parse_price_to_cents("45 €") == 4500
+    assert api_module._parse_price_to_cents("Desde 30 €") == 3000
+    assert api_module._parse_price_to_cents("60,50 €") == 6050
+    assert api_module._parse_price_to_cents("1.250 €") == 125000
+    assert api_module._parse_price_to_cents("40.50") == 4050
+    assert api_module._parse_price_to_cents("A consultar") == 0
+    assert api_module._parse_price_to_cents("gratis") == 0
+    assert api_module._parse_duration_minutes_text("45 min") == 45
+    assert api_module._parse_duration_minutes_text("1 h") == 60
+    assert api_module._parse_duration_minutes_text("1h 30 min") == 90
+    assert api_module._parse_duration_minutes_text("sin dato") == 0
+
+
+def test_services_catalog_duration_and_overlap(client: TestClient, api_module):
+    user = api_module._get_user_by_email("admin@example.com")
+    raw_session = api_module._create_auth_session(user["id"])
+    cookies = {"vantelia_portal_session": raw_session}
+
+    created = client.post(
+        "/auth/services",
+        params={"cliente_id": "demo"},
+        cookies=cookies,
+        json={"nombre": "Larga", "duration_minutes": 60, "price_cents": 5000},
+    )
+    assert created.status_code == 200, created.text
+    svc = created.json()
+    slug = svc["id"]
+    assert svc["duration_minutes"] == 60 and svc["price_cents"] == 5000
+    assert svc["price_label"] == "50 €"
+
+    listed = client.get("/auth/services", params={"cliente_id": "demo"}, cookies=cookies).json()["items"]
+    assert any(s["id"] == slug for s in listed)
+
+    public = client.get("/servicios/demo", headers={"Origin": "http://testserver"}).json()["servicios"]
+    assert any(s.get("id") == slug and s.get("duration_minutes") == 60 for s in public)
+
+    target = datetime.utcnow().date() + timedelta(days=2)
+    while target.weekday() == 6:
+        target += timedelta(days=1)
+    fecha = target.isoformat()
+
+    # Reserva con servicio de 60 min a las 09:00 (demo abre 09:00-10:00).
+    r1 = client.post(
+        "/auth/bookings", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"nombre": "A", "email": "", "telefono": "", "servicio": "Larga",
+              "employee_id": "", "fecha": fecha, "hora": "09:00", "notas": ""},
+    )
+    assert r1.status_code == 200, r1.text
+    booking_id = r1.json()["booking_id"]
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT start_at, end_at, service_id, service_price_cents FROM bookings WHERE id = ?",
+            (booking_id,),
+        ).fetchone()
+    ds = datetime.fromisoformat(row[0].replace("Z", "+00:00"))
+    de = datetime.fromisoformat(row[1].replace("Z", "+00:00"))
+    assert int((de - ds).total_seconds() // 60) == 60
+    assert row[2] == slug and row[3] == 5000
+
+    # Otra cita a las 09:30 solapa el bloque de 60 min -> conflicto.
+    r2 = client.post(
+        "/auth/bookings", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"nombre": "B", "email": "", "telefono": "", "servicio": "",
+              "employee_id": "", "fecha": fecha, "hora": "09:30", "notas": ""},
+    )
+    assert r2.status_code == 409
+
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM bookings WHERE id = ?", (booking_id,))
+        conn.execute("DELETE FROM services WHERE cliente_id = 'demo' AND slug = ?", (slug,))
+        conn.commit()
+
+
+def test_booking_manage_page_renders_with_service_catalog(client: TestClient, api_module):
+    # Regresion: la pagina publica de gestion construye available_services desde el
+    # catalogo (con duration/price int + is_active bool). Debe renderizar, no 500.
+    user = api_module._get_user_by_email("admin@example.com")
+    raw_session = api_module._create_auth_session(user["id"])
+    cookies = {"vantelia_portal_session": raw_session}
+    target = datetime.utcnow().date() + timedelta(days=2)
+    while target.weekday() == 6:
+        target += timedelta(days=1)
+    created = client.post(
+        "/auth/bookings", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"nombre": "Manage Test", "email": "", "telefono": "", "servicio": "",
+              "employee_id": "", "fecha": target.isoformat(), "hora": "09:00", "notas": ""},
+    )
+    assert created.status_code == 200, created.text
+    token = created.json()["manage_url"].rsplit("/", 1)[-1].split("?")[0]
+    page = client.get(f"/booking/manage/{token}")
+    assert page.status_code == 200, page.text
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM bookings WHERE id = ?", (created.json()["booking_id"],))
+        conn.commit()
+
+
+def test_onboarding_seeds_qa_panel_from_scrape(api_module):
+    # Regresion: run_onboarding saca las FAQ del info.txt y las deja en faq_pairs;
+    # cualquier flujo de scrape (rebrain/alta-express) debe sembrarlas en kb_qa o
+    # el panel de Preguntas Frecuentes queda vacio.
+    cid = "demo"
+    qs = ("Teneis parking?", "Cual es el horario?")
+
+    class _Result:
+        info_txt = "PREGUNTAS FRECUENTES:\n(gestionadas en panel)\n"
+        faq_pairs = [(qs[0], "Si, gratis para clientes."), (qs[1], "Lunes a viernes de 9 a 18.")]
+        faq_source = "literal"
+
+    def _clean():
+        with sqlite3.connect(api_module.DB_PATH) as c:
+            c.execute("DELETE FROM kb_qa WHERE cliente_id=? AND question IN (?,?)", (cid, qs[0], qs[1]))
+            c.commit()
+
+    _clean()
+    created = api_module._seed_qa_from_onboarding(cid, _Result(), "")
+    assert created == 2
+    with sqlite3.connect(api_module.DB_PATH) as c:
+        rows = c.execute("SELECT question FROM kb_qa WHERE cliente_id=? AND question IN (?,?)", (cid, qs[0], qs[1])).fetchall()
+    assert len(rows) == 2
+    # Idempotente: re-sembrar no duplica.
+    assert api_module._seed_qa_from_onboarding(cid, _Result(), "") == 0
+    _clean()
+
+
+def test_onboarding_literal_faq_filter_rejects_cookie_noise():
+    from onboarding_utils import _looks_like_faq_pair
+
+    assert not _looks_like_faq_pair(
+        "Google Fonts Marketing/Seguimiento Consent to service google-fonts",
+        "Uso Usamos Google Fonts para display of webfonts.",
+    )
+    assert not _looks_like_faq_pair(
+        "Preferencias Preferencias",
+        "El almacenamiento o acceso tecnico es necesario para almacenar preferencias.",
+    )
+    assert _looks_like_faq_pair(
+        "¿Qué es el drenaje linfático?",
+        "El drenaje linfático es una técnica terapéutica manual.",
+    )
+
+
 def test_login_creates_portal_session(client: TestClient):
     response = client.post(
         "/auth/login",
@@ -3246,7 +3493,7 @@ def test_app_knowledge_url_caps_derived_auto_qa(client: TestClient, api_module, 
     assert listed.json()["total"] == 5
 
 
-def test_app_knowledge_url_keeps_literal_auto_qa(client: TestClient, api_module, monkeypatch):
+def test_app_knowledge_url_caps_literal_auto_qa(client: TestClient, api_module, monkeypatch):
     cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot KB QA Literal")
 
     class LiteralFaqResult(_FakeOnboardingResult):
@@ -3264,7 +3511,7 @@ def test_app_knowledge_url_keeps_literal_auto_qa(client: TestClient, api_module,
         cookies=cookies,
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["qa_created"] == 12
+    assert resp.json()["qa_created"] == 5
 
 
 def test_app_tune_get_and_post(client: TestClient, api_module, monkeypatch):

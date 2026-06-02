@@ -149,9 +149,19 @@ function fillServiceOptions(select) {
   scopedServices.forEach((service) => {
     const option = document.createElement("option");
     option.value = service.id;
-    option.textContent = service.nombre;
+    option.dataset.nombre = service.nombre;
+    const bits = [];
+    if (service.duration_minutes) bits.push(`${service.duration_minutes} min`);
+    if (service.price_label) bits.push(service.price_label);
+    option.textContent = bits.length ? `${service.nombre} · ${bits.join(" · ")}` : service.nombre;
     select.appendChild(option);
   });
+}
+
+function _selectedServiceName(select, index) {
+  const opt = select && select.options[index === undefined ? select.selectedIndex : index];
+  if (!opt) return "";
+  return opt.dataset.nombre || opt.textContent || "";
 }
 
 function fillEmployeeOptions(select, wrap) {
@@ -543,7 +553,7 @@ export async function mostrarFormulario() {
   fillEmployeeOptions(employeeSelect, employeeWrap);
   fillServiceOptions(serviceSelect);
   citaData.servicio = serviceSelect && !serviceSelect.disabled
-    ? (serviceSelect.options[0]?.textContent || "Consulta general")
+    ? (_selectedServiceName(serviceSelect, 0) || "Consulta general")
     : "";
 
   const dateInput = document.getElementById("ia-f-fecha");
@@ -593,7 +603,7 @@ export async function mostrarFormulario() {
     }
 
     clearFieldError("ia-f-servicio");
-    citaData.servicio = selectedOption.textContent || "Consulta general";
+    citaData.servicio = _selectedServiceName(serviceSelect) || "Consulta general";
     citaData.notas = document.getElementById("ia-f-notas").value.trim();
     toggleStep(2);
   });
@@ -604,7 +614,7 @@ export async function mostrarFormulario() {
     citaData.employeeName = selectedEmployee?.name || "Aleatorio";
     fillServiceOptions(serviceSelect);
     citaData.servicio = serviceSelect && !serviceSelect.disabled
-      ? (serviceSelect.options[serviceSelect.selectedIndex]?.textContent || "")
+      ? _selectedServiceName(serviceSelect)
       : "";
     citaData.fecha = "";
     citaData.hora = "";
@@ -629,8 +639,7 @@ export async function mostrarFormulario() {
   });
 
   serviceSelect?.addEventListener("change", () => {
-    const selectedOption = serviceSelect.options[serviceSelect.selectedIndex];
-    citaData.servicio = selectedOption?.textContent || "";
+    citaData.servicio = _selectedServiceName(serviceSelect);
   });
 
   document.getElementById("ia-f-next2")?.addEventListener("click", () => {

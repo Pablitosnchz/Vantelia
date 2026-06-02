@@ -630,6 +630,14 @@
     .cd-detail-title { font-family:var(--font-title); font-size:1rem; font-weight:700; }
     .cd-detail-meta { display:flex; gap:10px; flex-wrap:wrap; font-size:0.82rem; color:var(--soft); align-items:center; }
     .cd-detail-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .cd-range { display:flex; gap:6px; }
+    .cd-range .filter-chip { padding:5px 12px; font-size:0.78rem; }
+    .cd-stats { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+    .cd-stat { font-size:0.8rem; color:var(--soft); background:var(--panel-2); border:1px solid var(--line); border-radius:99px; padding:5px 12px; }
+    .cd-stat b { color:var(--text); }
+    .cd-stat-ns b { color:#f87171; }
+    .cd-col.cd-today .cd-head { background:var(--accent-soft); color:var(--accent); }
+    .cd-col.cd-today .cd-name { color:var(--accent); }
     @media (max-width:720px){ .cd-col { flex-basis:158px; min-width:158px; } .cd-col.cd-gutter { flex-basis:48px; min-width:48px; width:48px; } }
 
     /* ── Accordion ── */
@@ -705,7 +713,8 @@
     .badge-pending { background: rgba(255,200,87,0.15); color: var(--warning); }
     .badge-confirmed { background: rgba(0,245,212,0.12); color: var(--success); }
     .badge-cancelled { background: var(--danger-soft); color: var(--danger); }
-    .badge-completed { background: rgba(255,255,255,0.06); color: var(--soft); }
+    .badge-completed { background: rgba(16,185,129,0.14); color: #34d399; }
+    .badge-noshow { background: rgba(239,68,68,0.15); color: #f87171; }
 
     /* responsive */
     @media (max-width: 1100px) {
@@ -822,6 +831,10 @@
   <div class="nav-item" data-tab="equipo">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     <span>Equipo</span>
+  </div>
+  <div class="nav-item" data-tab="servicios">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+    <span>Servicios</span>
   </div>
   <div class="nav-item" data-tab="horarios">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -1208,20 +1221,8 @@
   <section class="page" id="page-tune">
     <div class="panel-card">
       <h2>Tune AI</h2>
-      <p class="panel-sub">Controla los botones que ve el visitante y el catalogo real que usa la IA para responder y para el formulario de citas.</p>
+      <p class="panel-sub">Controla los botones de acceso rapido que ve el visitante en el chat. Los servicios con precio y duracion se gestionan en la pestaña <b>Servicios</b>.</p>
       <div id="tnStarterMount" style="margin-top:16px;"></div>
-      <div style="margin-top:24px; padding-top:18px; border-top:1px solid var(--line);">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px;">
-          <h3 style="margin:0; font-size:1rem;">Servicios-productos</h3>
-          <button class="btn btn-ghost" id="tnAddServiceBtn" type="button">+ Anadir</button>
-        </div>
-        <p class="panel-sub">Catalogo real del negocio. Esta lista se guarda en la base de conocimiento y es la que usa la IA para responder y para mostrar opciones al pedir cita.</p>
-        <div id="tnServicesList" style="display:flex; flex-direction:column; gap:10px; margin-top:12px;"></div>
-        <div style="display:flex; gap:10px; margin-top:14px;">
-          <button class="btn btn-primary" id="tnSaveServicesBtn" type="button">Guardar servicios-productos</button>
-          <button class="btn btn-ghost" id="tnReloadBtn" type="button">Descartar</button>
-        </div>
-      </div>
 
       <div class="form-row" style="display:none;">
         <div class="field" style="flex:1 1 100%;">
@@ -1408,17 +1409,12 @@
       <input type="checkbox" class="toggle-switch" id="bookingEnabledToggle" checked />
     </label>
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;">
-      <div class="filter-chips" id="citasQuickFilters">
-        <div class="filter-chip active" data-period="all">Todas</div>
-        <div class="filter-chip" data-period="today">Hoy</div>
-        <div class="filter-chip" data-period="tomorrow">Mañana</div>
-        <div class="filter-chip" data-period="week">Esta semana</div>
-        <div class="filter-chip" data-period="upcoming">Próximas</div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-primary" id="citasViewDay" style="padding:8px 14px;" title="Vista de agenda por día">Día</button>
+        <button class="btn btn-ghost" id="citasViewCal" style="padding:8px 14px;" title="Vista calendario mensual">Calendario</button>
       </div>
       <div style="margin-left:auto; display:flex; gap:8px;">
-        <button class="btn btn-primary" id="citasViewCal" style="padding:8px 14px;" title="Vista calendario">Calendario</button>
-        <button class="btn btn-ghost" id="citasViewDay" style="padding:8px 14px;" title="Vista de un día por profesional">Día</button>
-        <button class="btn btn-ghost" id="citasViewList" style="padding:8px 14px;" title="Vista lista">Lista</button>
+        <button class="btn btn-primary" id="citasNuevaBtn" style="padding:8px 14px;" title="Crear una cita manualmente">+ Nueva cita</button>
         <a class="btn btn-ghost" href="/auth/bookings/export">CSV</a>
       </div>
     </div>
@@ -1434,13 +1430,13 @@
         <option value="cancelled">Cancelada</option>
         <option value="completed">Completada</option>
       </select>
-      <input type="date" class="field-input" id="citasFiltDesde" style="width:auto; flex:0 0 160px;" />
-      <input type="date" class="field-input" id="citasFiltHasta" style="width:auto; flex:0 0 160px;" />
       <button class="btn btn-ghost" id="citasFiltLimpiar" style="padding:8px 14px;">Limpiar</button>
     </div>
 
-    <!-- Vista Calendario (por defecto) -->
-    <div id="citasCalView">
+    <div id="citasAttendanceStats" class="cd-stats" style="display:none;"></div>
+
+    <!-- Vista Calendario -->
+    <div id="citasCalView" style="display:none;">
       <div class="gcal-header">
         <button class="gcal-btn-today" id="calToday">Hoy</button>
         <button class="gcal-nav-btn" id="calPrev">&#8249;</button>
@@ -1452,24 +1448,19 @@
       </div>
     </div>
 
-    <!-- Vista Lista -->
-    <div id="citasListView" style="display:none;">
-      <div id="citasListContent" style="display:flex; flex-direction:column; gap:10px;"></div>
-      <div style="display:flex; gap:10px; margin-top:14px; align-items:center;">
-        <button class="btn btn-ghost" id="citasPrevPage" disabled>Anterior</button>
-        <span class="panel-sub" id="citasPageInfo" style="margin:0; flex:1; text-align:center;"></span>
-        <button class="btn btn-ghost" id="citasNextPage" disabled>Siguiente</button>
-      </div>
-    </div>
-
-    <!-- Vista Día (timeline por profesional) -->
-    <div id="citasDayView" style="display:none;">
+    <!-- Vista Día (timeline por profesional / semana por días) -->
+    <div id="citasDayView">
       <div class="gcal-header">
         <button class="gcal-btn-today" id="cdToday">Hoy</button>
-        <button class="gcal-nav-btn" id="cdPrev" aria-label="Día anterior">&#8249;</button>
-        <button class="gcal-nav-btn" id="cdNext" aria-label="Día siguiente">&#8250;</button>
+        <button class="gcal-nav-btn" id="cdPrev" aria-label="Anterior">&#8249;</button>
+        <button class="gcal-nav-btn" id="cdNext" aria-label="Siguiente">&#8250;</button>
         <h2 class="gcal-month-title" id="cdTitle">Día</h2>
-        <span class="panel-sub" id="cdMeta" style="margin:0 0 0 auto;"></span>
+        <div class="cd-range" id="cdRange">
+          <button class="filter-chip active" type="button" data-range="1">1 día</button>
+          <button class="filter-chip" type="button" data-range="3">3 días</button>
+          <button class="filter-chip" type="button" data-range="7">7 días</button>
+        </div>
+        <span class="panel-sub" id="cdMeta" style="margin:0;"></span>
       </div>
       <div class="cd-scroll"><div class="cd-grid" id="cdGrid"></div></div>
       <div class="cd-detail" id="cdDetail" style="display:none;"></div>
@@ -1488,6 +1479,21 @@
       <button class="btn btn-primary" id="equipoNewBtn" style="margin-left:auto;">+ Nuevo profesional</button>
     </div>
     <div class="employee-grid" id="equipoGrid"></div>
+  </section>
+
+  <!-- SERVICIOS -->
+  <section class="page page-agenda-wrap" id="page-servicios">
+    <div class="agenda-blocked-overlay" id="overlayServicios">
+      <strong>Sección desactivada</strong>
+      <p>Activa las citas para configurar tu catálogo de servicios.</p>
+      <button class="btn btn-primary" onclick="setTab('citas')">Ir a Citas</button>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+      <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600;">Servicios</h2>
+      <button class="btn btn-primary" id="servicioNewBtn" style="margin-left:auto;">+ Nuevo servicio</button>
+    </div>
+    <p class="panel-sub">Cada servicio tiene su propia duración y precio. La duración define cuánto bloquea en la agenda.</p>
+    <div id="serviciosList" style="display:flex; flex-direction:column; gap:10px; margin-top:14px;"></div>
   </section>
 
   <!-- HORARIOS -->
@@ -1712,6 +1718,44 @@
   </div>
 </div>
 
+<div class="drawer-overlay" id="newBookingOverlay"></div>
+<div class="booking-drawer" id="newBookingDrawer">
+  <div class="side-panel-head">
+    <b>Nueva cita</b>
+    <button id="newBookingClose">×</button>
+  </div>
+  <div style="padding:18px; overflow-y:auto; flex:1;">
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Nombre del cliente *</label><input type="text" class="field-input" id="nbNombre" placeholder="Nombre y apellidos" /></div>
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Email</label><input type="email" class="field-input" id="nbEmail" placeholder="opcional · se envía confirmación si lo rellenas" /></div>
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Teléfono</label><input type="tel" class="field-input" id="nbTelefono" placeholder="opcional" /></div>
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Profesional</label><select class="field-input" id="nbProf"></select></div>
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Servicio</label><select class="field-input" id="nbServicio"><option value="">Sin especificar</option></select></div>
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Fecha</label><input type="date" class="field-input" id="nbFecha" /></div>
+    <label class="field-label">Hora</label>
+    <div id="nbSlots" style="display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px;"></div>
+    <div class="field" style="margin-bottom:14px;"><label class="field-label">Notas</label><textarea class="field-input" id="nbNotas" rows="2" placeholder="opcional"></textarea></div>
+    <input type="hidden" id="nbSlotSelected" />
+    <button class="btn btn-primary" id="nbConfirmBtn" disabled style="width:100%;">Crear cita</button>
+  </div>
+</div>
+
+<div class="drawer-overlay" id="serviceOverlay"></div>
+<div class="booking-drawer" id="serviceDrawer">
+  <div class="side-panel-head">
+    <b id="serviceDrawerTitle">Nuevo servicio</b>
+    <button id="serviceClose">×</button>
+  </div>
+  <div style="padding:18px; overflow-y:auto; flex:1;">
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Nombre *</label><input type="text" class="field-input" id="svcNombre" placeholder="Ej. Primera consulta" /></div>
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Duración (minutos) *</label><input type="number" class="field-input" id="svcDuracion" min="5" max="600" step="5" value="30" /></div>
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Precio (€)</label><input type="number" class="field-input" id="svcPrecio" min="0" step="0.01" placeholder="0 = a consultar" /></div>
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Descripción</label><textarea class="field-input" id="svcDesc" rows="2" placeholder="opcional"></textarea></div>
+    <label style="display:flex; align-items:center; gap:8px; margin-bottom:14px; cursor:pointer;"><input type="checkbox" id="svcActivo" checked /> <span>Activo (visible para reservar)</span></label>
+    <input type="hidden" id="svcSlug" />
+    <button class="btn btn-primary" id="svcSaveBtn" style="width:100%;">Guardar</button>
+  </div>
+</div>
+
 <!-- Right panel: chat preview -->
 <aside class="rightpanel" id="rightPanel" style="display:none;">
   <div class="rp-head">
@@ -1751,7 +1795,7 @@ const state = {
   session_id: 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
 };
 
-const TABS = ['overview','chats','knowledge','qa','tune','whatsapp','appearance','deploy','billing','citas','equipo','horarios','mensajes','instalacion','cuenta'];
+const TABS = ['overview','chats','knowledge','qa','tune','whatsapp','appearance','deploy','billing','citas','equipo','servicios','horarios','mensajes','instalacion','cuenta'];
 const billingState = { period: 'monthly', plans: [], current: 'free', portal: false };
 
 function formatDetail(d) {
@@ -1822,7 +1866,7 @@ function setTab(tab) {
     overview:'Overview', chats:'Chats',
     knowledge:'Conocimiento', qa:'Q&A', tune:'Tune AI', whatsapp:'WhatsApp',
     appearance:'Apariencia', deploy:'Deploy', billing:'Suscripción',
-    citas:'Citas', equipo:'Equipo', horarios:'Horarios',
+    citas:'Citas', equipo:'Equipo', servicios:'Servicios', horarios:'Horarios',
     mensajes:'Mensajes automáticos', instalacion:'Instalación', cuenta:'Cuenta',
   };
   document.getElementById('pageTitle').textContent = titles[tab] || 'Panel';
@@ -1834,6 +1878,7 @@ function setTab(tab) {
   if (tab === 'billing')    loadBilling();
   if (tab === 'citas')      loadCitas();
   if (tab === 'equipo')     loadEquipo();
+  if (tab === 'servicios')  loadServicios();
   if (tab === 'horarios')   loadHorarios();
   if (tab === 'mensajes')   loadMensajes();
   if (tab === 'instalacion') loadInstalacion();
@@ -1915,7 +1960,7 @@ async function loadDeploy() {
 }
 
 function _applyBookingEnabledState(enabled) {
-  const AGENDA_TABS = ['equipo', 'horarios', 'mensajes'];
+  const AGENDA_TABS = ['equipo', 'servicios', 'horarios', 'mensajes'];
   AGENDA_TABS.forEach(tab => {
     document.querySelector(`.nav-item[data-tab="${tab}"]`)?.classList.toggle('booking-nav-disabled', !enabled);
     const overlayId = 'overlay' + tab.charAt(0).toUpperCase() + tab.slice(1);
@@ -2549,7 +2594,9 @@ document.getElementById('kbAddUrlBtn').addEventListener('click', async () => {
       : 'URL añadida al conocimiento', 'success');
     document.getElementById('kbUrl').value = '';
     loadKnowledge();
-    if (qaCount) { try { loadQA(); } catch {} }
+    if (qaCount) {
+      try { setTab('qa'); } catch { try { loadQA(); } catch {} }
+    }
   } catch (err) { toast(err.message, 'error'); }
   finally { btn.disabled = false; btn.textContent = 'Analizar y añadir'; }
 });
@@ -2688,7 +2735,6 @@ document.getElementById('qaSaveBtn').addEventListener('click', async () => {
 async function loadTune() {
   try {
     moveStarterPanelToTune();
-    await loadTuneServices();
   } catch (err) { toast(err.message, 'error'); }
 }
 
@@ -2700,65 +2746,6 @@ function moveStarterPanelToTune() {
   mount.appendChild(panel);
 }
 
-let tuneServices = [];
-
-async function loadTuneServices() {
-  const list = document.getElementById('tnServicesList');
-  if (!list) return;
-  list.innerHTML = '<div class="panel-sub" style="margin:0;">Cargando servicios...</div>';
-  const data = await api('/auth/app/services');
-  tuneServices = (data.items || []).map(item => ({
-    nombre: item.nombre || '',
-    descripcion: item.descripcion || '',
-  }));
-  renderTuneServices();
-}
-
-function renderTuneServices() {
-  const list = document.getElementById('tnServicesList');
-  if (!list) return;
-  list.innerHTML = '';
-  if (!tuneServices.length) {
-    list.innerHTML = '<div class="panel-sub" style="margin:0;">No hay servicios/productos detectados todavia. Anade los que quieras que use la IA.</div>';
-    return;
-  }
-  tuneServices.forEach((item, index) => {
-    const row = document.createElement('div');
-    row.className = 'chat-row';
-    row.style.cssText = 'display:grid; grid-template-columns:minmax(180px,0.8fr) minmax(220px,1.2fr) auto; gap:10px; align-items:start;';
-    row.innerHTML = `
-      <input class="field-input" data-field="nombre" maxlength="160" placeholder="Nombre del servicio/producto" value="${escapeHtml(item.nombre)}" />
-      <textarea class="field-textarea" data-field="descripcion" maxlength="800" placeholder="Descripcion breve, precio, condiciones..." style="min-height:44px;">${escapeHtml(item.descripcion || '')}</textarea>
-      <button class="btn btn-ghost" type="button" data-remove style="padding:8px 10px;">Quitar</button>`;
-    row.querySelector('[data-field="nombre"]').addEventListener('input', e => { tuneServices[index].nombre = e.target.value; });
-    row.querySelector('[data-field="descripcion"]').addEventListener('input', e => { tuneServices[index].descripcion = e.target.value; });
-    row.querySelector('[data-remove]').addEventListener('click', () => {
-      tuneServices.splice(index, 1);
-      renderTuneServices();
-    });
-    list.appendChild(row);
-  });
-}
-
-document.getElementById('tnAddServiceBtn').addEventListener('click', () => {
-  tuneServices.push({ nombre: '', descripcion: '' });
-  renderTuneServices();
-});
-document.getElementById('tnSaveServicesBtn').addEventListener('click', async () => {
-  const items = tuneServices
-    .map(item => ({ nombre: (item.nombre || '').trim(), descripcion: (item.descripcion || '').trim() }))
-    .filter(item => item.nombre);
-  try {
-    await api('/auth/app/services', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items }),
-    });
-    toast('Servicios-productos guardados', 'success');
-    await loadTuneServices();
-    try { loadKnowledge(); } catch {}
-  } catch (err) { toast(err.message, 'error'); }
-});
 document.getElementById('tnTemperature').addEventListener('input', e => {
   document.getElementById('tnTempValue').textContent = Number(e.target.value).toFixed(1);
 });
@@ -2777,7 +2764,6 @@ document.getElementById('tnSaveAdvancedBtn')?.addEventListener('click', async ()
     loadTune();
   } catch (err) { toast(err.message, 'error'); }
 });
-document.getElementById('tnReloadBtn').addEventListener('click', loadTune);
 
 let whatsappState = {};
 
@@ -3087,14 +3073,31 @@ function mountVanteliaWidget() {
 function reloadBotDrawer() { mountVanteliaWidget(); }
 
 // ── CITAS ─────────────────────────────────────────────────────────────
-const citasState = { page: 0, pageSize: 20, total: 0, period: 'all', view: 'cal', calYear: null, calMonth: null, calData: [], calClosedDays: [], calBlocks: [], dayDate: null, employees: null, daySchedule: null, dayItems: [], selectedDayBookingId: '' };
+const citasState = { view: 'day', calYear: null, calMonth: null, calData: [], calClosedDays: [], calBlocks: [], dayDate: null, dayRange: 1, employees: null, daySchedule: null, dayItems: [], selectedDayBookingId: '' };
 
 async function loadCitas() {
   const now = new Date();
   if (!citasState.calYear) { citasState.calYear = now.getFullYear(); citasState.calMonth = now.getMonth(); }
-  if (citasState.view === 'day') { await loadCitasDay(); return; }
-  const isCalView = document.getElementById('citasCalView').style.display !== 'none';
-  if (isCalView) { await fetchCitasCalData(); renderCalendar(); } else await fetchCitasList();
+  loadCitasAttendanceStats();
+  if (citasState.view === 'cal') { _switchToCalView(); await fetchCitasCalData(); renderCalendar(); }
+  else { _switchToDayView(); await loadCitasDay(); }
+}
+
+async function loadCitasAttendanceStats() {
+  const el = document.getElementById('citasAttendanceStats');
+  if (!el) return;
+  try {
+    const data = await api('/auth/dashboard');
+    const s = data.stats || {};
+    const done = Number(s.completed || 0), ns = Number(s.no_show || 0);
+    const rate = s.attendance_rate;
+    if (!done && !ns) { el.style.display = 'none'; return; }
+    el.style.display = 'flex';
+    el.innerHTML = `
+      <span class="cd-stat"><b>${done}</b> realizadas</span>
+      <span class="cd-stat cd-stat-ns"><b>${ns}</b> no-show</span>
+      ${rate !== null && rate !== undefined ? `<span class="cd-stat"><b>${rate}%</b> asistencia</span>` : ''}`;
+  } catch { el.style.display = 'none'; }
 }
 
 async function fetchCitasCalData() {
@@ -3123,130 +3126,12 @@ async function refreshCitasCalendarIfVisible() {
   renderCalendar();
 }
 
-function _switchToListView() {
-  document.getElementById('citasCalView').style.display = 'none';
+function _switchToCalView() {
+  document.getElementById('citasCalView').style.display = '';
   document.getElementById('citasDayView').style.display = 'none';
-  document.getElementById('citasListView').style.display = '';
-  document.getElementById('citasViewList').classList.replace('btn-ghost','btn-primary');
-  document.getElementById('citasViewCal').classList.replace('btn-primary','btn-ghost');
+  document.getElementById('citasViewCal').classList.replace('btn-ghost','btn-primary');
   document.getElementById('citasViewDay').classList.replace('btn-primary','btn-ghost');
-  citasState.view = 'list';
-}
-
-function _syncPeriodChips() {
-  document.querySelectorAll('#citasQuickFilters .filter-chip').forEach(c =>
-    c.classList.toggle('active', c.dataset.period === citasState.period)
-  );
-}
-
-async function fetchCitasList() {
-  _switchToListView();
-  const cont = document.getElementById('citasListContent');
-  cont.innerHTML = '<div class="panel-sub">Cargando…</div>';
-  const prof   = document.getElementById('citasFiltProf').value;
-  const estado = document.getElementById('citasFiltEstado').value;
-  const desde  = document.getElementById('citasFiltDesde').value;
-  const hasta  = document.getElementById('citasFiltHasta').value;
-  const period = citasState.period;
-
-  let params = `limit=${citasState.pageSize}&offset=${citasState.page * citasState.pageSize}`;
-  if (prof)   params += `&employee_id=${encodeURIComponent(prof)}`;
-  if (estado) params += `&estado=${encodeURIComponent(estado)}`;
-
-  // period chips tienen prioridad sobre fechas manuales
-  if (period === 'today') {
-    const d = new Date().toISOString().slice(0,10);
-    params += `&date_from=${d}&date_to=${d}`;
-  } else if (period === 'tomorrow') {
-    const d = new Date(Date.now()+86400000).toISOString().slice(0,10);
-    params += `&date_from=${d}&date_to=${d}`;
-  } else if (period === 'week') {
-    const from = new Date().toISOString().slice(0,10);
-    const to   = new Date(Date.now()+7*86400000).toISOString().slice(0,10);
-    params += `&date_from=${from}&date_to=${to}`;
-  } else if (period === 'upcoming') {
-    params += `&date_from=${new Date().toISOString().slice(0,10)}`;
-  } else {
-    // 'all' — usar fechas manuales si las hay
-    if (desde) params += `&date_from=${desde}`;
-    if (hasta) params += `&date_to=${hasta}`;
-  }
-
-  try {
-    const data = await api('/auth/bookings?' + params);
-    const items = data.items || data || [];
-    citasState.total = data.total || items.length;
-    cont.innerHTML = '';
-    if (!items.length) { cont.innerHTML = '<div class="panel-sub">Sin citas con estos filtros.</div>'; return; }
-    items.forEach(b => cont.appendChild(buildCitaRow(b)));
-    const info = document.getElementById('citasPageInfo');
-    info.textContent = `${citasState.page * citasState.pageSize + 1}–${Math.min((citasState.page+1)*citasState.pageSize, citasState.total)} de ${citasState.total}`;
-    document.getElementById('citasPrevPage').disabled = citasState.page === 0;
-    document.getElementById('citasNextPage').disabled = (citasState.page+1)*citasState.pageSize >= citasState.total;
-  } catch(e) { cont.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
-}
-
-function buildCitaRow(b) {
-  const row = document.createElement('div');
-  row.className = 'panel-card';
-  row.style.cssText = 'padding:16px 18px; background:var(--panel-2); margin-bottom:10px;';
-
-  const startAt = b.start_at || b.fecha;
-  const dt = startAt ? new Date(startAt) : null;
-  const fmtDate = dt ? dt.toLocaleDateString('es-ES', { weekday:'short', day:'2-digit', month:'short', year:'numeric' }) : (b.fecha || '–');
-  const fmtTime = dt ? dt.toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : (b.hora || '');
-
-  const statusLabels = { pending:'Pendiente', confirmed:'Confirmada', cancelled:'Cancelada', completed:'Completada' };
-  const statusMap = { pending:'badge-pending', confirmed:'badge-confirmed', cancelled:'badge-cancelled', completed:'badge-completed' };
-
-  const bid = b.booking_id || b.id || '';
-
-  row.innerHTML = `
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap;">
-      <div style="flex:1; min-width:200px; display:flex; flex-direction:column; gap:6px;">
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-          <span style="font-weight:700; font-size:1rem;">${escapeHtml(b.nombre || b.client_name || b.name || '(cliente)')}</span>
-          <span class="badge ${statusMap[b.estado || b.status] || ''}">${escapeHtml(statusLabels[b.estado || b.status] || b.estado || b.status || 'pendiente')}</span>
-          ${b.booking_code ? `<span class="badge" style="background:var(--accent-soft); color:var(--accent); font-family:'Courier New',monospace; letter-spacing:.06em;">N.º ${escapeHtml(b.booking_code)}</span>` : ''}
-        </div>
-        <div style="font-size:0.88rem; color:var(--text); font-weight:500;">
-          📅 ${escapeHtml(fmtDate)}${fmtTime ? ' · ' + escapeHtml(fmtTime) : ''}
-        </div>
-        <div style="font-size:0.84rem; color:var(--soft); display:flex; flex-wrap:wrap; gap:12px;">
-          ${b.servicio || b.service_name || b.service ? `<span>🛎 ${escapeHtml(b.servicio || b.service_name || b.service)}</span>` : ''}
-          ${b.employee_name || b.professional ? `<span>👤 ${escapeHtml(b.employee_name || b.professional)}</span>` : ''}
-        </div>
-        <div style="font-size:0.82rem; color:var(--soft-2); display:flex; flex-wrap:wrap; gap:12px;">
-          ${b.email ? `<span>✉ ${escapeHtml(b.email)}</span>` : ''}
-          ${b.telefono ? `<span>📞 ${escapeHtml(b.telefono)}</span>` : ''}
-        </div>
-        ${b.manage_url ? `<div style="margin-top:2px;"><a href="${escapeHtml(b.manage_url)}" target="_blank" rel="noopener" style="font-size:0.79rem; color:var(--accent); text-decoration:none;">🔗 Enlace de gestión del cliente</a></div>` : ''}
-      </div>
-      <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end; flex-shrink:0;">
-        ${b.can_reschedule !== false && (b.estado || b.status) !== 'cancelled' && (b.estado || b.status) !== 'completed' ? `<button class="btn btn-ghost" data-resched="${escapeHtml(bid)}" style="padding:5px 12px; font-size:0.8rem;">Reprogramar</button>` : ''}
-        ${b.can_cancel !== false && (b.estado || b.status) !== 'cancelled' && (b.estado || b.status) !== 'completed' ? `<button class="btn btn-ghost" data-cancel="${escapeHtml(bid)}" style="padding:5px 12px; font-size:0.8rem; color:var(--danger,#f55); border-color:var(--danger,#f55);">Cancelar</button>` : ''}
-      </div>
-    </div>
-    <div id="confirm-${escapeHtml(bid)}" style="display:none; margin-top:10px; align-items:center; gap:8px; background:rgba(255,80,80,0.08); padding:8px 12px; border-radius:8px;">
-      <span style="flex:1; font-size:0.84rem; color:var(--danger,#f55);">¿Cancelar esta cita?</span>
-      <button class="btn" style="background:var(--danger,#f55); color:#fff; padding:4px 12px; font-size:0.78rem;" data-confirm-cancel="${escapeHtml(bid)}">Sí, cancelar</button>
-      <button class="btn btn-ghost" style="padding:4px 10px; font-size:0.78rem;" data-dismiss-cancel="${escapeHtml(bid)}">No</button>
-    </div>`;
-
-  const cancelBtn = row.querySelector(`[data-cancel="${bid}"]`);
-  if (cancelBtn) cancelBtn.addEventListener('click', () => {
-    row.querySelector(`#confirm-${bid}`).style.display = 'flex';
-  });
-  const confBtn = row.querySelector(`[data-confirm-cancel="${bid}"]`);
-  if (confBtn) confBtn.addEventListener('click', async () => {
-    try { await api(`/auth/bookings/${bid}/cancel`, { method:'POST' }); toast('Cita cancelada', 'success'); fetchCitasList(); }
-    catch(e) { toast(e.message, 'error'); }
-  });
-  const dismissBtn = row.querySelector(`[data-dismiss-cancel="${bid}"]`);
-  if (dismissBtn) dismissBtn.addEventListener('click', () => { row.querySelector(`#confirm-${bid}`).style.display = 'none'; });
-  const reschedBtn = row.querySelector(`[data-resched="${bid}"]`);
-  if (reschedBtn) reschedBtn.addEventListener('click', () => openReschedDrawer(b));
-  return row;
+  citasState.view = 'cal';
 }
 
 async function openReschedDrawer(b) {
@@ -3297,58 +3182,223 @@ document.getElementById('reschedConfirmBtn').addEventListener('click', async () 
     toast('Cita reprogramada', 'success');
     document.getElementById('reschedDrawer').classList.remove('open');
     document.getElementById('reschedOverlay').classList.remove('open');
-    if (citasState.view === 'day') loadCitasDay(); else fetchCitasList();
+    loadCitas();
   } catch(e) { toast(e.message, 'error'); }
 });
 document.getElementById('reschedClose').addEventListener('click', () => { document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
 document.getElementById('reschedOverlay').addEventListener('click', () => { document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
 
+// ── Nueva cita (alta manual desde el portal) ──────────────────────────
+async function openNewBookingDrawer(opts = {}) {
+  if (!citasState.employees) {
+    try { const r = await api('/auth/employees'); citasState.employees = (Array.isArray(r) ? r : (r?.items || [])).map(e => ({ ...e, id: e.employee_id || e.id })); }
+    catch { citasState.employees = []; }
+  }
+  const profSel = document.getElementById('nbProf');
+  const emps = (citasState.employees || []).filter(e => (typeof e.is_active === 'boolean' ? e.is_active : true));
+  profSel.innerHTML = emps.length
+    ? emps.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name || 'Profesional')}</option>`).join('')
+    : '<option value="">Agenda general</option>';
+  if (opts.employeeId) profSel.value = opts.employeeId;
+  await loadNbServices();
+  ['nbNombre','nbEmail','nbTelefono','nbNotas'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('nbServicio').value = '';
+  document.getElementById('nbSlotSelected').value = '';
+  document.getElementById('nbConfirmBtn').disabled = true;
+  document.getElementById('nbFecha').value = opts.date || (citasState.dayDate ? cdDateKey(citasState.dayDate) : cdDateKey(new Date()));
+  document.getElementById('newBookingDrawer').classList.add('open');
+  document.getElementById('newBookingOverlay').classList.add('open');
+  await loadNbSlots(opts.time || '');
+}
+
+async function loadNbServices() {
+  const sel = document.getElementById('nbServicio');
+  try {
+    const data = await api(`/servicios/${encodeURIComponent(state.cliente_id)}`);
+    const list = data.servicios || data || [];
+    sel.innerHTML = '<option value="">Sin especificar</option>' + list.map(s => {
+      const name = s.nombre || s.name || s.id || '';
+      const bits = [];
+      if (s.duration_minutes) bits.push(`${s.duration_minutes} min`);
+      if (s.price_label) bits.push(s.price_label);
+      const label = bits.length ? `${name} · ${bits.join(' · ')}` : name;
+      return `<option value="${escapeHtml(name)}">${escapeHtml(label)}</option>`;
+    }).join('');
+  } catch { sel.innerHTML = '<option value="">Sin especificar</option>'; }
+}
+
+function nbSyncConfirm() {
+  document.getElementById('nbConfirmBtn').disabled =
+    !(document.getElementById('nbNombre').value.trim() && document.getElementById('nbSlotSelected').value);
+}
+
+async function loadNbSlots(preselect = '') {
+  const cont = document.getElementById('nbSlots');
+  const fecha = document.getElementById('nbFecha').value;
+  const empId = document.getElementById('nbProf').value || '';
+  document.getElementById('nbSlotSelected').value = '';
+  nbSyncConfirm();
+  if (!fecha) { cont.innerHTML = '<span class="panel-sub" style="margin:0;">Selecciona una fecha.</span>'; return; }
+  cont.innerHTML = '<span class="panel-sub" style="margin:0;">Cargando huecos…</span>';
+  try {
+    const servicio = document.getElementById('nbServicio').value || '';
+    const qs = `cliente_id=${encodeURIComponent(state.cliente_id)}&fecha=${encodeURIComponent(fecha)}`
+      + (empId ? `&employee_id=${encodeURIComponent(empId)}` : '')
+      + (servicio ? `&servicio=${encodeURIComponent(servicio)}` : '');
+    const data = await api(`/disponibilidad?${qs}`);
+    const all = data.slots || data || [];
+    const slots = all.filter(s => s.disponible !== false);
+    cont.innerHTML = '';
+    if (!slots.length) { cont.innerHTML = '<span class="panel-sub" style="margin:0;">Sin huecos disponibles ese día.</span>'; return; }
+    slots.forEach(s => {
+      const hora = s.hora || s.time || String(s);
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'filter-chip'; btn.textContent = hora;
+      btn.addEventListener('click', () => {
+        cont.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('nbSlotSelected').value = hora;
+        nbSyncConfirm();
+      });
+      cont.appendChild(btn);
+      if (preselect && hora === preselect) btn.click();
+    });
+  } catch(e) { cont.innerHTML = `<span class="panel-sub" style="margin:0;">${escapeHtml(e.message)}</span>`; }
+}
+
+function closeNewBookingDrawer() {
+  document.getElementById('newBookingDrawer').classList.remove('open');
+  document.getElementById('newBookingOverlay').classList.remove('open');
+}
+
+document.getElementById('citasNuevaBtn').addEventListener('click', () => openNewBookingDrawer().catch(e => toast(e.message, 'error')));
+document.getElementById('newBookingClose').addEventListener('click', closeNewBookingDrawer);
+document.getElementById('newBookingOverlay').addEventListener('click', closeNewBookingDrawer);
+document.getElementById('nbProf').addEventListener('change', () => loadNbSlots());
+document.getElementById('nbFecha').addEventListener('change', () => loadNbSlots());
+document.getElementById('nbServicio').addEventListener('change', () => loadNbSlots());
+document.getElementById('nbNombre').addEventListener('input', nbSyncConfirm);
+document.getElementById('nbConfirmBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('nbConfirmBtn');
+  const payload = {
+    nombre: document.getElementById('nbNombre').value.trim(),
+    email: document.getElementById('nbEmail').value.trim(),
+    telefono: document.getElementById('nbTelefono').value.trim(),
+    servicio: document.getElementById('nbServicio').value,
+    employee_id: document.getElementById('nbProf').value || '',
+    fecha: document.getElementById('nbFecha').value,
+    hora: document.getElementById('nbSlotSelected').value,
+    notas: document.getElementById('nbNotas').value.trim(),
+  };
+  if (!payload.nombre || !payload.fecha || !payload.hora) { toast('Completa nombre, fecha y hora.', 'error'); return; }
+  const old = btn.textContent; btn.disabled = true; btn.textContent = 'Creando…';
+  try {
+    await api('/auth/bookings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    toast('Cita creada', 'success');
+    closeNewBookingDrawer();
+    citasState.dayDate = new Date(`${payload.fecha}T00:00:00`);
+    citasState.view = 'day';
+    loadCitas();
+  } catch(e) { toast(e.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = old; }
+});
+
+// ── Servicios (catalogo con duracion/precio) ──────────────────────────
+let serviciosCache = [];
+async function loadServicios() {
+  const cont = document.getElementById('serviciosList');
+  cont.innerHTML = '<div class="panel-sub">Cargando…</div>';
+  try {
+    const data = await api('/auth/services?include_inactive=true');
+    serviciosCache = data.items || [];
+    renderServicios();
+  } catch(e) { cont.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+}
+function renderServicios() {
+  const cont = document.getElementById('serviciosList');
+  if (!serviciosCache.length) { cont.innerHTML = '<div class="panel-sub">Aún no tienes servicios. Crea el primero con “+ Nuevo servicio”.</div>'; return; }
+  cont.innerHTML = '';
+  serviciosCache.forEach(s => {
+    const row = document.createElement('div');
+    row.className = 'panel-card';
+    row.style.cssText = 'padding:14px 16px; background:var(--panel-2); display:flex; align-items:center; gap:14px; flex-wrap:wrap;';
+    const bits = [`${s.duration_minutes} min`, s.price_label || 'precio a consultar'];
+    row.innerHTML = `
+      <div style="flex:1; min-width:180px;">
+        <div style="font-weight:700;">${escapeHtml(s.nombre)}${s.is_active ? '' : ' <span class="badge badge-cancelled" style="margin-left:6px;">Inactivo</span>'}</div>
+        <div class="panel-sub" style="margin:2px 0 0;">${escapeHtml(bits.join(' · '))}${s.descripcion ? ' · ' + escapeHtml(s.descripcion) : ''}</div>
+      </div>
+      <button class="btn btn-ghost" data-edit="1" style="padding:6px 12px;">Editar</button>
+      <button class="btn btn-ghost" data-del="1" style="padding:6px 12px; color:var(--danger); border-color:var(--danger);">Eliminar</button>`;
+    row.querySelector('[data-edit]').addEventListener('click', () => openServiceDrawer(s));
+    row.querySelector('[data-del]').addEventListener('click', () => deleteService(s));
+    cont.appendChild(row);
+  });
+}
+function openServiceDrawer(svc = null) {
+  document.getElementById('serviceDrawerTitle').textContent = svc ? 'Editar servicio' : 'Nuevo servicio';
+  document.getElementById('svcSlug').value = svc ? svc.id : '';
+  document.getElementById('svcNombre').value = svc ? svc.nombre : '';
+  document.getElementById('svcDuracion').value = svc ? svc.duration_minutes : 30;
+  document.getElementById('svcPrecio').value = (svc && svc.price_cents) ? (svc.price_cents / 100) : '';
+  document.getElementById('svcDesc').value = svc ? (svc.descripcion || '') : '';
+  document.getElementById('svcActivo').checked = svc ? !!svc.is_active : true;
+  document.getElementById('serviceDrawer').classList.add('open');
+  document.getElementById('serviceOverlay').classList.add('open');
+}
+function closeServiceDrawer() {
+  document.getElementById('serviceDrawer').classList.remove('open');
+  document.getElementById('serviceOverlay').classList.remove('open');
+}
+async function saveService() {
+  const slug = document.getElementById('svcSlug').value;
+  const nombre = document.getElementById('svcNombre').value.trim();
+  const duration = parseInt(document.getElementById('svcDuracion').value, 10);
+  const precioEur = parseFloat(document.getElementById('svcPrecio').value);
+  const price_cents = isNaN(precioEur) ? 0 : Math.round(precioEur * 100);
+  const descripcion = document.getElementById('svcDesc').value.trim();
+  const is_active = document.getElementById('svcActivo').checked;
+  if (!nombre) { toast('El nombre es obligatorio.', 'error'); return; }
+  if (!duration || duration < 5) { toast('La duración mínima es 5 minutos.', 'error'); return; }
+  const body = JSON.stringify({ nombre, duration_minutes: duration, price_cents, descripcion, is_active });
+  const btn = document.getElementById('svcSaveBtn'); const old = btn.textContent; btn.disabled = true; btn.textContent = 'Guardando…';
+  try {
+    if (slug) await api(`/auth/services/${encodeURIComponent(slug)}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body });
+    else await api('/auth/services', { method:'POST', headers:{'Content-Type':'application/json'}, body });
+    toast('Servicio guardado', 'success');
+    closeServiceDrawer();
+    loadServicios();
+  } catch(e) { toast(e.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = old; }
+}
+async function deleteService(svc) {
+  if (!window.confirm(`¿Eliminar el servicio “${svc.nombre}”?`)) return;
+  try { await api(`/auth/services/${encodeURIComponent(svc.id)}`, { method:'DELETE' }); toast('Servicio eliminado', 'success'); loadServicios(); }
+  catch(e) { toast(e.message, 'error'); }
+}
+document.getElementById('servicioNewBtn').addEventListener('click', () => openServiceDrawer());
+document.getElementById('serviceClose').addEventListener('click', closeServiceDrawer);
+document.getElementById('serviceOverlay').addEventListener('click', closeServiceDrawer);
+document.getElementById('svcSaveBtn').addEventListener('click', saveService);
+
 document.getElementById('citasViewCal').addEventListener('click', async () => {
-  document.getElementById('citasCalView').style.display = '';
-  document.getElementById('citasListView').style.display = 'none';
-  document.getElementById('citasDayView').style.display = 'none';
-  document.getElementById('citasViewCal').classList.replace('btn-ghost', 'btn-primary');
-  document.getElementById('citasViewList').classList.replace('btn-primary', 'btn-ghost');
-  document.getElementById('citasViewDay').classList.replace('btn-primary', 'btn-ghost');
-  citasState.view = 'cal';
+  _switchToCalView();
   await fetchCitasCalData(); renderCalendar();
 });
-document.getElementById('citasViewList').addEventListener('click', () => { citasState.page = 0; fetchCitasList(); });
-document.getElementById('citasPrevPage').addEventListener('click', () => { citasState.page--; fetchCitasList(); });
-document.getElementById('citasNextPage').addEventListener('click', () => { citasState.page++; fetchCitasList(); });
-// Dropdowns y fechas — disparan fetch al cambiar
+// Filtros profesional/estado — recargan la vista activa
 ['citasFiltProf','citasFiltEstado'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => {
-    citasState.page = 0;
-    if (citasState.view === 'day') { loadCitasDay(); return; }
-    fetchCitasList();
+    if (citasState.view === 'cal') refreshCitasCalendarIfVisible();
+    else loadCitasDay();
   });
 });
-['citasFiltDesde','citasFiltHasta'].forEach(id => {
-  document.getElementById(id).addEventListener('change', () => {
-    // al tocar fechas manuales, desactivar period chip y poner 'all'
-    citasState.period = 'all'; _syncPeriodChips();
-    citasState.page = 0; fetchCitasList();
-  });
-});
-
 document.getElementById('citasFiltLimpiar').addEventListener('click', () => {
   ['citasFiltProf','citasFiltEstado'].forEach(id => document.getElementById(id).value = '');
-  ['citasFiltDesde','citasFiltHasta'].forEach(id => document.getElementById(id).value = '');
-  citasState.period = 'all'; citasState.page = 0;
-  _syncPeriodChips(); fetchCitasList();
+  if (citasState.view === 'cal') refreshCitasCalendarIfVisible();
+  else loadCitasDay();
 });
 
-document.querySelectorAll('#citasQuickFilters .filter-chip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    citasState.period = chip.dataset.period; citasState.page = 0;
-    // limpiar fechas manuales al usar un chip de periodo
-    ['citasFiltDesde','citasFiltHasta'].forEach(id => document.getElementById(id).value = '');
-    _syncPeriodChips(); fetchCitasList();
-  });
-});
-
-const CAL_STATUS_COLORS = { confirmed:'#0ea5e9', pending:'#f59e0b', completed:'#10b981', cancelled:'#6b7280' };
+const CAL_STATUS_COLORS = { confirmed:'#0ea5e9', pending:'#f59e0b', completed:'#10b981', cancelled:'#6b7280', no_show:'#ef4444' };
 
 function renderCalendar() {
   const y = citasState.calYear, m = citasState.calMonth;
@@ -3411,13 +3461,11 @@ function renderCalendar() {
 
     cell.innerHTML = html;
     cell.addEventListener('click', () => {
-      document.getElementById('citasFiltDesde').value = dateStr;
-      document.getElementById('citasFiltHasta').value = dateStr;
-      document.getElementById('citasCalView').style.display = 'none';
-      document.getElementById('citasListView').style.display = '';
-      document.getElementById('citasViewList').classList.replace('btn-ghost','btn-primary');
-      document.getElementById('citasViewCal').classList.replace('btn-primary','btn-ghost');
-      citasState.page = 0; fetchCitasList();
+      citasState.dayDate = new Date(`${dateStr}T00:00:00`);
+      citasState.dayRange = 1;
+      cdSyncRangeChips();
+      _switchToDayView();
+      loadCitasDay();
     });
     grid.appendChild(cell);
   }
@@ -3428,9 +3476,9 @@ document.getElementById('calToday').addEventListener('click', async () => { cons
 
 // ── CITAS · Vista Día (timeline por profesional) ──────────────────────
 const CD_PX_PER_MIN = 1.4, CD_AXIS_STEP = 30, CD_MIN_BLOCK_H = 30, CD_GENERAL_KEY = '__general__';
-const CD_ESTADO_NORM  = { confirmed:'confirmed', pending:'pending', pending_review:'pending', completed:'completed', cancelled:'cancelled' };
-const CD_ESTADO_TAG   = { confirmed:'Conf', pending:'Pend', completed:'Hecho', cancelled:'Canc' };
-const CD_ESTADO_LABEL = { confirmed:'Confirmada', pending:'Pendiente', completed:'Completada', cancelled:'Cancelada' };
+const CD_ESTADO_NORM  = { confirmed:'confirmed', pending:'pending', pending_review:'pending', completed:'completed', cancelled:'cancelled', no_show:'no_show' };
+const CD_ESTADO_TAG   = { confirmed:'Conf', pending:'Pend', completed:'Hecho', cancelled:'Canc', no_show:'No vino' };
+const CD_ESTADO_LABEL = { confirmed:'Confirmada', pending:'Pendiente', completed:'Completada', cancelled:'Cancelada', no_show:'No asistió' };
 
 function cdEstado(b){ return CD_ESTADO_NORM[b.estado || b.status] || 'pending'; }
 function cdHexToRgba(hex, a){
@@ -3481,6 +3529,25 @@ function cdPackLanes(events){
   return sorted;
 }
 
+function cdRangeDates(){
+  const n = Math.max(1, citasState.dayRange || 1);
+  const base = citasState.dayDate ? new Date(citasState.dayDate) : new Date();
+  base.setHours(0,0,0,0);
+  const out = [];
+  for (let i = 0; i < n; i++){ const d = new Date(base); d.setDate(base.getDate() + i); out.push(d); }
+  return out;
+}
+function cdBookingDateKey(b){ return ((b.fecha || b.start_at || b.datetime || b.date || '') + '').slice(0, 10); }
+function cdEmpColor(b){
+  const e = (citasState.employees || []).find(x => x.id === (b.employee_id || ''));
+  return (e && e.color) || '#00D1FF';
+}
+function cdSyncRangeChips(){
+  document.querySelectorAll('#cdRange .filter-chip').forEach(c =>
+    c.classList.toggle('active', Number(c.dataset.range) === (citasState.dayRange || 1))
+  );
+}
+
 async function loadCitasDay(){
   if (!citasState.dayDate) citasState.dayDate = new Date();
   if (!citasState.employees) {
@@ -3488,43 +3555,82 @@ async function loadCitasDay(){
     catch { citasState.employees = []; }
   }
   if (!citasState.daySchedule) { try { citasState.daySchedule = await api('/auth/schedule'); } catch { citasState.daySchedule = {}; } }
-  const dateKey = cdDateKey(citasState.dayDate);
+  const dates = cdRangeDates();
+  const fromKey = cdDateKey(dates[0]);
+  const toKey   = cdDateKey(dates[dates.length - 1]);
   const prof   = document.getElementById('citasFiltProf')?.value || '';
   const estado = document.getElementById('citasFiltEstado')?.value || '';
-  let params = `date_from=${dateKey}&date_to=${dateKey}&limit=1000`;
+  let params = `date_from=${fromKey}&date_to=${toKey}&limit=1000`;
   if (prof)   params += `&employee_id=${encodeURIComponent(prof)}`;
   if (estado) params += `&estado=${encodeURIComponent(estado)}`;
   try { const data = await api('/auth/bookings?' + params); citasState.dayItems = data.items || []; }
   catch { citasState.dayItems = []; }
+  cdSyncRangeChips();
   renderCitasDay();
 }
 
 function renderCitasDay(){
-  const dateKey = cdDateKey(citasState.dayDate);
-  const title = citasState.dayDate.toLocaleDateString('es-ES', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
-  document.getElementById('cdTitle').textContent = title.charAt(0).toUpperCase() + title.slice(1);
+  const dates = cdRangeDates();
+  const multi = dates.length > 1;
+  const todayKey = cdDateKey(new Date());
   const grid = document.getElementById('cdGrid');
   grid.innerHTML = '';
+
+  if (multi){
+    const f = d => d.toLocaleDateString('es-ES', { day:'2-digit', month:'short' });
+    document.getElementById('cdTitle').textContent = `${f(dates[0])} – ${f(dates[dates.length-1])} ${dates[dates.length-1].getFullYear()}`;
+  } else {
+    const t = dates[0].toLocaleDateString('es-ES', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+    document.getElementById('cdTitle').textContent = t.charAt(0).toUpperCase() + t.slice(1);
+  }
 
   const prof = document.getElementById('citasFiltProf')?.value || '';
   const emps = (citasState.employees || []).filter(e => (typeof e.is_active === 'boolean' ? e.is_active : true));
   const defEmp = (citasState.employees || []).find(e => e.is_default);
 
-  let columns = (prof ? emps.filter(e => e.id === prof) : emps).map(e => ({ key:e.id, name:e.name || 'Profesional', color:e.color || '#00D1FF', emp:e }));
-  if (!columns.length && !prof) columns = [{ key:CD_GENERAL_KEY, name:'Agenda', color:'var(--accent)', emp:null }];
-  if (!prof) {
-    const known = new Set(columns.map(c => c.key));
-    (citasState.dayItems || []).forEach(b => { const k = cdColKey(b, defEmp); if (!known.has(k)){ known.add(k); columns.push({ key:k, name:b.employee_name || 'Sin asignar', color:'var(--soft)', emp:null }); } });
+  // Columnas = días (rango > 1) o profesionales (1 día).
+  let columns;
+  if (multi){
+    const selEmp = prof ? (citasState.employees || []).find(e => e.id === prof) : null;
+    columns = dates.map(d => {
+      const key = cdDateKey(d);
+      const nm = d.toLocaleDateString('es-ES', { weekday:'short', day:'2-digit', month:'short' });
+      return {
+        type:'day', key, dateKey:key, emp:selEmp, color:null,
+        name: nm.charAt(0).toUpperCase() + nm.slice(1),
+        isToday: key === todayKey,
+        items: (citasState.dayItems || []).filter(b => cdBookingDateKey(b) === key),
+      };
+    });
+  } else {
+    const dateKey = cdDateKey(dates[0]);
+    // Ocultar la "agenda general" (is_default) si hay profesionales reales; se
+    // recrea abajo solo si tiene citas. Sin profesionales reales sigue siendo
+    // la unica columna.
+    const realEmps = emps.filter(e => !e.is_default);
+    const baseEmps = prof ? emps.filter(e => e.id === prof) : (realEmps.length ? realEmps : emps);
+    let cols = baseEmps.map(e => ({ type:'prof', key:e.id, dateKey, name:e.name || 'Profesional', color:e.color || '#00D1FF', emp:e, items:[], isToday:false }));
+    if (!cols.length && !prof) cols = [{ type:'prof', key:CD_GENERAL_KEY, dateKey, name:'Agenda', color:'var(--accent)', emp:null, items:[], isToday:false }];
+    const byKey = new Map(cols.map(c => [c.key, c]));
+    (citasState.dayItems || []).forEach(b => {
+      const k = cdColKey(b, defEmp);
+      let c = byKey.get(k);
+      if (!c){
+        if (prof) return;
+        const emp = (citasState.employees || []).find(x => x.id === k);
+        c = { type:'prof', key:k, dateKey, name:(emp && emp.name) || b.employee_name || 'Sin asignar', color:(emp && emp.color) || 'var(--soft)', emp: emp || null, items:[], isToday:false };
+        byKey.set(k, c); cols.push(c);
+      }
+      c.items.push(b);
+    });
+    columns = cols;
   }
-
-  const itemsByCol = new Map(); columns.forEach(c => itemsByCol.set(c.key, []));
-  (citasState.dayItems || []).forEach(b => { const k = cdColKey(b, defEmp); if (!itemsByCol.has(k)) itemsByCol.set(k, []); itemsByCol.get(k).push(b); });
 
   let minS = Infinity, maxE = -Infinity;
   columns.forEach(c => {
-    const info = cdColDayInfo(c.emp, dateKey);
+    const info = cdColDayInfo(c.emp, c.dateKey);
     if (!info.isClosed){ minS = Math.min(minS, info.dayStart); maxE = Math.max(maxE, info.dayEnd); }
-    (itemsByCol.get(c.key) || []).forEach(b => { const s = cdBookingStartMin(b); if (s === null) return; minS = Math.min(minS, s); maxE = Math.max(maxE, s + cdDur(b, c.emp)); });
+    c.items.forEach(b => { const s = cdBookingStartMin(b); if (s === null) return; minS = Math.min(minS, s); maxE = Math.max(maxE, s + cdDur(b, c.emp)); });
   });
   if (!Number.isFinite(minS)) minS = 540;
   if (!Number.isFinite(maxE)) maxE = 1080;
@@ -3533,7 +3639,9 @@ function renderCitasDay(){
   const bodyH = (endMin - startMin) * CD_PX_PER_MIN;
 
   const total = (citasState.dayItems || []).length;
-  document.getElementById('cdMeta').textContent = `${columns.length} profesional${columns.length === 1 ? '' : 'es'} · ${total} cita${total === 1 ? '' : 's'}`;
+  document.getElementById('cdMeta').textContent = multi
+    ? `${dates.length} días · ${total} cita${total === 1 ? '' : 's'}`
+    : `${columns.length} profesional${columns.length === 1 ? '' : 'es'} · ${total} cita${total === 1 ? '' : 's'}`;
 
   const gutter = document.createElement('div'); gutter.className = 'cd-col cd-gutter';
   const gh = document.createElement('div'); gh.className = 'cd-head'; gh.textContent = 'Hora';
@@ -3542,13 +3650,29 @@ function renderCitasDay(){
   gutter.appendChild(gh); gutter.appendChild(gb); grid.appendChild(gutter);
 
   columns.forEach(c => {
-    const info = cdColDayInfo(c.emp, dateKey);
-    const bookings = itemsByCol.get(c.key) || [];
-    const col = document.createElement('div'); col.className = 'cd-col';
+    const info = cdColDayInfo(c.emp, c.dateKey);
+    const bookings = c.items || [];
+    const col = document.createElement('div'); col.className = 'cd-col' + (c.isToday ? ' cd-today' : '');
     const head = document.createElement('div'); head.className = 'cd-head';
-    head.innerHTML = `<span class="cd-dot" style="background:${escapeHtml(c.color)}"></span><span class="cd-name">${escapeHtml(c.name)}</span><span class="cd-count">${bookings.length}</span>`;
+    const dot = c.type === 'prof' ? `<span class="cd-dot" style="background:${escapeHtml(c.color)}"></span>` : '';
+    head.innerHTML = `${dot}<span class="cd-name">${escapeHtml(c.name)}</span><span class="cd-count">${bookings.length}</span>`;
     const body = document.createElement('div'); body.className = 'cd-body'; body.style.height = bodyH + 'px';
     for (let t = startMin; t <= endMin; t += CD_AXIS_STEP){ const ln = document.createElement('div'); ln.className = 'cd-line' + (t%60===0 ? ' hour' : ''); ln.style.top = ((t-startMin)*CD_PX_PER_MIN) + 'px'; body.appendChild(ln); }
+
+    // Click en hueco vacío → crear cita manual prefijada.
+    if (!cdColDayInfo(c.emp, c.dateKey).isClosed) {
+      body.style.cursor = 'copy';
+      body.addEventListener('click', (e) => {
+        if (e.target !== body) return;
+        const rect = body.getBoundingClientRect();
+        const slot = Number(c.emp && c.emp.slot_minutes) || Number(citasState.daySchedule && citasState.daySchedule.slot_minutes) || 30;
+        let mins = startMin + (e.clientY - rect.top) / CD_PX_PER_MIN;
+        mins = Math.max(startMin, Math.round(mins / slot) * slot);
+        const hh = String(Math.floor(mins / 60)).padStart(2, '0'), mm = String(Math.floor(mins % 60)).padStart(2, '0');
+        const empId = c.type === 'prof' ? (c.emp ? c.emp.id : '') : (prof || '');
+        openNewBookingDrawer({ date: c.dateKey, time: `${hh}:${mm}`, employeeId: empId }).catch(err => toast(err.message, 'error'));
+      });
+    }
 
     const band = (top, bot, opt) => {
       const a = Math.max(0, top - startMin), b = Math.max(a, bot - startMin);
@@ -3572,14 +3696,16 @@ function renderCitasDay(){
       const h = Math.max(CD_MIN_BLOCK_H, (ev.endM - ev.startM) * CD_PX_PER_MIN) - 2;
       const lc = ev.laneCount || 1, wPct = 100/lc, lPct = ev.lane * wPct;
       const base = CAL_STATUS_COLORS[est] || CAL_STATUS_COLORS.pending;
+      const leftColor = c.type === 'day' ? cdEmpColor(b) : c.color;
       const btn = document.createElement('button'); btn.type = 'button';
       btn.className = 'cd-event' + (h < 46 ? ' compact' : '') + (est === 'cancelled' ? ' cancelled' : '');
       btn.style.top = top + 'px'; btn.style.height = h + 'px';
       btn.style.left = `calc(${lPct}% + 3px)`; btn.style.width = `calc(${wPct}% - 6px)`;
-      btn.style.background = cdHexToRgba(base, 0.16); btn.style.borderColor = cdHexToRgba(base, 0.5); btn.style.borderLeftColor = c.color;
+      btn.style.background = cdHexToRgba(base, 0.16); btn.style.borderColor = cdHexToRgba(base, 0.5); btn.style.borderLeftColor = leftColor;
       if ((b.booking_id || b.id) === citasState.selectedDayBookingId) btn.classList.add('selected');
       const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '');
-      btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(hora)} · ${escapeHtml(b.nombre || b.client_name || b.name || b.servicio || 'Cita')}</span><span class="cd-ev-tag" style="color:${base}">${escapeHtml(CD_ESTADO_TAG[est] || '')}</span></div><div class="cd-ev-svc">${escapeHtml(b.servicio || 'Consulta')}</div>`;
+      const sub = c.type === 'day' ? (b.employee_name || b.servicio || 'Consulta') : (b.servicio || 'Consulta');
+      btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(hora)} · ${escapeHtml(b.nombre || b.client_name || b.name || b.servicio || 'Cita')}</span><span class="cd-ev-tag" style="color:${base}">${escapeHtml(CD_ESTADO_TAG[est] || '')}</span></div><div class="cd-ev-svc">${escapeHtml(sub)}</div>`;
       btn.addEventListener('click', () => cdSelect(b));
       body.appendChild(btn);
     });
@@ -3602,9 +3728,10 @@ function cdSelect(b){
 
 function cdRenderDetail(b){
   const est = cdEstado(b);
-  const badge = { confirmed:'badge-confirmed', pending:'badge-pending', cancelled:'badge-cancelled', completed:'badge-completed' }[est] || 'badge-pending';
+  const badge = { confirmed:'badge-confirmed', pending:'badge-pending', cancelled:'badge-cancelled', completed:'badge-completed', no_show:'badge-noshow' }[est] || 'badge-pending';
   const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '--:--');
-  const canEdit = (b.can_cancel !== false) && est !== 'cancelled' && est !== 'completed';
+  const canEdit = (b.can_cancel !== false) && est !== 'cancelled' && est !== 'completed' && est !== 'no_show';
+  const canAttend = b.can_mark_attendance === true && est !== 'cancelled';
   const d = document.getElementById('cdDetail'); d.style.display = '';
   d.innerHTML = `
     <div class="cd-detail-head">
@@ -3612,9 +3739,10 @@ function cdRenderDetail(b){
         <div class="cd-detail-title">${escapeHtml(b.nombre || b.client_name || b.name || 'Cita')}</div>
         <div class="cd-detail-meta">
           <span class="badge ${badge}">${escapeHtml(CD_ESTADO_LABEL[est] || est)}</span>
+          ${est === 'completed' && b.completed_source === 'auto' ? `<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);" title="Se completó automáticamente al pasar la hora. Confirma si el cliente asistió.">auto · sin confirmar</span>` : ''}
           ${b.booking_code ? `<span class="badge" style="background:var(--accent-soft); color:var(--accent); font-family:'Courier New',monospace; letter-spacing:.06em;">N.º ${escapeHtml(b.booking_code)}</span>` : ''}
           <span>${escapeHtml(hora)} · ${escapeHtml(b.employee_name || 'Agenda')}</span>
-          <span>${escapeHtml(b.servicio || 'Consulta')}</span>
+          <span>${escapeHtml(b.servicio || 'Consulta')}${b.service_price_label ? ' · ' + escapeHtml(b.service_price_label) : ''}</span>
         </div>
         <div class="cd-detail-meta">
           <span>${escapeHtml(b.email || b.client_email || '–')}</span>
@@ -3624,6 +3752,8 @@ function cdRenderDetail(b){
       <button class="btn btn-ghost" type="button" data-cd="close" style="padding:6px 12px;">Cerrar</button>
     </div>
     <div class="cd-detail-actions">
+      ${canAttend ? `<button class="btn ${est === 'completed' ? 'btn-primary' : 'btn-ghost'}" type="button" data-cd="attended" style="padding:6px 14px;">✓ Realizada</button>
+      <button class="btn btn-ghost" type="button" data-cd="noshow" style="padding:6px 14px; color:var(--danger); border-color:var(--danger);${est === 'no_show' ? ' background:var(--danger-soft);' : ''}">✗ No vino</button>` : ''}
       ${b.manage_url ? `<button class="btn btn-ghost" type="button" data-cd="manage" style="padding:6px 14px;">Gestionar</button>` : ''}
       <button class="btn btn-ghost" type="button" data-cd="resched" style="padding:6px 14px;" ${canEdit ? '' : 'disabled'}>Reprogramar</button>
       <button class="btn btn-ghost" type="button" data-cd="cancel" style="padding:6px 14px; color:var(--danger); border-color:var(--danger);" ${canEdit ? '' : 'disabled'}>Cancelar</button>
@@ -3635,6 +3765,13 @@ function cdRenderDetail(b){
       try {
         if (action === 'close'){ citasState.selectedDayBookingId = ''; d.style.display = 'none'; renderCitasDay(); return; }
         if (action === 'manage'){ if (b.manage_url) window.open(b.manage_url, '_blank', 'noopener,noreferrer'); return; }
+        if (action === 'attended' || action === 'noshow'){
+          await api(`/auth/bookings/${bid}/attendance`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ attended: action === 'attended' }) });
+          toast(action === 'attended' ? 'Cita marcada como realizada' : 'Cita marcada como no asistida', 'success');
+          loadCitasAttendanceStats();
+          await loadCitasDay();
+          return;
+        }
         if (action === 'resched'){ openReschedDrawer(b); return; }
         if (action === 'cancel'){
           if (!window.confirm('¿Cancelar esta cita?')) return;
@@ -3649,25 +3786,27 @@ function cdRenderDetail(b){
 
 function _switchToDayView(){
   document.getElementById('citasCalView').style.display = 'none';
-  document.getElementById('citasListView').style.display = 'none';
   document.getElementById('citasDayView').style.display = '';
   document.getElementById('citasViewDay').classList.replace('btn-ghost','btn-primary');
   document.getElementById('citasViewCal').classList.replace('btn-primary','btn-ghost');
-  document.getElementById('citasViewList').classList.replace('btn-primary','btn-ghost');
   citasState.view = 'day';
 }
 
 document.getElementById('citasViewDay').addEventListener('click', () => {
-  if (!citasState.dayDate) {
-    const desde = document.getElementById('citasFiltDesde').value;
-    citasState.dayDate = desde ? new Date(`${desde}T00:00:00`) : new Date();
-  }
+  if (!citasState.dayDate) citasState.dayDate = new Date();
   _switchToDayView();
   loadCitasDay();
 });
 document.getElementById('cdToday').addEventListener('click', () => { citasState.dayDate = new Date(); loadCitasDay(); });
-document.getElementById('cdPrev').addEventListener('click', () => { const d = new Date(citasState.dayDate); d.setDate(d.getDate()-1); citasState.dayDate = d; loadCitasDay(); });
-document.getElementById('cdNext').addEventListener('click', () => { const d = new Date(citasState.dayDate); d.setDate(d.getDate()+1); citasState.dayDate = d; loadCitasDay(); });
+document.getElementById('cdPrev').addEventListener('click', () => { const step = citasState.dayRange || 1; const d = new Date(citasState.dayDate); d.setDate(d.getDate()-step); citasState.dayDate = d; loadCitasDay(); });
+document.getElementById('cdNext').addEventListener('click', () => { const step = citasState.dayRange || 1; const d = new Date(citasState.dayDate); d.setDate(d.getDate()+step); citasState.dayDate = d; loadCitasDay(); });
+document.querySelectorAll('#cdRange .filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    citasState.dayRange = Number(chip.dataset.range) || 1;
+    cdSyncRangeChips();
+    loadCitasDay();
+  });
+});
 
 // ── EQUIPO ────────────────────────────────────────────────────────────
 let allServices = [];
