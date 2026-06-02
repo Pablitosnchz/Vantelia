@@ -840,6 +840,7 @@ class PortalScheduleUpdatePayload(BaseModel):
     closed_weekdays: List[int] = Field(default_factory=list)
     message_templates: Optional[Dict[str, str]] = None
     message_template_enabled: Optional[Dict[str, bool]] = None
+    message_template_channels: Optional[Dict[str, Dict[str, bool]]] = None
 
 
 class PortalAgendaBlockPayload(BaseModel):
@@ -869,6 +870,8 @@ class PortalSchedulePublic(BaseModel):
     closed_weekdays: List[int]
     message_templates: Dict[str, str]
     message_template_enabled: Dict[str, bool]
+    message_template_channels: Dict[str, Dict[str, bool]]
+    reminder_channel_availability: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     blocks: List[PortalAgendaBlock]
 
 

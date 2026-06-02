@@ -446,6 +446,13 @@ DEFAULT_MESSAGE_TEMPLATE_ENABLED = {
     "rescheduled": True,
 }
 
+REMINDER_MESSAGE_KINDS = {"reminder_24h", "reminder_2h"}
+
+DEFAULT_MESSAGE_TEMPLATE_CHANNELS = {
+    "reminder_24h": {"email": True, "whatsapp": False, "sms": False},
+    "reminder_2h": {"email": True, "whatsapp": False, "sms": False},
+}
+
 MESSAGE_KIND_ALIASES = {
     "confirmacion": "confirmed",
     "confirmación": "confirmed",
@@ -569,6 +576,27 @@ def _normalize_message_template_enabled(
             if isinstance(nested_value, dict) and "enabled" in nested_value:
                 enabled[key] = bool(nested_value.get("enabled"))
     return enabled
+
+
+def _normalize_message_template_channels(raw_channels: Any) -> Dict[str, Dict[str, bool]]:
+    channels = {key: dict(value) for key, value in DEFAULT_MESSAGE_TEMPLATE_CHANNELS.items()}
+    if not isinstance(raw_channels, dict):
+        return channels
+    for kind in REMINDER_MESSAGE_KINDS:
+        raw_value = raw_channels.get(kind)
+        if not isinstance(raw_value, dict):
+            for raw_key, target_key in MESSAGE_KIND_ALIASES.items():
+                if target_key == kind and isinstance(raw_channels.get(raw_key), dict):
+                    raw_value = raw_channels.get(raw_key)
+                    break
+        if not isinstance(raw_value, dict):
+            continue
+        channels[kind] = {
+            "email": bool(raw_value.get("email", channels[kind]["email"])),
+            "whatsapp": bool(raw_value.get("whatsapp", channels[kind]["whatsapp"])),
+            "sms": bool(raw_value.get("sms", channels[kind]["sms"])),
+        }
+    return channels
 
 
 def _sanitize_text(value: str, *, allow_multiline: bool = False) -> str:
@@ -757,6 +785,9 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
                 booking.get("message_template_enabled", {}),
                 booking.get("message_templates", {}),
             ),
+            "message_template_channels": _normalize_message_template_channels(
+                booking.get("message_template_channels", {})
+            ),
         },
     }
 
@@ -817,6 +848,9 @@ def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
             "message_template_enabled": _normalize_message_template_enabled(
                 config.get("booking", {}).get("message_template_enabled", {}),
                 config.get("booking", {}).get("message_templates", {}),
+            ),
+            "message_template_channels": _normalize_message_template_channels(
+                config.get("booking", {}).get("message_template_channels", {})
             ),
         },
     }
@@ -2242,17 +2276,14 @@ def _booking_reminder_worker() -> None:
                     "Citas marcadas como completadas automaticamente: %s",
                     auto_completed,
                 )
-            if _smtp_configured():
-                result = asyncio.run(_run_booking_reminders())
-                if result.sent_24h or result.sent_2h or result.failed:
-                    logger.info(
-                        "Recordatorios procesados automaticamente. 24h=%s 2h=%s fallos=%s",
-                        result.sent_24h,
-                        result.sent_2h,
-                        result.failed,
-                    )
-            else:
-                logger.debug("Recordatorios automaticos omitidos: SMTP no configurado.")
+            result = asyncio.run(_run_booking_reminders())
+            if result.sent_24h or result.sent_2h or result.failed:
+                logger.info(
+                    "Recordatorios procesados automaticamente. 24h=%s 2h=%s fallos=%s",
+                    result.sent_24h,
+                    result.sent_2h,
+                    result.failed,
+                )
         except Exception as exc:  # noqa: BLE001
             logger.error("Error en el motor automatico de recordatorios: %s", exc)
 
@@ -4209,6 +4240,7 @@ def _config_from_admin_payload(cliente_id: str, payload: AdminClientePayload) ->
                 "success_message": payload.booking_success_message,
                 "message_templates": existing_booking.get("message_templates", {}),
                 "message_template_enabled": existing_booking.get("message_template_enabled", {}),
+                "message_template_channels": existing_booking.get("message_template_channels", {}),
             },
         },
     )
@@ -4385,6 +4417,54 @@ def _delete_agenda_block(cliente_id: str, block_id: str, *, employee_id: Optiona
         connection.commit()
 
 
+def _reminder_channel_availability(cliente_id: str) -> Dict[str, Dict[str, Any]]:
+    config = _get_client_config(cliente_id)
+    whatsapp_cfg = config.get("whatsapp", {}) or {}
+    voice_cfg = config.get("voice", {}) or {}
+
+    whatsapp_plan = bool(_plan_feature(cliente_id, "whatsapp_enabled"))
+    whatsapp_token = _whatsapp_access_token_for_client(cliente_id)
+    whatsapp_ready = bool(
+        whatsapp_plan
+        and whatsapp_cfg.get("enabled")
+        and str(whatsapp_cfg.get("phone_number_id", "") or "").strip()
+        and whatsapp_token
+    )
+    if not whatsapp_plan:
+        whatsapp_reason = "Necesitas un plan con WhatsApp."
+    elif not whatsapp_cfg.get("enabled"):
+        whatsapp_reason = "Activa WhatsApp en el portal."
+    elif not str(whatsapp_cfg.get("phone_number_id", "") or "").strip():
+        whatsapp_reason = "Falta el Phone Number ID de WhatsApp."
+    elif not whatsapp_token:
+        whatsapp_reason = "Falta el token de envio de WhatsApp en servidor."
+    else:
+        whatsapp_reason = "Disponible."
+
+    sms_plan = _client_voice_plan_enabled(cliente_id)
+    sms_sender = str(
+        TWILIO_SMS_SENDER
+        or voice_cfg.get("twilio_phone_number")
+        or TWILIO_DEFAULT_PHONE_NUMBER
+        or ""
+    ).strip()
+    sms_ready = bool(sms_plan and _voice_twilio_configured() and sms_sender)
+    if not sms_plan:
+        sms_reason = "Necesitas un plan con voz para SMS."
+    elif not _voice_twilio_configured():
+        sms_reason = "Faltan credenciales de Twilio en servidor."
+    elif not sms_sender:
+        sms_reason = "Falta un numero remitente para SMS."
+    else:
+        sms_reason = "Disponible."
+
+    return {
+        "email": {"available": True, "reason": "Disponible.", "label": "Email"},
+        "whatsapp": {"available": whatsapp_ready, "reason": whatsapp_reason, "label": "WhatsApp"},
+        "sms": {"available": sms_ready, "reason": sms_reason, "label": "SMS"},
+    }
+
+
 def _portal_schedule_from_config(cliente_id: str) -> PortalSchedulePublic:
     config = _get_client_config(cliente_id)
     booking = config["booking"]
@@ -4402,6 +4482,10 @@ def _portal_schedule_from_config(cliente_id: str) -> PortalSchedulePublic:
             booking.get("message_template_enabled", {}),
             booking.get("message_templates", {}),
         ),
+        message_template_channels=_normalize_message_template_channels(
+            booking.get("message_template_channels", {})
+        ),
+        reminder_channel_availability=_reminder_channel_availability(cliente_id),
         blocks=[
             _serialize_agenda_block(row)
             for row in _list_agenda_blocks(cliente_id, employee_id="", date_from=today, date_to=future_limit)
@@ -4427,6 +4511,10 @@ def _portal_schedule_from_employee(cliente_id: str, employee_id: str) -> PortalS
             booking.get("message_template_enabled", {}),
             booking.get("message_templates", {}),
         ),
+        message_template_channels=_normalize_message_template_channels(
+            booking.get("message_template_channels", {})
+        ),
+        reminder_channel_availability=_reminder_channel_availability(cliente_id),
         blocks=[
             _serialize_agenda_block(block)
             for block in _list_agenda_blocks(
@@ -5171,7 +5259,9 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
     fields_set = set(raw_fields_set)
     schedule_fields = {"enabled", "timezone", "slot_minutes", "day_start", "day_end", "closed_weekdays"}
     should_update_schedule = bool(fields_set & schedule_fields) or (
-        data.message_templates is None and data.message_template_enabled is None
+        data.message_templates is None
+        and data.message_template_enabled is None
+        and data.message_template_channels is None
     )
     if should_update_schedule:
         start = _parse_time(data.day_start).strftime("%H:%M")
@@ -5214,6 +5304,14 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
             data.message_template_enabled,
             data.message_templates,
         )
+    if data.message_template_channels is not None:
+        availability = _reminder_channel_availability(cliente_id)
+        channels = _normalize_message_template_channels(data.message_template_channels)
+        for kind, channel_map in channels.items():
+            for channel_name in ("whatsapp", "sms"):
+                if channel_map.get(channel_name) and not availability.get(channel_name, {}).get("available"):
+                    channel_map[channel_name] = False
+        booking["message_template_channels"] = channels
     config["booking"] = booking
     _validate_single_client_runtime(cliente_id, config)
     _persist_configs_to_disk(next_configs)
@@ -8157,6 +8255,9 @@ def _schedule_preview_payload_from_config(cliente_id: str) -> PortalScheduleUpda
             booking.get("message_template_enabled", {}),
             booking.get("message_templates", {}),
         ),
+        message_template_channels=_normalize_message_template_channels(
+            booking.get("message_template_channels", {})
+        ),
     )
 
 
@@ -8437,6 +8538,89 @@ def _booking_email_enabled(config: Dict[str, Any], kind: str) -> bool:
         config.get("booking", {}).get("message_templates", {}),
     )
     return enabled_map.get(kind, True)
+
+
+def _booking_customer_phone_for_channel(booking_row: sqlite3.Row, channel: str) -> str:
+    raw_value = _sanitize_text(booking_row["telefono"] if booking_row["telefono"] else "")
+    if not raw_value:
+        return ""
+    if raw_value.startswith("+"):
+        e164 = "+" + re.sub(r"\D", "", raw_value)
+    else:
+        digits = re.sub(r"\D", "", raw_value)
+        if digits.startswith("00"):
+            e164 = "+" + digits[2:]
+        elif len(digits) == 9 and digits[0] in {"6", "7", "8", "9"}:
+            e164 = "+34" + digits
+        elif digits.startswith("34") and len(digits) >= 11:
+            e164 = "+" + digits
+        elif len(digits) >= 10:
+            e164 = "+" + digits
+        else:
+            return ""
+    if channel == "whatsapp":
+        return e164.lstrip("+")
+    return e164
+
+
+def _booking_message_text_for_channel(
+    booking_row: sqlite3.Row,
+    kind: str,
+    request: Optional[Request] = None,
+) -> str:
+    config = _get_client_config(booking_row["cliente_id"])
+    text_body, _ = _booking_email_bodies(
+        booking_row,
+        config["nombre"],
+        kind,
+        _booking_row_manage_url(booking_row, request),
+        config.get("contacto", {}).get("email", ""),
+        config.get("contacto", {}).get("telefono", ""),
+        config.get("booking", {}).get("message_templates", {}),
+    )
+    return text_body
+
+
+async def _send_booking_whatsapp_reminder(
+    booking_row: sqlite3.Row,
+    kind: str,
+    request: Optional[Request] = None,
+) -> bool:
+    config = _get_client_config(booking_row["cliente_id"])
+    whatsapp_cfg = config.get("whatsapp", {}) or {}
+    phone_number_id = str(whatsapp_cfg.get("phone_number_id", "") or "").strip()
+    to_number = _booking_customer_phone_for_channel(booking_row, "whatsapp")
+    if not (phone_number_id and to_number):
+        return False
+    return await _send_whatsapp_text(
+        cliente_id=booking_row["cliente_id"],
+        phone_number_id=phone_number_id,
+        to_number=to_number,
+        text=_booking_message_text_for_channel(booking_row, kind, request),
+    )
+
+
+async def _send_booking_sms_reminder(
+    booking_row: sqlite3.Row,
+    kind: str,
+    request: Optional[Request] = None,
+) -> bool:
+    config = _get_client_config(booking_row["cliente_id"])
+    voice_cfg = config.get("voice", {}) or {}
+    from_number = str(
+        TWILIO_SMS_SENDER
+        or voice_cfg.get("twilio_phone_number")
+        or TWILIO_DEFAULT_PHONE_NUMBER
+        or ""
+    ).strip()
+    to_number = _booking_customer_phone_for_channel(booking_row, "sms")
+    if not (from_number and to_number):
+        return False
+    return await _send_twilio_sms(
+        to_number,
+        from_number,
+        _booking_message_text_for_channel(booking_row, kind, request),
+    )
 
 
 def _mark_booking_email_result(
@@ -10627,6 +10811,113 @@ async def _send_booking_email_by_kind(
     )
 
 
+async def _send_booking_reminder_by_kind(
+    booking_row: sqlite3.Row,
+    kind: str,
+    request: Optional[Request] = None,
+    *,
+    sent_column: str = "",
+) -> None:
+    config = _get_client_config(booking_row["cliente_id"])
+    if not _booking_email_enabled(config, kind):
+        if sent_column:
+            _mark_booking_email_result(
+                booking_row["id"],
+                status=f"disabled:{kind}",
+                sent_column=sent_column,
+                error="",
+            )
+        _record_booking_audit(
+            booking_row["id"],
+            booking_row["cliente_id"],
+            "booking_reminder_skipped",
+            {"kind": kind, "reason": "disabled"},
+        )
+        return
+
+    channels = _normalize_message_template_channels(
+        config.get("booking", {}).get("message_template_channels", {})
+    ).get(kind, {"email": True, "whatsapp": False, "sms": False})
+    availability = _reminder_channel_availability(booking_row["cliente_id"])
+    sent_channels: List[str] = []
+    failed_channels: Dict[str, str] = {}
+    skipped_channels: Dict[str, str] = {}
+
+    if not any(bool(channels.get(name)) for name in ("email", "whatsapp", "sms")):
+        if sent_column:
+            _mark_booking_email_result(
+                booking_row["id"],
+                status=f"disabled:{kind}",
+                sent_column=sent_column,
+                error="",
+            )
+        _record_booking_audit(
+            booking_row["id"],
+            booking_row["cliente_id"],
+            "booking_reminder_skipped",
+            {"kind": kind, "reason": "no_channels"},
+        )
+        return
+
+    if channels.get("email"):
+        try:
+            _send_booking_email(booking_row, kind, request)
+            sent_channels.append("email")
+        except Exception as exc:  # noqa: BLE001
+            failed_channels["email"] = str(exc)
+
+    if channels.get("whatsapp"):
+        if not availability.get("whatsapp", {}).get("available"):
+            skipped_channels["whatsapp"] = str(availability.get("whatsapp", {}).get("reason", "No disponible."))
+        else:
+            try:
+                if await _send_booking_whatsapp_reminder(booking_row, kind, request):
+                    sent_channels.append("whatsapp")
+                else:
+                    failed_channels["whatsapp"] = "No se pudo entregar WhatsApp o falta telefono valido."
+            except Exception as exc:  # noqa: BLE001
+                failed_channels["whatsapp"] = str(exc)
+
+    if channels.get("sms"):
+        if not availability.get("sms", {}).get("available"):
+            skipped_channels["sms"] = str(availability.get("sms", {}).get("reason", "No disponible."))
+        else:
+            try:
+                if await _send_booking_sms_reminder(booking_row, kind, request):
+                    sent_channels.append("sms")
+                else:
+                    failed_channels["sms"] = "No se pudo entregar SMS o falta telefono valido."
+            except Exception as exc:  # noqa: BLE001
+                failed_channels["sms"] = str(exc)
+
+    if sent_channels or skipped_channels:
+        status_value = kind if sent_channels == ["email"] else f"{kind}:{','.join(sent_channels or ['skipped'])}"
+        if sent_column:
+            _mark_booking_email_result(
+                booking_row["id"],
+                status=status_value,
+                sent_column=sent_column,
+                error="; ".join(f"{name}: {err}" for name, err in failed_channels.items()),
+            )
+        _record_booking_audit(
+            booking_row["id"],
+            booking_row["cliente_id"],
+            "booking_reminder_sent",
+            {
+                "kind": kind,
+                "channels": sent_channels,
+                "skipped": skipped_channels,
+                "failed": failed_channels,
+            },
+        )
+        return
+
+    raise RuntimeError(
+        "No se ha podido enviar el recordatorio por ningun canal: "
+        + "; ".join(f"{name}: {err}" for name, err in failed_channels.items())
+    )
+
+
 def _booking_due_for_reminder(row: sqlite3.Row, now_utc: datetime, hours_before: int) -> bool:
     start_at = _from_utc_iso(row["start_at"])
     if not start_at or row["status"] != "confirmed":
@@ -10730,7 +11021,7 @@ async def _run_booking_reminders(request: Optional[Request] = None) -> AdminRemi
         processed += 1
         try:
             if not row["reminder_24h_sent_at"] and _booking_due_for_reminder(row, now_utc, REMINDER_24H_HOURS):
-                await _send_booking_email_by_kind(
+                await _send_booking_reminder_by_kind(
                     row,
                     "reminder_24h",
                     request,
@@ -10740,7 +11031,7 @@ async def _run_booking_reminders(request: Optional[Request] = None) -> AdminRemi
                 continue
 
             if not row["reminder_2h_sent_at"] and _booking_due_for_reminder(row, now_utc, REMINDER_2H_HOURS):
-                await _send_booking_email_by_kind(
+                await _send_booking_reminder_by_kind(
                     row,
                     "reminder_2h",
                     request,

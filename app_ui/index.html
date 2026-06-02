@@ -842,7 +842,7 @@
   </div>
   <div class="nav-item" data-tab="mensajes">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-    <span>Mensajes</span>
+    <span>Recordatorios</span>
   </div>
 
   <div class="sidebar-divider"></div>
@@ -1553,19 +1553,19 @@
     </div>
   </section>
 
-  <!-- MENSAJES -->
+  <!-- RECORDATORIOS -->
   <section class="page page-agenda-wrap" id="page-mensajes">
     <div class="agenda-blocked-overlay" id="overlayMensajes">
       <strong>Sección desactivada</strong>
-      <p>Activa las citas para personalizar las plantillas de email.</p>
+      <p>Activa las citas para personalizar recordatorios y avisos.</p>
       <button class="btn btn-primary" onclick="setTab('citas')">Ir a Citas</button>
     </div>
     <div class="panel-card">
-      <h2>Plantillas de email automático</h2>
-      <p class="panel-sub">Personaliza los mensajes que se envían al cliente en cada evento de agenda.</p>
+      <h2>Recordatorios automáticos</h2>
+      <p class="panel-sub">Personaliza los avisos de agenda y elige si cada recordatorio se envía por email, WhatsApp o SMS.</p>
       <div id="mensajesAccordions" style="margin-top:14px;"></div>
       <div style="margin-top:18px;">
-        <button class="btn btn-primary" id="mensajesGuardarBtn">Guardar plantillas</button>
+        <button class="btn btn-primary" id="mensajesGuardarBtn">Guardar recordatorios</button>
       </div>
     </div>
   </section>
@@ -1867,7 +1867,7 @@ function setTab(tab) {
     knowledge:'Conocimiento', qa:'Q&A', tune:'Tune AI', whatsapp:'WhatsApp',
     appearance:'Apariencia', deploy:'Deploy', billing:'Suscripción',
     citas:'Citas', equipo:'Equipo', servicios:'Servicios', horarios:'Horarios',
-    mensajes:'Mensajes automáticos', instalacion:'Instalación', cuenta:'Cuenta',
+    mensajes:'Recordatorios', instalacion:'Instalación', cuenta:'Cuenta',
   };
   document.getElementById('pageTitle').textContent = titles[tab] || 'Panel';
   if (tab === 'chats')      loadChats();
@@ -4088,14 +4088,16 @@ document.getElementById('horBlockAddBtn').addEventListener('click', async () => 
 
 // ── MENSAJES ──────────────────────────────────────────────────────────
 const MSG_TEMPLATES = [
-  { key:'confirmacion', label:'Confirmación de cita' },
-  { key:'reminder_24h', label:'Recordatorio 24 horas antes' },
-  { key:'reminder_2h', label:'Recordatorio 2 horas antes' },
-  { key:'cancelled', label:'Cita cancelada' },
-  { key:'rescheduled', label:'Cita reprogramada' },
+  { key:'confirmacion', label:'Confirmación de cita', channels:false },
+  { key:'reminder_24h', label:'Recordatorio 24 horas antes', channels:true },
+  { key:'reminder_2h', label:'Recordatorio 2 horas antes', channels:true },
+  { key:'cancelled', label:'Cita cancelada', channels:false },
+  { key:'rescheduled', label:'Cita reprogramada', channels:false },
 ];
 let mensajesData = {};
 let mensajesEnabled = {};
+let mensajesChannels = {};
+let mensajesChannelAvailability = {};
 let mensajesSchedule = {};
 
 async function loadMensajes() {
@@ -4103,6 +4105,8 @@ async function loadMensajes() {
     const data = await api('/auth/schedule');
     mensajesData = data.message_templates || {};
     mensajesEnabled = data.message_template_enabled || {};
+    mensajesChannels = data.message_template_channels || {};
+    mensajesChannelAvailability = data.reminder_channel_availability || {};
     mensajesSchedule = data || {};
     renderMensajesAccordions();
   } catch(e) { toast(e.message, 'error'); }
@@ -4121,10 +4125,18 @@ function msgBackendKey(key) {
 function buildMensajesPayload() {
   const message_templates = {};
   const message_template_enabled = {};
+  const message_template_channels = {};
   MSG_TEMPLATES.forEach(tpl => {
     const key = msgBackendKey(tpl.key);
     message_templates[key] = document.querySelector(`.msg-content[data-key="${tpl.key}"]`)?.value || mensajesData[key] || '';
     message_template_enabled[key] = !!(document.querySelector(`.msg-enabled[data-key="${tpl.key}"]`)?.checked);
+    if (tpl.channels) {
+      message_template_channels[key] = {};
+      ['email', 'whatsapp', 'sms'].forEach(channel => {
+        const input = document.querySelector(`.msg-channel[data-key="${tpl.key}"][data-channel="${channel}"]`);
+        message_template_channels[key][channel] = !!(input && input.checked && !input.disabled);
+      });
+    }
   });
   return {
     enabled: mensajesSchedule.enabled !== false,
@@ -4135,7 +4147,44 @@ function buildMensajesPayload() {
     closed_weekdays: mensajesSchedule.closed_weekdays || mensajesSchedule.closed_days || [],
     message_templates,
     message_template_enabled,
+    message_template_channels,
   };
+}
+
+function msgChannelMeta(channel) {
+  return mensajesChannelAvailability[channel] || { available: channel === 'email', reason: '' };
+}
+
+function renderMsgChannels(tpl, key) {
+  if (!tpl.channels) return '';
+  const saved = mensajesChannels[key] || {};
+  const parts = [
+    { key:'email', label:'Email' },
+    { key:'whatsapp', label:'WhatsApp' },
+    { key:'sms', label:'SMS' },
+  ];
+  const controls = parts.map(part => {
+    const meta = msgChannelMeta(part.key);
+    const available = meta.available !== false;
+    const checked = part.key === 'email'
+      ? saved.email !== false
+      : !!saved[part.key] && available;
+    const title = available ? '' : escapeHtml(meta.reason || 'No disponible');
+    return `
+      <label title="${title}" style="display:inline-flex; align-items:center; gap:7px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; color:${available?'var(--soft)':'var(--soft-2)'}; background:${available?'rgba(255,255,255,0.03)':'rgba(255,255,255,0.02)'};">
+        <input type="checkbox" class="msg-channel" data-key="${tpl.key}" data-channel="${part.key}" ${checked?'checked':''} ${available?'':'disabled'} />
+        ${part.label}
+      </label>`;
+  }).join('');
+  const notices = parts
+    .filter(part => part.key !== 'email' && msgChannelMeta(part.key).available === false)
+    .map(part => `${part.label}: ${msgChannelMeta(part.key).reason || 'No disponible.'}`);
+  return `
+    <div style="margin:12px 0;">
+      <label class="field-label">Canales del recordatorio</label>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">${controls}</div>
+      ${notices.length ? `<div style="font-size:0.74rem; color:var(--soft-2); margin-top:6px;">${escapeHtml(notices.join(' · '))}</div>` : ''}
+    </div>`;
 }
 
 function renderMensajesAccordions() {
@@ -4156,6 +4205,7 @@ function renderMensajesAccordions() {
         <label style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:0.88rem; color:var(--soft);">
           <input type="checkbox" class="msg-enabled" data-key="${tpl.key}" ${enabled?'checked':''} /> Habilitar este mensaje
         </label>
+        ${renderMsgChannels(tpl, key)}
         <label class="field-label">Contenido</label>
         <textarea class="field-textarea msg-content" data-key="${tpl.key}" maxlength="500" style="min-height:80px;">${escapeHtml(content)}</textarea>
         <div style="font-size:0.74rem; color:var(--soft-2); margin-top:4px; text-align:right;" class="msg-counter" data-key="${tpl.key}">${content.length}/500</div>
@@ -4198,7 +4248,7 @@ function renderMensajesAccordions() {
 document.getElementById('mensajesGuardarBtn').addEventListener('click', async () => {
   try {
     await api('/auth/schedule', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(buildMensajesPayload()) });
-    toast('Plantillas guardadas', 'success'); loadMensajes();
+    toast('Recordatorios guardados', 'success'); loadMensajes();
   } catch(e) { toast(e.message, 'error'); }
 });
 

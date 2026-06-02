@@ -3618,16 +3618,34 @@ def test_message_templates_preview_and_partial_save(client: TestClient, api_modu
     schedule = client.get("/auth/schedule", cookies=cookies)
     assert schedule.status_code == 200
     assert all(schedule.json()["message_template_enabled"].values())
+    assert schedule.json()["message_template_channels"]["reminder_24h"]["email"] is True
+    assert schedule.json()["reminder_channel_availability"]["email"]["available"] is True
     assert schedule.json()["closed_weekdays"] == [6]
 
     saved = client.post(
         "/auth/schedule",
         cookies=cookies,
-        json={"message_templates": {"confirmed": "Texto confirmado desde mensajes."}},
+        json={
+            "message_templates": {"confirmed": "Texto confirmado desde mensajes."},
+            "message_template_channels": {
+                "reminder_24h": {"email": True, "whatsapp": True, "sms": True},
+                "reminder_2h": {"email": False, "whatsapp": True, "sms": True},
+            },
+        },
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["closed_weekdays"] == [6]
     assert all(saved.json()["message_template_enabled"].values())
+    assert saved.json()["message_template_channels"]["reminder_24h"] == {
+        "email": True,
+        "whatsapp": False,
+        "sms": False,
+    }
+    assert saved.json()["message_template_channels"]["reminder_2h"] == {
+        "email": False,
+        "whatsapp": False,
+        "sms": False,
+    }
 
     preview = client.post(
         "/auth/schedule/message-preview",
