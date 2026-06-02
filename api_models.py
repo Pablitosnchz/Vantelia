@@ -1019,6 +1019,8 @@ class AdminClienteResumen(BaseModel):
     branding_text: str = ""
     whatsapp_enabled: bool = False
     whatsapp_phone_number_id: str = ""
+    voice_enabled: bool = False
+    voice_phone_number: str = ""
     has_info_file: bool
     info_file_size: int = 0
     bookings_total: int = 0

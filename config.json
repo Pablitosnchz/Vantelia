@@ -32,6 +32,15 @@
       "access_token_env": "",
       "verify_token_env": ""
     },
+    "voice": {
+      "enabled": false,
+      "twilio_phone_number": "",
+      "openai_voice": "alloy",
+      "realtime_model": "",
+      "greeting": "Hola, soy el asistente virtual de Vantelia. En que puedo ayudarte?",
+      "max_duration_seconds": 300,
+      "sms_confirmation": true
+    },
     "booking": {
       "enabled": true,
       "timezone": "Europe/Madrid",

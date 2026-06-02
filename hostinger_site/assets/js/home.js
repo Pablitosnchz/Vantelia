@@ -620,8 +620,8 @@
     [
       { name:'Free', price:'0€', feat:'50 msg · 10 citas/mes' },
       { name:'Starter', price:'19€', feat:'1.000 msg · 100 citas/mes' },
-      { name:'Pro', price:'49€', feat:'5.000 msg · WhatsApp · Live Chat', tag:'Popular' },
-      { name:'Business', price:'149€', feat:'Ilimitado · soporte prioritario' }
+      { name:'Pro', price:'49€', feat:'5.000 msg · WhatsApp · agenda', tag:'Popular' },
+      { name:'Business', price:'149€', feat:'WhatsApp + voz por teléfono' }
     ].forEach(function (p) {
       var row = document.createElement('div');
       row.className = 'mw-plan';

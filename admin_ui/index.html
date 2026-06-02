@@ -1828,6 +1828,10 @@ tbody tr:last-child td { border-bottom: none; }
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v12.5a3 3 0 1 1-3-3"></path><path d="M9 3c0 3 2.5 5.5 5.5 5.5"></path></svg></span>
           <span class="nav-text"><strong>TikTok</strong><span>Captacion via DM</span></span>
         </button>
+        <button class="nav-button" type="button" data-nav-view="voice">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></span>
+          <span class="nav-text"><strong>Voz</strong><span>Llamadas telefonicas IA</span></span>
+        </button>
         <button class="nav-button" type="button" data-nav-view="security">
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9.5 12l1.8 1.8L15 10"></path></svg></span>
           <span class="nav-text"><strong>Seguridad</strong><span>Sesion y contrasena</span></span>
@@ -2618,6 +2622,82 @@ tbody tr:last-child td { border-bottom: none; }
             </div>
           </div>
         </section>
+      </section>
+
+      <section class="dashboard-view" data-view="voice">
+        <section class="card panel">
+          <div class="section-header">
+            <div>
+              <h2>Voz / Llamadas telefonicas</h2>
+              <p>La IA atiende llamadas entrantes por telefono (Twilio + OpenAI Realtime). El cliente desvia su numero de empresa al numero Twilio asignado y responde su mismo cerebro RAG.</p>
+            </div>
+            <div class="actions">
+              <button class="ghost small" type="button" id="voiceRefreshBtn">Actualizar</button>
+            </div>
+          </div>
+
+          <div class="actions cw-advanced-tabs">
+            <button class="ghost small active" type="button" data-voice-tab="calls">Llamadas</button>
+            <button class="ghost small" type="button" data-voice-tab="config">Configuracion</button>
+          </div>
+
+          <div class="outreach-panel active" data-voice-panel="calls">
+            <div class="grid-4" style="margin-top:12px;">
+              <div class="stat-card"><strong id="voiceStatToday">0</strong><span>Llamadas hoy</span></div>
+              <div class="stat-card"><strong id="voiceStatWeek">0</strong><span>Esta semana</span></div>
+              <div class="stat-card"><strong id="voiceStatAvg">0s</strong><span>Duracion media</span></div>
+              <div class="stat-card"><strong id="voiceStatBooking">0</strong><span>Con cita</span></div>
+            </div>
+            <div class="actions" style="margin-top:14px;gap:8px;flex-wrap:wrap;">
+              <select id="voiceFilterClient"><option value="">Todos los clientes</option></select>
+              <select id="voiceFilterStatus">
+                <option value="">Todos los estados</option>
+                <option value="in_progress">En curso</option>
+                <option value="completed">Completada</option>
+                <option value="failed">Fallida</option>
+                <option value="no_answer">Sin respuesta</option>
+              </select>
+            </div>
+            <div style="margin-top:12px;overflow:auto;">
+              <table style="width:100%;font-size:13px;">
+                <thead><tr><th>Fecha/hora</th><th>Cliente</th><th>Origen</th><th>Duracion</th><th>Estado</th><th>Resumen</th><th>Cita</th></tr></thead>
+                <tbody id="voiceCallsBody"><tr><td colspan="7" class="muted">Cargando...</td></tr></tbody>
+              </table>
+            </div>
+            <div class="actions" style="margin-top:12px;">
+              <button class="ghost small" type="button" id="voiceLoadMoreBtn" style="display:none;">Cargar mas</button>
+            </div>
+          </div>
+
+          <div class="outreach-panel" data-voice-panel="config" style="display:none;">
+            <div class="actions" style="margin-top:12px;">
+              <select id="voiceConfigClient"></select>
+            </div>
+            <div id="voiceConfigCard" class="card" style="padding:16px;margin-top:12px;">
+              <div class="muted">Selecciona un cliente para ver su configuracion de voz.</div>
+            </div>
+            <div class="card" style="padding:14px;margin-top:12px;background:#f8fafc;border:1px solid #e2e8f0;">
+              <strong>Como activar la voz en un cliente</strong>
+              <ol style="font-size:13px;line-height:1.7;margin:8px 0 0 18px;color:#475569;">
+                <li>Asigna un numero Twilio al cliente en <code>config.json</code> (bloque <code>voice</code>, campo <code>twilio_phone_number</code>, y <code>enabled: true</code>).</li>
+                <li>En la consola Twilio, apunta el webhook de voz del numero a <code>https://app.vantelia.es/voice/&lt;cliente_id&gt;</code> (HTTP POST) y el Status Callback a <code>/voice/status/&lt;cliente_id&gt;</code>.</li>
+                <li>El cliente configura en su operadora un <strong>desvio de llamada</strong> (incondicional o si no contesta) hacia el numero Twilio.</li>
+                <li>Listo: las llamadas al numero de la empresa las atiende la IA con su mismo cerebro RAG y, si detecta intencion de cita, envia un SMS con el enlace.</li>
+              </ol>
+            </div>
+          </div>
+        </section>
+
+        <div id="voiceDrawerOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:60;"></div>
+        <aside id="voiceDrawer" style="display:none;position:fixed;top:0;right:0;height:100%;width:min(520px,92vw);background:#fff;z-index:61;box-shadow:-12px 0 40px rgba(15,23,42,.2);overflow:auto;padding:20px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+            <strong id="voiceDrawerTitle">Detalle de llamada</strong>
+            <button class="ghost small" type="button" id="voiceDrawerClose">Cerrar</button>
+          </div>
+          <div id="voiceDrawerMeta" class="muted" style="font-size:12px;margin-top:8px;"></div>
+          <div id="voiceDrawerSummary" style="margin-top:12px;"></div>
+          <div id="voiceDrawerTranscript" style="margin-top:14px;display:grid;gap:8px;"></div>
+        </aside>
       </section>
 
       <section class="dashboard-view" data-view="security">
@@ -3881,6 +3961,8 @@ tbody tr:last-child td { border-bottom: none; }
         try { window.__igInit && window.__igInit(); } catch(e) { console.warn(e); }
       } else if (nextView === "tiktok") {
         try { window.__tkInit && window.__tkInit(); } catch(e) { console.warn(e); }
+      } else if (nextView === "voice") {
+        try { window.__voiceInit && window.__voiceInit(); } catch(e) { console.warn(e); }
       }
     }
 
@@ -10221,6 +10303,222 @@ a {
       };
     })();
     // === END TIKTOK PANEL ===========================================
+
+    // === VOICE PANEL ============================================
+    (function() {
+      const VQ = (sel) => document.querySelector(sel);
+      const VALL = (sel) => document.querySelectorAll(sel);
+      let voiceState = { tab: "calls", loaded: false, page: 1, hasMore: false, clients: [] };
+
+      async function vFetch(url, opts) {
+        opts = opts || {};
+        opts.credentials = "include";
+        opts.headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+        const r = await fetch(url, opts);
+        if (!r.ok) {
+          let msg = r.statusText;
+          try { const e = await r.json(); msg = e.detail || e.message || msg; } catch (e) {}
+          throw new Error(msg);
+        }
+        return r.json();
+      }
+
+      function vEsc(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => (
+          { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+        ));
+      }
+
+      function fmtDuration(seconds) {
+        seconds = parseInt(seconds || 0, 10);
+        if (!seconds) return "—";
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return m > 0 ? `${m}m ${s}s` : `${s}s`;
+      }
+
+      function fmtWhen(iso) {
+        if (!iso) return "—";
+        try { return new Date(iso).toLocaleString("es-ES"); } catch (e) { return iso; }
+      }
+
+      function statusBadge(status) {
+        const map = {
+          in_progress: ["#2563eb", "En curso"],
+          completed: ["#16a34a", "Completada"],
+          failed: ["#dc2626", "Fallida"],
+          no_answer: ["#64748b", "Sin respuesta"],
+        };
+        const [color, label] = map[status] || ["#64748b", status || "—"];
+        const spinner = status === "in_progress" ? " ⏳" : "";
+        return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;color:#fff;background:${color};">${vEsc(label)}${spinner}</span>`;
+      }
+
+      function setVoiceTab(tab) {
+        voiceState.tab = tab;
+        VALL("[data-voice-tab]").forEach(b => b.classList.toggle("active", b.dataset.voiceTab === tab));
+        VALL("[data-voice-panel]").forEach(p => {
+          const active = p.dataset.voicePanel === tab;
+          p.classList.toggle("active", active);
+          p.style.display = active ? "" : "none";
+        });
+        if (tab === "calls") loadVoiceCalls(true);
+        if (tab === "config") renderVoiceConfig();
+      }
+
+      async function loadVoiceClients() {
+        try {
+          const data = await vFetch("/admin/clientes");
+          voiceState.clients = Array.isArray(data) ? data : [];
+        } catch (e) {
+          voiceState.clients = [];
+        }
+        const optsHtml = voiceState.clients
+          .map(c => `<option value="${vEsc(c.cliente_id)}">${vEsc(c.nombre || c.cliente_id)}</option>`)
+          .join("");
+        const filter = VQ("#voiceFilterClient");
+        if (filter) filter.innerHTML = `<option value="">Todos los clientes</option>` + optsHtml;
+        const cfg = VQ("#voiceConfigClient");
+        if (cfg) cfg.innerHTML = `<option value="">Selecciona un cliente</option>` + optsHtml;
+      }
+
+      async function loadVoiceCalls(reset) {
+        if (reset) voiceState.page = 1;
+        const body = VQ("#voiceCallsBody");
+        const clienteId = VQ("#voiceFilterClient")?.value || "";
+        const status = VQ("#voiceFilterStatus")?.value || "";
+        const params = new URLSearchParams({ page: String(voiceState.page), page_size: "20" });
+        if (clienteId) params.set("cliente_id", clienteId);
+        if (status) params.set("status", status);
+        if (reset && body) body.innerHTML = `<tr><td colspan="7" class="muted">Cargando...</td></tr>`;
+        let data;
+        try {
+          data = await vFetch(`/admin/voice/calls?${params.toString()}`);
+        } catch (e) {
+          if (body) body.innerHTML = `<tr><td colspan="7" class="muted">Error: ${vEsc(e.message)}</td></tr>`;
+          return;
+        }
+        const stats = data.stats || {};
+        VQ("#voiceStatToday").textContent = String(stats.today || 0);
+        VQ("#voiceStatWeek").textContent = String(stats.week || 0);
+        VQ("#voiceStatAvg").textContent = fmtDuration(stats.avg_duration || 0);
+        VQ("#voiceStatBooking").textContent = String(stats.with_booking || 0);
+
+        const rows = (data.items || []).map(call => `
+          <tr data-voice-call="${vEsc(call.call_sid)}" style="cursor:pointer;">
+            <td>${vEsc(fmtWhen(call.started_at))}</td>
+            <td>${vEsc(call.cliente_id)}</td>
+            <td>${vEsc(call.from_number || "—")}</td>
+            <td>${vEsc(fmtDuration(call.duration_seconds))}</td>
+            <td>${statusBadge(call.status)}</td>
+            <td style="max-width:260px;">${vEsc(call.summary || "—")}</td>
+            <td>${call.booking_created ? "✅" : "—"}</td>
+          </tr>`).join("");
+
+        if (reset) {
+          body.innerHTML = rows || `<tr><td colspan="7" class="muted">Sin llamadas todavia.</td></tr>`;
+        } else {
+          body.insertAdjacentHTML("beforeend", rows);
+        }
+        VALL("#voiceCallsBody [data-voice-call]").forEach(tr => {
+          if (tr.dataset.voiceWired) return;
+          tr.dataset.voiceWired = "1";
+          tr.addEventListener("click", () => openVoiceDrawer(tr.dataset.voiceCall));
+        });
+
+        const loaded = voiceState.page * 20;
+        voiceState.hasMore = (data.total || 0) > loaded;
+        const moreBtn = VQ("#voiceLoadMoreBtn");
+        if (moreBtn) moreBtn.style.display = voiceState.hasMore ? "" : "none";
+      }
+
+      async function openVoiceDrawer(callSid) {
+        const overlay = VQ("#voiceDrawerOverlay");
+        const drawer = VQ("#voiceDrawer");
+        overlay.style.display = "block";
+        drawer.style.display = "block";
+        VQ("#voiceDrawerMeta").textContent = "Cargando...";
+        VQ("#voiceDrawerSummary").innerHTML = "";
+        VQ("#voiceDrawerTranscript").innerHTML = "";
+        let call;
+        try {
+          call = await vFetch(`/admin/voice/calls/${encodeURIComponent(callSid)}`);
+        } catch (e) {
+          VQ("#voiceDrawerMeta").textContent = "Error: " + e.message;
+          return;
+        }
+        VQ("#voiceDrawerTitle").textContent = `Llamada de ${call.from_number || "desconocido"}`;
+        VQ("#voiceDrawerMeta").innerHTML = `
+          ${vEsc(call.cliente_id)} · ${vEsc(fmtWhen(call.started_at))} · ${fmtDuration(call.duration_seconds)} · ${statusBadge(call.status)}
+          ${call.sms_sent ? " · 📩 SMS enviado" : ""}`;
+        VQ("#voiceDrawerSummary").innerHTML = call.summary
+          ? `<div class="card" style="padding:12px;background:#f0f9ff;border:1px solid #bae6fd;"><strong>Resumen IA</strong><p style="margin:6px 0 0;">${vEsc(call.summary)}</p></div>`
+          : "";
+        const transcript = call.transcript || [];
+        VQ("#voiceDrawerTranscript").innerHTML = transcript.length
+          ? transcript.map(t => {
+              const isUser = t.role === "user";
+              return `<div style="justify-self:${isUser ? "start" : "end"};max-width:85%;padding:8px 12px;border-radius:12px;background:${isUser ? "#e2e8f0" : "#dbeafe"};">
+                <div class="muted" style="font-size:10px;text-transform:uppercase;">${isUser ? "Llamante" : "Asistente"}</div>
+                <div>${vEsc(t.text)}</div>
+              </div>`;
+            }).join("")
+          : `<div class="muted">Sin transcripcion.</div>`;
+      }
+
+      function closeVoiceDrawer() {
+        VQ("#voiceDrawerOverlay").style.display = "none";
+        VQ("#voiceDrawer").style.display = "none";
+      }
+
+      function renderVoiceConfig() {
+        const cid = VQ("#voiceConfigClient")?.value || "";
+        const card = VQ("#voiceConfigCard");
+        if (!cid) {
+          card.innerHTML = `<div class="muted">Selecciona un cliente para ver su configuracion de voz.</div>`;
+          return;
+        }
+        const client = voiceState.clients.find(c => c.cliente_id === cid);
+        if (!client) { card.innerHTML = `<div class="muted">Cliente no encontrado.</div>`; return; }
+        const enabled = !!client.voice_enabled;
+        const number = client.voice_phone_number || "";
+        card.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div>
+              <strong>${vEsc(client.nombre || cid)}</strong>
+              <div class="muted" style="font-size:12px;">${vEsc(cid)}</div>
+            </div>
+            <span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;color:#fff;background:${enabled ? "#16a34a" : "#64748b"};">
+              ${enabled ? "Voz habilitada" : "Voz desactivada"}
+            </span>
+          </div>
+          <div style="margin-top:12px;display:grid;gap:6px;font-size:13px;">
+            <div><span class="muted">Numero Twilio asignado:</span> <strong>${number ? vEsc(number) : "— (usa el numero por defecto del .env)"}</strong></div>
+            <div><span class="muted">Webhook de voz:</span> <code>https://app.vantelia.es/voice/${vEsc(cid)}</code></div>
+            <div><span class="muted">Status callback:</span> <code>https://app.vantelia.es/voice/status/${vEsc(cid)}</code></div>
+          </div>
+          <p class="muted" style="font-size:12px;margin-top:10px;">El estado y el numero se editan en <code>config.json</code> (bloque <code>voice</code>). Esta vista es de solo lectura.</p>`;
+      }
+
+      VQ("#voiceRefreshBtn")?.addEventListener("click", () => { loadVoiceClients().then(() => loadVoiceCalls(true)); });
+      VQ("#voiceFilterClient")?.addEventListener("change", () => loadVoiceCalls(true));
+      VQ("#voiceFilterStatus")?.addEventListener("change", () => loadVoiceCalls(true));
+      VQ("#voiceLoadMoreBtn")?.addEventListener("click", () => { voiceState.page += 1; loadVoiceCalls(false); });
+      VQ("#voiceConfigClient")?.addEventListener("change", renderVoiceConfig);
+      VQ("#voiceDrawerClose")?.addEventListener("click", closeVoiceDrawer);
+      VQ("#voiceDrawerOverlay")?.addEventListener("click", closeVoiceDrawer);
+      VALL("[data-voice-tab]").forEach(b => b.addEventListener("click", () => setVoiceTab(b.dataset.voiceTab)));
+
+      window.__voiceInit = function() {
+        if (!voiceState.loaded) {
+          voiceState.loaded = true;
+          loadVoiceClients().then(() => setVoiceTab("calls"));
+        } else {
+          loadVoiceCalls(true);
+        }
+      };
+    })();
+    // === END VOICE PANEL ========================================
   </script>
 </body>
 </html>

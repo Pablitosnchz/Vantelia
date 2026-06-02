@@ -3601,3 +3601,123 @@ def test_self_serve_period_reset_on_month_boundary(api_module):
     refreshed = api_module._maybe_reset_subscription_period(stale)
     assert refreshed["messages_used_period"] == 0
     assert refreshed["current_period_start"] >= api_module._subscription_period_start_now()[:7]
+
+
+def test_voice_admin_calls_requires_auth(client: TestClient):
+    response = client.get("/admin/voice/calls")
+    assert response.status_code in (401, 403)
+
+
+def test_voice_admin_calls_listing_with_token(client: TestClient):
+    response = client.get(
+        "/admin/voice/calls",
+        headers={"Authorization": "Bearer test-admin-token"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert "items" in payload
+    assert "stats" in payload
+    assert set(payload["stats"]) >= {"today", "week", "avg_duration", "with_booking"}
+
+
+def test_voice_incoming_rejects_missing_twilio_signature(client: TestClient, api_module, monkeypatch):
+    # Voice channel needs Twilio creds configured to even reach the signature check.
+    monkeypatch.setattr(api_module, "TWILIO_ACCOUNT_SID", "ACtest")
+    monkeypatch.setattr(api_module, "TWILIO_AUTH_TOKEN", "twilio-auth-token-test")
+    response = client.post(
+        "/voice/demo",
+        data={"CallSid": "CA123", "From": "+34600000000", "To": "+34911111111"},
+    )
+    assert response.status_code == 403
+
+
+def test_voice_incoming_unknown_client_returns_hangup(client: TestClient, api_module, monkeypatch):
+    monkeypatch.setattr(api_module, "TWILIO_ACCOUNT_SID", "ACtest")
+    monkeypatch.setattr(api_module, "TWILIO_AUTH_TOKEN", "twilio-auth-token-test")
+    # Pretend the Twilio signature is valid so we exercise the client-resolution path.
+    monkeypatch.setattr(api_module, "_twilio_request_valid", lambda url, params, signature: True)
+    response = client.post(
+        "/voice/ghostclient",
+        data={"CallSid": "CA999", "From": "+34600000000", "To": "+34911111111"},
+        headers={"X-Twilio-Signature": "irrelevant-because-mocked"},
+    )
+    assert response.status_code == 200
+    assert "<Hangup" in response.text
+
+
+def test_voice_incoming_enabled_client_returns_stream(client: TestClient, api_module, monkeypatch):
+    monkeypatch.setattr(api_module, "TWILIO_ACCOUNT_SID", "ACtest")
+    monkeypatch.setattr(api_module, "TWILIO_AUTH_TOKEN", "twilio-auth-token-test")
+    monkeypatch.setattr(api_module, "_twilio_request_valid", lambda url, params, signature: True)
+    # Voice is plan-gated (Business). This test checks the webhook/Stream wiring, not
+    # the plan gate, so force the plan check True to stay robust against test ordering.
+    monkeypatch.setattr(api_module, "_client_voice_plan_enabled", lambda cliente_id: True)
+    # Enable voice on the demo client in the in-memory config.
+    api_module.CONFIG_CLIENTES["demo"]["voice"] = api_module._normalize_voice_config(
+        {"enabled": True, "greeting": "Hola demo", "openai_voice": "alloy"}
+    )
+    response = client.post(
+        "/voice/demo",
+        data={"CallSid": "CA777", "From": "+34600000000", "To": "+34911111111"},
+        headers={"X-Twilio-Signature": "irrelevant-because-mocked"},
+    )
+    assert response.status_code == 200
+    assert "<Connect>" in response.text
+    assert "/voice/stream/demo" in response.text
+    # The call should have been registered as in_progress.
+    detail = client.get(
+        "/admin/voice/calls/CA777",
+        headers={"Authorization": "Bearer test-admin-token"},
+    )
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "in_progress"
+
+
+def test_voice_booking_tool_creates_real_booking(api_module):
+    import asyncio
+    from datetime import datetime, timedelta
+
+    # Near-future weekday that isn't Sunday (demo closes weekday 6).
+    day = datetime.now().date() + timedelta(days=1)
+    while day.weekday() == 6:
+        day += timedelta(days=1)
+    fecha = day.isoformat()
+
+    avail = asyncio.run(api_module._voice_check_availability("demo", fecha))
+    assert avail["ok"] is True, avail
+    assert avail["hay_huecos"] is True, avail
+    hora = avail["huecos"][0]
+
+    result = asyncio.run(
+        api_module._voice_perform_booking(
+            "demo",
+            nombre="Cliente Voz",
+            telefono="+34600111222",
+            fecha=fecha,
+            hora=hora,
+            servicio="",
+        )
+    )
+    assert result["ok"] is True, result
+    assert result["booking_id"].startswith("bk_")
+
+    with api_module._get_db_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM bookings WHERE id = ?", (result["booking_id"],)
+        ).fetchone()
+    assert row is not None
+    assert row["source"] == "voice"
+    assert row["status"] == "confirmed"
+    assert row["telefono"] == "+34600111222"
+
+
+def test_voice_booking_tools_absent_when_booking_disabled(api_module):
+    cfg_enabled = api_module.CONFIG_CLIENTES["demo"]
+    tools = api_module._voice_booking_tools("demo", cfg_enabled)
+    assert any(t["name"] == "crear_cita" for t in tools)
+
+    # A config with booking disabled exposes no tools.
+    cfg_disabled = dict(cfg_enabled)
+    cfg_disabled["booking"] = dict(cfg_enabled["booking"])
+    cfg_disabled["booking"]["enabled"] = False
+    assert api_module._voice_booking_tools("demo", cfg_disabled) == []

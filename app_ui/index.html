@@ -1745,7 +1745,7 @@ function setTab(tab) {
       integrations: 'Integraciones',
     })[tab] || 'Próximamente';
     document.getElementById('lockedSub').textContent = (tab === 'livechat' || tab === 'integrations')
-      ? 'Disponible en plan Pro / Business.'
+      ? 'En desarrollo. Llegará próximamente.'
       : 'Se activa en la próxima fase del rediseño.';
     document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.getAttribute('data-tab') === tab));
     return;

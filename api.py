@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import copy
 import csv
 import hmac
@@ -36,7 +37,18 @@ try:
     stripe: Any = _stripe_module
 except ImportError:
     stripe = None
-from fastapi import BackgroundTasks, Cookie, Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import (
+    BackgroundTasks,
+    Cookie,
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from llama_index.core import (
@@ -104,6 +116,25 @@ WHATSAPP_APP_SECRET = os.getenv("WHATSAPP_APP_SECRET", "").strip()
 WHATSAPP_API_VERSION = os.getenv("WHATSAPP_API_VERSION", "v22.0").strip() or "v22.0"
 WHATSAPP_DEFAULT_CLIENT_ID = os.getenv("WHATSAPP_DEFAULT_CLIENT_ID", "").strip()
 WHATSAPP_PHONE_CLIENT_MAP = os.getenv("WHATSAPP_PHONE_CLIENT_MAP", "").strip()
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+TWILIO_DEFAULT_PHONE_NUMBER = os.getenv("TWILIO_DEFAULT_PHONE_NUMBER", "").strip()
+# Remitente SMS opcional. En ES el numero de voz no suele poder enviar SMS:
+# usa aqui un numero SMS-capable o un Alphanumeric Sender ID (ej. "Vantelia").
+# Vacio => usa el numero de voz del cliente / TWILIO_DEFAULT_PHONE_NUMBER.
+TWILIO_SMS_SENDER = os.getenv("TWILIO_SMS_SENDER", "").strip()
+try:
+    VOICE_MAX_DURATION_SECONDS = int(os.getenv("VOICE_MAX_DURATION_SECONDS", "300"))
+except ValueError:
+    VOICE_MAX_DURATION_SECONDS = 300
+VOICE_OPENAI_VOICE = os.getenv("VOICE_OPENAI_VOICE", "alloy").strip() or "alloy"
+# Modelo Realtime GA por defecto: el mini es mas barato y sobra para recepcionista
+# (citas, horarios, FAQs). Override por cliente con voice.realtime_model.
+# (La API beta `gpt-4o-*-realtime-preview` fue retirada en mayo 2026.)
+VOICE_REALTIME_MODEL = (
+    os.getenv("VOICE_REALTIME_MODEL", "gpt-realtime-mini").strip()
+    or "gpt-realtime-mini"
+)
 RAW_EXTRA_CORS_ORIGINS = os.getenv("EXTRA_CORS_ORIGINS", "")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "").strip().rstrip("/")
 SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
@@ -281,7 +312,7 @@ SELF_SERVE_PLANS: Dict[str, Dict[str, Any]] = {
         "price_monthly_eur": int(os.getenv("PLAN_PRO_PRICE_EUR", "49")),
         "price_annual_eur": int(os.getenv("PLAN_PRO_PRICE_ANNUAL_EUR", "490")),
         "messages_quota": int(os.getenv("PLAN_PRO_QUOTA", "5000")),
-        "features": ["chat", "uploads", "branding", "leads_export", "booking", "live_chat", "qa", "tune"],
+        "features": ["chat", "uploads", "branding", "leads_export", "booking", "qa", "tune", "whatsapp"],
         "stripe_price_monthly": STRIPE_PRICE_PRO,
         "stripe_price_annual": STRIPE_PRICE_PRO_ANNUAL,
     },
@@ -291,7 +322,7 @@ SELF_SERVE_PLANS: Dict[str, Dict[str, Any]] = {
         "price_monthly_eur": int(os.getenv("PLAN_BUSINESS_PRICE_EUR", "149")),
         "price_annual_eur": int(os.getenv("PLAN_BUSINESS_PRICE_ANNUAL_EUR", "1490")),
         "messages_quota": int(os.getenv("PLAN_BUSINESS_QUOTA", "25000")),
-        "features": ["chat", "uploads", "branding", "leads_export", "booking", "live_chat", "qa", "tune", "whatsapp", "integrations"],
+        "features": ["chat", "uploads", "branding", "leads_export", "booking", "qa", "tune", "whatsapp", "voice"],
         "stripe_price_monthly": STRIPE_PRICE_BUSINESS,
         "stripe_price_annual": STRIPE_PRICE_BUSINESS_ANNUAL,
     },
@@ -311,6 +342,8 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         "max_extra_documents": 0,
         "branding_customization": False,
         "whatsapp_enabled": False,
+        "voice_enabled": False,
+        "voice_minutes": 0,
         "csv_export": False,
         "multi_branch": False,
         "crm_integration": False,
@@ -326,6 +359,8 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         "max_extra_documents": 5,
         "branding_customization": True,
         "whatsapp_enabled": False,
+        "voice_enabled": False,
+        "voice_minutes": 0,
         "csv_export": True,
         "multi_branch": False,
         "crm_integration": False,
@@ -340,7 +375,9 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         "max_users": 2,
         "max_extra_documents": 20,
         "branding_customization": True,
-        "whatsapp_enabled": False,
+        "whatsapp_enabled": True,
+        "voice_enabled": False,
+        "voice_minutes": 0,
         "csv_export": True,
         "multi_branch": False,
         "crm_integration": False,
@@ -356,9 +393,11 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         "max_extra_documents": None,
         "branding_customization": True,
         "whatsapp_enabled": True,
+        "voice_enabled": True,
+        "voice_minutes": int(os.getenv("PLAN_BUSINESS_VOICE_MINUTES", "300")),
         "csv_export": True,
-        "multi_branch": True,
-        "crm_integration": True,
+        "multi_branch": False,
+        "crm_integration": False,
         "show_powered_by": False,
         "price_eur": int(os.getenv("PLAN_BUSINESS_PRICE_EUR", "149")),
     },
@@ -562,6 +601,41 @@ EXTRA_CORS_ORIGINS = [
 ]
 
 
+VOICE_ALLOWED_OPENAI_VOICES = {
+    "alloy", "echo", "shimmer", "ash", "ballad", "coral", "sage", "verse",
+}
+
+
+def _normalize_voice_config(payload: Any) -> Dict[str, Any]:
+    """Normaliza el bloque opcional `voice` de un cliente.
+
+    Tolera ausencia total del bloque (cliente sin canal de voz). El numero
+    Twilio por cliente es opcional: si falta, el handler usa
+    TWILIO_DEFAULT_PHONE_NUMBER. El routing Twilio->cliente_id se hace por la
+    URL del webhook, no por el numero.
+    """
+    data = payload if isinstance(payload, dict) else {}
+    voice_value = _sanitize_text(str(data.get("openai_voice", ""))).lower()
+    if voice_value not in VOICE_ALLOWED_OPENAI_VOICES:
+        voice_value = ""
+    try:
+        max_duration = int(data.get("max_duration_seconds", 0))
+    except (TypeError, ValueError):
+        max_duration = 0
+    if max_duration <= 0:
+        max_duration = 0  # 0 => usar VOICE_MAX_DURATION_SECONDS global
+    max_duration = min(max_duration, 3600)
+    return {
+        "enabled": bool(data.get("enabled", False)),
+        "twilio_phone_number": _sanitize_text(str(data.get("twilio_phone_number", "")))[:32],
+        "openai_voice": voice_value,
+        "realtime_model": _sanitize_text(str(data.get("realtime_model", "")))[:80],
+        "greeting": _sanitize_text(str(data.get("greeting", "")), allow_multiline=True)[:600],
+        "max_duration_seconds": max_duration,
+        "sms_confirmation": bool(data.get("sms_confirmation", False)),
+    }
+
+
 def _load_client_configs() -> Dict[str, Dict[str, Any]]:
     if not CONFIG_PATH.exists():
         raise RuntimeError(f"No se encontro el archivo de configuracion: {CONFIG_PATH}")
@@ -641,6 +715,7 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
                 str(payload.get("whatsapp", {}).get("verify_token_env", ""))
             )[:120],
         },
+        "voice": _normalize_voice_config(payload.get("voice", {})),
         "booking": {
             "enabled": bool(booking.get("enabled", False)),
             "timezone": _sanitize_text(booking.get("timezone", DEFAULT_TIMEZONE)) or DEFAULT_TIMEZONE,
@@ -702,6 +777,7 @@ def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
             "access_token_env": config.get("whatsapp", {}).get("access_token_env", ""),
             "verify_token_env": config.get("whatsapp", {}).get("verify_token_env", ""),
         },
+        "voice": _normalize_voice_config(config.get("voice", {})),
         "booking": {
             "enabled": bool(config.get("booking", {}).get("enabled", False)),
             "timezone": config.get("booking", {}).get("timezone", DEFAULT_TIMEZONE),
@@ -1461,6 +1537,32 @@ def _init_database() -> None:
         )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_message_usage_cliente_period ON message_usage_events(cliente_id, period_start)"
+        )
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS voice_calls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                call_sid TEXT UNIQUE NOT NULL,
+                cliente_id TEXT NOT NULL,
+                from_number TEXT NOT NULL DEFAULT '',
+                to_number TEXT NOT NULL DEFAULT '',
+                started_at TEXT NOT NULL DEFAULT '',
+                ended_at TEXT NOT NULL DEFAULT '',
+                duration_seconds INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'in_progress',
+                transcript_json TEXT NOT NULL DEFAULT '[]',
+                summary TEXT NOT NULL DEFAULT '',
+                booking_created INTEGER NOT NULL DEFAULT 0,
+                sms_sent INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_voice_calls_cliente ON voice_calls(cliente_id, started_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_voice_calls_status ON voice_calls(status)"
         )
 
         connection.commit()
@@ -4243,6 +4345,20 @@ def _booking_plan_unavailable_error() -> HTTPException:
         status_code=403,
         detail="Las reservas online no estan incluidas en el plan actual. Actualiza a un plan con agenda para activar esta funcion.",
     )
+
+
+def _client_voice_plan_enabled(cliente_id: str) -> bool:
+    """Whether the voice channel (phone) is available in the client's effective plan.
+
+    Voz = solo Business. Para clientes con dueño se mira el plan de la suscripcion;
+    si no, el flag voice_enabled del plan en config.
+    """
+    owner = db_get_client_owner(cliente_id)
+    if owner:
+        sub = db_get_subscription_for_user(owner)
+        plan = _normalize_plan_slug(sub["plan"] if sub else PLAN_DEFAULT)
+        return "voice" in (_self_serve_plan(plan).get("features") or [])
+    return bool(_plan_limits(_client_plan(cliente_id)).get("voice_enabled"))
 
 
 def _require_plan_feature(cliente_id: str, feature: str, error_message: str) -> None:
@@ -13544,16 +13660,23 @@ async def admin_clientes() -> List[AdminClienteResumen]:
     now_ts = time.time()
 
     for cliente_id, config in sorted(CONFIG_CLIENTES.items(), key=lambda item: item[0].lower()):
-        if cliente_id.startswith(DEMO_TENANT_PREFIX):
+        owner_uid_early = (owners_by_cliente.get(cliente_id) or {}).get("owner_user_id") or ""
+        # Ocultar solo demos AUTO sin dueño. Un demo reclamado (con owner) ya es
+        # un cliente real y debe aparecer en la lista de admin.
+        if cliente_id.startswith(DEMO_TENANT_PREFIX) and not owner_uid_early:
             continue
         booking_cfg = config.get("booking", {})
         whatsapp_cfg = config.get("whatsapp", {})
+        voice_cfg = config.get("voice", {})
         contacto = config.get("contacto", {})
         branding = config.get("branding", {})
         info_path = _client_info_path(cliente_id)
         client_counts = booking_counts.get(cliente_id, {})
 
-        is_demo = cliente_id.startswith(DEMO_TENANT_PREFIX) or cliente_id in demo_registry
+        # Reclamado (con dueño) => cliente real, no demo, aunque conserve el prefijo.
+        is_demo = (
+            cliente_id.startswith(DEMO_TENANT_PREFIX) or cliente_id in demo_registry
+        ) and not owner_uid_early
         demo_expires_at = ""
         demo_remaining = 0
         if is_demo and cliente_id in demo_registry:
@@ -13601,6 +13724,8 @@ async def admin_clientes() -> List[AdminClienteResumen]:
                 branding_text=str(branding.get("powered_by", "")),
                 whatsapp_enabled=bool(whatsapp_cfg.get("enabled", False)),
                 whatsapp_phone_number_id=str(whatsapp_cfg.get("phone_number_id", "")),
+                voice_enabled=bool(voice_cfg.get("enabled", False)),
+                voice_phone_number=str(voice_cfg.get("twilio_phone_number", "")),
                 has_info_file=info_path.exists(),
                 info_file_size=(info_path.stat().st_size if info_path.exists() else 0),
                 bookings_total=int(client_counts.get("total", 0)),
@@ -23613,6 +23738,926 @@ async def _tk_shutdown_workers() -> None:
 
 
 # === END TIKTOK ======================================================
+
+
+# ─── VOICE / TWILIO ──────────────────────────────────────────────────────────
+# Canal de voz (Nivel 1: desvio de llamada -> numero Twilio -> Media Streams ->
+# OpenAI Realtime API). El cliente configura en su operadora un desvio hacia el
+# numero Twilio asignado. Twilio llama a POST /voice/{cliente_id}, recibe TwiML
+# con <Connect><Stream> y abre un WebSocket de audio bidireccional contra
+# /voice/stream/{cliente_id}, que hace de puente con OpenAI Realtime.
+
+VOICE_BOOKING_KEYWORDS = (
+    "cita", "reserva", "reservar", "agendar", "agenda", "appointment",
+    "turno", "coger cita", "pedir cita", "concertar",
+)
+
+try:  # validador oficial Twilio si esta instalado; si no, fallback nativo HMAC-SHA1
+    from twilio.request_validator import RequestValidator as _TwilioRequestValidator
+except Exception:  # noqa: BLE001
+    _TwilioRequestValidator = None
+
+
+def _get_voice_config(cliente_id: str) -> Optional[Dict[str, Any]]:
+    """Devuelve el bloque voice del cliente si existe, esta habilitado y el plan lo
+    incluye (voz = solo Business). None en cualquier otro caso."""
+    config = CONFIG_CLIENTES.get(cliente_id)
+    if not config:
+        return None
+    voice_cfg = config.get("voice") or {}
+    if not voice_cfg.get("enabled"):
+        return None
+    if not _client_voice_plan_enabled(cliente_id):
+        return None
+    return voice_cfg
+
+
+def _voice_twilio_configured() -> bool:
+    return bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN)
+
+
+def _twilio_request_valid(url: str, params: Dict[str, str], signature: str) -> bool:
+    """Valida X-Twilio-Signature. Usa la libreria twilio si esta disponible;
+    si no, replica el algoritmo (HMAC-SHA1 sobre url + params ordenados)."""
+    token = TWILIO_AUTH_TOKEN
+    if not token or not signature:
+        return False
+    if _TwilioRequestValidator is not None:
+        try:
+            return bool(_TwilioRequestValidator(token).validate(url, params, signature))
+        except Exception:  # noqa: BLE001
+            pass
+    data = url + "".join(f"{key}{params[key]}" for key in sorted(params.keys()))
+    digest = hmac.new(token.encode("utf-8"), data.encode("utf-8"), hashlib.sha1).digest()
+    expected = base64.b64encode(digest).decode("ascii")
+    try:
+        return hmac.compare_digest(expected, signature)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+async def _voice_form_params(request: Request) -> Dict[str, str]:
+    """Parsea el cuerpo x-www-form-urlencoded de Twilio sin depender de
+    python-multipart. Twilio siempre envia sus webhooks como urlencoded."""
+    raw = await request.body()
+    parsed = parse_qsl(raw.decode("utf-8", errors="ignore"), keep_blank_values=True)
+    return {key: value for key, value in parsed}
+
+
+def _voice_request_url(request: Request) -> str:
+    """URL publica completa (incluyendo path y query) tal y como la firma Twilio."""
+    base = _public_base_url(request).rstrip("/")
+    url = f"{base}{request.url.path}"
+    if request.url.query:
+        url += f"?{request.url.query}"
+    return url
+
+
+def _voice_stream_ws_url(request: Request, cliente_id: str) -> str:
+    base = _public_base_url(request).rstrip("/")
+    ws_base = base.replace("https://", "wss://", 1).replace("http://", "ws://", 1)
+    return f"{ws_base}/voice/stream/{cliente_id}"
+
+
+def _voice_twiml_unavailable() -> Response:
+    twiml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<Response><Say language="es-ES">Lo sentimos, este servicio no esta disponible.</Say>'
+        "<Hangup/></Response>"
+    )
+    return Response(content=twiml, media_type="application/xml")
+
+
+def _voice_twiml_connect_stream(ws_url: str, call_sid: str) -> Response:
+    twiml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        "<Response><Connect>"
+        f'<Stream url="{escape(ws_url, quote=True)}">'
+        f'<Parameter name="call_sid" value="{escape(call_sid or "", quote=True)}"/>'
+        "</Stream></Connect></Response>"
+    )
+    return Response(content=twiml, media_type="application/xml")
+
+
+def _voice_call_register(call_sid: str, cliente_id: str, from_number: str, to_number: str) -> None:
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        with sqlite3.connect(DB_PATH, timeout=10) as conn:
+            conn.execute(
+                """
+                INSERT INTO voice_calls (call_sid, cliente_id, from_number, to_number, started_at, status)
+                VALUES (?, ?, ?, ?, ?, 'in_progress')
+                ON CONFLICT(call_sid) DO UPDATE SET
+                    cliente_id=excluded.cliente_id,
+                    from_number=excluded.from_number,
+                    to_number=excluded.to_number
+                """,
+                (call_sid, cliente_id, from_number, to_number, now_iso),
+            )
+            conn.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[voice] no se pudo registrar llamada %s: %s", call_sid, exc)
+
+
+def _voice_load_knowledge(cliente_id: str, max_chars: int = 16000) -> str:
+    """Lee los .txt del cliente para inyectar conocimiento en la sesion Realtime
+    (la Realtime API no hace RAG; necesitamos el contexto en las instructions)."""
+    try:
+        data_dir = _client_data_dir(cliente_id)
+    except Exception:  # noqa: BLE001
+        return ""
+    if not data_dir.exists():
+        return ""
+    parts: List[str] = []
+    for path in sorted(data_dir.glob("*.txt")):
+        try:
+            parts.append(path.read_text(encoding="utf-8", errors="ignore"))
+        except Exception:  # noqa: BLE001
+            continue
+    return "\n\n".join(parts).strip()[:max_chars]
+
+
+def _voice_booking_enabled(cliente_id: str, config: Dict[str, Any]) -> bool:
+    return bool(config.get("booking", {}).get("enabled")) and _client_booking_plan_enabled(cliente_id)
+
+
+def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
+    base = _build_system_prompt(cliente_id, config)
+
+    voice_rules = (
+        "\n\nCANAL: LLAMADA TELEFONICA POR VOZ. Eres la recepcionista del negocio, una persona real, no un robot.\n"
+        "- Habla SIEMPRE en espanol de Espana, con tono calido y cercano, como alguien que coge el telefono en recepcion.\n"
+        "- Frases cortas, una idea por turno. Nada de parrafos ni listas largas leidas en voz alta.\n"
+        "- Usa con naturalidad y moderacion expresiones como 'vale', 'perfecto', 'claro', 'un momento', 'a ver'.\n"
+        "- Di numeros, horas y precios en palabras naturales: 'las cinco y media', 'a las diez de la manana', 'cuarenta euros'.\n"
+        "- No leas en voz alta URLs, simbolos, markdown, asteriscos ni emojis.\n"
+        "- NUNCA digas que eres una IA, un asistente virtual, un modelo o un sistema; ni menciones herramientas internas, "
+        "ni codigos, ni etiquetas entre corchetes como [MOSTRAR_FORMULARIO].\n"
+        "- Si el llamante te interrumpe, callate y escucha.\n"
+        "- Si no entiendes algo, pide con amabilidad que lo repita.\n"
+        "- Empieza saludando breve y preguntando en que puedes ayudar.\n"
+    )
+
+    tz = config.get("booking", {}).get("timezone", DEFAULT_TIMEZONE)
+    try:
+        now_local = datetime.now(ZoneInfo(tz))
+    except Exception:  # noqa: BLE001
+        now_local = datetime.now(timezone.utc)
+    fecha_hoy = now_local.strftime("%Y-%m-%d")
+    dia_semana = now_local.strftime("%A")
+
+    if _voice_booking_enabled(cliente_id, config):
+        booking_block = (
+            "\nAGENDA DE CITAS POR VOZ (puedes reservar tu misma en la llamada):\n"
+            f"- Hoy es {fecha_hoy} ({dia_semana}), zona horaria {tz}. Calcula fechas relativas "
+            "('manana', 'el lunes que viene') a partir de hoy y pasalas SIEMPRE como YYYY-MM-DD.\n"
+            "- Para ver huecos libres usa la herramienta consultar_disponibilidad(fecha). Ofrece solo 2 o 3 "
+            "horas concretas, no leas la lista entera.\n"
+            "- Antes de reservar confirma en voz alta: nombre, telefono, servicio, dia y hora.\n"
+            "- Pide el telefono y repitelo para asegurarte de que lo has cogido bien.\n"
+            "- Crea la reserva con la herramienta crear_cita. Si devuelve ok, confirma con naturalidad que la "
+            "cita queda hecha y que recibira un SMS con los detalles. Si devuelve error, explica el motivo con "
+            "tacto y ofrece otra hora.\n"
+            "- No inventes huecos ni confirmes una cita sin haber llamado a crear_cita con exito.\n"
+        )
+    else:
+        booking_block = (
+            "\nAGENDA: la reserva online no esta activa para este negocio. Si piden cita, recoge nombre, "
+            "telefono y motivo, y di que el equipo les llamara para confirmar.\n"
+        )
+
+    knowledge = _voice_load_knowledge(cliente_id)
+    knowledge_block = (
+        f"\n\nBASE DE CONOCIMIENTO DEL NEGOCIO (es tu unica fuente para datos concretos como servicios, "
+        f"precios, horarios o direccion; si algo no esta aqui, dilo y ofrece que el equipo lo confirme):\n{knowledge}\n"
+        if knowledge
+        else ""
+    )
+    return base + voice_rules + booking_block + knowledge_block
+
+
+def _voice_booking_tools(cliente_id: str, config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Herramientas Realtime para agendar en vivo. Vacio si el cliente no tiene reserva."""
+    if not _voice_booking_enabled(cliente_id, config):
+        return []
+    return [
+        {
+            "type": "function",
+            "name": "consultar_disponibilidad",
+            "description": (
+                "Devuelve las horas libres de un dia concreto. Llamala antes de proponer horas. "
+                "La fecha debe ir en formato YYYY-MM-DD."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fecha": {"type": "string", "description": "Fecha en formato YYYY-MM-DD"},
+                    "servicio": {"type": "string", "description": "Servicio solicitado (opcional)"},
+                },
+                "required": ["fecha"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "crear_cita",
+            "description": (
+                "Crea y confirma una cita. Llamala solo despues de haber confirmado con el cliente nombre, "
+                "telefono, servicio, fecha (YYYY-MM-DD) y hora (HH:MM en 24h), y tras comprobar disponibilidad."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre": {"type": "string"},
+                    "telefono": {"type": "string"},
+                    "servicio": {"type": "string"},
+                    "fecha": {"type": "string", "description": "YYYY-MM-DD"},
+                    "hora": {"type": "string", "description": "HH:MM en 24h"},
+                    "email": {"type": "string", "description": "Email (opcional)"},
+                },
+                "required": ["nombre", "telefono", "fecha", "hora"],
+            },
+        },
+    ]
+
+
+async def _voice_check_availability(cliente_id: str, fecha: str, servicio: str = "") -> Dict[str, Any]:
+    config = CONFIG_CLIENTES.get(cliente_id)
+    if not config or not _voice_booking_enabled(cliente_id, config):
+        return {"ok": False, "error": "La reserva online no esta habilitada."}
+    try:
+        day = _parse_date(fecha)
+        _validate_booking_window(cliente_id, day)
+    except HTTPException as exc:
+        return {"ok": False, "error": str(exc.detail)}
+    try:
+        _all_slots, available = await _public_slot_sets_for_day(
+            cliente_id, fecha, servicio=_sanitize_text(servicio or "")
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[voice] disponibilidad fallo (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No se pudo consultar la disponibilidad."}
+    slots = sorted(available)
+    return {"ok": True, "fecha": fecha, "huecos": slots[:20], "hay_huecos": bool(slots)}
+
+
+async def _voice_perform_booking(
+    cliente_id: str,
+    *,
+    nombre: str,
+    telefono: str,
+    fecha: str,
+    hora: str,
+    servicio: str = "",
+    email: str = "",
+) -> Dict[str, Any]:
+    """Crea una cita real reutilizando el motor de booking del widget. source='voice'."""
+    config = CONFIG_CLIENTES.get(cliente_id)
+    if not config or not _voice_booking_enabled(cliente_id, config):
+        return {"ok": False, "error": "La reserva online no esta habilitada."}
+
+    nombre = _sanitize_text(nombre)
+    telefono = _sanitize_text(telefono)
+    servicio = _sanitize_text(servicio or "")
+    email = _sanitize_text(email or "")
+    if not nombre or not telefono:
+        return {"ok": False, "error": "Faltan el nombre o el telefono del cliente."}
+
+    try:
+        booking_date_dt = _parse_date(fecha)
+        _validate_booking_window(cliente_id, booking_date_dt)
+        booking_date = booking_date_dt.strftime("%Y-%m-%d")
+        booking_time = _parse_time(hora).strftime("%H:%M")
+    except HTTPException as exc:
+        return {"ok": False, "error": str(exc.detail)}
+
+    try:
+        employee_row = await _resolve_public_booking_employee(
+            cliente_id, booking_date, booking_time, servicio=servicio
+        )
+    except HTTPException as exc:
+        return {"ok": False, "error": str(exc.detail)}
+
+    booking_id = f"bk_{secrets.token_urlsafe(10)}"
+    manage_token = _generate_manage_token()
+    created_at = _utc_now_iso()
+    booking_timezone = employee_row["timezone"] or config["booking"]["timezone"]
+    try:
+        start_local, end_local = _booking_start_end(
+            cliente_id, booking_date, booking_time, employee_id=employee_row["id"]
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[voice] booking start/end fallo (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No se pudo calcular el horario de la cita."}
+
+    booking_payload = {
+        "booking_id": booking_id,
+        "cliente_id": cliente_id,
+        "empresa": config["nombre"],
+        "employee_id": employee_row["id"],
+        "employee_name": employee_row["name"],
+        "nombre": nombre,
+        "email": email,
+        "telefono": telefono,
+        "servicio": servicio,
+        "fecha": booking_date,
+        "hora": booking_time,
+        "notas": "Cita creada por el asistente de voz.",
+        "source": "voice",
+        "created_at": created_at,
+    }
+    try:
+        provider_result = await _create_provider_booking(cliente_id, booking_payload)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[voice] provider booking fallo (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No se pudo registrar la cita."}
+
+    record = {
+        "id": booking_id,
+        "cliente_id": cliente_id,
+        "employee_id": employee_row["id"],
+        "employee_name": employee_row["name"],
+        "nombre": nombre,
+        "email": email,
+        "telefono": telefono,
+        "servicio": servicio,
+        "booking_date": booking_date,
+        "booking_time": booking_time,
+        "notas": "Cita creada por el asistente de voz.",
+        "status": "confirmed",
+        "provider_name": provider_result.provider_name,
+        "provider_status": provider_result.status,
+        "provider_booking_id": provider_result.provider_booking_id,
+        "provider_booking_url": provider_result.provider_booking_url,
+        "manage_token": manage_token,
+        "timezone": booking_timezone,
+        "start_at": _to_utc_iso(start_local),
+        "end_at": _to_utc_iso(end_local),
+        "confirmed_at": created_at,
+        "cancelled_at": "",
+        "rescheduled_at": "",
+        "rescheduled_from_booking_id": "",
+        "confirmation_email_sent_at": "",
+        "reminder_24h_sent_at": "",
+        "reminder_2h_sent_at": "",
+        "customer_email_status": "",
+        "customer_email_last_error": "",
+        "source": "voice",
+        "created_at": created_at,
+    }
+    try:
+        _store_booking(record)
+    except sqlite3.IntegrityError:
+        return {"ok": False, "error": "Ese horario acaba de ocuparse. Ofrece otra hora."}
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[voice] store booking fallo (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No se pudo guardar la cita."}
+
+    _record_booking_audit(
+        booking_id,
+        cliente_id,
+        "booking_created",
+        {"status": "confirmed", "source": "voice", "employee_id": employee_row["id"]},
+    )
+    return {
+        "ok": True,
+        "booking_id": booking_id,
+        "fecha": booking_date,
+        "hora": booking_time,
+        "servicio": servicio or "cita",
+        "empleado": employee_row["name"],
+        "manage_url": _build_booking_manage_url(manage_token),
+    }
+
+
+async def _voice_dispatch_tool(cliente_id: str, name: str, arguments_json: str) -> Dict[str, Any]:
+    try:
+        args = json.loads(arguments_json or "{}")
+    except Exception:  # noqa: BLE001
+        args = {}
+    if not isinstance(args, dict):
+        args = {}
+    if name == "consultar_disponibilidad":
+        return await _voice_check_availability(
+            cliente_id, str(args.get("fecha", "")), str(args.get("servicio", ""))
+        )
+    if name == "crear_cita":
+        return await _voice_perform_booking(
+            cliente_id,
+            nombre=str(args.get("nombre", "")),
+            telefono=str(args.get("telefono", "")),
+            fecha=str(args.get("fecha", "")),
+            hora=str(args.get("hora", "")),
+            servicio=str(args.get("servicio", "")),
+            email=str(args.get("email", "")),
+        )
+    return {"ok": False, "error": "Funcion desconocida."}
+
+
+def _voice_detect_booking_intent(transcript_text: str) -> bool:
+    low = (transcript_text or "").lower()
+    return any(keyword in low for keyword in VOICE_BOOKING_KEYWORDS)
+
+
+def _voice_summarize(transcript_text: str) -> str:
+    if not OPENAI_API_KEY or not transcript_text.strip():
+        return ""
+    try:
+        from openai import OpenAI as OpenAISdkClient  # local import, evita choque de nombres
+
+        client = OpenAISdkClient(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model=DEFAULT_CHAT_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Resume en 2 frases, en espanol, esta llamada telefonica entre un "
+                        "asistente virtual y un cliente. Indica el motivo y si pidio cita."
+                    ),
+                },
+                {"role": "user", "content": transcript_text[:6000]},
+            ],
+            temperature=0.3,
+            max_tokens=160,
+        )
+        return (response.choices[0].message.content or "").strip()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[voice] resumen fallo: %s", exc)
+        return ""
+
+
+async def _send_twilio_sms(to_number: str, from_number: str, body: str) -> bool:
+    if not (_voice_twilio_configured() and from_number and to_number):
+        return False
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Messages.json"
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                url,
+                data={"To": to_number, "From": from_number, "Body": body[:1500]},
+                auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN),
+            )
+        if resp.status_code >= 300:
+            logger.error("[voice] Twilio SMS error (%s): %s", resp.status_code, resp.text[:300])
+            return False
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[voice] Twilio SMS exception: %s", exc)
+        return False
+
+
+async def _open_realtime_ws(model: str = ""):
+    """Abre la conexion WebSocket cliente contra OpenAI Realtime API (GA).
+
+    GA (mayo 2026): sin header OpenAI-Beta; modelos gpt-realtime / gpt-realtime-mini.
+    """
+    import websockets  # import diferido: solo necesario en llamadas reales
+
+    url = f"wss://api.openai.com/v1/realtime?model={model or VOICE_REALTIME_MODEL}"
+    headers = [("Authorization", f"Bearer {OPENAI_API_KEY}")]
+    try:  # websockets >=13 usa additional_headers; <=12 usa extra_headers
+        return await websockets.connect(url, additional_headers=headers, max_size=None)
+    except TypeError:
+        return await websockets.connect(url, extra_headers=headers, max_size=None)
+
+
+async def _voice_safe_close(ws) -> None:
+    try:
+        await ws.close()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def _voice_finalize_call(
+    *,
+    cliente_id: str,
+    config: Dict[str, Any],
+    voice_cfg: Dict[str, Any],
+    call_sid: str,
+    transcript: List[Dict[str, str]],
+    duration_seconds: int,
+    status_value: str,
+    booking_done: bool = False,
+) -> None:
+    transcript_text = "\n".join(f"{item['role']}: {item['text']}" for item in transcript)
+    # booking_created refleja una cita realmente creada por voz; si no, caemos a
+    # deteccion de intencion por palabras clave (lead sin reserva confirmada).
+    booking_intent = booking_done or _voice_detect_booking_intent(transcript_text)
+    summary = await asyncio.to_thread(_voice_summarize, transcript_text)
+
+    from_number = ""
+    if call_sid:
+        try:
+            with sqlite3.connect(DB_PATH, timeout=10) as conn:
+                conn.row_factory = sqlite3.Row
+                row = conn.execute(
+                    "SELECT from_number FROM voice_calls WHERE call_sid=?", (call_sid,)
+                ).fetchone()
+                if row:
+                    from_number = row["from_number"] or ""
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[voice] no se pudo leer from_number de %s: %s", call_sid, exc)
+
+    sms_sent = 0
+    if voice_cfg.get("sms_confirmation") and booking_intent and from_number:
+        twilio_from = (
+            TWILIO_SMS_SENDER
+            or voice_cfg.get("twilio_phone_number")
+            or TWILIO_DEFAULT_PHONE_NUMBER
+        )
+        base = (APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
+        link = f"{base}/demo/{cliente_id}"
+        body = (
+            f"Hola, gracias por llamar a {config['nombre']}. "
+            f"Para gestionar tu cita entra aqui: {link}"
+        )
+        if await _send_twilio_sms(from_number, twilio_from, body):
+            sms_sent = 1
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    if not call_sid:
+        logger.warning("[voice] llamada sin call_sid; no se persiste finalizacion")
+        return
+    try:
+        with sqlite3.connect(DB_PATH, timeout=10) as conn:
+            conn.execute(
+                """
+                UPDATE voice_calls
+                SET ended_at=?, duration_seconds=?, status=?, transcript_json=?,
+                    summary=?, booking_created=?, sms_sent=?
+                WHERE call_sid=?
+                """,
+                (
+                    now_iso,
+                    int(duration_seconds),
+                    status_value,
+                    json.dumps(transcript, ensure_ascii=False),
+                    summary,
+                    1 if booking_intent else 0,
+                    sms_sent,
+                    call_sid,
+                ),
+            )
+            conn.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[voice] no se pudo finalizar llamada %s: %s", call_sid, exc)
+
+
+@app.post("/voice/{cliente_id}")
+async def voice_incoming_call(cliente_id: str, request: Request) -> Response:
+    """Webhook Twilio para una llamada entrante. Devuelve TwiML con Media Stream."""
+    if not CLIENT_ID_PATTERN.match(cliente_id):
+        return _voice_twiml_unavailable()
+    if not _voice_twilio_configured():
+        raise HTTPException(status_code=503, detail="Voice not configured")
+
+    params = await _voice_form_params(request)
+    signature = request.headers.get("X-Twilio-Signature", "")
+    if not _twilio_request_valid(_voice_request_url(request), params, signature):
+        raise HTTPException(status_code=403, detail="Invalid Twilio signature")
+
+    voice_cfg = _get_voice_config(cliente_id)
+    if not voice_cfg:
+        return _voice_twiml_unavailable()
+
+    call_sid = params.get("CallSid", "")
+    if call_sid:
+        _voice_call_register(call_sid, cliente_id, params.get("From", ""), params.get("To", ""))
+
+    return _voice_twiml_connect_stream(_voice_stream_ws_url(request, cliente_id), call_sid)
+
+
+@app.post("/voice/status/{cliente_id}")
+async def voice_status_callback(cliente_id: str, request: Request) -> Response:
+    """Status callback de Twilio (completed/failed/busy/no-answer)."""
+    if not _voice_twilio_configured():
+        raise HTTPException(status_code=503, detail="Voice not configured")
+    params = await _voice_form_params(request)
+    signature = request.headers.get("X-Twilio-Signature", "")
+    if not _twilio_request_valid(_voice_request_url(request), params, signature):
+        raise HTTPException(status_code=403, detail="Invalid Twilio signature")
+
+    call_sid = params.get("CallSid", "")
+    call_status = (params.get("CallStatus", "") or "").lower()
+    mapping = {
+        "completed": "completed",
+        "busy": "no_answer",
+        "no-answer": "no_answer",
+        "failed": "failed",
+        "canceled": "failed",
+    }
+    new_status = mapping.get(call_status)
+    if call_sid and new_status:
+        try:
+            with sqlite3.connect(DB_PATH, timeout=10) as conn:
+                conn.execute(
+                    "UPDATE voice_calls SET status=? WHERE call_sid=? AND status != 'completed'",
+                    (new_status, call_sid),
+                )
+                conn.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[voice] status callback fallo para %s: %s", call_sid, exc)
+    return Response(status_code=204)
+
+
+@app.websocket("/voice/stream/{cliente_id}")
+async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
+    """Puente bidireccional Twilio Media Streams <-> OpenAI Realtime API."""
+    if not CLIENT_ID_PATTERN.match(cliente_id):
+        await websocket.close(code=1008)
+        return
+    config = CONFIG_CLIENTES.get(cliente_id)
+    voice_cfg = _get_voice_config(cliente_id)
+    if not config or not voice_cfg:
+        await websocket.close(code=1008)
+        return
+    if not OPENAI_API_KEY:
+        await websocket.close(code=1011)
+        return
+
+    await websocket.accept()
+
+    state: Dict[str, Any] = {"stream_sid": "", "call_sid": "", "booked": False, "fn_names": {}}
+    transcript: List[Dict[str, str]] = []
+    started_monotonic = time.time()
+    max_duration = int(voice_cfg.get("max_duration_seconds") or 0) or VOICE_MAX_DURATION_SECONDS
+    status_value = "completed"
+
+    def _append_transcript(role: str, text: str) -> None:
+        clean = (text or "").strip()
+        if clean:
+            transcript.append(
+                {"role": role, "text": clean, "ts": datetime.now(timezone.utc).isoformat()}
+            )
+
+    realtime_model = voice_cfg.get("realtime_model") or VOICE_REALTIME_MODEL
+    try:
+        openai_ws = await _open_realtime_ws(realtime_model)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[voice] no se pudo conectar a OpenAI Realtime (%s): %s", cliente_id, exc)
+        await websocket.close(code=1011)
+        return
+
+    try:
+        await openai_ws.send(
+            json.dumps(
+                {
+                    "type": "session.update",
+                    "session": {
+                        "type": "realtime",
+                        "model": realtime_model,
+                        "output_modalities": ["audio"],
+                        "instructions": _voice_build_instructions(cliente_id, config),
+                        "audio": {
+                            "input": {
+                                "format": {"type": "audio/pcmu"},
+                                "turn_detection": {
+                                    "type": "server_vad",
+                                    "threshold": 0.5,
+                                    "prefix_padding_ms": 300,
+                                    "silence_duration_ms": 600,
+                                },
+                                "transcription": {"model": "whisper-1"},
+                            },
+                            "output": {
+                                "format": {"type": "audio/pcmu"},
+                                "voice": voice_cfg.get("openai_voice") or VOICE_OPENAI_VOICE,
+                            },
+                        },
+                        "tools": _voice_booking_tools(cliente_id, config),
+                        "tool_choice": "auto",
+                    },
+                }
+            )
+        )
+
+        # Prioridad del saludo: greeting de voz especifico -> mensaje de bienvenida
+        # de "Apariencia" (bienvenida) -> default. Asi editar Apariencia tambien
+        # cambia como saluda el asistente de voz.
+        greeting = (
+            voice_cfg.get("greeting")
+            or config.get("bienvenida")
+            or f"Hola, soy el asistente virtual de {config['nombre']}. En que puedo ayudarte?"
+        )
+        await openai_ws.send(
+            json.dumps(
+                {
+                    "type": "conversation.item.create",
+                    "item": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": f'Inicia la llamada saludando exactamente con: "{greeting}"',
+                            }
+                        ],
+                    },
+                }
+            )
+        )
+        await openai_ws.send(json.dumps({"type": "response.create"}))
+
+        async def twilio_to_openai() -> None:
+            try:
+                async for raw in websocket.iter_text():
+                    message = json.loads(raw)
+                    event = message.get("event")
+                    if event == "media":
+                        await openai_ws.send(
+                            json.dumps(
+                                {
+                                    "type": "input_audio_buffer.append",
+                                    "audio": message["media"]["payload"],
+                                }
+                            )
+                        )
+                    elif event == "start":
+                        start = message.get("start", {})
+                        state["stream_sid"] = start.get("streamSid", "")
+                        state["call_sid"] = start.get("callSid", "") or start.get(
+                            "customParameters", {}
+                        ).get("call_sid", "")
+                    elif event == "stop":
+                        break
+            except WebSocketDisconnect:
+                pass
+            finally:
+                await _voice_safe_close(openai_ws)
+
+        async def openai_to_twilio() -> None:
+            async for raw in openai_ws:
+                event = json.loads(raw)
+                etype = event.get("type")
+                if etype == "response.output_audio.delta" and event.get("delta"):
+                    if state["stream_sid"]:
+                        await websocket.send_text(
+                            json.dumps(
+                                {
+                                    "event": "media",
+                                    "streamSid": state["stream_sid"],
+                                    "media": {"payload": event["delta"]},
+                                }
+                            )
+                        )
+                elif etype == "response.output_audio_transcript.done":
+                    _append_transcript("assistant", event.get("transcript", ""))
+                elif etype == "conversation.item.input_audio_transcription.completed":
+                    _append_transcript("user", event.get("transcript", ""))
+                elif etype == "response.output_item.added":
+                    item = event.get("item", {}) or {}
+                    if item.get("type") == "function_call" and item.get("call_id"):
+                        state["fn_names"][item["call_id"]] = item.get("name", "")
+                elif etype == "response.function_call_arguments.done":
+                    call_id = event.get("call_id", "")
+                    fname = event.get("name") or state["fn_names"].get(call_id, "")
+                    result = await _voice_dispatch_tool(cliente_id, fname, event.get("arguments", ""))
+                    if fname == "crear_cita" and result.get("ok"):
+                        state["booked"] = True
+                    await openai_ws.send(
+                        json.dumps(
+                            {
+                                "type": "conversation.item.create",
+                                "item": {
+                                    "type": "function_call_output",
+                                    "call_id": call_id,
+                                    "output": json.dumps(result, ensure_ascii=False),
+                                },
+                            }
+                        )
+                    )
+                    await openai_ws.send(json.dumps({"type": "response.create"}))
+                elif etype == "input_audio_buffer.speech_started":
+                    if state["stream_sid"]:
+                        await websocket.send_text(
+                            json.dumps({"event": "clear", "streamSid": state["stream_sid"]})
+                        )
+                elif etype == "error":
+                    logger.warning("[voice] OpenAI error %s: %s", cliente_id, event.get("error"))
+
+        tasks = [
+            asyncio.create_task(twilio_to_openai()),
+            asyncio.create_task(openai_to_twilio()),
+        ]
+        _done, pending = await asyncio.wait(
+            tasks, timeout=max_duration, return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("[voice] error en stream de %s: %s", cliente_id, exc)
+        status_value = "failed"
+    finally:
+        await _voice_safe_close(openai_ws)
+        try:
+            await websocket.close()
+        except Exception:  # noqa: BLE001
+            pass
+        await _voice_finalize_call(
+            cliente_id=cliente_id,
+            config=config,
+            voice_cfg=voice_cfg,
+            call_sid=state["call_sid"],
+            transcript=transcript,
+            duration_seconds=int(time.time() - started_monotonic),
+            status_value=status_value,
+            booking_done=bool(state.get("booked")),
+        )
+
+
+def _voice_stats(conn: sqlite3.Connection, cliente_id: str) -> Dict[str, int]:
+    params: List[Any] = []
+    cond = ""
+    if cliente_id:
+        cond = " WHERE cliente_id=?"
+        params = [cliente_id]
+    connector = " AND" if cond else " WHERE"
+    today = datetime.now(timezone.utc).date().isoformat()
+    week_ago = (datetime.now(timezone.utc).date() - timedelta(days=7)).isoformat()
+
+    def count(extra: str, extra_params: List[Any]) -> int:
+        row = conn.execute(
+            f"SELECT COUNT(*) AS c FROM voice_calls{cond}{extra}", params + extra_params
+        ).fetchone()
+        return int(row["c"] if row else 0)
+
+    avg_row = conn.execute(
+        f"SELECT AVG(duration_seconds) AS a FROM voice_calls{cond}{connector} duration_seconds>0",
+        params,
+    ).fetchone()
+    return {
+        "today": count(f"{connector} substr(started_at,1,10)=?", [today]),
+        "week": count(f"{connector} substr(started_at,1,10)>=?", [week_ago]),
+        "with_booking": count(f"{connector} booking_created=1", []),
+        "avg_duration": int((avg_row["a"] if avg_row and avg_row["a"] else 0) or 0),
+    }
+
+
+@app.get("/admin/voice/calls", dependencies=[Depends(_require_admin_token)])
+async def admin_voice_calls(
+    cliente_id: str = "",
+    status: str = "",
+    page: int = 1,
+    page_size: int = 20,
+) -> Dict[str, Any]:
+    page = max(1, page)
+    page_size = max(1, min(page_size, 100))
+    where: List[str] = []
+    params: List[Any] = []
+    if cliente_id:
+        where.append("cliente_id=?")
+        params.append(cliente_id)
+    if status:
+        where.append("status=?")
+        params.append(status)
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+    offset = (page - 1) * page_size
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        total = int(
+            conn.execute(f"SELECT COUNT(*) AS c FROM voice_calls{clause}", params).fetchone()["c"]
+        )
+        rows = conn.execute(
+            f"""
+            SELECT id, call_sid, cliente_id, from_number, started_at,
+                   duration_seconds, status, summary, booking_created
+            FROM voice_calls{clause}
+            ORDER BY id DESC LIMIT ? OFFSET ?
+            """,
+            params + [page_size, offset],
+        ).fetchall()
+        stats = _voice_stats(conn, cliente_id)
+    return {
+        "items": [dict(row) for row in rows],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "stats": stats,
+    }
+
+
+@app.get("/admin/voice/calls/{call_sid}", dependencies=[Depends(_require_admin_token)])
+async def admin_voice_call_detail(call_sid: str) -> Dict[str, Any]:
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT * FROM voice_calls WHERE call_sid=?", (call_sid,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Llamada no encontrada")
+    data = dict(row)
+    try:
+        data["transcript"] = json.loads(data.get("transcript_json") or "[]")
+    except Exception:  # noqa: BLE001
+        data["transcript"] = []
+    return data
+
+
+@app.on_event("startup")
+async def _voice_startup_log() -> None:
+    if _voice_twilio_configured():
+        logger.info("Voice channel enabled (Twilio configurado).")
+    else:
+        logger.info("Voice channel DISABLED - missing Twilio credentials.")
 
 
 if __name__ == "__main__":
