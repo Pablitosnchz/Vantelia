@@ -13,7 +13,7 @@ api.py               Backend FastAPI monolitico. Mantener en un solo archivo sal
 widget/              Widget embebible vanilla JS. Fuente en modulos, build en widget.min.js.
 admin_ui/            SPA del dashboard admin, HTML/CSS/JS en un solo index.html.
 access_ui/           SPA de login/acceso.
-portal_ui/           SPA del portal cliente.
+app_ui/              SPA del portal cliente real, servida en GET /app.
 hostinger_site/      Web comercial publica para Hostinger static hosting.
 site_exports/        Snapshots limpios para subir a Hostinger. Deben reflejar hostinger_site cuando toque.
 data/                Bases documentales por cliente para RAG: data/<cliente>/info.txt.
@@ -136,6 +136,8 @@ Endpoints admin con token:
 - `POST /admin/alta-express`
 - `POST /admin/reindex/{cliente_id}`
 - `GET /admin/stats`
+- `POST /admin/clientes/{cliente_id}/demo-agenda` — genera datos demo en la agenda (~1 mes de citas repartidas entre 3 profesionales `empdemo_*`, citas marcadas `source='demo_seed'`). Idempotente: regenera limpiando lo anterior. No toca datos reales.
+- `DELETE /admin/clientes/{cliente_id}/demo-agenda` — borra todos los datos demo (bookings `demo_seed` + empleados `empdemo_*` + sus bloqueos/auditoria).
 - Endpoints de clientes, bookings y chats definidos cerca del bloque admin.
 
 ## Configuracion multi-tenant
@@ -224,7 +226,7 @@ Al cambiar la web publica:
 
 ## UI admin, acceso y portal
 
-- Mantener single-file SPA en `admin_ui/index.html`, `access_ui/index.html` y `portal_ui/index.html`.
+- Mantener single-file SPA en `admin_ui/index.html`, `access_ui/index.html` y `app_ui/index.html`. La ruta `/portal` es solo un redirect estable (a `/dashboard`, que enruta admin->admin_ui y cliente->/app); no sirve UI propia.
 - Priorizar interfaces densas, claras y operativas. No convertirlas en landing pages.
 - Evitar dependencias externas nuevas salvo necesidad clara.
 - Textos visibles en espanol, con tono profesional.

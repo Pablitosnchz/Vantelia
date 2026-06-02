@@ -77,7 +77,6 @@ STORAGE_DIR = Path(os.getenv("VANTELIA_STORAGE_DIR", str(BASE_DIR / "storage")))
 WIDGET_DIR = BASE_DIR / "widget"
 ADMIN_UI_DIR = BASE_DIR / "admin_ui"
 ACCESS_UI_DIR = BASE_DIR / "access_ui"
-PORTAL_UI_DIR = BASE_DIR / "portal_ui"
 ONBOARDING_UI_DIR = BASE_DIR / "onboarding_ui"
 APP_UI_DIR = BASE_DIR / "app_ui"
 BRAND_DIR = BASE_DIR / "brand_assets"
@@ -845,7 +844,6 @@ def _ensure_runtime_directories() -> None:
     WIDGET_DIR.mkdir(exist_ok=True)
     ADMIN_UI_DIR.mkdir(exist_ok=True)
     ACCESS_UI_DIR.mkdir(exist_ok=True)
-    PORTAL_UI_DIR.mkdir(exist_ok=True)
     ONBOARDING_UI_DIR.mkdir(exist_ok=True)
     APP_UI_DIR.mkdir(exist_ok=True)
 
@@ -9216,6 +9214,213 @@ def _store_booking(record: Dict[str, Any]) -> None:
         connection.commit()
 
 
+# ---------------------------------------------------------------------------
+# Datos de demostracion para la agenda (solo admin)
+# ---------------------------------------------------------------------------
+
+DEMO_EMPLOYEE_ID_PREFIX = "empdemo_"
+DEMO_BOOKING_SOURCE = "demo_seed"
+
+_DEMO_PROFESSIONALS = [
+    {"name": "Laura Fernandez", "role_label": "Profesional", "color": "#00b1d9"},
+    {"name": "Carlos Ruiz", "role_label": "Profesional", "color": "#7c5cff"},
+    {"name": "Marta Gomez", "role_label": "Profesional", "color": "#f4795b"},
+]
+
+_DEMO_CUSTOMER_NAMES = [
+    "Ana Martinez", "Javier Lopez", "Lucia Sanchez", "Miguel Torres",
+    "Elena Diaz", "Pablo Romero", "Sara Jimenez", "David Moreno",
+    "Carmen Ortega", "Sergio Navarro", "Marina Castro", "Alberto Gil",
+    "Raquel Vidal", "Hugo Ramos", "Patricia Iglesias", "Daniel Santos",
+    "Cristina Molina", "Adrian Herrera", "Beatriz Flores", "Ruben Cano",
+]
+
+_DEMO_FALLBACK_SERVICES = [
+    "Primera consulta", "Revision", "Sesion de seguimiento", "Consulta general",
+]
+
+
+def _demo_service_names(cliente_id: str) -> List[str]:
+    names: List[str] = []
+    try:
+        for service in _extract_services_from_info(cliente_id):
+            nombre = str(service.get("nombre") or "").strip()
+            if nombre and nombre not in names:
+                names.append(nombre)
+    except Exception:  # noqa: BLE001
+        names = []
+    if not names:
+        names = list(_DEMO_FALLBACK_SERVICES)
+    return names[:12]
+
+
+def _purge_demo_agenda(cliente_id: str) -> Dict[str, int]:
+    """Borra todos los datos demo (bookings + empleados demo) de un cliente."""
+    with _get_db_connection() as connection:
+        booking_ids = [
+            row["id"]
+            for row in connection.execute(
+                "SELECT id FROM bookings WHERE cliente_id = ? AND source = ?",
+                (cliente_id, DEMO_BOOKING_SOURCE),
+            ).fetchall()
+        ]
+        if booking_ids:
+            placeholders = ",".join("?" for _ in booking_ids)
+            connection.execute(
+                f"DELETE FROM booking_audit WHERE cliente_id = ? AND booking_id IN ({placeholders})",
+                (cliente_id, *booking_ids),
+            )
+        bookings_removed = connection.execute(
+            "DELETE FROM bookings WHERE cliente_id = ? AND source = ?",
+            (cliente_id, DEMO_BOOKING_SOURCE),
+        ).rowcount
+        employees_removed = connection.execute(
+            "DELETE FROM employees WHERE cliente_id = ? AND id LIKE ?",
+            (cliente_id, f"{DEMO_EMPLOYEE_ID_PREFIX}%"),
+        ).rowcount
+        connection.execute(
+            "DELETE FROM agenda_blocks WHERE cliente_id = ? AND employee_id LIKE ?",
+            (cliente_id, f"{DEMO_EMPLOYEE_ID_PREFIX}%"),
+        )
+        connection.commit()
+    return {
+        "bookings_removed": int(bookings_removed or 0),
+        "employees_removed": int(employees_removed or 0),
+    }
+
+
+def _create_demo_employees(cliente_id: str) -> List[Dict[str, Any]]:
+    defaults = _employee_defaults_for_client(cliente_id)
+    created_at = _utc_now_iso()
+    closed_json = json.dumps(defaults["closed_weekdays"])
+    employees: List[Dict[str, Any]] = []
+    with _get_db_connection() as connection:
+        for profile in _DEMO_PROFESSIONALS:
+            employee_id = f"{DEMO_EMPLOYEE_ID_PREFIX}{secrets.token_urlsafe(6)}"
+            connection.execute(
+                """
+                INSERT INTO employees (
+                    id, cliente_id, name, role_label, color, is_active, is_default,
+                    timezone, slot_minutes, day_start, day_end, closed_weekdays_json, service_ids_json,
+                    created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, '[]', ?, ?)
+                """,
+                (
+                    employee_id, cliente_id, profile["name"], profile["role_label"], profile["color"],
+                    defaults["timezone"], int(defaults["slot_minutes"]),
+                    defaults["day_start"], defaults["day_end"], closed_json,
+                    created_at, created_at,
+                ),
+            )
+            employees.append({"id": employee_id, "name": profile["name"], "color": profile["color"]})
+        connection.commit()
+    return employees
+
+
+def _seed_demo_agenda(cliente_id: str) -> Dict[str, Any]:
+    """Genera ~1 mes de citas demo repartidas entre varios profesionales.
+
+    Idempotente: limpia datos demo previos antes de regenerar. Todas las citas
+    quedan marcadas con source='demo_seed' y los profesionales con id 'empdemo_*'
+    para poder borrarlas despues sin tocar datos reales del cliente.
+    """
+    _purge_demo_agenda(cliente_id)
+
+    defaults = _employee_defaults_for_client(cliente_id)
+    tz_name = defaults["timezone"] or DEFAULT_TIMEZONE
+    slot_minutes = max(10, int(defaults["slot_minutes"] or 30))
+    closed_weekdays = set(defaults["closed_weekdays"] or [])
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:  # noqa: BLE001
+        tz = timezone.utc
+        tz_name = "UTC"
+
+    start_dt = _parse_time(defaults["day_start"] or "09:00")
+    end_dt = _parse_time(defaults["day_end"] or "18:00")
+    day_slots: List[str] = []
+    cursor = start_dt
+    while cursor + timedelta(minutes=slot_minutes) <= end_dt:
+        day_slots.append(cursor.strftime("%H:%M"))
+        cursor += timedelta(minutes=slot_minutes)
+    if not day_slots:
+        day_slots = ["10:00", "11:00", "12:00", "16:00", "17:00"]
+
+    employees = _create_demo_employees(cliente_id)
+    services = _demo_service_names(cliente_id)
+    today = datetime.now(tz).date()
+    rng = random.Random(f"{cliente_id}:{today.isoformat()}")
+    created_at = _utc_now_iso()
+    bookings_created = 0
+    max_bookings = 350
+
+    for offset in range(-7, 29):  # ~5 semanas alrededor de hoy
+        day = today + timedelta(days=offset)
+        if day.weekday() in closed_weekdays:
+            continue
+        is_past = day < today
+        for emp in employees:
+            sample_size = max(1, int(len(day_slots) * rng.uniform(0.25, 0.55)))
+            chosen = rng.sample(day_slots, min(sample_size, len(day_slots)))
+            for hora in chosen:
+                if bookings_created >= max_bookings:
+                    break
+                start_local = datetime.fromisoformat(f"{day.isoformat()}T{hora}:00").replace(tzinfo=tz)
+                end_local = start_local + timedelta(minutes=slot_minutes)
+                if is_past:
+                    status_value = "cancelled" if rng.random() < 0.18 else "completed"
+                else:
+                    status_value = "pending_review" if rng.random() < 0.2 else "confirmed"
+                booking_id = secrets.token_urlsafe(16)
+                record = {
+                    "id": booking_id,
+                    "cliente_id": cliente_id,
+                    "employee_id": emp["id"],
+                    "employee_name": emp["name"],
+                    "nombre": rng.choice(_DEMO_CUSTOMER_NAMES),
+                    "email": f"demo+{booking_id[:8].lower()}@example.com",
+                    "telefono": f"+34 6{rng.randint(10, 99)} {rng.randint(100, 999)} {rng.randint(100, 999)}",
+                    "servicio": rng.choice(services),
+                    "booking_date": day.isoformat(),
+                    "booking_time": hora,
+                    "notas": "Cita de demostracion",
+                    "status": status_value,
+                    "provider_name": "internal",
+                    "provider_status": status_value,
+                    "provider_booking_id": "",
+                    "provider_booking_url": "",
+                    "manage_token": _generate_manage_token(),
+                    "timezone": tz_name,
+                    "start_at": _to_utc_iso(start_local),
+                    "end_at": _to_utc_iso(end_local),
+                    "confirmed_at": created_at if status_value in ("confirmed", "completed") else "",
+                    "cancelled_at": created_at if status_value == "cancelled" else "",
+                    "rescheduled_at": "",
+                    "rescheduled_from_booking_id": "",
+                    "confirmation_email_sent_at": "",
+                    "reminder_24h_sent_at": "",
+                    "reminder_2h_sent_at": "",
+                    "customer_email_status": "",
+                    "customer_email_last_error": "",
+                    "source": DEMO_BOOKING_SOURCE,
+                    "created_at": created_at,
+                }
+                try:
+                    _store_booking(record)
+                except sqlite3.IntegrityError:
+                    continue
+                bookings_created += 1
+        if bookings_created >= max_bookings:
+            break
+
+    return {
+        "employees_created": len(employees),
+        "bookings_created": bookings_created,
+        "timezone": tz_name,
+    }
+
+
 async def _send_booking_to_webhook(cliente_id: str, payload: Dict[str, Any]) -> Tuple[bool, str]:
     config = _get_client_config(cliente_id)
     booking_cfg = config["booking"]
@@ -13460,8 +13665,7 @@ async def app_entry(
         return RedirectResponse("/onboarding")
     index_path = APP_UI_DIR / "index.html"
     if not index_path.exists():
-        # Sem 3 will create app_ui — for now fall back to legacy portal.
-        return RedirectResponse("/portal")
+        raise HTTPException(status_code=404, detail="Portal de cliente no disponible.")
     html = (
         index_path.read_text(encoding="utf-8")
         .replace("__MARKETING_SITE_URL__", escape(MARKETING_SITE_URL))
@@ -14325,6 +14529,47 @@ async def admin_guardar_cliente(
 async def admin_eliminar_cliente(cliente_id: str) -> AuthSimpleResponse:
     _delete_client_everywhere(cliente_id)
     return AuthSimpleResponse(ok=True, message=f"Cliente {cliente_id} eliminado correctamente.")
+
+
+@app.post(
+    "/admin/clientes/{cliente_id}/demo-agenda",
+    dependencies=[Depends(_require_admin_token)],
+    response_model=AuthSimpleResponse,
+)
+async def admin_generar_demo_agenda(cliente_id: str) -> AuthSimpleResponse:
+    """Genera datos de demostracion en la agenda del cliente (~1 mes de citas
+    repartidas entre varios profesionales) para que vea como luce su calendario.
+    Es idempotente: regenera limpiando los datos demo anteriores."""
+    _assert_valid_client_id(cliente_id)
+    if cliente_id not in CONFIG_CLIENTES:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado.")
+    result = _seed_demo_agenda(cliente_id)
+    return AuthSimpleResponse(
+        ok=True,
+        message=(
+            f"Agenda demo generada: {result['bookings_created']} citas en "
+            f"{result['employees_created']} profesionales."
+        ),
+    )
+
+
+@app.delete(
+    "/admin/clientes/{cliente_id}/demo-agenda",
+    dependencies=[Depends(_require_admin_token)],
+    response_model=AuthSimpleResponse,
+)
+async def admin_borrar_demo_agenda(cliente_id: str) -> AuthSimpleResponse:
+    """Borra todos los datos de demostracion de la agenda del cliente
+    (citas con source='demo_seed' y profesionales demo 'empdemo_*')."""
+    _assert_valid_client_id(cliente_id)
+    result = _purge_demo_agenda(cliente_id)
+    return AuthSimpleResponse(
+        ok=True,
+        message=(
+            f"Agenda demo eliminada: {result['bookings_removed']} citas y "
+            f"{result['employees_removed']} profesionales demo."
+        ),
+    )
 
 
 class AdminClienteAssignOwnerPayload(BaseModel):

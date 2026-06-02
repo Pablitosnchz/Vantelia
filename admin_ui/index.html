@@ -2119,6 +2119,8 @@ tbody tr:last-child td { border-bottom: none; }
                 <button id="drawerWelcomeEmailBtn" class="btn-ghost" type="button">Reenviar bienvenida</button>
                 <button id="drawerReindexBtn" class="btn-ghost" type="button">Reindex info</button>
                 <button id="drawerExportConfigBtn" class="btn-ghost" type="button">Exportar JSON</button>
+                <button id="drawerDemoAgendaBtn" class="btn-ghost" type="button" title="Rellena la agenda con ~1 mes de citas y profesionales de ejemplo">Generar agenda demo</button>
+                <button id="drawerDemoAgendaClearBtn" class="btn-ghost" type="button" title="Borra todas las citas y profesionales de demostracion">Borrar agenda demo</button>
               </div>
             </div>
             <div class="drawer-section">
@@ -4961,6 +4963,30 @@ tbody tr:last-child td { border-bottom: none; }
       showStatus("Indice reindexado correctamente.", "success");
     }
 
+    async function runGenerateDemoAgenda(clienteId = state.drawerClientId || state.currentClientId) {
+      if (!clienteId) throw new Error("Selecciona un cliente antes de generar la agenda demo.");
+      const ok = window.confirm(
+        `Vas a generar datos de demostracion en la agenda de ${clienteId}.\n\nSe crearan profesionales y ~1 mes de citas de ejemplo. Si ya habia datos demo, se regeneran. No afecta a las citas reales del cliente.`
+      );
+      if (!ok) return;
+      showStatus("Generando agenda demo...", "info");
+      const result = await api(`/admin/clientes/${encodeURIComponent(clienteId)}/demo-agenda`, { method: "POST" });
+      await loadClients();
+      showStatus(result.message || "Agenda demo generada.", "success");
+    }
+
+    async function runClearDemoAgenda(clienteId = state.drawerClientId || state.currentClientId) {
+      if (!clienteId) throw new Error("Selecciona un cliente antes de borrar la agenda demo.");
+      const ok = window.confirm(
+        `Vas a borrar TODOS los datos de demostracion de la agenda de ${clienteId} (citas y profesionales demo).\n\nLas citas reales del cliente no se tocan.`
+      );
+      if (!ok) return;
+      showStatus("Borrando agenda demo...", "info");
+      const result = await api(`/admin/clientes/${encodeURIComponent(clienteId)}/demo-agenda`, { method: "DELETE" });
+      await loadClients();
+      showStatus(result.message || "Agenda demo eliminada.", "success");
+    }
+
     async function runResetPasswordOwner(client = currentClientSummaryRecord()) {
       const email = client?.owner_email || elements.drawerOwnerEmail?.value.trim();
       if (!email) throw new Error("El cliente no tiene owner email.");
@@ -5987,6 +6013,14 @@ tbody tr:last-child td { border-bottom: none; }
     });
     document.getElementById("drawerExportConfigBtn")?.addEventListener("click", () => {
       try { exportCurrentClientConfig(); } catch (error) { showStatus(error.message, "error"); }
+    });
+    document.getElementById("drawerDemoAgendaBtn")?.addEventListener("click", (event) => {
+      withButtonLoading(event.currentTarget, "Generando...", () => runGenerateDemoAgenda())
+        .catch((error) => showStatus(error.message, "error"));
+    });
+    document.getElementById("drawerDemoAgendaClearBtn")?.addEventListener("click", (event) => {
+      withButtonLoading(event.currentTarget, "Borrando...", () => runClearDemoAgenda())
+        .catch((error) => showStatus(error.message, "error"));
     });
     document.getElementById("assignOwnerBtn")?.addEventListener("click", () => {
       withButtonLoading(document.getElementById("assignOwnerBtn"), "Asignando...", () => assignOwnerFromDrawer())

@@ -449,6 +449,40 @@ def test_admin_token_protects_client_list(client: TestClient):
     assert allowed.json()[0]["cliente_id"] == "demo"
 
 
+def test_admin_demo_agenda_seed_and_purge(client: TestClient, api_module):
+    headers = {"Authorization": "Bearer test-admin-token"}
+    db_path = api_module.DB_PATH
+
+    def _counts():
+        with sqlite3.connect(db_path) as conn:
+            bookings = conn.execute(
+                "SELECT COUNT(*) FROM bookings WHERE cliente_id='demo' AND source='demo_seed'"
+            ).fetchone()[0]
+            emps = conn.execute(
+                "SELECT COUNT(*) FROM employees WHERE cliente_id='demo' AND id LIKE 'empdemo_%'"
+            ).fetchone()[0]
+        return bookings, emps
+
+    # Protegido sin token de admin.
+    assert client.post("/admin/clientes/demo/demo-agenda").status_code == 401
+
+    gen = client.post("/admin/clientes/demo/demo-agenda", headers=headers)
+    assert gen.status_code == 200
+    assert gen.json()["ok"] is True
+    bookings, emps = _counts()
+    assert bookings > 0
+    assert emps == len(api_module._DEMO_PROFESSIONALS)
+
+    # Idempotente: regenerar no acumula profesionales demo.
+    assert client.post("/admin/clientes/demo/demo-agenda", headers=headers).status_code == 200
+    _, emps_again = _counts()
+    assert emps_again == len(api_module._DEMO_PROFESSIONALS)
+
+    rm = client.delete("/admin/clientes/demo/demo-agenda", headers=headers)
+    assert rm.status_code == 200
+    assert _counts() == (0, 0)
+
+
 def test_login_creates_portal_session(client: TestClient):
     response = client.post(
         "/auth/login",
