@@ -100,6 +100,15 @@ CHAT_RATE_LIMIT = int(os.getenv("CHAT_RATE_LIMIT_PER_MINUTE", "30"))
 BOOKING_RATE_LIMIT = int(os.getenv("BOOKING_RATE_LIMIT_PER_MINUTE", "10"))
 MAX_BOOKING_ADVANCE_DAYS = int(os.getenv("MAX_BOOKING_ADVANCE_DAYS", "60"))
 RATE_LIMIT_WINDOW_SECONDS = 60
+# Cap por defecto para listados paginados de citas (tamano de pagina del portal).
+PORTAL_BOOKINGS_PAGE_CAP = 100
+# Cap ampliado para consultas acotadas por un rango de fechas corto (vista
+# calendario): la ventana esta limitada de forma natural, asi que devolvemos
+# todas las citas del rango en lugar de truncar a una pagina y dejar los ultimos
+# dias del mes en blanco.
+PORTAL_BOOKINGS_RANGE_CAP = int(os.getenv("PORTAL_BOOKINGS_RANGE_CAP", "5000"))
+# Span maximo (en dias) que se considera "rango acotado" y obtiene el cap ampliado.
+PORTAL_BOOKINGS_RANGE_MAX_SPAN_DAYS = 92
 
 logger = logging.getLogger("vantelia")
 logging.basicConfig(
@@ -470,6 +479,9 @@ class WAFlowState:
     nombre: str = ""
     email: str = ""
     notas: str = ""
+    booking_code: str = ""
+    verify_phone: str = ""
+    verify_email: str = ""
     greeted: bool = False
     last_seen: float = 0.0
 
@@ -1015,6 +1027,7 @@ def _init_database() -> None:
                 reminder_2h_sent_at TEXT NOT NULL DEFAULT '',
                 customer_email_status TEXT NOT NULL DEFAULT '',
                 customer_email_last_error TEXT NOT NULL DEFAULT '',
+                booking_code TEXT NOT NULL DEFAULT '',
                 source TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )
@@ -1077,10 +1090,19 @@ def _init_database() -> None:
             connection.execute(
                 "ALTER TABLE bookings ADD COLUMN customer_email_last_error TEXT NOT NULL DEFAULT ''"
             )
+        if "booking_code" not in columns:
+            connection.execute("ALTER TABLE bookings ADD COLUMN booking_code TEXT NOT NULL DEFAULT ''")
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_bookings_lookup
             ON bookings(cliente_id, employee_id, booking_date, booking_time, status)
+            """
+        )
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_code
+            ON bookings(cliente_id, booking_code)
+            WHERE booking_code <> ''
             """
         )
         connection.execute("DROP INDEX IF EXISTS idx_bookings_unique_slot")
@@ -2245,6 +2267,11 @@ async def startup_background_services() -> None:
             logger.info("Demos expiradas purgadas al arranque: %s", purged_at_boot)
     except Exception as exc:  # noqa: BLE001
         logger.error("Error purgando demos al arranque: %s", exc)
+
+    try:
+        _backfill_booking_codes()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Error en backfill de codigos de reserva al arranque: %s", exc)
 
     if OUTREACH_IMAP_AVAILABLE and (not outreach_imap_thread or not outreach_imap_thread.is_alive()):
         outreach_imap_stop.clear()
@@ -8066,6 +8093,10 @@ def _booking_email_bodies(
 ) -> Tuple[str, str]:
     service_name = booking_row["servicio"] or "Consulta"
     when_text = _booking_datetime_display(booking_row)
+    try:
+        booking_code = (booking_row["booking_code"] or "").strip()
+    except (KeyError, IndexError):
+        booking_code = ""
     manage_line = f"\nGestiona tu cita aqui: {manage_url}\n" if manage_url else ""
     manage_html = (
         (
@@ -8108,14 +8139,21 @@ def _booking_email_bodies(
     intro = intro_map.get(status_key, intro_map["confirmed"])
     extra_message_clean = _sanitize_text(extra_message, allow_multiline=True)
 
+    codigo_line = f"Numero de reserva: {booking_code}\n" if booking_code else ""
     text_body = (
         f"{intro}\n\n"
+        f"{codigo_line}"
         f"Empresa: {company_name}\n"
         f"Servicio: {service_name}\n"
         f"Fecha y hora: {when_text}\n"
         f"Zona horaria: {booking_row['timezone']}\n"
         f"{manage_line}"
     )
+    if booking_code:
+        text_body += (
+            "\nGuarda tu numero de reserva: te servira para cancelar o cambiar la cita "
+            "por telefono, web o WhatsApp.\n"
+        )
     if extra_message_clean and status_key == "cancelled":
         text_body += f"\nMotivo de cancelacion:\n{extra_message_clean}\n"
     if contact_text:
@@ -8127,7 +8165,20 @@ def _booking_email_bodies(
         f'<div style="background:#ffffff;border:1px solid #d8e2ee;border-radius:18px;'
         f'padding:24px 24px 12px;">'
         f'<p style="margin:0 0 16px;line-height:1.6;">{escape(intro)}</p>'
-        f'<ul style="margin:0 0 12px;padding-left:20px;line-height:1.8;">'
+        + (
+            f'<div style="margin:0 0 16px;padding:12px 16px;border-radius:12px;'
+            f'background:#eef6fb;border:1px solid #cfe3f0;">'
+            f'<span style="font-size:12px;color:#4a6173;text-transform:uppercase;'
+            f'letter-spacing:.04em;">Numero de reserva</span><br>'
+            f'<strong style="font-size:22px;letter-spacing:.08em;color:#0b6b8a;">'
+            f'{escape(booking_code)}</strong>'
+            f'<div style="font-size:12px;color:#4a6173;margin-top:4px;">'
+            f'Guardalo para cancelar o cambiar tu cita por telefono, web o WhatsApp.</div>'
+            f"</div>"
+            if booking_code
+            else ""
+        )
+        + f'<ul style="margin:0 0 12px;padding-left:20px;line-height:1.8;">'
         f"<li><strong>Empresa:</strong> {escape(company_name)}</li>"
         f"<li><strong>Servicio:</strong> {escape(service_name)}</li>"
         f"<li><strong>Fecha y hora:</strong> {escape(when_text)}</li>"
@@ -8250,6 +8301,375 @@ def _booking_start_end(
 
 def _generate_manage_token() -> str:
     return f"mg_{secrets.token_urlsafe(24)}"
+
+
+# Alfabeto sin caracteres ambiguos (sin 0/O, 1/I/L) para el numero de reserva
+# que el cliente dicta por telefono o teclea en chat.
+_BOOKING_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+
+
+def _generate_booking_code() -> str:
+    suffix = "".join(secrets.choice(_BOOKING_CODE_ALPHABET) for _ in range(4))
+    return f"R-{suffix}"
+
+
+def _unique_booking_code(connection: sqlite3.Connection, cliente_id: str) -> str:
+    """Codigo de reserva unico por cliente. Reintenta ante colision (rarisima)."""
+    for _ in range(12):
+        code = _generate_booking_code()
+        existing = connection.execute(
+            "SELECT 1 FROM bookings WHERE cliente_id = ? AND booking_code = ? LIMIT 1",
+            (cliente_id, code),
+        ).fetchone()
+        if not existing:
+            return code
+    return f"R-{secrets.token_hex(4).upper()}"
+
+
+def _normalize_phone_for_match(value: str) -> str:
+    """Deja solo digitos y se queda con los ultimos 9 (numero nacional ES)."""
+    digits = "".join(ch for ch in str(value or "") if ch.isdigit())
+    return digits[-9:] if len(digits) >= 9 else digits
+
+
+def _booking_contact_matches(row: sqlite3.Row, *, telefono: str = "", email: str = "") -> bool:
+    """True si el telefono o el email aportado coincide con el de la reserva.
+
+    Verificacion para que la IA solo cancele/reprograme citas del propio titular.
+    """
+    tel_in = _normalize_phone_for_match(telefono)
+    if tel_in and tel_in == _normalize_phone_for_match(row["telefono"] or ""):
+        return True
+    email_in = _sanitize_text(email).strip().lower()
+    if email_in and email_in == (row["email"] or "").strip().lower():
+        return True
+    return False
+
+
+def _get_booking_row_by_code(cliente_id: str, code: str) -> Optional[sqlite3.Row]:
+    normalized = _sanitize_text(code).strip().upper().replace(" ", "")
+    if not normalized:
+        return None
+    # Tolera que dicten el codigo sin el prefijo "R-".
+    candidates = {normalized}
+    if not normalized.startswith("R-"):
+        candidates.add(f"R-{normalized.lstrip('R-')}")
+    with _get_db_connection() as connection:
+        for candidate in candidates:
+            row = connection.execute(
+                "SELECT * FROM bookings WHERE cliente_id = ? AND booking_code = ? LIMIT 1",
+                (cliente_id, candidate),
+            ).fetchone()
+            if row:
+                return row
+    return None
+
+
+BOOKING_CODE_RE = re.compile(r"\bR[\s-]?([23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4})\b", re.IGNORECASE)
+
+
+def _extract_booking_code_from_text(text: str) -> str:
+    match = BOOKING_CODE_RE.search(str(text or "").upper())
+    if not match:
+        return ""
+    return f"R-{match.group(1).upper()}"
+
+
+def _extract_email_from_text(text: str) -> str:
+    match = re.search(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", str(text or ""))
+    return match.group(0).strip().lower() if match else ""
+
+
+def _extract_phone_from_text(text: str) -> str:
+    # Busca telefonos humanos tipo +34 611 222 333 sin confundirlos con R-XXXX.
+    for match in re.finditer(r"(?:\+|00)?\d[\d\s().-]{7,}\d", str(text or "")):
+        candidate = match.group(0)
+        if len("".join(ch for ch in candidate if ch.isdigit())) >= 9:
+            return candidate.strip()
+    return ""
+
+
+def _extract_time_from_text(text: str) -> str:
+    match = re.search(r"\b([01]?\d|2[0-3])[:h.]([0-5]\d)\b", str(text or ""), re.IGNORECASE)
+    if not match:
+        return ""
+    return f"{int(match.group(1)):02d}:{match.group(2)}"
+
+
+def _extract_date_from_text(text: str, timezone_name: str) -> str:
+    raw = str(text or "")
+    iso = re.search(r"\b(20\d{2}-\d{2}-\d{2})\b", raw)
+    if iso:
+        return iso.group(1)
+    slash = re.search(r"\b(\d{1,2})[/-](\d{1,2})(?:[/-](20\d{2}))?\b", raw)
+    if slash:
+        day = int(slash.group(1))
+        month = int(slash.group(2))
+        try:
+            today = datetime.now(ZoneInfo(timezone_name or DEFAULT_TIMEZONE)).date()
+        except Exception:
+            today = datetime.now(timezone.utc).date()
+        year = int(slash.group(3)) if slash.group(3) else today.year
+        try:
+            candidate = date(year, month, day)
+            if not slash.group(3) and candidate < today:
+                candidate = date(year + 1, month, day)
+            return candidate.isoformat()
+        except ValueError:
+            return ""
+    relative = _resolve_relative_date_es(raw, timezone_name or DEFAULT_TIMEZONE)
+    return relative.isoformat() if relative else ""
+
+
+async def _lookup_and_verify_booking_by_code(
+    cliente_id: str,
+    codigo_reserva: str,
+    *,
+    trusted_phone: str = "",
+    telefono: str = "",
+    email: str = "",
+) -> Tuple[Optional[sqlite3.Row], Optional[Dict[str, Any]]]:
+    codigo = _sanitize_text(codigo_reserva)
+    if not codigo:
+        return None, {"ok": False, "error": "Necesito el numero de reserva (formato R-XXXX)."}
+    row = _get_booking_row_by_code(cliente_id, codigo)
+    if not row:
+        return None, {"ok": False, "error": "No encuentro ninguna cita con ese numero de reserva. Revisalo y vuelve a intentarlo."}
+    verified = (
+        _booking_contact_matches(row, telefono=trusted_phone)
+        or _booking_contact_matches(row, telefono=telefono, email=email)
+    )
+    if not verified:
+        return None, {
+            "ok": False,
+            "needs_verification": True,
+            "error": (
+                "Por seguridad necesito verificar la reserva. Indica el telefono o el email "
+                "con el que hiciste la cita."
+            ),
+        }
+    return row, None
+
+
+def _booking_action_summary(row: sqlite3.Row) -> str:
+    try:
+        fecha = _format_date_es(_parse_date(row["booking_date"]).date())
+    except Exception:
+        fecha = row["booking_date"] or ""
+    return f"{fecha} a las {row['booking_time']}"
+
+
+async def _cancel_booking_by_code(
+    cliente_id: str,
+    codigo_reserva: str,
+    *,
+    trusted_phone: str = "",
+    telefono: str = "",
+    email: str = "",
+    motivo: str = "",
+    source: str,
+    request: Optional[Request] = None,
+) -> Dict[str, Any]:
+    row, error = await _lookup_and_verify_booking_by_code(
+        cliente_id, codigo_reserva, trusted_phone=trusted_phone, telefono=telefono, email=email
+    )
+    if error:
+        return error
+    if row["status"] == "cancelled":
+        return {"ok": True, "ya_cancelada": True, "mensaje": "Esa cita ya estaba cancelada."}
+    if row["status"] == "completed":
+        return {"ok": False, "error": "Esa cita ya se ha realizado y no se puede cancelar."}
+    try:
+        refreshed = await _cancel_booking_core(
+            row,
+            source=source,
+            reason=_sanitize_text(motivo, allow_multiline=True),
+            request=request,
+            audit_extra={"channel": source, "trusted_phone": trusted_phone},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[%s] cancelacion por codigo fallo (%s): %s", source, cliente_id, exc)
+        return {"ok": False, "error": "No se pudo cancelar la cita."}
+    return {
+        "ok": True,
+        "codigo_reserva": refreshed["booking_code"] or "",
+        "fecha": refreshed["booking_date"],
+        "hora": refreshed["booking_time"],
+        "mensaje": "Cita cancelada correctamente.",
+    }
+
+
+async def _reschedule_booking_by_code(
+    cliente_id: str,
+    codigo_reserva: str,
+    fecha: str,
+    hora: str,
+    *,
+    trusted_phone: str = "",
+    telefono: str = "",
+    email: str = "",
+    source: str,
+    request: Optional[Request] = None,
+) -> Dict[str, Any]:
+    row, error = await _lookup_and_verify_booking_by_code(
+        cliente_id, codigo_reserva, trusted_phone=trusted_phone, telefono=telefono, email=email
+    )
+    if error:
+        return error
+    payload = _booking_update_payload_from_reschedule(
+        row, BookingReschedulePayload(fecha=_sanitize_text(fecha), hora=_sanitize_text(hora))
+    )
+    try:
+        response = await _update_booking_details(
+            row,
+            payload,
+            request,
+            source=source,
+            audit_payload={"channel": source, "trusted_phone": trusted_phone},
+        )
+    except HTTPException as exc:
+        return {"ok": False, "error": str(exc.detail)}
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[%s] reprogramacion por codigo fallo (%s): %s", source, cliente_id, exc)
+        return {"ok": False, "error": "No se pudo reprogramar la cita."}
+    return {
+        "ok": True,
+        "codigo_reserva": row["booking_code"] or "",
+        "fecha": _sanitize_text(fecha),
+        "hora": _sanitize_text(hora),
+        "mensaje": response.mensaje or "Cita reprogramada correctamente.",
+    }
+
+
+def _message_requests_cancel_booking(message: str) -> bool:
+    text = _strip_accents(str(message or "").lower())
+    return any(word in text for word in ("cancelar", "anular", "cancelacion", "cancela", "borrar cita"))
+
+
+def _message_requests_reschedule_booking(message: str) -> bool:
+    text = _strip_accents(str(message or "").lower())
+    return any(word in text for word in ("reprogramar", "cambiar cita", "cambiar la cita", "mover cita", "modificar cita", "cambiar hora", "cambiar fecha"))
+
+
+async def _process_booking_management_message(
+    *,
+    cliente_id: str,
+    message: str,
+    request: Optional[Request],
+    source: str,
+    trusted_phone: str = "",
+) -> Optional[Tuple[str, str]]:
+    wants_cancel = _message_requests_cancel_booking(message)
+    wants_reschedule = _message_requests_reschedule_booking(message)
+    if not (wants_cancel or wants_reschedule or _extract_booking_code_from_text(message)):
+        return None
+
+    config = _get_client_config(cliente_id)
+    if not (bool(config.get("booking", {}).get("enabled")) and _client_booking_plan_enabled(cliente_id)):
+        return (
+            "booking_manage",
+            "La gestion de citas online no esta activa para este negocio. Contacta directamente con el equipo.",
+        )
+
+    code = _extract_booking_code_from_text(message)
+    email = _extract_email_from_text(message)
+    phone = _extract_phone_from_text(message)
+    if not (wants_cancel or wants_reschedule):
+        return (
+            "booking_manage",
+            "Tengo el numero de reserva. Dime si quieres cancelar o cambiar la cita.",
+        )
+    if not code:
+        action = "cancelar" if wants_cancel else "cambiar"
+        return (
+            "booking_manage",
+            f"Claro. Para {action} la cita necesito el numero de reserva, con formato R-XXXX.",
+        )
+    if not trusted_phone and not (email or phone):
+        return (
+            "booking_manage",
+            "Por seguridad, enviame tambien el telefono o el email con el que hiciste la reserva.",
+        )
+
+    if wants_cancel:
+        result = await _cancel_booking_by_code(
+            cliente_id,
+            code,
+            trusted_phone=trusted_phone,
+            telefono=phone,
+            email=email,
+            motivo="Solicitado por chat.",
+            source=source,
+            request=request,
+        )
+        if result.get("ok"):
+            suffix = " Ya estaba cancelada." if result.get("ya_cancelada") else ""
+            return ("booking_cancel", f"Listo, la cita {code} queda cancelada.{suffix}")
+        return ("booking_cancel", result.get("error") or "No se pudo cancelar la cita.")
+
+    tz = config.get("booking", {}).get("timezone") or DEFAULT_TIMEZONE
+    new_date = _extract_date_from_text(message, tz)
+    new_time = _extract_time_from_text(message)
+    missing = []
+    if not new_date:
+        missing.append("la nueva fecha")
+    if not new_time:
+        missing.append("la nueva hora")
+    if missing:
+        return (
+            "booking_reschedule",
+            f"Perfecto. Para cambiar la cita {code}, dime {' y '.join(missing)}.",
+        )
+    result = await _reschedule_booking_by_code(
+        cliente_id,
+        code,
+        new_date,
+        new_time,
+        trusted_phone=trusted_phone,
+        telefono=phone,
+        email=email,
+        source=source,
+        request=request,
+    )
+    if result.get("ok"):
+        try:
+            fecha_humana = _format_date_es(_parse_date(new_date).date())
+        except Exception:
+            fecha_humana = new_date
+        return (
+            "booking_reschedule",
+            f"Listo, he cambiado la cita {code} al {fecha_humana} a las {new_time}. El numero de reserva sigue siendo el mismo.",
+        )
+    return ("booking_reschedule", result.get("error") or "No se pudo reprogramar la cita.")
+
+
+def _backfill_booking_codes() -> int:
+    """Asigna numero de reserva a citas activas previas sin codigo.
+
+    One-shot idempotente: tras la primera pasada no encuentra filas y es no-op.
+    Solo toca citas confirmadas o pendientes (las que un cliente podria querer
+    gestionar); las pasadas/canceladas no necesitan codigo.
+    """
+    assigned = 0
+    try:
+        with _get_db_connection() as connection:
+            rows = connection.execute(
+                "SELECT id, cliente_id FROM bookings "
+                "WHERE booking_code = '' AND status IN ('confirmed', 'pending_review')"
+            ).fetchall()
+            for row in rows:
+                code = _unique_booking_code(connection, row["cliente_id"])
+                connection.execute(
+                    "UPDATE bookings SET booking_code = ? WHERE id = ?",
+                    (code, row["id"]),
+                )
+                assigned += 1
+            connection.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Backfill de codigos de reserva fallo: %s", exc)
+    if assigned:
+        logger.info("Backfill: asignados %s numeros de reserva a citas existentes.", assigned)
+    return assigned
 
 
 def _build_booking_manage_url(
@@ -8475,6 +8895,7 @@ def _serialize_booking_row(row: sqlite3.Row, request: Optional[Request] = None) 
         "provider_booking_id": row["provider_booking_id"] or "",
         "provider_booking_url": row["provider_booking_url"] or "",
         "manage_url": _booking_row_manage_url(row, request),
+        "booking_code": row["booking_code"] or "",
         "start_at": row["start_at"] or "",
         "end_at": row["end_at"] or "",
         "created_at": row["created_at"],
@@ -8741,6 +9162,8 @@ async def _reschedule_provider_booking(
 
 def _store_booking(record: Dict[str, Any]) -> None:
     with _get_db_connection() as connection:
+        if not record.get("booking_code"):
+            record["booking_code"] = _unique_booking_code(connection, record["cliente_id"])
         connection.execute(
             """
             INSERT INTO bookings (
@@ -8750,10 +9173,10 @@ def _store_booking(record: Dict[str, Any]) -> None:
                 manage_token, timezone, start_at, end_at,
                 confirmed_at, cancelled_at, rescheduled_at, rescheduled_from_booking_id,
                 confirmation_email_sent_at, reminder_24h_sent_at, reminder_2h_sent_at,
-                customer_email_status, customer_email_last_error,
+                customer_email_status, customer_email_last_error, booking_code,
                 source, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record["id"],
@@ -8785,6 +9208,7 @@ def _store_booking(record: Dict[str, Any]) -> None:
                 record["reminder_2h_sent_at"],
                 record["customer_email_status"],
                 record["customer_email_last_error"],
+                record["booking_code"],
                 record["source"],
                 record["created_at"],
             ),
@@ -8920,7 +9344,9 @@ def _portal_booking_summary_from_row(
         manage_url=_booking_row_manage_url(row, request, viewer="client"),
         contact_email=data["contact_email"],
         contact_phone=data["contact_phone"],
+        booking_code=data.get("booking_code", ""),
         start_at=data["start_at"],
+        end_at=data["end_at"],
         can_cancel=can_edit,
         can_reschedule=can_edit,
     )
@@ -9003,6 +9429,28 @@ def _list_booking_rows(
         total = connection.execute(count_sql, tuple(params[:-2] if params else [])).fetchone()[0]
         rows = connection.execute(sql, tuple(params)).fetchall()
         return rows, total
+
+
+def _portal_bookings_effective_cap(date_from: str, date_to: str) -> int:
+    """Cap de filas para ``/auth/bookings``.
+
+    Para listados normales devolvemos como mucho una pagina
+    (``PORTAL_BOOKINGS_PAGE_CAP``). Cuando la consulta esta acotada por un rango
+    de fechas corto (la vista calendario pide una ventana de ~6 semanas),
+    elevamos el cap para no truncar las citas de los ultimos dias del rango, que
+    de otro modo apareceria como dias vacios en el calendario.
+    """
+    if date_from and date_to:
+        try:
+            span = (
+                datetime.strptime(date_to, "%Y-%m-%d")
+                - datetime.strptime(date_from, "%Y-%m-%d")
+            ).days
+        except ValueError:
+            span = None
+        if span is not None and 0 <= span <= PORTAL_BOOKINGS_RANGE_MAX_SPAN_DAYS:
+            return PORTAL_BOOKINGS_RANGE_CAP
+    return PORTAL_BOOKINGS_PAGE_CAP
 
 
 def _portal_stats_for_user(user: sqlite3.Row, cliente_id_override: str = "") -> Dict[str, Any]:
@@ -9258,6 +9706,48 @@ async def _update_booking_details(
         manage_url=_booking_row_manage_url(refreshed, request),
         provider_booking_url=refreshed["provider_booking_url"] or "",
     )
+
+
+async def _cancel_booking_core(
+    booking_row: sqlite3.Row,
+    *,
+    source: str,
+    reason: str = "",
+    request: Optional[Request] = None,
+    audit_extra: Optional[Dict[str, Any]] = None,
+) -> sqlite3.Row:
+    """Cancela una cita (idempotente). Reutilizable por portal, voz y chat.
+
+    Devuelve la fila actualizada. No lanza si ya estaba cancelada.
+    """
+    booking_id = booking_row["id"]
+    if booking_row["status"] == "cancelled":
+        return booking_row
+    cancel_reason = _sanitize_text(reason, allow_multiline=True)
+    await _cancel_provider_booking(booking_row)
+    _update_booking_record(
+        booking_id,
+        status="cancelled",
+        cancelled_at=_utc_now_iso(),
+        provider_status="cancelled",
+    )
+    _record_booking_audit(
+        booking_id,
+        booking_row["cliente_id"],
+        "booking_cancelled",
+        {
+            "source": source,
+            "reason": cancel_reason,
+            "reason_sent_to_customer": bool(cancel_reason),
+            **(audit_extra or {}),
+        },
+    )
+    refreshed = _load_booking_or_404(booking_id)
+    try:
+        await _send_booking_email_by_kind(refreshed, "cancelled", request, extra_message=cancel_reason)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("No se pudo enviar email de cancelacion %s: %s", booking_id, exc)
+    return refreshed
 
 
 def _booking_manage_page(booking: BookingDetailPublic, *, viewer: str = "customer") -> str:
@@ -10619,21 +11109,25 @@ async def auth_bookings(
     normalized_scope = scope.strip().lower() or "all"
     if normalized_scope not in {"all", "upcoming", "history"}:
         raise HTTPException(status_code=400, detail="Scope invalido.")
+    date_from_clean = date_from.strip()
+    date_to_clean = date_to.strip()
+    cap = _portal_bookings_effective_cap(date_from_clean, date_to_clean)
+    effective_limit = max(1, min(limit, cap))
     rows, total = _list_booking_rows(
         cliente_id=target_client_id,
         employee_id=employee_id.strip(),
         status_filter=estado.strip(),
         search=q.strip(),
-        date_from=date_from.strip(),
-        date_to=date_to.strip(),
-        limit=max(1, min(limit, 100)),
+        date_from=date_from_clean,
+        date_to=date_to_clean,
+        limit=effective_limit,
         offset=max(0, offset),
         scope=normalized_scope,
     )
     return PortalBookingsResponse(
         items=[_portal_booking_summary_from_row(row, request) for row in rows],
         total=total,
-        limit=max(1, min(limit, 100)),
+        limit=effective_limit,
         offset=max(0, offset),
         scope=normalized_scope,
     )
@@ -14795,6 +15289,29 @@ async def _process_chat_message(
         )
         return qa_response
 
+    management = await _process_booking_management_message(
+        cliente_id=cliente_id,
+        message=message,
+        request=request,
+        source="chat",
+    )
+    if management:
+        management_intent, management_text = management
+        management_response = RespuestaChat(
+            respuesta=management_text,
+            mostrar_formulario=False,
+            session_id=session_id,
+            intent=management_intent,
+        )
+        _record_chat_message(
+            session_id=session_id,
+            cliente_id=cliente_id,
+            role="assistant",
+            content=management_response.respuesta,
+            intent=management_intent,
+        )
+        return management_response
+
     if booking_enabled and _message_requests_booking_form(message):
         booking_response = RespuestaChat(
             respuesta="📅 Te muestro el formulario de solicitud de cita para que puedas elegir servicio, fecha y hora.",
@@ -15301,11 +15818,27 @@ def _wa_clear_flow(cliente_id: str, from_number: str) -> None:
     whatsapp_flows.pop(_wa_flow_key(cliente_id, from_number), None)
 
 
+def _wa_reset_booking_fields(flow: WAFlowState) -> None:
+    flow.servicio = ""
+    flow.employee_id = ""
+    flow.employee_name = ""
+    flow.fecha = ""
+    flow.hora = ""
+    flow.nombre = ""
+    flow.email = ""
+    flow.notas = ""
+    flow.booking_code = ""
+    flow.verify_phone = ""
+    flow.verify_email = ""
+
+
 def _wa_main_menu_sections(booking_enabled: bool) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     if booking_enabled:
         rows.append({"id": "menu_agendar", "title": "📅 Agendar cita", "description": "Reserva tu cita en pocos pasos"})
         rows.append({"id": "menu_disponibilidad", "title": "🕐 Ver disponibilidad", "description": "Consulta huecos libres"})
+        rows.append({"id": "menu_cancelar_cita", "title": "Cancelar cita", "description": "Anula una reserva con tu codigo"})
+        rows.append({"id": "menu_cambiar_cita", "title": "Cambiar cita", "description": "Reprograma fecha u hora"})
     rows.append({"id": "menu_faq", "title": "💬 Preguntas frecuentes", "description": "Dudas habituales"})
     rows.append({"id": "menu_productos", "title": "🛍️ Productos / servicios", "description": "Catalogo del negocio"})
     rows.append({"id": "menu_recomendar", "title": "⭐ Recomendar", "description": "Te ayudo a elegir"})
@@ -15717,18 +16250,111 @@ async def _handle_whatsapp_message(
     # Trigger desde menu o texto
     trigger_agendar = iid == "menu_agendar" or text_norm in ("agendar", "agendar cita", "reservar", "reservar cita", "cita")
     trigger_disp = iid == "menu_disponibilidad" or text_norm in ("disponibilidad", "ver disponibilidad", "horarios", "huecos")
+    trigger_cancel = iid == "menu_cancelar_cita" or _message_requests_cancel_booking(incoming_text)
+    trigger_reschedule = iid == "menu_cambiar_cita" or _message_requests_reschedule_booking(incoming_text)
+
+    if trigger_cancel and booking_enabled:
+        _wa_reset_booking_fields(flow)
+        flow.flow = "manage_cancel_code"
+        code = _extract_booking_code_from_text(incoming_text)
+        if code:
+            flow.booking_code = code
+            flow.flow = "manage_cancel_verify"
+            result = await _cancel_booking_by_code(
+                cliente_id,
+                code,
+                trusted_phone=from_number,
+                source="whatsapp",
+                request=request,
+            )
+            if result.get("ok"):
+                _wa_clear_flow(cliente_id, from_number)
+                await _send_whatsapp_text(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                    text=f"✅ Listo, la cita {code} queda cancelada. Escribe *menu* para volver.",
+                )
+                return
+            if not result.get("needs_verification"):
+                _wa_clear_flow(cliente_id, from_number)
+                await _send_whatsapp_text(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                    text=f"⚠️ {result.get('error') or 'No se pudo cancelar la cita.'}",
+                )
+                return
+        await _send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text=(
+                "Para cancelar tu cita necesito el numero de reserva (formato *R-XXXX*)."
+                if not flow.booking_code else
+                "Por seguridad necesito verificar la reserva. Enviame el telefono o el email con el que hiciste la cita."
+            ),
+        )
+        return
+
+    if trigger_reschedule and booking_enabled:
+        _wa_reset_booking_fields(flow)
+        flow.flow = "manage_reschedule_code"
+        flow.booking_code = _extract_booking_code_from_text(incoming_text)
+        flow.verify_email = _extract_email_from_text(incoming_text)
+        flow.verify_phone = _extract_phone_from_text(incoming_text)
+        tz = config.get("booking", {}).get("timezone") or DEFAULT_TIMEZONE
+        flow.fecha = _extract_date_from_text(incoming_text, tz)
+        flow.hora = _extract_time_from_text(incoming_text)
+        if not flow.booking_code:
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text="Para cambiar tu cita necesito el numero de reserva (formato *R-XXXX*).",
+            )
+            return
+        if not flow.fecha:
+            flow.flow = "manage_reschedule_date"
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text=f"Perfecto. Indica la nueva fecha para la cita {flow.booking_code}.",
+            )
+            return
+        if not flow.hora:
+            flow.flow = "manage_reschedule_time"
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text=f"Indica la nueva hora para la cita {flow.booking_code}.",
+            )
+            return
+        flow.flow = "manage_reschedule_verify"
+        result = await _reschedule_booking_by_code(
+            cliente_id,
+            flow.booking_code,
+            flow.fecha,
+            flow.hora,
+            trusted_phone=from_number,
+            telefono=flow.verify_phone,
+            email=flow.verify_email,
+            source="whatsapp",
+            request=request,
+        )
+        if result.get("ok"):
+            _wa_clear_flow(cliente_id, from_number)
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {flow.fecha} a las {flow.hora}.",
+            )
+            return
+        await _send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text=(
+                "Por seguridad necesito verificar la reserva. Enviame el telefono o el email con el que hiciste la cita."
+                if result.get("needs_verification")
+                else f"⚠️ {result.get('error') or 'No se pudo cambiar la cita.'}"
+            ),
+        )
+        if not result.get("needs_verification"):
+            _wa_clear_flow(cliente_id, from_number)
+        return
 
     if trigger_agendar and booking_enabled:
         # Resetear flow y arrancar por servicio
         flow.flow = ""
-        flow.servicio = ""
-        flow.employee_id = ""
-        flow.employee_name = ""
-        flow.fecha = ""
-        flow.hora = ""
-        flow.nombre = ""
-        flow.email = ""
-        flow.notas = ""
+        _wa_reset_booking_fields(flow)
 
         services = _public_services_for_booking(cliente_id)
         if services:
@@ -15760,6 +16386,183 @@ async def _handle_whatsapp_message(
         await _wa_send_availability_overview(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number, config=config,
         )
+        return
+
+    if flow.flow == "manage_cancel_code":
+        code = _extract_booking_code_from_text(incoming_text)
+        if not code:
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text="No he reconocido el numero de reserva. Debe tener formato *R-XXXX*.",
+            )
+            return
+        flow.booking_code = code
+        result = await _cancel_booking_by_code(
+            cliente_id,
+            code,
+            trusted_phone=from_number,
+            source="whatsapp",
+            request=request,
+        )
+        if result.get("ok"):
+            _wa_clear_flow(cliente_id, from_number)
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text=f"✅ Listo, la cita {code} queda cancelada. Escribe *menu* para volver.",
+            )
+            return
+        if result.get("needs_verification"):
+            flow.flow = "manage_cancel_verify"
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text="Por seguridad necesito verificar la reserva. Enviame el telefono o el email con el que hiciste la cita.",
+            )
+            return
+        _wa_clear_flow(cliente_id, from_number)
+        await _send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text=f"⚠️ {result.get('error') or 'No se pudo cancelar la cita.'}",
+        )
+        return
+
+    if flow.flow == "manage_cancel_verify":
+        email = _extract_email_from_text(incoming_text)
+        phone = _extract_phone_from_text(incoming_text)
+        if not (email or phone):
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text="Enviame el telefono o el email usado en la reserva para poder verificarla.",
+            )
+            return
+        result = await _cancel_booking_by_code(
+            cliente_id,
+            flow.booking_code,
+            trusted_phone=from_number,
+            telefono=phone,
+            email=email,
+            source="whatsapp",
+            request=request,
+        )
+        if result.get("ok"):
+            _wa_clear_flow(cliente_id, from_number)
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text=f"✅ Listo, la cita {flow.booking_code} queda cancelada. Escribe *menu* para volver.",
+            )
+            return
+        await _send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text=f"⚠️ {result.get('error') or 'No se pudo cancelar la cita.'}",
+        )
+        if not result.get("needs_verification"):
+            _wa_clear_flow(cliente_id, from_number)
+        return
+
+    if flow.flow == "manage_reschedule_code":
+        code = _extract_booking_code_from_text(incoming_text)
+        if not code:
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text="No he reconocido el numero de reserva. Debe tener formato *R-XXXX*.",
+            )
+            return
+        flow.booking_code = code
+        flow.flow = "manage_reschedule_date"
+        await _send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text=f"Indica la nueva fecha para la cita {flow.booking_code}.",
+        )
+        return
+
+    if flow.flow == "manage_reschedule_date":
+        tz = config.get("booking", {}).get("timezone") or DEFAULT_TIMEZONE
+        fecha = _extract_date_from_text(incoming_text, tz)
+        if not fecha:
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text="No he reconocido la fecha. Puedes escribir, por ejemplo, *mañana* o *2026-06-15*.",
+            )
+            return
+        flow.fecha = fecha
+        flow.flow = "manage_reschedule_time"
+        await _send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text=f"Indica la nueva hora para la cita {flow.booking_code}.",
+        )
+        return
+
+    if flow.flow == "manage_reschedule_time":
+        hora = _extract_time_from_text(incoming_text)
+        if not hora:
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text="No he reconocido la hora. Escribela en formato *HH:MM*, por ejemplo *10:30*.",
+            )
+            return
+        flow.hora = hora
+        result = await _reschedule_booking_by_code(
+            cliente_id,
+            flow.booking_code,
+            flow.fecha,
+            flow.hora,
+            trusted_phone=from_number,
+            source="whatsapp",
+            request=request,
+        )
+        if result.get("ok"):
+            _wa_clear_flow(cliente_id, from_number)
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {flow.fecha} a las {flow.hora}.",
+            )
+            return
+        if result.get("needs_verification"):
+            flow.flow = "manage_reschedule_verify"
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text="Por seguridad necesito verificar la reserva. Enviame el telefono o el email con el que hiciste la cita.",
+            )
+            return
+        _wa_clear_flow(cliente_id, from_number)
+        await _send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text=f"⚠️ {result.get('error') or 'No se pudo cambiar la cita.'}",
+        )
+        return
+
+    if flow.flow == "manage_reschedule_verify":
+        email = _extract_email_from_text(incoming_text)
+        phone = _extract_phone_from_text(incoming_text)
+        if not (email or phone):
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text="Enviame el telefono o el email usado en la reserva para poder verificarla.",
+            )
+            return
+        result = await _reschedule_booking_by_code(
+            cliente_id,
+            flow.booking_code,
+            flow.fecha,
+            flow.hora,
+            trusted_phone=from_number,
+            telefono=phone,
+            email=email,
+            source="whatsapp",
+            request=request,
+        )
+        if result.get("ok"):
+            _wa_clear_flow(cliente_id, from_number)
+            await _send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {flow.fecha} a las {flow.hora}.",
+            )
+            return
+        await _send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text=f"⚠️ {result.get('error') or 'No se pudo cambiar la cita.'}",
+        )
+        if not result.get("needs_verification"):
+            _wa_clear_flow(cliente_id, from_number)
         return
 
     # FLUJO BOOKING - Servicio
@@ -23859,6 +24662,21 @@ def _voice_call_register(call_sid: str, cliente_id: str, from_number: str, to_nu
         logger.error("[voice] no se pudo registrar llamada %s: %s", call_sid, exc)
 
 
+def _voice_call_from_number(call_sid: str) -> str:
+    """Recupera el numero desde el que llaman, para verificar titularidad de citas."""
+    if not call_sid:
+        return ""
+    try:
+        with sqlite3.connect(DB_PATH, timeout=10) as conn:
+            row = conn.execute(
+                "SELECT from_number FROM voice_calls WHERE call_sid = ? LIMIT 1",
+                (call_sid,),
+            ).fetchone()
+            return (row[0] if row else "") or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _voice_load_knowledge(cliente_id: str, max_chars: int = 16000) -> str:
     """Lee los .txt del cliente para inyectar conocimiento en la sesion Realtime
     (la Realtime API no hace RAG; necesitamos el contexto en las instructions)."""
@@ -23918,6 +24736,16 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
             "- Crea la reserva con la herramienta crear_cita. Si devuelve ok, confirma con naturalidad que la "
             "cita queda hecha y que recibira un SMS con los detalles. Si devuelve error, explica el motivo con "
             "tacto y ofrece otra hora.\n"
+            "- crear_cita devuelve un numero de reserva (formato R y cuatro caracteres, por ejemplo R-7F4K). "
+            "Diselo al cliente deletreado, letra a letra y digito a digito, y pidele que lo apunte porque le servira "
+            "para cambiar o cancelar la cita.\n"
+            "- CANCELAR: si piden cancelar, pide su numero de reserva y usa la herramienta cancelar_cita. "
+            "REPROGRAMAR: pide el numero de reserva y la nueva fecha/hora (comprueba antes huecos con "
+            "consultar_disponibilidad) y usa reprogramar_cita.\n"
+            "- Seguridad: estas herramientas solo funcionan si el telefono desde el que llaman coincide con el de la "
+            "reserva. Si devuelven needs_verification, pide con tacto el telefono o el email con el que reservaron y "
+            "vuelve a intentarlo pasando ese dato. No confirmes una cancelacion o cambio sin que la herramienta "
+            "devuelva ok.\n"
             "- No inventes huecos ni confirmes una cita sin haber llamado a crear_cita con exito.\n"
         )
     else:
@@ -23962,7 +24790,8 @@ def _voice_booking_tools(cliente_id: str, config: Dict[str, Any]) -> List[Dict[s
             "name": "crear_cita",
             "description": (
                 "Crea y confirma una cita. Llamala solo despues de haber confirmado con el cliente nombre, "
-                "telefono, servicio, fecha (YYYY-MM-DD) y hora (HH:MM en 24h), y tras comprobar disponibilidad."
+                "telefono, servicio, fecha (YYYY-MM-DD) y hora (HH:MM en 24h), y tras comprobar disponibilidad. "
+                "Devuelve un numero de reserva (formato R-XXXX): comunicaselo al cliente y pidele que lo guarde."
             ),
             "parameters": {
                 "type": "object",
@@ -23975,6 +24804,46 @@ def _voice_booking_tools(cliente_id: str, config: Dict[str, Any]) -> List[Dict[s
                     "email": {"type": "string", "description": "Email (opcional)"},
                 },
                 "required": ["nombre", "telefono", "fecha", "hora"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "cancelar_cita",
+            "description": (
+                "Cancela una cita existente a partir de su numero de reserva (formato R-XXXX). "
+                "Por seguridad solo se cancela si el telefono desde el que llama coincide con el de la reserva; "
+                "si no coincide, pide al cliente el telefono o el email con el que reservo y pasalo en 'telefono' o 'email'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "codigo_reserva": {"type": "string", "description": "Numero de reserva, formato R-XXXX"},
+                    "telefono": {"type": "string", "description": "Telefono de la reserva, si el cliente lo facilita (opcional)"},
+                    "email": {"type": "string", "description": "Email de la reserva, si el cliente lo facilita (opcional)"},
+                    "motivo": {"type": "string", "description": "Motivo de cancelacion (opcional)"},
+                },
+                "required": ["codigo_reserva"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "reprogramar_cita",
+            "description": (
+                "Reprograma una cita existente a una nueva fecha y hora, a partir de su numero de reserva (R-XXXX). "
+                "Comprueba disponibilidad con consultar_disponibilidad antes de proponer la nueva hora. "
+                "Por seguridad solo se reprograma si el telefono desde el que llama coincide con el de la reserva; "
+                "si no, pide el telefono o el email con el que reservo y pasalo en 'telefono' o 'email'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "codigo_reserva": {"type": "string", "description": "Numero de reserva, formato R-XXXX"},
+                    "fecha": {"type": "string", "description": "Nueva fecha YYYY-MM-DD"},
+                    "hora": {"type": "string", "description": "Nueva hora HH:MM en 24h"},
+                    "telefono": {"type": "string", "description": "Telefono de la reserva, si el cliente lo facilita (opcional)"},
+                    "email": {"type": "string", "description": "Email de la reserva, si el cliente lo facilita (opcional)"},
+                },
+                "required": ["codigo_reserva", "fecha", "hora"],
             },
         },
     ]
@@ -24121,6 +24990,7 @@ async def _voice_perform_booking(
     return {
         "ok": True,
         "booking_id": booking_id,
+        "codigo_reserva": record.get("booking_code", ""),
         "fecha": booking_date,
         "hora": booking_time,
         "servicio": servicio or "cita",
@@ -24129,7 +24999,112 @@ async def _voice_perform_booking(
     }
 
 
-async def _voice_dispatch_tool(cliente_id: str, name: str, arguments_json: str) -> Dict[str, Any]:
+async def _voice_lookup_and_verify_booking(
+    cliente_id: str,
+    codigo_reserva: str,
+    *,
+    from_number: str = "",
+    telefono: str = "",
+    email: str = "",
+) -> Tuple[Optional[sqlite3.Row], Optional[Dict[str, Any]]]:
+    """Busca una cita por codigo y verifica titularidad (telefono que llama o aportado / email).
+
+    Devuelve (row, None) si todo ok, o (None, error_dict) para responder a la IA.
+    """
+    codigo = _sanitize_text(codigo_reserva)
+    if not codigo:
+        return None, {"ok": False, "error": "Pide al cliente su numero de reserva (formato R-XXXX)."}
+    row = _get_booking_row_by_code(cliente_id, codigo)
+    if not row:
+        return None, {"ok": False, "error": "No encuentro ninguna cita con ese numero de reserva. Pide que lo repita."}
+    verified = (
+        _booking_contact_matches(row, telefono=from_number)
+        or _booking_contact_matches(row, telefono=telefono, email=email)
+    )
+    if not verified:
+        return None, {
+            "ok": False,
+            "needs_verification": True,
+            "error": (
+                "Por seguridad no puedo continuar sin verificar la identidad. "
+                "Pide al cliente el telefono o el email con el que hizo la reserva."
+            ),
+        }
+    return row, None
+
+
+async def _voice_cancel_booking(
+    cliente_id: str,
+    codigo_reserva: str,
+    *,
+    from_number: str = "",
+    telefono: str = "",
+    email: str = "",
+    motivo: str = "",
+) -> Dict[str, Any]:
+    row, error = await _voice_lookup_and_verify_booking(
+        cliente_id, codigo_reserva, from_number=from_number, telefono=telefono, email=email
+    )
+    if error:
+        return error
+    if row["status"] == "cancelled":
+        return {"ok": True, "ya_cancelada": True, "mensaje": "Esa cita ya estaba cancelada."}
+    if row["status"] == "completed":
+        return {"ok": False, "error": "Esa cita ya se ha realizado y no se puede cancelar."}
+    try:
+        await _cancel_booking_core(
+            row, source="voice", reason=_sanitize_text(motivo, allow_multiline=True),
+            audit_extra={"channel": "voice", "from_number": from_number},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[voice] cancelacion fallo (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No se pudo cancelar la cita."}
+    return {
+        "ok": True,
+        "codigo_reserva": row["booking_code"] or "",
+        "fecha": row["booking_date"],
+        "hora": row["booking_time"],
+        "mensaje": "Cita cancelada correctamente.",
+    }
+
+
+async def _voice_reschedule_booking(
+    cliente_id: str,
+    codigo_reserva: str,
+    fecha: str,
+    hora: str,
+    *,
+    from_number: str = "",
+    telefono: str = "",
+    email: str = "",
+) -> Dict[str, Any]:
+    row, error = await _voice_lookup_and_verify_booking(
+        cliente_id, codigo_reserva, from_number=from_number, telefono=telefono, email=email
+    )
+    if error:
+        return error
+    payload = _booking_update_payload_from_reschedule(
+        row, BookingReschedulePayload(fecha=_sanitize_text(fecha), hora=_sanitize_text(hora))
+    )
+    try:
+        await _update_booking_details(row, payload, None, source="voice")
+    except HTTPException as exc:
+        return {"ok": False, "error": str(exc.detail)}
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[voice] reprogramacion fallo (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No se pudo reprogramar la cita."}
+    return {
+        "ok": True,
+        "codigo_reserva": row["booking_code"] or "",
+        "fecha": _sanitize_text(fecha),
+        "hora": _sanitize_text(hora),
+        "mensaje": "Cita reprogramada correctamente. El numero de reserva sigue siendo el mismo.",
+    }
+
+
+async def _voice_dispatch_tool(
+    cliente_id: str, name: str, arguments_json: str, *, from_number: str = ""
+) -> Dict[str, Any]:
     try:
         args = json.loads(arguments_json or "{}")
     except Exception:  # noqa: BLE001
@@ -24148,6 +25123,25 @@ async def _voice_dispatch_tool(cliente_id: str, name: str, arguments_json: str) 
             fecha=str(args.get("fecha", "")),
             hora=str(args.get("hora", "")),
             servicio=str(args.get("servicio", "")),
+            email=str(args.get("email", "")),
+        )
+    if name == "cancelar_cita":
+        return await _voice_cancel_booking(
+            cliente_id,
+            str(args.get("codigo_reserva", "")),
+            from_number=from_number,
+            telefono=str(args.get("telefono", "")),
+            email=str(args.get("email", "")),
+            motivo=str(args.get("motivo", "")),
+        )
+    if name == "reprogramar_cita":
+        return await _voice_reschedule_booking(
+            cliente_id,
+            str(args.get("codigo_reserva", "")),
+            str(args.get("fecha", "")),
+            str(args.get("hora", "")),
+            from_number=from_number,
+            telefono=str(args.get("telefono", "")),
             email=str(args.get("email", "")),
         )
     return {"ok": False, "error": "Funcion desconocida."}
@@ -24478,6 +25472,7 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                         state["call_sid"] = start.get("callSid", "") or start.get(
                             "customParameters", {}
                         ).get("call_sid", "")
+                        state["from_number"] = _voice_call_from_number(state["call_sid"])
                     elif event == "stop":
                         break
             except WebSocketDisconnect:
@@ -24511,7 +25506,10 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                 elif etype == "response.function_call_arguments.done":
                     call_id = event.get("call_id", "")
                     fname = event.get("name") or state["fn_names"].get(call_id, "")
-                    result = await _voice_dispatch_tool(cliente_id, fname, event.get("arguments", ""))
+                    result = await _voice_dispatch_tool(
+                        cliente_id, fname, event.get("arguments", ""),
+                        from_number=state.get("from_number", ""),
+                    )
                     if fname == "crear_cita" and result.get("ok"):
                         state["booked"] = True
                     await openai_ws.send(

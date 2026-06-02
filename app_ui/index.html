@@ -581,6 +581,57 @@
     .gcal-day.closed.blocked { box-shadow: inset 0 0 0 1px rgba(245,158,11,0.62), inset 3px 0 0 rgba(239,68,68,0.72); }
     .gcal-day-tag.blocked { background:rgba(245,158,11,0.13); color:#fde68a; border:1px solid rgba(245,158,11,0.38); }
 
+    /* ── Vista Día: timeline por profesional ── */
+    .cd-scroll { overflow-x:auto; overflow-y:hidden; border:1px solid var(--line); border-radius:12px; background:var(--panel); }
+    .cd-grid { display:flex; align-items:stretch; min-width:100%; }
+    .cd-col { display:flex; flex-direction:column; flex:1 1 190px; min-width:190px; }
+    .cd-col.cd-gutter { flex:0 0 58px; min-width:58px; width:58px; }
+    .cd-head {
+      height:40px; display:flex; align-items:center; gap:8px; padding:0 10px;
+      background:var(--panel-2); border-bottom:1px solid var(--line-strong); border-left:1px solid var(--line);
+      font-size:0.82rem; font-weight:700; color:var(--text); white-space:nowrap;
+    }
+    .cd-gutter .cd-head { border-left:0; }
+    .cd-dot { width:9px; height:9px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 0 2px rgba(255,255,255,0.08); }
+    .cd-name { overflow:hidden; text-overflow:ellipsis; }
+    .cd-count { margin-left:auto; font-size:0.68rem; font-weight:700; color:var(--soft); background:rgba(255,255,255,0.06); border-radius:999px; padding:1px 7px; }
+    .cd-body { position:relative; border-left:1px solid var(--line); }
+    .cd-gutter .cd-body { border-left:0; }
+    .cd-line { position:absolute; left:0; right:0; border-top:1px solid var(--line); pointer-events:none; }
+    .cd-line.hour { border-top-color:var(--line-strong); }
+    .cd-glabel { position:absolute; right:8px; transform:translateY(-50%); font-size:0.68rem; font-weight:600; color:var(--soft-2); white-space:nowrap; }
+    .cd-glabel.hour { color:var(--soft); }
+    .cd-unavail {
+      position:absolute; left:0; right:0; pointer-events:none;
+      background-color:rgba(7,16,31,0.55);
+      background-image:repeating-linear-gradient(-45deg, rgba(255,255,255,0.035) 0, rgba(255,255,255,0.035) 6px, transparent 6px, transparent 12px);
+    }
+    .cd-block { position:absolute; left:4px; right:4px; border-radius:6px; background:rgba(245,158,11,0.12); border:1px dashed rgba(245,158,11,0.5); pointer-events:none; overflow:hidden; }
+    .cd-block span { display:block; padding:4px 8px; font-size:0.62rem; font-weight:700; color:#fde68a; text-transform:uppercase; letter-spacing:.03em; }
+    .cd-closed { position:absolute; top:12px; left:0; right:0; text-align:center; font-size:0.74rem; font-weight:700; color:var(--soft-2); }
+    .cd-event {
+      position:absolute; left:4px; right:4px; border-radius:8px;
+      border:1px solid var(--line-strong); border-left:4px solid var(--accent);
+      background:var(--panel-2); padding:5px 9px 5px 10px; overflow:hidden; cursor:pointer;
+      text-align:left; display:block; transition:filter .12s ease, box-shadow .12s ease;
+    }
+    .cd-event:hover { filter:brightness(1.12); box-shadow:0 4px 14px rgba(0,0,0,0.3); z-index:5; }
+    .cd-event.selected { box-shadow:0 0 0 2px var(--accent); z-index:6; }
+    .cd-event.cancelled { opacity:.62; }
+    .cd-event.cancelled .cd-ev-name { text-decoration:line-through; }
+    .cd-ev-top { display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
+    .cd-ev-name { font-size:0.78rem; font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cd-ev-tag { flex:0 0 auto; font-size:0.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
+    .cd-ev-svc { font-size:0.72rem; color:var(--soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cd-event.compact { padding-top:3px; padding-bottom:3px; }
+    .cd-event.compact .cd-ev-svc { display:none; }
+    .cd-detail { margin-top:14px; background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+    .cd-detail-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; flex-wrap:wrap; }
+    .cd-detail-title { font-family:var(--font-title); font-size:1rem; font-weight:700; }
+    .cd-detail-meta { display:flex; gap:10px; flex-wrap:wrap; font-size:0.82rem; color:var(--soft); align-items:center; }
+    .cd-detail-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    @media (max-width:720px){ .cd-col { flex-basis:158px; min-width:158px; } .cd-col.cd-gutter { flex-basis:48px; min-width:48px; width:48px; } }
+
     /* ── Accordion ── */
     .accordion { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
     .accordion-head {
@@ -1366,6 +1417,7 @@
       </div>
       <div style="margin-left:auto; display:flex; gap:8px;">
         <button class="btn btn-primary" id="citasViewCal" style="padding:8px 14px;" title="Vista calendario">Calendario</button>
+        <button class="btn btn-ghost" id="citasViewDay" style="padding:8px 14px;" title="Vista de un día por profesional">Día</button>
         <button class="btn btn-ghost" id="citasViewList" style="padding:8px 14px;" title="Vista lista">Lista</button>
         <a class="btn btn-ghost" href="/auth/bookings/export">CSV</a>
       </div>
@@ -1408,6 +1460,19 @@
         <span class="panel-sub" id="citasPageInfo" style="margin:0; flex:1; text-align:center;"></span>
         <button class="btn btn-ghost" id="citasNextPage" disabled>Siguiente</button>
       </div>
+    </div>
+
+    <!-- Vista Día (timeline por profesional) -->
+    <div id="citasDayView" style="display:none;">
+      <div class="gcal-header">
+        <button class="gcal-btn-today" id="cdToday">Hoy</button>
+        <button class="gcal-nav-btn" id="cdPrev" aria-label="Día anterior">&#8249;</button>
+        <button class="gcal-nav-btn" id="cdNext" aria-label="Día siguiente">&#8250;</button>
+        <h2 class="gcal-month-title" id="cdTitle">Día</h2>
+        <span class="panel-sub" id="cdMeta" style="margin:0 0 0 auto;"></span>
+      </div>
+      <div class="cd-scroll"><div class="cd-grid" id="cdGrid"></div></div>
+      <div class="cd-detail" id="cdDetail" style="display:none;"></div>
     </div>
   </section>
 
@@ -3022,11 +3087,12 @@ function mountVanteliaWidget() {
 function reloadBotDrawer() { mountVanteliaWidget(); }
 
 // ── CITAS ─────────────────────────────────────────────────────────────
-const citasState = { page: 0, pageSize: 20, total: 0, period: 'all', calYear: null, calMonth: null, calData: [], calClosedDays: [], calBlocks: [] };
+const citasState = { page: 0, pageSize: 20, total: 0, period: 'all', view: 'cal', calYear: null, calMonth: null, calData: [], calClosedDays: [], calBlocks: [], dayDate: null, employees: null, daySchedule: null, dayItems: [], selectedDayBookingId: '' };
 
 async function loadCitas() {
   const now = new Date();
   if (!citasState.calYear) { citasState.calYear = now.getFullYear(); citasState.calMonth = now.getMonth(); }
+  if (citasState.view === 'day') { await loadCitasDay(); return; }
   const isCalView = document.getElementById('citasCalView').style.display !== 'none';
   if (isCalView) { await fetchCitasCalData(); renderCalendar(); } else await fetchCitasList();
 }
@@ -3039,7 +3105,7 @@ async function fetchCitasCalData() {
   const profId = document.getElementById('citasFiltProf')?.value || '';
   try {
     const profParam = profId ? `&employee_id=${encodeURIComponent(profId)}` : '';
-    const data = await api(`/auth/bookings?date_from=${from}&date_to=${to}&limit=200${profParam}`);
+    const data = await api(`/auth/bookings?date_from=${from}&date_to=${to}&limit=2000${profParam}`);
     citasState.calData = data.items || [];
   } catch { citasState.calData = []; }
   try {
@@ -3059,9 +3125,12 @@ async function refreshCitasCalendarIfVisible() {
 
 function _switchToListView() {
   document.getElementById('citasCalView').style.display = 'none';
+  document.getElementById('citasDayView').style.display = 'none';
   document.getElementById('citasListView').style.display = '';
   document.getElementById('citasViewList').classList.replace('btn-ghost','btn-primary');
   document.getElementById('citasViewCal').classList.replace('btn-primary','btn-ghost');
+  document.getElementById('citasViewDay').classList.replace('btn-primary','btn-ghost');
+  citasState.view = 'list';
 }
 
 function _syncPeriodChips() {
@@ -3138,6 +3207,7 @@ function buildCitaRow(b) {
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
           <span style="font-weight:700; font-size:1rem;">${escapeHtml(b.nombre || b.client_name || b.name || '(cliente)')}</span>
           <span class="badge ${statusMap[b.estado || b.status] || ''}">${escapeHtml(statusLabels[b.estado || b.status] || b.estado || b.status || 'pendiente')}</span>
+          ${b.booking_code ? `<span class="badge" style="background:var(--accent-soft); color:var(--accent); font-family:'Courier New',monospace; letter-spacing:.06em;">N.º ${escapeHtml(b.booking_code)}</span>` : ''}
         </div>
         <div style="font-size:0.88rem; color:var(--text); font-weight:500;">
           📅 ${escapeHtml(fmtDate)}${fmtTime ? ' · ' + escapeHtml(fmtTime) : ''}
@@ -3227,7 +3297,7 @@ document.getElementById('reschedConfirmBtn').addEventListener('click', async () 
     toast('Cita reprogramada', 'success');
     document.getElementById('reschedDrawer').classList.remove('open');
     document.getElementById('reschedOverlay').classList.remove('open');
-    fetchCitasList();
+    if (citasState.view === 'day') loadCitasDay(); else fetchCitasList();
   } catch(e) { toast(e.message, 'error'); }
 });
 document.getElementById('reschedClose').addEventListener('click', () => { document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
@@ -3236,8 +3306,11 @@ document.getElementById('reschedOverlay').addEventListener('click', () => { docu
 document.getElementById('citasViewCal').addEventListener('click', async () => {
   document.getElementById('citasCalView').style.display = '';
   document.getElementById('citasListView').style.display = 'none';
+  document.getElementById('citasDayView').style.display = 'none';
   document.getElementById('citasViewCal').classList.replace('btn-ghost', 'btn-primary');
   document.getElementById('citasViewList').classList.replace('btn-primary', 'btn-ghost');
+  document.getElementById('citasViewDay').classList.replace('btn-primary', 'btn-ghost');
+  citasState.view = 'cal';
   await fetchCitasCalData(); renderCalendar();
 });
 document.getElementById('citasViewList').addEventListener('click', () => { citasState.page = 0; fetchCitasList(); });
@@ -3246,7 +3319,9 @@ document.getElementById('citasNextPage').addEventListener('click', () => { citas
 // Dropdowns y fechas — disparan fetch al cambiar
 ['citasFiltProf','citasFiltEstado'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => {
-    citasState.page = 0; fetchCitasList();
+    citasState.page = 0;
+    if (citasState.view === 'day') { loadCitasDay(); return; }
+    fetchCitasList();
   });
 });
 ['citasFiltDesde','citasFiltHasta'].forEach(id => {
@@ -3350,6 +3425,249 @@ function renderCalendar() {
 document.getElementById('calPrev').addEventListener('click', async () => { citasState.calMonth--; if (citasState.calMonth < 0) { citasState.calMonth = 11; citasState.calYear--; } await fetchCitasCalData(); renderCalendar(); });
 document.getElementById('calNext').addEventListener('click', async () => { citasState.calMonth++; if (citasState.calMonth > 11) { citasState.calMonth = 0; citasState.calYear++; } await fetchCitasCalData(); renderCalendar(); });
 document.getElementById('calToday').addEventListener('click', async () => { const n = new Date(); citasState.calYear = n.getFullYear(); citasState.calMonth = n.getMonth(); await fetchCitasCalData(); renderCalendar(); });
+
+// ── CITAS · Vista Día (timeline por profesional) ──────────────────────
+const CD_PX_PER_MIN = 1.4, CD_AXIS_STEP = 30, CD_MIN_BLOCK_H = 30, CD_GENERAL_KEY = '__general__';
+const CD_ESTADO_NORM  = { confirmed:'confirmed', pending:'pending', pending_review:'pending', completed:'completed', cancelled:'cancelled' };
+const CD_ESTADO_TAG   = { confirmed:'Conf', pending:'Pend', completed:'Hecho', cancelled:'Canc' };
+const CD_ESTADO_LABEL = { confirmed:'Confirmada', pending:'Pendiente', completed:'Completada', cancelled:'Cancelada' };
+
+function cdEstado(b){ return CD_ESTADO_NORM[b.estado || b.status] || 'pending'; }
+function cdHexToRgba(hex, a){
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+  if (!m) return `rgba(0,209,255,${a})`;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+}
+function cdParseMin(v){ const p = String(v||'').split(':'); const h = +p[0], mi = +p[1]; return (Number.isNaN(h)||Number.isNaN(mi)) ? null : h*60+mi; }
+function cdFmtMin(t){ const c = Math.max(0, Math.min(1440, Math.round(t))); return `${String(Math.floor(c/60)).padStart(2,'0')}:${String(c%60).padStart(2,'0')}`; }
+function cdDateKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function cdBookingStartMin(b){
+  if (b.hora) { const v = cdParseMin(b.hora); if (v !== null) return v; }
+  if (b.start_at){ const d = new Date(b.start_at); if (!isNaN(d)) return d.getHours()*60 + d.getMinutes(); }
+  return null;
+}
+function cdDur(b, emp){
+  const s = b.start_at ? new Date(b.start_at) : null, e = b.end_at ? new Date(b.end_at) : null;
+  if (s && e && !isNaN(s) && !isNaN(e)) { const d = Math.round((e - s)/60000); if (d > 0 && d <= 1440) return d; }
+  return Number(emp?.slot_minutes) || Number(citasState.daySchedule?.slot_minutes) || 30;
+}
+function cdColKey(b, defEmp){ return b.employee_id || (defEmp ? defEmp.id : CD_GENERAL_KEY); }
+function cdColDayInfo(emp, dateKey){
+  const date = new Date(`${dateKey}T00:00:00`);
+  const wd = isNaN(date) ? -1 : (date.getDay()+6)%7;
+  const closed = (emp?.closed_weekdays || citasState.daySchedule?.closed_weekdays || []).map(Number);
+  const blocks = [];
+  const matchDate = (bl) => ((bl.fecha || bl.start_date || '') || '').slice(0,10) === dateKey;
+  (citasState.daySchedule?.blocks || []).forEach(bl => { if (matchDate(bl)) blocks.push(bl); });
+  if (emp) (emp.blocks || []).forEach(bl => { if (matchDate(bl)) blocks.push(bl); });
+  return {
+    isClosed: wd >= 0 && closed.includes(wd),
+    dayStart: cdParseMin(emp?.day_start || citasState.daySchedule?.day_start || '09:00') ?? 540,
+    dayEnd:   cdParseMin(emp?.day_end   || citasState.daySchedule?.day_end   || '18:00') ?? 1080,
+    blocks,
+  };
+}
+function cdPackLanes(events){
+  const sorted = events.slice().sort((a,b) => a.startM-b.startM || b.endM-a.endM);
+  let cluster = [], maxEnd = -1;
+  const assign = (g) => {
+    const ends = [];
+    g.forEach(ev => { let l = ends.findIndex(e => e <= ev.startM); if (l === -1){ l = ends.length; ends.push(ev.endM); } else ends[l] = ev.endM; ev.lane = l; });
+    g.forEach(ev => ev.laneCount = ends.length);
+  };
+  sorted.forEach(ev => { if (cluster.length && ev.startM >= maxEnd){ assign(cluster); cluster = []; maxEnd = -1; } cluster.push(ev); maxEnd = Math.max(maxEnd, ev.endM); });
+  if (cluster.length) assign(cluster);
+  return sorted;
+}
+
+async function loadCitasDay(){
+  if (!citasState.dayDate) citasState.dayDate = new Date();
+  if (!citasState.employees) {
+    try { const r = await api('/auth/employees'); citasState.employees = (Array.isArray(r) ? r : (r?.items || [])).map(e => ({ ...e, id: e.employee_id || e.id })); }
+    catch { citasState.employees = []; }
+  }
+  if (!citasState.daySchedule) { try { citasState.daySchedule = await api('/auth/schedule'); } catch { citasState.daySchedule = {}; } }
+  const dateKey = cdDateKey(citasState.dayDate);
+  const prof   = document.getElementById('citasFiltProf')?.value || '';
+  const estado = document.getElementById('citasFiltEstado')?.value || '';
+  let params = `date_from=${dateKey}&date_to=${dateKey}&limit=1000`;
+  if (prof)   params += `&employee_id=${encodeURIComponent(prof)}`;
+  if (estado) params += `&estado=${encodeURIComponent(estado)}`;
+  try { const data = await api('/auth/bookings?' + params); citasState.dayItems = data.items || []; }
+  catch { citasState.dayItems = []; }
+  renderCitasDay();
+}
+
+function renderCitasDay(){
+  const dateKey = cdDateKey(citasState.dayDate);
+  const title = citasState.dayDate.toLocaleDateString('es-ES', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+  document.getElementById('cdTitle').textContent = title.charAt(0).toUpperCase() + title.slice(1);
+  const grid = document.getElementById('cdGrid');
+  grid.innerHTML = '';
+
+  const prof = document.getElementById('citasFiltProf')?.value || '';
+  const emps = (citasState.employees || []).filter(e => (typeof e.is_active === 'boolean' ? e.is_active : true));
+  const defEmp = (citasState.employees || []).find(e => e.is_default);
+
+  let columns = (prof ? emps.filter(e => e.id === prof) : emps).map(e => ({ key:e.id, name:e.name || 'Profesional', color:e.color || '#00D1FF', emp:e }));
+  if (!columns.length && !prof) columns = [{ key:CD_GENERAL_KEY, name:'Agenda', color:'var(--accent)', emp:null }];
+  if (!prof) {
+    const known = new Set(columns.map(c => c.key));
+    (citasState.dayItems || []).forEach(b => { const k = cdColKey(b, defEmp); if (!known.has(k)){ known.add(k); columns.push({ key:k, name:b.employee_name || 'Sin asignar', color:'var(--soft)', emp:null }); } });
+  }
+
+  const itemsByCol = new Map(); columns.forEach(c => itemsByCol.set(c.key, []));
+  (citasState.dayItems || []).forEach(b => { const k = cdColKey(b, defEmp); if (!itemsByCol.has(k)) itemsByCol.set(k, []); itemsByCol.get(k).push(b); });
+
+  let minS = Infinity, maxE = -Infinity;
+  columns.forEach(c => {
+    const info = cdColDayInfo(c.emp, dateKey);
+    if (!info.isClosed){ minS = Math.min(minS, info.dayStart); maxE = Math.max(maxE, info.dayEnd); }
+    (itemsByCol.get(c.key) || []).forEach(b => { const s = cdBookingStartMin(b); if (s === null) return; minS = Math.min(minS, s); maxE = Math.max(maxE, s + cdDur(b, c.emp)); });
+  });
+  if (!Number.isFinite(minS)) minS = 540;
+  if (!Number.isFinite(maxE)) maxE = 1080;
+  const startMin = Math.max(0, Math.floor(minS/60)*60);
+  const endMin = Math.min(1440, Math.max(startMin + 60, Math.ceil(maxE/60)*60));
+  const bodyH = (endMin - startMin) * CD_PX_PER_MIN;
+
+  const total = (citasState.dayItems || []).length;
+  document.getElementById('cdMeta').textContent = `${columns.length} profesional${columns.length === 1 ? '' : 'es'} · ${total} cita${total === 1 ? '' : 's'}`;
+
+  const gutter = document.createElement('div'); gutter.className = 'cd-col cd-gutter';
+  const gh = document.createElement('div'); gh.className = 'cd-head'; gh.textContent = 'Hora';
+  const gb = document.createElement('div'); gb.className = 'cd-body'; gb.style.height = bodyH + 'px';
+  for (let t = startMin; t <= endMin; t += CD_AXIS_STEP){ const lab = document.createElement('div'); lab.className = 'cd-glabel' + (t%60===0 ? ' hour' : ''); lab.style.top = ((t-startMin)*CD_PX_PER_MIN) + 'px'; lab.textContent = cdFmtMin(t); gb.appendChild(lab); }
+  gutter.appendChild(gh); gutter.appendChild(gb); grid.appendChild(gutter);
+
+  columns.forEach(c => {
+    const info = cdColDayInfo(c.emp, dateKey);
+    const bookings = itemsByCol.get(c.key) || [];
+    const col = document.createElement('div'); col.className = 'cd-col';
+    const head = document.createElement('div'); head.className = 'cd-head';
+    head.innerHTML = `<span class="cd-dot" style="background:${escapeHtml(c.color)}"></span><span class="cd-name">${escapeHtml(c.name)}</span><span class="cd-count">${bookings.length}</span>`;
+    const body = document.createElement('div'); body.className = 'cd-body'; body.style.height = bodyH + 'px';
+    for (let t = startMin; t <= endMin; t += CD_AXIS_STEP){ const ln = document.createElement('div'); ln.className = 'cd-line' + (t%60===0 ? ' hour' : ''); ln.style.top = ((t-startMin)*CD_PX_PER_MIN) + 'px'; body.appendChild(ln); }
+
+    const band = (top, bot, opt) => {
+      const a = Math.max(0, top - startMin), b = Math.max(a, bot - startMin);
+      if (b - a <= 0) return;
+      const d = document.createElement('div'); d.className = opt.cls;
+      d.style.top = (a*CD_PX_PER_MIN) + 'px'; d.style.height = ((b-a)*CD_PX_PER_MIN) + 'px';
+      if (opt.label){ const s = document.createElement('span'); s.textContent = opt.label; d.appendChild(s); }
+      body.appendChild(d);
+    };
+    if (info.isClosed){ band(startMin, endMin, { cls:'cd-unavail' }); const n = document.createElement('div'); n.className = 'cd-closed'; n.textContent = 'No disponible'; body.appendChild(n); }
+    else {
+      band(startMin, info.dayStart, { cls:'cd-unavail' });
+      band(info.dayEnd, endMin, { cls:'cd-unavail' });
+      info.blocks.forEach(bl => { const s = cdParseMin(bl.hora_inicio || bl.start_time), e = cdParseMin(bl.hora_fin || bl.end_time); if (s === null || e === null) return; band(s, e, { cls:'cd-block', label:(bl.motivo || bl.reason || 'Bloqueado') }); });
+    }
+
+    const evs = bookings.map(b => { const s = cdBookingStartMin(b); if (s === null) return null; return { b, startM:s, endM:s + cdDur(b, c.emp) }; }).filter(Boolean);
+    cdPackLanes(evs).forEach(ev => {
+      const b = ev.b, est = cdEstado(b);
+      const top = (ev.startM - startMin) * CD_PX_PER_MIN;
+      const h = Math.max(CD_MIN_BLOCK_H, (ev.endM - ev.startM) * CD_PX_PER_MIN) - 2;
+      const lc = ev.laneCount || 1, wPct = 100/lc, lPct = ev.lane * wPct;
+      const base = CAL_STATUS_COLORS[est] || CAL_STATUS_COLORS.pending;
+      const btn = document.createElement('button'); btn.type = 'button';
+      btn.className = 'cd-event' + (h < 46 ? ' compact' : '') + (est === 'cancelled' ? ' cancelled' : '');
+      btn.style.top = top + 'px'; btn.style.height = h + 'px';
+      btn.style.left = `calc(${lPct}% + 3px)`; btn.style.width = `calc(${wPct}% - 6px)`;
+      btn.style.background = cdHexToRgba(base, 0.16); btn.style.borderColor = cdHexToRgba(base, 0.5); btn.style.borderLeftColor = c.color;
+      if ((b.booking_id || b.id) === citasState.selectedDayBookingId) btn.classList.add('selected');
+      const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '');
+      btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(hora)} · ${escapeHtml(b.nombre || b.client_name || b.name || b.servicio || 'Cita')}</span><span class="cd-ev-tag" style="color:${base}">${escapeHtml(CD_ESTADO_TAG[est] || '')}</span></div><div class="cd-ev-svc">${escapeHtml(b.servicio || 'Consulta')}</div>`;
+      btn.addEventListener('click', () => cdSelect(b));
+      body.appendChild(btn);
+    });
+
+    col.appendChild(head); col.appendChild(body); grid.appendChild(col);
+  });
+
+  if (citasState.selectedDayBookingId){
+    const still = (citasState.dayItems || []).find(b => (b.booking_id || b.id) === citasState.selectedDayBookingId);
+    if (still) cdRenderDetail(still); else { citasState.selectedDayBookingId = ''; document.getElementById('cdDetail').style.display = 'none'; }
+  }
+}
+
+function cdSelect(b){
+  citasState.selectedDayBookingId = b.booking_id || b.id || '';
+  renderCitasDay();
+  cdRenderDetail(b);
+  document.getElementById('cdDetail').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function cdRenderDetail(b){
+  const est = cdEstado(b);
+  const badge = { confirmed:'badge-confirmed', pending:'badge-pending', cancelled:'badge-cancelled', completed:'badge-completed' }[est] || 'badge-pending';
+  const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '--:--');
+  const canEdit = (b.can_cancel !== false) && est !== 'cancelled' && est !== 'completed';
+  const d = document.getElementById('cdDetail'); d.style.display = '';
+  d.innerHTML = `
+    <div class="cd-detail-head">
+      <div>
+        <div class="cd-detail-title">${escapeHtml(b.nombre || b.client_name || b.name || 'Cita')}</div>
+        <div class="cd-detail-meta">
+          <span class="badge ${badge}">${escapeHtml(CD_ESTADO_LABEL[est] || est)}</span>
+          ${b.booking_code ? `<span class="badge" style="background:var(--accent-soft); color:var(--accent); font-family:'Courier New',monospace; letter-spacing:.06em;">N.º ${escapeHtml(b.booking_code)}</span>` : ''}
+          <span>${escapeHtml(hora)} · ${escapeHtml(b.employee_name || 'Agenda')}</span>
+          <span>${escapeHtml(b.servicio || 'Consulta')}</span>
+        </div>
+        <div class="cd-detail-meta">
+          <span>${escapeHtml(b.email || b.client_email || '–')}</span>
+          ${(b.telefono || b.client_phone) ? `<span>${escapeHtml(b.telefono || b.client_phone)}</span>` : ''}
+        </div>
+      </div>
+      <button class="btn btn-ghost" type="button" data-cd="close" style="padding:6px 12px;">Cerrar</button>
+    </div>
+    <div class="cd-detail-actions">
+      ${b.manage_url ? `<button class="btn btn-ghost" type="button" data-cd="manage" style="padding:6px 14px;">Gestionar</button>` : ''}
+      <button class="btn btn-ghost" type="button" data-cd="resched" style="padding:6px 14px;" ${canEdit ? '' : 'disabled'}>Reprogramar</button>
+      <button class="btn btn-ghost" type="button" data-cd="cancel" style="padding:6px 14px; color:var(--danger); border-color:var(--danger);" ${canEdit ? '' : 'disabled'}>Cancelar</button>
+    </div>`;
+  d.querySelectorAll('button[data-cd]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const action = btn.dataset.cd;
+      const bid = b.booking_id || b.id || '';
+      try {
+        if (action === 'close'){ citasState.selectedDayBookingId = ''; d.style.display = 'none'; renderCitasDay(); return; }
+        if (action === 'manage'){ if (b.manage_url) window.open(b.manage_url, '_blank', 'noopener,noreferrer'); return; }
+        if (action === 'resched'){ openReschedDrawer(b); return; }
+        if (action === 'cancel'){
+          if (!window.confirm('¿Cancelar esta cita?')) return;
+          await api(`/auth/bookings/${bid}/cancel`, { method:'POST' });
+          toast('Cita cancelada', 'success');
+          await loadCitasDay();
+        }
+      } catch(e){ toast(e.message, 'error'); }
+    });
+  });
+}
+
+function _switchToDayView(){
+  document.getElementById('citasCalView').style.display = 'none';
+  document.getElementById('citasListView').style.display = 'none';
+  document.getElementById('citasDayView').style.display = '';
+  document.getElementById('citasViewDay').classList.replace('btn-ghost','btn-primary');
+  document.getElementById('citasViewCal').classList.replace('btn-primary','btn-ghost');
+  document.getElementById('citasViewList').classList.replace('btn-primary','btn-ghost');
+  citasState.view = 'day';
+}
+
+document.getElementById('citasViewDay').addEventListener('click', () => {
+  if (!citasState.dayDate) {
+    const desde = document.getElementById('citasFiltDesde').value;
+    citasState.dayDate = desde ? new Date(`${desde}T00:00:00`) : new Date();
+  }
+  _switchToDayView();
+  loadCitasDay();
+});
+document.getElementById('cdToday').addEventListener('click', () => { citasState.dayDate = new Date(); loadCitasDay(); });
+document.getElementById('cdPrev').addEventListener('click', () => { const d = new Date(citasState.dayDate); d.setDate(d.getDate()-1); citasState.dayDate = d; loadCitasDay(); });
+document.getElementById('cdNext').addEventListener('click', () => { const d = new Date(citasState.dayDate); d.setDate(d.getDate()+1); citasState.dayDate = d; loadCitasDay(); });
 
 // ── EQUIPO ────────────────────────────────────────────────────────────
 let allServices = [];

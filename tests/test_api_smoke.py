@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import importlib
 import json
 import os
+import re
 import sqlite3
 import sys
 import uuid
@@ -695,6 +697,360 @@ def test_booking_availability_works_without_openai(client: TestClient):
 
     assert response.status_code == 200
     assert "slots" in response.json()
+
+
+def test_calendar_range_query_does_not_truncate_at_page_cap(client: TestClient, api_module):
+    """La vista calendario pide una ventana de fechas acotada y debe recibir
+    todas las citas del rango, no las primeras 100 (que dejaria dias en blanco).
+    """
+    # Evita un 429 por el rate limit de login acumulado por tests previos.
+    with api_module.state_lock:
+        api_module.rate_limit_buckets.clear()
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "admin@example.com", "password": "test-password-123"},
+    )
+    assert login_response.status_code == 200
+    cookies = {"vantelia_portal_session": login_response.cookies["vantelia_portal_session"]}
+
+    # Ventana muy lejana para no colisionar con citas creadas por otros tests.
+    base = datetime.now() + timedelta(days=100)
+    total_inserted = 120  # 40 dias x 3 citas/dia, supera el page cap de 100.
+    horas = ["09:00", "09:30", "10:00"]
+    try:
+        with api_module._get_db_connection() as conn:
+            for i in range(total_inserted):
+                day = base + timedelta(days=i // 3)
+                conn.execute(
+                    """
+                    INSERT INTO bookings
+                        (id, cliente_id, employee_id, nombre, email, booking_date,
+                         booking_time, status, provider_name, provider_status, source, created_at)
+                    VALUES (?, 'demo', '', ?, ?, ?, ?, 'confirmed', 'internal', 'confirmed', 'cal-test', ?)
+                    """,
+                    (
+                        f"cal-test-{i}-{uuid.uuid4().hex[:8]}",
+                        f"Cliente {i}",
+                        f"cliente{i}@example.com",
+                        day.strftime("%Y-%m-%d"),
+                        horas[i % 3],
+                        api_module._utc_now_iso(),
+                    ),
+                )
+            conn.commit()
+
+        # Rango corto (calendario): devuelve todas las citas, sin truncar.
+        short = client.get(
+            "/auth/bookings",
+            params={
+                "cliente_id": "demo",
+                "scope": "all",
+                "date_from": base.strftime("%Y-%m-%d"),
+                "date_to": (base + timedelta(days=39)).strftime("%Y-%m-%d"),
+                "limit": 5000,
+            },
+            cookies=cookies,
+        )
+        assert short.status_code == 200, short.text
+        short_data = short.json()
+        assert short_data["total"] >= total_inserted
+        assert len(short_data["items"]) == short_data["total"]
+        assert len(short_data["items"]) > 100  # antes se truncaba aqui
+
+        # Rango muy amplio: se mantiene el page cap como salvaguarda anti-abuso.
+        wide = client.get(
+            "/auth/bookings",
+            params={
+                "cliente_id": "demo",
+                "scope": "all",
+                "date_from": base.strftime("%Y-%m-%d"),
+                "date_to": (base + timedelta(days=200)).strftime("%Y-%m-%d"),
+                "limit": 5000,
+            },
+            cookies=cookies,
+        )
+        assert wide.status_code == 200, wide.text
+        wide_data = wide.json()
+        assert wide_data["limit"] == 100
+        assert len(wide_data["items"]) == 100
+    finally:
+        with api_module._get_db_connection() as conn:
+            conn.execute("DELETE FROM bookings WHERE source = 'cal-test'")
+            conn.commit()
+
+
+def _build_booking_record(api_module, **overrides):
+    """Construye un record minimo valido para api_module._store_booking."""
+    now_iso = api_module._utc_now_iso()
+    base = api_module.datetime.now() + api_module.timedelta(days=120)
+    record = {
+        "id": f"bk_test_{uuid.uuid4().hex[:10]}",
+        "cliente_id": "demo",
+        "employee_id": "",
+        "employee_name": "",
+        "nombre": "Cliente Prueba",
+        "email": "cliente@example.com",
+        "telefono": "+34611222333",
+        "servicio": "Consulta",
+        "booking_date": base.strftime("%Y-%m-%d"),
+        "booking_time": "09:00",
+        "notas": "",
+        "status": "confirmed",
+        "provider_name": "internal",
+        "provider_status": "confirmed",
+        "provider_booking_id": "",
+        "provider_booking_url": "",
+        "manage_token": f"mg_test_{uuid.uuid4().hex[:10]}",
+        "timezone": "Europe/Madrid",
+        "start_at": "",
+        "end_at": "",
+        "confirmed_at": now_iso,
+        "cancelled_at": "",
+        "rescheduled_at": "",
+        "rescheduled_from_booking_id": "",
+        "confirmation_email_sent_at": "",
+        "reminder_24h_sent_at": "",
+        "reminder_2h_sent_at": "",
+        "customer_email_status": "",
+        "customer_email_last_error": "",
+        "source": "test",
+        "created_at": now_iso,
+    }
+    record.update(overrides)
+    return record
+
+
+def test_booking_code_generation_format(api_module):
+    pattern = re.compile(r"^R-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$")
+    for _ in range(50):
+        code = api_module._generate_booking_code()
+        assert pattern.match(code), code
+    # Sin caracteres ambiguos
+    assert not any(c in code for c in "01OIL")
+
+
+def test_phone_normalization_for_match(api_module):
+    assert api_module._normalize_phone_for_match("+34 611 22 23 33") == "611222333"
+    assert api_module._normalize_phone_for_match("0034611222333") == "611222333"
+    assert api_module._normalize_phone_for_match("611222333") == "611222333"
+
+
+def test_booking_code_lookup_and_contact_verification(api_module):
+    record = _build_booking_record(api_module)
+    try:
+        api_module._store_booking(record)
+        code = record["booking_code"]
+        assert re.match(r"^R-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$", code)
+
+        # Lookup por codigo (scoped al cliente), tolerante a espacios/mayusculas
+        row = api_module._get_booking_row_by_code("demo", code.lower())
+        assert row is not None and row["id"] == record["id"]
+        assert api_module._get_booking_row_by_code("otro_cliente", code) is None
+
+        # Verificacion de titularidad: telefono (con formato distinto) y email
+        assert api_module._booking_contact_matches(row, telefono="611 22 23 33")
+        assert api_module._booking_contact_matches(row, email="CLIENTE@example.com")
+        assert not api_module._booking_contact_matches(row, telefono="999888777")
+        assert not api_module._booking_contact_matches(row, email="otro@example.com")
+
+        # Exposicion en la serializacion que consume el portal
+        data = api_module._serialize_booking_row(row)
+        assert data["booking_code"] == code
+    finally:
+        with api_module._get_db_connection() as conn:
+            conn.execute("DELETE FROM bookings WHERE id = ?", (record["id"],))
+            conn.commit()
+
+
+def test_backfill_assigns_codes_to_active_bookings_only(api_module):
+    base = api_module.datetime.now() + api_module.timedelta(days=130)
+    now_iso = api_module._utc_now_iso()
+    ids = {
+        "confirmed": f"bk_bf_{uuid.uuid4().hex[:10]}",
+        "cancelled": f"bk_bf_{uuid.uuid4().hex[:10]}",
+    }
+    try:
+        with api_module._get_db_connection() as conn:
+            for status_value, time_value in (("confirmed", "11:00"), ("cancelled", "11:30")):
+                conn.execute(
+                    "INSERT INTO bookings "
+                    "(id, cliente_id, nombre, email, booking_date, booking_time, status, "
+                    " provider_status, source, created_at, booking_code) "
+                    "VALUES (?, 'demo', 'Cliente BF', 'bf@example.com', ?, ?, ?, ?, 'test', ?, '')",
+                    (ids[status_value], base.strftime("%Y-%m-%d"), time_value, status_value, status_value, now_iso),
+                )
+            conn.commit()
+
+        assigned = api_module._backfill_booking_codes()
+        assert assigned >= 1
+
+        with api_module._get_db_connection() as conn:
+            code_conf = conn.execute(
+                "SELECT booking_code FROM bookings WHERE id = ?", (ids["confirmed"],)
+            ).fetchone()[0]
+            code_canc = conn.execute(
+                "SELECT booking_code FROM bookings WHERE id = ?", (ids["cancelled"],)
+            ).fetchone()[0]
+        assert re.match(r"^R-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$", code_conf)
+        assert code_canc == ""  # cancelada: no necesita codigo
+
+        # Idempotencia: una segunda pasada no reasigna nada de estas dos
+        with api_module._get_db_connection() as conn:
+            second = conn.execute(
+                "SELECT booking_code FROM bookings WHERE id = ?", (ids["confirmed"],)
+            ).fetchone()[0]
+        assert second == code_conf
+    finally:
+        with api_module._get_db_connection() as conn:
+            conn.execute(
+                "DELETE FROM bookings WHERE id IN (?, ?)", (ids["confirmed"], ids["cancelled"])
+            )
+            conn.commit()
+
+
+def test_chat_can_cancel_booking_by_code(client: TestClient, api_module, monkeypatch: pytest.MonkeyPatch):
+    record = _build_booking_record(api_module)
+
+    async def _noop_cancel_provider(_row):
+        return None
+
+    async def _noop_email(*_args, **_kwargs):
+        return True
+
+    monkeypatch.setattr(api_module, "_cancel_provider_booking", _noop_cancel_provider)
+    monkeypatch.setattr(api_module, "_send_booking_email_by_kind", _noop_email)
+    try:
+        api_module._store_booking(record)
+        code = record["booking_code"]
+
+        response = client.post(
+            "/chat",
+            json={
+                "cliente_id": "demo",
+                "mensaje": f"Quiero cancelar mi cita {code}, mi email es cliente@example.com",
+                "session_id": f"s_cancel_{uuid.uuid4().hex[:8]}",
+            },
+            headers={"Origin": "http://testserver"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["intent"] == "booking_cancel"
+        assert "cancelada" in data["respuesta"].lower()
+        with api_module._get_db_connection() as conn:
+            status_value = conn.execute(
+                "SELECT status FROM bookings WHERE id = ?", (record["id"],)
+            ).fetchone()[0]
+        assert status_value == "cancelled"
+    finally:
+        with api_module._get_db_connection() as conn:
+            conn.execute("DELETE FROM bookings WHERE id = ?", (record["id"],))
+            conn.commit()
+
+
+def test_chat_can_reschedule_booking_by_code(client: TestClient, api_module, monkeypatch: pytest.MonkeyPatch):
+    record = _build_booking_record(api_module)
+    captured = {}
+
+    async def _fake_update(row, payload, request, *, source, audit_payload=None):
+        captured.update(
+            {
+                "booking_id": row["id"],
+                "fecha": payload.fecha,
+                "hora": payload.hora,
+                "source": source,
+                "audit_payload": audit_payload,
+            }
+        )
+        return api_module.BookingActionResponse(
+            ok=True,
+            booking_id=row["id"],
+            estado="confirmed",
+            mensaje="La cita se ha actualizado correctamente.",
+            employee_id=row["employee_id"] or "",
+            employee_name=row["employee_name"] or "",
+            manage_url="",
+            provider_booking_url="",
+        )
+
+    monkeypatch.setattr(api_module, "_update_booking_details", _fake_update)
+    try:
+        api_module._store_booking(record)
+        code = record["booking_code"]
+
+        response = client.post(
+            "/chat",
+            json={
+                "cliente_id": "demo",
+                "mensaje": (
+                    f"Quiero cambiar la cita {code} al 2026-06-15 a las 09:30. "
+                    "Mi telefono es 611222333"
+                ),
+                "session_id": f"s_reschedule_{uuid.uuid4().hex[:8]}",
+            },
+            headers={"Origin": "http://testserver"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["intent"] == "booking_reschedule"
+        assert "09:30" in data["respuesta"]
+        assert captured == {
+            "booking_id": record["id"],
+            "fecha": "2026-06-15",
+            "hora": "09:30",
+            "source": "chat",
+            "audit_payload": {"channel": "chat", "trusted_phone": ""},
+        }
+    finally:
+        with api_module._get_db_connection() as conn:
+            conn.execute("DELETE FROM bookings WHERE id = ?", (record["id"],))
+            conn.commit()
+
+
+def test_whatsapp_cancel_booking_by_code_uses_sender_phone(api_module, monkeypatch: pytest.MonkeyPatch):
+    record = _build_booking_record(api_module, telefono="34611222333")
+    sent_messages = []
+
+    async def _noop_cancel_provider(_row):
+        return None
+
+    async def _noop_email(*_args, **_kwargs):
+        return True
+
+    async def _capture_whatsapp_text(*, cliente_id, phone_number_id, to_number, text):
+        sent_messages.append(text)
+        return True
+
+    monkeypatch.setattr(api_module, "_cancel_provider_booking", _noop_cancel_provider)
+    monkeypatch.setattr(api_module, "_send_booking_email_by_kind", _noop_email)
+    monkeypatch.setattr(api_module, "_send_whatsapp_text", _capture_whatsapp_text)
+    try:
+        api_module._store_booking(record)
+        code = record["booking_code"]
+
+        asyncio.run(
+            api_module._handle_whatsapp_message(
+                cliente_id="demo",
+                phone_number_id="1234567890",
+                from_number="34611222333",
+                incoming_text=f"Cancelar cita {code}",
+                interactive_id="",
+                request=None,
+            )
+        )
+
+        assert any("cancelada" in message.lower() for message in sent_messages)
+        with api_module._get_db_connection() as conn:
+            status_value = conn.execute(
+                "SELECT status FROM bookings WHERE id = ?", (record["id"],)
+            ).fetchone()[0]
+        assert status_value == "cancelled"
+    finally:
+        api_module._wa_clear_flow("demo", "34611222333")
+        with api_module._get_db_connection() as conn:
+            conn.execute("DELETE FROM bookings WHERE id = ?", (record["id"],))
+            conn.commit()
 
 
 def test_legal_pages_are_public(client: TestClient):

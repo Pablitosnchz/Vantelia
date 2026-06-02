@@ -1239,6 +1239,267 @@ select {
   color: var(--text-2);
 }
 
+/* ── View switch (Calendario / Dia) ─────────────── */
+.view-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 0 0 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.view-switch-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 16px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.view-switch-btn:hover { color: var(--text); background: var(--surface-3); }
+.view-switch-btn.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+/* ── Day timeline (resource view) ───────────────── */
+.timeline-panel {
+  /* Geometria vertical (px/min, paso del eje) vive en JS: TL_PX_PER_MIN / TL_AXIS_STEP */
+  --tl-gutter-w: 60px;         /* ancho de la columna de horas */
+  --tl-col-min-w: 190px;       /* ancho minimo por profesional */
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.timeline-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.timeline-nav { display: inline-flex; gap: 6px; }
+.timeline-nav .ghost.icon {
+  width: 30px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 700;
+}
+.timeline-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.timeline-date, #timelineDateLabel {
+  font-family: var(--font-title);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.timeline-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.timeline-grid {
+  display: flex;
+  align-items: stretch;
+  min-width: 100%;
+}
+.timeline-grid .empty { padding: 28px; }
+
+/* Cabecera pegajosa por columna */
+.tl-col { display: flex; flex-direction: column; flex: 1 1 var(--tl-col-min-w); min-width: var(--tl-col-min-w); }
+.tl-col.tl-gutter-col { flex: 0 0 var(--tl-gutter-w); min-width: var(--tl-gutter-w); width: var(--tl-gutter-w); }
+.tl-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line-strong);
+  border-left: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+.tl-gutter-col .tl-head {
+  border-left: 0;
+  background: var(--surface-2);
+  z-index: 4;
+}
+.tl-head-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.08);
+}
+.tl-head-name { overflow: hidden; text-overflow: ellipsis; }
+.tl-head-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--soft);
+  background: var(--surface-3);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+/* Cuerpo de cada columna (lienzo de posicionamiento absoluto) */
+.tl-body {
+  position: relative;
+  border-left: 1px solid var(--line);
+}
+.tl-gutter-col .tl-body { border-left: 0; }
+
+/* Lineas horarias y etiquetas del gutter */
+.tl-hour-line {
+  position: absolute;
+  left: 0; right: 0;
+  border-top: 1px solid var(--line);
+  pointer-events: none;
+}
+.tl-hour-line.is-hour { border-top-color: var(--line-strong); }
+.tl-gutter-label {
+  position: absolute;
+  right: 8px;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--soft);
+  white-space: nowrap;
+}
+.tl-gutter-label.is-hour { color: var(--text-2); }
+
+/* Bandas no disponibles: fuera de horario, bloqueos y dia cerrado */
+.tl-unavailable {
+  position: absolute;
+  left: 0; right: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255,255,255,0.035) 0,
+    rgba(255,255,255,0.035) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  background-color: rgba(9,16,40,0.55);
+}
+.tl-block-band {
+  position: absolute;
+  left: 4px; right: 4px;
+  border-radius: 6px;
+  background: var(--warn-soft);
+  border: 1px dashed var(--warn-line);
+  pointer-events: none;
+  overflow: hidden;
+}
+.tl-block-band span {
+  display: block;
+  padding: 4px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--warn);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.tl-closed-note {
+  position: absolute;
+  top: 12px; left: 0; right: 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--soft);
+}
+
+/* Bloque de cita (hibrido: fondo por estado + franja color profesional) */
+.tl-event {
+  position: absolute;
+  left: 4px; right: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  border-left: 4px solid var(--accent);
+  background: var(--surface-3);
+  padding: 5px 9px 5px 10px;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  display: block;
+  transition: filter 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+.tl-event:hover { filter: brightness(1.08); box-shadow: var(--shadow-sm); z-index: 5; }
+.tl-event.is-selected { box-shadow: var(--ring); z-index: 6; }
+.tl-event-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.tl-event-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-event-tag {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.95;
+}
+.tl-event-svc {
+  font-size: 11.5px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-event.is-compact { padding-top: 3px; padding-bottom: 3px; }
+.tl-event.is-compact .tl-event-svc { display: none; }
+/* Estados (fondo + acento de texto), franja lateral la pinta JS por profesional */
+.tl-event.estado-confirmed { background: var(--info-soft); border-color: var(--accent-line); }
+.tl-event.estado-confirmed .tl-event-tag { color: var(--info); }
+.tl-event.estado-pending_review { background: var(--warn-soft); border-color: var(--warn-line); }
+.tl-event.estado-pending_review .tl-event-tag { color: var(--warn); }
+.tl-event.estado-completed { background: var(--success-soft); border-color: var(--success-line); }
+.tl-event.estado-completed .tl-event-tag { color: var(--success); }
+.tl-event.estado-cancelled { background: var(--danger-soft); border-color: var(--danger-line); opacity: 0.7; }
+.tl-event.estado-cancelled .tl-event-name { text-decoration: line-through; }
+.tl-event.estado-cancelled .tl-event-tag { color: var(--danger); }
+
+/* Panel de detalle al pulsar un bloque */
+.timeline-detail {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.timeline-detail-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.timeline-detail-title { font-family: var(--font-title); font-size: 1rem; font-weight: 700; color: var(--ink, var(--text)); }
+.timeline-detail-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-2); align-items: center; }
+.timeline-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+@media (max-width: 720px) {
+  .timeline-panel { --tl-col-min-w: 158px; --tl-gutter-w: 50px; }
+}
+
 /* ── Reschedule ─────────────────────────────────── */
 .reschedule-panel {
   background: var(--surface-2);
@@ -2291,6 +2552,11 @@ tbody tr:hover { background: var(--surface-2); }
               </div>
             </div>
 
+            <div class="view-switch" id="bookingViewSwitch" role="tablist" aria-label="Vista de la agenda">
+              <button type="button" class="view-switch-btn is-active" data-booking-view="calendar" role="tab" aria-selected="true">Calendario</button>
+              <button type="button" class="view-switch-btn" data-booking-view="timeline" role="tab" aria-selected="false">Dia</button>
+            </div>
+
             <section class="admin-view" id="bookingView">
               <section id="calendarPanel" class="calendar-panel">
                 <div class="calendar-head">
@@ -2304,6 +2570,26 @@ tbody tr:hover { background: var(--surface-2); }
                   </div>
                 </div>
                 <div id="calendarGrid" class="calendar-grid"></div>
+              </section>
+
+              <section id="timelinePanel" class="timeline-panel hidden">
+                <div class="timeline-toolbar">
+                  <div class="timeline-nav">
+                    <button id="timelineTodayBtn" class="ghost small" type="button">Hoy</button>
+                    <button id="timelinePrevDayBtn" class="ghost small icon" type="button" aria-label="Dia anterior">&lsaquo;</button>
+                    <button id="timelineNextDayBtn" class="ghost small icon" type="button" aria-label="Dia siguiente">&rsaquo;</button>
+                  </div>
+                  <div class="timeline-title">
+                    <strong id="timelineDateLabel">Agenda del dia</strong>
+                    <span class="muted" id="timelineMeta">Vista por profesional.</span>
+                  </div>
+                </div>
+                <div id="timelineScroll" class="timeline-scroll">
+                  <div id="timelineGrid" class="timeline-grid">
+                    <div class="empty">Cargando agenda del dia...</div>
+                  </div>
+                </div>
+                <div id="timelineDetail" class="timeline-detail hidden"></div>
               </section>
 
               <section id="dayAgenda" class="day-agenda hidden">
@@ -2990,6 +3276,10 @@ tbody tr:hover { background: var(--surface-2); }
       calendarDate: new Date(),
       calendarItems: [],
       selectedCalendarDate: "",
+      bookingView: "calendar",
+      timelineDate: new Date(),
+      timelineItems: [],
+      selectedTimelineBookingId: "",
       schedule: null,
       aiConfig: null,
       brainInfo: null,
@@ -3277,6 +3567,16 @@ tbody tr:hover { background: var(--surface-2); }
       rescheduleSlots: document.getElementById("rescheduleSlots"),
       confirmRescheduleBtn: document.getElementById("confirmRescheduleBtn"),
       cancelRescheduleBtn: document.getElementById("cancelRescheduleBtn"),
+      bookingViewSwitch: document.getElementById("bookingViewSwitch"),
+      timelinePanel: document.getElementById("timelinePanel"),
+      timelineScroll: document.getElementById("timelineScroll"),
+      timelineGrid: document.getElementById("timelineGrid"),
+      timelineDetail: document.getElementById("timelineDetail"),
+      timelineDateLabel: document.getElementById("timelineDateLabel"),
+      timelineMeta: document.getElementById("timelineMeta"),
+      timelineTodayBtn: document.getElementById("timelineTodayBtn"),
+      timelinePrevDayBtn: document.getElementById("timelinePrevDayBtn"),
+      timelineNextDayBtn: document.getElementById("timelineNextDayBtn"),
       contactBlock: document.getElementById("contactBlock"),
       contactInfo: document.getElementById("contactInfo"),
       changeCurrentPassword: document.getElementById("changeCurrentPassword"),
@@ -5597,7 +5897,7 @@ tbody tr:hover { background: var(--surface-2); }
       const bounds = visibleCalendarBounds(state.calendarDate);
       const params = new URLSearchParams({
         scope: "all",
-        limit: "100",
+        limit: "5000",
         offset: "0",
         date_from: bounds.start,
         date_to: bounds.end,
@@ -5606,9 +5906,458 @@ tbody tr:hover { background: var(--surface-2); }
       if (state.employeeFilter) params.set("employee_id", state.employeeFilter);
       const payload = await api(`/auth/bookings?${params.toString()}`);
       state.calendarItems = payload.items || [];
+      const total = Number(payload.total || 0);
+      if (total > state.calendarItems.length) {
+        setStatus(
+          `Mostrando ${state.calendarItems.length} de ${total} citas de este periodo. Filtra por profesional para ver el resto.`,
+          "info"
+        );
+      }
       updateContactCard(state.calendarItems);
       renderCalendar(state.calendarItems);
       renderSelectedDayAgenda();
+    }
+
+    /* ── Vista de dia por profesional (timeline) ─────────────────────── */
+    const TL_PX_PER_MIN = 1.4;     // alto en px por minuto
+    const TL_AXIS_STEP = 30;       // minutos entre lineas/etiquetas
+    const TL_MIN_BLOCK_H = 30;     // alto minimo de un bloque
+    const TL_GENERAL_KEY = "__general__";
+    const TL_ESTADO_TAG = {
+      confirmed: "Conf",
+      pending_review: "Pend",
+      completed: "Hecho",
+      cancelled: "Canc",
+    };
+    const TL_ESTADO_LABEL = {
+      confirmed: "Confirmada",
+      pending_review: "Pendiente",
+      completed: "Completada",
+      cancelled: "Cancelada",
+    };
+
+    function tlParseMinutes(value) {
+      const parts = String(value || "").split(":");
+      const hours = Number(parts[0]);
+      const minutes = Number(parts[1]);
+      if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+      return hours * 60 + minutes;
+    }
+
+    function tlFormatMinutes(total) {
+      const clamped = Math.max(0, Math.min(1440, Math.round(total)));
+      const hours = Math.floor(clamped / 60);
+      const minutes = clamped % 60;
+      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+    }
+
+    function timelineDateKey() {
+      return toDateInputValue(state.timelineDate);
+    }
+
+    function tlBookingDuration(booking, employee) {
+      const start = booking.start_at ? new Date(booking.start_at) : null;
+      const end = booking.end_at ? new Date(booking.end_at) : null;
+      if (start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+        const diff = Math.round((end.getTime() - start.getTime()) / 60000);
+        if (diff > 0 && diff <= 24 * 60) return diff;
+      }
+      const slot = Number(employee?.slot_minutes) || Number(state.schedule?.slot_minutes) || 30;
+      return slot;
+    }
+
+    function tlColumnKeyForBooking(booking, defaultEmp) {
+      if (booking.employee_id) return booking.employee_id;
+      return defaultEmp ? defaultEmp.employee_id : TL_GENERAL_KEY;
+    }
+
+    function tlColumnDayInfo(employee, dateKey) {
+      const date = new Date(`${dateKey}T00:00:00`);
+      const weekday = Number.isNaN(date.getTime()) ? -1 : portalWeekday(date);
+      const closedDays = new Set(
+        (employee?.closed_weekdays || state.schedule?.closed_weekdays || []).map((day) => Number(day))
+      );
+      const blocks = [];
+      (state.schedule?.blocks || []).forEach((block) => {
+        if (block.fecha === dateKey) blocks.push({ ...block, scope: "general" });
+      });
+      if (employee) {
+        (employee.blocks || []).forEach((block) => {
+          if (block.fecha === dateKey) blocks.push({ ...block, scope: "employee" });
+        });
+      }
+      return {
+        isClosed: weekday >= 0 && closedDays.has(weekday),
+        dayStart: tlParseMinutes(employee?.day_start || state.schedule?.day_start || "09:00") ?? 540,
+        dayEnd: tlParseMinutes(employee?.day_end || state.schedule?.day_end || "18:00") ?? 1080,
+        blocks,
+      };
+    }
+
+    function tlBuildColumns() {
+      const activeEmployees = state.employees.filter((employee) => employee.is_active);
+      let columns = (state.employeeFilter
+        ? activeEmployees.filter((employee) => employee.employee_id === state.employeeFilter)
+        : activeEmployees
+      ).map((employee) => ({
+        key: employee.employee_id,
+        name: employee.name || "Profesional",
+        color: employee.color || "var(--accent)",
+        employee,
+      }));
+
+      if (!columns.length && !state.employeeFilter) {
+        columns = [{ key: TL_GENERAL_KEY, name: "Agenda principal", color: "var(--accent)", employee: null }];
+      }
+
+      if (!state.employeeFilter) {
+        const defaultEmp = defaultEmployee();
+        const known = new Set(columns.map((column) => column.key));
+        state.timelineItems.forEach((booking) => {
+          const key = tlColumnKeyForBooking(booking, defaultEmp);
+          if (!known.has(key)) {
+            known.add(key);
+            columns.push({
+              key,
+              name: booking.employee_name || "Sin asignar",
+              color: "var(--soft)",
+              employee: null,
+            });
+          }
+        });
+      }
+      return columns;
+    }
+
+    function tlPackLanes(events) {
+      const sorted = events.slice().sort((a, b) => a.startM - b.startM || b.endM - a.endM);
+      let cluster = [];
+      let clusterMaxEnd = -1;
+      const assign = (group) => {
+        const laneEnds = [];
+        group.forEach((event) => {
+          let lane = laneEnds.findIndex((end) => end <= event.startM);
+          if (lane === -1) {
+            lane = laneEnds.length;
+            laneEnds.push(event.endM);
+          } else {
+            laneEnds[lane] = event.endM;
+          }
+          event.lane = lane;
+        });
+        group.forEach((event) => { event.laneCount = laneEnds.length; });
+      };
+      sorted.forEach((event) => {
+        if (cluster.length && event.startM >= clusterMaxEnd) {
+          assign(cluster);
+          cluster = [];
+          clusterMaxEnd = -1;
+        }
+        cluster.push(event);
+        clusterMaxEnd = Math.max(clusterMaxEnd, event.endM);
+      });
+      if (cluster.length) assign(cluster);
+      return sorted;
+    }
+
+    function tlAppendBand(body, topMin, bottomMin, startMin, options = {}) {
+      const top = Math.max(0, topMin - startMin);
+      const bottom = Math.max(top, bottomMin - startMin);
+      if (bottom - top <= 0) return;
+      const band = document.createElement("div");
+      band.className = options.className || "tl-unavailable";
+      band.style.top = `${top * TL_PX_PER_MIN}px`;
+      band.style.height = `${(bottom - top) * TL_PX_PER_MIN}px`;
+      if (options.label) {
+        const span = document.createElement("span");
+        span.textContent = options.label;
+        band.appendChild(span);
+      }
+      body.appendChild(band);
+    }
+
+    function renderTimeline() {
+      const dateKey = timelineDateKey();
+      el.timelineDateLabel.textContent = dateLongLabel(dateKey);
+      el.timelineGrid.innerHTML = "";
+
+      const columns = tlBuildColumns();
+      const defaultEmp = defaultEmployee();
+
+      // Agrupa citas por columna.
+      const itemsByColumn = new Map();
+      columns.forEach((column) => itemsByColumn.set(column.key, []));
+      state.timelineItems.forEach((booking) => {
+        const key = tlColumnKeyForBooking(booking, defaultEmp);
+        if (!itemsByColumn.has(key)) itemsByColumn.set(key, []);
+        itemsByColumn.get(key).push(booking);
+      });
+
+      // Calcula los limites del eje horario.
+      let minStart = Infinity;
+      let maxEnd = -Infinity;
+      columns.forEach((column) => {
+        const info = tlColumnDayInfo(column.employee, dateKey);
+        if (!info.isClosed) {
+          minStart = Math.min(minStart, info.dayStart);
+          maxEnd = Math.max(maxEnd, info.dayEnd);
+        }
+        (itemsByColumn.get(column.key) || []).forEach((booking) => {
+          const startM = tlParseMinutes(booking.hora);
+          if (startM === null) return;
+          minStart = Math.min(minStart, startM);
+          maxEnd = Math.max(maxEnd, startM + tlBookingDuration(booking, column.employee));
+        });
+      });
+      if (!Number.isFinite(minStart)) minStart = 540;
+      if (!Number.isFinite(maxEnd)) maxEnd = 1080;
+      const startMin = Math.max(0, Math.floor(minStart / 60) * 60);
+      const endMin = Math.min(1440, Math.max(startMin + 60, Math.ceil(maxEnd / 60) * 60));
+      const bodyHeight = (endMin - startMin) * TL_PX_PER_MIN;
+
+      const totalBookings = state.timelineItems.length;
+      el.timelineMeta.textContent = `${columns.length} profesional${columns.length === 1 ? "" : "es"} | ${totalBookings} cita${totalBookings === 1 ? "" : "s"}`;
+
+      // Columna de horas (gutter).
+      const gutter = document.createElement("div");
+      gutter.className = "tl-col tl-gutter-col";
+      const gutterHead = document.createElement("div");
+      gutterHead.className = "tl-head";
+      gutterHead.textContent = "Hora";
+      const gutterBody = document.createElement("div");
+      gutterBody.className = "tl-body";
+      gutterBody.style.height = `${bodyHeight}px`;
+      for (let tick = startMin; tick <= endMin; tick += TL_AXIS_STEP) {
+        const label = document.createElement("div");
+        label.className = `tl-gutter-label${tick % 60 === 0 ? " is-hour" : ""}`;
+        label.style.top = `${(tick - startMin) * TL_PX_PER_MIN}px`;
+        label.textContent = tlFormatMinutes(tick);
+        gutterBody.appendChild(label);
+      }
+      gutter.appendChild(gutterHead);
+      gutter.appendChild(gutterBody);
+      el.timelineGrid.appendChild(gutter);
+
+      // Una columna por profesional.
+      columns.forEach((column) => {
+        const info = tlColumnDayInfo(column.employee, dateKey);
+        const bookings = itemsByColumn.get(column.key) || [];
+
+        const col = document.createElement("div");
+        col.className = "tl-col";
+
+        const head = document.createElement("div");
+        head.className = "tl-head";
+        head.innerHTML = `
+          <span class="tl-head-dot" style="background:${escapeHtml(column.color)}"></span>
+          <span class="tl-head-name">${escapeHtml(column.name)}</span>
+          <span class="tl-head-count">${bookings.length}</span>
+        `;
+
+        const body = document.createElement("div");
+        body.className = "tl-body";
+        body.style.height = `${bodyHeight}px`;
+
+        // Lineas horarias.
+        for (let tick = startMin; tick <= endMin; tick += TL_AXIS_STEP) {
+          const line = document.createElement("div");
+          line.className = `tl-hour-line${tick % 60 === 0 ? " is-hour" : ""}`;
+          line.style.top = `${(tick - startMin) * TL_PX_PER_MIN}px`;
+          body.appendChild(line);
+        }
+
+        if (info.isClosed) {
+          tlAppendBand(body, startMin, endMin, startMin, { className: "tl-unavailable" });
+          const note = document.createElement("div");
+          note.className = "tl-closed-note";
+          note.textContent = "No disponible";
+          body.appendChild(note);
+        } else {
+          // Fuera de horario (antes de abrir / despues de cerrar).
+          tlAppendBand(body, startMin, info.dayStart, startMin, { className: "tl-unavailable" });
+          tlAppendBand(body, info.dayEnd, endMin, startMin, { className: "tl-unavailable" });
+          // Bloqueos de agenda.
+          info.blocks.forEach((block) => {
+            const blockStart = tlParseMinutes(block.hora_inicio);
+            const blockEnd = tlParseMinutes(block.hora_fin);
+            if (blockStart === null || blockEnd === null) return;
+            tlAppendBand(body, blockStart, blockEnd, startMin, {
+              className: "tl-block-band",
+              label: block.motivo ? block.motivo : "Bloqueado",
+            });
+          });
+        }
+
+        // Citas (bloques posicionados con reparto en carriles).
+        const events = bookings
+          .map((booking) => {
+            const startM = tlParseMinutes(booking.hora);
+            if (startM === null) return null;
+            return { booking, startM, endM: startM + tlBookingDuration(booking, column.employee) };
+          })
+          .filter(Boolean);
+        tlPackLanes(events).forEach((event) => {
+          const booking = event.booking;
+          const top = (event.startM - startMin) * TL_PX_PER_MIN;
+          const rawHeight = (event.endM - event.startM) * TL_PX_PER_MIN;
+          const height = Math.max(TL_MIN_BLOCK_H, rawHeight) - 2;
+          const laneCount = event.laneCount || 1;
+          const widthPct = 100 / laneCount;
+          const leftPct = event.lane * widthPct;
+
+          const block = document.createElement("button");
+          block.type = "button";
+          block.className = `tl-event estado-${booking.estado || "confirmed"}${height < 46 ? " is-compact" : ""}`;
+          block.style.top = `${top}px`;
+          block.style.height = `${height}px`;
+          block.style.left = `calc(${leftPct}% + 3px)`;
+          block.style.width = `calc(${widthPct}% - 6px)`;
+          block.style.borderLeftColor = column.color;
+          if (booking.booking_id === state.selectedTimelineBookingId) block.classList.add("is-selected");
+          const estadoTag = TL_ESTADO_TAG[booking.estado] || "";
+          block.innerHTML = `
+            <div class="tl-event-top">
+              <span class="tl-event-name">${escapeHtml(booking.hora || "")} &middot; ${escapeHtml(booking.nombre || booking.servicio || "Cita")}</span>
+              <span class="tl-event-tag">${escapeHtml(estadoTag)}</span>
+            </div>
+            <div class="tl-event-svc">${escapeHtml(booking.servicio || "Consulta")}</div>
+          `;
+          block.addEventListener("click", () => selectTimelineBooking(booking));
+          body.appendChild(block);
+        });
+
+        col.appendChild(head);
+        col.appendChild(body);
+        el.timelineGrid.appendChild(col);
+      });
+
+      // Re-render del detalle si la cita seleccionada sigue visible.
+      if (state.selectedTimelineBookingId) {
+        const stillThere = state.timelineItems.find((booking) => booking.booking_id === state.selectedTimelineBookingId);
+        if (stillThere) {
+          renderTimelineDetail(stillThere);
+        } else {
+          state.selectedTimelineBookingId = "";
+          el.timelineDetail.classList.add("hidden");
+        }
+      }
+    }
+
+    function selectTimelineBooking(booking) {
+      state.selectedTimelineBookingId = booking.booking_id || "";
+      renderTimeline();
+      renderTimelineDetail(booking);
+      el.timelineDetail.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    function renderTimelineDetail(booking) {
+      const estadoLabel = TL_ESTADO_LABEL[booking.estado] || booking.estado || "-";
+      const badgeClass = booking.estado === "confirmed" ? "badge-confirmed" :
+        booking.estado === "pending_review" ? "badge-pending" :
+        booking.estado === "cancelled" ? "badge-cancelled" : "badge-completed";
+      const label = `${booking.employee_name || "Agenda principal"} - ${booking.servicio || "Consulta"} - ${formatDateLabel(booking)}`;
+      el.timelineDetail.classList.remove("hidden");
+      el.timelineDetail.innerHTML = `
+        <div class="timeline-detail-head">
+          <div>
+            <div class="timeline-detail-title">${escapeHtml(booking.nombre || booking.servicio || "Cita")}</div>
+            <div class="timeline-detail-meta">
+              <span class="day-agenda-badge ${badgeClass}">${escapeHtml(estadoLabel)}</span>
+              <span>${escapeHtml(booking.hora || "--:--")} &bull; ${escapeHtml(booking.employee_name || "Agenda principal")}</span>
+              <span>${escapeHtml(booking.servicio || "Consulta")}</span>
+            </div>
+            <div class="timeline-detail-meta">
+              <span>${escapeHtml(booking.email || "-")}</span>
+              ${booking.telefono ? `<span>${escapeHtml(booking.telefono)}</span>` : ""}
+            </div>
+          </div>
+          <button class="ghost small" type="button" data-tl-action="close">Cerrar</button>
+        </div>
+        <div class="timeline-detail-actions">
+          <button class="secondary small" type="button" data-tl-action="manage" data-url="${escapeHtml(booking.manage_url || "")}">Gestionar</button>
+          <button class="secondary small" type="button" data-tl-action="reschedule" ${booking.can_reschedule ? "" : "disabled"}>Reprogramar</button>
+          <button class="danger small" type="button" data-tl-action="cancel" ${booking.can_cancel ? "" : "disabled"}>Cancelar</button>
+        </div>
+      `;
+      el.timelineDetail.querySelectorAll("button[data-tl-action]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const action = button.dataset.tlAction;
+          try {
+            if (action === "close") {
+              state.selectedTimelineBookingId = "";
+              el.timelineDetail.classList.add("hidden");
+              renderTimeline();
+              return;
+            }
+            if (action === "manage") {
+              const url = button.dataset.url || "";
+              if (!url) throw new Error("Esta reserva no tiene enlace de gestion.");
+              window.open(url, "_blank", "noopener,noreferrer");
+              return;
+            }
+            if (action === "cancel") {
+              await cancelBooking(booking.booking_id || "");
+              return;
+            }
+            if (action === "reschedule") {
+              openReschedulePanel(
+                booking.booking_id || "",
+                booking.employee_id || "",
+                booking.fecha || "",
+                booking.hora || "",
+                label
+              );
+            }
+          } catch (error) {
+            setStatus(error.message, "error");
+          }
+        });
+      });
+    }
+
+    async function loadTimelineBookings() {
+      const dateKey = timelineDateKey();
+      const params = new URLSearchParams({
+        scope: "all",
+        limit: "1000",
+        offset: "0",
+        date_from: dateKey,
+        date_to: dateKey,
+      });
+      if (state.status) params.set("estado", state.status);
+      if (state.employeeFilter) params.set("employee_id", state.employeeFilter);
+      const payload = await api(`/auth/bookings?${params.toString()}`);
+      state.timelineItems = payload.items || [];
+      renderTimeline();
+    }
+
+    function refreshActiveBookingView() {
+      if (state.bookingView === "timeline") return loadTimelineBookings();
+      return loadCalendarBookings();
+    }
+
+    function setBookingView(view) {
+      const next = view === "timeline" ? "timeline" : "calendar";
+      state.bookingView = next;
+      el.bookingViewSwitch.querySelectorAll("[data-booking-view]").forEach((button) => {
+        const active = button.dataset.bookingView === next;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      const showTimeline = next === "timeline";
+      el.timelinePanel.classList.toggle("hidden", !showTimeline);
+      el.calendarPanel.classList.toggle("hidden", showTimeline);
+      clearReschedulePanel();
+      if (showTimeline) {
+        el.dayAgenda.classList.add("hidden");
+        if (state.selectedCalendarDate) {
+          const parsed = new Date(`${state.selectedCalendarDate}T00:00:00`);
+          if (!Number.isNaN(parsed.getTime())) state.timelineDate = parsed;
+        }
+        loadTimelineBookings().catch((error) => setStatus(error.message, "error"));
+      } else {
+        renderSelectedDayAgenda();
+      }
     }
 
     async function loadDashboard() {
@@ -5630,6 +6379,9 @@ tbody tr:hover { background: var(--surface-2); }
       await loadSchedule();
       await loadEmployees();
       await loadCalendarBookings();
+      if (state.bookingView === "timeline") {
+        await loadTimelineBookings();
+      }
       await loadChats();
       if (state.showWelcomeTour && state.user?.role === "client") {
         openWelcomeTour();
@@ -6207,15 +6959,32 @@ tbody tr:hover { background: var(--surface-2); }
     el.employeeFilter.addEventListener("change", () => {
       state.employeeFilter = el.employeeFilter.value.trim();
       clearReschedulePanel();
-      loadCalendarBookings().catch((error) => setStatus(error.message, "error"));
+      refreshActiveBookingView().catch((error) => setStatus(error.message, "error"));
     });
     el.statusFilter.addEventListener("change", () => {
       state.status = el.statusFilter.value.trim();
       clearReschedulePanel();
-      loadCalendarBookings().catch((error) => setStatus(error.message, "error"));
+      refreshActiveBookingView().catch((error) => setStatus(error.message, "error"));
     });
     el.clearDayAgendaBtn.addEventListener("click", () => {
       clearSelectedCalendarDay();
+    });
+    el.bookingViewSwitch.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-booking-view]");
+      if (!button) return;
+      setBookingView(button.dataset.bookingView);
+    });
+    el.timelineTodayBtn.addEventListener("click", () => {
+      state.timelineDate = new Date();
+      loadTimelineBookings().catch((error) => setStatus(error.message, "error"));
+    });
+    el.timelinePrevDayBtn.addEventListener("click", () => {
+      state.timelineDate = addDays(state.timelineDate, -1);
+      loadTimelineBookings().catch((error) => setStatus(error.message, "error"));
+    });
+    el.timelineNextDayBtn.addEventListener("click", () => {
+      state.timelineDate = addDays(state.timelineDate, 1);
+      loadTimelineBookings().catch((error) => setStatus(error.message, "error"));
     });
     el.prevCalendarMonthBtn.addEventListener("click", () => {
       state.calendarDate = new Date(state.calendarDate.getFullYear(), state.calendarDate.getMonth() - 1, 1);

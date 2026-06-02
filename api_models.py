@@ -851,7 +851,9 @@ class PortalBookingSummary(BaseModel):
     manage_url: str = ""
     contact_email: str = ""
     contact_phone: str = ""
+    booking_code: str = ""
     start_at: str = ""
+    end_at: str = ""
     can_cancel: bool = True
     can_reschedule: bool = True
 
