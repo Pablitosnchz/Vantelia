@@ -10864,6 +10864,57 @@ def _extract_services_from_info(cliente_id: str) -> List[Dict[str, Any]]:
         existing = str(current.get("descripcion") or "").strip()
         current["descripcion"] = f"{existing}\n{detail}".strip() if existing else detail
 
+    def start_compact_service(raw_text: str) -> bool:
+        """Soporta lineas compactas frecuentes del scraper:
+        '- Masaje / 60€ / 55 min', '- Masaje - Desde 35€ - 1h',
+        '- Masaje: 60€ · 55 min'. Los bloques numerados con detalles debajo
+        siguen pasando por start_service() + append_detail().
+        """
+        raw = str(raw_text or "").strip()
+        if not raw:
+            return False
+        known_detail_labels = {
+            "precio", "tarifa", "coste", "duracion", "duración", "descripcion",
+            "descripción", "detalle", "incluye", "ideal para", "para quien",
+        }
+        parts: List[str] = []
+        colon_match = re.match(r"^([^:]{2,90}):\s*(.+)$", raw)
+        if colon_match and colon_match.group(1).strip().lower() not in known_detail_labels:
+            parts = [colon_match.group(1).strip(), colon_match.group(2).strip()]
+        else:
+            parts = [
+                p.strip()
+                for p in re.split(r"\s*(?:/|\||·|•|–|—|\s+-\s+)\s*", raw)
+                if p.strip()
+            ]
+        if len(parts) < 2:
+            return False
+        nombre = parts[0]
+        if not nombre or nombre.lower() in known_detail_labels:
+            return False
+        price_part = next((p for p in parts[1:] if _parse_price_to_cents(p)), "")
+        duration_part = next((p for p in parts[1:] if _parse_duration_minutes_text(p)), "")
+        # Evita convertir bullets descriptivos largos en servicios.
+        if not price_part and not duration_part:
+            return False
+        start_service(nombre)
+        if not current:
+            return False
+        if price_part:
+            current["price_cents"] = _parse_price_to_cents(price_part)
+        if duration_part:
+            current["duration_minutes"] = _parse_duration_minutes_text(duration_part)
+        details = [p for p in parts[1:] if p not in {price_part, duration_part}]
+        compact_bits = []
+        if price_part:
+            compact_bits.append(f"Precio: {price_part}")
+        if duration_part:
+            compact_bits.append(f"Duracion: {duration_part}")
+        compact_bits.extend(details)
+        if compact_bits:
+            append_detail("", " / ".join(compact_bits))
+        return True
+
     for linea in contenido.splitlines():
         valor = linea.strip()
         lower = valor.lower()
@@ -10888,6 +10939,9 @@ def _extract_services_from_info(cliente_id: str) -> List[Dict[str, Any]]:
 
         if valor.startswith("- Servicio:"):
             start_service(valor.split(":", 1)[1].strip())
+            continue
+
+        if valor.startswith("- ") and start_compact_service(valor[2:].strip()):
             continue
 
         if valor.startswith("- ") and valor.endswith(":"):

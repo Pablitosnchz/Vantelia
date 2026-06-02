@@ -273,6 +273,43 @@ def test_service_extraction_keeps_scraper_descriptions(api_module):
 
     services = api_module._extract_services_from_info(cliente_id)
     assert [item["nombre"] for item in services] == ["Starter", "Pro"]
+
+    compact_id = f"svc_compact_{uuid.uuid4().hex[:8]}"
+    compact_dir = api_module.DATA_DIR / compact_id
+    compact_dir.mkdir(parents=True, exist_ok=True)
+    (compact_dir / "info.txt").write_text(
+        "\n".join(
+            [
+                "SERVICIOS Y PRECIOS:",
+                "- Masaje Descontracturante / 60€ / 55 min",
+                "- Masaje Relajante / Desde 35€ / 1 sesión Individual",
+                "- Masaje a Cuatro Manos / 80€ / 75 min",
+                "- Ritual Premium - 95 EUR - 1 h 30 min",
+                "- Drenaje Linfático: 75€ · 75 min",
+                "- Reflexología Podal | 60 EUR | 50 min",
+                "",
+                "PREGUNTAS FRECUENTES:",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    compact = api_module._extract_services_from_info(compact_id)
+    assert [item["nombre"] for item in compact] == [
+        "Masaje Descontracturante",
+        "Masaje Relajante",
+        "Masaje a Cuatro Manos",
+        "Ritual Premium",
+        "Drenaje Linfático",
+        "Reflexología Podal",
+    ]
+    assert compact[0]["price_cents"] == 6000
+    assert compact[0]["duration_minutes"] == 55
+    assert compact[1]["price_cents"] == 3500
+    assert compact[2]["duration_minutes"] == 75
+    assert compact[3]["price_cents"] == 9500
+    assert compact[3]["duration_minutes"] == 90
+    assert compact[4]["price_cents"] == 7500
+    assert compact[5]["duration_minutes"] == 50
     assert "Precio: 19 EUR al mes" in services[0]["descripcion"]
     assert "personalizacion de marca" in services[0]["descripcion"]
 
