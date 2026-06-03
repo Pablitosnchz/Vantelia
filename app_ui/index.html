@@ -174,6 +174,25 @@
       height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2));
       border-radius: 99px; transition: width .3s ease;
     }
+    /* Overview redesign */
+    .ov-stat { padding: 16px 18px; }
+    .ov-stat-label { color: var(--soft); font-size: 0.72rem; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 6px; }
+    .ov-stat-value { font-family: var(--font-title); font-size: 2rem; font-weight: 700; line-height: 1; }
+    .ov-stat-sub { color: var(--soft-2); font-size: 0.75rem; margin-top: 5px; }
+    .ov-stat-quota .ov-stat-value { font-size: 1.5rem; }
+    .ov-channel-card {
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--line);
+      border-radius: 12px; padding: 12px 14px;
+    }
+    .ov-ch-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .ov-ch-info { flex: 1; min-width: 0; }
+    .ov-ch-name { font-size: 0.85rem; font-weight: 600; }
+    .ov-ch-status { font-size: 0.75rem; color: var(--soft-2); display: flex; align-items: center; gap: 5px; margin-top: 2px; }
+    .ov-ch-status.active { color: #4ade80; }
+    .ov-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--soft-2); display: inline-block; flex-shrink: 0; }
+    .ov-dot.active { background: #4ade80; box-shadow: 0 0 6px #4ade8088; }
+    .ov-quick { display: flex; align-items: center; gap: 7px; font-size: 0.83rem; padding: 7px 14px; }
     .stat-icon {
       width: 36px; height: 36px; border-radius: 10px;
       background: var(--accent-soft); color: var(--accent);
@@ -817,10 +836,6 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="4.93" y1="4.93" x2="9.17" y2="9.17"/><line x1="14.83" y1="14.83" x2="19.07" y2="19.07"/><line x1="14.83" y1="9.17" x2="19.07" y2="4.93"/><line x1="9.17" y1="14.83" x2="4.93" y2="19.07"/></svg>
     <span>Apariencia</span>
   </div>
-  <div class="nav-item" data-tab="deploy">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-    <span>Deploy</span>
-  </div>
 
   <div class="sidebar-divider"></div>
   <div class="sidebar-section" data-label="Agenda">Agenda</div>
@@ -890,46 +905,142 @@
 
   <!-- OVERVIEW -->
   <section class="page active" id="page-overview">
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-        <div class="label">Usuarios hoy</div>
-        <div class="row">
-          <div class="value" id="stUsersToday">0</div>
-          <div class="sub" id="stMessagesToday">0 mensajes</div>
-        </div>
+
+    <!-- Stats grid -->
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:12px; margin-bottom:16px;">
+
+      <div class="stat-card ov-stat">
+        <div class="ov-stat-label">Conversaciones hoy</div>
+        <div class="ov-stat-value" id="stUsersToday">0</div>
+        <div class="ov-stat-sub" id="stMessagesToday">0 mensajes</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-        <div class="label">Mensajes este periodo</div>
-        <div class="row">
-          <b id="stMsgUsed">0</b>
-          <div class="sub">/ <span id="stMsgQuota">50</span> · plan <span id="stPlan">free</span></div>
-        </div>
-        <div class="progress"><div class="progress-bar" id="stMsgBar" style="width:0%"></div></div>
+
+      <div class="stat-card ov-stat">
+        <div class="ov-stat-label">Sesiones totales</div>
+        <div class="ov-stat-value" id="stSessTotal">0</div>
+        <div class="ov-stat-sub">historial completo</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-        <div class="label">Conocimiento</div>
-        <div class="row"><b id="stTrainBytes">0</b><div class="sub">caracteres</div></div>
-        <div class="sub">Total sesiones: <span id="stSessTotal">0</span></div>
+
+      <div class="stat-card ov-stat">
+        <div class="ov-stat-label">Leads captados</div>
+        <div class="ov-stat-value" id="stLeads">0</div>
+        <div class="ov-stat-sub">contactos recogidos</div>
+      </div>
+
+      <div class="stat-card ov-stat">
+        <div class="ov-stat-label">Conocimiento</div>
+        <div class="ov-stat-value" id="stTrainBytes">0</div>
+        <div class="ov-stat-sub">caracteres indexados</div>
+      </div>
+
+      <div class="stat-card ov-stat" id="stCardCitasHoy" style="display:none;">
+        <div class="ov-stat-label">Citas hoy</div>
+        <div class="ov-stat-value" id="stCitasHoy">0</div>
+        <div class="ov-stat-sub" id="stCitasUpcoming">0 próximas (7 días)</div>
+      </div>
+
+      <div class="stat-card ov-stat ov-stat-quota">
+        <div class="ov-stat-label">Mensajes · plan <span id="stPlan" style="color:var(--accent); text-transform:uppercase; font-size:0.7rem;">free</span></div>
+        <div class="ov-stat-value"><span id="stMsgUsed">0</span><span style="font-size:1rem; font-weight:400; color:var(--soft);">/<span id="stMsgQuota">50</span></span></div>
+        <div style="margin-top:8px;"><div class="progress" style="height:4px;"><div class="progress-bar" id="stMsgBar" style="width:0%"></div></div></div>
+        <div class="ov-stat-sub" id="stMsgBarLabel">este periodo</div>
+      </div>
+
+    </div>
+
+    <!-- Canales -->
+    <div class="panel-card" style="margin-bottom:16px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <h2 style="margin:0;">Canales activos</h2>
+        <span class="panel-sub" style="margin:0;">Estado de cada canal de tu asistente</span>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px;" id="ovChannelsGrid">
+
+        <div class="ov-channel-card">
+          <div class="ov-ch-icon" style="background:rgba(0,209,255,0.12);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00D1FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          </div>
+          <div class="ov-ch-info">
+            <div class="ov-ch-name">Widget web</div>
+            <div class="ov-ch-status active"><span class="ov-dot active"></span>Activo</div>
+          </div>
+        </div>
+
+        <div class="ov-channel-card" id="ovChWhatsApp">
+          <div class="ov-ch-icon" style="background:rgba(37,211,102,0.12);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#25D366" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          </div>
+          <div class="ov-ch-info">
+            <div class="ov-ch-name">WhatsApp</div>
+            <div class="ov-ch-status" id="ovChWhatsAppStatus"><span class="ov-dot"></span>Inactivo</div>
+          </div>
+        </div>
+
+        <div class="ov-channel-card" id="ovChVoz">
+          <div class="ov-ch-icon" style="background:rgba(168,85,247,0.12);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </div>
+          <div class="ov-ch-info">
+            <div class="ov-ch-name">Asistente de voz</div>
+            <div class="ov-ch-status" id="ovChVozStatus"><span class="ov-dot"></span>Inactivo</div>
+          </div>
+        </div>
+
+        <div class="ov-channel-card" id="ovChAgenda">
+          <div class="ov-ch-icon" style="background:rgba(245,158,11,0.12);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </div>
+          <div class="ov-ch-info">
+            <div class="ov-ch-name">Agenda</div>
+            <div class="ov-ch-status" id="ovChAgendaStatus"><span class="ov-dot"></span>Inactivo</div>
+          </div>
+        </div>
+
       </div>
     </div>
 
-    <div class="panel-card">
-      <h2>Resumen rápido</h2>
-      <p class="panel-sub">Tu asistente está listo. Aquí tienes los enlaces clave.</p>
-      <div class="form-row">
-        <div class="field" style="flex:1 1 100%;">
-          <label class="field-label">Demo / preview</label>
-          <div style="display:flex; gap:8px; align-items:center;">
-            <input class="field-input" id="overviewDemoUrl" readonly />
-            <button class="btn btn-ghost" id="copyDemoBtn" type="button">Copiar</button>
-            <a class="btn btn-primary" id="openDemoBtn" target="_blank" rel="noreferrer">Abrir</a>
-          </div>
+    <!-- Accesos rápidos + demo -->
+    <div style="display:grid; grid-template-columns:1fr auto; gap:12px; align-items:start;">
+
+      <div class="panel-card">
+        <h2 style="margin-bottom:12px;">Accesos rápidos</h2>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-ghost ov-quick" onclick="setTab('chats')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Últimos chats
+          </button>
+          <button class="btn btn-ghost ov-quick" id="ovQuickCitas" style="display:none;" onclick="setTab('citas')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Citas de hoy
+          </button>
+          <button class="btn btn-ghost ov-quick" onclick="setTab('knowledge')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Conocimiento
+          </button>
+          <button class="btn btn-ghost ov-quick" onclick="setTab('appearance')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Apariencia
+          </button>
+          <button class="btn btn-ghost ov-quick" onclick="setTab('billing')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            Suscripción
+          </button>
         </div>
       </div>
+
+      <div class="panel-card" style="min-width:260px;">
+        <h2 style="margin-bottom:10px;">Probar asistente</h2>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input class="field-input" id="overviewDemoUrl" readonly style="font-size:0.78rem;" />
+          <button class="btn btn-ghost" id="copyDemoBtn" type="button" title="Copiar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <a class="btn btn-primary" id="openDemoBtn" target="_blank" rel="noreferrer" style="white-space:nowrap;">Abrir demo</a>
+        </div>
+      </div>
+
     </div>
+
   </section>
 
   <!-- CHATS -->
@@ -1082,28 +1193,6 @@
   </section>
 
   <!-- DEPLOY -->
-  <section class="page" id="page-deploy">
-    <div class="panel-card">
-      <h2>Incrustar en tu web</h2>
-      <p class="panel-sub">Pega este código justo antes de <code style="color:var(--accent-2);">&lt;/body&gt;</code>. La burbuja de chat aparecerá en la esquina inferior derecha.</p>
-      <div class="code-block" id="depSnippet"></div>
-      <div style="margin-top:12px; display:flex; gap:10px;">
-        <button class="btn btn-primary" id="depCopySnippet" type="button">Copiar código</button>
-        <button class="btn btn-ghost" id="depMailSnippet" type="button">Enviarlo a mi desarrollador</button>
-      </div>
-    </div>
-
-    <div class="panel-card" style="margin-top:18px;">
-      <h2>Compartir con un enlace</h2>
-      <p class="panel-sub">Para emails, QR o redes sociales. Cualquiera con este enlace puede chatear.</p>
-      <div style="display:flex; gap:8px; align-items:center; margin-top:10px;">
-        <input class="field-input" id="depShareLink" readonly />
-        <button class="btn btn-ghost" id="depCopyShare" type="button">Copiar</button>
-        <a class="btn btn-primary" id="depOpenShare" target="_blank" rel="noreferrer">Abrir</a>
-      </div>
-    </div>
-  </section>
-
   <!-- KNOWLEDGE -->
   <section class="page" id="page-knowledge">
     <div class="panel-card">
@@ -1821,7 +1910,7 @@ const state = {
   session_id: 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
 };
 
-const TABS = ['overview','chats','knowledge','qa','tune','whatsapp','appearance','deploy','billing','citas','equipo','servicios','horarios','mensajes','instalacion','cuenta'];
+const TABS = ['overview','chats','knowledge','qa','tune','whatsapp','appearance','billing','citas','equipo','servicios','horarios','mensajes','instalacion','cuenta'];
 const billingState = { period: 'monthly', plans: [], current: 'free', portal: false };
 
 function formatDetail(d) {
@@ -1896,7 +1985,7 @@ function setTab(tab) {
   const titles = {
     overview:'Overview', chats:'Chats',
     knowledge:'Conocimiento', qa:'Q&A', tune:'Tune AI', whatsapp:'WhatsApp',
-    appearance:'Apariencia', deploy:'Deploy', billing:'Suscripción',
+    appearance:'Apariencia', billing:'Suscripción',
     citas:'Citas', equipo:'Equipo', servicios:'Servicios', horarios:'Horarios',
     mensajes:'Recordatorios y avisos', instalacion:'Instalación', cuenta:'Cuenta',
   };
@@ -1959,15 +2048,42 @@ async function loadOverview() {
     document.getElementById('rpAvatar').style.background = `linear-gradient(135deg, ${state.color}, var(--accent-2))`;
     document.getElementById('rpWelcome').textContent = state.bienvenida || 'Hola, ¿en qué puedo ayudarte hoy?';
 
+    // Stats
     document.getElementById('stUsersToday').textContent = data.stats.users_today;
     document.getElementById('stMessagesToday').textContent = data.stats.messages_today + ' mensajes';
+    document.getElementById('stSessTotal').textContent = (data.stats.chat_sessions_total || 0).toLocaleString();
+    document.getElementById('stLeads').textContent = (data.stats.leads_generated || 0).toLocaleString();
+    document.getElementById('stTrainBytes').textContent = (data.stats.training_chars || 0).toLocaleString();
+
+    // Quota card
     document.getElementById('stMsgUsed').textContent = data.subscription.messages_used;
     document.getElementById('stMsgQuota').textContent = data.subscription.messages_quota;
     document.getElementById('stPlan').textContent = data.subscription.plan;
     const pct = Math.min(100, Math.round(100 * data.subscription.messages_used / Math.max(1, data.subscription.messages_quota)));
     document.getElementById('stMsgBar').style.width = pct + '%';
-    document.getElementById('stTrainBytes').textContent = (data.stats.training_chars || 0).toLocaleString();
-    document.getElementById('stSessTotal').textContent = data.stats.chat_sessions_total;
+    document.getElementById('stMsgBar').style.background = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '';
+    document.getElementById('stMsgBarLabel').textContent = `${pct}% usado este periodo`;
+
+    // Citas (condicional)
+    const bookingOn = data.channels?.booking;
+    document.getElementById('stCardCitasHoy').style.display = bookingOn ? '' : 'none';
+    document.getElementById('ovQuickCitas').style.display = bookingOn ? '' : 'none';
+    if (bookingOn) {
+      document.getElementById('stCitasHoy').textContent = data.stats.bookings_today ?? 0;
+      document.getElementById('stCitasUpcoming').textContent = `${data.stats.bookings_upcoming ?? 0} próximas (7 días)`;
+    }
+
+    // Canales
+    const ch = data.channels || {};
+    const setChannel = (statusId, active) => {
+      const el = document.getElementById(statusId);
+      if (!el) return;
+      el.innerHTML = `<span class="ov-dot${active ? ' active' : ''}"></span>${active ? 'Activo' : 'Inactivo'}`;
+      el.className = 'ov-ch-status' + (active ? ' active' : '');
+    };
+    setChannel('ovChWhatsAppStatus', ch.whatsapp);
+    setChannel('ovChVozStatus', ch.voice);
+    setChannel('ovChAgendaStatus', ch.booking);
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -1980,9 +2096,6 @@ async function loadDeploy() {
     state.share_link = data.share_link;
     state.demo_url = data.demo_url;
     state.api_base_url = data.api_base_url || state.api_base_url;
-    document.getElementById('depSnippet').textContent = data.install_snippet;
-    document.getElementById('depShareLink').value = data.share_link;
-    document.getElementById('depOpenShare').href = data.share_link;
     document.getElementById('overviewDemoUrl').value = data.demo_url;
     document.getElementById('openDemoBtn').href = data.demo_url;
   } catch (err) {
@@ -2520,23 +2633,10 @@ async function copy(text, btn) {
     btn.textContent = 'Copia manual';
   }
 }
-document.getElementById('depCopySnippet').addEventListener('click', async e => {
-  await copy(state.install_snippet, e.target);
-  trackAppEvent('snippet_copied', { surface: 'deploy' });
-});
-document.getElementById('depCopyShare').addEventListener('click', async e => {
-  await copy(state.share_link, e.target);
-  trackAppEvent('share_link_copied', { surface: 'deploy' });
-});
 document.getElementById('copyDemoBtn').addEventListener('click', async e => {
   await copy(state.demo_url, e.target);
   trackAppEvent('demo_url_copied', { surface: 'overview' });
 });
-document.getElementById('depMailSnippet').addEventListener('click', () => {
-  const body = encodeURIComponent(`Hola, este es el código de instalación de mi asistente Vantelia. Por favor, añádelo justo antes de </body> en mi web:\n\n${state.install_snippet}`);
-  window.location.href = `mailto:?subject=Código de instalación Vantelia&body=${body}`;
-});
-
 document.getElementById('rpSendBtn').addEventListener('click', () => sendPreviewMessage(document.getElementById('rpInput').value));
 document.getElementById('rpInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') sendPreviewMessage(document.getElementById('rpInput').value);
@@ -3157,6 +3257,23 @@ async function refreshCitasCalendarIfVisible() {
   renderCalendar();
 }
 
+function invalidateCitasScheduleCache() {
+  citasState.daySchedule = null;
+  citasState.employees = null;
+}
+
+async function refreshCitasIfVisible() {
+  invalidateCitasScheduleCache();
+  const page = document.getElementById('page-citas');
+  if (!page || !page.classList.contains('active')) return;
+  if (citasState.view === 'cal') {
+    await fetchCitasCalData();
+    renderCalendar();
+  } else {
+    await loadCitasDay();
+  }
+}
+
 function _switchToCalView() {
   document.getElementById('citasCalView').style.display = '';
   document.getElementById('citasDayView').style.display = 'none';
@@ -3515,7 +3632,7 @@ document.getElementById('calNext').addEventListener('click', async () => { citas
 document.getElementById('calToday').addEventListener('click', async () => { const n = new Date(); citasState.calYear = n.getFullYear(); citasState.calMonth = n.getMonth(); await fetchCitasCalData(); renderCalendar(); });
 
 // ── CITAS · Vista Día (timeline por profesional) ──────────────────────
-const CD_PX_PER_MIN = 1.4, CD_AXIS_STEP = 30, CD_MIN_BLOCK_H = 30, CD_GENERAL_KEY = '__general__';
+const CD_PX_PER_MIN = 1.4, CD_AXIS_STEP = 30, CD_MIN_BLOCK_H = 22, CD_GENERAL_KEY = '__general__';
 const CD_ESTADO_NORM  = { confirmed:'confirmed', pending:'pending', pending_review:'pending', completed:'completed', cancelled:'cancelled', no_show:'no_show' };
 const CD_ESTADO_TAG   = { confirmed:'Conf', pending:'Pend', completed:'Hecho', cancelled:'Canc', no_show:'No vino' };
 const CD_ESTADO_LABEL = { confirmed:'Confirmada', pending:'Pendiente', completed:'Completada', cancelled:'Cancelada', no_show:'No asistió' };
@@ -3536,9 +3653,18 @@ function cdBookingStartMin(b){
   return null;
 }
 function cdDur(b, emp){
+  const svcDur = Number(b.service_duration_minutes || b.duration_minutes || 0);
+  if (svcDur > 0 && svcDur <= 1440) return svcDur;
   const s = b.start_at ? new Date(b.start_at) : null, e = b.end_at ? new Date(b.end_at) : null;
   if (s && e && !isNaN(s) && !isNaN(e)) { const d = Math.round((e - s)/60000); if (d > 0 && d <= 1440) return d; }
   return Number(emp?.slot_minutes) || Number(citasState.daySchedule?.slot_minutes) || 30;
+}
+function cdServiceMeta(b){
+  const bits = [];
+  const dur = Number(b.service_duration_minutes || b.duration_minutes || 0);
+  if (dur > 0) bits.push(`${dur} min`);
+  if (b.service_price_label) bits.push(b.service_price_label);
+  return bits.length ? ` · ${bits.join(' · ')}` : '';
 }
 function cdColKey(b, defEmp){ return b.employee_id || (defEmp ? defEmp.id : CD_GENERAL_KEY); }
 function normalizeDailyBreaks(data){
@@ -3760,7 +3886,7 @@ function renderCitasDay(){
       if ((b.booking_id || b.id) === citasState.selectedDayBookingId) btn.classList.add('selected');
       const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '');
       const sub = c.type === 'day' ? (b.employee_name || b.servicio || 'Consulta') : (b.servicio || 'Consulta');
-      btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(hora)} · ${escapeHtml(b.nombre || b.client_name || b.name || b.servicio || 'Cita')}</span><span class="cd-ev-tag" style="color:${base}">${escapeHtml(CD_ESTADO_TAG[est] || '')}</span></div><div class="cd-ev-svc">${escapeHtml(sub)}</div>`;
+      btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(hora)} · ${escapeHtml(b.nombre || b.client_name || b.name || b.servicio || 'Cita')}</span><span class="cd-ev-tag" style="color:${base}">${escapeHtml(CD_ESTADO_TAG[est] || '')}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
       btn.addEventListener('click', () => cdSelect(b));
       body.appendChild(btn);
     });
@@ -3797,7 +3923,7 @@ function cdRenderDetail(b){
           ${est === 'completed' && b.completed_source === 'auto' ? `<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);" title="Se completó automáticamente al pasar la hora. Confirma si el cliente asistió.">auto · sin confirmar</span>` : ''}
           ${b.booking_code ? `<span class="badge" style="background:var(--accent-soft); color:var(--accent); font-family:'Courier New',monospace; letter-spacing:.06em;">N.º ${escapeHtml(b.booking_code)}</span>` : ''}
           <span>${escapeHtml(hora)} · ${escapeHtml(b.employee_name || 'Agenda')}</span>
-          <span>${escapeHtml(b.servicio || 'Consulta')}${b.service_price_label ? ' · ' + escapeHtml(b.service_price_label) : ''}</span>
+          <span>${escapeHtml((b.servicio || 'Consulta') + cdServiceMeta(b))}</span>
         </div>
         <div class="cd-detail-meta">
           <span>${escapeHtml(b.email || b.client_email || '–')}</span>
@@ -4044,6 +4170,7 @@ function renderHorarioBreaks(){
     row.querySelector('[data-break-idx]').addEventListener('click', () => {
       horarioBreakWindows.splice(idx, 1);
       renderHorarioBreaks();
+      saveHorario();
     });
     list.appendChild(row);
   });
@@ -4110,7 +4237,7 @@ function renderBloqueos(blocks) {
         await api(url, { method:'DELETE' });
         toast('Bloqueo eliminado', 'success');
         loadHorarios(document.getElementById('horProf').value);
-        refreshCitasCalendarIfVisible();
+        refreshCitasIfVisible();
       }
       catch(e) { toast(e.message, 'error'); }
     });
@@ -4132,6 +4259,7 @@ document.getElementById('horBreakAddBtn').addEventListener('click', () => {
   horarioBreakWindows.sort((a,b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
   ['horBreakNewStart','horBreakNewEnd','horBreakNewReason'].forEach(id => document.getElementById(id).value = '');
   renderHorarioBreaks();
+  saveHorario();
 });
 
 function closeHorarioConflictModal(){
@@ -4217,7 +4345,7 @@ async function saveHorario(){
     closeHorarioConflictModal();
     toast('Horario guardado', 'success');
     loadHorarios(profId);
-    refreshCitasCalendarIfVisible();
+    refreshCitasIfVisible();
   }
   catch(e) {
     if (!openHorarioConflictModal(e.detail)) toast(e.message, 'error');
@@ -4256,7 +4384,7 @@ document.getElementById('horBlockAddBtn').addEventListener('click', async () => 
     toast('Bloqueo añadido', 'success');
     ['horBlockStart','horBlockEnd','horBlockHStart','horBlockHEnd','horBlockReason'].forEach(id => document.getElementById(id).value = '');
     loadHorarios(profId);
-    refreshCitasCalendarIfVisible();
+    refreshCitasIfVisible();
   } catch(e) { toast(e.message, 'error'); }
 });
 
@@ -4431,9 +4559,8 @@ document.getElementById('mensajesGuardarBtn').addEventListener('click', async ()
 
 // ── INSTALACION ───────────────────────────────────────────────────────
 function loadInstalacion() {
-  const snippet = `<script\n  src="https://app.vantelia.es/widget/widget.min.js"\n  data-api="https://app.vantelia.es"\n  data-client="__CLIENTE_ID__"\n  data-position="right">\n<\/script>`;
-  document.getElementById('instSnippet').value = snippet;
-  document.getElementById('instDemoLink').href = '/demo/__CLIENTE_ID__';
+  document.getElementById('instSnippet').value = state.install_snippet || '';
+  document.getElementById('instDemoLink').href = state.demo_url || '#';
 }
 document.getElementById('instCopyBtn').addEventListener('click', e => copy(document.getElementById('instSnippet').value, e.target));
 

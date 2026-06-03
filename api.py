@@ -646,7 +646,7 @@ EXTRA_CORS_ORIGINS = [
 
 
 VOICE_ALLOWED_OPENAI_VOICES = {
-    "alloy", "echo", "shimmer", "ash", "ballad", "coral", "sage", "verse",
+    "alloy", "echo", "shimmer", "ash", "ballad", "coral", "sage", "verse", "marin", "cedar",
 }
 
 
@@ -2645,6 +2645,7 @@ from api_models import (
     OnboardingStateResponse,
     AppOverviewSubscription,
     AppOverviewStats,
+    AppOverviewChannels,
     AppOverviewResponse,
     AppDeployResponse,
     AppAppearancePayload,
@@ -2668,6 +2669,8 @@ from api_models import (
     AppServicesPayload,
     AppWhatsAppPayload,
     AppWhatsAppResponse,
+    AppVoicePayload,
+    AppVoiceResponse,
     AppLiveChatSession,
     BillingPlanTier,
     BillingSubscriptionPublic,
@@ -9667,6 +9670,7 @@ def _booking_row_manage_url(
 
 def _serialize_booking_row(row: sqlite3.Row, request: Optional[Request] = None) -> Dict[str, Any]:
     config = _get_client_config(row["cliente_id"])
+    service_meta = _booking_display_service_meta(row, row["cliente_id"])
     return {
         "booking_id": row["id"],
         "cliente_id": row["cliente_id"],
@@ -9689,9 +9693,10 @@ def _serialize_booking_row(row: sqlite3.Row, request: Optional[Request] = None) 
         "manage_url": _booking_row_manage_url(row, request),
         "booking_code": row["booking_code"] or "",
         "completed_source": row["completed_source"] or "",
-        "service_id": row["service_id"] or "",
-        "service_price_cents": int(row["service_price_cents"] or 0),
-        "service_price_label": _format_price_cents(int(row["service_price_cents"] or 0)),
+        "service_id": service_meta["service_id"],
+        "service_duration_minutes": int(service_meta["service_duration_minutes"] or 0),
+        "service_price_cents": int(service_meta["service_price_cents"] or 0),
+        "service_price_label": service_meta["service_price_label"],
         "start_at": row["start_at"] or "",
         "end_at": row["end_at"] or "",
         "created_at": row["created_at"],
@@ -9808,6 +9813,38 @@ def _booking_row_duration_min(row: sqlite3.Row, cliente_id: str) -> int:
         except ValueError:
             pass
     return _service_duration_minutes(cliente_id, row["servicio"] or "")
+
+
+def _booking_catalog_service_row(row: sqlite3.Row, cliente_id: str) -> Optional[sqlite3.Row]:
+    service_id = ""
+    try:
+        service_id = row["service_id"] or ""
+    except (KeyError, IndexError):
+        service_id = ""
+    if service_id:
+        service_row = _get_service_row(cliente_id, service_id)
+        if service_row is not None:
+            return service_row
+    return _find_service_by_name(cliente_id, row["servicio"] or "")
+
+
+def _booking_display_service_meta(row: sqlite3.Row, cliente_id: str) -> Dict[str, Any]:
+    service_row = _booking_catalog_service_row(row, cliente_id)
+    if service_row is not None:
+        price_cents = int(service_row["price_cents"] or 0)
+        return {
+            "service_id": service_row["slug"] or "",
+            "service_duration_minutes": int(service_row["duration_minutes"] or 0),
+            "service_price_cents": price_cents,
+            "service_price_label": _format_price_cents(price_cents),
+        }
+    price_cents = int(row["service_price_cents"] or 0)
+    return {
+        "service_id": row["service_id"] or "",
+        "service_duration_minutes": _booking_row_duration_min(row, cliente_id),
+        "service_price_cents": price_cents,
+        "service_price_label": _format_price_cents(price_cents),
+    }
 
 
 def _booked_intervals(
@@ -10256,6 +10293,62 @@ def _store_booking(record: Dict[str, Any]) -> None:
 DEMO_EMPLOYEE_ID_PREFIX = "empdemo_"
 DEMO_BOOKING_SOURCE = "demo_seed"
 
+
+def _sync_demo_bookings_for_service(
+    cliente_id: str,
+    *,
+    old_slug: str,
+    old_name: str,
+    service_row: sqlite3.Row,
+) -> int:
+    duration = int(service_row["duration_minutes"] or 0)
+    if duration <= 0:
+        return 0
+    service_slug = service_row["slug"] or old_slug
+    service_name = service_row["name"] or old_name
+    service_price = int(service_row["price_cents"] or 0)
+    updated = 0
+    with _get_db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT * FROM bookings
+            WHERE cliente_id = ? AND source = ?
+              AND (service_id IN (?, ?) OR servicio IN (?, ?))
+            """,
+            (cliente_id, DEMO_BOOKING_SOURCE, old_slug, service_slug, old_name, service_name),
+        ).fetchall()
+        for booking in rows:
+            timezone_name = booking["timezone"] or _get_client_config(cliente_id)["booking"]["timezone"]
+            try:
+                tzinfo = ZoneInfo(timezone_name)
+            except Exception:  # noqa: BLE001
+                tzinfo = ZoneInfo(DEFAULT_TIMEZONE)
+                timezone_name = DEFAULT_TIMEZONE
+            start_local = datetime.fromisoformat(
+                f"{booking['booking_date']}T{booking['booking_time']}:00"
+            ).replace(tzinfo=tzinfo)
+            end_local = start_local + timedelta(minutes=duration)
+            connection.execute(
+                """
+                UPDATE bookings
+                SET servicio = ?, service_id = ?, service_price_cents = ?,
+                    timezone = ?, start_at = ?, end_at = ?
+                WHERE id = ?
+                """,
+                (
+                    service_name,
+                    service_slug,
+                    service_price,
+                    timezone_name,
+                    _to_utc_iso(start_local),
+                    _to_utc_iso(end_local),
+                    booking["id"],
+                ),
+            )
+            updated += 1
+        connection.commit()
+    return updated
+
 _DEMO_PROFESSIONALS = [
     {"name": "Laura Fernandez", "role_label": "Profesional", "color": "#00b1d9"},
     {"name": "Carlos Ruiz", "role_label": "Profesional", "color": "#7c5cff"},
@@ -10452,7 +10545,13 @@ def _seed_demo_agenda(cliente_id: str) -> Dict[str, Any]:
                     service_duration = int(service.get("duration_minutes") or 0)
                 except (TypeError, ValueError):
                     service_duration = 0
-                service_duration = service_duration if service_duration > 0 else slot_minutes
+                if service_duration <= 0:
+                    # Si el servicio no tiene duración definida, asignar una duración
+                    # realista y variada para que el demo no quede monótono.
+                    _DEMO_DURATION_POOL = [30, 45, 60, 45, 75, 30, 60, 90, 45, 60]
+                    service_duration = _DEMO_DURATION_POOL[
+                        hash(service_name) % len(_DEMO_DURATION_POOL)
+                    ]
                 try:
                     service_price = int(service.get("price_cents") or 0)
                 except (TypeError, ValueError):
@@ -10584,6 +10683,10 @@ def _booking_public_detail_from_row(
         provider_name=data["provider_name"],
         provider_booking_url=data["provider_booking_url"],
         manage_url=data["manage_url"],
+        service_id=data.get("service_id", ""),
+        service_duration_minutes=int(data.get("service_duration_minutes", 0) or 0),
+        service_price_cents=int(data.get("service_price_cents", 0) or 0),
+        service_price_label=data.get("service_price_label", ""),
         contact_email=data["contact_email"],
         contact_phone=data["contact_phone"],
         available_services=_services_for_employee(
@@ -10660,6 +10763,10 @@ def _portal_booking_summary_from_row(
         contact_phone=data["contact_phone"],
         booking_code=data.get("booking_code", ""),
         completed_source=data.get("completed_source", ""),
+        service_id=data.get("service_id", ""),
+        service_duration_minutes=int(data.get("service_duration_minutes", 0) or 0),
+        service_price_cents=int(data.get("service_price_cents", 0) or 0),
+        service_price_label=data.get("service_price_label", ""),
         start_at=data["start_at"],
         end_at=data["end_at"],
         can_cancel=can_edit,
@@ -12823,6 +12930,8 @@ def _period_start_iso_for_user(user_id: str) -> str:
 
 def _compute_dashboard_stats(cliente_id: str, period_start_iso: str) -> AppOverviewStats:
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    today_date = datetime.now(timezone.utc).date().isoformat()
+    upcoming_date = (datetime.now(timezone.utc).date() + timedelta(days=7)).isoformat()
     training_path = DATA_DIR / cliente_id / "info.txt"
     training_chars = 0
     if training_path.exists():
@@ -12853,6 +12962,16 @@ def _compute_dashboard_stats(cliente_id: str, period_start_iso: str) -> AppOverv
             "SELECT COUNT(*) FROM chat_sessions WHERE cliente_id = ?",
             (cliente_id,),
         ).fetchone()[0] or 0
+        bookings_today = connection.execute(
+            "SELECT COUNT(*) FROM bookings WHERE cliente_id = ? AND booking_date = ? "
+            "AND status IN ('confirmed', 'pending_review')",
+            (cliente_id, today_date),
+        ).fetchone()[0] or 0
+        bookings_upcoming = connection.execute(
+            "SELECT COUNT(*) FROM bookings WHERE cliente_id = ? AND booking_date > ? AND booking_date <= ? "
+            "AND status IN ('confirmed', 'pending_review')",
+            (cliente_id, today_date, upcoming_date),
+        ).fetchone()[0] or 0
     return AppOverviewStats(
         users_today=int(sessions_today),
         messages_today=int(messages_today),
@@ -12860,6 +12979,8 @@ def _compute_dashboard_stats(cliente_id: str, period_start_iso: str) -> AppOverv
         leads_generated=int(leads_generated),
         training_chars=int(training_chars),
         chat_sessions_total=int(chat_sessions_total),
+        bookings_today=int(bookings_today),
+        bookings_upcoming=int(bookings_upcoming),
         countries=[],
     )
 
@@ -12881,6 +13002,12 @@ async def app_overview(
         cancel_at_period_end=bool(sub_row["cancel_at_period_end"]),
         current_period_end=sub_row["current_period_end"] or "",
     )
+    channels = AppOverviewChannels(
+        web=True,
+        whatsapp=bool(cfg.get("whatsapp", {}).get("enabled", False)),
+        voice=bool(cfg.get("voice", {}).get("enabled", False)),
+        booking=bool(cfg.get("booking", {}).get("enabled", False)),
+    )
     return AppOverviewResponse(
         cliente_id=cliente_id,
         nombre=cfg.get("nombre", cliente_id),
@@ -12889,6 +13016,7 @@ async def app_overview(
         bienvenida=cfg.get("bienvenida", ""),
         subscription=subscription,
         stats=stats,
+        channels=channels,
     )
 
 
@@ -13937,6 +14065,60 @@ async def app_whatsapp_post(
         _update_runtime_configs(next_configs)
     _persist_configs_to_disk(next_configs)
     return _app_whatsapp_response(cliente_id, request)
+
+
+def _app_voice_response(cliente_id: str) -> "AppVoiceResponse":
+    cfg = CONFIG_CLIENTES.get(cliente_id, {})
+    voice_cfg = cfg.get("voice", {}) or {}
+    plan_ok = _client_voice_plan_enabled(cliente_id)
+    enabled = bool(voice_cfg.get("enabled", False)) and plan_ok
+    status = "active" if enabled else "disabled"
+    return AppVoiceResponse(
+        ok=True,
+        cliente_id=cliente_id,
+        enabled=enabled,
+        twilio_phone_number=str(voice_cfg.get("twilio_phone_number", "") or ""),
+        openai_voice=str(voice_cfg.get("openai_voice", "") or ""),
+        greeting=str(voice_cfg.get("greeting", "") or ""),
+        plan_allows_voice=plan_ok,
+        status=status,
+        status_label="Activo" if enabled else "Desactivado",
+    )
+
+
+@app.get("/auth/app/voice", response_model=AppVoiceResponse)
+async def app_voice_get(
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> AppVoiceResponse:
+    return _app_voice_response(_resolve_cliente_for_self_serve_user(user))
+
+
+@app.post("/auth/app/voice", response_model=AppVoiceResponse)
+async def app_voice_post(
+    data: AppVoicePayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> AppVoiceResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    with state_lock:
+        next_configs = copy.deepcopy(CONFIG_CLIENTES)
+        cfg = next_configs.get(cliente_id, {})
+        voice = dict(cfg.get("voice", {}) or {})
+        if data.enabled is not None:
+            if data.enabled and not _client_voice_plan_enabled(cliente_id):
+                raise HTTPException(status_code=403, detail="El asistente de voz está disponible en el plan Business.")
+            voice["enabled"] = bool(data.enabled)
+        if data.twilio_phone_number is not None:
+            voice["twilio_phone_number"] = _sanitize_text(data.twilio_phone_number)[:32]
+        if data.openai_voice is not None:
+            v = _sanitize_text(data.openai_voice).lower()
+            voice["openai_voice"] = v if v in VOICE_ALLOWED_OPENAI_VOICES else (voice.get("openai_voice") or "alloy")
+        if data.greeting is not None:
+            voice["greeting"] = _sanitize_text(data.greeting, allow_multiline=True)[:600]
+        cfg["voice"] = voice
+        next_configs[cliente_id] = cfg
+        _update_runtime_configs(next_configs)
+    _persist_configs_to_disk(next_configs)
+    return _app_voice_response(cliente_id)
 
 
 # --- Sem 4: Live Chat (Pro gate stub) --------------------------------------
@@ -15971,10 +16153,6 @@ async def admin_clientes() -> List[AdminClienteResumen]:
 
     for cliente_id, config in sorted(CONFIG_CLIENTES.items(), key=lambda item: item[0].lower()):
         owner_uid_early = (owners_by_cliente.get(cliente_id) or {}).get("owner_user_id") or ""
-        # Ocultar solo demos AUTO sin dueño. Un demo reclamado (con owner) ya es
-        # un cliente real y debe aparecer en la lista de admin.
-        if cliente_id.startswith(DEMO_TENANT_PREFIX) and not owner_uid_early:
-            continue
         booking_cfg = config.get("booking", {})
         whatsapp_cfg = config.get("whatsapp", {})
         voice_cfg = config.get("voice", {})
@@ -16182,6 +16360,108 @@ async def admin_borrar_demo_agenda(cliente_id: str) -> AuthSimpleResponse:
             f"{result['employees_removed']} profesionales demo."
         ),
     )
+
+
+class AdminServicePatchPayload(BaseModel):
+    duration_minutes: Optional[int] = Field(default=None, ge=1, le=600)
+    price_cents: Optional[int] = Field(default=None, ge=0)
+    is_active: Optional[bool] = None
+
+
+@app.patch(
+    "/admin/services/{cliente_id}/{slug}",
+    dependencies=[Depends(_require_admin_token)],
+)
+async def admin_patch_service(
+    cliente_id: str,
+    slug: str,
+    data: AdminServicePatchPayload,
+) -> Dict[str, Any]:
+    """Actualiza duración, precio o estado de un servicio del catálogo sin requerir sesión portal."""
+    _assert_valid_client_id(cliente_id)
+    updates: Dict[str, Any] = {}
+    if data.duration_minutes is not None:
+        updates["duration_minutes"] = int(data.duration_minutes)
+    if data.price_cents is not None:
+        updates["price_cents"] = int(data.price_cents)
+    if data.is_active is not None:
+        updates["is_active"] = 1 if data.is_active else 0
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nada que actualizar.")
+    updates["updated_at"] = _utc_now_iso()
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    with _get_db_connection() as conn:
+        row = conn.execute(
+            "SELECT slug FROM services WHERE cliente_id = ? AND slug = ?", (cliente_id, slug)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Servicio '{slug}' no encontrado para {cliente_id}.")
+        conn.execute(
+            f"UPDATE services SET {set_clause} WHERE cliente_id = ? AND slug = ?",
+            (*updates.values(), cliente_id, slug),
+        )
+        conn.commit()
+        updated = conn.execute(
+            "SELECT slug, name, duration_minutes, price_cents, is_active FROM services WHERE cliente_id = ? AND slug = ?",
+            (cliente_id, slug),
+        ).fetchone()
+    return {"ok": True, "slug": updated["slug"], "name": updated["name"],
+            "duration_minutes": updated["duration_minutes"], "price_cents": updated["price_cents"],
+            "is_active": bool(updated["is_active"])}
+
+
+class AdminVoicePayload(BaseModel):
+    enabled: Optional[bool] = None
+    twilio_phone_number: Optional[str] = Field(default=None, max_length=32)
+    openai_voice: Optional[str] = Field(default=None, max_length=40)
+    greeting: Optional[str] = Field(default=None, max_length=600)
+
+
+@app.post("/admin/clientes/{cliente_id}/voice", dependencies=[Depends(_require_admin_token)])
+async def admin_set_voice(cliente_id: str, data: AdminVoicePayload) -> Dict[str, Any]:
+    """Activa/configura el canal de voz de un cliente sin requerir sesión portal.
+
+    Persiste el cambio en config.json (duradero: el deploy preserva el config de
+    producción). Devuelve también diagnóstico del gate de plan y de las credenciales
+    Twilio del backend para depurar por qué una llamada podría no entrar.
+    """
+    _assert_valid_client_id(cliente_id)
+    if cliente_id not in CONFIG_CLIENTES:
+        raise HTTPException(status_code=404, detail=f"Cliente '{cliente_id}' no encontrado.")
+    with state_lock:
+        next_configs = copy.deepcopy(CONFIG_CLIENTES)
+        cfg = next_configs.get(cliente_id, {})
+        voice = dict(cfg.get("voice", {}) or {})
+        if data.enabled is not None:
+            if data.enabled and not _client_voice_plan_enabled(cliente_id):
+                raise HTTPException(
+                    status_code=403,
+                    detail="El asistente de voz requiere plan Business para este cliente.",
+                )
+            voice["enabled"] = bool(data.enabled)
+        if data.twilio_phone_number is not None:
+            voice["twilio_phone_number"] = _sanitize_text(data.twilio_phone_number)[:32]
+        if data.openai_voice is not None:
+            v = _sanitize_text(data.openai_voice).lower()
+            voice["openai_voice"] = v if v in VOICE_ALLOWED_OPENAI_VOICES else (voice.get("openai_voice") or "alloy")
+        if data.greeting is not None:
+            voice["greeting"] = _sanitize_text(data.greeting, allow_multiline=True)[:600]
+        cfg["voice"] = voice
+        next_configs[cliente_id] = cfg
+        _update_runtime_configs(next_configs)
+    _persist_configs_to_disk(next_configs)
+    resolved = _get_voice_config(cliente_id)
+    return {
+        "ok": True,
+        "cliente_id": cliente_id,
+        "voice_enabled": bool(voice.get("enabled")),
+        "twilio_phone_number": voice.get("twilio_phone_number", ""),
+        "plan_allows_voice": _client_voice_plan_enabled(cliente_id),
+        "twilio_backend_configured": _voice_twilio_configured(),
+        "openai_configured": bool(OPENAI_API_KEY),
+        "webhook_active": resolved is not None,
+        "webhook_url": f"{APP_BASE_URL.rstrip('/')}/voice/{cliente_id}" if APP_BASE_URL else f"/voice/{cliente_id}",
+    }
 
 
 class AdminClienteAssignOwnerPayload(BaseModel):
@@ -17088,6 +17368,14 @@ async def auth_update_service(
                 (*updates.values(), target_client_id, slug),
             )
             connection.commit()
+        updated_row = _get_service_row(target_client_id, slug)
+        if updated_row is not None:
+            _sync_demo_bookings_for_service(
+                target_client_id,
+                old_slug=slug,
+                old_name=row["name"] or "",
+                service_row=updated_row,
+            )
     return ServicePublic(**_service_row_to_public(_get_service_row(target_client_id, slug)))
 
 
@@ -18958,6 +19246,127 @@ async def reindexar(cliente_id: str) -> Dict[str, str]:
     _invalidate_client_runtime(cliente_id)
     cargar_indice(cliente_id)
     return {"status": "ok", "mensaje": f"Indice reindexado para {cliente_id}"}
+
+
+def _gen_qa_from_info_heuristic(info_txt: str, max_pairs: int = 5) -> List[Tuple[str, str]]:
+    """Genera pares Q&A plausibles a partir del texto libre del info.txt cuando no hay
+    sección P:/R: estructurada. Extrae servicios, precios, horarios y datos de contacto
+    para construir preguntas naturales sin necesitar OpenAI."""
+    pairs: List[Tuple[str, str]] = []
+
+    # 1. Servicios → "¿Qué servicios ofrece [negocio]?"
+    servicios: List[str] = []
+    for line in info_txt.splitlines():
+        stripped = line.strip().lstrip("–-•*1234567890. ")
+        if not stripped or len(stripped) < 4 or len(stripped) > 120:
+            continue
+        lower = stripped.lower()
+        if any(kw in lower for kw in ("servicio", "tratamiento", "terapia", "sesion", "masaje",
+                                       "rehabilitacion", "fisio", "consulta", "cirugia", "dieta",
+                                       "nutricion", "psicolog", "osteop", "acupuntura", "pilates")):
+            servicios.append(stripped.rstrip(":").strip())
+    if servicios:
+        svc_list = ", ".join(servicios[:6])
+        pairs.append((
+            "¿Qué servicios ofrecéis?",
+            f"Ofrecemos {svc_list}. Puedes consultarnos para más detalles sobre cada tratamiento.",
+        ))
+
+    # 2. Precio → "¿Cuánto cuesta una sesión?"
+    price_pattern = re.compile(
+        r"(?:precio|tarifa|coste|costo|desde)[^\n]*?(\d[\d\s.,]*\s*(?:EUR|€|euros?))",
+        re.IGNORECASE,
+    )
+    prices = price_pattern.findall(info_txt)
+    if prices:
+        pairs.append((
+            "¿Cuánto cuesta una sesión?",
+            f"El precio de las sesiones varía según el tratamiento. Algunas tarifas orientativas: {'; '.join(prices[:3])}. Consúltanos para un presupuesto personalizado.",
+        ))
+
+    # 3. Horario
+    horario_pattern = re.compile(
+        r"(?:horario|abierto|atenci[oó]n)[^\n]*?(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|lun|mar|mi[eé]|jue|vie|s[aá]b|dom)[^\n]+",
+        re.IGNORECASE,
+    )
+    horarios = horario_pattern.findall(info_txt, )
+    horario_lines = [m for m in re.findall(
+        r"(?:horario[s]?|abierto|atenci[oó]n)[^\n]*\n?[^\n]*\d{1,2}:\d{2}",
+        info_txt, re.IGNORECASE
+    )]
+    if horario_lines:
+        pairs.append((
+            "¿Cuál es vuestro horario de atención?",
+            f"{horario_lines[0].strip()} Puedes llamarnos o consultarnos para confirmar disponibilidad.",
+        ))
+
+    # 4. Cita previa
+    if any(kw in info_txt.lower() for kw in ("cita", "reserva", "agenda", "booking")):
+        pairs.append((
+            "¿Cómo puedo pedir una cita?",
+            "Puedes solicitar tu cita a través de este asistente, llamándonos o enviándonos un mensaje. Intentaremos atenderte lo antes posible.",
+        ))
+
+    # 5. Ubicación / contacto
+    tel_m = re.search(r"tel[eé]fono[s]?\s*[:\-]?\s*([\d\s()+]{7,20})", info_txt, re.IGNORECASE)
+    dir_m = re.search(r"direcci[oó]n[^\n]*\n?([^\n]{10,80})", info_txt, re.IGNORECASE)
+    if tel_m or dir_m:
+        parts = []
+        if dir_m:
+            parts.append(f"Estamos en {dir_m.group(1).strip()}")
+        if tel_m:
+            parts.append(f"puedes contactarnos en el {tel_m.group(1).strip()}")
+        pairs.append((
+            "¿Dónde estáis ubicados y cómo contactar con vosotros?",
+            ". ".join(parts) + ".",
+        ))
+
+    # filtrar pares que ya pasen el validador
+    pairs = [(q, a) for q, a in pairs if _looks_like_auto_qa_pair(q, a)]
+    return pairs[:max_pairs]
+
+
+@app.post("/admin/gen-qa/{cliente_id}", dependencies=[Depends(_require_admin_token)])
+async def admin_gen_qa(cliente_id: str, max_pairs: int = 5) -> Dict[str, Any]:
+    """Genera y persiste hasta `max_pairs` preguntas frecuentes para el cliente.
+
+    Flujo:
+    1. Parsea la sección P:/R: del info.txt existente.
+    2. Si no hay pares, intenta extracción heurística del info.txt (sin OpenAI).
+    3. Solo inserta pares nuevos (deduplica por pregunta en minúsculas).
+    """
+    _assert_valid_client_id(cliente_id)
+    info_txt = _read_info_txt(cliente_id)
+    source = "none"
+    created = 0
+
+    # Paso 1: sección P:/R: estructurada
+    created = _autocreate_qa_from_info(cliente_id, info_txt, "", max_pairs=max_pairs)
+    if created:
+        source = "info_pr_format"
+    else:
+        # Paso 2: heurística libre
+        heuristic_pairs = _gen_qa_from_info_heuristic(info_txt, max_pairs=max_pairs)
+        if heuristic_pairs:
+            created = _autocreate_qa_from_info(
+                cliente_id, "", "", explicit_pairs=heuristic_pairs, max_pairs=max_pairs
+            )
+            if created:
+                source = "info_heuristic"
+
+    with _get_db_connection() as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM kb_qa WHERE cliente_id=?", (cliente_id,)
+        ).fetchone()[0]
+
+    return {
+        "ok": True,
+        "cliente_id": cliente_id,
+        "created": created,
+        "source": source,
+        "total_qa": total,
+        "mensaje": f"Se han generado {created} nuevas preguntas frecuentes (fuente: {source}). Total en panel: {total}.",
+    }
 
 
 class AdminRebrainPayload(BaseModel):
@@ -26693,7 +27102,8 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
         "- No leas en voz alta URLs, simbolos, markdown, asteriscos ni emojis.\n"
         "- NUNCA digas que eres una IA, un asistente virtual, un modelo o un sistema; ni menciones herramientas internas, "
         "ni codigos, ni etiquetas entre corchetes como [MOSTRAR_FORMULARIO].\n"
-        "- Si el llamante te interrumpe, callate y escucha.\n"
+        "- No te cortes por ruidos, respiraciones o monosilabos accidentales. Si el llamante te interrumpe claramente, "
+        "termina la palabra o frase corta en curso y escucha.\n"
         "- Si no entiendes algo, pide con amabilidad que lo repita.\n"
         "- Empieza saludando breve y preguntando en que puedes ayudar.\n"
     )
@@ -27409,9 +27819,11 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                                 "format": {"type": "audio/pcmu"},
                                 "turn_detection": {
                                     "type": "server_vad",
-                                    "threshold": 0.5,
+                                    "threshold": 0.65,
                                     "prefix_padding_ms": 300,
-                                    "silence_duration_ms": 600,
+                                    "silence_duration_ms": 800,
+                                    "create_response": True,
+                                    "interrupt_response": False,
                                 },
                                 "transcription": {"model": "whisper-1"},
                             },
@@ -27483,16 +27895,23 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                 await _voice_safe_close(openai_ws)
 
         async def openai_to_twilio() -> None:
+            async def _stream_sid_ready(timeout_seconds: float = 3.0) -> str:
+                deadline = time.time() + timeout_seconds
+                while not state["stream_sid"] and time.time() < deadline:
+                    await asyncio.sleep(0.02)
+                return state["stream_sid"]
+
             async for raw in openai_ws:
                 event = json.loads(raw)
                 etype = event.get("type")
                 if etype == "response.output_audio.delta" and event.get("delta"):
-                    if state["stream_sid"]:
+                    stream_sid = state["stream_sid"] or await _stream_sid_ready()
+                    if stream_sid:
                         await websocket.send_text(
                             json.dumps(
                                 {
                                     "event": "media",
-                                    "streamSid": state["stream_sid"],
+                                    "streamSid": stream_sid,
                                     "media": {"payload": event["delta"]},
                                 }
                             )
@@ -27528,10 +27947,10 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                     )
                     await openai_ws.send(json.dumps({"type": "response.create"}))
                 elif etype == "input_audio_buffer.speech_started":
-                    if state["stream_sid"]:
-                        await websocket.send_text(
-                            json.dumps({"event": "clear", "streamSid": state["stream_sid"]})
-                        )
+                    # With interrupt_response disabled, speech_started is only a turn-state
+                    # signal. Clearing Twilio playback here can chop off the assistant's
+                    # current phrase on background noise or echo from the phone line.
+                    pass
                 elif etype == "error":
                     logger.warning("[voice] OpenAI error %s: %s", cliente_id, event.get("error"))
 

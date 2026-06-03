@@ -219,9 +219,9 @@
   },
   "demo_auto_the_nook_940b21": {
     "nombre": "The Nook Madrid",
-    "plan": "free",
+    "plan": "business",
     "subscription": {
-      "plan": "free"
+      "plan": "business"
     },
     "icono": "TN",
     "color": "#0EA5E9",
@@ -250,6 +250,15 @@
       "phone_number_id": "",
       "access_token_env": "",
       "verify_token_env": ""
+    },
+    "voice": {
+      "enabled": true,
+      "twilio_phone_number": "+18038849920",
+      "openai_voice": "marin",
+      "realtime_model": "",
+      "greeting": "Hola, soy el asistente virtual de The Nook Madrid. En que puedo ayudarte?",
+      "max_duration_seconds": 300,
+      "sms_confirmation": true
     },
     "booking": {
       "enabled": false,

@@ -2383,6 +2383,7 @@ tbody tr:last-child td { border-bottom: none; }
           <button id="saveAiBtn" type="button">Guardar IA</button>
           <button id="rebrainAiBtn" class="secondary" type="button" title="Vuelve a raspar la web del cliente y regenera info.txt">Actualizar cerebro</button>
           <button id="reindexAiBtn" class="secondary" type="button">Reindexar</button>
+          <button id="genQaAiBtn" class="secondary" type="button" title="Genera hasta 5 preguntas frecuentes desde el info.txt del cliente">Generar FAQs</button>
           <button id="openAiDemoBtn" class="ghost" type="button">Abrir demo</button>
         </div>
       </section>
@@ -3902,6 +3903,7 @@ tbody tr:last-child td { border-bottom: none; }
       saveAiBtn: document.getElementById("saveAiBtn"),
       rebrainAiBtn: document.getElementById("rebrainAiBtn"),
       reindexAiBtn: document.getElementById("reindexAiBtn"),
+      genQaAiBtn: document.getElementById("genQaAiBtn"),
       openAiDemoBtn: document.getElementById("openAiDemoBtn"),
       accentColor: document.getElementById("accentColor"),
       aiLogoUrl: document.getElementById("aiLogoUrl"),
@@ -4664,8 +4666,8 @@ tbody tr:last-child td { border-bottom: none; }
     }
 
     function clientStatusValue(client) {
-      if (!client?.owner_user_id) return "sin_owner";
       if (client?.is_demo) return "demo";
+      if (!client?.owner_user_id) return "sin_owner";
       const raw = String(client?.subscription_status || "").toLowerCase();
       if (raw === "trialing" || raw === "trial") return "trial";
       if (["canceled", "cancelled", "past_due", "unpaid", "incomplete_expired"].includes(raw)) return "canceled";
@@ -4782,6 +4784,7 @@ tbody tr:last-child td { border-bottom: none; }
         const quota = Number(client.messages_quota || 0);
         const pct = usagePercent(client);
         const messagesLabel = quota ? `${used.toLocaleString()} / ${quota.toLocaleString()}` : `${used.toLocaleString()} / -`;
+        const isDemo = !!client.is_demo;
         const lastLogin = client.owner_last_login_at ? new Date(client.owner_last_login_at).toLocaleDateString() : "Nunca";
         const ownerEmail = client.owner_email || "Sin owner";
         row.innerHTML = `
@@ -4789,7 +4792,7 @@ tbody tr:last-child td { border-bottom: none; }
             <div class="client-main-cell">
               <span class="client-avatar" style="background:${escapeHtml(clientAvatarColor(client))};">${escapeHtml(clientAvatarText(client))}</span>
               <span class="client-cell-text">
-                <strong>${escapeHtml(client.nombre || "-")}</strong>
+                <strong>${escapeHtml(client.nombre || "-")}${isDemo ? ' <span style="font-size:0.68rem;font-weight:600;background:rgba(99,179,237,0.18);color:#63b3ed;border-radius:4px;padding:1px 6px;vertical-align:middle;letter-spacing:.04em;">DEMO</span>' : ''}</strong>
                 <span>${escapeHtml(client.cliente_id || "-")}</span>
               </span>
             </div>
@@ -4961,6 +4964,13 @@ tbody tr:last-child td { border-bottom: none; }
       await api(`/admin/reindex/${encodeURIComponent(clienteId)}`, { method: "POST" });
       await loadStats();
       showStatus("Indice reindexado correctamente.", "success");
+    }
+
+    async function runGenQa(clienteId = state.currentClientId) {
+      if (!clienteId) throw new Error("No hay cliente seleccionado.");
+      showStatus("Generando preguntas frecuentes...", "info");
+      const result = await api(`/admin/gen-qa/${encodeURIComponent(clienteId)}`, { method: "POST" });
+      showStatus(result.mensaje || `Generadas ${result.created} FAQs (total: ${result.total_qa}).`, result.created > 0 ? "success" : "info");
     }
 
     async function runGenerateDemoAgenda(clienteId = state.drawerClientId || state.currentClientId) {
@@ -5861,6 +5871,14 @@ tbody tr:last-child td { border-bottom: none; }
       try {
         setView("ai");
         await withButtonLoading(elements.rebrainAiBtn, "Raspando web...", () => rebrainCurrentClient());
+      } catch (error) {
+        showStatus(error.message, "error");
+      }
+    });
+
+    elements.genQaAiBtn.addEventListener("click", async () => {
+      try {
+        await withButtonLoading(elements.genQaAiBtn, "Generando FAQs...", () => runGenQa(state.currentClientId));
       } catch (error) {
         showStatus(error.message, "error");
       }

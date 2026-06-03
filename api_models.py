@@ -124,6 +124,10 @@ class BookingDetailPublic(BaseModel):
     provider_name: str
     provider_booking_url: str = ""
     manage_url: str = ""
+    service_id: str = ""
+    service_duration_minutes: int = 0
+    service_price_cents: int = 0
+    service_price_label: str = ""
     contact_email: str = ""
     contact_phone: str = ""
     available_services: List[Dict[str, Any]] = Field(default_factory=list)
@@ -372,7 +376,16 @@ class AppOverviewStats(BaseModel):
     leads_generated: int = 0
     training_chars: int = 0
     chat_sessions_total: int = 0
+    bookings_today: int = 0
+    bookings_upcoming: int = 0
     countries: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class AppOverviewChannels(BaseModel):
+    web: bool = True
+    whatsapp: bool = False
+    voice: bool = False
+    booking: bool = False
 
 
 class AppOverviewResponse(BaseModel):
@@ -383,6 +396,7 @@ class AppOverviewResponse(BaseModel):
     bienvenida: str = ""
     subscription: AppOverviewSubscription
     stats: AppOverviewStats
+    channels: AppOverviewChannels = Field(default_factory=AppOverviewChannels)
 
 
 class AppDeployResponse(BaseModel):
@@ -566,6 +580,25 @@ class AppWhatsAppResponse(BaseModel):
     plan_allows_whatsapp: bool = False
     access_token_configured: bool = False
     verify_token_configured: bool = False
+    status: str = "disabled"
+    status_label: str = "Desactivado"
+
+
+class AppVoicePayload(BaseModel):
+    enabled: Optional[bool] = None
+    twilio_phone_number: Optional[str] = Field(default=None, max_length=32)
+    openai_voice: Optional[str] = Field(default=None, max_length=40)
+    greeting: Optional[str] = Field(default=None, max_length=600)
+
+
+class AppVoiceResponse(BaseModel):
+    ok: bool = True
+    cliente_id: str
+    enabled: bool = False
+    twilio_phone_number: str = ""
+    openai_voice: str = ""
+    greeting: str = ""
+    plan_allows_voice: bool = False
     status: str = "disabled"
     status_label: str = "Desactivado"
 
@@ -915,6 +948,10 @@ class PortalBookingSummary(BaseModel):
     contact_phone: str = ""
     booking_code: str = ""
     completed_source: str = ""
+    service_id: str = ""
+    service_duration_minutes: int = 0
+    service_price_cents: int = 0
+    service_price_label: str = ""
     start_at: str = ""
     end_at: str = ""
     can_cancel: bool = True

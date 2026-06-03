@@ -799,6 +799,37 @@ def test_services_catalog_duration_and_overlap(client: TestClient, api_module):
               "employee_id": "", "fecha": fecha, "hora": "09:30", "notas": ""},
     )
     assert r2.status_code == 409
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("UPDATE bookings SET source = ? WHERE id = ?", (api_module.DEMO_BOOKING_SOURCE, booking_id))
+        conn.commit()
+
+    updated = client.patch(
+        f"/auth/services/{slug}",
+        params={"cliente_id": "demo"},
+        cookies=cookies,
+        json={"duration_minutes": 15, "price_cents": 3000},
+    )
+    assert updated.status_code == 200, updated.text
+    listed_bookings = client.get(
+        "/auth/bookings",
+        params={"cliente_id": "demo", "date_from": fecha, "date_to": fecha},
+        cookies=cookies,
+    )
+    assert listed_bookings.status_code == 200, listed_bookings.text
+    booking_summary = next(
+        item for item in listed_bookings.json()["items"] if item["booking_id"] == booking_id
+    )
+    assert booking_summary["service_duration_minutes"] == 15
+    assert booking_summary["service_price_cents"] == 3000
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        synced = conn.execute(
+            "SELECT start_at, end_at, service_price_cents FROM bookings WHERE id = ?",
+            (booking_id,),
+        ).fetchone()
+    ds = datetime.fromisoformat(synced[0].replace("Z", "+00:00"))
+    de = datetime.fromisoformat(synced[1].replace("Z", "+00:00"))
+    assert int((de - ds).total_seconds() // 60) == 15
+    assert synced[2] == 3000
 
     with sqlite3.connect(api_module.DB_PATH) as conn:
         conn.execute("DELETE FROM bookings WHERE id = ?", (booking_id,))

@@ -283,9 +283,12 @@ Write-Step "Actualizando el VPS y reconstruyendo Docker"
 $remoteScriptUnix = $remoteScript -replace "`r`n", "`n"
 $remoteScriptB64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($remoteScriptUnix))
 $remoteCommand = "echo $remoteScriptB64 | base64 -d | bash -s -- '$RemoteBase' '$RemoteProject' '$ArchiveName'"
+$ErrorActionPreference = "Continue"
 & ssh.exe @sshArgsBase $ServerHost $remoteCommand
-if ($LASTEXITCODE -ne 0) {
-    throw "La actualizacion remota ha fallado."
+$sshExit = $LASTEXITCODE
+$ErrorActionPreference = "Stop"
+if ($sshExit -ne 0) {
+    throw "La actualizacion remota ha fallado (exit $sshExit)."
 }
 
 Write-Step "Despliegue completado"
