@@ -831,12 +831,21 @@ class PortalBrainPublic(BaseModel):
     reindex_error: str = ""
 
 
+class PortalScheduleBreakWindow(BaseModel):
+    start: str = Field(min_length=5, max_length=5)
+    end: str = Field(min_length=5, max_length=5)
+    reason: str = Field(default="Descanso", max_length=80)
+
+
 class PortalScheduleUpdatePayload(BaseModel):
     enabled: bool = True
     timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
     slot_minutes: int = Field(default=30, ge=5, le=240)
     day_start: str = Field(default="09:00", min_length=5, max_length=5)
     day_end: str = Field(default="18:00", min_length=5, max_length=5)
+    break_start: str = Field(default="", max_length=5)
+    break_end: str = Field(default="", max_length=5)
+    break_windows: List[PortalScheduleBreakWindow] = Field(default_factory=list)
     closed_weekdays: List[int] = Field(default_factory=list)
     message_templates: Optional[Dict[str, str]] = None
     message_template_enabled: Optional[Dict[str, bool]] = None
@@ -867,6 +876,9 @@ class PortalSchedulePublic(BaseModel):
     slot_minutes: int
     day_start: str
     day_end: str
+    break_start: str = ""
+    break_end: str = ""
+    break_windows: List[PortalScheduleBreakWindow] = Field(default_factory=list)
     closed_weekdays: List[int]
     message_templates: Dict[str, str]
     message_template_enabled: Dict[str, bool]
@@ -927,6 +939,9 @@ class PortalEmployeePayload(BaseModel):
     slot_minutes: int = Field(default=30, ge=5, le=240)
     day_start: str = Field(default="09:00", min_length=5, max_length=5)
     day_end: str = Field(default="18:00", min_length=5, max_length=5)
+    break_start: str = Field(default="", max_length=5)
+    break_end: str = Field(default="", max_length=5)
+    break_windows: List[PortalScheduleBreakWindow] = Field(default_factory=list)
     closed_weekdays: List[int] = Field(default_factory=list)
     service_ids: List[str] = Field(default_factory=list)
 
@@ -943,6 +958,9 @@ class PortalEmployeePublic(BaseModel):
     slot_minutes: int = 30
     day_start: str = "09:00"
     day_end: str = "18:00"
+    break_start: str = ""
+    break_end: str = ""
+    break_windows: List[PortalScheduleBreakWindow] = Field(default_factory=list)
     closed_weekdays: List[int] = Field(default_factory=list)
     service_ids: List[str] = Field(default_factory=list)
     allows_all_services: bool = True

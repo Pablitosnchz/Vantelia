@@ -1518,6 +1518,16 @@
         <div class="field"><label class="field-label">Zona horaria</label><input type="text" class="field-input" id="horTz" placeholder="Europe/Madrid" /></div>
       </div>
       <div style="margin-top:14px;">
+        <label class="field-label">Descansos diarios</label>
+        <div id="horBreaksList" style="display:flex; flex-direction:column; gap:8px; margin-top:8px;"></div>
+        <div class="form-row" style="margin-top:10px;">
+          <div class="field"><label class="field-label">Inicio descanso</label><input type="time" class="field-input" id="horBreakNewStart" /></div>
+          <div class="field"><label class="field-label">Fin descanso</label><input type="time" class="field-input" id="horBreakNewEnd" /></div>
+          <div class="field"><label class="field-label">Motivo</label><input type="text" class="field-input" id="horBreakNewReason" maxlength="80" placeholder="Comida" /></div>
+        </div>
+        <button class="btn btn-ghost" id="horBreakAddBtn" type="button" style="margin-top:8px;">+ Añadir descanso</button>
+      </div>
+      <div style="margin-top:14px;">
         <label class="field-label">Días cerrados</label>
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:8px;" id="horDays">
           <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="0" style="display:none;" /> Lun</label>
@@ -1532,6 +1542,7 @@
       <div style="margin-top:18px;">
         <button class="btn btn-primary" id="horSaveBtn">Guardar horario</button>
       </div>
+      <div id="horConflictBox" style="display:none; margin-top:14px;"></div>
     </div>
 
     <div class="panel-card" style="margin-top:18px;">
@@ -1718,6 +1729,21 @@
   </div>
 </div>
 
+<div class="drawer-overlay" id="horConflictOverlay"></div>
+<div class="booking-drawer" id="horConflictDrawer">
+  <div class="side-panel-head">
+    <b>Citas dentro del descanso</b>
+    <button id="horConflictClose">×</button>
+  </div>
+  <div style="padding:18px; overflow-y:auto; flex:1; display:flex; flex-direction:column;">
+    <p class="panel-sub" id="horConflictMsg" style="margin:0;"></p>
+    <div id="horConflictList" style="display:flex; flex-direction:column; gap:10px; margin:14px 0;"></div>
+    <div style="margin-top:auto; padding-top:12px;">
+      <button class="btn btn-primary" id="horConflictRetry" style="width:100%;">He gestionado las citas · Guardar de nuevo</button>
+    </div>
+  </div>
+</div>
+
 <div class="drawer-overlay" id="newBookingOverlay"></div>
 <div class="booking-drawer" id="newBookingDrawer">
   <div class="side-panel-head">
@@ -1814,7 +1840,12 @@ async function api(path, opts) {
   });
   let data = null;
   try { data = await resp.json(); } catch {}
-  if (!resp.ok) throw new Error(formatDetail(data?.detail));
+  if (!resp.ok) {
+    const err = new Error(formatDetail(data?.detail));
+    err.status = resp.status;
+    err.detail = data?.detail;
+    throw err;
+  }
   return data;
 }
 
@@ -3134,7 +3165,12 @@ function _switchToCalView() {
   citasState.view = 'cal';
 }
 
-async function openReschedDrawer(b) {
+let reschedCurrentBooking = null;
+let reschedOnDone = null;
+
+async function openReschedDrawer(b, onDone) {
+  reschedCurrentBooking = b || null;
+  reschedOnDone = (typeof onDone === 'function') ? onDone : null;
   const bid = b.booking_id || b.id || '';
   document.getElementById('reschedBookingId').value = bid;
   document.getElementById('reschedSlotSelected').value = '';
@@ -3153,7 +3189,10 @@ async function loadReschedSlots() {
   if (!date) { slotsDiv.innerHTML = '<div class="panel-sub">Selecciona una fecha.</div>'; return; }
   slotsDiv.innerHTML = '<div class="panel-sub">Cargando huecos…</div>';
   try {
-    const data = await api(`/disponibilidad?cliente_id=${state.cliente_id}&fecha=${date}`);
+    let params = `cliente_id=${encodeURIComponent(state.cliente_id)}&fecha=${encodeURIComponent(date)}`;
+    if (reschedCurrentBooking?.employee_id) params += `&employee_id=${encodeURIComponent(reschedCurrentBooking.employee_id)}`;
+    if (reschedCurrentBooking?.servicio) params += `&servicio=${encodeURIComponent(reschedCurrentBooking.servicio)}`;
+    const data = await api(`/disponibilidad?${params}`);
     const allSlots = data.slots || data || [];
     const slots = allSlots.filter(s => s.disponible !== false);
     slotsDiv.innerHTML = '';
@@ -3183,10 +3222,11 @@ document.getElementById('reschedConfirmBtn').addEventListener('click', async () 
     document.getElementById('reschedDrawer').classList.remove('open');
     document.getElementById('reschedOverlay').classList.remove('open');
     loadCitas();
+    const cb = reschedOnDone; reschedOnDone = null; if (cb) cb();
   } catch(e) { toast(e.message, 'error'); }
 });
-document.getElementById('reschedClose').addEventListener('click', () => { document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
-document.getElementById('reschedOverlay').addEventListener('click', () => { document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
+document.getElementById('reschedClose').addEventListener('click', () => { reschedOnDone = null; document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
+document.getElementById('reschedOverlay').addEventListener('click', () => { reschedOnDone = null; document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
 
 // ── Nueva cita (alta manual desde el portal) ──────────────────────────
 async function openNewBookingDrawer(opts = {}) {
@@ -3501,6 +3541,18 @@ function cdDur(b, emp){
   return Number(emp?.slot_minutes) || Number(citasState.daySchedule?.slot_minutes) || 30;
 }
 function cdColKey(b, defEmp){ return b.employee_id || (defEmp ? defEmp.id : CD_GENERAL_KEY); }
+function normalizeDailyBreaks(data){
+  const raw = Array.isArray(data?.break_windows) ? data.break_windows : [];
+  const items = raw.map(item => ({
+    start: item.start || item.hora_inicio || item.break_start || '',
+    end: item.end || item.hora_fin || item.break_end || '',
+    reason: item.reason || item.motivo || 'Descanso',
+  })).filter(item => item.start && item.end);
+  if (!items.length && data?.break_start && data?.break_end) {
+    items.push({ start:data.break_start, end:data.break_end, reason:'Descanso' });
+  }
+  return items.sort((a,b) => String(a.start).localeCompare(String(b.start)) || String(a.end).localeCompare(String(b.end)));
+}
 function cdColDayInfo(emp, dateKey){
   const date = new Date(`${dateKey}T00:00:00`);
   const wd = isNaN(date) ? -1 : (date.getDay()+6)%7;
@@ -3509,6 +3561,9 @@ function cdColDayInfo(emp, dateKey){
   const matchDate = (bl) => ((bl.fecha || bl.start_date || '') || '').slice(0,10) === dateKey;
   (citasState.daySchedule?.blocks || []).forEach(bl => { if (matchDate(bl)) blocks.push(bl); });
   if (emp) (emp.blocks || []).forEach(bl => { if (matchDate(bl)) blocks.push(bl); });
+  normalizeDailyBreaks(emp || citasState.daySchedule || {}).forEach(br => {
+    blocks.push({ fecha: dateKey, hora_inicio: br.start, hora_fin: br.end, motivo: br.reason || 'Descanso' });
+  });
   return {
     isClosed: wd >= 0 && closed.includes(wd),
     dayStart: cdParseMin(emp?.day_start || citasState.daySchedule?.day_start || '09:00') ?? 540,
@@ -3932,12 +3987,12 @@ document.getElementById('equipoSaveBtn').addEventListener('click', async () => {
   const name = document.getElementById('equipoNombre').value.trim();
   if (!name) { toast('El nombre es obligatorio.', 'error'); return; }
   const payload = isDefault
-    ? { name, role: document.getElementById('equipoRol').value.trim(), color: document.getElementById('equipoColor').value, active: true }
+    ? { name, role_label: document.getElementById('equipoRol').value.trim(), color: document.getElementById('equipoColor').value, is_active: true }
     : {
         name,
-        role: document.getElementById('equipoRol').value.trim(),
+        role_label: document.getElementById('equipoRol').value.trim(),
         color: document.getElementById('equipoColor').value,
-        active: document.getElementById('equipoActivo').checked,
+        is_active: document.getElementById('equipoActivo').checked,
         service_ids: [...document.querySelectorAll('#equipoServicesCheck input:checked')].map(c => c.value),
       };
   try {
@@ -3970,6 +4025,39 @@ function loadHorariosProfSelect(emps) {
   items.forEach(e => { const o = document.createElement('option'); o.value = e.id; o.textContent = e.name; sel.appendChild(o); });
 }
 
+let horarioBreakWindows = [];
+
+function renderHorarioBreaks(){
+  const list = document.getElementById('horBreaksList');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!horarioBreakWindows.length) {
+    list.innerHTML = '<div class="panel-sub">Sin descansos diarios.</div>';
+    return;
+  }
+  horarioBreakWindows.forEach((br, idx) => {
+    const row = document.createElement('div');
+    row.className = 'chat-row';
+    row.style.cssText = 'padding:10px 14px; display:flex; align-items:center; gap:10px;';
+    const label = br.reason || 'Descanso';
+    row.innerHTML = `<div style="flex:1;"><b>${escapeHtml(br.start)} – ${escapeHtml(br.end)}</b> <span class="panel-sub" style="margin:0;">${escapeHtml(label)}</span></div><button class="btn btn-ghost" data-break-idx="${idx}" style="padding:4px 10px; font-size:0.78rem;">Eliminar</button>`;
+    row.querySelector('[data-break-idx]').addEventListener('click', () => {
+      horarioBreakWindows.splice(idx, 1);
+      renderHorarioBreaks();
+    });
+    list.appendChild(row);
+  });
+}
+
+function setHorarioBreaks(data){
+  horarioBreakWindows = normalizeDailyBreaks(data || {}).map(item => ({
+    start: item.start,
+    end: item.end,
+    reason: item.reason || 'Descanso',
+  }));
+  renderHorarioBreaks();
+}
+
 async function loadHorarios(selectedProfId) {
   const profId = selectedProfId ?? (document.getElementById('horProf')?.value || '');
   try {
@@ -3988,6 +4076,7 @@ function fillHorarioForm(data) {
   document.getElementById('horEnd').value = data.day_end || data.end_time || '18:00';
   document.getElementById('horSlot').value = data.slot_minutes || data.slot_duration || 30;
   document.getElementById('horTz').value = data.timezone || 'Europe/Madrid';
+  setHorarioBreaks(data);
   const closedRaw = data.closed_weekdays || data.closed_days || [];
   const closed = closedRaw.map(n => parseInt(n));
   document.querySelectorAll('#horDays input[type=checkbox]').forEach(cb => {
@@ -4033,7 +4122,81 @@ document.querySelectorAll('#horDays label').forEach(lbl => {
   lbl.addEventListener('click', () => setTimeout(() => lbl.classList.toggle('active', lbl.querySelector('input').checked), 0));
 });
 
-document.getElementById('horSaveBtn').addEventListener('click', async () => {
+document.getElementById('horBreakAddBtn').addEventListener('click', () => {
+  const start = document.getElementById('horBreakNewStart').value;
+  const end = document.getElementById('horBreakNewEnd').value;
+  const reason = document.getElementById('horBreakNewReason').value.trim() || 'Descanso';
+  if (!start || !end) { toast('Indica inicio y fin del descanso.', 'error'); return; }
+  if (start >= end) { toast('El fin del descanso debe ser posterior al inicio.', 'error'); return; }
+  horarioBreakWindows.push({ start, end, reason });
+  horarioBreakWindows.sort((a,b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+  ['horBreakNewStart','horBreakNewEnd','horBreakNewReason'].forEach(id => document.getElementById(id).value = '');
+  renderHorarioBreaks();
+});
+
+function closeHorarioConflictModal(){
+  document.getElementById('horConflictDrawer')?.classList.remove('open');
+  document.getElementById('horConflictOverlay')?.classList.remove('open');
+}
+// El flujo de guardado antiguo llamaba a esta funcion; la mantenemos como alias.
+function clearHorarioConflictNotice(){ closeHorarioConflictModal(); }
+
+async function cancelConflictBooking(booking){
+  const bid = booking.booking_id || booking.id;
+  if (!bid) return;
+  if (!window.confirm(`¿Cancelar la cita de ${booking.nombre || 'el cliente'} (${booking.fecha || ''} ${booking.hora || ''})?`)) return;
+  try {
+    await api(`/auth/bookings/${encodeURIComponent(bid)}/cancel`, { method:'POST' });
+    toast('Cita cancelada', 'success');
+    loadCitas();
+    saveHorario();   // re-valida: si ya no quedan conflictos, guarda y cierra la ventana
+  } catch(e){ toast(e.message, 'error'); }
+}
+
+function openHorarioConflictModal(detail){
+  if (!detail || detail.type !== 'schedule_booking_conflicts') return false;
+  const conflicts = Array.isArray(detail.conflicts) ? detail.conflicts : [];
+  const overlay = document.getElementById('horConflictOverlay');
+  const drawer = document.getElementById('horConflictDrawer');
+  const list = document.getElementById('horConflictList');
+  const msg = document.getElementById('horConflictMsg');
+  if (!overlay || !drawer || !list) return false;
+  if (msg) msg.textContent = detail.message || 'Estas citas caen dentro del descanso. Reprográmalas o cancélalas y vuelve a guardar.';
+  list.innerHTML = conflicts.length ? conflicts.map((b, idx) => `
+    <div class="chat-row" style="padding:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; border:1px solid rgba(245,158,11,0.35); border-radius:8px;">
+      <div style="flex:1; min-width:180px;">
+        <b>${escapeHtml(b.fecha || '')} ${escapeHtml(b.hora || '')} · ${escapeHtml(b.nombre || 'Cita')}</b>
+        <span class="panel-sub" style="margin:0; display:block;">${escapeHtml(b.servicio || 'Consulta')}${b.employee_name ? ' · ' + escapeHtml(b.employee_name) : ''}</span>
+      </div>
+      <button class="btn btn-ghost" type="button" data-cf-action="day" data-cf-idx="${idx}" style="padding:5px 10px;">Ver día</button>
+      <button class="btn btn-ghost" type="button" data-cf-action="cancel" data-cf-idx="${idx}" style="padding:5px 10px; color:#fca5a5;">Cancelar</button>
+      <button class="btn btn-primary" type="button" data-cf-action="resched" data-cf-idx="${idx}" style="padding:5px 10px;" ${b.can_reschedule === false ? 'disabled' : ''}>Reprogramar</button>
+    </div>
+  `).join('') : '<div class="panel-sub">No se pudieron cargar las citas afectadas.</div>';
+  list.querySelectorAll('[data-cf-action]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const booking = conflicts[Number(btn.dataset.cfIdx)];
+      if (!booking) return;
+      const action = btn.dataset.cfAction;
+      if (action === 'resched') { openReschedDrawer(booking, () => saveHorario()); return; }
+      if (action === 'cancel')  { cancelConflictBooking(booking); return; }
+      closeHorarioConflictModal();
+      setTab('citas');
+      _switchToDayView();
+      if (booking.fecha) citasState.dayDate = new Date(`${booking.fecha}T00:00:00`);
+      const filter = document.getElementById('citasFiltProf');
+      if (filter) filter.value = '';
+      await loadCitasDay();
+      const found = (citasState.dayItems || []).find(item => (item.booking_id || item.id) === booking.booking_id);
+      if (found) cdSelect(found);
+    });
+  });
+  overlay.classList.add('open');
+  drawer.classList.add('open');
+  return true;
+}
+
+async function saveHorario(){
   const closed = [...document.querySelectorAll('#horDays input:checked')].map(cb => parseInt(cb.value));
   const profId = document.getElementById('horProf').value;
   const enabledNow = (typeof state !== 'undefined' && state && state.bookingEnabled === false) ? false : true;
@@ -4041,6 +4204,9 @@ document.getElementById('horSaveBtn').addEventListener('click', async () => {
     enabled: enabledNow,
     day_start: document.getElementById('horStart').value,
     day_end: document.getElementById('horEnd').value,
+    break_start: horarioBreakWindows[0]?.start || '',
+    break_end: horarioBreakWindows[0]?.end || '',
+    break_windows: horarioBreakWindows,
     slot_minutes: parseInt(document.getElementById('horSlot').value) || 30,
     timezone: document.getElementById('horTz').value.trim() || 'Europe/Madrid',
     closed_weekdays: closed,
@@ -4048,12 +4214,20 @@ document.getElementById('horSaveBtn').addEventListener('click', async () => {
   const url = profId ? `/auth/schedule/employee/${encodeURIComponent(profId)}` : '/auth/schedule';
   try {
     await api(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    closeHorarioConflictModal();
     toast('Horario guardado', 'success');
     loadHorarios(profId);
     refreshCitasCalendarIfVisible();
   }
-  catch(e) { toast(e.message, 'error'); }
-});
+  catch(e) {
+    if (!openHorarioConflictModal(e.detail)) toast(e.message, 'error');
+  }
+}
+
+document.getElementById('horSaveBtn').addEventListener('click', () => saveHorario());
+document.getElementById('horConflictClose')?.addEventListener('click', closeHorarioConflictModal);
+document.getElementById('horConflictOverlay')?.addEventListener('click', closeHorarioConflictModal);
+document.getElementById('horConflictRetry')?.addEventListener('click', () => saveHorario());
 
 document.getElementById('horProf').addEventListener('change', async () => {
   const profId = document.getElementById('horProf').value;
@@ -4144,6 +4318,9 @@ function buildMensajesPayload() {
     slot_minutes: parseInt(mensajesSchedule.slot_minutes || mensajesSchedule.slot_duration || 30) || 30,
     day_start: mensajesSchedule.day_start || mensajesSchedule.start_time || '09:00',
     day_end: mensajesSchedule.day_end || mensajesSchedule.end_time || '18:00',
+    break_start: mensajesSchedule.break_start || '',
+    break_end: mensajesSchedule.break_end || '',
+    break_windows: normalizeDailyBreaks(mensajesSchedule),
     closed_weekdays: mensajesSchedule.closed_weekdays || mensajesSchedule.closed_days || [],
     message_templates,
     message_template_enabled,

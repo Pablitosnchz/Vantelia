@@ -16,6 +16,8 @@ let currentStep = 0;
 let services = [];
 let employees = [];
 let slotsDisponibles = [];
+let slotsRequestSeq = 0;
+let loadedSlotsKey = "";
 
 function bringFormIntoView(form, behavior = "smooth") {
   const msgs = document.getElementById("ia-w-msgs");
@@ -164,6 +166,31 @@ function _selectedServiceName(select, index) {
   return opt.dataset.nombre || opt.textContent || "";
 }
 
+function _slotsKey(fecha, servicio, employeeId) {
+  return [
+    String(fecha || ""),
+    String(servicio || ""),
+    String(employeeId || ""),
+  ].join("|");
+}
+
+function invalidateSlots(message = "") {
+  slotsRequestSeq += 1;
+  loadedSlotsKey = "";
+  slotsDisponibles = [];
+  citaData.hora = "";
+
+  const nextButton = document.getElementById("ia-f-next2");
+  if (nextButton) nextButton.disabled = true;
+
+  const container = document.getElementById("ia-time-slots");
+  if (container) {
+    container.innerHTML = message
+      ? `<div class="ia-empty-slots">${escapeHtml(message)}</div>`
+      : "";
+  }
+}
+
 function fillEmployeeOptions(select, wrap) {
   if (!select || !wrap) return;
 
@@ -230,6 +257,14 @@ async function cargarSlots(fecha) {
   const nextButton = document.getElementById("ia-f-next2");
   if (!container || !nextButton) return;
 
+  const requestId = ++slotsRequestSeq;
+  const requestService = citaData.servicio;
+  const requestEmployeeId = citaData.employeeId;
+  const requestKey = _slotsKey(fecha, requestService, requestEmployeeId);
+
+  loadedSlotsKey = "";
+  slotsDisponibles = [];
+  citaData.hora = "";
   nextButton.disabled = true;
   container.innerHTML =
     '<div class="ia-loading-slots"><span class="ia-spinner"></span><div>Consultando disponibilidad...</div></div>';
@@ -239,12 +274,25 @@ async function cargarSlots(fecha) {
       cliente_id: WIDGET_CONFIG.clienteId,
       fecha,
     });
-    if (citaData.employeeId) params.set("employee_id", citaData.employeeId);
-    if (citaData.servicio) params.set("servicio", citaData.servicio);
+    if (requestEmployeeId) params.set("employee_id", requestEmployeeId);
+    if (requestService) params.set("servicio", requestService);
     const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/disponibilidad?${params.toString()}`);
+    if (
+      requestId !== slotsRequestSeq ||
+      requestKey !== _slotsKey(citaData.fecha, citaData.servicio, citaData.employeeId)
+    ) {
+      return;
+    }
     slotsDisponibles = Array.isArray(data.slots) ? data.slots : [];
+    loadedSlotsKey = requestKey;
     renderSlots();
   } catch (error) {
+    if (
+      requestId !== slotsRequestSeq ||
+      requestKey !== _slotsKey(citaData.fecha, citaData.servicio, citaData.employeeId)
+    ) {
+      return;
+    }
     slotsDisponibles = [];
     container.innerHTML = `<div class="ia-slot-error">${escapeHtml(
       humanizeErrorMessage(error, "No se ha podido cargar la disponibilidad.")
@@ -583,7 +631,8 @@ export async function mostrarFormulario() {
     toggleStep(1);
   });
 
-  document.getElementById("ia-f-next1")?.addEventListener("click", () => {
+  document.getElementById("ia-f-next1")?.addEventListener("click", async () => {
+    const previousSlotsKey = loadedSlotsKey;
     if (employees.length > 1) {
       const selectedEmployee = employees.find((employee) => employee.employee_id === employeeSelect?.value);
       clearFieldError("ia-f-employee");
@@ -606,6 +655,15 @@ export async function mostrarFormulario() {
     citaData.servicio = _selectedServiceName(serviceSelect) || "Consulta general";
     citaData.notas = document.getElementById("ia-f-notas").value.trim();
     toggleStep(2);
+
+    const selectedDate = dateInput?.value || "";
+    if (selectedDate) {
+      citaData.fecha = selectedDate;
+      const nextSlotsKey = _slotsKey(citaData.fecha, citaData.servicio, citaData.employeeId);
+      if (previousSlotsKey !== nextSlotsKey || loadedSlotsKey !== nextSlotsKey) {
+        await cargarSlots(citaData.fecha);
+      }
+    }
   });
 
   employeeSelect?.addEventListener("change", () => {
@@ -617,11 +675,8 @@ export async function mostrarFormulario() {
       ? _selectedServiceName(serviceSelect)
       : "";
     citaData.fecha = "";
-    citaData.hora = "";
     if (dateInput) dateInput.value = "";
-    const slots = document.getElementById("ia-time-slots");
-    if (slots) slots.innerHTML = "";
-    document.getElementById("ia-f-next2")?.setAttribute("disabled", "disabled");
+    invalidateSlots();
   });
 
   dateInput?.addEventListener("change", async (event) => {
@@ -639,7 +694,11 @@ export async function mostrarFormulario() {
   });
 
   serviceSelect?.addEventListener("change", () => {
-    citaData.servicio = _selectedServiceName(serviceSelect);
+    const nextService = _selectedServiceName(serviceSelect);
+    if (nextService !== citaData.servicio) {
+      citaData.servicio = nextService;
+      invalidateSlots(citaData.fecha ? "Pulsa Siguiente para actualizar los horarios de este servicio." : "");
+    }
   });
 
   document.getElementById("ia-f-next2")?.addEventListener("click", () => {

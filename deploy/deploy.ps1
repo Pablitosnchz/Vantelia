@@ -275,7 +275,15 @@ rm -f "$ARCHIVE_PATH"
 '@
 
 Write-Step "Actualizando el VPS y reconstruyendo Docker"
-($remoteScript -replace "`r`n", "`n") | & ssh.exe @sshArgsBase $ServerHost "bash -s -- '$RemoteBase' '$RemoteProject' '$ArchiveName'"
+# Enviamos el script remoto codificado en base64 (ASCII puro) como argumento y
+# lo decodificamos en el VPS. Asi evitamos que el encoding de PowerShell para el
+# stdin de ssh anteponga un BOM (UTF-8 con firma); ese BOM rompia la primera
+# linea en bash ("set: command not found") y desactivaba el modo estricto
+# fail-fast. GetBytes() de UTF8 nunca emite preambulo, asi que el base64 es limpio.
+$remoteScriptUnix = $remoteScript -replace "`r`n", "`n"
+$remoteScriptB64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($remoteScriptUnix))
+$remoteCommand = "echo $remoteScriptB64 | base64 -d | bash -s -- '$RemoteBase' '$RemoteProject' '$ArchiveName'"
+& ssh.exe @sshArgsBase $ServerHost $remoteCommand
 if ($LASTEXITCODE -ne 0) {
     throw "La actualizacion remota ha fallado."
 }

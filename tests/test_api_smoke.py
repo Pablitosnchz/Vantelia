@@ -9,6 +9,7 @@ import os
 import re
 import sqlite3
 import sys
+import unicodedata
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -243,6 +244,47 @@ def test_unrestricted_employee_accepts_generic_service_name(api_module):
     assert api_module._service_name_allowed_for_employee("demo", employee, "Consulta general") is True
 
 
+def test_service_duration_resolves_regardless_of_accents(api_module):
+    """La duracion debe resolverse aunque el servicio llegue con la tilde en otra
+    forma Unicode (NFD), sin tilde, en otra caja o como etiqueta completa. Si no,
+    cae al slot del profesional y un servicio de 75 min se trataria como 30."""
+    cliente_id = "demo"
+    db_path = api_module.DB_PATH
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "DELETE FROM services WHERE cliente_id = ? AND slug = 'masaje_antiestr_s'",
+            (cliente_id,),
+        )
+        conn.execute(
+            """
+            INSERT INTO services
+                (cliente_id, slug, name, duration_minutes, price_cents, description, is_active, sort_order, created_at, updated_at)
+            VALUES (?, 'masaje_antiestr_s', 'Masaje Antiestrés', 75, 8000, '', 1, 50, 'now', 'now')
+            """,
+            (cliente_id,),
+        )
+        conn.commit()
+    try:
+        variants = [
+            "Masaje Antiestrés",                                   # NFC tal cual
+            unicodedata.normalize("NFD", "Masaje Antiestrés"),    # tilde descompuesta
+            "Masaje Antiestres",                                   # sin tilde
+            "  masaje   ANTIESTRÉS ",                              # caja/espacios
+            "Masaje Antiestrés · 75 min · 80€",                   # etiqueta completa
+        ]
+        for variant in variants:
+            assert (
+                api_module._service_duration_minutes(cliente_id, variant) == 75
+            ), f"no resolvio 75 min para {variant!r}"
+    finally:
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                "DELETE FROM services WHERE cliente_id = ? AND slug = 'masaje_antiestr_s'",
+                (cliente_id,),
+            )
+            conn.commit()
+
+
 def test_service_extraction_keeps_scraper_descriptions(api_module):
     demo_services = api_module._extract_services_from_info("demo")
     assert demo_services[0]["nombre"] == "Auditoria IA"
@@ -287,6 +329,8 @@ def test_service_extraction_keeps_scraper_descriptions(api_module):
                 "- Ritual Premium - 95 EUR - 1 h 30 min",
                 "- Drenaje Linfático: 75€ · 75 min",
                 "- Reflexología Podal | 60 EUR | 50 min",
+                "- Bonos de 5 sesiones: 12% dto.",
+                "- Bonos de 10 sesiones: 15% dto.",
                 "",
                 "PREGUNTAS FRECUENTES:",
             ]
@@ -555,6 +599,11 @@ def test_demo_agenda_uses_visible_services_catalog(client: TestClient, api_modul
         gen = client.post(f"/admin/clientes/{cliente_id}/demo-agenda", headers=headers)
         assert gen.status_code == 200, gen.text
         with sqlite3.connect(db_path) as conn:
+            rows = conn.execute(
+                "SELECT servicio, start_at, end_at, service_id, service_price_cents "
+                "FROM bookings WHERE cliente_id = ? AND source = ?",
+                (cliente_id, api_module.DEMO_BOOKING_SOURCE),
+            ).fetchall()
             services = {
                 row[0]
                 for row in conn.execute(
@@ -563,6 +612,13 @@ def test_demo_agenda_uses_visible_services_catalog(client: TestClient, api_modul
                 ).fetchall()
             }
         assert services == {"Masaje visible"}
+        assert rows
+        for _, start_at, end_at, service_id, service_price_cents in rows:
+            start_dt = datetime.fromisoformat(start_at.replace("Z", "+00:00"))
+            end_dt = datetime.fromisoformat(end_at.replace("Z", "+00:00"))
+            assert int((end_dt - start_dt).total_seconds() // 60) == 55
+            assert service_id == "masaje_visible"
+            assert service_price_cents == 6000
     finally:
         info_path.write_text(original_info, encoding="utf-8")
         api_module._purge_demo_agenda(cliente_id)
@@ -750,6 +806,429 @@ def test_services_catalog_duration_and_overlap(client: TestClient, api_module):
         conn.commit()
 
 
+def test_service_duration_allows_adjacent_short_slot_but_blocks_long_overlap(client: TestClient, api_module):
+    user = api_module._get_user_by_email("admin@example.com")
+    raw_session = api_module._create_auth_session(user["id"])
+    cookies = {"vantelia_portal_session": raw_session}
+    suffix = uuid.uuid4().hex[:8]
+    short_name = f"Corta {suffix}"
+    long_name = f"Larga solape {suffix}"
+
+    target = datetime.utcnow().date() + timedelta(days=5)
+    while target.weekday() == 6:
+        target += timedelta(days=1)
+    fecha = target.isoformat()
+
+    created_short = client.post(
+        "/auth/services",
+        params={"cliente_id": "demo"},
+        cookies=cookies,
+        json={"nombre": short_name, "duration_minutes": 30, "price_cents": 0},
+    )
+    created_long = client.post(
+        "/auth/services",
+        params={"cliente_id": "demo"},
+        cookies=cookies,
+        json={"nombre": long_name, "duration_minutes": 50, "price_cents": 0},
+    )
+    assert created_short.status_code == 200, created_short.text
+    assert created_long.status_code == 200, created_long.text
+    short_slug = created_short.json()["id"]
+    long_slug = created_long.json()["id"]
+    booking_id = ""
+    try:
+        booked = client.post(
+            "/auth/bookings",
+            params={"cliente_id": "demo"},
+            cookies=cookies,
+            json={
+                "nombre": "Reserva borde",
+                "email": "",
+                "telefono": "",
+                "servicio": short_name,
+                "employee_id": "",
+                "fecha": fecha,
+                "hora": "09:30",
+                "notas": "",
+            },
+        )
+        assert booked.status_code == 200, booked.text
+        booking_id = booked.json()["booking_id"]
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            employee_id = conn.execute(
+                "SELECT employee_id FROM bookings WHERE id = ?", (booking_id,)
+            ).fetchone()[0]
+
+        short_slots = client.get(
+            "/disponibilidad",
+            params={
+                "cliente_id": "demo",
+                "fecha": fecha,
+                "employee_id": employee_id,
+                "servicio": short_name,
+            },
+            headers={"Origin": "http://testserver"},
+        )
+        assert short_slots.status_code == 200, short_slots.text
+        short_by_hour = {slot["hora"]: slot["disponible"] for slot in short_slots.json()["slots"]}
+        assert short_by_hour["09:00"] is True
+        assert short_by_hour["09:30"] is False
+
+        long_slots = client.get(
+            "/disponibilidad",
+            params={
+                "cliente_id": "demo",
+                "fecha": fecha,
+                "employee_id": employee_id,
+                "servicio": long_name,
+            },
+            headers={"Origin": "http://testserver"},
+        )
+        assert long_slots.status_code == 200, long_slots.text
+        long_by_hour = {slot["hora"]: slot["disponible"] for slot in long_slots.json()["slots"]}
+        assert long_by_hour["09:00"] is False
+    finally:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            if booking_id:
+                conn.execute("DELETE FROM bookings WHERE id = ?", (booking_id,))
+            conn.execute(
+                "DELETE FROM services WHERE cliente_id = 'demo' AND slug IN (?, ?)",
+                (short_slug, long_slug),
+            )
+            conn.commit()
+
+
+def test_schedule_break_filters_slots_by_service_duration(client: TestClient, api_module):
+    user = api_module._get_user_by_email("admin@example.com")
+    raw_session = api_module._create_auth_session(user["id"])
+    cookies = {"vantelia_portal_session": raw_session}
+    suffix = uuid.uuid4().hex[:8]
+    short_name = f"Corta pausa {suffix}"
+    long_name = f"Larga pausa {suffix}"
+    created_ids: list[str] = []
+    employee_id = ""
+
+    target = datetime.utcnow().date() + timedelta(days=6)
+    while target.weekday() == 6:
+        target += timedelta(days=1)
+    fecha = target.isoformat()
+
+    try:
+        for name, duration in ((short_name, 30), (long_name, 50)):
+            response = client.post(
+                "/auth/services",
+                params={"cliente_id": "demo"},
+                cookies=cookies,
+                json={"nombre": name, "duration_minutes": duration, "price_cents": 0},
+            )
+            assert response.status_code == 200, response.text
+            created_ids.append(response.json()["id"])
+
+        employee_response = client.post(
+            "/auth/employees",
+            params={"cliente_id": "demo"},
+            cookies=cookies,
+            json={
+                "name": f"Turnos {suffix}",
+                "role_label": "Pruebas",
+                "color": "#00b1d9",
+                "is_active": True,
+                "timezone": "Europe/Madrid",
+                "slot_minutes": 30,
+                "day_start": "09:00",
+                "day_end": "16:00",
+                "break_windows": [
+                    {"start": "12:00", "end": "12:30", "reason": "Media manana"},
+                    {"start": "14:00", "end": "15:00", "reason": "Comida"},
+                ],
+                "closed_weekdays": [],
+                "service_ids": [],
+            },
+        )
+        assert employee_response.status_code == 200, employee_response.text
+        employee_id = employee_response.json()["employee_id"]
+
+        short_slots = client.get(
+            "/disponibilidad",
+            params={
+                "cliente_id": "demo",
+                "fecha": fecha,
+                "employee_id": employee_id,
+                "servicio": short_name,
+            },
+            headers={"Origin": "http://testserver"},
+        )
+        assert short_slots.status_code == 200, short_slots.text
+        short_by_hour = {slot["hora"]: slot["disponible"] for slot in short_slots.json()["slots"]}
+        assert short_by_hour["11:30"] is True
+        assert "12:00" not in short_by_hour
+        assert short_by_hour["12:30"] is True
+        assert short_by_hour["13:30"] is True
+        assert "14:00" not in short_by_hour
+        assert "14:30" not in short_by_hour
+        assert short_by_hour["15:00"] is True
+
+        long_slots = client.get(
+            "/disponibilidad",
+            params={
+                "cliente_id": "demo",
+                "fecha": fecha,
+                "employee_id": employee_id,
+                "servicio": long_name,
+            },
+            headers={"Origin": "http://testserver"},
+        )
+        assert long_slots.status_code == 200, long_slots.text
+        long_by_hour = {slot["hora"]: slot["disponible"] for slot in long_slots.json()["slots"]}
+        assert "11:30" not in long_by_hour
+        assert long_by_hour["11:00"] is True
+        assert "13:30" not in long_by_hour
+        assert long_by_hour["15:00"] is True
+
+        blocked_booking = client.post(
+            "/auth/bookings",
+            params={"cliente_id": "demo"},
+            cookies=cookies,
+            json={
+                "nombre": "No cabe",
+                "email": "",
+                "telefono": "",
+                "servicio": long_name,
+                "employee_id": employee_id,
+                "fecha": fecha,
+                "hora": "11:30",
+                "notas": "",
+            },
+        )
+        assert blocked_booking.status_code == 409
+    finally:
+        if employee_id:
+            client.delete(f"/auth/employees/{employee_id}", params={"cliente_id": "demo"}, cookies=cookies)
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            if created_ids:
+                conn.execute(
+                    "DELETE FROM services WHERE cliente_id = 'demo' AND slug IN (%s)"
+                    % ",".join("?" for _ in created_ids),
+                    tuple(created_ids),
+                )
+            conn.commit()
+
+
+def test_schedule_break_rejects_future_booking_conflicts(client: TestClient, api_module):
+    user = api_module._get_user_by_email("admin@example.com")
+    raw_session = api_module._create_auth_session(user["id"])
+    cookies = {"vantelia_portal_session": raw_session}
+    suffix = uuid.uuid4().hex[:8]
+    service_name = f"Cita pausa {suffix}"
+    service_id = ""
+    employee_id = ""
+    booking_id = ""
+
+    target = datetime.utcnow().date() + timedelta(days=7)
+    while target.weekday() == 6:
+        target += timedelta(days=1)
+    fecha = target.isoformat()
+
+    try:
+        service_response = client.post(
+            "/auth/services",
+            params={"cliente_id": "demo"},
+            cookies=cookies,
+            json={"nombre": service_name, "duration_minutes": 30, "price_cents": 0},
+        )
+        assert service_response.status_code == 200, service_response.text
+        service_id = service_response.json()["id"]
+
+        employee_response = client.post(
+            "/auth/employees",
+            params={"cliente_id": "demo"},
+            cookies=cookies,
+            json={
+                "name": f"Conflicto pausa {suffix}",
+                "role_label": "Pruebas",
+                "color": "#00b1d9",
+                "is_active": True,
+                "timezone": "Europe/Madrid",
+                "slot_minutes": 30,
+                "day_start": "09:00",
+                "day_end": "14:00",
+                "closed_weekdays": [],
+                "service_ids": [],
+            },
+        )
+        assert employee_response.status_code == 200, employee_response.text
+        employee_id = employee_response.json()["employee_id"]
+
+        booking_response = client.post(
+            "/auth/bookings",
+            params={"cliente_id": "demo"},
+            cookies=cookies,
+            json={
+                "nombre": "Reserva comida",
+                "email": "",
+                "telefono": "",
+                "servicio": service_name,
+                "employee_id": employee_id,
+                "fecha": fecha,
+                "hora": "12:00",
+                "notas": "",
+            },
+        )
+        assert booking_response.status_code == 200, booking_response.text
+        booking_id = booking_response.json()["booking_id"]
+
+        update_response = client.post(
+            f"/auth/schedule/employee/{employee_id}",
+            params={"cliente_id": "demo"},
+            cookies=cookies,
+            json={
+                "enabled": True,
+                "timezone": "Europe/Madrid",
+                "slot_minutes": 30,
+                "day_start": "09:00",
+                "day_end": "14:00",
+                "break_windows": [
+                    {"start": "11:00", "end": "11:30", "reason": "Pausa"},
+                    {"start": "12:00", "end": "13:00", "reason": "Comida"},
+                ],
+                "closed_weekdays": [],
+            },
+        )
+        assert update_response.status_code == 409
+        detail = update_response.json()["detail"]
+        assert detail["type"] == "schedule_booking_conflicts"
+        assert "descanso" in detail["message"].lower()
+        assert detail["conflicts"][0]["booking_id"] == booking_id
+        assert detail["conflicts"][0]["can_reschedule"] is True
+    finally:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            if booking_id:
+                conn.execute("DELETE FROM bookings WHERE id = ?", (booking_id,))
+            if service_id:
+                conn.execute("DELETE FROM services WHERE cliente_id = 'demo' AND slug = ?", (service_id,))
+            conn.commit()
+        if employee_id:
+            client.delete(f"/auth/employees/{employee_id}", params={"cliente_id": "demo"}, cookies=cookies)
+
+
+def test_today_availability_hides_past_slots_and_rejects_past_booking(
+    client: TestClient,
+    api_module,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    booking_cfg = api_module.CONFIG_CLIENTES["demo"]["booking"]
+    previous_closed = list(booking_cfg.get("closed_weekdays", []))
+    tz = api_module.ZoneInfo("Europe/Madrid")
+    today = datetime.now(tz).date()
+    fixed_now = datetime(today.year, today.month, today.day, 9, 15, tzinfo=tz)
+    monkeypatch.setattr(api_module, "_utc_now", lambda: fixed_now.astimezone(api_module.timezone.utc))
+    booking_cfg["closed_weekdays"] = []
+
+    user = api_module._get_user_by_email("admin@example.com")
+    raw_session = api_module._create_auth_session(user["id"])
+    cookies = {"vantelia_portal_session": raw_session}
+    employee = api_module._resolve_employee_for_booking("demo", "", require_active=False)
+
+    try:
+        availability = client.get(
+            "/disponibilidad",
+            params={
+                "cliente_id": "demo",
+                "fecha": today.isoformat(),
+                "employee_id": employee["id"],
+            },
+            headers={"Origin": "http://testserver"},
+        )
+        assert availability.status_code == 200, availability.text
+        by_hour = {slot["hora"]: slot["disponible"] for slot in availability.json()["slots"]}
+        assert "09:00" not in by_hour
+        assert by_hour["09:30"] is True
+
+        past_booking = client.post(
+            "/auth/bookings",
+            params={"cliente_id": "demo"},
+            cookies=cookies,
+            json={
+                "nombre": "Tarde",
+                "email": "",
+                "telefono": "",
+                "servicio": "",
+                "employee_id": employee["id"],
+                "fecha": today.isoformat(),
+                "hora": "09:00",
+                "notas": "",
+            },
+        )
+        assert past_booking.status_code == 409
+    finally:
+        booking_cfg["closed_weekdays"] = previous_closed
+
+
+def test_block_conflicts_use_actual_booking_duration(api_module):
+    target = datetime.utcnow().date() + timedelta(days=8)
+    while target.weekday() == 6:
+        target += timedelta(days=1)
+    fecha = target.isoformat()
+    employee = api_module._resolve_employee_for_booking("demo", "", require_active=False)
+    start_local, end_local = api_module._booking_start_end(
+        "demo",
+        fecha,
+        "09:00",
+        employee_id=employee["id"],
+        duration_minutes=50,
+    )
+    booking_id = uuid.uuid4().hex
+    created_at = api_module._utc_now_iso()
+    api_module._store_booking({
+        "id": booking_id,
+        "cliente_id": "demo",
+        "employee_id": employee["id"],
+        "employee_name": employee["name"] or "",
+        "nombre": "Cita larga",
+        "email": "",
+        "telefono": "",
+        "servicio": "Servicio largo",
+        "booking_date": fecha,
+        "booking_time": "09:00",
+        "notas": "",
+        "status": "confirmed",
+        "provider_name": "internal",
+        "provider_status": "confirmed",
+        "provider_booking_id": "",
+        "provider_booking_url": "",
+        "manage_token": f"mg_{booking_id}",
+        "timezone": employee["timezone"] or "Europe/Madrid",
+        "start_at": api_module._to_utc_iso(start_local),
+        "end_at": api_module._to_utc_iso(end_local),
+        "confirmed_at": created_at,
+        "cancelled_at": "",
+        "rescheduled_at": "",
+        "rescheduled_from_booking_id": "",
+        "confirmation_email_sent_at": "",
+        "reminder_24h_sent_at": "",
+        "reminder_2h_sent_at": "",
+        "customer_email_status": "",
+        "customer_email_last_error": "",
+        "service_id": "",
+        "service_price_cents": 0,
+        "source": "test",
+        "created_at": created_at,
+    })
+    try:
+        conflicts = api_module._booking_conflicts_for_block(
+            "demo",
+            fecha,
+            "09:30",
+            "09:45",
+            employee_id=employee["id"],
+        )
+        assert [row["id"] for row in conflicts] == [booking_id]
+    finally:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("DELETE FROM bookings WHERE id = ?", (booking_id,))
+            conn.commit()
+
+
 def test_booking_manage_page_renders_with_service_catalog(client: TestClient, api_module):
     # Regresion: la pagina publica de gestion construye available_services desde el
     # catalogo (con duration/price int + is_active bool). Debe renderizar, no 500.
@@ -886,6 +1365,8 @@ def test_portal_can_update_professional_schedule(client: TestClient):
             "slot_minutes": 30,
             "day_start": "09:00",
             "day_end": "10:00",
+            "break_start": "",
+            "break_end": "",
             "closed_weekdays": [],
             "service_ids": [],
         },
@@ -903,6 +1384,10 @@ def test_portal_can_update_professional_schedule(client: TestClient):
                 "slot_minutes": 45,
                 "day_start": "11:00",
                 "day_end": "15:30",
+                "break_windows": [
+                    {"start": "13:00", "end": "14:00", "reason": "Comida"},
+                    {"start": "14:30", "end": "15:00", "reason": "Pausa"},
+                ],
                 "closed_weekdays": [0, 2],
             },
         )
@@ -911,6 +1396,12 @@ def test_portal_can_update_professional_schedule(client: TestClient):
         assert schedule["slot_minutes"] == 45
         assert schedule["day_start"] == "11:00"
         assert schedule["day_end"] == "15:30"
+        assert schedule["break_start"] == "13:00"
+        assert schedule["break_end"] == "14:00"
+        assert schedule["break_windows"] == [
+            {"start": "13:00", "end": "14:00", "reason": "Comida"},
+            {"start": "14:30", "end": "15:00", "reason": "Pausa"},
+        ]
         assert schedule["closed_weekdays"] == [0, 2]
 
         get_response = client.get(
@@ -920,6 +1411,8 @@ def test_portal_can_update_professional_schedule(client: TestClient):
         )
         assert get_response.status_code == 200
         assert get_response.json()["slot_minutes"] == 45
+        assert get_response.json()["break_start"] == "13:00"
+        assert len(get_response.json()["break_windows"]) == 2
     finally:
         client.delete(f"/auth/employees/{employee_id}", params={"cliente_id": "demo"}, cookies=cookies)
 

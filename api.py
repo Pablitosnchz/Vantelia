@@ -601,7 +601,11 @@ def _normalize_message_template_channels(raw_channels: Any) -> Dict[str, Dict[st
 
 
 def _sanitize_text(value: str, *, allow_multiline: bool = False) -> str:
-    value = str(value or "")
+    # Normalizamos a NFC para que el texto que llega de cualquier canal (web,
+    # WhatsApp, voz) sea canonico. Sin esto, una tilde descompuesta (NFD) no
+    # casa con la misma tilde compuesta (NFC) guardada en BD y rompe busquedas
+    # como la del catalogo de servicios.
+    value = unicodedata.normalize("NFC", str(value or ""))
     if allow_multiline:
         cleaned_lines = [" ".join(line.split()) for line in value.splitlines()]
         return "\n".join(line for line in cleaned_lines if line).strip()
@@ -676,6 +680,124 @@ def _normalize_voice_config(payload: Any) -> Dict[str, Any]:
     }
 
 
+def _normalize_optional_time_value(value: Any) -> str:
+    candidate = _sanitize_text(str(value or ""))
+    return candidate if TIME_PATTERN.match(candidate) else ""
+
+
+def _normalize_required_time_value(value: Any, field_label: str) -> str:
+    candidate = _sanitize_text(str(value or ""))
+    if not TIME_PATTERN.match(candidate):
+        raise HTTPException(status_code=400, detail=f"{field_label} invalida. Usa formato HH:MM.")
+    return datetime.strptime(candidate, "%H:%M").strftime("%H:%M")
+
+
+def _break_window_values(raw: Any) -> Tuple[str, str, str]:
+    if hasattr(raw, "model_dump"):
+        raw = raw.model_dump()
+    elif hasattr(raw, "dict"):
+        raw = raw.dict()
+    if isinstance(raw, dict):
+        start = raw.get("start", raw.get("hora_inicio", raw.get("break_start", "")))
+        end = raw.get("end", raw.get("hora_fin", raw.get("break_end", "")))
+        reason = raw.get("reason", raw.get("motivo", "Descanso"))
+        return str(start or ""), str(end or ""), str(reason or "Descanso")
+    if isinstance(raw, (list, tuple)) and len(raw) >= 2:
+        reason = raw[2] if len(raw) > 2 else "Descanso"
+        return str(raw[0] or ""), str(raw[1] or ""), str(reason or "Descanso")
+    return "", "", "Descanso"
+
+
+def _normalize_break_windows(
+    day_start: str,
+    day_end: str,
+    windows: Any = None,
+    legacy_start: Any = "",
+    legacy_end: Any = "",
+) -> List[Dict[str, str]]:
+    start = _normalize_required_time_value(day_start, "Hora de inicio")
+    end = _normalize_required_time_value(day_end, "Hora de fin")
+    if start >= end:
+        raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio.")
+
+    raw_windows = windows if isinstance(windows, list) else []
+    normalized: List[Dict[str, str]] = []
+    for raw in raw_windows:
+        pausa_inicio_raw, pausa_fin_raw, reason_raw = _break_window_values(raw)
+        if not pausa_inicio_raw and not pausa_fin_raw:
+            continue
+        if not pausa_inicio_raw or not pausa_fin_raw:
+            raise HTTPException(
+                status_code=400,
+                detail="Cada descanso debe tener inicio y fin, o quedar vacio.",
+            )
+        pausa_inicio = _normalize_required_time_value(pausa_inicio_raw, "Inicio del descanso")
+        pausa_fin = _normalize_required_time_value(pausa_fin_raw, "Fin del descanso")
+        if not (start < pausa_inicio < pausa_fin < end):
+            raise HTTPException(
+                status_code=400,
+                detail="Cada descanso debe estar dentro del horario y tener inicio anterior al fin.",
+            )
+        normalized.append(
+            {
+                "start": pausa_inicio,
+                "end": pausa_fin,
+                "reason": (_sanitize_text(reason_raw) or "Descanso")[:80],
+            }
+        )
+
+    if not normalized:
+        legacy_pair = _normalize_break_window(start, end, legacy_start, legacy_end)
+        if legacy_pair != ("", ""):
+            normalized.append({"start": legacy_pair[0], "end": legacy_pair[1], "reason": "Descanso"})
+
+    normalized.sort(key=lambda item: (item["start"], item["end"]))
+    for idx in range(1, len(normalized)):
+        previous = normalized[idx - 1]
+        current = normalized[idx]
+        if current["start"] < previous["end"]:
+            raise HTTPException(status_code=400, detail="Los descansos diarios no pueden solaparse.")
+    return normalized
+
+
+def _first_break_pair(windows: Any) -> Tuple[str, str]:
+    if isinstance(windows, list) and windows:
+        first = windows[0]
+        if isinstance(first, dict):
+            return str(first.get("start", "") or ""), str(first.get("end", "") or "")
+    return "", ""
+
+
+def _normalize_break_window(
+    day_start: str,
+    day_end: str,
+    break_start: Any = "",
+    break_end: Any = "",
+) -> Tuple[str, str]:
+    pausa_inicio = _sanitize_text(str(break_start or ""))
+    pausa_fin = _sanitize_text(str(break_end or ""))
+    if not pausa_inicio and not pausa_fin:
+        return "", ""
+    if not pausa_inicio or not pausa_fin:
+        raise HTTPException(
+            status_code=400,
+            detail="Indica inicio y fin del descanso, o deja ambos vacios.",
+        )
+
+    start = _normalize_required_time_value(day_start, "Hora de inicio")
+    end = _normalize_required_time_value(day_end, "Hora de fin")
+    pausa_inicio = _normalize_required_time_value(pausa_inicio, "Inicio del descanso")
+    pausa_fin = _normalize_required_time_value(pausa_fin, "Fin del descanso")
+    if start >= end:
+        raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio.")
+    if not (start < pausa_inicio < pausa_fin < end):
+        raise HTTPException(
+            status_code=400,
+            detail="El descanso debe estar dentro del horario y tener inicio anterior al fin.",
+        )
+    return pausa_inicio, pausa_fin
+
+
 def _load_client_configs() -> Dict[str, Dict[str, Any]]:
     if not CONFIG_PATH.exists():
         raise RuntimeError(f"No se encontro el archivo de configuracion: {CONFIG_PATH}")
@@ -694,6 +816,16 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
         raise RuntimeError(f"cliente_id invalido en config.json: {cliente_id}")
 
     booking = payload.get("booking", {})
+    booking_day_start = _sanitize_text(booking.get("day_start", "09:00")) or "09:00"
+    booking_day_end = _sanitize_text(booking.get("day_end", "18:00")) or "18:00"
+    booking_break_windows = _normalize_break_windows(
+        booking_day_start,
+        booking_day_end,
+        booking.get("break_windows", []),
+        booking.get("break_start", ""),
+        booking.get("break_end", ""),
+    )
+    booking_break_start, booking_break_end = _first_break_pair(booking_break_windows)
     allowed_origins = [
         _normalize_origin_value(origin)
         for origin in payload.get("allowed_origins", [])
@@ -760,8 +892,11 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
             "enabled": bool(booking.get("enabled", False)),
             "timezone": _sanitize_text(booking.get("timezone", DEFAULT_TIMEZONE)) or DEFAULT_TIMEZONE,
             "slot_minutes": int(booking.get("slot_minutes", 30)),
-            "day_start": _sanitize_text(booking.get("day_start", "09:00")) or "09:00",
-            "day_end": _sanitize_text(booking.get("day_end", "18:00")) or "18:00",
+            "day_start": booking_day_start,
+            "day_end": booking_day_end,
+            "break_start": booking_break_start,
+            "break_end": booking_break_end,
+            "break_windows": booking_break_windows,
             "closed_weekdays": booking.get("closed_weekdays", [6]),
             "provider": "internal",
             "webhook_env": _sanitize_text(booking.get("webhook_env", "")),
@@ -794,6 +929,15 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
 
 
 def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    booking_cfg = config.get("booking", {})
+    break_windows = _normalize_break_windows(
+        booking_cfg.get("day_start", "09:00"),
+        booking_cfg.get("day_end", "18:00"),
+        booking_cfg.get("break_windows", []),
+        booking_cfg.get("break_start", ""),
+        booking_cfg.get("break_end", ""),
+    )
+    break_start, break_end = _first_break_pair(break_windows)
     return {
         "nombre": config["nombre"],
         "plan": config.get("plan", PLAN_DEFAULT),
@@ -827,6 +971,9 @@ def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
             "slot_minutes": int(config.get("booking", {}).get("slot_minutes", 30)),
             "day_start": config.get("booking", {}).get("day_start", "09:00"),
             "day_end": config.get("booking", {}).get("day_end", "18:00"),
+            "break_start": break_start,
+            "break_end": break_end,
+            "break_windows": break_windows,
             "closed_weekdays": list(config.get("booking", {}).get("closed_weekdays", [6])),
             "provider": "internal",
             "webhook_env": config.get("booking", {}).get("webhook_env", ""),
@@ -956,11 +1103,22 @@ def _employee_service_ids_from_row(row: sqlite3.Row, cliente_id: str = "") -> Li
 def _employee_defaults_for_client(cliente_id: str) -> Dict[str, Any]:
     config = CONFIG_CLIENTES.get(cliente_id, {})
     booking = config.get("booking", {})
+    break_windows = _normalize_break_windows(
+        booking.get("day_start", "09:00"),
+        booking.get("day_end", "18:00"),
+        booking.get("break_windows", []),
+        booking.get("break_start", ""),
+        booking.get("break_end", ""),
+    )
+    break_start, break_end = _first_break_pair(break_windows)
     return {
         "timezone": booking.get("timezone", DEFAULT_TIMEZONE),
         "slot_minutes": int(booking.get("slot_minutes", 30)),
         "day_start": booking.get("day_start", "09:00"),
         "day_end": booking.get("day_end", "18:00"),
+        "break_start": break_start,
+        "break_end": break_end,
+        "break_windows": break_windows,
         "closed_weekdays": _normalize_closed_weekdays_list(booking.get("closed_weekdays", [])),
     }
 
@@ -987,10 +1145,11 @@ def _ensure_default_employees_for_all_clients() -> None:
                     """
                     INSERT INTO employees (
                         id, cliente_id, name, role_label, color, is_active, is_default,
-                        timezone, slot_minutes, day_start, day_end, closed_weekdays_json, service_ids_json,
+                        timezone, slot_minutes, day_start, day_end, break_start, break_end,
+                        break_windows_json, closed_weekdays_json, service_ids_json,
                         created_at, updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         employee_id,
@@ -1004,6 +1163,9 @@ def _ensure_default_employees_for_all_clients() -> None:
                         defaults["slot_minutes"],
                         defaults["day_start"],
                         defaults["day_end"],
+                        defaults["break_start"],
+                        defaults["break_end"],
+                        json.dumps(defaults["break_windows"]),
                         json.dumps(defaults["closed_weekdays"]),
                         "[]",
                         now_iso,
@@ -1169,6 +1331,9 @@ def _init_database() -> None:
                 slot_minutes INTEGER NOT NULL DEFAULT 30,
                 day_start TEXT NOT NULL DEFAULT '09:00',
                 day_end TEXT NOT NULL DEFAULT '18:00',
+                break_start TEXT NOT NULL DEFAULT '',
+                break_end TEXT NOT NULL DEFAULT '',
+                break_windows_json TEXT NOT NULL DEFAULT '[]',
                 closed_weekdays_json TEXT NOT NULL DEFAULT '[]',
                 service_ids_json TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL,
@@ -1194,6 +1359,12 @@ def _init_database() -> None:
         }
         if "service_ids_json" not in employee_columns:
             connection.execute("ALTER TABLE employees ADD COLUMN service_ids_json TEXT NOT NULL DEFAULT '[]'")
+        if "break_start" not in employee_columns:
+            connection.execute("ALTER TABLE employees ADD COLUMN break_start TEXT NOT NULL DEFAULT ''")
+        if "break_end" not in employee_columns:
+            connection.execute("ALTER TABLE employees ADD COLUMN break_end TEXT NOT NULL DEFAULT ''")
+        if "break_windows_json" not in employee_columns:
+            connection.execute("ALTER TABLE employees ADD COLUMN break_windows_json TEXT NOT NULL DEFAULT '[]'")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS booking_audit (
@@ -2073,6 +2244,16 @@ def _validate_single_client_runtime(cliente_id: str, config: Dict[str, Any]) -> 
             raise RuntimeError(f"day_start invalido para {cliente_id}")
         if not TIME_PATTERN.match(booking_cfg["day_end"]):
             raise RuntimeError(f"day_end invalido para {cliente_id}")
+        try:
+            _normalize_break_windows(
+                booking_cfg["day_start"],
+                booking_cfg["day_end"],
+                booking_cfg.get("break_windows", []),
+                booking_cfg.get("break_start", ""),
+                booking_cfg.get("break_end", ""),
+            )
+        except HTTPException as exc:
+            raise RuntimeError(f"descansos invalidos para {cliente_id}: {exc.detail}") from exc
         if booking_cfg["slot_minutes"] <= 0:
             raise RuntimeError(f"slot_minutes invalido para {cliente_id}")
         if not isinstance(booking_cfg["closed_weekdays"], list) or any(
@@ -2705,16 +2886,37 @@ def _get_service_row(cliente_id: str, slug: str) -> Optional[sqlite3.Row]:
         ).fetchone()
 
 
+def _service_match_key(value: str) -> str:
+    """Clave de comparacion de nombres de servicio robusta a tildes, mayusculas y
+    forma de normalizacion Unicode. Permite casar el servicio que llega de
+    cualquier canal con el catalogo aunque difieran en tildes o caja."""
+    text = unicodedata.normalize("NFKD", _sanitize_text(value or "")).casefold()
+    return "".join(ch for ch in text if not unicodedata.combining(ch))
+
+
 def _find_service_by_name(cliente_id: str, name: str) -> Optional[sqlite3.Row]:
     name_clean = _sanitize_text(name or "")
     if not name_clean:
         return None
-    row = _get_service_row(cliente_id, _normalize_service_id(name_clean))
-    if row:
-        return row
-    for candidate in _list_service_rows(cliente_id, include_inactive=True):
-        if _sanitize_text(candidate["name"]).lower() == name_clean.lower():
-            return candidate
+    # El nombre puede llegar como etiqueta completa ("Nombre . 75 min . 80EUR");
+    # probamos tambien solo la parte del nombre antes del separador.
+    variants = [name_clean]
+    if " · " in name_clean:
+        variants.append(name_clean.split(" · ", 1)[0].strip())
+
+    rows = _list_service_rows(cliente_id, include_inactive=True)
+    for variant in variants:
+        if not variant:
+            continue
+        row = _get_service_row(cliente_id, _normalize_service_id(variant))
+        if row:
+            return row
+        key = _service_match_key(variant)
+        if not key:
+            continue
+        for candidate in rows:
+            if _service_match_key(candidate["name"]) == key:
+                return candidate
     return None
 
 
@@ -2751,11 +2953,26 @@ def _public_services_for_booking(cliente_id: str, employee_id: str = "") -> List
 
 
 def _employee_schedule_from_row(row: sqlite3.Row) -> Dict[str, Any]:
+    try:
+        raw_break_windows = json.loads(row["break_windows_json"] or "[]")
+    except (IndexError, KeyError, json.JSONDecodeError):
+        raw_break_windows = []
+    break_windows = _normalize_break_windows(
+        row["day_start"] or "09:00",
+        row["day_end"] or "18:00",
+        raw_break_windows,
+        row["break_start"] or "",
+        row["break_end"] or "",
+    )
+    break_start, break_end = _first_break_pair(break_windows)
     return {
         "timezone": row["timezone"] or DEFAULT_TIMEZONE,
         "slot_minutes": int(row["slot_minutes"] or 30),
         "day_start": row["day_start"] or "09:00",
         "day_end": row["day_end"] or "18:00",
+        "break_start": break_start,
+        "break_end": break_end,
+        "break_windows": break_windows,
         "closed_weekdays": _employee_closed_weekdays_from_row(row),
     }
 
@@ -4226,6 +4443,9 @@ def _config_from_admin_payload(cliente_id: str, payload: AdminClientePayload) ->
                 "slot_minutes": payload.booking_slot_minutes,
                 "day_start": payload.booking_day_start,
                 "day_end": payload.booking_day_end,
+                "break_start": existing_booking.get("break_start", ""),
+                "break_end": existing_booking.get("break_end", ""),
+                "break_windows": existing_booking.get("break_windows", []),
                 "closed_weekdays": payload.booking_closed_weekdays,
                 "provider": "internal",
                 "webhook_env": payload.booking_webhook_env,
@@ -4469,6 +4689,14 @@ def _reminder_channel_availability(cliente_id: str) -> Dict[str, Dict[str, Any]]
 def _portal_schedule_from_config(cliente_id: str) -> PortalSchedulePublic:
     config = _get_client_config(cliente_id)
     booking = config["booking"]
+    break_windows = _normalize_break_windows(
+        booking.get("day_start", "09:00"),
+        booking.get("day_end", "18:00"),
+        booking.get("break_windows", []),
+        booking.get("break_start", ""),
+        booking.get("break_end", ""),
+    )
+    break_start, break_end = _first_break_pair(break_windows)
     today = _utc_now().date().isoformat()
     future_limit = (_utc_now() + timedelta(days=180)).date().isoformat()
     return PortalSchedulePublic(
@@ -4477,6 +4705,9 @@ def _portal_schedule_from_config(cliente_id: str) -> PortalSchedulePublic:
         slot_minutes=int(booking.get("slot_minutes", 30)),
         day_start=booking.get("day_start", "09:00"),
         day_end=booking.get("day_end", "18:00"),
+        break_start=break_start,
+        break_end=break_end,
+        break_windows=break_windows,
         closed_weekdays=list(booking.get("closed_weekdays", [])),
         message_templates=_normalize_message_templates(booking.get("message_templates", {})),
         message_template_enabled=_normalize_message_template_enabled(
@@ -4506,6 +4737,9 @@ def _portal_schedule_from_employee(cliente_id: str, employee_id: str) -> PortalS
         slot_minutes=schedule["slot_minutes"],
         day_start=schedule["day_start"],
         day_end=schedule["day_end"],
+        break_start=schedule["break_start"],
+        break_end=schedule["break_end"],
+        break_windows=schedule["break_windows"],
         closed_weekdays=schedule["closed_weekdays"],
         message_templates=_normalize_message_templates(booking.get("message_templates", {})),
         message_template_enabled=_normalize_message_template_enabled(
@@ -5258,7 +5492,17 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
     if raw_fields_set is None:
         raw_fields_set = getattr(data, "__fields_set__", set())
     fields_set = set(raw_fields_set)
-    schedule_fields = {"enabled", "timezone", "slot_minutes", "day_start", "day_end", "closed_weekdays"}
+    schedule_fields = {
+        "enabled",
+        "timezone",
+        "slot_minutes",
+        "day_start",
+        "day_end",
+        "break_start",
+        "break_end",
+        "break_windows",
+        "closed_weekdays",
+    }
     should_update_schedule = bool(fields_set & schedule_fields) or (
         data.message_templates is None
         and data.message_template_enabled is None
@@ -5269,6 +5513,8 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
         end = _parse_time(data.day_end).strftime("%H:%M")
         if start >= end:
             raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio.")
+        break_windows = _normalize_break_windows(start, end, data.break_windows, data.break_start, data.break_end)
+        break_start, break_end = _first_break_pair(break_windows)
         closed_weekdays = sorted({int(day) for day in data.closed_weekdays if 0 <= int(day) <= 6})
         if len(closed_weekdays) != len(set(data.closed_weekdays)):
             closed_weekdays = sorted(set(closed_weekdays))
@@ -5288,6 +5534,31 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
                         "Hay citas activas en los dias que quieres cerrar. Cancelalas o reprogramalas antes de guardar.",
                     ),
                 )
+        previous_break_windows = _normalize_break_windows(
+            config.get("booking", {}).get("day_start", "09:00"),
+            config.get("booking", {}).get("day_end", "18:00"),
+            config.get("booking", {}).get("break_windows", []),
+            config.get("booking", {}).get("break_start", ""),
+            config.get("booking", {}).get("break_end", ""),
+        )
+        if break_windows != previous_break_windows and break_windows:
+            try:
+                default_employee_id = _default_employee_row(cliente_id)["id"]
+            except HTTPException:
+                default_employee_id = ""
+            conflicts = _booking_conflicts_for_break_windows(
+                cliente_id,
+                break_windows,
+                employee_id=default_employee_id,
+            )
+            if conflicts:
+                raise HTTPException(
+                    status_code=409,
+                    detail=_schedule_conflict_detail(
+                        conflicts,
+                        "Hay citas activas dentro del descanso que quieres guardar. Cancelalas o reprogramalas antes.",
+                    ),
+                )
         booking.update(
             {
                 "enabled": bool(data.enabled),
@@ -5295,6 +5566,9 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
                 "slot_minutes": int(data.slot_minutes),
                 "day_start": start,
                 "day_end": end,
+                "break_start": break_start,
+                "break_end": break_end,
+                "break_windows": break_windows,
                 "closed_weekdays": closed_weekdays,
             }
         )
@@ -5316,6 +5590,30 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
     config["booking"] = booking
     _validate_single_client_runtime(cliente_id, config)
     _persist_configs_to_disk(next_configs)
+    if should_update_schedule:
+        with _get_db_connection() as connection:
+            connection.execute(
+                """
+                UPDATE employees
+                SET timezone = ?, slot_minutes = ?, day_start = ?, day_end = ?,
+                    break_start = ?, break_end = ?, break_windows_json = ?,
+                    closed_weekdays_json = ?, updated_at = ?
+                WHERE cliente_id = ? AND is_default = 1
+                """,
+                (
+                    booking["timezone"],
+                    int(booking["slot_minutes"]),
+                    booking["day_start"],
+                    booking["day_end"],
+                    booking.get("break_start", ""),
+                    booking.get("break_end", ""),
+                    json.dumps(booking.get("break_windows", [])),
+                    json.dumps(booking["closed_weekdays"]),
+                    _utc_now_iso(),
+                    cliente_id,
+                ),
+            )
+            connection.commit()
     _update_runtime_configs(next_configs)
     return _portal_schedule_from_config(cliente_id)
 
@@ -5326,6 +5624,8 @@ def _update_employee_schedule(cliente_id: str, employee_id: str, data: PortalSch
     end = _parse_time(data.day_end).strftime("%H:%M")
     if start >= end:
         raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio.")
+    break_windows = _normalize_break_windows(start, end, data.break_windows, data.break_start, data.break_end)
+    break_start, break_end = _first_break_pair(break_windows)
     closed_weekdays = _normalize_closed_weekdays_list(data.closed_weekdays)
     previous_closed_weekdays = set(_employee_closed_weekdays_from_row(row))
     newly_closed_weekdays = set(closed_weekdays) - previous_closed_weekdays
@@ -5343,11 +5643,29 @@ def _update_employee_schedule(cliente_id: str, employee_id: str, data: PortalSch
                     "Hay citas activas en los dias que quieres cerrar. Cancelalas o reprogramalas antes de guardar.",
                 ),
             )
+    previous_schedule = _employee_schedule_from_row(row)
+    previous_break_windows = previous_schedule.get("break_windows", [])
+    if break_windows != previous_break_windows and break_windows:
+        conflicts = _booking_conflicts_for_break_windows(
+            cliente_id,
+            break_windows,
+            employee_id=employee_id,
+        )
+        if conflicts:
+            raise HTTPException(
+                status_code=409,
+                detail=_schedule_conflict_detail(
+                    conflicts,
+                    "Hay citas activas dentro del descanso que quieres guardar. Cancelalas o reprogramalas antes.",
+                ),
+            )
     with _get_db_connection() as connection:
         connection.execute(
             """
             UPDATE employees
-            SET timezone = ?, slot_minutes = ?, day_start = ?, day_end = ?, closed_weekdays_json = ?, updated_at = ?
+            SET timezone = ?, slot_minutes = ?, day_start = ?, day_end = ?,
+                break_start = ?, break_end = ?, break_windows_json = ?,
+                closed_weekdays_json = ?, updated_at = ?
             WHERE id = ? AND cliente_id = ?
             """,
             (
@@ -5355,6 +5673,9 @@ def _update_employee_schedule(cliente_id: str, employee_id: str, data: PortalSch
                 int(data.slot_minutes),
                 start,
                 end,
+                break_start,
+                break_end,
+                json.dumps(break_windows),
                 json.dumps(closed_weekdays),
                 _utc_now_iso(),
                 employee_id,
@@ -5384,6 +5705,9 @@ def _serialize_portal_employee(row: sqlite3.Row) -> PortalEmployeePublic:
         slot_minutes=schedule["slot_minutes"],
         day_start=schedule["day_start"],
         day_end=schedule["day_end"],
+        break_start=schedule["break_start"],
+        break_end=schedule["break_end"],
+        break_windows=schedule["break_windows"],
         closed_weekdays=schedule["closed_weekdays"],
         service_ids=service_ids,
         allows_all_services=not service_ids,
@@ -5407,23 +5731,66 @@ def _portal_employees_for_client(cliente_id: str) -> PortalEmployeesResponse:
     )
 
 
-def _validate_employee_payload(cliente_id: str, data: PortalEmployeePayload) -> Dict[str, Any]:
-    defaults = _employee_defaults_for_client(cliente_id)
-    start = _parse_time(data.day_start).strftime("%H:%M")
-    end = _parse_time(data.day_end).strftime("%H:%M")
+def _validate_employee_payload(
+    cliente_id: str,
+    data: PortalEmployeePayload,
+    *,
+    existing_row: Optional[sqlite3.Row] = None,
+) -> Dict[str, Any]:
+    raw_fields_set = getattr(data, "model_fields_set", None)
+    if raw_fields_set is None:
+        raw_fields_set = getattr(data, "__fields_set__", set())
+    fields_set = set(raw_fields_set)
+    defaults = _employee_schedule_from_row(existing_row) if existing_row is not None else _employee_defaults_for_client(cliente_id)
+    start_value = data.day_start if "day_start" in fields_set else defaults["day_start"]
+    end_value = data.day_end if "day_end" in fields_set else defaults["day_end"]
+    break_start_value = data.break_start if "break_start" in fields_set else defaults.get("break_start", "")
+    break_end_value = data.break_end if "break_end" in fields_set else defaults.get("break_end", "")
+    break_windows_value = data.break_windows if "break_windows" in fields_set else defaults.get("break_windows", [])
+    start = _parse_time(start_value).strftime("%H:%M")
+    end = _parse_time(end_value).strftime("%H:%M")
     if start >= end:
         raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio.")
-    closed_weekdays = _normalize_closed_weekdays_list(data.closed_weekdays)
-    service_ids = _normalize_service_ids_for_client(cliente_id, data.service_ids)
+    break_windows = _normalize_break_windows(start, end, break_windows_value, break_start_value, break_end_value)
+    break_start, break_end = _first_break_pair(break_windows)
+    closed_weekdays = (
+        _normalize_closed_weekdays_list(data.closed_weekdays)
+        if "closed_weekdays" in fields_set
+        else list(defaults.get("closed_weekdays", []))
+    )
+    service_ids = (
+        _normalize_service_ids_for_client(cliente_id, data.service_ids)
+        if "service_ids" in fields_set or existing_row is None
+        else _employee_service_ids_from_row(existing_row, cliente_id)
+    )
     return {
         "name": _sanitize_text(data.name),
-        "role_label": _sanitize_text(data.role_label),
-        "color": _normalize_employee_color(data.color, "#00b1d9"),
-        "is_active": bool(data.is_active),
-        "timezone": _sanitize_text(data.timezone) or defaults["timezone"],
-        "slot_minutes": int(data.slot_minutes),
+        "role_label": (
+            _sanitize_text(data.role_label)
+            if "role_label" in fields_set or existing_row is None
+            else _sanitize_text(existing_row["role_label"] or "")
+        ),
+        "color": _normalize_employee_color(
+            data.color if "color" in fields_set or existing_row is None else existing_row["color"],
+            "#00b1d9",
+        ),
+        "is_active": (
+            bool(data.is_active)
+            if "is_active" in fields_set or existing_row is None
+            else bool(existing_row["is_active"])
+        ),
+        "timezone": (
+            (_sanitize_text(data.timezone) or defaults["timezone"])
+            if "timezone" in fields_set
+            else defaults["timezone"]
+        ),
+        "slot_minutes": int(data.slot_minutes if "slot_minutes" in fields_set else defaults["slot_minutes"]),
         "day_start": start,
         "day_end": end,
+        "break_start": break_start,
+        "break_end": break_end,
+        "break_windows": break_windows,
+        "break_windows_json": json.dumps(break_windows),
         "closed_weekdays_json": json.dumps(closed_weekdays),
         "closed_weekdays": closed_weekdays,
         "service_ids_json": json.dumps(service_ids),
@@ -5457,10 +5824,11 @@ def _create_portal_employee(
             """
             INSERT INTO employees (
                 id, cliente_id, name, role_label, color, is_active, is_default,
-                timezone, slot_minutes, day_start, day_end, closed_weekdays_json, service_ids_json,
+                timezone, slot_minutes, day_start, day_end, break_start, break_end,
+                break_windows_json, closed_weekdays_json, service_ids_json,
                 created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 employee_id,
@@ -5473,6 +5841,9 @@ def _create_portal_employee(
                 payload["slot_minutes"],
                 payload["day_start"],
                 payload["day_end"],
+                payload["break_start"],
+                payload["break_end"],
+                payload["break_windows_json"],
                 payload["closed_weekdays_json"],
                 payload["service_ids_json"],
                 created_at,
@@ -5513,7 +5884,7 @@ def _update_portal_employee(
     row = _get_employee_row(employee_id, cliente_id=cliente_id)
     if not row:
         raise HTTPException(status_code=404, detail="Profesional no encontrado.")
-    payload = _validate_employee_payload(cliente_id, data)
+    payload = _validate_employee_payload(cliente_id, data, existing_row=row)
     max_professionals = _plan_feature(cliente_id, "max_professionals")
     if (
         not full_access
@@ -5540,12 +5911,28 @@ def _update_portal_employee(
             status_code=409,
             detail="Este profesional tiene citas futuras activas. Reasignalas o reprogramalas antes de desactivarlo.",
         )
+    previous_break_windows = _employee_schedule_from_row(row).get("break_windows", [])
+    if payload["break_windows"] != previous_break_windows and payload["break_windows"]:
+        conflicts = _booking_conflicts_for_break_windows(
+            cliente_id,
+            payload["break_windows"],
+            employee_id=employee_id,
+        )
+        if conflicts:
+            raise HTTPException(
+                status_code=409,
+                detail=_schedule_conflict_detail(
+                    conflicts,
+                    "Hay citas activas dentro del descanso que quieres guardar. Cancelalas o reprogramalas antes.",
+                ),
+            )
     with _get_db_connection() as connection:
         connection.execute(
             """
             UPDATE employees
             SET name = ?, role_label = ?, color = ?, is_active = ?, timezone = ?,
-                slot_minutes = ?, day_start = ?, day_end = ?, closed_weekdays_json = ?, service_ids_json = ?, updated_at = ?
+                slot_minutes = ?, day_start = ?, day_end = ?, break_start = ?, break_end = ?,
+                break_windows_json = ?, closed_weekdays_json = ?, service_ids_json = ?, updated_at = ?
             WHERE id = ? AND cliente_id = ?
             """,
             (
@@ -5557,6 +5944,9 @@ def _update_portal_employee(
                 payload["slot_minutes"],
                 payload["day_start"],
                 payload["day_end"],
+                payload["break_start"],
+                payload["break_end"],
+                payload["break_windows_json"],
                 payload["closed_weekdays_json"],
                 payload["service_ids_json"],
                 _utc_now_iso(),
@@ -7524,6 +7914,13 @@ def _is_open_now(booking_cfg: Dict[str, Any], now_dt: datetime) -> Optional[bool
     try:
         day_start = booking_cfg.get("day_start") or "09:00"
         day_end = booking_cfg.get("day_end") or "18:00"
+        break_windows = _normalize_break_windows(
+            day_start,
+            day_end,
+            booking_cfg.get("break_windows", []),
+            booking_cfg.get("break_start", ""),
+            booking_cfg.get("break_end", ""),
+        )
         closed = set(booking_cfg.get("closed_weekdays") or [])
         if now_dt.weekday() in closed:
             return False
@@ -7531,6 +7928,13 @@ def _is_open_now(booking_cfg: Dict[str, Any], now_dt: datetime) -> Optional[bool
         eh, em = (int(x) for x in day_end.split(":"))
         start = now_dt.replace(hour=sh, minute=sm, second=0, microsecond=0)
         end = now_dt.replace(hour=eh, minute=em, second=0, microsecond=0)
+        for break_window in break_windows:
+            bh, bm = (int(x) for x in break_window["start"].split(":"))
+            rh, rm = (int(x) for x in break_window["end"].split(":"))
+            pause_start = now_dt.replace(hour=bh, minute=bm, second=0, microsecond=0)
+            pause_end = now_dt.replace(hour=rh, minute=rm, second=0, microsecond=0)
+            if pause_start <= now_dt < pause_end:
+                return False
         return start <= now_dt <= end
     except Exception:
         return None
@@ -7561,6 +7965,18 @@ def _build_live_context_block(cliente_id: str, config: Dict[str, Any]) -> str:
         elif open_now is False:
             lines.append(
                 f"- Estado: CERRADO ahora. Horario habitual {booking_cfg.get('day_start','09:00')}-{booking_cfg.get('day_end','18:00')}."
+            )
+        break_windows = _normalize_break_windows(
+            booking_cfg.get("day_start", "09:00"),
+            booking_cfg.get("day_end", "18:00"),
+            booking_cfg.get("break_windows", []),
+            booking_cfg.get("break_start", ""),
+            booking_cfg.get("break_end", ""),
+        )
+        if break_windows:
+            descanso_txt = ", ".join(f"{item['start']}-{item['end']}" for item in break_windows)
+            lines.append(
+                f"- Descansos diarios: {descanso_txt}."
             )
         closed = booking_cfg.get("closed_weekdays") or []
         if closed:
@@ -8244,12 +8660,23 @@ def _normalize_message_kind(kind: str) -> str:
 
 def _schedule_preview_payload_from_config(cliente_id: str) -> PortalScheduleUpdatePayload:
     booking = _get_client_config(cliente_id).get("booking", {})
+    break_windows = _normalize_break_windows(
+        booking.get("day_start", "09:00"),
+        booking.get("day_end", "18:00"),
+        booking.get("break_windows", []),
+        booking.get("break_start", ""),
+        booking.get("break_end", ""),
+    )
+    break_start, break_end = _first_break_pair(break_windows)
     return PortalScheduleUpdatePayload(
         enabled=bool(booking.get("enabled", True)),
         timezone=_sanitize_text(booking.get("timezone", DEFAULT_TIMEZONE)) or DEFAULT_TIMEZONE,
         slot_minutes=int(booking.get("slot_minutes", 30)),
         day_start=_sanitize_text(booking.get("day_start", "09:00")) or "09:00",
         day_end=_sanitize_text(booking.get("day_end", "18:00")) or "18:00",
+        break_start=break_start,
+        break_end=break_end,
+        break_windows=break_windows,
         closed_weekdays=_normalize_closed_weekdays_list(booking.get("closed_weekdays", [])),
         message_templates=_normalize_message_templates(booking.get("message_templates", {})),
         message_template_enabled=_normalize_message_template_enabled(
@@ -9325,8 +9752,21 @@ def _build_slots_for_day(
     # Paso del grid = slot_minutes; el hueco debe caber la duracion completa.
     slots: List[str] = []
     current = start_dt
+    tzinfo = ZoneInfo(booking_cfg["timezone"])
+    now_local = _utc_now().astimezone(tzinfo)
+    break_intervals = _break_intervals_from_windows(booking_cfg.get("break_windows", []))
     while current + timedelta(minutes=span) <= end_dt:
-        slots.append(current.strftime("%H:%M"))
+        slot = current.strftime("%H:%M")
+        slot_start_min = _time_to_min(slot)
+        slot_end_min = (slot_start_min + span) if slot_start_min is not None else None
+        slot_start_local = current.replace(tzinfo=tzinfo)
+        overlaps_break = (
+            slot_start_min is not None
+            and slot_end_min is not None
+            and _interval_overlaps(slot_start_min, slot_end_min, break_intervals)
+        )
+        if not overlaps_break and (selected_day.date() != now_local.date() or slot_start_local > now_local):
+            slots.append(slot)
         current += timedelta(minutes=slot_minutes)
 
     return slots
@@ -9343,6 +9783,17 @@ def _time_to_min(value: Any) -> Optional[int]:
     if len(parts) < 2 or not parts[0].isdigit() or not parts[1].isdigit():
         return None
     return int(parts[0]) * 60 + int(parts[1])
+
+
+def _break_intervals_from_windows(windows: Any) -> List[Tuple[int, int]]:
+    intervals: List[Tuple[int, int]] = []
+    for raw in windows or []:
+        start_value, end_value, _ = _break_window_values(raw)
+        start_min = _time_to_min(start_value)
+        end_min = _time_to_min(end_value)
+        if start_min is not None and end_min is not None and start_min < end_min:
+            intervals.append((start_min, end_min))
+    return intervals
 
 
 def _booking_row_duration_min(row: sqlite3.Row, cliente_id: str) -> int:
@@ -9452,6 +9903,41 @@ def _booking_conflict_message(rows: List[sqlite3.Row], prefix: str) -> str:
     return f"{prefix}{suffix}"
 
 
+def _booking_conflict_items(rows: List[sqlite3.Row]) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    now_dt = _utc_now()
+    for row in rows[:12]:
+        start_at = _from_utc_iso(row["start_at"] or "")
+        status_value = str(row["status"] or "")
+        can_reschedule = status_value not in {"cancelled", "completed", "no_show"} and not (start_at and start_at < now_dt)
+        items.append(
+            {
+                "booking_id": row["id"],
+                "nombre": row["nombre"] or row["email"] or "Cita",
+                "email": row["email"] or "",
+                "telefono": row["telefono"] or "",
+                "servicio": row["servicio"] or "Consulta",
+                "fecha": row["booking_date"],
+                "hora": row["booking_time"],
+                "employee_id": row["employee_id"] or "",
+                "employee_name": row["employee_name"] or "",
+                "estado": status_value,
+                "start_at": row["start_at"] or "",
+                "end_at": row["end_at"] or "",
+                "can_reschedule": can_reschedule,
+            }
+        )
+    return items
+
+
+def _schedule_conflict_detail(rows: List[sqlite3.Row], prefix: str) -> Dict[str, Any]:
+    return {
+        "type": "schedule_booking_conflicts",
+        "message": _booking_conflict_message(rows, prefix),
+        "conflicts": _booking_conflict_items(rows),
+    }
+
+
 def _booking_conflicts_for_block(
     cliente_id: str,
     fecha: str,
@@ -9475,6 +9961,7 @@ def _booking_conflicts_for_block(
             row["booking_date"],
             row["booking_time"],
             employee_id=row["employee_id"] or employee_id,
+            duration_minutes=_booking_row_duration_min(row, cliente_id),
         )
         if booking_start < block_end and booking_end > block_start:
             conflicts.append(row)
@@ -9511,6 +9998,67 @@ def _booking_conflicts_for_closed_weekdays(
         except ValueError:
             continue
         if weekday in weekdays:
+            conflicts.append(row)
+    return conflicts
+
+
+def _booking_conflicts_for_break_window(
+    cliente_id: str,
+    break_start: str,
+    break_end: str,
+    *,
+    employee_id: str = "",
+) -> List[sqlite3.Row]:
+    return _booking_conflicts_for_break_windows(
+        cliente_id,
+        [{"start": break_start, "end": break_end, "reason": "Descanso"}],
+        employee_id=employee_id,
+    )
+
+
+def _booking_conflicts_for_break_windows(
+    cliente_id: str,
+    break_windows: List[Dict[str, str]],
+    *,
+    employee_id: str = "",
+) -> List[sqlite3.Row]:
+    break_intervals = _break_intervals_from_windows(break_windows)
+    if not break_intervals:
+        return []
+    if employee_id:
+        schedule = _employee_schedule_from_row(_resolve_employee_for_booking(cliente_id, employee_id, require_active=False))
+        timezone_name = schedule["timezone"]
+    else:
+        timezone_name = _get_client_config(cliente_id)["booking"].get("timezone", DEFAULT_TIMEZONE)
+    try:
+        local_today = _utc_now().astimezone(ZoneInfo(timezone_name)).date().isoformat()
+    except Exception:
+        local_today = _utc_now().date().isoformat()
+    now_utc = _utc_now()
+    with _get_db_connection() as connection:
+        clauses = [
+            "cliente_id = ?",
+            "booking_date >= ?",
+            "status IN ('confirmed', 'pending_review')",
+        ]
+        params: List[Any] = [cliente_id, local_today]
+        if employee_id:
+            clauses.append("employee_id = ?")
+            params.append(employee_id)
+        rows = connection.execute(
+            "SELECT * FROM bookings WHERE " + " AND ".join(clauses) + " ORDER BY booking_date ASC, booking_time ASC",
+            tuple(params),
+        ).fetchall()
+    conflicts: List[sqlite3.Row] = []
+    for row in rows:
+        start_at = _from_utc_iso(row["start_at"] or "")
+        if start_at and start_at < now_utc:
+            continue
+        start_min = _time_to_min(row["booking_time"])
+        if start_min is None:
+            continue
+        end_min = start_min + _booking_row_duration_min(row, cliente_id)
+        if _interval_overlaps(start_min, end_min, break_intervals):
             conflicts.append(row)
     return conflicts
 
@@ -9556,6 +10104,42 @@ async def _booking_slot_available(
         _interval_overlaps(start_min, end_min, _booked_intervals(cliente_id, fecha, employee_id=employee_id))
         or _interval_overlaps(start_min, end_min, _blocked_intervals(cliente_id, fecha, employee_id=employee_id))
     )
+
+
+async def _employee_slot_sets_for_day(
+    cliente_id: str,
+    fecha: str,
+    *,
+    employee_row: Optional[sqlite3.Row] = None,
+    employee_id: str = "",
+    servicio: str = "",
+    duration_minutes: Optional[int] = None,
+    exclude_booking_id: str = "",
+) -> Tuple[Set[str], Set[str]]:
+    employee = employee_row or _resolve_employee_for_booking(cliente_id, employee_id)
+    dur = int(duration_minutes or _service_duration_minutes(cliente_id, _sanitize_text(servicio), employee))
+    slots = await _available_slots_for_day(
+        cliente_id,
+        fecha,
+        employee_id=employee["id"],
+        duration_minutes=dur,
+    )
+    booked = _booked_intervals(
+        cliente_id,
+        fecha,
+        employee_id=employee["id"],
+        exclude_booking_id=exclude_booking_id,
+    )
+    blocked = _blocked_intervals(cliente_id, fecha, employee_id=employee["id"])
+    available: Set[str] = set()
+    for slot in slots:
+        start_min = _time_to_min(slot)
+        if start_min is None:
+            continue
+        end_min = start_min + dur
+        if not _interval_overlaps(start_min, end_min, booked) and not _interval_overlaps(start_min, end_min, blocked):
+            available.add(slot)
+    return set(slots), available
 
 
 async def _booking_slot_available_for_reschedule(
@@ -9691,27 +10275,48 @@ _DEMO_FALLBACK_SERVICES = [
 ]
 
 
+def _is_bookable_demo_service(service: Dict[str, Any]) -> bool:
+    nombre = str(service.get("nombre") or service.get("name") or "").strip().lower()
+    descripcion = str(service.get("descripcion") or service.get("description") or "").strip().lower()
+    text = f"{nombre} {descripcion}"
+    if not nombre:
+        return False
+    discount_markers = ("bono", "bonos", "descuento", "dto", "%")
+    return not any(marker in text for marker in discount_markers)
+
+
 def _demo_service_names(cliente_id: str) -> List[str]:
-    names: List[str] = []
+    return [service["nombre"] for service in _demo_services(cliente_id)]
+
+
+def _demo_services(cliente_id: str) -> List[Dict[str, Any]]:
+    services: List[Dict[str, Any]] = []
+    seen: set[str] = set()
     try:
         for service in _catalog_services(cliente_id):
             nombre = str(service.get("nombre") or "").strip()
-            if nombre and nombre not in names:
-                names.append(nombre)
+            if nombre and nombre not in seen and _is_bookable_demo_service(service):
+                services.append(service)
+                seen.add(nombre)
     except Exception:  # noqa: BLE001
-        names = []
-    if names:
-        return names[:12]
+        services = []
+        seen = set()
+    if services:
+        return services[:12]
     try:
         for service in _extract_services_from_info(cliente_id):
             nombre = str(service.get("nombre") or "").strip()
-            if nombre and nombre not in names:
-                names.append(nombre)
+            if nombre and nombre not in seen and _is_bookable_demo_service(service):
+                services.append(service)
+                seen.add(nombre)
     except Exception:  # noqa: BLE001
-        names = []
-    if not names:
-        names = list(_DEMO_FALLBACK_SERVICES)
-    return names[:12]
+        services = []
+    if not services:
+        services = [
+            {"id": _normalize_service_id(name), "nombre": name, "duration_minutes": 0, "price_cents": 0}
+            for name in _DEMO_FALLBACK_SERVICES
+        ]
+    return services[:12]
 
 
 def _purge_demo_agenda(cliente_id: str) -> Dict[str, int]:
@@ -9753,6 +10358,7 @@ def _create_demo_employees(cliente_id: str) -> List[Dict[str, Any]]:
     defaults = _employee_defaults_for_client(cliente_id)
     created_at = _utc_now_iso()
     closed_json = json.dumps(defaults["closed_weekdays"])
+    break_windows_json = json.dumps(defaults.get("break_windows", []))
     employees: List[Dict[str, Any]] = []
     with _get_db_connection() as connection:
         for profile in _DEMO_PROFESSIONALS:
@@ -9761,15 +10367,17 @@ def _create_demo_employees(cliente_id: str) -> List[Dict[str, Any]]:
                 """
                 INSERT INTO employees (
                     id, cliente_id, name, role_label, color, is_active, is_default,
-                    timezone, slot_minutes, day_start, day_end, closed_weekdays_json, service_ids_json,
+                    timezone, slot_minutes, day_start, day_end, break_start, break_end,
+                    break_windows_json, closed_weekdays_json, service_ids_json,
                     created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, '[]', ?, ?)
+                VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?)
                 """,
                 (
                     employee_id, cliente_id, profile["name"], profile["role_label"], profile["color"],
                     defaults["timezone"], int(defaults["slot_minutes"]),
-                    defaults["day_start"], defaults["day_end"], closed_json,
+                    defaults["day_start"], defaults["day_end"],
+                    defaults["break_start"], defaults["break_end"], break_windows_json, closed_json,
                     created_at, created_at,
                 ),
             )
@@ -9799,21 +10407,32 @@ def _seed_demo_agenda(cliente_id: str) -> Dict[str, Any]:
 
     start_dt = _parse_time(defaults["day_start"] or "09:00")
     end_dt = _parse_time(defaults["day_end"] or "18:00")
+    break_intervals = _break_intervals_from_windows(defaults.get("break_windows", []))
     day_slots: List[str] = []
     cursor = start_dt
     while cursor + timedelta(minutes=slot_minutes) <= end_dt:
-        day_slots.append(cursor.strftime("%H:%M"))
+        slot = cursor.strftime("%H:%M")
+        slot_start_min = _time_to_min(slot)
+        slot_end_min = (slot_start_min + slot_minutes) if slot_start_min is not None else None
+        if (
+            slot_start_min is not None
+            and slot_end_min is not None
+            and not _interval_overlaps(slot_start_min, slot_end_min, break_intervals)
+        ):
+            day_slots.append(slot)
         cursor += timedelta(minutes=slot_minutes)
     if not day_slots:
         day_slots = ["10:00", "11:00", "12:00", "16:00", "17:00"]
 
     employees = _create_demo_employees(cliente_id)
-    services = _demo_service_names(cliente_id)
+    services = _demo_services(cliente_id)
     today = datetime.now(tz).date()
     rng = random.Random(f"{cliente_id}:{today.isoformat()}")
     created_at = _utc_now_iso()
     bookings_created = 0
     max_bookings = 350
+    end_day_min = _time_to_min(end_dt.strftime("%H:%M")) or (24 * 60)
+    occupied_by_employee_day: Dict[Tuple[str, str], List[Tuple[int, int]]] = {}
 
     for offset in range(-7, 29):  # ~5 semanas alrededor de hoy
         day = today + timedelta(days=offset)
@@ -9826,8 +10445,32 @@ def _seed_demo_agenda(cliente_id: str) -> Dict[str, Any]:
             for hora in chosen:
                 if bookings_created >= max_bookings:
                     break
+                service = rng.choice(services)
+                service_name = str(service.get("nombre") or service.get("name") or "Consulta general").strip()
+                service_id = str(service.get("id") or service.get("slug") or _normalize_service_id(service_name))
+                try:
+                    service_duration = int(service.get("duration_minutes") or 0)
+                except (TypeError, ValueError):
+                    service_duration = 0
+                service_duration = service_duration if service_duration > 0 else slot_minutes
+                try:
+                    service_price = int(service.get("price_cents") or 0)
+                except (TypeError, ValueError):
+                    service_price = 0
+                start_min = _time_to_min(hora)
+                if start_min is None:
+                    continue
+                end_min = start_min + service_duration
+                if end_min > end_day_min:
+                    continue
+                if _interval_overlaps(start_min, end_min, break_intervals):
+                    continue
+                occupied_key = (emp["id"], day.isoformat())
+                occupied = occupied_by_employee_day.setdefault(occupied_key, [])
+                if any(start_min < busy_end and end_min > busy_start for busy_start, busy_end in occupied):
+                    continue
                 start_local = datetime.fromisoformat(f"{day.isoformat()}T{hora}:00").replace(tzinfo=tz)
-                end_local = start_local + timedelta(minutes=slot_minutes)
+                end_local = start_local + timedelta(minutes=service_duration)
                 if is_past:
                     status_value = "cancelled" if rng.random() < 0.18 else "completed"
                 else:
@@ -9841,7 +10484,7 @@ def _seed_demo_agenda(cliente_id: str) -> Dict[str, Any]:
                     "nombre": rng.choice(_DEMO_CUSTOMER_NAMES),
                     "email": f"demo+{booking_id[:8].lower()}@example.com",
                     "telefono": f"+34 6{rng.randint(10, 99)} {rng.randint(100, 999)} {rng.randint(100, 999)}",
-                    "servicio": rng.choice(services),
+                    "servicio": service_name,
                     "booking_date": day.isoformat(),
                     "booking_time": hora,
                     "notas": "Cita de demostracion",
@@ -9863,6 +10506,8 @@ def _seed_demo_agenda(cliente_id: str) -> Dict[str, Any]:
                     "reminder_2h_sent_at": "",
                     "customer_email_status": "",
                     "customer_email_last_error": "",
+                    "service_id": service_id,
+                    "service_price_cents": service_price,
                     "source": DEMO_BOOKING_SOURCE,
                     "created_at": created_at,
                 }
@@ -9870,6 +10515,7 @@ def _seed_demo_agenda(cliente_id: str) -> Dict[str, Any]:
                     _store_booking(record)
                 except sqlite3.IntegrityError:
                     continue
+                occupied.append((start_min, end_min))
                 bookings_created += 1
         if bookings_created >= max_bookings:
             break
@@ -11226,6 +11872,13 @@ def _extract_services_from_info(cliente_id: str) -> List[Dict[str, Any]]:
             return False
         price_part = next((p for p in parts[1:] if _parse_price_to_cents(p)), "")
         duration_part = next((p for p in parts[1:] if _parse_duration_minutes_text(p)), "")
+        raw_lower = raw.lower()
+        if (
+            not duration_part
+            and "%" in raw
+            and any(marker in raw_lower for marker in ("bono", "bonos", "descuento", "dto"))
+        ):
+            return False
         # Evita convertir bullets descriptivos largos en servicios.
         if not price_part and not duration_part:
             return False
@@ -11382,20 +12035,14 @@ async def _public_slot_sets_for_day(
     for employee_row in _list_public_employee_rows(cliente_id, include_inactive=False):
         if servicio and not _service_name_allowed_for_employee(cliente_id, employee_row, servicio):
             continue
-        dur = _service_duration_minutes(cliente_id, servicio, employee_row)
-        employee_slots = await _available_slots_for_day(
-            cliente_id, fecha, employee_id=employee_row["id"], duration_minutes=dur
+        employee_slots, employee_available = await _employee_slot_sets_for_day(
+            cliente_id,
+            fecha,
+            employee_row=employee_row,
+            servicio=servicio,
         )
-        booked = _booked_intervals(cliente_id, fecha, employee_id=employee_row["id"])
-        blocked = _blocked_intervals(cliente_id, fecha, employee_id=employee_row["id"])
         all_slots.update(employee_slots)
-        for slot in employee_slots:
-            start_min = _time_to_min(slot)
-            if start_min is None:
-                continue
-            end_min = start_min + dur
-            if not _interval_overlaps(start_min, end_min, booked) and not _interval_overlaps(start_min, end_min, blocked):
-                available_slots.add(slot)
+        available_slots.update(employee_available)
     return all_slots, available_slots
 
 
@@ -16104,25 +16751,21 @@ async def disponibilidad(
     try:
         if employee_id:
             employee_row = _resolve_employee_for_booking(cliente_id, employee_id)
-            dur = _service_duration_minutes(cliente_id, _sanitize_text(servicio), employee_row)
-            slots = await _available_slots_for_day(
-                cliente_id, fecha, employee_id=employee_row["id"], duration_minutes=dur
+            slots, available_slots = await _employee_slot_sets_for_day(
+                cliente_id,
+                fecha,
+                employee_row=employee_row,
+                servicio=servicio,
             )
-            booked = _booked_intervals(cliente_id, fecha, employee_id=employee_row["id"])
-            blocked = _blocked_intervals(cliente_id, fecha, employee_id=employee_row["id"])
-
-            def _slot_free(hora: str) -> bool:
-                start_min = _time_to_min(hora)
-                if start_min is None:
-                    return False
-                end_min = start_min + dur
-                return not _interval_overlaps(start_min, end_min, booked) and not _interval_overlaps(start_min, end_min, blocked)
 
             return RespuestaDisponibilidad(
                 fecha=fecha,
                 timezone=employee_row["timezone"] or config["booking"]["timezone"],
                 employee_id=employee_row["id"],
-                slots=[SlotDisponibilidad(hora=hora, disponible=_slot_free(hora)) for hora in slots],
+                slots=[
+                    SlotDisponibilidad(hora=hora, disponible=hora in available_slots)
+                    for hora in sorted(slots)
+                ],
             )
 
         all_slots, available_slots = await _public_slot_sets_for_day(
@@ -17212,10 +17855,12 @@ async def _wa_send_date_picker(
 
         try:
             if employee_id:
-                emp_slots = await _available_slots_for_day(cliente_id, candidate.isoformat(), employee_id=employee_id)
-                occupied = _booked_slots(cliente_id, candidate.isoformat(), employee_id=employee_id)
-                occupied.update(_blocked_slots(cliente_id, candidate.isoformat(), employee_id=employee_id))
-                available = set(s for s in emp_slots if s not in occupied)
+                _, available = await _employee_slot_sets_for_day(
+                    cliente_id,
+                    candidate.isoformat(),
+                    employee_id=employee_id,
+                    servicio=servicio,
+                )
             else:
                 _, available = await _public_slot_sets_for_day(cliente_id, candidate.isoformat(), servicio=servicio)
         except Exception:
@@ -17263,11 +17908,12 @@ async def _wa_send_time_picker(
 ) -> bool:
     try:
         if employee_id:
-            emp_slots = await _available_slots_for_day(cliente_id, fecha_iso, employee_id=employee_id)
-            occupied = _booked_slots(cliente_id, fecha_iso, employee_id=employee_id)
-            occupied.update(_blocked_slots(cliente_id, fecha_iso, employee_id=employee_id))
-            all_slots = set(emp_slots)
-            available = set(s for s in emp_slots if s not in occupied)
+            all_slots, available = await _employee_slot_sets_for_day(
+                cliente_id,
+                fecha_iso,
+                employee_id=employee_id,
+                servicio=servicio,
+            )
         else:
             all_slots, available = await _public_slot_sets_for_day(cliente_id, fecha_iso, servicio=servicio)
     except HTTPException as exc:
@@ -26242,13 +26888,31 @@ async def _voice_perform_booking(
     except HTTPException as exc:
         return {"ok": False, "error": str(exc.detail)}
 
+    service_row = _find_service_by_name(cliente_id, servicio)
+    service_duration = _service_duration_minutes(cliente_id, servicio, employee_row)
+    service_id = service_row["slug"] if service_row else ""
+    service_price = int(service_row["price_cents"]) if service_row else 0
+
+    if not await _booking_slot_available(
+        cliente_id,
+        booking_date,
+        booking_time,
+        employee_id=employee_row["id"],
+        duration_minutes=service_duration,
+    ):
+        return {"ok": False, "error": "Ese horario ya no esta disponible. Ofrece otra hora."}
+
     booking_id = f"bk_{secrets.token_urlsafe(10)}"
     manage_token = _generate_manage_token()
     created_at = _utc_now_iso()
     booking_timezone = employee_row["timezone"] or config["booking"]["timezone"]
     try:
         start_local, end_local = _booking_start_end(
-            cliente_id, booking_date, booking_time, employee_id=employee_row["id"]
+            cliente_id,
+            booking_date,
+            booking_time,
+            employee_id=employee_row["id"],
+            duration_minutes=service_duration,
         )
     except Exception as exc:  # noqa: BLE001
         logger.error("[voice] booking start/end fallo (%s): %s", cliente_id, exc)
@@ -26306,6 +26970,8 @@ async def _voice_perform_booking(
         "reminder_2h_sent_at": "",
         "customer_email_status": "",
         "customer_email_last_error": "",
+        "service_id": service_id,
+        "service_price_cents": service_price,
         "source": "voice",
         "created_at": created_at,
     }
