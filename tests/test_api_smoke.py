@@ -4809,8 +4809,36 @@ def test_admin_impersonate_flow_sets_cookie_and_blocks_password(
         cookies={api_module.PORTAL_COOKIE_NAME: cookie},
     )
     assert end.status_code == 200
+    assert end.json()["admin_redirect_url"] == "/acceso"
     after_end = client.get("/auth/me", cookies={api_module.PORTAL_COOKIE_NAME: cookie})
     assert after_end.status_code == 401
+
+    admin_user = api_module._get_user_by_email("admin@example.com")
+    admin_session = api_module._create_auth_session(admin_user["id"])
+    impersonate_from_session = client.post(
+        f"/admin/clientes/{cliente_id}/impersonate",
+        cookies={api_module.PORTAL_COOKIE_NAME: admin_session},
+    )
+    assert impersonate_from_session.status_code == 200, impersonate_from_session.text
+    session_cookie = impersonate_from_session.cookies.get(api_module.PORTAL_COOKIE_NAME)
+    admin_return_cookie = impersonate_from_session.cookies.get(api_module.ADMIN_RETURN_COOKIE_NAME)
+    assert session_cookie
+    assert admin_return_cookie == admin_session
+
+    restored = client.post(
+        "/admin/impersonate/end",
+        cookies={
+            api_module.PORTAL_COOKIE_NAME: session_cookie,
+            api_module.ADMIN_RETURN_COOKIE_NAME: admin_return_cookie,
+        },
+    )
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["admin_redirect_url"] == "/dashboard"
+    restored_admin_cookie = restored.cookies.get(api_module.PORTAL_COOKIE_NAME)
+    assert restored_admin_cookie == admin_session
+    restored_me = client.get("/auth/me", cookies={api_module.PORTAL_COOKIE_NAME: restored_admin_cookie})
+    assert restored_me.status_code == 200
+    assert restored_me.json()["role"] == "admin"
 
 
 def test_admin_cliente_audit_returns_impersonations(client: TestClient, api_module):

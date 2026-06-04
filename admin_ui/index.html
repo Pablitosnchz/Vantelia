@@ -100,6 +100,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+body.sidebar-open { overflow: hidden; }
 
 a { color: inherit; text-decoration: none; }
 a:hover { color: var(--accent); }
@@ -170,6 +171,29 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
 }
 .topbar .brand p { display: none; }
 .top-actions { display: flex; align-items: center; gap: 10px; }
+.sidebar-toggle {
+  display: none;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.sidebar-toggle:hover { border-color: var(--accent-line); color: var(--accent); }
+.sidebar-toggle svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .topbar-user {
   display: inline-flex; align-items: center; gap: 10px;
   padding: 6px 12px;
@@ -203,6 +227,20 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
   top: 65px;
   overflow-y: auto;
   overflow-x: hidden;
+}
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(4,8,16,0.62);
+  z-index: 70;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+}
+.sidebar-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .sidebar-stack { display: flex; flex-direction: column; gap: 12px; }
@@ -1731,11 +1769,17 @@ tbody tr:last-child td { border-bottom: none; }
   .page {
     grid-template-columns: 1fr;
   }
-  .topbar { padding: 12px 16px; }
+  .topbar { padding: 10px 12px; gap: 10px; }
+  .sidebar-toggle { display: inline-flex; }
+  .topbar .brand { min-width: 0; }
+  .topbar .brand-mark { gap: 9px; min-width: 0; }
+  .topbar .brand-copy { min-width: 0; }
+  .topbar .brand h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top-actions { gap: 8px; }
   .sidebar {
     position: fixed;
     top: 0; left: 0;
-    width: 280px;
+    width: min(86vw, 310px);
     height: 100vh;
     z-index: 80;
     transform: translateX(-100%);
@@ -1745,6 +1789,7 @@ tbody tr:last-child td { border-bottom: none; }
     grid-row: 1 / -1;
   }
   .sidebar.is-open { transform: translateX(0); }
+  .sidebar-overlay { display: block; }
   .side-nav { padding: 4px 0; }
 
   .main { padding: 18px 16px 44px; grid-column: 1; }
@@ -1768,6 +1813,9 @@ tbody tr:last-child td { border-bottom: none; }
   body { font-size: 13.5px; }
   h1 { font-size: 1.2rem; }
   h2 { font-size: 1.05rem; }
+  .topbar .brand-logo { width: 32px; height: 32px; }
+  .topbar-user { display: none; }
+  .top-actions .danger.small { padding: 8px 10px; }
   .card { padding: 16px; }
   .stat strong { font-size: 1.3rem; }
 }
@@ -1776,6 +1824,9 @@ tbody tr:last-child td { border-bottom: none; }
 <body>
   <div class="page">
     <header class="topbar">
+      <button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Abrir menu" aria-controls="adminSidebar" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+      </button>
       <section class="brand">
         <div class="brand-mark">
           <img class="brand-logo" src="/brand-assets/Logo_1_sin_resplandor.png" alt="Vantelia" />
@@ -1798,7 +1849,7 @@ tbody tr:last-child td { border-bottom: none; }
     </header>
 
     <div class="shell">
-    <aside class="sidebar">
+    <aside id="adminSidebar" class="sidebar">
       <nav class="side-nav" aria-label="Navegacion del dashboard">
         <button class="nav-button active" type="button" data-nav-view="clients">
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
@@ -1862,6 +1913,7 @@ tbody tr:last-child td { border-bottom: none; }
       </section>
 
     </aside>
+    <div id="sidebarOverlay" class="sidebar-overlay" aria-hidden="true"></div>
 
     <main class="main">
       <section class="card hero">
@@ -3790,6 +3842,9 @@ tbody tr:last-child td { border-bottom: none; }
 
     const elements = {
       status: document.getElementById("status"),
+      sidebarToggle: document.getElementById("sidebarToggle"),
+      sidebar: document.getElementById("adminSidebar"),
+      sidebarOverlay: document.getElementById("sidebarOverlay"),
       navButtons: document.querySelectorAll("[data-nav-view]"),
       views: document.querySelectorAll(".dashboard-view"),
       clientTabButtons: document.querySelectorAll("[data-client-tab]"),
@@ -3949,6 +4004,24 @@ tbody tr:last-child td { border-bottom: none; }
       return `${name} (${id})`;
     }
 
+    function isMobileSidebar() {
+      return window.matchMedia("(max-width: 960px)").matches;
+    }
+
+    function setSidebarOpen(open) {
+      const shouldOpen = !!open;
+      elements.sidebar?.classList.toggle("is-open", shouldOpen);
+      elements.sidebarOverlay?.classList.toggle("is-open", shouldOpen);
+      elements.sidebarToggle?.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+      elements.sidebarToggle?.setAttribute("aria-label", shouldOpen ? "Cerrar menu" : "Abrir menu");
+      elements.sidebarOverlay?.setAttribute("aria-hidden", shouldOpen ? "false" : "true");
+      document.body.classList.toggle("sidebar-open", shouldOpen);
+    }
+
+    function closeSidebar() {
+      setSidebarOpen(false);
+    }
+
     function setView(view) {
       const nextView = view || "clients";
       state.activeView = nextView;
@@ -3968,6 +4041,7 @@ tbody tr:last-child td { border-bottom: none; }
       } else if (nextView === "voice") {
         try { window.__voiceInit && window.__voiceInit(); } catch(e) { console.warn(e); }
       }
+      if (isMobileSidebar()) closeSidebar();
     }
 
     async function loadStatsOverview() {
@@ -6098,7 +6172,17 @@ tbody tr:last-child td { border-bottom: none; }
         closeBookingModal();
       } else if (event.key === "Escape" && state.drawerOpen) {
         closeClientDrawer();
+      } else if (event.key === "Escape") {
+        closeSidebar();
       }
+    });
+    elements.sidebarToggle?.addEventListener("click", () => {
+      const isOpen = elements.sidebar?.classList.contains("is-open");
+      setSidebarOpen(!isOpen);
+    });
+    elements.sidebarOverlay?.addEventListener("click", closeSidebar);
+    window.addEventListener("resize", () => {
+      if (!isMobileSidebar()) closeSidebar();
     });
     elements.navButtons.forEach((button) => {
       button.addEventListener("click", () => setView(button.dataset.navView));

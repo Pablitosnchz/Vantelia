@@ -3209,6 +3209,7 @@ const citasState = { view: 'day', calYear: null, calMonth: null, calData: [], ca
 async function loadCitas() {
   const now = new Date();
   if (!citasState.calYear) { citasState.calYear = now.getFullYear(); citasState.calMonth = now.getMonth(); }
+  await ensureCitasEmployeesLoaded();
   loadCitasAttendanceStats();
   if (citasState.view === 'cal') { _switchToCalView(); await fetchCitasCalData(); renderCalendar(); }
   else { _switchToDayView(); await loadCitasDay(); }
@@ -3232,6 +3233,7 @@ async function loadCitasAttendanceStats() {
 }
 
 async function fetchCitasCalData() {
+  await ensureCitasEmployeesLoaded();
   const y = citasState.calYear, m = citasState.calMonth;
   const from = `${y}-${String(m+1).padStart(2,'0')}-01`;
   const lastDay = new Date(y, m+1, 0).getDate();
@@ -3260,6 +3262,19 @@ async function refreshCitasCalendarIfVisible() {
 function invalidateCitasScheduleCache() {
   citasState.daySchedule = null;
   citasState.employees = null;
+}
+
+async function ensureCitasEmployeesLoaded() {
+  const sel = document.getElementById('citasFiltProf');
+  if (!citasState.employees) {
+    try {
+      const r = await api('/auth/employees');
+      citasState.employees = (Array.isArray(r) ? r : (r?.items || [])).map(e => ({ ...e, id: e.employee_id || e.id }));
+    } catch {
+      citasState.employees = [];
+    }
+  }
+  if (sel && sel.options.length <= 1) loadCitasProfSelect(citasState.employees || []);
 }
 
 async function refreshCitasIfVisible() {
@@ -4009,6 +4024,7 @@ async function loadEquipo() {
     const emps = Array.isArray(empsRaw) ? empsRaw : (empsRaw?.items || []);
     const svcs = Array.isArray(svcsRaw) ? svcsRaw : (svcsRaw?.items || []);
     allServices = svcs;
+    citasState.employees = emps.map(e => ({ ...e, id: e.employee_id || e.id }));
     grid.innerHTML = '';
     if (!emps.length) { grid.innerHTML = '<div class="panel-sub">Sin profesionales. Crea el primero.</div>'; }
     emps.forEach(raw => {
@@ -4042,9 +4058,11 @@ async function loadEquipo() {
 
 function loadCitasProfSelect(emps) {
   const sel = document.getElementById('citasFiltProf');
+  const current = sel.value || '';
   const items = normalizeEmployeeItems(emps);
   while (sel.options.length > 1) sel.remove(1);
   items.forEach(e => { const o = document.createElement('option'); o.value = e.id; o.textContent = e.name; sel.appendChild(o); });
+  if (current && items.some(e => e.id === current)) sel.value = current;
 }
 
 function openEquipoPanel(emp) {
@@ -4595,9 +4613,13 @@ async function mountAdminImpersonationBanner() {
     pill.addEventListener('mouseenter', () => { pill.style.opacity = '1'; });
     pill.addEventListener('mouseleave', () => { pill.style.opacity = '0.55'; });
     pill.addEventListener('click', async () => {
-      try { await api('/admin/impersonate/end', { method: 'POST' }); } catch {}
+      let redirect = '/dashboard';
+      try {
+        const res = await api('/admin/impersonate/end', { method: 'POST' });
+        redirect = res?.admin_redirect_url || redirect;
+      } catch {}
       try { localStorage.removeItem('vantelia_admin_impersonating'); } catch {}
-      window.location.href = '/dashboard';
+      window.location.href = redirect;
     });
     document.body.appendChild(pill);
   } catch {

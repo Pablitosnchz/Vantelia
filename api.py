@@ -178,6 +178,10 @@ MANAGE_TOKEN_VALID_DAYS_AFTER_DATE = int(os.getenv("MANAGE_TOKEN_VALID_DAYS_AFTE
 PASSWORD_RESET_TOKEN_HOURS = int(os.getenv("PASSWORD_RESET_TOKEN_HOURS", "2"))
 PASSWORD_RESET_RESEND_SECONDS = int(os.getenv("PASSWORD_RESET_RESEND_SECONDS", "60"))
 PORTAL_COOKIE_NAME = os.getenv("PORTAL_COOKIE_NAME", "vantelia_portal_session").strip() or "vantelia_portal_session"
+ADMIN_RETURN_COOKIE_NAME = (
+    os.getenv("ADMIN_RETURN_COOKIE_NAME", "vantelia_admin_session").strip()
+    or "vantelia_admin_session"
+)
 PORTAL_COOKIE_DOMAIN = os.getenv("PORTAL_COOKIE_DOMAIN", "").strip()
 PORTAL_SESSION_HOURS = int(os.getenv("PORTAL_SESSION_HOURS", "72"))
 PORTAL_ADMIN_EMAIL = os.getenv("PORTAL_ADMIN_EMAIL", "").strip().lower()
@@ -4255,6 +4259,23 @@ def _set_portal_cookie(response: Response, raw_token: str) -> None:
 
 def _clear_portal_cookie(response: Response) -> None:
     response.delete_cookie(PORTAL_COOKIE_NAME, path="/", samesite="lax", domain=PORTAL_COOKIE_DOMAIN or None)
+
+
+def _set_admin_return_cookie(response: Response, raw_token: str) -> None:
+    response.set_cookie(
+        ADMIN_RETURN_COOKIE_NAME,
+        raw_token,
+        max_age=max(3600, PORTAL_SESSION_HOURS * 3600),
+        httponly=True,
+        secure=APP_BASE_URL.startswith("https://"),
+        samesite="lax",
+        domain=PORTAL_COOKIE_DOMAIN or None,
+        path="/",
+    )
+
+
+def _clear_admin_return_cookie(response: Response) -> None:
+    response.delete_cookie(ADMIN_RETURN_COOKIE_NAME, path="/", samesite="lax", domain=PORTAL_COOKIE_DOMAIN or None)
 
 
 _ensure_default_portal_admin()
@@ -12239,6 +12260,7 @@ async def auth_login(data: AuthLoginPayload, request: Request) -> Response:
         redirect_to=_redirect_for_role(fresh_user["role"]),
     )
     response = JSONResponse(payload.model_dump())
+    _clear_admin_return_cookie(response)
     _set_portal_cookie(response, raw_token)
     return response
 
@@ -12251,6 +12273,7 @@ async def auth_logout(
     if portal_session:
         _delete_auth_session(portal_session)
     _clear_portal_cookie(response)
+    _clear_admin_return_cookie(response)
     return response
 
 
@@ -16532,6 +16555,7 @@ async def admin_assign_cliente_owner(
 async def admin_impersonate_cliente(
     cliente_id: str,
     request: Request,
+    portal_session: Optional[str] = Cookie(default=None, alias=PORTAL_COOKIE_NAME),
     admin: Dict[str, str] = Depends(_require_admin_identity),
 ) -> Response:
     """Admin opens cliente's portal as the cliente owner.
@@ -16606,6 +16630,10 @@ async def admin_impersonate_cliente(
         ).model_dump()
     )
     response.headers["Cache-Control"] = "no-store"
+    if portal_session and admin.get("via") == "session":
+        _set_admin_return_cookie(response, portal_session)
+    else:
+        _clear_admin_return_cookie(response)
     _set_portal_cookie(response, raw_token)
     return response
 
@@ -16616,6 +16644,7 @@ async def admin_impersonate_cliente(
 )
 async def admin_impersonate_end(
     portal_session: Optional[str] = Cookie(default=None, alias=PORTAL_COOKIE_NAME),
+    admin_return_session: Optional[str] = Cookie(default=None, alias=ADMIN_RETURN_COOKIE_NAME),
 ) -> Response:
     """Closes the impersonated session and returns the admin to the dashboard.
 
@@ -16624,7 +16653,8 @@ async def admin_impersonate_end(
     plain logout for that token.
     """
     user_row = _get_authenticated_portal_user_or_none(portal_session)
-    if _session_is_impersonated(user_row):
+    was_impersonated = _session_is_impersonated(user_row)
+    if was_impersonated:
         admin_email = _session_impersonator_email(user_row)
         with _get_db_connection() as connection:
             connection.execute(
@@ -16635,11 +16665,20 @@ async def admin_impersonate_end(
         logger.info("[admin] impersonate end admin=%s session=%s", admin_email, user_row["session_id"])
     if portal_session:
         _delete_auth_session(portal_session)
+    admin_redirect_url = "/acceso"
+    admin_row = _get_authenticated_portal_user_or_none(admin_return_session) if was_impersonated else None
     response = JSONResponse(
-        AdminImpersonateEndResponse(ok=True, admin_redirect_url="/dashboard").model_dump()
+        AdminImpersonateEndResponse(
+            ok=True,
+            admin_redirect_url="/dashboard" if admin_row and admin_row["role"] == "admin" else admin_redirect_url,
+        ).model_dump()
     )
     response.headers["Cache-Control"] = "no-store"
-    _clear_portal_cookie(response)
+    if admin_row and admin_row["role"] == "admin":
+        _set_portal_cookie(response, admin_return_session or "")
+    else:
+        _clear_portal_cookie(response)
+    _clear_admin_return_cookie(response)
     return response
 
 
