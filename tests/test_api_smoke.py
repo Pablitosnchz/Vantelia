@@ -3192,7 +3192,8 @@ def test_instagram_draft_generation_no_network(client: TestClient, api_module):
     assert any(d["username"] == "demo_draft_user" for d in drafts)
     target = next(d for d in drafts if d["username"] == "demo_draft_user")
     assert target["stage"] == "cold"
-    assert target["variant"] in {"A", "B"}
+    # Cold usa las plantillas editables del panel (Mensajes / templates_v2): variantes A/B/C.
+    assert target["variant"] in {"A", "B", "C"}
     assert "ig.me/m/" in target["deep_link"]
     # Mensaje sin reventar limite 500 chars
     assert len(target["message"]) <= 500

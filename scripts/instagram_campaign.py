@@ -444,6 +444,43 @@ def fetch_candidates(
     return out
 
 
+def _db_path_from_conn(conn: sqlite3.Connection) -> str:
+    """Ruta del fichero sqlite asociado a la conexion (para leer overrides del panel)."""
+    try:
+        for _seq, name, file in conn.execute("PRAGMA database_list").fetchall():
+            if name == "main" and file:
+                return file
+    except Exception:
+        pass
+    return ""
+
+
+def _render_message(conn: sqlite3.Connection, p: IGProspect, stage: str) -> tuple[str, str]:
+    """Texto del DM para este prospect.
+
+    En cold usa las plantillas editables del panel (pestana Mensajes / templates_v2)
+    con los overrides A/B/C que haya guardado el usuario. Si templates_v2 no esta
+    disponible o devuelve texto vacio, cae a las plantillas internas por stage.
+    """
+    if stage == "cold":
+        try:
+            from instagram_templates_v2 import render_natural, pick_variant  # type: ignore
+
+            db_path = _db_path_from_conn(conn)
+            text = render_natural(
+                username=p.username,
+                business_name=p.full_name or "",
+                niche=p.niche or "",
+                city=p.city or "",
+                db_path=db_path or None,
+            )
+            if text and len(text.strip()) >= 30:
+                return text, pick_variant(p.username)
+        except Exception:
+            pass
+    return render(stage, p)
+
+
 def create_draft(conn: sqlite3.Connection, row: sqlite3.Row, stage: str) -> dict:
     p = _row_to_prospect(row)
     existing = conn.execute(
@@ -452,7 +489,7 @@ def create_draft(conn: sqlite3.Connection, row: sqlite3.Row, stage: str) -> dict
     ).fetchone()
     if existing:
         raise ValueError(f"Ya existe un intento para @{p.username} en stage={stage}")
-    message, variant = render(stage, p)
+    message, variant = _render_message(conn, p, stage)
     conn.execute(
         """INSERT INTO ig_sends (username, stage, variant, message_text, mode, ready, drafted_at)
            VALUES (?,?,?,?,?,?,?)""",
@@ -483,7 +520,7 @@ def cmd_preview(args: argparse.Namespace) -> int:
         rows = fetch_candidates(conn, args.stage, args.limit, args.after_days)
         for r in rows:
             p = _row_to_prospect(r)
-            message, variant = render(args.stage, p)
+            message, variant = _render_message(conn, p, args.stage)
             print(f"\n--- @{p.username} | {args.stage} | variant={variant} ---")
             print(message)
             print(f"link: {igme_deep_link(p.username, message)}")

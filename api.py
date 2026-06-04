@@ -25200,6 +25200,15 @@ def instagram_generate_drafts(payload: InstagramDraftRequest):
 
 @app.get("/admin/instagram/drafts", dependencies=[Depends(_require_admin_token)])
 def instagram_drafts_queue(stage: str = "", niche: str = "", city: str = "", limit: int = 100):
+    # Single-touch: con follow-ups desactivados, descarta cualquier draft no-cold
+    # que quedara en cola (de versiones anteriores) para que no se envie ni se vea.
+    if not _ig_env_bool("IG_AUTONOMOUS_FOLLOWUPS", False):
+        with _instagram_db() as conn:
+            conn.execute(
+                "UPDATE ig_sends SET mode='skipped', ready=0, skip_reason='followups_off' "
+                "WHERE mode='draft' AND ready=1 AND stage<>'cold'"
+            )
+            conn.commit()
     where = ["s.mode='draft'", "s.ready=1"]
     params: List[Any] = []
     if stage:
@@ -25663,7 +25672,11 @@ def _ig_autopilot_run_once() -> Dict[str, Any]:
                     (_instagram_now(),),
                 )
 
-        if row["auto_followups"]:
+        # Follow-ups desactivados por defecto: single-touch (solo cold). Cada cuenta
+        # recibe un unico DM y nunca se recontacta. Para reactivar la secuencia
+        # fu1/fu2/breakup hay que poner IG_AUTONOMOUS_FOLLOWUPS=true en el entorno
+        # ademas del toggle del panel.
+        if row["auto_followups"] and _ig_env_bool("IG_AUTONOMOUS_FOLLOWUPS", False):
             for fu_stage, after in (("fu1", 5), ("fu2", 7), ("breakup", 10)):
                 fu_cand = ig_fetch_candidates(conn, fu_stage, 5, after)
                 for r in fu_cand:
@@ -25797,10 +25810,10 @@ def _ig_campaign_render_dm(prospect: Dict[str, Any]) -> str:
         return f"Hola, te escribo desde Vantelia. Hacemos asistentes IA para negocios como el vuestro. ¿Hablamos?"
     return render_natural(
         username=prospect.get("username", ""),
-        business_name=prospect.get("business_name", "") or "",
+        business_name=prospect.get("business_name", "") or prospect.get("full_name", "") or "",
         niche=prospect.get("niche", "") or "",
         city=prospect.get("city", "") or "",
-        db_path=str(IG_DEFAULT_DB),
+        db_path=str(_instagram_db_path()),
     )
 
 
@@ -26131,7 +26144,7 @@ def instagram_dm_templates_preview(variant: str = "A",
         niche=niche,
         city=city,
         variant=variant.upper(),
-        db_path=str(IG_DEFAULT_DB),
+        db_path=str(_instagram_db_path()),
     )
     return {"variant": variant.upper(), "text": text}
 
@@ -26250,6 +26263,322 @@ async def _ig_shutdown_workers() -> None:
 
 
 # === END INSTAGRAM ===================================================
+
+
+# =====================================================================
+# === WHATSAPP OUTREACH ===============================================
+# Cold outbound por WhatsApp Web (Playwright, tu propio numero). Coge los
+# telefonos de los prospects de Captacion (outreach.db) — NO hace discovery
+# propio. Un unico mensaje por telefono (dedup). Envio automatico opt-in via
+# WA_AUTOSEND_ENABLED + numero vinculado por QR. Riesgo ban Meta: numero 2ario.
+# =====================================================================
+
+try:
+    import whatsapp_outreach as wa_outreach  # type: ignore
+    WA_AVAILABLE = True
+except Exception as _wa_err:  # noqa: BLE001
+    logger.warning(f"Modulo whatsapp_outreach no disponible: {_wa_err}")
+    wa_outreach = None  # type: ignore
+    WA_AVAILABLE = False
+
+_wa_login_lock = threading.Lock()
+_wa_login_state: Dict[str, Any] = {"running": False, "result": None, "status": ""}
+_wa_send_lock = threading.Lock()
+_wa_send_job_lock = threading.Lock()
+_wa_send_state: Dict[str, Any] = {
+    "running": False,
+    "phase": "idle",
+    "requested": 0,
+    "queued": 0,
+    "candidates": 0,
+    "attempted": 0,
+    "sent": 0,
+    "skipped": 0,
+    "current_phone": "",
+    "last_reason": "",
+    "dry_run": False,
+    "started_at": "",
+    "finished_at": "",
+}
+
+
+class WhatsAppMessagePayload(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4000)
+
+
+class WhatsAppSendPayload(BaseModel):
+    count: int = Field(20, ge=1, le=200)
+    dry_run: bool = False
+
+
+def _whatsapp_db():
+    if not WA_AVAILABLE:
+        raise HTTPException(503, "Modulo whatsapp no disponible.")
+    return wa_outreach.connect()
+
+
+def _wa_autosend_enabled() -> bool:
+    try:
+        from whatsapp_autosend import is_autosend_enabled  # type: ignore
+        return is_autosend_enabled()
+    except Exception:
+        return False
+
+
+def _wa_session_info() -> Dict[str, Any]:
+    try:
+        from whatsapp_autosend import session_info  # type: ignore
+        return session_info()
+    except Exception:
+        return {"connected": False}
+
+
+def _wa_send_progress() -> Dict[str, Any]:
+    with _wa_send_lock:
+        progress = dict(_wa_send_state)
+    total = int(progress.get("requested") or progress.get("queued") or 0)
+    done = int(progress.get("sent") or 0)
+    progress["total"] = total
+    progress["done"] = done
+    progress["percent"] = int(round((done / total) * 100)) if total else (100 if progress.get("phase") == "done" else 0)
+    return progress
+
+
+@app.get("/admin/whatsapp/stats", dependencies=[Depends(_require_admin_token)])
+def whatsapp_stats():
+    with _whatsapp_db() as conn:
+        s = wa_outreach.stats(conn)
+    return {"stats": s, "autosend_enabled": _wa_autosend_enabled(),
+            "session": _wa_session_info(), "progress": _wa_send_progress()}
+
+
+@app.get("/admin/whatsapp/recent", dependencies=[Depends(_require_admin_token)])
+def whatsapp_recent(limit: int = 30):
+    with _whatsapp_db() as conn:
+        return {"items": wa_outreach.recent(conn, limit)}
+
+
+@app.get("/admin/whatsapp/message", dependencies=[Depends(_require_admin_token)])
+def whatsapp_message_get():
+    with _whatsapp_db() as conn:
+        tpl = wa_outreach.get_message_template(conn)
+    return {"message": tpl, "default": wa_outreach.DEFAULT_MESSAGE,
+            "placeholders_help": wa_outreach.PLACEHOLDERS_HELP}
+
+
+@app.put("/admin/whatsapp/message", dependencies=[Depends(_require_admin_token)])
+def whatsapp_message_put(payload: WhatsAppMessagePayload):
+    with _whatsapp_db() as conn:
+        wa_outreach.set_message_template(conn, payload.message)
+    return {"ok": True}
+
+
+@app.post("/admin/whatsapp/send", dependencies=[Depends(_require_admin_token)])
+def whatsapp_send(payload: WhatsAppSendPayload, background_tasks: BackgroundTasks):
+    if not WA_AVAILABLE:
+        raise HTTPException(503, "Modulo whatsapp no disponible")
+    if not payload.dry_run:
+        if not _wa_autosend_enabled():
+            raise HTTPException(412, "WA_AUTOSEND_ENABLED=false en el .env del servidor")
+        if not _wa_session_info().get("connected"):
+            raise HTTPException(412, "WhatsApp no conectado. Vincula tu numero (QR) en Configuracion.")
+    target_count = int(payload.count)
+    candidate_limit = min(500, max(target_count, target_count * 4))
+    with _whatsapp_db() as conn:
+        # Rellena una bolsa extra de candidatos: los numero_invalido no cuentan
+        # contra el objetivo de enviados reales.
+        existing = len(wa_outreach.fetch_queued(conn, candidate_limit))
+        need = max(0, candidate_limit - existing)
+        if need:
+            wa_outreach.enqueue(conn, need)
+        items = [{"phone": q["phone"], "message": q["message"]}
+                 for q in wa_outreach.fetch_queued(conn, candidate_limit)]
+    if not items:
+        return {"ok": True, "queued": 0, "detail": "No quedan telefonos nuevos por contactar."}
+
+    if not _wa_send_job_lock.acquire(blocking=False):
+        raise HTTPException(409, "Ya hay un envio WhatsApp en curso. Espera a que termine antes de lanzar otro.")
+
+    with _wa_send_lock:
+        _wa_send_state.update({
+            "running": True,
+            "phase": "queued",
+            "requested": target_count,
+            "queued": target_count,
+            "candidates": len(items),
+            "attempted": 0,
+            "sent": 0,
+            "skipped": 0,
+            "current_phone": "",
+            "last_reason": "",
+            "dry_run": bool(payload.dry_run),
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": "",
+        })
+
+    def _run() -> None:
+        try:
+            from whatsapp_autosend import autosend_messages  # type: ignore
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("wa autosend no disponible: %s", exc)
+            with _wa_send_lock:
+                _wa_send_state.update({
+                    "running": False,
+                    "phase": "error",
+                    "last_reason": str(exc)[:160],
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                })
+            try:
+                _wa_send_job_lock.release()
+            except RuntimeError:
+                pass
+            return
+
+        def _attempt(phone: str) -> None:
+            with _wa_send_lock:
+                _wa_send_state.update({"phase": "sending", "current_phone": phone, "last_reason": ""})
+            try:
+                with wa_outreach.connect() as c:
+                    wa_outreach.mark_sending(c, phone)
+            except Exception:
+                pass
+
+        def _mark(phone: str, ok: bool, reason: str) -> None:
+            with _wa_send_lock:
+                _wa_send_state["attempted"] = int(_wa_send_state.get("attempted") or 0) + 1
+                if ok:
+                    _wa_send_state["sent"] = int(_wa_send_state.get("sent") or 0) + 1
+                else:
+                    _wa_send_state["skipped"] = int(_wa_send_state.get("skipped") or 0) + 1
+                _wa_send_state.update({
+                    "phase": "skipping" if reason == "numero_invalido" else "pausing",
+                    "current_phone": phone,
+                    "last_reason": "" if ok else (reason or ""),
+                })
+            try:
+                with wa_outreach.connect() as c:
+                    if ok:
+                        wa_outreach.mark_sent(c, phone)
+                    else:
+                        wa_outreach.mark_skipped(c, phone, reason)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("wa mark %s: %s", phone, exc)
+
+        try:
+            autosend_messages(
+                items,
+                dry_run=payload.dry_run,
+                on_result=_mark,
+                on_attempt=_attempt,
+                target_ok=target_count,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("wa autosend error: %s", exc)
+            with _wa_send_lock:
+                _wa_send_state.update({"phase": "error", "last_reason": str(exc)[:160]})
+        finally:
+            with _wa_send_lock:
+                if _wa_send_state.get("phase") not in ("error",):
+                    _wa_send_state["phase"] = "done"
+                _wa_send_state.update({
+                    "running": False,
+                    "current_phone": "",
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                })
+            try:
+                _wa_send_job_lock.release()
+            except RuntimeError:
+                pass
+
+    background_tasks.add_task(_run)
+    return {"ok": True, "queued": target_count, "target": target_count, "candidates": len(items), "dry_run": payload.dry_run}
+
+
+@app.get("/admin/whatsapp/session", dependencies=[Depends(_require_admin_token)])
+def whatsapp_session():
+    return {"session": _wa_session_info(),
+            "autosend_enabled": _wa_autosend_enabled(),
+            "login_running": bool(_wa_login_state.get("running")),
+            "login_status": _wa_login_state.get("status", ""),
+            "login_result": _wa_login_state.get("result")}
+
+
+@app.post("/admin/whatsapp/connect", dependencies=[Depends(_require_admin_token)])
+def whatsapp_connect():
+    if not WA_AVAILABLE:
+        raise HTTPException(503, "Modulo whatsapp no disponible")
+    try:
+        from whatsapp_autosend import start_login_session  # type: ignore
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(503, f"whatsapp_autosend no disponible: {exc}")
+    with _wa_login_lock:
+        if _wa_login_state.get("running"):
+            return {"ok": True, "already_running": True}
+        _wa_login_state.update({"running": True, "result": None, "status": "arrancando"})
+
+    def _login() -> None:
+        def _status(msg: str) -> None:
+            _wa_login_state["status"] = msg
+        try:
+            res = start_login_session(timeout_sec=180, headless=True, on_status=_status)
+            _wa_login_state["result"] = res
+        except Exception as exc:  # noqa: BLE001
+            _wa_login_state["result"] = {"connected": False, "reason": str(exc)[:200]}
+        finally:
+            _wa_login_state["running"] = False
+
+    threading.Thread(target=_login, name="wa-login", daemon=True).start()
+    return {"ok": True, "started": True}
+
+
+@app.get("/admin/whatsapp/qr", dependencies=[Depends(_require_admin_token)])
+def whatsapp_qr():
+    try:
+        from whatsapp_autosend import latest_qr_bytes  # type: ignore
+    except Exception:  # noqa: BLE001
+        raise HTTPException(503, "whatsapp_autosend no disponible")
+    data = latest_qr_bytes()
+    if not data:
+        raise HTTPException(404, "QR aun no disponible")
+    return Response(content=data, media_type="image/png",
+                    headers={"Cache-Control": "no-store"})
+
+
+@app.get("/admin/whatsapp/debug-shot", dependencies=[Depends(_require_admin_token)])
+def whatsapp_debug_shot():
+    """Ultima captura del navegador headless (diagnostico de envio)."""
+    try:
+        from whatsapp_autosend import latest_debug_bytes  # type: ignore
+    except Exception:  # noqa: BLE001
+        raise HTTPException(503, "whatsapp_autosend no disponible")
+    data = latest_debug_bytes()
+    if not data:
+        raise HTTPException(404, "Sin captura de debug todavia")
+    return Response(content=data, media_type="image/png",
+                    headers={"Cache-Control": "no-store"})
+
+
+@app.post("/admin/whatsapp/disconnect", dependencies=[Depends(_require_admin_token)])
+def whatsapp_disconnect():
+    try:
+        from whatsapp_autosend import clear_session  # type: ignore
+    except Exception:  # noqa: BLE001
+        raise HTTPException(503, "whatsapp_autosend no disponible")
+    removed = clear_session()
+    _wa_login_state.update({"running": False, "result": None, "status": ""})
+    return {"ok": True, "removed": removed}
+
+
+@app.post("/admin/whatsapp/test", dependencies=[Depends(_require_admin_token)])
+def whatsapp_test():
+    try:
+        from whatsapp_autosend import verify_session  # type: ignore
+    except Exception:  # noqa: BLE001
+        raise HTTPException(503, "whatsapp_autosend no disponible")
+    return verify_session(timeout_sec=40)
+
+
+# === END WHATSAPP ====================================================
 
 
 # =====================================================================

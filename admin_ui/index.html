@@ -1146,6 +1146,79 @@ select {
 
 .muted { color: var(--soft); font-size: 13px; line-height: 1.55; }
 
+/* Light inline panels inside the dark admin theme need local dark text. */
+[style*="background:#fff"],
+[style*="background:#ffffff"],
+[style*="background:#f8fafc"],
+[style*="background:#f0fdf4"],
+[style*="background:#eff6ff"],
+[style*="background:#fffbeb"],
+[style*="background:#fef3c7"] {
+  color: #0f172a;
+}
+[style*="background:#fff"] h1,
+[style*="background:#fff"] h2,
+[style*="background:#fff"] h3,
+[style*="background:#fff"] h4,
+[style*="background:#fff"] strong,
+[style*="background:#ffffff"] h1,
+[style*="background:#ffffff"] h2,
+[style*="background:#ffffff"] h3,
+[style*="background:#ffffff"] h4,
+[style*="background:#ffffff"] strong,
+[style*="background:#f8fafc"] h1,
+[style*="background:#f8fafc"] h2,
+[style*="background:#f8fafc"] h3,
+[style*="background:#f8fafc"] h4,
+[style*="background:#f8fafc"] strong,
+[style*="background:#f0fdf4"] h1,
+[style*="background:#f0fdf4"] h2,
+[style*="background:#f0fdf4"] h3,
+[style*="background:#f0fdf4"] h4,
+[style*="background:#f0fdf4"] strong,
+[style*="background:#eff6ff"] h1,
+[style*="background:#eff6ff"] h2,
+[style*="background:#eff6ff"] h3,
+[style*="background:#eff6ff"] h4,
+[style*="background:#eff6ff"] strong,
+[style*="background:#fffbeb"] h1,
+[style*="background:#fffbeb"] h2,
+[style*="background:#fffbeb"] h3,
+[style*="background:#fffbeb"] h4,
+[style*="background:#fffbeb"] strong,
+[style*="background:#fef3c7"] h1,
+[style*="background:#fef3c7"] h2,
+[style*="background:#fef3c7"] h3,
+[style*="background:#fef3c7"] h4,
+[style*="background:#fef3c7"] strong {
+  color: #0f172a;
+}
+[style*="background:#fff"] .muted,
+[style*="background:#ffffff"] .muted,
+[style*="background:#f8fafc"] .muted,
+[style*="background:#f0fdf4"] .muted,
+[style*="background:#eff6ff"] .muted,
+[style*="background:#fffbeb"] .muted,
+[style*="background:#fef3c7"] .muted {
+  color: #475569;
+}
+[style*="background:#fff"] p,
+[style*="background:#fff"] li,
+[style*="background:#ffffff"] p,
+[style*="background:#ffffff"] li,
+[style*="background:#f8fafc"] p,
+[style*="background:#f8fafc"] li,
+[style*="background:#f0fdf4"] p,
+[style*="background:#f0fdf4"] li,
+[style*="background:#eff6ff"] p,
+[style*="background:#eff6ff"] li,
+[style*="background:#fffbeb"] p,
+[style*="background:#fffbeb"] li,
+[style*="background:#fef3c7"] p,
+[style*="background:#fef3c7"] li {
+  color: #334155;
+}
+
 .pill {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 3px 9px;
@@ -1878,6 +1951,10 @@ tbody tr:last-child td { border-bottom: none; }
         <button class="nav-button" type="button" data-nav-view="tiktok">
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v12.5a3 3 0 1 1-3-3"></path><path d="M9 3c0 3 2.5 5.5 5.5 5.5"></path></svg></span>
           <span class="nav-text"><strong>TikTok</strong><span>Captacion via DM</span></span>
+        </button>
+        <button class="nav-button" type="button" data-nav-view="whatsapp">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20l1.2-5.2A8.5 8.5 0 1 1 21 11.5z"></path><path d="M8.5 8.5c0 4 3 7 7 7"></path></svg></span>
+          <span class="nav-text"><strong>WhatsApp</strong><span>Captacion via WhatsApp</span></span>
         </button>
         <button class="nav-button" type="button" data-nav-view="voice">
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></span>
@@ -2675,6 +2752,144 @@ tbody tr:last-child td { border-bottom: none; }
                 <tbody id="tkSupBody"><tr><td colspan="4" class="muted">Cargando bajas...</td></tr></tbody>
               </table>
             </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="dashboard-view" data-view="whatsapp">
+        <section class="card panel">
+          <div class="section-header">
+            <div>
+              <h2>Captacion WhatsApp</h2>
+              <p>Coge los telefonos de los negocios de Captacion y les manda un WhatsApp desde tu numero. Un mensaje por telefono, nunca repite.</p>
+            </div>
+            <div class="actions">
+              <span id="waSessionPill" class="pill"></span>
+              <button class="ghost small" type="button" id="waRefreshBtn">Actualizar</button>
+            </div>
+          </div>
+
+          <div id="waAutosendWarn" style="display:none;background:#451a03;color:#fca5a5;padding:8px 12px;border-radius:8px;margin:8px 0 12px 0;font-size:12px;">
+            Envio automatico activo. Riesgo de bloqueo Meta por spam. Usa un numero secundario, no el principal.
+          </div>
+
+          <div class="actions cw-advanced-tabs" style="margin-top:8px;gap:6px;">
+            <button class="ghost small active" type="button" data-wa-tab="enviar">Enviar</button>
+            <button class="ghost small" type="button" data-wa-tab="mensaje">Mensaje</button>
+            <button class="ghost small" type="button" data-wa-tab="config">Configuracion</button>
+          </div>
+
+          <!-- ENVIAR -->
+          <div class="outreach-panel active" data-wa-panel="enviar">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px;">
+              <div style="padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+                <strong id="waStatSentToday" style="font-size:22px;">0</strong><div class="muted" style="font-size:12px;">Enviados hoy</div>
+              </div>
+              <div style="padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+                <strong id="waStatSentTotal" style="font-size:22px;">0</strong><div class="muted" style="font-size:12px;">Enviados total</div>
+              </div>
+              <div style="padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+                <strong id="waStatQueued" style="font-size:22px;">0</strong><div class="muted" style="font-size:12px;">En cola</div>
+              </div>
+              <div style="padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">
+                <strong id="waStatSending" style="font-size:22px;">0</strong><div class="muted" style="font-size:12px;">Enviando ahora</div>
+              </div>
+              <div style="padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
+                <strong id="waStatAvailable" style="font-size:22px;">0</strong><div class="muted" style="font-size:12px;">Negocios disponibles</div>
+              </div>
+            </div>
+
+            <div id="waProgressCard" style="display:none;padding:14px;margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+                <strong id="waProgressPhase" style="font-size:14px;">Preparando envio</strong>
+                <span id="waProgressPct" class="muted" style="font-size:12px;font-weight:600;">0%</span>
+              </div>
+              <div style="height:10px;border-radius:999px;background:#e2e8f0;overflow:hidden;margin-top:10px;">
+                <span id="waProgressFill" style="display:block;height:100%;width:0%;background:#2563eb;transition:width .25s ease;"></span>
+              </div>
+              <div id="waProgressMeta" class="muted" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;">
+                <span>0 de 0 procesados</span>
+                <span></span>
+              </div>
+            </div>
+
+            <div class="card" style="padding:16px;margin-top:14px;border:2px solid #cbd5e1;">
+              <strong style="font-size:15px;">Enviar mensajes</strong>
+              <p class="muted" style="margin:4px 0 12px;font-size:12px;">
+                Pon a cuantos negocios quieres escribir y pulsa enviar. El sistema coge ese numero de telefonos
+                nuevos (sin repetir), abre WhatsApp Web con tu numero y los manda solos, con pausas entre cada uno.
+              </p>
+              <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+                <label style="font-size:12px;display:flex;flex-direction:column;gap:4px;">
+                  Numero de negocios
+                  <input id="waSendCount" type="number" min="1" max="200" value="20" style="width:120px;font-size:18px;font-weight:600;text-align:center;padding:6px;" />
+                </label>
+                <button id="waSendBtn" class="secondary" type="button" style="font-size:15px;padding:10px 24px;">ENVIAR WHATSAPP</button>
+                <label class="checkbox" style="font-size:12px;"><input id="waDryRun" type="checkbox" /> Prueba (no envia)</label>
+              </div>
+              <p id="waSendMsg" class="muted" style="margin:10px 0 0;font-size:12px;"></p>
+            </div>
+
+            <div class="card panel" style="padding:12px;margin-top:14px;">
+              <strong>Actividad reciente</strong>
+              <div id="waRecentList" class="muted" style="margin-top:8px;">cargando...</div>
+            </div>
+          </div>
+
+          <!-- MENSAJE -->
+          <div class="outreach-panel" data-wa-panel="mensaje" style="display:none;">
+            <div class="card" style="padding:14px;margin-top:12px;">
+              <strong>Mensaje que se envia</strong>
+              <p class="muted" id="waMessageHelp" style="margin:4px 0 0;font-size:12px;">
+                Este texto se manda a cada negocio. Placeholders opcionales: <code>{business_name}</code>, <code>{city}</code>, <code>{niche}</code>.
+              </p>
+            </div>
+            <textarea id="waMessageText" rows="16" style="width:100%;font-size:13px;margin-top:10px;padding:10px;" placeholder="Escribe el mensaje..."></textarea>
+            <div class="actions" style="margin-top:10px;gap:8px;">
+              <button class="secondary" type="button" id="waMessageSaveBtn">Guardar mensaje</button>
+              <button class="ghost small" type="button" id="waMessageResetBtn">Restaurar por defecto</button>
+              <span id="waMessageMsg" class="muted" style="font-size:12px;"></span>
+            </div>
+          </div>
+
+          <!-- CONFIGURACION -->
+          <div class="outreach-panel" data-wa-panel="config" style="display:none;">
+            <div class="card" style="padding:16px;margin-top:12px;background:#fffbeb;border:1px solid #fde68a;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:260px;">
+                  <strong style="font-size:14px;">Conectar tu WhatsApp</strong>
+                  <p class="muted" style="margin:4px 0 0;font-size:12px;">
+                    Vincula tu WhatsApp escaneando un QR (igual que WhatsApp Web). El VPS enviara los mensajes desde tu numero.
+                    <strong>Recomendado: numero secundario.</strong> Riesgo de bloqueo Meta al automatizar envios masivos.
+                  </p>
+                </div>
+                <div id="waSessionBadge" class="muted" style="font-size:12px;text-align:right;min-width:160px;">Cargando...</div>
+              </div>
+              <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;align-items:flex-start;">
+                <div style="text-align:center;">
+                  <div id="waQrBox" style="width:240px;height:240px;border:2px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#fff;">
+                    <span class="muted" style="font-size:12px;padding:10px;text-align:center;">Pulsa "Conectar" y aqui saldra el QR para escanear con tu movil.</span>
+                  </div>
+                  <p id="waQrHint" class="muted" style="font-size:11px;margin:6px 0 0;max-width:240px;"></p>
+                </div>
+                <div style="flex:1;min-width:220px;">
+                  <ol style="font-size:12px;line-height:1.8;margin:0 0 12px 16px;color:#475569;">
+                    <li>Pulsa <strong>Conectar</strong>. Aparece un QR.</li>
+                    <li>En tu movil: WhatsApp → Ajustes → <strong>Dispositivos vinculados</strong> → Vincular dispositivo.</li>
+                    <li>Escanea el QR. Cuando ponga "Conectada", ya puedes enviar.</li>
+                  </ol>
+                  <div class="actions" style="gap:8px;flex-wrap:wrap;">
+                    <button class="secondary small" type="button" id="waConnectBtn">Conectar</button>
+                    <button class="ghost small" type="button" id="waTestBtn">Probar sesion</button>
+                    <button class="ghost small" type="button" id="waDisconnectBtn" style="color:#b91c1c;">Desconectar</button>
+                  </div>
+                  <p id="waConnMsg" class="muted" style="font-size:12px;margin-top:8px;"></p>
+                </div>
+              </div>
+            </div>
+            <p class="muted" style="font-size:11px;margin-top:10px;">
+              El envio automatico ademas requiere <code>WA_AUTOSEND_ENABLED=true</code> en el .env del servidor.
+            </p>
           </div>
         </section>
       </section>
@@ -3491,6 +3706,7 @@ tbody tr:last-child td { border-bottom: none; }
 
           <div class="actions cw-advanced-tabs">
             <button class="ghost small active" type="button" data-ig-tab="dashboard">Hoy</button>
+            <button class="ghost small" type="button" data-ig-tab="drafts">Drafts <span id="igDraftsBadge" class="pill accent" style="display:none;margin-left:4px;"></span></button>
             <button class="ghost small" type="button" data-ig-tab="autopilot">Configuracion</button>
             <button class="ghost small" type="button" data-ig-tab="dmtemplates">Mensajes</button>
             <button class="ghost small" type="button" data-ig-tab="suppressions">Bajas</button>
@@ -3609,7 +3825,7 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="grid-3" style="margin-top:10px;">
                 <label>Target diario nuevos<input id="igAutoDailyNew" type="number" min="1" max="200" value="15" /></label>
                 <label>Cap diario outreach<input id="igAutoDailyCap" type="number" min="1" max="200" value="25" style="display:none;" /></label>
-                <label class="checkbox"><input id="igAutoFollowups" type="checkbox" checked /> Auto follow-ups</label>
+                <label class="checkbox"><input id="igAutoFollowups" type="checkbox" /> Auto follow-ups <span class="muted" style="font-size:10px;">(desactivado: requiere IG_AUTONOMOUS_FOLLOWUPS=true)</span></label>
               </div>
               <label>Targets JSON (lista de {usernames, niche, city})
                 <textarea id="igAutoTargets" rows="6" placeholder='[{"usernames":["c1","c2"],"niche":"dental","city":"Madrid"}]'></textarea>
@@ -3693,6 +3909,37 @@ tbody tr:last-child td { border-bottom: none; }
             <div class="actions" style="margin-top:12px;">
               <button class="secondary" type="button" id="igTplSaveBtn">Guardar plantillas</button>
               <span id="igTplMsg" class="muted" style="font-size:12px;"></span>
+            </div>
+          </div>
+
+          <div class="outreach-panel" data-ig-panel="drafts" style="display:none;">
+            <div class="card" style="padding:14px;margin-top:12px;background:#f0fdf4;border:1px solid #bbf7d0;">
+              <strong>Envio manual 1-clic (compliant)</strong>
+              <p class="muted" style="margin:4px 0 0;font-size:12px;">
+                Genera mensajes personalizados por prospect. Pulsa <strong>Enviar DM</strong>: abre Instagram con el texto ya escrito,
+                tu envias con 1 clic y al volver marcas como enviado. Sin automatizar el envio, sin riesgo de bloqueo Meta.
+              </p>
+            </div>
+            <div class="actions" style="margin-top:12px;gap:8px;flex-wrap:wrap;">
+              <button class="secondary small" type="button" id="igGenerateColdBtn">Generar mensajes (20)</button>
+              <span class="muted" style="font-size:11px;align-self:center;">Solo el mensaje inicial (cold) de la pestana Mensajes. Sin follow-ups, una vez por cuenta.</span>
+            </div>
+            <div class="actions" style="margin-top:10px;gap:8px;flex-wrap:wrap;align-items:end;">
+              <label style="font-size:12px;">Stage
+                <select id="igDraftsStageFilter">
+                  <option value="">Todos</option>
+                  <option value="cold">cold</option>
+                  <option value="fu1">fu1</option>
+                  <option value="fu2">fu2</option>
+                  <option value="breakup">breakup</option>
+                </select>
+              </label>
+              <label style="font-size:12px;">Niche<input id="igDraftsNiche" placeholder="dental" /></label>
+              <label style="font-size:12px;">Ciudad<input id="igDraftsCity" placeholder="Madrid" /></label>
+              <button class="ghost small" type="button" id="igDraftsRefreshBtn">Refrescar</button>
+            </div>
+            <div id="igDraftsList" class="ig-list" style="margin-top:12px;display:grid;gap:10px;">
+              <div class="muted">Pulsa "Generar cold" o "Refrescar" para ver la cola.</div>
             </div>
           </div>
 
@@ -4038,6 +4285,8 @@ tbody tr:last-child td { border-bottom: none; }
         try { window.__igInit && window.__igInit(); } catch(e) { console.warn(e); }
       } else if (nextView === "tiktok") {
         try { window.__tkInit && window.__tkInit(); } catch(e) { console.warn(e); }
+      } else if (nextView === "whatsapp") {
+        try { window.__waInit && window.__waInit(); } catch(e) { console.warn(e); }
       } else if (nextView === "voice") {
         try { window.__voiceInit && window.__voiceInit(); } catch(e) { console.warn(e); }
       }
@@ -9227,6 +9476,7 @@ a {
           p.style.display = isActive ? "" : "none";
         });
         if (tab === "dashboard") { loadStats(); loadOpsSummary(); loadHotLeads(); }
+        if (tab === "drafts") loadDrafts();
         if (tab === "templates") loadTemplates();
         if (tab === "autopilot") { loadIgCampaign(); loadIgAutosendStatus(); startIgCampaignPolling(); } else { stopIgCampaignPolling(); }
         if (tab === "dmtemplates") loadIgDmTemplates();
@@ -9316,7 +9566,13 @@ a {
           IGQ("#igCampMsg").textContent = "Campana iniciada. El sistema empieza a buscar.";
           IGQ("#igCampMsg").style.color = "#047857";
         } catch (err) {
-          IGQ("#igCampMsg").innerHTML = `<span style="color:#b91c1c;">Error: ${err.message}</span>`;
+          let hint = "Error: " + err.message;
+          if (/IG_AUTOSEND_ENABLED/i.test(err.message)) {
+            hint = "Envio automatico desactivado. Para activarlo: pon IG_AUTOSEND_ENABLED=true en el .env del servidor y conecta las cookies IG abajo. Si prefieres no automatizar (sin riesgo Meta), usa la pestana Drafts: envio manual 1-clic.";
+          } else if (/sesion ig no conectada/i.test(err.message)) {
+            hint = "Sesion IG no conectada. Pega las cookies de Instagram en el bloque de abajo y pulsa Conectar.";
+          }
+          IGQ("#igCampMsg").innerHTML = `<span style="color:#b91c1c;">${escapeHtml(hint)}</span>`;
         }
         btn.disabled = false;
         await loadIgCampaign();
@@ -10439,6 +10695,269 @@ a {
       };
     })();
     // === END TIKTOK PANEL ===========================================
+
+    // ============================================================
+    // === WHATSAPP PANEL =========================================
+    // ============================================================
+    (function whatsappModule() {
+      const WQ = (sel) => document.querySelector(sel);
+      const WALL = (sel) => Array.from(document.querySelectorAll(sel));
+      const waState = { loaded: false, currentTab: "enviar", qrTimer: null, pollTimer: null };
+
+      async function waFetch(url, opts) {
+        const next = Object.assign({ credentials: "include" }, opts || {});
+        next.headers = Object.assign({ "Accept": "application/json" }, next.headers || {});
+        if (next.body && !next.headers["Content-Type"]) next.headers["Content-Type"] = "application/json";
+        const res = await fetch(url, next);
+        if (!res.ok) {
+          let detail = "Error " + res.status;
+          try { const d = await res.json(); detail = d.detail || detail; } catch (e) {}
+          throw new Error(detail);
+        }
+        const ct = res.headers.get("content-type") || "";
+        return ct.includes("application/json") ? res.json() : res.text();
+      }
+
+      function waEsc(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+
+      function setWaTab(tab) {
+        waState.currentTab = tab;
+        WALL("[data-wa-tab]").forEach(b => b.classList.toggle("active", b.dataset.waTab === tab));
+        WALL("[data-wa-panel]").forEach(p => {
+          const on = p.dataset.waPanel === tab;
+          p.classList.toggle("active", on);
+          p.style.display = on ? "" : "none";
+        });
+        if (tab === "enviar") { loadWaStats(); loadWaRecent(); startWaPoll(); } else { stopWaPoll(); }
+        if (tab === "mensaje") loadWaMessage();
+        if (tab === "config") { loadWaSession(); }
+      }
+
+      function startWaPoll() {
+        stopWaPoll();
+        waState.pollTimer = setInterval(() => {
+          const panel = WQ('[data-wa-panel="enviar"]');
+          if (!panel || panel.style.display === "none") return;
+          loadWaStats(); loadWaRecent();
+        }, 5000);
+      }
+      function stopWaPoll() { if (waState.pollTimer) { clearInterval(waState.pollTimer); waState.pollTimer = null; } }
+
+      function renderWaProgress(progress) {
+        const card = WQ("#waProgressCard");
+        if (!card) return;
+        const p = progress || {};
+        const phase = p.phase || "idle";
+        const total = Number(p.total || p.queued || 0);
+        const done = Number(p.done || p.attempted || 0);
+        const sent = Number(p.sent || 0);
+        const skipped = Number(p.skipped || 0);
+        const pct = Math.max(0, Math.min(100, Number(p.percent || (total ? Math.round((done / total) * 100) : 0))));
+        const hasProgress = total > 0 || p.running || phase === "done" || phase === "error";
+        card.style.display = hasProgress ? "" : "none";
+        if (!hasProgress) return;
+        const labels = {
+          queued: "Preparando cola",
+          sending: "Enviando mensaje",
+          skipping: "Saltando numero invalido",
+          pausing: "Pausa entre mensajes",
+          done: "Envio terminado",
+          error: "Envio detenido",
+          idle: "Sin envio activo",
+        };
+        WQ("#waProgressPhase").textContent = labels[phase] || phase;
+        WQ("#waProgressPct").textContent = `${pct}%`;
+        WQ("#waProgressFill").style.width = `${pct}%`;
+        WQ("#waProgressFill").style.background = phase === "error" ? "#dc2626" : phase === "done" ? "#16a34a" : "#2563eb";
+        const current = p.current_phone ? `Actual: +${waEsc(p.current_phone)}` : "";
+        const reason = p.last_reason ? `Ultimo: ${waEsc(p.last_reason)}` : "";
+        WQ("#waProgressMeta").innerHTML = `<span>${sent} de ${total} enviados · ${p.attempted || 0} intentos · ${skipped} saltados</span><span>${current || reason}</span>`;
+      }
+
+      async function loadWaStats() {
+        try {
+          const data = await waFetch("/admin/whatsapp/stats");
+          const s = data.stats || {};
+          WQ("#waStatSentToday").textContent = s.sent_today || 0;
+          WQ("#waStatSentTotal").textContent = s.sent_total || 0;
+          WQ("#waStatQueued").textContent = s.queued || 0;
+          WQ("#waStatSending").textContent = s.sending || 0;
+          WQ("#waStatAvailable").textContent = s.available || 0;
+          renderWaProgress(data.progress || {});
+          const sess = data.session || {};
+          const pill = WQ("#waSessionPill");
+          if (sess.connected) { pill.textContent = "WhatsApp conectado"; pill.className = "pill success"; }
+          else { pill.textContent = "WhatsApp sin conectar"; pill.className = "pill warn"; }
+          WQ("#waAutosendWarn").style.display = data.autosend_enabled ? "" : "none";
+        } catch (e) {
+          WQ("#waSendMsg").innerHTML = `<span style="color:#b91c1c;">${waEsc(e.message)}</span>`;
+        }
+      }
+
+      function waModeBadge(mode, reason) {
+        const map = { sent: ["#047857", "enviado"], queued: ["#64748b", "en cola"], skipped: ["#b45309", "saltado"], sending: ["#2563eb", "enviando"] };
+        const m = map[mode] || ["#64748b", mode || "?"];
+        const r = reason ? ` (${waEsc(reason)})` : "";
+        return `<span style="color:${m[0]};font-weight:600;">${m[1]}</span>${r}`;
+      }
+
+      async function loadWaRecent() {
+        try {
+          const data = await waFetch("/admin/whatsapp/recent?limit=30");
+          const items = data.items || [];
+          const box = WQ("#waRecentList");
+          if (!items.length) { box.innerHTML = '<span class="muted">Aun no hay envios. Pulsa "Enviar WhatsApp".</span>'; return; }
+          box.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;">${items.map(i => `
+            <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;border-bottom:1px solid #f1f5f9;padding:4px 0;">
+              <span><strong>${waEsc(i.business_name || "(sin nombre)")}</strong> <span class="muted">+${waEsc(i.phone)}</span></span>
+              <span>${waModeBadge(i.mode, i.skip_reason)}</span>
+            </div>`).join("")}</div>`;
+        } catch (e) { WQ("#waRecentList").innerHTML = `<span style="color:#b91c1c;">${waEsc(e.message)}</span>`; }
+      }
+
+      async function waSend() {
+        const count = parseInt(WQ("#waSendCount").value || "20", 10);
+        const dryRun = WQ("#waDryRun").checked;
+        if (!count || count < 1 || count > 200) {
+          WQ("#waSendMsg").innerHTML = '<span style="color:#b91c1c;">Numero debe ser 1-200.</span>'; return;
+        }
+        if (!dryRun && !confirm(`Enviar WhatsApp a ${count} negocios desde tu numero? Se envian de verdad.`)) return;
+        const btn = WQ("#waSendBtn");
+        btn.disabled = true;
+        WQ("#waSendMsg").textContent = "Encolando...";
+        WQ("#waSendMsg").style.color = "#64748b";
+        try {
+          const data = await waFetch("/admin/whatsapp/send", { method: "POST", body: JSON.stringify({ count, dry_run: dryRun }) });
+          if (data.queued === 0) {
+            WQ("#waSendMsg").innerHTML = `<span style="color:#b45309;">${waEsc(data.detail || "No quedan telefonos nuevos.")}</span>`;
+          } else {
+            const target = data.target || data.queued || count;
+            const candidates = data.candidates ? ` (${data.candidates} candidatos preparados por si hay invalidos)` : "";
+            WQ("#waSendMsg").innerHTML = `<span style="color:#047857;">Objetivo: ${target} enviados reales${candidates}. Enviando en segundo plano.</span>`;
+          }
+          loadWaStats(); loadWaRecent();
+        } catch (e) {
+          let hint = e.message;
+          if (/WA_AUTOSEND_ENABLED/i.test(e.message)) hint = "Envio automatico desactivado: pon WA_AUTOSEND_ENABLED=true en el .env del servidor.";
+          else if (/no conectado/i.test(e.message)) hint = "WhatsApp no conectado. Ve a Configuracion y vincula tu numero con el QR.";
+          WQ("#waSendMsg").innerHTML = `<span style="color:#b91c1c;">${waEsc(hint)}</span>`;
+        }
+        btn.disabled = false;
+      }
+
+      let _waDefaultMsg = "";
+      async function loadWaMessage() {
+        try {
+          const data = await waFetch("/admin/whatsapp/message");
+          _waDefaultMsg = data.default || "";
+          const el = WQ("#waMessageText");
+          if (document.activeElement !== el) el.value = data.message || "";
+          if (data.placeholders_help) WQ("#waMessageHelp").innerHTML = waEsc(data.placeholders_help).replace(/\{(\w+)\}/g, '<code>{$1}</code>');
+        } catch (e) { WQ("#waMessageMsg").innerHTML = `<span style="color:#b91c1c;">${waEsc(e.message)}</span>`; }
+      }
+
+      async function waSaveMessage() {
+        const text = WQ("#waMessageText").value.trim();
+        if (!text) { WQ("#waMessageMsg").innerHTML = '<span style="color:#b91c1c;">El mensaje no puede estar vacio.</span>'; return; }
+        try {
+          await waFetch("/admin/whatsapp/message", { method: "PUT", body: JSON.stringify({ message: text }) });
+          WQ("#waMessageMsg").innerHTML = '<span style="color:#047857;">Guardado.</span>';
+        } catch (e) { WQ("#waMessageMsg").innerHTML = `<span style="color:#b91c1c;">${waEsc(e.message)}</span>`; }
+      }
+
+      function waResetMessage() {
+        if (_waDefaultMsg) { WQ("#waMessageText").value = _waDefaultMsg; WQ("#waMessageMsg").textContent = "Restaurado el texto por defecto (guarda para aplicar)."; }
+      }
+
+      async function loadWaSession() {
+        const badge = WQ("#waSessionBadge");
+        try {
+          const data = await waFetch("/admin/whatsapp/session");
+          const s = data.session || {};
+          if (s.connected) {
+            const saved = s.saved_at ? new Date(s.saved_at).toLocaleString("es-ES") : "?";
+            badge.innerHTML = `<span style="color:#047857;font-weight:600;">● Conectada</span><br/><span style="font-size:11px;color:#64748b;">vinculada ${saved}</span>`;
+            stopWaQrPoll();
+            WQ("#waQrBox").innerHTML = '<span style="color:#047857;font-size:13px;padding:10px;text-align:center;">✓ WhatsApp vinculado</span>';
+            WQ("#waQrHint").textContent = "";
+          } else if (data.login_running) {
+            badge.innerHTML = `<span style="color:#2563eb;">● Vinculando...</span><br/><span style="font-size:11px;color:#64748b;">${waEsc(data.login_status || "")}</span>`;
+          } else {
+            badge.innerHTML = `<span style="color:#b91c1c;">● Sin conectar</span><br/><span style="font-size:11px;color:#64748b;">${waEsc((data.login_result && data.login_result.reason) || "pulsa Conectar")}</span>`;
+          }
+          WQ("#waAutosendWarn").style.display = data.autosend_enabled ? "" : "none";
+          return data;
+        } catch (e) { badge.innerHTML = `<span style="color:#b91c1c;">${waEsc(e.message)}</span>`; return null; }
+      }
+
+      function refreshWaQrImg() {
+        const box = WQ("#waQrBox");
+        const url = "/admin/whatsapp/qr?t=" + Date.now();
+        // Probar a cargar el QR; si 404 aun no esta listo.
+        const img = new Image();
+        img.onload = () => { box.innerHTML = `<img src="${url}" alt="QR WhatsApp" style="width:230px;height:230px;" />`; };
+        img.src = url;
+      }
+
+      function startWaQrPoll() {
+        stopWaQrPoll();
+        WQ("#waQrHint").textContent = "Esperando escaneo... el QR caduca, si pasa mucho pulsa Conectar otra vez.";
+        waState.qrTimer = setInterval(async () => {
+          refreshWaQrImg();
+          const data = await loadWaSession();
+          if (data && (data.session || {}).connected) { stopWaQrPoll(); loadWaStats(); }
+          if (data && !data.login_running && !(data.session || {}).connected && data.login_result) { stopWaQrPoll(); }
+        }, 3000);
+      }
+      function stopWaQrPoll() { if (waState.qrTimer) { clearInterval(waState.qrTimer); waState.qrTimer = null; } }
+
+      async function waConnect() {
+        WQ("#waConnMsg").textContent = "Arrancando navegador y generando QR (~10s)...";
+        WQ("#waConnMsg").style.color = "#64748b";
+        WQ("#waQrBox").innerHTML = '<span class="muted" style="font-size:12px;padding:10px;">Generando QR...</span>';
+        try {
+          await waFetch("/admin/whatsapp/connect", { method: "POST" });
+          startWaQrPoll();
+        } catch (e) { WQ("#waConnMsg").innerHTML = `<span style="color:#b91c1c;">${waEsc(e.message)}</span>`; }
+      }
+
+      async function waTest() {
+        WQ("#waConnMsg").textContent = "Comprobando sesion contra WhatsApp (~30s)...";
+        try {
+          const data = await waFetch("/admin/whatsapp/test", { method: "POST" });
+          WQ("#waConnMsg").innerHTML = data.ok ? '<span style="color:#047857;">Sesion valida.</span>' : `<span style="color:#b91c1c;">Sesion invalida: ${waEsc(data.reason || "?")}</span>`;
+          loadWaSession();
+        } catch (e) { WQ("#waConnMsg").innerHTML = `<span style="color:#b91c1c;">${waEsc(e.message)}</span>`; }
+      }
+
+      async function waDisconnect() {
+        if (!confirm("Desvincular WhatsApp? Tendras que volver a escanear el QR.")) return;
+        stopWaQrPoll();
+        try {
+          await waFetch("/admin/whatsapp/disconnect", { method: "POST" });
+          WQ("#waConnMsg").textContent = "Desvinculado.";
+          WQ("#waQrBox").innerHTML = '<span class="muted" style="font-size:12px;padding:10px;text-align:center;">Pulsa "Conectar" para vincular de nuevo.</span>';
+          loadWaSession(); loadWaStats();
+        } catch (e) { WQ("#waConnMsg").innerHTML = `<span style="color:#b91c1c;">${waEsc(e.message)}</span>`; }
+      }
+
+      WALL("[data-wa-tab]").forEach(b => b.addEventListener("click", () => setWaTab(b.dataset.waTab)));
+      WQ("#waRefreshBtn")?.addEventListener("click", () => setWaTab(waState.currentTab));
+      WQ("#waSendBtn")?.addEventListener("click", waSend);
+      WQ("#waMessageSaveBtn")?.addEventListener("click", waSaveMessage);
+      WQ("#waMessageResetBtn")?.addEventListener("click", waResetMessage);
+      WQ("#waConnectBtn")?.addEventListener("click", waConnect);
+      WQ("#waTestBtn")?.addEventListener("click", waTest);
+      WQ("#waDisconnectBtn")?.addEventListener("click", waDisconnect);
+
+      window.__waInit = function() {
+        if (!waState.loaded) { setWaTab("enviar"); waState.loaded = true; }
+        else { loadWaStats(); loadWaRecent(); }
+      };
+    })();
+    // === END WHATSAPP PANEL =====================================
 
     // === VOICE PANEL ============================================
     (function() {

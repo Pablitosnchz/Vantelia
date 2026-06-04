@@ -481,6 +481,38 @@ Drafts enviados → `mode='sent_auto'` (no `'sent'`). Fallos → `mode='skipped'
 - Listas de supresion honradas en discovery, drafts y autopilot.
 - Sin firma comercial estilo email en los DMs (rapido = spam en IG). Solo opener + hook + link demo.
 
+## Captacion WhatsApp
+
+Cold outbound por WhatsApp Web automatizado con TU numero (Playwright), NO via WhatsApp Cloud API ni Graph. Reutiliza los telefonos de los prospects de Captacion email (`outreach.db` tabla `prospects.phone`, extraidos por Google Places en su dia) — **no hace discovery propio**. Single-touch: un unico mensaje por telefono, dedup permanente.
+
+### Componentes
+
+- `scripts/whatsapp_outreach.py`: capa de datos. DB `storage/whatsapp/whatsapp.db` (env `WA_DB_PATH`). Tabla `wa_messages` (PK `phone` normalizado E.164 sin '+'; dedup) + `wa_settings` (plantilla del mensaje). `normalize_phone` (default ES +34), `fetch_prospect_phones` (lee outreach.db, excluye ya-contactados/bajas/clientes), `enqueue`, `mark_sent/skipped`, `stats`, `recent`, `get/set_message_template`, `render_message` (placeholders `{business_name}/{city}/{niche}`).
+- `scripts/whatsapp_autosend.py`: Playwright WhatsApp Web. Sesion = **user data dir persistente** (`launch_persistent_context`, env `WA_SESSION_DIR`), no cookies. `start_login_session` abre WA Web headless y captura el QR a PNG (`WA_QR_PATH`) hasta que el user lo escanea (dispositivo vinculado). `session_info` (ligero, lee marker), `verify_session` (lanza navegador real), `clear_session`, `_send_one` (navega a `web.whatsapp.com/send?phone=&text=`, detecta numero invalido, pulsa enviar/Enter), `autosend_messages` (cap `WA_AUTOSEND_DAILY_CAP`, delays humanos `WA_AUTOSEND_MIN/MAX_DELAY_SEC`).
+
+### Endpoints admin (Bearer ADMIN_API_TOKEN o sesion admin)
+
+- `GET  /admin/whatsapp/stats` — enviados hoy/total, en cola, disponibles, session, autosend_enabled.
+- `GET  /admin/whatsapp/recent` — ultimos envios con estado.
+- `GET/PUT /admin/whatsapp/message` — plantilla del mensaje.
+- `POST /admin/whatsapp/send` `{count, dry_run}` — encola N telefonos nuevos (dedup) y lanza job background que envia via Playwright + marca sent/skipped. 412 si `WA_AUTOSEND_ENABLED=false` o WhatsApp no conectado (salvo dry_run).
+- `GET  /admin/whatsapp/session` — estado sesion + login_running/status.
+- `POST /admin/whatsapp/connect` — arranca login en hilo de fondo (genera QR).
+- `GET  /admin/whatsapp/qr` — PNG del QR (404 si aun no listo).
+- `POST /admin/whatsapp/disconnect`, `POST /admin/whatsapp/test`.
+
+### UI
+
+Tab "WhatsApp" en sidebar admin (`data-view="whatsapp"`, modulo JS `whatsappModule`, init `window.__waInit`). Sub-tabs: **Enviar** (stats + input num negocios + boton ENVIAR + actividad reciente), **Mensaje** (textarea editable + placeholders), **Configuracion** (conectar via QR escaneable, probar/desconectar sesion).
+
+### Variables .env
+
+`WA_AUTOSEND_ENABLED` (default false, gate del envio real), `WA_DB_PATH`, `WA_SESSION_DIR`, `WA_QR_PATH`, `WA_AUTOSEND_HEADLESS`, `WA_AUTOSEND_DAILY_CAP` (20), `WA_AUTOSEND_MIN/MAX_DELAY_SEC` (60/240).
+
+### Compliance / riesgo
+
+Automatizar WhatsApp Web viola ToS Meta y puede provocar bloqueo del numero. Usar numero secundario. Single-touch + delays + cap diario para minimizar. Requiere Playwright+Chromium (ya en Dockerfile).
+
 ## Tests actuales
 
 `tests/test_api_smoke.py` cubre:
