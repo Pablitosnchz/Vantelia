@@ -685,7 +685,6 @@ def _normalize_voice_config(payload: Any) -> Dict[str, Any]:
     max_duration = min(max_duration, 3600)
     return {
         "enabled": bool(data.get("enabled", False)),
-        "name": _sanitize_text(str(data.get("name", "")))[:40],
         "twilio_phone_number": _sanitize_text(str(data.get("twilio_phone_number", "")))[:32],
         "openai_voice": voice_value,
         "realtime_model": _sanitize_text(str(data.get("realtime_model", "")))[:80],
@@ -696,9 +695,10 @@ def _normalize_voice_config(payload: Any) -> Dict[str, Any]:
 
 
 def _voice_default_greeting(config: Dict[str, Any], voice_cfg: Dict[str, Any]) -> str:
-    """Saludo con el que 'descuelga' el asistente de voz. Orden: saludo explicito ->
-    mensaje de bienvenida del cliente -> default con el nombre del asistente si lo hay.
-    Compartido por telefono, test del panel y demo para que todos saluden igual."""
+    """Saludo con el que 'descuelga' el asistente de voz. Usa el mensaje de bienvenida
+    de Apariencia (config.bienvenida) para que sea el MISMO agente que web y WhatsApp.
+    Orden: saludo de voz especifico (solo via admin) -> bienvenida de Apariencia ->
+    default. Compartido por telefono, test del panel y demo."""
     explicit = _sanitize_text(str(voice_cfg.get("greeting", "") or ""), allow_multiline=True)
     if explicit:
         return explicit
@@ -706,9 +706,6 @@ def _voice_default_greeting(config: Dict[str, Any], voice_cfg: Dict[str, Any]) -
     if bienvenida:
         return bienvenida
     nombre = config.get("nombre", "") or "la empresa"
-    voice_name = _sanitize_text(str(voice_cfg.get("name", "") or ""))
-    if voice_name:
-        return f"Hola, soy {voice_name}, de {nombre}. En que puedo ayudarte?"
     return f"Hola, soy el asistente de {nombre}. En que puedo ayudarte?"
 
 
@@ -14434,10 +14431,8 @@ def _app_voice_response(cliente_id: str, request: Request) -> "AppVoiceResponse"
         ok=True,
         cliente_id=cliente_id,
         enabled=enabled,
-        name=str(voice_cfg.get("name", "") or ""),
         twilio_phone_number=str(voice_cfg.get("twilio_phone_number", "") or ""),
         openai_voice=str(voice_cfg.get("openai_voice", "") or ""),
-        greeting=str(voice_cfg.get("greeting", "") or ""),
         webhook_url=webhook_url,
         plan_allows_voice=plan_ok,
         status=status_value,
@@ -14468,15 +14463,11 @@ async def app_voice_post(
             if data.enabled and not _client_voice_plan_enabled(cliente_id):
                 raise HTTPException(status_code=403, detail="El asistente de voz está disponible en el plan Business.")
             voice["enabled"] = bool(data.enabled)
-        if data.name is not None:
-            voice["name"] = _sanitize_text(data.name)[:40]
         if data.twilio_phone_number is not None:
             voice["twilio_phone_number"] = _sanitize_text(data.twilio_phone_number)[:32]
         if data.openai_voice is not None:
             v = _sanitize_text(data.openai_voice).lower()
             voice["openai_voice"] = v if v in VOICE_ALLOWED_OPENAI_VOICES else (voice.get("openai_voice") or "alloy")
-        if data.greeting is not None:
-            voice["greeting"] = _sanitize_text(data.greeting, allow_multiline=True)[:600]
         cfg["voice"] = voice
         next_configs[cliente_id] = cfg
         _update_runtime_configs(next_configs)
@@ -27939,14 +27930,8 @@ def _voice_booking_enabled(cliente_id: str, config: Dict[str, Any]) -> bool:
 def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
     base = _build_system_prompt(cliente_id, config)
 
-    voice_name = _sanitize_text(str((config.get("voice", {}) or {}).get("name", "") or ""))
-    name_rule = (
-        f"- Te llamas {voice_name}. Si te preguntan tu nombre, di que eres {voice_name}.\n"
-        if voice_name else ""
-    )
     voice_rules = (
         "\n\nCANAL: LLAMADA TELEFONICA POR VOZ. Eres la recepcionista del negocio, una persona real, no un robot.\n"
-        + name_rule +
         "- Habla SIEMPRE en espanol de Espana, con tono calido y cercano, como alguien que coge el telefono en recepcion.\n"
         "- Frases cortas, una idea por turno. Nada de parrafos ni listas largas leidas en voz alta.\n"
         "- Usa con naturalidad y moderacion expresiones como 'vale', 'perfecto', 'claro', 'un momento', 'a ver'.\n"

@@ -1382,31 +1382,25 @@
 
       <!-- Configuracion -->
       <div style="margin-top:20px; display:grid; gap:14px;">
-        <div class="ap-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
-          <div class="field">
-            <label class="field-label">Nombre del asistente de voz</label>
-            <input class="field-input" id="vozName" maxlength="40" placeholder="Ej: Sofía" />
-          </div>
-          <div class="field">
-            <label class="field-label">Voz</label>
-            <select class="field-input" id="vozVoice">
-              <option value="">Por defecto</option>
-              <option value="alloy">Alloy</option>
-              <option value="echo">Echo</option>
-              <option value="shimmer">Shimmer</option>
-              <option value="ash">Ash</option>
-              <option value="ballad">Ballad</option>
-              <option value="coral">Coral</option>
-              <option value="sage">Sage</option>
-              <option value="verse">Verse</option>
-              <option value="marin">Marin</option>
-              <option value="cedar">Cedar</option>
-            </select>
-          </div>
-        </div>
+        <p class="panel-sub" style="margin:0; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.4);">
+          Es el mismo asistente que tu web y tu WhatsApp. El nombre y el mensaje de bienvenida se editan en
+          <a href="#" id="vozGoAppearance" style="color:var(--accent); text-decoration:none;">Apariencia</a>. Aquí solo eliges la voz.
+        </p>
         <div class="field">
-          <label class="field-label">Saludo al descolgar (opcional)</label>
-          <textarea class="field-textarea" id="vozGreeting" maxlength="600" placeholder="Si lo dejas vacío, saluda con el nombre del asistente y de tu negocio." style="min-height:70px;"></textarea>
+          <label class="field-label">Voz</label>
+          <select class="field-input" id="vozVoice">
+            <option value="">Por defecto</option>
+            <option value="alloy">Alloy</option>
+            <option value="echo">Echo</option>
+            <option value="shimmer">Shimmer</option>
+            <option value="ash">Ash</option>
+            <option value="ballad">Ballad</option>
+            <option value="coral">Coral</option>
+            <option value="sage">Sage</option>
+            <option value="verse">Verse</option>
+            <option value="marin">Marin</option>
+            <option value="cedar">Cedar</option>
+          </select>
         </div>
         <label style="display:flex; align-items:center; gap:10px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.4);">
           <input type="checkbox" id="vozEnabled" />
@@ -3162,9 +3156,7 @@ document.getElementById('waSaveBtn').addEventListener('click', async () => {
 let voiceState = {};
 function renderVoice(data) {
   voiceState = data || {};
-  document.getElementById('vozName').value = data.name || '';
   document.getElementById('vozVoice').value = data.openai_voice || '';
-  document.getElementById('vozGreeting').value = data.greeting || '';
   document.getElementById('vozEnabled').checked = !!data.enabled;
   document.getElementById('vozPhone').value = data.twilio_phone_number || '';
   document.getElementById('vozWebhookUrl').value = data.webhook_url || '';
@@ -3198,9 +3190,7 @@ document.getElementById('vozSaveBtn').addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         enabled,
-        name: document.getElementById('vozName').value.trim(),
         openai_voice: document.getElementById('vozVoice').value,
-        greeting: document.getElementById('vozGreeting').value.trim(),
         twilio_phone_number: document.getElementById('vozPhone').value.trim(),
       }),
     });
@@ -3210,6 +3200,7 @@ document.getElementById('vozSaveBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('vozGoBillingBtn').addEventListener('click', () => setTab('billing'));
+document.getElementById('vozGoAppearance').addEventListener('click', (e) => { e.preventDefault(); setTab('appearance'); });
 document.getElementById('vozCopyWebhookBtn').addEventListener('click', () => copyFieldValue('vozWebhookUrl'));
 document.getElementById('vozRequestBtn').addEventListener('click', () => {
   const phone = (document.getElementById('vozPhone').value || '').trim();
@@ -3333,7 +3324,7 @@ document.getElementById('vozRequestBtn').addEventListener('click', () => {
     if(active) return;
     resetUI();
     avatarEl.textContent = ((state.nombre||'IA').trim()[0]||'IA').toUpperCase();
-    nameEl.textContent = (voiceState.name || state.nombre || 'Asistente de voz');
+    nameEl.textContent = (state.nombre || 'Asistente de voz');
     active=true;
     overlay.classList.add('open'); document.body.style.overflow='hidden';
     setStatus('Pidiendo micrófono…'); timerEl.textContent='00:00'; setHint('Permite el micrófono para empezar a hablar.');

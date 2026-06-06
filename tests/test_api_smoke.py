@@ -4341,11 +4341,13 @@ def test_app_voice_settings_plan_gate_and_session(client: TestClient, api_module
     saved = client.post(
         "/auth/app/voice",
         cookies=cookies,
-        json={"enabled": False, "name": "Sofía", "openai_voice": "verse", "greeting": "Hola, gracias por llamar."},
+        json={"enabled": False, "openai_voice": "verse"},
     )
     assert saved.status_code == 200, saved.text
-    assert saved.json()["name"] == "Sofía"
     assert saved.json()["openai_voice"] == "verse"
+    # Un solo agente (web/WhatsApp/voz): la voz no tiene nombre ni saludo propios.
+    assert "name" not in saved.json()
+    assert "greeting" not in saved.json()
 
     # Activar y probar en navegador estan gated a Business.
     assert client.post("/auth/app/voice", cookies=cookies, json={"enabled": True}).status_code == 403
@@ -4363,27 +4365,23 @@ def test_app_voice_settings_plan_gate_and_session(client: TestClient, api_module
     assert enabled.json()["enabled"] is True
     assert enabled.json()["plan_allows_voice"] is True
     assert api_module.CONFIG_CLIENTES[cliente_id]["voice"]["enabled"] is True
-    assert api_module.CONFIG_CLIENTES[cliente_id]["voice"]["name"] == "Sofía"
+    assert api_module.CONFIG_CLIENTES[cliente_id]["voice"]["openai_voice"] == "verse"
 
     # Con plan Business pero sin OPENAI_API_KEY -> 503: no se mintea token real.
     monkeypatch.setattr(api_module, "OPENAI_API_KEY", "")
     assert client.post("/auth/app/voice/session", cookies=cookies).status_code == 503
 
-    # El nombre del asistente de voz se inyecta en las instrucciones (sync teléfono/demo/test).
-    instr = api_module._voice_build_instructions(cliente_id, api_module.CONFIG_CLIENTES[cliente_id])
-    assert "Sofía" in instr
 
-
-def test_voice_name_normalize_serialize_and_greeting(api_module):
-    norm = api_module._normalize_voice_config({"name": "Sofía", "openai_voice": "verse"})
-    assert norm["name"] == "Sofía"
-    # El nombre sobrevive normalizacion y serializacion (round-trip).
-    cfg = api_module._normalize_client_config("demo_voice_rt", {"voice": {"name": "Marta"}})
-    assert cfg["voice"]["name"] == "Marta"
-    assert api_module._serialize_client_config(cfg)["voice"]["name"] == "Marta"
-    # El saludo por defecto usa el nombre cuando no hay saludo ni bienvenida.
-    greeting = api_module._voice_default_greeting({"nombre": "MG Clinic", "bienvenida": ""}, {"name": "Sofía"})
-    assert "Sofía" in greeting
+def test_voice_uses_shared_identity_and_greeting(api_module):
+    # La config de voz ya no guarda nombre ni saludo propios (un solo agente).
+    norm = api_module._normalize_voice_config({"openai_voice": "verse", "name": "X"})
+    assert "name" not in norm
+    assert norm["openai_voice"] == "verse"
+    # El saludo de voz sale de la bienvenida de Apariencia (mismo agente que web/WhatsApp).
+    greeting = api_module._voice_default_greeting(
+        {"nombre": "MG Clinic", "bienvenida": "Hola, MG Clinic al habla."}, {}
+    )
+    assert greeting == "Hola, MG Clinic al habla."
 
 
 def test_app_livechat_402_when_free_plan(client: TestClient, api_module, monkeypatch):
