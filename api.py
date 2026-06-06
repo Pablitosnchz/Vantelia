@@ -6292,7 +6292,6 @@ VOICE_DEMO_TEMPLATE = """
   .cta-voice {
     background: linear-gradient(135deg, #10b981, #06b6d4);
     color: #04121a;
-    margin-left: 12px;
   }
   #vdemoOverlay {
     position: fixed; inset: 0; z-index: 60;
@@ -6794,6 +6793,17 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
 
     .cta svg {{ width: 18px; height: 18px; }}
 
+    .hero-ctas {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      align-items: center;
+      max-width: 480px;
+      margin: 0 auto;
+    }}
+    .hero-ctas .cta {{ flex: 0 1 auto; }}
+
     /* STEPS */
     .section {{
       margin-top: 80px;
@@ -7033,6 +7043,9 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
       .page {{ padding: 36px 18px 120px; }}
       .steps {{ grid-template-columns: 1fr; }}
       .widget-pointer .tooltip {{ display: none; }}
+      .hero {{ padding: 28px 4px 18px; }}
+      .hero-ctas {{ flex-direction: column; align-items: stretch; max-width: 360px; }}
+      .hero-ctas .cta {{ width: 100%; justify-content: center; padding: 15px 20px; }}
     }}
 
     @media (max-width: 768px) {{
@@ -7052,11 +7065,13 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
       <span class="badge-live"><span class="dot"></span>Demo en vivo · {nombre}</span>
       <h1>Prueba la IA de Vantelia en directo</h1>
       <p class="lead">Habla con el asistente como lo harían tus clientes y descubre cómo agenda citas automáticamente.</p>
-      <button type="button" id="ctaProbar" class="cta">
-        Probar ahora
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
-      </button>
-      {voice_cta_button}
+      <div class="hero-ctas">
+        <button type="button" id="ctaProbar" class="cta">
+          Probar ahora
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </button>
+        {voice_cta_button}
+      </div>
     </section>
 
     <section class="section reveal">
