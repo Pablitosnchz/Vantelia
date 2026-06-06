@@ -586,6 +586,7 @@ class AppWhatsAppResponse(BaseModel):
 
 class AppVoicePayload(BaseModel):
     enabled: Optional[bool] = None
+    name: Optional[str] = Field(default=None, max_length=40)
     twilio_phone_number: Optional[str] = Field(default=None, max_length=32)
     openai_voice: Optional[str] = Field(default=None, max_length=40)
     greeting: Optional[str] = Field(default=None, max_length=600)
@@ -595,9 +596,11 @@ class AppVoiceResponse(BaseModel):
     ok: bool = True
     cliente_id: str
     enabled: bool = False
+    name: str = ""
     twilio_phone_number: str = ""
     openai_voice: str = ""
     greeting: str = ""
+    webhook_url: str = ""
     plan_allows_voice: bool = False
     status: str = "disabled"
     status_label: str = "Desactivado"

@@ -1,0 +1,67 @@
+name: CI
+
+# Verificacion automatica en cada push/PR a main.
+# NO cambia funcionalidad: solo compila, construye el widget y corre los tests
+# que ya existen (tests autocontenidos, sin secretos ni servicios externos).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancela ejecuciones viejas del mismo ref cuando llega un push nuevo.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (py_compile + pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile check (py_compile)
+        run: python -m py_compile api.py auto_onboarding.py onboarding_utils.py
+
+      - name: Run tests
+        # Entorno minimo que esperan los tests; no son secretos reales.
+        env:
+          OPENAI_API_KEY: ""
+          ADMIN_API_TOKEN: test-admin-token
+        run: python -m pytest -q
+
+  widget:
+    name: Widget build (esbuild)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install npm deps
+        run: npm install
+
+      - name: Build widget
+        run: npm run build
+
+      - name: Verify build is reproducible (committed bundle up to date)
+        # Falla si widget.min.js commiteado no coincide con el build actual.
+        # Mantiene el bundle sincronizado con la fuente.
+        run: git diff --exit-code -- widget/widget.min.js

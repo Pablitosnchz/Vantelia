@@ -143,6 +143,16 @@ VOICE_REALTIME_MODEL = (
     os.getenv("VOICE_REALTIME_MODEL", "gpt-realtime-mini").strip()
     or "gpt-realtime-mini"
 )
+# Demo de voz en el navegador (llamada simulada, sin telefono): tope de duracion
+# y rate limit por IP para acotar el gasto de minutos Realtime en una pagina publica.
+try:
+    DEMO_VOICE_MAX_SECONDS = int(os.getenv("DEMO_VOICE_MAX_SECONDS", "120"))
+except ValueError:
+    DEMO_VOICE_MAX_SECONDS = 120
+try:
+    DEMO_VOICE_RATE_LIMIT = int(os.getenv("DEMO_VOICE_RATE_LIMIT_PER_MINUTE", "3"))
+except ValueError:
+    DEMO_VOICE_RATE_LIMIT = 3
 RAW_EXTRA_CORS_ORIGINS = os.getenv("EXTRA_CORS_ORIGINS", "")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "").strip().rstrip("/")
 SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
@@ -675,6 +685,7 @@ def _normalize_voice_config(payload: Any) -> Dict[str, Any]:
     max_duration = min(max_duration, 3600)
     return {
         "enabled": bool(data.get("enabled", False)),
+        "name": _sanitize_text(str(data.get("name", "")))[:40],
         "twilio_phone_number": _sanitize_text(str(data.get("twilio_phone_number", "")))[:32],
         "openai_voice": voice_value,
         "realtime_model": _sanitize_text(str(data.get("realtime_model", "")))[:80],
@@ -682,6 +693,23 @@ def _normalize_voice_config(payload: Any) -> Dict[str, Any]:
         "max_duration_seconds": max_duration,
         "sms_confirmation": bool(data.get("sms_confirmation", False)),
     }
+
+
+def _voice_default_greeting(config: Dict[str, Any], voice_cfg: Dict[str, Any]) -> str:
+    """Saludo con el que 'descuelga' el asistente de voz. Orden: saludo explicito ->
+    mensaje de bienvenida del cliente -> default con el nombre del asistente si lo hay.
+    Compartido por telefono, test del panel y demo para que todos saluden igual."""
+    explicit = _sanitize_text(str(voice_cfg.get("greeting", "") or ""), allow_multiline=True)
+    if explicit:
+        return explicit
+    bienvenida = _sanitize_text(str(config.get("bienvenida", "") or ""), allow_multiline=True)
+    if bienvenida:
+        return bienvenida
+    nombre = config.get("nombre", "") or "la empresa"
+    voice_name = _sanitize_text(str(voice_cfg.get("name", "") or ""))
+    if voice_name:
+        return f"Hola, soy {voice_name}, de {nombre}. En que puedo ayudarte?"
+    return f"Hola, soy el asistente de {nombre}. En que puedo ayudarte?"
 
 
 def _normalize_optional_time_value(value: Any) -> str:
@@ -892,6 +920,10 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
             )[:120],
         },
         "voice": _normalize_voice_config(payload.get("voice", {})),
+        # Permite que un demo creado a mano (no demo_auto_*) muestre el banner de
+        # "reclamar/activar" y sea reclamable publicamente. Opt-in: por defecto False,
+        # asi los clientes reales (ej. "van") nunca quedan expuestos.
+        "demo_claimable": bool(payload.get("demo_claimable", False)),
         "booking": {
             "enabled": bool(booking.get("enabled", False)),
             "timezone": _sanitize_text(booking.get("timezone", DEFAULT_TIMEZONE)) or DEFAULT_TIMEZONE,
@@ -969,6 +1001,7 @@ def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
             "verify_token_env": config.get("whatsapp", {}).get("verify_token_env", ""),
         },
         "voice": _normalize_voice_config(config.get("voice", {})),
+        "demo_claimable": bool(config.get("demo_claimable", False)),
         "booking": {
             "enabled": bool(config.get("booking", {}).get("enabled", False)),
             "timezone": config.get("booking", {}).get("timezone", DEFAULT_TIMEZONE),
@@ -3445,7 +3478,10 @@ def _claim_cliente_id(claim_token: str, user_id: str, *, source: str = "claim_de
             detail="Ya tienes un bot creado. Solo se permite un bot por cuenta en planes free.",
         )
 
-    is_demo_tenant = cliente_id.startswith(DEMO_TENANT_PREFIX)
+    is_demo_tenant = (
+        cliente_id.startswith(DEMO_TENANT_PREFIX)
+        or bool(CONFIG_CLIENTES.get(cliente_id, {}).get("demo_claimable"))
+    )
     if not is_demo_tenant and not existing_owner:
         # Allow claiming legacy unowned clients only via admin path; reject here to
         # avoid letting any signed-in user grab a production cliente_id.
@@ -6244,6 +6280,278 @@ def _build_install_snippet(cliente_id: str, request: Request) -> Dict[str, str]:
     }
 
 
+# Bloque de "llamada simulada" por voz para la pagina de demo. Se inyecta como VALOR
+# en el f-string de _build_demo_page (por eso usa llaves simples sin escapar) y trae su
+# propio <style>, el overlay tipo pantalla de llamada y el JS WebRTC. Placeholders:
+# __VOICE_CFG__ (objeto JS con api/cliente), __NOMBRE__, __INITIAL__, __COLOR__.
+VOICE_DEMO_TEMPLATE = """
+<style>
+  .cta-voice {
+    background: linear-gradient(135deg, #10b981, #06b6d4);
+    color: #04121a;
+    margin-left: 12px;
+  }
+  #vdemoOverlay {
+    position: fixed; inset: 0; z-index: 60;
+    display: none; align-items: center; justify-content: center;
+    padding: 24px;
+    background: radial-gradient(1200px 700px at 50% -10%, rgba(0,245,212,0.12), transparent 60%),
+                rgba(5, 10, 24, 0.92);
+    backdrop-filter: blur(8px);
+  }
+  #vdemoOverlay.open { display: flex; animation: vdemoFade 0.25s ease both; }
+  @keyframes vdemoFade { from { opacity: 0; } to { opacity: 1; } }
+  .vdemo-card {
+    width: 100%; max-width: 360px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 24px;
+    padding: 34px 26px 28px;
+    text-align: center;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+  }
+  .vdemo-avatar {
+    width: 104px; height: 104px; margin: 0 auto 18px;
+    border-radius: 999px;
+    display: grid; place-items: center;
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 700; font-size: 2.2rem; color: #04121a;
+    background: linear-gradient(135deg, __COLOR__, #00F5D4);
+    position: relative;
+  }
+  .vdemo-avatar::after {
+    content: ""; position: absolute; inset: -8px;
+    border-radius: 999px; border: 2px solid rgba(0,245,212,0.45);
+    opacity: 0; transform: scale(0.9);
+  }
+  .vdemo-card.speaking .vdemo-avatar::after { animation: vdemoRing 1.1s ease-out infinite; }
+  @keyframes vdemoRing {
+    0% { opacity: 0.8; transform: scale(0.92); }
+    100% { opacity: 0; transform: scale(1.25); }
+  }
+  .vdemo-name { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 1.3rem; color: #fff; }
+  .vdemo-status { margin-top: 6px; color: rgba(255,255,255,0.66); font-size: 0.96rem; min-height: 22px; }
+  .vdemo-timer { margin-top: 12px; font-variant-numeric: tabular-nums; font-size: 1.5rem; font-weight: 600; color: #fff; letter-spacing: 0.04em; }
+  .vdemo-actions { display: flex; gap: 14px; justify-content: center; margin-top: 24px; }
+  .vdemo-btn {
+    appearance: none; cursor: pointer; font: inherit; font-weight: 600; font-size: 0.92rem;
+    border: 1px solid rgba(255,255,255,0.16); color: #fff;
+    background: rgba(255,255,255,0.06);
+    padding: 12px 18px; border-radius: 999px; transition: all 0.16s ease;
+  }
+  .vdemo-btn:hover { background: rgba(255,255,255,0.12); }
+  .vdemo-btn.on { background: rgba(255,255,255,0.2); }
+  .vdemo-btn.hang { background: #ef4444; border-color: #ef4444; color: #fff; }
+  .vdemo-btn.hang:hover { background: #dc2626; }
+  .vdemo-hint { margin-top: 18px; color: rgba(255,255,255,0.5); font-size: 0.84rem; line-height: 1.5; }
+</style>
+<div id="vdemoOverlay" role="dialog" aria-modal="true" aria-label="Llamada con el asistente">
+  <div class="vdemo-card" id="vdemoCard">
+    <div class="vdemo-avatar">__INITIAL__</div>
+    <div class="vdemo-name">__NOMBRE__</div>
+    <div class="vdemo-status" id="vdemoStatus">Llamando…</div>
+    <div class="vdemo-timer" id="vdemoTimer">00:00</div>
+    <div class="vdemo-actions">
+      <button type="button" class="vdemo-btn" id="vdemoMute">Silenciar</button>
+      <button type="button" class="vdemo-btn hang" id="vdemoHang">Colgar</button>
+    </div>
+    <div class="vdemo-hint" id="vdemoHint">Habla con normalidad, como en una llamada real.</div>
+  </div>
+  <audio id="vdemoAudio" autoplay playsinline></audio>
+</div>
+<script>
+(function(){
+  var CFG = __VOICE_CFG__;
+  var btn = document.getElementById('vdemoCallBtn');
+  if(!btn) return;
+  var overlay = document.getElementById('vdemoOverlay');
+  var card = document.getElementById('vdemoCard');
+  var statusEl = document.getElementById('vdemoStatus');
+  var timerEl = document.getElementById('vdemoTimer');
+  var hintEl = document.getElementById('vdemoHint');
+  var audioEl = document.getElementById('vdemoAudio');
+  var muteBtn = document.getElementById('vdemoMute');
+  var hangBtn = document.getElementById('vdemoHang');
+
+  var pc=null, dc=null, micStream=null, timerId=null, maxId=null, speakId=null;
+  var seconds=0, muted=false, active=false, ended=false, MAXS=120;
+
+  function setStatus(t){ if(statusEl) statusEl.textContent=t; }
+  function setHint(t){ if(hintEl) hintEl.textContent=t; }
+  function fmt(s){ var m=Math.floor(s/60), x=s%60; return (m<10?'0':'')+m+':'+(x<10?'0':'')+x; }
+  function speaking(on){ if(card) card.classList.toggle('speaking', !!on); }
+
+  function cleanup(){
+    active=false;
+    if(timerId){ clearInterval(timerId); timerId=null; }
+    if(maxId){ clearTimeout(maxId); maxId=null; }
+    if(speakId){ clearTimeout(speakId); speakId=null; }
+    speaking(false);
+    try{ if(dc) dc.close(); }catch(e){}
+    try{ if(pc) pc.close(); }catch(e){}
+    try{ if(micStream) micStream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+    pc=null; dc=null; micStream=null;
+    if(audioEl){ try{ audioEl.srcObject=null; }catch(e){} }
+  }
+  function resetCallUI(){
+    ended=false;
+    if(muteBtn){ muteBtn.style.display=''; muteBtn.textContent='Silenciar'; muteBtn.classList.remove('on'); }
+    if(hangBtn){ hangBtn.textContent='Colgar'; hangBtn.classList.add('hang'); }
+    if(overlay) overlay.classList.remove('ended');
+  }
+  function closeOverlay(){ cleanup(); resetCallUI(); if(overlay) overlay.classList.remove('open'); document.body.style.overflow=''; }
+  // Fin de llamada NO solicitado por el usuario: deja el overlay abierto como un pop-up
+  // que explica el motivo, y convierte "Colgar" en "Cerrar". Asi el usuario siempre ve
+  // por que se ha cortado.
+  function endCall(reason, detail){
+    if(ended) return;
+    ended=true; active=false;
+    cleanup();
+    setStatus(reason || 'Llamada finalizada');
+    setHint(detail || 'La llamada ha terminado.');
+    if(muteBtn) muteBtn.style.display='none';
+    if(hangBtn){ hangBtn.textContent='Cerrar'; hangBtn.classList.remove('hang'); }
+    if(overlay) overlay.classList.add('ended');
+  }
+  function fail(msg, hint){ endCall(msg || 'No se pudo conectar', hint || 'Revisa los permisos e inténtalo de nuevo.'); }
+
+  function isSecure(){
+    return window.isSecureContext === true
+      || location.protocol === 'https:'
+      || location.hostname === 'localhost'
+      || location.hostname === '127.0.0.1';
+  }
+  // Pide el microfono de forma universal: API moderna y, si no existe, los nombres
+  // antiguos por navegador. Rechaza con un nombre claro si no se puede ni intentar.
+  function getMic(){
+    if(!isSecure()) return Promise.reject({ name:'InsecureContext' });
+    var md = navigator.mediaDevices;
+    if(md && md.getUserMedia) return md.getUserMedia({ audio:true });
+    var legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+    if(legacy) return new Promise(function(res, rej){ legacy.call(navigator, { audio:true }, res, rej); });
+    return Promise.reject({ name:'Unsupported' });
+  }
+  function micError(e){
+    var n = (e && e.name) || '';
+    if(n==='InsecureContext') fail('Necesita conexión segura', 'Abre el demo con https:// para poder hablar.');
+    else if(n==='NotAllowedError' || n==='SecurityError' || n==='PermissionDeniedError') fail('Micrófono bloqueado', 'Toca el candado/ajustes del navegador y permite el micrófono para esta web.');
+    else if(n==='NotFoundError' || n==='DevicesNotFoundError') fail('No se detecta micrófono', 'Conecta o activa un micrófono y vuelve a intentarlo.');
+    else if(n==='NotReadableError' || n==='TrackStartError') fail('Micrófono ocupado', 'Otra app está usando el micrófono. Ciérrala e inténtalo de nuevo.');
+    else if(n==='Unsupported') fail('Navegador no compatible', 'Prueba con Chrome o Safari actualizados.');
+    else fail('No se pudo abrir el micrófono', 'Revisa los permisos del navegador e inténtalo de nuevo.');
+  }
+
+  function handleEvent(ev){
+    var type = (ev && ev.type) || '';
+    if(type.indexOf('output_audio.delta')>=0 || type.indexOf('audio.delta')>=0){
+      setStatus('Hablando…'); speaking(true);
+      if(speakId) clearTimeout(speakId);
+      speakId=setTimeout(function(){ speaking(false); if(active) setStatus('En llamada'); }, 650);
+    } else if(type==='response.done' || type.indexOf('output_audio.done')>=0){
+      speaking(false); if(active) setStatus('En llamada');
+    } else if(type==='input_audio_buffer.speech_started'){
+      if(active) setHint('Te escucho…');
+    } else if(type==='error'){
+      var em = (ev && ev.error && (ev.error.message || ev.error.code)) || '';
+      endCall('La llamada terminó', em ? ('Motivo: '+em) : 'El asistente devolvió un error. Vuelve a intentarlo.');
+    }
+  }
+
+  async function postSDP(model, sdp, secret){
+    var endpoints = [
+      'https://api.openai.com/v1/realtime/calls?model='+model,
+      'https://api.openai.com/v1/realtime?model='+model
+    ];
+    var lastErr;
+    for(var i=0;i<endpoints.length;i++){
+      try{
+        var r = await fetch(endpoints[i], { method:'POST', body:sdp, headers:{ 'Authorization':'Bearer '+secret, 'Content-Type':'application/sdp' } });
+        if(r.ok) return await r.text();
+        lastErr = new Error('sdp http '+r.status);
+      }catch(e){ lastErr=e; }
+    }
+    throw lastErr || new Error('sdp failed');
+  }
+
+  async function call(){
+    if(active) return;
+    resetCallUI();
+    active=true;
+    overlay.classList.add('open'); document.body.style.overflow='hidden';
+    setStatus('Pidiendo micrófono…'); timerEl.textContent='00:00';
+    setHint('Permite el micrófono para empezar a hablar.');
+    muted=false;
+
+    try{
+      micStream = await getMic();
+    }catch(e){ micError(e); return; }
+
+    var sess;
+    setStatus('Conectando…');
+    try{
+      var base = (CFG.api||'').replace(/\\/$/,'');
+      var r = await fetch(base + '/demo/' + encodeURIComponent(CFG.cliente) + '/voice/session', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:'{}' });
+      if(r.status===429){ fail('Demasiados intentos', 'Has iniciado varias llamadas seguidas. Espera un minuto y vuelve a probar.'); return; }
+      if(r.status===503){ fail('Voz no disponible', 'El asistente de voz no está configurado ahora mismo.'); return; }
+      if(!r.ok) throw new Error('http '+r.status);
+      sess = await r.json();
+    }catch(e){ fail('No se pudo iniciar la voz', 'Hubo un problema al conectar con el asistente. Inténtalo de nuevo.'); return; }
+    MAXS = sess.max_duration_seconds || 120;
+
+    try{
+      pc = new RTCPeerConnection();
+      pc.ontrack = function(e){ try{ audioEl.srcObject = e.streams[0]; audioEl.play().catch(function(){}); }catch(_){} };
+      pc.onconnectionstatechange = function(){
+        if(!pc) return;
+        var s = pc.connectionState;
+        if(s==='connected'){ if(active && !ended) setStatus('En llamada'); }
+        else if(s==='failed'){ endCall('Se cortó la llamada', 'Se perdió la conexión con el asistente. Comprueba tu internet y vuelve a llamar.'); }
+        else if(s==='disconnected'){ if(active && !ended) setStatus('Reconectando…'); }
+      };
+      pc.oniceconnectionstatechange = function(){
+        if(pc && pc.iceConnectionState==='failed'){ endCall('Se cortó la llamada', 'No se pudo mantener la conexión de audio (red o firewall). Vuelve a intentarlo.'); }
+      };
+      micStream.getTracks().forEach(function(t){ pc.addTrack(t, micStream); });
+      dc = pc.createDataChannel('oai-events');
+      dc.onmessage = function(m){ try{ handleEvent(JSON.parse(m.data)); }catch(_){} };
+      dc.onclose = function(){ if(active && !ended) endCall('La llamada se cerró', 'El asistente cerró la sesión. Vuelve a llamar para seguir probando.'); };
+      dc.onopen = function(){
+        try{
+          var g = sess.greeting || '';
+          if(g){
+            dc.send(JSON.stringify({ type:'conversation.item.create', item:{ type:'message', role:'user', content:[{ type:'input_text', text:'Inicia la llamada saludando exactamente con: "'+g+'"' }] } }));
+            dc.send(JSON.stringify({ type:'response.create' }));
+          }
+        }catch(_){}
+      };
+      var offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      var sdpAnswer = await postSDP(encodeURIComponent(sess.model||''), offer.sdp, sess.client_secret);
+      await pc.setRemoteDescription({ type:'answer', sdp:sdpAnswer });
+    }catch(e){ fail('No se pudo establecer la llamada', 'No se pudo abrir el canal de audio con el asistente. Inténtalo de nuevo.'); return; }
+
+    setStatus('En llamada');
+    setHint('Habla con normalidad. Pulsa Colgar para terminar.');
+    seconds=0; timerEl.textContent='00:00';
+    timerId=setInterval(function(){ seconds++; timerEl.textContent=fmt(seconds); }, 1000);
+    maxId=setTimeout(function(){
+      endCall('Tiempo de demo agotado', 'Esta demo de voz dura '+MAXS+' segundos. Pulsa "Llamar al asistente" para hablar otra vez.');
+    }, MAXS*1000);
+  }
+
+  btn.addEventListener('click', call);
+  if(muteBtn) muteBtn.addEventListener('click', function(){
+    muted=!muted;
+    if(micStream) micStream.getAudioTracks().forEach(function(t){ t.enabled=!muted; });
+    muteBtn.textContent = muted ? 'Activar micro' : 'Silenciar';
+    muteBtn.classList.toggle('on', muted);
+  });
+  if(hangBtn) hangBtn.addEventListener('click', closeOverlay);
+})();
+</script>
+"""
+
+
 def _build_demo_page(cliente_id: str, request: Request) -> str:
     config = _get_client_config(cliente_id)
     assets = _build_install_snippet(cliente_id, request)
@@ -6265,7 +6573,7 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
 
     # Self-serve bridge: only auto demos (demo_auto_*) without an owner can be claimed.
     is_claimable_demo = (
-        cliente_id.startswith(DEMO_TENANT_PREFIX)
+        (cliente_id.startswith(DEMO_TENANT_PREFIX) or bool(config.get("demo_claimable")))
         and not db_get_client_owner(cliente_id)
     )
     claim_banner = (
@@ -6294,6 +6602,24 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
         '<h3>Haz una consulta</h3>'
         '<p>Pregunta lo que un cliente real preguntaría. La IA responde al instante.</p>'
         '</article>'
+    )
+
+    # Llamada simulada por voz (browser WebRTC, sin telefono): boton en el hero +
+    # bloque overlay/JS inyectado como valor (llaves literales, no las parsea el f-string).
+    voice_initial = escape((config.get("icono") or config["nombre"][:2] or "IA").upper())
+    voice_js_cfg = json.dumps(
+        {"api": assets["api_base_url"], "cliente": cliente_id}
+    ).replace("</", "<\\/")
+    voice_cta_button = (
+        '<button type="button" id="vdemoCallBtn" class="cta cta-voice">'
+        '📞 Llamar al asistente</button>'
+    )
+    voice_call_block = (
+        VOICE_DEMO_TEMPLATE
+        .replace("__VOICE_CFG__", voice_js_cfg)
+        .replace("__NOMBRE__", nombre)
+        .replace("__INITIAL__", voice_initial)
+        .replace("__COLOR__", color)
     )
 
     return f"""<!DOCTYPE html>
@@ -6727,6 +7053,7 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
         Probar ahora
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
       </button>
+      {voice_cta_button}
     </section>
 
     <section class="section reveal">
@@ -6916,6 +7243,7 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
       document.querySelectorAll(".reveal").forEach(function (el) {{ io.observe(el); }});
     }})();
   </script>
+  {voice_call_block}
 </body>
 </html>
 """
@@ -14090,35 +14418,45 @@ async def app_whatsapp_post(
     return _app_whatsapp_response(cliente_id, request)
 
 
-def _app_voice_response(cliente_id: str) -> "AppVoiceResponse":
+def _app_voice_response(cliente_id: str, request: Request) -> "AppVoiceResponse":
     cfg = CONFIG_CLIENTES.get(cliente_id, {})
     voice_cfg = cfg.get("voice", {}) or {}
     plan_ok = _client_voice_plan_enabled(cliente_id)
     enabled = bool(voice_cfg.get("enabled", False)) and plan_ok
-    status = "active" if enabled else "disabled"
+    webhook_url = f"{_public_base_url(request).rstrip('/')}/voice/{cliente_id}"
+    if enabled:
+        status_value, status_label = "active", "Activo"
+    elif bool(voice_cfg.get("enabled", False)) and not plan_ok:
+        status_value, status_label = "plan_required", "Requiere plan Business"
+    else:
+        status_value, status_label = "disabled", "Desactivado"
     return AppVoiceResponse(
         ok=True,
         cliente_id=cliente_id,
         enabled=enabled,
+        name=str(voice_cfg.get("name", "") or ""),
         twilio_phone_number=str(voice_cfg.get("twilio_phone_number", "") or ""),
         openai_voice=str(voice_cfg.get("openai_voice", "") or ""),
         greeting=str(voice_cfg.get("greeting", "") or ""),
+        webhook_url=webhook_url,
         plan_allows_voice=plan_ok,
-        status=status,
-        status_label="Activo" if enabled else "Desactivado",
+        status=status_value,
+        status_label=status_label,
     )
 
 
 @app.get("/auth/app/voice", response_model=AppVoiceResponse)
 async def app_voice_get(
+    request: Request,
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> AppVoiceResponse:
-    return _app_voice_response(_resolve_cliente_for_self_serve_user(user))
+    return _app_voice_response(_resolve_cliente_for_self_serve_user(user), request)
 
 
 @app.post("/auth/app/voice", response_model=AppVoiceResponse)
 async def app_voice_post(
     data: AppVoicePayload,
+    request: Request,
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> AppVoiceResponse:
     cliente_id = _resolve_cliente_for_self_serve_user(user)
@@ -14130,6 +14468,8 @@ async def app_voice_post(
             if data.enabled and not _client_voice_plan_enabled(cliente_id):
                 raise HTTPException(status_code=403, detail="El asistente de voz está disponible en el plan Business.")
             voice["enabled"] = bool(data.enabled)
+        if data.name is not None:
+            voice["name"] = _sanitize_text(data.name)[:40]
         if data.twilio_phone_number is not None:
             voice["twilio_phone_number"] = _sanitize_text(data.twilio_phone_number)[:32]
         if data.openai_voice is not None:
@@ -14141,7 +14481,31 @@ async def app_voice_post(
         next_configs[cliente_id] = cfg
         _update_runtime_configs(next_configs)
     _persist_configs_to_disk(next_configs)
-    return _app_voice_response(cliente_id)
+    return _app_voice_response(cliente_id, request)
+
+
+@app.post("/auth/app/voice/session", include_in_schema=False)
+async def app_voice_session(
+    request: Request,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """Token efimero para probar el asistente de voz en el navegador desde el panel del
+    cliente (misma llamada simulada que la demo). Requiere plan Business; reutiliza la
+    config de voz del cliente, asi que suena igual que el telefono."""
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    config = _get_client_config(cliente_id)
+    if not _client_voice_plan_enabled(cliente_id):
+        raise HTTPException(status_code=403, detail="El asistente de voz está disponible en el plan Business.")
+    if not OPENAI_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El asistente de voz no esta disponible ahora mismo.",
+        )
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"app_voice:{cliente_id}:{client_ip}", DEMO_VOICE_RATE_LIMIT)
+    voice_cfg = config.get("voice") or {}
+    max_seconds = int(voice_cfg.get("max_duration_seconds") or 0) or DEMO_VOICE_MAX_SECONDS
+    return await _mint_voice_session(cliente_id, config, max_seconds=max_seconds, log_tag="app-voice")
 
 
 # --- Sem 4: Live Chat (Pro gate stub) --------------------------------------
@@ -15527,7 +15891,121 @@ async def dashboard(
 async def demo_cliente(cliente_id: str, request: Request) -> HTMLResponse:
     _assert_valid_client_id(cliente_id)
     _get_client_config(cliente_id)
-    return HTMLResponse(_build_demo_page(cliente_id, request))
+    response = HTMLResponse(_build_demo_page(cliente_id, request))
+    # La "llamada simulada" necesita el microfono. El resto del sitio mantiene
+    # microphone=() por seguridad, pero en esta pagina lo permitimos para el propio
+    # origen (self) para que el navegador pueda pedir el permiso en cualquier
+    # dispositivo. El middleware de seguridad usa setdefault, asi que respeta este valor.
+    response.headers["Permissions-Policy"] = "microphone=(self), camera=(), geolocation=()"
+    return response
+
+
+async def _mint_voice_session(
+    cliente_id: str,
+    config: Dict[str, Any],
+    *,
+    max_seconds: int,
+    log_tag: str = "voice",
+) -> Dict[str, Any]:
+    """Mintea un client_secret EFIMERO de OpenAI Realtime para hablar por WebRTC desde
+    el navegador. Reutiliza instructions/tools/voz/saludo del cliente (config.voice), por
+    lo que telefono, test del panel y demo comparten el mismo cerebro. La OPENAI_API_KEY
+    nunca sale del backend. Lanza HTTPException(502) si OpenAI falla.
+
+    El llamador es responsable del gating (plan/rate limit) y de comprobar OPENAI_API_KEY.
+    """
+    voice_cfg = config.get("voice") or {}
+    realtime_model = voice_cfg.get("realtime_model") or VOICE_REALTIME_MODEL
+    openai_voice = voice_cfg.get("openai_voice") or VOICE_OPENAI_VOICE
+
+    session_body = {
+        "session": {
+            "type": "realtime",
+            "model": realtime_model,
+            "instructions": _voice_build_instructions(cliente_id, config),
+            "audio": {
+                "input": {
+                    "turn_detection": {
+                        "type": "server_vad",
+                        "threshold": 0.6,
+                        "prefix_padding_ms": 300,
+                        "silence_duration_ms": 700,
+                        "create_response": True,
+                        "interrupt_response": True,
+                    },
+                    "transcription": {"model": "whisper-1"},
+                },
+                "output": {"voice": openai_voice},
+            },
+            "tools": _voice_booking_tools(cliente_id, config),
+            "tool_choice": "auto",
+        }
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/realtime/client_secrets",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=session_body,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[%s] no se pudo mintear token (%s): %s", log_tag, cliente_id, exc)
+        raise HTTPException(status_code=502, detail="No se pudo iniciar el asistente de voz.")
+
+    if resp.status_code >= 300:
+        logger.error(
+            "[%s] OpenAI client_secrets %s (%s): %s",
+            log_tag, resp.status_code, cliente_id, resp.text[:400],
+        )
+        raise HTTPException(status_code=502, detail="No se pudo iniciar el asistente de voz.")
+
+    try:
+        data = resp.json()
+    except Exception:  # noqa: BLE001
+        data = {}
+    # GA devuelve {"value": "ek_...", ...}; toleramos la forma anidada por compat.
+    client_secret = (
+        data.get("value")
+        or (data.get("client_secret") or {}).get("value")
+        or ""
+    )
+    if not client_secret:
+        logger.error("[%s] respuesta sin client_secret (%s): %s", log_tag, cliente_id, json.dumps(data)[:400])
+        raise HTTPException(status_code=502, detail="No se pudo iniciar el asistente de voz.")
+
+    return {
+        "client_secret": client_secret,
+        "model": realtime_model,
+        "voice": openai_voice,
+        "cliente_id": cliente_id,
+        "greeting": _voice_default_greeting(config, voice_cfg),
+        "max_duration_seconds": max_seconds,
+    }
+
+
+@app.post("/demo/{cliente_id}/voice/session", include_in_schema=False)
+async def demo_voice_session(cliente_id: str, request: Request) -> Dict[str, Any]:
+    """Token efimero para la "llamada simulada" del demo. A diferencia de la voz
+    telefonica (Twilio), aqui NO se aplica gating de plan: el demo siempre permite
+    probar la voz. Al ser pagina publica, acotamos el gasto con rate limit por IP y un
+    tope de duracion que el front respeta colgando solo.
+    """
+    _assert_valid_client_id(cliente_id)
+    config = _get_client_config(cliente_id)  # 404 si el cliente no existe
+    if not OPENAI_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El asistente de voz no esta disponible ahora mismo.",
+        )
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"demo_voice:{cliente_id}:{client_ip}", DEMO_VOICE_RATE_LIMIT)
+    voice_cfg = config.get("voice") or {}
+    max_seconds = int(voice_cfg.get("max_duration_seconds") or 0) or DEMO_VOICE_MAX_SECONDS
+    return await _mint_voice_session(cliente_id, config, max_seconds=max_seconds, log_tag="demo-voice")
 
 
 @app.post("/demo/generate", response_model=DemoGenerateResponse)
@@ -27461,8 +27939,14 @@ def _voice_booking_enabled(cliente_id: str, config: Dict[str, Any]) -> bool:
 def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
     base = _build_system_prompt(cliente_id, config)
 
+    voice_name = _sanitize_text(str((config.get("voice", {}) or {}).get("name", "") or ""))
+    name_rule = (
+        f"- Te llamas {voice_name}. Si te preguntan tu nombre, di que eres {voice_name}.\n"
+        if voice_name else ""
+    )
     voice_rules = (
         "\n\nCANAL: LLAMADA TELEFONICA POR VOZ. Eres la recepcionista del negocio, una persona real, no un robot.\n"
+        + name_rule +
         "- Habla SIEMPRE en espanol de Espana, con tono calido y cercano, como alguien que coge el telefono en recepcion.\n"
         "- Frases cortas, una idea por turno. Nada de parrafos ni listas largas leidas en voz alta.\n"
         "- Usa con naturalidad y moderacion expresiones como 'vale', 'perfecto', 'claro', 'un momento', 'a ver'.\n"
@@ -28208,13 +28692,9 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
         )
 
         # Prioridad del saludo: greeting de voz especifico -> mensaje de bienvenida
-        # de "Apariencia" (bienvenida) -> default. Asi editar Apariencia tambien
-        # cambia como saluda el asistente de voz.
-        greeting = (
-            voice_cfg.get("greeting")
-            or config.get("bienvenida")
-            or f"Hola, soy el asistente virtual de {config['nombre']}. En que puedo ayudarte?"
-        )
+        # de "Apariencia" (bienvenida) -> default con el nombre del asistente de voz.
+        # Compartido con el test del panel y la demo via _voice_default_greeting.
+        greeting = _voice_default_greeting(config, voice_cfg)
         await openai_ws.send(
             json.dumps(
                 {

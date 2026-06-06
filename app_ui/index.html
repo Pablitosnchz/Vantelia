@@ -828,6 +828,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
     <span>Tune AI</span>
   </div>
+  <div class="nav-item" data-tab="voz">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+    <span>Asistente de voz</span>
+  </div>
   <div class="nav-item" data-tab="whatsapp">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 11.7a8.5 8.5 0 0 1-12.4 7.5L3 20.5l1.4-4.9A8.5 8.5 0 1 1 20.5 11.7z"/><path d="M8.8 8.2c.2-.5.5-.5.8-.5h.6c.2 0 .5.1.6.4l.7 1.7c.1.3.1.5-.1.7l-.4.5c-.1.2-.2.4 0 .6.4.7 1 1.3 1.7 1.8.2.1.4.1.6-.1l.6-.5c.2-.2.4-.2.7-.1l1.6.8c.3.1.4.4.4.7 0 .6-.3 1.2-.8 1.5-.6.4-1.6.5-3.2-.2-2.1-.9-3.8-2.6-4.7-4.7-.7-1.6-.6-2.6-.2-3.2z"/></svg>
     <span>WhatsApp</span>
@@ -1338,6 +1342,121 @@
         <button class="btn btn-primary" id="tnSaveAdvancedBtn" type="button">Guardar configuración</button>
         <button class="btn btn-ghost" id="tnReloadAdvancedBtn" type="button">Descartar</button>
       </div>
+    </div>
+  </section>
+
+  <!-- ASISTENTE DE VOZ / TELEFONO -->
+  <style>
+    #vpOverlay { position: fixed; inset: 0; z-index: 200; display: none; align-items: center; justify-content: center; padding: 24px; background: rgba(5,10,24,0.92); backdrop-filter: blur(8px); }
+    #vpOverlay.open { display: flex; }
+    .vp-card { width: 100%; max-width: 360px; background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)); border: 1px solid rgba(255,255,255,0.12); border-radius: 24px; padding: 34px 26px 28px; text-align: center; box-shadow: 0 30px 80px rgba(0,0,0,0.5); }
+    .vp-avatar { width: 104px; height: 104px; margin: 0 auto 18px; border-radius: 999px; display: grid; place-items: center; font-weight: 700; font-size: 2.2rem; color: #04121a; background: linear-gradient(135deg, var(--accent, #00b1d9), #00F5D4); position: relative; }
+    .vp-avatar::after { content: ""; position: absolute; inset: -8px; border-radius: 999px; border: 2px solid rgba(0,245,212,0.45); opacity: 0; transform: scale(0.9); }
+    .vp-card.speaking .vp-avatar::after { animation: vpRing 1.1s ease-out infinite; }
+    @keyframes vpRing { 0% { opacity: 0.8; transform: scale(0.92); } 100% { opacity: 0; transform: scale(1.25); } }
+    .vp-name { font-weight: 700; font-size: 1.3rem; color: #fff; }
+    .vp-status { margin-top: 6px; color: rgba(255,255,255,0.66); font-size: 0.96rem; min-height: 22px; }
+    .vp-timer { margin-top: 12px; font-variant-numeric: tabular-nums; font-size: 1.5rem; font-weight: 600; color: #fff; letter-spacing: 0.04em; }
+    .vp-actions { display: flex; gap: 14px; justify-content: center; margin-top: 24px; }
+    .vp-btn { appearance: none; cursor: pointer; font: inherit; font-weight: 600; font-size: 0.92rem; border: 1px solid rgba(255,255,255,0.16); color: #fff; background: rgba(255,255,255,0.06); padding: 12px 18px; border-radius: 999px; transition: all 0.16s ease; }
+    .vp-btn:hover { background: rgba(255,255,255,0.12); }
+    .vp-btn.on { background: rgba(255,255,255,0.2); }
+    .vp-btn.hang { background: #ef4444; border-color: #ef4444; color: #fff; }
+    .vp-btn.hang:hover { background: #dc2626; }
+    .vp-hint { margin-top: 18px; color: rgba(255,255,255,0.5); font-size: 0.84rem; line-height: 1.5; }
+  </style>
+  <section class="page" id="page-voz">
+    <div class="panel-card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0;">Asistente de voz</h2>
+          <p class="panel-sub">Tu asistente atendiendo llamadas de teléfono. Pruébalo aquí mismo en el navegador.</p>
+        </div>
+        <span class="pro-pill" id="vozStatusPill" style="background:var(--accent-soft); color:var(--accent);">Cargando</span>
+      </div>
+
+      <div id="vozPlanNotice" class="panel-sub" style="display:none; margin-top:14px; padding:12px; border:1px solid rgba(245,158,11,0.35); border-radius:10px; background:rgba(245,158,11,0.08); color:#fde68a;">
+        Tu plan actual no incluye el asistente de voz. Está disponible en el plan Business.
+        <button class="btn btn-ghost" id="vozGoBillingBtn" type="button" style="margin-left:10px; padding:6px 10px;">Ver planes</button>
+      </div>
+
+      <!-- Configuracion -->
+      <div style="margin-top:20px; display:grid; gap:14px;">
+        <div class="ap-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+          <div class="field">
+            <label class="field-label">Nombre del asistente de voz</label>
+            <input class="field-input" id="vozName" maxlength="40" placeholder="Ej: Sofía" />
+          </div>
+          <div class="field">
+            <label class="field-label">Voz</label>
+            <select class="field-input" id="vozVoice">
+              <option value="">Por defecto</option>
+              <option value="alloy">Alloy</option>
+              <option value="echo">Echo</option>
+              <option value="shimmer">Shimmer</option>
+              <option value="ash">Ash</option>
+              <option value="ballad">Ballad</option>
+              <option value="coral">Coral</option>
+              <option value="sage">Sage</option>
+              <option value="verse">Verse</option>
+              <option value="marin">Marin</option>
+              <option value="cedar">Cedar</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label">Saludo al descolgar (opcional)</label>
+          <textarea class="field-textarea" id="vozGreeting" maxlength="600" placeholder="Si lo dejas vacío, saluda con el nombre del asistente y de tu negocio." style="min-height:70px;"></textarea>
+        </div>
+        <label style="display:flex; align-items:center; gap:10px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.4);">
+          <input type="checkbox" id="vozEnabled" />
+          <span><b>Asistente de voz activo</b><br><span class="panel-sub" style="margin:0;">Atenderá las llamadas que lleguen al número conectado.</span></span>
+        </label>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+          <button class="btn btn-primary" id="vozSaveBtn" type="button">Guardar cambios</button>
+          <button class="btn btn-ghost" id="vozTestBtn" type="button">📞 Probar en el navegador</button>
+        </div>
+      </div>
+
+      <!-- Instalar en numero (asistido) -->
+      <div style="margin-top:22px; padding:24px; border-radius:14px; background:linear-gradient(135deg, rgba(0,177,217,0.10), rgba(7,16,31,0.55)); border:1px solid rgba(0,177,217,0.28);">
+        <h3 style="margin:0; font-family:var(--font-title); font-size:1.1rem;">Instala el asistente en tu número</h3>
+        <p style="color:var(--soft); font-size:0.92rem; line-height:1.55; margin:6px 0 14px;">Dinos en qué número quieres que atienda y el equipo de Vantelia lo conecta por ti. Cuando esté listo, las llamadas a ese número las cogerá tu asistente.</p>
+        <div class="field">
+          <label class="field-label">Número de teléfono para el asistente</label>
+          <input class="field-input" id="vozPhone" type="tel" placeholder="+34 900 123 456" autocomplete="tel" />
+        </div>
+        <div style="display:flex; gap:12px; margin-top:14px; flex-wrap:wrap; align-items:center;">
+          <button class="btn btn-primary" id="vozRequestBtn" type="button">Solicitar instalación</button>
+          <span class="panel-sub" style="margin:0;">Te respondemos en menos de 24h hábiles.</span>
+        </div>
+      </div>
+
+      <details id="vozAdvancedBox" style="margin-top:18px; padding:14px 16px; border:1px solid var(--line); border-radius:12px; background:rgba(7,16,31,0.4);">
+        <summary style="cursor:pointer; font-weight:600; color:var(--soft);">¿Tienes tu propio número en Twilio? Conéctalo tú mismo</summary>
+        <p class="panel-sub" style="margin-top:10px;">En la configuración de Voz de tu número en Twilio, pon esta URL como webhook (método POST):</p>
+        <label class="field-label">Webhook de voz</label>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input class="field-input" id="vozWebhookUrl" readonly />
+          <button class="btn btn-ghost" id="vozCopyWebhookBtn" type="button">Copiar</button>
+        </div>
+      </details>
+    </div>
+
+    <!-- Overlay de llamada simulada (reutiliza la UX de la demo) -->
+    <div id="vpOverlay" role="dialog" aria-modal="true" aria-label="Llamada de prueba con el asistente">
+      <div class="vp-card" id="vpCard">
+        <div class="vp-avatar" id="vpAvatar">IA</div>
+        <div class="vp-name" id="vpName">Asistente de voz</div>
+        <div class="vp-status" id="vpStatus">Llamando…</div>
+        <div class="vp-timer" id="vpTimer">00:00</div>
+        <div class="vp-actions">
+          <button type="button" class="vp-btn" id="vpMute">Silenciar</button>
+          <button type="button" class="vp-btn hang" id="vpHang">Colgar</button>
+        </div>
+        <div class="vp-hint" id="vpHint">Habla con normalidad, como en una llamada real.</div>
+      </div>
+      <audio id="vpAudio" autoplay playsinline></audio>
     </div>
   </section>
 
@@ -1910,7 +2029,7 @@ const state = {
   session_id: 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
 };
 
-const TABS = ['overview','chats','knowledge','qa','tune','whatsapp','appearance','billing','citas','equipo','servicios','horarios','mensajes','instalacion','cuenta'];
+const TABS = ['overview','chats','knowledge','qa','tune','voz','whatsapp','appearance','billing','citas','equipo','servicios','horarios','mensajes','instalacion','cuenta'];
 const billingState = { period: 'monthly', plans: [], current: 'free', portal: false };
 
 function formatDetail(d) {
@@ -1984,7 +2103,7 @@ function setTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.getAttribute('data-tab') === tab));
   const titles = {
     overview:'Overview', chats:'Chats',
-    knowledge:'Conocimiento', qa:'Q&A', tune:'Tune AI', whatsapp:'WhatsApp',
+    knowledge:'Conocimiento', qa:'Q&A', tune:'Tune AI', voz:'Asistente de voz', whatsapp:'WhatsApp',
     appearance:'Apariencia', billing:'Suscripción',
     citas:'Citas', equipo:'Equipo', servicios:'Servicios', horarios:'Horarios',
     mensajes:'Recordatorios y avisos', instalacion:'Instalación', cuenta:'Cuenta',
@@ -1994,6 +2113,7 @@ function setTab(tab) {
   if (tab === 'knowledge')  loadKnowledge();
   if (tab === 'qa')         loadQA();
   if (tab === 'tune')       loadTune();
+  if (tab === 'voz')        loadVoz();
   if (tab === 'whatsapp')   loadWhatsApp();
   if (tab === 'billing')    loadBilling();
   if (tab === 'citas')      loadCitas();
@@ -3037,6 +3157,245 @@ document.getElementById('waSaveBtn').addEventListener('click', async () => {
     toast('Conexion de WhatsApp guardada', 'success');
   } catch (err) { toast(err.message, 'error'); }
 });
+
+// ── ASISTENTE DE VOZ ──────────────────────────────────────────────────
+let voiceState = {};
+function renderVoice(data) {
+  voiceState = data || {};
+  document.getElementById('vozName').value = data.name || '';
+  document.getElementById('vozVoice').value = data.openai_voice || '';
+  document.getElementById('vozGreeting').value = data.greeting || '';
+  document.getElementById('vozEnabled').checked = !!data.enabled;
+  document.getElementById('vozPhone').value = data.twilio_phone_number || '';
+  document.getElementById('vozWebhookUrl').value = data.webhook_url || '';
+
+  const pill = document.getElementById('vozStatusPill');
+  pill.textContent = data.status_label || 'Desactivado';
+  const c = data.status === 'active'
+    ? ['rgba(0,245,212,0.15)', 'var(--success)']
+    : data.status === 'plan_required'
+      ? ['rgba(245,158,11,0.14)', '#fde68a']
+      : ['rgba(255,255,255,0.06)', 'var(--soft)'];
+  pill.style.background = c[0]; pill.style.color = c[1];
+
+  document.getElementById('vozPlanNotice').style.display = data.plan_allows_voice ? 'none' : '';
+}
+
+async function loadVoz() {
+  try { renderVoice(await api('/auth/app/voice')); }
+  catch (err) { toast(err.message, 'error'); }
+}
+
+document.getElementById('vozSaveBtn').addEventListener('click', async () => {
+  const enabled = document.getElementById('vozEnabled').checked;
+  if (enabled && voiceState.plan_allows_voice === false) {
+    toast('El asistente de voz está disponible en el plan Business.', 'error');
+    return;
+  }
+  try {
+    const data = await api('/auth/app/voice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enabled,
+        name: document.getElementById('vozName').value.trim(),
+        openai_voice: document.getElementById('vozVoice').value,
+        greeting: document.getElementById('vozGreeting').value.trim(),
+        twilio_phone_number: document.getElementById('vozPhone').value.trim(),
+      }),
+    });
+    renderVoice(data);
+    toast('Asistente de voz guardado', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+document.getElementById('vozGoBillingBtn').addEventListener('click', () => setTab('billing'));
+document.getElementById('vozCopyWebhookBtn').addEventListener('click', () => copyFieldValue('vozWebhookUrl'));
+document.getElementById('vozRequestBtn').addEventListener('click', () => {
+  const phone = (document.getElementById('vozPhone').value || '').trim();
+  if (!phone) { toast('Indica el número de teléfono antes de solicitar la instalación.', 'error'); return; }
+  const empresa = state.nombre || state.cliente_id;
+  const userEmail = (document.getElementById('userEmail')?.textContent || '').trim();
+  const userName = (document.getElementById('userName')?.textContent || '').trim();
+  const subject = `Instalar asistente de voz para ${empresa}`;
+  const body = [
+    'Hola equipo Vantelia,',
+    '',
+    'Quiero instalar el asistente de voz en mi número de teléfono. Estos son mis datos:',
+    '',
+    `• Empresa: ${empresa}`,
+    `• Cliente ID: ${state.cliente_id}`,
+    `• Contacto: ${userName || '(sin nombre)'} — ${userEmail || '(sin email)'}`,
+    `• Número de teléfono: ${phone}`,
+    '',
+    'Gracias.',
+  ].join('\n');
+  window.location.href = `mailto:info@vantelia.es?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  toast('Abriendo tu cliente de correo…', 'success');
+});
+
+// Llamada simulada en el panel (misma UX que la demo) -> /auth/app/voice/session
+(function(){
+  const overlay = document.getElementById('vpOverlay');
+  const card = document.getElementById('vpCard');
+  const avatarEl = document.getElementById('vpAvatar');
+  const nameEl = document.getElementById('vpName');
+  const statusEl = document.getElementById('vpStatus');
+  const timerEl = document.getElementById('vpTimer');
+  const hintEl = document.getElementById('vpHint');
+  const audioEl = document.getElementById('vpAudio');
+  const muteBtn = document.getElementById('vpMute');
+  const hangBtn = document.getElementById('vpHang');
+  const testBtn = document.getElementById('vozTestBtn');
+  if (!testBtn) return;
+
+  let pc=null, dc=null, micStream=null, timerId=null, maxId=null, speakId=null;
+  let seconds=0, muted=false, active=false, ended=false, MAXS=120;
+
+  const setStatus = t => { statusEl.textContent = t; };
+  const setHint = t => { hintEl.textContent = t; };
+  const fmt = s => { const m=Math.floor(s/60), x=s%60; return (m<10?'0':'')+m+':'+(x<10?'0':'')+x; };
+  const speaking = on => card.classList.toggle('speaking', !!on);
+
+  function cleanup(){
+    active=false;
+    if(timerId){clearInterval(timerId);timerId=null;}
+    if(maxId){clearTimeout(maxId);maxId=null;}
+    if(speakId){clearTimeout(speakId);speakId=null;}
+    speaking(false);
+    try{ if(dc) dc.close(); }catch(e){}
+    try{ if(pc) pc.close(); }catch(e){}
+    try{ if(micStream) micStream.getTracks().forEach(t=>t.stop()); }catch(e){}
+    pc=null; dc=null; micStream=null;
+    if(audioEl){ try{ audioEl.srcObject=null; }catch(e){} }
+  }
+  function resetUI(){
+    ended=false;
+    muteBtn.style.display=''; muteBtn.textContent='Silenciar'; muteBtn.classList.remove('on');
+    hangBtn.textContent='Colgar'; hangBtn.classList.add('hang');
+  }
+  function closeOverlay(){ cleanup(); resetUI(); overlay.classList.remove('open'); document.body.style.overflow=''; }
+  function endCall(reason, detail){
+    if(ended) return;
+    ended=true; cleanup();
+    setStatus(reason||'Llamada finalizada');
+    setHint(detail||'La llamada ha terminado.');
+    muteBtn.style.display='none';
+    hangBtn.textContent='Cerrar'; hangBtn.classList.remove('hang');
+  }
+  function fail(msg, hint){ endCall(msg||'No se pudo conectar', hint||'Revisa los permisos e inténtalo de nuevo.'); }
+
+  function isSecure(){
+    return window.isSecureContext === true || location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1';
+  }
+  function getMic(){
+    if(!isSecure()) return Promise.reject({name:'InsecureContext'});
+    const md = navigator.mediaDevices;
+    if(md && md.getUserMedia) return md.getUserMedia({audio:true});
+    const legacy = navigator.getUserMedia||navigator.webkitGetUserMedia||navigator.mozGetUserMedia;
+    if(legacy) return new Promise((res,rej)=>legacy.call(navigator,{audio:true},res,rej));
+    return Promise.reject({name:'Unsupported'});
+  }
+  function micError(e){
+    const n=(e&&e.name)||'';
+    if(n==='InsecureContext') fail('Necesita conexión segura','Abre el panel con https:// para poder hablar.');
+    else if(n==='NotAllowedError'||n==='SecurityError'||n==='PermissionDeniedError') fail('Micrófono bloqueado','Toca el candado del navegador y permite el micrófono para esta web.');
+    else if(n==='NotFoundError'||n==='DevicesNotFoundError') fail('No se detecta micrófono','Conecta o activa un micrófono y vuelve a intentarlo.');
+    else if(n==='NotReadableError') fail('Micrófono ocupado','Otra app está usando el micrófono. Ciérrala e inténtalo de nuevo.');
+    else if(n==='Unsupported') fail('Navegador no compatible','Prueba con Chrome o Safari actualizados.');
+    else fail('No se pudo abrir el micrófono','Revisa los permisos del navegador.');
+  }
+  function handleEvent(ev){
+    const type=(ev&&ev.type)||'';
+    if(type.indexOf('output_audio.delta')>=0 || type.indexOf('audio.delta')>=0){
+      setStatus('Hablando…'); speaking(true);
+      if(speakId) clearTimeout(speakId);
+      speakId=setTimeout(()=>{ speaking(false); if(active) setStatus('En llamada'); }, 650);
+    } else if(type==='response.done' || type.indexOf('output_audio.done')>=0){
+      speaking(false); if(active) setStatus('En llamada');
+    } else if(type==='input_audio_buffer.speech_started'){
+      if(active) setHint('Te escucho…');
+    } else if(type==='error'){
+      const em=(ev&&ev.error&&(ev.error.message||ev.error.code))||'';
+      endCall('La llamada terminó', em?('Motivo: '+em):'El asistente devolvió un error.');
+    }
+  }
+  async function postSDP(model, sdp, secret){
+    const eps=['https://api.openai.com/v1/realtime/calls?model='+model, 'https://api.openai.com/v1/realtime?model='+model];
+    let lastErr;
+    for(const ep of eps){
+      try{ const r=await fetch(ep,{method:'POST',body:sdp,headers:{'Authorization':'Bearer '+secret,'Content-Type':'application/sdp'}}); if(r.ok) return await r.text(); lastErr=new Error('sdp '+r.status); }
+      catch(e){ lastErr=e; }
+    }
+    throw lastErr||new Error('sdp failed');
+  }
+  async function startCall(){
+    if(active) return;
+    resetUI();
+    avatarEl.textContent = ((state.nombre||'IA').trim()[0]||'IA').toUpperCase();
+    nameEl.textContent = (voiceState.name || state.nombre || 'Asistente de voz');
+    active=true;
+    overlay.classList.add('open'); document.body.style.overflow='hidden';
+    setStatus('Pidiendo micrófono…'); timerEl.textContent='00:00'; setHint('Permite el micrófono para empezar a hablar.');
+    muted=false;
+    try{ micStream = await getMic(); }catch(e){ micError(e); return; }
+    let sess;
+    setStatus('Conectando…');
+    try{
+      const r = await fetch('/auth/app/voice/session', { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:'{}' });
+      if(r.status===403){ fail('Plan Business requerido','El asistente de voz se activa en el plan Business.'); return; }
+      if(r.status===429){ fail('Demasiados intentos','Espera un minuto y vuelve a probar.'); return; }
+      if(r.status===503){ fail('Voz no disponible','El asistente de voz no está configurado ahora mismo.'); return; }
+      if(!r.ok) throw new Error('http '+r.status);
+      sess = await r.json();
+    }catch(e){ fail('No se pudo iniciar la voz','Hubo un problema al conectar. Inténtalo de nuevo.'); return; }
+    MAXS = sess.max_duration_seconds || 120;
+    try{
+      pc = new RTCPeerConnection();
+      pc.ontrack = e => { try{ audioEl.srcObject=e.streams[0]; audioEl.play().catch(()=>{}); }catch(_){} };
+      pc.onconnectionstatechange = () => {
+        if(!pc) return;
+        const s=pc.connectionState;
+        if(s==='connected'){ if(active&&!ended) setStatus('En llamada'); }
+        else if(s==='failed'){ endCall('Se cortó la llamada','Se perdió la conexión. Comprueba tu internet.'); }
+        else if(s==='disconnected'){ if(active&&!ended) setStatus('Reconectando…'); }
+      };
+      pc.oniceconnectionstatechange = () => { if(pc&&pc.iceConnectionState==='failed') endCall('Se cortó la llamada','No se pudo mantener la conexión de audio (red o firewall).'); };
+      micStream.getTracks().forEach(t=>pc.addTrack(t, micStream));
+      dc = pc.createDataChannel('oai-events');
+      dc.onmessage = m => { try{ handleEvent(JSON.parse(m.data)); }catch(_){} };
+      dc.onclose = () => { if(active&&!ended) endCall('La llamada se cerró','El asistente cerró la sesión.'); };
+      dc.onopen = () => {
+        try{
+          const g = sess.greeting || '';
+          if(g){
+            dc.send(JSON.stringify({ type:'conversation.item.create', item:{ type:'message', role:'user', content:[{ type:'input_text', text:'Inicia la llamada saludando exactamente con: "'+g+'"' }] } }));
+            dc.send(JSON.stringify({ type:'response.create' }));
+          }
+        }catch(_){}
+      };
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      const ans = await postSDP(encodeURIComponent(sess.model||''), offer.sdp, sess.client_secret);
+      await pc.setRemoteDescription({ type:'answer', sdp:ans });
+    }catch(e){ fail('No se pudo establecer la llamada','No se pudo abrir el canal de audio.'); return; }
+    setStatus('En llamada'); setHint('Habla con normalidad. Pulsa Colgar para terminar.');
+    seconds=0; timerEl.textContent='00:00';
+    timerId=setInterval(()=>{ seconds++; timerEl.textContent=fmt(seconds); }, 1000);
+    maxId=setTimeout(()=>{ endCall('Tiempo de prueba agotado','La prueba dura '+MAXS+' segundos. Pulsa Probar para hablar otra vez.'); }, MAXS*1000);
+  }
+  testBtn.addEventListener('click', () => {
+    if (voiceState.plan_allows_voice === false) { toast('El asistente de voz está disponible en el plan Business.', 'error'); return; }
+    startCall();
+  });
+  muteBtn.addEventListener('click', () => {
+    muted=!muted;
+    if(micStream) micStream.getAudioTracks().forEach(t=>t.enabled=!muted);
+    muteBtn.textContent = muted ? 'Activar micro' : 'Silenciar';
+    muteBtn.classList.toggle('on', muted);
+  });
+  hangBtn.addEventListener('click', closeOverlay);
+})();
 
 // ── BILLING ───────────────────────────────────────────────────────────
 async function loadBilling() {

@@ -564,6 +564,39 @@ def test_admin_demo_agenda_seed_and_purge(client: TestClient, api_module):
     assert _counts() == (0, 0)
 
 
+def test_demo_page_includes_voice_call_ui(client: TestClient):
+    # El demo debe seguir sirviendo el chat (widget) y ademas el boton/overlay de
+    # la "llamada simulada" por voz.
+    resp = client.get("/demo/demo")
+    assert resp.status_code == 200
+    # La pagina del demo debe permitir el microfono (self) para la llamada simulada,
+    # sin abrir el resto del sitio (que mantiene microphone=()).
+    assert "microphone=(self)" in resp.headers.get("Permissions-Policy", "")
+    html = resp.text
+    assert "ia-w-btn" not in html or "widget.min.js" in html  # widget de chat presente
+    assert 'id="vdemoCallBtn"' in html
+    assert "Llamar al asistente" in html
+    assert 'id="vdemoOverlay"' in html
+    assert "/voice/session" in html
+    # La config JS quedo inyectada (placeholders sustituidos).
+    assert '"cliente": "demo"' in html
+    for leftover in ("__VOICE_CFG__", "__NOMBRE__", "__INITIAL__", "__COLOR__"):
+        assert leftover not in html
+    # No se filtra la API key de OpenAI en la pagina.
+    assert "OPENAI_API_KEY" not in html
+
+
+def test_demo_voice_session_requires_openai_key(client: TestClient):
+    # En el entorno de test OPENAI_API_KEY="" -> 503 antes de llamar a OpenAI.
+    resp = client.post("/demo/demo/voice/session")
+    assert resp.status_code == 503
+
+
+def test_demo_voice_session_unknown_client_404(client: TestClient):
+    resp = client.post("/demo/clientequenoexiste/voice/session")
+    assert resp.status_code == 404
+
+
 def test_demo_agenda_uses_visible_services_catalog(client: TestClient, api_module):
     headers = {"Authorization": "Bearer test-admin-token"}
     cliente_id = "demo"
@@ -4294,6 +4327,65 @@ def test_app_whatsapp_settings_and_plan_gate(client: TestClient, api_module, mon
     assert api_module.CONFIG_CLIENTES[cliente_id]["whatsapp"]["enabled"] is True
 
 
+def test_app_voice_settings_plan_gate_and_session(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, email = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Voz")
+    user = api_module._get_user_by_email(email)
+    assert user is not None
+
+    initial = client.get("/auth/app/voice", cookies=cookies)
+    assert initial.status_code == 200
+    assert initial.json()["enabled"] is False
+    assert initial.json()["plan_allows_voice"] is False
+    assert initial.json()["webhook_url"].endswith(f"/voice/{cliente_id}")
+
+    saved = client.post(
+        "/auth/app/voice",
+        cookies=cookies,
+        json={"enabled": False, "name": "Sofía", "openai_voice": "verse", "greeting": "Hola, gracias por llamar."},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["name"] == "Sofía"
+    assert saved.json()["openai_voice"] == "verse"
+
+    # Activar y probar en navegador estan gated a Business.
+    assert client.post("/auth/app/voice", cookies=cookies, json={"enabled": True}).status_code == 403
+    assert client.post("/auth/app/voice/session", cookies=cookies).status_code == 403
+
+    with api_module._get_db_connection() as connection:
+        connection.execute(
+            "UPDATE subscriptions SET plan = 'business', messages_quota = 25000 WHERE user_id = ?",
+            (user["id"],),
+        )
+        connection.commit()
+
+    enabled = client.post("/auth/app/voice", cookies=cookies, json={"enabled": True})
+    assert enabled.status_code == 200, enabled.text
+    assert enabled.json()["enabled"] is True
+    assert enabled.json()["plan_allows_voice"] is True
+    assert api_module.CONFIG_CLIENTES[cliente_id]["voice"]["enabled"] is True
+    assert api_module.CONFIG_CLIENTES[cliente_id]["voice"]["name"] == "Sofía"
+
+    # Con plan Business pero sin OPENAI_API_KEY -> 503: no se mintea token real.
+    monkeypatch.setattr(api_module, "OPENAI_API_KEY", "")
+    assert client.post("/auth/app/voice/session", cookies=cookies).status_code == 503
+
+    # El nombre del asistente de voz se inyecta en las instrucciones (sync teléfono/demo/test).
+    instr = api_module._voice_build_instructions(cliente_id, api_module.CONFIG_CLIENTES[cliente_id])
+    assert "Sofía" in instr
+
+
+def test_voice_name_normalize_serialize_and_greeting(api_module):
+    norm = api_module._normalize_voice_config({"name": "Sofía", "openai_voice": "verse"})
+    assert norm["name"] == "Sofía"
+    # El nombre sobrevive normalizacion y serializacion (round-trip).
+    cfg = api_module._normalize_client_config("demo_voice_rt", {"voice": {"name": "Marta"}})
+    assert cfg["voice"]["name"] == "Marta"
+    assert api_module._serialize_client_config(cfg)["voice"]["name"] == "Marta"
+    # El saludo por defecto usa el nombre cuando no hay saludo ni bienvenida.
+    greeting = api_module._voice_default_greeting({"nombre": "MG Clinic", "bienvenida": ""}, {"name": "Sofía"})
+    assert "Sofía" in greeting
+
+
 def test_app_livechat_402_when_free_plan(client: TestClient, api_module, monkeypatch):
     cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Free")
     resp = client.get("/auth/app/livechat", cookies=cookies)
@@ -4551,6 +4643,57 @@ def test_claim_rejects_non_demo_cliente_publicly(client: TestClient, api_module)
     user = api_module._get_user_by_email(email)
     assert user["cliente_id"] == ""
     assert api_module.db_get_client_owner("demo") == ""
+
+
+def test_demo_claimable_flag_allows_public_claim_and_banner(client: TestClient, api_module):
+    # Un demo creado a mano (NO demo_auto_*) con demo_claimable=True debe mostrar el
+    # banner de reclamar y permitir el claim publico, sin abrir clientes reales.
+    cliente_id = f"saleslead_{uuid.uuid4().hex[:6]}"
+    assert not cliente_id.startswith(api_module.DEMO_TENANT_PREFIX)
+    normalized = api_module._normalize_client_config(cliente_id, {
+        "nombre": "Sales Lead Demo",
+        "color": "#00b1d9",
+        "icono": "AI",
+        "bienvenida": "Hola, demo.",
+        "allowed_origins": [],
+        "booking": {"enabled": False},
+        "whatsapp": {"enabled": False},
+        "demo_claimable": True,
+    })
+    # El flag sobrevive normalizacion y serializacion (round-trip).
+    assert normalized["demo_claimable"] is True
+    assert api_module._serialize_client_config(normalized)["demo_claimable"] is True
+
+    with api_module.state_lock:
+        next_configs = dict(api_module.CONFIG_CLIENTES)
+        next_configs[cliente_id] = normalized
+        api_module._update_runtime_configs(next_configs)
+    # Persistir crea/actualiza la fila en la tabla clientes (necesaria para fijar owner).
+    api_module._persist_configs_to_disk(next_configs)
+    (Path(os.environ["VANTELIA_DATA_DIR"]) / cliente_id).mkdir(parents=True, exist_ok=True)
+    (Path(os.environ["VANTELIA_DATA_DIR"]) / cliente_id / "info.txt").write_text("demo", encoding="utf-8")
+
+    # Banner de reclamar visible en la pagina demo.
+    page = client.get(f"/demo/{cliente_id}")
+    assert page.status_code == 200
+    assert "claim-banner" in page.text
+
+    # Claim publico funciona (transfiere propiedad).
+    email = f"claimflag_{uuid.uuid4().hex[:8]}@example.com"
+    resp = client.post(
+        "/auth/signup",
+        json={
+            "email": email,
+            "password": "secret-pass-123",
+            "display_name": "Reclamante Flag",
+            "claim": cliente_id,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["redirect_to"] == "/app"
+    user = api_module._get_user_by_email(email)
+    assert user["cliente_id"] == cliente_id
+    assert api_module.db_get_client_owner(cliente_id) == user["id"]
 
 
 def test_claim_rejects_already_owned_demo(client: TestClient, api_module):
