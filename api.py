@@ -15844,7 +15844,14 @@ async def app_entry(
     )
     return HTMLResponse(
         html,
-        headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"},
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+            # El panel incluye la prueba de voz (llamada simulada) que necesita el
+            # microfono. El resto del sitio mantiene microphone=(); aqui lo permitimos
+            # al propio origen. El middleware de seguridad usa setdefault y lo respeta.
+            "Permissions-Policy": "microphone=(self), camera=(), geolocation=()",
+        },
     )
 
 

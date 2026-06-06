@@ -4332,6 +4332,11 @@ def test_app_voice_settings_plan_gate_and_session(client: TestClient, api_module
     user = api_module._get_user_by_email(email)
     assert user is not None
 
+    # El panel debe permitir el microfono (self) para la prueba de voz por navegador.
+    panel = client.get("/app", cookies=cookies)
+    assert panel.status_code == 200
+    assert "microphone=(self)" in panel.headers.get("Permissions-Policy", "")
+
     initial = client.get("/auth/app/voice", cookies=cookies)
     assert initial.status_code == 200
     assert initial.json()["enabled"] is False
