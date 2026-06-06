@@ -153,6 +153,12 @@ try:
     DEMO_VOICE_RATE_LIMIT = int(os.getenv("DEMO_VOICE_RATE_LIMIT_PER_MINUTE", "3"))
 except ValueError:
     DEMO_VOICE_RATE_LIMIT = 3
+# El test del panel lo lanza el propio cliente autenticado sobre su bot: limite mas
+# holgado que el demo publico para no cortar al probar varias veces seguidas.
+try:
+    APP_VOICE_RATE_LIMIT = int(os.getenv("APP_VOICE_RATE_LIMIT_PER_MINUTE", "10"))
+except ValueError:
+    APP_VOICE_RATE_LIMIT = 10
 RAW_EXTRA_CORS_ORIGINS = os.getenv("EXTRA_CORS_ORIGINS", "")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "").strip().rstrip("/")
 SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
@@ -14493,7 +14499,7 @@ async def app_voice_session(
             detail="El asistente de voz no esta disponible ahora mismo.",
         )
     client_ip = request.client.host if request.client else "unknown"
-    _check_rate_limit(f"app_voice:{cliente_id}:{client_ip}", DEMO_VOICE_RATE_LIMIT)
+    _check_rate_limit(f"app_voice:{cliente_id}:{client_ip}", APP_VOICE_RATE_LIMIT)
     voice_cfg = config.get("voice") or {}
     max_seconds = int(voice_cfg.get("max_duration_seconds") or 0) or DEMO_VOICE_MAX_SECONDS
     return await _mint_voice_session(cliente_id, config, max_seconds=max_seconds, log_tag="app-voice")
