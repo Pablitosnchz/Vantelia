@@ -533,10 +533,21 @@ Si cambias contratos de respuesta, auth, cookies, booking o WhatsApp, actualiza 
 - `README.md`: instalacion, endpoints y operacion general.
 - `docs/Funcionalidades.md`: resumen funcional.
 - `docs/MANUAL_ADMIN.md`: operacion del panel.
+- `docs/PLAN_ESCALA_AGENCIA_IA.md`: sistema operativo comercial de 90 dias.
+- `docs/SEGUIMIENTO_PLAN_ESCALA.md`: rutina para registrar y revisar la ejecucion.
 - `docs/MANUAL_GOOGLE_CALENDAR.md`: calendario.
 - `docs/OPERACION_PRODUCCION.md`: checklist minima para vender/operar.
 - `deploy/hostinger/DEPLOY.md`: guia VPS/Hostinger.
 - `docs/legal/*.md`: textos legales servidos por `/legal/{documento}`.
+
+## Seguimiento del plan de escala
+
+Cuando el usuario pregunte por crecimiento, ventas, seguimiento del plan o
+prioridades comerciales, contrastar `docs/PLAN_ESCALA_AGENCIA_IA.md` con las
+tablas SQLite `growth_daily`, `growth_opportunities`, `growth_opportunity_audit`,
+`growth_weekly_reviews` y `growth_plan_tasks` (o `GET /admin/growth/overview`).
+No asumir actividad no registrada. La operacion diaria se hace desde la seccion
+**Plan de escala** del panel admin; `scripts/scale_tracker.py` queda como respaldo.
 
 ## Checklist antes de cerrar una tarea
 

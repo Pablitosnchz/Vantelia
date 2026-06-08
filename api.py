@@ -1862,6 +1862,91 @@ def _init_database() -> None:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_voice_calls_status ON voice_calls(status)"
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS growth_daily (
+                activity_date TEXT PRIMARY KEY,
+                researched INTEGER NOT NULL DEFAULT 0,
+                contacts INTEGER NOT NULL DEFAULT 0,
+                followups INTEGER NOT NULL DEFAULT 0,
+                calls INTEGER NOT NULL DEFAULT 0,
+                positive_replies INTEGER NOT NULL DEFAULT 0,
+                conversations INTEGER NOT NULL DEFAULT 0,
+                meetings INTEGER NOT NULL DEFAULT 0,
+                proposals INTEGER NOT NULL DEFAULT 0,
+                won INTEGER NOT NULL DEFAULT 0,
+                eur_sold REAL NOT NULL DEFAULT 0,
+                new_recurring INTEGER NOT NULL DEFAULT 0,
+                delivery_hours REAL NOT NULL DEFAULT 0,
+                learning TEXT NOT NULL DEFAULT '',
+                blocker TEXT NOT NULL DEFAULT '',
+                next_action TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS growth_opportunities (
+                id TEXT PRIMARY KEY,
+                company TEXT NOT NULL,
+                campaign TEXT NOT NULL DEFAULT '',
+                offer TEXT NOT NULL DEFAULT '',
+                stage TEXT NOT NULL DEFAULT 'identificada',
+                value_eur REAL NOT NULL DEFAULT 0,
+                decision_maker TEXT NOT NULL DEFAULT '',
+                contact TEXT NOT NULL DEFAULT '',
+                problem TEXT NOT NULL DEFAULT '',
+                next_action TEXT NOT NULL DEFAULT '',
+                next_action_date TEXT NOT NULL DEFAULT '',
+                decision_date TEXT NOT NULL DEFAULT '',
+                notes TEXT NOT NULL DEFAULT '',
+                lost_reason TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_growth_opportunities_stage ON growth_opportunities(stage, next_action_date)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS growth_opportunity_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                opportunity_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_growth_opportunity_audit ON growth_opportunity_audit(opportunity_id, id)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS growth_weekly_reviews (
+                week_start TEXT PRIMARY KEY,
+                generated_json TEXT NOT NULL DEFAULT '{}',
+                decision TEXT NOT NULL DEFAULT '',
+                notes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS growth_plan_tasks (
+                task_key TEXT PRIMARY KEY,
+                completed INTEGER NOT NULL DEFAULT 0,
+                completed_at TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
 
         connection.commit()
     _ensure_default_employees_for_all_clients()
@@ -2765,6 +2850,10 @@ from api_models import (
     AdminImpersonateEndResponse,
     AdminAltaExpressPayload,
     AdminAltaExpressResponse,
+    GrowthDailyPayload,
+    GrowthOpportunityPayload,
+    GrowthWeeklyReviewPayload,
+    GrowthPlanTaskPayload,
 )
 
 def _list_employee_rows(cliente_id: str, *, include_inactive: bool = True) -> List[sqlite3.Row]:
@@ -6425,12 +6514,16 @@ VOICE_DEMO_TEMPLATE = """
   }
   // Pide el microfono de forma universal: API moderna y, si no existe, los nombres
   // antiguos por navegador. Rechaza con un nombre claro si no se puede ni intentar.
+  // Forzamos cancelacion de eco/ruido: sin esto el mic recaptura la voz del propio
+  // asistente (audioEl) y el server_vad la toma como habla del usuario -> corta la
+  // frase a medias y entra en bucle volviendo a saludar/responder.
+  var MIC_AUDIO = { echoCancellation:true, noiseSuppression:true, autoGainControl:true };
   function getMic(){
     if(!isSecure()) return Promise.reject({ name:'InsecureContext' });
     var md = navigator.mediaDevices;
-    if(md && md.getUserMedia) return md.getUserMedia({ audio:true });
+    if(md && md.getUserMedia) return md.getUserMedia({ audio:MIC_AUDIO });
     var legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
-    if(legacy) return new Promise(function(res, rej){ legacy.call(navigator, { audio:true }, res, rej); });
+    if(legacy) return new Promise(function(res, rej){ legacy.call(navigator, { audio:MIC_AUDIO }, res, rej); });
     return Promise.reject({ name:'Unsupported' });
   }
   function micError(e){
@@ -6453,10 +6546,36 @@ VOICE_DEMO_TEMPLATE = """
       speaking(false); if(active) setStatus('En llamada');
     } else if(type==='input_audio_buffer.speech_started'){
       if(active) setHint('Te escucho…');
+    } else if(type==='response.function_call_arguments.done'){
+      runTool(ev);
     } else if(type==='error'){
       var em = (ev && ev.error && (ev.error.message || ev.error.code)) || '';
       endCall('La llamada terminó', em ? ('Motivo: '+em) : 'El asistente devolvió un error. Vuelve a intentarlo.');
     }
+  }
+
+  // El navegador habla directo con OpenAI; cuando el modelo pide una funcion (consultar
+  // disponibilidad, agendar...), la ejecutamos contra el backend y devolvemos el resultado
+  // por el data channel. Sin esto el modelo se quedaria esperando -> silencio largo.
+  async function runTool(ev){
+    var name = ev && ev.name;
+    var callId = ev && ev.call_id;
+    var argsStr = (ev && ev.arguments) || '{}';
+    if(!name || !callId || !dc) return;
+    if(active) setHint('Un momento, lo compruebo…');
+    var result;
+    try{
+      var base = (CFG.api||'').replace(/\\/$/,'');
+      var r = await fetch(base + '/demo/' + encodeURIComponent(CFG.cliente) + '/voice/tool', {
+        method:'POST', headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ name:name, arguments:argsStr })
+      });
+      result = r.ok ? await r.json() : { ok:false, error:'No se pudo consultar ahora mismo.' };
+    }catch(e){ result = { ok:false, error:'No se pudo consultar ahora mismo.' }; }
+    try{
+      dc.send(JSON.stringify({ type:'conversation.item.create', item:{ type:'function_call_output', call_id:callId, output: JSON.stringify(result) } }));
+      dc.send(JSON.stringify({ type:'response.create' }));
+    }catch(_){}
   }
 
   async function postSDP(model, sdp, secret){
@@ -14520,6 +14639,33 @@ async def app_voice_session(
     return await _mint_voice_session(cliente_id, config, max_seconds=max_seconds, log_tag="app-voice")
 
 
+@app.post("/auth/app/voice/tool", include_in_schema=False)
+async def app_voice_tool(
+    request: Request,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """Ejecuta una tool de la voz en navegador desde el panel del cliente. A diferencia de la
+    demo publica, aqui SI se reserva/cancela de verdad sobre la agenda del propio cliente
+    (es el dueno probando su sistema). Reusa _voice_dispatch_tool (la misma logica que el
+    telefono). Sin esto el modelo se queda esperando el function_call_output (silencio)."""
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    if not _client_voice_plan_enabled(cliente_id):
+        raise HTTPException(status_code=403, detail="El asistente de voz está disponible en el plan Business.")
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"app_voice_tool:{cliente_id}:{client_ip}", 60)
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    name = str(body.get("name", ""))
+    arguments = body.get("arguments", "")
+    if not isinstance(arguments, str):
+        arguments = json.dumps(arguments, ensure_ascii=False)
+    return await _voice_dispatch_tool(cliente_id, name, arguments, from_number="")
+
+
 # --- Sem 4: Live Chat (Pro gate stub) --------------------------------------
 
 def _user_plan(user: sqlite3.Row) -> str:
@@ -15944,11 +16090,16 @@ async def _mint_voice_session(
             "instructions": _voice_build_instructions(cliente_id, config),
             "audio": {
                 "input": {
+                    # semantic_vad: un modelo decide si REALMENTE hablo una persona, en
+                    # vez de medir amplitud (server_vad). El eco residual y el ruido de
+                    # fondo ya no se cuelan como un turno falso (causa de los cortes +
+                    # bucle). eagerness=low => espera y es conservador antes de tomar el
+                    # turno. interrupt_response=True permite interrumpir como en una llamada
+                    # real. En WebRTC OpenAI conoce el audio reproducido y trunca
+                    # automaticamente la parte que el usuario no llego a oir.
                     "turn_detection": {
-                        "type": "server_vad",
-                        "threshold": 0.6,
-                        "prefix_padding_ms": 300,
-                        "silence_duration_ms": 700,
+                        "type": "semantic_vad",
+                        "eagerness": "low",
                         "create_response": True,
                         "interrupt_response": True,
                     },
@@ -16025,6 +16176,29 @@ async def demo_voice_session(cliente_id: str, request: Request) -> Dict[str, Any
     voice_cfg = config.get("voice") or {}
     max_seconds = int(voice_cfg.get("max_duration_seconds") or 0) or DEMO_VOICE_MAX_SECONDS
     return await _mint_voice_session(cliente_id, config, max_seconds=max_seconds, log_tag="demo-voice")
+
+
+@app.post("/demo/{cliente_id}/voice/tool", include_in_schema=False)
+async def demo_voice_tool(cliente_id: str, request: Request) -> Dict[str, Any]:
+    """Ejecuta una tool de la voz en navegador (demo publica). El navegador habla directo con
+    OpenAI por WebRTC; cuando el modelo pide una funcion, el front la reenvia aqui y devolvemos
+    el resultado para que lo cuente en voz. Sin esto, el modelo se quedaria esperando un
+    function_call_output que nadie produce (silencio largo). Solo lectura: ver _voice_dispatch_tool_demo."""
+    _assert_valid_client_id(cliente_id)
+    _get_client_config(cliente_id)  # 404 si el cliente no existe
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"demo_voice_tool:{cliente_id}:{client_ip}", 30)
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    name = str(body.get("name", ""))
+    arguments = body.get("arguments", "")
+    if not isinstance(arguments, str):
+        arguments = json.dumps(arguments, ensure_ascii=False)
+    return await _voice_dispatch_tool_demo(cliente_id, name, arguments)
 
 
 @app.post("/demo/generate", response_model=DemoGenerateResponse)
@@ -20536,6 +20710,403 @@ async def admin_self_service_funnel(days: int = 30) -> Dict[str, Any]:
             "upgrade_started": upgrades_started > 0,
         },
     }
+
+
+# =====================================================================
+# === PLAN DE ESCALA ==================================================
+# Centro diario de actividad, pipeline y revision comercial.
+# =====================================================================
+
+GROWTH_STAGES = {
+    "identificada", "contactada", "conversacion", "descubrimiento", "demo",
+    "propuesta", "ganada", "perdida", "recurrente",
+}
+GROWTH_ACTIVE_STAGES = GROWTH_STAGES - {"ganada", "perdida", "recurrente"}
+GROWTH_STAGE_WEIGHTS = {
+    "identificada": 0.05, "contactada": 0.10, "conversacion": 0.20,
+    "descubrimiento": 0.35, "demo": 0.50, "propuesta": 0.75,
+    "ganada": 1.0, "recurrente": 1.0, "perdida": 0.0,
+}
+GROWTH_PLAN_START = date(2026, 6, 8)
+GROWTH_DAILY_TARGETS = {"researched": 10, "contacts": 20, "followups": 10, "calls": 3}
+GROWTH_PLAN_TASKS = [
+    {"key": "d1_pipeline", "label": "Día 1 · Preparar pipeline"},
+    {"key": "d1_select", "label": "Día 1 · Seleccionar 20 empresas Campaña 1"},
+    {"key": "d1_contact", "label": "Día 1 · Enviar 20 contactos manuales"},
+    {"key": "d1_calls", "label": "Día 1 · Realizar 10 llamadas"},
+    {"key": "d2_campaign1", "label": "Día 2 · Repetir Campaña 1"},
+    {"key": "d3_campaign2", "label": "Día 3 · Ejecutar Campaña 2"},
+    {"key": "d4_demos", "label": "Día 4 · Preparar y realizar demos"},
+    {"key": "d5_proposal", "label": "Día 5 · Enviar primera propuesta"},
+    {"key": "w1_review", "label": "Semana 1 · Completar dashboard y decisión"},
+]
+
+
+def _growth_date(value: str) -> str:
+    try:
+        return date.fromisoformat(value).isoformat()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Fecha invalida; usa YYYY-MM-DD.") from exc
+
+
+def _growth_stage(value: str) -> str:
+    stage = _sanitize_text(value, allow_multiline=False).strip().lower()
+    if stage not in GROWTH_STAGES:
+        raise HTTPException(status_code=400, detail="Etapa de oportunidad invalida.")
+    return stage
+
+
+def _growth_daily_public(row: Optional[sqlite3.Row], activity_date: str) -> Dict[str, Any]:
+    base: Dict[str, Any] = {"activity_date": activity_date}
+    for key in (
+        "researched", "contacts", "followups", "calls", "positive_replies",
+        "conversations", "meetings", "proposals", "won", "new_recurring",
+    ):
+        base[key] = int(row[key] or 0) if row else 0
+    for key in ("eur_sold", "delivery_hours"):
+        base[key] = float(row[key] or 0) if row else 0.0
+    for key in ("learning", "blocker", "next_action"):
+        base[key] = str(row[key] or "") if row else ""
+    base["created_at"] = str(row["created_at"] or "") if row else ""
+    base["updated_at"] = str(row["updated_at"] or "") if row else ""
+    return base
+
+
+def _growth_summary(connection: sqlite3.Connection, days: int) -> Dict[str, Any]:
+    since = (date.today() - timedelta(days=days - 1)).isoformat()
+    row = connection.execute(
+        """
+        SELECT COALESCE(SUM(researched),0) researched, COALESCE(SUM(contacts),0) contacts,
+               COALESCE(SUM(followups),0) followups, COALESCE(SUM(calls),0) calls,
+               COALESCE(SUM(positive_replies),0) positive_replies,
+               COALESCE(SUM(conversations),0) conversations, COALESCE(SUM(meetings),0) meetings,
+               COALESCE(SUM(proposals),0) proposals, COALESCE(SUM(won),0) won,
+               COALESCE(SUM(eur_sold),0) eur_sold, COALESCE(SUM(new_recurring),0) new_recurring,
+               COALESCE(SUM(delivery_hours),0) delivery_hours
+        FROM growth_daily WHERE activity_date >= ?
+        """,
+        (since,),
+    ).fetchone()
+    result = {key: float(row[key] or 0) for key in row.keys()}
+    for key in ("researched", "contacts", "followups", "calls", "positive_replies", "conversations", "meetings", "proposals", "won", "new_recurring"):
+        result[key] = int(result[key])
+    def rate(part: str, total: str) -> float:
+        return round(result[part] * 100 / result[total], 1) if result[total] else 0.0
+    result["positive_reply_rate"] = rate("positive_replies", "contacts")
+    result["conversation_rate"] = rate("conversations", "contacts")
+    result["meeting_rate"] = rate("meetings", "conversations")
+    result["proposal_rate"] = rate("proposals", "meetings")
+    result["close_rate"] = rate("won", "proposals")
+    result["days"] = days
+    return result
+
+
+def _growth_metric_state(value: float, *, green: float, alert: float, denominator: float = 1, minimum: float = 0) -> str:
+    if denominator < minimum:
+        return "insufficient"
+    if value >= green:
+        return "green"
+    if value >= alert:
+        return "alert"
+    return "stop"
+
+
+def _growth_states(summary: Dict[str, Any]) -> Dict[str, str]:
+    return {
+        "positive_reply_rate": _growth_metric_state(summary["positive_reply_rate"], green=5, alert=2, denominator=summary["contacts"], minimum=100),
+        "meeting_rate": _growth_metric_state(summary["meeting_rate"], green=50, alert=30, denominator=summary["conversations"], minimum=1),
+        "proposal_rate": _growth_metric_state(summary["proposal_rate"], green=40, alert=20, denominator=summary["meetings"], minimum=1),
+        "close_rate": _growth_metric_state(summary["close_rate"], green=25, alert=10, denominator=summary["proposals"], minimum=8),
+    }
+
+
+def _growth_overall_state(states: Dict[str, str]) -> str:
+    values = set(states.values())
+    if "stop" in values:
+        return "stop"
+    if "alert" in values:
+        return "alert"
+    if "green" in values:
+        return "green"
+    return "insufficient"
+
+
+def _growth_automatic_outreach() -> Dict[str, int]:
+    result = {"prospects": 0, "sends_30d": 0, "replies_30d": 0}
+    try:
+        since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        with _outreach_db() as connection:
+            result["prospects"] = int(connection.execute("SELECT COUNT(*) FROM prospects").fetchone()[0])
+            result["sends_30d"] = int(connection.execute("SELECT COUNT(*) FROM sends WHERE created_at >= ?", (since,)).fetchone()[0])
+            result["replies_30d"] = int(connection.execute("SELECT COUNT(*) FROM events WHERE type = 'reply' AND ts >= ?", (since,)).fetchone()[0])
+    except Exception:
+        pass
+    return result
+
+
+def _growth_opportunity_public(row: sqlite3.Row) -> Dict[str, Any]:
+    return dict(row)
+
+
+def _growth_generate_review(connection: sqlite3.Connection, week_start: str) -> Dict[str, Any]:
+    start = date.fromisoformat(_growth_date(week_start))
+    end = (start + timedelta(days=6)).isoformat()
+    rows = connection.execute(
+        "SELECT * FROM growth_daily WHERE activity_date BETWEEN ? AND ? ORDER BY activity_date",
+        (start.isoformat(), end),
+    ).fetchall()
+    totals = {key: 0.0 for key in ("researched", "contacts", "followups", "calls", "positive_replies", "conversations", "meetings", "proposals", "won", "eur_sold", "new_recurring", "delivery_hours")}
+    for row in rows:
+        for key in totals:
+            totals[key] += float(row[key] or 0)
+    contacts = totals["contacts"]
+    positive_rate = totals["positive_replies"] * 100 / contacts if contacts else 0
+    worked = []
+    missed = []
+    if totals["contacts"] >= 75:
+        worked.append("Se cumplio el objetivo semanal de contactos.")
+    else:
+        missed.append(f"Faltaron {max(0, 75-int(totals['contacts']))} contactos para el objetivo semanal.")
+    if totals["conversations"] >= 6:
+        worked.append("Se alcanzo el objetivo de conversaciones.")
+    else:
+        missed.append("No se alcanzo el objetivo de 6 conversaciones.")
+    if totals["proposals"] >= 2:
+        worked.append("Se alcanzo el objetivo de propuestas.")
+    else:
+        missed.append("No se alcanzo el objetivo de 2 propuestas.")
+    if not rows:
+        missed = ["No hay actividad registrada para esta semana."]
+    bottleneck = "Faltan datos para identificar un cuello de botella."
+    if contacts >= 20 and positive_rate < 2:
+        bottleneck = "Lista o mensaje: la respuesta positiva esta por debajo del 2 %."
+    elif totals["conversations"] >= 3 and totals["meetings"] / totals["conversations"] < 0.3:
+        bottleneck = "Dolor o CTA: pocas conversaciones avanzan a reunion."
+    elif totals["meetings"] >= 3 and totals["proposals"] / totals["meetings"] < 0.2:
+        bottleneck = "Cualificacion: pocas reuniones justifican propuesta."
+    elif totals["proposals"] >= 3 and totals["won"] / totals["proposals"] < 0.1:
+        bottleneck = "Oferta o confianza: pocas propuestas se convierten en pago."
+    priorities = [
+        "Completar contactos y follow-ups antes de tareas tecnicas.",
+        "Resolver todas las proximas acciones vencidas.",
+        "Pedir decision en propuestas abiertas.",
+        "Registrar aprendizaje y bloqueo cada dia.",
+        "Cambiar una sola variable segun el cuello de botella.",
+    ]
+    return {
+        "week_start": start.isoformat(), "week_end": end, "has_data": bool(rows),
+        "worked": worked, "missed": missed, "bottleneck": bottleneck,
+        "campaign_decision": "Mantener mientras no se alcance un umbral STOP; modificar una sola variable si hay alerta.",
+        "priorities": priorities, "totals": totals,
+    }
+
+
+@app.get("/admin/growth/overview", dependencies=[Depends(_require_admin_token)])
+async def admin_growth_overview() -> Dict[str, Any]:
+    today = date.today().isoformat()
+    with _get_db_connection() as connection:
+        daily_row = connection.execute("SELECT * FROM growth_daily WHERE activity_date = ?", (today,)).fetchone()
+        summaries = {str(days): _growth_summary(connection, days) for days in (7, 30, 90)}
+        opportunities = connection.execute("SELECT * FROM growth_opportunities ORDER BY updated_at DESC").fetchall()
+        weekly_rows = connection.execute(
+            """
+            SELECT strftime('%Y-W%W', activity_date) AS week,
+                   SUM(contacts) contacts, SUM(conversations) conversations,
+                   SUM(proposals) proposals, SUM(won) won, SUM(eur_sold) eur_sold
+            FROM growth_daily WHERE activity_date >= ?
+            GROUP BY strftime('%Y-W%W', activity_date) ORDER BY week
+            """,
+            ((date.today() - timedelta(days=89)).isoformat(),),
+        ).fetchall()
+        task_rows = {row["task_key"]: bool(row["completed"]) for row in connection.execute("SELECT * FROM growth_plan_tasks").fetchall()}
+        latest_review = connection.execute("SELECT * FROM growth_weekly_reviews ORDER BY week_start DESC LIMIT 1").fetchone()
+    summary_30 = summaries["30"]
+    states = _growth_states(summary_30)
+    active = [row for row in opportunities if row["stage"] in GROWTH_ACTIVE_STAGES]
+    weighted = sum(float(row["value_eur"] or 0) * GROWTH_STAGE_WEIGHTS.get(row["stage"], 0) for row in active)
+    missing_next = sum(1 for row in active if not str(row["next_action"] or "").strip())
+    overdue = sum(1 for row in active if row["next_action_date"] and row["next_action_date"] < today)
+    plan_path = BASE_DIR / "docs" / "PLAN_ESCALA_AGENCIA_IA.md"
+    def breakdown(key: str) -> List[Dict[str, Any]]:
+        values: Dict[str, Dict[str, Any]] = {}
+        for row in opportunities:
+            name = str(row[key] or "").strip() or "sin_asignar"
+            entry = values.setdefault(name, {"name": name, "count": 0, "active": 0, "won": 0, "value_eur": 0.0})
+            entry["count"] += 1
+            entry["active"] += int(row["stage"] in GROWTH_ACTIVE_STAGES)
+            entry["won"] += int(row["stage"] in {"ganada", "recurrente"})
+            entry["value_eur"] += float(row["value_eur"] or 0)
+        return list(values.values())
+    return {
+        "today": _growth_daily_public(daily_row, today),
+        "targets": GROWTH_DAILY_TARGETS,
+        "summaries": summaries,
+        "states": states,
+        "overall_state": _growth_overall_state(states),
+        "plan": {"start_date": GROWTH_PLAN_START.isoformat(), "day": max(1, (date.today() - GROWTH_PLAN_START).days + 1), "horizon_days": 90},
+        "pipeline": {"active": len(active), "total": len(opportunities), "weighted_value_eur": round(weighted, 2), "missing_next_action": missing_next, "overdue": overdue},
+        "breakdown": {"campaigns": breakdown("campaign"), "offers": breakdown("offer")},
+        "weekly": [dict(row) for row in weekly_rows],
+        "opportunities": [_growth_opportunity_public(row) for row in opportunities],
+        "tasks": [{**task, "completed": task_rows.get(task["key"], False)} for task in GROWTH_PLAN_TASKS],
+        "latest_review": dict(latest_review) if latest_review else None,
+        "automatic_outreach": _growth_automatic_outreach(),
+        "plan_markdown": plan_path.read_text(encoding="utf-8") if plan_path.exists() else "",
+    }
+
+
+@app.put("/admin/growth/daily/{activity_date}", dependencies=[Depends(_require_admin_token)])
+async def admin_growth_daily_save(activity_date: str, data: GrowthDailyPayload) -> Dict[str, Any]:
+    activity_date = _growth_date(activity_date)
+    now = _utc_now_iso()
+    values = data.model_dump()
+    with _get_db_connection() as connection:
+        exists = connection.execute("SELECT 1 FROM growth_daily WHERE activity_date = ?", (activity_date,)).fetchone()
+        connection.execute(
+            """
+            INSERT INTO growth_daily (
+                activity_date, researched, contacts, followups, calls, positive_replies,
+                conversations, meetings, proposals, won, eur_sold, new_recurring,
+                delivery_hours, learning, blocker, next_action, created_at, updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(activity_date) DO UPDATE SET
+                researched=excluded.researched, contacts=excluded.contacts, followups=excluded.followups,
+                calls=excluded.calls, positive_replies=excluded.positive_replies,
+                conversations=excluded.conversations, meetings=excluded.meetings,
+                proposals=excluded.proposals, won=excluded.won, eur_sold=excluded.eur_sold,
+                new_recurring=excluded.new_recurring, delivery_hours=excluded.delivery_hours,
+                learning=excluded.learning, blocker=excluded.blocker, next_action=excluded.next_action,
+                updated_at=excluded.updated_at
+            """,
+            (activity_date, values["researched"], values["contacts"], values["followups"], values["calls"],
+             values["positive_replies"], values["conversations"], values["meetings"], values["proposals"],
+             values["won"], values["eur_sold"], values["new_recurring"], values["delivery_hours"],
+             values["learning"], values["blocker"], values["next_action"], now, now),
+        )
+        connection.commit()
+        row = connection.execute("SELECT * FROM growth_daily WHERE activity_date = ?", (activity_date,)).fetchone()
+    return {"ok": True, "created": not bool(exists), "item": _growth_daily_public(row, activity_date)}
+
+
+@app.get("/admin/growth/opportunities", dependencies=[Depends(_require_admin_token)])
+async def admin_growth_opportunities(stage: str = "", campaign: str = "", offer: str = "", overdue: bool = False) -> Dict[str, Any]:
+    clauses, params = [], []
+    if stage:
+        clauses.append("stage = ?"); params.append(_growth_stage(stage))
+    if campaign:
+        clauses.append("campaign = ?"); params.append(campaign)
+    if offer:
+        clauses.append("offer = ?"); params.append(offer)
+    if overdue:
+        clauses.append("stage NOT IN ('ganada','perdida','recurrente') AND next_action_date <> '' AND next_action_date < ?"); params.append(date.today().isoformat())
+    where = " WHERE " + " AND ".join(clauses) if clauses else ""
+    with _get_db_connection() as connection:
+        rows = connection.execute("SELECT * FROM growth_opportunities" + where + " ORDER BY updated_at DESC", tuple(params)).fetchall()
+    return {"items": [_growth_opportunity_public(row) for row in rows]}
+
+
+def _growth_audit(connection: sqlite3.Connection, opportunity_id: str, event_type: str, payload: Dict[str, Any]) -> None:
+    connection.execute(
+        "INSERT INTO growth_opportunity_audit (opportunity_id,event_type,payload_json,created_at) VALUES (?,?,?,?)",
+        (opportunity_id, event_type, json.dumps(payload, ensure_ascii=False), _utc_now_iso()),
+    )
+
+
+@app.post("/admin/growth/opportunities", dependencies=[Depends(_require_admin_token)])
+async def admin_growth_opportunity_create(data: GrowthOpportunityPayload) -> Dict[str, Any]:
+    item = data.model_dump()
+    item["stage"] = _growth_stage(item["stage"])
+    opportunity_id, now = uuid.uuid4().hex, _utc_now_iso()
+    with _get_db_connection() as connection:
+        connection.execute(
+            """INSERT INTO growth_opportunities
+            (id,company,campaign,offer,stage,value_eur,decision_maker,contact,problem,next_action,next_action_date,decision_date,notes,lost_reason,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (opportunity_id, item["company"], item["campaign"], item["offer"], item["stage"], item["value_eur"],
+             item["decision_maker"], item["contact"], item["problem"], item["next_action"], item["next_action_date"],
+             item["decision_date"], item["notes"], item["lost_reason"], now, now),
+        )
+        _growth_audit(connection, opportunity_id, "created", item)
+        connection.commit()
+        row = connection.execute("SELECT * FROM growth_opportunities WHERE id = ?", (opportunity_id,)).fetchone()
+    return {"ok": True, "item": _growth_opportunity_public(row)}
+
+
+@app.patch("/admin/growth/opportunities/{opportunity_id}", dependencies=[Depends(_require_admin_token)])
+async def admin_growth_opportunity_update(opportunity_id: str, data: GrowthOpportunityPayload) -> Dict[str, Any]:
+    item = data.model_dump()
+    item["stage"] = _growth_stage(item["stage"])
+    with _get_db_connection() as connection:
+        before = connection.execute("SELECT * FROM growth_opportunities WHERE id = ?", (opportunity_id,)).fetchone()
+        if not before:
+            raise HTTPException(status_code=404, detail="Oportunidad no encontrada.")
+        connection.execute(
+            """UPDATE growth_opportunities SET company=?,campaign=?,offer=?,stage=?,value_eur=?,decision_maker=?,contact=?,
+            problem=?,next_action=?,next_action_date=?,decision_date=?,notes=?,lost_reason=?,updated_at=? WHERE id=?""",
+            (item["company"], item["campaign"], item["offer"], item["stage"], item["value_eur"], item["decision_maker"],
+             item["contact"], item["problem"], item["next_action"], item["next_action_date"], item["decision_date"],
+             item["notes"], item["lost_reason"], _utc_now_iso(), opportunity_id),
+        )
+        _growth_audit(connection, opportunity_id, "updated", {"before": dict(before), "after": item})
+        connection.commit()
+        row = connection.execute("SELECT * FROM growth_opportunities WHERE id = ?", (opportunity_id,)).fetchone()
+    return {"ok": True, "item": _growth_opportunity_public(row)}
+
+
+@app.delete("/admin/growth/opportunities/{opportunity_id}", dependencies=[Depends(_require_admin_token)])
+async def admin_growth_opportunity_delete(opportunity_id: str) -> Dict[str, Any]:
+    with _get_db_connection() as connection:
+        row = connection.execute("SELECT * FROM growth_opportunities WHERE id = ?", (opportunity_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Oportunidad no encontrada.")
+        _growth_audit(connection, opportunity_id, "deleted", dict(row))
+        connection.execute("DELETE FROM growth_opportunities WHERE id = ?", (opportunity_id,))
+        connection.commit()
+    return {"ok": True}
+
+
+@app.get("/admin/growth/opportunities/{opportunity_id}/history", dependencies=[Depends(_require_admin_token)])
+async def admin_growth_opportunity_history(opportunity_id: str) -> Dict[str, Any]:
+    with _get_db_connection() as connection:
+        rows = connection.execute("SELECT * FROM growth_opportunity_audit WHERE opportunity_id = ? ORDER BY id DESC", (opportunity_id,)).fetchall()
+    return {"items": [dict(row) for row in rows]}
+
+
+@app.post("/admin/growth/review/generate", dependencies=[Depends(_require_admin_token)])
+async def admin_growth_review_generate(week_start: str = "") -> Dict[str, Any]:
+    target = week_start or (date.today() - timedelta(days=date.today().weekday())).isoformat()
+    with _get_db_connection() as connection:
+        return _growth_generate_review(connection, target)
+
+
+@app.put("/admin/growth/review", dependencies=[Depends(_require_admin_token)])
+async def admin_growth_review_save(data: GrowthWeeklyReviewPayload) -> Dict[str, Any]:
+    week_start, now = _growth_date(data.week_start), _utc_now_iso()
+    with _get_db_connection() as connection:
+        generated = _growth_generate_review(connection, week_start)
+        connection.execute(
+            """INSERT INTO growth_weekly_reviews (week_start,generated_json,decision,notes,created_at,updated_at)
+            VALUES (?,?,?,?,?,?) ON CONFLICT(week_start) DO UPDATE SET generated_json=excluded.generated_json,
+            decision=excluded.decision,notes=excluded.notes,updated_at=excluded.updated_at""",
+            (week_start, json.dumps(generated, ensure_ascii=False), data.decision, data.notes, now, now),
+        )
+        connection.commit()
+    return {"ok": True, "generated": generated}
+
+
+@app.put("/admin/growth/tasks", dependencies=[Depends(_require_admin_token)])
+async def admin_growth_task_save(data: GrowthPlanTaskPayload) -> Dict[str, Any]:
+    if data.task_key not in {item["key"] for item in GROWTH_PLAN_TASKS}:
+        raise HTTPException(status_code=400, detail="Tarea del plan invalida.")
+    now = _utc_now_iso()
+    with _get_db_connection() as connection:
+        connection.execute(
+            """INSERT INTO growth_plan_tasks (task_key,completed,completed_at,updated_at) VALUES (?,?,?,?)
+            ON CONFLICT(task_key) DO UPDATE SET completed=excluded.completed,completed_at=excluded.completed_at,updated_at=excluded.updated_at""",
+            (data.task_key, int(data.completed), now if data.completed else "", now),
+        )
+        connection.commit()
+    return {"ok": True}
 
 
 # =====================================================================
@@ -27969,8 +28540,14 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
         "ni codigos, ni etiquetas entre corchetes como [MOSTRAR_FORMULARIO].\n"
         "- No te cortes por ruidos, respiraciones o monosilabos accidentales. Si el llamante te interrumpe claramente, "
         "termina la palabra o frase corta en curso y escucha.\n"
+        "- Si una intervencion corta tu respuesta, no reinicies ni repitas la frase desde el principio. Responde primero "
+        "a lo que haya dicho la persona y, si aun falta informacion util, retoma desde la siguiente idea no escuchada.\n"
         "- Si no entiendes algo, pide con amabilidad que lo repita.\n"
-        "- Empieza saludando breve y preguntando en que puedes ayudar.\n"
+        "- Empieza saludando breve y preguntando en que puedes ayudar. Saluda UNA sola vez al "
+        "principio de la llamada: no vuelvas a presentarte ni a repetir el saludo despues.\n"
+        "- NUNCA repitas la misma frase dos veces seguidas. Si solo oyes silencio, ruido de fondo "
+        "o un eco de tu propia voz, NO respondas ni te repitas: espera en silencio a que la persona "
+        "hable. Si tras una pausa larga no dice nada, pregunta una sola vez '¿Sigue ahi?' y vuelve a esperar.\n"
     )
 
     tz = config.get("booking", {}).get("timezone", DEFAULT_TIMEZONE)
@@ -27986,6 +28563,9 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
             "\nAGENDA DE CITAS POR VOZ (puedes reservar tu misma en la llamada):\n"
             f"- Hoy es {fecha_hoy} ({dia_semana}), zona horaria {tz}. Calcula fechas relativas "
             "('manana', 'el lunes que viene') a partir de hoy y pasalas SIEMPRE como YYYY-MM-DD.\n"
+            "- Consultar la agenda es instantaneo. Puedes decir una frase muy breve como 'un momento' "
+            "justo antes de mirar la disponibilidad, pero NO te quedes esperando sin mas: llama a la "
+            "herramienta en el mismo turno. Nunca prometas que 'ahora lo miras' sin usar la herramienta.\n"
             "- Para ver huecos libres usa la herramienta consultar_disponibilidad(fecha). Ofrece solo 2 o 3 "
             "horas concretas, no leas la lista entera.\n"
             "- Antes de reservar confirma en voz alta: nombre, telefono, servicio, dia y hora.\n"
@@ -28424,6 +29004,31 @@ async def _voice_dispatch_tool(
     return {"ok": False, "error": "Funcion desconocida."}
 
 
+async def _voice_dispatch_tool_demo(cliente_id: str, name: str, arguments_json: str) -> Dict[str, Any]:
+    """Ejecucion de tools para la voz EN NAVEGADOR de la demo publica. Solo lectura real:
+    consultar_disponibilidad se ejecuta de verdad (util para mostrar huecos), pero las tools
+    de escritura NO tocan la agenda real (cualquiera puede abrir la demo). Devuelven un
+    resultado honesto que el asistente puede leer en voz alta."""
+    if name == "consultar_disponibilidad":
+        try:
+            args = json.loads(arguments_json or "{}")
+        except Exception:  # noqa: BLE001
+            args = {}
+        if not isinstance(args, dict):
+            args = {}
+        return await _voice_check_availability(
+            cliente_id, str(args.get("fecha", "")), str(args.get("servicio", ""))
+        )
+    if name in {"crear_cita", "cancelar_cita", "reprogramar_cita"}:
+        return {
+            "ok": False,
+            "demo": True,
+            "error": "Esto es una demostracion: la cita no se guarda. En la version real "
+            "quedaria agendada al instante y el cliente recibiria la confirmacion.",
+        }
+    return {"ok": False, "error": "Funcion desconocida."}
+
+
 def _voice_detect_booking_intent(transcript_text: str) -> bool:
     low = (transcript_text or "").lower()
     return any(keyword in low for keyword in VOICE_BOOKING_KEYWORDS)
@@ -28497,6 +29102,52 @@ async def _voice_safe_close(ws) -> None:
         await ws.close()
     except Exception:  # noqa: BLE001
         pass
+
+
+def _voice_pcmu_duration_ms(audio_b64: str) -> int:
+    """Duracion aproximada de audio PCMU: 8 kHz, un byte por muestra."""
+    try:
+        return max(0, len(base64.b64decode(audio_b64 or "", validate=True)) // 8)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _voice_interruption_audio_end_ms(state: Dict[str, Any]) -> int:
+    started_at = state.get("assistant_audio_started_at")
+    if started_at is None:
+        return 0
+    elapsed = max(0, int(state.get("latest_media_timestamp", 0)) - int(started_at))
+    generated = max(0, int(state.get("assistant_audio_generated_ms", 0)))
+    return min(elapsed, generated) if generated else elapsed
+
+
+def _voice_reset_assistant_playback(state: Dict[str, Any]) -> None:
+    state["assistant_item_id"] = ""
+    state["assistant_audio_started_at"] = None
+    state["assistant_audio_generated_ms"] = 0
+
+
+async def _voice_truncate_interrupted_response(openai_ws, twilio_ws, state: Dict[str, Any]) -> bool:
+    """Detiene el audio pendiente y conserva solo la parte que el llamante ya oyo."""
+    item_id = state.get("assistant_item_id", "")
+    stream_sid = state.get("stream_sid", "")
+    if not item_id or not stream_sid:
+        return False
+
+    audio_end_ms = _voice_interruption_audio_end_ms(state)
+    await twilio_ws.send_text(json.dumps({"event": "clear", "streamSid": stream_sid}))
+    await openai_ws.send(
+        json.dumps(
+            {
+                "type": "conversation.item.truncate",
+                "item_id": item_id,
+                "content_index": 0,
+                "audio_end_ms": audio_end_ms,
+            }
+        )
+    )
+    _voice_reset_assistant_playback(state)
+    return True
 
 
 async def _voice_finalize_call(
@@ -28648,7 +29299,16 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
 
     await websocket.accept()
 
-    state: Dict[str, Any] = {"stream_sid": "", "call_sid": "", "booked": False, "fn_names": {}}
+    state: Dict[str, Any] = {
+        "stream_sid": "",
+        "call_sid": "",
+        "booked": False,
+        "fn_names": {},
+        "latest_media_timestamp": 0,
+        "assistant_item_id": "",
+        "assistant_audio_started_at": None,
+        "assistant_audio_generated_ms": 0,
+    }
     transcript: List[Dict[str, str]] = []
     started_monotonic = time.time()
     max_duration = int(voice_cfg.get("max_duration_seconds") or 0) or VOICE_MAX_DURATION_SECONDS
@@ -28682,13 +29342,20 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                         "audio": {
                             "input": {
                                 "format": {"type": "audio/pcmu"},
+                                # semantic_vad en vez de server_vad: en telefonia no hay
+                                # AEC y el eco de la linea se colaba como inbound; con un
+                                # VAD por amplitud eso disparaba una respuesta al propio
+                                # audio (se corta + repite). El VAD semantico solo abre
+                                # turno cuando de verdad habla el llamante, asi que ignora
+                                # eco/ruido de la linea. eagerness=low es conservador;
+                                # interrupt_response=True permite un barge-in natural. Al
+                                # detectar habla truncamos manualmente el audio pendiente de
+                                # Twilio para que el modelo no repita la frase completa.
                                 "turn_detection": {
-                                    "type": "server_vad",
-                                    "threshold": 0.65,
-                                    "prefix_padding_ms": 300,
-                                    "silence_duration_ms": 800,
+                                    "type": "semantic_vad",
+                                    "eagerness": "low",
                                     "create_response": True,
-                                    "interrupt_response": False,
+                                    "interrupt_response": True,
                                 },
                                 "transcription": {"model": "whisper-1"},
                             },
@@ -28733,6 +29400,12 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                     message = json.loads(raw)
                     event = message.get("event")
                     if event == "media":
+                        try:
+                            state["latest_media_timestamp"] = int(
+                                message.get("media", {}).get("timestamp", 0)
+                            )
+                        except (TypeError, ValueError):
+                            pass
                         await openai_ws.send(
                             json.dumps(
                                 {
@@ -28768,6 +29441,14 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                 if etype == "response.output_audio.delta" and event.get("delta"):
                     stream_sid = state["stream_sid"] or await _stream_sid_ready()
                     if stream_sid:
+                        item_id = event.get("item_id", "")
+                        if item_id and item_id != state["assistant_item_id"]:
+                            state["assistant_item_id"] = item_id
+                            state["assistant_audio_started_at"] = state["latest_media_timestamp"]
+                            state["assistant_audio_generated_ms"] = 0
+                        state["assistant_audio_generated_ms"] += _voice_pcmu_duration_ms(
+                            event["delta"]
+                        )
                         await websocket.send_text(
                             json.dumps(
                                 {
@@ -28808,10 +29489,7 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                     )
                     await openai_ws.send(json.dumps({"type": "response.create"}))
                 elif etype == "input_audio_buffer.speech_started":
-                    # With interrupt_response disabled, speech_started is only a turn-state
-                    # signal. Clearing Twilio playback here can chop off the assistant's
-                    # current phrase on background noise or echo from the phone line.
-                    pass
+                    await _voice_truncate_interrupted_response(openai_ws, websocket, state)
                 elif etype == "error":
                     logger.warning("[voice] OpenAI error %s: %s", cliente_id, event.get("error"))
 

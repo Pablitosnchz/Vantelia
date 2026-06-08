@@ -3279,12 +3279,15 @@ document.getElementById('vozRequestBtn').addEventListener('click', () => {
   function isSecure(){
     return window.isSecureContext === true || location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1';
   }
+  // Cancelacion de eco/ruido obligatoria: sin esto el mic recaptura la voz del
+  // asistente y el server_vad la confunde con habla del usuario -> se corta y repite.
+  const MIC_AUDIO = { echoCancellation:true, noiseSuppression:true, autoGainControl:true };
   function getMic(){
     if(!isSecure()) return Promise.reject({name:'InsecureContext'});
     const md = navigator.mediaDevices;
-    if(md && md.getUserMedia) return md.getUserMedia({audio:true});
+    if(md && md.getUserMedia) return md.getUserMedia({audio:MIC_AUDIO});
     const legacy = navigator.getUserMedia||navigator.webkitGetUserMedia||navigator.mozGetUserMedia;
-    if(legacy) return new Promise((res,rej)=>legacy.call(navigator,{audio:true},res,rej));
+    if(legacy) return new Promise((res,rej)=>legacy.call(navigator,{audio:MIC_AUDIO},res,rej));
     return Promise.reject({name:'Unsupported'});
   }
   function micError(e){
@@ -3306,10 +3309,34 @@ document.getElementById('vozRequestBtn').addEventListener('click', () => {
       speaking(false); if(active) setStatus('En llamada');
     } else if(type==='input_audio_buffer.speech_started'){
       if(active) setHint('Te escucho…');
+    } else if(type==='response.function_call_arguments.done'){
+      runTool(ev);
     } else if(type==='error'){
       const em=(ev&&ev.error&&(ev.error.message||ev.error.code))||'';
       endCall('La llamada terminó', em?('Motivo: '+em):'El asistente devolvió un error.');
     }
+  }
+  // El navegador habla directo con OpenAI; ejecutamos aqui las funciones que pide el modelo
+  // (consultar disponibilidad, agendar...) contra el backend del propio cliente y devolvemos
+  // el resultado por el data channel. Sin esto el asistente se queda esperando -> silencio.
+  async function runTool(ev){
+    const name = ev && ev.name;
+    const callId = ev && ev.call_id;
+    const argsStr = (ev && ev.arguments) || '{}';
+    if(!name || !callId || !dc) return;
+    if(active) setHint('Un momento, lo compruebo…');
+    let result;
+    try{
+      const r = await fetch('/auth/app/voice/tool', {
+        method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name, arguments: argsStr })
+      });
+      result = r.ok ? await r.json() : { ok:false, error:'No se pudo consultar ahora mismo.' };
+    }catch(e){ result = { ok:false, error:'No se pudo consultar ahora mismo.' }; }
+    try{
+      dc.send(JSON.stringify({ type:'conversation.item.create', item:{ type:'function_call_output', call_id:callId, output: JSON.stringify(result) } }));
+      dc.send(JSON.stringify({ type:'response.create' }));
+    }catch(_){}
   }
   async function postSDP(model, sdp, secret){
     const eps=['https://api.openai.com/v1/realtime/calls?model='+model, 'https://api.openai.com/v1/realtime?model='+model];

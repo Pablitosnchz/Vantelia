@@ -1216,3 +1216,48 @@ class AdminAltaExpressResponse(BaseModel):
     widget_script_url: str
     api_base_url: str
     demo_url: str
+
+
+class GrowthDailyPayload(BaseModel):
+    researched: int = Field(default=0, ge=0, le=100000)
+    contacts: int = Field(default=0, ge=0, le=100000)
+    followups: int = Field(default=0, ge=0, le=100000)
+    calls: int = Field(default=0, ge=0, le=100000)
+    positive_replies: int = Field(default=0, ge=0, le=100000)
+    conversations: int = Field(default=0, ge=0, le=100000)
+    meetings: int = Field(default=0, ge=0, le=100000)
+    proposals: int = Field(default=0, ge=0, le=100000)
+    won: int = Field(default=0, ge=0, le=100000)
+    eur_sold: float = Field(default=0, ge=0, le=100000000)
+    new_recurring: int = Field(default=0, ge=0, le=100000)
+    delivery_hours: float = Field(default=0, ge=0, le=10000)
+    learning: str = Field(default="", max_length=2000)
+    blocker: str = Field(default="", max_length=2000)
+    next_action: str = Field(default="", max_length=1000)
+
+
+class GrowthOpportunityPayload(BaseModel):
+    company: str = Field(min_length=1, max_length=180)
+    campaign: str = Field(default="", max_length=120)
+    offer: str = Field(default="", max_length=120)
+    stage: str = Field(default="identificada", max_length=40)
+    value_eur: float = Field(default=0, ge=0, le=100000000)
+    decision_maker: str = Field(default="", max_length=180)
+    contact: str = Field(default="", max_length=240)
+    problem: str = Field(default="", max_length=2000)
+    next_action: str = Field(default="", max_length=1000)
+    next_action_date: str = Field(default="", max_length=10)
+    decision_date: str = Field(default="", max_length=10)
+    notes: str = Field(default="", max_length=4000)
+    lost_reason: str = Field(default="", max_length=1000)
+
+
+class GrowthWeeklyReviewPayload(BaseModel):
+    week_start: str = Field(min_length=10, max_length=10)
+    decision: str = Field(default="", max_length=2000)
+    notes: str = Field(default="", max_length=4000)
+
+
+class GrowthPlanTaskPayload(BaseModel):
+    task_key: str = Field(min_length=1, max_length=120)
+    completed: bool = False

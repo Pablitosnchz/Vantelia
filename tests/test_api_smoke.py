@@ -2254,6 +2254,111 @@ def test_analytics_events_are_recorded_and_visible_to_admin(client: TestClient):
     assert payload["recent"][0]["event_name"] == "demo_submit"
 
 
+def test_growth_endpoints_require_admin_and_daily_is_upserted(client: TestClient):
+    forbidden = client.get("/admin/growth/overview")
+    headers = {"Authorization": "Bearer test-admin-token"}
+    activity_date = datetime.now().date().isoformat()
+    payload = {
+        "researched": 10,
+        "contacts": 20,
+        "followups": 5,
+        "calls": 3,
+        "positive_replies": 2,
+        "conversations": 1,
+        "meetings": 1,
+        "proposals": 0,
+        "won": 0,
+        "eur_sold": 0,
+        "new_recurring": 0,
+        "delivery_hours": 1.5,
+        "learning": "Mensaje concreto funciona mejor.",
+        "blocker": "",
+        "next_action": "Hacer follow-up.",
+    }
+    created = client.put(f"/admin/growth/daily/{activity_date}", json=payload, headers=headers)
+    payload["contacts"] = 25
+    updated = client.put(f"/admin/growth/daily/{activity_date}", json=payload, headers=headers)
+    overview = client.get("/admin/growth/overview", headers=headers)
+
+    assert forbidden.status_code == 401
+    assert created.status_code == 200 and created.json()["created"] is True
+    assert updated.status_code == 200 and updated.json()["created"] is False
+    assert overview.status_code == 200
+    body = overview.json()
+    assert body["today"]["contacts"] == 25
+    assert body["summaries"]["30"]["contacts"] >= 25
+    assert body["plan_markdown"].startswith("# Sistema operativo")
+    assert body["overall_state"] in {"green", "alert", "stop", "insufficient"}
+
+
+def test_growth_pipeline_crud_history_and_weekly_review(client: TestClient):
+    headers = {"Authorization": "Bearer test-admin-token"}
+    item = {
+        "company": "Empresa Growth Test",
+        "campaign": "Campaña 1",
+        "offer": "Oferta A",
+        "stage": "conversacion",
+        "value_eur": 1500,
+        "decision_maker": "Laura",
+        "contact": "laura@example.com",
+        "problem": "Consultas sin contexto",
+        "next_action": "Agendar descubrimiento",
+        "next_action_date": datetime.now().date().isoformat(),
+        "decision_date": "",
+        "notes": "",
+        "lost_reason": "",
+    }
+    created = client.post("/admin/growth/opportunities", json=item, headers=headers)
+    assert created.status_code == 200
+    opportunity_id = created.json()["item"]["id"]
+
+    item["stage"] = "propuesta"
+    item["next_action"] = "Pedir decisión"
+    updated = client.patch(f"/admin/growth/opportunities/{opportunity_id}", json=item, headers=headers)
+    listed = client.get("/admin/growth/opportunities?stage=propuesta", headers=headers)
+    history = client.get(f"/admin/growth/opportunities/{opportunity_id}/history", headers=headers)
+    review = client.post("/admin/growth/review/generate", headers=headers)
+    saved = client.put(
+        "/admin/growth/review",
+        json={"week_start": datetime.now().date().isoformat(), "decision": "Mantener", "notes": "Test"},
+        headers=headers,
+    )
+
+    assert updated.status_code == 200
+    assert listed.status_code == 200
+    assert any(row["id"] == opportunity_id for row in listed.json()["items"])
+    assert len(history.json()["items"]) >= 2
+    assert review.status_code == 200 and len(review.json()["priorities"]) == 5
+    assert saved.status_code == 200
+
+    deleted = client.delete(f"/admin/growth/opportunities/{opportunity_id}", headers=headers)
+    assert deleted.status_code == 200
+
+
+def test_growth_thresholds_and_plan_tasks(client: TestClient, api_module):
+    headers = {"Authorization": "Bearer test-admin-token"}
+    insufficient = api_module._growth_states(
+        {"positive_reply_rate": 0, "meeting_rate": 0, "proposal_rate": 0, "close_rate": 0,
+         "contacts": 99, "conversations": 0, "meetings": 0, "proposals": 7}
+    )
+    stop = api_module._growth_states(
+        {"positive_reply_rate": 1, "meeting_rate": 20, "proposal_rate": 10, "close_rate": 5,
+         "contacts": 100, "conversations": 10, "meetings": 10, "proposals": 8}
+    )
+    task = client.put(
+        "/admin/growth/tasks",
+        json={"task_key": "d1_pipeline", "completed": True},
+        headers=headers,
+    )
+    overview = client.get("/admin/growth/overview", headers=headers)
+
+    assert insufficient["positive_reply_rate"] == "insufficient"
+    assert insufficient["close_rate"] == "insufficient"
+    assert set(stop.values()) == {"stop"}
+    assert task.status_code == 200
+    assert next(row for row in overview.json()["tasks"] if row["key"] == "d1_pipeline")["completed"] is True
+
+
 def test_stripe_webhook_activates_client_subscription(client: TestClient, api_module, monkeypatch):
     api_module.stripe = _FakeStripe
     monkeypatch.setattr(api_module, "STRIPE_WEBHOOK_SECRET", "whsec_test_dummy")
@@ -4389,6 +4494,13 @@ def test_voice_uses_shared_identity_and_greeting(api_module):
     assert greeting == "Hola, MG Clinic al habla."
 
 
+def test_voice_instructions_resume_after_interruption_without_repeating(api_module):
+    instructions = api_module._voice_build_instructions("demo", api_module.CONFIG_CLIENTES["demo"])
+
+    assert "no reinicies ni repitas la frase desde el principio" in instructions
+    assert "retoma desde la siguiente idea no escuchada" in instructions
+
+
 def test_app_livechat_402_when_free_plan(client: TestClient, api_module, monkeypatch):
     cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Free")
     resp = client.get("/auth/app/livechat", cookies=cookies)
@@ -5124,6 +5236,55 @@ def test_voice_incoming_enabled_client_returns_stream(client: TestClient, api_mo
     )
     assert detail.status_code == 200
     assert detail.json()["status"] == "in_progress"
+
+
+def test_voice_truncates_twilio_playback_at_the_heard_audio(api_module):
+    import asyncio
+    import base64
+    import json
+
+    class FakeOpenAIWebSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send(self, value):
+            self.sent.append(json.loads(value))
+
+    class FakeTwilioWebSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send_text(self, value):
+            self.sent.append(json.loads(value))
+
+    openai_ws = FakeOpenAIWebSocket()
+    twilio_ws = FakeTwilioWebSocket()
+    state = {
+        "stream_sid": "MZ123",
+        "assistant_item_id": "item_123",
+        "assistant_audio_started_at": 1000,
+        "latest_media_timestamp": 1750,
+        "assistant_audio_generated_ms": 1200,
+    }
+
+    assert api_module._voice_pcmu_duration_ms(base64.b64encode(b"x" * 800).decode()) == 100
+    truncated = asyncio.run(
+        api_module._voice_truncate_interrupted_response(openai_ws, twilio_ws, state)
+    )
+
+    assert truncated is True
+    assert twilio_ws.sent == [{"event": "clear", "streamSid": "MZ123"}]
+    assert openai_ws.sent == [
+        {
+            "type": "conversation.item.truncate",
+            "item_id": "item_123",
+            "content_index": 0,
+            "audio_end_ms": 750,
+        }
+    ]
+    assert state["assistant_item_id"] == ""
+    assert state["assistant_audio_started_at"] is None
+    assert state["assistant_audio_generated_ms"] == 0
 
 
 def test_voice_booking_tool_creates_real_booking(api_module):

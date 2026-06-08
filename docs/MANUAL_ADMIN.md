@@ -982,6 +982,20 @@ Si el chat responde bien a esas preguntas, el cliente ya esta muy cerca de estar
 - Se ha hecho una prueba real de conversacion.
 - Se han revisado citas o derivacion a contacto humano si aplica.
 
+## Plan de escala
+
+La sección **Plan de escala** convierte el panel en el centro de ejecución
+comercial:
+
+- **Hoy**: registra actividad, aprendizaje, bloqueo y próxima acción.
+- **Pipeline**: crea y actualiza oportunidades; evita dejar activas sin siguiente paso.
+- **Métricas**: compara 7, 30 y 90 días con umbrales verde, alerta y STOP.
+- **Revisión semanal**: genera conclusiones basadas en datos y guarda decisiones.
+- **Plan**: consulta la fuente de verdad estratégica sin salir del panel.
+
+Registrar únicamente actividad real. Las métricas automáticas de Captación se
+muestran como contexto y no se mezclan con conversaciones, propuestas o ventas.
+
 ## 22. Mantenimiento diario, semanal y mensual
 
 ### Tareas diarias

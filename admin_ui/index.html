@@ -468,6 +468,25 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
 /* ── Outreach panel ──── */
 .outreach-panel { display: none; padding-top: 12px; }
 .outreach-panel.active { display: block; animation: fadeUp .2s ease both; }
+.scale-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:14px 0; }
+.scale-tab.active { background:var(--accent-soft); color:var(--accent); border-color:var(--accent-line); }
+.scale-panel { display:none; }
+.scale-panel.active { display:grid; gap:16px; animation:fadeUp .2s ease both; }
+.scale-state { display:inline-flex; padding:5px 10px; border-radius:999px; font-size:11px; font-weight:800; text-transform:uppercase; }
+.scale-state.green { color:var(--success); background:var(--success-soft); border:1px solid var(--success-line); }
+.scale-state.alert { color:var(--warning); background:var(--warn-soft); border:1px solid var(--warn-line); }
+.scale-state.stop { color:var(--danger); background:var(--danger-soft); border:1px solid var(--danger-line); }
+.scale-state.insufficient { color:var(--soft); background:var(--surface-2); border:1px solid var(--line); }
+.scale-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.scale-kpi { padding:15px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface-2); }
+.scale-kpi strong { display:block; font-size:1.45rem; font-family:var(--font-title); margin-top:6px; }
+.scale-form-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.scale-form-grid .wide { grid-column:span 2; }
+.scale-task { display:flex; align-items:center; gap:9px; padding:9px 11px; border:1px solid var(--line); border-radius:9px; background:var(--surface-2); }
+.scale-plan { white-space:pre-wrap; max-height:720px; overflow:auto; padding:18px; background:#07101f; border:1px solid var(--line); border-radius:var(--radius); color:var(--text-2); line-height:1.6; }
+.scale-review-list { margin:8px 0 0; padding-left:20px; color:var(--text-2); line-height:1.7; }
+@media(max-width:1050px){.scale-kpis,.scale-form-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:650px){.scale-kpis,.scale-form-grid{grid-template-columns:1fr}.scale-form-grid .wide{grid-column:auto;}}
 .campaign-wizard { display: grid; gap: 16px; }
 .campaign-wizard.outreach-panel { display: none; }
 .campaign-wizard.outreach-panel.active { display: grid !important; }
@@ -1932,6 +1951,10 @@ tbody tr:last-child td { border-bottom: none; }
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"></path><rect x="7" y="12" width="3" height="5" rx="1"></rect><rect x="12" y="8" width="3" height="9" rx="1"></rect><rect x="17" y="5" width="3" height="12" rx="1"></rect></svg></span>
           <span class="nav-text"><strong>Estadísticas</strong><span>Actividad y churn</span></span>
         </button>
+        <button class="nav-button" type="button" data-nav-view="scale">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18"></path><path d="M5 16l4-4 3 3 6-8"></path><path d="M15 7h3v3"></path></svg></span>
+          <span class="nav-text"><strong>Plan de escala</strong><span>Hoy, pipeline y revisión</span></span>
+        </button>
         <button class="nav-button" type="button" data-nav-view="express">
           <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"></path></svg></span>
           <span class="nav-text"><strong>Alta express</strong><span>Crear desde una web</span></span>
@@ -2143,6 +2166,104 @@ tbody tr:last-child td { border-bottom: none; }
                 </table>
               </div>
             </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="dashboard-view" data-view="scale">
+        <section class="card panel">
+          <div class="section-header">
+            <div>
+              <h2>Plan de escala</h2>
+              <p class="muted">Centro diario para ejecutar, medir y revisar el plan comercial de 90 días.</p>
+            </div>
+            <div class="actions">
+              <span id="scaleOverallState" class="scale-state insufficient">Sin datos</span>
+              <button id="scaleRefreshBtn" class="secondary small" type="button">Actualizar</button>
+            </div>
+          </div>
+          <div class="scale-kpis">
+            <div class="scale-kpi"><span class="muted">Día del plan</span><strong id="scalePlanDay">—</strong><small class="muted">de 90</small></div>
+            <div class="scale-kpi"><span class="muted">Próxima acción</span><strong id="scaleNextAction" style="font-size:1rem;">No registrada</strong></div>
+            <div class="scale-kpi"><span class="muted">Pipeline ponderado</span><strong id="scalePipelineValue">0 €</strong></div>
+            <div class="scale-kpi"><span class="muted">Alertas pipeline</span><strong id="scalePipelineAlerts">0</strong><small class="muted">sin acción o vencidas</small></div>
+          </div>
+          <div class="scale-tabs">
+            <button class="ghost small scale-tab active" data-scale-tab="today" type="button">Hoy</button>
+            <button class="ghost small scale-tab" data-scale-tab="pipeline" type="button">Pipeline</button>
+            <button class="ghost small scale-tab" data-scale-tab="metrics" type="button">Métricas</button>
+            <button class="ghost small scale-tab" data-scale-tab="review" type="button">Revisión semanal</button>
+            <button class="ghost small scale-tab" data-scale-tab="plan" type="button">Plan</button>
+          </div>
+
+          <div class="scale-panel active" data-scale-panel="today">
+            <div class="card" style="padding:16px;">
+              <strong>Checklist del plan</strong>
+              <div id="scaleTasks" style="display:grid;gap:8px;margin-top:12px;"></div>
+            </div>
+            <form id="scaleDailyForm" class="card" style="padding:16px;">
+              <div class="section-header"><div><strong>Cierre de hoy</strong><p class="muted">Guarda o edita el registro del día. Los objetivos nunca se suman como resultados.</p></div><button type="submit">Guardar día</button></div>
+              <div class="scale-form-grid" style="margin-top:14px;">
+                <label>Investigados<input id="scaleResearched" type="number" min="0"></label>
+                <label>Contactos<input id="scaleContacts" type="number" min="0"></label>
+                <label>Follow-ups<input id="scaleFollowups" type="number" min="0"></label>
+                <label>Llamadas<input id="scaleCalls" type="number" min="0"></label>
+                <label>Respuestas positivas<input id="scalePositiveReplies" type="number" min="0"></label>
+                <label>Conversaciones<input id="scaleConversations" type="number" min="0"></label>
+                <label>Reuniones<input id="scaleMeetings" type="number" min="0"></label>
+                <label>Propuestas<input id="scaleProposals" type="number" min="0"></label>
+                <label>Ventas<input id="scaleWon" type="number" min="0"></label>
+                <label>EUR vendidos<input id="scaleEurSold" type="number" min="0" step="0.01"></label>
+                <label>Nuevos recurrentes<input id="scaleRecurring" type="number" min="0"></label>
+                <label>Horas entrega<input id="scaleDeliveryHours" type="number" min="0" step="0.25"></label>
+                <label class="wide">Aprendizaje<textarea id="scaleLearning" rows="3"></textarea></label>
+                <label class="wide">Bloqueo<textarea id="scaleBlocker" rows="3"></textarea></label>
+                <label class="wide">Próxima acción<textarea id="scaleDailyNext" rows="2"></textarea></label>
+              </div>
+            </form>
+          </div>
+
+          <div class="scale-panel" data-scale-panel="pipeline">
+            <form id="scaleOpportunityForm" class="card" style="padding:16px;">
+              <div class="section-header"><div><strong id="scaleOppFormTitle">Nueva oportunidad</strong><p class="muted">Toda oportunidad activa debe tener próxima acción y fecha.</p></div><div class="actions"><button id="scaleOppCancelBtn" class="ghost small" type="button">Limpiar</button><button type="submit">Guardar</button></div></div>
+              <input id="scaleOppId" type="hidden">
+              <div class="scale-form-grid" style="margin-top:14px;">
+                <label>Empresa<input id="scaleOppCompany" required></label>
+                <label>Campaña<input id="scaleOppCampaign" placeholder="Campaña 1"></label>
+                <label>Oferta<input id="scaleOppOffer" placeholder="Oferta A"></label>
+                <label>Etapa<select id="scaleOppStage"><option>identificada</option><option>contactada</option><option>conversacion</option><option>descubrimiento</option><option>demo</option><option>propuesta</option><option>ganada</option><option>perdida</option><option>recurrente</option></select></label>
+                <label>Valor EUR<input id="scaleOppValue" type="number" min="0" step="0.01"></label>
+                <label>Decisor<input id="scaleOppDecisionMaker"></label>
+                <label>Contacto<input id="scaleOppContact"></label>
+                <label>Fecha decisión<input id="scaleOppDecisionDate" type="date"></label>
+                <label class="wide">Problema<textarea id="scaleOppProblem" rows="2"></textarea></label>
+                <label>Próxima acción<input id="scaleOppNextAction"></label>
+                <label>Fecha próxima acción<input id="scaleOppNextDate" type="date"></label>
+                <label class="wide">Notas<textarea id="scaleOppNotes" rows="2"></textarea></label>
+                <label class="wide">Motivo de pérdida<textarea id="scaleOppLostReason" rows="2"></textarea></label>
+              </div>
+            </form>
+            <div class="card" style="padding:16px;">
+              <div class="section-header"><strong>Oportunidades</strong><div class="actions"><select id="scaleOppFilter"><option value="">Todas</option><option value="overdue">Acciones vencidas</option><option value="missing">Sin próxima acción</option></select></div></div>
+              <div class="table-shell" style="margin-top:12px;"><table><thead><tr><th>Empresa</th><th>Oferta / campaña</th><th>Etapa</th><th>Valor</th><th>Próxima acción</th><th></th></tr></thead><tbody id="scaleOppBody"></tbody></table></div>
+            </div>
+          </div>
+
+          <div class="scale-panel" data-scale-panel="metrics">
+            <div id="scaleMetrics" style="display:grid;gap:16px;"></div>
+          </div>
+
+          <div class="scale-panel" data-scale-panel="review">
+            <div class="actions"><button id="scaleGenerateReviewBtn" type="button">Generar revisión con datos</button></div>
+            <div id="scaleReviewOutput" class="card" style="padding:16px;"></div>
+            <form id="scaleReviewForm" class="card" style="padding:16px;">
+              <div class="grid"><label>Decisión semanal<textarea id="scaleReviewDecision" rows="4"></textarea></label><label>Notas<textarea id="scaleReviewNotes" rows="4"></textarea></label></div>
+              <div class="actions"><button type="submit">Guardar revisión</button></div>
+            </form>
+          </div>
+
+          <div class="scale-panel" data-scale-panel="plan">
+            <div class="card" style="padding:16px;"><strong>Fuente de verdad estratégica</strong><pre id="scalePlanMarkdown" class="scale-plan"></pre></div>
           </div>
         </section>
       </section>
@@ -4281,6 +4402,8 @@ tbody tr:last-child td { border-bottom: none; }
 
       if (nextView === "analytics") {
         loadStatsOverview().catch((error) => showStatus(error.message, "error"));
+      } else if (nextView === "scale") {
+        try { window.__scaleInit && window.__scaleInit(); } catch(e) { console.warn(e); }
       } else if (nextView === "instagram") {
         try { window.__igInit && window.__igInit(); } catch(e) { console.warn(e); }
       } else if (nextView === "tiktok") {
@@ -6445,6 +6568,106 @@ tbody tr:last-child td { border-bottom: none; }
     setClientTab("profile");
     setView("clients");
     connect().catch((error) => showStatus(error.message, "error"));
+
+    // ============================================================
+    // === PLAN DE ESCALA =========================================
+    // ============================================================
+    (function scaleModule() {
+      const q = (sel) => document.querySelector(sel);
+      const qa = (sel) => Array.from(document.querySelectorAll(sel));
+      const S = { loaded:false, data:null, review:null };
+      const val = (id) => q(id)?.value ?? "";
+      const num = (id) => Number(val(id) || 0);
+      const money = (n) => `${Number(n || 0).toLocaleString("es-ES",{maximumFractionDigits:0})} €`;
+      const stateLabel = (s) => ({green:"Verde",alert:"Alerta",stop:"STOP",insufficient:"Sin datos"})[s] || s;
+      const statePill = (s) => `<span class="scale-state ${escapeHtml(s)}">${escapeHtml(stateLabel(s))}</span>`;
+      const scaleApi = (path, options={}) => api("/admin/growth" + path, {
+        ...options,
+        headers: options.body ? {"Content-Type":"application/json", ...(options.headers||{})} : options.headers,
+      });
+
+      function setTab(name) {
+        qa("[data-scale-tab]").forEach(b => b.classList.toggle("active", b.dataset.scaleTab === name));
+        qa("[data-scale-panel]").forEach(p => p.classList.toggle("active", p.dataset.scalePanel === name));
+      }
+      qa("[data-scale-tab]").forEach(b => b.addEventListener("click", () => setTab(b.dataset.scaleTab)));
+
+      function setInput(id, value) { const el=q(id); if(el) el.value=value ?? ""; }
+      function renderToday(data) {
+        const d=data.today || {}, targets=data.targets || {};
+        [["#scaleResearched","researched"],["#scaleContacts","contacts"],["#scaleFollowups","followups"],["#scaleCalls","calls"],
+        ["#scalePositiveReplies","positive_replies"],["#scaleConversations","conversations"],["#scaleMeetings","meetings"],
+        ["#scaleProposals","proposals"],["#scaleWon","won"],["#scaleEurSold","eur_sold"],["#scaleRecurring","new_recurring"],
+        ["#scaleDeliveryHours","delivery_hours"],["#scaleLearning","learning"],["#scaleBlocker","blocker"],["#scaleDailyNext","next_action"]]
+          .forEach(([id,key]) => setInput(id,d[key]));
+        ["researched","contacts","followups","calls"].forEach(key => {
+          const input=q("#scale"+key.split("_").map(x=>x[0].toUpperCase()+x.slice(1)).join(""));
+          if(input) input.title=`Objetivo diario: ${targets[key] || 0}`;
+        });
+        q("#scaleTasks").innerHTML=(data.tasks||[]).map(t=>`<label class="scale-task"><input type="checkbox" data-scale-task="${escapeHtml(t.key)}" ${t.completed?"checked":""}><span>${escapeHtml(t.label)}</span></label>`).join("");
+        qa("[data-scale-task]").forEach(el=>el.addEventListener("change", async()=>{await scaleApi("/tasks",{method:"PUT",body:JSON.stringify({task_key:el.dataset.scaleTask,completed:el.checked})});}));
+      }
+      function renderHeader(data) {
+        q("#scalePlanDay").textContent=String(data.plan?.day || 1);
+        q("#scaleNextAction").textContent=data.today?.next_action || "No registrada";
+        q("#scalePipelineValue").textContent=money(data.pipeline?.weighted_value_eur);
+        q("#scalePipelineAlerts").textContent=String((data.pipeline?.missing_next_action||0)+(data.pipeline?.overdue||0));
+        const pill=q("#scaleOverallState"); pill.className=`scale-state ${data.overall_state}`; pill.textContent=stateLabel(data.overall_state);
+      }
+      function renderOpportunities(data) {
+        let items=[...(data.opportunities||[])], filter=val("#scaleOppFilter");
+        const today=data.today?.activity_date || "";
+        if(filter==="overdue") items=items.filter(x=>x.next_action_date && x.next_action_date<today && !["ganada","perdida","recurrente"].includes(x.stage));
+        if(filter==="missing") items=items.filter(x=>!x.next_action && !["ganada","perdida","recurrente"].includes(x.stage));
+        q("#scaleOppBody").innerHTML=items.length?items.map(x=>`<tr>
+          <td><b>${escapeHtml(x.company)}</b><div class="muted">${escapeHtml(x.decision_maker||x.contact||"")}</div></td>
+          <td>${escapeHtml(x.offer||"—")}<div class="muted">${escapeHtml(x.campaign||"—")}</div></td>
+          <td>${escapeHtml(x.stage)}</td><td>${money(x.value_eur)}</td>
+          <td>${escapeHtml(x.next_action||"SIN PRÓXIMA ACCIÓN")}<div class="muted">${escapeHtml(x.next_action_date||"")}</div></td>
+          <td><div class="actions"><button class="ghost small" data-scale-edit="${x.id}" type="button">Editar</button><button class="danger small" data-scale-delete="${x.id}" type="button">Borrar</button></div></td></tr>`).join("")
+          :'<tr><td colspan="6" class="muted">Sin oportunidades para este filtro.</td></tr>';
+        qa("[data-scale-edit]").forEach(b=>b.addEventListener("click",()=>editOpportunity(b.dataset.scaleEdit)));
+        qa("[data-scale-delete]").forEach(b=>b.addEventListener("click",()=>deleteOpportunity(b.dataset.scaleDelete)));
+      }
+      function metricCard(days, s, states) {
+        const ratios=[["Respuesta positiva","positive_reply_rate"],["Conversación","conversation_rate"],["Reunión","meeting_rate"],["Propuesta","proposal_rate"],["Cierre","close_rate"]];
+        return `<div class="card" style="padding:16px;"><div class="section-header"><strong>Últimos ${days} días</strong><span class="muted">${s.contacts} contactos · ${money(s.eur_sold)}</span></div>
+          <div class="scale-kpis" style="margin-top:12px;"><div class="scale-kpi"><span class="muted">Conversaciones</span><strong>${s.conversations}</strong></div><div class="scale-kpi"><span class="muted">Reuniones</span><strong>${s.meetings}</strong></div><div class="scale-kpi"><span class="muted">Propuestas</span><strong>${s.proposals}</strong></div><div class="scale-kpi"><span class="muted">Ganadas</span><strong>${s.won}</strong></div></div>
+          <div class="table-shell" style="margin-top:12px;"><table><tbody>${ratios.map(([label,key])=>`<tr><td>${label}</td><td>${Number(s[key]||0).toFixed(1)}%</td><td>${days===30&&states[key]?statePill(states[key]):""}</td></tr>`).join("")}</tbody></table></div></div>`;
+      }
+      function renderMetrics(data) {
+        const breakdown=(title,rows)=>`<div class="card" style="padding:16px;"><strong>${title}</strong><div class="table-shell" style="margin-top:10px;"><table><thead><tr><th>Nombre</th><th>Total</th><th>Activas</th><th>Ganadas</th><th>Valor</th></tr></thead><tbody>${(rows||[]).map(x=>`<tr><td>${escapeHtml(x.name)}</td><td>${x.count}</td><td>${x.active}</td><td>${x.won}</td><td>${money(x.value_eur)}</td></tr>`).join("")||'<tr><td colspan="5" class="muted">Sin datos.</td></tr>'}</tbody></table></div></div>`;
+        const weekly=`<div class="card" style="padding:16px;"><strong>Evolución semanal</strong><div class="table-shell" style="margin-top:10px;"><table><thead><tr><th>Semana</th><th>Contactos</th><th>Conversaciones</th><th>Propuestas</th><th>Ganadas</th><th>EUR</th></tr></thead><tbody>${(data.weekly||[]).map(x=>`<tr><td>${escapeHtml(x.week)}</td><td>${x.contacts||0}</td><td>${x.conversations||0}</td><td>${x.proposals||0}</td><td>${x.won||0}</td><td>${money(x.eur_sold)}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">Sin actividad registrada.</td></tr>'}</tbody></table></div></div>`;
+        q("#scaleMetrics").innerHTML=[7,30,90].map(d=>metricCard(d,data.summaries[String(d)]||{},data.states||{})).join("")+
+          weekly+breakdown("Por campaña",data.breakdown?.campaigns)+breakdown("Por oferta",data.breakdown?.offers)+
+          `<div class="card" style="padding:16px;"><strong>Automatización disponible, solo como contexto</strong><p class="muted" style="margin-top:8px;">Prospects en captación: ${data.automatic_outreach?.prospects||0} · Envíos 30 días: ${data.automatic_outreach?.sends_30d||0} · Respuestas detectadas: ${data.automatic_outreach?.replies_30d||0}. No se suman automáticamente a resultados manuales.</p></div>`;
+      }
+      function renderPlan(data){q("#scalePlanMarkdown").textContent=data.plan_markdown||"Plan no disponible.";}
+      function renderReview(review) {
+        S.review=review; const box=q("#scaleReviewOutput");
+        box.innerHTML=`<strong>${review.has_data?"Revisión basada en datos":"Faltan datos"}</strong>
+          <p style="margin-top:10px;"><b>Cuello de botella:</b> ${escapeHtml(review.bottleneck||"")}</p>
+          <p style="margin-top:8px;"><b>Decisión sugerida:</b> ${escapeHtml(review.campaign_decision||"")}</p>
+          <div class="grid" style="margin-top:12px;"><div><b>Funcionó</b><ul class="scale-review-list">${(review.worked||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join("")||"<li>Sin evidencia todavía.</li>"}</ul></div><div><b>Incumplimientos</b><ul class="scale-review-list">${(review.missed||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join("")}</ul></div></div>
+          <b>5 prioridades</b><ol class="scale-review-list">${(review.priorities||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join("")}</ol>`;
+      }
+      async function load() {
+        const data=await scaleApi("/overview"); S.data=data; S.loaded=true;
+        renderHeader(data);renderToday(data);renderOpportunities(data);renderMetrics(data);renderPlan(data);
+      }
+      function opportunityPayload() {return {company:val("#scaleOppCompany"),campaign:val("#scaleOppCampaign"),offer:val("#scaleOppOffer"),stage:val("#scaleOppStage"),value_eur:num("#scaleOppValue"),decision_maker:val("#scaleOppDecisionMaker"),contact:val("#scaleOppContact"),problem:val("#scaleOppProblem"),next_action:val("#scaleOppNextAction"),next_action_date:val("#scaleOppNextDate"),decision_date:val("#scaleOppDecisionDate"),notes:val("#scaleOppNotes"),lost_reason:val("#scaleOppLostReason")};}
+      function clearOpportunity(){["#scaleOppId","#scaleOppCompany","#scaleOppCampaign","#scaleOppOffer","#scaleOppValue","#scaleOppDecisionMaker","#scaleOppContact","#scaleOppProblem","#scaleOppNextAction","#scaleOppNextDate","#scaleOppDecisionDate","#scaleOppNotes","#scaleOppLostReason"].forEach(id=>setInput(id,""));setInput("#scaleOppStage","identificada");q("#scaleOppFormTitle").textContent="Nueva oportunidad";}
+      function editOpportunity(id){const x=(S.data?.opportunities||[]).find(o=>o.id===id);if(!x)return;Object.entries({scaleOppId:x.id,scaleOppCompany:x.company,scaleOppCampaign:x.campaign,scaleOppOffer:x.offer,scaleOppStage:x.stage,scaleOppValue:x.value_eur,scaleOppDecisionMaker:x.decision_maker,scaleOppContact:x.contact,scaleOppProblem:x.problem,scaleOppNextAction:x.next_action,scaleOppNextDate:x.next_action_date,scaleOppDecisionDate:x.decision_date,scaleOppNotes:x.notes,scaleOppLostReason:x.lost_reason}).forEach(([id,v])=>setInput("#"+id,v));q("#scaleOppFormTitle").textContent="Editar oportunidad";q("#scaleOpportunityForm").scrollIntoView({behavior:"smooth"});}
+      async function deleteOpportunity(id){if(!confirm("¿Borrar esta oportunidad? El historial se conserva."))return;await scaleApi("/opportunities/"+encodeURIComponent(id),{method:"DELETE"});await load();}
+      q("#scaleDailyForm").addEventListener("submit",async e=>{e.preventDefault();const payload={researched:num("#scaleResearched"),contacts:num("#scaleContacts"),followups:num("#scaleFollowups"),calls:num("#scaleCalls"),positive_replies:num("#scalePositiveReplies"),conversations:num("#scaleConversations"),meetings:num("#scaleMeetings"),proposals:num("#scaleProposals"),won:num("#scaleWon"),eur_sold:num("#scaleEurSold"),new_recurring:num("#scaleRecurring"),delivery_hours:num("#scaleDeliveryHours"),learning:val("#scaleLearning"),blocker:val("#scaleBlocker"),next_action:val("#scaleDailyNext")};await scaleApi("/daily/"+S.data.today.activity_date,{method:"PUT",body:JSON.stringify(payload)});showStatus("Día guardado.","success");await load();});
+      q("#scaleOpportunityForm").addEventListener("submit",async e=>{e.preventDefault();const id=val("#scaleOppId");await scaleApi("/opportunities"+(id?"/"+encodeURIComponent(id):""),{method:id?"PATCH":"POST",body:JSON.stringify(opportunityPayload())});clearOpportunity();showStatus("Oportunidad guardada.","success");await load();});
+      q("#scaleOppCancelBtn").addEventListener("click",clearOpportunity);
+      q("#scaleOppFilter").addEventListener("change",()=>renderOpportunities(S.data));
+      q("#scaleRefreshBtn").addEventListener("click",()=>load().catch(e=>showStatus(e.message,"error")));
+      q("#scaleGenerateReviewBtn").addEventListener("click",async()=>renderReview(await scaleApi("/review/generate",{method:"POST"})));
+      q("#scaleReviewForm").addEventListener("submit",async e=>{e.preventDefault();const monday=new Date();monday.setDate(monday.getDate()-((monday.getDay()+6)%7));const week=monday.toISOString().slice(0,10);await scaleApi("/review",{method:"PUT",body:JSON.stringify({week_start:week,decision:val("#scaleReviewDecision"),notes:val("#scaleReviewNotes")})});showStatus("Revisión guardada.","success");await load();});
+      window.__scaleInit=()=>{if(!S.loaded)load().catch(e=>showStatus(e.message,"error"));};
+    })();
 
     // ============================================================
     // === OUTREACH PANEL =========================================
