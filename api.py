@@ -308,6 +308,7 @@ def _normalize_plan_slug(plan: str) -> str:
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "").strip()
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
+STRIPE_CONNECT_WEBHOOK_SECRET = os.getenv("STRIPE_CONNECT_WEBHOOK_SECRET", "").strip()
 STRIPE_CONNECT_API_VERSION = os.getenv("STRIPE_CONNECT_API_VERSION", "2026-05-27.preview").strip()
 STRIPE_CONNECT_BASE_URL = "https://api.stripe.com/v2/core"
 STRIPE_CONNECT_COUNTRY = os.getenv("STRIPE_CONNECT_COUNTRY", "es").strip().lower()
@@ -16712,11 +16713,26 @@ async def auth_subscription_portal(
     return SubscriptionPortalResponse(url=session.url)
 
 
+def _construct_stripe_webhook_event(payload: bytes, sig_header: str) -> Any:
+    secrets_to_try = list(
+        dict.fromkeys(secret for secret in (STRIPE_WEBHOOK_SECRET, STRIPE_CONNECT_WEBHOOK_SECRET) if secret)
+    )
+    last_error: Optional[Exception] = None
+    for webhook_secret in secrets_to_try:
+        try:
+            return stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+        except stripe.error.SignatureVerificationError as exc:
+            last_error = exc
+    if last_error:
+        raise last_error
+    raise RuntimeError("Stripe webhook secret no configurado.")
+
+
 @app.post("/webhooks/stripe", include_in_schema=False)
 async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) -> Dict[str, Any]:
     if not _stripe_configured():
         raise HTTPException(status_code=503, detail="Stripe no configurado.")
-    if not STRIPE_WEBHOOK_SECRET:
+    if not STRIPE_WEBHOOK_SECRET and not STRIPE_CONNECT_WEBHOOK_SECRET:
         logger.error("Stripe webhook recibido pero STRIPE_WEBHOOK_SECRET no está configurado; rechazando por seguridad.")
         raise HTTPException(status_code=503, detail="Stripe webhook secret no configurado.")
     payload = await request.body()
@@ -16725,7 +16741,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
         logger.warning("Stripe webhook recibido sin cabecera stripe-signature; rechazando.")
         raise HTTPException(status_code=400, detail="Falta firma del webhook.")
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+        event = _construct_stripe_webhook_event(payload, sig_header)
     except stripe.error.SignatureVerificationError as exc:
         logger.warning("Stripe webhook firma inválida: %s", exc)
         raise HTTPException(status_code=400, detail="Firma del webhook inválida.") from exc
