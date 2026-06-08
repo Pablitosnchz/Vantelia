@@ -168,8 +168,8 @@
       "http://localhost:8000"
     ],
     "contacto": {
-      "email": "soporte@vantelia.es",
-      "telefono": "+34 600000000"
+      "email": "info@vantelia.es",
+      "telefono": ""
     },
     "branding": {
       "powered_by": "Powered by Vantelia"

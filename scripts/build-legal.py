@@ -109,7 +109,12 @@ FOOTER = """<footer class="site-footer" aria-label="Pie de página">
   </div>
 </footer>
 
-<script src="/assets/js/home.js" defer></script>"""
+<script src="/assets/js/home.js" defer></script>
+<script
+  src="https://app.vantelia.es/widget/widget.min.js?v=20260605-sitewide"
+  data-api="https://app.vantelia.es"
+  data-client="Vantelia"
+  data-position="right"></script>"""
 
 
 def page(slug: str, title: str, description: str, body_html: str) -> str:

@@ -110,7 +110,7 @@ FOOTER = """<footer class="site-footer" aria-label="Pie de página">
 
 <script src="/assets/js/home.js" defer></script>
 <script
-  src="https://app.vantelia.es/widget/widget.min.js?v=1777076198"
+  src="https://app.vantelia.es/widget/widget.min.js?v=20260605-sitewide"
   data-api="https://app.vantelia.es"
   data-client="Vantelia"
   data-position="right"></script>"""

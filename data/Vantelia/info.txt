@@ -5,7 +5,7 @@ IDENTIDAD:
 - Actividad: asistentes de IA para empresas que quieren captar mas consultas, responder mejor y agendar citas sin depender siempre de una persona.
 - Web principal: https://www.vantelia.es
 - Plataforma: https://app.vantelia.es
-- Contacto de soporte: soporte@vantelia.es
+- Contacto general y soporte: info@vantelia.es
 - Idioma principal: espanol de Espana.
 
 PROPUESTA PRINCIPAL:
