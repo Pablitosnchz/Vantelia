@@ -1,5 +1,6 @@
 beautifulsoup4==4.12.3
 backports.zoneinfo==0.2.1; python_version < "3.9"
+cryptography==44.0.2
 email-validator==2.2.0
 fastapi==0.115.0
 google-auth==2.40.1

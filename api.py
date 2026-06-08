@@ -31,6 +31,7 @@ from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunpa
 
 import httpx
 from dotenv import load_dotenv
+from cryptography.fernet import Fernet, InvalidToken
 
 try:
     import stripe as _stripe_module
@@ -186,6 +187,8 @@ SMTP_REPLY_TO = _allowed_vantelia_email(
     DEFAULT_VANTELIA_SUPPORT_EMAIL,
 )
 SMTP_STARTTLS = os.getenv("SMTP_STARTTLS", "true").strip().lower() in {"1", "true", "yes", "on"}
+EMAIL_SEND_PROVIDER = os.getenv("EMAIL_SEND_PROVIDER", "auto").strip().lower() or "auto"
+GMAIL_TOKEN_ENCRYPTION_KEY = os.getenv("GMAIL_TOKEN_ENCRYPTION_KEY", "").strip()
 REMINDER_24H_HOURS = int(os.getenv("REMINDER_24H_HOURS", "24"))
 REMINDER_2H_HOURS = int(os.getenv("REMINDER_2H_HOURS", "2"))
 REMINDER_RUN_INTERVAL_MINUTES = int(os.getenv("REMINDER_RUN_INTERVAL_MINUTES", "30"))
@@ -217,9 +220,12 @@ SIGNUP_ENABLED = os.getenv("SIGNUP_ENABLED", "true").strip().lower() in {"1", "t
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
 GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "").strip()
+GOOGLE_GMAIL_REDIRECT_URI = os.getenv("GOOGLE_GMAIL_REDIRECT_URI", "").strip()
 GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_OAUTH_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+GOOGLE_GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
+GOOGLE_GMAIL_SCOPES = "openid email https://www.googleapis.com/auth/gmail.send"
 DEFAULT_FREE_QUOTA = int(os.getenv("DEFAULT_FREE_QUOTA", "50"))
 ONBOARDING_MAX_PAGES_DEFAULT = int(os.getenv("ONBOARDING_MAX_PAGES", "12"))
 
@@ -1662,6 +1668,31 @@ def _init_database() -> None:
                 intent TEXT NOT NULL DEFAULT 'login',
                 claim TEXT NOT NULL DEFAULT '',
                 created_at REAL NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gmail_oauth_states (
+                state TEXT PRIMARY KEY,
+                admin_user_id TEXT NOT NULL DEFAULT '',
+                created_at REAL NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gmail_connections (
+                id TEXT PRIMARY KEY,
+                email TEXT NOT NULL DEFAULT '',
+                access_token_encrypted TEXT NOT NULL DEFAULT '',
+                refresh_token_encrypted TEXT NOT NULL DEFAULT '',
+                expires_at REAL NOT NULL DEFAULT 0,
+                scopes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_used_at TEXT NOT NULL DEFAULT '',
+                last_error TEXT NOT NULL DEFAULT ''
             )
             """
         )
@@ -3426,6 +3457,35 @@ def _google_oauth_configured() -> bool:
     return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI)
 
 
+def _gmail_oauth_create_state(admin_user_id: str = "") -> str:
+    state = secrets.token_urlsafe(32)
+    now = time.time()
+    with _get_db_connection() as conn:
+        conn.execute(
+            "INSERT INTO gmail_oauth_states (state, admin_user_id, created_at) VALUES (?, ?, ?)",
+            (state, admin_user_id, now),
+        )
+        conn.execute("DELETE FROM gmail_oauth_states WHERE created_at < ?", (now - _OAUTH_STATE_TTL_SECONDS,))
+        conn.commit()
+    return state
+
+
+def _gmail_oauth_consume_state(state: str) -> Optional[Dict[str, Any]]:
+    if not state:
+        return None
+    with _get_db_connection() as conn:
+        row = conn.execute(
+            "SELECT admin_user_id, created_at FROM gmail_oauth_states WHERE state = ?",
+            (state,),
+        ).fetchone()
+        if row:
+            conn.execute("DELETE FROM gmail_oauth_states WHERE state = ?", (state,))
+            conn.commit()
+    if not row or time.time() - float(row["created_at"]) > _OAUTH_STATE_TTL_SECONDS:
+        return None
+    return {"admin_user_id": row["admin_user_id"], "created_at": row["created_at"]}
+
+
 # --- Onboarding state (transient, lives in user row's metadata or memory) ---
 # We store wizard state in the clientes row's config_json as a `_onboarding_state`
 # key while the user has not finalized. On finalize we strip it.
@@ -4423,6 +4483,202 @@ def _smtp_configured() -> bool:
     return bool(SMTP_HOST and SMTP_FROM_EMAIL)
 
 
+def _gmail_redirect_uri() -> str:
+    if GOOGLE_GMAIL_REDIRECT_URI:
+        return GOOGLE_GMAIL_REDIRECT_URI
+    if APP_BASE_URL:
+        return f"{APP_BASE_URL}/auth/google/gmail/callback"
+    return ""
+
+
+def _gmail_oauth_configured() -> bool:
+    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and _gmail_redirect_uri() and _gmail_fernet())
+
+
+def _gmail_fernet() -> Optional[Fernet]:
+    raw_key = GMAIL_TOKEN_ENCRYPTION_KEY or ADMIN_API_TOKEN
+    if not raw_key:
+        return None
+    try:
+        if GMAIL_TOKEN_ENCRYPTION_KEY:
+            return Fernet(GMAIL_TOKEN_ENCRYPTION_KEY.encode("ascii"))
+    except (ValueError, UnicodeError):
+        logger.error("GMAIL_TOKEN_ENCRYPTION_KEY no es una clave Fernet valida.")
+        return None
+    derived = base64.urlsafe_b64encode(hashlib.sha256(raw_key.encode("utf-8")).digest())
+    return Fernet(derived)
+
+
+def _gmail_encrypt(value: str) -> str:
+    fernet = _gmail_fernet()
+    if not fernet:
+        raise RuntimeError("Configura GMAIL_TOKEN_ENCRYPTION_KEY o ADMIN_API_TOKEN para cifrar tokens Gmail.")
+    return fernet.encrypt(str(value or "").encode("utf-8")).decode("ascii")
+
+
+def _gmail_decrypt(value: str) -> str:
+    if not value:
+        return ""
+    fernet = _gmail_fernet()
+    if not fernet:
+        raise RuntimeError("No se puede descifrar la conexion Gmail: falta la clave de cifrado.")
+    try:
+        return fernet.decrypt(value.encode("ascii")).decode("utf-8")
+    except (InvalidToken, ValueError, UnicodeError) as exc:
+        raise RuntimeError("No se puede descifrar la conexion Gmail con la clave actual.") from exc
+
+
+def _gmail_connection() -> Optional[sqlite3.Row]:
+    with _get_db_connection() as connection:
+        return connection.execute("SELECT * FROM gmail_connections WHERE id = 'default'").fetchone()
+
+
+def _gmail_connected() -> bool:
+    row = _gmail_connection()
+    return bool(row and row["refresh_token_encrypted"])
+
+
+def _email_delivery_configured() -> bool:
+    if EMAIL_SEND_PROVIDER == "gmail":
+        return _gmail_oauth_configured() and _gmail_connected()
+    if EMAIL_SEND_PROVIDER == "smtp":
+        return _smtp_configured()
+    return (_gmail_oauth_configured() and _gmail_connected()) or _smtp_configured()
+
+
+def _gmail_save_tokens(token_data: Dict[str, Any], email: str, scopes: str = "") -> None:
+    current = _gmail_connection()
+    access_token = str(token_data.get("access_token") or "").strip()
+    refresh_token = str(token_data.get("refresh_token") or "").strip()
+    if not refresh_token and current:
+        refresh_token_encrypted = current["refresh_token_encrypted"]
+    elif refresh_token:
+        refresh_token_encrypted = _gmail_encrypt(refresh_token)
+    else:
+        raise RuntimeError("Google no devolvio refresh_token. Revoca el acceso y vuelve a conectar Gmail.")
+    expires_in = max(60, int(token_data.get("expires_in") or 3600))
+    now_iso = _utc_now_iso()
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO gmail_connections (
+                id, email, access_token_encrypted, refresh_token_encrypted, expires_at,
+                scopes, created_at, updated_at, last_used_at, last_error
+            ) VALUES ('default', ?, ?, ?, ?, ?, ?, ?, '', '')
+            ON CONFLICT(id) DO UPDATE SET
+                email=excluded.email,
+                access_token_encrypted=excluded.access_token_encrypted,
+                refresh_token_encrypted=excluded.refresh_token_encrypted,
+                expires_at=excluded.expires_at,
+                scopes=excluded.scopes,
+                updated_at=excluded.updated_at,
+                last_error=''
+            """,
+            (
+                _normalize_email(email),
+                _gmail_encrypt(access_token),
+                refresh_token_encrypted,
+                time.time() + expires_in,
+                scopes or str(token_data.get("scope") or ""),
+                now_iso,
+                now_iso,
+            ),
+        )
+        connection.commit()
+
+
+def _gmail_access_token() -> Tuple[str, sqlite3.Row]:
+    row = _gmail_connection()
+    if not row or not row["refresh_token_encrypted"]:
+        raise RuntimeError("Gmail no esta conectado.")
+    if row["access_token_encrypted"] and float(row["expires_at"] or 0) > time.time() + 60:
+        return _gmail_decrypt(row["access_token_encrypted"]), row
+    refresh_token = _gmail_decrypt(row["refresh_token_encrypted"])
+    with httpx.Client(timeout=20.0) as client:
+        response = client.post(
+            GOOGLE_OAUTH_TOKEN_URL,
+            data={
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            },
+            headers={"Accept": "application/json"},
+        )
+        response.raise_for_status()
+        token_data = response.json()
+    _gmail_save_tokens(token_data, row["email"], row["scopes"])
+    fresh = _gmail_connection()
+    if not fresh:
+        raise RuntimeError("No se pudo guardar el token renovado de Gmail.")
+    return _gmail_decrypt(fresh["access_token_encrypted"]), fresh
+
+
+def _gmail_send_message(message: EmailMessage) -> None:
+    if not _gmail_oauth_configured():
+        raise RuntimeError("Google OAuth para Gmail no esta configurado.")
+    access_token, connection_row = _gmail_access_token()
+    connected_email = _normalize_email(connection_row["email"])
+    from_name, from_email = parseaddr(str(message.get("From") or ""))
+    if connected_email and _normalize_email(from_email) != connected_email:
+        if message.get("From"):
+            message.replace_header("From", formataddr((from_name or SMTP_FROM_NAME or "Vantelia", connected_email)))
+        else:
+            message["From"] = formataddr((SMTP_FROM_NAME or "Vantelia", connected_email))
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
+    try:
+        with httpx.Client(timeout=25.0) as client:
+            response = client.post(
+                GOOGLE_GMAIL_SEND_URL,
+                json={"raw": raw},
+                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            )
+            response.raise_for_status()
+    except Exception as exc:
+        with _get_db_connection() as db:
+            db.execute(
+                "UPDATE gmail_connections SET last_error = ?, updated_at = ? WHERE id = 'default'",
+                (str(exc)[:500], _utc_now_iso()),
+            )
+            db.commit()
+        raise
+    with _get_db_connection() as db:
+        db.execute(
+            "UPDATE gmail_connections SET last_used_at = ?, last_error = '' WHERE id = 'default'",
+            (_utc_now_iso(),),
+        )
+        db.commit()
+
+
+def _smtp_send_message(message: EmailMessage) -> None:
+    if not _smtp_configured():
+        raise RuntimeError("El sistema SMTP no esta configurado. Revisa SMTP_HOST y SMTP_FROM_EMAIL.")
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as smtp:
+        smtp.ehlo()
+        if SMTP_STARTTLS:
+            smtp.starttls()
+            smtp.ehlo()
+        if SMTP_USERNAME:
+            smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
+        smtp.send_message(message)
+
+
+def _send_email_object(message: EmailMessage) -> None:
+    if EMAIL_SEND_PROVIDER not in {"auto", "gmail", "smtp"}:
+        raise RuntimeError("EMAIL_SEND_PROVIDER debe ser auto, gmail o smtp.")
+    if EMAIL_SEND_PROVIDER == "gmail" and not (_gmail_oauth_configured() and _gmail_connected()):
+        raise RuntimeError("EMAIL_SEND_PROVIDER=gmail pero Gmail no esta conectado.")
+    if EMAIL_SEND_PROVIDER in {"auto", "gmail"} and _gmail_oauth_configured() and _gmail_connected():
+        try:
+            _gmail_send_message(copy.deepcopy(message))
+            return
+        except Exception as exc:
+            if EMAIL_SEND_PROVIDER == "gmail" or not _smtp_configured():
+                raise
+            logger.warning("Envio Gmail fallo; usando respaldo SMTP: %s", exc)
+    _smtp_send_message(message)
+
+
 def _email_sender() -> str:
     if SMTP_FROM_NAME:
         return formataddr((SMTP_FROM_NAME, SMTP_FROM_EMAIL))
@@ -4436,8 +4692,8 @@ def _send_email_message(
     html_body: str = "",
     reply_to: Optional[str] = None,
 ) -> None:
-    if not _smtp_configured():
-        raise RuntimeError("El sistema de correo no esta configurado. Revisa SMTP_HOST y SMTP_FROM_EMAIL.")
+    if not _email_delivery_configured():
+        raise RuntimeError("El sistema de correo no esta configurado. Conecta Gmail o configura SMTP.")
 
     message = EmailMessage()
     message["Subject"] = subject
@@ -4450,14 +4706,7 @@ def _send_email_message(
     if html_body:
         message.add_alternative(html_body, subtype="html")
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as smtp:
-        smtp.ehlo()
-        if SMTP_STARTTLS:
-            smtp.starttls()
-            smtp.ehlo()
-        if SMTP_USERNAME:
-            smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
-        smtp.send_message(message)
+    _send_email_object(message)
 
 
 def _preferred_public_base_url(request: Optional[Request] = None) -> str:
@@ -12930,6 +13179,121 @@ async def auth_google_callback(
     return response
 
 
+@app.get("/admin/email-channels/status", dependencies=[Depends(_require_admin_token)])
+async def admin_email_channels_status() -> Dict[str, Any]:
+    row = _gmail_connection()
+    gmail_ready = _gmail_oauth_configured() and _gmail_connected()
+    if EMAIL_SEND_PROVIDER == "gmail":
+        active_provider = "gmail" if gmail_ready else "none"
+    elif EMAIL_SEND_PROVIDER == "smtp":
+        active_provider = "smtp" if _smtp_configured() else "none"
+    else:
+        active_provider = "gmail" if gmail_ready else "smtp" if _smtp_configured() else "none"
+    return {
+        "provider": EMAIL_SEND_PROVIDER,
+        "active_provider": active_provider,
+        "gmail": {
+            "configured": _gmail_oauth_configured(),
+            "connected": bool(row and row["refresh_token_encrypted"]),
+            "email": row["email"] if row else "",
+            "scopes": (row["scopes"] if row else "").split(),
+            "updated_at": row["updated_at"] if row else "",
+            "last_used_at": row["last_used_at"] if row else "",
+            "last_error": row["last_error"] if row else "",
+            "redirect_uri": _gmail_redirect_uri(),
+        },
+        "smtp": {
+            "configured": _smtp_configured(),
+            "from_email": SMTP_FROM_EMAIL if _smtp_configured() else "",
+        },
+    }
+
+
+@app.get("/admin/email-channels/gmail/connect", include_in_schema=False)
+async def admin_email_channels_gmail_connect(
+    identity: Dict[str, str] = Depends(_require_admin_identity),
+) -> Response:
+    if not _gmail_oauth_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Configura Google OAuth, GOOGLE_GMAIL_REDIRECT_URI y la clave de cifrado antes de conectar Gmail.",
+        )
+    state = _gmail_oauth_create_state(identity.get("user_id", ""))
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": _gmail_redirect_uri(),
+        "response_type": "code",
+        "scope": GOOGLE_GMAIL_SCOPES,
+        "state": state,
+        "access_type": "offline",
+        "include_granted_scopes": "true",
+        "prompt": "consent select_account",
+    }
+    return RedirectResponse(f"{GOOGLE_OAUTH_AUTHORIZE_URL}?{urlencode(params)}")
+
+
+@app.get("/auth/google/gmail/callback", include_in_schema=False)
+async def auth_google_gmail_callback(
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+) -> Response:
+    if error:
+        return RedirectResponse(f"/dashboard?gmail_error={quote(error)}")
+    state_payload = _gmail_oauth_consume_state(state or "")
+    if not state_payload:
+        return RedirectResponse("/dashboard?gmail_error=state_expired")
+    if not code:
+        return RedirectResponse("/dashboard?gmail_error=missing_code")
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            token_response = await client.post(
+                GOOGLE_OAUTH_TOKEN_URL,
+                data={
+                    "code": code,
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": _gmail_redirect_uri(),
+                    "grant_type": "authorization_code",
+                },
+                headers={"Accept": "application/json"},
+            )
+            token_response.raise_for_status()
+            token_data = token_response.json()
+            access_token = str(token_data.get("access_token") or "")
+            if not access_token:
+                raise RuntimeError("Google no devolvio access_token.")
+            userinfo_response = await client.get(
+                GOOGLE_OAUTH_USERINFO_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            userinfo_response.raise_for_status()
+            email = _normalize_email(userinfo_response.json().get("email", ""))
+        if not email:
+            raise RuntimeError("Google no devolvio el email de la cuenta.")
+        _gmail_save_tokens(token_data, email, str(token_data.get("scope") or GOOGLE_GMAIL_SCOPES))
+    except Exception as exc:
+        logger.error("Conexion Gmail fallo: %s", exc)
+        return RedirectResponse(f"/dashboard?gmail_error={quote(str(exc)[:160])}")
+    return RedirectResponse("/dashboard?gmail_connected=1")
+
+
+@app.delete("/admin/email-channels/gmail", dependencies=[Depends(_require_admin_token)])
+async def admin_email_channels_gmail_disconnect() -> Dict[str, Any]:
+    row = _gmail_connection()
+    if row and row["refresh_token_encrypted"]:
+        try:
+            refresh_token = _gmail_decrypt(row["refresh_token_encrypted"])
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.post("https://oauth2.googleapis.com/revoke", params={"token": refresh_token})
+        except Exception as exc:
+            logger.warning("No se pudo revocar Gmail en Google; se eliminara la conexion local: %s", exc)
+    with _get_db_connection() as connection:
+        connection.execute("DELETE FROM gmail_connections WHERE id = 'default'")
+        connection.commit()
+    return {"ok": True}
+
+
 # --- Vantelia 2.0 wizard onboarding (Sem 2) ---
 
 def _require_self_serve_user(
@@ -13182,7 +13546,7 @@ async def auth_forgot_password(
     data: AuthPasswordForgotPayload,
     request: Request,
 ) -> AuthSimpleResponse:
-    if not _smtp_configured():
+    if not _email_delivery_configured():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="La recuperacion por correo no esta disponible todavia. Configura SMTP en el servidor.",
@@ -15912,7 +16276,7 @@ async def auth_send_user_reset_link(
     user: sqlite3.Row = Depends(_require_authenticated_admin_user),
 ) -> AuthSimpleResponse:
     _ = user
-    if not _smtp_configured():
+    if not _email_delivery_configured():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="La recuperacion por correo no esta disponible todavia. Configura SMTP en el servidor.",
@@ -16378,7 +16742,7 @@ async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGene
     except Exception as exc:  # noqa: BLE001
         logger.debug("No se pudo registrar demo_generated en outreach: %s", exc)
 
-    if _smtp_configured() and CONSULTA_NOTIFICATION_EMAIL:
+    if _email_delivery_configured() and CONSULTA_NOTIFICATION_EMAIL:
         try:
             asunto = f"Nueva demo generada: {empresa_clean}"
             cuerpo_text = (
@@ -16640,7 +17004,7 @@ async def solicitar_consulta(data: ConsultaLeadPayload, request: Request) -> Dic
 
     notif_sent = False
     confirm_sent = False
-    if _smtp_configured():
+    if _email_delivery_configured():
         try:
             _send_email_message(
                 CONSULTA_NOTIFICATION_EMAIL,
@@ -16663,7 +17027,7 @@ async def solicitar_consulta(data: ConsultaLeadPayload, request: Request) -> Dic
         except Exception as exc:
             logger.error("Error enviando confirmacion de consulta a %s: %s", data.email, exc)
     else:
-        logger.warning("SMTP no configurado: no se han enviado emails de la consulta de %s", data.email)
+        logger.warning("Canal de email no configurado: no se han enviado emails de la consulta de %s", data.email)
 
     logger.info(
         "Consulta recibida de %s <%s> (IP: %s) notif=%s confirm=%s",
@@ -21127,7 +21491,6 @@ try:
         connect as outreach_connect,
         smtp_settings as outreach_smtp_settings,
         build_message as outreach_build_message,
-        smtp_send as outreach_smtp_send,
         fetch_candidates as outreach_fetch_candidates,
         normalize_email as outreach_normalize_email,
         _row_to_prospect as outreach_row_to_prospect,
@@ -22266,11 +22629,7 @@ def _autopilot_config_row(conn) -> Dict[str, Any]:
     clicks_30d = conn.execute(
         "SELECT COUNT(*) AS c FROM events WHERE type='click' AND ts >= datetime('now','-30 day')"
     ).fetchone()["c"]
-    try:
-        smtp_settings = outreach_smtp_settings()
-        smtp_ok = bool(smtp_settings.get("host") and smtp_settings.get("from_email"))
-    except Exception:
-        smtp_ok = False
+    smtp_ok = _email_delivery_configured()
     env_enabled = os.getenv("OUTREACH_AUTONOMOUS_ENABLED", "").lower() == "true"
     google_ok = bool(os.getenv("GOOGLE_PLACES_API_KEY", "").strip())
     targets_count = len(targets)
@@ -22288,7 +22647,7 @@ def _autopilot_config_row(conn) -> Dict[str, Any]:
     if not enabled_db:
         blockers.append("Modo automático pausado en el panel")
     if not smtp_ok:
-        blockers.append("SMTP no configurado (no se pueden enviar emails)")
+        blockers.append("No hay canal de email conectado (Gmail o SMTP)")
     if False and not google_ok:
         blockers.append("GOOGLE_PLACES_API_KEY vacía (no hay discovery)")
     tick_state = _outreach_tick_state_snapshot()
@@ -23913,7 +24272,7 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
 
                 msg = outreach_build_message(p.email, subject, text, html_body, settings, in_reply_to=in_reply_to)
                 try:
-                    outreach_smtp_send(msg, settings)
+                    _send_email_object(msg)
                 except Exception as send_err:  # noqa: BLE001
                     _job_log(conn, job_id, f"ERROR {p.email}: {send_err}")
                     limit_reason = _outreach_smtp_ratelimit_reason(send_err)
@@ -24292,10 +24651,10 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                         "daily_new_target": daily_new_target})
 
         settings = outreach_smtp_settings()
-        smtp_ok = bool(settings.get("host") and settings.get("from_email"))
+        smtp_ok = _email_delivery_configured()
         if not smtp_ok:
-            _autopilot_log("warning", "smtp_not_configured", "SMTP no configurado — no se puede enviar")
-            _outreach_tick_state_update("smtp_not_configured", "SMTP no configurado")
+            _autopilot_log("warning", "smtp_not_configured", "No hay canal de email conectado")
+            _outreach_tick_state_update("smtp_not_configured", "No hay canal de email conectado")
             return
 
         # ---- PASO 1: FOLLOW-UPS (cold pendientes + fu1 + fu2 + breakup) ----
@@ -24851,7 +25210,7 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
 
             msg = outreach_build_message(recipient, subject, text, html_body, settings, in_reply_to=in_reply_to)
             try:
-                outreach_smtp_send(msg, settings)
+                _send_email_object(msg)
             except Exception as err:  # noqa: BLE001
                 limit_reason = _outreach_smtp_ratelimit_reason(err)
                 if campaign_id and mode == "send":
@@ -24997,7 +25356,7 @@ def sendManualAcquisitionEmail(payload: OutreachManualEmailPayload):
         if OUTREACH_AVAILABLE:
             settings = outreach_smtp_settings()
             msg = outreach_build_message(recipient, subject, text_body or " ", final_html, settings)
-            outreach_smtp_send(msg, settings)
+            _send_email_object(msg)
             message_id = msg["Message-ID"] or ""
         else:
             _send_email_message(recipient, subject, text_body or " ", final_html)

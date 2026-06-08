@@ -5335,3 +5335,83 @@ def test_voice_booking_tools_absent_when_booking_disabled(api_module):
     cfg_disabled["booking"] = dict(cfg_enabled["booking"])
     cfg_disabled["booking"]["enabled"] = False
     assert api_module._voice_booking_tools("demo", cfg_disabled) == []
+def test_gmail_tokens_are_encrypted_and_connection_status_is_safe(client: TestClient, api_module):
+    with api_module._get_db_connection() as connection:
+        connection.execute("DELETE FROM gmail_connections")
+        connection.commit()
+
+    api_module._gmail_save_tokens(
+        {
+            "access_token": "access-secret",
+            "refresh_token": "refresh-secret",
+            "expires_in": 3600,
+            "scope": api_module.GOOGLE_GMAIL_SCOPES,
+        },
+        "sender@example.com",
+    )
+
+    row = api_module._gmail_connection()
+    assert row is not None
+    assert "access-secret" not in row["access_token_encrypted"]
+    assert "refresh-secret" not in row["refresh_token_encrypted"]
+    assert api_module._gmail_decrypt(row["access_token_encrypted"]) == "access-secret"
+    assert api_module._gmail_decrypt(row["refresh_token_encrypted"]) == "refresh-secret"
+
+    response = client.get(
+        "/admin/email-channels/status",
+        headers={"Authorization": "Bearer test-admin-token"},
+    )
+    assert response.status_code == 200
+    assert response.json()["gmail"]["connected"] is True
+    assert "access-secret" not in response.text
+    assert "refresh-secret" not in response.text
+
+    with api_module._get_db_connection() as connection:
+        connection.execute("DELETE FROM gmail_connections")
+        connection.commit()
+
+
+def test_gmail_oauth_connect_requests_offline_send_scope(client: TestClient, api_module, monkeypatch):
+    monkeypatch.setattr(api_module, "GOOGLE_CLIENT_ID", "client-id")
+    monkeypatch.setattr(api_module, "GOOGLE_CLIENT_SECRET", "client-secret")
+    monkeypatch.setattr(api_module, "GOOGLE_GMAIL_REDIRECT_URI", "https://app.test.local/auth/google/gmail/callback")
+
+    response = client.get(
+        "/admin/email-channels/gmail/connect",
+        headers={"Authorization": "Bearer test-admin-token"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 307
+    location = response.headers["location"]
+    assert "https://accounts.google.com/o/oauth2/v2/auth?" in location
+    assert "gmail.send" in location
+    assert "access_type=offline" in location
+    assert "prompt=consent+select_account" in location
+
+
+def test_email_provider_auto_prefers_gmail_and_falls_back_to_smtp(api_module, monkeypatch):
+    sent = []
+    message = api_module.EmailMessage()
+    message["From"] = "Vantelia <info@vantelia.es>"
+    message["To"] = "test@example.com"
+    message["Subject"] = "Prueba"
+    message.set_content("Hola")
+
+    monkeypatch.setattr(api_module, "EMAIL_SEND_PROVIDER", "auto")
+    monkeypatch.setattr(api_module, "_gmail_oauth_configured", lambda: True)
+    monkeypatch.setattr(api_module, "_gmail_connected", lambda: True)
+    monkeypatch.setattr(api_module, "_smtp_configured", lambda: True)
+    monkeypatch.setattr(api_module, "_gmail_send_message", lambda msg: sent.append("gmail"))
+    monkeypatch.setattr(api_module, "_smtp_send_message", lambda msg: sent.append("smtp"))
+    api_module._send_email_object(message)
+    assert sent == ["gmail"]
+
+    sent.clear()
+
+    def fail_gmail(msg):
+        raise RuntimeError("gmail unavailable")
+
+    monkeypatch.setattr(api_module, "_gmail_send_message", fail_gmail)
+    api_module._send_email_object(message)
+    assert sent == ["smtp"]
