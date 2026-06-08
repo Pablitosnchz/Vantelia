@@ -174,6 +174,8 @@ class ServicePublic(BaseModel):
     payment_type: str = "full"
     deposit_amount_cents: int = 0
     currency: str = "eur"
+    deposit_value: int = 0
+    confirm_booking_on_paid: bool = True
 
 
 class ServicesResponse(BaseModel):
@@ -204,6 +206,64 @@ class ServiceUpdatePayload(BaseModel):
     payment_type: Optional[str] = Field(default=None, pattern=r"^(full|deposit)$")
     deposit_amount_cents: Optional[int] = Field(default=None, ge=0, le=10_000_000)
     currency: Optional[str] = Field(default=None, pattern=r"^[a-zA-Z]{3}$")
+
+
+class ServicePaymentPolicyPayload(BaseModel):
+    mode: str = Field(default="none", max_length=40)
+    deposit_value: int = Field(default=0, ge=0, le=10_000_000)
+    confirm_booking_on_paid: bool = True
+
+
+class ConnectAccountStatus(BaseModel):
+    connected: bool = False
+    stripe_account_id: str = ""
+    charges_enabled: bool = False
+    payouts_enabled: bool = False
+    details_submitted: bool = False
+    # Opt-in: permite que la IA (web, WhatsApp, voz) envie enlaces de pago en
+    # nombre del negocio. Por defecto desactivado.
+    ai_send_enabled: bool = False
+
+
+class AiSendTogglePayload(BaseModel):
+    enabled: bool
+
+
+class ConnectStartResponse(BaseModel):
+    url: str
+
+
+class CustomerPaymentPublic(BaseModel):
+    id: str
+    contact_id: str = ""
+    booking_id: str = ""
+    service_id: str = ""
+    service_name: str = ""
+    amount_cents: int = 0
+    currency: str = "eur"
+    status: str = "pending"
+    checkout_url: str = ""
+    created_at: str = ""
+    paid_at: str = ""
+    updated_at: str = ""
+
+
+class CustomerPaymentsResponse(BaseModel):
+    items: List[CustomerPaymentPublic]
+    total: int
+
+
+class PaymentLinkPayload(BaseModel):
+    amount_cents: Optional[int] = Field(default=None, ge=50, le=10_000_000)
+
+
+class PaymentLinkResponse(BaseModel):
+    payment: CustomerPaymentPublic
+    checkout_url: str
+
+
+class PaymentRefundPayload(BaseModel):
+    amount_cents: Optional[int] = Field(default=None, ge=1, le=10_000_000)
 
 
 class StaffBookingCreatePayload(BaseModel):
@@ -484,6 +544,129 @@ class AppLeadsListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class CRMContactPayload(BaseModel):
+    name: str = Field(default="", max_length=200)
+    email: str = Field(default="", max_length=200)
+    phone: str = Field(default="", max_length=80)
+    status: str = Field(default="nuevo", max_length=40)
+    notes: str = Field(default="", max_length=8000)
+    tags: List[str] = Field(default_factory=list, max_length=30)
+    owner: str = Field(default="", max_length=200)
+    next_action: str = Field(default="", max_length=500)
+    next_action_at: str = Field(default="", max_length=40)
+    source: str = Field(default="manual", max_length=40)
+
+
+class CRMContactPublic(BaseModel):
+    id: str
+    cliente_id: str
+    name: str = ""
+    email: str = ""
+    phone: str = ""
+    status: str = "nuevo"
+    notes: str = ""
+    tags: List[str] = Field(default_factory=list)
+    owner: str = ""
+    next_action: str = ""
+    next_action_at: str = ""
+    source_first: str = ""
+    source_last: str = ""
+    first_seen_at: str = ""
+    last_seen_at: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    leads_count: int = 0
+    bookings_count: int = 0
+    chats_count: int = 0
+    voice_calls_count: int = 0
+
+
+class CRMContactListItem(BaseModel):
+    id: str
+    name: str = ""
+    email: str = ""
+    phone: str = ""
+    status: str = "nuevo"
+    tags: List[str] = Field(default_factory=list)
+    owner: str = ""
+    next_action: str = ""
+    next_action_at: str = ""
+    source_first: str = ""
+    source_last: str = ""
+    last_seen_at: str = ""
+    created_at: str = ""
+    leads_count: int = 0
+    bookings_count: int = 0
+    chats_count: int = 0
+    voice_calls_count: int = 0
+
+
+class CRMContactsListResponse(BaseModel):
+    items: List[CRMContactListItem]
+    total: int
+    page: int
+    page_size: int
+    pages: int = 0
+
+
+class CRMContactActivity(BaseModel):
+    kind: str
+    reference_id: str = ""
+    title: str = ""
+    detail: str = ""
+    status: str = ""
+    occurred_at: str = ""
+    source: str = ""
+
+
+class CRMContactDetailResponse(BaseModel):
+    contact: CRMContactPublic
+    activity: List[CRMContactActivity] = Field(default_factory=list)
+
+
+class ChannelEmailStatus(BaseModel):
+    provider: str = "vantelia_smtp"
+    fallback_enabled: bool = True
+    connected: bool = False
+    account_email: str = ""
+    account_name: str = ""
+    status: str = "not_connected"
+    last_error: str = ""
+    google_configured: bool = False
+
+
+class ChannelSmsStatus(BaseModel):
+    mode: str = "vantelia_default"
+    sender: str = ""
+    sender_status: str = "not_configured"
+    available: bool = False
+    last_error: str = ""
+
+
+class ChannelSettingsResponse(BaseModel):
+    email: ChannelEmailStatus
+    sms: ChannelSmsStatus
+
+
+class ChannelConnectResponse(BaseModel):
+    url: str
+
+
+class ChannelEmailSettingsPayload(BaseModel):
+    provider: str = Field(default="vantelia_smtp", max_length=40)
+    fallback_enabled: bool = True
+
+
+class ChannelSmsSettingsPayload(BaseModel):
+    mode: str = Field(default="vantelia_default", max_length=40)
+    sender: str = Field(default="", max_length=32)
+
+
+class ChannelTestPayload(BaseModel):
+    target: str = Field(min_length=3, max_length=320)
+    audit: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class AppQAItem(BaseModel):
@@ -1000,6 +1183,9 @@ class PortalBookingSummary(BaseModel):
     service_duration_minutes: int = 0
     service_price_cents: int = 0
     service_price_label: str = ""
+    payment_status: str = ""
+    payment_amount_cents: int = 0
+    payment_checkout_url: str = ""
     start_at: str = ""
     end_at: str = ""
     can_cancel: bool = True

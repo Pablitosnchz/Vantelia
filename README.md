@@ -12,6 +12,7 @@ Sistema SaaS de chatbox embebible multiempresa pensado para instalarlo en webs c
 - Correos transaccionales de cita, enlaces de gestion, cancelacion/reprogramacion y recordatorios.
 - Control de origen por cliente, portal con login por sesiones y endpoints admin protegidos por token o sesion.
 - Portal cliente con vistas de proximas/historicas y acciones de cancelacion o reprogramacion.
+- CRM ligero con ficha unica, estados comerciales e historial consolidado.
 - Cambio de contrasena dentro del portal y recuperacion por correo.
 - Identidad visual compartida en admin, portal, demo y paginas de gestion de cita.
 - `auto_onboarding.py` para generar y guardar `info.txt` dentro de `data/`.
@@ -73,6 +74,23 @@ streamlit run auto_onboarding.py
 - `POST /auth/password/reset`
 - `GET /auth/chats`
 - `GET /auth/chats/{session_id}`
+- `GET /auth/app/contacts`
+- `GET /auth/app/contacts/export.csv`
+- `POST /auth/app/contacts`
+- `GET /auth/app/contacts/{contact_id}`
+- `PUT /auth/app/contacts/{contact_id}`
+- `GET /auth/app/payments/connect/status`
+- `POST /auth/app/payments/connect/start`
+- `GET /auth/app/payments`
+- `POST /auth/app/bookings/{booking_id}/payment-link`
+- `POST /auth/app/payments/{payment_id}/refund`
+- `GET /auth/app/channels`
+- `POST /auth/app/channels/email/google/connect`
+- `GET /auth/app/channels/email/google/callback`
+- `POST /auth/app/channels/email/google/disconnect`
+- `POST /auth/app/channels/email/test`
+- `POST /auth/app/channels/sms/settings`
+- `POST /auth/app/channels/sms/test`
 - `POST /chat`
 - `GET /disponibilidad`
 - `POST /agendar`
@@ -84,6 +102,7 @@ streamlit run auto_onboarding.py
 - `POST /whatsapp/webhook`
 - `GET /whatsapp/webhook/{cliente_id}`
 - `POST /whatsapp/webhook/{cliente_id}`
+- `POST /stripe/connect/webhook`
 
 ## Endpoints admin
 
@@ -148,6 +167,16 @@ powershell -ExecutionPolicy Bypass -File .\scripts\backup.ps1
 - WhatsApp Cloud API reutiliza la misma IA, RAG y guardado de conversaciones que el widget. Activa el canal por cliente desde Admin > IA > WhatsApp y configura en Meta el webhook `https://app.vantelia.es/whatsapp/webhook` o `https://app.vantelia.es/whatsapp/webhook/{cliente_id}`.
 - Para WhatsApp, define `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_ACCESS_TOKEN` y opcionalmente `WHATSAPP_APP_SECRET`. Si cada cliente usa un token distinto, guarda el nombre de la variable de entorno en el campo `Env token acceso`.
 - Si vas a enviar desde `info@vantelia.es` y responder desde `soporte@vantelia.es`, deja listos `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_REPLY_TO` y `PORTAL_SUPPORT_EMAIL`.
+
+### Canales de envio por negocio
+
+Por defecto los emails y SMS usan la infraestructura de Vantelia. En **Canales de envio**, cada negocio puede conectar Gmail mediante OAuth para enviar realmente desde su cuenta, o solicitar un Sender ID SMS comercial. Nunca se piden contrasenas de Gmail ni tokens Twilio al cliente final.
+
+Para Gmail crea una aplicacion OAuth web en Google Cloud, habilita Gmail API, configura la pantalla de consentimiento y registra exactamente `GOOGLE_GMAIL_REDIRECT_URL`. Solicita solo `openid`, `email` y `https://www.googleapis.com/auth/gmail.send`. Antes de produccion, completa la verificacion de Google para el scope sensible.
+
+Configura `GOOGLE_GMAIL_CLIENT_ID`, `GOOGLE_GMAIL_CLIENT_SECRET`, `GOOGLE_GMAIL_REDIRECT_URL` y una clave Fernet estable en `OAUTH_TOKEN_ENCRYPTION_KEY`. Si esa clave cambia, las conexiones guardadas dejan de poder descifrarse.
+
+Los Sender ID alfanumericos se guardan inicialmente como `pending_registration` y no pueden enviar hasta que soporte los registre y active con Twilio. Para Espana, completa el registro regulatorio del Sender ID antes de usarlo. La tabla `client_channel_settings` deja preparados SID/token cifrados para provisionar una subcuenta Twilio aislada por negocio.
 - Si quieres recordatorios automaticos, ajusta `REMINDER_RUN_INTERVAL_MINUTES`, `REMINDER_24H_HOURS` y `REMINDER_2H_HOURS`.
 - Para cerrar citas ya pasadas sin borrarlas, ajusta `BOOKING_AUTO_COMPLETE_HOURS`.
 - Para el enlace de recuperacion de contrasena, ajusta `PASSWORD_RESET_TOKEN_HOURS`.

@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
 
 import httpx
+from cryptography.fernet import Fernet, InvalidToken
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -226,6 +227,12 @@ GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_OAUTH_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 GOOGLE_GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
 GOOGLE_GMAIL_SCOPES = "openid email profile https://www.googleapis.com/auth/gmail.send"
+GOOGLE_OAUTH_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
+GOOGLE_GMAIL_CLIENT_ID = os.getenv("GOOGLE_GMAIL_CLIENT_ID", "").strip()
+GOOGLE_GMAIL_CLIENT_SECRET = os.getenv("GOOGLE_GMAIL_CLIENT_SECRET", "").strip()
+GOOGLE_GMAIL_REDIRECT_URL = os.getenv("GOOGLE_GMAIL_REDIRECT_URL", "").strip()
+OAUTH_TOKEN_ENCRYPTION_KEY = os.getenv("OAUTH_TOKEN_ENCRYPTION_KEY", "").strip()
+GOOGLE_GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 DEFAULT_FREE_QUOTA = int(os.getenv("DEFAULT_FREE_QUOTA", "50"))
 ONBOARDING_MAX_PAGES_DEFAULT = int(os.getenv("ONBOARDING_MAX_PAGES", "12"))
 
@@ -313,6 +320,9 @@ STRIPE_CONNECT_API_VERSION = os.getenv("STRIPE_CONNECT_API_VERSION", "2026-05-27
 STRIPE_CONNECT_BASE_URL = "https://api.stripe.com/v2/core"
 STRIPE_CONNECT_COUNTRY = os.getenv("STRIPE_CONNECT_COUNTRY", "es").strip().lower()
 BOOKING_PAYMENT_EXPIRY_MINUTES = min(24 * 60, max(30, int(os.getenv("BOOKING_PAYMENT_EXPIRY_MINUTES", "30"))))
+STRIPE_CONNECT_CLIENT_ID = os.getenv("STRIPE_CONNECT_CLIENT_ID", "").strip()
+STRIPE_CONNECT_RETURN_URL = os.getenv("STRIPE_CONNECT_RETURN_URL", "").strip()
+STRIPE_CONNECT_REFRESH_URL = os.getenv("STRIPE_CONNECT_REFRESH_URL", "").strip()
 
 # Self-serve plans (Vantelia 2.0)
 STRIPE_PRICE_STARTER = os.getenv("STRIPE_PRICE_STARTER", "").strip()
@@ -1883,6 +1893,268 @@ def _init_database() -> None:
             "CREATE INDEX IF NOT EXISTS idx_bot_leads_cliente ON bot_leads(cliente_id, created_at)"
         )
 
+        # CRM ligero: identidad consolidada y enlaces a registros operativos.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS crm_contacts (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                name TEXT NOT NULL DEFAULT '',
+                email TEXT NOT NULL DEFAULT '',
+                email_normalized TEXT NOT NULL DEFAULT '',
+                phone TEXT NOT NULL DEFAULT '',
+                phone_normalized TEXT NOT NULL DEFAULT '',
+                search_text TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'nuevo',
+                notes TEXT NOT NULL DEFAULT '',
+                tags_json TEXT NOT NULL DEFAULT '[]',
+                owner TEXT NOT NULL DEFAULT '',
+                next_action TEXT NOT NULL DEFAULT '',
+                next_action_at TEXT NOT NULL DEFAULT '',
+                source_first TEXT NOT NULL DEFAULT '',
+                source_last TEXT NOT NULL DEFAULT '',
+                first_seen_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_crm_contacts_cliente ON crm_contacts(cliente_id, updated_at)"
+        )
+        crm_contact_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(crm_contacts)").fetchall()
+        }
+        if "search_text" not in crm_contact_columns:
+            connection.execute("ALTER TABLE crm_contacts ADD COLUMN search_text TEXT NOT NULL DEFAULT ''")
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_contacts_email
+            ON crm_contacts(cliente_id, email_normalized)
+            WHERE email_normalized <> ''
+            """
+        )
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_contacts_phone
+            ON crm_contacts(cliente_id, phone_normalized)
+            WHERE phone_normalized <> ''
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_crm_contacts_status ON crm_contacts(cliente_id, status, last_seen_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_crm_contacts_owner ON crm_contacts(cliente_id, owner, last_seen_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_crm_contacts_source ON crm_contacts(cliente_id, source_last, last_seen_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_crm_contacts_next_action ON crm_contacts(cliente_id, next_action_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_crm_contacts_created ON crm_contacts(cliente_id, created_at)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS crm_contact_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id TEXT NOT NULL,
+                contact_id TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                UNIQUE(cliente_id, entity_type, entity_id)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_crm_contact_links_contact ON crm_contact_links(cliente_id, contact_id, created_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_crm_contact_links_source ON crm_contact_links(cliente_id, source, contact_id)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS crm_contact_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id TEXT NOT NULL,
+                contact_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                actor TEXT NOT NULL DEFAULT 'system',
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_crm_contact_audit_contact ON crm_contact_audit(cliente_id, contact_id, id)"
+        )
+
+        # Stripe Connect para pagos de clientes finales. Separado de subscriptions.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS client_payment_accounts (
+                cliente_id TEXT PRIMARY KEY,
+                provider TEXT NOT NULL DEFAULT 'stripe_connect',
+                stripe_account_id TEXT NOT NULL DEFAULT '',
+                charges_enabled INTEGER NOT NULL DEFAULT 0,
+                payouts_enabled INTEGER NOT NULL DEFAULT 0,
+                details_submitted INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_accounts_stripe ON client_payment_accounts(stripe_account_id) WHERE stripe_account_id <> ''"
+        )
+        payment_account_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(client_payment_accounts)").fetchall()
+        }
+        if "ai_send_enabled" not in payment_account_columns:
+            connection.execute(
+                "ALTER TABLE client_payment_accounts ADD COLUMN ai_send_enabled INTEGER NOT NULL DEFAULT 0"
+            )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS service_payment_policies (
+                cliente_id TEXT NOT NULL,
+                service_id TEXT NOT NULL,
+                mode TEXT NOT NULL DEFAULT 'none',
+                deposit_value INTEGER NOT NULL DEFAULT 0,
+                confirm_booking_on_paid INTEGER NOT NULL DEFAULT 1,
+                refund_policy_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (cliente_id, service_id)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS customer_payments (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                contact_id TEXT NOT NULL DEFAULT '',
+                booking_id TEXT NOT NULL DEFAULT '',
+                service_id TEXT NOT NULL DEFAULT '',
+                service_name TEXT NOT NULL DEFAULT '',
+                stripe_account_id TEXT NOT NULL DEFAULT '',
+                stripe_checkout_session_id TEXT NOT NULL DEFAULT '',
+                stripe_payment_intent_id TEXT NOT NULL DEFAULT '',
+                amount_cents INTEGER NOT NULL DEFAULT 0,
+                currency TEXT NOT NULL DEFAULT 'eur',
+                status TEXT NOT NULL DEFAULT 'pending',
+                checkout_url TEXT NOT NULL DEFAULT '',
+                paid_at TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_customer_payments_client ON customer_payments(cliente_id, created_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_customer_payments_booking ON customer_payments(cliente_id, booking_id)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_customer_payments_contact ON customer_payments(cliente_id, contact_id)"
+        )
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_payments_session
+            ON customer_payments(stripe_checkout_session_id)
+            WHERE stripe_checkout_session_id <> ''
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS customer_payment_events (
+                stripe_event_id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                payment_id TEXT NOT NULL DEFAULT '',
+                event_type TEXT NOT NULL,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_customer_payment_events_client ON customer_payment_events(cliente_id, created_at)"
+        )
+
+        # Canales de envio multi-tenant. Los secretos OAuth se guardan cifrados.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS client_channel_settings (
+                cliente_id TEXT PRIMARY KEY,
+                email_provider TEXT NOT NULL DEFAULT 'vantelia_smtp',
+                email_fallback_enabled INTEGER NOT NULL DEFAULT 1,
+                sms_mode TEXT NOT NULL DEFAULT 'vantelia_default',
+                sms_sender TEXT NOT NULL DEFAULT '',
+                sms_sender_status TEXT NOT NULL DEFAULT 'not_configured',
+                sms_twilio_account_sid_encrypted TEXT NOT NULL DEFAULT '',
+                sms_twilio_auth_token_encrypted TEXT NOT NULL DEFAULT '',
+                last_error TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS client_oauth_connections (
+                cliente_id TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                account_email TEXT NOT NULL DEFAULT '',
+                account_name TEXT NOT NULL DEFAULT '',
+                scopes_json TEXT NOT NULL DEFAULT '[]',
+                access_token_encrypted TEXT NOT NULL DEFAULT '',
+                refresh_token_encrypted TEXT NOT NULL DEFAULT '',
+                expires_at TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'active',
+                last_error TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (cliente_id, provider)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS client_channel_oauth_states (
+                state_hash TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                code_verifier_encrypted TEXT NOT NULL,
+                created_at REAL NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS client_channel_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                provider TEXT NOT NULL DEFAULT '',
+                success INTEGER NOT NULL DEFAULT 0,
+                detail TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_client_channel_audit_client ON client_channel_audit(cliente_id, created_at)"
+        )
+
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS live_chat_sessions (
@@ -2857,6 +3129,15 @@ from api_models import (
     ServicesResponse,
     ServicePayload,
     ServiceUpdatePayload,
+    ServicePaymentPolicyPayload,
+    ConnectAccountStatus,
+    AiSendTogglePayload,
+    ConnectStartResponse,
+    CustomerPaymentPublic,
+    CustomerPaymentsResponse,
+    PaymentLinkPayload,
+    PaymentLinkResponse,
+    PaymentRefundPayload,
     BookingUpdatePayload,
     AdminBookingResumen,
     AdminReminderRunResult,
@@ -2884,6 +3165,19 @@ from api_models import (
     AppLeadPublic,
     AppLeadPayload,
     AppLeadsListResponse,
+    CRMContactPayload,
+    CRMContactPublic,
+    CRMContactListItem,
+    CRMContactsListResponse,
+    CRMContactActivity,
+    CRMContactDetailResponse,
+    ChannelEmailStatus,
+    ChannelSmsStatus,
+    ChannelSettingsResponse,
+    ChannelConnectResponse,
+    ChannelEmailSettingsPayload,
+    ChannelSmsSettingsPayload,
+    ChannelTestPayload,
     AppQAItem,
     AppQAPayload,
     AppQAUpdatePayload,
@@ -3049,6 +3343,11 @@ def _format_price_cents(cents: int) -> str:
 
 def _service_row_to_public(row: sqlite3.Row) -> Dict[str, Any]:
     price_cents = int(row["price_cents"] or 0)
+    with _get_db_connection() as connection:
+        policy = connection.execute(
+            "SELECT * FROM service_payment_policies WHERE cliente_id=? AND service_id=?",
+            (row["cliente_id"], row["slug"]),
+        ).fetchone()
     return {
         "id": row["slug"],
         "nombre": row["name"],
@@ -3057,10 +3356,12 @@ def _service_row_to_public(row: sqlite3.Row) -> Dict[str, Any]:
         "price_cents": price_cents,
         "price_label": _format_price_cents(price_cents),
         "is_active": bool(row["is_active"]),
-        "payment_mode": row["payment_mode"] or "payment_disabled",
+        "payment_mode": policy["mode"] if policy else (row["payment_mode"] or "payment_disabled"),
         "payment_type": row["payment_type"] or "full",
         "deposit_amount_cents": int(row["deposit_amount_cents"] or 0),
         "currency": (row["currency"] or "eur").lower(),
+        "deposit_value": int(policy["deposit_value"] or 0) if policy else 0,
+        "confirm_booking_on_paid": bool(policy["confirm_booking_on_paid"]) if policy else True,
     }
 
 
@@ -4826,6 +5127,181 @@ def send_client_email(
         return {"ok": False, "provider": "none", "error": str(exc)[:500]}
 
 
+def _channel_fernet() -> Fernet:
+    if not OAUTH_TOKEN_ENCRYPTION_KEY:
+        raise RuntimeError("OAUTH_TOKEN_ENCRYPTION_KEY no esta configurada.")
+    try:
+        return Fernet(OAUTH_TOKEN_ENCRYPTION_KEY.encode("ascii"))
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError("OAUTH_TOKEN_ENCRYPTION_KEY no es una clave Fernet valida.") from exc
+
+
+def _encrypt_channel_secret(value: str) -> str:
+    return _channel_fernet().encrypt(str(value or "").encode("utf-8")).decode("ascii") if value else ""
+
+
+def _decrypt_channel_secret(value: str) -> str:
+    if not value:
+        return ""
+    try:
+        return _channel_fernet().decrypt(value.encode("ascii")).decode("utf-8")
+    except InvalidToken as exc:
+        raise RuntimeError("No se pudo descifrar la credencial del canal.") from exc
+
+
+def _ensure_channel_settings(cliente_id: str) -> sqlite3.Row:
+    now = _utc_now_iso()
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO client_channel_settings (cliente_id, created_at, updated_at)
+            VALUES (?, ?, ?) ON CONFLICT(cliente_id) DO NOTHING
+            """,
+            (cliente_id, now, now),
+        )
+        connection.commit()
+        return connection.execute(
+            "SELECT * FROM client_channel_settings WHERE cliente_id=?", (cliente_id,)
+        ).fetchone()
+
+
+def _channel_audit(
+    cliente_id: str, channel: str, event_type: str, provider: str, success: bool, detail: str = ""
+) -> None:
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO client_channel_audit
+                (cliente_id, channel, event_type, provider, success, detail, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (cliente_id, channel, event_type, provider, int(success), _sanitize_text(detail)[:500], _utc_now_iso()),
+        )
+        connection.commit()
+
+
+def _client_gmail_connection(cliente_id: str) -> Optional[sqlite3.Row]:
+    with _get_db_connection() as connection:
+        return connection.execute(
+            "SELECT * FROM client_oauth_connections WHERE cliente_id=? AND provider='gmail_oauth'",
+            (cliente_id,),
+        ).fetchone()
+
+
+def _client_gmail_access_token(cliente_id: str, connection_row: sqlite3.Row) -> str:
+    access_token = _decrypt_channel_secret(connection_row["access_token_encrypted"])
+    expires_at = _from_utc_iso(connection_row["expires_at"] or "")
+    if access_token and expires_at and expires_at > datetime.now(timezone.utc) + timedelta(seconds=60):
+        return access_token
+    refresh_token = _decrypt_channel_secret(connection_row["refresh_token_encrypted"])
+    if not refresh_token:
+        raise RuntimeError("Google requiere volver a conectar la cuenta.")
+    response = httpx.post(
+        GOOGLE_OAUTH_TOKEN_URL,
+        data={
+            "client_id": GOOGLE_GMAIL_CLIENT_ID,
+            "client_secret": GOOGLE_GMAIL_CLIENT_SECRET,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        },
+        timeout=15,
+    )
+    response.raise_for_status()
+    token_data = response.json()
+    access_token = str(token_data.get("access_token", ""))
+    if not access_token:
+        raise RuntimeError("Google no devolvio un token de acceso.")
+    expires = datetime.now(timezone.utc) + timedelta(seconds=int(token_data.get("expires_in", 3600)))
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            UPDATE client_oauth_connections
+            SET access_token_encrypted=?, expires_at=?, status='active', last_error='', updated_at=?
+            WHERE cliente_id=? AND provider='gmail_oauth'
+            """,
+            (_encrypt_channel_secret(access_token), expires.isoformat(), _utc_now_iso(), cliente_id),
+        )
+        connection.commit()
+    return access_token
+
+
+def _send_gmail_message(
+    cliente_id: str, connection_row: sqlite3.Row, to_email: str, subject: str,
+    text_body: str, html_body: str = "", reply_to: Optional[str] = None,
+) -> None:
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = connection_row["account_email"]
+    message["To"] = to_email
+    if reply_to:
+        message["Reply-To"] = reply_to
+    message.set_content(text_body)
+    if html_body:
+        message.add_alternative(html_body, subtype="html")
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii").rstrip("=")
+    response = httpx.post(
+        GOOGLE_GMAIL_SEND_URL,
+        json={"raw": raw},
+        headers={"Authorization": f"Bearer {_client_gmail_access_token(cliente_id, connection_row)}"},
+        timeout=20,
+    )
+    response.raise_for_status()
+
+
+def _send_client_email(
+    cliente_id: str, to_email: str, subject: str, text_body: str,
+    html_body: str = "", reply_to: Optional[str] = None,
+) -> str:
+    settings = _ensure_channel_settings(cliente_id)
+    provider = settings["email_provider"] or "vantelia_smtp"
+    if provider == "gmail_oauth":
+        connection_row = _client_gmail_connection(cliente_id)
+        if connection_row and connection_row["status"] == "active":
+            try:
+                _send_gmail_message(cliente_id, connection_row, to_email, subject, text_body, html_body, reply_to)
+                _channel_audit(cliente_id, "email", "send", provider, True)
+                return provider
+            except Exception as exc:  # noqa: BLE001
+                error = str(exc)[:500]
+                with _get_db_connection() as connection:
+                    connection.execute(
+                        "UPDATE client_oauth_connections SET status='error', last_error=?, updated_at=? WHERE cliente_id=? AND provider='gmail_oauth'",
+                        (error, _utc_now_iso(), cliente_id),
+                    )
+                    connection.commit()
+                _channel_audit(cliente_id, "email", "send_failed", provider, False, error)
+                if not settings["email_fallback_enabled"]:
+                    raise
+        elif not settings["email_fallback_enabled"]:
+            raise RuntimeError("La cuenta de Google remitente no esta disponible.")
+    _send_email_message(to_email, subject, text_body, html_body, reply_to)
+    _channel_audit(cliente_id, "email", "send", "vantelia_smtp", True)
+    return "vantelia_smtp"
+
+
+async def _send_client_sms(cliente_id: str, to_number: str, body: str) -> bool:
+    settings = _ensure_channel_settings(cliente_id)
+    mode = settings["sms_mode"] or "vantelia_default"
+    sender = ""
+    account_sid, auth_token = TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN
+    if mode in {"twilio_dedicated_number", "twilio_alphanumeric_sender"}:
+        if settings["sms_sender_status"] != "active":
+            _channel_audit(cliente_id, "sms", "send_rejected", mode, False, "Remitente no activo.")
+            return False
+        sender = settings["sms_sender"] or ""
+        account_sid = _decrypt_channel_secret(settings["sms_twilio_account_sid_encrypted"]) or account_sid
+        auth_token = _decrypt_channel_secret(settings["sms_twilio_auth_token_encrypted"]) or auth_token
+    else:
+        config = CONFIG_CLIENTES.get(cliente_id) or {}
+        sender = TWILIO_SMS_SENDER or (config.get("voice", {}) or {}).get("twilio_phone_number") or TWILIO_DEFAULT_PHONE_NUMBER
+    if mode == "vantelia_default":
+        sent = await _send_twilio_sms(to_number, sender, body)
+    else:
+        sent = await _send_twilio_sms(to_number, sender, body, account_sid=account_sid, auth_token=auth_token)
+    _channel_audit(cliente_id, "sms", "send" if sent else "send_failed", mode, sent)
+    return sent
+
+
 def _preferred_public_base_url(request: Optional[Request] = None) -> str:
     return _configured_public_base_url() or (_public_base_url(request) if request is not None else "")
 
@@ -5159,7 +5635,6 @@ def _delete_agenda_block(cliente_id: str, block_id: str, *, employee_id: Optiona
 def _reminder_channel_availability(cliente_id: str) -> Dict[str, Dict[str, Any]]:
     config = _get_client_config(cliente_id)
     whatsapp_cfg = config.get("whatsapp", {}) or {}
-    voice_cfg = config.get("voice", {}) or {}
 
     whatsapp_plan = bool(_plan_feature(cliente_id, "whatsapp_enabled"))
     whatsapp_token = _whatsapp_access_token_for_client(cliente_id)
@@ -5180,22 +5655,9 @@ def _reminder_channel_availability(cliente_id: str) -> Dict[str, Dict[str, Any]]
     else:
         whatsapp_reason = "Disponible."
 
-    sms_plan = _client_voice_plan_enabled(cliente_id)
-    sms_sender = str(
-        TWILIO_SMS_SENDER
-        or voice_cfg.get("twilio_phone_number")
-        or TWILIO_DEFAULT_PHONE_NUMBER
-        or ""
-    ).strip()
-    sms_ready = bool(sms_plan and _voice_twilio_configured() and sms_sender)
-    if not sms_plan:
-        sms_reason = "Necesitas un plan con voz para SMS."
-    elif not _voice_twilio_configured():
-        sms_reason = "Faltan credenciales de Twilio en servidor."
-    elif not sms_sender:
-        sms_reason = "Falta un numero remitente para SMS."
-    else:
-        sms_reason = "Disponible."
+    channel_status = _channel_settings_public(cliente_id)
+    sms_ready = channel_status.sms.available
+    sms_reason = "Disponible." if sms_ready else "Configura y activa un remitente en Canales de envio."
 
     return {
         "email": {"available": True, "reason": "Disponible.", "label": "Email"},
@@ -6615,6 +7077,17 @@ def _delete_client_everywhere(cliente_id: str) -> None:
         connection.execute("DELETE FROM kb_qa WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM kb_documents WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM bot_leads WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM crm_contact_audit WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM crm_contact_links WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM crm_contacts WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM customer_payment_events WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM customer_payments WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM service_payment_policies WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM client_payment_accounts WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM client_channel_audit WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM client_channel_oauth_states WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM client_oauth_connections WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM client_channel_settings WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM clientes WHERE cliente_id = ?", (cliente_id,))
         connection.commit()
 
@@ -9901,20 +10374,12 @@ async def _send_booking_sms_reminder(
     *,
     extra_message: str = "",
 ) -> bool:
-    config = _get_client_config(booking_row["cliente_id"])
-    voice_cfg = config.get("voice", {}) or {}
-    from_number = str(
-        TWILIO_SMS_SENDER
-        or voice_cfg.get("twilio_phone_number")
-        or TWILIO_DEFAULT_PHONE_NUMBER
-        or ""
-    ).strip()
     to_number = _booking_customer_phone_for_channel(booking_row, "sms")
-    if not (from_number and to_number):
+    if not to_number:
         return False
-    return await _send_twilio_sms(
+    return await _send_client_sms(
+        booking_row["cliente_id"],
         to_number,
-        from_number,
         _booking_message_text_for_channel(booking_row, kind, request, extra_message=extra_message),
     )
 
@@ -10204,6 +10669,17 @@ def _message_requests_reschedule_booking(message: str) -> bool:
     return any(word in text for word in ("reprogramar", "cambiar cita", "cambiar la cita", "mover cita", "modificar cita", "cambiar hora", "cambiar fecha"))
 
 
+def _message_requests_payment(message: str) -> bool:
+    text = _strip_accents(str(message or "").lower())
+    return any(
+        word in text
+        for word in (
+            "pagar", "enlace de pago", "link de pago", "quiero pagar", "como pago",
+            "abonar", "dejar una senal", "pagar la senal", "pagar el deposito", "metodo de pago",
+        )
+    )
+
+
 async def _process_booking_management_message(
     *,
     cliente_id: str,
@@ -10294,6 +10770,62 @@ async def _process_booking_management_message(
             f"Listo, he cambiado la cita {code} al {fecha_humana} a las {new_time}. El numero de reserva sigue siendo el mismo.",
         )
     return ("booking_reschedule", result.get("error") or "No se pudo reprogramar la cita.")
+
+
+async def _process_payment_request_message(
+    *,
+    cliente_id: str,
+    message: str,
+    request: Optional[Request],
+    source: str,
+    trusted_phone: str = "",
+) -> Optional[Tuple[str, str]]:
+    """Flujo de pago para el chat (web/WhatsApp). Si el cliente final pide pagar,
+    localiza su cita y genera el enlace, enviado por el canal que toca segun el
+    origen de la cita (web/WhatsApp -> email). Resuelve la cita por: numero de
+    reserva en el mensaje; si no, telefono verificado del canal (WhatsApp) o
+    email/telefono que el cliente haya escrito. Devuelve (intent, texto) o None
+    si el mensaje no es una peticion de pago."""
+    if not _message_requests_payment(message):
+        return None
+    if not _ai_payment_sending_available(cliente_id):
+        return (
+            "payment",
+            "Ahora mismo no puedo gestionar el pago online. El equipo del negocio puede ayudarte directamente.",
+        )
+    code = _extract_booking_code_from_text(message)
+    booking = _get_booking_row_by_code(cliente_id, code) if code else None
+    if code and not booking:
+        return (
+            "payment",
+            "No encuentro ninguna cita con ese numero de reserva. Revisa el codigo (formato R-XXXX).",
+        )
+    if not booking:
+        # Sin codigo: intenta identificar al cliente por el telefono verificado del
+        # canal (WhatsApp) o por el email/telefono que haya escrito en el mensaje.
+        msg_email = _extract_email_from_text(message)
+        msg_phone = trusted_phone or _extract_phone_from_text(message)
+        booking = _latest_booking_for_contact(cliente_id, phone=msg_phone, email=msg_email)
+    if not booking:
+        return (
+            "payment",
+            "Para enviarte el enlace de pago necesito el numero de reserva de tu cita (formato R-XXXX), "
+            "o el email o telefono con el que reservaste.",
+        )
+    result = await _ai_send_payment_link(
+        cliente_id, booking, base_url=_preferred_public_base_url(request)
+    )
+    if not result.get("ok"):
+        return ("payment", result.get("error") or "No se pudo generar el enlace de pago.")
+    amount_label = result.get("amount_label", "")
+    checkout_url = result.get("checkout_url", "")
+    servicio = result.get("servicio", "tu cita")
+    parts = [f"He generado el enlace para pagar {servicio} ({amount_label})."]
+    if result.get("method") == "email" and result.get("sent"):
+        parts.append("Te lo he enviado por email.")
+    if checkout_url:
+        parts.append(f"Tambien puedes pagar aqui: {checkout_url}")
+    return ("payment", " ".join(parts))
 
 
 def _backfill_booking_codes() -> int:
@@ -11152,6 +11684,17 @@ def _store_booking(record: Dict[str, Any]) -> None:
         )
         connection.commit()
     _booking_payment_after_store(record["id"])
+    booking_status = "confirmado" if record.get("status") == "confirmed" else "cita_pendiente"
+    _crm_upsert_contact(
+        record["cliente_id"],
+        name=record.get("nombre", ""),
+        email=record.get("email", ""),
+        phone=record.get("telefono", ""),
+        source=record.get("source", "booking"),
+        status=booking_status,
+        entity_type="booking",
+        entity_id=record["id"],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -11611,6 +12154,11 @@ def _portal_booking_summary_from_row(
     # La asistencia se marca en citas pasadas no canceladas; permite tambien
     # corregir una completada-auto -> no_show (o viceversa) despues.
     can_mark_attendance = status_value != "cancelled" and (is_past or status_value in {"completed", "no_show"})
+    with _get_db_connection() as connection:
+        payment = connection.execute(
+            "SELECT * FROM customer_payments WHERE cliente_id=? AND booking_id=? ORDER BY created_at DESC LIMIT 1",
+            (row["cliente_id"], row["id"]),
+        ).fetchone()
     return PortalBookingSummary(
         booking_id=data["booking_id"],
         empresa=data["empresa"],
@@ -11635,6 +12183,9 @@ def _portal_booking_summary_from_row(
         service_duration_minutes=int(data.get("service_duration_minutes", 0) or 0),
         service_price_cents=int(data.get("service_price_cents", 0) or 0),
         service_price_label=data.get("service_price_label", ""),
+        payment_status=payment["status"] if payment else "",
+        payment_amount_cents=int(payment["amount_cents"] or 0) if payment else 0,
+        payment_checkout_url=payment["checkout_url"] if payment else "",
         start_at=data["start_at"],
         end_at=data["end_at"],
         can_cancel=can_edit,
@@ -12005,6 +12556,11 @@ async def _update_booking_details(
         },
     )
     refreshed = _load_booking_or_404(booking_row["id"])
+    _crm_upsert_contact(
+        refreshed["cliente_id"], name=refreshed["nombre"], email=refreshed["email"],
+        phone=refreshed["telefono"] or "", source=source, status="confirmado",
+        entity_type="booking", entity_id=refreshed["id"],
+    )
     try:
         await _send_booking_reminder_by_kind(refreshed, "rescheduled" if slot_changed else "confirmed", request)
     except Exception as exc:  # noqa: BLE001
@@ -12057,6 +12613,11 @@ async def _cancel_booking_core(
         },
     )
     refreshed = _load_booking_or_404(booking_id)
+    _crm_upsert_contact(
+        refreshed["cliente_id"], name=refreshed["nombre"], email=refreshed["email"],
+        phone=refreshed["telefono"] or "", source=source, status="interesado",
+        entity_type="booking", entity_id=refreshed["id"],
+    )
     try:
         await _send_booking_reminder_by_kind(refreshed, "cancelled", request, extra_message=cancel_reason)
     except Exception as exc:  # noqa: BLE001
@@ -12634,6 +13195,14 @@ def _auto_complete_past_bookings() -> int:
             )
             completed += 1
         connection.commit()
+    for row in rows:
+        booking = _get_booking_row_by_id(row["id"])
+        if booking:
+            _crm_upsert_contact(
+                booking["cliente_id"], name=booking["nombre"], email=booking["email"],
+                phone=booking["telefono"] or "", source="automation", status="cliente",
+                entity_type="booking", entity_id=booking["id"],
+            )
     return completed
 
 
@@ -14252,6 +14821,1513 @@ async def app_appearance_post(
     return await app_appearance_get(user)
 
 
+# --- CRM ligero ------------------------------------------------------------
+
+CRM_CONTACT_STATUSES = {"nuevo", "interesado", "cita_pendiente", "confirmado", "cliente", "perdido"}
+CRM_STATUS_PRIORITY = {
+    "nuevo": 0,
+    "interesado": 1,
+    "cita_pendiente": 2,
+    "confirmado": 3,
+    "cliente": 4,
+    "perdido": -1,
+}
+CRM_CONTACT_SORTS = {
+    "last_activity_desc": "c.last_seen_at DESC, c.id DESC",
+    "last_activity_asc": "c.last_seen_at ASC, c.id ASC",
+    "created_desc": "c.created_at DESC, c.id DESC",
+    "created_asc": "c.created_at ASC, c.id ASC",
+    "name_asc": "c.name COLLATE NOCASE ASC, c.id ASC",
+    "name_desc": "c.name COLLATE NOCASE DESC, c.id DESC",
+    "next_action_asc": "CASE WHEN c.next_action_at = '' THEN 1 ELSE 0 END, c.next_action_at ASC, c.id ASC",
+    "next_action_desc": "CASE WHEN c.next_action_at = '' THEN 1 ELSE 0 END, c.next_action_at DESC, c.id DESC",
+}
+CRM_BACKFILLED_CLIENTS: Set[str] = set()
+
+
+def _normalize_crm_email(value: str) -> str:
+    return _sanitize_text(value).strip().lower()
+
+
+def _normalize_crm_phone(value: str) -> str:
+    raw = _sanitize_text(value).strip()
+    digits = re.sub(r"\D", "", raw)
+    if not digits:
+        return ""
+    if raw.startswith("+"):
+        return "+" + digits
+    if len(digits) == 9:
+        return "+34" + digits
+    return "+" + digits
+
+
+def _normalize_crm_search(value: str) -> str:
+    text = unicodedata.normalize("NFKD", _sanitize_text(value, allow_multiline=True)).casefold()
+    normalized = " ".join("".join(ch for ch in text if not unicodedata.combining(ch)).split())
+    digits = re.sub(r"\D", "", normalized)
+    if len(digits) >= 6 and not re.search(r"[a-z]", normalized):
+        return digits
+    return normalized
+
+
+def _crm_search_text(*values: str) -> str:
+    combined = " ".join(value or "" for value in values)
+    normalized = _normalize_crm_search(combined)
+    digits = re.sub(r"\D", "", combined)
+    return f"{normalized} {digits}".strip() if len(digits) >= 6 else normalized
+
+
+def _crm_json_list(raw: str) -> List[str]:
+    try:
+        value = json.loads(raw or "[]")
+    except (TypeError, ValueError):
+        return []
+    return [str(item) for item in value if str(item).strip()] if isinstance(value, list) else []
+
+
+def _crm_contact_public(row: sqlite3.Row, connection: Optional[sqlite3.Connection] = None) -> CRMContactPublic:
+    counts = {"lead": 0, "booking": 0, "chat": 0, "voice": 0}
+    owns_connection = connection is None
+    if owns_connection:
+        connection = _get_db_connection()
+    try:
+        for item in connection.execute(
+            """
+            SELECT entity_type, COUNT(*) AS total
+            FROM crm_contact_links
+            WHERE cliente_id = ? AND contact_id = ?
+            GROUP BY entity_type
+            """,
+            (row["cliente_id"], row["id"]),
+        ).fetchall():
+            counts[item["entity_type"]] = int(item["total"] or 0)
+    finally:
+        if owns_connection:
+            connection.close()
+    return CRMContactPublic(
+        id=row["id"],
+        cliente_id=row["cliente_id"],
+        name=row["name"] or "",
+        email=row["email"] or "",
+        phone=row["phone"] or "",
+        status=row["status"] or "nuevo",
+        notes=row["notes"] or "",
+        tags=_crm_json_list(row["tags_json"]),
+        owner=row["owner"] or "",
+        next_action=row["next_action"] or "",
+        next_action_at=row["next_action_at"] or "",
+        source_first=row["source_first"] or "",
+        source_last=row["source_last"] or "",
+        first_seen_at=row["first_seen_at"] or "",
+        last_seen_at=row["last_seen_at"] or "",
+        created_at=row["created_at"] or "",
+        updated_at=row["updated_at"] or "",
+        leads_count=counts["lead"],
+        bookings_count=counts["booking"],
+        chats_count=counts["chat"],
+        voice_calls_count=counts["voice"],
+    )
+
+
+def _crm_contact_list_item(row: sqlite3.Row) -> CRMContactListItem:
+    return CRMContactListItem(
+        id=row["id"],
+        name=row["name"] or "",
+        email=row["email"] or "",
+        phone=row["phone"] or "",
+        status=row["status"] or "nuevo",
+        tags=_crm_json_list(row["tags_json"]),
+        owner=row["owner"] or "",
+        next_action=row["next_action"] or "",
+        next_action_at=row["next_action_at"] or "",
+        source_first=row["source_first"] or "",
+        source_last=row["source_last"] or "",
+        last_seen_at=row["last_seen_at"] or "",
+        created_at=row["created_at"] or "",
+        leads_count=int(row["leads_count"] or 0),
+        bookings_count=int(row["bookings_count"] or 0),
+        chats_count=int(row["chats_count"] or 0),
+        voice_calls_count=int(row["voice_calls_count"] or 0),
+    )
+
+
+def _crm_audit(
+    connection: sqlite3.Connection,
+    cliente_id: str,
+    contact_id: str,
+    event_type: str,
+    payload: Optional[Dict[str, Any]] = None,
+    *,
+    actor: str = "system",
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO crm_contact_audit (cliente_id, contact_id, event_type, actor, payload_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (cliente_id, contact_id, event_type, actor, json.dumps(payload or {}, ensure_ascii=False), _utc_now_iso()),
+    )
+
+
+def _crm_link(
+    connection: sqlite3.Connection,
+    cliente_id: str,
+    contact_id: str,
+    entity_type: str,
+    entity_id: str,
+    source: str,
+) -> None:
+    if not entity_id:
+        return
+    connection.execute(
+        """
+        INSERT INTO crm_contact_links (cliente_id, contact_id, entity_type, entity_id, source, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(cliente_id, entity_type, entity_id) DO UPDATE SET
+            contact_id=excluded.contact_id, source=excluded.source
+        """,
+        (cliente_id, contact_id, entity_type, entity_id, source, _utc_now_iso()),
+    )
+
+
+def _crm_upsert_contact(
+    cliente_id: str,
+    *,
+    name: str = "",
+    email: str = "",
+    phone: str = "",
+    source: str = "",
+    status: str = "",
+    entity_type: str = "",
+    entity_id: str = "",
+    actor: str = "system",
+) -> str:
+    name = _sanitize_text(name)[:200]
+    email = _sanitize_text(email)[:200]
+    phone = _sanitize_text(phone)[:80]
+    source = _sanitize_text(source)[:40] or "unknown"
+    email_norm = _normalize_crm_email(email)
+    phone_norm = _normalize_crm_phone(phone)
+    if not (name or email_norm or phone_norm):
+        return ""
+    now_iso = _utc_now_iso()
+    with _get_db_connection() as connection:
+        row = None
+        if email_norm:
+            row = connection.execute(
+                "SELECT * FROM crm_contacts WHERE cliente_id = ? AND email_normalized = ? LIMIT 1",
+                (cliente_id, email_norm),
+            ).fetchone()
+        if not row and phone_norm:
+            row = connection.execute(
+                "SELECT * FROM crm_contacts WHERE cliente_id = ? AND phone_normalized = ? LIMIT 1",
+                (cliente_id, phone_norm),
+            ).fetchone()
+        if row:
+            contact_id = row["id"]
+            next_status = row["status"] or "nuevo"
+            if status in CRM_CONTACT_STATUSES and next_status != "perdido":
+                if CRM_STATUS_PRIORITY.get(status, 0) > CRM_STATUS_PRIORITY.get(next_status, 0):
+                    next_status = status
+            updates = {
+                "name": name or row["name"],
+                "email": email or row["email"],
+                "email_normalized": email_norm or row["email_normalized"],
+                "phone": phone or row["phone"],
+                "phone_normalized": phone_norm or row["phone_normalized"],
+                "search_text": _crm_search_text(
+                    name or row["name"], email or row["email"], phone or row["phone"],
+                ),
+                "status": next_status,
+                "source_last": source,
+                "last_seen_at": now_iso,
+                "updated_at": now_iso,
+            }
+            # Do not steal an identifier that already belongs to another contact.
+            for key, normalized_key in (("email", "email_normalized"), ("phone", "phone_normalized")):
+                normalized = updates[normalized_key]
+                if normalized:
+                    collision = connection.execute(
+                        f"SELECT id FROM crm_contacts WHERE cliente_id = ? AND {normalized_key} = ? AND id <> ? LIMIT 1",
+                        (cliente_id, normalized, contact_id),
+                    ).fetchone()
+                    if collision:
+                        updates[key] = row[key]
+                        updates[normalized_key] = row[normalized_key]
+            connection.execute(
+                """
+                UPDATE crm_contacts SET
+                    name=?, email=?, email_normalized=?, phone=?, phone_normalized=?, search_text=?, status=?,
+                    source_last=?, last_seen_at=?, updated_at=?
+                WHERE id=? AND cliente_id=?
+                """,
+                (*updates.values(), contact_id, cliente_id),
+            )
+            event_type = "contact_seen"
+        else:
+            contact_id = "ct_" + secrets.token_hex(10)
+            next_status = status if status in CRM_CONTACT_STATUSES else "nuevo"
+            connection.execute(
+                """
+                INSERT INTO crm_contacts (
+                    id, cliente_id, name, email, email_normalized, phone, phone_normalized, search_text, status,
+                    notes, tags_json, owner, next_action, next_action_at, source_first, source_last,
+                    first_seen_at, last_seen_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '[]', '', '', '', ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    contact_id, cliente_id, name, email, email_norm, phone, phone_norm,
+                    _crm_search_text(name, email, phone), next_status,
+                    source, source, now_iso, now_iso, now_iso, now_iso,
+                ),
+            )
+            event_type = "contact_created"
+        _crm_link(connection, cliente_id, contact_id, entity_type, entity_id, source)
+        _crm_audit(
+            connection, cliente_id, contact_id, event_type,
+            {"source": source, "entity_type": entity_type, "entity_id": entity_id},
+            actor=actor,
+        )
+        connection.commit()
+    return contact_id
+
+
+def _crm_contact_or_404(connection: sqlite3.Connection, cliente_id: str, contact_id: str) -> sqlite3.Row:
+    row = connection.execute(
+        "SELECT * FROM crm_contacts WHERE id = ? AND cliente_id = ? LIMIT 1",
+        (contact_id, cliente_id),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Contacto no encontrado.")
+    return row
+
+
+def _crm_contact_activity(connection: sqlite3.Connection, cliente_id: str, contact_id: str) -> List[CRMContactActivity]:
+    links = connection.execute(
+        """
+        SELECT entity_type, entity_id, source, created_at
+        FROM crm_contact_links WHERE cliente_id = ? AND contact_id = ?
+        ORDER BY created_at DESC LIMIT 200
+        """,
+        (cliente_id, contact_id),
+    ).fetchall()
+    activity: List[CRMContactActivity] = []
+    for link in links:
+        kind, entity_id = link["entity_type"], link["entity_id"]
+        title, detail, item_status, occurred_at = kind, "", "", link["created_at"]
+        if kind == "booking":
+            row = connection.execute("SELECT * FROM bookings WHERE id = ? AND cliente_id = ?", (entity_id, cliente_id)).fetchone()
+            if row:
+                title = f"Cita: {row['servicio'] or 'Consulta'}"
+                detail = f"{row['booking_date']} {row['booking_time']}".strip()
+                item_status, occurred_at = row["status"], row["created_at"]
+        elif kind == "lead":
+            row = connection.execute("SELECT * FROM bot_leads WHERE id = ? AND cliente_id = ?", (entity_id, cliente_id)).fetchone()
+            if row:
+                title, detail, occurred_at = "Lead captado", row["message"] or "", row["created_at"]
+        elif kind == "chat":
+            row = connection.execute("SELECT * FROM chat_sessions WHERE id = ? AND cliente_id = ?", (entity_id, cliente_id)).fetchone()
+            if row:
+                title, detail, occurred_at = "Conversacion", row["origin"] or "", row["last_message_at"]
+        elif kind == "voice":
+            row = connection.execute("SELECT * FROM voice_calls WHERE call_sid = ? AND cliente_id = ?", (entity_id, cliente_id)).fetchone()
+            if row:
+                title, detail, item_status, occurred_at = "Llamada", row["summary"] or "", row["status"], row["started_at"]
+        activity.append(CRMContactActivity(
+            kind=kind, reference_id=entity_id, title=title, detail=detail,
+            status=item_status, occurred_at=occurred_at or "", source=link["source"] or "",
+        ))
+    activity.sort(key=lambda item: item.occurred_at, reverse=True)
+    payment_rows = connection.execute(
+        "SELECT * FROM customer_payments WHERE cliente_id=? AND contact_id=? ORDER BY created_at DESC LIMIT 100",
+        (cliente_id, contact_id),
+    ).fetchall()
+    for row in payment_rows:
+        activity.append(CRMContactActivity(
+            kind="payment", reference_id=row["id"], title=f"Pago: {row['service_name'] or 'Servicio'}",
+            detail=_format_price_cents(int(row["amount_cents"] or 0)), status=row["status"],
+            occurred_at=row["paid_at"] or row["created_at"], source="stripe_connect",
+        ))
+    activity.sort(key=lambda item: item.occurred_at, reverse=True)
+    return activity
+
+
+def _crm_backfill_client(cliente_id: str) -> None:
+    """Enlaza datos historicos de forma idempotente al abrir el CRM."""
+    with state_lock:
+        if cliente_id in CRM_BACKFILLED_CLIENTS:
+            return
+    with _get_db_connection() as connection:
+        bookings = connection.execute(
+            """
+            SELECT b.* FROM bookings b
+            LEFT JOIN crm_contact_links l
+              ON l.cliente_id=b.cliente_id AND l.entity_type='booking' AND l.entity_id=b.id
+            WHERE b.cliente_id=? AND l.id IS NULL
+            """,
+            (cliente_id,),
+        ).fetchall()
+        leads = connection.execute(
+            """
+            SELECT b.* FROM bot_leads b
+            LEFT JOIN crm_contact_links l
+              ON l.cliente_id=b.cliente_id AND l.entity_type='lead' AND l.entity_id=b.id
+            WHERE b.cliente_id=? AND l.id IS NULL
+            """,
+            (cliente_id,),
+        ).fetchall()
+        calls = connection.execute(
+            """
+            SELECT v.* FROM voice_calls v
+            LEFT JOIN crm_contact_links l
+              ON l.cliente_id=v.cliente_id AND l.entity_type='voice' AND l.entity_id=v.call_sid
+            WHERE v.cliente_id=? AND l.id IS NULL AND v.from_number <> ''
+            """,
+            (cliente_id,),
+        ).fetchall()
+        whatsapp = connection.execute(
+            "SELECT DISTINCT from_number FROM whatsapp_inbound_messages WHERE cliente_id=? AND from_number <> ''",
+            (cliente_id,),
+        ).fetchall()
+        linked_whatsapp_ids = {
+            row["entity_id"]
+            for row in connection.execute(
+                "SELECT entity_id FROM crm_contact_links WHERE cliente_id=? AND entity_type='chat' AND entity_id LIKE 'wa_%'",
+                (cliente_id,),
+            ).fetchall()
+        }
+        search_rows = connection.execute(
+            "SELECT id, name, email, phone FROM crm_contacts WHERE cliente_id=? AND search_text=''",
+            (cliente_id,),
+        ).fetchall()
+        for row in search_rows:
+            connection.execute(
+                "UPDATE crm_contacts SET search_text=? WHERE id=? AND cliente_id=?",
+                (_crm_search_text(row["name"], row["email"], row["phone"]), row["id"], cliente_id),
+            )
+        connection.commit()
+    for row in bookings:
+        _crm_upsert_contact(
+            cliente_id, name=row["nombre"], email=row["email"], phone=row["telefono"] or "",
+            source=row["source"] or "booking",
+            status="confirmado" if row["status"] == "confirmed" else "cita_pendiente",
+            entity_type="booking", entity_id=row["id"],
+        )
+    for row in leads:
+        contact_id = _crm_upsert_contact(
+            cliente_id, name=row["name"], email=row["email"], phone=row["phone"],
+            source=row["source"] or "lead", status="interesado", entity_type="lead", entity_id=row["id"],
+        )
+        if contact_id and row["session_id"]:
+            with _get_db_connection() as connection:
+                _crm_link(connection, cliente_id, contact_id, "chat", row["session_id"], row["source"] or "chat")
+                connection.commit()
+    for row in calls:
+        _crm_upsert_contact(
+            cliente_id, phone=row["from_number"], source="voice", status="nuevo",
+            entity_type="voice", entity_id=row["call_sid"],
+        )
+    for row in whatsapp:
+        entity_id = f"wa_{_normalize_crm_phone(row['from_number'])}"
+        if entity_id in linked_whatsapp_ids:
+            continue
+        _crm_upsert_contact(
+            cliente_id, phone=row["from_number"], source="whatsapp", status="nuevo",
+            entity_type="chat", entity_id=entity_id,
+        )
+    with state_lock:
+        CRM_BACKFILLED_CLIENTS.add(cliente_id)
+
+
+def _crm_contact_filters(
+    cliente_id: str,
+    *,
+    q: str = "",
+    status_filter: str = "",
+    tag: str = "",
+    owner: str = "",
+    source: str = "",
+    next_action_filter: str = "",
+    date_from: str = "",
+    date_to: str = "",
+) -> Tuple[str, List[Any]]:
+    clauses = ["c.cliente_id = ?"]
+    params: List[Any] = [cliente_id]
+    query = _normalize_crm_search(q)
+    if query:
+        clauses.append("c.search_text LIKE ?")
+        params.append(f"%{query}%")
+    if status_filter in CRM_CONTACT_STATUSES:
+        clauses.append("c.status = ?")
+        params.append(status_filter)
+    clean_tag = _sanitize_text(tag)[:80]
+    if clean_tag:
+        clauses.append("EXISTS (SELECT 1 FROM json_each(c.tags_json) jt WHERE LOWER(jt.value) = LOWER(?))")
+        params.append(clean_tag)
+    clean_owner = _sanitize_text(owner)[:200]
+    if clean_owner:
+        clauses.append("LOWER(c.owner) = LOWER(?)")
+        params.append(clean_owner)
+    clean_source = _sanitize_text(source)[:40]
+    if clean_source:
+        clauses.append("(c.source_first = ? OR c.source_last = ? OR EXISTS (SELECT 1 FROM crm_contact_links sl WHERE sl.cliente_id=c.cliente_id AND sl.contact_id=c.id AND sl.source=?))")
+        params.extend([clean_source, clean_source, clean_source])
+    now_iso = _utc_now_iso()
+    if next_action_filter == "pending":
+        clauses.append("c.next_action_at <> ''")
+    elif next_action_filter == "overdue":
+        clauses.append("c.next_action_at <> '' AND c.next_action_at < ?")
+        params.append(now_iso)
+    elif next_action_filter == "upcoming":
+        clauses.append("c.next_action_at <> '' AND c.next_action_at >= ?")
+        params.append(now_iso)
+    elif next_action_filter == "none":
+        clauses.append("c.next_action_at = ''")
+    for value, operator in ((date_from, ">="), (date_to, "<=")):
+        clean_date = _sanitize_text(value)[:40]
+        if clean_date:
+            clauses.append(f"c.last_seen_at {operator} ?")
+            params.append(clean_date)
+    return " AND ".join(clauses), params
+
+
+def _crm_contacts_query(
+    connection: sqlite3.Connection,
+    where: str,
+    params: List[Any],
+    *,
+    order_by: str,
+    limit: int,
+    offset: int,
+) -> List[sqlite3.Row]:
+    return connection.execute(
+        f"""
+        WITH link_counts AS (
+            SELECT cliente_id, contact_id,
+                SUM(CASE WHEN entity_type='lead' THEN 1 ELSE 0 END) AS leads_count,
+                SUM(CASE WHEN entity_type='booking' THEN 1 ELSE 0 END) AS bookings_count,
+                SUM(CASE WHEN entity_type='chat' THEN 1 ELSE 0 END) AS chats_count,
+                SUM(CASE WHEN entity_type='voice' THEN 1 ELSE 0 END) AS voice_calls_count
+            FROM crm_contact_links
+            WHERE cliente_id = ?
+            GROUP BY cliente_id, contact_id
+        )
+        SELECT c.*,
+            COALESCE(lc.leads_count, 0) AS leads_count,
+            COALESCE(lc.bookings_count, 0) AS bookings_count,
+            COALESCE(lc.chats_count, 0) AS chats_count,
+            COALESCE(lc.voice_calls_count, 0) AS voice_calls_count
+        FROM crm_contacts c
+        LEFT JOIN link_counts lc ON lc.cliente_id=c.cliente_id AND lc.contact_id=c.id
+        WHERE {where}
+        ORDER BY {order_by}
+        LIMIT ? OFFSET ?
+        """,
+        (params[0], *params, limit, offset),
+    ).fetchall()
+
+
+@app.get("/auth/app/contacts", response_model=CRMContactsListResponse)
+async def app_contacts_list(
+    page: int = 1,
+    page_size: int = 50,
+    q: str = "",
+    status_filter: str = "",
+    tag: str = "",
+    owner: str = "",
+    source: str = "",
+    next_action_filter: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    sort: str = "last_activity_desc",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> CRMContactsListResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    _crm_backfill_client(cliente_id)
+    page, page_size = max(1, page), max(1, min(page_size, 200))
+    where, params = _crm_contact_filters(
+        cliente_id, q=q, status_filter=status_filter, tag=tag, owner=owner, source=source,
+        next_action_filter=next_action_filter, date_from=date_from, date_to=date_to,
+    )
+    order_by = CRM_CONTACT_SORTS.get(sort, CRM_CONTACT_SORTS["last_activity_desc"])
+    with _get_db_connection() as connection:
+        total = connection.execute(f"SELECT COUNT(*) FROM crm_contacts c WHERE {where}", tuple(params)).fetchone()[0]
+        rows = _crm_contacts_query(
+            connection, where, params, order_by=order_by,
+            limit=page_size, offset=(page - 1) * page_size,
+        )
+        items = [_crm_contact_list_item(row) for row in rows]
+    pages = (int(total or 0) + page_size - 1) // page_size
+    return CRMContactsListResponse(items=items, total=int(total or 0), page=page, page_size=page_size, pages=pages)
+
+
+@app.get("/auth/app/contacts/export.csv")
+async def app_contacts_export(
+    q: str = "",
+    status_filter: str = "",
+    tag: str = "",
+    owner: str = "",
+    source: str = "",
+    next_action_filter: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    sort: str = "last_activity_desc",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> Response:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    _crm_backfill_client(cliente_id)
+    where, params = _crm_contact_filters(
+        cliente_id, q=q, status_filter=status_filter, tag=tag, owner=owner, source=source,
+        next_action_filter=next_action_filter, date_from=date_from, date_to=date_to,
+    )
+    order_by = CRM_CONTACT_SORTS.get(sort, CRM_CONTACT_SORTS["last_activity_desc"])
+    with _get_db_connection() as connection:
+        rows = connection.execute(
+            f"SELECT c.* FROM crm_contacts c WHERE {where} ORDER BY {order_by}",
+            tuple(params),
+        ).fetchall()
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "name", "email", "phone", "status", "tags", "owner", "source_first", "source_last",
+        "next_action", "next_action_at", "last_seen_at", "created_at", "notes",
+    ])
+    for row in rows:
+        writer.writerow([
+            row["name"], row["email"], row["phone"], row["status"],
+            ", ".join(_crm_json_list(row["tags_json"])), row["owner"], row["source_first"],
+            row["source_last"], row["next_action"], row["next_action_at"], row["last_seen_at"],
+            row["created_at"], (row["notes"] or "").replace("\r", " ").replace("\n", " "),
+        ])
+    filename = f"contactos_{cliente_id}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/auth/app/contacts", response_model=CRMContactPublic)
+async def app_contact_create(
+    data: CRMContactPayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> CRMContactPublic:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    contact_id = _crm_upsert_contact(
+        cliente_id, name=data.name, email=data.email, phone=data.phone,
+        source=data.source or "manual", status=data.status, actor=f"user:{user['id']}",
+    )
+    if not contact_id:
+        raise HTTPException(status_code=400, detail="Indica al menos nombre, email o telefono.")
+    return await app_contact_update(contact_id, data, user)
+
+
+@app.put("/auth/app/contacts/{contact_id}", response_model=CRMContactPublic)
+async def app_contact_update(
+    contact_id: str,
+    data: CRMContactPayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> CRMContactPublic:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    status_value = data.status if data.status in CRM_CONTACT_STATUSES else "nuevo"
+    tags = list(dict.fromkeys(_sanitize_text(tag)[:80] for tag in data.tags if _sanitize_text(tag)))[:30]
+    email_norm, phone_norm = _normalize_crm_email(data.email), _normalize_crm_phone(data.phone)
+    with _get_db_connection() as connection:
+        _crm_contact_or_404(connection, cliente_id, contact_id)
+        for column, value in (("email_normalized", email_norm), ("phone_normalized", phone_norm)):
+            if value and connection.execute(
+                f"SELECT 1 FROM crm_contacts WHERE cliente_id = ? AND {column} = ? AND id <> ? LIMIT 1",
+                (cliente_id, value, contact_id),
+            ).fetchone():
+                raise HTTPException(status_code=409, detail="Ese email o telefono ya pertenece a otro contacto.")
+        connection.execute(
+            """
+            UPDATE crm_contacts SET name=?, email=?, email_normalized=?, phone=?, phone_normalized=?, search_text=?,
+                status=?, notes=?, tags_json=?, owner=?, next_action=?, next_action_at=?, updated_at=?
+            WHERE id=? AND cliente_id=?
+            """,
+            (
+                _sanitize_text(data.name)[:200], _sanitize_text(data.email)[:200], email_norm,
+                _sanitize_text(data.phone)[:80], phone_norm, _crm_search_text(data.name, data.email, data.phone), status_value,
+                _sanitize_text(data.notes, allow_multiline=True)[:8000], json.dumps(tags, ensure_ascii=False),
+                _sanitize_text(data.owner)[:200], _sanitize_text(data.next_action)[:500],
+                _sanitize_text(data.next_action_at)[:40], _utc_now_iso(), contact_id, cliente_id,
+            ),
+        )
+        _crm_audit(connection, cliente_id, contact_id, "contact_updated", {"status": status_value}, actor=f"user:{user['id']}")
+        connection.commit()
+        row = _crm_contact_or_404(connection, cliente_id, contact_id)
+        return _crm_contact_public(row, connection)
+
+
+@app.get("/auth/app/contacts/{contact_id}", response_model=CRMContactDetailResponse)
+async def app_contact_detail(
+    contact_id: str,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> CRMContactDetailResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    with _get_db_connection() as connection:
+        row = _crm_contact_or_404(connection, cliente_id, contact_id)
+        audit_rows = connection.execute(
+            "SELECT event_type, actor, payload_json, created_at FROM crm_contact_audit WHERE cliente_id = ? AND contact_id = ? ORDER BY id DESC LIMIT 100",
+            (cliente_id, contact_id),
+        ).fetchall()
+        audit = [
+            {"event_type": item["event_type"], "actor": item["actor"], "payload": json.loads(item["payload_json"] or "{}"), "created_at": item["created_at"]}
+            for item in audit_rows
+        ]
+        return CRMContactDetailResponse(
+            contact=_crm_contact_public(row, connection),
+            activity=_crm_contact_activity(connection, cliente_id, contact_id),
+            audit=audit,
+        )
+
+
+# --- Pagos de clientes finales / Stripe Connect ----------------------------
+
+PAYMENT_POLICY_MODES = {"none", "full", "deposit_fixed", "deposit_percent"}
+PAYMENT_STATUSES = {"pending", "paid", "failed", "refunded", "partially_refunded"}
+
+
+def _connect_account_status(cliente_id: str, *, refresh: bool = False) -> ConnectAccountStatus:
+    with _get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM client_payment_accounts WHERE cliente_id=?", (cliente_id,)
+        ).fetchone()
+    if not row:
+        return ConnectAccountStatus()
+    row_keys = row.keys()
+    values = {
+        "connected": bool(row["stripe_account_id"]),
+        "stripe_account_id": row["stripe_account_id"] or "",
+        "charges_enabled": bool(row["charges_enabled"]),
+        "payouts_enabled": bool(row["payouts_enabled"]),
+        "details_submitted": bool(row["details_submitted"]),
+        "ai_send_enabled": bool(row["ai_send_enabled"]) if "ai_send_enabled" in row_keys else False,
+    }
+    if refresh and values["stripe_account_id"] and _stripe_configured():
+        try:
+            _stripe_init()
+            account = stripe.Account.retrieve(values["stripe_account_id"])
+            values.update({
+                "charges_enabled": bool(_object_get(account, "charges_enabled", False)),
+                "payouts_enabled": bool(_object_get(account, "payouts_enabled", False)),
+                "details_submitted": bool(_object_get(account, "details_submitted", False)),
+            })
+            with _get_db_connection() as connection:
+                connection.execute(
+                    """
+                    UPDATE client_payment_accounts SET charges_enabled=?, payouts_enabled=?,
+                        details_submitted=?, updated_at=? WHERE cliente_id=?
+                    """,
+                    (
+                        int(values["charges_enabled"]), int(values["payouts_enabled"]),
+                        int(values["details_submitted"]), _utc_now_iso(), cliente_id,
+                    ),
+                )
+                connection.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("No se pudo refrescar Stripe Connect para %s: %s", cliente_id, exc)
+    return ConnectAccountStatus(**values)
+
+
+def _save_connect_account(cliente_id: str, account: Any) -> str:
+    account_id = str(_object_get(account, "id", "") or "")
+    if not account_id:
+        raise HTTPException(status_code=502, detail="Stripe no devolvio una cuenta Connect valida.")
+    now = _utc_now_iso()
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO client_payment_accounts
+                (cliente_id, stripe_account_id, charges_enabled, payouts_enabled, details_submitted, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(cliente_id) DO UPDATE SET stripe_account_id=excluded.stripe_account_id,
+                charges_enabled=excluded.charges_enabled, payouts_enabled=excluded.payouts_enabled,
+                details_submitted=excluded.details_submitted, updated_at=excluded.updated_at
+            """,
+            (
+                cliente_id, account_id, int(bool(_object_get(account, "charges_enabled", False))),
+                int(bool(_object_get(account, "payouts_enabled", False))),
+                int(bool(_object_get(account, "details_submitted", False))), now, now,
+            ),
+        )
+        connection.commit()
+    return account_id
+
+
+def _payment_policy(cliente_id: str, service_id: str) -> Dict[str, Any]:
+    with _get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM service_payment_policies WHERE cliente_id=? AND service_id=?",
+            (cliente_id, service_id),
+        ).fetchone()
+    return {
+        "mode": row["mode"] if row else "none",
+        "deposit_value": int(row["deposit_value"] or 0) if row else 0,
+        "confirm_booking_on_paid": bool(row["confirm_booking_on_paid"]) if row else True,
+    }
+
+
+def _ai_send_enabled_for_client(cliente_id: str) -> bool:
+    """True si el negocio activo el opt-in 'la IA puede enviar enlaces de pago'."""
+    with _get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT ai_send_enabled FROM client_payment_accounts WHERE cliente_id=?",
+            (cliente_id,),
+        ).fetchone()
+    return bool(row["ai_send_enabled"]) if row else False
+
+
+def _set_ai_send_enabled(cliente_id: str, enabled: bool) -> None:
+    now = _utc_now_iso()
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO client_payment_accounts (cliente_id, ai_send_enabled, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(cliente_id) DO UPDATE SET ai_send_enabled=excluded.ai_send_enabled,
+                updated_at=excluded.updated_at
+            """,
+            (cliente_id, int(bool(enabled)), now, now),
+        )
+        connection.commit()
+
+
+def _ai_payment_sending_available(cliente_id: str) -> bool:
+    """La IA puede enviar enlaces de pago solo si: opt-in activo + Stripe conectado
+    y con cobros habilitados."""
+    if not _ai_send_enabled_for_client(cliente_id):
+        return False
+    status = _connect_account_status(cliente_id)
+    return bool(status.connected and status.charges_enabled)
+
+
+def _payment_amount_for_booking(booking: sqlite3.Row, override: Optional[int] = None) -> int:
+    if override is not None:
+        return int(override)
+    price = int(booking["service_price_cents"] or 0)
+    policy = _payment_policy(booking["cliente_id"], booking["service_id"] or "")
+    if policy["mode"] == "full":
+        return price
+    if policy["mode"] == "deposit_fixed":
+        return min(price, int(policy["deposit_value"])) if price else int(policy["deposit_value"])
+    if policy["mode"] == "deposit_percent":
+        return round(price * int(policy["deposit_value"]) / 100)
+    return 0
+
+
+def _payment_public(row: sqlite3.Row) -> CustomerPaymentPublic:
+    return CustomerPaymentPublic(
+        id=row["id"], contact_id=row["contact_id"] or "", booking_id=row["booking_id"] or "",
+        service_id=row["service_id"] or "", service_name=row["service_name"] or "",
+        amount_cents=int(row["amount_cents"] or 0), currency=row["currency"] or "eur",
+        status=row["status"] or "pending", checkout_url=row["checkout_url"] or "",
+        created_at=row["created_at"] or "", paid_at=row["paid_at"] or "", updated_at=row["updated_at"] or "",
+    )
+
+
+def _payment_contact_for_booking(booking: sqlite3.Row) -> str:
+    with _get_db_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT contact_id FROM crm_contact_links
+            WHERE cliente_id=? AND entity_type='booking' AND entity_id=? LIMIT 1
+            """,
+            (booking["cliente_id"], booking["id"]),
+        ).fetchone()
+    return row["contact_id"] if row else _crm_upsert_contact(
+        booking["cliente_id"], name=booking["nombre"], email=booking["email"],
+        phone=booking["telefono"] or "", source="payment", status="cita_pendiente",
+        entity_type="booking", entity_id=booking["id"],
+    )
+
+
+def _gmail_channel_configured() -> bool:
+    return bool(
+        GOOGLE_GMAIL_CLIENT_ID and GOOGLE_GMAIL_CLIENT_SECRET
+        and GOOGLE_GMAIL_REDIRECT_URL and OAUTH_TOKEN_ENCRYPTION_KEY
+    )
+
+
+def _channel_settings_public(cliente_id: str) -> ChannelSettingsResponse:
+    settings = _ensure_channel_settings(cliente_id)
+    gmail = _client_gmail_connection(cliente_id)
+    sms_mode = settings["sms_mode"] or "vantelia_default"
+    if sms_mode == "vantelia_default":
+        config = CONFIG_CLIENTES.get(cliente_id) or {}
+        sender = TWILIO_SMS_SENDER or (config.get("voice", {}) or {}).get("twilio_phone_number") or TWILIO_DEFAULT_PHONE_NUMBER
+        sms_available = bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and sender)
+    else:
+        sender = settings["sms_sender"] or ""
+        sms_available = settings["sms_sender_status"] == "active"
+    return ChannelSettingsResponse(
+        email=ChannelEmailStatus(
+            provider=settings["email_provider"] or "vantelia_smtp",
+            fallback_enabled=bool(settings["email_fallback_enabled"]),
+            connected=bool(gmail and gmail["status"] == "active"),
+            account_email=str(gmail["account_email"] or "") if gmail else "",
+            account_name=str(gmail["account_name"] or "") if gmail else "",
+            status=str(gmail["status"] or "not_connected") if gmail else "not_connected",
+            last_error=str(gmail["last_error"] or "") if gmail else "",
+            google_configured=_gmail_channel_configured(),
+        ),
+        sms=ChannelSmsStatus(
+            mode=sms_mode,
+            sender=str(sender or ""),
+            sender_status=str(settings["sms_sender_status"] or "not_configured"),
+            available=sms_available,
+            last_error=str(settings["last_error"] or ""),
+        ),
+    )
+
+
+def _gmail_channel_state_create(cliente_id: str, user_id: str) -> Tuple[str, str]:
+    verifier = secrets.token_urlsafe(64)
+    raw_state = secrets.token_urlsafe(32)
+    signature = hmac.new(
+        OAUTH_TOKEN_ENCRYPTION_KEY.encode("utf-8"), raw_state.encode("ascii"), hashlib.sha256
+    ).hexdigest()
+    state = f"{raw_state}.{signature}"
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO client_channel_oauth_states
+                (state_hash, cliente_id, user_id, provider, code_verifier_encrypted, created_at)
+            VALUES (?, ?, ?, 'gmail_oauth', ?, ?)
+            """,
+            (hashlib.sha256(state.encode()).hexdigest(), cliente_id, user_id, _encrypt_channel_secret(verifier), time.time()),
+        )
+        connection.execute("DELETE FROM client_channel_oauth_states WHERE created_at < ?", (time.time() - 600,))
+        connection.commit()
+    return state, verifier
+
+
+def _gmail_channel_state_consume(state: str, cliente_id: str, user_id: str) -> str:
+    parts = str(state or "").rsplit(".", 1)
+    if len(parts) != 2:
+        raise HTTPException(status_code=400, detail="Estado OAuth invalido o caducado.")
+    expected = hmac.new(
+        OAUTH_TOKEN_ENCRYPTION_KEY.encode("utf-8"), parts[0].encode("ascii"), hashlib.sha256
+    ).hexdigest()
+    if not secrets.compare_digest(parts[1], expected):
+        raise HTTPException(status_code=400, detail="Estado OAuth invalido o caducado.")
+    state_hash = hashlib.sha256(state.encode()).hexdigest()
+    with _get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM client_channel_oauth_states WHERE state_hash=?", (state_hash,)
+        ).fetchone()
+        if row:
+            connection.execute("DELETE FROM client_channel_oauth_states WHERE state_hash=?", (state_hash,))
+            connection.commit()
+    if (
+        not row or row["cliente_id"] != cliente_id or row["user_id"] != user_id
+        or time.time() - float(row["created_at"]) > 600
+    ):
+        raise HTTPException(status_code=400, detail="Estado OAuth invalido o caducado.")
+    return _decrypt_channel_secret(row["code_verifier_encrypted"])
+
+
+@app.get("/auth/app/channels", response_model=ChannelSettingsResponse)
+async def app_channels_get(
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> ChannelSettingsResponse:
+    return _channel_settings_public(_resolve_cliente_for_self_serve_user(user))
+
+
+@app.post("/auth/app/channels/email/settings", response_model=ChannelSettingsResponse)
+async def app_channels_email_settings(
+    data: ChannelEmailSettingsPayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> ChannelSettingsResponse:
+    if data.provider not in {"vantelia_smtp", "gmail_oauth"}:
+        raise HTTPException(status_code=400, detail="Proveedor de email no valido.")
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    if data.provider == "gmail_oauth" and not _client_gmail_connection(cliente_id):
+        raise HTTPException(status_code=400, detail="Conecta primero una cuenta de Google.")
+    _ensure_channel_settings(cliente_id)
+    with _get_db_connection() as connection:
+        connection.execute(
+            "UPDATE client_channel_settings SET email_provider=?, email_fallback_enabled=?, updated_at=? WHERE cliente_id=?",
+            (data.provider, int(data.fallback_enabled), _utc_now_iso(), cliente_id),
+        )
+        connection.commit()
+    return _channel_settings_public(cliente_id)
+
+
+@app.post("/auth/app/channels/email/google/connect", response_model=ChannelConnectResponse)
+async def app_channels_google_connect(
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> ChannelConnectResponse:
+    if not _gmail_channel_configured():
+        raise HTTPException(status_code=503, detail="La conexion con Gmail no esta configurada.")
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    _ensure_channel_settings(cliente_id)
+    state, verifier = _gmail_channel_state_create(cliente_id, user["id"])
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    params = {
+        "client_id": GOOGLE_GMAIL_CLIENT_ID,
+        "redirect_uri": GOOGLE_GMAIL_REDIRECT_URL,
+        "response_type": "code",
+        "scope": f"openid email {GOOGLE_GMAIL_SEND_SCOPE}",
+        "state": state,
+        "access_type": "offline",
+        "prompt": "consent select_account",
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+    }
+    return ChannelConnectResponse(url=f"{GOOGLE_OAUTH_AUTHORIZE_URL}?{urlencode(params)}")
+
+
+@app.get("/auth/app/channels/email/google/callback", include_in_schema=False)
+async def app_channels_google_callback(
+    code: str = "", state: str = "", error: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> RedirectResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    if error:
+        return RedirectResponse(url=f"/app?channels_error={quote(error)}", status_code=303)
+    verifier = _gmail_channel_state_consume(state, cliente_id, user["id"])
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            token_response = await client.post(
+                GOOGLE_OAUTH_TOKEN_URL,
+                data={
+                    "code": code, "client_id": GOOGLE_GMAIL_CLIENT_ID,
+                    "client_secret": GOOGLE_GMAIL_CLIENT_SECRET,
+                    "redirect_uri": GOOGLE_GMAIL_REDIRECT_URL,
+                    "grant_type": "authorization_code", "code_verifier": verifier,
+                },
+            )
+            token_response.raise_for_status()
+            token = token_response.json()
+            access_token = str(token.get("access_token", ""))
+            info_response = await client.get(
+                GOOGLE_OAUTH_USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"}
+            )
+            info_response.raise_for_status()
+            info = info_response.json()
+    except Exception as exc:  # noqa: BLE001
+        _channel_audit(cliente_id, "email", "connect_failed", "gmail_oauth", False, str(exc))
+        raise HTTPException(status_code=502, detail="No se pudo conectar la cuenta de Google.") from exc
+    granted = set(str(token.get("scope", "")).split())
+    if GOOGLE_GMAIL_SEND_SCOPE not in granted:
+        raise HTTPException(status_code=400, detail="Google no concedio permiso para enviar correo.")
+    now, expires = _utc_now_iso(), datetime.now(timezone.utc) + timedelta(seconds=int(token.get("expires_in", 3600)))
+    existing = _client_gmail_connection(cliente_id)
+    refresh_token = str(token.get("refresh_token", "")) or (
+        _decrypt_channel_secret(existing["refresh_token_encrypted"]) if existing else ""
+    )
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO client_oauth_connections
+                (cliente_id, provider, account_email, account_name, scopes_json,
+                 access_token_encrypted, refresh_token_encrypted, expires_at, status, created_at, updated_at)
+            VALUES (?, 'gmail_oauth', ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+            ON CONFLICT(cliente_id, provider) DO UPDATE SET
+                account_email=excluded.account_email, account_name=excluded.account_name,
+                scopes_json=excluded.scopes_json, access_token_encrypted=excluded.access_token_encrypted,
+                refresh_token_encrypted=excluded.refresh_token_encrypted, expires_at=excluded.expires_at,
+                status='active', last_error='', updated_at=excluded.updated_at
+            """,
+            (
+                cliente_id, _normalize_email(info.get("email", "")), str(info.get("name", "")),
+                json.dumps(sorted(granted)), _encrypt_channel_secret(access_token),
+                _encrypt_channel_secret(refresh_token), expires.isoformat(), now, now,
+            ),
+        )
+        connection.execute(
+            "UPDATE client_channel_settings SET email_provider='gmail_oauth', updated_at=? WHERE cliente_id=?",
+            (now, cliente_id),
+        )
+        connection.commit()
+    _channel_audit(cliente_id, "email", "connected", "gmail_oauth", True)
+    return RedirectResponse(url="/app?channels=connected", status_code=303)
+
+
+@app.post("/auth/app/channels/email/google/disconnect", response_model=ChannelSettingsResponse)
+async def app_channels_google_disconnect(
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> ChannelSettingsResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    gmail = _client_gmail_connection(cliente_id)
+    if gmail and _gmail_channel_configured():
+        try:
+            token = (
+                _decrypt_channel_secret(gmail["refresh_token_encrypted"])
+                or _decrypt_channel_secret(gmail["access_token_encrypted"])
+            )
+            if token:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    await client.post(
+                        GOOGLE_OAUTH_REVOKE_URL,
+                        data={"token": token},
+                        headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    )
+        except Exception:  # noqa: BLE001
+            _channel_audit(
+                cliente_id, "email", "revoke_failed", "gmail_oauth", False,
+                "Google no confirmo la revocacion; la conexion local se elimino.",
+            )
+    with _get_db_connection() as connection:
+        connection.execute(
+            "DELETE FROM client_oauth_connections WHERE cliente_id=? AND provider='gmail_oauth'", (cliente_id,)
+        )
+        connection.execute(
+            "UPDATE client_channel_settings SET email_provider='vantelia_smtp', updated_at=? WHERE cliente_id=?",
+            (_utc_now_iso(), cliente_id),
+        )
+        connection.commit()
+    _channel_audit(cliente_id, "email", "disconnected", "gmail_oauth", True)
+    return _channel_settings_public(cliente_id)
+
+
+@app.post("/auth/app/channels/email/test", response_model=AuthSimpleResponse)
+async def app_channels_email_test(
+    data: ChannelTestPayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> AuthSimpleResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    _check_rate_limit(f"channel-email-test:{cliente_id}", 3)
+    target = _normalize_email(data.target)
+    if not target:
+        raise HTTPException(status_code=400, detail="Indica un email valido.")
+    provider = _send_client_email(
+        cliente_id, target, "Prueba de canal de Vantelia",
+        "El canal de email de tu negocio esta configurado correctamente.",
+    )
+    return AuthSimpleResponse(ok=True, message=f"Correo de prueba enviado mediante {provider}.")
+
+
+@app.post("/auth/app/channels/sms/settings", response_model=ChannelSettingsResponse)
+async def app_channels_sms_settings(
+    data: ChannelSmsSettingsPayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> ChannelSettingsResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    if data.mode not in {"vantelia_default", "twilio_alphanumeric_sender", "twilio_dedicated_number"}:
+        raise HTTPException(status_code=400, detail="Modo SMS no valido.")
+    settings = _ensure_channel_settings(cliente_id)
+    sender, sender_status = "", "not_configured"
+    if data.mode == "twilio_alphanumeric_sender":
+        sender = data.sender.strip().upper()
+        if not re.fullmatch(r"(?=.*[A-Z])[A-Z0-9 ]{3,11}", sender):
+            raise HTTPException(status_code=400, detail="El Sender ID debe tener 3-11 caracteres y alguna letra.")
+        sender_status = "pending_registration"
+    elif data.mode == "twilio_dedicated_number":
+        if settings["sms_mode"] != data.mode or settings["sms_sender_status"] != "active":
+            raise HTTPException(status_code=400, detail="El numero dedicado debe provisionarlo soporte antes de activarlo.")
+        sender, sender_status = settings["sms_sender"], "active"
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            UPDATE client_channel_settings
+            SET sms_mode=?, sms_sender=?, sms_sender_status=?, updated_at=?
+            WHERE cliente_id=?
+            """,
+            (data.mode, sender, sender_status, _utc_now_iso(), cliente_id),
+        )
+        connection.commit()
+    _channel_audit(cliente_id, "sms", "settings_updated", data.mode, True, sender_status)
+    return _channel_settings_public(cliente_id)
+
+
+@app.post("/auth/app/channels/sms/test", response_model=AuthSimpleResponse)
+async def app_channels_sms_test(
+    data: ChannelTestPayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> AuthSimpleResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    _check_rate_limit(f"channel-sms-test:{cliente_id}", 3)
+    target = _booking_customer_phone_for_channel({"telefono": data.target}, "sms")
+    if not target:
+        raise HTTPException(status_code=400, detail="Indica un telefono valido.")
+    if not await _send_client_sms(cliente_id, target, "Prueba de canal SMS de Vantelia."):
+        raise HTTPException(status_code=502, detail="No se pudo enviar el SMS de prueba.")
+    return AuthSimpleResponse(ok=True, message="SMS de prueba enviado.")
+
+
+@app.get("/auth/app/payments/connect/status", response_model=ConnectAccountStatus)
+async def app_connect_status(
+    refresh: bool = False,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> ConnectAccountStatus:
+    return _connect_account_status(_resolve_cliente_for_self_serve_user(user), refresh=refresh)
+
+
+@app.post("/auth/app/payments/ai-send", response_model=ConnectAccountStatus)
+async def app_payments_ai_send_toggle(
+    data: AiSendTogglePayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> ConnectAccountStatus:
+    """Opt-in del negocio: permite que la IA envie enlaces de pago en su nombre."""
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    _set_ai_send_enabled(cliente_id, data.enabled)
+    return _connect_account_status(cliente_id)
+
+
+@app.post("/auth/app/payments/connect/start", response_model=ConnectStartResponse)
+async def app_connect_start(
+    request: Request,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> ConnectStartResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    if STRIPE_CONNECT_CLIENT_ID:
+        state = _oauth_create_state("stripe_connect", f"{cliente_id}:{user['id']}")
+        redirect_uri = STRIPE_CONNECT_RETURN_URL or f"{_public_base_url(request)}/auth/app/payments/connect/callback"
+        url = "https://connect.stripe.com/oauth/authorize?" + urlencode({
+            "response_type": "code", "client_id": STRIPE_CONNECT_CLIENT_ID,
+            "scope": "read_write", "state": state, "redirect_uri": redirect_uri,
+        })
+        return ConnectStartResponse(url=url)
+
+    _stripe_init()
+    base_url = _public_base_url(request)
+    try:
+        with _get_db_connection() as connection:
+            row = connection.execute(
+                "SELECT stripe_account_id FROM client_payment_accounts WHERE cliente_id=?",
+                (cliente_id,),
+            ).fetchone()
+        account_id = str(row["stripe_account_id"] or "") if row else ""
+        if account_id:
+            account = stripe.Account.retrieve(account_id)
+        else:
+            account = stripe.Account.create(
+                type="standard",
+                metadata={"vantelia_cliente_id": cliente_id},
+            )
+        account_id = _save_connect_account(cliente_id, account)
+        account_link = stripe.AccountLink.create(
+            account=account_id,
+            refresh_url=STRIPE_CONNECT_REFRESH_URL or f"{base_url}/app?payments=refresh",
+            return_url=f"{base_url}/app?payments=connected",
+            type="account_onboarding",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Error iniciando Stripe Connect Onboarding para %s: %s", cliente_id, exc)
+        if "signed up for Connect" in str(exc):
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Stripe Connect aun no esta activado para Vantelia. "
+                    "El administrador debe completar el perfil de plataforma en "
+                    "https://dashboard.stripe.com/connect antes de conectar empresas."
+                ),
+            ) from exc
+        raise HTTPException(status_code=502, detail="No se pudo iniciar Stripe Connect.") from exc
+    return ConnectStartResponse(url=str(_object_get(account_link, "url", "") or ""))
+
+
+@app.get("/auth/app/payments/connect/callback")
+async def app_connect_callback(
+    request: Request,
+    code: str = "",
+    state: str = "",
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> RedirectResponse:
+    state_data = _oauth_consume_state(state)
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    if not state_data or state_data["intent"] != "stripe_connect" or state_data["claim"] != f"{cliente_id}:{user['id']}":
+        raise HTTPException(status_code=400, detail="Estado OAuth invalido o caducado.")
+    if not code:
+        raise HTTPException(status_code=400, detail="Stripe no devolvio un codigo de autorizacion.")
+    _stripe_init()
+    try:
+        token = stripe.OAuth.token(grant_type="authorization_code", code=code)
+        account_id = _object_get(token, "stripe_user_id", "")
+        account = stripe.Account.retrieve(account_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail="No se pudo conectar la cuenta Stripe.") from exc
+    _save_connect_account(cliente_id, account)
+    return RedirectResponse(url="/app?payments=connected", status_code=303)
+
+
+@app.put("/auth/app/services/{service_id}/payment-policy", response_model=ServicePublic)
+async def app_service_payment_policy(
+    service_id: str,
+    data: ServicePaymentPolicyPayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> ServicePublic:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    _ensure_services_seeded(cliente_id)
+    service = _get_service_row(cliente_id, service_id)
+    if not service:
+        raise HTTPException(status_code=404, detail="Servicio no encontrado.")
+    if data.mode not in PAYMENT_POLICY_MODES:
+        raise HTTPException(status_code=400, detail="Politica de pago invalida.")
+    if data.mode == "deposit_percent" and not 1 <= data.deposit_value <= 100:
+        raise HTTPException(status_code=400, detail="El porcentaje debe estar entre 1 y 100.")
+    now = _utc_now_iso()
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO service_payment_policies
+                (cliente_id, service_id, mode, deposit_value, confirm_booking_on_paid, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(cliente_id, service_id) DO UPDATE SET mode=excluded.mode,
+                deposit_value=excluded.deposit_value, confirm_booking_on_paid=excluded.confirm_booking_on_paid,
+                updated_at=excluded.updated_at
+            """,
+            (cliente_id, service_id, data.mode, data.deposit_value, int(data.confirm_booking_on_paid), now, now),
+        )
+        connection.commit()
+    return ServicePublic(**_service_row_to_public(service))
+
+
+@app.get("/auth/app/payments", response_model=CustomerPaymentsResponse)
+async def app_customer_payments(
+    booking_id: str = "", contact_id: str = "", limit: int = 100,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> CustomerPaymentsResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    clauses, params = ["cliente_id=?"], [cliente_id]
+    if booking_id:
+        clauses.append("booking_id=?"); params.append(booking_id)
+    if contact_id:
+        clauses.append("contact_id=?"); params.append(contact_id)
+    with _get_db_connection() as connection:
+        total = connection.execute(f"SELECT COUNT(*) FROM customer_payments WHERE {' AND '.join(clauses)}", tuple(params)).fetchone()[0]
+        rows = connection.execute(
+            f"SELECT * FROM customer_payments WHERE {' AND '.join(clauses)} ORDER BY created_at DESC LIMIT ?",
+            (*params, max(1, min(limit, 500))),
+        ).fetchall()
+    return CustomerPaymentsResponse(items=[_payment_public(row) for row in rows], total=int(total or 0))
+
+
+def _create_customer_payment_link(
+    cliente_id: str,
+    booking: sqlite3.Row,
+    *,
+    base_url: str,
+    override_cents: Optional[int] = None,
+) -> sqlite3.Row:
+    """Crea una sesion de Stripe Checkout sobre la cuenta Connect del negocio y
+    persiste el customer_payment. Logica compartida por el portal (boton manual)
+    y por la IA (web/WhatsApp/voz). Lanza HTTPException en cada error de negocio
+    para que cada llamante mapee el detalle como prefiera. Sincrona (llama a
+    Stripe): los llamantes async deben envolverla en asyncio.to_thread."""
+    booking_id = booking["id"]
+    with _get_db_connection() as connection:
+        paid = connection.execute(
+            "SELECT 1 FROM customer_payments WHERE cliente_id=? AND booking_id=? AND status='paid' LIMIT 1",
+            (cliente_id, booking_id),
+        ).fetchone()
+    if paid:
+        raise HTTPException(status_code=409, detail="Esta cita ya tiene un pago completado.")
+    account = _connect_account_status(cliente_id, refresh=True)
+    if not account.connected or not account.charges_enabled:
+        raise HTTPException(status_code=409, detail="Conecta y activa Stripe antes de solicitar pagos.")
+    amount = _payment_amount_for_booking(booking, override_cents)
+    if amount < 50:
+        raise HTTPException(status_code=400, detail="Configura un precio o una señal minima de 0,50 EUR.")
+    contact_id = _payment_contact_for_booking(booking)
+    payment_id, now = "pay_" + secrets.token_hex(10), _utc_now_iso()
+    metadata = {"source": "customer_payment", "payment_id": payment_id, "cliente_id": cliente_id, "booking_id": booking_id}
+    base = (base_url or "").rstrip("/")
+    _stripe_init()
+    try:
+        checkout_kwargs: Dict[str, Any] = dict(
+            mode="payment",
+            line_items=[{"price_data": {"currency": "eur", "unit_amount": amount, "product_data": {"name": booking["servicio"] or "Reserva"}}, "quantity": 1}],
+            metadata=metadata,
+            success_url=f"{base}/booking/manage/{booking['manage_token']}?payment=success",
+            cancel_url=f"{base}/booking/manage/{booking['manage_token']}?payment=cancel",
+            stripe_account=account.stripe_account_id,
+        )
+        if booking["email"]:
+            checkout_kwargs["customer_email"] = booking["email"]
+        session = stripe.checkout.Session.create(**checkout_kwargs)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("No se pudo crear checkout Connect %s: %s", booking_id, exc)
+        raise HTTPException(status_code=502, detail="No se pudo crear el enlace de pago.") from exc
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO customer_payments
+                (id, cliente_id, contact_id, booking_id, service_id, service_name, stripe_account_id,
+                 stripe_checkout_session_id, amount_cents, currency, status, checkout_url, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'eur', 'pending', ?, ?, ?)
+            """,
+            (
+                payment_id, cliente_id, contact_id, booking_id, booking["service_id"] or "",
+                booking["servicio"] or "", account.stripe_account_id, _object_get(session, "id", ""),
+                amount, _object_get(session, "url", ""), now, now,
+            ),
+        )
+        connection.commit()
+        row = connection.execute("SELECT * FROM customer_payments WHERE id=?", (payment_id,)).fetchone()
+    return row
+
+
+@app.post("/auth/app/bookings/{booking_id}/payment-link", response_model=PaymentLinkResponse)
+async def app_booking_payment_link(
+    booking_id: str,
+    data: PaymentLinkPayload,
+    request: Request,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> PaymentLinkResponse:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    booking = _load_booking_or_404(booking_id)
+    if booking["cliente_id"] != cliente_id:
+        raise HTTPException(status_code=404, detail="Cita no encontrada.")
+    row = _create_customer_payment_link(
+        cliente_id, booking, base_url=_public_base_url(request), override_cents=data.amount_cents
+    )
+    return PaymentLinkResponse(payment=_payment_public(row), checkout_url=row["checkout_url"])
+
+
+def _ai_payment_method_for_source(source: str) -> str:
+    """Canal de envio del enlace segun el origen de la cita: voz -> SMS, resto -> email."""
+    return "sms" if (source or "").strip().lower() == "voice" else "email"
+
+
+async def _ai_send_payment_link(
+    cliente_id: str,
+    booking: sqlite3.Row,
+    *,
+    base_url: str = "",
+) -> Dict[str, Any]:
+    """Genera y ENVIA un enlace de pago al cliente final, en nombre del negocio.
+
+    Canal automatico segun booking.source: 'voice' -> SMS al telefono de la cita,
+    resto -> email al email de la cita. Aplica todas las reglas de seguridad:
+    opt-in del negocio, Stripe conectado, importe NO manipulable por el cliente
+    (sale de la politica/precio), dedup de pago ya pagado y rate limit. Devuelve
+    un dict con `ok` y mensajes amigables para que el asistente los verbalice.
+    Nunca lanza: cualquier fallo vuelve como {"ok": False, ...}.
+    """
+    config = CONFIG_CLIENTES.get(cliente_id) or {}
+    nombre_negocio = config.get("nombre", "") or "el negocio"
+
+    if not _ai_send_enabled_for_client(cliente_id):
+        return {"ok": False, "reason": "disabled",
+                "error": "El envio de enlaces de pago no esta activado para este negocio."}
+
+    booking_id = booking["id"]
+    source = (booking["source"] or "").strip().lower()
+    method = _ai_payment_method_for_source(source)
+    email = _sanitize_text(booking["email"] or "")
+    phone = _booking_customer_phone_for_channel(booking, "sms")
+
+    if method == "sms" and not phone:
+        return {"ok": False, "reason": "no_phone", "method": method,
+                "error": "La cita no tiene un telefono al que enviar el SMS con el enlace de pago."}
+    if method == "email" and not email:
+        return {"ok": False, "reason": "no_email", "method": method,
+                "error": "La cita no tiene un email al que enviar el enlace de pago."}
+
+    # Rate limit: maximo 2 enlaces por cita en la ultima hora (anti-spam/enumeracion).
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    with _get_db_connection() as connection:
+        recent = connection.execute(
+            "SELECT COUNT(*) AS n FROM customer_payments WHERE cliente_id=? AND booking_id=? AND created_at>=?",
+            (cliente_id, booking_id, cutoff),
+        ).fetchone()
+    if recent and int(recent["n"] or 0) >= 2:
+        return {"ok": False, "reason": "rate_limited", "method": method,
+                "error": "Ya se han enviado varios enlaces de pago de esta cita en la ultima hora."}
+
+    base = base_url or _preferred_public_base_url()
+    try:
+        row = await asyncio.to_thread(
+            _create_customer_payment_link, cliente_id, booking, base_url=base, override_cents=None
+        )
+    except HTTPException as exc:
+        return {"ok": False, "reason": "link_error", "method": method, "error": str(exc.detail)}
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[ai-pay] no se pudo crear enlace para %s: %s", booking_id, exc)
+        return {"ok": False, "reason": "link_error", "method": method,
+                "error": "No se pudo generar el enlace de pago."}
+
+    checkout_url = row["checkout_url"] or ""
+    amount_cents = int(row["amount_cents"] or 0)
+    amount_label = _format_price_cents(amount_cents)
+    servicio = booking["servicio"] or "tu cita"
+    code = booking["booking_code"] or ""
+
+    sent = False
+    if method == "sms":
+        body = (
+            f"{nombre_negocio}: para pagar {servicio} ({amount_label}) usa este enlace seguro: "
+            f"{checkout_url}"
+        )
+        sent = await _send_client_sms(cliente_id, phone, body)
+    else:
+        reply_to = (config.get("contacto", {}) or {}).get("email", "") or None
+        subject = f"Enlace de pago de tu cita en {nombre_negocio}"
+        text_body = (
+            f"Hola,\n\nGracias por confiar en {nombre_negocio}. "
+            f"Para completar el pago de {servicio} ({amount_label}) usa este enlace seguro:\n\n"
+            f"{checkout_url}\n\n"
+            "El pago se procesa de forma segura a traves de Stripe.\n\n"
+            f"Un saludo,\n{nombre_negocio}"
+        )
+        html_body = (
+            f"<p>Hola,</p><p>Gracias por confiar en <strong>{escape(nombre_negocio)}</strong>. "
+            f"Para completar el pago de <strong>{escape(servicio)}</strong> ({escape(amount_label)}) "
+            f"usa este enlace seguro:</p>"
+            f'<p><a href="{escape(checkout_url)}">Pagar ahora</a></p>'
+            "<p>El pago se procesa de forma segura a traves de Stripe.</p>"
+            f"<p>Un saludo,<br>{escape(nombre_negocio)}</p>"
+        )
+        try:
+            await asyncio.to_thread(_send_client_email, cliente_id, email, subject, text_body, html_body, reply_to)
+            sent = True
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[ai-pay] email fallo %s: %s", booking_id, exc)
+            sent = False
+
+    _record_booking_audit(
+        booking_id, cliente_id, "ai_payment_link_sent",
+        {
+            "source": source, "method": method, "amount_cents": amount_cents,
+            "payment_id": row["id"], "sent": bool(sent),
+            "recipient": (phone if method == "sms" else email),
+        },
+    )
+
+    return {
+        "ok": True, "method": method, "sent": bool(sent),
+        "amount_cents": amount_cents, "amount_label": amount_label,
+        "checkout_url": checkout_url, "booking_code": code, "servicio": servicio,
+    }
+
+
+@app.post("/auth/app/payments/{payment_id}/refund", response_model=CustomerPaymentPublic)
+async def app_payment_refund(
+    payment_id: str,
+    data: PaymentRefundPayload,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> CustomerPaymentPublic:
+    cliente_id = _resolve_cliente_for_self_serve_user(user)
+    with _get_db_connection() as connection:
+        payment = connection.execute(
+            "SELECT * FROM customer_payments WHERE id=? AND cliente_id=?", (payment_id, cliente_id)
+        ).fetchone()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Pago no encontrado.")
+    if payment["status"] not in {"paid", "partially_refunded"} or not payment["stripe_payment_intent_id"]:
+        raise HTTPException(status_code=409, detail="Este pago no se puede reembolsar.")
+    kwargs: Dict[str, Any] = {
+        "payment_intent": payment["stripe_payment_intent_id"],
+        "stripe_account": payment["stripe_account_id"],
+    }
+    if data.amount_cents is not None:
+        kwargs["amount"] = int(data.amount_cents)
+    _stripe_init()
+    try:
+        stripe.Refund.create(**kwargs)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail="No se pudo solicitar el reembolso.") from exc
+    with _get_db_connection() as connection:
+        row = connection.execute("SELECT * FROM customer_payments WHERE id=?", (payment_id,)).fetchone()
+    return _payment_public(row)
+
+
 # --- Sem 4: Leads ----------------------------------------------------------
 
 def _lead_row_to_public(row: sqlite3.Row) -> AppLeadPublic:
@@ -14351,6 +16427,21 @@ async def app_lead_create(
         )
         connection.commit()
         row = connection.execute("SELECT * FROM bot_leads WHERE id = ?", (lead_id,)).fetchone()
+    contact_id = _crm_upsert_contact(
+        cliente_id,
+        name=name,
+        email=email,
+        phone=phone,
+        source=_sanitize_text(data.source)[:40] or "manual",
+        status="interesado",
+        entity_type="lead",
+        entity_id=lead_id,
+        actor=f"user:{user['id']}",
+    )
+    if contact_id and data.session_id:
+        with _get_db_connection() as connection:
+            _crm_link(connection, cliente_id, contact_id, "chat", _sanitize_text(data.session_id)[:200], "chat")
+            connection.commit()
     return _lead_row_to_public(row)
 
 
@@ -16458,6 +18549,12 @@ async def auth_mark_booking_attendance(
         },
     )
     refreshed = _load_booking_or_404(booking_id)
+    _crm_upsert_contact(
+        refreshed["cliente_id"], name=refreshed["nombre"], email=refreshed["email"],
+        phone=refreshed["telefono"] or "", source="portal",
+        status="cliente" if data.attended else "interesado",
+        entity_type="booking", entity_id=refreshed["id"], actor=f"user:{user['id']}",
+    )
     return BookingActionResponse(
         ok=True,
         booking_id=booking_id,
@@ -16726,6 +18823,106 @@ def _construct_stripe_webhook_event(payload: bytes, sig_header: str) -> Any:
     if last_error:
         raise last_error
     raise RuntimeError("Stripe webhook secret no configurado.")
+
+
+@app.post("/stripe/connect/webhook", include_in_schema=False)
+async def stripe_connect_webhook(request: Request) -> Dict[str, Any]:
+    if not _stripe_configured() or not STRIPE_CONNECT_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Stripe Connect webhook no configurado.")
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature", "")
+    try:
+        event = stripe.Webhook.construct_event(payload, signature, STRIPE_CONNECT_WEBHOOK_SECRET)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Webhook Connect invalido.") from exc
+    event_id = str(_object_get(event, "id", "") or "")
+    event_type = str(_object_get(event, "type", "") or "")
+    account_id = str(_object_get(event, "account", "") or "")
+    data = _object_get(_object_get(event, "data", {}), "object", {}) or {}
+    metadata = _object_get(data, "metadata", {}) or {}
+    payment_id = str(_object_get(metadata, "payment_id", "") or "")
+    session_id = str(_object_get(data, "id", "") or "") if event_type.startswith("checkout.session.") else ""
+    with _get_db_connection() as connection:
+        account_row = connection.execute(
+            "SELECT cliente_id FROM client_payment_accounts WHERE stripe_account_id=?", (account_id,)
+        ).fetchone()
+        if not account_row:
+            raise HTTPException(status_code=404, detail="Cuenta Connect no reconocida.")
+        cliente_id = account_row["cliente_id"]
+        if connection.execute("SELECT 1 FROM customer_payment_events WHERE stripe_event_id=?", (event_id,)).fetchone():
+            return {"received": True, "duplicate": True}
+        payment = None
+        if payment_id:
+            payment = connection.execute(
+                "SELECT * FROM customer_payments WHERE id=? AND cliente_id=?", (payment_id, cliente_id)
+            ).fetchone()
+        if not payment and session_id:
+            payment = connection.execute(
+                "SELECT * FROM customer_payments WHERE stripe_checkout_session_id=? AND cliente_id=?",
+                (session_id, cliente_id),
+            ).fetchone()
+        if not payment and event_type == "charge.refunded":
+            payment_intent_id = str(_object_get(data, "payment_intent", "") or "")
+            if payment_intent_id:
+                payment = connection.execute(
+                    "SELECT * FROM customer_payments WHERE stripe_payment_intent_id=? AND cliente_id=?",
+                    (payment_intent_id, cliente_id),
+                ).fetchone()
+        connection.execute(
+            """
+            INSERT INTO customer_payment_events (stripe_event_id, cliente_id, payment_id, event_type, payload_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (event_id, cliente_id, payment["id"] if payment else payment_id, event_type, json.dumps(data, ensure_ascii=False, default=str), _utc_now_iso()),
+        )
+        if event_type == "account.updated":
+            connection.execute(
+                """
+                UPDATE client_payment_accounts SET charges_enabled=?, payouts_enabled=?,
+                    details_submitted=?, updated_at=? WHERE cliente_id=?
+                """,
+                (
+                    int(bool(_object_get(data, "charges_enabled", False))),
+                    int(bool(_object_get(data, "payouts_enabled", False))),
+                    int(bool(_object_get(data, "details_submitted", False))),
+                    _utc_now_iso(), cliente_id,
+                ),
+            )
+        if payment:
+            now = _utc_now_iso()
+            new_status = payment["status"]
+            paid_at = payment["paid_at"] or ""
+            payment_intent = payment["stripe_payment_intent_id"] or ""
+            if event_type == "checkout.session.completed" and str(_object_get(data, "payment_status", "")) == "paid":
+                new_status, paid_at = "paid", now
+                payment_intent = str(_object_get(data, "payment_intent", "") or "")
+            elif event_type in {"checkout.session.expired", "payment_intent.payment_failed"}:
+                new_status = "failed"
+            elif event_type == "charge.refunded":
+                refunded = int(_object_get(data, "amount_refunded", 0) or 0)
+                total = int(_object_get(data, "amount", 0) or payment["amount_cents"])
+                new_status = "refunded" if refunded >= total else "partially_refunded"
+            connection.execute(
+                "UPDATE customer_payments SET status=?, paid_at=?, stripe_payment_intent_id=?, updated_at=? WHERE id=?",
+                (new_status, paid_at, payment_intent, now, payment["id"]),
+            )
+            if new_status == "paid" and payment["booking_id"]:
+                booking = connection.execute("SELECT * FROM bookings WHERE id=? AND cliente_id=?", (payment["booking_id"], cliente_id)).fetchone()
+                if booking:
+                    policy = _payment_policy(cliente_id, payment["service_id"] or "")
+                    if policy["confirm_booking_on_paid"] and booking["status"] == "pending_review":
+                        connection.execute(
+                            "UPDATE bookings SET status='confirmed', confirmed_at=? WHERE id=?",
+                            (now, booking["id"]),
+                        )
+                        connection.execute(
+                            "INSERT INTO booking_audit (booking_id, cliente_id, event_type, payload_json, created_at) VALUES (?, ?, 'booking_confirmed_by_payment', ?, ?)",
+                            (booking["id"], cliente_id, json.dumps({"payment_id": payment["id"]}), now),
+                        )
+            connection.commit()
+        else:
+            connection.commit()
+    return {"received": True}
 
 
 @app.post("/webhooks/stripe", include_in_schema=False)
@@ -19262,6 +21459,9 @@ async def auth_delete_service(
         connection.execute(
             "DELETE FROM services WHERE cliente_id = ? AND slug = ?", (target_client_id, slug)
         )
+        connection.execute(
+            "DELETE FROM service_payment_policies WHERE cliente_id = ? AND service_id = ?", (target_client_id, slug)
+        )
         connection.commit()
     return AuthSimpleResponse(ok=True, message="Servicio eliminado.")
 
@@ -19307,6 +21507,7 @@ async def _process_chat_message(
     request: Request,
     origin_override: str = "",
     user_agent_override: str = "",
+    trusted_phone: str = "",
 ) -> RespuestaChat:
     commercial_intent = _detect_commercial_intent(message)
     _ensure_chat_session_record(
@@ -19415,6 +21616,32 @@ async def _process_chat_message(
             intent="qa_exact",
         )
         return qa_response
+
+    # El pago se evalua antes que la gestion de cita: una peticion de pago suele
+    # incluir el numero de reserva y, sin esto, la gestion la interceptaria.
+    payment_flow = await _process_payment_request_message(
+        cliente_id=cliente_id,
+        message=message,
+        request=request,
+        source="chat",
+        trusted_phone=trusted_phone,
+    )
+    if payment_flow:
+        payment_intent, payment_text = payment_flow
+        payment_response = RespuestaChat(
+            respuesta=payment_text,
+            mostrar_formulario=False,
+            session_id=session_id,
+            intent=payment_intent,
+        )
+        _record_chat_message(
+            session_id=session_id,
+            cliente_id=cliente_id,
+            role="assistant",
+            content=payment_response.respuesta,
+            intent=payment_intent,
+        )
+        return payment_response
 
     management = await _process_booking_management_message(
         cliente_id=cliente_id,
@@ -19672,7 +21899,15 @@ def _mark_whatsapp_message_if_new(
             ),
         )
         connection.commit()
-        return True
+    _crm_upsert_contact(
+        cliente_id,
+        phone=from_number,
+        source="whatsapp",
+        status="nuevo",
+        entity_type="chat",
+        entity_id=f"wa_{_normalize_crm_phone(from_number)}",
+    )
+    return True
 
 
 def _verify_whatsapp_signature(raw_body: bytes, signature_header: str) -> None:
@@ -20976,6 +23211,7 @@ async def _handle_whatsapp_message(
         request=request,
         origin_override=f"whatsapp:{from_number}",
         user_agent_override="WhatsApp Cloud API",
+        trusted_phone=from_number,
     )
 
     if chat_response.mostrar_formulario and booking_enabled:
@@ -29649,6 +31885,15 @@ def _voice_call_register(call_sid: str, cliente_id: str, from_number: str, to_nu
             conn.commit()
     except Exception as exc:  # noqa: BLE001
         logger.error("[voice] no se pudo registrar llamada %s: %s", call_sid, exc)
+    else:
+        _crm_upsert_contact(
+            cliente_id,
+            phone=from_number,
+            source="voice",
+            status="nuevo",
+            entity_type="voice",
+            entity_id=call_sid,
+        )
 
 
 def _voice_call_from_number(call_sid: str) -> str:
@@ -29747,6 +31992,13 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
             "devuelva ok.\n"
             "- No inventes huecos ni confirmes una cita sin haber llamado a crear_cita con exito.\n"
         )
+        if _ai_payment_sending_available(cliente_id):
+            booking_block += (
+                "- COBRO: si el cliente quiere pagar o dejar una senal de su cita, confirmale en voz alta el "
+                "importe (lo fija el negocio segun el servicio; nunca lo decide el cliente) y usa la herramienta "
+                "enviar_enlace_pago. Le llegara un SMS con un enlace seguro. No leas la URL en voz alta: solo di "
+                "que le envias el enlace por mensaje. Si devuelve error, explicalo con tacto.\n"
+            )
     else:
         booking_block = (
             "\nAGENDA: la reserva online no esta activa para este negocio. Si piden cita, recoge nombre, "
@@ -29767,7 +32019,7 @@ def _voice_booking_tools(cliente_id: str, config: Dict[str, Any]) -> List[Dict[s
     """Herramientas Realtime para agendar en vivo. Vacio si el cliente no tiene reserva."""
     if not _voice_booking_enabled(cliente_id, config):
         return []
-    return [
+    tools: List[Dict[str, Any]] = [
         {
             "type": "function",
             "name": "consultar_disponibilidad",
@@ -29846,6 +32098,28 @@ def _voice_booking_tools(cliente_id: str, config: Dict[str, Any]) -> List[Dict[s
             },
         },
     ]
+    if _ai_payment_sending_available(cliente_id):
+        tools.append(
+            {
+                "type": "function",
+                "name": "enviar_enlace_pago",
+                "description": (
+                    "Envia por SMS al telefono de la llamada un enlace seguro para que el cliente pague su cita. "
+                    "Usala SOLO si el cliente quiere pagar o dejar una senal y tras confirmarle en voz alta el importe. "
+                    "El importe lo fija el negocio segun el servicio: NUNCA lo decide el cliente. Pasa el numero de "
+                    "reserva (R-XXXX) si lo tienes; si no, se usa la ultima cita de este telefono. No leas la URL en "
+                    "voz alta: solo confirma que le llega el enlace por SMS."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "codigo_reserva": {"type": "string", "description": "Numero de reserva, formato R-XXXX (opcional)"},
+                    },
+                    "required": [],
+                },
+            }
+        )
+    return tools
 
 
 async def _voice_check_availability(cliente_id: str, fecha: str, servicio: str = "") -> Dict[str, Any]:
@@ -30129,6 +32403,68 @@ async def _voice_reschedule_booking(
     }
 
 
+def _latest_booking_for_contact(
+    cliente_id: str, *, phone: str = "", email: str = ""
+) -> Optional[sqlite3.Row]:
+    """Ultima cita activa (confirmada o pendiente) que coincide con un telefono o
+    email. Permite que la IA envie el enlace de pago sin pedir el numero de reserva
+    cuando ya conoce al cliente (telefono de la llamada/WhatsApp o contacto dado)."""
+    norm_phone = _normalize_phone_for_match(phone)
+    norm_email = _sanitize_text(email).strip().lower()
+    if not norm_phone and not norm_email:
+        return None
+    with _get_db_connection() as connection:
+        rows = connection.execute(
+            "SELECT * FROM bookings WHERE cliente_id=? AND status IN ('confirmed','pending_review') "
+            "ORDER BY created_at DESC LIMIT 50",
+            (cliente_id,),
+        ).fetchall()
+    for row in rows:
+        if norm_phone and _normalize_phone_for_match(row["telefono"] or "") == norm_phone:
+            return row
+        if norm_email and (row["email"] or "").strip().lower() == norm_email:
+            return row
+    return None
+
+
+async def _voice_send_payment_link(
+    cliente_id: str, codigo_reserva: str, *, from_number: str = ""
+) -> Dict[str, Any]:
+    """Tool de voz: envia por SMS el enlace de pago de la cita. Resuelve la cita por
+    numero de reserva (verificando que el telefono de la llamada coincide) o, si no
+    se da codigo, por el telefono de la llamada."""
+    if not _ai_payment_sending_available(cliente_id):
+        return {"ok": False, "error": "El cobro con tarjeta no esta disponible en este momento."}
+    code = _sanitize_text(codigo_reserva)
+    if code:
+        booking = _get_booking_row_by_code(cliente_id, code)
+        if not booking:
+            return {"ok": False, "error": "No encuentro ninguna cita con ese numero de reserva."}
+        if from_number and not _booking_contact_matches(booking, telefono=from_number):
+            return {
+                "ok": False,
+                "needs_verification": True,
+                "error": "Por seguridad solo puedo enviar el enlace al telefono con el que se reservo.",
+            }
+    else:
+        booking = _latest_booking_for_contact(cliente_id, phone=from_number)
+        if not booking:
+            return {
+                "ok": False,
+                "error": "No encuentro ninguna cita asociada a este telefono. Pide el numero de reserva.",
+            }
+    result = await _ai_send_payment_link(cliente_id, booking, base_url=_preferred_public_base_url())
+    if not result.get("ok"):
+        return {"ok": False, "error": result.get("error") or "No se pudo enviar el enlace de pago."}
+    amount_label = result.get("amount_label", "")
+    return {
+        "ok": True,
+        "importe": amount_label,
+        "enviado": bool(result.get("sent")),
+        "mensaje": f"Enviado un SMS con el enlace para pagar {amount_label}.",
+    }
+
+
 async def _voice_dispatch_tool(
     cliente_id: str, name: str, arguments_json: str, *, from_number: str = ""
 ) -> Dict[str, Any]:
@@ -30170,6 +32506,12 @@ async def _voice_dispatch_tool(
             from_number=from_number,
             telefono=str(args.get("telefono", "")),
             email=str(args.get("email", "")),
+        )
+    if name == "enviar_enlace_pago":
+        return await _voice_send_payment_link(
+            cliente_id,
+            str(args.get("codigo_reserva", "")),
+            from_number=from_number,
         )
     return {"ok": False, "error": "Funcion desconocida."}
 
@@ -30232,16 +32574,25 @@ def _voice_summarize(transcript_text: str) -> str:
         return ""
 
 
-async def _send_twilio_sms(to_number: str, from_number: str, body: str) -> bool:
-    if not (_voice_twilio_configured() and from_number and to_number):
+async def _send_twilio_sms(
+    to_number: str,
+    from_number: str,
+    body: str,
+    *,
+    account_sid: str = "",
+    auth_token: str = "",
+) -> bool:
+    account_sid = account_sid or TWILIO_ACCOUNT_SID
+    auth_token = auth_token or TWILIO_AUTH_TOKEN
+    if not (account_sid and auth_token and from_number and to_number):
         return False
-    url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Messages.json"
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json"
     try:
         async with httpx.AsyncClient(timeout=20) as client:
             resp = await client.post(
                 url,
                 data={"To": to_number, "From": from_number, "Body": body[:1500]},
-                auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN),
+                auth=(account_sid, auth_token),
             )
         if resp.status_code >= 300:
             logger.error("[voice] Twilio SMS error (%s): %s", resp.status_code, resp.text[:300])
