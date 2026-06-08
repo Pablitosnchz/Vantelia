@@ -104,6 +104,8 @@ class RespuestaAgendado(BaseModel):
     provider_booking_id: str = ""
     provider_booking_url: str = ""
     manage_url: str = ""
+    payment_status: str = "not_required"
+    payment_url: str = ""
 
 
 class BookingDetailPublic(BaseModel):
@@ -142,6 +144,8 @@ class BookingActionResponse(BaseModel):
     employee_name: str = ""
     manage_url: str = ""
     provider_booking_url: str = ""
+    payment_status: str = "not_required"
+    payment_url: str = ""
 
 
 class BookingReschedulePayload(BaseModel):
@@ -166,6 +170,10 @@ class ServicePublic(BaseModel):
     price_cents: int = 0
     price_label: str = ""
     is_active: bool = True
+    payment_mode: str = "payment_disabled"
+    payment_type: str = "full"
+    deposit_amount_cents: int = 0
+    currency: str = "eur"
 
 
 class ServicesResponse(BaseModel):
@@ -179,6 +187,10 @@ class ServicePayload(BaseModel):
     descripcion: str = Field(default="", max_length=500)
     is_active: bool = True
     sort_order: int = Field(default=0, ge=0, le=9999)
+    payment_mode: str = Field(default="payment_disabled", pattern=r"^(payment_disabled|payment_optional|payment_required)$")
+    payment_type: str = Field(default="full", pattern=r"^(full|deposit)$")
+    deposit_amount_cents: int = Field(default=0, ge=0, le=10_000_000)
+    currency: str = Field(default="eur", pattern=r"^[a-zA-Z]{3}$")
 
 
 class ServiceUpdatePayload(BaseModel):
@@ -188,6 +200,10 @@ class ServiceUpdatePayload(BaseModel):
     descripcion: Optional[str] = Field(default=None, max_length=500)
     is_active: Optional[bool] = None
     sort_order: Optional[int] = Field(default=None, ge=0, le=9999)
+    payment_mode: Optional[str] = Field(default=None, pattern=r"^(payment_disabled|payment_optional|payment_required)$")
+    payment_type: Optional[str] = Field(default=None, pattern=r"^(full|deposit)$")
+    deposit_amount_cents: Optional[int] = Field(default=None, ge=0, le=10_000_000)
+    currency: Optional[str] = Field(default=None, pattern=r"^[a-zA-Z]{3}$")
 
 
 class StaffBookingCreatePayload(BaseModel):
@@ -677,6 +693,25 @@ class StripeConnectStateResponse(BaseModel):
 class StripeConnectStartResponse(BaseModel):
     ok: bool
     onboarding_url: str
+
+
+class BookingPaymentStateResponse(BaseModel):
+    booking_id: str
+    payment_required: bool = False
+    payment_optional: bool = False
+    payment_status: str = "not_required"
+    amount_cents: int = 0
+    currency: str = "eur"
+    checkout_url: str = ""
+
+
+class GmailClientStateResponse(BaseModel):
+    configured: bool = False
+    connected: bool = False
+    email: str = ""
+    status: str = "not_connected"
+    last_error: str = ""
+    smtp_fallback: bool = False
 
 
 class ConsultaLeadPayload(BaseModel):

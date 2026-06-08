@@ -1586,6 +1586,19 @@
       </div>
       <p class="panel-sub" id="stripeConnectMessage" style="margin-top:12px;"></p>
     </div>
+    <div class="panel-card" style="margin-top:18px;">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <h2 style="margin:0;">Email Gmail del negocio</h2>
+        <span class="pro-pill" id="gmailClientStatusPill">Sin conectar</span>
+      </div>
+      <p class="panel-sub">Opcional. Permite enviar confirmaciones y recordatorios desde el Gmail del negocio. Si no está conectado, se usa SMTP cuando esté disponible.</p>
+      <div id="gmailClientEmail" style="margin-top:12px; color:var(--soft);">No hay Gmail conectado.</div>
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="gmailClientConnectBtn" type="button">Conectar Gmail</button>
+        <button class="btn btn-ghost" id="gmailClientDisconnectBtn" type="button" style="display:none;">Desconectar</button>
+      </div>
+      <p class="panel-sub" id="gmailClientMessage" style="margin-top:10px;"></p>
+    </div>
   </section>
 
   <!-- BILLING -->
@@ -2002,6 +2015,9 @@
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Nombre *</label><input type="text" class="field-input" id="svcNombre" placeholder="Ej. Primera consulta" /></div>
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Duración (minutos) *</label><input type="number" class="field-input" id="svcDuracion" min="5" max="600" step="5" value="30" /></div>
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Precio (€)</label><input type="number" class="field-input" id="svcPrecio" min="0" step="0.01" placeholder="0 = a consultar" /></div>
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Cobro Stripe</label><select class="field-input" id="svcPaymentMode"><option value="payment_disabled">Sin cobro</option><option value="payment_optional">Pago opcional</option><option value="payment_required">Pago requerido</option></select></div>
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Tipo de cobro</label><select class="field-input" id="svcPaymentType"><option value="full">Importe completo</option><option value="deposit">Depósito</option></select></div>
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Depósito (€)</label><input type="number" class="field-input" id="svcDeposit" min="0" step="0.01" placeholder="Solo para depósitos" /></div>
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Descripción</label><textarea class="field-input" id="svcDesc" rows="2" placeholder="opcional"></textarea></div>
     <label style="display:flex; align-items:center; gap:8px; margin-bottom:14px; cursor:pointer;"><input type="checkbox" id="svcActivo" checked /> <span>Activo (visible para reservar)</span></label>
     <input type="hidden" id="svcSlug" />
@@ -3480,6 +3496,7 @@ async function loadStripeConnect() {
     message.textContent = err.message;
     toast(err.message, 'error');
   }
+  loadGmailClientChannel();
 }
 
 async function startStripeConnect() {
@@ -3498,10 +3515,41 @@ async function startStripeConnect() {
 document.getElementById('stripeConnectBtn').addEventListener('click', startStripeConnect);
 document.getElementById('stripeConnectRefreshBtn').addEventListener('click', loadStripeConnect);
 
+async function loadGmailClientChannel() {
+  const pill = document.getElementById('gmailClientStatusPill');
+  const email = document.getElementById('gmailClientEmail');
+  const message = document.getElementById('gmailClientMessage');
+  const connect = document.getElementById('gmailClientConnectBtn');
+  const disconnect = document.getElementById('gmailClientDisconnectBtn');
+  try {
+    const data = await api('/auth/app/email-channel');
+    pill.textContent = data.connected ? 'Activo' : data.configured ? 'Sin conectar' : 'No disponible';
+    pill.style.color = data.connected ? 'var(--success)' : 'var(--soft)';
+    email.textContent = data.email || 'No hay Gmail conectado.';
+    connect.disabled = !data.configured;
+    connect.textContent = data.connected ? 'Reconectar Gmail' : 'Conectar Gmail';
+    disconnect.style.display = data.connected ? '' : 'none';
+    message.textContent = data.last_error || (data.smtp_fallback ? 'SMTP está disponible como respaldo.' : 'El email es opcional y no bloquea las reservas.');
+  } catch (err) { message.textContent = err.message; }
+}
+document.getElementById('gmailClientConnectBtn').addEventListener('click', () => {
+  window.location.href = '/auth/app/email-channel/gmail/connect';
+});
+document.getElementById('gmailClientDisconnectBtn').addEventListener('click', async () => {
+  try {
+    await api('/auth/app/email-channel/gmail', { method:'DELETE' });
+    toast('Gmail desconectado', 'success');
+    loadGmailClientChannel();
+  } catch (err) { toast(err.message, 'error'); }
+});
+
 (function handleStripeConnectReturn() {
   const sp = new URLSearchParams(window.location.search);
   if (sp.get('stripe_connect') === 'returned') {
     toast('Conexion de Stripe actualizada.', 'success');
+    setTimeout(() => setTab('payments'), 200);
+  } else if (sp.get('gmail_connected') === '1') {
+    toast('Gmail conectado correctamente.', 'success');
     setTimeout(() => setTab('payments'), 200);
   }
 })();
@@ -3981,6 +4029,9 @@ function openServiceDrawer(svc = null) {
   document.getElementById('svcNombre').value = svc ? svc.nombre : '';
   document.getElementById('svcDuracion').value = svc ? svc.duration_minutes : 30;
   document.getElementById('svcPrecio').value = (svc && svc.price_cents) ? (svc.price_cents / 100) : '';
+  document.getElementById('svcPaymentMode').value = svc ? (svc.payment_mode || 'payment_disabled') : 'payment_disabled';
+  document.getElementById('svcPaymentType').value = svc ? (svc.payment_type || 'full') : 'full';
+  document.getElementById('svcDeposit').value = (svc && svc.deposit_amount_cents) ? (svc.deposit_amount_cents / 100) : '';
   document.getElementById('svcDesc').value = svc ? (svc.descripcion || '') : '';
   document.getElementById('svcActivo').checked = svc ? !!svc.is_active : true;
   document.getElementById('serviceDrawer').classList.add('open');
@@ -3997,10 +4048,14 @@ async function saveService() {
   const precioEur = parseFloat(document.getElementById('svcPrecio').value);
   const price_cents = isNaN(precioEur) ? 0 : Math.round(precioEur * 100);
   const descripcion = document.getElementById('svcDesc').value.trim();
+  const payment_mode = document.getElementById('svcPaymentMode').value;
+  const payment_type = document.getElementById('svcPaymentType').value;
+  const depositEur = parseFloat(document.getElementById('svcDeposit').value);
+  const deposit_amount_cents = isNaN(depositEur) ? 0 : Math.round(depositEur * 100);
   const is_active = document.getElementById('svcActivo').checked;
   if (!nombre) { toast('El nombre es obligatorio.', 'error'); return; }
   if (!duration || duration < 5) { toast('La duración mínima es 5 minutos.', 'error'); return; }
-  const body = JSON.stringify({ nombre, duration_minutes: duration, price_cents, descripcion, is_active });
+  const body = JSON.stringify({ nombre, duration_minutes: duration, price_cents, descripcion, is_active, payment_mode, payment_type, deposit_amount_cents, currency:'eur' });
   const btn = document.getElementById('svcSaveBtn'); const old = btn.textContent; btn.disabled = true; btn.textContent = 'Guardando…';
   try {
     if (slug) await api(`/auth/services/${encodeURIComponent(slug)}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body });

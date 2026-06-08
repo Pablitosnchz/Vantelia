@@ -5511,3 +5511,154 @@ def test_email_provider_auto_prefers_gmail_and_falls_back_to_smtp(api_module, mo
     monkeypatch.setattr(api_module, "_gmail_send_message", fail_gmail)
     api_module._send_email_object(message)
     assert sent == ["smtp"]
+
+
+def test_client_gmail_connection_is_encrypted_and_isolated(api_module):
+    with api_module._get_db_connection() as connection:
+        connection.execute("DELETE FROM gmail_connections WHERE id IN ('client_a', 'client_b')")
+        connection.commit()
+
+    api_module._gmail_save_tokens(
+        {"access_token": "access-a", "refresh_token": "refresh-a", "expires_in": 3600},
+        "a@example.com",
+        cliente_id="client_a",
+    )
+    api_module._gmail_save_tokens(
+        {"access_token": "access-b", "refresh_token": "refresh-b", "expires_in": 3600},
+        "b@example.com",
+        cliente_id="client_b",
+    )
+
+    row_a = api_module._gmail_connection("client_a")
+    row_b = api_module._gmail_connection("client_b")
+    assert row_a["email"] == "a@example.com"
+    assert row_b["email"] == "b@example.com"
+    assert api_module._gmail_decrypt(row_a["refresh_token_encrypted"]) == "refresh-a"
+    assert api_module._gmail_decrypt(row_b["refresh_token_encrypted"]) == "refresh-b"
+    assert "refresh-a" not in row_a["refresh_token_encrypted"]
+
+    with api_module._get_db_connection() as connection:
+        connection.execute("DELETE FROM gmail_connections WHERE id IN ('client_a', 'client_b')")
+        connection.commit()
+
+
+def test_required_booking_payment_is_idempotent_and_confirmed_by_webhook(api_module, monkeypatch):
+    service_slug = f"paid-{uuid.uuid4().hex[:8]}"
+    record = _build_booking_record(
+        api_module,
+        servicio="Consulta de pago",
+        service_id=service_slug,
+        service_price_cents=4900,
+        booking_time="09:30",
+    )
+    created_sessions = []
+    sent_emails = []
+
+    def fake_create(**kwargs):
+        created_sessions.append(kwargs)
+        return SimpleNamespace(id="cs_booking_test", url="https://checkout.stripe.test/booking")
+
+    with api_module._get_db_connection() as connection:
+        now = api_module._utc_now_iso()
+        connection.execute(
+            """
+            INSERT INTO services
+                (cliente_id, slug, name, duration_minutes, price_cents, payment_mode,
+                 payment_type, deposit_amount_cents, currency, created_at, updated_at)
+            VALUES (?, ?, ?, 30, 4900, 'payment_required', 'deposit', 1200, 'eur', ?, ?)
+            """,
+            ("demo", service_slug, "Consulta de pago", now, now),
+        )
+        connection.commit()
+
+    api_module._save_stripe_connected_account("demo", "owner-test", "acct_booking_test", status_value="active")
+    monkeypatch.setattr(api_module, "_stripe_init", lambda: None)
+    monkeypatch.setattr(api_module.stripe.checkout.Session, "create", fake_create)
+    monkeypatch.setattr(api_module, "_send_booking_email", lambda row, kind, *args, **kwargs: sent_emails.append(kind))
+
+    try:
+        api_module._store_booking(record)
+        stored = api_module._get_booking_row_by_id(record["id"])
+        payment = api_module._booking_payment_row(record["id"])
+        assert stored["status"] == "pending_payment"
+        assert stored["payment_status"] == "pending"
+        assert payment["amount_cents"] == 1200
+        assert payment["checkout_url"] == "https://checkout.stripe.test/booking"
+        assert created_sessions[0]["stripe_account"] == "acct_booking_test"
+
+        assert api_module.create_booking_payment_checkout("demo", record["id"]) == payment["checkout_url"]
+        assert len(created_sessions) == 1
+
+        event = {
+            "id": "cs_booking_test",
+            "payment_intent": "pi_booking_test",
+            "metadata": {"source": "booking_payment", "cliente_id": "demo", "booking_id": record["id"]},
+        }
+        assert api_module.process_booking_payment_webhook(event) is True
+        assert api_module.process_booking_payment_webhook(event) is True
+        paid = api_module._get_booking_row_by_id(record["id"])
+        assert paid["status"] == "confirmed"
+        assert paid["payment_status"] == "paid"
+        assert sent_emails == ["confirmed"]
+    finally:
+        with api_module._get_db_connection() as connection:
+            connection.execute("DELETE FROM booking_payments WHERE booking_id = ?", (record["id"],))
+            connection.execute("DELETE FROM bookings WHERE id = ?", (record["id"],))
+            connection.execute("DELETE FROM services WHERE cliente_id = 'demo' AND slug = ?", (service_slug,))
+            connection.execute("DELETE FROM stripe_connected_accounts WHERE cliente_id = 'demo'")
+            connection.commit()
+
+
+def test_required_payment_expiry_releases_booking_and_stripe_unavailable_does_not_block(api_module, monkeypatch):
+    service_slug = f"paid-expire-{uuid.uuid4().hex[:8]}"
+    record = _build_booking_record(
+        api_module,
+        servicio="Consulta caducable",
+        service_id=service_slug,
+        service_price_cents=3000,
+        booking_time="09:30",
+    )
+    with api_module._get_db_connection() as connection:
+        now = api_module._utc_now_iso()
+        connection.execute(
+            """
+            INSERT INTO services
+                (cliente_id, slug, name, duration_minutes, price_cents, payment_mode,
+                 payment_type, deposit_amount_cents, currency, created_at, updated_at)
+            VALUES (?, ?, ?, 30, 3000, 'payment_required', 'full', 0, 'eur', ?, ?)
+            """,
+            ("demo", service_slug, "Consulta caducable", now, now),
+        )
+        connection.execute("DELETE FROM stripe_connected_accounts WHERE cliente_id = 'demo'")
+        connection.commit()
+
+    try:
+        api_module._store_booking(record)
+        stored = api_module._get_booking_row_by_id(record["id"])
+        assert stored["status"] == "confirmed"
+        assert stored["payment_status"] == "not_required"
+
+        api_module._save_stripe_connected_account("demo", "owner-test", "acct_booking_test", status_value="active")
+        record_two = _build_booking_record(
+            api_module,
+            servicio="Consulta caducable",
+            service_id=service_slug,
+            service_price_cents=3000,
+            booking_time="10:00",
+        )
+        monkeypatch.setattr(api_module, "_booking_payment_after_store", lambda booking_id, request=None: "")
+        api_module._store_booking(record_two)
+        expired_event = {
+            "metadata": {"source": "booking_payment", "cliente_id": "demo", "booking_id": record_two["id"]}
+        }
+        assert api_module.process_booking_payment_expired_webhook(expired_event) is True
+        expired = api_module._get_booking_row_by_id(record_two["id"])
+        assert expired["status"] == "cancelled"
+        assert expired["payment_status"] == "expired"
+    finally:
+        with api_module._get_db_connection() as connection:
+            connection.execute("DELETE FROM booking_payments WHERE cliente_id = 'demo'")
+            connection.execute("DELETE FROM bookings WHERE id IN (?, ?)", (record["id"], locals().get("record_two", {}).get("id", "")))
+            connection.execute("DELETE FROM services WHERE cliente_id = 'demo' AND slug = ?", (service_slug,))
+            connection.execute("DELETE FROM stripe_connected_accounts WHERE cliente_id = 'demo'")
+            connection.commit()

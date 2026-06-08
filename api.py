@@ -225,7 +225,7 @@ GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_OAUTH_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 GOOGLE_GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
-GOOGLE_GMAIL_SCOPES = "openid email https://www.googleapis.com/auth/gmail.send"
+GOOGLE_GMAIL_SCOPES = "openid email profile https://www.googleapis.com/auth/gmail.send"
 DEFAULT_FREE_QUOTA = int(os.getenv("DEFAULT_FREE_QUOTA", "50"))
 ONBOARDING_MAX_PAGES_DEFAULT = int(os.getenv("ONBOARDING_MAX_PAGES", "12"))
 
@@ -311,6 +311,7 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
 STRIPE_CONNECT_API_VERSION = os.getenv("STRIPE_CONNECT_API_VERSION", "2026-05-27.preview").strip()
 STRIPE_CONNECT_BASE_URL = "https://api.stripe.com/v2/core"
 STRIPE_CONNECT_COUNTRY = os.getenv("STRIPE_CONNECT_COUNTRY", "es").strip().lower()
+BOOKING_PAYMENT_EXPIRY_MINUTES = min(24 * 60, max(30, int(os.getenv("BOOKING_PAYMENT_EXPIRY_MINUTES", "30"))))
 
 # Self-serve plans (Vantelia 2.0)
 STRIPE_PRICE_STARTER = os.getenv("STRIPE_PRICE_STARTER", "").strip()
@@ -1275,6 +1276,7 @@ def _init_database() -> None:
                 completed_source TEXT NOT NULL DEFAULT '',
                 service_id TEXT NOT NULL DEFAULT '',
                 service_price_cents INTEGER NOT NULL DEFAULT 0,
+                payment_status TEXT NOT NULL DEFAULT 'not_required',
                 source TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )
@@ -1345,6 +1347,8 @@ def _init_database() -> None:
             connection.execute("ALTER TABLE bookings ADD COLUMN service_id TEXT NOT NULL DEFAULT ''")
         if "service_price_cents" not in columns:
             connection.execute("ALTER TABLE bookings ADD COLUMN service_price_cents INTEGER NOT NULL DEFAULT 0")
+        if "payment_status" not in columns:
+            connection.execute("ALTER TABLE bookings ADD COLUMN payment_status TEXT NOT NULL DEFAULT 'not_required'")
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_bookings_lookup
@@ -1363,7 +1367,7 @@ def _init_database() -> None:
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_unique_slot
             ON bookings(cliente_id, employee_id, booking_date, booking_time)
-            WHERE status IN ('confirmed', 'pending_review')
+            WHERE status IN ('confirmed', 'pending_review', 'pending_payment')
             """
         )
         connection.execute(
@@ -1463,6 +1467,10 @@ def _init_database() -> None:
                 description TEXT NOT NULL DEFAULT '',
                 is_active INTEGER NOT NULL DEFAULT 1,
                 sort_order INTEGER NOT NULL DEFAULT 0,
+                payment_mode TEXT NOT NULL DEFAULT 'payment_disabled',
+                payment_type TEXT NOT NULL DEFAULT 'full',
+                deposit_amount_cents INTEGER NOT NULL DEFAULT 0,
+                currency TEXT NOT NULL DEFAULT 'eur',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL DEFAULT '',
                 PRIMARY KEY (cliente_id, slug)
@@ -1475,6 +1483,17 @@ def _init_database() -> None:
             ON services(cliente_id, is_active, sort_order, name)
             """
         )
+        service_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(services)").fetchall()
+        }
+        for column_name, definition in {
+            "payment_mode": "TEXT NOT NULL DEFAULT 'payment_disabled'",
+            "payment_type": "TEXT NOT NULL DEFAULT 'full'",
+            "deposit_amount_cents": "INTEGER NOT NULL DEFAULT 0",
+            "currency": "TEXT NOT NULL DEFAULT 'eur'",
+        }.items():
+            if column_name not in service_columns:
+                connection.execute(f"ALTER TABLE services ADD COLUMN {column_name} {definition}")
         agenda_columns = {
             row[1]: row for row in connection.execute("PRAGMA table_info(agenda_blocks)").fetchall()
         }
@@ -1679,6 +1698,7 @@ def _init_database() -> None:
             CREATE TABLE IF NOT EXISTS gmail_oauth_states (
                 state TEXT PRIMARY KEY,
                 admin_user_id TEXT NOT NULL DEFAULT '',
+                cliente_id TEXT NOT NULL DEFAULT '',
                 created_at REAL NOT NULL
             )
             """
@@ -1687,6 +1707,7 @@ def _init_database() -> None:
             """
             CREATE TABLE IF NOT EXISTS gmail_connections (
                 id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL DEFAULT '',
                 email TEXT NOT NULL DEFAULT '',
                 access_token_encrypted TEXT NOT NULL DEFAULT '',
                 refresh_token_encrypted TEXT NOT NULL DEFAULT '',
@@ -1698,6 +1719,42 @@ def _init_database() -> None:
                 last_error TEXT NOT NULL DEFAULT ''
             )
             """
+        )
+        gmail_state_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(gmail_oauth_states)").fetchall()
+        }
+        if "cliente_id" not in gmail_state_columns:
+            connection.execute("ALTER TABLE gmail_oauth_states ADD COLUMN cliente_id TEXT NOT NULL DEFAULT ''")
+        gmail_connection_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(gmail_connections)").fetchall()
+        }
+        if "cliente_id" not in gmail_connection_columns:
+            connection.execute("ALTER TABLE gmail_connections ADD COLUMN cliente_id TEXT NOT NULL DEFAULT ''")
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_gmail_connections_cliente ON gmail_connections(cliente_id) WHERE cliente_id <> ''"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS booking_payments (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                booking_id TEXT NOT NULL UNIQUE,
+                stripe_account_id TEXT NOT NULL DEFAULT '',
+                checkout_session_id TEXT NOT NULL DEFAULT '',
+                payment_intent_id TEXT NOT NULL DEFAULT '',
+                amount_cents INTEGER NOT NULL DEFAULT 0,
+                currency TEXT NOT NULL DEFAULT 'eur',
+                status TEXT NOT NULL DEFAULT 'pending',
+                checkout_url TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                paid_at TEXT NOT NULL DEFAULT '',
+                refunded_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_booking_payments_session ON booking_payments(checkout_session_id) WHERE checkout_session_id <> ''"
         )
 
         # --- Vantelia 2.0 self-serve tables (Sem 1 migration) ---
@@ -2854,6 +2911,8 @@ from api_models import (
     BillingPortalResponse,
     StripeConnectStateResponse,
     StripeConnectStartResponse,
+    BookingPaymentStateResponse,
+    GmailClientStateResponse,
     ConsultaLeadPayload,
     DemoGeneratePayload,
     DemoGenerateResponse,
@@ -2997,6 +3056,10 @@ def _service_row_to_public(row: sqlite3.Row) -> Dict[str, Any]:
         "price_cents": price_cents,
         "price_label": _format_price_cents(price_cents),
         "is_active": bool(row["is_active"]),
+        "payment_mode": row["payment_mode"] or "payment_disabled",
+        "payment_type": row["payment_type"] or "full",
+        "deposit_amount_cents": int(row["deposit_amount_cents"] or 0),
+        "currency": (row["currency"] or "eur").lower(),
     }
 
 
@@ -3172,7 +3235,7 @@ def _employee_booking_counters(cliente_id: str, employee_id: str) -> Dict[str, i
             WHERE cliente_id = ?
               AND employee_id = ?
               AND booking_date = ?
-              AND status IN ('confirmed', 'pending_review')
+              AND status IN ('confirmed', 'pending_review', 'pending_payment')
             """,
             (cliente_id, employee_id, today),
         ).fetchone()[0]
@@ -3182,7 +3245,7 @@ def _employee_booking_counters(cliente_id: str, employee_id: str) -> Dict[str, i
             FROM bookings
             WHERE cliente_id = ?
               AND employee_id = ?
-              AND status IN ('confirmed', 'pending_review')
+              AND status IN ('confirmed', 'pending_review', 'pending_payment')
               AND (start_at = '' OR start_at >= ?)
             """,
             (cliente_id, employee_id, now_iso),
@@ -3476,13 +3539,13 @@ def _google_oauth_configured() -> bool:
     return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI)
 
 
-def _gmail_oauth_create_state(admin_user_id: str = "") -> str:
+def _gmail_oauth_create_state(admin_user_id: str = "", cliente_id: str = "") -> str:
     state = secrets.token_urlsafe(32)
     now = time.time()
     with _get_db_connection() as conn:
         conn.execute(
-            "INSERT INTO gmail_oauth_states (state, admin_user_id, created_at) VALUES (?, ?, ?)",
-            (state, admin_user_id, now),
+            "INSERT INTO gmail_oauth_states (state, admin_user_id, cliente_id, created_at) VALUES (?, ?, ?, ?)",
+            (state, admin_user_id, cliente_id, now),
         )
         conn.execute("DELETE FROM gmail_oauth_states WHERE created_at < ?", (now - _OAUTH_STATE_TTL_SECONDS,))
         conn.commit()
@@ -3494,7 +3557,7 @@ def _gmail_oauth_consume_state(state: str) -> Optional[Dict[str, Any]]:
         return None
     with _get_db_connection() as conn:
         row = conn.execute(
-            "SELECT admin_user_id, created_at FROM gmail_oauth_states WHERE state = ?",
+            "SELECT admin_user_id, cliente_id, created_at FROM gmail_oauth_states WHERE state = ?",
             (state,),
         ).fetchone()
         if row:
@@ -3502,7 +3565,11 @@ def _gmail_oauth_consume_state(state: str) -> Optional[Dict[str, Any]]:
             conn.commit()
     if not row or time.time() - float(row["created_at"]) > _OAUTH_STATE_TTL_SECONDS:
         return None
-    return {"admin_user_id": row["admin_user_id"], "created_at": row["created_at"]}
+    return {
+        "admin_user_id": row["admin_user_id"],
+        "cliente_id": row["cliente_id"],
+        "created_at": row["created_at"],
+    }
 
 
 # --- Onboarding state (transient, lives in user row's metadata or memory) ---
@@ -4547,26 +4614,31 @@ def _gmail_decrypt(value: str) -> str:
         raise RuntimeError("No se puede descifrar la conexion Gmail con la clave actual.") from exc
 
 
-def _gmail_connection() -> Optional[sqlite3.Row]:
+def _gmail_connection(cliente_id: str = "") -> Optional[sqlite3.Row]:
+    connection_id = cliente_id or "default"
     with _get_db_connection() as connection:
-        return connection.execute("SELECT * FROM gmail_connections WHERE id = 'default'").fetchone()
+        return connection.execute("SELECT * FROM gmail_connections WHERE id = ?", (connection_id,)).fetchone()
 
 
-def _gmail_connected() -> bool:
-    row = _gmail_connection()
+def _gmail_connected(cliente_id: str = "") -> bool:
+    row = _gmail_connection(cliente_id)
     return bool(row and row["refresh_token_encrypted"])
 
 
-def _email_delivery_configured() -> bool:
+def _email_delivery_configured(cliente_id: str = "") -> bool:
+    client_gmail_connected = bool(cliente_id and _gmail_connected(cliente_id))
+    global_gmail_connected = _gmail_connected()
+    gmail_ready = _gmail_oauth_configured() and (client_gmail_connected or global_gmail_connected)
     if EMAIL_SEND_PROVIDER == "gmail":
-        return _gmail_oauth_configured() and _gmail_connected()
+        return gmail_ready
     if EMAIL_SEND_PROVIDER == "smtp":
         return _smtp_configured()
-    return (_gmail_oauth_configured() and _gmail_connected()) or _smtp_configured()
+    return gmail_ready or _smtp_configured()
 
 
-def _gmail_save_tokens(token_data: Dict[str, Any], email: str, scopes: str = "") -> None:
-    current = _gmail_connection()
+def _gmail_save_tokens(token_data: Dict[str, Any], email: str, scopes: str = "", cliente_id: str = "") -> None:
+    connection_id = cliente_id or "default"
+    current = _gmail_connection(cliente_id)
     access_token = str(token_data.get("access_token") or "").strip()
     refresh_token = str(token_data.get("refresh_token") or "").strip()
     if not refresh_token and current:
@@ -4581,9 +4653,9 @@ def _gmail_save_tokens(token_data: Dict[str, Any], email: str, scopes: str = "")
         connection.execute(
             """
             INSERT INTO gmail_connections (
-                id, email, access_token_encrypted, refresh_token_encrypted, expires_at,
+                id, cliente_id, email, access_token_encrypted, refresh_token_encrypted, expires_at,
                 scopes, created_at, updated_at, last_used_at, last_error
-            ) VALUES ('default', ?, ?, ?, ?, ?, ?, ?, '', '')
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '')
             ON CONFLICT(id) DO UPDATE SET
                 email=excluded.email,
                 access_token_encrypted=excluded.access_token_encrypted,
@@ -4594,6 +4666,8 @@ def _gmail_save_tokens(token_data: Dict[str, Any], email: str, scopes: str = "")
                 last_error=''
             """,
             (
+                connection_id,
+                cliente_id,
                 _normalize_email(email),
                 _gmail_encrypt(access_token),
                 refresh_token_encrypted,
@@ -4606,8 +4680,8 @@ def _gmail_save_tokens(token_data: Dict[str, Any], email: str, scopes: str = "")
         connection.commit()
 
 
-def _gmail_access_token() -> Tuple[str, sqlite3.Row]:
-    row = _gmail_connection()
+def _gmail_access_token(cliente_id: str = "") -> Tuple[str, sqlite3.Row]:
+    row = _gmail_connection(cliente_id)
     if not row or not row["refresh_token_encrypted"]:
         raise RuntimeError("Gmail no esta conectado.")
     if row["access_token_encrypted"] and float(row["expires_at"] or 0) > time.time() + 60:
@@ -4626,17 +4700,17 @@ def _gmail_access_token() -> Tuple[str, sqlite3.Row]:
         )
         response.raise_for_status()
         token_data = response.json()
-    _gmail_save_tokens(token_data, row["email"], row["scopes"])
-    fresh = _gmail_connection()
+    _gmail_save_tokens(token_data, row["email"], row["scopes"], cliente_id)
+    fresh = _gmail_connection(cliente_id)
     if not fresh:
         raise RuntimeError("No se pudo guardar el token renovado de Gmail.")
     return _gmail_decrypt(fresh["access_token_encrypted"]), fresh
 
 
-def _gmail_send_message(message: EmailMessage) -> None:
+def _gmail_send_message(message: EmailMessage, cliente_id: str = "") -> None:
     if not _gmail_oauth_configured():
         raise RuntimeError("Google OAuth para Gmail no esta configurado.")
-    access_token, connection_row = _gmail_access_token()
+    access_token, connection_row = _gmail_access_token(cliente_id)
     connected_email = _normalize_email(connection_row["email"])
     from_name, from_email = parseaddr(str(message.get("From") or ""))
     if connected_email and _normalize_email(from_email) != connected_email:
@@ -4656,15 +4730,15 @@ def _gmail_send_message(message: EmailMessage) -> None:
     except Exception as exc:
         with _get_db_connection() as db:
             db.execute(
-                "UPDATE gmail_connections SET last_error = ?, updated_at = ? WHERE id = 'default'",
-                (str(exc)[:500], _utc_now_iso()),
+                "UPDATE gmail_connections SET last_error = ?, updated_at = ? WHERE id = ?",
+                (str(exc)[:500], _utc_now_iso(), cliente_id or "default"),
             )
             db.commit()
         raise
     with _get_db_connection() as db:
         db.execute(
-            "UPDATE gmail_connections SET last_used_at = ?, last_error = '' WHERE id = 'default'",
-            (_utc_now_iso(),),
+            "UPDATE gmail_connections SET last_used_at = ?, last_error = '' WHERE id = ?",
+            (_utc_now_iso(), cliente_id or "default"),
         )
         db.commit()
 
@@ -4682,14 +4756,20 @@ def _smtp_send_message(message: EmailMessage) -> None:
         smtp.send_message(message)
 
 
-def _send_email_object(message: EmailMessage) -> None:
+def _send_email_object(message: EmailMessage, cliente_id: str = "") -> None:
     if EMAIL_SEND_PROVIDER not in {"auto", "gmail", "smtp"}:
         raise RuntimeError("EMAIL_SEND_PROVIDER debe ser auto, gmail o smtp.")
-    if EMAIL_SEND_PROVIDER == "gmail" and not (_gmail_oauth_configured() and _gmail_connected()):
+    client_gmail_connected = bool(cliente_id and _gmail_connected(cliente_id))
+    gmail_ready = _gmail_oauth_configured() and (client_gmail_connected or _gmail_connected())
+    gmail_target = cliente_id if client_gmail_connected else ""
+    if EMAIL_SEND_PROVIDER == "gmail" and not gmail_ready:
         raise RuntimeError("EMAIL_SEND_PROVIDER=gmail pero Gmail no esta conectado.")
-    if EMAIL_SEND_PROVIDER in {"auto", "gmail"} and _gmail_oauth_configured() and _gmail_connected():
+    if EMAIL_SEND_PROVIDER in {"auto", "gmail"} and gmail_ready:
         try:
-            _gmail_send_message(copy.deepcopy(message))
+            if gmail_target:
+                _gmail_send_message(copy.deepcopy(message), gmail_target)
+            else:
+                _gmail_send_message(copy.deepcopy(message))
             return
         except Exception as exc:
             if EMAIL_SEND_PROVIDER == "gmail" or not _smtp_configured():
@@ -4710,8 +4790,9 @@ def _send_email_message(
     text_body: str,
     html_body: str = "",
     reply_to: Optional[str] = None,
+    cliente_id: str = "",
 ) -> None:
-    if not _email_delivery_configured():
+    if not _email_delivery_configured(cliente_id):
         raise RuntimeError("El sistema de correo no esta configurado. Conecta Gmail o configura SMTP.")
 
     message = EmailMessage()
@@ -4725,7 +4806,23 @@ def _send_email_message(
     if html_body:
         message.add_alternative(html_body, subtype="html")
 
-    _send_email_object(message)
+    _send_email_object(message, cliente_id)
+
+
+def send_client_email(
+    cliente_id: str,
+    to_email: str,
+    subject: str,
+    text_body: str,
+    html_body: str = "",
+    reply_to: Optional[str] = None,
+) -> Dict[str, Any]:
+    try:
+        _send_email_message(to_email, subject, text_body, html_body, reply_to, cliente_id)
+        return {"ok": True, "provider": "gmail" if _gmail_connected(cliente_id) else "smtp"}
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Email cliente fallo cliente=%s: %s", cliente_id, exc)
+        return {"ok": False, "provider": "none", "error": str(exc)[:500]}
 
 
 def _preferred_public_base_url(request: Optional[Request] = None) -> str:
@@ -6286,7 +6383,7 @@ def _active_future_bookings_for_employee(cliente_id: str, employee_id: str) -> i
                 FROM bookings
                 WHERE cliente_id = ?
                   AND employee_id = ?
-                  AND status IN ('confirmed', 'pending_review')
+                  AND status IN ('confirmed', 'pending_review', 'pending_payment')
                   AND (start_at = '' OR start_at >= ?)
                 """,
                 (cliente_id, employee_id, _utc_now_iso()),
@@ -9714,7 +9811,13 @@ def _send_booking_email(
         config.get("booking", {}).get("message_templates", {}),
         extra_message,
     )
-    _send_email_message(booking_row["email"], subject, text_body, html_body)
+    _send_email_message(
+        booking_row["email"],
+        subject,
+        text_body,
+        html_body,
+        cliente_id=booking_row["cliente_id"],
+    )
 
 
 def _booking_email_enabled(config: Dict[str, Any], kind: str) -> bool:
@@ -10647,7 +10750,7 @@ def _booked_slots(
         clauses = [
             "cliente_id = ?",
             "booking_date = ?",
-            "status IN ('confirmed', 'pending_review')",
+            "status IN ('confirmed', 'pending_review', 'pending_payment')",
         ]
         params: List[Any] = [cliente_id, fecha]
         if employee_id:
@@ -10671,7 +10774,7 @@ def _active_booking_rows_for_day(cliente_id: str, fecha: str, *, employee_id: st
         clauses = [
             "cliente_id = ?",
             "booking_date = ?",
-            "status IN ('confirmed', 'pending_review')",
+            "status IN ('confirmed', 'pending_review', 'pending_payment')",
         ]
         params: List[Any] = [cliente_id, fecha]
         if employee_id:
@@ -10772,7 +10875,7 @@ def _booking_conflicts_for_closed_weekdays(
         clauses = [
             "cliente_id = ?",
             "booking_date >= ?",
-            "status IN ('confirmed', 'pending_review')",
+            "status IN ('confirmed', 'pending_review', 'pending_payment')",
         ]
         params: List[Any] = [cliente_id, today]
         if employee_id:
@@ -10830,7 +10933,7 @@ def _booking_conflicts_for_break_windows(
         clauses = [
             "cliente_id = ?",
             "booking_date >= ?",
-            "status IN ('confirmed', 'pending_review')",
+            "status IN ('confirmed', 'pending_review', 'pending_payment')",
         ]
         params: List[Any] = [cliente_id, local_today]
         if employee_id:
@@ -10983,6 +11086,14 @@ async def _reschedule_provider_booking(
 
 
 def _store_booking(record: Dict[str, Any]) -> None:
+    service = _get_service_row(record["cliente_id"], record.get("service_id", "")) or _find_service_by_name(
+        record["cliente_id"], record.get("servicio", "")
+    )
+    decision = resolve_payment_requirement(record["cliente_id"], service)
+    record["payment_status"] = decision["payment_status"]
+    if decision["payment_required"]:
+        record["status"] = "pending_payment"
+        record["confirmed_at"] = ""
     with _get_db_connection() as connection:
         if not record.get("booking_code"):
             record["booking_code"] = _unique_booking_code(connection, record["cliente_id"])
@@ -10996,9 +11107,9 @@ def _store_booking(record: Dict[str, Any]) -> None:
                 confirmed_at, cancelled_at, rescheduled_at, rescheduled_from_booking_id,
                 confirmation_email_sent_at, reminder_24h_sent_at, reminder_2h_sent_at,
                 customer_email_status, customer_email_last_error, booking_code,
-                service_id, service_price_cents, source, created_at
+                service_id, service_price_cents, payment_status, source, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record["id"],
@@ -11033,11 +11144,13 @@ def _store_booking(record: Dict[str, Any]) -> None:
                 record["booking_code"],
                 record.get("service_id", ""),
                 int(record.get("service_price_cents", 0) or 0),
+                record.get("payment_status", "not_required"),
                 record["source"],
                 record["created_at"],
             ),
         )
         connection.commit()
+    _booking_payment_after_store(record["id"])
 
 
 # ---------------------------------------------------------------------------
@@ -11572,7 +11685,7 @@ def _list_booking_rows(
     if scope == "upcoming":
         clauses.append(
             "("
-            "status IN ('confirmed', 'pending_review') "
+            "status IN ('confirmed', 'pending_review', 'pending_payment') "
             "AND (start_at = '' OR start_at >= ?)"
             ")"
         )
@@ -11668,7 +11781,7 @@ def _portal_stats_for_user(user: sqlite3.Row, cliente_id_override: str = "") -> 
             SELECT COUNT(*)
             FROM bookings
             WHERE cliente_id = ?
-              AND status IN ('confirmed', 'pending_review')
+              AND status IN ('confirmed', 'pending_review', 'pending_payment')
               AND (start_at = '' OR start_at >= ?)
             """,
             (target_client_id, _utc_now_iso()),
@@ -12303,6 +12416,14 @@ async def _send_booking_email_by_kind(
     extra_message: str = "",
     respect_enabled: bool = True,
 ) -> None:
+    if kind == "confirmed" and booking_row["status"] == "pending_payment":
+        _record_booking_audit(
+            booking_row["id"],
+            booking_row["cliente_id"],
+            "booking_email_skipped",
+            {"kind": kind, "reason": "pending_payment"},
+        )
+        return
     if respect_enabled:
         config = _get_client_config(booking_row["cliente_id"])
         if not _booking_email_enabled(config, kind):
@@ -13290,11 +13411,17 @@ async def auth_google_gmail_callback(
             email = _normalize_email(userinfo_response.json().get("email", ""))
         if not email:
             raise RuntimeError("Google no devolvio el email de la cuenta.")
-        _gmail_save_tokens(token_data, email, str(token_data.get("scope") or GOOGLE_GMAIL_SCOPES))
+        target_cliente_id = str(state_payload.get("cliente_id") or "")
+        _gmail_save_tokens(
+            token_data,
+            email,
+            str(token_data.get("scope") or GOOGLE_GMAIL_SCOPES),
+            target_cliente_id,
+        )
     except Exception as exc:
         logger.error("Conexion Gmail fallo: %s", exc)
         return RedirectResponse(f"/dashboard?gmail_error={quote(str(exc)[:160])}")
-    return RedirectResponse("/dashboard?gmail_connected=1")
+    return RedirectResponse("/app?gmail_connected=1" if state_payload.get("cliente_id") else "/dashboard?gmail_connected=1")
 
 
 @app.delete("/admin/email-channels/gmail", dependencies=[Depends(_require_admin_token)])
@@ -13309,6 +13436,71 @@ async def admin_email_channels_gmail_disconnect() -> Dict[str, Any]:
             logger.warning("No se pudo revocar Gmail en Google; se eliminara la conexion local: %s", exc)
     with _get_db_connection() as connection:
         connection.execute("DELETE FROM gmail_connections WHERE id = 'default'")
+        connection.commit()
+    return {"ok": True}
+
+
+@app.get("/auth/app/email-channel", response_model=GmailClientStateResponse)
+async def app_email_channel_state(
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> GmailClientStateResponse:
+    cliente_id = str(user["cliente_id"] or "")
+    if not cliente_id:
+        raise HTTPException(status_code=400, detail="Tu usuario no tiene un negocio asociado.")
+    row = _gmail_connection(cliente_id)
+    connected = bool(row and row["refresh_token_encrypted"])
+    return GmailClientStateResponse(
+        configured=_gmail_oauth_configured(),
+        connected=connected,
+        email=row["email"] if row else "",
+        status="reconnect_required" if row and row["last_error"] else "active" if connected else "not_connected",
+        last_error=row["last_error"] if row else "",
+        smtp_fallback=_smtp_configured(),
+    )
+
+
+@app.get("/auth/app/email-channel/gmail/connect", include_in_schema=False)
+async def app_email_channel_gmail_connect(
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> Response:
+    if _session_is_impersonated(user):
+        raise HTTPException(status_code=403, detail="Accion bloqueada en sesion de admin (impersonacion).")
+    cliente_id = str(user["cliente_id"] or "")
+    if not cliente_id:
+        raise HTTPException(status_code=400, detail="Tu usuario no tiene un negocio asociado.")
+    if not _gmail_oauth_configured():
+        raise HTTPException(status_code=503, detail="Google OAuth para Gmail no esta configurado.")
+    state = _gmail_oauth_create_state(user["id"], cliente_id)
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": _gmail_redirect_uri(),
+        "response_type": "code",
+        "scope": GOOGLE_GMAIL_SCOPES,
+        "state": state,
+        "access_type": "offline",
+        "include_granted_scopes": "true",
+        "prompt": "consent select_account",
+    }
+    return RedirectResponse(f"{GOOGLE_OAUTH_AUTHORIZE_URL}?{urlencode(params)}")
+
+
+@app.delete("/auth/app/email-channel/gmail")
+async def app_email_channel_gmail_disconnect(
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    if _session_is_impersonated(user):
+        raise HTTPException(status_code=403, detail="Accion bloqueada en sesion de admin (impersonacion).")
+    cliente_id = str(user["cliente_id"] or "")
+    row = _gmail_connection(cliente_id)
+    if row and row["refresh_token_encrypted"]:
+        try:
+            refresh_token = _gmail_decrypt(row["refresh_token_encrypted"])
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.post("https://oauth2.googleapis.com/revoke", params={"token": refresh_token})
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("No se pudo revocar Gmail cliente=%s: %s", cliente_id, exc)
+    with _get_db_connection() as connection:
+        connection.execute("DELETE FROM gmail_connections WHERE id = ?", (cliente_id,))
         connection.commit()
     return {"ok": True}
 
@@ -13835,12 +14027,12 @@ def _compute_dashboard_stats(cliente_id: str, period_start_iso: str) -> AppOverv
         ).fetchone()[0] or 0
         bookings_today = connection.execute(
             "SELECT COUNT(*) FROM bookings WHERE cliente_id = ? AND booking_date = ? "
-            "AND status IN ('confirmed', 'pending_review')",
+            "AND status IN ('confirmed', 'pending_review', 'pending_payment')",
             (cliente_id, today_date),
         ).fetchone()[0] or 0
         bookings_upcoming = connection.execute(
             "SELECT COUNT(*) FROM bookings WHERE cliente_id = ? AND booking_date > ? AND booking_date <= ? "
-            "AND status IN ('confirmed', 'pending_review')",
+            "AND status IN ('confirmed', 'pending_review', 'pending_payment')",
             (cliente_id, today_date, upcoming_date),
         ).fetchone()[0] or 0
     return AppOverviewStats(
@@ -15408,6 +15600,282 @@ async def app_stripe_connect_return(
     return RedirectResponse("/app?stripe_connect=returned", status_code=303)
 
 
+def resolve_payment_requirement(
+    cliente_id: str,
+    service: Optional[sqlite3.Row],
+    booking: Optional[sqlite3.Row] = None,
+) -> Dict[str, Any]:
+    mode = str(service["payment_mode"] or "payment_disabled") if service else "payment_disabled"
+    payment_type = str(service["payment_type"] or "full") if service else "full"
+    currency = str(service["currency"] or "eur").lower() if service else "eur"
+    full_amount = int(
+        (booking["service_price_cents"] if booking else service["price_cents"]) or 0
+    ) if service else 0
+    deposit = int(service["deposit_amount_cents"] or 0) if service else 0
+    amount = deposit if payment_type == "deposit" and deposit > 0 else full_amount
+    account = _stripe_connected_account_row(cliente_id)
+    stripe_active = bool(account and account["status"] == "active" and _stripe_configured())
+    available = stripe_active and amount > 0 and mode != "payment_disabled"
+    return {
+        "mode": mode,
+        "payment_type": payment_type,
+        "currency": currency,
+        "amount_cents": amount if available else 0,
+        "stripe_account_id": account["stripe_account_id"] if available else "",
+        "payment_required": bool(available and mode == "payment_required"),
+        "payment_optional": bool(available and mode == "payment_optional"),
+        "payment_status": "pending" if available and mode == "payment_required" else "optional" if available else "not_required",
+    }
+
+
+def _booking_payment_row(booking_id: str) -> Optional[sqlite3.Row]:
+    with _get_db_connection() as connection:
+        return connection.execute(
+            "SELECT * FROM booking_payments WHERE booking_id = ?",
+            (booking_id,),
+        ).fetchone()
+
+
+def create_booking_payment_checkout(cliente_id: str, booking_id: str, request: Optional[Request] = None) -> str:
+    booking = _load_booking_or_404(booking_id)
+    if booking["cliente_id"] != cliente_id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
+    service = _get_service_row(cliente_id, booking["service_id"]) or _find_service_by_name(
+        cliente_id, booking["servicio"]
+    )
+    decision = resolve_payment_requirement(cliente_id, service, booking)
+    if not decision["payment_required"] and not decision["payment_optional"]:
+        raise HTTPException(status_code=409, detail="Esta reserva no tiene un pago Stripe disponible.")
+    existing = _booking_payment_row(booking_id)
+    if existing and existing["status"] == "paid":
+        return existing["checkout_url"] or ""
+    if existing and existing["checkout_url"]:
+        return existing["checkout_url"]
+    _stripe_init()
+    base_url = _preferred_public_base_url(request).rstrip("/")
+    if not base_url:
+        raise HTTPException(status_code=503, detail="APP_BASE_URL no configurada para generar enlaces de pago.")
+    try:
+        session = stripe.checkout.Session.create(
+            stripe_account=decision["stripe_account_id"],
+            mode="payment",
+            line_items=[{
+                "price_data": {
+                    "currency": decision["currency"],
+                    "product_data": {"name": booking["servicio"] or "Reserva"},
+                    "unit_amount": decision["amount_cents"],
+                },
+                "quantity": 1,
+            }],
+            customer_email=booking["email"] or None,
+            success_url=f"{base_url}/reservas/{booking['manage_token']}?payment=success",
+            cancel_url=f"{base_url}/reservas/{booking['manage_token']}?payment=cancel",
+            expires_at=int(time.time()) + BOOKING_PAYMENT_EXPIRY_MINUTES * 60,
+            metadata={
+                "source": "booking_payment",
+                "cliente_id": cliente_id,
+                "booking_id": booking_id,
+            },
+            payment_intent_data={
+                "metadata": {
+                    "source": "booking_payment",
+                    "cliente_id": cliente_id,
+                    "booking_id": booking_id,
+                },
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Stripe booking checkout fallo cliente=%s booking=%s: %s", cliente_id, booking_id, exc)
+        raise HTTPException(status_code=502, detail="No se pudo crear el enlace de pago.") from exc
+    now = _utc_now_iso()
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO booking_payments
+                (id, cliente_id, booking_id, stripe_account_id, checkout_session_id,
+                 amount_cents, currency, status, checkout_url, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+            ON CONFLICT(booking_id) DO UPDATE SET
+                checkout_session_id=excluded.checkout_session_id,
+                checkout_url=excluded.checkout_url,
+                updated_at=excluded.updated_at
+            """,
+            (
+                f"pay_{secrets.token_urlsafe(10)}", cliente_id, booking_id,
+                decision["stripe_account_id"], session.id or "",
+                decision["amount_cents"], decision["currency"], session.url or "", now, now,
+            ),
+        )
+        connection.execute(
+            """
+            UPDATE bookings
+            SET payment_status = CASE WHEN status = 'pending_payment' THEN 'pending' ELSE 'optional' END
+            WHERE id = ?
+            """,
+            (booking_id,),
+        )
+        connection.commit()
+    return session.url or ""
+
+
+def _booking_payment_after_store(booking_id: str, request: Optional[Request] = None) -> str:
+    booking = _get_booking_row_by_id(booking_id)
+    if not booking or booking["payment_status"] not in {"pending", "optional"}:
+        return ""
+    try:
+        return create_booking_payment_checkout(booking["cliente_id"], booking_id, request)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Pago opcional no disponible booking=%s: %s", booking_id, exc)
+        if booking["status"] == "pending_payment":
+            _update_booking_record(
+                booking_id,
+                status="confirmed",
+                confirmed_at=_utc_now_iso(),
+                payment_status="not_required",
+            )
+        return ""
+
+
+def process_booking_payment_webhook(data_object: Dict[str, Any]) -> bool:
+    metadata = data_object.get("metadata") or {}
+    if metadata.get("source") != "booking_payment":
+        return False
+    booking_id = str(metadata.get("booking_id") or "")
+    cliente_id = str(metadata.get("cliente_id") or "")
+    if not booking_id or not cliente_id:
+        return True
+    now = _utc_now_iso()
+    session_id = str(data_object.get("id") or "")
+    payment_intent_id = str(data_object.get("payment_intent") or "")
+    with _get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT status FROM booking_payments WHERE booking_id = ?",
+            (booking_id,),
+        ).fetchone()
+        if row and row["status"] == "paid":
+            return True
+        connection.execute(
+            """
+            UPDATE booking_payments
+            SET status='paid', checkout_session_id=?, payment_intent_id=?,
+                paid_at=?, updated_at=?
+            WHERE booking_id=? AND cliente_id=?
+            """,
+            (session_id, payment_intent_id, now, now, booking_id, cliente_id),
+        )
+        booking = connection.execute(
+            "SELECT status FROM bookings WHERE id = ? AND cliente_id = ?",
+            (booking_id, cliente_id),
+        ).fetchone()
+        connection.execute(
+            """
+            UPDATE bookings
+            SET payment_status='paid',
+                status=CASE WHEN status IN ('pending_payment', 'confirmed') THEN 'confirmed' ELSE status END,
+                confirmed_at=CASE
+                    WHEN status IN ('pending_payment', 'confirmed') AND confirmed_at='' THEN ?
+                    ELSE confirmed_at
+                END
+            WHERE id=? AND cliente_id=?
+            """,
+            (now, booking_id, cliente_id),
+        )
+        connection.commit()
+    _record_booking_audit(booking_id, cliente_id, "booking_payment_paid", {"checkout_session_id": session_id})
+    refreshed = _get_booking_row_by_id(booking_id)
+    if refreshed and refreshed["status"] == "confirmed" and booking and booking["status"] == "pending_payment":
+        try:
+            _send_booking_email(refreshed, "confirmed")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("No se pudo enviar confirmacion tras pago booking=%s: %s", booking_id, exc)
+    return True
+
+
+def process_booking_payment_expired_webhook(data_object: Dict[str, Any]) -> bool:
+    metadata = data_object.get("metadata") or {}
+    if metadata.get("source") != "booking_payment":
+        return False
+    booking_id = str(metadata.get("booking_id") or "")
+    cliente_id = str(metadata.get("cliente_id") or "")
+    if not booking_id or not cliente_id:
+        return True
+    now = _utc_now_iso()
+    with _get_db_connection() as connection:
+        booking = connection.execute(
+            "SELECT status, payment_status FROM bookings WHERE id = ? AND cliente_id = ?",
+            (booking_id, cliente_id),
+        ).fetchone()
+        if not booking or booking["payment_status"] == "paid":
+            return True
+        connection.execute(
+            "UPDATE booking_payments SET status='expired', updated_at=? WHERE booking_id=? AND cliente_id=?",
+            (now, booking_id, cliente_id),
+        )
+        if booking["status"] == "pending_payment":
+            connection.execute(
+                "UPDATE bookings SET status='cancelled', payment_status='expired', cancelled_at=? WHERE id=?",
+                (now, booking_id),
+            )
+        else:
+            connection.execute(
+                "UPDATE bookings SET payment_status='expired' WHERE id=?",
+                (booking_id,),
+            )
+        connection.commit()
+    _record_booking_audit(booking_id, cliente_id, "booking_payment_expired", {})
+    return True
+
+
+@app.get("/auth/bookings/{booking_id}/payment", response_model=BookingPaymentStateResponse)
+async def auth_booking_payment_state(
+    booking_id: str,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> BookingPaymentStateResponse:
+    booking = _load_booking_or_404(booking_id)
+    if user["role"] != "admin" and booking["cliente_id"] != user["cliente_id"]:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
+    service = _get_service_row(booking["cliente_id"], booking["service_id"]) or _find_service_by_name(
+        booking["cliente_id"], booking["servicio"]
+    )
+    decision = resolve_payment_requirement(booking["cliente_id"], service, booking)
+    payment = _booking_payment_row(booking_id)
+    return BookingPaymentStateResponse(
+        booking_id=booking_id,
+        payment_required=decision["payment_required"],
+        payment_optional=decision["payment_optional"],
+        payment_status=payment["status"] if payment else booking["payment_status"],
+        amount_cents=int(payment["amount_cents"] if payment else decision["amount_cents"]),
+        currency=payment["currency"] if payment else decision["currency"],
+        checkout_url=payment["checkout_url"] if payment else "",
+    )
+
+
+@app.post("/auth/bookings/{booking_id}/payment/checkout", response_model=BookingPaymentStateResponse)
+async def auth_booking_payment_checkout(
+    booking_id: str,
+    request: Request,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> BookingPaymentStateResponse:
+    booking = _load_booking_or_404(booking_id)
+    if user["role"] != "admin" and booking["cliente_id"] != user["cliente_id"]:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
+    checkout_url = create_booking_payment_checkout(booking["cliente_id"], booking_id, request)
+    payment = _booking_payment_row(booking_id)
+    service = _get_service_row(booking["cliente_id"], booking["service_id"]) or _find_service_by_name(
+        booking["cliente_id"], booking["servicio"]
+    )
+    decision = resolve_payment_requirement(booking["cliente_id"], service, booking)
+    return BookingPaymentStateResponse(
+        booking_id=booking_id,
+        payment_required=decision["payment_required"],
+        payment_optional=decision["payment_optional"],
+        payment_status=payment["status"] if payment else booking["payment_status"],
+        amount_cents=int(payment["amount_cents"] if payment else 0),
+        currency=payment["currency"] if payment else "eur",
+        checkout_url=checkout_url,
+    )
+
+
 @app.get("/auth/app/billing", response_model=BillingStateResponse)
 async def app_billing_state(
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
@@ -15631,7 +16099,7 @@ async def auth_schedule_message_test(
     target_email = str(data.target_email or data.test_email or user["email"] or "").strip()
     if not target_email:
         raise HTTPException(status_code=400, detail="Indica un email donde enviar la prueba.")
-    _send_email_message(target_email, preview.subject, preview.text_body, preview.html_body)
+    _send_email_message(target_email, preview.subject, preview.text_body, preview.html_body, cliente_id=target_client_id)
     return AuthSimpleResponse(ok=True, message=f"Correo de prueba enviado a {target_email}.")
 
 
@@ -15883,14 +16351,17 @@ async def auth_create_booking(
             logger.error("No se ha podido enviar el aviso de la cita manual %s: %s", booking_id, exc)
             _mark_booking_email_result(booking_id, status="failed", error=str(exc))
 
+    payment_row = _booking_payment_row(booking_id)
     return BookingActionResponse(
         ok=True,
         booking_id=booking_id,
-        estado="confirmed",
+        estado=booking_row["status"] if booking_row else "confirmed",
         mensaje="Cita creada correctamente.",
         employee_id=employee_row["id"],
         employee_name=employee_row["name"],
         manage_url=_build_booking_manage_url(manage_token, request),
+        payment_status=booking_row["payment_status"] if booking_row else "not_required",
+        payment_url=payment_row["checkout_url"] if payment_row else "",
     )
 
 
@@ -16267,6 +16738,8 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
 
     try:
         if event_type == "checkout.session.completed":
+            if process_booking_payment_webhook(data_object):
+                return {"received": True}
             cid = (data_object.get("metadata") or {}).get("cliente_id") or data_object.get("client_reference_id")
             plan = (data_object.get("metadata") or {}).get("plan") or PLAN_DEFAULT
             billing_period = (data_object.get("metadata") or {}).get("billing_period") or "monthly"
@@ -16367,6 +16840,9 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
                     request,
                 )
                 logger.info("Suscripción activada para %s · plan=%s", cid, plan)
+        elif event_type == "checkout.session.expired":
+            if process_booking_payment_expired_webhook(data_object):
+                return {"received": True}
         elif event_type in {"customer.subscription.updated", "customer.subscription.created"}:
             sub_id = data_object.get("id", "")
             status_str = data_object.get("status", "")
@@ -18642,10 +19118,12 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
                 {"kind": email_status_key, "error": str(exc)},
             )
 
+    stored_booking = _get_booking_row_by_id(booking_id)
+    payment_row = _booking_payment_row(booking_id)
     return RespuestaAgendado(
         ok=True,
         booking_id=booking_id,
-        estado=booking_status,
+        estado=stored_booking["status"] if stored_booking else booking_status,
         mensaje=config["booking"]["success_message"],
         employee_id=employee_row["id"],
         employee_name=employee_row["name"],
@@ -18653,6 +19131,8 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
         provider_booking_id=provider_result.provider_booking_id,
         provider_booking_url=provider_result.provider_booking_url,
         manage_url=_build_booking_manage_url(manage_token, request),
+        payment_status=stored_booking["payment_status"] if stored_booking else "not_required",
+        payment_url=payment_row["checkout_url"] if payment_row else "",
     )
 
 
@@ -18682,13 +19162,16 @@ async def auth_create_service(
         connection.execute(
             """
             INSERT INTO services
-            (cliente_id, slug, name, duration_minutes, price_cents, description, is_active, sort_order, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (cliente_id, slug, name, duration_minutes, price_cents, description, is_active, sort_order,
+             payment_mode, payment_type, deposit_amount_cents, currency, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 target_client_id, slug, name, int(data.duration_minutes), int(data.price_cents),
                 _sanitize_text(data.descripcion, allow_multiline=True),
-                1 if data.is_active else 0, int(data.sort_order), now, now,
+                1 if data.is_active else 0, int(data.sort_order),
+                data.payment_mode, data.payment_type, int(data.deposit_amount_cents),
+                data.currency.lower(), now, now,
             ),
         )
         connection.commit()
@@ -18722,6 +19205,14 @@ async def auth_update_service(
         updates["is_active"] = 1 if data.is_active else 0
     if data.sort_order is not None:
         updates["sort_order"] = int(data.sort_order)
+    if data.payment_mode is not None:
+        updates["payment_mode"] = data.payment_mode
+    if data.payment_type is not None:
+        updates["payment_type"] = data.payment_type
+    if data.deposit_amount_cents is not None:
+        updates["deposit_amount_cents"] = int(data.deposit_amount_cents)
+    if data.currency is not None:
+        updates["currency"] = data.currency.lower()
     if updates:
         updates["updated_at"] = _utc_now_iso()
         assignments = ", ".join(f"{col} = ?" for col in updates)
@@ -19832,6 +20323,11 @@ async def _wa_create_booking(
     )
     if flow.notas:
         confirmacion += f"📝 Notas: {flow.notas}\n"
+    payment_row = _booking_payment_row(booking_id)
+    stored_booking = _get_booking_row_by_id(booking_id)
+    if payment_row and payment_row["checkout_url"]:
+        payment_label = "Para confirmar, completa el pago" if stored_booking and stored_booking["status"] == "pending_payment" else "Pago opcional"
+        confirmacion += f"\n💳 *{payment_label}:* {payment_row['checkout_url']}\n"
     confirmacion += (
         f"\nRecibiras email de confirmacion y un recordatorio antes. "
         f"Si necesitas cancelar o cambiarla, responde *cancelar*.\n\n"
@@ -20722,6 +21218,8 @@ async def admin_gen_qa(cliente_id: str, max_pairs: int = 5) -> Dict[str, Any]:
             "SELECT COUNT(*) FROM kb_qa WHERE cliente_id=?", (cliente_id,)
         ).fetchone()[0]
 
+    payment_row = _booking_payment_row(booking_id)
+    stored_booking = _get_booking_row_by_id(booking_id)
     return {
         "ok": True,
         "cliente_id": cliente_id,
@@ -29492,6 +29990,8 @@ async def _voice_perform_booking(
         "booking_created",
         {"status": "confirmed", "source": "voice", "employee_id": employee_row["id"]},
     )
+    stored_booking = _get_booking_row_by_id(booking_id)
+    payment_row = _booking_payment_row(booking_id)
     return {
         "ok": True,
         "booking_id": booking_id,
@@ -29501,6 +30001,12 @@ async def _voice_perform_booking(
         "servicio": servicio or "cita",
         "empleado": employee_row["name"],
         "manage_url": _build_booking_manage_url(manage_token),
+        "payment_status": stored_booking["payment_status"] if stored_booking else "not_required",
+        "payment_url": payment_row["checkout_url"] if payment_row else "",
+        "mensaje_pago": (
+            "Envia este enlace seguro por SMS, WhatsApp o email; nunca pidas datos bancarios por telefono."
+            if payment_row and payment_row["checkout_url"] else ""
+        ),
     }
 
 
