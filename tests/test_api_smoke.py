@@ -4553,6 +4553,7 @@ def test_app_stripe_connect_start_creates_and_reuses_account(client: TestClient,
         calls.append((method, path, payload))
         if path == "/accounts":
             assert payload["contact_email"] == email
+            assert payload["identity"]["country"] == "es"
             assert payload["configuration"]["merchant"]["capabilities"]["card_payments"]["requested"] is True
             return {"id": "acct_connect_test", "configuration": {"merchant": {}}, "requirements": {"entries": []}}
         assert path == "/account_links"
@@ -4570,15 +4571,34 @@ def test_app_stripe_connect_start_creates_and_reuses_account(client: TestClient,
     assert row["stripe_account_id"] == "acct_connect_test"
 
 
+def test_stripe_connect_display_name_falls_back_when_runtime_config_is_missing(api_module):
+    cliente_id = "stripe_connect_legacy"
+    now_iso = api_module._utc_now_iso()
+    with api_module._get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO clientes
+                (cliente_id, owner_user_id, plan, nombre, website_url,
+                 config_json, created_at, updated_at, source)
+            VALUES (?, '', 'free', ?, '', '{}', ?, ?, 'legacy')
+            """,
+            (cliente_id, "Negocio legado", now_iso, now_iso),
+        )
+        connection.commit()
+    assert cliente_id not in api_module.CONFIG_CLIENTES
+    assert api_module._stripe_connect_display_name(cliente_id) == "Negocio legado"
+
+
 def test_app_stripe_connect_state_syncs_active_account(client: TestClient, api_module, monkeypatch):
     cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Connect Active")
     monkeypatch.setattr(api_module, "STRIPE_SECRET_KEY", "sk_test_connect")
     owner_id = api_module.db_get_client_owner(cliente_id)
     api_module._save_stripe_connected_account(cliente_id, owner_id, "acct_active_test")
-    monkeypatch.setattr(
-        api_module,
-        "_stripe_connect_request",
-        lambda method, path, payload=None: {
+    requested_paths = []
+
+    def fake_connect_request(method, path, payload=None):
+        requested_paths.append(path)
+        return {
             "id": "acct_active_test",
             "configuration": {
                 "merchant": {
@@ -4588,12 +4608,16 @@ def test_app_stripe_connect_state_syncs_active_account(client: TestClient, api_m
                 },
             },
             "requirements": {"entries": []},
-        },
-    )
+        }
+
+    monkeypatch.setattr(api_module, "_stripe_connect_request", fake_connect_request)
     resp = client.get("/auth/app/stripe-connect", cookies=cookies)
     assert resp.status_code == 200, resp.text
     assert resp.json()["connected"] is True
     assert resp.json()["status"] == "active"
+    assert requested_paths == [
+        "/accounts/acct_active_test?include[0]=configuration.merchant&include[1]=requirements"
+    ]
 
 
 def test_app_billing_checkout_503_when_stripe_not_configured(client: TestClient, api_module, monkeypatch):

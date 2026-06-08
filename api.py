@@ -310,6 +310,7 @@ STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
 STRIPE_CONNECT_API_VERSION = os.getenv("STRIPE_CONNECT_API_VERSION", "2026-05-27.preview").strip()
 STRIPE_CONNECT_BASE_URL = "https://api.stripe.com/v2/core"
+STRIPE_CONNECT_COUNTRY = os.getenv("STRIPE_CONNECT_COUNTRY", "es").strip().lower()
 
 # Self-serve plans (Vantelia 2.0)
 STRIPE_PRICE_STARTER = os.getenv("STRIPE_PRICE_STARTER", "").strip()
@@ -15246,13 +15247,28 @@ def _stripe_connect_account_status(account: Dict[str, Any]) -> Tuple[str, int]:
     return ("requirements_due" if due else "pending"), due
 
 
+def _stripe_connect_display_name(cliente_id: str) -> str:
+    config = CONFIG_CLIENTES.get(cliente_id, {})
+    configured_name = str(config.get("nombre", "")).strip()
+    if configured_name:
+        return configured_name
+    with _get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT nombre FROM clientes WHERE cliente_id = ?",
+            (cliente_id,),
+        ).fetchone()
+    return str(row["nombre"] or cliente_id).strip() if row else cliente_id
+
+
 def _create_stripe_connected_account(user: sqlite3.Row) -> str:
     cliente_id = str(user["cliente_id"] or "")
-    config = _get_client_config(cliente_id)
     payload = {
         "contact_email": user["email"],
-        "display_name": config.get("nombre") or cliente_id,
+        "display_name": _stripe_connect_display_name(cliente_id),
         "dashboard": "full",
+        "identity": {
+            "country": STRIPE_CONNECT_COUNTRY,
+        },
         "configuration": {
             "merchant": {
                 "capabilities": {
@@ -15335,7 +15351,7 @@ async def app_stripe_connect_state(
         try:
             account = _stripe_connect_request(
                 "GET",
-                f"/accounts/{row['stripe_account_id']}?include[]=configuration.merchant&include[]=requirements",
+                f"/accounts/{row['stripe_account_id']}?include[0]=configuration.merchant&include[1]=requirements",
             )
             status_value, requirements_due = _stripe_connect_account_status(account)
             _save_stripe_connected_account(
