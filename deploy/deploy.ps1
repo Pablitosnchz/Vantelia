@@ -255,11 +255,17 @@ fi
 mv "$NEW_DIR" "$REMOTE_PROJECT"
 
 cd "$REMOTE_PROJECT"
-docker compose -f deploy/hostinger/docker-compose.yml up -d --build
+# Compose escribe el progreso por stderr; lo unificamos con stdout para que
+# PowerShell conserve el orden y no muestre mensajes atrasados tras el exito.
+docker compose -f deploy/hostinger/docker-compose.yml up -d --build 2>&1
 docker ps
 
 attempt=1
-until curl --fail --silent --show-error http://127.0.0.1:8000/health; do
+while true; do
+  if health_response="$(curl --fail --silent --max-time 5 http://127.0.0.1:8000/health 2>/dev/null)"; then
+    echo "$health_response"
+    break
+  fi
   if [ "$attempt" -ge 12 ]; then
     echo ""
     echo "Healthcheck fallido tras varios intentos. Ultimos logs de vantelia-app:" >&2
@@ -291,7 +297,28 @@ if ($sshExit -ne 0) {
     throw "La actualizacion remota ha fallado (exit $sshExit)."
 }
 
+Write-Step "Verificando produccion publica"
+$PublicHealthUrl = "https://app.vantelia.es/health"
+$publicHealth = $null
+for ($attempt = 1; $attempt -le 6; $attempt++) {
+    try {
+        $publicHealth = Invoke-RestMethod -Uri $PublicHealthUrl -TimeoutSec 15
+        if ($publicHealth.status -eq "ok") {
+            break
+        }
+    } catch {
+        if ($attempt -eq 6) {
+            throw "El VPS responde, pero el healthcheck publico ha fallado: $($_.Exception.Message)"
+        }
+        Start-Sleep -Seconds 3
+    }
+}
+if (-not $publicHealth -or $publicHealth.status -ne "ok") {
+    throw "El healthcheck publico no devolvio status=ok."
+}
+Write-Host "Produccion publica: OK" -ForegroundColor Green
+
 Write-Step "Despliegue completado"
 Write-Host "Panel:   https://app.vantelia.es/dashboard" -ForegroundColor Green
-Write-Host "Health:  https://app.vantelia.es/health" -ForegroundColor Green
+Write-Host "Health:  $PublicHealthUrl" -ForegroundColor Green
 Write-Host "Demo:    https://app.vantelia.es/demo/$DemoClient" -ForegroundColor Green
