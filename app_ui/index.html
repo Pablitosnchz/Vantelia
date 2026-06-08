@@ -866,6 +866,10 @@
 
   <div class="sidebar-divider"></div>
   <div class="sidebar-section" data-label="Cuenta">Cuenta</div>
+  <div class="nav-item" data-tab="payments">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><path d="M7 15h2"/></svg>
+    <span>Cobros Stripe</span>
+  </div>
   <div class="nav-item" data-tab="billing">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
     <span>Suscripción</span>
@@ -1563,6 +1567,27 @@
     </div>
   </section>
 
+  <!-- STRIPE CONNECT -->
+  <section class="page" id="page-payments">
+    <div class="panel-card">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px; flex-wrap:wrap;">
+        <h2 style="margin:0;">Cobros con Stripe</h2>
+        <span class="pro-pill" id="stripeConnectStatusPill" style="background:rgba(255,255,255,0.08); color:var(--soft);">Sin conectar</span>
+      </div>
+      <p class="panel-sub">Conecta la cuenta Stripe de tu negocio para recibir pagos de tus clientes. Esta cuenta es independiente de tu suscripcion a Vantelia.</p>
+      <div style="margin-top:18px; padding:16px; border:1px solid var(--border); border-radius:12px; background:rgba(7,16,31,0.35);">
+        <div style="color:var(--soft-2); font-size:0.8rem; text-transform:uppercase; letter-spacing:.08em;">Cuenta conectada</div>
+        <div id="stripeConnectAccountId" style="margin-top:6px; font-family:monospace; color:var(--soft);">Todavia no hay una cuenta Stripe conectada.</div>
+        <div id="stripeConnectRequirements" class="panel-sub" style="margin-top:8px;"></div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;">
+        <button class="btn btn-primary" id="stripeConnectBtn" type="button">Conectar Stripe</button>
+        <button class="btn btn-ghost" id="stripeConnectRefreshBtn" type="button">Actualizar estado</button>
+      </div>
+      <p class="panel-sub" id="stripeConnectMessage" style="margin-top:12px;"></p>
+    </div>
+  </section>
+
   <!-- BILLING -->
   <section class="page" id="page-billing">
     <div class="panel-card">
@@ -2023,7 +2048,7 @@ const state = {
   session_id: 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
 };
 
-const TABS = ['overview','chats','knowledge','qa','tune','voz','whatsapp','appearance','billing','citas','equipo','servicios','horarios','mensajes','instalacion','cuenta'];
+const TABS = ['overview','chats','knowledge','qa','tune','voz','whatsapp','appearance','payments','billing','citas','equipo','servicios','horarios','mensajes','instalacion','cuenta'];
 const billingState = { period: 'monthly', plans: [], current: 'free', portal: false };
 
 function formatDetail(d) {
@@ -2098,7 +2123,7 @@ function setTab(tab) {
   const titles = {
     overview:'Overview', chats:'Chats',
     knowledge:'Conocimiento', qa:'Q&A', tune:'Tune AI', voz:'Asistente de voz', whatsapp:'WhatsApp',
-    appearance:'Apariencia', billing:'Suscripción',
+    appearance:'Apariencia', payments:'Cobros Stripe', billing:'Suscripción',
     citas:'Citas', equipo:'Equipo', servicios:'Servicios', horarios:'Horarios',
     mensajes:'Recordatorios y avisos', instalacion:'Instalación', cuenta:'Cuenta',
   };
@@ -2109,6 +2134,7 @@ function setTab(tab) {
   if (tab === 'tune')       loadTune();
   if (tab === 'voz')        loadVoz();
   if (tab === 'whatsapp')   loadWhatsApp();
+  if (tab === 'payments')   loadStripeConnect();
   if (tab === 'billing')    loadBilling();
   if (tab === 'citas')      loadCitas();
   if (tab === 'equipo')     loadEquipo();
@@ -3413,6 +3439,71 @@ document.getElementById('vozRequestBtn').addEventListener('click', () => {
     muteBtn.classList.toggle('on', muted);
   });
   hangBtn.addEventListener('click', closeOverlay);
+})();
+
+// ── STRIPE CONNECT ────────────────────────────────────────────────────
+async function loadStripeConnect() {
+  const pill = document.getElementById('stripeConnectStatusPill');
+  const account = document.getElementById('stripeConnectAccountId');
+  const requirements = document.getElementById('stripeConnectRequirements');
+  const message = document.getElementById('stripeConnectMessage');
+  const connectBtn = document.getElementById('stripeConnectBtn');
+  try {
+    const data = await api('/auth/app/stripe-connect');
+    account.textContent = data.stripe_account_id || 'Todavia no hay una cuenta Stripe conectada.';
+    connectBtn.disabled = !data.configured;
+    connectBtn.textContent = data.connected ? 'Continuar configuracion en Stripe' : 'Conectar Stripe';
+    if (!data.configured) {
+      pill.textContent = 'No disponible';
+      pill.style.color = 'var(--danger)';
+      requirements.textContent = '';
+      message.textContent = 'Stripe Connect no esta configurado en el servidor.';
+    } else if (data.status === 'active') {
+      pill.textContent = 'Activa';
+      pill.style.color = 'var(--success)';
+      requirements.textContent = 'La cuenta esta lista para recibir cobros.';
+      message.textContent = '';
+    } else if (data.connected) {
+      pill.textContent = 'Configuracion pendiente';
+      pill.style.color = 'var(--warning)';
+      requirements.textContent = data.requirements_due
+        ? `${data.requirements_due} requisito(s) pendiente(s) en Stripe.`
+        : 'Stripe todavia esta revisando o completando la activacion.';
+      message.textContent = data.last_error || '';
+    } else {
+      pill.textContent = 'Sin conectar';
+      pill.style.color = 'var(--soft)';
+      requirements.textContent = '';
+      message.textContent = 'Stripe te guiara para verificar el negocio y configurar los cobros.';
+    }
+  } catch (err) {
+    message.textContent = err.message;
+    toast(err.message, 'error');
+  }
+}
+
+async function startStripeConnect() {
+  const btn = document.getElementById('stripeConnectBtn');
+  btn.disabled = true;
+  try {
+    const data = await api('/auth/app/stripe-connect/start', { method: 'POST' });
+    if (data.onboarding_url) window.location.href = data.onboarding_url;
+    else toast('Stripe no devolvio un enlace de conexion.', 'error');
+  } catch (err) {
+    btn.disabled = false;
+    toast(err.message, 'error');
+  }
+}
+
+document.getElementById('stripeConnectBtn').addEventListener('click', startStripeConnect);
+document.getElementById('stripeConnectRefreshBtn').addEventListener('click', loadStripeConnect);
+
+(function handleStripeConnectReturn() {
+  const sp = new URLSearchParams(window.location.search);
+  if (sp.get('stripe_connect') === 'returned') {
+    toast('Conexion de Stripe actualizada.', 'success');
+    setTimeout(() => setTab('payments'), 200);
+  }
 })();
 
 // ── BILLING ───────────────────────────────────────────────────────────

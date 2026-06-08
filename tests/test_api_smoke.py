@@ -4524,6 +4524,78 @@ def test_app_billing_state_defaults_to_free_plan(client: TestClient, api_module,
     assert data["portal_available"] is False
 
 
+def test_app_stripe_connect_requires_authentication(client: TestClient):
+    assert client.get("/auth/app/stripe-connect").status_code == 401
+    assert client.post("/auth/app/stripe-connect/start").status_code == 401
+
+
+def test_app_stripe_connect_state_defaults_to_not_connected(client: TestClient, api_module, monkeypatch):
+    cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Connect State")
+    monkeypatch.setattr(api_module, "STRIPE_SECRET_KEY", "sk_test_connect")
+    resp = client.get("/auth/app/stripe-connect", cookies=cookies)
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {
+        "configured": True,
+        "connected": False,
+        "stripe_account_id": "",
+        "status": "not_connected",
+        "requirements_due": 0,
+        "last_error": "",
+    }
+
+
+def test_app_stripe_connect_start_creates_and_reuses_account(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, email = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Connect Start")
+    monkeypatch.setattr(api_module, "STRIPE_SECRET_KEY", "sk_test_connect")
+    calls = []
+
+    def fake_connect_request(method, path, *, payload=None):
+        calls.append((method, path, payload))
+        if path == "/accounts":
+            assert payload["contact_email"] == email
+            assert payload["configuration"]["merchant"]["capabilities"]["card_payments"]["requested"] is True
+            return {"id": "acct_connect_test", "configuration": {"merchant": {}}, "requirements": {"entries": []}}
+        assert path == "/account_links"
+        assert payload["account"] == "acct_connect_test"
+        return {"url": "https://connect.stripe.test/onboarding"}
+
+    monkeypatch.setattr(api_module, "_stripe_connect_request", fake_connect_request)
+    first = client.post("/auth/app/stripe-connect/start", cookies=cookies)
+    second = client.post("/auth/app/stripe-connect/start", cookies=cookies)
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert first.json()["onboarding_url"] == "https://connect.stripe.test/onboarding"
+    assert [path for _, path, _ in calls].count("/accounts") == 1
+    row = api_module._stripe_connected_account_row(cliente_id)
+    assert row["stripe_account_id"] == "acct_connect_test"
+
+
+def test_app_stripe_connect_state_syncs_active_account(client: TestClient, api_module, monkeypatch):
+    cookies, cliente_id, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Connect Active")
+    monkeypatch.setattr(api_module, "STRIPE_SECRET_KEY", "sk_test_connect")
+    owner_id = api_module.db_get_client_owner(cliente_id)
+    api_module._save_stripe_connected_account(cliente_id, owner_id, "acct_active_test")
+    monkeypatch.setattr(
+        api_module,
+        "_stripe_connect_request",
+        lambda method, path, payload=None: {
+            "id": "acct_active_test",
+            "configuration": {
+                "merchant": {
+                    "capabilities": {
+                        "card_payments": {"status": "active"},
+                    },
+                },
+            },
+            "requirements": {"entries": []},
+        },
+    )
+    resp = client.get("/auth/app/stripe-connect", cookies=cookies)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["connected"] is True
+    assert resp.json()["status"] == "active"
+
+
 def test_app_billing_checkout_503_when_stripe_not_configured(client: TestClient, api_module, monkeypatch):
     cookies, _, _ = _signup_and_wizard(client, api_module, monkeypatch, name="Bot Stripe")
     monkeypatch.setattr(api_module, "STRIPE_SECRET_KEY", "")

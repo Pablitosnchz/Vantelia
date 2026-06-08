@@ -308,6 +308,8 @@ def _normalize_plan_slug(plan: str) -> str:
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "").strip()
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
+STRIPE_CONNECT_API_VERSION = os.getenv("STRIPE_CONNECT_API_VERSION", "2026-05-27.preview").strip()
+STRIPE_CONNECT_BASE_URL = "https://api.stripe.com/v2/core"
 
 # Self-serve plans (Vantelia 2.0)
 STRIPE_PRICE_STARTER = os.getenv("STRIPE_PRICE_STARTER", "").strip()
@@ -1765,6 +1767,20 @@ def _init_database() -> None:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_sub ON subscriptions(stripe_subscription_id)"
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS stripe_connected_accounts (
+                cliente_id TEXT PRIMARY KEY,
+                owner_user_id TEXT NOT NULL DEFAULT '',
+                stripe_account_id TEXT NOT NULL UNIQUE,
+                status TEXT NOT NULL DEFAULT 'pending',
+                requirements_due INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
 
         connection.execute(
             """
@@ -2835,6 +2851,8 @@ from api_models import (
     BillingCheckoutResponse,
     AppTrackEventPayload,
     BillingPortalResponse,
+    StripeConnectStateResponse,
+    StripeConnectStartResponse,
     ConsultaLeadPayload,
     DemoGeneratePayload,
     DemoGenerateResponse,
@@ -15117,6 +15135,261 @@ def _build_plan_tiers(current_plan_slug: str) -> List[BillingPlanTier]:
             is_current=(slug == current_plan_slug),
         ))
     return out
+
+
+def _stripe_connect_headers() -> Dict[str, str]:
+    if not _stripe_connect_configured():
+        raise HTTPException(status_code=503, detail="Stripe no configurado en el servidor.")
+    return {
+        "Authorization": f"Bearer {STRIPE_SECRET_KEY}",
+        "Stripe-Version": STRIPE_CONNECT_API_VERSION,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+
+def _stripe_connect_configured() -> bool:
+    return bool(STRIPE_SECRET_KEY)
+
+
+def _stripe_connect_request(method: str, path: str, *, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    try:
+        with httpx.Client(timeout=25.0) as client:
+            response = client.request(
+                method,
+                f"{STRIPE_CONNECT_BASE_URL}{path}",
+                headers=_stripe_connect_headers(),
+                json=payload,
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="No se pudo conectar con Stripe Connect.") from exc
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+    if response.is_error:
+        message = (
+            body.get("error", {}).get("message", "")
+            if isinstance(body.get("error"), dict)
+            else ""
+        )
+        logger.error("Stripe Connect %s %s fallo (%s): %s", method, path, response.status_code, message)
+        raise HTTPException(
+            status_code=502,
+            detail=message or "Stripe no pudo completar la operacion de conexion.",
+        )
+    return body
+
+
+def _stripe_connected_account_row(cliente_id: str) -> Optional[sqlite3.Row]:
+    with _get_db_connection() as connection:
+        return connection.execute(
+            "SELECT * FROM stripe_connected_accounts WHERE cliente_id = ?",
+            (cliente_id,),
+        ).fetchone()
+
+
+def _save_stripe_connected_account(
+    cliente_id: str,
+    owner_user_id: str,
+    stripe_account_id: str,
+    *,
+    status_value: str = "pending",
+    requirements_due: int = 0,
+    last_error: str = "",
+) -> None:
+    now_iso = _utc_now_iso()
+    with _get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO stripe_connected_accounts
+                (cliente_id, owner_user_id, stripe_account_id, status,
+                 requirements_due, last_error, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(cliente_id) DO UPDATE SET
+                owner_user_id = excluded.owner_user_id,
+                stripe_account_id = excluded.stripe_account_id,
+                status = excluded.status,
+                requirements_due = excluded.requirements_due,
+                last_error = excluded.last_error,
+                updated_at = excluded.updated_at
+            """,
+            (
+                cliente_id,
+                owner_user_id,
+                stripe_account_id,
+                status_value,
+                requirements_due,
+                last_error,
+                now_iso,
+                now_iso,
+            ),
+        )
+        connection.commit()
+
+
+def _stripe_connect_requirement_count(account: Dict[str, Any]) -> int:
+    requirements = account.get("requirements")
+    if not isinstance(requirements, dict):
+        return 0
+    entries = requirements.get("entries")
+    return len(entries) if isinstance(entries, list) else 0
+
+
+def _stripe_connect_account_status(account: Dict[str, Any]) -> Tuple[str, int]:
+    due = _stripe_connect_requirement_count(account)
+    merchant = account.get("configuration", {}).get("merchant", {})
+    card_payments = merchant.get("capabilities", {}).get("card_payments", {})
+    capability_status = str(card_payments.get("status", "")).lower()
+    if capability_status == "active" and due == 0:
+        return "active", 0
+    return ("requirements_due" if due else "pending"), due
+
+
+def _create_stripe_connected_account(user: sqlite3.Row) -> str:
+    cliente_id = str(user["cliente_id"] or "")
+    config = _get_client_config(cliente_id)
+    payload = {
+        "contact_email": user["email"],
+        "display_name": config.get("nombre") or cliente_id,
+        "dashboard": "full",
+        "configuration": {
+            "merchant": {
+                "capabilities": {
+                    "card_payments": {"requested": True},
+                },
+            },
+        },
+        "defaults": {
+            "currency": "eur",
+            "responsibilities": {
+                "fees_collector": "stripe",
+                "losses_collector": "stripe",
+            },
+            "locales": ["es-ES"],
+        },
+        "include": ["configuration.merchant", "requirements"],
+    }
+    account = _stripe_connect_request("POST", "/accounts", payload=payload)
+    account_id = str(account.get("id", ""))
+    if not account_id:
+        raise HTTPException(status_code=502, detail="Stripe no devolvio una cuenta conectada valida.")
+    status_value, due = _stripe_connect_account_status(account)
+    _save_stripe_connected_account(
+        cliente_id,
+        user["id"],
+        account_id,
+        status_value=status_value,
+        requirements_due=due,
+    )
+    return account_id
+
+
+def _stripe_connect_account_id(user: sqlite3.Row) -> str:
+    cliente_id = str(user["cliente_id"] or "")
+    if not cliente_id:
+        raise HTTPException(status_code=400, detail="Tu usuario no tiene un negocio asociado.")
+    row = _stripe_connected_account_row(cliente_id)
+    return str(row["stripe_account_id"]) if row else _create_stripe_connected_account(user)
+
+
+def _stripe_connect_onboarding_url(user: sqlite3.Row, request: Request) -> str:
+    account_id = _stripe_connect_account_id(user)
+    base_url = _public_base_url(request)
+    account_link = _stripe_connect_request(
+        "POST",
+        "/account_links",
+        payload={
+            "account": account_id,
+            "use_case": {
+                "type": "account_onboarding",
+                "account_onboarding": {
+                    "collection_options": {"fields": "eventually_due"},
+                    "configurations": ["merchant"],
+                    "return_url": f"{base_url}/auth/app/stripe-connect/return",
+                    "refresh_url": f"{base_url}/auth/app/stripe-connect/refresh",
+                },
+            },
+        },
+    )
+    onboarding_url = str(account_link.get("url", ""))
+    if not onboarding_url:
+        raise HTTPException(status_code=502, detail="Stripe no devolvio un enlace de conexion valido.")
+    return onboarding_url
+
+
+@app.get("/auth/app/stripe-connect", response_model=StripeConnectStateResponse)
+async def app_stripe_connect_state(
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> StripeConnectStateResponse:
+    cliente_id = str(user["cliente_id"] or "")
+    if not cliente_id:
+        raise HTTPException(status_code=400, detail="Tu usuario no tiene un negocio asociado.")
+    row = _stripe_connected_account_row(cliente_id)
+    if not row:
+        return StripeConnectStateResponse(configured=_stripe_connect_configured())
+    status_value = str(row["status"] or "pending")
+    requirements_due = int(row["requirements_due"] or 0)
+    last_error = ""
+    if _stripe_connect_configured():
+        try:
+            account = _stripe_connect_request(
+                "GET",
+                f"/accounts/{row['stripe_account_id']}?include[]=configuration.merchant&include[]=requirements",
+            )
+            status_value, requirements_due = _stripe_connect_account_status(account)
+            _save_stripe_connected_account(
+                cliente_id,
+                user["id"],
+                row["stripe_account_id"],
+                status_value=status_value,
+                requirements_due=requirements_due,
+            )
+        except HTTPException as exc:
+            last_error = str(exc.detail)
+            _save_stripe_connected_account(
+                cliente_id,
+                user["id"],
+                row["stripe_account_id"],
+                status_value=status_value,
+                requirements_due=requirements_due,
+                last_error=last_error,
+            )
+    return StripeConnectStateResponse(
+        configured=_stripe_connect_configured(),
+        connected=True,
+        stripe_account_id=row["stripe_account_id"],
+        status=status_value,
+        requirements_due=requirements_due,
+        last_error=last_error,
+    )
+
+
+@app.post("/auth/app/stripe-connect/start", response_model=StripeConnectStartResponse)
+async def app_stripe_connect_start(
+    request: Request,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> StripeConnectStartResponse:
+    if _session_is_impersonated(user):
+        raise HTTPException(status_code=403, detail="Accion bloqueada en sesion de admin (impersonacion).")
+    return StripeConnectStartResponse(ok=True, onboarding_url=_stripe_connect_onboarding_url(user, request))
+
+
+@app.get("/auth/app/stripe-connect/refresh")
+async def app_stripe_connect_refresh(
+    request: Request,
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> RedirectResponse:
+    if _session_is_impersonated(user):
+        raise HTTPException(status_code=403, detail="Accion bloqueada en sesion de admin (impersonacion).")
+    return RedirectResponse(_stripe_connect_onboarding_url(user, request), status_code=303)
+
+
+@app.get("/auth/app/stripe-connect/return")
+async def app_stripe_connect_return(
+    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
+) -> RedirectResponse:
+    return RedirectResponse("/app?stripe_connect=returned", status_code=303)
 
 
 @app.get("/auth/app/billing", response_model=BillingStateResponse)

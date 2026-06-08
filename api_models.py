@@ -665,6 +665,20 @@ class BillingPortalResponse(BaseModel):
     portal_url: str
 
 
+class StripeConnectStateResponse(BaseModel):
+    configured: bool = False
+    connected: bool = False
+    stripe_account_id: str = ""
+    status: str = "not_connected"
+    requirements_due: int = 0
+    last_error: str = ""
+
+
+class StripeConnectStartResponse(BaseModel):
+    ok: bool
+    onboarding_url: str
+
+
 class ConsultaLeadPayload(BaseModel):
     nombre: str = Field(min_length=1, max_length=120)
     email: EmailStr
