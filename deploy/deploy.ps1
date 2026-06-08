@@ -164,6 +164,8 @@ if (-not $SkipLocalChecks) {
     if ($pythonVersion -lt [version]"3.11") {
         throw "Python local debe ser 3.11 o superior para coincidir con Docker (actual: $pythonVersionOutput)."
     }
+    Write-Host "Sincronizando dependencias de requirements.txt..."
+    Invoke-Checked -FilePath $PythonCommand -Arguments @("-m", "pip", "install", "--quiet", "--disable-pip-version-check", "-r", "requirements.txt") -WorkingDirectory $ProjectRoot
     Invoke-Checked -FilePath $PythonCommand -Arguments @("-m", "pytest") -WorkingDirectory $ProjectRoot
     Invoke-Checked -FilePath $PythonCommand -Arguments @("-m", "py_compile", "api.py", "auto_onboarding.py", "onboarding_utils.py") -WorkingDirectory $ProjectRoot
 }
