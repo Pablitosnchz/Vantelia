@@ -793,13 +793,6 @@
     .agenda-blocked-overlay strong { font-size: 1rem; color: var(--text); }
     .page-agenda-wrap { position: relative; }
     .nav-item.booking-nav-disabled { opacity: 0.35; pointer-events: none; }
-    .crm-filter-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:10px; margin-top:10px; }
-    .crm-contact-row { text-align:left; padding:14px; cursor:pointer; display:grid; grid-template-columns:minmax(180px,1.2fr) minmax(150px,1fr) auto; gap:12px; align-items:center; }
-    .crm-pagination { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:14px; }
-    @media (max-width: 680px) {
-      .crm-contact-row { grid-template-columns:1fr; }
-      .crm-contact-row .pro-pill { justify-self:start; }
-    }
   </style>
 </head>
 <body>
@@ -850,14 +843,6 @@
 
   <div class="sidebar-divider"></div>
   <div class="sidebar-section" data-label="Operaciones">Operaciones</div>
-  <div class="nav-item" data-tab="contactos">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
-    <span>Contactos</span>
-  </div>
-  <div class="nav-item" data-tab="pagos">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M7 15h3"/></svg>
-    <span>Pagos</span>
-  </div>
   <div class="nav-item" data-tab="canales">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v12H5.2L4 17.2V4z"/><path d="M7 8h10M7 12h7"/></svg>
     <span>Canales de envio</span>
@@ -1586,37 +1571,45 @@
     </div>
   </section>
 
-  <!-- STRIPE CONNECT -->
+  <!-- COBROS STRIPE -->
   <section class="page" id="page-payments">
+    <div style="margin-bottom:18px;">
+      <h1 style="margin:0;">Cobros Stripe</h1>
+      <p class="panel-sub">Conecta Stripe para cobrar a tus clientes y gestionar los pagos desde Vantelia.</p>
+    </div>
     <div class="panel-card">
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px; flex-wrap:wrap;">
         <h2 style="margin:0;">Cobros con Stripe</h2>
-        <span class="pro-pill" id="stripeConnectStatusPill" style="background:rgba(255,255,255,0.08); color:var(--soft);">Sin conectar</span>
       </div>
       <p class="panel-sub">Conecta la cuenta Stripe de tu negocio para recibir pagos de tus clientes. Esta cuenta es independiente de tu suscripcion a Vantelia.</p>
-      <div style="margin-top:18px; padding:16px; border:1px solid var(--border); border-radius:12px; background:rgba(7,16,31,0.35);">
-        <div style="color:var(--soft-2); font-size:0.8rem; text-transform:uppercase; letter-spacing:.08em;">Cuenta conectada</div>
-        <div id="stripeConnectAccountId" style="margin-top:6px; font-family:monospace; color:var(--soft);">Todavia no hay una cuenta Stripe conectada.</div>
-        <div id="stripeConnectRequirements" class="panel-sub" style="margin-top:8px;"></div>
-      </div>
+      <div id="payConnectStatus" class="panel-sub" style="margin:14px 0;">Consultando conexion...</div>
       <div style="display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;">
-        <button class="btn btn-primary" id="stripeConnectBtn" type="button">Conectar Stripe</button>
-        <button class="btn btn-ghost" id="stripeConnectRefreshBtn" type="button">Actualizar estado</button>
+        <button class="btn btn-primary" id="payConnectBtn" type="button">Conectar Stripe</button>
+        <button class="btn btn-ghost" id="payRefreshBtn" type="button">Actualizar estado</button>
       </div>
-      <p class="panel-sub" id="stripeConnectMessage" style="margin-top:12px;"></p>
     </div>
     <div class="panel-card" style="margin-top:18px;">
-      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <h2 style="margin:0;">Email Gmail del negocio</h2>
-        <span class="pro-pill" id="gmailClientStatusPill">Sin conectar</span>
+      <h2>Cobros por el asistente IA</h2>
+      <p class="panel-sub">Permite que el asistente envie el enlace de pago de una cita por email o SMS. El importe siempre sale del servicio configurado.</p>
+      <label style="display:flex;align-items:center;gap:10px;margin-top:12px;cursor:pointer;">
+        <input type="checkbox" id="payAiSendToggle" />
+        <span>Permitir que la IA envie enlaces de pago en mi nombre</span>
+      </label>
+      <div id="payAiSendStatus" class="panel-sub" style="margin-top:8px;"></div>
+    </div>
+    <div class="panel-card" style="margin-top:18px;">
+      <h2>Crear enlace de pago</h2>
+      <p class="panel-sub">Introduce el ID de una cita. Se aplicara la politica configurada en su servicio.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <input class="field-input" id="payBookingId" placeholder="ID de cita" style="flex:1;min-width:220px;" />
+        <input class="field-input" id="payOverrideAmount" type="number" min="0.5" step="0.01" placeholder="Importe manual EUR (opcional)" style="width:220px;" />
+        <button class="btn btn-primary" id="payCreateLinkBtn" type="button">Crear enlace</button>
       </div>
-      <p class="panel-sub">Opcional. Permite enviar confirmaciones y recordatorios desde el Gmail del negocio. Si no está conectado, se usa SMTP cuando esté disponible.</p>
-      <div id="gmailClientEmail" style="margin-top:12px; color:var(--soft);">No hay Gmail conectado.</div>
-      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
-        <button class="btn btn-primary" id="gmailClientConnectBtn" type="button">Conectar Gmail</button>
-        <button class="btn btn-ghost" id="gmailClientDisconnectBtn" type="button" style="display:none;">Desconectar</button>
-      </div>
-      <p class="panel-sub" id="gmailClientMessage" style="margin-top:10px;"></p>
+      <div id="payCreatedLink" style="margin-top:12px;"></div>
+    </div>
+    <div class="panel-card" style="margin-top:18px;">
+      <h2>Historial de pagos</h2>
+      <div id="paymentsList" style="display:grid;gap:10px;margin-top:12px;"></div>
     </div>
   </section>
 
@@ -1658,8 +1651,8 @@
     </div>
   </section>
 
-  <!-- CONTACTOS CRM -->
-  <section class="page" id="page-contactos">
+  <!-- CONTACTOS CRM RETIRADO DEL PORTAL -->
+  <section class="page" id="page-contactos-removed" hidden>
     <div class="panel-card">
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap;">
         <div>
@@ -1739,40 +1732,6 @@
       <button class="btn btn-primary" id="crmSaveBtn" type="button" style="margin-top:12px;">Guardar ficha</button>
       <h3 style="margin-top:24px;">Actividad</h3>
       <div id="crmActivity" style="display:grid;gap:8px;"></div>
-    </div>
-  </section>
-
-  <!-- PAGOS CLIENTES FINALES -->
-  <section class="page" id="page-pagos">
-    <div class="panel-card">
-      <h2>Stripe para tus clientes</h2>
-      <p class="panel-sub">Los cobros llegan directamente a tu propia cuenta Stripe. Esta conexion es independiente de tu suscripcion a Vantelia.</p>
-      <div id="payConnectStatus" class="panel-sub" style="margin:14px 0;">Consultando conexion...</div>
-      <button class="btn btn-primary" id="payConnectBtn" type="button">Conectar Stripe</button>
-      <button class="btn btn-ghost" id="payRefreshBtn" type="button">Actualizar estado</button>
-    </div>
-    <div class="panel-card" style="margin-top:18px;">
-      <h2>Cobros por el asistente IA</h2>
-      <p class="panel-sub">Si lo activas, tu asistente (web, WhatsApp y voz) podra enviar el enlace de pago de una cita al cliente: por email si la cita se creo por web/WhatsApp, o por SMS si se creo por el agente de voz. El importe siempre sale del servicio; el cliente no puede cambiarlo.</p>
-      <label style="display:flex;align-items:center;gap:10px;margin-top:12px;cursor:pointer;">
-        <input type="checkbox" id="payAiSendToggle" />
-        <span>Permitir que la IA envie enlaces de pago en mi nombre</span>
-      </label>
-      <div id="payAiSendStatus" class="panel-sub" style="margin-top:8px;"></div>
-    </div>
-    <div class="panel-card" style="margin-top:18px;">
-      <h2>Crear enlace de pago</h2>
-      <p class="panel-sub">Introduce el ID de una cita. Se aplicara la politica configurada en su servicio.</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <input class="field-input" id="payBookingId" placeholder="ID de cita" style="flex:1;min-width:220px;" />
-        <input class="field-input" id="payOverrideAmount" type="number" min="0.5" step="0.01" placeholder="Importe manual EUR (opcional)" style="width:220px;" />
-        <button class="btn btn-primary" id="payCreateLinkBtn" type="button">Crear enlace</button>
-      </div>
-      <div id="payCreatedLink" style="margin-top:12px;"></div>
-    </div>
-    <div class="panel-card" style="margin-top:18px;">
-      <h2>Historial de pagos</h2>
-      <div id="paymentsList" style="display:grid;gap:10px;margin-top:12px;"></div>
     </div>
   </section>
 
@@ -2246,7 +2205,7 @@ const state = {
   session_id: 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
 };
 
-const TABS = ['overview','chats','knowledge','qa','tune','voz','whatsapp','appearance','payments','billing','contactos','canales','citas','equipo','servicios','horarios','mensajes','instalacion','cuenta'];
+const TABS = ['overview','chats','knowledge','qa','tune','voz','whatsapp','appearance','payments','billing','canales','citas','equipo','servicios','horarios','mensajes','instalacion','cuenta'];
 const billingState = { period: 'monthly', plans: [], current: 'free', portal: false };
 
 function formatDetail(d) {
@@ -2307,7 +2266,7 @@ function setTab(tab) {
       text: 'Texto',
       qa: 'Q&A',
       tune: 'Tune AI',
-      integrations: 'Integraciones',
+      integrations: 'Cobros Stripe',
     })[tab] || 'Próximamente';
     document.getElementById('lockedSub').textContent = (tab === 'livechat' || tab === 'integrations')
       ? 'En desarrollo. Llegará próximamente.'
@@ -2323,7 +2282,7 @@ function setTab(tab) {
     knowledge:'Conocimiento', qa:'Q&A', tune:'Tune AI', voz:'Asistente de voz', whatsapp:'WhatsApp',
     appearance:'Apariencia', payments:'Cobros Stripe', billing:'Suscripción',
     citas:'Citas', equipo:'Equipo', servicios:'Servicios', horarios:'Horarios',
-    contactos:'Contactos', canales:'Canales de envio',
+    canales:'Canales de envio',
     mensajes:'Recordatorios y avisos', instalacion:'Instalación', cuenta:'Cuenta',
   };
   document.getElementById('pageTitle').textContent = titles[tab] || 'Panel';
@@ -2333,10 +2292,8 @@ function setTab(tab) {
   if (tab === 'tune')       loadTune();
   if (tab === 'voz')        loadVoz();
   if (tab === 'whatsapp')   loadWhatsApp();
-  if (tab === 'payments')   loadStripeConnect();
+  if (tab === 'payments')   loadPayments();
   if (tab === 'billing')    loadBilling();
-  if (tab === 'contactos')  loadContactos();
-  if (tab === 'pagos')      loadPayments();
   if (tab === 'canales')    loadChannels();
   if (tab === 'citas')      loadCitas();
   if (tab === 'equipo')     loadEquipo();
@@ -3682,7 +3639,6 @@ async function loadStripeConnect() {
     message.textContent = err.message;
     toast(err.message, 'error');
   }
-  loadGmailClientChannel();
 }
 
 async function startStripeConnect() {
@@ -3698,45 +3654,17 @@ async function startStripeConnect() {
   }
 }
 
-document.getElementById('stripeConnectBtn').addEventListener('click', startStripeConnect);
-document.getElementById('stripeConnectRefreshBtn').addEventListener('click', loadStripeConnect);
-
-async function loadGmailClientChannel() {
-  const pill = document.getElementById('gmailClientStatusPill');
-  const email = document.getElementById('gmailClientEmail');
-  const message = document.getElementById('gmailClientMessage');
-  const connect = document.getElementById('gmailClientConnectBtn');
-  const disconnect = document.getElementById('gmailClientDisconnectBtn');
-  try {
-    const data = await api('/auth/app/email-channel');
-    pill.textContent = data.connected ? 'Activo' : data.configured ? 'Sin conectar' : 'No disponible';
-    pill.style.color = data.connected ? 'var(--success)' : 'var(--soft)';
-    email.textContent = data.email || 'No hay Gmail conectado.';
-    connect.disabled = !data.configured;
-    connect.textContent = data.connected ? 'Reconectar Gmail' : 'Conectar Gmail';
-    disconnect.style.display = data.connected ? '' : 'none';
-    message.textContent = data.last_error || (data.smtp_fallback ? 'SMTP está disponible como respaldo.' : 'El email es opcional y no bloquea las reservas.');
-  } catch (err) { message.textContent = err.message; }
-}
-document.getElementById('gmailClientConnectBtn').addEventListener('click', () => {
-  window.location.href = '/auth/app/email-channel/gmail/connect';
-});
-document.getElementById('gmailClientDisconnectBtn').addEventListener('click', async () => {
-  try {
-    await api('/auth/app/email-channel/gmail', { method:'DELETE' });
-    toast('Gmail desconectado', 'success');
-    loadGmailClientChannel();
-  } catch (err) { toast(err.message, 'error'); }
-});
+document.getElementById('stripeConnectBtn')?.addEventListener('click', startStripeConnect);
+document.getElementById('stripeConnectRefreshBtn')?.addEventListener('click', loadStripeConnect);
 
 (function handleStripeConnectReturn() {
   const sp = new URLSearchParams(window.location.search);
-  if (sp.get('stripe_connect') === 'returned') {
+  if (sp.get('stripe_connect') === 'returned' || sp.get('payments') === 'connected' || sp.get('payments') === 'refresh') {
     toast('Conexion de Stripe actualizada.', 'success');
     setTimeout(() => setTab('payments'), 200);
   } else if (sp.get('gmail_connected') === '1') {
     toast('Gmail conectado correctamente.', 'success');
-    setTimeout(() => setTab('payments'), 200);
+    setTimeout(() => setTab('canales'), 200);
   }
 })();
 
@@ -3803,7 +3731,7 @@ function renderPlansGrid() {
       qa: 'Q&A manual',
       tune: 'Tune AI avanzado',
       whatsapp: 'WhatsApp',
-      integrations: 'Integraciones',
+      integrations: 'Cobros Stripe',
     };
     card.innerHTML = `
       <div style="display:flex; align-items:baseline; justify-content:space-between;">

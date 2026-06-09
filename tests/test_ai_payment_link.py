@@ -124,6 +124,7 @@ def test_ai_send_uses_sms_for_voice_booking(api_module, monkeypatch):
         return True
 
     monkeypatch.setattr(api_module, "_send_twilio_sms", capture_sms)
+    monkeypatch.setattr(api_module, "_ai_payment_delivery_available", lambda cliente_id, method: method == "sms")
     monkeypatch.setattr(
         api_module, "_send_email_message",
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("Una cita de voz no debe enviar email.")),
@@ -194,7 +195,40 @@ def test_ai_send_rejected_without_connected_stripe(api_module, monkeypatch):
         api_module._ai_send_payment_link("demo", _booking_row(api_module, booking_id))
     )
     assert result["ok"] is False
-    assert result["reason"] == "link_error"
+    assert result["reason"] == "stripe_unavailable"
+
+
+@pytest.mark.parametrize(
+    ("source", "email", "telefono", "expected_method"),
+    [
+        ("vantelia_widget", "web@example.com", "+34600123456", "email"),
+        ("whatsapp", "whatsapp@example.com", "+34600123456", "email"),
+        ("voice", "voice@example.com", "+34600999888", "sms"),
+    ],
+)
+def test_ai_send_rejected_before_checkout_when_required_channel_is_unavailable(
+    api_module, monkeypatch, source, email, telefono, expected_method
+):
+    suffix = uuid.uuid4().hex[:8]
+    _seed_connect_account(api_module)
+    _seed_service(api_module)
+    _seed_full_policy(api_module)
+    api_module._set_ai_send_enabled("demo", True)
+    booking_id = _seed_booking(
+        api_module, suffix, source=source, email=email, telefono=telefono,
+    )
+    captured_session: dict = {}
+    _patch_stripe_ok(api_module, monkeypatch, suffix, captured_session)
+    monkeypatch.setattr(api_module, "_ai_payment_delivery_available", lambda cliente_id, method: False)
+
+    result = asyncio.run(
+        api_module._ai_send_payment_link("demo", _booking_row(api_module, booking_id))
+    )
+
+    assert result["ok"] is False
+    assert result["reason"] == "channel_unavailable"
+    assert result["method"] == expected_method
+    assert captured_session == {}
 
 
 def test_ai_send_dedup_when_already_paid(api_module, monkeypatch):

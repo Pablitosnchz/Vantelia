@@ -15682,6 +15682,22 @@ def _channel_settings_public(cliente_id: str) -> ChannelSettingsResponse:
     )
 
 
+def _ai_payment_delivery_available(cliente_id: str, method: str) -> bool:
+    """Comprueba el canal efectivo antes de crear un Checkout que no se podra enviar."""
+    channel_status = _channel_settings_public(cliente_id)
+    if method == "sms":
+        return bool(channel_status.sms.available)
+
+    settings = _ensure_channel_settings(cliente_id)
+    provider = settings["email_provider"] or "vantelia_smtp"
+    if provider == "gmail_oauth":
+        gmail = _client_gmail_connection(cliente_id)
+        if gmail and gmail["status"] == "active":
+            return True
+        return bool(settings["email_fallback_enabled"] and _email_delivery_configured())
+    return _email_delivery_configured()
+
+
 def _gmail_channel_state_create(cliente_id: str, user_id: str) -> Tuple[str, str]:
     verifier = secrets.token_urlsafe(64)
     raw_state = secrets.token_urlsafe(32)
@@ -16213,12 +16229,21 @@ async def _ai_send_payment_link(
     email = _sanitize_text(booking["email"] or "")
     phone = _booking_customer_phone_for_channel(booking, "sms")
 
+    account = _connect_account_status(cliente_id, refresh=True)
+    if not account.connected or not account.charges_enabled:
+        return {"ok": False, "reason": "stripe_unavailable", "method": method,
+                "error": "Conecta y activa Stripe antes de enviar enlaces de pago."}
+
     if method == "sms" and not phone:
         return {"ok": False, "reason": "no_phone", "method": method,
                 "error": "La cita no tiene un telefono al que enviar el SMS con el enlace de pago."}
     if method == "email" and not email:
         return {"ok": False, "reason": "no_email", "method": method,
                 "error": "La cita no tiene un email al que enviar el enlace de pago."}
+    if not _ai_payment_delivery_available(cliente_id, method):
+        channel_label = "SMS" if method == "sms" else "email"
+        return {"ok": False, "reason": "channel_unavailable", "method": method,
+                "error": f"Configura un canal de {channel_label} antes de enviar enlaces de pago."}
 
     # Rate limit: maximo 2 enlaces por cita en la ultima hora (anti-spam/enumeracion).
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
