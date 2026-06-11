@@ -779,9 +779,9 @@ def _outreach_admin_preview_html(html: str) -> str:
     return cleaned
 
 
-def _outreach_preflight_auth_status(settings: Dict[str, object]) -> Dict[str, Any]:
-    from_email = str(settings.get("from_email") or "").strip().lower()
-    smtp_user = str(settings.get("username") or "").strip().lower()
+def _outreach_preflight_auth_status(settings_row: Dict[str, object]) -> Dict[str, Any]:
+    from_email = str(settings_row.get("from_email") or "").strip().lower()
+    smtp_user = str(settings_row.get("username") or "").strip().lower()
     from_domain = from_email.rsplit("@", 1)[-1] if "@" in from_email else ""
     smtp_domain = smtp_user.rsplit("@", 1)[-1] if "@" in smtp_user else ""
     aligned = bool(from_domain and smtp_domain and from_domain == smtp_domain)
@@ -933,7 +933,7 @@ def _outreach_create_campaign(
     name: str,
     stage: str,
     emails: List[str],
-    settings: Dict[str, object],
+    settings_row: Dict[str, object],
     delay: float,
     jitter: float,
     force_window: bool,
@@ -969,7 +969,7 @@ def _outreach_create_campaign(
                     status_code=409,
                     detail=f"{len(existing)} email(s) ya pertenecen a otra campana: {examples}",
                 )
-    sender = str(settings.get("from_email") or "")
+    sender = str(settings_row.get("from_email") or "")
     tracking = int(bool((not OUTREACH_TRACKING_DISABLED) and OUTREACH_TRACKING_SECRET and OUTREACH_TRACKING_BASE_URL))
     cur = conn.execute(
         """INSERT INTO campaigns
@@ -1094,8 +1094,8 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
 
     max_total = int(params.get("max", 10))
     send_real = bool(params.get("send", True))
-    settings = outreach_smtp_settings()
-    unsub = str(settings.get("unsubscribe_mailto") or "baja@vantelia.es")
+    settings_row = outreach_smtp_settings()
+    unsub = str(settings_row.get("unsubscribe_mailto") or "baja@vantelia.es")
     is_autopilot = bool(params.get("autopilot"))
 
     try:
@@ -1183,7 +1183,7 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
                     sent_total += 1
                     continue
 
-                msg = outreach_build_message(p.email, subject, text, html_body, settings, in_reply_to=in_reply_to)
+                msg = outreach_build_message(p.email, subject, text, html_body, settings_row, in_reply_to=in_reply_to)
                 try:
                     emailing._send_email_object(msg)
                 except Exception as send_err:  # noqa: BLE001
@@ -1567,7 +1567,7 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                        {"auto_followups": auto_followups, "discovery_enabled": discovery_enabled,
                         "daily_new_target": daily_new_target})
 
-        settings = outreach_smtp_settings()
+        settings_row = outreach_smtp_settings()
         smtp_ok = emailing._email_delivery_configured()
         if not smtp_ok:
             _autopilot_log("warning", "smtp_not_configured", "No hay canal de email conectado")
@@ -1914,8 +1914,8 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
     stage = params.get("stage", "cold")
     campaign_id = int(params.get("campaign_id") or 0)
     real_send = bool(params.get("send")) or bool(params.get("test_to"))
-    settings = outreach_smtp_settings()
-    unsub = str(settings["unsubscribe_mailto"]) or "baja@vantelia.es"
+    settings_row = outreach_smtp_settings()
+    unsub = str(settings_row["unsubscribe_mailto"]) or "baja@vantelia.es"
     is_autopilot = bool(params.get("autopilot"))
 
     try:
@@ -1992,7 +1992,7 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                 name=params.get("campaign_name") or f"Campana {stage} {_outreach_now()[:10]}",
                 stage=stage,
                 emails=[p.email for p in candidates],
-                settings=settings,
+                settings_row=settings_row,
                 delay=float(params.get("delay", 70.0)),
                 jitter=float(params.get("jitter", 25.0)),
                 force_window=bool(params.get("force_window")),
@@ -2124,7 +2124,7 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                 if row and row["message_id"]:
                     in_reply_to = row["message_id"]
 
-            msg = outreach_build_message(recipient, subject, text, html_body, settings, in_reply_to=in_reply_to)
+            msg = outreach_build_message(recipient, subject, text, html_body, settings_row, in_reply_to=in_reply_to)
             try:
                 emailing._send_email_object(msg)
             except Exception as err:  # noqa: BLE001
@@ -2413,4 +2413,17 @@ def _outreach_run_discovery_job(job_id: int, params: dict) -> None:
         except Exception:
             pass
 
+
+
+
+OUTREACH_TRACKING_ALLOWED_HOSTS = {"vantelia.es", "www.vantelia.es", "app.vantelia.es"}
+
+GA4_PROPERTY_ID = os.getenv("GA4_PROPERTY_ID", "").strip()
+
+GA4_SERVICE_ACCOUNT_JSON = (
+    os.getenv("GA4_SERVICE_ACCOUNT_JSON", "").strip()
+    or os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON_VANTELIA", "").strip()
+)
+
+OUTREACH_PIXEL_GIF = bytes.fromhex("47494638396101000100800000ffffff00000021f90401000000002c00000000010001000002024401003b")
 

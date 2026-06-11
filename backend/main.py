@@ -253,3 +253,24 @@ async def _voice_startup_log() -> None:
         settings.logger.info("Voice channel DISABLED - missing Twilio credentials.")
 
 
+
+# Registrar endpoints: el orden de import preserva el orden de rutas del monolito.
+from backend.routers import (  # noqa: E402,F401
+    public_base,
+    auth_oauth,
+    onboarding_web,
+    portal_app,
+    billing_web,
+    portal_users,
+    ui_pages,
+    public_misc,
+    admin_core,
+    public_booking,
+    whatsapp_webhooks,
+    admin_ops,
+    admin_growth,
+    admin_outreach,
+    tracking,
+    admin_captacion,
+    voice_web,
+)

@@ -192,3 +192,29 @@ def _growth_audit(connection: sqlite3.Connection, opportunity_id: str, event_typ
     )
 
 
+
+
+GROWTH_ACTIVE_STAGES = GROWTH_STAGES - {"ganada", "perdida", "recurrente"}
+
+GROWTH_STAGE_WEIGHTS = {
+    "identificada": 0.05, "contactada": 0.10, "conversacion": 0.20,
+    "descubrimiento": 0.35, "demo": 0.50, "propuesta": 0.75,
+    "ganada": 1.0, "recurrente": 1.0, "perdida": 0.0,
+}
+
+GROWTH_PLAN_START = date(2026, 6, 8)
+
+GROWTH_DAILY_TARGETS = {"researched": 10, "contacts": 20, "followups": 10, "calls": 3}
+
+GROWTH_PLAN_TASKS = [
+    {"key": "d1_pipeline", "label": "Día 1 · Preparar pipeline"},
+    {"key": "d1_select", "label": "Día 1 · Seleccionar 20 empresas Campaña 1"},
+    {"key": "d1_contact", "label": "Día 1 · Enviar 20 contactos manuales"},
+    {"key": "d1_calls", "label": "Día 1 · Realizar 10 llamadas"},
+    {"key": "d2_campaign1", "label": "Día 2 · Repetir Campaña 1"},
+    {"key": "d3_campaign2", "label": "Día 3 · Ejecutar Campaña 2"},
+    {"key": "d4_demos", "label": "Día 4 · Preparar y realizar demos"},
+    {"key": "d5_proposal", "label": "Día 5 · Enviar primera propuesta"},
+    {"key": "w1_review", "label": "Semana 1 · Completar dashboard y decisión"},
+]
+

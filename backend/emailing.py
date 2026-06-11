@@ -505,19 +505,19 @@ def _gmail_send_message(message: EmailMessage, cliente_id: str = "") -> None:
             )
             response.raise_for_status()
     except Exception as exc:
-        with db._get_db_connection() as db:
-            db.execute(
+        with db._get_db_connection() as db_row:
+            db_row.execute(
                 "UPDATE gmail_connections SET last_error = ?, updated_at = ? WHERE id = ?",
                 (str(exc)[:500], timeutils._utc_now_iso(), cliente_id or "default"),
             )
-            db.commit()
+            db_row.commit()
         raise
-    with db._get_db_connection() as db:
-        db.execute(
+    with db._get_db_connection() as db_row:
+        db_row.execute(
             "UPDATE gmail_connections SET last_used_at = ?, last_error = '' WHERE id = ?",
             (timeutils._utc_now_iso(), cliente_id or "default"),
         )
-        db.commit()
+        db_row.commit()
 
 
 def _smtp_send_message(message: EmailMessage) -> None:

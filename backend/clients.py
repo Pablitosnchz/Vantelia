@@ -39,15 +39,15 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
     if not settings.CLIENT_ID_PATTERN.match(cliente_id):
         raise RuntimeError(f"cliente_id invalido en config.json: {cliente_id}")
 
-    booking = payload.get("booking", {})
-    booking_day_start = textnorm._sanitize_text(booking.get("day_start", "09:00")) or "09:00"
-    booking_day_end = textnorm._sanitize_text(booking.get("day_end", "18:00")) or "18:00"
+    booking_row = payload.get("booking", {})
+    booking_day_start = textnorm._sanitize_text(booking_row.get("day_start", "09:00")) or "09:00"
+    booking_day_end = textnorm._sanitize_text(booking_row.get("day_end", "18:00")) or "18:00"
     booking_break_windows = textnorm._normalize_break_windows(
         booking_day_start,
         booking_day_end,
-        booking.get("break_windows", []),
-        booking.get("break_start", ""),
-        booking.get("break_end", ""),
+        booking_row.get("break_windows", []),
+        booking_row.get("break_start", ""),
+        booking_row.get("break_end", ""),
     )
     booking_break_start, booking_break_end = textnorm._first_break_pair(booking_break_windows)
     allowed_origins = [
@@ -117,18 +117,18 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
         # asi los clientes reales (ej. "van") nunca quedan expuestos.
         "demo_claimable": bool(payload.get("demo_claimable", False)),
         "booking": {
-            "enabled": bool(booking.get("enabled", False)),
-            "timezone": textnorm._sanitize_text(booking.get("timezone", settings.DEFAULT_TIMEZONE)) or settings.DEFAULT_TIMEZONE,
-            "slot_minutes": int(booking.get("slot_minutes", 30)),
+            "enabled": bool(booking_row.get("enabled", False)),
+            "timezone": textnorm._sanitize_text(booking_row.get("timezone", settings.DEFAULT_TIMEZONE)) or settings.DEFAULT_TIMEZONE,
+            "slot_minutes": int(booking_row.get("slot_minutes", 30)),
             "day_start": booking_day_start,
             "day_end": booking_day_end,
             "break_start": booking_break_start,
             "break_end": booking_break_end,
             "break_windows": booking_break_windows,
-            "closed_weekdays": booking.get("closed_weekdays", [6]),
+            "closed_weekdays": booking_row.get("closed_weekdays", [6]),
             "provider": "internal",
-            "webhook_env": textnorm._sanitize_text(booking.get("webhook_env", "")),
-            "webhook_url": textnorm._normalize_optional_http_url(booking.get("webhook_url", "")),
+            "webhook_env": textnorm._sanitize_text(booking_row.get("webhook_env", "")),
+            "webhook_url": textnorm._normalize_optional_http_url(booking_row.get("webhook_url", "")),
             "calendly_user_env": "",
             "calendly_event_type_env": "",
             "calendly_location_kind": "",
@@ -138,19 +138,19 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
             "google_service_account_path": "",
             "google_service_account_env": "",
             "success_message": textnorm._sanitize_text(
-                booking.get(
+                booking_row.get(
                     "success_message",
                     "Tu solicitud de cita ha quedado registrada correctamente.",
                 ),
                 allow_multiline=True,
             ),
-            "message_templates": textnorm._normalize_message_templates(booking.get("message_templates", {})),
+            "message_templates": textnorm._normalize_message_templates(booking_row.get("message_templates", {})),
             "message_template_enabled": textnorm._normalize_message_template_enabled(
-                booking.get("message_template_enabled", {}),
-                booking.get("message_templates", {}),
+                booking_row.get("message_template_enabled", {}),
+                booking_row.get("message_templates", {}),
             ),
             "message_template_channels": textnorm._normalize_message_template_channels(
-                booking.get("message_template_channels", {})
+                booking_row.get("message_template_channels", {})
             ),
         },
     }

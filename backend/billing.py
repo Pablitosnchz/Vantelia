@@ -32,7 +32,7 @@ try:
 except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
-from onboarding_utils import run_onboarding
+import onboarding_utils
 from api_models import BillingPlanTier, BillingSubscriptionPublic, SubscriptionFeatures, SubscriptionPublic, SubscriptionUsage
 from backend import agenda, booking, portal, rag, appstate, clients, db, emailing, onboarding, security, settings, stripe_gateway, textnorm, timeutils
 
@@ -334,7 +334,7 @@ def _create_client_from_public_checkout(
         raise RuntimeError("OPENAI_API_KEY no configurada; no se puede ejecutar alta express.")
 
     cliente_id = onboarding._unique_cliente_id(company_name)
-    result = run_onboarding(
+    result = onboarding_utils.run_onboarding(
         website_url=website_url,
         api_key=settings.OPENAI_API_KEY,
         nombre_bot=ai_name,

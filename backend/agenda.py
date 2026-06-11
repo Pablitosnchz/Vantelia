@@ -107,24 +107,24 @@ def _employee_service_ids_from_row(row: sqlite3.Row, cliente_id: str = "") -> Li
 
 def _employee_defaults_for_client(cliente_id: str) -> Dict[str, Any]:
     config = appstate.CONFIG_CLIENTES.get(cliente_id, {})
-    booking = config.get("booking", {})
+    booking_row = config.get("booking", {})
     break_windows = textnorm._normalize_break_windows(
-        booking.get("day_start", "09:00"),
-        booking.get("day_end", "18:00"),
-        booking.get("break_windows", []),
-        booking.get("break_start", ""),
-        booking.get("break_end", ""),
+        booking_row.get("day_start", "09:00"),
+        booking_row.get("day_end", "18:00"),
+        booking_row.get("break_windows", []),
+        booking_row.get("break_start", ""),
+        booking_row.get("break_end", ""),
     )
     break_start, break_end = textnorm._first_break_pair(break_windows)
     return {
-        "timezone": booking.get("timezone", settings.DEFAULT_TIMEZONE),
-        "slot_minutes": int(booking.get("slot_minutes", 30)),
-        "day_start": booking.get("day_start", "09:00"),
-        "day_end": booking.get("day_end", "18:00"),
+        "timezone": booking_row.get("timezone", settings.DEFAULT_TIMEZONE),
+        "slot_minutes": int(booking_row.get("slot_minutes", 30)),
+        "day_start": booking_row.get("day_start", "09:00"),
+        "day_end": booking_row.get("day_end", "18:00"),
         "break_start": break_start,
         "break_end": break_end,
         "break_windows": break_windows,
-        "closed_weekdays": _normalize_closed_weekdays_list(booking.get("closed_weekdays", [])),
+        "closed_weekdays": _normalize_closed_weekdays_list(booking_row.get("closed_weekdays", [])),
     }
 
 
@@ -646,34 +646,34 @@ def _reminder_channel_availability(cliente_id: str) -> Dict[str, Dict[str, Any]]
 
 def _portal_schedule_from_config(cliente_id: str) -> PortalSchedulePublic:
     config = clients._get_client_config(cliente_id)
-    booking = config["booking"]
+    booking_row = config["booking"]
     break_windows = textnorm._normalize_break_windows(
-        booking.get("day_start", "09:00"),
-        booking.get("day_end", "18:00"),
-        booking.get("break_windows", []),
-        booking.get("break_start", ""),
-        booking.get("break_end", ""),
+        booking_row.get("day_start", "09:00"),
+        booking_row.get("day_end", "18:00"),
+        booking_row.get("break_windows", []),
+        booking_row.get("break_start", ""),
+        booking_row.get("break_end", ""),
     )
     break_start, break_end = textnorm._first_break_pair(break_windows)
     today = timeutils._utc_now().date().isoformat()
     future_limit = (timeutils._utc_now() + timedelta(days=180)).date().isoformat()
     return PortalSchedulePublic(
-        enabled=bool(booking.get("enabled", False)),
-        timezone=booking.get("timezone", settings.DEFAULT_TIMEZONE),
-        slot_minutes=int(booking.get("slot_minutes", 30)),
-        day_start=booking.get("day_start", "09:00"),
-        day_end=booking.get("day_end", "18:00"),
+        enabled=bool(booking_row.get("enabled", False)),
+        timezone=booking_row.get("timezone", settings.DEFAULT_TIMEZONE),
+        slot_minutes=int(booking_row.get("slot_minutes", 30)),
+        day_start=booking_row.get("day_start", "09:00"),
+        day_end=booking_row.get("day_end", "18:00"),
         break_start=break_start,
         break_end=break_end,
         break_windows=break_windows,
-        closed_weekdays=list(booking.get("closed_weekdays", [])),
-        message_templates=textnorm._normalize_message_templates(booking.get("message_templates", {})),
+        closed_weekdays=list(booking_row.get("closed_weekdays", [])),
+        message_templates=textnorm._normalize_message_templates(booking_row.get("message_templates", {})),
         message_template_enabled=textnorm._normalize_message_template_enabled(
-            booking.get("message_template_enabled", {}),
-            booking.get("message_templates", {}),
+            booking_row.get("message_template_enabled", {}),
+            booking_row.get("message_templates", {}),
         ),
         message_template_channels=textnorm._normalize_message_template_channels(
-            booking.get("message_template_channels", {})
+            booking_row.get("message_template_channels", {})
         ),
         reminder_channel_availability=_reminder_channel_availability(cliente_id),
         blocks=[
@@ -686,7 +686,7 @@ def _portal_schedule_from_config(cliente_id: str) -> PortalSchedulePublic:
 def _portal_schedule_from_employee(cliente_id: str, employee_id: str) -> PortalSchedulePublic:
     row = _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
     schedule = _employee_schedule_from_row(row)
-    booking = clients._get_client_config(cliente_id)["booking"]
+    booking_row = clients._get_client_config(cliente_id)["booking"]
     today = timeutils._utc_now().date().isoformat()
     future_limit = (timeutils._utc_now() + timedelta(days=180)).date().isoformat()
     return PortalSchedulePublic(
@@ -699,13 +699,13 @@ def _portal_schedule_from_employee(cliente_id: str, employee_id: str) -> PortalS
         break_end=schedule["break_end"],
         break_windows=schedule["break_windows"],
         closed_weekdays=schedule["closed_weekdays"],
-        message_templates=textnorm._normalize_message_templates(booking.get("message_templates", {})),
+        message_templates=textnorm._normalize_message_templates(booking_row.get("message_templates", {})),
         message_template_enabled=textnorm._normalize_message_template_enabled(
-            booking.get("message_template_enabled", {}),
-            booking.get("message_templates", {}),
+            booking_row.get("message_template_enabled", {}),
+            booking_row.get("message_templates", {}),
         ),
         message_template_channels=textnorm._normalize_message_template_channels(
-            booking.get("message_template_channels", {})
+            booking_row.get("message_template_channels", {})
         ),
         reminder_channel_availability=_reminder_channel_availability(cliente_id),
         blocks=[
@@ -725,7 +725,7 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
     config = next_configs.get(cliente_id)
     if not config:
         raise HTTPException(status_code=404, detail="Cliente no configurado")
-    booking = dict(config.get("booking", {}))
+    booking_row = dict(config.get("booking", {}))
     raw_fields_set = getattr(data, "model_fields_set", None)
     if raw_fields_set is None:
         raw_fields_set = getattr(data, "__fields_set__", set())
@@ -797,7 +797,7 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
                         "Hay citas activas dentro del descanso que quieres guardar. Cancelalas o reprogramalas antes.",
                     ),
                 )
-        booking.update(
+        booking_row.update(
             {
                 "enabled": bool(data.enabled),
                 "timezone": textnorm._sanitize_text(data.timezone) or settings.DEFAULT_TIMEZONE,
@@ -811,9 +811,9 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
             }
         )
     if data.message_templates is not None:
-        booking["message_templates"] = textnorm._normalize_message_templates(data.message_templates)
+        booking_row["message_templates"] = textnorm._normalize_message_templates(data.message_templates)
     if data.message_template_enabled is not None:
-        booking["message_template_enabled"] = textnorm._normalize_message_template_enabled(
+        booking_row["message_template_enabled"] = textnorm._normalize_message_template_enabled(
             data.message_template_enabled,
             data.message_templates,
         )
@@ -824,8 +824,8 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
             for channel_name in ("whatsapp", "sms"):
                 if channel_map.get(channel_name) and not availability.get(channel_name, {}).get("available"):
                     channel_map[channel_name] = False
-        booking["message_template_channels"] = channels
-    config["booking"] = booking
+        booking_row["message_template_channels"] = channels
+    config["booking"] = booking_row
     clients._validate_single_client_runtime(cliente_id, config)
     clients._persist_configs_to_disk(next_configs)
     if should_update_schedule:
@@ -839,14 +839,14 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
                 WHERE cliente_id = ? AND is_default = 1
                 """,
                 (
-                    booking["timezone"],
-                    int(booking["slot_minutes"]),
-                    booking["day_start"],
-                    booking["day_end"],
-                    booking.get("break_start", ""),
-                    booking.get("break_end", ""),
-                    json.dumps(booking.get("break_windows", [])),
-                    json.dumps(booking["closed_weekdays"]),
+                    booking_row["timezone"],
+                    int(booking_row["slot_minutes"]),
+                    booking_row["day_start"],
+                    booking_row["day_end"],
+                    booking_row.get("break_start", ""),
+                    booking_row.get("break_end", ""),
+                    json.dumps(booking_row.get("break_windows", [])),
+                    json.dumps(booking_row["closed_weekdays"]),
                     timeutils._utc_now_iso(),
                     cliente_id,
                 ),
@@ -1231,32 +1231,32 @@ def _delete_portal_employee(cliente_id: str, employee_id: str) -> None:
 
 
 def _schedule_preview_payload_from_config(cliente_id: str) -> PortalScheduleUpdatePayload:
-    booking = clients._get_client_config(cliente_id).get("booking", {})
+    booking_row = clients._get_client_config(cliente_id).get("booking", {})
     break_windows = textnorm._normalize_break_windows(
-        booking.get("day_start", "09:00"),
-        booking.get("day_end", "18:00"),
-        booking.get("break_windows", []),
-        booking.get("break_start", ""),
-        booking.get("break_end", ""),
+        booking_row.get("day_start", "09:00"),
+        booking_row.get("day_end", "18:00"),
+        booking_row.get("break_windows", []),
+        booking_row.get("break_start", ""),
+        booking_row.get("break_end", ""),
     )
     break_start, break_end = textnorm._first_break_pair(break_windows)
     return PortalScheduleUpdatePayload(
-        enabled=bool(booking.get("enabled", True)),
-        timezone=textnorm._sanitize_text(booking.get("timezone", settings.DEFAULT_TIMEZONE)) or settings.DEFAULT_TIMEZONE,
-        slot_minutes=int(booking.get("slot_minutes", 30)),
-        day_start=textnorm._sanitize_text(booking.get("day_start", "09:00")) or "09:00",
-        day_end=textnorm._sanitize_text(booking.get("day_end", "18:00")) or "18:00",
+        enabled=bool(booking_row.get("enabled", True)),
+        timezone=textnorm._sanitize_text(booking_row.get("timezone", settings.DEFAULT_TIMEZONE)) or settings.DEFAULT_TIMEZONE,
+        slot_minutes=int(booking_row.get("slot_minutes", 30)),
+        day_start=textnorm._sanitize_text(booking_row.get("day_start", "09:00")) or "09:00",
+        day_end=textnorm._sanitize_text(booking_row.get("day_end", "18:00")) or "18:00",
         break_start=break_start,
         break_end=break_end,
         break_windows=break_windows,
-        closed_weekdays=_normalize_closed_weekdays_list(booking.get("closed_weekdays", [])),
-        message_templates=textnorm._normalize_message_templates(booking.get("message_templates", {})),
+        closed_weekdays=_normalize_closed_weekdays_list(booking_row.get("closed_weekdays", [])),
+        message_templates=textnorm._normalize_message_templates(booking_row.get("message_templates", {})),
         message_template_enabled=textnorm._normalize_message_template_enabled(
-            booking.get("message_template_enabled", {}),
-            booking.get("message_templates", {}),
+            booking_row.get("message_template_enabled", {}),
+            booking_row.get("message_templates", {}),
         ),
         message_template_channels=textnorm._normalize_message_template_channels(
-            booking.get("message_template_channels", {})
+            booking_row.get("message_template_channels", {})
         ),
     )
 

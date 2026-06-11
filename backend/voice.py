@@ -768,23 +768,23 @@ async def _voice_send_payment_link(
         return {"ok": False, "error": "El cobro con tarjeta no esta disponible en este momento."}
     code = textnorm._sanitize_text(codigo_reserva)
     if code:
-        booking = booking._get_booking_row_by_code(cliente_id, code)
-        if not booking:
+        booking_row = booking._get_booking_row_by_code(cliente_id, code)
+        if not booking_row:
             return {"ok": False, "error": "No encuentro ninguna cita con ese numero de reserva."}
-        if from_number and not booking._booking_contact_matches(booking, telefono=from_number):
+        if from_number and not booking._booking_contact_matches(booking_row, telefono=from_number):
             return {
                 "ok": False,
                 "needs_verification": True,
                 "error": "Por seguridad solo puedo enviar el enlace al telefono con el que se reservo.",
             }
     else:
-        booking = booking._latest_booking_for_contact(cliente_id, phone=from_number)
-        if not booking:
+        booking_row = booking._latest_booking_for_contact(cliente_id, phone=from_number)
+        if not booking_row:
             return {
                 "ok": False,
                 "error": "No encuentro ninguna cita asociada a este telefono. Pide el numero de reserva.",
             }
-    result = await booking._ai_send_payment_link(cliente_id, booking, base_url=textnorm._preferred_public_base_url())
+    result = await booking._ai_send_payment_link(cliente_id, booking_row, base_url=textnorm._preferred_public_base_url())
     if not result.get("ok"):
         return {"ok": False, "error": result.get("error") or "No se pudo enviar el enlace de pago."}
     amount_label = result.get("amount_label", "")

@@ -36,7 +36,7 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
 
 from api_models import AppKnowledgeItem, AppQAItem, ChatMessagePublic, ChatSessionSummary, PortalBrainPayload, PortalBrainPublic
-from onboarding_utils import normalize_url as normalize_onboarding_url
+import onboarding_utils
 from backend import agenda, appstate, clients, db, emailing, messaging, security, settings, textnorm, timeutils
 
 def _setup_llama_index() -> None:
@@ -1197,7 +1197,7 @@ def _maybe_regenerate_info_with_qa(cliente_id: str) -> None:
 
 def _canonical_knowledge_url(raw_url: str) -> str:
     try:
-        normalized = normalize_onboarding_url(raw_url)
+        normalized = onboarding_utils.normalize_url(raw_url)
     except ValueError:
         normalized = str(raw_url or "").strip()
     parsed = urlparse(normalized)
@@ -1369,7 +1369,7 @@ def _autocreate_qa_from_info(
 
 
 def _seed_qa_from_onboarding(cliente_id: str, result: Any, user_id: Any = "") -> int:
-    """Siembra kb_qa con las FAQ extraidas por el scraper. run_onboarding() quita
+    """Siembra kb_qa con las FAQ extraidas por el scraper. onboarding_utils.run_onboarding() quita
     la seccion FAQ del info.txt y la devuelve en result.faq_pairs, asi que CUALQUIER
     flujo que regenere el cerebro (rebrain, alta-express, Stripe) debe llamar a esto
     o las preguntas frecuentes quedarian vacias en el panel."""

@@ -32,7 +32,7 @@ try:
 except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
-from onboarding_utils import run_onboarding, slugify_company
+import onboarding_utils
 from backend import agenda, appstate, clients, db, demo_agenda, outreach, rag, security, settings, textnorm, timeutils
 
 def _read_onboarding_state(cliente_id: str) -> Dict[str, Any]:
@@ -215,7 +215,7 @@ def _claim_cliente_id(claim_token: str, user_id: str, *, source: str = "claim_de
 
 
 def _unique_cliente_id(seed: str) -> str:
-    base = (slugify_company(seed) or "cliente").lower()
+    base = (onboarding_utils.slugify_company(seed) or "cliente").lower()
     base = base[:64].strip("_") or "cliente"
     candidate = base
     index = 2

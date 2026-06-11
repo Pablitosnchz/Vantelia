@@ -106,12 +106,28 @@ def test_setattr_parchea_modulo_home(api_module):
 
 
 def test_sin_colisiones_reales_entre_homes(api_module):
-    permitidas: set[str] = set()
+    """Mismas reglas de exclusion que la construccion de _EXPORT_MAP en api.py."""
+    import types
+
+    import api_models
+
+    # Duplicados historicos conocidos (ya existian en el monolito): api.py y
+    # api_models definian cada uno su _DEMO_SECTOR_DEFAULTS y DEFAULT_TIMEZONE.
+    # El mapa resuelve al home historico (demo_agenda/settings) por orden.
+    # OpenAI: llama-index (rag) vs cliente openai (onboarding_utils);
+    # EMAIL_RE: regex propio de textnorm vs el de onboarding_utils.
+    permitidas: set[str] = {"_DEMO_SECTOR_DEFAULTS", "DEFAULT_TIMEZONE", "OpenAI", "EMAIL_RE"}
+    sentinel = object()
     vistos: dict[str, tuple] = {}
     conflictos = []
     for mod in api_module._HOME_MODULES:
+        es_router = mod.__name__.startswith("backend.routers")
         for nombre, valor in vars(mod).items():
             if nombre.startswith("__") or nombre in permitidas:
+                continue
+            if isinstance(valor, types.ModuleType) and valor.__name__.startswith("backend"):
+                continue
+            if es_router and getattr(api_models, nombre, sentinel) is valor:
                 continue
             if nombre in vistos and vistos[nombre][1] is not valor:
                 conflictos.append(f"{nombre}: {vistos[nombre][0]} vs {mod.__name__}")
