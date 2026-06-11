@@ -3038,3 +3038,20 @@ def _latest_booking_for_contact(
     return None
 
 
+
+
+def _set_ai_send_enabled(cliente_id: str, enabled: bool) -> None:
+    now = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO client_payment_accounts (cliente_id, ai_send_enabled, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(cliente_id) DO UPDATE SET ai_send_enabled=excluded.ai_send_enabled,
+                updated_at=excluded.updated_at
+            """,
+            (cliente_id, int(bool(enabled)), now, now),
+        )
+        connection.commit()
+
+

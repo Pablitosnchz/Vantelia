@@ -381,3 +381,30 @@ def _construct_stripe_webhook_event(payload: bytes, sig_header: str) -> Any:
     raise RuntimeError("Stripe webhook secret no configurado.")
 
 
+
+
+def _save_connect_account(cliente_id: str, account: Any) -> str:
+    account_id = str(textnorm._object_get(account, "id", "") or "")
+    if not account_id:
+        raise HTTPException(status_code=502, detail="Stripe no devolvio una cuenta Connect valida.")
+    now = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO client_payment_accounts
+                (cliente_id, stripe_account_id, charges_enabled, payouts_enabled, details_submitted, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(cliente_id) DO UPDATE SET stripe_account_id=excluded.stripe_account_id,
+                charges_enabled=excluded.charges_enabled, payouts_enabled=excluded.payouts_enabled,
+                details_submitted=excluded.details_submitted, updated_at=excluded.updated_at
+            """,
+            (
+                cliente_id, account_id, int(bool(textnorm._object_get(account, "charges_enabled", False))),
+                int(bool(textnorm._object_get(account, "payouts_enabled", False))),
+                int(bool(textnorm._object_get(account, "details_submitted", False))), now, now,
+            ),
+        )
+        connection.commit()
+    return account_id
+
+

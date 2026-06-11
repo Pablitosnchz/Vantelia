@@ -35,7 +35,7 @@ from llama_index.core import (
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
 
-from api_models import AppQAItem, ChatMessagePublic, ChatSessionSummary, PortalBrainPayload, PortalBrainPublic
+from api_models import AppKnowledgeItem, AppQAItem, ChatMessagePublic, ChatSessionSummary, PortalBrainPayload, PortalBrainPublic
 from onboarding_utils import normalize_url as normalize_onboarding_url
 from backend import agenda, appstate, clients, db, emailing, messaging, security, settings, textnorm, timeutils
 
@@ -1483,5 +1483,19 @@ def _gen_qa_from_info_heuristic(info_txt: str, max_pairs: int = 5) -> List[Tuple
     # filtrar pares que ya pasen el validador
     pairs = [(q, a) for q, a in pairs if _looks_like_auto_qa_pair(q, a)]
     return pairs[:max_pairs]
+
+
+
+
+def _kb_row_to_public(row: sqlite3.Row) -> AppKnowledgeItem:
+    return AppKnowledgeItem(
+        id=row["id"],
+        source=row["source"] or "upload",
+        filename=row["filename"] or "",
+        source_url=row["source_url"] or "",
+        size_bytes=int(row["size_bytes"] or 0),
+        indexed_at=row["indexed_at"] or "",
+        uploaded_at=row["uploaded_at"] or "",
+    )
 
 

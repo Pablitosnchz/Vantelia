@@ -846,3 +846,35 @@ def _channel_audit(
 
 
 
+
+
+def _check_rate_limit(bucket_key: str, limit: int) -> None:
+    now = time.time()
+    with appstate.state_lock:
+        bucket = appstate.rate_limit_buckets.setdefault(bucket_key, [])
+        bucket[:] = [timestamp for timestamp in bucket if now - timestamp < settings.RATE_LIMIT_WINDOW_SECONDS]
+        if len(bucket) >= limit:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Se ha alcanzado el limite temporal de peticiones.",
+            )
+        bucket.append(now)
+
+
+def _enforce_allowed_origin(request: Request, cliente_id: str) -> None:
+    config = clients._get_client_config(cliente_id)
+    allowed_origins = set(config.get("allowed_origins", []))
+    app_origin = textnorm._normalize_origin_value(textnorm._public_base_url(request))
+    allowed_origins.add(app_origin)
+    request_origin = textnorm._request_origin(request)
+
+    if allowed_origins and not request_origin:
+        raise HTTPException(
+            status_code=403,
+            detail="No se ha podido verificar el dominio de origen de la peticion.",
+        )
+
+    if request_origin and allowed_origins and request_origin not in allowed_origins:
+        raise HTTPException(status_code=403, detail="Dominio no autorizado para este cliente")
+
+
