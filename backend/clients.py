@@ -471,3 +471,22 @@ def _plan_feature(cliente_id: str, feature: str) -> Any:
     return _plan_limits(_client_plan(cliente_id)).get(feature)
 
 
+
+
+def _client_booking_plan_enabled(cliente_id: str) -> bool:
+    """Whether booking is available in the client's effective plan."""
+    owner = db.db_get_client_owner(cliente_id)
+    if owner:
+        sub = db.db_get_subscription_for_user(owner)
+        plan = settings._normalize_plan_slug(sub["plan"] if sub else settings.PLAN_DEFAULT)
+        return "booking" in (settings._self_serve_plan(plan).get("features") or [])
+
+    booking_limit = _plan_limits(_client_plan(cliente_id)).get("monthly_bookings")
+    if booking_limit is None:
+        return True
+    try:
+        return int(booking_limit) > 0
+    except (TypeError, ValueError):
+        return False
+
+

@@ -6,14 +6,22 @@ invalida (contrato historico del monolito).
 """
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from fastapi import HTTPException, Request
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover - Python 3.8 compatibility
+    from backports.zoneinfo import ZoneInfo
+
+from backend import timeutils
 
 from backend import settings
 
@@ -453,5 +461,121 @@ def _parse_duration_minutes_text(text: str) -> int:
     if match_m:
         total += int(match_m.group(1))
     return total if total > 0 else 0
+
+
+
+
+def _strip_accents(text: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", text or "") if unicodedata.category(c) != "Mn")
+
+
+WEEKDAY_NAMES_ES = {
+    "lunes": 0, "martes": 1, "miercoles": 2,
+    "jueves": 3, "viernes": 4, "sabado": 5, "domingo": 6,
+}
+
+
+MONTH_NAMES_ES = {
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
+    "julio": 7, "agosto": 8, "septiembre": 9, "setiembre": 9,
+    "octubre": 10, "noviembre": 11, "diciembre": 12,
+}
+
+
+DAY_LABELS_ES = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"]
+
+
+MONTH_LABELS_ES = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+]
+
+
+def _resolve_relative_date_es(message: str, timezone_name: str) -> Optional[date]:
+    if not message:
+        return None
+    try:
+        today = datetime.now(ZoneInfo(timezone_name)).date()
+    except Exception:
+        today = timeutils._utc_now().date()
+    norm = _strip_accents(str(message).lower())
+
+    if re.search(r"\bpasado\s+manana\b", norm):
+        return today + timedelta(days=2)
+    if re.search(r"\bmanana\b", norm):
+        return today + timedelta(days=1)
+    if re.search(r"\bhoy\b", norm) or re.search(r"\besta\s+tarde\b", norm) or re.search(r"\bahora\s+mismo\b", norm):
+        return today
+    if re.search(r"\b(la\s+semana\s+que\s+viene|proxima\s+semana|semana\s+proxima)\b", norm):
+        return today + timedelta(days=7)
+
+    for name, idx in WEEKDAY_NAMES_ES.items():
+        if re.search(rf"\b{name}\b", norm):
+            delta = (idx - today.weekday()) % 7
+            wants_next = bool(re.search(rf"\b(proximo|proxima|siguiente)\s+{name}\b", norm))
+            wants_this = bool(re.search(rf"\b(este|esta)\s+{name}\b", norm))
+            if delta == 0 and wants_next:
+                delta = 7
+            elif delta == 0 and not wants_this and not re.search(r"\bhoy\b", norm):
+                delta = 7
+            return today + timedelta(days=delta)
+
+    m = re.search(r"\bdia\s+(\d{1,2})\b", norm)
+    if m:
+        day_val = int(m.group(1))
+        try:
+            candidate = date(today.year, today.month, day_val)
+            if candidate < today:
+                if today.month == 12:
+                    candidate = date(today.year + 1, 1, day_val)
+                else:
+                    candidate = date(today.year, today.month + 1, day_val)
+            return candidate
+        except ValueError:
+            return None
+
+    m = re.search(r"\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b", norm)
+    if m:
+        day_val, month_val = int(m.group(1)), int(m.group(2))
+        year_val = today.year
+        if m.group(3):
+            y = int(m.group(3))
+            year_val = 2000 + y if y < 100 else y
+        try:
+            candidate = date(year_val, month_val, day_val)
+            if not m.group(3) and candidate < today:
+                candidate = date(year_val + 1, month_val, day_val)
+            return candidate
+        except ValueError:
+            return None
+
+    m = re.search(r"\b(\d{1,2})\s+de\s+([a-z]+)\b", norm)
+    if m:
+        day_val = int(m.group(1))
+        month_name = m.group(2)
+        month_val = MONTH_NAMES_ES.get(month_name)
+        if month_val:
+            try:
+                candidate = date(today.year, month_val, day_val)
+                if candidate < today:
+                    candidate = date(today.year + 1, month_val, day_val)
+                return candidate
+            except ValueError:
+                return None
+    return None
+
+
+def _format_date_es(d: date) -> str:
+    return f"{DAY_LABELS_ES[d.weekday()]} {d.day} de {MONTH_LABELS_ES[d.month - 1]}"
+
+
+def _safe_json_list(raw_value: str) -> List[str]:
+    try:
+        parsed = json.loads(raw_value or "[]")
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(item) for item in parsed if str(item).strip()]
 
 
