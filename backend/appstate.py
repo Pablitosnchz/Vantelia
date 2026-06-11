@@ -1,10 +1,10 @@
 """Estado mutable compartido del backend (refactor F3).
 
 Modulo HOJA: solo stdlib. Reglas de uso desde otros modulos:
-- Acceso siempre cualificado: `appstate.sesiones`, `with appstate.state_lock:`.
+- Acceso siempre cualificado: `sesiones`, `with state_lock:`.
 - Mutaciones de dicts in-place bajo `state.state_lock`.
 - Re-binds completos asignando al atributo del modulo
-  (`appstate.CONFIG_CLIENTES = nuevo`), nunca via copia local, para que todos
+  (`CONFIG_CLIENTES = nuevo`), nunca via copia local, para que todos
   los lectores (y el proxy de api.py) vean el cambio.
 """
 from __future__ import annotations
@@ -55,7 +55,7 @@ class ProviderBookingResult:
 
 
 # Config multi-tenant en memoria; poblada al importar api (transicion F3).
-# Re-bind siempre via appstate.CONFIG_CLIENTES = ...
+# Re-bind siempre via CONFIG_CLIENTES = ...
 CONFIG_CLIENTES: Dict[str, Dict[str, Any]] = {}
 
 whatsapp_flows: Dict[str, WAFlowState] = {}

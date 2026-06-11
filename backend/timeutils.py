@@ -25,3 +25,20 @@ def _session_expires_at(hours: int = settings.PORTAL_SESSION_HOURS) -> str:
 
 def _to_utc_iso(dt_value: datetime) -> str:
     return dt_value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _expires_at_in_hours(hours: int) -> str:
+    safe_hours = max(1, hours)
+    return (_utc_now() + timedelta(hours=safe_hours)).replace(tzinfo=None).isoformat(timespec="seconds") + "Z"
+
+
+def _from_utc_iso(value: str) -> Optional[datetime]:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+

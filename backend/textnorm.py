@@ -309,3 +309,76 @@ def _normalize_break_window(
         )
     return pausa_inicio, pausa_fin
 
+
+
+def _normalize_email(email: str) -> str:
+    return str(email).strip().lower()
+
+
+def _preferred_public_base_url(request: Optional[Request] = None) -> str:
+    return _configured_public_base_url() or (_public_base_url(request) if request is not None else "")
+
+
+def _configured_public_base_url() -> str:
+    if not settings.APP_BASE_URL:
+        return ""
+    try:
+        return _normalize_origin_value(settings.APP_BASE_URL)
+    except RuntimeError:
+        settings.logger.warning("APP_BASE_URL invalida; se usara la URL de la peticion.")
+        return ""
+
+
+def _strip_origin(value: str) -> str:
+    return _normalize_origin_value(value)
+
+
+def _request_origin(request: Request) -> str:
+    origin = request.headers.get("origin", "").strip()
+    if origin:
+        try:
+            return _strip_origin(origin)
+        except RuntimeError:
+            return ""
+
+    referer = request.headers.get("referer", "").strip()
+    if referer:
+        parsed = urlparse(referer)
+        if parsed.scheme and parsed.netloc:
+            try:
+                return _strip_origin(f"{parsed.scheme}://{parsed.netloc}")
+            except RuntimeError:
+                return ""
+
+    return ""
+
+
+def _forwarded_header_value(raw_value: str) -> str:
+    return str(raw_value or "").split(",", 1)[0].strip()
+
+
+def _public_base_url(request: Request) -> str:
+    configured_base_url = _configured_public_base_url()
+    if configured_base_url:
+        return configured_base_url
+
+    forwarded_proto = _forwarded_header_value(request.headers.get("x-forwarded-proto", ""))
+    forwarded_host = _forwarded_header_value(request.headers.get("x-forwarded-host", ""))
+    forwarded_port = _forwarded_header_value(request.headers.get("x-forwarded-port", ""))
+
+    scheme = forwarded_proto or request.url.scheme or "http"
+    host = forwarded_host or request.headers.get("host", "").strip() or request.url.netloc
+
+    if not host:
+        return str(request.base_url).rstrip("/")
+
+    if forwarded_port and ":" not in host:
+        is_default_port = (scheme == "http" and forwarded_port == "80") or (
+            scheme == "https" and forwarded_port == "443"
+        )
+        if not is_default_port:
+            host = f"{host}:{forwarded_port}"
+
+    return f"{scheme}://{host}".rstrip("/")
+
+

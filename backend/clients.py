@@ -407,3 +407,52 @@ def _persist_configs_to_disk(configs: Dict[str, Dict[str, Any]]) -> None:
     _sync_clientes_table_after_persist(configs)
 
 
+
+
+def _client_subscription(cliente_id: str) -> Dict[str, Any]:
+    config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
+    sub = config.get("subscription") or {}
+
+    # Self-serve users store their plan in the DB. DB takes precedence over config.json.
+    db_sub = db.db_subscription_for_cliente(cliente_id)
+    if db_sub:
+        db_plan = settings._normalize_plan_slug(db_sub["plan"] or settings.PLAN_DEFAULT)
+        if db_plan not in settings.PLAN_VALID:
+            db_plan = settings.PLAN_DEFAULT
+        return {
+            "plan": db_plan,
+            "status": str(db_sub["status"] or "active"),
+            "started_at": str(db_sub["current_period_start"] or ""),
+            "renews_at": str(db_sub["current_period_end"] or ""),
+            "canceled_at": "",
+            "stripe_customer_id": str(db_sub["stripe_customer_id"] or ""),
+            "stripe_subscription_id": str(db_sub["stripe_subscription_id"] or ""),
+            "billing_period": "monthly",
+            "lifetime": bool(db_sub["cancel_at_period_end"] == 0 and (db_sub["stripe_subscription_id"] or "") == "" and db_plan != "free"),
+        }
+
+    plan = settings._normalize_plan_slug(sub.get("plan") or config.get("plan") or settings.PLAN_DEFAULT)
+    if plan not in settings.PLAN_VALID:
+        plan = settings.PLAN_DEFAULT
+    return {  # noqa: RET504
+        "plan": plan,
+        "status": str(sub.get("status") or "active"),
+        "started_at": str(sub.get("started_at") or ""),
+        "renews_at": str(sub.get("renews_at") or ""),
+        "canceled_at": str(sub.get("canceled_at") or ""),
+        "stripe_customer_id": str(sub.get("stripe_customer_id") or ""),
+        "stripe_subscription_id": str(sub.get("stripe_subscription_id") or ""),
+        "billing_period": str(sub.get("billing_period") or "monthly"),
+        "lifetime": bool(sub.get("lifetime") or str(sub.get("billing_period") or "").lower() == "lifetime"),
+    }
+
+
+def _client_plan(cliente_id: str) -> str:
+    return _client_subscription(cliente_id)["plan"]
+
+
+def _plan_limits(plan: str) -> Dict[str, Any]:
+    normalized = settings._normalize_plan_slug(plan)
+    return settings.PLAN_LIMITS.get(normalized) or settings.PLAN_LIMITS[settings.PLAN_DEFAULT]
+
+

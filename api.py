@@ -218,6 +218,69 @@ from backend.settings import (  # noqa: F401  (transicion F3: copias re-exportad
 )
 
 
+from backend import security
+from backend.security import (  # noqa: F401  (transicion F3)
+    ADMIN_IMPERSONATION_TTL_MINUTES,
+    _OAUTH_STATE_TTL_SECONDS,
+    _active_admin_count,
+    _assert_admin_can_manage_user,
+    _assign_client_user_to_cliente,
+    _channel_fernet,
+    _cleanup_auth_sessions,
+    _cleanup_password_reset_tokens,
+    _clear_admin_return_cookie,
+    _clear_portal_cookie,
+    _compound_token_parts,
+    _consume_password_reset_token,
+    _count_client_users,
+    _create_auth_session,
+    _create_impersonation_session,
+    _create_password_reset_token,
+    _create_user,
+    _create_user_self_serve,
+    _delete_auth_session,
+    _delete_user,
+    _delete_user_auth_sessions,
+    _enforce_session_cookie_origin,
+    _ensure_default_portal_admin,
+    _get_authenticated_portal_user_or_none,
+    _get_session_user,
+    _get_user_by_email,
+    _get_user_by_google_sub,
+    _get_user_by_id,
+    _gmail_fernet,
+    _gmail_oauth_configured,
+    _gmail_oauth_consume_state,
+    _gmail_oauth_create_state,
+    _gmail_redirect_uri,
+    _google_oauth_configured,
+    _hash_secret,
+    _link_google_to_user,
+    _list_users,
+    _load_managed_user_or_404,
+    _oauth_consume_state,
+    _oauth_create_state,
+    _password_reset_url,
+    _period_start_iso_for_user,
+    _platform_access_url,
+    _redirect_for_role,
+    _require_admin_token,
+    _require_authenticated_admin_user,
+    _require_authenticated_portal_user,
+    _require_self_serve_user,
+    _resolve_cliente_for_self_serve_user,
+    _serialize_auth_user,
+    _serialize_managed_user,
+    _session_impersonator_email,
+    _session_is_impersonated,
+    _set_admin_return_cookie,
+    _set_portal_cookie,
+    _set_user_active,
+    _update_user_password,
+    _update_user_profile,
+    _user_plan,
+    _verify_secret,
+)
 from backend import appstate
 from backend.appstate import (  # noqa: F401  (clases: excepcion permitida)
     ProviderBookingResult,
@@ -226,6 +289,7 @@ from backend.appstate import (  # noqa: F401  (clases: excepcion permitida)
 )
 
 
+from backend.timeutils import _expires_at_in_hours, _from_utc_iso  # noqa: F401
 from backend import timeutils
 from backend.timeutils import (  # noqa: F401  (transicion F3)
     _session_expires_at,
@@ -233,6 +297,7 @@ from backend.timeutils import (  # noqa: F401  (transicion F3)
     _utc_now,
     _utc_now_iso,
 )
+from backend.textnorm import _configured_public_base_url, _forwarded_header_value, _normalize_email, _preferred_public_base_url, _public_base_url, _request_origin, _strip_origin  # noqa: F401
 from backend import textnorm
 from backend.textnorm import (  # noqa: F401  (transicion F3)
     EXTRA_CORS_ORIGINS,
@@ -256,6 +321,7 @@ from backend.textnorm import (  # noqa: F401  (transicion F3)
 )
 
 
+from backend.clients import _client_plan, _client_subscription, _plan_limits  # noqa: F401
 from backend import clients
 from backend.clients import (  # noqa: F401  (transicion F3)
     _collect_cors_origins,
@@ -1221,311 +1287,56 @@ def _employee_booking_counters(cliente_id: str, employee_id: str) -> Dict[str, i
     return {"today": int(today_count), "upcoming": int(upcoming_count)}
 
 
-def _expires_at_in_hours(hours: int) -> str:
-    safe_hours = max(1, hours)
-    return (_utc_now() + timedelta(hours=safe_hours)).replace(tzinfo=None).isoformat(timespec="seconds") + "Z"
 
 
-def _compound_token_parts(raw_token: str, expected_prefix: str) -> Tuple[str, str]:
-    token_value = str(raw_token or "").strip()
-    if "." not in token_value:
-        return "", ""
-    token_id, secret = token_value.split(".", 1)
-    if not token_id.startswith(f"{expected_prefix}_") or not secret:
-        return "", ""
-    return token_id, secret
 
 
-def _normalize_email(email: str) -> str:
-    return str(email).strip().lower()
 
 
-def _hash_secret(raw_value: str) -> str:
-    salt = secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", raw_value.encode("utf-8"), salt.encode("utf-8"), 200_000)
-    return f"pbkdf2_sha256${salt}${digest.hex()}"
 
 
-def _verify_secret(raw_value: str, encoded: str) -> bool:
-    try:
-        algorithm, salt, expected = encoded.split("$", 2)
-    except ValueError:
-        return False
-    if algorithm != "pbkdf2_sha256":
-        return False
-    digest = hashlib.pbkdf2_hmac("sha256", raw_value.encode("utf-8"), salt.encode("utf-8"), 200_000)
-    return secrets.compare_digest(digest.hex(), expected)
 
 
-def _serialize_auth_user(row: sqlite3.Row) -> AuthUserPublic:
-    cliente_id = row["cliente_id"] or ""
-    plan = _client_plan(cliente_id) if cliente_id else PLAN_DEFAULT
-    limits = _plan_limits(plan)
-    return AuthUserPublic(
-        user_id=row["id"],
-        email=row["email"],
-        display_name=row["display_name"],
-        role=row["role"],
-        cliente_id=cliente_id,
-        plan=plan,
-        plan_label=str(limits.get("label") or plan.title()),
-        last_login_at=row["last_login_at"] or "",
-        as_admin_session=_session_is_impersonated(row),
-        impersonator_email=_session_impersonator_email(row),
-    )
 
 
-def _serialize_managed_user(row: sqlite3.Row) -> AuthManagedUser:
-    return AuthManagedUser(
-        user_id=row["id"],
-        email=row["email"],
-        display_name=row["display_name"],
-        role=row["role"],
-        cliente_id=row["cliente_id"] or "",
-        is_active=bool(row["is_active"]),
-        created_at=row["created_at"] or "",
-        last_login_at=row["last_login_at"] or "",
-    )
 
 
-def _get_user_by_email(email: str) -> Optional[sqlite3.Row]:
-    with _get_db_connection() as connection:
-        return connection.execute(
-            "SELECT * FROM users WHERE email = ?",
-            (_normalize_email(email),),
-        ).fetchone()
 
 
-def _get_user_by_id(user_id: str) -> Optional[sqlite3.Row]:
-    with _get_db_connection() as connection:
-        return connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
 
-def _list_users(*, role: str = "", cliente_id: str = "", include_inactive: bool = True) -> List[sqlite3.Row]:
-    sql = "SELECT * FROM users"
-    clauses: List[str] = []
-    params: List[Any] = []
-    if role:
-        clauses.append("role = ?")
-        params.append(role)
-    if cliente_id:
-        clauses.append("cliente_id = ?")
-        params.append(cliente_id)
-    if not include_inactive:
-        clauses.append("is_active = 1")
-    if clauses:
-        sql += " WHERE " + " AND ".join(clauses)
-    sql += " ORDER BY role ASC, is_active DESC, display_name COLLATE NOCASE ASC, email COLLATE NOCASE ASC"
-    with _get_db_connection() as connection:
-        return connection.execute(sql, tuple(params)).fetchall()
 
 
-def _active_admin_count() -> int:
-    with _get_db_connection() as connection:
-        return connection.execute(
-            "SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active = 1"
-        ).fetchone()[0]
 
 
-def _set_user_active(user_id: str, is_active: bool) -> None:
-    with _get_db_connection() as connection:
-        connection.execute(
-            "UPDATE users SET is_active = ? WHERE id = ?",
-            (1 if is_active else 0, user_id),
-        )
-        connection.commit()
 
 
-def _update_user_password(user_id: str, new_password: str) -> None:
-    with _get_db_connection() as connection:
-        connection.execute(
-            "UPDATE users SET password_hash = ? WHERE id = ?",
-            (_hash_secret(new_password), user_id),
-        )
-        connection.commit()
 
 
-def _update_user_profile(user_id: str, *, email: str, display_name: str) -> sqlite3.Row:
-    email_norm = _normalize_email(email)
-    clean_name = _sanitize_text(display_name)
-    if len(clean_name) < 2:
-        raise HTTPException(status_code=400, detail="El nombre debe tener al menos 2 caracteres.")
-
-    with _get_db_connection() as connection:
-        existing = connection.execute(
-            "SELECT id FROM users WHERE email = ? AND id <> ?",
-            (email_norm, user_id),
-        ).fetchone()
-        if existing:
-            raise HTTPException(status_code=409, detail="Ese email ya esta en uso por otro usuario.")
-
-        connection.execute(
-            "UPDATE users SET email = ?, display_name = ? WHERE id = ?",
-            (email_norm, clean_name, user_id),
-        )
-        connection.commit()
-        updated = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-        if not updated:
-            raise HTTPException(status_code=404, detail="Usuario no encontrado.")
-        return updated
 
 
-def _create_user(*, email: str, password: str, role: str, display_name: str, cliente_id: str = "") -> sqlite3.Row:
-    user_id = f"usr_{secrets.token_urlsafe(12)}"
-    email_norm = _normalize_email(email)
-    now_iso = _utc_now_iso()
-    password_hash = _hash_secret(password)
-    with _get_db_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO users (
-                id, email, password_hash, role, display_name, cliente_id, is_active, created_at, last_login_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, '')
-            """,
-            (user_id, email_norm, password_hash, role, display_name.strip(), cliente_id.strip(), now_iso),
-        )
-        connection.commit()
-        return connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
 
 # --- Vantelia 2.0 self-serve helpers (Sem 2) ---
 
-def _get_user_by_google_sub(google_sub: str) -> Optional[sqlite3.Row]:
-    sub = (google_sub or "").strip()
-    if not sub:
-        return None
-    with _get_db_connection() as connection:
-        return connection.execute(
-            "SELECT * FROM users WHERE google_sub = ?", (sub,)
-        ).fetchone()
 
 
-def _link_google_to_user(user_id: str, google_sub: str, avatar_url: str = "") -> None:
-    with _get_db_connection() as connection:
-        connection.execute(
-            "UPDATE users SET google_sub = ?, email_verified = 1, avatar_url = ? WHERE id = ?",
-            (google_sub.strip(), avatar_url.strip(), user_id),
-        )
-        connection.commit()
 
 
-def _create_user_self_serve(
-    *,
-    email: str,
-    display_name: str,
-    password: str = "",
-    google_sub: str = "",
-    avatar_url: str = "",
-    signup_source: str = "self_serve",
-    email_verified: bool = False,
-) -> sqlite3.Row:
-    """Create a self-serve user with optional Google linkage. Password is optional
-    if google_sub is set (OAuth-only account). Returns the new user row."""
-    if not password and not google_sub:
-        raise HTTPException(status_code=400, detail="Password o cuenta Google requerida.")
-    if not SIGNUP_ENABLED:
-        raise HTTPException(status_code=403, detail="Registro deshabilitado.")
-    user_id = f"usr_{secrets.token_urlsafe(12)}"
-    email_norm = _normalize_email(email)
-    now_iso = _utc_now_iso()
-    password_hash = _hash_secret(password) if password else _hash_secret(secrets.token_urlsafe(32))
-    with _get_db_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO users (
-                id, email, password_hash, role, display_name, cliente_id,
-                is_active, created_at, last_login_at,
-                google_sub, email_verified, signup_source, avatar_url
-            ) VALUES (?, ?, ?, 'client', ?, '', 1, ?, '', ?, ?, ?, ?)
-            """,
-            (
-                user_id,
-                email_norm,
-                password_hash,
-                display_name.strip() or email_norm.split("@")[0],
-                now_iso,
-                google_sub.strip(),
-                1 if (email_verified or google_sub) else 0,
-                signup_source,
-                avatar_url.strip(),
-            ),
-        )
-        connection.commit()
-        return connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
 
 # --- Google OAuth helpers ---
 
-_OAUTH_STATE_TTL_SECONDS = 600
 
 
-def _oauth_create_state(intent: str = "login", claim: str = "") -> str:
-    state = secrets.token_urlsafe(24)
-    nonce = secrets.token_urlsafe(16)
-    now = time.time()
-    cutoff = now - _OAUTH_STATE_TTL_SECONDS
-    with _get_db_connection() as conn:
-        conn.execute(
-            "INSERT INTO oauth_states (state, nonce, intent, claim, created_at) VALUES (?, ?, ?, ?, ?)",
-            (state, nonce, intent, claim or "", now),
-        )
-        conn.execute("DELETE FROM oauth_states WHERE created_at < ?", (cutoff,))
-        conn.commit()
-    return state
 
 
-def _oauth_consume_state(state: str) -> Optional[Dict[str, Any]]:
-    if not state:
-        return None
-    with _get_db_connection() as conn:
-        row = conn.execute(
-            "SELECT nonce, intent, claim, created_at FROM oauth_states WHERE state = ?", (state,)
-        ).fetchone()
-        if row:
-            conn.execute("DELETE FROM oauth_states WHERE state = ?", (state,))
-            conn.commit()
-    if not row:
-        return None
-    if time.time() - row["created_at"] > _OAUTH_STATE_TTL_SECONDS:
-        return None
-    return {"nonce": row["nonce"], "intent": row["intent"], "claim": row["claim"], "created_at": row["created_at"]}
 
 
-def _google_oauth_configured() -> bool:
-    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI)
 
 
-def _gmail_oauth_create_state(admin_user_id: str = "", cliente_id: str = "") -> str:
-    state = secrets.token_urlsafe(32)
-    now = time.time()
-    with _get_db_connection() as conn:
-        conn.execute(
-            "INSERT INTO gmail_oauth_states (state, admin_user_id, cliente_id, created_at) VALUES (?, ?, ?, ?)",
-            (state, admin_user_id, cliente_id, now),
-        )
-        conn.execute("DELETE FROM gmail_oauth_states WHERE created_at < ?", (now - _OAUTH_STATE_TTL_SECONDS,))
-        conn.commit()
-    return state
 
 
-def _gmail_oauth_consume_state(state: str) -> Optional[Dict[str, Any]]:
-    if not state:
-        return None
-    with _get_db_connection() as conn:
-        row = conn.execute(
-            "SELECT admin_user_id, cliente_id, created_at FROM gmail_oauth_states WHERE state = ?",
-            (state,),
-        ).fetchone()
-        if row:
-            conn.execute("DELETE FROM gmail_oauth_states WHERE state = ?", (state,))
-            conn.commit()
-    if not row or time.time() - float(row["created_at"]) > _OAUTH_STATE_TTL_SECONDS:
-        return None
-    return {
-        "admin_user_id": row["admin_user_id"],
-        "cliente_id": row["cliente_id"],
-        "created_at": row["created_at"],
-    }
 
 
 # --- Onboarding state (transient, lives in user row's metadata or memory) ---
@@ -1788,227 +1599,32 @@ def _generate_starter_questions(info_excerpt: str, nombre: str) -> List[str]:
         return fallback
 
 
-def _assign_client_user_to_cliente(user_id: str, cliente_id: str) -> sqlite3.Row:
-    with _get_db_connection() as connection:
-        connection.execute(
-            "UPDATE users SET role = 'client', cliente_id = ?, is_active = 1 WHERE id = ?",
-            (cliente_id.strip(), user_id),
-        )
-        connection.commit()
-        return connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
 
-def _delete_user(user_id: str) -> None:
-    with _get_db_connection() as connection:
-        connection.execute("DELETE FROM auth_sessions WHERE user_id = ?", (user_id,))
-        connection.execute("DELETE FROM password_reset_tokens WHERE user_id = ?", (user_id,))
-        connection.execute("DELETE FROM users WHERE id = ?", (user_id,))
-        connection.commit()
 
 
-def _ensure_default_portal_admin() -> None:
-    if not PORTAL_ADMIN_EMAIL or not PORTAL_ADMIN_PASSWORD:
-        return
-    existing = _get_user_by_email(PORTAL_ADMIN_EMAIL)
-    if existing:
-        return
-    _create_user(
-        email=PORTAL_ADMIN_EMAIL,
-        password=PORTAL_ADMIN_PASSWORD,
-        role="admin",
-        display_name=PORTAL_ADMIN_NAME,
-    )
-    logger.info("Usuario admin inicial del portal creado para %s", PORTAL_ADMIN_EMAIL)
 
 
-def _create_auth_session(user_id: str) -> str:
-    session_id = f"ses_{secrets.token_urlsafe(10)}"
-    session_secret = secrets.token_urlsafe(32)
-    now_iso = _utc_now_iso()
-    expires_at = _session_expires_at()
-    with _get_db_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO auth_sessions (id, user_id, session_token_hash, created_at, expires_at, last_seen_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (session_id, user_id, _hash_secret(session_secret), now_iso, expires_at, now_iso),
-        )
-        connection.commit()
-    return f"{session_id}.{session_secret}"
 
 
-ADMIN_IMPERSONATION_TTL_MINUTES = max(
-    5, min(180, int(os.getenv("ADMIN_IMPERSONATION_TTL_MINUTES", "30")))
-)
 
 
-def _create_impersonation_session(
-    *,
-    target_user_id: str,
-    admin_user_id: str,
-    admin_email: str,
-    ip: str = "",
-) -> Tuple[str, str]:
-    """Create a short-lived auth_sessions row that proxies as target_user_id.
-
-    Returns (raw_token, session_id). Stamps impersonator_* columns so the
-    session is identifiable as admin-impersonation and the portal banner can
-    show it. Lifetime = ADMIN_IMPERSONATION_TTL_MINUTES.
-    """
-    session_id = f"ses_{secrets.token_urlsafe(10)}"
-    session_secret = secrets.token_urlsafe(32)
-    now = _utc_now()
-    expires = now + timedelta(minutes=ADMIN_IMPERSONATION_TTL_MINUTES)
-    with _get_db_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO auth_sessions
-                (id, user_id, session_token_hash, created_at, expires_at, last_seen_at,
-                 impersonator_user_id, impersonator_email, impersonator_ip)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                session_id,
-                target_user_id,
-                _hash_secret(session_secret),
-                now.isoformat(),
-                expires.isoformat(),
-                now.isoformat(),
-                admin_user_id,
-                admin_email,
-                ip,
-            ),
-        )
-        connection.commit()
-    return f"{session_id}.{session_secret}", session_id
 
 
-def _session_is_impersonated(user_row: Optional[sqlite3.Row]) -> bool:
-    if not user_row:
-        return False
-    try:
-        return bool((user_row["impersonator_user_id"] or "").strip())
-    except (IndexError, KeyError):
-        return False
 
 
-def _session_impersonator_email(user_row: Optional[sqlite3.Row]) -> str:
-    if not user_row:
-        return ""
-    try:
-        return str(user_row["impersonator_email"] or "")
-    except (IndexError, KeyError):
-        return ""
 
 
-def _delete_auth_session(raw_token: str) -> None:
-    session_id, session_secret = _compound_token_parts(raw_token, "ses")
-    with _get_db_connection() as connection:
-        if session_id and session_secret:
-            row = connection.execute(
-                "SELECT id, session_token_hash FROM auth_sessions WHERE id = ?",
-                (session_id,),
-            ).fetchone()
-            if row and _verify_secret(session_secret, row["session_token_hash"]):
-                connection.execute("DELETE FROM auth_sessions WHERE id = ?", (session_id,))
-                connection.commit()
-                return
-
-        rows = connection.execute("SELECT id, session_token_hash FROM auth_sessions").fetchall()
-        for row in rows:
-            if _verify_secret(raw_token, row["session_token_hash"]):
-                connection.execute("DELETE FROM auth_sessions WHERE id = ?", (row["id"],))
-                connection.commit()
-                return
 
 
-def _delete_user_auth_sessions(user_id: str, *, keep_session_id: str = "") -> None:
-    with _get_db_connection() as connection:
-        if keep_session_id:
-            connection.execute(
-                "DELETE FROM auth_sessions WHERE user_id = ? AND id <> ?",
-                (user_id, keep_session_id),
-            )
-        else:
-            connection.execute("DELETE FROM auth_sessions WHERE user_id = ?", (user_id,))
-        connection.commit()
 
 
-def _cleanup_password_reset_tokens() -> None:
-    now_iso = _utc_now_iso()
-    with _get_db_connection() as connection:
-        connection.execute(
-            "DELETE FROM password_reset_tokens WHERE used_at <> '' OR expires_at <= ?",
-            (now_iso,),
-        )
-        connection.commit()
 
 
-def _create_password_reset_token(user_id: str, requested_from_ip: str = "") -> str:
-    reset_id = f"prt_{secrets.token_urlsafe(10)}"
-    reset_secret = secrets.token_urlsafe(32)
-    now_iso = _utc_now_iso()
-    expires_at = _expires_at_in_hours(PASSWORD_RESET_TOKEN_HOURS)
-    with _get_db_connection() as connection:
-        connection.execute("DELETE FROM password_reset_tokens WHERE user_id = ?", (user_id,))
-        connection.execute(
-            """
-            INSERT INTO password_reset_tokens (
-                id, user_id, token_hash, created_at, expires_at, used_at, requested_from_ip
-            ) VALUES (?, ?, ?, ?, ?, '', ?)
-            """,
-            (
-                reset_id,
-                user_id,
-                _hash_secret(reset_secret),
-                now_iso,
-                expires_at,
-                requested_from_ip.strip(),
-            ),
-        )
-        connection.commit()
-    return f"{reset_id}.{reset_secret}"
 
 
-def _consume_password_reset_token(public_token: str) -> sqlite3.Row:
-    _cleanup_password_reset_tokens()
-    reset_id, reset_secret = _compound_token_parts(public_token, "prt")
-    if not reset_id or not reset_secret:
-        raise HTTPException(status_code=400, detail="El enlace de recuperacion no es valido.")
-
-    with _get_db_connection() as connection:
-        row = connection.execute(
-            """
-            SELECT t.id AS reset_token_id, t.user_id, t.token_hash, t.expires_at, t.used_at, u.*
-            FROM password_reset_tokens t
-            JOIN users u ON u.id = t.user_id
-            WHERE t.id = ?
-            """,
-            (reset_id,),
-        ).fetchone()
-        if not row or not row["is_active"]:
-            raise HTTPException(status_code=400, detail="El enlace de recuperacion ya no es valido.")
-        if row["used_at"]:
-            raise HTTPException(status_code=400, detail="Este enlace de recuperacion ya se ha usado.")
-        if not _verify_secret(reset_secret, row["token_hash"]):
-            raise HTTPException(status_code=400, detail="El enlace de recuperacion no es valido.")
-        if row["expires_at"] <= _utc_now_iso():
-            raise HTTPException(status_code=400, detail="El enlace de recuperacion ha caducado.")
-
-        connection.execute(
-            "UPDATE password_reset_tokens SET used_at = ? WHERE id = ?",
-            (_utc_now_iso(), reset_id),
-        )
-        connection.commit()
-        return row
 
 
-def _password_reset_url(public_token: str, request: Optional[Request] = None) -> str:
-    base_url = _preferred_public_base_url(request) or ""
-    if not base_url:
-        raise RuntimeError("No se ha podido construir la URL publica del portal.")
-    return f"{base_url}/acceso?reset_token={quote(public_token, safe='')}"
 
 
 def _send_password_reset_email(user: sqlite3.Row, public_token: str, request: Optional[Request] = None) -> None:
@@ -2126,9 +1742,6 @@ def _send_password_reset_email(user: sqlite3.Row, public_token: str, request: Op
     _send_email_message(user["email"], subject, text_body, html_body)
 
 
-def _platform_access_url(request: Optional[Request] = None) -> str:
-    base_url = (_preferred_public_base_url(request) or APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
-    return f"{base_url}/acceso"
 
 
 def _send_checkout_welcome_email(
@@ -2416,139 +2029,33 @@ def _send_checkout_admin_notification(
         logger.warning("No se pudo enviar notificacion de alta a %s: %s", CONSULTA_NOTIFICATION_EMAIL, exc)
 
 
-def _cleanup_auth_sessions() -> None:
-    now_iso = _utc_now_iso()
-    with _get_db_connection() as connection:
-        connection.execute("DELETE FROM auth_sessions WHERE expires_at <= ?", (now_iso,))
-        connection.commit()
 
 
-def _get_session_user(session_token: str) -> Optional[sqlite3.Row]:
-    if not session_token:
-        return None
-    _cleanup_auth_sessions()
-    session_id, session_secret = _compound_token_parts(session_token, "ses")
-    with _get_db_connection() as connection:
-        if session_id and session_secret:
-            row = connection.execute(
-                """
-                SELECT s.id AS session_id, s.session_token_hash, s.expires_at,
-                       s.impersonator_user_id, s.impersonator_email, s.impersonator_ip, u.*
-                FROM auth_sessions s
-                JOIN users u ON u.id = s.user_id
-                WHERE s.id = ? AND u.is_active = 1
-                """,
-                (session_id,),
-            ).fetchone()
-            if row and _verify_secret(session_secret, row["session_token_hash"]):
-                connection.execute(
-                    "UPDATE auth_sessions SET last_seen_at = ? WHERE id = ?",
-                    (_utc_now_iso(), row["session_id"]),
-                )
-                connection.commit()
-                return row
-
-        rows = connection.execute(
-            """
-            SELECT s.id AS session_id, s.session_token_hash, s.expires_at,
-                   s.impersonator_user_id, s.impersonator_email, s.impersonator_ip, u.*
-            FROM auth_sessions s
-            JOIN users u ON u.id = s.user_id
-            WHERE u.is_active = 1
-            """
-        ).fetchall()
-        for row in rows:
-            if _verify_secret(session_token, row["session_token_hash"]):
-                connection.execute(
-                    "UPDATE auth_sessions SET last_seen_at = ? WHERE id = ?",
-                    (_utc_now_iso(), row["session_id"]),
-                )
-                connection.commit()
-                return row
-    return None
 
 
-def _redirect_for_role(role: str) -> str:
-    if role == "admin":
-        return "/dashboard"
-    return "/app"
 
 
-def _set_portal_cookie(response: Response, raw_token: str) -> None:
-    response.set_cookie(
-        PORTAL_COOKIE_NAME,
-        raw_token,
-        max_age=max(3600, PORTAL_SESSION_HOURS * 3600),
-        httponly=True,
-        secure=APP_BASE_URL.startswith("https://"),
-        samesite="lax",
-        domain=PORTAL_COOKIE_DOMAIN or None,
-        path="/",
-    )
 
 
-def _clear_portal_cookie(response: Response) -> None:
-    response.delete_cookie(PORTAL_COOKIE_NAME, path="/", samesite="lax", domain=PORTAL_COOKIE_DOMAIN or None)
 
 
-def _set_admin_return_cookie(response: Response, raw_token: str) -> None:
-    response.set_cookie(
-        ADMIN_RETURN_COOKIE_NAME,
-        raw_token,
-        max_age=max(3600, PORTAL_SESSION_HOURS * 3600),
-        httponly=True,
-        secure=APP_BASE_URL.startswith("https://"),
-        samesite="lax",
-        domain=PORTAL_COOKIE_DOMAIN or None,
-        path="/",
-    )
 
 
-def _clear_admin_return_cookie(response: Response) -> None:
-    response.delete_cookie(ADMIN_RETURN_COOKIE_NAME, path="/", samesite="lax", domain=PORTAL_COOKIE_DOMAIN or None)
 
 
 _ensure_default_portal_admin()
 
 
-def _from_utc_iso(value: str) -> Optional[datetime]:
-    raw = str(value or "").strip()
-    if not raw:
-        return None
-    try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except ValueError:
-        return None
 
 
 def _smtp_configured() -> bool:
     return bool(SMTP_HOST and SMTP_FROM_EMAIL)
 
 
-def _gmail_redirect_uri() -> str:
-    if GOOGLE_GMAIL_REDIRECT_URI:
-        return GOOGLE_GMAIL_REDIRECT_URI
-    if APP_BASE_URL:
-        return f"{APP_BASE_URL}/auth/google/gmail/callback"
-    return ""
 
 
-def _gmail_oauth_configured() -> bool:
-    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and _gmail_redirect_uri() and _gmail_fernet())
 
 
-def _gmail_fernet() -> Optional[Fernet]:
-    raw_key = GMAIL_TOKEN_ENCRYPTION_KEY or ADMIN_API_TOKEN
-    if not raw_key:
-        return None
-    try:
-        if GMAIL_TOKEN_ENCRYPTION_KEY:
-            return Fernet(GMAIL_TOKEN_ENCRYPTION_KEY.encode("ascii"))
-    except (ValueError, UnicodeError):
-        logger.error("GMAIL_TOKEN_ENCRYPTION_KEY no es una clave Fernet valida.")
-        return None
-    derived = base64.urlsafe_b64encode(hashlib.sha256(raw_key.encode("utf-8")).digest())
-    return Fernet(derived)
 
 
 def _gmail_encrypt(value: str) -> str:
@@ -2781,13 +2288,6 @@ def send_client_email(
         return {"ok": False, "provider": "none", "error": str(exc)[:500]}
 
 
-def _channel_fernet() -> Fernet:
-    if not OAUTH_TOKEN_ENCRYPTION_KEY:
-        raise RuntimeError("OAUTH_TOKEN_ENCRYPTION_KEY no esta configurada.")
-    try:
-        return Fernet(OAUTH_TOKEN_ENCRYPTION_KEY.encode("ascii"))
-    except (ValueError, TypeError) as exc:
-        raise RuntimeError("OAUTH_TOKEN_ENCRYPTION_KEY no es una clave Fernet valida.") from exc
 
 
 def _encrypt_channel_secret(value: str) -> str:
@@ -2956,22 +2456,10 @@ async def _send_client_sms(cliente_id: str, to_number: str, body: str) -> bool:
     return sent
 
 
-def _preferred_public_base_url(request: Optional[Request] = None) -> str:
-    return _configured_public_base_url() or (_public_base_url(request) if request is not None else "")
 
 
-def _configured_public_base_url() -> str:
-    if not APP_BASE_URL:
-        return ""
-    try:
-        return _normalize_origin_value(APP_BASE_URL)
-    except RuntimeError:
-        logger.warning("APP_BASE_URL invalida; se usara la URL de la peticion.")
-        return ""
 
 
-def _strip_origin(value: str) -> str:
-    return _normalize_origin_value(value)
 
 
 def _get_client_config(cliente_id: str) -> Dict[str, Any]:
@@ -3398,51 +2886,10 @@ def _portal_ai_config_from_client_config(cliente_id: str) -> PortalAiConfigPubli
     )
 
 
-def _client_subscription(cliente_id: str) -> Dict[str, Any]:
-    config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
-    sub = config.get("subscription") or {}
-
-    # Self-serve users store their plan in the DB. DB takes precedence over config.json.
-    db_sub = db_subscription_for_cliente(cliente_id)
-    if db_sub:
-        db_plan = _normalize_plan_slug(db_sub["plan"] or PLAN_DEFAULT)
-        if db_plan not in PLAN_VALID:
-            db_plan = PLAN_DEFAULT
-        return {
-            "plan": db_plan,
-            "status": str(db_sub["status"] or "active"),
-            "started_at": str(db_sub["current_period_start"] or ""),
-            "renews_at": str(db_sub["current_period_end"] or ""),
-            "canceled_at": "",
-            "stripe_customer_id": str(db_sub["stripe_customer_id"] or ""),
-            "stripe_subscription_id": str(db_sub["stripe_subscription_id"] or ""),
-            "billing_period": "monthly",
-            "lifetime": bool(db_sub["cancel_at_period_end"] == 0 and (db_sub["stripe_subscription_id"] or "") == "" and db_plan != "free"),
-        }
-
-    plan = _normalize_plan_slug(sub.get("plan") or config.get("plan") or PLAN_DEFAULT)
-    if plan not in PLAN_VALID:
-        plan = PLAN_DEFAULT
-    return {  # noqa: RET504
-        "plan": plan,
-        "status": str(sub.get("status") or "active"),
-        "started_at": str(sub.get("started_at") or ""),
-        "renews_at": str(sub.get("renews_at") or ""),
-        "canceled_at": str(sub.get("canceled_at") or ""),
-        "stripe_customer_id": str(sub.get("stripe_customer_id") or ""),
-        "stripe_subscription_id": str(sub.get("stripe_subscription_id") or ""),
-        "billing_period": str(sub.get("billing_period") or "monthly"),
-        "lifetime": bool(sub.get("lifetime") or str(sub.get("billing_period") or "").lower() == "lifetime"),
-    }
 
 
-def _client_plan(cliente_id: str) -> str:
-    return _client_subscription(cliente_id)["plan"]
 
 
-def _plan_limits(plan: str) -> Dict[str, Any]:
-    normalized = _normalize_plan_slug(plan)
-    return PLAN_LIMITS.get(normalized) or PLAN_LIMITS[PLAN_DEFAULT]
 
 
 def _plan_feature(cliente_id: str, feature: str) -> Any:
@@ -3539,16 +2986,6 @@ def _count_bookings_this_month(cliente_id: str) -> int:
         return 0
 
 
-def _count_client_users(cliente_id: str) -> int:
-    try:
-        with _get_db_connection() as conn:
-            row = conn.execute(
-                "SELECT COUNT(*) FROM users WHERE role = 'client' AND cliente_id = ? AND is_active = 1",
-                (cliente_id,),
-            ).fetchone()
-            return int(row[0]) if row and row[0] is not None else 0
-    except Exception:
-        return 0
 
 
 def _timestamp_to_iso(value: Any) -> str:
@@ -6026,53 +5463,10 @@ def _check_rate_limit(bucket_key: str, limit: int) -> None:
         bucket.append(now)
 
 
-def _request_origin(request: Request) -> str:
-    origin = request.headers.get("origin", "").strip()
-    if origin:
-        try:
-            return _strip_origin(origin)
-        except RuntimeError:
-            return ""
-
-    referer = request.headers.get("referer", "").strip()
-    if referer:
-        parsed = urlparse(referer)
-        if parsed.scheme and parsed.netloc:
-            try:
-                return _strip_origin(f"{parsed.scheme}://{parsed.netloc}")
-            except RuntimeError:
-                return ""
-
-    return ""
 
 
-def _forwarded_header_value(raw_value: str) -> str:
-    return str(raw_value or "").split(",", 1)[0].strip()
 
 
-def _public_base_url(request: Request) -> str:
-    configured_base_url = _configured_public_base_url()
-    if configured_base_url:
-        return configured_base_url
-
-    forwarded_proto = _forwarded_header_value(request.headers.get("x-forwarded-proto", ""))
-    forwarded_host = _forwarded_header_value(request.headers.get("x-forwarded-host", ""))
-    forwarded_port = _forwarded_header_value(request.headers.get("x-forwarded-port", ""))
-
-    scheme = forwarded_proto or request.url.scheme or "http"
-    host = forwarded_host or request.headers.get("host", "").strip() or request.url.netloc
-
-    if not host:
-        return str(request.base_url).rstrip("/")
-
-    if forwarded_port and ":" not in host:
-        is_default_port = (scheme == "http" and forwarded_port == "80") or (
-            scheme == "https" and forwarded_port == "443"
-        )
-        if not is_default_port:
-            host = f"{host}:{forwarded_port}"
-
-    return f"{scheme}://{host}".rstrip("/")
 
 
 def _enforce_allowed_origin(request: Request, cliente_id: str) -> None:
@@ -6092,62 +5486,16 @@ def _enforce_allowed_origin(request: Request, cliente_id: str) -> None:
         raise HTTPException(status_code=403, detail="Dominio no autorizado para este cliente")
 
 
-def _enforce_session_cookie_origin(request: Request, portal_session: Optional[str]) -> None:
-    if not portal_session or request.method.upper() in {"GET", "HEAD", "OPTIONS"}:
-        return
-    request_origin = _request_origin(request)
-    if not request_origin:
-        return
-    app_origin = _normalize_origin_value(_public_base_url(request))
-    if request_origin != app_origin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Origen no autorizado para una accion autenticada.",
-        )
 
 
-def _get_authenticated_portal_user_or_none(
-    portal_session: Optional[str],
-) -> Optional[sqlite3.Row]:
-    if not portal_session:
-        return None
-    return _get_session_user(portal_session)
 
 
-def _require_authenticated_portal_user(
-    request: Request,
-    portal_session: Optional[str] = Cookie(default=None, alias=PORTAL_COOKIE_NAME),
-) -> sqlite3.Row:
-    _enforce_session_cookie_origin(request, portal_session)
-    user = _get_authenticated_portal_user_or_none(portal_session)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesion no valida o expirada.")
-    return user
 
 
-def _require_authenticated_admin_user(
-    user: sqlite3.Row = Depends(_require_authenticated_portal_user),
-) -> sqlite3.Row:
-    if user["role"] != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso solo para administradores.")
-    return user
 
 
-def _load_managed_user_or_404(user_id: str) -> sqlite3.Row:
-    row = _get_user_by_id(user_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
-    return row
 
 
-def _assert_admin_can_manage_user(current_user: sqlite3.Row, target_user: sqlite3.Row, action: str) -> None:
-    if current_user["id"] == target_user["id"]:
-        raise HTTPException(status_code=400, detail=f"No puedes {action} tu propio usuario desde este menu.")
-    if target_user["role"] == "admin" and _active_admin_count() <= 1:
-        raise HTTPException(
-            status_code=400,
-            detail="No puedes dejar el portal sin ningun administrador activo.",
-        )
 
 
 def _portal_client_id_or_403(user: sqlite3.Row, cliente_id: str = "") -> str:
@@ -6166,27 +5514,6 @@ def _portal_client_id_or_403(user: sqlite3.Row, cliente_id: str = "") -> str:
     return user_client_id
 
 
-def _require_admin_token(
-    request: Request,
-    authorization: Optional[str] = Header(default=None),
-    portal_session: Optional[str] = Cookie(default=None, alias=PORTAL_COOKIE_NAME),
-) -> None:
-    portal_user = _get_authenticated_portal_user_or_none(portal_session)
-    if portal_user and portal_user["role"] == "admin":
-        return
-
-    if not ADMIN_API_TOKEN:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Los endpoints de administracion no estan habilitados.",
-        )
-
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Falta token admin o sesion valida.")
-
-    token = authorization.split(" ", 1)[1].strip()
-    if not secrets.compare_digest(token, ADMIN_API_TOKEN):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token admin invalido")
 
 
 def _require_admin_identity(
@@ -11720,13 +11047,6 @@ async def app_email_channel_gmail_disconnect(
 
 # --- Vantelia 2.0 wizard onboarding (Sem 2) ---
 
-def _require_self_serve_user(
-    portal_session: Optional[str] = Cookie(default=None, alias=PORTAL_COOKIE_NAME),
-) -> sqlite3.Row:
-    user = _get_authenticated_portal_user_or_none(portal_session)
-    if not user:
-        raise HTTPException(status_code=401, detail="Sesion requerida.")
-    return user
 
 
 @app.get("/onboarding/state", response_model=OnboardingStateResponse)
@@ -12186,22 +11506,8 @@ async def auth_chat_detail(
 
 # --- Vantelia 2.0 dashboard endpoints (Sem 3) ---
 
-def _resolve_cliente_for_self_serve_user(user: sqlite3.Row) -> str:
-    cliente_id = (user["cliente_id"] or "").strip()
-    if not cliente_id:
-        raise HTTPException(status_code=400, detail="Aun no has creado un bot. Completa el wizard.")
-    if cliente_id not in appstate.CONFIG_CLIENTES:
-        raise HTTPException(status_code=404, detail="Bot no encontrado.")
-    return cliente_id
 
 
-def _period_start_iso_for_user(user_id: str) -> str:
-    sub = db_get_subscription_for_user(user_id)
-    if sub and sub["current_period_start"]:
-        return sub["current_period_start"]
-    # Default: start of current calendar month UTC
-    now = _utc_now()
-    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
 
 
 def _compute_dashboard_stats(cliente_id: str, period_start_iso: str) -> AppOverviewStats:
@@ -15003,9 +14309,6 @@ async def app_voice_tool(
 
 # --- Sem 4: Live Chat (Pro gate stub) --------------------------------------
 
-def _user_plan(user: sqlite3.Row) -> str:
-    sub = db_get_subscription_for_user(user["id"])
-    return (sub["plan"] if sub else "free").lower()
 
 
 def _require_pro_plan(user: sqlite3.Row) -> None:
@@ -30796,7 +30099,7 @@ import types as _types
 
 # Modulos home ya extraidos, de mas especifico a mas generico (el primero que
 # define un nombre gana). Crece con cada sub-commit de la fase 3.
-_HOME_MODULES: tuple = (appstate, clients, db, timeutils, textnorm, settings)
+_HOME_MODULES: tuple = (appstate, security, clients, db, timeutils, textnorm, settings)
 
 _EXPORT_MAP: Dict[str, Any] = {}
 for _home_mod in _HOME_MODULES:
