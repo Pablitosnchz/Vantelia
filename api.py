@@ -1191,8 +1191,7 @@ def _default_employee_name(cliente_id: str) -> str:
 
 
 def _ensure_default_employees_for_all_clients() -> None:
-    with sqlite3.connect(DB_PATH) as connection:
-        connection.row_factory = sqlite3.Row
+    with _get_db_connection() as connection:
         now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         for index, cliente_id in enumerate(CONFIG_CLIENTES.keys()):
             row = connection.execute(
@@ -1249,7 +1248,7 @@ def _ensure_default_employees_for_all_clients() -> None:
 
 def _init_database() -> None:
     _ensure_runtime_directories()
-    with sqlite3.connect(DB_PATH) as connection:
+    with _get_db_connection() as connection:
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute(
             """
@@ -2358,8 +2357,7 @@ def _sync_clientes_table_from_config() -> None:
     if not snapshot:
         return
     now_iso = datetime.now(timezone.utc).isoformat()
-    with sqlite3.connect(DB_PATH, timeout=10) as connection:
-        connection.row_factory = sqlite3.Row
+    with _get_db_connection() as connection:
         existing_ids = {
             row["cliente_id"]
             for row in connection.execute("SELECT cliente_id FROM clientes").fetchall()
@@ -2399,8 +2397,7 @@ def _sync_clientes_table_after_persist(configs: Dict[str, Dict[str, Any]]) -> No
     """
     now_iso = datetime.now(timezone.utc).isoformat()
     try:
-        with sqlite3.connect(DB_PATH, timeout=10) as connection:
-            connection.row_factory = sqlite3.Row
+        with _get_db_connection() as connection:
             existing = {
                 row["cliente_id"]: row
                 for row in connection.execute(
@@ -2441,8 +2438,7 @@ def _sync_clientes_table_after_persist(configs: Dict[str, Dict[str, Any]]) -> No
 
 
 def db_get_client_row(cliente_id: str) -> Optional[sqlite3.Row]:
-    with sqlite3.connect(DB_PATH, timeout=10) as connection:
-        connection.row_factory = sqlite3.Row
+    with _get_db_connection() as connection:
         return connection.execute(
             "SELECT * FROM clientes WHERE cliente_id = ?", (cliente_id,)
         ).fetchone()
@@ -2455,7 +2451,7 @@ def db_get_client_owner(cliente_id: str) -> str:
 
 def db_set_client_owner(cliente_id: str, owner_user_id: str, *, source: str = "self_serve") -> None:
     now_iso = datetime.now(timezone.utc).isoformat()
-    with sqlite3.connect(DB_PATH, timeout=10) as connection:
+    with _get_db_connection() as connection:
         connection.execute(
             """
             UPDATE clientes
@@ -2470,8 +2466,7 @@ def db_set_client_owner(cliente_id: str, owner_user_id: str, *, source: str = "s
 def db_list_clientes_for_owner(owner_user_id: str) -> List[sqlite3.Row]:
     if not owner_user_id:
         return []
-    with sqlite3.connect(DB_PATH, timeout=10) as connection:
-        connection.row_factory = sqlite3.Row
+    with _get_db_connection() as connection:
         return list(
             connection.execute(
                 "SELECT * FROM clientes WHERE owner_user_id = ? ORDER BY created_at DESC",
@@ -2483,8 +2478,7 @@ def db_list_clientes_for_owner(owner_user_id: str) -> List[sqlite3.Row]:
 def db_get_subscription_for_user(user_id: str) -> Optional[sqlite3.Row]:
     if not user_id:
         return None
-    with sqlite3.connect(DB_PATH, timeout=10) as connection:
-        connection.row_factory = sqlite3.Row
+    with _get_db_connection() as connection:
         return connection.execute(
             "SELECT * FROM subscriptions WHERE user_id = ?", (user_id,)
         ).fetchone()
@@ -2709,8 +2703,7 @@ def db_ensure_free_subscription(user_id: str, cliente_id: str = "") -> sqlite3.R
     now_iso = datetime.now(timezone.utc).isoformat()
     sub_id = secrets.token_hex(12)
     free_quota = int(SELF_SERVE_PLANS.get("free", {}).get("messages_quota", int(os.getenv("DEFAULT_FREE_QUOTA", "50"))))
-    with sqlite3.connect(DB_PATH, timeout=10) as connection:
-        connection.row_factory = sqlite3.Row
+    with _get_db_connection() as connection:
         connection.execute(
             """
             INSERT INTO subscriptions
@@ -4076,7 +4069,7 @@ def _mark_outreach_prospect_as_client_for_cliente(cliente_id: str, user_email: s
     try:
         with sqlite3.connect(db_path, timeout=5) as conn:
             conn.row_factory = sqlite3.Row
-            now_iso = datetime.now(timezone.utc).isoformat()
+            now_iso = _utc_now().isoformat()
             for email in candidate_emails:
                 conn.execute(
                     "UPDATE prospects SET status = 'client', updated_at = ? "
@@ -4204,7 +4197,7 @@ def _create_impersonation_session(
     """
     session_id = f"ses_{secrets.token_urlsafe(10)}"
     session_secret = secrets.token_urlsafe(32)
-    now = datetime.now(timezone.utc)
+    now = _utc_now()
     expires = now + timedelta(minutes=ADMIN_IMPERSONATION_TTL_MINUTES)
     with _get_db_connection() as connection:
         connection.execute(
@@ -4368,7 +4361,7 @@ def _send_password_reset_email(user: sqlite3.Row, public_token: str, request: Op
     expires_text = f"{expires_minutes} minuto{'s' if expires_minutes != 1 else ''}"
     reset_domain = urlparse(reset_url).netloc or "app.vantelia.es"
     support_email = PORTAL_SUPPORT_EMAIL or DEFAULT_VANTELIA_SUPPORT_EMAIL
-    current_year = datetime.now(timezone.utc).year
+    current_year = _utc_now().year
     subject = "Restablece tu contraseña de Vantelia"
     text_body = (
         f"{greeting_text}\n\n"
@@ -4494,7 +4487,7 @@ def _send_checkout_welcome_email(
     base_url = (_preferred_public_base_url(request) or APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
     logo_url = f"{base_url}/brand-assets/Logo_1_sin_resplandor.png"
     support_email = PORTAL_SUPPORT_EMAIL or DEFAULT_VANTELIA_SUPPORT_EMAIL
-    current_year = datetime.now(timezone.utc).year
+    current_year = _utc_now().year
     clean_name = _sanitize_text(display_name) or _sanitize_text(company_name) or "Cliente"
     clean_company = _sanitize_text(company_name) or clean_name
     clean_ai_name = _sanitize_text(ai_name) or "Asistente Vantelia"
@@ -5191,7 +5184,7 @@ def _client_gmail_connection(cliente_id: str) -> Optional[sqlite3.Row]:
 def _client_gmail_access_token(cliente_id: str, connection_row: sqlite3.Row) -> str:
     access_token = _decrypt_channel_secret(connection_row["access_token_encrypted"])
     expires_at = _from_utc_iso(connection_row["expires_at"] or "")
-    if access_token and expires_at and expires_at > datetime.now(timezone.utc) + timedelta(seconds=60):
+    if access_token and expires_at and expires_at > _utc_now() + timedelta(seconds=60):
         return access_token
     refresh_token = _decrypt_channel_secret(connection_row["refresh_token_encrypted"])
     if not refresh_token:
@@ -5211,7 +5204,7 @@ def _client_gmail_access_token(cliente_id: str, connection_row: sqlite3.Row) -> 
     access_token = str(token_data.get("access_token", ""))
     if not access_token:
         raise RuntimeError("Google no devolvio un token de acceso.")
-    expires = datetime.now(timezone.utc) + timedelta(seconds=int(token_data.get("expires_in", 3600)))
+    expires = _utc_now() + timedelta(seconds=int(token_data.get("expires_in", 3600)))
     with _get_db_connection() as connection:
         connection.execute(
             """
@@ -5861,7 +5854,7 @@ def _require_active_subscription(cliente_id: str) -> None:
 
 
 def _current_billing_period() -> Tuple[str, str]:
-    now = datetime.now(timezone.utc)
+    now = _utc_now()
     start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     if start.month == 12:
         end = start.replace(year=start.year + 1, month=1)
@@ -6162,7 +6155,7 @@ def _claim_stripe_session(session_id: str) -> bool:
             return False
         sessions[session_id] = {
             "status": "processing",
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": _utc_now().isoformat(),
         }
         _save_stripe_sessions(sessions)
     return True
@@ -6175,7 +6168,7 @@ def _mark_stripe_session(session_id: str, *, status: str, cliente_id: str = "", 
         sessions = _load_stripe_sessions()
         entry = dict(sessions.get(session_id) or {})
         entry["status"] = status
-        entry["ts"] = datetime.now(timezone.utc).isoformat()
+        entry["ts"] = _utc_now().isoformat()
         if cliente_id:
             entry["cliente_id"] = cliente_id
         if error:
@@ -6320,7 +6313,7 @@ def _create_client_from_public_checkout(
         stripe_subscription_id=subscription_id,
         stripe_checkout_session_id=session_id,
         billing_period=billing_period,
-        started_at=datetime.now(timezone.utc).isoformat(),
+        started_at=_utc_now().isoformat(),
     )
 
     customer_email = customer.get("email", "")
@@ -9137,7 +9130,7 @@ def _resolve_relative_date_es(message: str, timezone_name: str) -> Optional[date
     try:
         today = datetime.now(ZoneInfo(timezone_name)).date()
     except Exception:
-        today = datetime.now(timezone.utc).date()
+        today = _utc_now().date()
     norm = _strip_accents(str(message).lower())
 
     if re.search(r"\bpasado\s+manana\b", norm):
@@ -9209,7 +9202,7 @@ def _availability_dates_from_message(message: str, timezone_name: str) -> List[d
     try:
         today = datetime.now(ZoneInfo(timezone_name)).date()
     except Exception:
-        today = datetime.now(timezone.utc).date()
+        today = _utc_now().date()
     norm = _strip_accents(str(message or "").lower())
 
     if _message_requests_week_availability(message):
@@ -9274,7 +9267,7 @@ def _build_live_context_block(cliente_id: str, config: Dict[str, Any]) -> str:
     try:
         now_local = datetime.now(ZoneInfo(tz_name))
     except Exception:
-        now_local = datetime.now(timezone.utc)
+        now_local = _utc_now()
         tz_name = "UTC"
 
     fecha_humana = _format_date_es(now_local.date())
@@ -9497,7 +9490,7 @@ def _vacation_blocks_summary(cliente_id: str, timezone_name: str) -> str:
     try:
         today = datetime.now(ZoneInfo(timezone_name)).date()
     except Exception:
-        today = datetime.now(timezone.utc).date()
+        today = _utc_now().date()
     until = today + timedelta(days=180)
     keywords = ("vacacion", "vacaciones", "festivo", "cierre", "cerrado", "puente")
     try:
@@ -10421,6 +10414,19 @@ def _generate_manage_token() -> str:
     return f"mg_{secrets.token_urlsafe(24)}"
 
 
+def _booking_blank_tracking_fields() -> Dict[str, str]:
+    """Campos de seguimiento vacios comunes a toda cita recien creada."""
+    return {
+        "rescheduled_at": "",
+        "rescheduled_from_booking_id": "",
+        "confirmation_email_sent_at": "",
+        "reminder_24h_sent_at": "",
+        "reminder_2h_sent_at": "",
+        "customer_email_status": "",
+        "customer_email_last_error": "",
+    }
+
+
 # Alfabeto sin caracteres ambiguos (sin 0/O, 1/I/L) para el numero de reserva
 # que el cliente dicta por telefono o teclea en chat.
 _BOOKING_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
@@ -10526,7 +10532,7 @@ def _extract_date_from_text(text: str, timezone_name: str) -> str:
         try:
             today = datetime.now(ZoneInfo(timezone_name or DEFAULT_TIMEZONE)).date()
         except Exception:
-            today = datetime.now(timezone.utc).date()
+            today = _utc_now().date()
         year = int(slash.group(3)) if slash.group(3) else today.year
         try:
             candidate = date(year, month, day)
@@ -12009,13 +12015,7 @@ def _seed_demo_agenda(cliente_id: str) -> Dict[str, Any]:
                     "end_at": _to_utc_iso(end_local),
                     "confirmed_at": created_at if status_value in ("confirmed", "completed") else "",
                     "cancelled_at": created_at if status_value == "cancelled" else "",
-                    "rescheduled_at": "",
-                    "rescheduled_from_booking_id": "",
-                    "confirmation_email_sent_at": "",
-                    "reminder_24h_sent_at": "",
-                    "reminder_2h_sent_at": "",
-                    "customer_email_status": "",
-                    "customer_email_last_error": "",
+                    **_booking_blank_tracking_fields(),
                     "service_id": service_id,
                     "service_price_cents": service_price,
                     "source": DEMO_BOOKING_SOURCE,
@@ -12412,7 +12412,7 @@ def _manage_token_still_valid(row: sqlite3.Row) -> bool:
             if base.tzinfo is None:
                 base = base.replace(tzinfo=timezone.utc)
             cutoff = base + timedelta(days=90)
-        return datetime.now(timezone.utc) <= cutoff
+        return _utc_now() <= cutoff
     except Exception:
         return True
 
@@ -14557,14 +14557,14 @@ def _period_start_iso_for_user(user_id: str) -> str:
     if sub and sub["current_period_start"]:
         return sub["current_period_start"]
     # Default: start of current calendar month UTC
-    now = datetime.now(timezone.utc)
+    now = _utc_now()
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
 
 
 def _compute_dashboard_stats(cliente_id: str, period_start_iso: str) -> AppOverviewStats:
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    today_date = datetime.now(timezone.utc).date().isoformat()
-    upcoming_date = (datetime.now(timezone.utc).date() + timedelta(days=7)).isoformat()
+    today_start = _utc_now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    today_date = _utc_now().date().isoformat()
+    upcoming_date = (_utc_now().date() + timedelta(days=7)).isoformat()
     training_path = DATA_DIR / cliente_id / "info.txt"
     training_chars = 0
     if training_path.exists():
@@ -15399,7 +15399,7 @@ async def app_contacts_export(
             row["source_last"], row["next_action"], row["next_action_at"], row["last_seen_at"],
             row["created_at"], (row["notes"] or "").replace("\r", " ").replace("\n", " "),
         ])
-    filename = f"contactos_{cliente_id}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
+    filename = f"contactos_{cliente_id}_{_utc_now().strftime('%Y%m%d')}.csv"
     return Response(
         content=output.getvalue(),
         media_type="text/csv; charset=utf-8",
@@ -15829,7 +15829,7 @@ async def app_channels_google_callback(
     granted = set(str(token.get("scope", "")).split())
     if GOOGLE_GMAIL_SEND_SCOPE not in granted:
         raise HTTPException(status_code=400, detail="Google no concedio permiso para enviar correo.")
-    now, expires = _utc_now_iso(), datetime.now(timezone.utc) + timedelta(seconds=int(token.get("expires_in", 3600)))
+    now, expires = _utc_now_iso(), _utc_now() + timedelta(seconds=int(token.get("expires_in", 3600)))
     existing = _client_gmail_connection(cliente_id)
     refresh_token = str(token.get("refresh_token", "")) or (
         _decrypt_channel_secret(existing["refresh_token_encrypted"]) if existing else ""
@@ -16246,7 +16246,7 @@ async def _ai_send_payment_link(
                 "error": f"Configura un canal de {channel_label} antes de enviar enlaces de pago."}
 
     # Rate limit: maximo 2 enlaces por cita en la ultima hora (anti-spam/enumeracion).
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    cutoff = (_utc_now() - timedelta(hours=1)).isoformat()
     with _get_db_connection() as connection:
         recent = connection.execute(
             "SELECT COUNT(*) AS n FROM customer_payments WHERE cliente_id=? AND booking_id=? AND created_at>=?",
@@ -16508,7 +16508,7 @@ async def app_leads_export(
             (r["message"] or "").replace("\n", " ").replace("\r", " "),
             r["source"] or "", r["session_id"] or "",
         ])
-    filename = f"leads_{cliente_id}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
+    filename = f"leads_{cliente_id}_{_utc_now().strftime('%Y%m%d')}.csv"
     return Response(
         content=buf.getvalue(),
         media_type="text/csv; charset=utf-8",
@@ -18422,13 +18422,7 @@ async def auth_create_booking(
         "end_at": _to_utc_iso(end_local),
         "confirmed_at": created_at,
         "cancelled_at": "",
-        "rescheduled_at": "",
-        "rescheduled_from_booking_id": "",
-        "confirmation_email_sent_at": "",
-        "reminder_24h_sent_at": "",
-        "reminder_2h_sent_at": "",
-        "customer_email_status": "",
-        "customer_email_last_error": "",
+        **_booking_blank_tracking_fields(),
         "service_id": service_id,
         "service_price_cents": service_price,
         "source": "portal_manual",
@@ -18996,7 +18990,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
                         stripe_customer_id=customer_id,
                         stripe_subscription_id=sub_id,
                         status="active",
-                        current_period_start=datetime.now(timezone.utc).isoformat(),
+                        current_period_start=_utc_now().isoformat(),
                     )
                     logger.info("Self-serve subscription activada user=%s plan=%s", user_id, plan)
                 else:
@@ -19063,7 +19057,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
                     stripe_customer_id=customer_id,
                     stripe_subscription_id=sub_id,
                     billing_period=billing_period,
-                    started_at=datetime.now(timezone.utc).isoformat(),
+                    started_at=_utc_now().isoformat(),
                 )
                 _try_record_analytics_event(
                     {
@@ -19160,7 +19154,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
                 _set_client_subscription(
                     cid_target,
                     status="canceled",
-                    canceled_at=datetime.now(timezone.utc).isoformat(),
+                    canceled_at=_utc_now().isoformat(),
                 )
                 logger.info("Suscripción cancelada %s", cid_target)
         elif event_type == "invoice.payment_failed":
@@ -19182,7 +19176,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
                 _set_client_subscription(
                     cid_target,
                     status="past_due",
-                    last_payment_failed_at=datetime.now(timezone.utc).isoformat(),
+                    last_payment_failed_at=_utc_now().isoformat(),
                     last_payment_failed_invoice_url=hosted_invoice_url,
                 )
                 _send_payment_failed_emails(
@@ -19723,7 +19717,7 @@ async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGene
 
     _register_demo_tenant(cliente_id)
 
-    expires_dt = datetime.now(timezone.utc) + timedelta(seconds=DEMO_TTL_SECONDS)
+    expires_dt = _utc_now() + timedelta(seconds=DEMO_TTL_SECONDS)
     demo_url = f"{_public_base_url(request)}/demo/{cliente_id}"
 
     try:
@@ -19736,7 +19730,7 @@ async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGene
                         "demo_generated",
                         "cold",
                         demo_url,
-                        datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                        _utc_now().isoformat(timespec="seconds"),
                         request.headers.get("user-agent", "")[:200],
                         client_ip[:64],
                     ),
@@ -19942,7 +19936,7 @@ async def solicitar_consulta(data: ConsultaLeadPayload, request: Request) -> Dic
     telefono_texto = data.telefono or "No proporcionado"
     mensaje_texto  = data.mensaje  or "(sin mensaje)"
 
-    fecha_utc = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+    fecha_utc = _utc_now().strftime('%Y-%m-%d %H:%M UTC')
 
     asunto_admin = "Nueva consulta recibida"
     cuerpo_admin_text = (
@@ -20066,7 +20060,7 @@ async def healthcheck() -> Dict[str, Any]:
         "checks": checks,
         "runtime": {
             "started_at": STARTED_AT.isoformat(),
-            "uptime_seconds": int((datetime.now(timezone.utc) - STARTED_AT).total_seconds()),
+            "uptime_seconds": int((_utc_now() - STARTED_AT).total_seconds()),
             "data_dir": str(DATA_DIR),
             "storage_dir": str(STORAGE_DIR),
         },
@@ -21300,13 +21294,7 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
         "end_at": _to_utc_iso(end_local),
         "confirmed_at": created_at if booking_status == "confirmed" else "",
         "cancelled_at": "",
-        "rescheduled_at": "",
-        "rescheduled_from_booking_id": "",
-        "confirmation_email_sent_at": "",
-        "reminder_24h_sent_at": "",
-        "reminder_2h_sent_at": "",
-        "customer_email_status": "",
-        "customer_email_last_error": "",
+        **_booking_blank_tracking_fields(),
         "service_id": service_id,
         "service_price_cents": service_price,
         "source": "widget",
@@ -21746,7 +21734,7 @@ async def _process_chat_message(
             try:
                 target_date = datetime.now(ZoneInfo(client_config["booking"]["timezone"])).date()
             except Exception:
-                target_date = datetime.now(timezone.utc).date()
+                target_date = _utc_now().date()
         availability_context = await _build_availability_context(cliente_id, target_date)
         if availability_context:
             context_blocks.append(availability_context)
@@ -22261,7 +22249,7 @@ async def _wa_send_date_picker(
     try:
         today = datetime.now(ZoneInfo(tz_name)).date()
     except Exception:
-        today = datetime.now(timezone.utc).date()
+        today = _utc_now().date()
 
     rows: List[Dict[str, Any]] = []
     offset = 0
@@ -22405,7 +22393,7 @@ async def _wa_send_availability_overview(
     try:
         today = datetime.now(ZoneInfo(tz_name)).date()
     except Exception:
-        today = datetime.now(timezone.utc).date()
+        today = _utc_now().date()
 
     lines = ["🕐 *Disponibilidad proximos dias:*", ""]
     found = 0
@@ -22530,13 +22518,7 @@ async def _wa_create_booking(
             "end_at": _to_utc_iso(end_local),
             "confirmed_at": created_at,
             "cancelled_at": "",
-            "rescheduled_at": "",
-            "rescheduled_from_booking_id": "",
-            "confirmation_email_sent_at": "",
-            "reminder_24h_sent_at": "",
-            "reminder_2h_sent_at": "",
-            "customer_email_status": "",
-            "customer_email_last_error": "",
+            **_booking_blank_tracking_fields(),
             "service_id": service_id,
             "service_price_cents": service_price,
             "source": "whatsapp",
@@ -23640,7 +23622,7 @@ async def admin_stats_overview() -> AdminStatsOverview:
     Counts active subscriptions, monthly messages used/quota, top users,
     recent signups (7d) and churn risk (no login in 30d). One query pass.
     """
-    now = datetime.now(timezone.utc)
+    now = _utc_now()
     seven_days_ago = (now - timedelta(days=7)).isoformat()
     thirty_days_ago = (now - timedelta(days=30)).isoformat()
 
@@ -23784,7 +23766,7 @@ async def estadisticas() -> Dict[str, Any]:
 async def admin_analytics(days: int = 30, limit: int = 80) -> Dict[str, Any]:
     days = max(1, min(int(days or 30), 365))
     limit = max(1, min(int(limit or 80), 300))
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = _utc_now() - timedelta(days=days)
     since_iso = since.isoformat().replace("+00:00", "Z")
 
     with _get_db_connection() as connection:
@@ -23890,7 +23872,7 @@ async def admin_analytics(days: int = 30, limit: int = 80) -> Dict[str, Any]:
 @app.get("/admin/self-service-funnel", dependencies=[Depends(_require_admin_token)])
 async def admin_self_service_funnel(days: int = 30) -> Dict[str, Any]:
     days = max(1, min(int(days or 30), 365))
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = _utc_now() - timedelta(days=days)
     since_iso = since.replace(tzinfo=None).isoformat(timespec="seconds") + "Z"
 
     def pct(part: int, total: int) -> int:
@@ -24262,7 +24244,7 @@ def _growth_overall_state(states: Dict[str, str]) -> str:
 def _growth_automatic_outreach() -> Dict[str, int]:
     result = {"prospects": 0, "sends_30d": 0, "replies_30d": 0}
     try:
-        since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        since = (_utc_now() - timedelta(days=30)).isoformat()
         with _outreach_db() as connection:
             result["prospects"] = int(connection.execute("SELECT COUNT(*) FROM prospects").fetchone()[0])
             result["sends_30d"] = int(connection.execute("SELECT COUNT(*) FROM sends WHERE created_at >= ?", (since,)).fetchone()[0])
@@ -24605,7 +24587,7 @@ def _outreach_db():
 
 
 def _outreach_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return _utc_now().isoformat(timespec="seconds")
 
 
 def _autopilot_log(level: str, event: str, message: str, detail: Any = None) -> None:
@@ -24889,14 +24871,14 @@ def outreach_stats():
             "SELECT COUNT(DISTINCT email) AS c FROM sends WHERE mode='send'"
         ).fetchone()["c"]
 
-        today = datetime.now(timezone.utc).date().isoformat()
+        today = _utc_now().date().isoformat()
         sent_today = conn.execute(
             "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND substr(sent_at,1,10)=?",
             (today,),
         ).fetchone()["c"]
 
-        week_cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat(timespec="seconds")
-        month_cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat(timespec="seconds")
+        week_cutoff = (_utc_now() - timedelta(days=7)).isoformat(timespec="seconds")
+        month_cutoff = (_utc_now() - timedelta(days=30)).isoformat(timespec="seconds")
         sent_week = conn.execute(
             "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND sent_at>=?",
             (week_cutoff,),
@@ -25066,7 +25048,7 @@ def outreach_hot_leads(limit: int = 15, days: int = 14):
     """
     limit = max(1, min(100, int(limit or 15)))
     days = max(1, min(60, int(days or 14)))
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+    cutoff = (_utc_now() - timedelta(days=days)).isoformat(timespec="seconds")
 
     with _outreach_db() as conn:
         rows = conn.execute(
@@ -25278,7 +25260,7 @@ def _outreach_autopilot_gate(
     if not last_sent:
         return False, "sin envio previo"
     min_wait = _outreach_normalize_followup_days(followup_days).get(stage, 3)
-    age_days = (datetime.now(timezone.utc) - last_sent).total_seconds() / 86400
+    age_days = (_utc_now() - last_sent).total_seconds() / 86400
     if age_days < min_wait:
         return False, f"esperar {max(1, int((min_wait - age_days) + 0.999))}d"
     return True, "listo para aprobar"
@@ -25427,7 +25409,7 @@ def _outreach_followup_item(
 def outreach_followup_queue(limit: int = 80, days: int = 45):
     limit = max(1, min(200, int(limit or 80)))
     days = max(1, min(365, int(days or 45)))
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+    cutoff = (_utc_now() - timedelta(days=days)).isoformat(timespec="seconds")
     with _outreach_db() as conn:
         followup_days = _outreach_config_followup_days(conn)
         rows = conn.execute(
@@ -25545,7 +25527,7 @@ def outreach_autopilot_next_action():
     with _outreach_db() as conn:
         stage_days = _outreach_followup_stage_days(_outreach_config_followup_days(conn))
         for stage, after_days in stage_days:
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=after_days)).isoformat(timespec="seconds")
+            cutoff = (_utc_now() - timedelta(days=after_days)).isoformat(timespec="seconds")
             prev_stage = OUTREACH_STAGES[OUTREACH_STAGES.index(stage) - 1]
             row = conn.execute(
                 """
@@ -25609,7 +25591,7 @@ def outreach_autopilot_run(payload: OutreachAutopilotSendPayload):
         followup_days = _outreach_config_followup_days(conn)
         params["followup_days"] = followup_days
         if payload.apply_status:
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=max(1, int(payload.days or 60)))).isoformat(timespec="seconds")
+            cutoff = (_utc_now() - timedelta(days=max(1, int(payload.days or 60)))).isoformat(timespec="seconds")
             cur = conn.execute(
                 """UPDATE prospects SET status='engaged', updated_at=?
                    WHERE status IN ('new','contacted')
@@ -25925,7 +25907,7 @@ def outreach_ab_stats(stage: str = "cold", days: int = 30):
     if stage not in OUTREACH_STAGES:
         raise HTTPException(status_code=400, detail="Stage invalido.")
     days = max(1, min(365, int(days or 30)))
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+    cutoff = (_utc_now() - timedelta(days=days)).isoformat(timespec="seconds")
 
     with _outreach_db() as conn:
         rows = conn.execute(
@@ -26088,7 +26070,7 @@ def outreach_list_prospects(
         where.append("p.source LIKE ?")
         params.append(f"%{source}%")
     if days and days > 0:
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=int(days))).isoformat(timespec="seconds")
+        cutoff = (_utc_now() - timedelta(days=int(days))).isoformat(timespec="seconds")
         where.append("p.updated_at >= ?")
         params.append(cutoff)
     if clicked_vantelia:
@@ -27587,7 +27569,7 @@ def _autonomous_within_window() -> bool:
     """Mismas reglas que _outreach_within_window pero locales aquí por si no existe."""
     if (os.getenv("OUTREACH_RESPECT_WINDOW", "true").lower() != "true"):
         return True
-    now = datetime.now(timezone.utc)
+    now = _utc_now()
     try:
         from zoneinfo import ZoneInfo
         tz_name = os.getenv("OUTREACH_TIMEZONE", "Europe/Madrid")
@@ -28884,7 +28866,7 @@ def _instagram_db_path() -> Path:
 
 
 def _instagram_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return _utc_now().isoformat(timespec="seconds")
 
 
 def _ig_env_bool(name: str, default: bool) -> bool:
@@ -29105,7 +29087,7 @@ def _ig_next_followup(stage: str, sent_at: str) -> Dict[str, str]:
     try:
         dt = datetime.fromisoformat(sent_at.replace("Z", "+00:00"))
     except Exception:
-        dt = datetime.now(timezone.utc)
+        dt = _utc_now()
     return {
         "next_stage": next_stage,
         "next_followup_at": (dt + timedelta(days=delays.get(stage, 7))).isoformat(timespec="seconds"),
@@ -29149,7 +29131,7 @@ def instagram_stats():
         sent_distinct = conn.execute(
             "SELECT COUNT(DISTINCT username) AS c FROM ig_sends WHERE mode IN ('sent','sent_auto')"
         ).fetchone()["c"]
-        today = datetime.now(timezone.utc).date().isoformat()
+        today = _utc_now().date().isoformat()
         sent_today = conn.execute(
             "SELECT COUNT(*) AS c FROM ig_sends WHERE mode IN ('sent','sent_auto') AND substr(sent_at,1,10)=?",
             (today,),
@@ -29417,8 +29399,8 @@ def instagram_prospect_timeline(username: str):
 
 @app.get("/admin/instagram/ops-summary", dependencies=[Depends(_require_admin_token)])
 def instagram_ops_summary():
-    today = datetime.now(timezone.utc).date().isoformat()
-    week_cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat(timespec="seconds")
+    today = _utc_now().date().isoformat()
+    week_cutoff = (_utc_now() - timedelta(days=7)).isoformat(timespec="seconds")
     with _instagram_db() as conn:
         sent_today = conn.execute(
             "SELECT COUNT(*) AS c FROM ig_sends WHERE mode IN ('sent','sent_auto') AND substr(sent_at,1,10)=?",
@@ -30001,7 +29983,7 @@ def instagram_hot_leads(limit: int = 15):
 def instagram_ab_stats(stage: str = "cold", days: int = 30):
     if stage not in IG_STAGES:
         raise HTTPException(400, "stage invalido")
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=max(1, days))).isoformat(timespec="seconds")
+    cutoff = (_utc_now() - timedelta(days=max(1, days))).isoformat(timespec="seconds")
     with _instagram_db() as conn:
         rows = conn.execute(
             """SELECT variant,
@@ -30040,7 +30022,7 @@ def instagram_autopilot_get():
         except Exception:
             cfg["targets"] = []
         # contadores diarios
-        today = datetime.now(timezone.utc).date().isoformat()
+        today = _utc_now().date().isoformat()
         cfg["sent_today"] = conn.execute(
             "SELECT COUNT(*) AS c FROM ig_sends WHERE mode IN ('sent','sent_auto') AND substr(sent_at,1,10)=?",
             (today,),
@@ -30114,7 +30096,7 @@ def _ig_autopilot_run_once() -> Dict[str, Any]:
         else:
             try:
                 last_dt = datetime.fromisoformat(last_disc.replace("Z", "+00:00"))
-                age = (datetime.now(timezone.utc) - last_dt).total_seconds() / 3600.0
+                age = (_utc_now() - last_dt).total_seconds() / 3600.0
                 do_discovery = age >= discovery_hours
             except Exception:
                 do_discovery = True
@@ -30145,7 +30127,7 @@ def _ig_autopilot_run_once() -> Dict[str, Any]:
                 )
 
         # Drafts cold hasta cap diario
-        today = datetime.now(timezone.utc).date().isoformat()
+        today = _utc_now().date().isoformat()
         sent_today = conn.execute(
             "SELECT COUNT(*) AS c FROM ig_sends WHERE mode IN ('sent','sent_auto','draft','sending') AND substr(coalesce(sent_at,drafted_at),1,10)=?",
             (today,),
@@ -30190,7 +30172,7 @@ def _ig_autopilot_run_once() -> Dict[str, Any]:
             env_cap = int(os.getenv("IG_AUTOSEND_DAILY_CAP", "20") or 20)
             cap = db_cap if db_cap > 0 else env_cap
             # Cuenta enviados hoy con autosend para respetar tope diario.
-            today = datetime.now(timezone.utc).date().isoformat()
+            today = _utc_now().date().isoformat()
             with _instagram_db() as conn:
                 sent_today_auto = conn.execute(
                     "SELECT COUNT(*) AS c FROM ig_sends WHERE mode='sent_auto' AND substr(coalesce(sent_at,drafted_at),1,10)=?",
@@ -30903,7 +30885,7 @@ def whatsapp_send(payload: WhatsAppSendPayload, background_tasks: BackgroundTask
             "current_phone": "",
             "last_reason": "",
             "dry_run": bool(payload.dry_run),
-            "started_at": datetime.now(timezone.utc).isoformat(),
+            "started_at": _utc_now().isoformat(),
             "finished_at": "",
         })
 
@@ -30917,7 +30899,7 @@ def whatsapp_send(payload: WhatsAppSendPayload, background_tasks: BackgroundTask
                     "running": False,
                     "phase": "error",
                     "last_reason": str(exc)[:160],
-                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "finished_at": _utc_now().isoformat(),
                 })
             try:
                 _wa_send_job_lock.release()
@@ -30974,7 +30956,7 @@ def whatsapp_send(payload: WhatsAppSendPayload, background_tasks: BackgroundTask
                 _wa_send_state.update({
                     "running": False,
                     "current_phone": "",
-                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "finished_at": _utc_now().isoformat(),
                 })
             try:
                 _wa_send_job_lock.release()
@@ -31104,7 +31086,7 @@ def _tk_env_bool(name: str, default: bool = False) -> bool:
 
 
 def _tk_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return _utc_now().isoformat()
 
 
 def _tk_db():
@@ -31693,7 +31675,7 @@ def tiktok_dm_templates_preview(variant: str = "A",
 @app.get("/admin/tiktok/stats", dependencies=[Depends(_require_admin_token)])
 def tiktok_stats():
     _tk_migrate()
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = _utc_now().date().isoformat()
     with _tk_db() as conn:
         sent_today = conn.execute(
             "SELECT COUNT(*) AS c FROM tk_sends WHERE mode='sent_auto' AND substr(sent_at,1,10)=?",
@@ -31893,9 +31875,9 @@ def _voice_twiml_connect_stream(ws_url: str, call_sid: str) -> Response:
 
 
 def _voice_call_register(call_sid: str, cliente_id: str, from_number: str, to_number: str) -> None:
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = _utc_now().isoformat()
     try:
-        with sqlite3.connect(DB_PATH, timeout=10) as conn:
+        with _get_db_connection() as conn:
             conn.execute(
                 """
                 INSERT INTO voice_calls (call_sid, cliente_id, from_number, to_number, started_at, status)
@@ -31926,7 +31908,7 @@ def _voice_call_from_number(call_sid: str) -> str:
     if not call_sid:
         return ""
     try:
-        with sqlite3.connect(DB_PATH, timeout=10) as conn:
+        with _get_db_connection() as conn:
             row = conn.execute(
                 "SELECT from_number FROM voice_calls WHERE call_sid = ? LIMIT 1",
                 (call_sid,),
@@ -31986,7 +31968,7 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
     try:
         now_local = datetime.now(ZoneInfo(tz))
     except Exception:  # noqa: BLE001
-        now_local = datetime.now(timezone.utc)
+        now_local = _utc_now()
     fecha_hoy = now_local.strftime("%Y-%m-%d")
     dia_semana = now_local.strftime("%A")
 
@@ -32279,13 +32261,7 @@ async def _voice_perform_booking(
         "end_at": _to_utc_iso(end_local),
         "confirmed_at": created_at,
         "cancelled_at": "",
-        "rescheduled_at": "",
-        "rescheduled_from_booking_id": "",
-        "confirmation_email_sent_at": "",
-        "reminder_24h_sent_at": "",
-        "reminder_2h_sent_at": "",
-        "customer_email_status": "",
-        "customer_email_last_error": "",
+        **_booking_blank_tracking_fields(),
         "service_id": service_id,
         "service_price_cents": service_price,
         "source": "voice",
@@ -32716,8 +32692,7 @@ async def _voice_finalize_call(
     from_number = ""
     if call_sid:
         try:
-            with sqlite3.connect(DB_PATH, timeout=10) as conn:
-                conn.row_factory = sqlite3.Row
+            with _get_db_connection() as conn:
                 row = conn.execute(
                     "SELECT from_number FROM voice_calls WHERE call_sid=?", (call_sid,)
                 ).fetchone()
@@ -32742,12 +32717,12 @@ async def _voice_finalize_call(
         if await _send_twilio_sms(from_number, twilio_from, body):
             sms_sent = 1
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = _utc_now().isoformat()
     if not call_sid:
         logger.warning("[voice] llamada sin call_sid; no se persiste finalizacion")
         return
     try:
-        with sqlite3.connect(DB_PATH, timeout=10) as conn:
+        with _get_db_connection() as conn:
             conn.execute(
                 """
                 UPDATE voice_calls
@@ -32817,7 +32792,7 @@ async def voice_status_callback(cliente_id: str, request: Request) -> Response:
     new_status = mapping.get(call_status)
     if call_sid and new_status:
         try:
-            with sqlite3.connect(DB_PATH, timeout=10) as conn:
+            with _get_db_connection() as conn:
                 conn.execute(
                     "UPDATE voice_calls SET status=? WHERE call_sid=? AND status != 'completed'",
                     (new_status, call_sid),
@@ -32864,7 +32839,7 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
         clean = (text or "").strip()
         if clean:
             transcript.append(
-                {"role": role, "text": clean, "ts": datetime.now(timezone.utc).isoformat()}
+                {"role": role, "text": clean, "ts": _utc_now().isoformat()}
             )
 
     realtime_model = voice_cfg.get("realtime_model") or VOICE_REALTIME_MODEL
@@ -33077,8 +33052,8 @@ def _voice_stats(conn: sqlite3.Connection, cliente_id: str) -> Dict[str, int]:
         cond = " WHERE cliente_id=?"
         params = [cliente_id]
     connector = " AND" if cond else " WHERE"
-    today = datetime.now(timezone.utc).date().isoformat()
-    week_ago = (datetime.now(timezone.utc).date() - timedelta(days=7)).isoformat()
+    today = _utc_now().date().isoformat()
+    week_ago = (_utc_now().date() - timedelta(days=7)).isoformat()
 
     def count(extra: str, extra_params: List[Any]) -> int:
         row = conn.execute(
@@ -33117,8 +33092,7 @@ async def admin_voice_calls(
         params.append(status)
     clause = (" WHERE " + " AND ".join(where)) if where else ""
     offset = (page - 1) * page_size
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
-        conn.row_factory = sqlite3.Row
+    with _get_db_connection() as conn:
         total = int(
             conn.execute(f"SELECT COUNT(*) AS c FROM voice_calls{clause}", params).fetchone()["c"]
         )
@@ -33143,8 +33117,7 @@ async def admin_voice_calls(
 
 @app.get("/admin/voice/calls/{call_sid}", dependencies=[Depends(_require_admin_token)])
 async def admin_voice_call_detail(call_sid: str) -> Dict[str, Any]:
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
-        conn.row_factory = sqlite3.Row
+    with _get_db_connection() as conn:
         row = conn.execute("SELECT * FROM voice_calls WHERE call_sid=?", (call_sid,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Llamada no encontrada")
