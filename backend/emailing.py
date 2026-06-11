@@ -27,6 +27,7 @@ import httpx
 from cryptography.fernet import InvalidToken
 from fastapi import HTTPException, Request
 
+from api_models import ChannelEmailStatus, ChannelSettingsResponse, ChannelSmsStatus
 from backend import appstate, clients, db, security, settings, textnorm, timeutils
 
 def _send_password_reset_email(user: sqlite3.Row, public_token: str, request: Optional[Request] = None) -> None:
@@ -753,3 +754,35 @@ def _gmail_channel_state_consume(state: str, cliente_id: str, user_id: str) -> s
     return security._decrypt_channel_secret(row["code_verifier_encrypted"])
 
 
+
+
+def _channel_settings_public(cliente_id: str) -> ChannelSettingsResponse:
+    channel_settings = security._ensure_channel_settings(cliente_id)
+    gmail = _client_gmail_connection(cliente_id)
+    sms_mode = channel_settings["sms_mode"] or "vantelia_default"
+    if sms_mode == "vantelia_default":
+        config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
+        sender = settings.TWILIO_SMS_SENDER or (config.get("voice", {}) or {}).get("twilio_phone_number") or settings.TWILIO_DEFAULT_PHONE_NUMBER
+        sms_available = bool(settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and sender)
+    else:
+        sender = channel_settings["sms_sender"] or ""
+        sms_available = channel_settings["sms_sender_status"] == "active"
+    return ChannelSettingsResponse(
+        email=ChannelEmailStatus(
+            provider=channel_settings["email_provider"] or "vantelia_smtp",
+            fallback_enabled=bool(channel_settings["email_fallback_enabled"]),
+            connected=bool(gmail and gmail["status"] == "active"),
+            account_email=str(gmail["account_email"] or "") if gmail else "",
+            account_name=str(gmail["account_name"] or "") if gmail else "",
+            status=str(gmail["status"] or "not_connected") if gmail else "not_connected",
+            last_error=str(gmail["last_error"] or "") if gmail else "",
+            google_configured=_gmail_channel_configured(),
+        ),
+        sms=ChannelSmsStatus(
+            mode=sms_mode,
+            sender=str(sender or ""),
+            sender_status=str(channel_settings["sms_sender_status"] or "not_configured"),
+            available=sms_available,
+            last_error=str(channel_settings["last_error"] or ""),
+        ),
+    )

@@ -382,3 +382,76 @@ def _public_base_url(request: Request) -> str:
     return f"{scheme}://{host}".rstrip("/")
 
 
+
+
+def _format_price_cents(cents: int) -> str:
+    cents = int(cents or 0)
+    if cents <= 0:
+        return ""
+    if cents % 100 == 0:
+        return f"{cents // 100} €"
+    return (f"{cents / 100:.2f}").replace(".", ",") + " €"
+
+
+def _parse_date(date_text: str) -> datetime:
+    try:
+        return datetime.strptime(date_text, "%Y-%m-%d")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Fecha invalida. Usa formato YYYY-MM-DD.") from exc
+
+
+def _parse_time(time_text: str) -> datetime:
+    if not settings.TIME_PATTERN.match(time_text):
+        raise HTTPException(status_code=400, detail="Hora invalida. Usa formato HH:MM.")
+    try:
+        return datetime.strptime(time_text, "%H:%M")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Hora invalida.") from exc
+
+
+def _time_to_min(value: Any) -> Optional[int]:
+    parts = str(value or "").split(":")
+    if len(parts) < 2 or not parts[0].isdigit() or not parts[1].isdigit():
+        return None
+    return int(parts[0]) * 60 + int(parts[1])
+
+
+def _parse_price_to_cents(text: str) -> int:
+    """Extrae un precio (en centimos) de un texto libre tipo '40€', '60,50',
+    '1.250 €', 'desde 30'. Devuelve 0 si no hay numero ('a consultar', 'gratis')."""
+    match = re.search(r"\d[\d.,]*", str(text or ""))
+    if not match:
+        return 0
+    raw = match.group(0)
+    if "," in raw and "." in raw:
+        raw = raw.replace(".", "").replace(",", ".")
+    elif "," in raw:
+        raw = raw.replace(",", ".")
+    elif raw.count(".") > 1:
+        raw = raw.replace(".", "")
+    elif "." in raw:
+        _, _, dec = raw.partition(".")
+        if len(dec) == 3:  # '1.250' = separador de miles, no decimal
+            raw = raw.replace(".", "")
+    try:
+        value = float(raw)
+    except ValueError:
+        return 0
+    if value <= 0:
+        return 0
+    return int(round(value * 100))
+
+
+def _parse_duration_minutes_text(text: str) -> int:
+    """Extrae una duracion en minutos de un texto ('45 min', '1h', '1h 30')."""
+    s = str(text or "").lower()
+    total = 0
+    match_h = re.search(r"(\d+)\s*(?:h|hora|horas)\b", s)
+    match_m = re.search(r"(\d+)\s*(?:min|minuto|minutos|')", s)
+    if match_h:
+        total += int(match_h.group(1)) * 60
+    if match_m:
+        total += int(match_m.group(1))
+    return total if total > 0 else 0
+
+

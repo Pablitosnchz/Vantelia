@@ -465,3 +465,9 @@ def _get_client_config(cliente_id: str) -> Dict[str, Any]:
     return config
 
 
+
+
+def _plan_feature(cliente_id: str, feature: str) -> Any:
+    return _plan_limits(_client_plan(cliente_id)).get(feature)
+
+
