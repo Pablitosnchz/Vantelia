@@ -158,9 +158,14 @@ rebuild de verificación en F4.
 | F3.5 backend/clients.py | ✅ | be4f757 |
 | F3.6 backend/security.py (+extras textnorm/clients/timeutils) | ✅ | b8c62ed |
 | F3.7 backend/emailing.py + messaging.py + stripe_gateway.py | ✅ | 4ada884 |
-| F3.8 agenda, F3.9 rag, F3.10 booking+demo_agenda, F3.11 whatsapp_flows | Pendiente | — |
-| F3.12 outreach/instagram/tiktok/voice/workers | Pendiente | — |
-| F3.13+ main.py + routers + shim final | Pendiente | — |
+| F3.8 backend/agenda.py | ✅ | 69812e5 |
+| F3.9 backend/rag.py | ✅ | a1f1031 |
+| F3.10 backend/booking.py + crm.py + demo_agenda.py | ✅ | 511b19f |
+| F3.11 backend/chat.py + whatsapp.py | ✅ | d74eb90 |
+| F3.12 onboarding/outreach/instagram/tiktok/wa_capture/voice/growth/billing/portal | ✅ | d60df59 |
+| **CHECKPOINT A**: 26 módulos backend; api.py 33.170→13.176 líneas (solo endpoints+app+proxy) | ✅ | — |
+| F3.13 backend/main.py (app/middlewares/mounts/eventos) | Pendiente | — |
+| F3.14+ routers por dominio (333 endpoints) + shim final api.py | Pendiente | — |
 | F4 Frontend | Pendiente | — |
 | F5 Tests + conftest | Pendiente | — |
 | F6 Documentación | Pendiente | — |
@@ -184,5 +189,15 @@ Notas de transición F3 (para retomar en sesiones futuras):
   regex plano — los docstrings sufren), (3) pop de los nombres del propio
   módulo destino del mapeo antes de cualificar.
 - El canal Bash de la sesión se come `\\` — generar código con chr(10) o Edit.
+- Riesgos ya mordidos (no repetir): NO usar strip de auto-referencias por regex
+  (machacó params llamados `booking`); los nombres de módulo no deben chocar con
+  locals/estado histórico (`state`→appstate, `whatsapp_flows`→whatsapp módulo,
+  `wa_outreach`→wa_capture); los try/except de imports de scripts y los probes
+  *_AVAILABLE deben moverse ENTEROS con su dominio.
+- Bug latente pre-existente (sin tocar): `discovered_count` sin asignar en el
+  log de `_outreach_run_discovery_job` (backend/outreach.py ~1789-1802).
+- F3.14 routers: preservar ORDEN de registro de rutas (first-match de FastAPI);
+  mover endpoints por secciones contiguas e incluir routers en el orden
+  original de aparición.
 
 Si una sesión se queda sin contexto: dejar todo committeado y actualizar esta tabla.
