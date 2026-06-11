@@ -2035,3 +2035,35 @@ def _agenda_block_reasons_for_day(cliente_id: str, fecha: str) -> List[str]:
     return reasons
 
 
+
+
+def _is_open_now(booking_cfg: Dict[str, Any], now_dt: datetime) -> Optional[bool]:
+    try:
+        day_start = booking_cfg.get("day_start") or "09:00"
+        day_end = booking_cfg.get("day_end") or "18:00"
+        break_windows = textnorm._normalize_break_windows(
+            day_start,
+            day_end,
+            booking_cfg.get("break_windows", []),
+            booking_cfg.get("break_start", ""),
+            booking_cfg.get("break_end", ""),
+        )
+        closed = set(booking_cfg.get("closed_weekdays") or [])
+        if now_dt.weekday() in closed:
+            return False
+        sh, sm = (int(x) for x in day_start.split(":"))
+        eh, em = (int(x) for x in day_end.split(":"))
+        start = now_dt.replace(hour=sh, minute=sm, second=0, microsecond=0)
+        end = now_dt.replace(hour=eh, minute=em, second=0, microsecond=0)
+        for break_window in break_windows:
+            bh, bm = (int(x) for x in break_window["start"].split(":"))
+            rh, rm = (int(x) for x in break_window["end"].split(":"))
+            pause_start = now_dt.replace(hour=bh, minute=bm, second=0, microsecond=0)
+            pause_end = now_dt.replace(hour=rh, minute=rm, second=0, microsecond=0)
+            if pause_start <= now_dt < pause_end:
+                return False
+        return start <= now_dt <= end
+    except Exception:
+        return None
+
+

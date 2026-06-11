@@ -602,3 +602,10 @@ def _build_install_snippet(cliente_id: str, request: Request) -> Dict[str, str]:
     }
 
 
+
+
+def _require_plan_feature(cliente_id: str, feature: str, error_message: str) -> None:
+    if not _plan_feature(cliente_id, feature):
+        raise HTTPException(status_code=403, detail=error_message)
+
+

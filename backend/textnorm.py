@@ -647,3 +647,8 @@ def _extract_date_from_text(text: str, timezone_name: str) -> str:
     return relative.isoformat() if relative else ""
 
 
+
+
+EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
