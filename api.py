@@ -218,60 +218,12 @@ from backend.settings import (  # noqa: F401  (transicion F3: copias re-exportad
 )
 
 
-@dataclass
-class SessionState:
-    engine: Any
-    cliente_id: str
-    created_at: float
-    last_seen: float
-    message_count: int = 0
-
-
-@dataclass
-class WAFlowState:
-    cliente_id: str
-    from_number: str
-    flow: str = ""
-    servicio: str = ""
-    employee_id: str = ""
-    employee_name: str = ""
-    fecha: str = ""
-    hora: str = ""
-    nombre: str = ""
-    email: str = ""
-    notas: str = ""
-    booking_code: str = ""
-    verify_phone: str = ""
-    verify_email: str = ""
-    greeted: bool = False
-    last_seen: float = 0.0
-
-
-whatsapp_flows: Dict[str, WAFlowState] = {}
-
-
-@dataclass
-class ProviderBookingResult:
-    success: bool
-    status: str
-    provider_name: str
-    provider_booking_id: str = ""
-    provider_booking_url: str = ""
-    message: str = ""
-
-
-indices: Dict[str, VectorStoreIndex] = {}
-sesiones: Dict[str, SessionState] = {}
-rate_limit_buckets: Dict[str, List[float]] = {}
-last_cleanup_run = 0.0
-state_lock = threading.RLock()
-booking_reminder_stop = threading.Event()
-booking_reminder_thread: Optional[threading.Thread] = None
-outreach_imap_stop = threading.Event()
-outreach_imap_thread: Optional[threading.Thread] = None
-outreach_autopilot_stop = threading.Event()
-outreach_autopilot_thread: Optional[threading.Thread] = None
-STARTED_AT = datetime.now(timezone.utc)
+from backend import appstate
+from backend.appstate import (  # noqa: F401  (clases: excepcion permitida)
+    ProviderBookingResult,
+    SessionState,
+    WAFlowState,
+)
 
 
 def _normalize_origin_value(origin: str) -> str:
@@ -783,14 +735,14 @@ CONFIG_CLIENTES = _load_client_configs()
 
 def _collect_cors_origins() -> List[str]:
     origins = set(EXTRA_CORS_ORIGINS)
-    with state_lock:
+    with appstate.state_lock:
         for config in CONFIG_CLIENTES.values():
             origins.update(config.get("allowed_origins", []))
     return sorted(origin for origin in origins if origin)
 
 
 def _update_runtime_configs(next_configs: Dict[str, Dict[str, Any]]) -> None:
-    with state_lock:
+    with appstate.state_lock:
         CONFIG_CLIENTES.clear()
         CONFIG_CLIENTES.update(next_configs)
 
@@ -2063,7 +2015,7 @@ def _sync_clientes_table_from_config() -> None:
     are refreshed from the JSON snapshot.
     """
     try:
-        with state_lock:
+        with appstate.state_lock:
             snapshot = {cid: copy.deepcopy(cfg) for cid, cfg in CONFIG_CLIENTES.items()}
     except Exception:  # noqa: BLE001
         snapshot = {}
@@ -2646,7 +2598,7 @@ def _booking_reminder_worker() -> None:
         "Motor de recordatorios automaticos iniciado. Intervalo: %s minutos.",
         REMINDER_RUN_INTERVAL_MINUTES,
     )
-    while not booking_reminder_stop.is_set():
+    while not appstate.booking_reminder_stop.is_set():
         try:
             try:
                 purged_demos = _purge_expired_demos()
@@ -2678,7 +2630,7 @@ def _booking_reminder_worker() -> None:
         except Exception as exc:  # noqa: BLE001
             logger.error("Error en el motor automatico de recordatorios: %s", exc)
 
-        booking_reminder_stop.wait(interval_seconds)
+        appstate.booking_reminder_stop.wait(interval_seconds)
 
 
 def _outreach_imap_worker() -> None:
@@ -2691,7 +2643,7 @@ def _outreach_imap_worker() -> None:
         return
     interval_seconds = max(60, interval_minutes * 60)
     logger.info("Poller IMAP outreach iniciado. Intervalo: %s minutos.", interval_minutes)
-    while not outreach_imap_stop.is_set():
+    while not appstate.outreach_imap_stop.is_set():
         try:
             if not OUTREACH_IMAP_AVAILABLE or outreach_imap_poll is None:
                 break
@@ -2706,13 +2658,11 @@ def _outreach_imap_worker() -> None:
                 logger.debug("IMAP poll stats: %s", stats)
         except Exception as exc:  # noqa: BLE001
             logger.error("Error en poller IMAP outreach: %s", exc)
-        outreach_imap_stop.wait(interval_seconds)
+        appstate.outreach_imap_stop.wait(interval_seconds)
 
 
 @app.on_event("startup")
 async def startup_background_services() -> None:
-    global booking_reminder_thread, outreach_imap_thread, outreach_autopilot_thread
-
     try:
         purged_at_boot = _purge_expired_demos()
         if purged_at_boot:
@@ -2725,23 +2675,23 @@ async def startup_background_services() -> None:
     except Exception as exc:  # noqa: BLE001
         logger.error("Error en backfill de codigos de reserva al arranque: %s", exc)
 
-    if OUTREACH_IMAP_AVAILABLE and (not outreach_imap_thread or not outreach_imap_thread.is_alive()):
-        outreach_imap_stop.clear()
-        outreach_imap_thread = threading.Thread(
+    if OUTREACH_IMAP_AVAILABLE and (not appstate.outreach_imap_thread or not appstate.outreach_imap_thread.is_alive()):
+        appstate.outreach_imap_stop.clear()
+        appstate.outreach_imap_thread = threading.Thread(
             target=_outreach_imap_worker,
             name="vantelia-outreach-imap",
             daemon=True,
         )
-        outreach_imap_thread.start()
+        appstate.outreach_imap_thread.start()
 
-    if not outreach_autopilot_thread or not outreach_autopilot_thread.is_alive():
-        outreach_autopilot_stop.clear()
-        outreach_autopilot_thread = threading.Thread(
+    if not appstate.outreach_autopilot_thread or not appstate.outreach_autopilot_thread.is_alive():
+        appstate.outreach_autopilot_stop.clear()
+        appstate.outreach_autopilot_thread = threading.Thread(
             target=_outreach_autopilot_worker,
             name="vantelia-outreach-autopilot",
             daemon=True,
         )
-        outreach_autopilot_thread.start()
+        appstate.outreach_autopilot_thread.start()
 
     global outreach_autonomous_thread
     if not outreach_autonomous_thread or not outreach_autonomous_thread.is_alive():
@@ -2757,23 +2707,23 @@ async def startup_background_services() -> None:
         logger.info("Recordatorios automaticos desactivados (REMINDER_RUN_INTERVAL_MINUTES <= 0).")
         return
 
-    if booking_reminder_thread and booking_reminder_thread.is_alive():
+    if appstate.booking_reminder_thread and appstate.booking_reminder_thread.is_alive():
         return
 
-    booking_reminder_stop.clear()
-    booking_reminder_thread = threading.Thread(
+    appstate.booking_reminder_stop.clear()
+    appstate.booking_reminder_thread = threading.Thread(
         target=_booking_reminder_worker,
         name="vantelia-booking-reminders",
         daemon=True,
     )
-    booking_reminder_thread.start()
+    appstate.booking_reminder_thread.start()
 
 
 @app.on_event("shutdown")
 async def shutdown_background_services() -> None:
-    booking_reminder_stop.set()
-    outreach_imap_stop.set()
-    outreach_autopilot_stop.set()
+    appstate.booking_reminder_stop.set()
+    appstate.outreach_imap_stop.set()
+    appstate.outreach_autopilot_stop.set()
     outreach_autonomous_stop.set()
 
 
@@ -3622,7 +3572,7 @@ def _generate_unique_cliente_id(name: str) -> str:
     base = _slugify_cliente_id(name)
     candidate = base
     suffix = 0
-    with state_lock:
+    with appstate.state_lock:
         existing = set(CONFIG_CLIENTES.keys())
     while candidate in existing or db_get_client_row(candidate) is not None:
         suffix += 1
@@ -3656,7 +3606,7 @@ def _provision_self_serve_cliente(
         "plan": "free",
     }
     normalized = _normalize_client_config(cliente_id, base_config)
-    with state_lock:
+    with appstate.state_lock:
         next_configs = copy.deepcopy(CONFIG_CLIENTES)
         next_configs[cliente_id] = normalized
         _update_runtime_configs(next_configs)
@@ -6797,10 +6747,10 @@ def _delete_client_everywhere(cliente_id: str) -> None:
         connection.execute("DELETE FROM clientes WHERE cliente_id = ?", (cliente_id,))
         connection.commit()
 
-    with state_lock:
-        indices.pop(cliente_id, None)
-        for session_id in [sid for sid, session in sesiones.items() if session.cliente_id == cliente_id]:
-            sesiones.pop(session_id, None)
+    with appstate.state_lock:
+        appstate.indices.pop(cliente_id, None)
+        for session_id in [sid for sid, session in appstate.sesiones.items() if session.cliente_id == cliente_id]:
+            appstate.sesiones.pop(session_id, None)
 
     for base_dir in (DATA_DIR, STORAGE_DIR):
         target_dir = base_dir / cliente_id
@@ -6818,10 +6768,10 @@ def _delete_client_everywhere(cliente_id: str) -> None:
 
 
 def _invalidate_client_runtime(cliente_id: str) -> None:
-    with state_lock:
-        indices.pop(cliente_id, None)
-        for session_id in [sid for sid, session in sesiones.items() if session.cliente_id == cliente_id]:
-            sesiones.pop(session_id, None)
+    with appstate.state_lock:
+        appstate.indices.pop(cliente_id, None)
+        for session_id in [sid for sid, session in appstate.sesiones.items() if session.cliente_id == cliente_id]:
+            appstate.sesiones.pop(session_id, None)
 
     ruta_storage = STORAGE_DIR / cliente_id
     _ensure_path_within(STORAGE_DIR, ruta_storage)
@@ -8050,30 +8000,28 @@ def _normalize_session_id(session_id: Optional[str]) -> str:
 
 
 def _cleanup_sessions(force: bool = False) -> None:
-    global last_cleanup_run
-
     now = time.time()
-    with state_lock:
-        if not force and now - last_cleanup_run < 60:
+    with appstate.state_lock:
+        if not force and now - appstate.last_cleanup_run < 60:
             return
 
         expired_ids = [
             session_id
-            for session_id, session in sesiones.items()
+            for session_id, session in appstate.sesiones.items()
             if now - session.last_seen > SESSION_TTL_SECONDS
         ]
         for session_id in expired_ids:
-            sesiones.pop(session_id, None)
+            appstate.sesiones.pop(session_id, None)
 
         stale_buckets = [
             bucket_key
-            for bucket_key, timestamps in rate_limit_buckets.items()
+            for bucket_key, timestamps in appstate.rate_limit_buckets.items()
             if not any(now - timestamp < RATE_LIMIT_WINDOW_SECONDS for timestamp in timestamps)
         ]
         for bucket_key in stale_buckets:
-            rate_limit_buckets.pop(bucket_key, None)
+            appstate.rate_limit_buckets.pop(bucket_key, None)
 
-        last_cleanup_run = now
+        appstate.last_cleanup_run = now
 
     if expired_ids:
         logger.info("Sesiones expiradas eliminadas: %s", len(expired_ids))
@@ -8081,8 +8029,8 @@ def _cleanup_sessions(force: bool = False) -> None:
 
 def _check_rate_limit(bucket_key: str, limit: int) -> None:
     now = time.time()
-    with state_lock:
-        bucket = rate_limit_buckets.setdefault(bucket_key, [])
+    with appstate.state_lock:
+        bucket = appstate.rate_limit_buckets.setdefault(bucket_key, [])
         bucket[:] = [timestamp for timestamp in bucket if now - timestamp < RATE_LIMIT_WINDOW_SECONDS]
         if len(bucket) >= limit:
             raise HTTPException(
@@ -9594,9 +9542,9 @@ def _load_chat_message_rows(session_id: str) -> List[sqlite3.Row]:
 
 
 def cargar_indice(cliente_id: str) -> VectorStoreIndex:
-    with state_lock:
-        if cliente_id in indices:
-            return indices[cliente_id]
+    with appstate.state_lock:
+        if cliente_id in appstate.indices:
+            return appstate.indices[cliente_id]
 
     if not OPENAI_API_KEY:
         raise HTTPException(
@@ -9614,8 +9562,8 @@ def cargar_indice(cliente_id: str) -> VectorStoreIndex:
         try:
             storage_context = StorageContext.from_defaults(persist_dir=str(ruta_storage))
             indice = load_index_from_storage(storage_context)
-            with state_lock:
-                indices[cliente_id] = indice
+            with appstate.state_lock:
+                appstate.indices[cliente_id] = indice
             logger.info("Indice cargado desde storage para %s", cliente_id)
             return indice
         except Exception as exc:  # noqa: BLE001
@@ -9628,8 +9576,8 @@ def cargar_indice(cliente_id: str) -> VectorStoreIndex:
     indice = VectorStoreIndex.from_documents(documentos)
     ruta_storage.mkdir(parents=True, exist_ok=True)
     indice.storage_context.persist(persist_dir=str(ruta_storage))
-    with state_lock:
-        indices[cliente_id] = indice
+    with appstate.state_lock:
+        appstate.indices[cliente_id] = indice
     logger.info("Indice recreado para %s", cliente_id)
     return indice
 
@@ -9638,8 +9586,8 @@ def _get_or_create_session(session_id: str, cliente_id: str) -> SessionState:
     config = _get_client_config(cliente_id)
     now = time.time()
 
-    with state_lock:
-        session = sesiones.get(session_id)
+    with appstate.state_lock:
+        session = appstate.sesiones.get(session_id)
         if session and session.cliente_id == cliente_id:
             session.last_seen = now
             return session
@@ -9658,8 +9606,8 @@ def _get_or_create_session(session_id: str, cliente_id: str) -> SessionState:
         last_seen=now,
         message_count=0,
     )
-    with state_lock:
-        sesiones[session_id] = session
+    with appstate.state_lock:
+        appstate.sesiones[session_id] = session
     return session
 
 
@@ -13903,7 +13851,7 @@ async def onboarding_learn(
         origin = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else ""
     except Exception:  # noqa: BLE001
         origin = ""
-    with state_lock:
+    with appstate.state_lock:
         next_configs = copy.deepcopy(CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         if result.detected_business_name and not cfg.get("nombre"):
@@ -13917,8 +13865,8 @@ async def onboarding_learn(
 
     # invalidate llama-index cache so next chat reindexes
     try:
-        with state_lock:
-            indices.pop(cliente_id, None)
+        with appstate.state_lock:
+            appstate.indices.pop(cliente_id, None)
     except NameError:
         pass
 
@@ -13964,7 +13912,7 @@ async def onboarding_personality(
         _sanitize_text(q)[:140] for q in (data.starter_questions or []) if _sanitize_text(q)
     ]
     cleaned_starters = _strip_base_from_extras(sanitized)
-    with state_lock:
+    with appstate.state_lock:
         next_configs = copy.deepcopy(CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         cfg["bienvenida"] = _sanitize_text(data.bienvenida, allow_multiline=True)[:600]
@@ -14462,7 +14410,7 @@ async def app_appearance_post(
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> AppAppearanceResponse:
     cliente_id = _resolve_cliente_for_self_serve_user(user)
-    with state_lock:
+    with appstate.state_lock:
         next_configs = copy.deepcopy(CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         if data.nombre is not None:
@@ -14524,11 +14472,11 @@ async def app_appearance_post(
             logger.warning("No se pudo limpiar Q&A huerfanas de starters %s: %s", cliente_id, exc)
     # Invalidate llama-index cache and active sessions so the next chat rebuilds the prompt.
     try:
-        with state_lock:
-            indices.pop(cliente_id, None)
-            stale = [sid for sid, s in sesiones.items() if s.cliente_id == cliente_id]
+        with appstate.state_lock:
+            appstate.indices.pop(cliente_id, None)
+            stale = [sid for sid, s in appstate.sesiones.items() if s.cliente_id == cliente_id]
             for sid in stale:
-                sesiones.pop(sid, None)
+                appstate.sesiones.pop(sid, None)
     except NameError:
         pass
     return await app_appearance_get(user)
@@ -14867,7 +14815,7 @@ def _crm_contact_activity(connection: sqlite3.Connection, cliente_id: str, conta
 
 def _crm_backfill_client(cliente_id: str) -> None:
     """Enlaza datos historicos de forma idempotente al abrir el CRM."""
-    with state_lock:
+    with appstate.state_lock:
         if cliente_id in CRM_BACKFILLED_CLIENTS:
             return
     with _get_db_connection() as connection:
@@ -14948,7 +14896,7 @@ def _crm_backfill_client(cliente_id: str) -> None:
             cliente_id, phone=row["from_number"], source="whatsapp", status="nuevo",
             entity_type="chat", entity_id=entity_id,
         )
-    with state_lock:
+    with appstate.state_lock:
         CRM_BACKFILLED_CLIENTS.add(cliente_id)
 
 
@@ -16368,8 +16316,8 @@ def _write_info(cliente_id: str, content: str) -> None:
     path.write_text(content, encoding="utf-8")
     # invalidate RAG index
     try:
-        with state_lock:
-            indices.pop(cliente_id, None)
+        with appstate.state_lock:
+            appstate.indices.pop(cliente_id, None)
     except NameError:
         pass
 
@@ -16782,8 +16730,8 @@ async def app_knowledge_reindex(
 ) -> AppKnowledgeReindexResponse:
     cliente_id = _resolve_cliente_for_self_serve_user(user)
     try:
-        with state_lock:
-            indices.pop(cliente_id, None)
+        with appstate.state_lock:
+            appstate.indices.pop(cliente_id, None)
     except NameError:
         pass
     info = _read_info(cliente_id)
@@ -16816,7 +16764,7 @@ async def app_tune_post(
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> AppTuneResponse:
     cliente_id = _resolve_cliente_for_self_serve_user(user)
-    with state_lock:
+    with appstate.state_lock:
         next_configs = copy.deepcopy(CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         if data.prompt_extra is not None:
@@ -16829,8 +16777,8 @@ async def app_tune_post(
         _update_runtime_configs(next_configs)
     _persist_configs_to_disk(next_configs)
     try:
-        with state_lock:
-            indices.pop(cliente_id, None)
+        with appstate.state_lock:
+            appstate.indices.pop(cliente_id, None)
     except NameError:
         pass
     return await app_tune_get(user)
@@ -16932,7 +16880,7 @@ async def app_whatsapp_post(
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> AppWhatsAppResponse:
     cliente_id = _resolve_cliente_for_self_serve_user(user)
-    with state_lock:
+    with appstate.state_lock:
         next_configs = copy.deepcopy(CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         wa = dict(cfg.get("whatsapp", {}) or {})
@@ -17000,7 +16948,7 @@ async def app_voice_post(
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> AppVoiceResponse:
     cliente_id = _resolve_cliente_for_self_serve_user(user)
-    with state_lock:
+    with appstate.state_lock:
         next_configs = copy.deepcopy(CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         voice = dict(cfg.get("voice", {}) or {})
@@ -19772,8 +19720,8 @@ async def healthcheck() -> Dict[str, Any]:
         "clientes_configurados": len(CONFIG_CLIENTES),
         "checks": checks,
         "runtime": {
-            "started_at": STARTED_AT.isoformat(),
-            "uptime_seconds": int((_utc_now() - STARTED_AT).total_seconds()),
+            "started_at": appstate.STARTED_AT.isoformat(),
+            "uptime_seconds": int((_utc_now() - appstate.STARTED_AT).total_seconds()),
             "data_dir": str(DATA_DIR),
             "storage_dir": str(STORAGE_DIR),
         },
@@ -20196,7 +20144,7 @@ async def admin_set_voice(cliente_id: str, data: AdminVoicePayload) -> Dict[str,
     _assert_valid_client_id(cliente_id)
     if cliente_id not in CONFIG_CLIENTES:
         raise HTTPException(status_code=404, detail=f"Cliente '{cliente_id}' no encontrado.")
-    with state_lock:
+    with appstate.state_lock:
         next_configs = copy.deepcopy(CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         voice = dict(cfg.get("voice", {}) or {})
@@ -21408,7 +21356,7 @@ async def _process_chat_message(
         return booking_response
 
     session = _get_or_create_session(session_id, cliente_id)
-    with state_lock:
+    with appstate.state_lock:
         session.last_seen = time.time()
         session.message_count += 1
 
@@ -21507,7 +21455,7 @@ def _whatsapp_phone_client_map() -> Dict[str, str]:
         cliente_id = cliente_id.strip()
         if phone_number_id and cliente_id:
             mapping[phone_number_id] = cliente_id
-    with state_lock:
+    with appstate.state_lock:
         for cliente_id, config in CONFIG_CLIENTES.items():
             whatsapp_cfg = config.get("whatsapp", {})
             phone_number_id = str(whatsapp_cfg.get("phone_number_id", "")).strip()
@@ -21894,16 +21842,16 @@ def _wa_flow_key(cliente_id: str, from_number: str) -> str:
 
 def _wa_get_flow(cliente_id: str, from_number: str) -> WAFlowState:
     key = _wa_flow_key(cliente_id, from_number)
-    flow = whatsapp_flows.get(key)
+    flow = appstate.whatsapp_flows.get(key)
     if not flow:
         flow = WAFlowState(cliente_id=cliente_id, from_number=from_number, last_seen=time.time())
-        whatsapp_flows[key] = flow
+        appstate.whatsapp_flows[key] = flow
     flow.last_seen = time.time()
     return flow
 
 
 def _wa_clear_flow(cliente_id: str, from_number: str) -> None:
-    whatsapp_flows.pop(_wa_flow_key(cliente_id, from_number), None)
+    appstate.whatsapp_flows.pop(_wa_flow_key(cliente_id, from_number), None)
 
 
 def _wa_reset_booking_fields(flow: WAFlowState) -> None:
@@ -23461,9 +23409,9 @@ async def estadisticas() -> Dict[str, Any]:
             """
         ).fetchall()
 
-    with state_lock:
-        sesiones_activas = len(sesiones)
-        indices_cargados = sorted(indices.keys())
+    with appstate.state_lock:
+        sesiones_activas = len(appstate.sesiones)
+        indices_cargados = sorted(appstate.indices.keys())
 
     return {
         "version": app.version,
@@ -27720,9 +27668,9 @@ def _outreach_autopilot_worker() -> None:
     interval_minutes = max(10, int(os.getenv("AUTOPILOT_INTERVAL_MINUTES", "60") or 60))
     max_per_run = max(1, int(os.getenv("AUTOPILOT_MAX", "10") or 10))
     logger.info("Autopiloto outreach iniciado. Intervalo: %s min, max/ciclo: %s.", interval_minutes, max_per_run)
-    while not outreach_autopilot_stop.is_set():
-        outreach_autopilot_stop.wait(interval_minutes * 60)
-        if outreach_autopilot_stop.is_set():
+    while not appstate.outreach_autopilot_stop.is_set():
+        appstate.outreach_autopilot_stop.wait(interval_minutes * 60)
+        if appstate.outreach_autopilot_stop.is_set():
             break
         try:
             if not OUTREACH_AVAILABLE:
@@ -32866,7 +32814,7 @@ import types as _types
 
 # Modulos home ya extraidos, de mas especifico a mas generico (el primero que
 # define un nombre gana). Crece con cada sub-commit de la fase 3.
-_HOME_MODULES: tuple = (settings,)
+_HOME_MODULES: tuple = (appstate, settings)
 
 _EXPORT_MAP: Dict[str, Any] = {}
 for _home_mod in _HOME_MODULES:
