@@ -579,3 +579,71 @@ def _safe_json_list(raw_value: str) -> List[str]:
     return [str(item) for item in parsed if str(item).strip()]
 
 
+
+
+def _brand_asset_public_path(filename: str) -> str:
+    if not filename:
+        return ""
+    asset_path = settings.BRAND_DIR / filename
+    if not asset_path.exists():
+        return ""
+    return f"/brand-assets/{filename}"
+
+
+def _object_get(payload: Any, key: str, default: Any = None) -> Any:
+    if isinstance(payload, dict):
+        return payload.get(key, default)
+    return getattr(payload, key, default)
+
+
+def _assert_valid_client_id(cliente_id: str) -> None:
+    if not settings.CLIENT_ID_PATTERN.match(cliente_id):
+        raise HTTPException(status_code=400, detail="cliente_id invalido")
+
+
+def _extract_email_from_text(text: str) -> str:
+    match = re.search(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", str(text or ""))
+    return match.group(0).strip().lower() if match else ""
+
+
+def _extract_phone_from_text(text: str) -> str:
+    # Busca telefonos humanos tipo +34 611 222 333 sin confundirlos con R-XXXX.
+    for match in re.finditer(r"(?:\+|00)?\d[\d\s().-]{7,}\d", str(text or "")):
+        candidate = match.group(0)
+        if len("".join(ch for ch in candidate if ch.isdigit())) >= 9:
+            return candidate.strip()
+    return ""
+
+
+def _extract_time_from_text(text: str) -> str:
+    match = re.search(r"\b([01]?\d|2[0-3])[:h.]([0-5]\d)\b", str(text or ""), re.IGNORECASE)
+    if not match:
+        return ""
+    return f"{int(match.group(1)):02d}:{match.group(2)}"
+
+
+def _extract_date_from_text(text: str, timezone_name: str) -> str:
+    raw = str(text or "")
+    iso = re.search(r"\b(20\d{2}-\d{2}-\d{2})\b", raw)
+    if iso:
+        return iso.group(1)
+    slash = re.search(r"\b(\d{1,2})[/-](\d{1,2})(?:[/-](20\d{2}))?\b", raw)
+    if slash:
+        day = int(slash.group(1))
+        month = int(slash.group(2))
+        try:
+            today = datetime.now(ZoneInfo(timezone_name or settings.DEFAULT_TIMEZONE)).date()
+        except Exception:
+            today = timeutils._utc_now().date()
+        year = int(slash.group(3)) if slash.group(3) else today.year
+        try:
+            candidate = date(year, month, day)
+            if not slash.group(3) and candidate < today:
+                candidate = date(year + 1, month, day)
+            return candidate.isoformat()
+        except ValueError:
+            return ""
+    relative = _resolve_relative_date_es(raw, timezone_name or settings.DEFAULT_TIMEZONE)
+    return relative.isoformat() if relative else ""
+
+

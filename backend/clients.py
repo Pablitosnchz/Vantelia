@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import copy
 import json
+import shutil
 import re
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 try:
     from zoneinfo import ZoneInfo
@@ -488,5 +489,116 @@ def _client_booking_plan_enabled(cliente_id: str) -> bool:
         return int(booking_limit) > 0
     except (TypeError, ValueError):
         return False
+
+
+
+
+def _current_billing_period() -> Tuple[str, str]:
+    now = timeutils._utc_now()
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if start.month == 12:
+        end = start.replace(year=start.year + 1, month=1)
+    else:
+        end = start.replace(month=start.month + 1)
+    return start.isoformat(), end.isoformat()
+
+
+def _delete_client_everywhere(cliente_id: str) -> None:
+    textnorm._assert_valid_client_id(cliente_id)
+    if cliente_id not in appstate.CONFIG_CLIENTES:
+        raise HTTPException(status_code=404, detail="Cliente no configurado")
+
+    next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+    next_configs.pop(cliente_id, None)
+    _persist_configs_to_disk(next_configs)
+    _update_runtime_configs(next_configs)
+
+    with db._get_db_connection() as connection:
+        user_rows = connection.execute(
+            "SELECT id FROM users WHERE role = 'client' AND cliente_id = ?",
+            (cliente_id,),
+        ).fetchall()
+        user_ids = [row["id"] for row in user_rows]
+        if user_ids:
+            placeholders = ",".join("?" for _ in user_ids)
+            params = tuple(user_ids)
+            connection.execute(f"DELETE FROM auth_sessions WHERE user_id IN ({placeholders})", params)
+            connection.execute(f"DELETE FROM password_reset_tokens WHERE user_id IN ({placeholders})", params)
+            connection.execute(f"DELETE FROM subscriptions WHERE user_id IN ({placeholders})", params)
+            connection.execute(f"DELETE FROM message_usage_events WHERE user_id IN ({placeholders})", params)
+            connection.execute(f"DELETE FROM admin_impersonations WHERE target_user_id IN ({placeholders})", params)
+        connection.execute("DELETE FROM users WHERE role = 'client' AND cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM subscriptions WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM message_usage_events WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM admin_impersonations WHERE target_cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM booking_audit WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM bookings WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM agenda_blocks WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM employees WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM chat_messages WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM chat_sessions WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM live_chat_sessions WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM analytics_events WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM whatsapp_inbound_messages WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM kb_qa WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM kb_documents WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM bot_leads WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM crm_contact_audit WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM crm_contact_links WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM crm_contacts WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM customer_payment_events WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM customer_payments WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM service_payment_policies WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM client_payment_accounts WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM client_channel_audit WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM client_channel_oauth_states WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM client_oauth_connections WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM client_channel_settings WHERE cliente_id = ?", (cliente_id,))
+        connection.execute("DELETE FROM clientes WHERE cliente_id = ?", (cliente_id,))
+        connection.commit()
+
+    with appstate.state_lock:
+        appstate.indices.pop(cliente_id, None)
+        for session_id in [sid for sid, session in appstate.sesiones.items() if session.cliente_id == cliente_id]:
+            appstate.sesiones.pop(session_id, None)
+
+    for base_dir in (settings.DATA_DIR, settings.STORAGE_DIR):
+        target_dir = base_dir / cliente_id
+        textnorm._ensure_path_within(base_dir, target_dir)
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
+
+    try:
+        from backend import demo_agenda  # lazy: evita ciclo clients<->demo
+        registry = demo_agenda._load_demo_registry()
+        if cliente_id in registry:
+            registry.pop(cliente_id, None)
+            demo_agenda._save_demo_registry(registry)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("No se pudo limpiar demo registry para %s: %s", cliente_id, exc)
+
+
+def _build_install_snippet(cliente_id: str, request: Request) -> Dict[str, str]:
+    api_base = textnorm._public_base_url(request)
+    widget_version = ""
+    widget_path = settings.WIDGET_DIR / "widget.min.js"
+    if widget_path.exists():
+        widget_version = f"?v={int(widget_path.stat().st_mtime)}"
+
+    widget_script_url = f"{api_base}/widget/widget.min.js{widget_version}"
+    demo_url = f"{api_base}/demo/{cliente_id}"
+    snippet = (
+        '<script\n'
+        f'  src="{widget_script_url}"\n'
+        f'  data-api="{api_base}"\n'
+        f'  data-client="{cliente_id}"\n'
+        '  data-position="right"></script>'
+    )
+    return {
+        "install_snippet": snippet,
+        "widget_script_url": widget_script_url,
+        "api_base_url": api_base,
+        "demo_url": demo_url,
+    }
 
 
