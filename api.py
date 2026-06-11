@@ -226,297 +226,34 @@ from backend.appstate import (  # noqa: F401  (clases: excepcion permitida)
 )
 
 
-def _normalize_origin_value(origin: str) -> str:
-    raw_value = str(origin).strip().rstrip("/")
-    if not raw_value:
-        raise RuntimeError("Se ha recibido un origen vacio en la configuracion.")
-
-    parsed = urlparse(raw_value)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise RuntimeError(f"Origen invalido en la configuracion: {origin}")
-
-    if parsed.path not in {"", "/"} or parsed.params or parsed.query or parsed.fragment:
-        raise RuntimeError(
-            f"El origen debe incluir solo esquema y dominio, sin rutas ni query strings: {origin}"
-        )
-
-    return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
-
-
-def _normalize_optional_http_url(raw_url: str) -> str:
-    value = str(raw_url).strip()
-    if not value:
-        return ""
-
-    parsed = urlparse(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise RuntimeError(f"URL HTTP invalida en la configuracion: {raw_url}")
-
-    return value
-
-
-def _normalize_message_templates(raw_templates: Any) -> Dict[str, str]:
-    templates = dict(DEFAULT_MESSAGE_TEMPLATES)
-    if isinstance(raw_templates, dict):
-        for key in DEFAULT_MESSAGE_TEMPLATES:
-            raw_value = raw_templates.get(key, "")
-            if isinstance(raw_value, dict):
-                raw_value = raw_value.get("body", raw_value.get("message", ""))
-            value = _sanitize_text(raw_value, allow_multiline=True)
-            if value:
-                templates[key] = value[:500]
-    return templates
-
-
-def _normalize_message_template_enabled(
-    raw_enabled: Any,
-    raw_templates: Any = None,
-) -> Dict[str, bool]:
-    enabled = dict(DEFAULT_MESSAGE_TEMPLATE_ENABLED)
-    if isinstance(raw_enabled, dict):
-        for key in DEFAULT_MESSAGE_TEMPLATE_ENABLED:
-            if key in raw_enabled:
-                enabled[key] = bool(raw_enabled.get(key))
-    if isinstance(raw_templates, dict):
-        for key in DEFAULT_MESSAGE_TEMPLATE_ENABLED:
-            nested_value = raw_templates.get(key)
-            if isinstance(nested_value, dict) and "enabled" in nested_value:
-                enabled[key] = bool(nested_value.get("enabled"))
-    return enabled
-
-
-def _normalize_message_template_channels(raw_channels: Any) -> Dict[str, Dict[str, bool]]:
-    channels = {key: dict(value) for key, value in DEFAULT_MESSAGE_TEMPLATE_CHANNELS.items()}
-    if not isinstance(raw_channels, dict):
-        return channels
-    for kind in DEFAULT_MESSAGE_TEMPLATE_CHANNELS:
-        raw_value = raw_channels.get(kind)
-        if not isinstance(raw_value, dict):
-            for raw_key, target_key in MESSAGE_KIND_ALIASES.items():
-                if target_key == kind and isinstance(raw_channels.get(raw_key), dict):
-                    raw_value = raw_channels.get(raw_key)
-                    break
-        if not isinstance(raw_value, dict):
-            continue
-        channels[kind] = {
-            "email": bool(raw_value.get("email", channels[kind]["email"])),
-            "whatsapp": bool(raw_value.get("whatsapp", channels[kind]["whatsapp"])),
-            "sms": bool(raw_value.get("sms", channels[kind]["sms"])),
-        }
-    return channels
-
-
-def _sanitize_text(value: str, *, allow_multiline: bool = False) -> str:
-    # Normalizamos a NFC para que el texto que llega de cualquier canal (web,
-    # WhatsApp, voz) sea canonico. Sin esto, una tilde descompuesta (NFD) no
-    # casa con la misma tilde compuesta (NFC) guardada en BD y rompe busquedas
-    # como la del catalogo de servicios.
-    value = unicodedata.normalize("NFC", str(value or ""))
-    if allow_multiline:
-        cleaned_lines = [" ".join(line.split()) for line in value.splitlines()]
-        return "\n".join(line for line in cleaned_lines if line).strip()
-
-    return " ".join(value.split()).strip()
-
-
-def _normalize_chat_response_text(value: str) -> str:
-    text = str(value or "").replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\t", "\t")
-    text = re.sub(
-        r"_Escribe\s+\*\*men[uú]\*\*\s+para\s+volver\s+al\s+menu\s+principal\._",
-        "Escribe **menú** para volver al menú principal.",
-        text,
-        flags=re.IGNORECASE,
-    )
-    text = re.sub(
-        r"_Escribe\s+men[uú]\s+para\s+volver\s+al\s+menu\s+principal\._",
-        "Escribe **menú** para volver al menú principal.",
-        text,
-        flags=re.IGNORECASE,
-    )
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
-
-
-def _ensure_path_within(base_dir: Path, target_dir: Path) -> None:
-    base_resolved = base_dir.resolve()
-    target_resolved = target_dir.resolve()
-    if target_resolved != base_resolved and base_resolved not in target_resolved.parents:
-        raise RuntimeError(f"Ruta fuera del directorio permitido: {target_dir}")
-
-
-EXTRA_CORS_ORIGINS = [
-    _normalize_origin_value(origin)
-    for origin in RAW_EXTRA_CORS_ORIGINS.split(",")
-    if origin.strip()
-]
-
-
-VOICE_ALLOWED_OPENAI_VOICES = {
-    "alloy", "echo", "shimmer", "ash", "ballad", "coral", "sage", "verse", "marin", "cedar",
-}
-
-
-def _normalize_voice_config(payload: Any) -> Dict[str, Any]:
-    """Normaliza el bloque opcional `voice` de un cliente.
-
-    Tolera ausencia total del bloque (cliente sin canal de voz). El numero
-    Twilio por cliente es opcional: si falta, el handler usa
-    TWILIO_DEFAULT_PHONE_NUMBER. El routing Twilio->cliente_id se hace por la
-    URL del webhook, no por el numero.
-    """
-    data = payload if isinstance(payload, dict) else {}
-    voice_value = _sanitize_text(str(data.get("openai_voice", ""))).lower()
-    if voice_value not in VOICE_ALLOWED_OPENAI_VOICES:
-        voice_value = ""
-    try:
-        max_duration = int(data.get("max_duration_seconds", 0))
-    except (TypeError, ValueError):
-        max_duration = 0
-    if max_duration <= 0:
-        max_duration = 0  # 0 => usar VOICE_MAX_DURATION_SECONDS global
-    max_duration = min(max_duration, 3600)
-    return {
-        "enabled": bool(data.get("enabled", False)),
-        "twilio_phone_number": _sanitize_text(str(data.get("twilio_phone_number", "")))[:32],
-        "openai_voice": voice_value,
-        "realtime_model": _sanitize_text(str(data.get("realtime_model", "")))[:80],
-        "greeting": _sanitize_text(str(data.get("greeting", "")), allow_multiline=True)[:600],
-        "max_duration_seconds": max_duration,
-        "sms_confirmation": bool(data.get("sms_confirmation", False)),
-    }
-
-
-def _voice_default_greeting(config: Dict[str, Any], voice_cfg: Dict[str, Any]) -> str:
-    """Saludo con el que 'descuelga' el asistente de voz. Usa el mensaje de bienvenida
-    de Apariencia (config.bienvenida) para que sea el MISMO agente que web y WhatsApp.
-    Orden: saludo de voz especifico (solo via admin) -> bienvenida de Apariencia ->
-    default. Compartido por telefono, test del panel y demo."""
-    explicit = _sanitize_text(str(voice_cfg.get("greeting", "") or ""), allow_multiline=True)
-    if explicit:
-        return explicit
-    bienvenida = _sanitize_text(str(config.get("bienvenida", "") or ""), allow_multiline=True)
-    if bienvenida:
-        return bienvenida
-    nombre = config.get("nombre", "") or "la empresa"
-    return f"Hola, soy el asistente de {nombre}. En que puedo ayudarte?"
-
-
-def _normalize_optional_time_value(value: Any) -> str:
-    candidate = _sanitize_text(str(value or ""))
-    return candidate if TIME_PATTERN.match(candidate) else ""
-
-
-def _normalize_required_time_value(value: Any, field_label: str) -> str:
-    candidate = _sanitize_text(str(value or ""))
-    if not TIME_PATTERN.match(candidate):
-        raise HTTPException(status_code=400, detail=f"{field_label} invalida. Usa formato HH:MM.")
-    return datetime.strptime(candidate, "%H:%M").strftime("%H:%M")
-
-
-def _break_window_values(raw: Any) -> Tuple[str, str, str]:
-    if hasattr(raw, "model_dump"):
-        raw = raw.model_dump()
-    elif hasattr(raw, "dict"):
-        raw = raw.dict()
-    if isinstance(raw, dict):
-        start = raw.get("start", raw.get("hora_inicio", raw.get("break_start", "")))
-        end = raw.get("end", raw.get("hora_fin", raw.get("break_end", "")))
-        reason = raw.get("reason", raw.get("motivo", "Descanso"))
-        return str(start or ""), str(end or ""), str(reason or "Descanso")
-    if isinstance(raw, (list, tuple)) and len(raw) >= 2:
-        reason = raw[2] if len(raw) > 2 else "Descanso"
-        return str(raw[0] or ""), str(raw[1] or ""), str(reason or "Descanso")
-    return "", "", "Descanso"
-
-
-def _normalize_break_windows(
-    day_start: str,
-    day_end: str,
-    windows: Any = None,
-    legacy_start: Any = "",
-    legacy_end: Any = "",
-) -> List[Dict[str, str]]:
-    start = _normalize_required_time_value(day_start, "Hora de inicio")
-    end = _normalize_required_time_value(day_end, "Hora de fin")
-    if start >= end:
-        raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio.")
-
-    raw_windows = windows if isinstance(windows, list) else []
-    normalized: List[Dict[str, str]] = []
-    for raw in raw_windows:
-        pausa_inicio_raw, pausa_fin_raw, reason_raw = _break_window_values(raw)
-        if not pausa_inicio_raw and not pausa_fin_raw:
-            continue
-        if not pausa_inicio_raw or not pausa_fin_raw:
-            raise HTTPException(
-                status_code=400,
-                detail="Cada descanso debe tener inicio y fin, o quedar vacio.",
-            )
-        pausa_inicio = _normalize_required_time_value(pausa_inicio_raw, "Inicio del descanso")
-        pausa_fin = _normalize_required_time_value(pausa_fin_raw, "Fin del descanso")
-        if not (start < pausa_inicio < pausa_fin < end):
-            raise HTTPException(
-                status_code=400,
-                detail="Cada descanso debe estar dentro del horario y tener inicio anterior al fin.",
-            )
-        normalized.append(
-            {
-                "start": pausa_inicio,
-                "end": pausa_fin,
-                "reason": (_sanitize_text(reason_raw) or "Descanso")[:80],
-            }
-        )
-
-    if not normalized:
-        legacy_pair = _normalize_break_window(start, end, legacy_start, legacy_end)
-        if legacy_pair != ("", ""):
-            normalized.append({"start": legacy_pair[0], "end": legacy_pair[1], "reason": "Descanso"})
-
-    normalized.sort(key=lambda item: (item["start"], item["end"]))
-    for idx in range(1, len(normalized)):
-        previous = normalized[idx - 1]
-        current = normalized[idx]
-        if current["start"] < previous["end"]:
-            raise HTTPException(status_code=400, detail="Los descansos diarios no pueden solaparse.")
-    return normalized
-
-
-def _first_break_pair(windows: Any) -> Tuple[str, str]:
-    if isinstance(windows, list) and windows:
-        first = windows[0]
-        if isinstance(first, dict):
-            return str(first.get("start", "") or ""), str(first.get("end", "") or "")
-    return "", ""
-
-
-def _normalize_break_window(
-    day_start: str,
-    day_end: str,
-    break_start: Any = "",
-    break_end: Any = "",
-) -> Tuple[str, str]:
-    pausa_inicio = _sanitize_text(str(break_start or ""))
-    pausa_fin = _sanitize_text(str(break_end or ""))
-    if not pausa_inicio and not pausa_fin:
-        return "", ""
-    if not pausa_inicio or not pausa_fin:
-        raise HTTPException(
-            status_code=400,
-            detail="Indica inicio y fin del descanso, o deja ambos vacios.",
-        )
-
-    start = _normalize_required_time_value(day_start, "Hora de inicio")
-    end = _normalize_required_time_value(day_end, "Hora de fin")
-    pausa_inicio = _normalize_required_time_value(pausa_inicio, "Inicio del descanso")
-    pausa_fin = _normalize_required_time_value(pausa_fin, "Fin del descanso")
-    if start >= end:
-        raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio.")
-    if not (start < pausa_inicio < pausa_fin < end):
-        raise HTTPException(
-            status_code=400,
-            detail="El descanso debe estar dentro del horario y tener inicio anterior al fin.",
-        )
-    return pausa_inicio, pausa_fin
+from backend import timeutils
+from backend.timeutils import (  # noqa: F401  (transicion F3)
+    _session_expires_at,
+    _to_utc_iso,
+    _utc_now,
+    _utc_now_iso,
+)
+from backend import textnorm
+from backend.textnorm import (  # noqa: F401  (transicion F3)
+    EXTRA_CORS_ORIGINS,
+    VOICE_ALLOWED_OPENAI_VOICES,
+    _break_window_values,
+    _ensure_path_within,
+    _first_break_pair,
+    _normalize_break_window,
+    _normalize_break_windows,
+    _normalize_chat_response_text,
+    _normalize_message_template_channels,
+    _normalize_message_template_enabled,
+    _normalize_message_templates,
+    _normalize_optional_http_url,
+    _normalize_optional_time_value,
+    _normalize_origin_value,
+    _normalize_required_time_value,
+    _normalize_voice_config,
+    _sanitize_text,
+    _voice_default_greeting,
+)
 
 
 def _load_client_configs() -> Dict[str, Dict[str, Any]]:
@@ -730,21 +467,21 @@ def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-CONFIG_CLIENTES = _load_client_configs()
+appstate.CONFIG_CLIENTES = _load_client_configs()
 
 
 def _collect_cors_origins() -> List[str]:
     origins = set(EXTRA_CORS_ORIGINS)
     with appstate.state_lock:
-        for config in CONFIG_CLIENTES.values():
+        for config in appstate.CONFIG_CLIENTES.values():
             origins.update(config.get("allowed_origins", []))
     return sorted(origin for origin in origins if origin)
 
 
 def _update_runtime_configs(next_configs: Dict[str, Dict[str, Any]]) -> None:
     with appstate.state_lock:
-        CONFIG_CLIENTES.clear()
-        CONFIG_CLIENTES.update(next_configs)
+        appstate.CONFIG_CLIENTES.clear()
+        appstate.CONFIG_CLIENTES.update(next_configs)
 
 
 def _ensure_runtime_directories() -> None:
@@ -827,7 +564,7 @@ def _employee_service_ids_from_row(row: sqlite3.Row, cliente_id: str = "") -> Li
 
 
 def _employee_defaults_for_client(cliente_id: str) -> Dict[str, Any]:
-    config = CONFIG_CLIENTES.get(cliente_id, {})
+    config = appstate.CONFIG_CLIENTES.get(cliente_id, {})
     booking = config.get("booking", {})
     break_windows = _normalize_break_windows(
         booking.get("day_start", "09:00"),
@@ -850,15 +587,15 @@ def _employee_defaults_for_client(cliente_id: str) -> Dict[str, Any]:
 
 
 def _default_employee_name(cliente_id: str) -> str:
-    config = CONFIG_CLIENTES.get(cliente_id, {})
+    config = appstate.CONFIG_CLIENTES.get(cliente_id, {})
     company = _sanitize_text(config.get("nombre", cliente_id))
     return f"Agenda general {company}".strip()
 
 
 def _ensure_default_employees_for_all_clients() -> None:
     with _get_db_connection() as connection:
-        now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        for index, cliente_id in enumerate(CONFIG_CLIENTES.keys()):
+        now_iso = _utc_now().isoformat().replace("+00:00", "Z")
+        for index, cliente_id in enumerate(appstate.CONFIG_CLIENTES.keys()):
             row = connection.execute(
                 "SELECT * FROM employees WHERE cliente_id = ? AND is_default = 1 LIMIT 1",
                 (cliente_id,),
@@ -2016,12 +1753,12 @@ def _sync_clientes_table_from_config() -> None:
     """
     try:
         with appstate.state_lock:
-            snapshot = {cid: copy.deepcopy(cfg) for cid, cfg in CONFIG_CLIENTES.items()}
+            snapshot = {cid: copy.deepcopy(cfg) for cid, cfg in appstate.CONFIG_CLIENTES.items()}
     except Exception:  # noqa: BLE001
         snapshot = {}
     if not snapshot:
         return
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = _utc_now().isoformat()
     with _get_db_connection() as connection:
         existing_ids = {
             row["cliente_id"]
@@ -2060,7 +1797,7 @@ def _sync_clientes_table_after_persist(configs: Dict[str, Dict[str, Any]]) -> No
     Handles inserts, updates and deletes so DB stays in lockstep with JSON.
     Preserves owner_user_id and source columns for existing rows.
     """
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = _utc_now().isoformat()
     try:
         with _get_db_connection() as connection:
             existing = {
@@ -2115,7 +1852,7 @@ def db_get_client_owner(cliente_id: str) -> str:
 
 
 def db_set_client_owner(cliente_id: str, owner_user_id: str, *, source: str = "self_serve") -> None:
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = _utc_now().isoformat()
     with _get_db_connection() as connection:
         connection.execute(
             """
@@ -2151,7 +1888,7 @@ def db_get_subscription_for_user(user_id: str) -> Optional[sqlite3.Row]:
 
 def _subscription_period_start_now() -> str:
     """Calendar month start in UTC ISO format."""
-    now = datetime.now(timezone.utc)
+    now = _utc_now()
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
 
 
@@ -2161,7 +1898,7 @@ def _maybe_reset_subscription_period(sub: sqlite3.Row) -> sqlite3.Row:
     Returns the (possibly refreshed) subscription row."""
     if not sub:
         return sub
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = _utc_now().isoformat()
     plan = (sub["plan"] or "free").lower()
     current_start = sub["current_period_start"] or ""
     needs_reset = False
@@ -2213,7 +1950,7 @@ def db_increment_message_usage(cliente_id: str, *, count: int = 1, kind: str = "
     if not sub:
         sub = db_ensure_free_subscription(owner, cliente_id=cliente_id)
     sub = _maybe_reset_subscription_period(sub)
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = _utc_now().isoformat()
     event_id = "evt_" + secrets.token_hex(10)
     period_start = sub["current_period_start"] or _subscription_period_start_now()
     with _get_db_connection() as connection:
@@ -2279,7 +2016,7 @@ def db_set_subscription_from_stripe(
     """Upsert a self-serve subscription tied to user_id after a Stripe event."""
     plan = _self_serve_plan(plan_slug)
     quota = int(plan["messages_quota"])
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = _utc_now().isoformat()
     existing = db_get_subscription_for_user(user_id)
     with _get_db_connection() as connection:
         if existing:
@@ -2365,7 +2102,7 @@ def db_ensure_free_subscription(user_id: str, cliente_id: str = "") -> sqlite3.R
     existing = db_get_subscription_for_user(user_id)
     if existing:
         return existing
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = _utc_now().isoformat()
     sub_id = secrets.token_hex(12)
     free_quota = int(SELF_SERVE_PLANS.get("free", {}).get("messages_quota", int(os.getenv("DEFAULT_FREE_QUOTA", "50"))))
     with _get_db_connection() as connection:
@@ -2429,7 +2166,7 @@ def _validate_runtime_config() -> None:
     if not OPENAI_API_KEY:
         logger.warning("OPENAI_API_KEY no esta configurada. El chat quedara deshabilitado.")
 
-    for cliente_id, config in CONFIG_CLIENTES.items():
+    for cliente_id, config in appstate.CONFIG_CLIENTES.items():
         _validate_single_client_runtime(cliente_id, config)
 
     if WEBHOOK_DEFAULT:
@@ -3211,18 +2948,6 @@ def _employee_booking_counters(cliente_id: str, employee_id: str) -> Dict[str, i
     return {"today": int(today_count), "upcoming": int(upcoming_count)}
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def _utc_now_iso() -> str:
-    return _utc_now().replace(tzinfo=None).isoformat(timespec="seconds") + "Z"
-
-
-def _session_expires_at(hours: int = PORTAL_SESSION_HOURS) -> str:
-    return (_utc_now() + timedelta(hours=max(1, hours))).replace(tzinfo=None).isoformat(timespec="seconds") + "Z"
-
-
 def _expires_at_in_hours(hours: int) -> str:
     safe_hours = max(1, hours)
     return (_utc_now() + timedelta(hours=safe_hours)).replace(tzinfo=None).isoformat(timespec="seconds") + "Z"
@@ -3573,7 +3298,7 @@ def _generate_unique_cliente_id(name: str) -> str:
     candidate = base
     suffix = 0
     with appstate.state_lock:
-        existing = set(CONFIG_CLIENTES.keys())
+        existing = set(appstate.CONFIG_CLIENTES.keys())
     while candidate in existing or db_get_client_row(candidate) is not None:
         suffix += 1
         candidate = f"{base}_{secrets.token_hex(3)}"
@@ -3607,7 +3332,7 @@ def _provision_self_serve_cliente(
     }
     normalized = _normalize_client_config(cliente_id, base_config)
     with appstate.state_lock:
-        next_configs = copy.deepcopy(CONFIG_CLIENTES)
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
         next_configs[cliente_id] = normalized
         _update_runtime_configs(next_configs)
     _persist_configs_to_disk(next_configs)
@@ -3656,7 +3381,7 @@ def _claim_cliente_id(claim_token: str, user_id: str, *, source: str = "claim_de
     cliente_id = (claim_token or "").strip()
     if not cliente_id or not CLIENT_ID_PATTERN.match(cliente_id):
         raise HTTPException(status_code=400, detail="Claim token invalido.")
-    if cliente_id not in CONFIG_CLIENTES:
+    if cliente_id not in appstate.CONFIG_CLIENTES:
         raise HTTPException(status_code=404, detail="Bot no encontrado.")
 
     existing_owner = db_get_client_owner(cliente_id)
@@ -3676,7 +3401,7 @@ def _claim_cliente_id(claim_token: str, user_id: str, *, source: str = "claim_de
 
     is_demo_tenant = (
         cliente_id.startswith(DEMO_TENANT_PREFIX)
-        or bool(CONFIG_CLIENTES.get(cliente_id, {}).get("demo_claimable"))
+        or bool(appstate.CONFIG_CLIENTES.get(cliente_id, {}).get("demo_claimable"))
     )
     if not is_demo_tenant and not existing_owner:
         # Allow claiming legacy unowned clients only via admin path; reject here to
@@ -3718,7 +3443,7 @@ def _mark_outreach_prospect_as_client_for_cliente(cliente_id: str, user_email: s
     status to 'client'. Lookup: exact match on prospects.email = user_email or
     on the contacto.email saved in the cliente config. Anything missing is
     silently skipped."""
-    cfg = CONFIG_CLIENTES.get(cliente_id, {})
+    cfg = appstate.CONFIG_CLIENTES.get(cliente_id, {})
     candidate_emails: List[str] = []
     if user_email:
         candidate_emails.append(user_email.lower())
@@ -4948,7 +4673,7 @@ async def _send_client_sms(cliente_id: str, to_number: str, body: str) -> bool:
         account_sid = _decrypt_channel_secret(settings["sms_twilio_account_sid_encrypted"]) or account_sid
         auth_token = _decrypt_channel_secret(settings["sms_twilio_auth_token_encrypted"]) or auth_token
     else:
-        config = CONFIG_CLIENTES.get(cliente_id) or {}
+        config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
         sender = TWILIO_SMS_SENDER or (config.get("voice", {}) or {}).get("twilio_phone_number") or TWILIO_DEFAULT_PHONE_NUMBER
     if mode == "vantelia_default":
         sent = await _send_twilio_sms(to_number, sender, body)
@@ -4977,7 +4702,7 @@ def _strip_origin(value: str) -> str:
 
 
 def _get_client_config(cliente_id: str) -> Dict[str, Any]:
-    config = CONFIG_CLIENTES.get(cliente_id)
+    config = appstate.CONFIG_CLIENTES.get(cliente_id)
     if not config:
         raise HTTPException(status_code=404, detail="Cliente no configurado")
     return config
@@ -5051,8 +4776,8 @@ def _client_payload_from_config(config: Dict[str, Any], info_txt: str) -> AdminC
 
 
 def _config_from_admin_payload(cliente_id: str, payload: AdminClientePayload) -> Dict[str, Any]:
-    existing_booking = CONFIG_CLIENTES.get(cliente_id, {}).get("booking", {})
-    existing_config = CONFIG_CLIENTES.get(cliente_id, {})
+    existing_booking = appstate.CONFIG_CLIENTES.get(cliente_id, {}).get("booking", {})
+    existing_config = appstate.CONFIG_CLIENTES.get(cliente_id, {})
     # accent_color: usa el valor del payload si viene, si no conserva el existente
     if payload.accent_color is not None:
         accent_color = _sanitize_text(payload.accent_color or "")
@@ -5413,7 +5138,7 @@ def _portal_ai_config_from_client_config(cliente_id: str) -> PortalAiConfigPubli
 
 
 def _client_subscription(cliente_id: str) -> Dict[str, Any]:
-    config = CONFIG_CLIENTES.get(cliente_id) or {}
+    config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
     sub = config.get("subscription") or {}
 
     # Self-serve users store their plan in the DB. DB takes precedence over config.json.
@@ -5672,7 +5397,7 @@ def _build_subscription_public(cliente_id: str, *, admin_override: bool = False)
 
 
 def _set_client_subscription(cliente_id: str, **fields: Any) -> None:
-    next_configs = copy.deepcopy(CONFIG_CLIENTES)
+    next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
     config = next_configs.get(cliente_id)
     if not config:
         raise HTTPException(status_code=404, detail="Cliente no configurado")
@@ -5767,7 +5492,7 @@ def _unique_cliente_id(seed: str) -> str:
     base = base[:64].strip("_") or "cliente"
     candidate = base
     index = 2
-    while candidate in CONFIG_CLIENTES:
+    while candidate in appstate.CONFIG_CLIENTES:
         suffix = f"_{index}"
         candidate = f"{base[:80 - len(suffix)]}{suffix}"
         index += 1
@@ -5845,7 +5570,7 @@ def _find_client_by_stripe_id(
 ) -> str:
     if not (customer_id or subscription_id or session_id):
         return ""
-    for cid, cfg in CONFIG_CLIENTES.items():
+    for cid, cfg in appstate.CONFIG_CLIENTES.items():
         sub = cfg.get("subscription") or {}
         if subscription_id and sub.get("stripe_subscription_id") == subscription_id:
             return cid
@@ -5892,7 +5617,7 @@ def _public_checkout_session_state(session_object: Any) -> Tuple[str, str, str]:
     local_entry = sessions.get(session_id) or {}
     if not cliente_id and local_entry.get("cliente_id"):
         cliente_id = str(local_entry.get("cliente_id") or "")
-    if cliente_id and cliente_id in CONFIG_CLIENTES:
+    if cliente_id and cliente_id in appstate.CONFIG_CLIENTES:
         return "ready", cliente_id, "Tu portal ya esta listo."
     if local_entry.get("status") == "failed":
         return "failed", "", "El alta automatica ha fallado. Soporte revisara tu caso."
@@ -6041,7 +5766,7 @@ def _update_portal_ai_config(
     *,
     full_access: bool = False,
 ) -> PortalAiConfigPublic:
-    next_configs = copy.deepcopy(CONFIG_CLIENTES)
+    next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
     config = next_configs.get(cliente_id)
     if not config:
         raise HTTPException(status_code=404, detail="Cliente no configurado")
@@ -6119,7 +5844,7 @@ def _update_portal_brain(cliente_id: str, data: PortalBrainPayload) -> PortalBra
 
 
 def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) -> PortalSchedulePublic:
-    next_configs = copy.deepcopy(CONFIG_CLIENTES)
+    next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
     config = next_configs.get(cliente_id)
     if not config:
         raise HTTPException(status_code=404, detail="Cliente no configurado")
@@ -6662,7 +6387,7 @@ def _save_admin_client_payload(
     next_config = _config_from_admin_payload(cliente_id, data)
     _validate_single_client_runtime(cliente_id, next_config)
 
-    next_configs = dict(CONFIG_CLIENTES)
+    next_configs = dict(appstate.CONFIG_CLIENTES)
     next_configs[cliente_id] = next_config
 
     _persist_configs_to_disk(next_configs)
@@ -6695,10 +6420,10 @@ def _save_admin_client_payload(
 
 def _delete_client_everywhere(cliente_id: str) -> None:
     _assert_valid_client_id(cliente_id)
-    if cliente_id not in CONFIG_CLIENTES:
+    if cliente_id not in appstate.CONFIG_CLIENTES:
         raise HTTPException(status_code=404, detail="Cliente no configurado")
 
-    next_configs = copy.deepcopy(CONFIG_CLIENTES)
+    next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
     next_configs.pop(cliente_id, None)
     _persist_configs_to_disk(next_configs)
     _update_runtime_configs(next_configs)
@@ -6832,7 +6557,7 @@ def _purge_expired_demos() -> int:
         return 0
     for cliente_id in expired:
         try:
-            if cliente_id in CONFIG_CLIENTES:
+            if cliente_id in appstate.CONFIG_CLIENTES:
                 _delete_client_everywhere(cliente_id)
             registry.pop(cliente_id, None)
             logger.info("Demo expirada eliminada: %s", cliente_id)
@@ -10769,10 +10494,6 @@ def _serialize_booking_row(row: sqlite3.Row, request: Optional[Request] = None) 
     }
 
 
-def _to_utc_iso(dt_value: datetime) -> str:
-    return dt_value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
 def _validate_booking_window(cliente_id: str, selected_day: datetime) -> None:
     config = _get_client_config(cliente_id)
     timezone_name = config["booking"]["timezone"]
@@ -13310,7 +13031,7 @@ async def root() -> Dict[str, Any]:
         "status": "ok",
         "service": app.title,
         "version": app.version,
-        "clientes_activos": sorted(CONFIG_CLIENTES.keys()),
+        "clientes_activos": sorted(appstate.CONFIG_CLIENTES.keys()),
     }
 
 
@@ -13755,7 +13476,7 @@ async def onboarding_state(
     if not cliente_id:
         return OnboardingStateResponse(step="name")
     state = _read_onboarding_state(cliente_id)
-    cfg = CONFIG_CLIENTES.get(cliente_id, {})
+    cfg = appstate.CONFIG_CLIENTES.get(cliente_id, {})
     info_path = DATA_DIR / cliente_id / "info.txt"
     has_kb = info_path.exists() and info_path.stat().st_size > 200
     return OnboardingStateResponse(
@@ -13777,12 +13498,12 @@ async def onboarding_start(
     user: sqlite3.Row = Depends(_require_self_serve_user),
 ) -> OnboardingStartResponse:
     existing_cliente = (user["cliente_id"] or "").strip()
-    if existing_cliente and existing_cliente in CONFIG_CLIENTES:
+    if existing_cliente and existing_cliente in appstate.CONFIG_CLIENTES:
         # already provisioned; reuse and bounce wizard step forward
         state = _read_onboarding_state(existing_cliente)
         return OnboardingStartResponse(
             cliente_id=existing_cliente,
-            nombre=CONFIG_CLIENTES[existing_cliente].get("nombre", ""),
+            nombre=appstate.CONFIG_CLIENTES[existing_cliente].get("nombre", ""),
             step=state.get("step", "learn"),
         )
     cliente_id = _provision_self_serve_cliente(owner_user_id=user["id"], nombre=data.nombre)
@@ -13819,7 +13540,7 @@ async def onboarding_learn(
         result = run_onboarding(
             website_url=data.website_url,
             api_key=OPENAI_API_KEY,
-            nombre_bot=CONFIG_CLIENTES.get(cliente_id, {}).get("nombre", cliente_id),
+            nombre_bot=appstate.CONFIG_CLIENTES.get(cliente_id, {}).get("nombre", cliente_id),
             tono=data.tono,
             idioma=data.idioma,
             max_paginas=max_pages,
@@ -13852,7 +13573,7 @@ async def onboarding_learn(
     except Exception:  # noqa: BLE001
         origin = ""
     with appstate.state_lock:
-        next_configs = copy.deepcopy(CONFIG_CLIENTES)
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         if result.detected_business_name and not cfg.get("nombre"):
             cfg["nombre"] = result.detected_business_name
@@ -13913,7 +13634,7 @@ async def onboarding_personality(
     ]
     cleaned_starters = _strip_base_from_extras(sanitized)
     with appstate.state_lock:
-        next_configs = copy.deepcopy(CONFIG_CLIENTES)
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         cfg["bienvenida"] = _sanitize_text(data.bienvenida, allow_multiline=True)[:600]
         cfg["prompt_extra"] = _sanitize_text(data.prompt_extra, allow_multiline=True)[:4000]
@@ -14208,7 +13929,7 @@ def _resolve_cliente_for_self_serve_user(user: sqlite3.Row) -> str:
     cliente_id = (user["cliente_id"] or "").strip()
     if not cliente_id:
         raise HTTPException(status_code=400, detail="Aun no has creado un bot. Completa el wizard.")
-    if cliente_id not in CONFIG_CLIENTES:
+    if cliente_id not in appstate.CONFIG_CLIENTES:
         raise HTTPException(status_code=404, detail="Bot no encontrado.")
     return cliente_id
 
@@ -14284,7 +14005,7 @@ async def app_overview(
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> AppOverviewResponse:
     cliente_id = _resolve_cliente_for_self_serve_user(user)
-    cfg = CONFIG_CLIENTES.get(cliente_id, {})
+    cfg = appstate.CONFIG_CLIENTES.get(cliente_id, {})
     sub_row = db_get_subscription_for_user(user["id"]) or db_ensure_free_subscription(user["id"], cliente_id=cliente_id)
     period_start = _period_start_iso_for_user(user["id"])
     stats = _compute_dashboard_stats(cliente_id, period_start)
@@ -14374,7 +14095,7 @@ async def app_appearance_get(
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> AppAppearanceResponse:
     cliente_id = _resolve_cliente_for_self_serve_user(user)
-    cfg = CONFIG_CLIENTES.get(cliente_id, {})
+    cfg = appstate.CONFIG_CLIENTES.get(cliente_id, {})
     state = _read_onboarding_state(cliente_id)
     launcher_shape = str(cfg.get("launcher_shape", "circle") or "circle").lower()
     if launcher_shape not in ("circle", "bar"):
@@ -14411,7 +14132,7 @@ async def app_appearance_post(
 ) -> AppAppearanceResponse:
     cliente_id = _resolve_cliente_for_self_serve_user(user)
     with appstate.state_lock:
-        next_configs = copy.deepcopy(CONFIG_CLIENTES)
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         if data.nombre is not None:
             cfg["nombre"] = _sanitize_text(data.nombre)[:120] or cliente_id
@@ -15316,7 +15037,7 @@ def _channel_settings_public(cliente_id: str) -> ChannelSettingsResponse:
     gmail = _client_gmail_connection(cliente_id)
     sms_mode = settings["sms_mode"] or "vantelia_default"
     if sms_mode == "vantelia_default":
-        config = CONFIG_CLIENTES.get(cliente_id) or {}
+        config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
         sender = TWILIO_SMS_SENDER or (config.get("voice", {}) or {}).get("twilio_phone_number") or TWILIO_DEFAULT_PHONE_NUMBER
         sms_available = bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and sender)
     else:
@@ -15877,7 +15598,7 @@ async def _ai_send_payment_link(
     un dict con `ok` y mensajes amigables para que el asistente los verbalice.
     Nunca lanza: cualquier fallo vuelve como {"ok": False, ...}.
     """
-    config = CONFIG_CLIENTES.get(cliente_id) or {}
+    config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
     nombre_negocio = config.get("nombre", "") or "el negocio"
 
     if not _ai_send_enabled_for_client(cliente_id):
@@ -16644,7 +16365,7 @@ async def app_knowledge_add_url(
         result = run_onboarding(
             website_url=canonical_url,
             api_key=OPENAI_API_KEY,
-            nombre_bot=CONFIG_CLIENTES.get(cliente_id, {}).get("nombre", cliente_id),
+            nombre_bot=appstate.CONFIG_CLIENTES.get(cliente_id, {}).get("nombre", cliente_id),
             tono="Profesional y cercano",
             idioma="Espanol",
             max_paginas=max_pages,
@@ -16748,7 +16469,7 @@ async def app_tune_get(
     user: sqlite3.Row = Depends(_require_authenticated_portal_user),
 ) -> AppTuneResponse:
     cliente_id = _resolve_cliente_for_self_serve_user(user)
-    cfg = CONFIG_CLIENTES.get(cliente_id, {})
+    cfg = appstate.CONFIG_CLIENTES.get(cliente_id, {})
     return AppTuneResponse(
         cliente_id=cliente_id,
         prompt_extra=cfg.get("prompt_extra", ""),
@@ -16765,7 +16486,7 @@ async def app_tune_post(
 ) -> AppTuneResponse:
     cliente_id = _resolve_cliente_for_self_serve_user(user)
     with appstate.state_lock:
-        next_configs = copy.deepcopy(CONFIG_CLIENTES)
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         if data.prompt_extra is not None:
             cfg["prompt_extra"] = _sanitize_text(data.prompt_extra, allow_multiline=True)[:8000]
@@ -16881,7 +16602,7 @@ async def app_whatsapp_post(
 ) -> AppWhatsAppResponse:
     cliente_id = _resolve_cliente_for_self_serve_user(user)
     with appstate.state_lock:
-        next_configs = copy.deepcopy(CONFIG_CLIENTES)
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         wa = dict(cfg.get("whatsapp", {}) or {})
         if data.phone_number_id is not None:
@@ -16909,7 +16630,7 @@ async def app_whatsapp_post(
 
 
 def _app_voice_response(cliente_id: str, request: Request) -> "AppVoiceResponse":
-    cfg = CONFIG_CLIENTES.get(cliente_id, {})
+    cfg = appstate.CONFIG_CLIENTES.get(cliente_id, {})
     voice_cfg = cfg.get("voice", {}) or {}
     plan_ok = _client_voice_plan_enabled(cliente_id)
     enabled = bool(voice_cfg.get("enabled", False)) and plan_ok
@@ -16949,7 +16670,7 @@ async def app_voice_post(
 ) -> AppVoiceResponse:
     cliente_id = _resolve_cliente_for_self_serve_user(user)
     with appstate.state_lock:
-        next_configs = copy.deepcopy(CONFIG_CLIENTES)
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         voice = dict(cfg.get("voice", {}) or {})
         if data.enabled is not None:
@@ -17218,7 +16939,7 @@ def _stripe_connect_account_status(account: Dict[str, Any]) -> Tuple[str, int]:
 
 
 def _stripe_connect_display_name(cliente_id: str) -> str:
-    config = CONFIG_CLIENTES.get(cliente_id, {})
+    config = appstate.CONFIG_CLIENTES.get(cliente_id, {})
     configured_name = str(config.get("nombre", "")).strip()
     if configured_name:
         return configured_name
@@ -18710,7 +18431,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
                             )
                             _mark_stripe_session(session_id, status="failed", error=str(exc))
                     background_tasks.add_task(_run_onboarding_bg)
-            elif cid and cid in CONFIG_CLIENTES:
+            elif cid and cid in appstate.CONFIG_CLIENTES:
                 _set_client_subscription(
                     cid,
                     plan=plan,
@@ -18774,11 +18495,11 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
                 return {"received": True}
             if not cid:
                 # Buscar por subscription_id
-                for candidate_cid, cfg in CONFIG_CLIENTES.items():
+                for candidate_cid, cfg in appstate.CONFIG_CLIENTES.items():
                     if (cfg.get("subscription") or {}).get("stripe_subscription_id") == sub_id:
                         cid = candidate_cid
                         break
-            if cid and cid in CONFIG_CLIENTES:
+            if cid and cid in appstate.CONFIG_CLIENTES:
                 renews_at = ""
                 if current_period_end:
                     renews_at = datetime.fromtimestamp(int(current_period_end), tz=timezone.utc).isoformat()
@@ -18807,7 +18528,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
                 logger.info("Self-serve subscription cancelada user=%s", _ss_row["user_id"])
                 return {"received": True}
             cid_target = None
-            for candidate_cid, cfg in CONFIG_CLIENTES.items():
+            for candidate_cid, cfg in appstate.CONFIG_CLIENTES.items():
                 if (cfg.get("subscription") or {}).get("stripe_subscription_id") == sub_id:
                     cid_target = candidate_cid
                     break
@@ -18831,8 +18552,8 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
             if next_payment_attempt:
                 next_iso = datetime.fromtimestamp(int(next_payment_attempt), tz=timezone.utc).isoformat()
             cid_target = _find_client_by_stripe_id(customer_id=customer_id, subscription_id=sub_id)
-            if cid_target and cid_target in CONFIG_CLIENTES:
-                cfg = CONFIG_CLIENTES.get(cid_target) or {}
+            if cid_target and cid_target in appstate.CONFIG_CLIENTES:
+                cfg = appstate.CONFIG_CLIENTES.get(cid_target) or {}
                 sub_cfg = cfg.get("subscription") or {}
                 _set_client_subscription(
                     cid_target,
@@ -19233,7 +18954,7 @@ async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGene
     email_lower = str(data.email).lower()
     now_ts = time.time()
     for existing_id, created_ts in registry.items():
-        cfg = CONFIG_CLIENTES.get(existing_id, {})
+        cfg = appstate.CONFIG_CLIENTES.get(existing_id, {})
         contacto_existing = cfg.get("contacto", {})
         if (
             str(contacto_existing.get("email", "")).lower() == email_lower
@@ -19717,7 +19438,7 @@ async def healthcheck() -> Dict[str, Any]:
         "status": overall_status,
         "version": app.version,
         "openai_configured": bool(OPENAI_API_KEY),
-        "clientes_configurados": len(CONFIG_CLIENTES),
+        "clientes_configurados": len(appstate.CONFIG_CLIENTES),
         "checks": checks,
         "runtime": {
             "started_at": appstate.STARTED_AT.isoformat(),
@@ -19867,7 +19588,7 @@ async def admin_clientes() -> List[AdminClienteResumen]:
     demo_registry = _load_demo_registry()
     now_ts = time.time()
 
-    for cliente_id, config in sorted(CONFIG_CLIENTES.items(), key=lambda item: item[0].lower()):
+    for cliente_id, config in sorted(appstate.CONFIG_CLIENTES.items(), key=lambda item: item[0].lower()):
         owner_uid_early = (owners_by_cliente.get(cliente_id) or {}).get("owner_user_id") or ""
         booking_cfg = config.get("booking", {})
         whatsapp_cfg = config.get("whatsapp", {})
@@ -19972,7 +19693,7 @@ async def admin_cliente_detalle(cliente_id: str, request: Request) -> AdminClien
 )
 async def admin_cliente_audit(cliente_id: str) -> AdminClienteAuditResponse:
     _assert_valid_client_id(cliente_id)
-    if cliente_id not in CONFIG_CLIENTES:
+    if cliente_id not in appstate.CONFIG_CLIENTES:
         raise HTTPException(status_code=404, detail="Cliente no encontrado.")
 
     def _duration_seconds(started_at: str, ended_at: str) -> Optional[int]:
@@ -20047,7 +19768,7 @@ async def admin_generar_demo_agenda(cliente_id: str) -> AuthSimpleResponse:
     repartidas entre varios profesionales) para que vea como luce su calendario.
     Es idempotente: regenera limpiando los datos demo anteriores."""
     _assert_valid_client_id(cliente_id)
-    if cliente_id not in CONFIG_CLIENTES:
+    if cliente_id not in appstate.CONFIG_CLIENTES:
         raise HTTPException(status_code=404, detail="Cliente no encontrado.")
     result = _seed_demo_agenda(cliente_id)
     return AuthSimpleResponse(
@@ -20142,10 +19863,10 @@ async def admin_set_voice(cliente_id: str, data: AdminVoicePayload) -> Dict[str,
     Twilio del backend para depurar por qué una llamada podría no entrar.
     """
     _assert_valid_client_id(cliente_id)
-    if cliente_id not in CONFIG_CLIENTES:
+    if cliente_id not in appstate.CONFIG_CLIENTES:
         raise HTTPException(status_code=404, detail=f"Cliente '{cliente_id}' no encontrado.")
     with appstate.state_lock:
-        next_configs = copy.deepcopy(CONFIG_CLIENTES)
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
         voice = dict(cfg.get("voice", {}) or {})
         if data.enabled is not None:
@@ -20201,7 +19922,7 @@ async def admin_assign_cliente_owner(
     existing config.json clients into Vantelia 2.0 without forcing them to
     re-register through the wizard."""
     _assert_valid_client_id(cliente_id)
-    if cliente_id not in CONFIG_CLIENTES:
+    if cliente_id not in appstate.CONFIG_CLIENTES:
         raise HTTPException(status_code=404, detail="Cliente no encontrado.")
     target_email = _normalize_email(data.email)
     user = _get_user_by_email(target_email)
@@ -20258,7 +19979,7 @@ async def admin_impersonate_cliente(
     The portal banner picks up the impersonation flag via /auth/me.
     """
     _assert_valid_client_id(cliente_id)
-    if cliente_id not in CONFIG_CLIENTES:
+    if cliente_id not in appstate.CONFIG_CLIENTES:
         raise HTTPException(status_code=404, detail="Cliente no encontrado.")
     with _get_db_connection() as connection:
         row = connection.execute(
@@ -21456,7 +21177,7 @@ def _whatsapp_phone_client_map() -> Dict[str, str]:
         if phone_number_id and cliente_id:
             mapping[phone_number_id] = cliente_id
     with appstate.state_lock:
-        for cliente_id, config in CONFIG_CLIENTES.items():
+        for cliente_id, config in appstate.CONFIG_CLIENTES.items():
             whatsapp_cfg = config.get("whatsapp", {})
             phone_number_id = str(whatsapp_cfg.get("phone_number_id", "")).strip()
             if whatsapp_cfg.get("enabled") and phone_number_id:
@@ -23415,7 +23136,7 @@ async def estadisticas() -> Dict[str, Any]:
 
     return {
         "version": app.version,
-        "clientes_configurados": len(CONFIG_CLIENTES),
+        "clientes_configurados": len(appstate.CONFIG_CLIENTES),
         "sesiones_activas": sesiones_activas,
         "indices_cargados": indices_cargados,
         "bookings_por_cliente": {row["cliente_id"]: row["total"] for row in rows},
@@ -31457,7 +31178,7 @@ except Exception:  # noqa: BLE001
 def _get_voice_config(cliente_id: str) -> Optional[Dict[str, Any]]:
     """Devuelve el bloque voice del cliente si existe, esta habilitado y el plan lo
     incluye (voz = solo Business). None en cualquier otro caso."""
-    config = CONFIG_CLIENTES.get(cliente_id)
+    config = appstate.CONFIG_CLIENTES.get(cliente_id)
     if not config:
         return None
     voice_cfg = config.get("voice") or {}
@@ -31791,7 +31512,7 @@ def _voice_booking_tools(cliente_id: str, config: Dict[str, Any]) -> List[Dict[s
 
 
 async def _voice_check_availability(cliente_id: str, fecha: str, servicio: str = "") -> Dict[str, Any]:
-    config = CONFIG_CLIENTES.get(cliente_id)
+    config = appstate.CONFIG_CLIENTES.get(cliente_id)
     if not config or not _voice_booking_enabled(cliente_id, config):
         return {"ok": False, "error": "La reserva online no esta habilitada."}
     try:
@@ -31821,7 +31542,7 @@ async def _voice_perform_booking(
     email: str = "",
 ) -> Dict[str, Any]:
     """Crea una cita real reutilizando el motor de booking del widget. source='voice'."""
-    config = CONFIG_CLIENTES.get(cliente_id)
+    config = appstate.CONFIG_CLIENTES.get(cliente_id)
     if not config or not _voice_booking_enabled(cliente_id, config):
         return {"ok": False, "error": "La reserva online no esta habilitada."}
 
@@ -32470,7 +32191,7 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
     if not CLIENT_ID_PATTERN.match(cliente_id):
         await websocket.close(code=1008)
         return
-    config = CONFIG_CLIENTES.get(cliente_id)
+    config = appstate.CONFIG_CLIENTES.get(cliente_id)
     voice_cfg = _get_voice_config(cliente_id)
     if not config or not voice_cfg:
         await websocket.close(code=1008)
@@ -32814,7 +32535,7 @@ import types as _types
 
 # Modulos home ya extraidos, de mas especifico a mas generico (el primero que
 # define un nombre gana). Crece con cada sub-commit de la fase 3.
-_HOME_MODULES: tuple = (appstate, settings)
+_HOME_MODULES: tuple = (appstate, timeutils, textnorm, settings)
 
 _EXPORT_MAP: Dict[str, Any] = {}
 for _home_mod in _HOME_MODULES:

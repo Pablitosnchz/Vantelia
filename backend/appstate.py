@@ -54,6 +54,10 @@ class ProviderBookingResult:
     message: str = ""
 
 
+# Config multi-tenant en memoria; poblada al importar api (transicion F3).
+# Re-bind siempre via appstate.CONFIG_CLIENTES = ...
+CONFIG_CLIENTES: Dict[str, Dict[str, Any]] = {}
+
 whatsapp_flows: Dict[str, WAFlowState] = {}
 # Indices RAG por cliente (valores VectorStoreIndex; Any para mantener este
 # modulo libre de dependencias pesadas).
