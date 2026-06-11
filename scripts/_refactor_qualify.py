@@ -54,7 +54,7 @@ def qualify_source(source: str, mapping: Dict[str, str]) -> Tuple[str, int]:
 
         if ttype == tokenize.NAME and tstring in ("import", "from"):
             in_import = True
-        if ttype in (tokenize.NEWLINE, tokenize.NL):
+        if ttype == tokenize.NEWLINE:
             in_import = False
 
         if ttype == tokenize.NAME and tstring in mapping and not in_import:
@@ -122,6 +122,8 @@ def _selftest() -> None:
     assert "'_utc_now()'" in result, result
     assert "settings.DB_PATH} a las {timeutils._utc_now()" in result, result
     assert "from x import DB_PATH" in result, result
+    multi, _ = qualify_source("from x import (" + chr(10) + "    DB_PATH," + chr(10) + "    _utc_now," + chr(10) + ")" + chr(10), mapping)
+    assert "settings." not in multi and "timeutils." not in multi, multi
     assert "cfg = state.CONFIG_CLIENTES[k]" in result, result
     try:
         qualify_source("global DB_PATH\n", mapping)

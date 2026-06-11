@@ -147,12 +147,30 @@ rebuild de verificación en F4.
 | Fase | Estado | Commit |
 | --- | --- | --- |
 | Preparación (rama + baseline) | ✅ Hecha | — |
-| F0 Auditoría | ✅ Este documento | (este commit) |
-| F1 Borrado de lo "seguro" | ⏸️ Pendiente de aprobación del usuario | — |
-| F2 Deduplicación backend | Pendiente | — |
-| F3 Modularización (`backend/`, sub-commits por módulo) | Pendiente | — |
+| F0 Auditoría | ✅ | be07543 |
+| F1 Borrado de lo "seguro" (15 archivos, aprobado) | ✅ | 4f53a9e |
+| F2 Deduplicación backend | ✅ | c092a58 |
+| F3.0 Esqueleto backend/ + proxy + guardias shim | ✅ | 58502bc |
+| F3.1 backend/settings.py | ✅ | f273828 |
+| F3.2 backend/appstate.py (alias "state" colisionaba con OAuth) | ✅ | 0a1af2a |
+| F3.3 backend/timeutils.py + backend/textnorm.py + CONFIG_CLIENTES | ✅ | 9479eaf |
+| F3.4 backend/db.py | ✅ | 6b93c07 |
+| F3.5 backend/clients.py | ✅ | (este commit) |
+| F3.6+ security, emailing, messaging, stripe_gateway, rag, agenda, booking, dominios growth | Pendiente | — |
+| F3.13+ main.py + routers + shim final | Pendiente | — |
 | F4 Frontend | Pendiente | — |
 | F5 Tests + conftest | Pendiente | — |
 | F6 Documentación | Pendiente | — |
+
+Notas de transición F3 (para retomar en sesiones futuras):
+- Patrón por módulo: cortar bloque → `backend/<mod>.py` con acceso cualificado
+  (herramienta `scripts/_refactor_qualify.py`, mapeo maestro por AST) → api.py
+  re-importa los nombres como copias transitorias → añadir módulo a
+  `_HOME_MODULES` del epílogo proxy de api.py → pytest completo en verde.
+- Estado mutable: SIEMPRE cualificado (`appstate.X`), nunca copia.
+- Aliases que colisionan con locales de api.py: `state` (OAuth) y `settings`
+  (canales/outreach). Por eso el módulo de estado se llama `appstate`; cuando
+  se muevan canales/outreach, renombrar sus locales `settings` al moverlos.
+- Gate rápido: `python -m pytest -q -p no:warnings` (~1,5 min vs ~10 min).
 
 Si una sesión se queda sin contexto: dejar todo committeado y actualizar esta tabla.

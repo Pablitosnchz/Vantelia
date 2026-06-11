@@ -1,0 +1,409 @@
+"""Config multi-tenant de clientes (refactor F3).
+
+Carga/normaliza/serializa config.json, lo valida en runtime, y mantiene la
+tabla `clientes` de SQLite en lockstep con el JSON (sync tras persistir).
+appstate.CONFIG_CLIENTES es la fuente de verdad en memoria.
+"""
+from __future__ import annotations
+
+import copy
+import json
+import re
+import sqlite3
+from typing import Any, Dict, List, Optional
+
+from fastapi import HTTPException
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover - Python 3.8 compatibility
+    from backports.zoneinfo import ZoneInfo
+
+from backend import appstate, db, settings, textnorm, timeutils
+
+def _load_client_configs() -> Dict[str, Dict[str, Any]]:
+    if not settings.CONFIG_PATH.exists():
+        raise RuntimeError(f"No se encontro el archivo de configuracion: {settings.CONFIG_PATH}")
+
+    raw_config = json.loads(settings.CONFIG_PATH.read_text(encoding="utf-8"))
+    normalized: Dict[str, Dict[str, Any]] = {}
+
+    for cliente_id, payload in raw_config.items():
+        normalized[cliente_id] = _normalize_client_config(cliente_id, payload)
+
+    return normalized
+
+
+def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not settings.CLIENT_ID_PATTERN.match(cliente_id):
+        raise RuntimeError(f"cliente_id invalido en config.json: {cliente_id}")
+
+    booking = payload.get("booking", {})
+    booking_day_start = textnorm._sanitize_text(booking.get("day_start", "09:00")) or "09:00"
+    booking_day_end = textnorm._sanitize_text(booking.get("day_end", "18:00")) or "18:00"
+    booking_break_windows = textnorm._normalize_break_windows(
+        booking_day_start,
+        booking_day_end,
+        booking.get("break_windows", []),
+        booking.get("break_start", ""),
+        booking.get("break_end", ""),
+    )
+    booking_break_start, booking_break_end = textnorm._first_break_pair(booking_break_windows)
+    allowed_origins = [
+        textnorm._normalize_origin_value(origin)
+        for origin in payload.get("allowed_origins", [])
+        if isinstance(origin, str) and str(origin).strip()
+    ]
+
+    incoming_subscription = payload.get("subscription") if isinstance(payload.get("subscription"), dict) else {}
+    explicit_plan = payload.get("plan") or incoming_subscription.get("plan")
+    plan = settings._normalize_plan_slug(explicit_plan or settings.PLAN_DEFAULT)
+    if plan not in settings.PLAN_VALID:
+        plan = settings.PLAN_DEFAULT
+    subscription = dict(incoming_subscription)
+    subscription["plan"] = plan
+
+    chat_model_value = textnorm._sanitize_text(payload.get("chat_model", ""))
+    if chat_model_value and chat_model_value not in settings.AVAILABLE_CHAT_MODELS_BOOT:
+        chat_model_value = ""
+    try:
+        temperature_value = float(payload.get("temperature", 0.2))
+    except (TypeError, ValueError):
+        temperature_value = 0.2
+    temperature_value = max(0.0, min(2.0, temperature_value))
+
+    return {
+        "nombre": textnorm._sanitize_text(payload.get("nombre", cliente_id)),
+        "plan": plan,
+        "subscription": subscription,
+        "icono": textnorm._sanitize_text(payload.get("icono", "Chat"))[:12] or "Chat",
+        "color": textnorm._sanitize_text(payload.get("color", "#00b1d9")) or "#00b1d9",
+        "accent_color": textnorm._sanitize_text(payload.get("accent_color", "")),
+        "logo_url": textnorm._sanitize_text(payload.get("logo_url", "")),
+        "bienvenida": textnorm._sanitize_text(
+            payload.get("bienvenida", "Hola, soy tu asistente virtual. En que puedo ayudarte?"),
+            allow_multiline=True,
+        ),
+        "prompt_extra": textnorm._sanitize_text(payload.get("prompt_extra", ""), allow_multiline=True),
+        "chat_model": chat_model_value,
+        "temperature": temperature_value,
+        "allowed_origins": allowed_origins,
+        "contacto": {
+            "email": textnorm._sanitize_text(str(payload.get("contacto", {}).get("email", ""))),
+            "telefono": textnorm._sanitize_text(str(payload.get("contacto", {}).get("telefono", ""))),
+        },
+        "branding": {
+            "powered_by": textnorm._sanitize_text(
+                str(payload.get("branding", {}).get("powered_by", "Powered by Vantelia"))
+            )
+            or "Powered by Vantelia"
+        },
+        "whatsapp": {
+            "enabled": bool(payload.get("whatsapp", {}).get("enabled", False)),
+            "phone_number_id": textnorm._sanitize_text(
+                str(payload.get("whatsapp", {}).get("phone_number_id", ""))
+            )[:120],
+            "access_token_env": textnorm._sanitize_text(
+                str(payload.get("whatsapp", {}).get("access_token_env", ""))
+            )[:120],
+            "verify_token_env": textnorm._sanitize_text(
+                str(payload.get("whatsapp", {}).get("verify_token_env", ""))
+            )[:120],
+        },
+        "voice": textnorm._normalize_voice_config(payload.get("voice", {})),
+        # Permite que un demo creado a mano (no demo_auto_*) muestre el banner de
+        # "reclamar/activar" y sea reclamable publicamente. Opt-in: por defecto False,
+        # asi los clientes reales (ej. "van") nunca quedan expuestos.
+        "demo_claimable": bool(payload.get("demo_claimable", False)),
+        "booking": {
+            "enabled": bool(booking.get("enabled", False)),
+            "timezone": textnorm._sanitize_text(booking.get("timezone", settings.DEFAULT_TIMEZONE)) or settings.DEFAULT_TIMEZONE,
+            "slot_minutes": int(booking.get("slot_minutes", 30)),
+            "day_start": booking_day_start,
+            "day_end": booking_day_end,
+            "break_start": booking_break_start,
+            "break_end": booking_break_end,
+            "break_windows": booking_break_windows,
+            "closed_weekdays": booking.get("closed_weekdays", [6]),
+            "provider": "internal",
+            "webhook_env": textnorm._sanitize_text(booking.get("webhook_env", "")),
+            "webhook_url": textnorm._normalize_optional_http_url(booking.get("webhook_url", "")),
+            "calendly_user_env": "",
+            "calendly_event_type_env": "",
+            "calendly_location_kind": "",
+            "calendly_location_value": "",
+            "google_calendar_id": "",
+            "google_calendar_id_env": "",
+            "google_service_account_path": "",
+            "google_service_account_env": "",
+            "success_message": textnorm._sanitize_text(
+                booking.get(
+                    "success_message",
+                    "Tu solicitud de cita ha quedado registrada correctamente.",
+                ),
+                allow_multiline=True,
+            ),
+            "message_templates": textnorm._normalize_message_templates(booking.get("message_templates", {})),
+            "message_template_enabled": textnorm._normalize_message_template_enabled(
+                booking.get("message_template_enabled", {}),
+                booking.get("message_templates", {}),
+            ),
+            "message_template_channels": textnorm._normalize_message_template_channels(
+                booking.get("message_template_channels", {})
+            ),
+        },
+    }
+
+
+def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    booking_cfg = config.get("booking", {})
+    break_windows = textnorm._normalize_break_windows(
+        booking_cfg.get("day_start", "09:00"),
+        booking_cfg.get("day_end", "18:00"),
+        booking_cfg.get("break_windows", []),
+        booking_cfg.get("break_start", ""),
+        booking_cfg.get("break_end", ""),
+    )
+    break_start, break_end = textnorm._first_break_pair(break_windows)
+    return {
+        "nombre": config["nombre"],
+        "plan": config.get("plan", settings.PLAN_DEFAULT),
+        "subscription": dict(config.get("subscription") or {"plan": config.get("plan", settings.PLAN_DEFAULT)}),
+        "icono": config["icono"],
+        "color": config["color"],
+        "accent_color": config.get("accent_color", ""),
+        "logo_url": config.get("logo_url", ""),
+        "bienvenida": config["bienvenida"],
+        "prompt_extra": config.get("prompt_extra", ""),
+        "chat_model": config.get("chat_model", ""),
+        "temperature": float(config.get("temperature", 0.2)),
+        "allowed_origins": list(config.get("allowed_origins", [])),
+        "contacto": {
+            "email": config.get("contacto", {}).get("email", ""),
+            "telefono": config.get("contacto", {}).get("telefono", ""),
+        },
+        "branding": {
+            "powered_by": config.get("branding", {}).get("powered_by", "Powered by Vantelia"),
+        },
+        "whatsapp": {
+            "enabled": bool(config.get("whatsapp", {}).get("enabled", False)),
+            "phone_number_id": config.get("whatsapp", {}).get("phone_number_id", ""),
+            "access_token_env": config.get("whatsapp", {}).get("access_token_env", ""),
+            "verify_token_env": config.get("whatsapp", {}).get("verify_token_env", ""),
+        },
+        "voice": textnorm._normalize_voice_config(config.get("voice", {})),
+        "demo_claimable": bool(config.get("demo_claimable", False)),
+        "booking": {
+            "enabled": bool(config.get("booking", {}).get("enabled", False)),
+            "timezone": config.get("booking", {}).get("timezone", settings.DEFAULT_TIMEZONE),
+            "slot_minutes": int(config.get("booking", {}).get("slot_minutes", 30)),
+            "day_start": config.get("booking", {}).get("day_start", "09:00"),
+            "day_end": config.get("booking", {}).get("day_end", "18:00"),
+            "break_start": break_start,
+            "break_end": break_end,
+            "break_windows": break_windows,
+            "closed_weekdays": list(config.get("booking", {}).get("closed_weekdays", [6])),
+            "provider": "internal",
+            "webhook_env": config.get("booking", {}).get("webhook_env", ""),
+            "webhook_url": config.get("booking", {}).get("webhook_url", ""),
+            "calendly_user_env": "",
+            "calendly_event_type_env": "",
+            "calendly_location_kind": "",
+            "calendly_location_value": "",
+            "google_calendar_id": "",
+            "google_calendar_id_env": "",
+            "google_service_account_path": "",
+            "google_service_account_env": "",
+            "success_message": config.get("booking", {}).get(
+                "success_message",
+                "Tu solicitud de cita ha quedado registrada correctamente.",
+            ),
+            "message_templates": textnorm._normalize_message_templates(
+                config.get("booking", {}).get("message_templates", {})
+            ),
+            "message_template_enabled": textnorm._normalize_message_template_enabled(
+                config.get("booking", {}).get("message_template_enabled", {}),
+                config.get("booking", {}).get("message_templates", {}),
+            ),
+            "message_template_channels": textnorm._normalize_message_template_channels(
+                config.get("booking", {}).get("message_template_channels", {})
+            ),
+        },
+    }
+
+
+appstate.CONFIG_CLIENTES = _load_client_configs()
+
+
+def _collect_cors_origins() -> List[str]:
+    origins = set(textnorm.EXTRA_CORS_ORIGINS)
+    with appstate.state_lock:
+        for config in appstate.CONFIG_CLIENTES.values():
+            origins.update(config.get("allowed_origins", []))
+    return sorted(origin for origin in origins if origin)
+
+
+def _update_runtime_configs(next_configs: Dict[str, Dict[str, Any]]) -> None:
+    with appstate.state_lock:
+        appstate.CONFIG_CLIENTES.clear()
+        appstate.CONFIG_CLIENTES.update(next_configs)
+
+
+def _sync_clientes_table_from_config() -> None:
+    """Mirror in-memory CONFIG_CLIENTES into the clientes table.
+
+    Called on startup after _load_client_configs. Idempotent: existing rows
+    keep their owner_user_id, plan and source fields; only nombre/config_json
+    are refreshed from the JSON snapshot.
+    """
+    try:
+        with appstate.state_lock:
+            snapshot = {cid: copy.deepcopy(cfg) for cid, cfg in appstate.CONFIG_CLIENTES.items()}
+    except Exception:  # noqa: BLE001
+        snapshot = {}
+    if not snapshot:
+        return
+    now_iso = timeutils._utc_now().isoformat()
+    with db._get_db_connection() as connection:
+        existing_ids = {
+            row["cliente_id"]
+            for row in connection.execute("SELECT cliente_id FROM clientes").fetchall()
+        }
+        for cliente_id, config in snapshot.items():
+            serialized = _serialize_client_config(config)
+            config_json = json.dumps(serialized, ensure_ascii=False)
+            nombre = serialized.get("nombre") or cliente_id
+            plan = serialized.get("plan") or settings.PLAN_DEFAULT
+            if cliente_id in existing_ids:
+                connection.execute(
+                    """
+                    UPDATE clientes
+                    SET nombre = ?, config_json = ?, updated_at = ?
+                    WHERE cliente_id = ?
+                    """,
+                    (nombre, config_json, now_iso, cliente_id),
+                )
+            else:
+                connection.execute(
+                    """
+                    INSERT INTO clientes
+                        (cliente_id, owner_user_id, plan, nombre, website_url,
+                         config_json, created_at, updated_at, source)
+                    VALUES (?, '', ?, ?, '', ?, ?, ?, 'legacy')
+                    """,
+                    (cliente_id, plan, nombre, config_json, now_iso, now_iso),
+                )
+        connection.commit()
+
+
+def _sync_clientes_table_after_persist(configs: Dict[str, Dict[str, Any]]) -> None:
+    """Apply incremental updates to the clientes table after _persist_configs_to_disk.
+
+    Handles inserts, updates and deletes so DB stays in lockstep with JSON.
+    Preserves owner_user_id and source columns for existing rows.
+    """
+    now_iso = timeutils._utc_now().isoformat()
+    try:
+        with db._get_db_connection() as connection:
+            existing = {
+                row["cliente_id"]: row
+                for row in connection.execute(
+                    "SELECT cliente_id, owner_user_id, source FROM clientes"
+                ).fetchall()
+            }
+            incoming_ids = set(configs.keys())
+            for cliente_id, config in configs.items():
+                serialized = _serialize_client_config(config)
+                config_json = json.dumps(serialized, ensure_ascii=False)
+                nombre = serialized.get("nombre") or cliente_id
+                plan = serialized.get("plan") or settings.PLAN_DEFAULT
+                if cliente_id in existing:
+                    connection.execute(
+                        """
+                        UPDATE clientes
+                        SET nombre = ?, plan = ?, config_json = ?, updated_at = ?
+                        WHERE cliente_id = ?
+                        """,
+                        (nombre, plan, config_json, now_iso, cliente_id),
+                    )
+                else:
+                    connection.execute(
+                        """
+                        INSERT INTO clientes
+                            (cliente_id, owner_user_id, plan, nombre, website_url,
+                             config_json, created_at, updated_at, source)
+                        VALUES (?, '', ?, ?, '', ?, ?, ?, 'legacy')
+                        """,
+                        (cliente_id, plan, nombre, config_json, now_iso, now_iso),
+                    )
+            stale = set(existing.keys()) - incoming_ids
+            for cliente_id in stale:
+                connection.execute("DELETE FROM clientes WHERE cliente_id = ?", (cliente_id,))
+            connection.commit()
+    except sqlite3.Error as exc:
+        settings.logger.error("Fallo sync clientes table tras persist JSON: %s", exc)
+
+
+def _validate_single_client_runtime(cliente_id: str, config: Dict[str, Any]) -> None:
+    booking_cfg = config["booking"]
+    provider = booking_cfg.get("provider", "internal")
+    whatsapp_cfg = config.get("whatsapp", {})
+    if not re.match(r"^#[0-9A-Fa-f]{6}$", str(config.get("color", ""))):
+        raise RuntimeError(f"color invalido para {cliente_id}. Usa formato #RRGGBB.")
+    accent_color = str(config.get("accent_color", "")).strip()
+    if accent_color and not re.match(r"^#[0-9A-Fa-f]{6}$", accent_color):
+        raise RuntimeError(f"accent_color invalido para {cliente_id}. Usa formato #RRGGBB.")
+    if whatsapp_cfg.get("enabled") and not str(whatsapp_cfg.get("phone_number_id", "")).strip():
+        raise RuntimeError(f"whatsapp.phone_number_id requerido para {cliente_id} si WhatsApp esta activo")
+    if booking_cfg["enabled"]:
+        try:
+            ZoneInfo(booking_cfg["timezone"])
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"timezone invalida para {cliente_id}") from exc
+        if not settings.TIME_PATTERN.match(booking_cfg["day_start"]):
+            raise RuntimeError(f"day_start invalido para {cliente_id}")
+        if not settings.TIME_PATTERN.match(booking_cfg["day_end"]):
+            raise RuntimeError(f"day_end invalido para {cliente_id}")
+        try:
+            textnorm._normalize_break_windows(
+                booking_cfg["day_start"],
+                booking_cfg["day_end"],
+                booking_cfg.get("break_windows", []),
+                booking_cfg.get("break_start", ""),
+                booking_cfg.get("break_end", ""),
+            )
+        except HTTPException as exc:
+            raise RuntimeError(f"descansos invalidos para {cliente_id}: {exc.detail}") from exc
+        if booking_cfg["slot_minutes"] <= 0:
+            raise RuntimeError(f"slot_minutes invalido para {cliente_id}")
+        if not isinstance(booking_cfg["closed_weekdays"], list) or any(
+            not isinstance(day, int) or day < 0 or day > 6 for day in booking_cfg["closed_weekdays"]
+        ):
+            raise RuntimeError(f"closed_weekdays invalido para {cliente_id}")
+        if provider != "internal":
+            raise RuntimeError(f"provider invalido para {cliente_id}")
+
+
+def _validate_runtime_config() -> None:
+    if not settings.OPENAI_API_KEY:
+        settings.logger.warning("OPENAI_API_KEY no esta configurada. El chat quedara deshabilitado.")
+
+    for cliente_id, config in appstate.CONFIG_CLIENTES.items():
+        _validate_single_client_runtime(cliente_id, config)
+
+    if settings.WEBHOOK_DEFAULT:
+        textnorm._normalize_optional_http_url(settings.WEBHOOK_DEFAULT)
+
+
+def _persist_configs_to_disk(configs: Dict[str, Dict[str, Any]]) -> None:
+    serialized = {
+        cliente_id: _serialize_client_config(config)
+        for cliente_id, config in sorted(configs.items(), key=lambda item: item[0].lower())
+    }
+    settings.CONFIG_PATH.write_text(
+        json.dumps(serialized, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    _sync_clientes_table_after_persist(configs)
+
+
