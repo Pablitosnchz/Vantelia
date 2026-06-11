@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+import sys as _sys
+
+# Refactor F3: si api se reimporta con otro entorno (fixtures de tests hacen
+# sys.modules.pop("api") + import), purgar backend.* para que los modulos del
+# paquete relean el entorno igual que lo hace este archivo. En produccion
+# (primer import) es un no-op.
+for _stale in [_m for _m in list(_sys.modules) if _m == "backend" or _m.startswith("backend.")]:
+    del _sys.modules[_stale]
+
 import asyncio
 import base64
 import copy
@@ -32,7 +41,6 @@ from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunpa
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from dotenv import load_dotenv
-from cryptography.fernet import Fernet, InvalidToken
 
 try:
     import stripe as _stripe_module
@@ -33135,6 +33143,66 @@ async def _voice_startup_log() -> None:
         logger.info("Voice channel enabled (Twilio configurado).")
     else:
         logger.info("Voice channel DISABLED - missing Twilio credentials.")
+
+
+# ============================================================================
+# Epilogo de compatibilidad (refactor F3).
+#
+# A medida que el monolito se extrae a backend/, este proxy mantiene el
+# contrato historico del modulo `api`:
+#   - `api.simbolo` lee EN VIVO del modulo home en backend/ (via __getattr__).
+#   - `monkeypatch.setattr(api, "simbolo", ...)` parchea el modulo home (y la
+#     copia transitoria importada en api, si existe), de modo que TODOS los
+#     llamadores ven el parche (__setattr__).
+#   - `dir(api)` incluye los simbolos extraidos (scripts/qa_e2e.py itera
+#     dir(api) para anular _send_whatsapp*).
+# ============================================================================
+import types as _types
+
+# Modulos home ya extraidos, de mas especifico a mas generico (el primero que
+# define un nombre gana). Crece con cada sub-commit de la fase 3.
+_HOME_MODULES: tuple = ()
+
+_EXPORT_MAP: Dict[str, Any] = {}
+for _home_mod in _HOME_MODULES:
+    for _exported in vars(_home_mod):
+        if not _exported.startswith("__"):
+            _EXPORT_MAP.setdefault(_exported, _home_mod)
+
+
+class _ApiCompatModule(_types.ModuleType):
+    def __getattr__(self, name: str):
+        home = _EXPORT_MAP.get(name)
+        if home is None:
+            raise AttributeError(f"module 'api' has no attribute {name!r}")
+        return getattr(home, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        home = _EXPORT_MAP.get(name)
+        if home is not None:
+            setattr(home, name, value)
+            # Mantener en sync la copia transitoria solo si api ya la tiene;
+            # si el simbolo vive solo en backend, no crear una sombra estatica.
+            if name in self.__dict__:
+                super().__setattr__(name, value)
+            return
+        super().__setattr__(name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if name in self.__dict__:
+            super().__delattr__(name)
+            return
+        home = _EXPORT_MAP.get(name)
+        if home is not None:
+            delattr(home, name)
+            return
+        super().__delattr__(name)
+
+    def __dir__(self):
+        return sorted(set(super().__dir__()) | set(_EXPORT_MAP))
+
+
+_sys.modules[__name__].__class__ = _ApiCompatModule
 
 
 if __name__ == "__main__":
