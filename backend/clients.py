@@ -456,3 +456,12 @@ def _plan_limits(plan: str) -> Dict[str, Any]:
     return settings.PLAN_LIMITS.get(normalized) or settings.PLAN_LIMITS[settings.PLAN_DEFAULT]
 
 
+
+
+def _get_client_config(cliente_id: str) -> Dict[str, Any]:
+    config = appstate.CONFIG_CLIENTES.get(cliente_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Cliente no configurado")
+    return config
+
+

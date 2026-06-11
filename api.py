@@ -218,6 +218,7 @@ from backend.settings import (  # noqa: F401  (transicion F3: copias re-exportad
 )
 
 
+from backend.security import _channel_audit, _decrypt_channel_secret, _encrypt_channel_secret, _ensure_channel_settings  # noqa: F401
 from backend import security
 from backend.security import (  # noqa: F401  (transicion F3)
     ADMIN_IMPERSONATION_TTL_MINUTES,
@@ -281,6 +282,12 @@ from backend.security import (  # noqa: F401  (transicion F3)
     _user_plan,
     _verify_secret,
 )
+from backend import emailing
+from backend.emailing import _client_gmail_access_token, _client_gmail_connection, _email_delivery_configured, _email_sender, _gmail_access_token, _gmail_channel_configured, _gmail_channel_state_consume, _gmail_channel_state_create, _gmail_connected, _gmail_connection, _gmail_decrypt, _gmail_encrypt, _gmail_save_tokens, _gmail_send_message, _send_checkout_welcome_email, _send_client_email, _send_email_message, _send_email_object, _send_gmail_message, _send_password_reset_email, _send_payment_failed_emails, _smtp_configured, _smtp_send_message, send_client_email  # noqa: F401
+from backend import messaging
+from backend.messaging import _send_client_sms, _send_twilio_sms, _send_whatsapp_buttons, _send_whatsapp_list, _send_whatsapp_payload, _send_whatsapp_text, _twilio_request_valid, _voice_twilio_configured, _whatsapp_access_token_for_client, _whatsapp_chunks, _whatsapp_env_value  # noqa: F401
+from backend import stripe_gateway
+from backend.stripe_gateway import _STRIPE_SESSIONS_FILE, _STRIPE_SESSIONS_LOCK, _claim_stripe_session, _construct_stripe_webhook_event, _create_stripe_connected_account, _find_client_by_stripe_id, _load_stripe_sessions, _mark_stripe_session, _save_stripe_connected_account, _save_stripe_sessions, _stripe_configured, _stripe_connect_account_id, _stripe_connect_account_status, _stripe_connect_configured, _stripe_connect_display_name, _stripe_connect_headers, _stripe_connect_onboarding_url, _stripe_connect_request, _stripe_connect_requirement_count, _stripe_connected_account_row, _stripe_custom_field_values, _stripe_init, _stripe_onboarding_custom_fields, _stripe_price_for_plan  # noqa: F401
 from backend import appstate
 from backend.appstate import (  # noqa: F401  (clases: excepcion permitida)
     ProviderBookingResult,
@@ -322,6 +329,7 @@ from backend.textnorm import (  # noqa: F401  (transicion F3)
 
 
 from backend.clients import _client_plan, _client_subscription, _plan_limits  # noqa: F401
+from backend.clients import _get_client_config  # noqa: F401
 from backend import clients
 from backend.clients import (  # noqa: F401  (transicion F3)
     _collect_cors_origins,
@@ -1627,344 +1635,12 @@ def _generate_starter_questions(info_excerpt: str, nombre: str) -> List[str]:
 
 
 
-def _send_password_reset_email(user: sqlite3.Row, public_token: str, request: Optional[Request] = None) -> None:
-    reset_url = _password_reset_url(public_token, request)
-    base_url = (_preferred_public_base_url(request) or APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
-    logo_url = f"{base_url}/brand-assets/Logo_1_sin_resplandor.png"
-    display_name = str(user["display_name"] or "").strip()
-    greeting_text = f"Hola {display_name}," if display_name else "Hola,"
-    greeting_html = f"Hola {escape(display_name)}," if display_name else "Hola,"
-    expires_minutes = max(1, PASSWORD_RESET_TOKEN_HOURS * 60)
-    expires_text = f"{expires_minutes} minuto{'s' if expires_minutes != 1 else ''}"
-    reset_domain = urlparse(reset_url).netloc or "app.vantelia.es"
-    support_email = PORTAL_SUPPORT_EMAIL or DEFAULT_VANTELIA_SUPPORT_EMAIL
-    current_year = _utc_now().year
-    subject = "Restablece tu contraseña de Vantelia"
-    text_body = (
-        f"{greeting_text}\n\n"
-        "Hemos recibido una solicitud para restablecer la contraseña de tu acceso a Vantelia.\n\n"
-        "Para crear una nueva contraseña, abre este enlace seguro:\n"
-        f"{reset_url}\n\n"
-        f"Dominio seguro: {reset_domain}\n"
-        f"Este enlace expirará en {expires_text}.\n\n"
-        "Si no has solicitado este cambio, puedes ignorar este mensaje. Tu cuenta seguirá protegida.\n\n"
-        f"Si tienes problemas, contacta con soporte: {support_email}\n\n"
-        "Vantelia\n"
-        f"(c) {current_year} Vantelia. Todos los derechos reservados.\n"
-    )
-    html_body = f"""<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light">
-    <meta name="supported-color-schemes" content="light">
-    <title>Restablece tu contraseña de Vantelia</title>
-  </head>
-  <body style="margin:0;padding:0;background:#0B132B;font-family:Inter,Segoe UI,Arial,sans-serif;color:#F0F4F8;">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
-      Hemos recibido una solicitud para restablecer tu contraseña de Vantelia. El enlace expira en {escape(expires_text)}.
-    </div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background:#0B132B;">
-      <tr>
-        <td align="center" style="padding:28px 14px;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;border-collapse:separate;border-spacing:0;">
-            <tr>
-              <td style="padding:0 0 18px;text-align:center;">
-                <img src="{escape(logo_url)}" width="148" alt="Vantelia" style="display:inline-block;width:148px;max-width:60%;height:auto;border:0;outline:none;text-decoration:none;">
-              </td>
-            </tr>
-            <tr>
-              <td style="border:1px solid rgba(0,209,255,0.22);border-radius:24px;overflow:hidden;background:#08102A;box-shadow:0 28px 70px rgba(0,0,0,0.38);">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                  <tr>
-                    <td style="padding:34px 30px 22px;background:linear-gradient(135deg,rgba(0,209,255,0.18),rgba(0,245,212,0.08) 46%,rgba(8,16,42,0.92));">
-                      <div style="display:inline-block;padding:7px 12px;border:1px solid rgba(0,209,255,0.30);border-radius:999px;background:rgba(0,209,255,0.10);color:#00D1FF;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">
-                        Acceso seguro
-                      </div>
-                      <h1 style="margin:18px 0 0;font-family:'Space Grotesk',Inter,Segoe UI,Arial,sans-serif;font-size:30px;line-height:1.12;color:#FFFFFF;font-weight:700;">
-                        Restablece tu contraseña
-                      </h1>
-                      <p style="margin:12px 0 0;color:#D4E3EE;font-size:16px;line-height:1.65;">
-                        {greeting_html} hemos recibido una solicitud para cambiar la contraseña de tu acceso a Vantelia.
-                      </p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:30px;">
-                      <p style="margin:0 0 22px;color:#D4E3EE;font-size:16px;line-height:1.7;">
-                        Si has sido tú, puedes crear una nueva contraseña desde el botón inferior. Por seguridad, el enlace solo funciona una vez y durante un tiempo limitado.
-                      </p>
-                      <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 24px;">
-                        <tr>
-                          <td style="border-radius:999px;background:linear-gradient(135deg,#00D1FF,#00F5D4);box-shadow:0 12px 34px rgba(0,209,255,0.32);">
-                            <a href="{escape(reset_url)}" style="display:inline-block;padding:15px 26px;border-radius:999px;color:#04101C;font-size:15px;font-weight:800;text-decoration:none;font-family:'Space Grotesk',Inter,Segoe UI,Arial,sans-serif;">
-                              Restablecer contraseña
-                            </a>
-                          </td>
-                        </tr>
-                      </table>
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 22px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;background:rgba(255,255,255,0.04);">
-                        <tr>
-                          <td style="padding:16px 18px;">
-                            <p style="margin:0 0 8px;color:#F0F4F8;font-size:14px;font-weight:700;">Detalles de seguridad</p>
-                            <p style="margin:0;color:#8FA3B4;font-size:14px;line-height:1.65;">
-                              Este enlace expirará en <strong style="color:#F0F4F8;">{escape(expires_text)}</strong>.<br>
-                              Dominio seguro: <strong style="color:#00D1FF;">{escape(reset_domain)}</strong>
-                            </p>
-                          </td>
-                        </tr>
-                      </table>
-                      <p style="margin:0 0 16px;color:#8FA3B4;font-size:14px;line-height:1.7;">
-                        Si no has solicitado este cambio, puedes ignorar este mensaje. Tu contraseña actual no se modificará.
-                      </p>
-                      <p style="margin:0;color:#8FA3B4;font-size:14px;line-height:1.7;">
-                        Si tienes problemas, contacta con soporte en
-                        <a href="mailto:{escape(support_email)}" style="color:#00D1FF;text-decoration:none;font-weight:700;">{escape(support_email)}</a>.
-                      </p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:22px 8px 0;text-align:center;color:#637C8E;font-size:12px;line-height:1.6;">
-                <p style="margin:0 0 6px;">Vantelia · IA y automatización para empresas</p>
-                <p style="margin:0;">(c) {current_year} Vantelia. Todos los derechos reservados.</p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>"""
-    _send_email_message(user["email"], subject, text_body, html_body)
 
 
 
 
-def _send_checkout_welcome_email(
-    *,
-    to_email: str,
-    display_name: str,
-    company_name: str,
-    cliente_id: str,
-    ai_name: str,
-    plan: str,
-    billing_period: str,
-    subscription_id: str,
-    temporary_password: str,
-    request: Optional[Request] = None,
-) -> None:
-    access_url = _platform_access_url(request)
-    base_url = (_preferred_public_base_url(request) or APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
-    logo_url = f"{base_url}/brand-assets/Logo_1_sin_resplandor.png"
-    support_email = PORTAL_SUPPORT_EMAIL or DEFAULT_VANTELIA_SUPPORT_EMAIL
-    current_year = _utc_now().year
-    clean_name = _sanitize_text(display_name) or _sanitize_text(company_name) or "Cliente"
-    clean_company = _sanitize_text(company_name) or clean_name
-    clean_ai_name = _sanitize_text(ai_name) or "Asistente Vantelia"
-    plan_label = _plan_limits(plan).get("label") or plan.title()
-    period_label = "mensual" if billing_period == "monthly" else "anual"
-    subject = "Tu alta en Vantelia esta lista"
-
-    text_body = (
-        f"Hola {clean_name},\n\n"
-        "Gracias por contratar Vantelia. Hemos creado tu cliente y tu acceso a la plataforma.\n\n"
-        "Resumen de la compra:\n"
-        f"- Empresa: {clean_company}\n"
-        f"- Cliente interno: {cliente_id}\n"
-        f"- IA: {clean_ai_name}\n"
-        f"- Plan: {plan_label} ({period_label})\n"
-        f"- Suscripcion Stripe: {subscription_id or '-'}\n\n"
-        "Acceso a la plataforma:\n"
-        f"- Email: {to_email}\n"
-        f"- Contrasena temporal: {temporary_password}\n"
-        f"- URL: {access_url}\n\n"
-        "Te recomendamos cambiar la contrasena despues del primer acceso.\n\n"
-        f"Soporte: {support_email}\n\n"
-        "Vantelia\n"
-        f"(c) {current_year} Vantelia. Todos los derechos reservados.\n"
-    )
-    html_body = f"""<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light">
-    <meta name="supported-color-schemes" content="light">
-    <title>Tu alta en Vantelia esta lista</title>
-  </head>
-  <body bgcolor="#0B132B" style="margin:0;padding:0;background-color:#0B132B;background:#0B132B;font-family:Inter,Segoe UI,Arial,sans-serif;color:#F0F4F8;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#0B132B" style="width:100%;background-color:#0B132B;background:#0B132B;">
-      <tr>
-        <td align="center" bgcolor="#0B132B" style="padding:28px 14px;background-color:#0B132B;background:#0B132B;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#0B132B" style="width:100%;max-width:660px;border-collapse:separate;border-spacing:0;background-color:#0B132B;background:#0B132B;">
-            <tr>
-              <td style="padding:0 0 18px;text-align:center;">
-                <img src="{escape(logo_url)}" width="148" alt="Vantelia" style="display:inline-block;width:148px;max-width:60%;height:auto;border:0;">
-              </td>
-            </tr>
-            <tr>
-              <td style="border:1px solid rgba(0,209,255,0.22);border-radius:24px;overflow:hidden;background:#08102A;box-shadow:0 28px 70px rgba(0,0,0,0.38);">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                  <tr>
-                    <td style="padding:34px 30px 22px;background:linear-gradient(135deg,rgba(0,209,255,0.18),rgba(0,245,212,0.08) 46%,rgba(8,16,42,0.92));">
-                      <div style="display:inline-block;padding:7px 12px;border:1px solid rgba(0,209,255,0.30);border-radius:999px;background:rgba(0,209,255,0.10);color:#00D1FF;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">
-                        Alta completada
-                      </div>
-                      <h1 style="margin:18px 0 0;font-family:'Space Grotesk',Inter,Segoe UI,Arial,sans-serif;font-size:30px;line-height:1.12;color:#FFFFFF;font-weight:700;">
-                        Tu acceso a Vantelia esta listo
-                      </h1>
-                      <p style="margin:12px 0 0;color:#D4E3EE;font-size:16px;line-height:1.65;">
-                        Hola {escape(clean_name)}, hemos creado el cliente de {escape(clean_company)} y ya puedes entrar en la plataforma.
-                      </p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:30px;">
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 22px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;background:rgba(255,255,255,0.04);">
-                        <tr>
-                          <td style="padding:16px 18px;">
-                            <p style="margin:0 0 10px;color:#F0F4F8;font-size:15px;font-weight:800;">Resumen de la compra</p>
-                            <p style="margin:0;color:#D4E3EE;font-size:14px;line-height:1.75;">
-                              Empresa: <strong style="color:#FFFFFF;">{escape(clean_company)}</strong><br>
-                              IA: <strong style="color:#FFFFFF;">{escape(clean_ai_name)}</strong><br>
-                              Plan: <strong style="color:#FFFFFF;">{escape(str(plan_label))} ({escape(period_label)})</strong><br>
-                              Cliente interno: <strong style="color:#00D1FF;">{escape(cliente_id)}</strong><br>
-                              Suscripcion: <strong style="color:#FFFFFF;">{escape(subscription_id or "-")}</strong>
-                            </p>
-                          </td>
-                        </tr>
-                      </table>
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;border:1px solid rgba(0,209,255,0.20);border-radius:16px;background:rgba(0,209,255,0.07);">
-                        <tr>
-                          <td style="padding:16px 18px;">
-                            <p style="margin:0 0 10px;color:#F0F4F8;font-size:15px;font-weight:800;">Credenciales temporales</p>
-                            <p style="margin:0;color:#D4E3EE;font-size:14px;line-height:1.75;">
-                              Email: <strong style="color:#FFFFFF;">{escape(to_email)}</strong><br>
-                              Contrasena temporal: <strong style="color:#00D1FF;">{escape(temporary_password)}</strong>
-                            </p>
-                          </td>
-                        </tr>
-                      </table>
-                      <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 22px;">
-                        <tr>
-                          <td style="border-radius:999px;background:linear-gradient(135deg,#00D1FF,#00F5D4);box-shadow:0 12px 34px rgba(0,209,255,0.32);">
-                            <a href="{escape(access_url)}" style="display:inline-block;padding:15px 26px;border-radius:999px;color:#04101C;font-size:15px;font-weight:800;text-decoration:none;font-family:'Space Grotesk',Inter,Segoe UI,Arial,sans-serif;">
-                              Acceder a la plataforma
-                            </a>
-                          </td>
-                        </tr>
-                      </table>
-                      <p style="margin:0 0 16px;color:#8FA3B4;font-size:14px;line-height:1.7;">
-                        Por seguridad, cambia la contrasena despues del primer acceso.
-                      </p>
-                      <p style="margin:0;color:#8FA3B4;font-size:14px;line-height:1.7;">
-                        Soporte:
-                        <a href="mailto:{escape(support_email)}" style="color:#00D1FF;text-decoration:none;font-weight:700;">{escape(support_email)}</a>.
-                      </p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:22px 8px 0;text-align:center;color:#637C8E;font-size:12px;line-height:1.6;">
-                <p style="margin:0 0 6px;">Vantelia - IA y automatizacion para empresas</p>
-                <p style="margin:0;">(c) {current_year} Vantelia. Todos los derechos reservados.</p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>"""
-    _send_email_message(to_email, subject, text_body, html_body)
 
 
-def _send_payment_failed_emails(
-    *,
-    cliente_id: str,
-    customer_email: str,
-    company_name: str,
-    plan: str,
-    amount_due_eur: str,
-    attempt_count: int,
-    next_attempt_iso: str,
-    hosted_invoice_url: str,
-    customer_id: str,
-    subscription_id: str,
-) -> None:
-    plan_label = _plan_limits(plan).get("label") or plan.title() or "-"
-    next_attempt_label = next_attempt_iso or "Sin nuevo intento programado"
-    invoice_link = hosted_invoice_url or "https://app.vantelia.es/portal"
-    support_email = PORTAL_SUPPORT_EMAIL or DEFAULT_VANTELIA_SUPPORT_EMAIL or "soporte@vantelia.es"
-
-    if customer_email:
-        subject_c = "Vantelia: tu pago no se ha podido procesar"
-        text_c = (
-            f"Hola,\n\n"
-            f"Hemos intentado cobrar la cuota del plan {plan_label} de Vantelia y la operacion no se ha podido completar.\n\n"
-            f"Importe: {amount_due_eur} EUR\n"
-            f"Intento numero: {attempt_count}\n"
-            f"Proximo reintento: {next_attempt_label}\n\n"
-            f"Para evitar la suspension del servicio, actualiza el metodo de pago desde el portal de facturacion:\n"
-            f"{invoice_link}\n\n"
-            f"Si tienes dudas, escribenos a {support_email}.\n\n"
-            f"Vantelia\n"
-        )
-        html_c = (
-            f"<h2>Pago no completado</h2>"
-            f"<p>Hemos intentado cobrar la cuota del plan <strong>{escape(str(plan_label))}</strong> y la operacion no se ha podido completar.</p>"
-            f"<table cellpadding='6' style='border-collapse:collapse'>"
-            f"<tr><td><strong>Importe</strong></td><td>{escape(amount_due_eur)} EUR</td></tr>"
-            f"<tr><td><strong>Intento</strong></td><td>{escape(str(attempt_count))}</td></tr>"
-            f"<tr><td><strong>Proximo reintento</strong></td><td>{escape(next_attempt_label)}</td></tr>"
-            f"</table>"
-            f"<p>Para evitar la suspension del servicio, actualiza el metodo de pago desde el portal de facturacion:</p>"
-            f"<p><a href='{escape(invoice_link)}'>Actualizar pago</a></p>"
-            f"<p>Si tienes dudas, escribenos a <a href='mailto:{escape(support_email)}'>{escape(support_email)}</a>.</p>"
-        )
-        try:
-            _send_email_message(customer_email, subject_c, text_c, html_c)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("No se pudo enviar aviso de pago fallido a %s: %s", customer_email, exc)
-
-    if CONSULTA_NOTIFICATION_EMAIL:
-        subject_a = f"Pago fallido Vantelia: {company_name or cliente_id} ({plan_label})"
-        text_a = (
-            f"Pago fallido en Stripe.\n\n"
-            f"Cliente: {company_name or cliente_id} ({cliente_id})\n"
-            f"Email contacto: {customer_email or '-'}\n"
-            f"Plan: {plan_label}\n"
-            f"Importe: {amount_due_eur} EUR\n"
-            f"Intento: {attempt_count}\n"
-            f"Proximo reintento: {next_attempt_label}\n"
-            f"Stripe customer: {customer_id or '-'}\n"
-            f"Stripe subscription: {subscription_id or '-'}\n"
-            f"Hosted invoice: {invoice_link}\n"
-        )
-        html_a = (
-            f"<h2>Pago fallido Stripe</h2>"
-            f"<table cellpadding='6' style='border-collapse:collapse'>"
-            f"<tr><td><strong>Cliente</strong></td><td>{escape(company_name or cliente_id)} ({escape(cliente_id)})</td></tr>"
-            f"<tr><td><strong>Email contacto</strong></td><td>{escape(customer_email or '-')}</td></tr>"
-            f"<tr><td><strong>Plan</strong></td><td>{escape(str(plan_label))}</td></tr>"
-            f"<tr><td><strong>Importe</strong></td><td>{escape(amount_due_eur)} EUR</td></tr>"
-            f"<tr><td><strong>Intento</strong></td><td>{escape(str(attempt_count))}</td></tr>"
-            f"<tr><td><strong>Proximo reintento</strong></td><td>{escape(next_attempt_label)}</td></tr>"
-            f"<tr><td><strong>Stripe customer</strong></td><td>{escape(customer_id or '-')}</td></tr>"
-            f"<tr><td><strong>Stripe subscription</strong></td><td>{escape(subscription_id or '-')}</td></tr>"
-            f"<tr><td><strong>Hosted invoice</strong></td><td><a href='{escape(invoice_link)}'>{escape(invoice_link)}</a></td></tr>"
-            f"</table>"
-        )
-        try:
-            _send_email_message(CONSULTA_NOTIFICATION_EMAIL, subject_a, text_a, html_a)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("No se pudo enviar aviso pago fallido admin: %s", exc)
 
 
 def _send_checkout_admin_notification(
@@ -2048,8 +1724,6 @@ _ensure_default_portal_admin()
 
 
 
-def _smtp_configured() -> bool:
-    return bool(SMTP_HOST and SMTP_FROM_EMAIL)
 
 
 
@@ -2058,402 +1732,6 @@ def _smtp_configured() -> bool:
 
 
 
-def _gmail_encrypt(value: str) -> str:
-    fernet = _gmail_fernet()
-    if not fernet:
-        raise RuntimeError("Configura GMAIL_TOKEN_ENCRYPTION_KEY o ADMIN_API_TOKEN para cifrar tokens Gmail.")
-    return fernet.encrypt(str(value or "").encode("utf-8")).decode("ascii")
-
-
-def _gmail_decrypt(value: str) -> str:
-    if not value:
-        return ""
-    fernet = _gmail_fernet()
-    if not fernet:
-        raise RuntimeError("No se puede descifrar la conexion Gmail: falta la clave de cifrado.")
-    try:
-        return fernet.decrypt(value.encode("ascii")).decode("utf-8")
-    except (InvalidToken, ValueError, UnicodeError) as exc:
-        raise RuntimeError("No se puede descifrar la conexion Gmail con la clave actual.") from exc
-
-
-def _gmail_connection(cliente_id: str = "") -> Optional[sqlite3.Row]:
-    connection_id = cliente_id or "default"
-    with _get_db_connection() as connection:
-        return connection.execute("SELECT * FROM gmail_connections WHERE id = ?", (connection_id,)).fetchone()
-
-
-def _gmail_connected(cliente_id: str = "") -> bool:
-    row = _gmail_connection(cliente_id)
-    return bool(row and row["refresh_token_encrypted"])
-
-
-def _email_delivery_configured(cliente_id: str = "") -> bool:
-    client_gmail_connected = bool(cliente_id and _gmail_connected(cliente_id))
-    global_gmail_connected = _gmail_connected()
-    gmail_ready = _gmail_oauth_configured() and (client_gmail_connected or global_gmail_connected)
-    if EMAIL_SEND_PROVIDER == "gmail":
-        return gmail_ready
-    if EMAIL_SEND_PROVIDER == "smtp":
-        return _smtp_configured()
-    return gmail_ready or _smtp_configured()
-
-
-def _gmail_save_tokens(token_data: Dict[str, Any], email: str, scopes: str = "", cliente_id: str = "") -> None:
-    connection_id = cliente_id or "default"
-    current = _gmail_connection(cliente_id)
-    access_token = str(token_data.get("access_token") or "").strip()
-    refresh_token = str(token_data.get("refresh_token") or "").strip()
-    if not refresh_token and current:
-        refresh_token_encrypted = current["refresh_token_encrypted"]
-    elif refresh_token:
-        refresh_token_encrypted = _gmail_encrypt(refresh_token)
-    else:
-        raise RuntimeError("Google no devolvio refresh_token. Revoca el acceso y vuelve a conectar Gmail.")
-    expires_in = max(60, int(token_data.get("expires_in") or 3600))
-    now_iso = _utc_now_iso()
-    with _get_db_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO gmail_connections (
-                id, cliente_id, email, access_token_encrypted, refresh_token_encrypted, expires_at,
-                scopes, created_at, updated_at, last_used_at, last_error
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '')
-            ON CONFLICT(id) DO UPDATE SET
-                email=excluded.email,
-                access_token_encrypted=excluded.access_token_encrypted,
-                refresh_token_encrypted=excluded.refresh_token_encrypted,
-                expires_at=excluded.expires_at,
-                scopes=excluded.scopes,
-                updated_at=excluded.updated_at,
-                last_error=''
-            """,
-            (
-                connection_id,
-                cliente_id,
-                _normalize_email(email),
-                _gmail_encrypt(access_token),
-                refresh_token_encrypted,
-                time.time() + expires_in,
-                scopes or str(token_data.get("scope") or ""),
-                now_iso,
-                now_iso,
-            ),
-        )
-        connection.commit()
-
-
-def _gmail_access_token(cliente_id: str = "") -> Tuple[str, sqlite3.Row]:
-    row = _gmail_connection(cliente_id)
-    if not row or not row["refresh_token_encrypted"]:
-        raise RuntimeError("Gmail no esta conectado.")
-    if row["access_token_encrypted"] and float(row["expires_at"] or 0) > time.time() + 60:
-        return _gmail_decrypt(row["access_token_encrypted"]), row
-    refresh_token = _gmail_decrypt(row["refresh_token_encrypted"])
-    with httpx.Client(timeout=20.0) as client:
-        response = client.post(
-            GOOGLE_OAUTH_TOKEN_URL,
-            data={
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "refresh_token": refresh_token,
-                "grant_type": "refresh_token",
-            },
-            headers={"Accept": "application/json"},
-        )
-        response.raise_for_status()
-        token_data = response.json()
-    _gmail_save_tokens(token_data, row["email"], row["scopes"], cliente_id)
-    fresh = _gmail_connection(cliente_id)
-    if not fresh:
-        raise RuntimeError("No se pudo guardar el token renovado de Gmail.")
-    return _gmail_decrypt(fresh["access_token_encrypted"]), fresh
-
-
-def _gmail_send_message(message: EmailMessage, cliente_id: str = "") -> None:
-    if not _gmail_oauth_configured():
-        raise RuntimeError("Google OAuth para Gmail no esta configurado.")
-    access_token, connection_row = _gmail_access_token(cliente_id)
-    connected_email = _normalize_email(connection_row["email"])
-    from_name, from_email = parseaddr(str(message.get("From") or ""))
-    if connected_email and _normalize_email(from_email) != connected_email:
-        if message.get("From"):
-            message.replace_header("From", formataddr((from_name or SMTP_FROM_NAME or "Vantelia", connected_email)))
-        else:
-            message["From"] = formataddr((SMTP_FROM_NAME or "Vantelia", connected_email))
-    raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
-    try:
-        with httpx.Client(timeout=25.0) as client:
-            response = client.post(
-                GOOGLE_GMAIL_SEND_URL,
-                json={"raw": raw},
-                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-            )
-            response.raise_for_status()
-    except Exception as exc:
-        with _get_db_connection() as db:
-            db.execute(
-                "UPDATE gmail_connections SET last_error = ?, updated_at = ? WHERE id = ?",
-                (str(exc)[:500], _utc_now_iso(), cliente_id or "default"),
-            )
-            db.commit()
-        raise
-    with _get_db_connection() as db:
-        db.execute(
-            "UPDATE gmail_connections SET last_used_at = ?, last_error = '' WHERE id = ?",
-            (_utc_now_iso(), cliente_id or "default"),
-        )
-        db.commit()
-
-
-def _smtp_send_message(message: EmailMessage) -> None:
-    if not _smtp_configured():
-        raise RuntimeError("El sistema SMTP no esta configurado. Revisa SMTP_HOST y SMTP_FROM_EMAIL.")
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as smtp:
-        smtp.ehlo()
-        if SMTP_STARTTLS:
-            smtp.starttls()
-            smtp.ehlo()
-        if SMTP_USERNAME:
-            smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
-        smtp.send_message(message)
-
-
-def _send_email_object(message: EmailMessage, cliente_id: str = "") -> None:
-    if EMAIL_SEND_PROVIDER not in {"auto", "gmail", "smtp"}:
-        raise RuntimeError("EMAIL_SEND_PROVIDER debe ser auto, gmail o smtp.")
-    client_gmail_connected = bool(cliente_id and _gmail_connected(cliente_id))
-    gmail_ready = _gmail_oauth_configured() and (client_gmail_connected or _gmail_connected())
-    gmail_target = cliente_id if client_gmail_connected else ""
-    if EMAIL_SEND_PROVIDER == "gmail" and not gmail_ready:
-        raise RuntimeError("EMAIL_SEND_PROVIDER=gmail pero Gmail no esta conectado.")
-    if EMAIL_SEND_PROVIDER in {"auto", "gmail"} and gmail_ready:
-        try:
-            if gmail_target:
-                _gmail_send_message(copy.deepcopy(message), gmail_target)
-            else:
-                _gmail_send_message(copy.deepcopy(message))
-            return
-        except Exception as exc:
-            if EMAIL_SEND_PROVIDER == "gmail" or not _smtp_configured():
-                raise
-            logger.warning("Envio Gmail fallo; usando respaldo SMTP: %s", exc)
-    _smtp_send_message(message)
-
-
-def _email_sender() -> str:
-    if SMTP_FROM_NAME:
-        return formataddr((SMTP_FROM_NAME, SMTP_FROM_EMAIL))
-    return SMTP_FROM_EMAIL
-
-
-def _send_email_message(
-    to_email: str,
-    subject: str,
-    text_body: str,
-    html_body: str = "",
-    reply_to: Optional[str] = None,
-    cliente_id: str = "",
-) -> None:
-    if not _email_delivery_configured(cliente_id):
-        raise RuntimeError("El sistema de correo no esta configurado. Conecta Gmail o configura SMTP.")
-
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = _email_sender()
-    message["To"] = to_email
-    reply_addr = (reply_to or SMTP_REPLY_TO or "").strip()
-    if reply_addr:
-        message["Reply-To"] = reply_addr
-    message.set_content(text_body)
-    if html_body:
-        message.add_alternative(html_body, subtype="html")
-
-    _send_email_object(message, cliente_id)
-
-
-def send_client_email(
-    cliente_id: str,
-    to_email: str,
-    subject: str,
-    text_body: str,
-    html_body: str = "",
-    reply_to: Optional[str] = None,
-) -> Dict[str, Any]:
-    try:
-        _send_email_message(to_email, subject, text_body, html_body, reply_to, cliente_id)
-        return {"ok": True, "provider": "gmail" if _gmail_connected(cliente_id) else "smtp"}
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Email cliente fallo cliente=%s: %s", cliente_id, exc)
-        return {"ok": False, "provider": "none", "error": str(exc)[:500]}
-
-
-
-
-def _encrypt_channel_secret(value: str) -> str:
-    return _channel_fernet().encrypt(str(value or "").encode("utf-8")).decode("ascii") if value else ""
-
-
-def _decrypt_channel_secret(value: str) -> str:
-    if not value:
-        return ""
-    try:
-        return _channel_fernet().decrypt(value.encode("ascii")).decode("utf-8")
-    except InvalidToken as exc:
-        raise RuntimeError("No se pudo descifrar la credencial del canal.") from exc
-
-
-def _ensure_channel_settings(cliente_id: str) -> sqlite3.Row:
-    now = _utc_now_iso()
-    with _get_db_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO client_channel_settings (cliente_id, created_at, updated_at)
-            VALUES (?, ?, ?) ON CONFLICT(cliente_id) DO NOTHING
-            """,
-            (cliente_id, now, now),
-        )
-        connection.commit()
-        return connection.execute(
-            "SELECT * FROM client_channel_settings WHERE cliente_id=?", (cliente_id,)
-        ).fetchone()
-
-
-def _channel_audit(
-    cliente_id: str, channel: str, event_type: str, provider: str, success: bool, detail: str = ""
-) -> None:
-    with _get_db_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO client_channel_audit
-                (cliente_id, channel, event_type, provider, success, detail, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (cliente_id, channel, event_type, provider, int(success), _sanitize_text(detail)[:500], _utc_now_iso()),
-        )
-        connection.commit()
-
-
-def _client_gmail_connection(cliente_id: str) -> Optional[sqlite3.Row]:
-    with _get_db_connection() as connection:
-        return connection.execute(
-            "SELECT * FROM client_oauth_connections WHERE cliente_id=? AND provider='gmail_oauth'",
-            (cliente_id,),
-        ).fetchone()
-
-
-def _client_gmail_access_token(cliente_id: str, connection_row: sqlite3.Row) -> str:
-    access_token = _decrypt_channel_secret(connection_row["access_token_encrypted"])
-    expires_at = _from_utc_iso(connection_row["expires_at"] or "")
-    if access_token and expires_at and expires_at > _utc_now() + timedelta(seconds=60):
-        return access_token
-    refresh_token = _decrypt_channel_secret(connection_row["refresh_token_encrypted"])
-    if not refresh_token:
-        raise RuntimeError("Google requiere volver a conectar la cuenta.")
-    response = httpx.post(
-        GOOGLE_OAUTH_TOKEN_URL,
-        data={
-            "client_id": GOOGLE_GMAIL_CLIENT_ID,
-            "client_secret": GOOGLE_GMAIL_CLIENT_SECRET,
-            "refresh_token": refresh_token,
-            "grant_type": "refresh_token",
-        },
-        timeout=15,
-    )
-    response.raise_for_status()
-    token_data = response.json()
-    access_token = str(token_data.get("access_token", ""))
-    if not access_token:
-        raise RuntimeError("Google no devolvio un token de acceso.")
-    expires = _utc_now() + timedelta(seconds=int(token_data.get("expires_in", 3600)))
-    with _get_db_connection() as connection:
-        connection.execute(
-            """
-            UPDATE client_oauth_connections
-            SET access_token_encrypted=?, expires_at=?, status='active', last_error='', updated_at=?
-            WHERE cliente_id=? AND provider='gmail_oauth'
-            """,
-            (_encrypt_channel_secret(access_token), expires.isoformat(), _utc_now_iso(), cliente_id),
-        )
-        connection.commit()
-    return access_token
-
-
-def _send_gmail_message(
-    cliente_id: str, connection_row: sqlite3.Row, to_email: str, subject: str,
-    text_body: str, html_body: str = "", reply_to: Optional[str] = None,
-) -> None:
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = connection_row["account_email"]
-    message["To"] = to_email
-    if reply_to:
-        message["Reply-To"] = reply_to
-    message.set_content(text_body)
-    if html_body:
-        message.add_alternative(html_body, subtype="html")
-    raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii").rstrip("=")
-    response = httpx.post(
-        GOOGLE_GMAIL_SEND_URL,
-        json={"raw": raw},
-        headers={"Authorization": f"Bearer {_client_gmail_access_token(cliente_id, connection_row)}"},
-        timeout=20,
-    )
-    response.raise_for_status()
-
-
-def _send_client_email(
-    cliente_id: str, to_email: str, subject: str, text_body: str,
-    html_body: str = "", reply_to: Optional[str] = None,
-) -> str:
-    settings = _ensure_channel_settings(cliente_id)
-    provider = settings["email_provider"] or "vantelia_smtp"
-    if provider == "gmail_oauth":
-        connection_row = _client_gmail_connection(cliente_id)
-        if connection_row and connection_row["status"] == "active":
-            try:
-                _send_gmail_message(cliente_id, connection_row, to_email, subject, text_body, html_body, reply_to)
-                _channel_audit(cliente_id, "email", "send", provider, True)
-                return provider
-            except Exception as exc:  # noqa: BLE001
-                error = str(exc)[:500]
-                with _get_db_connection() as connection:
-                    connection.execute(
-                        "UPDATE client_oauth_connections SET status='error', last_error=?, updated_at=? WHERE cliente_id=? AND provider='gmail_oauth'",
-                        (error, _utc_now_iso(), cliente_id),
-                    )
-                    connection.commit()
-                _channel_audit(cliente_id, "email", "send_failed", provider, False, error)
-                if not settings["email_fallback_enabled"]:
-                    raise
-        elif not settings["email_fallback_enabled"]:
-            raise RuntimeError("La cuenta de Google remitente no esta disponible.")
-    _send_email_message(to_email, subject, text_body, html_body, reply_to)
-    _channel_audit(cliente_id, "email", "send", "vantelia_smtp", True)
-    return "vantelia_smtp"
-
-
-async def _send_client_sms(cliente_id: str, to_number: str, body: str) -> bool:
-    settings = _ensure_channel_settings(cliente_id)
-    mode = settings["sms_mode"] or "vantelia_default"
-    sender = ""
-    account_sid, auth_token = TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN
-    if mode in {"twilio_dedicated_number", "twilio_alphanumeric_sender"}:
-        if settings["sms_sender_status"] != "active":
-            _channel_audit(cliente_id, "sms", "send_rejected", mode, False, "Remitente no activo.")
-            return False
-        sender = settings["sms_sender"] or ""
-        account_sid = _decrypt_channel_secret(settings["sms_twilio_account_sid_encrypted"]) or account_sid
-        auth_token = _decrypt_channel_secret(settings["sms_twilio_auth_token_encrypted"]) or auth_token
-    else:
-        config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
-        sender = TWILIO_SMS_SENDER or (config.get("voice", {}) or {}).get("twilio_phone_number") or TWILIO_DEFAULT_PHONE_NUMBER
-    if mode == "vantelia_default":
-        sent = await _send_twilio_sms(to_number, sender, body)
-    else:
-        sent = await _send_twilio_sms(to_number, sender, body, account_sid=account_sid, auth_token=auth_token)
-    _channel_audit(cliente_id, "sms", "send" if sent else "send_failed", mode, sent)
-    return sent
 
 
 
@@ -2462,11 +1740,50 @@ async def _send_client_sms(cliente_id: str, to_number: str, body: str) -> bool:
 
 
 
-def _get_client_config(cliente_id: str) -> Dict[str, Any]:
-    config = appstate.CONFIG_CLIENTES.get(cliente_id)
-    if not config:
-        raise HTTPException(status_code=404, detail="Cliente no configurado")
-    return config
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def _client_data_dir(cliente_id: str) -> Path:
@@ -3112,77 +2429,14 @@ def _set_client_subscription(cliente_id: str, **fields: Any) -> None:
     _update_runtime_configs(next_configs)
 
 
-def _stripe_configured() -> bool:
-    return bool(stripe is not None and STRIPE_SECRET_KEY)
 
 
-def _stripe_init() -> None:
-    if stripe is None:
-        raise HTTPException(status_code=503, detail="Stripe no está disponible (instala el paquete 'stripe').")
-    if not STRIPE_SECRET_KEY:
-        raise HTTPException(status_code=503, detail="STRIPE_SECRET_KEY no configurada.")
-    stripe.api_key = STRIPE_SECRET_KEY
 
 
-def _stripe_price_for_plan(plan: str, billing_period: str = "monthly") -> Tuple[str, str]:
-    normalized_plan = _normalize_plan_slug(plan)
-    if normalized_plan not in PLAN_VALID:
-        raise HTTPException(status_code=400, detail="Plan no valido.")
-
-    plan_def = _self_serve_plan(normalized_plan)
-    normalized_period = str(billing_period or "monthly").strip().lower()
-    if normalized_period in {"annual", "yearly", "year"}:
-        price_id = plan_def.get("stripe_price_annual", "")
-        period = "annual"
-    elif normalized_period in {"monthly", "month", ""}:
-        price_id = plan_def.get("stripe_price_monthly", "")
-        period = "monthly"
-    else:
-        raise HTTPException(status_code=400, detail="Periodo de facturacion no valido.")
-
-    if not price_id:
-        env_suffix = "_ANNUAL" if period == "annual" else ""
-        raise HTTPException(
-            status_code=503,
-            detail=f"STRIPE_PRICE_{normalized_plan.upper()}{env_suffix} no configurado.",
-        )
-    return price_id, period
 
 
-def _stripe_onboarding_custom_fields() -> List[Dict[str, Any]]:
-    return [
-        {
-            "key": "website",
-            "label": {"type": "custom", "custom": "Web donde instalaremos la IA"},
-            "type": "text",
-            "text": {"maximum_length": 200, "minimum_length": 4},
-            "optional": False,
-        },
-        {
-            "key": "empresa",
-            "label": {"type": "custom", "custom": "Nombre de tu empresa"},
-            "type": "text",
-            "text": {"maximum_length": 80, "minimum_length": 2},
-            "optional": False,
-        },
-        {
-            "key": "ianame",
-            "label": {"type": "custom", "custom": "Nombre del asistente IA"},
-            "type": "text",
-            "text": {"maximum_length": 40, "minimum_length": 2},
-            "optional": True,
-        },
-    ]
 
 
-def _stripe_custom_field_values(session_object: Dict[str, Any]) -> Dict[str, str]:
-    values: Dict[str, str] = {}
-    for field in session_object.get("custom_fields") or []:
-        key = str(field.get("key") or "").strip()
-        text_value = ((field.get("text") or {}).get("value") or "").strip()
-        if key and text_value:
-            values[key] = text_value
-    return values
 
 
 def _unique_cliente_id(seed: str) -> str:
@@ -3207,76 +2461,16 @@ def _public_checkout_customer_details(session_object: Dict[str, Any]) -> Dict[st
     }
 
 
-_STRIPE_SESSIONS_FILE = STORAGE_DIR / "stripe_sessions.json"
-_STRIPE_SESSIONS_LOCK = threading.Lock()
 
 
-def _load_stripe_sessions() -> Dict[str, Dict[str, Any]]:
-    if not _STRIPE_SESSIONS_FILE.exists():
-        return {}
-    try:
-        with _STRIPE_SESSIONS_FILE.open("r", encoding="utf-8") as fh:
-            data = json.load(fh)
-        return data if isinstance(data, dict) else {}
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("No se pudo leer stripe_sessions.json: %s", exc)
-        return {}
 
 
-def _save_stripe_sessions(data: Dict[str, Dict[str, Any]]) -> None:
-    STORAGE_DIR.mkdir(exist_ok=True)
-    tmp = _STRIPE_SESSIONS_FILE.with_suffix(".json.tmp")
-    with tmp.open("w", encoding="utf-8") as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
-    tmp.replace(_STRIPE_SESSIONS_FILE)
 
 
-def _claim_stripe_session(session_id: str) -> bool:
-    """Reserva session_id de Stripe en disco. False si ya fue vista (procesando/done/failed)."""
-    if not session_id:
-        return True
-    with _STRIPE_SESSIONS_LOCK:
-        sessions = _load_stripe_sessions()
-        if session_id in sessions:
-            return False
-        sessions[session_id] = {
-            "status": "processing",
-            "ts": _utc_now().isoformat(),
-        }
-        _save_stripe_sessions(sessions)
-    return True
 
 
-def _mark_stripe_session(session_id: str, *, status: str, cliente_id: str = "", error: str = "") -> None:
-    if not session_id:
-        return
-    with _STRIPE_SESSIONS_LOCK:
-        sessions = _load_stripe_sessions()
-        entry = dict(sessions.get(session_id) or {})
-        entry["status"] = status
-        entry["ts"] = _utc_now().isoformat()
-        if cliente_id:
-            entry["cliente_id"] = cliente_id
-        if error:
-            entry["error"] = error[:500]
-        sessions[session_id] = entry
-        _save_stripe_sessions(sessions)
 
 
-def _find_client_by_stripe_id(
-    *, customer_id: str = "", subscription_id: str = "", session_id: str = ""
-) -> str:
-    if not (customer_id or subscription_id or session_id):
-        return ""
-    for cid, cfg in appstate.CONFIG_CLIENTES.items():
-        sub = cfg.get("subscription") or {}
-        if subscription_id and sub.get("stripe_subscription_id") == subscription_id:
-            return cid
-        if customer_id and sub.get("stripe_customer_id") == customer_id:
-            return cid
-        if session_id and sub.get("stripe_checkout_session_id") == session_id:
-            return cid
-    return ""
 
 
 def _retrieve_public_checkout_session(session_id: str) -> Any:
@@ -12592,11 +11786,6 @@ def _payment_contact_for_booking(booking: sqlite3.Row) -> str:
     )
 
 
-def _gmail_channel_configured() -> bool:
-    return bool(
-        GOOGLE_GMAIL_CLIENT_ID and GOOGLE_GMAIL_CLIENT_SECRET
-        and GOOGLE_GMAIL_REDIRECT_URL and OAUTH_TOKEN_ENCRYPTION_KEY
-    )
 
 
 def _channel_settings_public(cliente_id: str) -> ChannelSettingsResponse:
@@ -12647,50 +11836,8 @@ def _ai_payment_delivery_available(cliente_id: str, method: str) -> bool:
     return _email_delivery_configured()
 
 
-def _gmail_channel_state_create(cliente_id: str, user_id: str) -> Tuple[str, str]:
-    verifier = secrets.token_urlsafe(64)
-    raw_state = secrets.token_urlsafe(32)
-    signature = hmac.new(
-        OAUTH_TOKEN_ENCRYPTION_KEY.encode("utf-8"), raw_state.encode("ascii"), hashlib.sha256
-    ).hexdigest()
-    state = f"{raw_state}.{signature}"
-    with _get_db_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO client_channel_oauth_states
-                (state_hash, cliente_id, user_id, provider, code_verifier_encrypted, created_at)
-            VALUES (?, ?, ?, 'gmail_oauth', ?, ?)
-            """,
-            (hashlib.sha256(state.encode()).hexdigest(), cliente_id, user_id, _encrypt_channel_secret(verifier), time.time()),
-        )
-        connection.execute("DELETE FROM client_channel_oauth_states WHERE created_at < ?", (time.time() - 600,))
-        connection.commit()
-    return state, verifier
 
 
-def _gmail_channel_state_consume(state: str, cliente_id: str, user_id: str) -> str:
-    parts = str(state or "").rsplit(".", 1)
-    if len(parts) != 2:
-        raise HTTPException(status_code=400, detail="Estado OAuth invalido o caducado.")
-    expected = hmac.new(
-        OAUTH_TOKEN_ENCRYPTION_KEY.encode("utf-8"), parts[0].encode("ascii"), hashlib.sha256
-    ).hexdigest()
-    if not secrets.compare_digest(parts[1], expected):
-        raise HTTPException(status_code=400, detail="Estado OAuth invalido o caducado.")
-    state_hash = hashlib.sha256(state.encode()).hexdigest()
-    with _get_db_connection() as connection:
-        row = connection.execute(
-            "SELECT * FROM client_channel_oauth_states WHERE state_hash=?", (state_hash,)
-        ).fetchone()
-        if row:
-            connection.execute("DELETE FROM client_channel_oauth_states WHERE state_hash=?", (state_hash,))
-            connection.commit()
-    if (
-        not row or row["cliente_id"] != cliente_id or row["user_id"] != user_id
-        or time.time() - float(row["created_at"]) > 600
-    ):
-        raise HTTPException(status_code=400, detail="Estado OAuth invalido o caducado.")
-    return _decrypt_channel_secret(row["code_verifier_encrypted"])
 
 
 @app.get("/auth/app/channels", response_model=ChannelSettingsResponse)
@@ -14393,200 +13540,26 @@ def _build_plan_tiers(current_plan_slug: str) -> List[BillingPlanTier]:
     return out
 
 
-def _stripe_connect_headers() -> Dict[str, str]:
-    if not _stripe_connect_configured():
-        raise HTTPException(status_code=503, detail="Stripe no configurado en el servidor.")
-    return {
-        "Authorization": f"Bearer {STRIPE_SECRET_KEY}",
-        "Stripe-Version": STRIPE_CONNECT_API_VERSION,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
 
 
-def _stripe_connect_configured() -> bool:
-    return bool(STRIPE_SECRET_KEY)
 
 
-def _stripe_connect_request(method: str, path: str, *, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    try:
-        with httpx.Client(timeout=25.0) as client:
-            response = client.request(
-                method,
-                f"{STRIPE_CONNECT_BASE_URL}{path}",
-                headers=_stripe_connect_headers(),
-                json=payload,
-            )
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail="No se pudo conectar con Stripe Connect.") from exc
-    try:
-        body = response.json()
-    except ValueError:
-        body = {}
-    if response.is_error:
-        message = (
-            body.get("error", {}).get("message", "")
-            if isinstance(body.get("error"), dict)
-            else ""
-        )
-        logger.error("Stripe Connect %s %s fallo (%s): %s", method, path, response.status_code, message)
-        raise HTTPException(
-            status_code=502,
-            detail=message or "Stripe no pudo completar la operacion de conexion.",
-        )
-    return body
 
 
-def _stripe_connected_account_row(cliente_id: str) -> Optional[sqlite3.Row]:
-    with _get_db_connection() as connection:
-        return connection.execute(
-            "SELECT * FROM stripe_connected_accounts WHERE cliente_id = ?",
-            (cliente_id,),
-        ).fetchone()
 
 
-def _save_stripe_connected_account(
-    cliente_id: str,
-    owner_user_id: str,
-    stripe_account_id: str,
-    *,
-    status_value: str = "pending",
-    requirements_due: int = 0,
-    last_error: str = "",
-) -> None:
-    now_iso = _utc_now_iso()
-    with _get_db_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO stripe_connected_accounts
-                (cliente_id, owner_user_id, stripe_account_id, status,
-                 requirements_due, last_error, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(cliente_id) DO UPDATE SET
-                owner_user_id = excluded.owner_user_id,
-                stripe_account_id = excluded.stripe_account_id,
-                status = excluded.status,
-                requirements_due = excluded.requirements_due,
-                last_error = excluded.last_error,
-                updated_at = excluded.updated_at
-            """,
-            (
-                cliente_id,
-                owner_user_id,
-                stripe_account_id,
-                status_value,
-                requirements_due,
-                last_error,
-                now_iso,
-                now_iso,
-            ),
-        )
-        connection.commit()
 
 
-def _stripe_connect_requirement_count(account: Dict[str, Any]) -> int:
-    requirements = account.get("requirements")
-    if not isinstance(requirements, dict):
-        return 0
-    entries = requirements.get("entries")
-    return len(entries) if isinstance(entries, list) else 0
 
 
-def _stripe_connect_account_status(account: Dict[str, Any]) -> Tuple[str, int]:
-    due = _stripe_connect_requirement_count(account)
-    merchant = account.get("configuration", {}).get("merchant", {})
-    card_payments = merchant.get("capabilities", {}).get("card_payments", {})
-    capability_status = str(card_payments.get("status", "")).lower()
-    if capability_status == "active" and due == 0:
-        return "active", 0
-    return ("requirements_due" if due else "pending"), due
 
 
-def _stripe_connect_display_name(cliente_id: str) -> str:
-    config = appstate.CONFIG_CLIENTES.get(cliente_id, {})
-    configured_name = str(config.get("nombre", "")).strip()
-    if configured_name:
-        return configured_name
-    with _get_db_connection() as connection:
-        row = connection.execute(
-            "SELECT nombre FROM clientes WHERE cliente_id = ?",
-            (cliente_id,),
-        ).fetchone()
-    return str(row["nombre"] or cliente_id).strip() if row else cliente_id
 
 
-def _create_stripe_connected_account(user: sqlite3.Row) -> str:
-    cliente_id = str(user["cliente_id"] or "")
-    payload = {
-        "contact_email": user["email"],
-        "display_name": _stripe_connect_display_name(cliente_id),
-        "dashboard": "full",
-        "identity": {
-            "country": STRIPE_CONNECT_COUNTRY,
-        },
-        "configuration": {
-            "merchant": {
-                "capabilities": {
-                    "card_payments": {"requested": True},
-                },
-            },
-        },
-        "defaults": {
-            "currency": "eur",
-            "responsibilities": {
-                "fees_collector": "stripe",
-                "losses_collector": "stripe",
-            },
-            "locales": ["es-ES"],
-        },
-        "include": ["configuration.merchant", "requirements"],
-    }
-    account = _stripe_connect_request("POST", "/accounts", payload=payload)
-    account_id = str(account.get("id", ""))
-    if not account_id:
-        raise HTTPException(status_code=502, detail="Stripe no devolvio una cuenta conectada valida.")
-    status_value, due = _stripe_connect_account_status(account)
-    _save_stripe_connected_account(
-        cliente_id,
-        user["id"],
-        account_id,
-        status_value=status_value,
-        requirements_due=due,
-    )
-    return account_id
 
 
-def _stripe_connect_account_id(user: sqlite3.Row) -> str:
-    cliente_id = str(user["cliente_id"] or "")
-    if not cliente_id:
-        raise HTTPException(status_code=400, detail="Tu usuario no tiene un negocio asociado.")
-    row = _stripe_connected_account_row(cliente_id)
-    return str(row["stripe_account_id"]) if row else _create_stripe_connected_account(user)
 
 
-def _stripe_connect_onboarding_url(user: sqlite3.Row, request: Request) -> str:
-    account_id = _stripe_connect_account_id(user)
-    base_url = _public_base_url(request)
-    account_link = _stripe_connect_request(
-        "POST",
-        "/account_links",
-        payload={
-            "account": account_id,
-            "use_case": {
-                "type": "account_onboarding",
-                "account_onboarding": {
-                    "collection_options": {"fields": "eventually_due"},
-                    "configurations": ["merchant"],
-                    "return_url": f"{base_url}/auth/app/stripe-connect/return",
-                    "refresh_url": f"{base_url}/auth/app/stripe-connect/refresh",
-                },
-            },
-        },
-    )
-    onboarding_url = str(account_link.get("url", ""))
-    if not onboarding_url:
-        raise HTTPException(status_code=502, detail="Stripe no devolvio un enlace de conexion valido.")
-    return onboarding_url
 
 
 @app.get("/auth/app/stripe-connect", response_model=StripeConnectStateResponse)
@@ -15775,19 +14748,6 @@ async def auth_subscription_portal(
     return SubscriptionPortalResponse(url=session.url)
 
 
-def _construct_stripe_webhook_event(payload: bytes, sig_header: str) -> Any:
-    secrets_to_try = list(
-        dict.fromkeys(secret for secret in (STRIPE_WEBHOOK_SECRET, STRIPE_CONNECT_WEBHOOK_SECRET) if secret)
-    )
-    last_error: Optional[Exception] = None
-    for webhook_secret in secrets_to_try:
-        try:
-            return stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
-        except stripe.error.SignatureVerificationError as exc:
-            last_error = exc
-    if last_error:
-        raise last_error
-    raise RuntimeError("Stripe webhook secret no configurado.")
 
 
 @app.post("/stripe/connect/webhook", include_in_schema=False)
@@ -18726,8 +17686,6 @@ async def _process_chat_message(
     return chat_response
 
 
-def _whatsapp_env_value(env_name: str, fallback: str = "") -> str:
-    return os.getenv(str(env_name or "").strip(), "").strip() if env_name else fallback.strip()
 
 
 def _whatsapp_phone_client_map() -> Dict[str, str]:
@@ -18788,10 +17746,6 @@ def _whatsapp_verify_token_for_client(cliente_id: str = "") -> str:
     return WHATSAPP_VERIFY_TOKEN
 
 
-def _whatsapp_access_token_for_client(cliente_id: str) -> str:
-    config = _get_client_config(cliente_id)
-    configured_env = str(config.get("whatsapp", {}).get("access_token_env", "")).strip()
-    return _whatsapp_env_value(configured_env, WHATSAPP_ACCESS_TOKEN)
 
 
 def _whatsapp_session_id(cliente_id: str, from_number: str) -> str:
@@ -18808,23 +17762,6 @@ def _whatsapp_public_booking_text(cliente_id: str, request: Request) -> str:
     return f"Para completar la cita con formulario, entra aqui: {base_url.rstrip('/')}"
 
 
-def _whatsapp_chunks(text: str, *, max_length: int = 3500) -> List[str]:
-    cleaned = _sanitize_text(text, allow_multiline=True)
-    if not cleaned:
-        return ["Ahora mismo no tengo una respuesta valida."]
-    chunks: List[str] = []
-    while cleaned:
-        if len(cleaned) <= max_length:
-            chunks.append(cleaned)
-            break
-        split_at = cleaned.rfind("\n", 0, max_length)
-        if split_at < 800:
-            split_at = cleaned.rfind(" ", 0, max_length)
-        if split_at < 800:
-            split_at = max_length
-        chunks.append(cleaned[:split_at].strip())
-        cleaned = cleaned[split_at:].strip()
-    return chunks
 
 
 def _mark_whatsapp_message_if_new(
@@ -18890,134 +17827,12 @@ def _verify_whatsapp_signature(raw_body: bytes, signature_header: str) -> None:
         raise HTTPException(status_code=403, detail="Firma de WhatsApp invalida.")
 
 
-async def _send_whatsapp_payload(
-    *,
-    cliente_id: str,
-    phone_number_id: str,
-    payload: Dict[str, Any],
-) -> bool:
-    access_token = _whatsapp_access_token_for_client(cliente_id)
-    if not access_token:
-        logger.warning("WhatsApp sin token configurado para %s; respuesta no enviada.", cliente_id)
-        return False
-    url = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{phone_number_id}/messages"
-    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
-    async with httpx.AsyncClient(timeout=20) as client:
-        response = await client.post(url, headers=headers, json=payload)
-        if response.status_code >= 300:
-            logger.error(
-                "Error enviando WhatsApp interactive a %s (%s): %s",
-                cliente_id,
-                response.status_code,
-                response.text[:500],
-            )
-            return False
-    return True
 
 
-async def _send_whatsapp_buttons(
-    *,
-    cliente_id: str,
-    phone_number_id: str,
-    to_number: str,
-    body: str,
-    buttons: List[Tuple[str, str]],
-    header: str = "",
-    footer: str = "",
-) -> bool:
-    btns = []
-    for btn_id, btn_label in buttons[:3]:
-        btns.append({
-            "type": "reply",
-            "reply": {"id": btn_id[:256], "title": btn_label[:20]},
-        })
-    interactive: Dict[str, Any] = {
-        "type": "button",
-        "body": {"text": body[:1024]},
-        "action": {"buttons": btns},
-    }
-    if header:
-        interactive["header"] = {"type": "text", "text": header[:60]}
-    if footer:
-        interactive["footer"] = {"text": footer[:60]}
-    payload = {
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": to_number,
-        "type": "interactive",
-        "interactive": interactive,
-    }
-    return await _send_whatsapp_payload(
-        cliente_id=cliente_id, phone_number_id=phone_number_id, payload=payload,
-    )
 
 
-async def _send_whatsapp_list(
-    *,
-    cliente_id: str,
-    phone_number_id: str,
-    to_number: str,
-    body: str,
-    button_text: str,
-    sections: List[Dict[str, Any]],
-    header: str = "",
-    footer: str = "",
-) -> bool:
-    interactive: Dict[str, Any] = {
-        "type": "list",
-        "body": {"text": body[:1024]},
-        "action": {"button": button_text[:20], "sections": sections},
-    }
-    if header:
-        interactive["header"] = {"type": "text", "text": header[:60]}
-    if footer:
-        interactive["footer"] = {"text": footer[:60]}
-    payload = {
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": to_number,
-        "type": "interactive",
-        "interactive": interactive,
-    }
-    return await _send_whatsapp_payload(
-        cliente_id=cliente_id, phone_number_id=phone_number_id, payload=payload,
-    )
 
 
-async def _send_whatsapp_text(
-    *,
-    cliente_id: str,
-    phone_number_id: str,
-    to_number: str,
-    text: str,
-) -> bool:
-    access_token = _whatsapp_access_token_for_client(cliente_id)
-    if not access_token:
-        logger.warning("WhatsApp sin token configurado para %s; respuesta no enviada.", cliente_id)
-        return False
-
-    url = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{phone_number_id}/messages"
-    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
-    delivered = True
-    async with httpx.AsyncClient(timeout=20) as client:
-        for chunk in _whatsapp_chunks(text):
-            payload = {
-                "messaging_product": "whatsapp",
-                "recipient_type": "individual",
-                "to": to_number,
-                "type": "text",
-                "text": {"preview_url": True, "body": chunk},
-            }
-            response = await client.post(url, headers=headers, json=payload)
-            if response.status_code >= 300:
-                delivered = False
-                logger.error(
-                    "Error enviando WhatsApp a %s (%s): %s",
-                    cliente_id,
-                    response.status_code,
-                    response.text[:500],
-                )
-    return delivered
 
 
 def _agenda_block_reasons_for_day(cliente_id: str, fecha: str) -> List[str]:
@@ -28753,28 +27568,8 @@ def _get_voice_config(cliente_id: str) -> Optional[Dict[str, Any]]:
     return voice_cfg
 
 
-def _voice_twilio_configured() -> bool:
-    return bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN)
 
 
-def _twilio_request_valid(url: str, params: Dict[str, str], signature: str) -> bool:
-    """Valida X-Twilio-Signature. Usa la libreria twilio si esta disponible;
-    si no, replica el algoritmo (HMAC-SHA1 sobre url + params ordenados)."""
-    token = TWILIO_AUTH_TOKEN
-    if not token or not signature:
-        return False
-    if _TwilioRequestValidator is not None:
-        try:
-            return bool(_TwilioRequestValidator(token).validate(url, params, signature))
-        except Exception:  # noqa: BLE001
-            pass
-    data = url + "".join(f"{key}{params[key]}" for key in sorted(params.keys()))
-    digest = hmac.new(token.encode("utf-8"), data.encode("utf-8"), hashlib.sha1).digest()
-    expected = base64.b64encode(digest).decode("ascii")
-    try:
-        return hmac.compare_digest(expected, signature)
-    except Exception:  # noqa: BLE001
-        return False
 
 
 async def _voice_form_params(request: Request) -> Dict[str, str]:
@@ -29521,33 +28316,6 @@ def _voice_summarize(transcript_text: str) -> str:
         return ""
 
 
-async def _send_twilio_sms(
-    to_number: str,
-    from_number: str,
-    body: str,
-    *,
-    account_sid: str = "",
-    auth_token: str = "",
-) -> bool:
-    account_sid = account_sid or TWILIO_ACCOUNT_SID
-    auth_token = auth_token or TWILIO_AUTH_TOKEN
-    if not (account_sid and auth_token and from_number and to_number):
-        return False
-    url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json"
-    try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            resp = await client.post(
-                url,
-                data={"To": to_number, "From": from_number, "Body": body[:1500]},
-                auth=(account_sid, auth_token),
-            )
-        if resp.status_code >= 300:
-            logger.error("[voice] Twilio SMS error (%s): %s", resp.status_code, resp.text[:300])
-            return False
-        return True
-    except Exception as exc:  # noqa: BLE001
-        logger.error("[voice] Twilio SMS exception: %s", exc)
-        return False
 
 
 async def _open_realtime_ws(model: str = ""):
@@ -30099,7 +28867,7 @@ import types as _types
 
 # Modulos home ya extraidos, de mas especifico a mas generico (el primero que
 # define un nombre gana). Crece con cada sub-commit de la fase 3.
-_HOME_MODULES: tuple = (appstate, security, clients, db, timeutils, textnorm, settings)
+_HOME_MODULES: tuple = (appstate, security, emailing, messaging, stripe_gateway, clients, db, timeutils, textnorm, settings)
 
 _EXPORT_MAP: Dict[str, Any] = {}
 for _home_mod in _HOME_MODULES:

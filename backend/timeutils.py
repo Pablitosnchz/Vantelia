@@ -7,6 +7,7 @@ cualquier codigo nuevo debe llamarlo en lugar de datetime.now(timezone.utc).
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from backend import settings
 

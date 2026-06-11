@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 from backend import settings
 

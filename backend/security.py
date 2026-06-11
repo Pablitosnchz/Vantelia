@@ -796,3 +796,49 @@ def _user_plan(user: sqlite3.Row) -> str:
     return (sub["plan"] if sub else "free").lower()
 
 
+
+
+def _encrypt_channel_secret(value: str) -> str:
+    return _channel_fernet().encrypt(str(value or "").encode("utf-8")).decode("ascii") if value else ""
+
+
+def _decrypt_channel_secret(value: str) -> str:
+    if not value:
+        return ""
+    try:
+        return _channel_fernet().decrypt(value.encode("ascii")).decode("utf-8")
+    except InvalidToken as exc:
+        raise RuntimeError("No se pudo descifrar la credencial del canal.") from exc
+
+
+def _ensure_channel_settings(cliente_id: str) -> sqlite3.Row:
+    now = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO client_channel_settings (cliente_id, created_at, updated_at)
+            VALUES (?, ?, ?) ON CONFLICT(cliente_id) DO NOTHING
+            """,
+            (cliente_id, now, now),
+        )
+        connection.commit()
+        return connection.execute(
+            "SELECT * FROM client_channel_settings WHERE cliente_id=?", (cliente_id,)
+        ).fetchone()
+
+
+def _channel_audit(
+    cliente_id: str, channel: str, event_type: str, provider: str, success: bool, detail: str = ""
+) -> None:
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO client_channel_audit
+                (cliente_id, channel, event_type, provider, success, detail, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (cliente_id, channel, event_type, provider, int(success), textnorm._sanitize_text(detail)[:500], timeutils._utc_now_iso()),
+        )
+        connection.commit()
+
+
