@@ -164,8 +164,9 @@ rebuild de verificación en F4.
 | F3.11 backend/chat.py + whatsapp.py | ✅ | d74eb90 |
 | F3.12 onboarding/outreach/instagram/tiktok/wa_capture/voice/growth/billing/portal | ✅ | d60df59 |
 | **CHECKPOINT A**: 26 módulos backend; api.py 33.170→13.176 líneas (solo endpoints+app+proxy) | ✅ | — |
-| F3.13 backend/main.py (app/middlewares/mounts/eventos) | Pendiente | — |
-| F3.14+ routers por dominio (333 endpoints) + shim final api.py | Pendiente | — |
+| F3.13 backend/main.py (app/middlewares/mounts/eventos) | ✅ | 67a2843 |
+| F3.14 17 routers + shim final (api.py = 150 líneas; tabla de rutas idéntica) | ✅ | c61fb0c |
+| **CHECKPOINT B / F3 COMPLETA**: pytest 264/264, qa_e2e 0, uvicorn api:app + /health 200 | ✅ | — |
 | F4 Frontend | Pendiente | — |
 | F5 Tests + conftest | Pendiente | — |
 | F6 Documentación | Pendiente | — |
