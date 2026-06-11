@@ -105,6 +105,10 @@ def api_module(tmp_path_factory: pytest.TempPathFactory):
             "WHATSAPP_VERIFY_TOKEN": "test-whatsapp-token",
             "WHATSAPP_ACCESS_TOKEN": "",
             "WHATSAPP_APP_SECRET": "",
+            "TWILIO_ACCOUNT_SID": "",
+            "TWILIO_AUTH_TOKEN": "",
+            "TWILIO_DEFAULT_PHONE_NUMBER": "",
+            "TWILIO_SMS_SENDER": "",
             "STRIPE_SECRET_KEY": "sk_test_dummy",
             "STRIPE_WEBHOOK_SECRET": "",
             "STRIPE_PRICE_STARTER": "price_test_starter",
@@ -117,6 +121,7 @@ def api_module(tmp_path_factory: pytest.TempPathFactory):
             "OUTREACH_TRACKING_SECRET": "test-outreach-secret",
             "OUTREACH_TRACKING_BASE_URL": "https://app.test.local",
             "OUTREACH_RESPECT_WINDOW": "false",
+            "TK_DB_PATH": str(storage_dir / "tiktok" / "tiktok.db"),
         }
     )
     sys.modules.pop("api", None)
