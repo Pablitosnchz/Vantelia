@@ -155,8 +155,11 @@ rebuild de verificación en F4.
 | F3.2 backend/appstate.py (alias "state" colisionaba con OAuth) | ✅ | 0a1af2a |
 | F3.3 backend/timeutils.py + backend/textnorm.py + CONFIG_CLIENTES | ✅ | 9479eaf |
 | F3.4 backend/db.py | ✅ | 6b93c07 |
-| F3.5 backend/clients.py | ✅ | (este commit) |
-| F3.6+ security, emailing, messaging, stripe_gateway, rag, agenda, booking, dominios growth | Pendiente | — |
+| F3.5 backend/clients.py | ✅ | be4f757 |
+| F3.6 backend/security.py (+extras textnorm/clients/timeutils) | ✅ | b8c62ed |
+| F3.7 backend/emailing.py + messaging.py + stripe_gateway.py | ✅ | 4ada884 |
+| F3.8 agenda, F3.9 rag, F3.10 booking+demo_agenda, F3.11 whatsapp_flows | Pendiente | — |
+| F3.12 outreach/instagram/tiktok/voice/workers | Pendiente | — |
 | F3.13+ main.py + routers + shim final | Pendiente | — |
 | F4 Frontend | Pendiente | — |
 | F5 Tests + conftest | Pendiente | — |
@@ -172,5 +175,14 @@ Notas de transición F3 (para retomar en sesiones futuras):
   (canales/outreach). Por eso el módulo de estado se llama `appstate`; cuando
   se muevan canales/outreach, renombrar sus locales `settings` al moverlos.
 - Gate rápido: `python -m pytest -q -p no:warnings` (~1,5 min vs ~10 min).
+- Herramientas de empalme en %TEMP%: `extract_lib.py` (master_mapping por AST,
+  block_analysis, extract_defs por nombre, closure transitivo) — si se pierde,
+  regenerarla a partir del patrón de los commits f3.4-f3.7.
+- Tras cada extracción: (1) escaneo AST de nombres no resueltos en backend/*.py
+  (detecta imports que faltan que py_compile no ve), (2) strip de
+  auto-referencias `<mod>.` dentro del propio módulo (basado en tokens, NO
+  regex plano — los docstrings sufren), (3) pop de los nombres del propio
+  módulo destino del mapeo antes de cualificar.
+- El canal Bash de la sesión se come `\\` — generar código con chr(10) o Edit.
 
 Si una sesión se queda sin contexto: dejar todo committeado y actualizar esta tabla.
