@@ -448,46 +448,29 @@ from backend.db import (  # noqa: F401  (transicion F3)
 
 
 
-_ensure_runtime_directories()
-_init_database()
-_ensure_default_employees_for_all_clients()
-_sync_clientes_table_from_config()
-_validate_runtime_config()
-_setup_llama_index()
-
-
-app = FastAPI(
-    title="Vantelia Embedded Chat API",
-    description="Backend multiempresa para chat embebible con RAG y flujo profesional de leads.",
-    version="1.0.0",
+from backend import main
+from backend.main import (  # noqa: F401  (transicion F3)
+    app,
+    _build_cors_headers,
+    _ig_shutdown_workers,
+    _ig_startup_workers,
+    _no_cache_widget_bundle,
+    _tk_shutdown_workers,
+    _tk_startup_workers,
+    _voice_startup_log,
+    dynamic_cors_middleware,
+    security_headers_middleware,
+    shutdown_background_services,
+    startup_background_services,
 )
 
 
-@app.middleware("http")
-async def _no_cache_widget_bundle(request: Request, call_next):
-    response = await call_next(request)
-    if request.url.path == "/widget/widget.min.js":
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-    return response
 
 
-@app.middleware("http")
-async def security_headers_middleware(request: Request, call_next: Any) -> Response:
-    response = await call_next(request)
-    response.headers.setdefault("X-Content-Type-Options", "nosniff")
-    response.headers.setdefault("X-Frame-Options", "DENY")
-    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-    if _configured_public_base_url().startswith("https://"):
-        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-    return response
 
 
-app.mount("/widget", StaticFiles(directory=str(WIDGET_DIR)), name="widget")
-if BRAND_DIR.exists():
-    app.mount("/brand-assets", StaticFiles(directory=str(BRAND_DIR)), name="brand-assets")
+
+
 
 
 
@@ -591,105 +574,12 @@ async def legal_document(documento: str) -> HTMLResponse:
 
 
 
-@app.on_event("startup")
-async def startup_background_services() -> None:
-    try:
-        purged_at_boot = _purge_expired_demos()
-        if purged_at_boot:
-            logger.info("Demos expiradas purgadas al arranque: %s", purged_at_boot)
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Error purgando demos al arranque: %s", exc)
-
-    try:
-        _backfill_booking_codes()
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Error en backfill de codigos de reserva al arranque: %s", exc)
-
-    if OUTREACH_IMAP_AVAILABLE and (not appstate.outreach_imap_thread or not appstate.outreach_imap_thread.is_alive()):
-        appstate.outreach_imap_stop.clear()
-        appstate.outreach_imap_thread = threading.Thread(
-            target=_outreach_imap_worker,
-            name="vantelia-outreach-imap",
-            daemon=True,
-        )
-        appstate.outreach_imap_thread.start()
-
-    if not appstate.outreach_autopilot_thread or not appstate.outreach_autopilot_thread.is_alive():
-        appstate.outreach_autopilot_stop.clear()
-        appstate.outreach_autopilot_thread = threading.Thread(
-            target=_outreach_autopilot_worker,
-            name="vantelia-outreach-autopilot",
-            daemon=True,
-        )
-        appstate.outreach_autopilot_thread.start()
-
-    if not outreach.outreach_autonomous_thread or not outreach.outreach_autonomous_thread.is_alive():
-        outreach_autonomous_stop.clear()
-        outreach.outreach_autonomous_thread = threading.Thread(
-            target=_outreach_autonomous_worker,
-            name="vantelia-outreach-autonomous",
-            daemon=True,
-        )
-        outreach.outreach_autonomous_thread.start()
-
-    if REMINDER_RUN_INTERVAL_MINUTES <= 0:
-        logger.info("Recordatorios automaticos desactivados (REMINDER_RUN_INTERVAL_MINUTES <= 0).")
-        return
-
-    if appstate.booking_reminder_thread and appstate.booking_reminder_thread.is_alive():
-        return
-
-    appstate.booking_reminder_stop.clear()
-    appstate.booking_reminder_thread = threading.Thread(
-        target=_booking_reminder_worker,
-        name="vantelia-booking-reminders",
-        daemon=True,
-    )
-    appstate.booking_reminder_thread.start()
 
 
-@app.on_event("shutdown")
-async def shutdown_background_services() -> None:
-    appstate.booking_reminder_stop.set()
-    appstate.outreach_imap_stop.set()
-    appstate.outreach_autopilot_stop.set()
-    outreach_autonomous_stop.set()
 
 
-def _build_cors_headers(origin: str) -> Dict[str, str]:
-    return {
-        "Access-Control-Allow-Origin": origin,
-        "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers": "Authorization, Content-Type",
-        "Access-Control-Allow-Credentials": "true",
-        "Vary": "Origin",
-    }
 
 
-@app.middleware("http")
-async def dynamic_cors_middleware(request: Request, call_next: Any) -> Response:
-    raw_origin = request.headers.get("origin", "").strip()
-    normalized_origin = ""
-    if raw_origin:
-        try:
-            normalized_origin = _normalize_origin_value(raw_origin)
-        except RuntimeError:
-            normalized_origin = ""
-
-    is_preflight = request.method == "OPTIONS" and bool(
-        request.headers.get("access-control-request-method", "").strip()
-    )
-
-    if is_preflight:
-        response: Response = Response(status_code=204)
-    else:
-        response = await call_next(request)
-
-    if normalized_origin and normalized_origin in _collect_cors_origins():
-        for key, value in _build_cors_headers(normalized_origin).items():
-            response.headers[key] = value
-
-    return response
 
 
 from api_models import (
@@ -1009,7 +899,6 @@ from api_models import (
 
 
 
-_ensure_default_portal_admin()
 
 
 
@@ -11987,31 +11876,8 @@ def instagram_replies_poll_now():
 
 
 
-@app.on_event("startup")
-async def _ig_startup_workers() -> None:
-    if IG_REPLIES_AVAILABLE and (not instagram.ig_replies_thread or not instagram.ig_replies_thread.is_alive()):
-        ig_replies_stop.clear()
-        instagram.ig_replies_thread = threading.Thread(target=_ig_replies_worker, name="vantelia-ig-replies", daemon=True)
-        instagram.ig_replies_thread.start()
-    if IG_AVAILABLE and (not instagram.ig_autopilot_thread or not instagram.ig_autopilot_thread.is_alive()):
-        ig_autopilot_stop.clear()
-        instagram.ig_autopilot_thread = threading.Thread(target=_ig_autopilot_worker, name="vantelia-ig-autopilot", daemon=True)
-        instagram.ig_autopilot_thread.start()
-    if IG_AVAILABLE and (not instagram.ig_campaign_thread or not instagram.ig_campaign_thread.is_alive()):
-        try:
-            _ig_campaign_migrate()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("ig_campaign migrate fallo: %s", exc)
-        ig_campaign_stop.clear()
-        instagram.ig_campaign_thread = threading.Thread(target=_ig_campaign_worker, name="vantelia-ig-campaign", daemon=True)
-        instagram.ig_campaign_thread.start()
 
 
-@app.on_event("shutdown")
-async def _ig_shutdown_workers() -> None:
-    ig_replies_stop.set()
-    ig_autopilot_stop.set()
-    ig_campaign_stop.set()
 
 
 # === END INSTAGRAM ===================================================
@@ -12638,22 +12504,8 @@ def tiktok_prospects(limit: int = 100, status: str = ""):
 
 # ----- Worker startup/shutdown -----
 
-@app.on_event("startup")
-async def _tk_startup_workers() -> None:
-    if TK_AVAILABLE:
-        try:
-            _tk_migrate()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("tk_campaign migrate fallo: %s", exc)
-        if not tiktok.tk_campaign_thread or not tiktok.tk_campaign_thread.is_alive():
-            tk_campaign_stop.clear()
-            tiktok.tk_campaign_thread = threading.Thread(target=_tk_campaign_worker, name="vantelia-tk-campaign", daemon=True)
-            tiktok.tk_campaign_thread.start()
 
 
-@app.on_event("shutdown")
-async def _tk_shutdown_workers() -> None:
-    tk_campaign_stop.set()
 
 
 # === END TIKTOK ======================================================
@@ -13096,12 +12948,6 @@ async def admin_voice_call_detail(call_sid: str) -> Dict[str, Any]:
     return data
 
 
-@app.on_event("startup")
-async def _voice_startup_log() -> None:
-    if _voice_twilio_configured():
-        logger.info("Voice channel enabled (Twilio configurado).")
-    else:
-        logger.info("Voice channel DISABLED - missing Twilio credentials.")
 
 
 # ============================================================================
@@ -13120,7 +12966,7 @@ import types as _types
 
 # Modulos home ya extraidos, de mas especifico a mas generico (el primero que
 # define un nombre gana). Crece con cada sub-commit de la fase 3.
-_HOME_MODULES: tuple = (appstate, voice, wa_capture, instagram, tiktok, outreach, growth, billing, portal, onboarding, whatsapp, chat, booking, demo_agenda, agenda, rag, crm, security, emailing, messaging, stripe_gateway, clients, db, timeutils, textnorm, settings)
+_HOME_MODULES: tuple = (appstate, main, voice, wa_capture, instagram, tiktok, outreach, growth, billing, portal, onboarding, whatsapp, chat, booking, demo_agenda, agenda, rag, crm, security, emailing, messaging, stripe_gateway, clients, db, timeutils, textnorm, settings)
 
 _EXPORT_MAP: Dict[str, Any] = {}
 for _home_mod in _HOME_MODULES:
