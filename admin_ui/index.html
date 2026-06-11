@@ -4900,12 +4900,6 @@ tbody tr:last-child td { border-bottom: none; }
       });
     }
 
-    async function openClientSection(clienteId, tab = "profile") {
-      setView("clients");
-      setClientTab(tab);
-      await loadClientDetail(clienteId);
-    }
-
     async function openClientAiSection(clienteId) {
       setView("ai");
       await loadClientDetail(clienteId);
@@ -9734,9 +9728,6 @@ a {
         return ct.includes("application/json") ? res.json() : res.text();
       }
 
-      function escapeHtml(s) {
-        return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
-      }
 
       function igEmpty(text) {
         return `<div class="ig-empty">${escapeHtml(text)}</div>`;
