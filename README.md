@@ -1,5 +1,7 @@
 # Vantelia 2.0
 
+
+> Arquitectura del backend (modulos `backend/` + routers + shim `api.py`): ver `docs/ARQUITECTURA.md`.
 Sistema SaaS de chatbox embebible multiempresa pensado para instalarlo en webs corporativas con una experiencia de venta, citas y operativa mucho mas profesional.
 
 ## Que incluye

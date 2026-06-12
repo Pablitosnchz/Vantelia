@@ -1,0 +1,1077 @@
+"""Canal de voz: Twilio Media Streams <-> OpenAI Realtime (refactor F3)."""
+from __future__ import annotations
+
+import asyncio
+import base64
+import csv
+import hashlib
+import hmac
+import json
+import os
+import random
+import re
+import secrets
+import sqlite3
+import threading
+import time
+import unicodedata
+import uuid
+from datetime import date, datetime, timedelta, timezone
+from html import escape
+from io import StringIO
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+
+import httpx
+from fastapi import BackgroundTasks, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover - Python 3.8 compatibility
+    from backports.zoneinfo import ZoneInfo
+
+from api_models import AppVoiceResponse, BookingReschedulePayload
+from backend import agenda, appstate, booking, chat, clients, crm, db, demo_agenda, messaging, rag, security, settings, textnorm, timeutils
+
+def _client_voice_plan_enabled(cliente_id: str) -> bool:
+    """Whether the voice channel (phone) is available in the client's effective plan.
+
+    Voz = solo Business. Para clientes con dueño se mira el plan de la suscripcion;
+    si no, el flag voice_enabled del plan en config.
+    """
+    owner = db.db_get_client_owner(cliente_id)
+    if owner:
+        sub = db.db_get_subscription_for_user(owner)
+        plan = settings._normalize_plan_slug(sub["plan"] if sub else settings.PLAN_DEFAULT)
+        return "voice" in (settings._self_serve_plan(plan).get("features") or [])
+    return bool(clients._plan_limits(clients._client_plan(cliente_id)).get("voice_enabled"))
+
+
+def _app_voice_response(cliente_id: str, request: Request) -> "AppVoiceResponse":
+    cfg = appstate.CONFIG_CLIENTES.get(cliente_id, {})
+    voice_cfg = cfg.get("voice", {}) or {}
+    plan_ok = _client_voice_plan_enabled(cliente_id)
+    enabled = bool(voice_cfg.get("enabled", False)) and plan_ok
+    webhook_url = f"{textnorm._public_base_url(request).rstrip('/')}/voice/{cliente_id}"
+    if enabled:
+        status_value, status_label = "active", "Activo"
+    elif bool(voice_cfg.get("enabled", False)) and not plan_ok:
+        status_value, status_label = "plan_required", "Requiere plan Business"
+    else:
+        status_value, status_label = "disabled", "Desactivado"
+    return AppVoiceResponse(
+        ok=True,
+        cliente_id=cliente_id,
+        enabled=enabled,
+        twilio_phone_number=str(voice_cfg.get("twilio_phone_number", "") or ""),
+        openai_voice=str(voice_cfg.get("openai_voice", "") or ""),
+        webhook_url=webhook_url,
+        plan_allows_voice=plan_ok,
+        status=status_value,
+        status_label=status_label,
+    )
+
+
+async def _mint_voice_session(
+    cliente_id: str,
+    config: Dict[str, Any],
+    *,
+    max_seconds: int,
+    log_tag: str = "voice",
+) -> Dict[str, Any]:
+    """Mintea un client_secret EFIMERO de OpenAI Realtime para hablar por WebRTC desde
+    el navegador. Reutiliza instructions/tools/voz/saludo del cliente (config.voice), por
+    lo que telefono, test del panel y demo comparten el mismo cerebro. La OPENAI_API_KEY
+    nunca sale del backend. Lanza HTTPException(502) si OpenAI falla.
+
+    El llamador es responsable del gating (plan/rate limit) y de comprobar OPENAI_API_KEY.
+    """
+    voice_cfg = config.get("voice") or {}
+    realtime_model = voice_cfg.get("realtime_model") or settings.VOICE_REALTIME_MODEL
+    openai_voice = voice_cfg.get("openai_voice") or settings.VOICE_OPENAI_VOICE
+
+    session_body = {
+        "session": {
+            "type": "realtime",
+            "model": realtime_model,
+            "instructions": _voice_build_instructions(cliente_id, config),
+            "audio": {
+                "input": {
+                    # semantic_vad: un modelo decide si REALMENTE hablo una persona, en
+                    # vez de medir amplitud (server_vad). El eco residual y el ruido de
+                    # fondo ya no se cuelan como un turno falso (causa de los cortes +
+                    # bucle). eagerness=low => espera y es conservador antes de tomar el
+                    # turno. interrupt_response=True permite interrumpir como en una llamada
+                    # real. En WebRTC OpenAI conoce el audio reproducido y trunca
+                    # automaticamente la parte que el usuario no llego a oir.
+                    "turn_detection": {
+                        "type": "semantic_vad",
+                        "eagerness": "low",
+                        "create_response": True,
+                        "interrupt_response": True,
+                    },
+                    "transcription": {"model": "whisper-1"},
+                },
+                "output": {"voice": openai_voice},
+            },
+            "tools": _voice_booking_tools(cliente_id, config),
+            "tool_choice": "auto",
+        }
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/realtime/client_secrets",
+                headers={
+                    "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=session_body,
+            )
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("[%s] no se pudo mintear token (%s): %s", log_tag, cliente_id, exc)
+        raise HTTPException(status_code=502, detail="No se pudo iniciar el asistente de voz.")
+
+    if resp.status_code >= 300:
+        settings.logger.error(
+            "[%s] OpenAI client_secrets %s (%s): %s",
+            log_tag, resp.status_code, cliente_id, resp.text[:400],
+        )
+        raise HTTPException(status_code=502, detail="No se pudo iniciar el asistente de voz.")
+
+    try:
+        data = resp.json()
+    except Exception:  # noqa: BLE001
+        data = {}
+    # GA devuelve {"value": "ek_...", ...}; toleramos la forma anidada por compat.
+    client_secret = (
+        data.get("value")
+        or (data.get("client_secret") or {}).get("value")
+        or ""
+    )
+    if not client_secret:
+        settings.logger.error("[%s] respuesta sin client_secret (%s): %s", log_tag, cliente_id, json.dumps(data)[:400])
+        raise HTTPException(status_code=502, detail="No se pudo iniciar el asistente de voz.")
+
+    return {
+        "client_secret": client_secret,
+        "model": realtime_model,
+        "voice": openai_voice,
+        "cliente_id": cliente_id,
+        "greeting": textnorm._voice_default_greeting(config, voice_cfg),
+        "max_duration_seconds": max_seconds,
+    }
+
+
+VOICE_BOOKING_KEYWORDS = (
+    "cita", "reserva", "reservar", "agendar", "agenda", "appointment",
+    "turno", "coger cita", "pedir cita", "concertar",
+)
+
+
+def _get_voice_config(cliente_id: str) -> Optional[Dict[str, Any]]:
+    """Devuelve el bloque voice del cliente si existe, esta habilitado y el plan lo
+    incluye (voz = solo Business). None en cualquier otro caso."""
+    config = appstate.CONFIG_CLIENTES.get(cliente_id)
+    if not config:
+        return None
+    voice_cfg = config.get("voice") or {}
+    if not voice_cfg.get("enabled"):
+        return None
+    if not _client_voice_plan_enabled(cliente_id):
+        return None
+    return voice_cfg
+
+
+async def _voice_form_params(request: Request) -> Dict[str, str]:
+    """Parsea el cuerpo x-www-form-urlencoded de Twilio sin depender de
+    python-multipart. Twilio siempre envia sus webhooks como urlencoded."""
+    raw = await request.body()
+    parsed = parse_qsl(raw.decode("utf-8", errors="ignore"), keep_blank_values=True)
+    return {key: value for key, value in parsed}
+
+
+def _voice_request_url(request: Request) -> str:
+    """URL publica completa (incluyendo path y query) tal y como la firma Twilio."""
+    base = textnorm._public_base_url(request).rstrip("/")
+    url = f"{base}{request.url.path}"
+    if request.url.query:
+        url += f"?{request.url.query}"
+    return url
+
+
+def _voice_stream_ws_url(request: Request, cliente_id: str) -> str:
+    base = textnorm._public_base_url(request).rstrip("/")
+    ws_base = base.replace("https://", "wss://", 1).replace("http://", "ws://", 1)
+    return f"{ws_base}/voice/stream/{cliente_id}"
+
+
+def _voice_twiml_unavailable() -> Response:
+    twiml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<Response><Say language="es-ES">Lo sentimos, este servicio no esta disponible.</Say>'
+        "<Hangup/></Response>"
+    )
+    return Response(content=twiml, media_type="application/xml")
+
+
+def _voice_twiml_connect_stream(ws_url: str, call_sid: str) -> Response:
+    twiml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        "<Response><Connect>"
+        f'<Stream url="{escape(ws_url, quote=True)}">'
+        f'<Parameter name="call_sid" value="{escape(call_sid or "", quote=True)}"/>'
+        "</Stream></Connect></Response>"
+    )
+    return Response(content=twiml, media_type="application/xml")
+
+
+def _voice_call_register(call_sid: str, cliente_id: str, from_number: str, to_number: str) -> None:
+    now_iso = timeutils._utc_now().isoformat()
+    try:
+        with db._get_db_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO voice_calls (call_sid, cliente_id, from_number, to_number, started_at, status)
+                VALUES (?, ?, ?, ?, ?, 'in_progress')
+                ON CONFLICT(call_sid) DO UPDATE SET
+                    cliente_id=excluded.cliente_id,
+                    from_number=excluded.from_number,
+                    to_number=excluded.to_number
+                """,
+                (call_sid, cliente_id, from_number, to_number, now_iso),
+            )
+            conn.commit()
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("[voice] no se pudo registrar llamada %s: %s", call_sid, exc)
+    else:
+        crm._crm_upsert_contact(
+            cliente_id,
+            phone=from_number,
+            source="voice",
+            status="nuevo",
+            entity_type="voice",
+            entity_id=call_sid,
+        )
+
+
+def _voice_call_from_number(call_sid: str) -> str:
+    """Recupera el numero desde el que llaman, para verificar titularidad de citas."""
+    if not call_sid:
+        return ""
+    try:
+        with db._get_db_connection() as conn:
+            row = conn.execute(
+                "SELECT from_number FROM voice_calls WHERE call_sid = ? LIMIT 1",
+                (call_sid,),
+            ).fetchone()
+            return (row[0] if row else "") or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _voice_load_knowledge(cliente_id: str, max_chars: int = 16000) -> str:
+    """Lee los .txt del cliente para inyectar conocimiento en la sesion Realtime
+    (la Realtime API no hace RAG; necesitamos el contexto en las instructions)."""
+    try:
+        data_dir = rag._client_data_dir(cliente_id)
+    except Exception:  # noqa: BLE001
+        return ""
+    if not data_dir.exists():
+        return ""
+    parts: List[str] = []
+    for path in sorted(data_dir.glob("*.txt")):
+        try:
+            parts.append(path.read_text(encoding="utf-8", errors="ignore"))
+        except Exception:  # noqa: BLE001
+            continue
+    return "\n\n".join(parts).strip()[:max_chars]
+
+
+def _voice_booking_enabled(cliente_id: str, config: Dict[str, Any]) -> bool:
+    return bool(config.get("booking", {}).get("enabled")) and clients._client_booking_plan_enabled(cliente_id)
+
+
+def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
+    base = rag._build_system_prompt(cliente_id, config)
+
+    voice_rules = (
+        "\n\nCANAL: LLAMADA TELEFONICA POR VOZ. Eres la recepcionista del negocio, una persona real, no un robot.\n"
+        "- Habla SIEMPRE en espanol de Espana, con tono calido y cercano, como alguien que coge el telefono en recepcion.\n"
+        "- Frases cortas, una idea por turno. Nada de parrafos ni listas largas leidas en voz alta.\n"
+        "- Usa con naturalidad y moderacion expresiones como 'vale', 'perfecto', 'claro', 'un momento', 'a ver'.\n"
+        "- Di numeros, horas y precios en palabras naturales: 'las cinco y media', 'a las diez de la manana', 'cuarenta euros'.\n"
+        "- No leas en voz alta URLs, simbolos, markdown, asteriscos ni emojis.\n"
+        "- NUNCA digas que eres una IA, un asistente virtual, un modelo o un sistema; ni menciones herramientas internas, "
+        "ni codigos, ni etiquetas entre corchetes como [MOSTRAR_FORMULARIO].\n"
+        "- No te cortes por ruidos, respiraciones o monosilabos accidentales. Si el llamante te interrumpe claramente, "
+        "termina la palabra o frase corta en curso y escucha.\n"
+        "- Si una intervencion corta tu respuesta, no reinicies ni repitas la frase desde el principio. Responde primero "
+        "a lo que haya dicho la persona y, si aun falta informacion util, retoma desde la siguiente idea no escuchada.\n"
+        "- Si no entiendes algo, pide con amabilidad que lo repita.\n"
+        "- Empieza saludando breve y preguntando en que puedes ayudar. Saluda UNA sola vez al "
+        "principio de la llamada: no vuelvas a presentarte ni a repetir el saludo despues.\n"
+        "- NUNCA repitas la misma frase dos veces seguidas. Si solo oyes silencio, ruido de fondo "
+        "o un eco de tu propia voz, NO respondas ni te repitas: espera en silencio a que la persona "
+        "hable. Si tras una pausa larga no dice nada, pregunta una sola vez '¿Sigue ahi?' y vuelve a esperar.\n"
+    )
+
+    tz = config.get("booking", {}).get("timezone", settings.DEFAULT_TIMEZONE)
+    try:
+        now_local = datetime.now(ZoneInfo(tz))
+    except Exception:  # noqa: BLE001
+        now_local = timeutils._utc_now()
+    fecha_hoy = now_local.strftime("%Y-%m-%d")
+    dia_semana = now_local.strftime("%A")
+
+    if _voice_booking_enabled(cliente_id, config):
+        booking_block = (
+            "\nAGENDA DE CITAS POR VOZ (puedes reservar tu misma en la llamada):\n"
+            f"- Hoy es {fecha_hoy} ({dia_semana}), zona horaria {tz}. Calcula fechas relativas "
+            "('manana', 'el lunes que viene') a partir de hoy y pasalas SIEMPRE como YYYY-MM-DD.\n"
+            "- Consultar la agenda es instantaneo. Puedes decir una frase muy breve como 'un momento' "
+            "justo antes de mirar la disponibilidad, pero NO te quedes esperando sin mas: llama a la "
+            "herramienta en el mismo turno. Nunca prometas que 'ahora lo miras' sin usar la herramienta.\n"
+            "- Para ver huecos libres usa la herramienta consultar_disponibilidad(fecha). Ofrece solo 2 o 3 "
+            "horas concretas, no leas la lista entera.\n"
+            "- Antes de reservar confirma en voz alta: nombre, telefono, servicio, dia y hora.\n"
+            "- Pide el telefono y repitelo para asegurarte de que lo has cogido bien.\n"
+            "- Crea la reserva con la herramienta crear_cita. Si devuelve ok, confirma con naturalidad que la "
+            "cita queda hecha y que recibira un SMS con los detalles. Si devuelve error, explica el motivo con "
+            "tacto y ofrece otra hora.\n"
+            "- crear_cita devuelve un numero de reserva (formato R y cuatro caracteres, por ejemplo R-7F4K). "
+            "Diselo al cliente deletreado, letra a letra y digito a digito, y pidele que lo apunte porque le servira "
+            "para cambiar o cancelar la cita.\n"
+            "- CANCELAR: si piden cancelar, pide su numero de reserva y usa la herramienta cancelar_cita. "
+            "REPROGRAMAR: pide el numero de reserva y la nueva fecha/hora (comprueba antes huecos con "
+            "consultar_disponibilidad) y usa reprogramar_cita.\n"
+            "- Seguridad: estas herramientas solo funcionan si el telefono desde el que llaman coincide con el de la "
+            "reserva. Si devuelven needs_verification, pide con tacto el telefono o el email con el que reservaron y "
+            "vuelve a intentarlo pasando ese dato. No confirmes una cancelacion o cambio sin que la herramienta "
+            "devuelva ok.\n"
+            "- No inventes huecos ni confirmes una cita sin haber llamado a crear_cita con exito.\n"
+        )
+        if booking._ai_payment_sending_available(cliente_id):
+            booking_block += (
+                "- COBRO: si el cliente quiere pagar o dejar una senal de su cita, confirmale en voz alta el "
+                "importe (lo fija el negocio segun el servicio; nunca lo decide el cliente) y usa la herramienta "
+                "enviar_enlace_pago. Le llegara un SMS con un enlace seguro. No leas la URL en voz alta: solo di "
+                "que le envias el enlace por mensaje. Si devuelve error, explicalo con tacto.\n"
+            )
+    else:
+        booking_block = (
+            "\nAGENDA: la reserva online no esta activa para este negocio. Si piden cita, recoge nombre, "
+            "telefono y motivo, y di que el equipo les llamara para confirmar.\n"
+        )
+
+    knowledge = _voice_load_knowledge(cliente_id)
+    knowledge_block = (
+        f"\n\nBASE DE CONOCIMIENTO DEL NEGOCIO (es tu unica fuente para datos concretos como servicios, "
+        f"precios, horarios o direccion; si algo no esta aqui, dilo y ofrece que el equipo lo confirme):\n{knowledge}\n"
+        if knowledge
+        else ""
+    )
+    return base + voice_rules + booking_block + knowledge_block
+
+
+def _voice_booking_tools(cliente_id: str, config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Herramientas Realtime para agendar en vivo. Vacio si el cliente no tiene reserva."""
+    if not _voice_booking_enabled(cliente_id, config):
+        return []
+    tools: List[Dict[str, Any]] = [
+        {
+            "type": "function",
+            "name": "consultar_disponibilidad",
+            "description": (
+                "Devuelve las horas libres de un dia concreto. Llamala antes de proponer horas. "
+                "La fecha debe ir en formato YYYY-MM-DD."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fecha": {"type": "string", "description": "Fecha en formato YYYY-MM-DD"},
+                    "servicio": {"type": "string", "description": "Servicio solicitado (opcional)"},
+                },
+                "required": ["fecha"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "crear_cita",
+            "description": (
+                "Crea y confirma una cita. Llamala solo despues de haber confirmado con el cliente nombre, "
+                "telefono, servicio, fecha (YYYY-MM-DD) y hora (HH:MM en 24h), y tras comprobar disponibilidad. "
+                "Devuelve un numero de reserva (formato R-XXXX): comunicaselo al cliente y pidele que lo guarde."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre": {"type": "string"},
+                    "telefono": {"type": "string"},
+                    "servicio": {"type": "string"},
+                    "fecha": {"type": "string", "description": "YYYY-MM-DD"},
+                    "hora": {"type": "string", "description": "HH:MM en 24h"},
+                    "email": {"type": "string", "description": "Email (opcional)"},
+                },
+                "required": ["nombre", "telefono", "fecha", "hora"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "cancelar_cita",
+            "description": (
+                "Cancela una cita existente a partir de su numero de reserva (formato R-XXXX). "
+                "Por seguridad solo se cancela si el telefono desde el que llama coincide con el de la reserva; "
+                "si no coincide, pide al cliente el telefono o el email con el que reservo y pasalo en 'telefono' o 'email'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "codigo_reserva": {"type": "string", "description": "Numero de reserva, formato R-XXXX"},
+                    "telefono": {"type": "string", "description": "Telefono de la reserva, si el cliente lo facilita (opcional)"},
+                    "email": {"type": "string", "description": "Email de la reserva, si el cliente lo facilita (opcional)"},
+                    "motivo": {"type": "string", "description": "Motivo de cancelacion (opcional)"},
+                },
+                "required": ["codigo_reserva"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "reprogramar_cita",
+            "description": (
+                "Reprograma una cita existente a una nueva fecha y hora, a partir de su numero de reserva (R-XXXX). "
+                "Comprueba disponibilidad con consultar_disponibilidad antes de proponer la nueva hora. "
+                "Por seguridad solo se reprograma si el telefono desde el que llama coincide con el de la reserva; "
+                "si no, pide el telefono o el email con el que reservo y pasalo en 'telefono' o 'email'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "codigo_reserva": {"type": "string", "description": "Numero de reserva, formato R-XXXX"},
+                    "fecha": {"type": "string", "description": "Nueva fecha YYYY-MM-DD"},
+                    "hora": {"type": "string", "description": "Nueva hora HH:MM en 24h"},
+                    "telefono": {"type": "string", "description": "Telefono de la reserva, si el cliente lo facilita (opcional)"},
+                    "email": {"type": "string", "description": "Email de la reserva, si el cliente lo facilita (opcional)"},
+                },
+                "required": ["codigo_reserva", "fecha", "hora"],
+            },
+        },
+    ]
+    if booking._ai_payment_sending_available(cliente_id):
+        tools.append(
+            {
+                "type": "function",
+                "name": "enviar_enlace_pago",
+                "description": (
+                    "Envia por SMS al telefono de la llamada un enlace seguro para que el cliente pague su cita. "
+                    "Usala SOLO si el cliente quiere pagar o dejar una senal y tras confirmarle en voz alta el importe. "
+                    "El importe lo fija el negocio segun el servicio: NUNCA lo decide el cliente. Pasa el numero de "
+                    "reserva (R-XXXX) si lo tienes; si no, se usa la ultima cita de este telefono. No leas la URL en "
+                    "voz alta: solo confirma que le llega el enlace por SMS."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "codigo_reserva": {"type": "string", "description": "Numero de reserva, formato R-XXXX (opcional)"},
+                    },
+                    "required": [],
+                },
+            }
+        )
+    return tools
+
+
+async def _voice_check_availability(cliente_id: str, fecha: str, servicio: str = "") -> Dict[str, Any]:
+    config = appstate.CONFIG_CLIENTES.get(cliente_id)
+    if not config or not _voice_booking_enabled(cliente_id, config):
+        return {"ok": False, "error": "La reserva online no esta habilitada."}
+    try:
+        day = textnorm._parse_date(fecha)
+        agenda._validate_booking_window(cliente_id, day)
+    except HTTPException as exc:
+        return {"ok": False, "error": str(exc.detail)}
+    try:
+        _all_slots, available = await agenda._public_slot_sets_for_day(
+            cliente_id, fecha, servicio=textnorm._sanitize_text(servicio or "")
+        )
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("[voice] disponibilidad fallo (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No se pudo consultar la disponibilidad."}
+    slots = sorted(available)
+    return {"ok": True, "fecha": fecha, "huecos": slots[:20], "hay_huecos": bool(slots)}
+
+
+async def _voice_perform_booking(
+    cliente_id: str,
+    *,
+    nombre: str,
+    telefono: str,
+    fecha: str,
+    hora: str,
+    servicio: str = "",
+    email: str = "",
+) -> Dict[str, Any]:
+    """Crea una cita real reutilizando el motor de booking del widget. source='voice'."""
+    config = appstate.CONFIG_CLIENTES.get(cliente_id)
+    if not config or not _voice_booking_enabled(cliente_id, config):
+        return {"ok": False, "error": "La reserva online no esta habilitada."}
+
+    nombre = textnorm._sanitize_text(nombre)
+    telefono = textnorm._sanitize_text(telefono)
+    servicio = textnorm._sanitize_text(servicio or "")
+    email = textnorm._sanitize_text(email or "")
+    if not nombre or not telefono:
+        return {"ok": False, "error": "Faltan el nombre o el telefono del cliente."}
+
+    try:
+        booking_date_dt = textnorm._parse_date(fecha)
+        agenda._validate_booking_window(cliente_id, booking_date_dt)
+        booking_date = booking_date_dt.strftime("%Y-%m-%d")
+        booking_time = textnorm._parse_time(hora).strftime("%H:%M")
+    except HTTPException as exc:
+        return {"ok": False, "error": str(exc.detail)}
+
+    try:
+        employee_row = await agenda._resolve_public_booking_employee(
+            cliente_id, booking_date, booking_time, servicio=servicio
+        )
+    except HTTPException as exc:
+        return {"ok": False, "error": str(exc.detail)}
+
+    service_row = agenda._find_service_by_name(cliente_id, servicio)
+    service_duration = agenda._service_duration_minutes(cliente_id, servicio, employee_row)
+    service_id = service_row["slug"] if service_row else ""
+    service_price = int(service_row["price_cents"]) if service_row else 0
+
+    if not await agenda._booking_slot_available(
+        cliente_id,
+        booking_date,
+        booking_time,
+        employee_id=employee_row["id"],
+        duration_minutes=service_duration,
+    ):
+        return {"ok": False, "error": "Ese horario ya no esta disponible. Ofrece otra hora."}
+
+    booking_id = f"bk_{secrets.token_urlsafe(10)}"
+    manage_token = booking._generate_manage_token()
+    created_at = timeutils._utc_now_iso()
+    booking_timezone = employee_row["timezone"] or config["booking"]["timezone"]
+    try:
+        start_local, end_local = agenda._booking_start_end(
+            cliente_id,
+            booking_date,
+            booking_time,
+            employee_id=employee_row["id"],
+            duration_minutes=service_duration,
+        )
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("[voice] booking start/end fallo (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No se pudo calcular el horario de la cita."}
+
+    booking_payload = {
+        "booking_id": booking_id,
+        "cliente_id": cliente_id,
+        "empresa": config["nombre"],
+        "employee_id": employee_row["id"],
+        "employee_name": employee_row["name"],
+        "nombre": nombre,
+        "email": email,
+        "telefono": telefono,
+        "servicio": servicio,
+        "fecha": booking_date,
+        "hora": booking_time,
+        "notas": "Cita creada por el asistente de voz.",
+        "source": "voice",
+        "created_at": created_at,
+    }
+    try:
+        provider_result = await booking._create_provider_booking(cliente_id, booking_payload)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("[voice] provider booking fallo (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No se pudo registrar la cita."}
+
+    record = {
+        "id": booking_id,
+        "cliente_id": cliente_id,
+        "employee_id": employee_row["id"],
+        "employee_name": employee_row["name"],
+        "nombre": nombre,
+        "email": email,
+        "telefono": telefono,
+        "servicio": servicio,
+        "booking_date": booking_date,
+        "booking_time": booking_time,
+        "notas": "Cita creada por el asistente de voz.",
+        "status": "confirmed",
+        "provider_name": provider_result.provider_name,
+        "provider_status": provider_result.status,
+        "provider_booking_id": provider_result.provider_booking_id,
+        "provider_booking_url": provider_result.provider_booking_url,
+        "manage_token": manage_token,
+        "timezone": booking_timezone,
+        "start_at": timeutils._to_utc_iso(start_local),
+        "end_at": timeutils._to_utc_iso(end_local),
+        "confirmed_at": created_at,
+        "cancelled_at": "",
+        **booking._booking_blank_tracking_fields(),
+        "service_id": service_id,
+        "service_price_cents": service_price,
+        "source": "voice",
+        "created_at": created_at,
+    }
+    try:
+        booking._store_booking(record)
+    except sqlite3.IntegrityError:
+        return {"ok": False, "error": "Ese horario acaba de ocuparse. Ofrece otra hora."}
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("[voice] store booking fallo (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No se pudo guardar la cita."}
+
+    booking._record_booking_audit(
+        booking_id,
+        cliente_id,
+        "booking_created",
+        {"status": "confirmed", "source": "voice", "employee_id": employee_row["id"]},
+    )
+    stored_booking = booking._get_booking_row_by_id(booking_id)
+    payment_row = booking._booking_payment_row(booking_id)
+    return {
+        "ok": True,
+        "booking_id": booking_id,
+        "codigo_reserva": record.get("booking_code", ""),
+        "fecha": booking_date,
+        "hora": booking_time,
+        "servicio": servicio or "cita",
+        "empleado": employee_row["name"],
+        "manage_url": booking._build_booking_manage_url(manage_token),
+        "payment_status": stored_booking["payment_status"] if stored_booking else "not_required",
+        "payment_url": payment_row["checkout_url"] if payment_row else "",
+        "mensaje_pago": (
+            "Envia este enlace seguro por SMS, WhatsApp o email; nunca pidas datos bancarios por telefono."
+            if payment_row and payment_row["checkout_url"] else ""
+        ),
+    }
+
+
+async def _voice_lookup_and_verify_booking(
+    cliente_id: str,
+    codigo_reserva: str,
+    *,
+    from_number: str = "",
+    telefono: str = "",
+    email: str = "",
+) -> Tuple[Optional[sqlite3.Row], Optional[Dict[str, Any]]]:
+    """Busca una cita por codigo y verifica titularidad (telefono que llama o aportado / email).
+
+    Devuelve (row, None) si todo ok, o (None, error_dict) para responder a la IA.
+    """
+    codigo = textnorm._sanitize_text(codigo_reserva)
+    if not codigo:
+        return None, {"ok": False, "error": "Pide al cliente su numero de reserva (formato R-XXXX)."}
+    row = booking._get_booking_row_by_code(cliente_id, codigo)
+    if not row:
+        return None, {"ok": False, "error": "No encuentro ninguna cita con ese numero de reserva. Pide que lo repita."}
+    verified = (
+        booking._booking_contact_matches(row, telefono=from_number)
+        or booking._booking_contact_matches(row, telefono=telefono, email=email)
+    )
+    if not verified:
+        return None, {
+            "ok": False,
+            "needs_verification": True,
+            "error": (
+                "Por seguridad no puedo continuar sin verificar la identidad. "
+                "Pide al cliente el telefono o el email con el que hizo la reserva."
+            ),
+        }
+    return row, None
+
+
+async def _voice_cancel_booking(
+    cliente_id: str,
+    codigo_reserva: str,
+    *,
+    from_number: str = "",
+    telefono: str = "",
+    email: str = "",
+    motivo: str = "",
+) -> Dict[str, Any]:
+    row, error = await _voice_lookup_and_verify_booking(
+        cliente_id, codigo_reserva, from_number=from_number, telefono=telefono, email=email
+    )
+    if error:
+        return error
+    if row["status"] == "cancelled":
+        return {"ok": True, "ya_cancelada": True, "mensaje": "Esa cita ya estaba cancelada."}
+    if row["status"] == "completed":
+        return {"ok": False, "error": "Esa cita ya se ha realizado y no se puede cancelar."}
+    try:
+        await booking._cancel_booking_core(
+            row, source="voice", reason=textnorm._sanitize_text(motivo, allow_multiline=True),
+            audit_extra={"channel": "voice", "from_number": from_number},
+        )
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("[voice] cancelacion fallo (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No se pudo cancelar la cita."}
+    return {
+        "ok": True,
+        "codigo_reserva": row["booking_code"] or "",
+        "fecha": row["booking_date"],
+        "hora": row["booking_time"],
+        "mensaje": "Cita cancelada correctamente.",
+    }
+
+
+async def _voice_reschedule_booking(
+    cliente_id: str,
+    codigo_reserva: str,
+    fecha: str,
+    hora: str,
+    *,
+    from_number: str = "",
+    telefono: str = "",
+    email: str = "",
+) -> Dict[str, Any]:
+    row, error = await _voice_lookup_and_verify_booking(
+        cliente_id, codigo_reserva, from_number=from_number, telefono=telefono, email=email
+    )
+    if error:
+        return error
+    payload = booking._booking_update_payload_from_reschedule(
+        row, BookingReschedulePayload(fecha=textnorm._sanitize_text(fecha), hora=textnorm._sanitize_text(hora))
+    )
+    try:
+        await booking._update_booking_details(row, payload, None, source="voice")
+    except HTTPException as exc:
+        return {"ok": False, "error": str(exc.detail)}
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("[voice] reprogramacion fallo (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No se pudo reprogramar la cita."}
+    return {
+        "ok": True,
+        "codigo_reserva": row["booking_code"] or "",
+        "fecha": textnorm._sanitize_text(fecha),
+        "hora": textnorm._sanitize_text(hora),
+        "mensaje": "Cita reprogramada correctamente. El numero de reserva sigue siendo el mismo.",
+    }
+
+
+async def _voice_send_payment_link(
+    cliente_id: str, codigo_reserva: str, *, from_number: str = ""
+) -> Dict[str, Any]:
+    """Tool de voz: envia por SMS el enlace de pago de la cita. Resuelve la cita por
+    numero de reserva (verificando que el telefono de la llamada coincide) o, si no
+    se da codigo, por el telefono de la llamada."""
+    if not booking._ai_payment_sending_available(cliente_id):
+        return {"ok": False, "error": "El cobro con tarjeta no esta disponible en este momento."}
+    code = textnorm._sanitize_text(codigo_reserva)
+    if code:
+        booking_row = booking._get_booking_row_by_code(cliente_id, code)
+        if not booking_row:
+            return {"ok": False, "error": "No encuentro ninguna cita con ese numero de reserva."}
+        if from_number and not booking._booking_contact_matches(booking_row, telefono=from_number):
+            return {
+                "ok": False,
+                "needs_verification": True,
+                "error": "Por seguridad solo puedo enviar el enlace al telefono con el que se reservo.",
+            }
+    else:
+        booking_row = booking._latest_booking_for_contact(cliente_id, phone=from_number)
+        if not booking_row:
+            return {
+                "ok": False,
+                "error": "No encuentro ninguna cita asociada a este telefono. Pide el numero de reserva.",
+            }
+    result = await booking._ai_send_payment_link(cliente_id, booking_row, base_url=textnorm._preferred_public_base_url())
+    if not result.get("ok"):
+        return {"ok": False, "error": result.get("error") or "No se pudo enviar el enlace de pago."}
+    amount_label = result.get("amount_label", "")
+    return {
+        "ok": True,
+        "importe": amount_label,
+        "enviado": bool(result.get("sent")),
+        "mensaje": f"Enviado un SMS con el enlace para pagar {amount_label}.",
+    }
+
+
+async def _voice_dispatch_tool(
+    cliente_id: str, name: str, arguments_json: str, *, from_number: str = ""
+) -> Dict[str, Any]:
+    try:
+        args = json.loads(arguments_json or "{}")
+    except Exception:  # noqa: BLE001
+        args = {}
+    if not isinstance(args, dict):
+        args = {}
+    if name == "consultar_disponibilidad":
+        return await _voice_check_availability(
+            cliente_id, str(args.get("fecha", "")), str(args.get("servicio", ""))
+        )
+    if name == "crear_cita":
+        return await _voice_perform_booking(
+            cliente_id,
+            nombre=str(args.get("nombre", "")),
+            telefono=str(args.get("telefono", "")),
+            fecha=str(args.get("fecha", "")),
+            hora=str(args.get("hora", "")),
+            servicio=str(args.get("servicio", "")),
+            email=str(args.get("email", "")),
+        )
+    if name == "cancelar_cita":
+        return await _voice_cancel_booking(
+            cliente_id,
+            str(args.get("codigo_reserva", "")),
+            from_number=from_number,
+            telefono=str(args.get("telefono", "")),
+            email=str(args.get("email", "")),
+            motivo=str(args.get("motivo", "")),
+        )
+    if name == "reprogramar_cita":
+        return await _voice_reschedule_booking(
+            cliente_id,
+            str(args.get("codigo_reserva", "")),
+            str(args.get("fecha", "")),
+            str(args.get("hora", "")),
+            from_number=from_number,
+            telefono=str(args.get("telefono", "")),
+            email=str(args.get("email", "")),
+        )
+    if name == "enviar_enlace_pago":
+        return await _voice_send_payment_link(
+            cliente_id,
+            str(args.get("codigo_reserva", "")),
+            from_number=from_number,
+        )
+    return {"ok": False, "error": "Funcion desconocida."}
+
+
+async def _voice_dispatch_tool_demo(cliente_id: str, name: str, arguments_json: str) -> Dict[str, Any]:
+    """Ejecucion de tools para la voz EN NAVEGADOR de la demo publica. Solo lectura real:
+    consultar_disponibilidad se ejecuta de verdad (util para mostrar huecos), pero las tools
+    de escritura NO tocan la agenda real (cualquiera puede abrir la demo). Devuelven un
+    resultado honesto que el asistente puede leer en voz alta."""
+    if name == "consultar_disponibilidad":
+        try:
+            args = json.loads(arguments_json or "{}")
+        except Exception:  # noqa: BLE001
+            args = {}
+        if not isinstance(args, dict):
+            args = {}
+        return await _voice_check_availability(
+            cliente_id, str(args.get("fecha", "")), str(args.get("servicio", ""))
+        )
+    if name in {"crear_cita", "cancelar_cita", "reprogramar_cita"}:
+        return {
+            "ok": False,
+            "demo": True,
+            "error": "Esto es una demostracion: la cita no se guarda. En la version real "
+            "quedaria agendada al instante y el cliente recibiria la confirmacion.",
+        }
+    return {"ok": False, "error": "Funcion desconocida."}
+
+
+def _voice_detect_booking_intent(transcript_text: str) -> bool:
+    low = (transcript_text or "").lower()
+    return any(keyword in low for keyword in VOICE_BOOKING_KEYWORDS)
+
+
+def _voice_summarize(transcript_text: str) -> str:
+    if not settings.OPENAI_API_KEY or not transcript_text.strip():
+        return ""
+    try:
+        from openai import OpenAI as OpenAISdkClient  # local import, evita choque de nombres
+
+        client = OpenAISdkClient(api_key=settings.OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model=settings.DEFAULT_CHAT_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Resume en 2 frases, en espanol, esta llamada telefonica entre un "
+                        "asistente virtual y un cliente. Indica el motivo y si pidio cita."
+                    ),
+                },
+                {"role": "user", "content": transcript_text[:6000]},
+            ],
+            temperature=0.3,
+            max_tokens=160,
+        )
+        return (response.choices[0].message.content or "").strip()
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("[voice] resumen fallo: %s", exc)
+        return ""
+
+
+async def _open_realtime_ws(model: str = ""):
+    """Abre la conexion WebSocket cliente contra OpenAI Realtime API (GA).
+
+    GA (mayo 2026): sin header OpenAI-Beta; modelos gpt-realtime / gpt-realtime-mini.
+    """
+    import websockets  # import diferido: solo necesario en llamadas reales
+
+    url = f"wss://api.openai.com/v1/realtime?model={model or settings.VOICE_REALTIME_MODEL}"
+    headers = [("Authorization", f"Bearer {settings.OPENAI_API_KEY}")]
+    try:  # websockets >=13 usa additional_headers; <=12 usa extra_headers
+        return await websockets.connect(url, additional_headers=headers, max_size=None)
+    except TypeError:
+        return await websockets.connect(url, extra_headers=headers, max_size=None)
+
+
+async def _voice_safe_close(ws) -> None:
+    try:
+        await ws.close()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _voice_pcmu_duration_ms(audio_b64: str) -> int:
+    """Duracion aproximada de audio PCMU: 8 kHz, un byte por muestra."""
+    try:
+        return max(0, len(base64.b64decode(audio_b64 or "", validate=True)) // 8)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _voice_interruption_audio_end_ms(state: Dict[str, Any]) -> int:
+    started_at = state.get("assistant_audio_started_at")
+    if started_at is None:
+        return 0
+    elapsed = max(0, int(state.get("latest_media_timestamp", 0)) - int(started_at))
+    generated = max(0, int(state.get("assistant_audio_generated_ms", 0)))
+    return min(elapsed, generated) if generated else elapsed
+
+
+def _voice_reset_assistant_playback(state: Dict[str, Any]) -> None:
+    state["assistant_item_id"] = ""
+    state["assistant_audio_started_at"] = None
+    state["assistant_audio_generated_ms"] = 0
+
+
+async def _voice_truncate_interrupted_response(openai_ws, twilio_ws, state: Dict[str, Any]) -> bool:
+    """Detiene el audio pendiente y conserva solo la parte que el llamante ya oyo."""
+    item_id = state.get("assistant_item_id", "")
+    stream_sid = state.get("stream_sid", "")
+    if not item_id or not stream_sid:
+        return False
+
+    audio_end_ms = _voice_interruption_audio_end_ms(state)
+    await twilio_ws.send_text(json.dumps({"event": "clear", "streamSid": stream_sid}))
+    await openai_ws.send(
+        json.dumps(
+            {
+                "type": "conversation.item.truncate",
+                "item_id": item_id,
+                "content_index": 0,
+                "audio_end_ms": audio_end_ms,
+            }
+        )
+    )
+    _voice_reset_assistant_playback(state)
+    return True
+
+
+async def _voice_finalize_call(
+    *,
+    cliente_id: str,
+    config: Dict[str, Any],
+    voice_cfg: Dict[str, Any],
+    call_sid: str,
+    transcript: List[Dict[str, str]],
+    duration_seconds: int,
+    status_value: str,
+    booking_done: bool = False,
+) -> None:
+    transcript_text = "\n".join(f"{item['role']}: {item['text']}" for item in transcript)
+    # booking_created refleja una cita realmente creada por voz; si no, caemos a
+    # deteccion de intencion por palabras clave (lead sin reserva confirmada).
+    booking_intent = booking_done or _voice_detect_booking_intent(transcript_text)
+    summary = await asyncio.to_thread(_voice_summarize, transcript_text)
+
+    from_number = ""
+    if call_sid:
+        try:
+            with db._get_db_connection() as conn:
+                row = conn.execute(
+                    "SELECT from_number FROM voice_calls WHERE call_sid=?", (call_sid,)
+                ).fetchone()
+                if row:
+                    from_number = row["from_number"] or ""
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.error("[voice] no se pudo leer from_number de %s: %s", call_sid, exc)
+
+    sms_sent = 0
+    if voice_cfg.get("sms_confirmation") and booking_intent and from_number:
+        twilio_from = (
+            settings.TWILIO_SMS_SENDER
+            or voice_cfg.get("twilio_phone_number")
+            or settings.TWILIO_DEFAULT_PHONE_NUMBER
+        )
+        base = (settings.APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
+        link = f"{base}/demo/{cliente_id}"
+        body = (
+            f"Hola, gracias por llamar a {config['nombre']}. "
+            f"Para gestionar tu cita entra aqui: {link}"
+        )
+        if await messaging._send_twilio_sms(from_number, twilio_from, body):
+            sms_sent = 1
+
+    now_iso = timeutils._utc_now().isoformat()
+    if not call_sid:
+        settings.logger.warning("[voice] llamada sin call_sid; no se persiste finalizacion")
+        return
+    try:
+        with db._get_db_connection() as conn:
+            conn.execute(
+                """
+                UPDATE voice_calls
+                SET ended_at=?, duration_seconds=?, status=?, transcript_json=?,
+                    summary=?, booking_created=?, sms_sent=?
+                WHERE call_sid=?
+                """,
+                (
+                    now_iso,
+                    int(duration_seconds),
+                    status_value,
+                    json.dumps(transcript, ensure_ascii=False),
+                    summary,
+                    1 if booking_intent else 0,
+                    sms_sent,
+                    call_sid,
+                ),
+            )
+            conn.commit()
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("[voice] no se pudo finalizar llamada %s: %s", call_sid, exc)
+
+
+def _voice_stats(conn: sqlite3.Connection, cliente_id: str) -> Dict[str, int]:
+    params: List[Any] = []
+    cond = ""
+    if cliente_id:
+        cond = " WHERE cliente_id=?"
+        params = [cliente_id]
+    connector = " AND" if cond else " WHERE"
+    today = timeutils._utc_now().date().isoformat()
+    week_ago = (timeutils._utc_now().date() - timedelta(days=7)).isoformat()
+
+    def count(extra: str, extra_params: List[Any]) -> int:
+        row = conn.execute(
+            f"SELECT COUNT(*) AS c FROM voice_calls{cond}{extra}", params + extra_params
+        ).fetchone()
+        return int(row["c"] if row else 0)
+
+    avg_row = conn.execute(
+        f"SELECT AVG(duration_seconds) AS a FROM voice_calls{cond}{connector} duration_seconds>0",
+        params,
+    ).fetchone()
+    return {
+        "today": count(f"{connector} substr(started_at,1,10)=?", [today]),
+        "week": count(f"{connector} substr(started_at,1,10)>=?", [week_ago]),
+        "with_booking": count(f"{connector} booking_created=1", []),
+        "avg_duration": int((avg_row["a"] if avg_row and avg_row["a"] else 0) or 0),
+    }
+
+

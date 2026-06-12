@@ -1496,3 +1496,115 @@ class GrowthWeeklyReviewPayload(BaseModel):
 class GrowthPlanTaskPayload(BaseModel):
     task_key: str = Field(min_length=1, max_length=120)
     completed: bool = False
+
+
+class OutreachAutopilotSendPayload(BaseModel):
+    max: int = 10
+    send: bool = True
+    delay: float = 70.0
+    jitter: float = 25.0
+    days: int = 60
+    limit: int = 120
+    apply_status: bool = False
+
+
+class OutreachCampaignCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=180)
+    stage: str = "cold"
+    emails: List[str] = Field(default_factory=list)
+    delay: float = 70.0
+    jitter: float = 25.0
+    force_window: bool = False
+
+
+class OutreachCampaignPatch(BaseModel):
+    status: Optional[str] = None
+    name: Optional[str] = None
+
+
+class OutreachDiscoverRequest(BaseModel):
+    sector: str = Field(..., min_length=2)
+    ciudad: str = Field(..., min_length=2)
+    max: int = 30
+    extract_emails: bool = True
+    import_direct: bool = False
+    source: str = Field(default="auto", pattern="^(auto|places|osm)$")
+
+
+class OutreachManualEmailPayload(BaseModel):
+    recipient: EmailStr
+    subject: str = Field(..., min_length=1, max_length=180)
+    text: str = Field(default="", max_length=50000)
+    html: str = Field(default="", max_length=200000)
+    css: str = Field(default="", max_length=50000)
+
+
+class OutreachPreflightRequest(BaseModel):
+    stage: str = "cold"
+    emails: List[str] = Field(default_factory=list)
+    max: int = 20
+    after_days: int = 4
+
+
+class OutreachProspectIn(BaseModel):
+    email: EmailStr
+    business_name: str = Field(..., min_length=1, max_length=200)
+    contact_name: str = ""
+    niche: str = ""
+    website: str = ""
+    service_hint: str = ""
+    city: str = ""
+    phone: str = ""
+    tags: str = ""
+    source: str = "manual"
+    status: str = "new"
+    notes: str = ""
+    score: int = 0
+
+
+class OutreachProspectPatch(BaseModel):
+    business_name: Optional[str] = None
+    contact_name: Optional[str] = None
+    niche: Optional[str] = None
+    website: Optional[str] = None
+    service_hint: Optional[str] = None
+    city: Optional[str] = None
+    phone: Optional[str] = None
+    tags: Optional[str] = None
+    source: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+    score: Optional[int] = None
+
+
+class OutreachReplyPayload(BaseModel):
+    email: EmailStr
+    stage: str = ""
+    note: str = ""
+
+
+class OutreachSendRequest(BaseModel):
+    stage: str = "cold"
+    campaign_name: str = ""
+    max: int = 20
+    dry_run: bool = True
+    test_to: str = ""
+    email: str = ""
+    emails: List[str] = Field(default_factory=list)
+    after_days: int = 4
+    delay: float = 70.0
+    jitter: float = 25.0
+    force_window: bool = False
+    autopilot: bool = False
+
+
+class OutreachSuppressRequest(BaseModel):
+    email: EmailStr
+    reason: str = "manual"
+
+
+class OutreachTemplateOverride(BaseModel):
+    stage: str
+    subject_pool: str = ""
+    body_text: str = ""
+    body_html: str = ""
