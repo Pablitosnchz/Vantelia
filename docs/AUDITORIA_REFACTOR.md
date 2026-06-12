@@ -167,9 +167,15 @@ rebuild de verificación en F4.
 | F3.13 backend/main.py (app/middlewares/mounts/eventos) | ✅ | 67a2843 |
 | F3.14 17 routers + shim final (api.py = 150 líneas; tabla de rutas idéntica) | ✅ | c61fb0c |
 | **CHECKPOINT B / F3 COMPLETA**: pytest 264/264, qa_e2e 0, uvicorn api:app + /health 200 | ✅ | — |
-| F4 Frontend | Pendiente | — |
-| F5 Tests + conftest | Pendiente | — |
-| F6 Documentación | Pendiente | — |
+| F4 Frontend (duplicados intra-archivo admin_ui; widget intacto) | ✅ | 9400ec4 |
+| F5 Tests (guardias shim en F3.0 + conftest con factory de entorno) | ✅ | d7d03fe |
+| F6 Documentación (ARQUITECTURA.md, CLAUDE.md, README, mapa antiguo superseded) | ✅ | (este commit) |
+
+**REFACTORIZACIÓN COMPLETA.** Gates finales: pytest 264/264, qa_e2e exit 0,
+tabla de rutas idéntica al monolito (330 rutas, orden incluido),
+`uvicorn api:app` + /health 200, py_compile entrypoints, npm run build
+reproducible. Pendientes que decide el usuario: los ítems "dudoso" del §1.2
+y el bug latente pre-existente de `discovered_count` (§notas).
 
 Notas de transición F3 (para retomar en sesiones futuras):
 - Patrón por módulo: cortar bloque → `backend/<mod>.py` con acceso cualificado

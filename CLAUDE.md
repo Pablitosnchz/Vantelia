@@ -9,7 +9,9 @@ La web comercial publica vive separada como sitio estatico en Hostinger. La apli
 ## Mapa del repositorio
 
 ```text
-api.py               Backend FastAPI monolitico. Mantener en un solo archivo salvo peticion explicita.
+api.py               Shim de compatibilidad (~150 lineas): uvicorn api:app + proxy del namespace historico.
+backend/             Implementacion real: modulos por dominio + main.py (app) + routers/ (endpoints). Ver docs/ARQUITECTURA.md.
+api_models.py        Modelos Pydantic compartidos (requests/responses).
 widget/              Widget embebible vanilla JS. Fuente en modulos, build en widget.min.js.
 admin_ui/            SPA del dashboard admin, HTML/CSS/JS en un solo index.html.
 access_ui/           SPA de login/acceso.
@@ -44,7 +46,7 @@ config.json          Config multi-tenant de clientes.
 
 - Trabaja en espanol para textos visibles, contenido comercial, emails, legales y mensajes de usuario.
 - No introduzcas frameworks frontend. El proyecto usa HTML/CSS/JS vanilla.
-- No dividas `api.py` en modulos salvo que el usuario pida una refactorizacion grande.
+- El backend esta modularizado en `backend/` (refactor junio 2026). Entre modulos de backend el acceso es CUALIFICADO (`from backend import booking` + `booking.helper()`), nunca from-import de funciones: el proxy de `api.py` y los monkeypatch de tests dependen de ello. Clases y modelos Pydantic si pueden importarse por nombre. No toques el shim `api.py` ni el orden de import de routers en `backend/main.py` sin leer docs/ARQUITECTURA.md.
 - No metas secretos en git. `.env`, `storage/`, DBs, service accounts reales y tokens deben quedarse locales.
 - No rompas compatibilidad del widget: muchas webs dependeran del snippet y de `data-*`.
 - Cambios en `hostinger_site/` deben replicarse en `site_exports/vantelia_static_clean/` cuando sean para produccion.
@@ -115,7 +117,7 @@ Subida web estatica a Hostinger:
 
 ## Backend API
 
-`api.py` tiene unas 8k lineas y concentra modelos, helpers, persistencia, auth, booking, endpoints, WhatsApp y UI serving. Antes de editar, busca el bloque exacto con `rg`.
+El backend vive en `backend/` (28 modulos de dominio + `backend/routers/` con 17 modulos de endpoints); `api.py` es solo el entrypoint de compatibilidad. Mapa completo, convenciones y "donde anadir cosas" en `docs/ARQUITECTURA.md`. Antes de editar, localiza el modulo del dominio con `rg`. Nota: el py_compile de CI/deploy cubre los entrypoints; `python -m pytest` importa todo backend/ (cobertura equivalente).
 
 Endpoints publicos principales:
 

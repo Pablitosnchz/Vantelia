@@ -1,3 +1,7 @@
+> **SUPERSEDED (junio 2026):** la modularizacion descrita aqui se completo en la rama
+> `refactor/estable-v1`. La referencia vigente es `docs/ARQUITECTURA.md`;
+> el historico de decisiones esta en `docs/AUDITORIA_REFACTOR.md`.
+
 # API Refactor Map
 
 `api.py` sigue siendo el punto de entrada de FastAPI (`uvicorn api:app`), pero la primera fase ya separa los modelos compartidos en `api_models.py`.
