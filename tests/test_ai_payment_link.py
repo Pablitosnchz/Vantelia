@@ -69,6 +69,13 @@ def _patch_stripe_ok(api_module, monkeypatch, suffix: str, captured: dict) -> No
     monkeypatch.setattr(api_module.stripe.checkout.Session, "create", create_session)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_payment_delivery(api_module, monkeypatch):
+    """Los tests de pago no dependen del SMTP real ni envian correos."""
+    monkeypatch.setattr(api_module, "_ai_payment_delivery_available", lambda cliente_id, method: True)
+    monkeypatch.setattr(api_module, "_send_client_email", lambda *args, **kwargs: None)
+
+
 def test_ai_send_uses_email_for_web_booking(api_module, monkeypatch):
     suffix = uuid.uuid4().hex[:8]
     _seed_connect_account(api_module)
@@ -83,9 +90,9 @@ def test_ai_send_uses_email_for_web_booking(api_module, monkeypatch):
     _patch_stripe_ok(api_module, monkeypatch, suffix, captured_session)
     sent_email: dict = {}
     monkeypatch.setattr(
-        api_module, "_send_email_message",
-        lambda to, subject, text, html="", reply_to=None: sent_email.update(
-            {"to": to, "subject": subject, "text": text}
+        api_module, "_send_client_email",
+        lambda cliente_id, to, subject, text, html="", reply_to=None: sent_email.update(
+            {"cliente_id": cliente_id, "to": to, "subject": subject, "text": text}
         ),
     )
 
@@ -126,7 +133,7 @@ def test_ai_send_uses_sms_for_voice_booking(api_module, monkeypatch):
     monkeypatch.setattr(api_module, "_send_twilio_sms", capture_sms)
     monkeypatch.setattr(api_module, "_ai_payment_delivery_available", lambda cliente_id, method: method == "sms")
     monkeypatch.setattr(
-        api_module, "_send_email_message",
+        api_module, "_send_client_email",
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("Una cita de voz no debe enviar email.")),
     )
 
@@ -153,7 +160,6 @@ def test_ai_send_amount_is_not_set_by_customer(api_module, monkeypatch):
     )
     captured_session: dict = {}
     _patch_stripe_ok(api_module, monkeypatch, suffix, captured_session)
-    monkeypatch.setattr(api_module, "_send_email_message", lambda *a, **k: None)
 
     result = asyncio.run(
         api_module._ai_send_payment_link("demo", _booking_row(api_module, booking_id))
@@ -338,7 +344,6 @@ def test_chat_payment_intent_generates_link(api_module, monkeypatch):
     code = _booking_row(api_module, booking_id)["booking_code"]
     captured_session: dict = {}
     _patch_stripe_ok(api_module, monkeypatch, suffix, captured_session)
-    monkeypatch.setattr(api_module, "_send_email_message", lambda *a, **k: None)
 
     result = asyncio.run(
         api_module._process_payment_request_message(
@@ -364,7 +369,6 @@ def test_chat_payment_without_code_resolves_by_trusted_phone(api_module, monkeyp
     )
     captured_session: dict = {}
     _patch_stripe_ok(api_module, monkeypatch, suffix, captured_session)
-    monkeypatch.setattr(api_module, "_send_email_message", lambda *a, **k: None)
 
     result = asyncio.run(
         api_module._process_payment_request_message(
@@ -391,7 +395,6 @@ def test_chat_payment_without_code_resolves_by_email_in_message(api_module, monk
     )
     captured_session: dict = {}
     _patch_stripe_ok(api_module, monkeypatch, suffix, captured_session)
-    monkeypatch.setattr(api_module, "_send_email_message", lambda *a, **k: None)
 
     result = asyncio.run(
         api_module._process_payment_request_message(
