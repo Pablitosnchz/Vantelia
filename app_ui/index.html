@@ -774,6 +774,9 @@
       overflow-y: auto;
     }
     .side-panel.open { right: 0; }
+    /* Ficha de cliente: panel más ancho, oculto fuera de pantalla por completo. */
+    #clientePanel { width: min(560px, 96vw); right: calc(-1 * min(560px, 96vw) - 24px); }
+    #clientePanel.open { right: 0; }
     #qaFormCard { width: 440px; right: -460px; }
     #qaFormCard.open { right: 0; }
     @media (max-width: 520px) { #qaFormCard { width: 100%; right: -100%; } }
@@ -2328,7 +2331,7 @@
 
 <!-- Side panel: ficha de cliente 360 -->
 <div class="drawer-overlay" id="clienteOverlay"></div>
-<div class="side-panel" id="clientePanel" style="width:min(560px,96vw);">
+<div class="side-panel" id="clientePanel">
   <div class="side-panel-head"><b id="clientePanelTitle">Cliente</b><button id="clientePanelClose">×</button></div>
   <div class="side-panel-body" id="clientePanelBody"></div>
 </div>
