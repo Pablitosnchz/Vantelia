@@ -1864,6 +1864,9 @@
     </div>
 
     <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
+      <select class="field-input" id="citasFiltCentro" style="width:auto; flex:0 0 200px; display:none;">
+        <option value="">Todos los centros</option>
+      </select>
       <select class="field-input" id="citasFiltProf" style="width:auto; flex:0 0 200px;">
         <option value="">Todos los profesionales</option>
       </select>
@@ -4134,7 +4137,7 @@ function mountVanteliaWidget() {
 function reloadBotDrawer() { mountVanteliaWidget(); }
 
 // ── CITAS ─────────────────────────────────────────────────────────────
-const citasState = { view: 'day', calYear: null, calMonth: null, calData: [], calClosedDays: [], calBlocks: [], dayDate: null, dayRange: 1, employees: null, daySchedule: null, dayItems: [], selectedDayBookingId: '' };
+const citasState = { view: 'day', calYear: null, calMonth: null, calData: [], calClosedDays: [], calBlocks: [], dayDate: null, dayRange: 1, employees: null, locations: null, daySchedule: null, dayItems: [], selectedDayBookingId: '' };
 
 // CRM ligero
 const crmState = { activeId: '', items: [], page: 1, pageSize: 50, total: 0, pages: 0, controller: null, debounce: null };
@@ -4486,7 +4489,8 @@ async function fetchCitasCalData() {
   const profId = document.getElementById('citasFiltProf')?.value || '';
   try {
     const profParam = profId ? `&employee_id=${encodeURIComponent(profId)}` : '';
-    const data = await api(`/auth/bookings?date_from=${from}&date_to=${to}&limit=2000${profParam}`);
+    const locParam = citasCentroId() ? `&location_id=${encodeURIComponent(citasCentroId())}` : '';
+    const data = await api(`/auth/bookings?date_from=${from}&date_to=${to}&limit=2000${profParam}${locParam}`);
     citasState.calData = data.items || [];
   } catch { citasState.calData = []; }
   try {
@@ -4507,6 +4511,7 @@ async function refreshCitasCalendarIfVisible() {
 function invalidateCitasScheduleCache() {
   citasState.daySchedule = null;
   citasState.employees = null;
+  citasState.locations = null;
 }
 
 async function ensureCitasEmployeesLoaded() {
@@ -4519,7 +4524,34 @@ async function ensureCitasEmployeesLoaded() {
       citasState.employees = [];
     }
   }
+  if (citasState.locations === null) {
+    try { const r = await api('/auth/locations'); citasState.locations = r.items || []; }
+    catch { citasState.locations = []; }
+    populateCitasCentros();
+  }
   if (sel && sel.options.length <= 1) loadCitasProfSelect(citasState.employees || []);
+}
+
+// Centro seleccionado en la pestaña Citas ('' = todos).
+function citasCentroId() { return document.getElementById('citasFiltCentro')?.value || ''; }
+
+// Empleados del centro seleccionado (o todos si no hay filtro).
+function citasEmpsForCentro() {
+  const loc = citasCentroId();
+  const all = citasState.employees || [];
+  return loc ? all.filter(e => (e.location_id || '') === loc) : all;
+}
+
+function populateCitasCentros() {
+  const sel = document.getElementById('citasFiltCentro');
+  if (!sel) return;
+  const locs = citasState.locations || [];
+  // Solo tiene sentido el filtro con más de un centro.
+  sel.style.display = locs.length > 1 ? '' : 'none';
+  const current = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
+  locs.forEach(l => { const o = document.createElement('option'); o.value = l.location_id; o.textContent = l.name; sel.appendChild(o); });
+  if (current && locs.some(l => l.location_id === current)) sel.value = current;
 }
 
 async function refreshCitasIfVisible() {
@@ -4874,8 +4906,17 @@ document.getElementById('citasViewCal').addEventListener('click', async () => {
     else loadCitasDay();
   });
 });
+// Filtro de centro — reacota los profesionales a ese centro y recarga.
+document.getElementById('citasFiltCentro').addEventListener('change', () => {
+  const profSel = document.getElementById('citasFiltProf');
+  if (profSel) profSel.value = '';
+  loadCitasProfSelect(citasState.employees || []);
+  if (citasState.view === 'cal') refreshCitasCalendarIfVisible();
+  else loadCitasDay();
+});
 document.getElementById('citasFiltLimpiar').addEventListener('click', () => {
-  ['citasFiltProf','citasFiltEstado'].forEach(id => document.getElementById(id).value = '');
+  ['citasFiltCentro','citasFiltProf','citasFiltEstado'].forEach(id => document.getElementById(id).value = '');
+  loadCitasProfSelect(citasState.employees || []);
   if (citasState.view === 'cal') refreshCitasCalendarIfVisible();
   else loadCitasDay();
 });
@@ -5069,6 +5110,7 @@ async function loadCitasDay(){
   let params = `date_from=${fromKey}&date_to=${toKey}&limit=1000`;
   if (prof)   params += `&employee_id=${encodeURIComponent(prof)}`;
   if (estado) params += `&estado=${encodeURIComponent(estado)}`;
+  if (citasCentroId()) params += `&location_id=${encodeURIComponent(citasCentroId())}`;
   try { const data = await api('/auth/bookings?' + params); citasState.dayItems = data.items || []; }
   catch { citasState.dayItems = []; }
   cdSyncRangeChips();
@@ -5091,7 +5133,7 @@ function renderCitasDay(){
   }
 
   const prof = document.getElementById('citasFiltProf')?.value || '';
-  const emps = (citasState.employees || []).filter(e => (typeof e.is_active === 'boolean' ? e.is_active : true));
+  const emps = citasEmpsForCentro().filter(e => (typeof e.is_active === 'boolean' ? e.is_active : true));
   const defEmp = (citasState.employees || []).find(e => e.is_default);
 
   // Columnas = días (rango > 1) o profesionales (1 día).
@@ -5467,7 +5509,13 @@ async function loadEquipo() {
 function loadCitasProfSelect(emps) {
   const sel = document.getElementById('citasFiltProf');
   const current = sel.value || '';
-  const items = normalizeEmployeeItems(emps);
+  // Si hay centro seleccionado, solo los profesionales de ese centro.
+  const loc = citasCentroId();
+  const byId = new Map((citasState.employees || []).map(e => [e.id, e]));
+  const scoped = loc
+    ? (emps || []).filter(e => (((byId.get(e.id) || e).location_id) || '') === loc)
+    : (emps || []);
+  const items = normalizeEmployeeItems(scoped);
   while (sel.options.length > 1) sel.remove(1);
   items.forEach(e => { const o = document.createElement('option'); o.value = e.id; o.textContent = e.name; sel.appendChild(o); });
   if (current && items.some(e => e.id === current)) sel.value = current;

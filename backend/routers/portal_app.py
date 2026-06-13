@@ -206,6 +206,7 @@ async def auth_bookings(
     cliente_id: str = "",
     estado: str = "",
     employee_id: str = "",
+    location_id: str = "",
     scope: str = "all",
     q: str = "",
     date_from: str = "",
@@ -224,9 +225,14 @@ async def auth_bookings(
     date_to_clean = date_to.strip()
     cap = booking._portal_bookings_effective_cap(date_from_clean, date_to_clean)
     effective_limit = max(1, min(limit, cap))
+    location_filter = (
+        agenda._resolve_location_id(target_client_id, location_id.strip())
+        if (location_id.strip() and target_client_id) else ""
+    )
     rows, total = booking._list_booking_rows(
         cliente_id=target_client_id,
         employee_id=employee_id.strip(),
+        location_id=location_filter,
         status_filter=estado.strip(),
         search=q.strip(),
         date_from=date_from_clean,

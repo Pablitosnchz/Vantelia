@@ -1499,6 +1499,7 @@ def _list_booking_rows(
     *,
     cliente_id: str = "",
     employee_id: str = "",
+    location_id: str = "",
     status_filter: str = "",
     search: str = "",
     date_from: str = "",
@@ -1516,6 +1517,9 @@ def _list_booking_rows(
     if employee_id:
         clauses.append("employee_id = ?")
         params.append(employee_id)
+    if location_id:
+        clauses.append("location_id = ?")
+        params.append(location_id)
     if status_filter:
         clauses.append("status = ?")
         params.append(status_filter)
