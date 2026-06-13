@@ -68,6 +68,7 @@ last_cleanup_run = 0.0
 state_lock = threading.RLock()
 booking_reminder_stop = threading.Event()
 booking_reminder_thread: Optional[threading.Thread] = None
+ai_rebooking_last_run = ""  # ISO del ultimo pase de rebooking IA (guard 1/dia)
 outreach_imap_stop = threading.Event()
 outreach_imap_thread: Optional[threading.Thread] = None
 outreach_autopilot_stop = threading.Event()

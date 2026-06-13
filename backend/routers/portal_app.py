@@ -1024,6 +1024,34 @@ async def app_payments_ai_send_toggle(
     return booking._connect_account_status(cliente_id)
 
 
+@app.get("/auth/app/rebooking-ai")
+async def app_rebooking_ai_status(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, bool]:
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    return {"enabled": booking._ai_rebooking_enabled_for_client(target)}
+
+
+@app.post("/auth/app/rebooking-ai")
+async def app_rebooking_ai_toggle(
+    data: AiSendTogglePayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, bool]:
+    """Opt-in: la IA reengancha clientes inactivos por WhatsApp ('¿te reservo otra cita?')."""
+    security._require_portal_min_role(user, "owner")
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    security._ensure_channel_settings(target)
+    with db._get_db_connection() as connection:
+        connection.execute(
+            "UPDATE client_channel_settings SET ai_rebooking_enabled=?, updated_at=? WHERE cliente_id=?",
+            (1 if data.enabled else 0, timeutils._utc_now_iso(), target),
+        )
+        connection.commit()
+    return {"enabled": bool(data.enabled)}
+
+
 @app.post("/auth/app/payments/connect/start", response_model=ConnectStartResponse)
 async def app_connect_start(
     request: Request,

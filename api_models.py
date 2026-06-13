@@ -294,7 +294,10 @@ class StaffBookingCreatePayload(BaseModel):
 
 class BookingUpdatePayload(BaseModel):
     nombre: str = Field(min_length=2, max_length=80)
-    email: EmailStr
+    # str (no EmailStr): las citas de mostrador/walk-in no tienen email; reprogramarlas
+    # (incluido el drag&drop) no debe fallar por validacion. El flujo publico sobreescribe
+    # este campo con el email guardado de la reserva.
+    email: str = Field(default="", max_length=200)
     telefono: str = Field(default="", max_length=30)
     servicio: str = Field(default="", max_length=120)
     employee_id: str = Field(default="", max_length=80)

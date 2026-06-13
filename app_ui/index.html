@@ -743,6 +743,27 @@
     .inf-trow .t-bar { height: 6px; border-radius: 3px; background: var(--accent); opacity: 0.85; min-width: 2px; }
     .inf-trow .t-val { color: var(--soft); white-space: nowrap; font-size: 0.78rem; }
 
+    /* ── Calendario: leyenda + drag & drop ── */
+    .cd-legend { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-left: auto; }
+    .cd-leg { display: inline-flex; align-items: center; gap: 5px; font-size: 0.74rem; color: var(--soft); }
+    .cd-leg i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+    .cd-leg-hint { color: var(--soft-2); font-style: italic; }
+    .cd-event { cursor: grab; }
+    .cd-event.cd-dragging { opacity: 0.4; cursor: grabbing; }
+    /* Mientras se arrastra, los eventos no capturan el puntero para que la
+       columna reciba dragover/drop en toda su altura. */
+    .cd-grid.cd-dragging-active .cd-event { pointer-events: none; }
+    .cd-body.cd-drop-active { box-shadow: inset 0 0 0 2px var(--accent, #00b1d9); border-radius: 6px; }
+    .cd-drop-ghost {
+      position: absolute; left: 2px; right: 2px; height: 2px; background: var(--accent, #00b1d9);
+      border-radius: 2px; pointer-events: none; z-index: 5; box-shadow: 0 0 6px var(--accent, #00b1d9);
+    }
+    .cd-drop-ghost::before {
+      content: attr(data-time); position: absolute; left: 0; top: -16px; font-size: 0.7rem;
+      font-weight: 700; color: var(--accent, #00b1d9); background: var(--panel, #0b1424); padding: 0 4px; border-radius: 3px;
+    }
+    @media (max-width: 768px) { .cd-legend { display: none; } }
+
     /* ── Side panel (equipo editor) ── */
     .side-panel {
       position: fixed; top: 0; right: -360px; width: 340px; height: 100%;
@@ -909,6 +930,10 @@
   <div class="nav-item" data-tab="citas">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
     <span>Citas</span>
+  </div>
+  <div class="nav-item" data-tab="clientes">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    <span>Clientes</span>
   </div>
   <div class="nav-item" data-tab="equipo">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -1908,6 +1933,14 @@
           <button class="filter-chip" type="button" data-range="7">7 días</button>
         </div>
         <span class="panel-sub" id="cdMeta" style="margin:0;"></span>
+        <div class="cd-legend" id="cdLegend" aria-hidden="true">
+          <span class="cd-leg"><i style="background:#0ea5e9"></i>Confirmada</span>
+          <span class="cd-leg"><i style="background:#f59e0b"></i>Pendiente</span>
+          <span class="cd-leg"><i style="background:#10b981"></i>Realizada</span>
+          <span class="cd-leg"><i style="background:#ef4444"></i>No-show</span>
+          <span class="cd-leg"><i style="background:#6b7280"></i>Cancelada</span>
+          <span class="cd-leg cd-leg-hint">✋ arrastra una cita para reprogramar</span>
+        </div>
       </div>
       <div class="cd-scroll"><div class="cd-grid" id="cdGrid"></div></div>
       <div class="cd-detail" id="cdDetail" style="display:none;"></div>
@@ -1915,6 +1948,16 @@
   </section>
 
   <!-- EQUIPO -->
+  <!-- CLIENTES (ficha 360 sobre el CRM) -->
+  <section class="page" id="page-clientes">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+      <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600;">Clientes</h2>
+      <input type="text" class="field-input" id="clientesSearch" placeholder="Buscar por nombre, email o teléfono…" style="margin-left:auto; max-width:340px;" />
+    </div>
+    <p class="panel-sub">Ficha de cada cliente: historial de visitas, gasto, bonos y notas. Se rellena solo desde las reservas y conversaciones.</p>
+    <div id="clientesList" style="display:flex; flex-direction:column; gap:6px; margin-top:14px;"></div>
+  </section>
+
   <section class="page page-agenda-wrap" id="page-equipo">
     <div class="agenda-blocked-overlay" id="overlayEquipo">
       <strong>Sección desactivada</strong>
@@ -2197,6 +2240,14 @@
       </div>
     </div>
 
+    <div class="panel-card" style="margin-top:18px;" id="rebookingAiBlock">
+      <h2>Rebooking automático con IA</h2>
+      <p class="panel-sub">La IA reengancha por WhatsApp a clientes que hace tiempo que no vienen ("¿te reservo otra cita?"). Requiere WhatsApp conectado. Se envía como mucho una vez cada ~8 semanas por cliente.</p>
+      <label style="display:flex; align-items:center; gap:10px; margin-top:12px; font-size:0.9rem;">
+        <input type="checkbox" id="rebookingAiToggle" /> Activar rebooking automático por WhatsApp
+      </label>
+    </div>
+
     <div class="panel-card" style="margin-top:18px; border-color:var(--danger);">
       <h2 style="color:var(--danger);">Zona de peligro</h2>
       <p class="panel-sub">Cerrar sesión en este dispositivo.</p>
@@ -2273,6 +2324,13 @@
       <button class="btn" id="centroDeleteBtn" style="background:var(--danger-soft); color:var(--danger); border:1px solid var(--danger);">Eliminar</button>
     </div>
   </div>
+</div>
+
+<!-- Side panel: ficha de cliente 360 -->
+<div class="drawer-overlay" id="clienteOverlay"></div>
+<div class="side-panel" id="clientePanel" style="width:min(560px,96vw);">
+  <div class="side-panel-head"><b id="clientePanelTitle">Cliente</b><button id="clientePanelClose">×</button></div>
+  <div class="side-panel-body" id="clientePanelBody"></div>
 </div>
 
 <!-- Side panel: producto -->
@@ -2499,7 +2557,7 @@ const state = {
   session_id: 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
 };
 
-const TABS = ['overview','informes','chats','knowledge','qa','tune','voz','whatsapp','appearance','payments','billing','canales','citas','equipo','servicios','ventas','horarios','mensajes','instalacion','cuenta'];
+const TABS = ['overview','informes','chats','knowledge','qa','tune','voz','whatsapp','appearance','payments','billing','canales','citas','clientes','equipo','servicios','ventas','horarios','mensajes','instalacion','cuenta'];
 const billingState = { period: 'monthly', plans: [], current: 'free', portal: false };
 
 function formatDetail(d) {
@@ -2575,7 +2633,7 @@ function setTab(tab) {
     overview:'Overview', chats:'Chats',
     knowledge:'Conocimiento', qa:'Q&A', tune:'Tune AI', voz:'Asistente de voz', whatsapp:'WhatsApp',
     appearance:'Apariencia', payments:'Cobros Stripe', billing:'Suscripción',
-    citas:'Citas', equipo:'Equipo', servicios:'Servicios', horarios:'Horarios',
+    citas:'Citas', clientes:'Clientes', equipo:'Equipo', servicios:'Servicios', horarios:'Horarios',
     canales:'Canales de envio', ventas:'Ventas', informes:'Informes',
     mensajes:'Recordatorios y avisos', instalacion:'Instalación', cuenta:'Cuenta',
   };
@@ -2595,9 +2653,10 @@ function setTab(tab) {
   if (tab === 'horarios')   loadHorarios();
   if (tab === 'mensajes')   loadMensajes();
   if (tab === 'instalacion') loadInstalacion();
-  if (tab === 'cuenta')     { loadCuenta(); loadAccessTeam(); }
+  if (tab === 'cuenta')     { loadCuenta(); loadAccessTeam(); loadRebookingAi(); }
   if (tab === 'ventas')     loadVentas();
   if (tab === 'informes')   loadInformes();
+  if (tab === 'clientes')   loadClientes();
 }
 
 document.querySelectorAll('.nav-item').forEach(n => {
@@ -4652,6 +4711,11 @@ async function openNewBookingDrawer(opts = {}) {
   await loadNbServices();
   ['nbNombre','nbEmail','nbTelefono','nbNotas'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('nbServicio').value = '';
+  // Prefill opcional (rebooking / ficha de cliente).
+  if (opts.nombre) document.getElementById('nbNombre').value = opts.nombre;
+  if (opts.email) document.getElementById('nbEmail').value = opts.email;
+  if (opts.telefono) document.getElementById('nbTelefono').value = opts.telefono;
+  if (opts.servicio) document.getElementById('nbServicio').value = opts.servicio;
   document.getElementById('nbSlotSelected').value = '';
   document.getElementById('nbConfirmBtn').disabled = true;
   document.getElementById('nbFecha').value = opts.date || (citasState.dayDate ? cdDateKey(citasState.dayDate) : cdDateKey(new Date()));
@@ -5210,15 +5274,39 @@ function renderCitasDay(){
     // Click en hueco vacío → crear cita manual prefijada.
     if (!cdColDayInfo(c.emp, c.dateKey).isClosed) {
       body.style.cursor = 'copy';
+      const slotMin = Number(c.emp && c.emp.slot_minutes) || Number(citasState.daySchedule && citasState.daySchedule.slot_minutes) || 30;
       body.addEventListener('click', (e) => {
         if (e.target !== body) return;
-        const rect = body.getBoundingClientRect();
-        const slot = Number(c.emp && c.emp.slot_minutes) || Number(citasState.daySchedule && citasState.daySchedule.slot_minutes) || 30;
-        let mins = startMin + (e.clientY - rect.top) / CD_PX_PER_MIN;
-        mins = Math.max(startMin, Math.round(mins / slot) * slot);
-        const hh = String(Math.floor(mins / 60)).padStart(2, '0'), mm = String(Math.floor(mins % 60)).padStart(2, '0');
+        const mins = cdSnapMins(body, e.clientY, startMin, slotMin);
         const empId = c.type === 'prof' ? (c.emp ? c.emp.id : '') : (prof || '');
-        openNewBookingDrawer({ date: c.dateKey, time: `${hh}:${mm}`, employeeId: empId }).catch(err => toast(err.message, 'error'));
+        openNewBookingDrawer({ date: c.dateKey, time: cdMinsToHora(mins), employeeId: empId }).catch(err => toast(err.message, 'error'));
+      });
+      // Drop de una cita arrastrada → reprograma a esta columna/hora.
+      body.addEventListener('dragover', (e) => {
+        if (!cdDragId) return;
+        e.preventDefault();
+        try { e.dataTransfer.dropEffect = 'move'; } catch (err) {}
+        body.classList.add('cd-drop-active');
+        const mins = cdSnapMins(body, e.clientY, startMin, slotMin);
+        let g = body.querySelector('.cd-drop-ghost');
+        if (!g) { g = document.createElement('div'); g.className = 'cd-drop-ghost'; body.appendChild(g); }
+        g.style.top = ((mins - startMin) * CD_PX_PER_MIN) + 'px';
+        g.setAttribute('data-time', cdMinsToHora(mins));
+      });
+      body.addEventListener('dragleave', (e) => {
+        if (e.target !== body) return;
+        body.classList.remove('cd-drop-active');
+        const g = body.querySelector('.cd-drop-ghost'); if (g) g.remove();
+      });
+      body.addEventListener('drop', (e) => {
+        if (!cdDragId) return;
+        e.preventDefault();
+        const id = cdDragId; cdDragId = '';
+        const mins = cdSnapMins(body, e.clientY, startMin, slotMin);
+        const dragB = (citasState.dayItems || []).find(x => (x.booking_id || x.id) === id);
+        const empId = c.type === 'prof' ? (c.emp ? c.emp.id : '') : (dragB ? dragB.employee_id : (prof || ''));
+        cdClearDropArtifacts();
+        cdRescheduleDrop(id, empId, c.dateKey, cdMinsToHora(mins));
       });
     }
 
@@ -5255,6 +5343,17 @@ function renderCitasDay(){
       const sub = c.type === 'day' ? (b.employee_name || b.servicio || 'Consulta') : (b.servicio || 'Consulta');
       btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(hora)} · ${escapeHtml(b.nombre || b.client_name || b.name || b.servicio || 'Cita')}</span><span class="cd-ev-tag" style="color:${base}">${escapeHtml(CD_ESTADO_TAG[est] || '')}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
       btn.addEventListener('click', () => cdSelect(b));
+      // Reprogramables (confirmada/pendiente) se pueden arrastrar a otra hora/columna.
+      if (est === 'confirmed' || est === 'pending' || est === 'pending_review'){
+        btn.draggable = true;
+        btn.addEventListener('dragstart', (ev) => {
+          cdDragId = b.booking_id || b.id || '';
+          btn.classList.add('cd-dragging');
+          document.getElementById('cdGrid')?.classList.add('cd-dragging-active');
+          try { ev.dataTransfer.setData('text/plain', cdDragId); ev.dataTransfer.effectAllowed = 'move'; } catch (err) {}
+        });
+        btn.addEventListener('dragend', () => { btn.classList.remove('cd-dragging'); cdDragId = ''; cdClearDropArtifacts(); });
+      }
       body.appendChild(btn);
     });
 
@@ -5272,6 +5371,34 @@ function cdSelect(b){
   renderCitasDay();
   cdRenderDetail(b);
   document.getElementById('cdDetail').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+// ── Drag & drop: reprogramar arrastrando la cita (hora + profesional) ──
+let cdDragId = '';
+function cdClearDropArtifacts(){
+  document.querySelectorAll('.cd-body.cd-drop-active').forEach(x => x.classList.remove('cd-drop-active'));
+  document.querySelectorAll('.cd-drop-ghost').forEach(x => x.remove());
+  document.getElementById('cdGrid')?.classList.remove('cd-dragging-active');
+}
+function cdSnapMins(body, clientY, startMin, slotMin){
+  const rect = body.getBoundingClientRect();
+  let mins = startMin + (clientY - rect.top) / CD_PX_PER_MIN;
+  return Math.max(startMin, Math.round(mins / slotMin) * slotMin);
+}
+function cdMinsToHora(mins){
+  return `${String(Math.floor(mins/60)).padStart(2,'0')}:${String(Math.floor(mins%60)).padStart(2,'0')}`;
+}
+async function cdRescheduleDrop(bookingId, employeeId, dateKey, hora){
+  try {
+    await api(`/auth/bookings/${encodeURIComponent(bookingId)}/reschedule`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ employee_id: employeeId || '', fecha: dateKey, hora }),
+    });
+    toast('Cita reprogramada.', 'success');
+  } catch (e) {
+    toast(e.message || 'Ese hueco no está disponible.', 'error');
+  }
+  loadCitasDay();
 }
 
 function cdRenderDetail(b){
@@ -5310,6 +5437,7 @@ function cdRenderDetail(b){
       ${est !== 'cancelled' && b.payment_status !== 'preauthorized' ? `<button class="btn btn-ghost" type="button" data-cd="pay" style="padding:6px 14px;">💳 Cobrar</button>` : ''}
       ${est !== 'cancelled' && b.payment_status !== 'paid' ? `<button class="btn btn-ghost" type="button" data-cd="redeempkg" style="padding:6px 14px;">🎟 Bono</button>
       <button class="btn btn-ghost" type="button" data-cd="redeemgift" style="padding:6px 14px;">🎁 Tarjeta regalo</button>` : ''}
+      ${est !== 'cancelled' ? `<button class="btn btn-ghost" type="button" data-cd="rebook" style="padding:6px 14px;">🔁 Reservar siguiente</button>` : ''}
       <button class="btn btn-ghost" type="button" data-cd="resched" style="padding:6px 14px;" ${canEdit ? '' : 'disabled'}>Reprogramar</button>
       <button class="btn btn-ghost" type="button" data-cd="cancel" style="padding:6px 14px; color:var(--danger); border-color:var(--danger);" ${canEdit ? '' : 'disabled'}>Cancelar</button>
     </div>`;
@@ -5336,6 +5464,17 @@ function cdRenderDetail(b){
             }
           } catch(e){ toast(e.message, 'error'); }
           finally { btn.disabled = false; btn.textContent = orig; }
+          return;
+        }
+        if (action === 'rebook'){
+          // Reservar siguiente: drawer prefijado con mismo servicio/profesional/cliente, +4 semanas.
+          const base = b.start_at ? new Date(b.start_at) : new Date();
+          base.setDate(base.getDate() + 28);
+          openNewBookingDrawer({
+            date: cdDateKey(base), time: b.hora || '', employeeId: b.employee_id || '',
+            servicio: b.servicio || '', nombre: b.nombre || b.client_name || '',
+            email: b.email || b.client_email || '', telefono: b.telefono || b.client_phone || '',
+          }).catch(err => toast(err.message, 'error'));
           return;
         }
         if (action === 'redeempkg'){
@@ -6290,6 +6429,24 @@ document.getElementById('accessTeamAddBtn')?.addEventListener('click', async () 
   } catch (e) { toast(e.message, 'error'); }
 });
 
+// ── Rebooking automático con IA (opt-in, solo owner) ──────────────────
+async function loadRebookingAi() {
+  const block = document.getElementById('rebookingAiBlock');
+  if (!block) return;
+  if ((window.PORTAL_ROLE || 'owner') !== 'owner') { block.style.display = 'none'; return; }
+  block.style.display = '';
+  try {
+    const r = await api('/auth/app/rebooking-ai');
+    document.getElementById('rebookingAiToggle').checked = !!r.enabled;
+  } catch {}
+}
+document.getElementById('rebookingAiToggle')?.addEventListener('change', async (e) => {
+  try {
+    await api('/auth/app/rebooking-ai', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ enabled: e.target.checked }) });
+    toast(e.target.checked ? 'Rebooking IA activado.' : 'Rebooking IA desactivado.', 'success');
+  } catch (err) { toast(err.message, 'error'); e.target.checked = !e.target.checked; }
+});
+
 // ── ROLES: visibilidad de tabs según portal_role ──────────────────────
 const ROLE_HIDDEN_TABS = {
   staff: ['informes', 'knowledge', 'qa', 'tune', 'voz', 'whatsapp', 'appearance', 'payments', 'billing', 'canales', 'equipo', 'servicios', 'horarios', 'mensajes', 'instalacion'],
@@ -6304,6 +6461,129 @@ function applyRoleVisibility(role) {
     n.style.display = hidden.includes(n.getAttribute('data-tab')) ? 'none' : '';
   });
 }
+
+// ── CLIENTES (ficha 360 sobre el CRM) ─────────────────────────────────
+const clientesState = { current: null };
+const CRM_STATUS_LABEL = { nuevo:'Nuevo', lead:'Lead', cliente:'Cliente', recurrente:'Recurrente', inactivo:'Inactivo', perdido:'Perdido' };
+
+async function loadClientes() {
+  const list = document.getElementById('clientesList');
+  list.innerHTML = '<div class="panel-sub">Cargando…</div>';
+  const q = document.getElementById('clientesSearch').value.trim();
+  try {
+    const data = await api(`/auth/app/contacts?page_size=100${q ? `&q=${encodeURIComponent(q)}` : ''}`);
+    const items = data.items || [];
+    if (!items.length) { list.innerHTML = '<div class="panel-sub">Sin clientes todavía. Se crean solos con cada reserva o conversación.</div>'; return; }
+    list.innerHTML = items.map(ct => `
+      <div class="sale-row" data-contact="${escapeHtml(ct.id)}" style="cursor:pointer;">
+        <div class="sale-main">
+          <b>${escapeHtml(ct.name || ct.email || ct.phone || 'Cliente')}</b>
+          ${ct.status && ct.status !== 'nuevo' ? `<span class="pill pill-active" style="margin-left:6px;">${escapeHtml(CRM_STATUS_LABEL[ct.status] || ct.status)}</span>` : ''}
+          <div style="color:var(--soft-2); font-size:0.78rem;">
+            ${escapeHtml(ct.email || '')}${ct.email && ct.phone ? ' · ' : ''}${escapeHtml(ct.phone || '')}
+            ${ct.last_seen_at ? ` · visto ${escapeHtml(String(ct.last_seen_at).slice(0,10))}` : ''}
+          </div>
+        </div>
+        <div class="sale-amount" style="font-weight:600; color:var(--soft);">${ct.bookings_count || 0} cita${(ct.bookings_count||0)===1?'':'s'}</div>
+      </div>`).join('');
+    list.querySelectorAll('[data-contact]').forEach(row => row.addEventListener('click', () => openClientePanel(row.getAttribute('data-contact'))));
+  } catch (e) { list.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+}
+document.getElementById('clientesSearch').addEventListener('input', () => { clearTimeout(window.__clT); window.__clT = setTimeout(loadClientes, 300); });
+
+const CRM_ACT_ICON = { booking:'📅', lead:'📨', chat:'💬', voice_call:'📞', note:'📝' };
+
+async function openClientePanel(contactId) {
+  const panel = document.getElementById('clientePanel'), body = document.getElementById('clientePanelBody');
+  body.innerHTML = '<div class="panel-sub">Cargando…</div>';
+  panel.classList.add('open'); document.getElementById('clienteOverlay').classList.add('open');
+  try {
+    const data = await api(`/auth/app/contacts/${encodeURIComponent(contactId)}`);
+    const ct = data.contact || {}; const acts = data.activity || [];
+    clientesState.current = ct;
+    document.getElementById('clientePanelTitle').textContent = ct.name || ct.email || ct.phone || 'Cliente';
+    const waPhone = (ct.phone || '').replace(/[^\d]/g, '');
+    body.innerHTML = `
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+        ${ct.phone ? `<a class="btn btn-ghost" href="tel:${escapeHtml(ct.phone)}" style="font-size:0.82rem;">📞 Llamar</a>` : ''}
+        ${waPhone ? `<a class="btn btn-ghost" href="https://wa.me/${escapeHtml(waPhone)}" target="_blank" rel="noopener" style="font-size:0.82rem;">💬 WhatsApp</a>` : ''}
+        ${ct.email ? `<a class="btn btn-ghost" href="mailto:${escapeHtml(ct.email)}" style="font-size:0.82rem;">✉ Email</a>` : ''}
+        <button class="btn btn-primary" id="clienteRebookBtn" style="font-size:0.82rem;">🔁 Reservar siguiente</button>
+      </div>
+      <div class="inf-kpis" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); margin-bottom:14px;">
+        <div class="inf-kpi"><div class="k-label">Citas</div><div class="k-value">${ct.bookings_count || 0}</div></div>
+        <div class="inf-kpi"><div class="k-label">Chats</div><div class="k-value">${ct.chats_count || 0}</div></div>
+        <div class="inf-kpi"><div class="k-label">Llamadas</div><div class="k-value">${ct.voice_calls_count || 0}</div></div>
+      </div>
+      <div class="field" style="margin-bottom:6px;">
+        <label class="field-label">Datos</label>
+        <div style="font-size:0.86rem; color:var(--soft);">
+          ${escapeHtml(ct.email || 'sin email')}${ct.phone ? ' · ' + escapeHtml(ct.phone) : ''}<br>
+          ${ct.first_seen_at ? 'Cliente desde ' + escapeHtml(String(ct.first_seen_at).slice(0,10)) : ''}
+        </div>
+      </div>
+      <div id="clienteBonos" style="margin:10px 0;"></div>
+      <div class="field" style="margin-bottom:12px;">
+        <label class="field-label">Notas internas</label>
+        <textarea class="field-input" id="clienteNotas" rows="3" maxlength="8000">${escapeHtml(ct.notes || '')}</textarea>
+        <button class="btn btn-primary" id="clienteSaveNotas" style="margin-top:8px; font-size:0.82rem;">Guardar nota</button>
+      </div>
+      <div class="field">
+        <label class="field-label">Historial</label>
+        <div id="clienteActividad" style="display:flex; flex-direction:column; gap:6px;">
+          ${acts.length ? acts.map(a => `
+            <div class="sale-row" style="padding:8px 12px;">
+              <div class="sale-main">
+                <span>${CRM_ACT_ICON[a.kind] || '•'}</span> ${escapeHtml(a.title || a.kind)}
+                ${a.status ? `<span style="color:var(--soft-2); font-size:0.76rem;"> · ${escapeHtml(a.status)}</span>` : ''}
+                ${a.detail ? `<div style="color:var(--soft-2); font-size:0.76rem;">${escapeHtml(a.detail)}</div>` : ''}
+              </div>
+              <div class="t-val">${a.occurred_at ? escapeHtml(String(a.occurred_at).slice(0,10)) : ''}</div>
+            </div>`).join('') : '<div class="panel-sub">Sin actividad registrada.</div>'}
+        </div>
+      </div>`;
+    // Bonos/gift del cliente (por email).
+    if (ct.email) loadClienteBonos(ct.email);
+    document.getElementById('clienteRebookBtn').addEventListener('click', () => {
+      closeClientePanel();
+      setTab('citas');
+      openNewBookingDrawer({ nombre: ct.name || '', email: ct.email || '', telefono: ct.phone || '' }).catch(err => toast(err.message, 'error'));
+    });
+    document.getElementById('clienteSaveNotas').addEventListener('click', async () => {
+      try {
+        await api(`/auth/app/contacts/${encodeURIComponent(ct.id)}`, {
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ name: ct.name || '', email: ct.email || '', phone: ct.phone || '',
+            status: ct.status || 'nuevo', notes: document.getElementById('clienteNotas').value, tags: ct.tags || [] }),
+        });
+        toast('Nota guardada.', 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    });
+  } catch (e) { body.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+}
+
+async function loadClienteBonos(email) {
+  const el = document.getElementById('clienteBonos'); if (!el) return;
+  try {
+    const [pk, gc] = await Promise.all([
+      api(`/auth/package-purchases?q=${encodeURIComponent(email)}&status=active`).catch(() => ({ items: [] })),
+      api(`/auth/gift-cards?q=${encodeURIComponent(email)}`).catch(() => ({ items: [] })),
+    ]);
+    const bonos = (pk.items || []).filter(p => p.remaining_total > 0);
+    const gifts = (gc.items || []).filter(g => g.status === 'active' && g.balance_cents > 0);
+    if (!bonos.length && !gifts.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `<label class="field-label">Bonos y saldo</label>` +
+      bonos.map(b => `<div class="sale-row" style="padding:8px 12px;"><div class="sale-main">🎟 ${escapeHtml(b.package_name)} · ${b.remaining_total} sesión(es)</div></div>`).join('') +
+      gifts.map(g => `<div class="sale-row" style="padding:8px 12px;"><div class="sale-main">🎁 ${escapeHtml(g.code)} · saldo ${eur(g.balance_cents)}</div></div>`).join('');
+  } catch { el.innerHTML = ''; }
+}
+
+function closeClientePanel() {
+  document.getElementById('clientePanel').classList.remove('open');
+  document.getElementById('clienteOverlay').classList.remove('open');
+}
+document.getElementById('clientePanelClose').addEventListener('click', closeClientePanel);
+document.getElementById('clienteOverlay').addEventListener('click', closeClientePanel);
 
 // ── HORARIOS ──────────────────────────────────────────────────────────
 function loadHorariosProfSelect(emps) {

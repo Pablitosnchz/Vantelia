@@ -1129,6 +1129,30 @@ def _init_database() -> None:
             )
             """
         )
+        channel_settings_cols = {
+            row[1] for row in connection.execute("PRAGMA table_info(client_channel_settings)").fetchall()
+        }
+        if "ai_rebooking_enabled" not in channel_settings_cols:
+            connection.execute(
+                "ALTER TABLE client_channel_settings ADD COLUMN ai_rebooking_enabled INTEGER NOT NULL DEFAULT 0"
+            )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ai_rebooking_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id TEXT NOT NULL,
+                contact_phone TEXT NOT NULL,
+                servicio TEXT NOT NULL DEFAULT '',
+                sent_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_ai_rebooking_log_lookup
+            ON ai_rebooking_log(cliente_id, contact_phone, sent_at)
+            """
+        )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS client_oauth_connections (

@@ -86,10 +86,150 @@ def _booking_reminder_worker() -> None:
                     result.sent_2h,
                     result.failed,
                 )
+            # Rebooking proactivo por IA (opt-in por negocio, como mucho 1 pasada/dia).
+            try:
+                if _ai_rebooking_due():
+                    nudged = asyncio.run(_run_ai_rebooking_pass())
+                    appstate.ai_rebooking_last_run = timeutils._utc_now_iso()
+                    if nudged:
+                        settings.logger.info("Rebooking IA: %s clientes reenganchados.", nudged)
+            except Exception as exc:  # noqa: BLE001
+                settings.logger.error("Error en el rebooking IA: %s", exc)
         except Exception as exc:  # noqa: BLE001
             settings.logger.error("Error en el motor automatico de recordatorios: %s", exc)
 
         appstate.booking_reminder_stop.wait(interval_seconds)
+
+
+# ---------------------------------------------------------------------------
+# Rebooking proactivo por IA (re-enganche de clientes inactivos por WhatsApp)
+# ---------------------------------------------------------------------------
+
+AI_REBOOKING_AFTER_DAYS = int(os.getenv("AI_REBOOKING_AFTER_DAYS", "28") or "28")
+AI_REBOOKING_DEDUP_DAYS = int(os.getenv("AI_REBOOKING_DEDUP_DAYS", "56") or "56")
+AI_REBOOKING_CAP_PER_CLIENT = int(os.getenv("AI_REBOOKING_CAP_PER_CLIENT", "15") or "15")
+AI_REBOOKING_RUN_INTERVAL_HOURS = int(os.getenv("AI_REBOOKING_RUN_INTERVAL_HOURS", "24") or "24")
+
+
+def _ai_rebooking_enabled_for_client(cliente_id: str) -> bool:
+    with db._get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT ai_rebooking_enabled FROM client_channel_settings WHERE cliente_id=?",
+            (cliente_id,),
+        ).fetchone()
+    return bool(row["ai_rebooking_enabled"]) if row and "ai_rebooking_enabled" in row.keys() else False
+
+
+def _ai_rebooking_due() -> bool:
+    last = getattr(appstate, "ai_rebooking_last_run", "") or ""
+    if not last:
+        return True
+    try:
+        last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return True
+    return (timeutils._utc_now() - last_dt) >= timedelta(hours=AI_REBOOKING_RUN_INTERVAL_HOURS)
+
+
+def _ai_rebooking_candidates(cliente_id: str) -> List[Dict[str, str]]:
+    """Telefonos cuya ultima cita realizada fue hace >= AFTER dias, sin cita futura y
+    sin nudge reciente. Devuelve [{phone, servicio}]."""
+    today = timeutils._utc_now().date()
+    cutoff_date = (today - timedelta(days=AI_REBOOKING_AFTER_DAYS)).isoformat()
+    dedup_cutoff = (timeutils._utc_now() - timedelta(days=AI_REBOOKING_DEDUP_DAYS)).isoformat()
+    candidates: List[Dict[str, str]] = []
+    with db._get_db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT telefono, MAX(booking_date) AS last_date
+            FROM bookings
+            WHERE cliente_id=? AND telefono<>'' AND status='completed'
+            GROUP BY telefono
+            HAVING last_date <= ?
+            ORDER BY last_date DESC
+            """,
+            (cliente_id, cutoff_date),
+        ).fetchall()
+        for row in rows:
+            phone = row["telefono"]
+            future = connection.execute(
+                """
+                SELECT 1 FROM bookings
+                WHERE cliente_id=? AND telefono=? AND booking_date>=?
+                  AND status IN ('confirmed','pending_review','pending_payment')
+                LIMIT 1
+                """,
+                (cliente_id, phone, today.isoformat()),
+            ).fetchone()
+            if future:
+                continue
+            nudged = connection.execute(
+                "SELECT 1 FROM ai_rebooking_log WHERE cliente_id=? AND contact_phone=? AND sent_at>=? LIMIT 1",
+                (cliente_id, phone, dedup_cutoff),
+            ).fetchone()
+            if nudged:
+                continue
+            last_service = connection.execute(
+                """
+                SELECT servicio FROM bookings
+                WHERE cliente_id=? AND telefono=? AND status='completed'
+                ORDER BY booking_date DESC LIMIT 1
+                """,
+                (cliente_id, phone),
+            ).fetchone()
+            candidates.append({"phone": phone, "servicio": (last_service["servicio"] if last_service else "") or ""})
+            if len(candidates) >= AI_REBOOKING_CAP_PER_CLIENT:
+                break
+    return candidates
+
+
+def _ai_rebooking_text(cliente_id: str, servicio: str) -> str:
+    config = clients._get_client_config(cliente_id)
+    nombre = config.get("nombre", "") or "nosotros"
+    svc = f" tu {servicio}" if servicio else " tu cita"
+    return (
+        f"Hola 👋 Soy el asistente de {nombre}. Hace un tiempo que no vienes — "
+        f"¿quieres que te reserve{svc}? Respóndeme y te busco el mejor hueco."
+    )
+
+
+def _log_ai_rebooking(cliente_id: str, phone: str, servicio: str) -> None:
+    with db._get_db_connection() as connection:
+        connection.execute(
+            "INSERT INTO ai_rebooking_log (cliente_id, contact_phone, servicio, sent_at) VALUES (?, ?, ?, ?)",
+            (cliente_id, phone, servicio, timeutils._utc_now_iso()),
+        )
+        connection.commit()
+
+
+async def _run_ai_rebooking_pass() -> int:
+    nudged_clients = 0
+    for cliente_id in list(appstate.CONFIG_CLIENTES.keys()):
+        if not _ai_rebooking_enabled_for_client(cliente_id):
+            continue
+        config = clients._get_client_config(cliente_id)
+        whatsapp_cfg = config.get("whatsapp", {}) or {}
+        phone_number_id = str(whatsapp_cfg.get("phone_number_id", "") or "").strip()
+        if not (whatsapp_cfg.get("enabled") and phone_number_id):
+            continue
+        any_sent = False
+        for cand in _ai_rebooking_candidates(cliente_id):
+            try:
+                ok = await messaging._send_whatsapp_text(
+                    cliente_id=cliente_id,
+                    phone_number_id=phone_number_id,
+                    to_number=cand["phone"],
+                    text=_ai_rebooking_text(cliente_id, cand["servicio"]),
+                )
+            except Exception as exc:  # noqa: BLE001
+                settings.logger.error("Rebooking IA: fallo enviando a %s: %s", cand["phone"], exc)
+                ok = False
+            if ok:
+                _log_ai_rebooking(cliente_id, cand["phone"], cand["servicio"])
+                any_sent = True
+        if any_sent:
+            nudged_clients += 1
+    return nudged_clients
 
 
 def _public_services_for_booking(

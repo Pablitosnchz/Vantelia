@@ -1439,6 +1439,93 @@ def test_whatsapp_reminder_buttons_confirm_and_cancel(client: TestClient, api_mo
         conn.commit()
 
 
+def test_reschedule_via_drag_payload_moves_booking(client: TestClient, api_module):
+    cookies = _portal_admin_cookies(api_module)
+    target = datetime.utcnow().date() + timedelta(days=2)
+    while target.weekday() == 6:
+        target += timedelta(days=1)
+    fecha = target.isoformat()
+    created = client.post("/auth/bookings", params={"cliente_id": "demo"}, cookies=cookies,
+                          json={"nombre": "Drag Cliente", "email": "", "telefono": "600333111",
+                                "servicio": "", "employee_id": "", "fecha": fecha, "hora": "09:00", "notas": ""})
+    assert created.status_code == 200, created.text
+    bid = created.json()["booking_id"]
+    emp_id = created.json().get("employee_id", "")
+    # Payload que envía el drag&drop: {employee_id, fecha, hora}.
+    r = client.post(f"/auth/bookings/{bid}/reschedule", cookies=cookies,
+                    json={"employee_id": emp_id, "fecha": fecha, "hora": "09:30"})
+    assert r.status_code == 200, r.text
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        bt = conn.execute("SELECT booking_time FROM bookings WHERE id=?", (bid,)).fetchone()[0]
+    assert bt == "09:30"
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM bookings WHERE id=?", (bid,)); conn.commit()
+
+
+def test_ai_rebooking_selects_inactive_and_dedups(api_module, monkeypatch):
+    api_module._ensure_channel_settings("demo")
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("UPDATE client_channel_settings SET ai_rebooking_enabled=1 WHERE cliente_id='demo'")
+        conn.commit()
+
+    def _seed_completed(phone, days_ago):
+        bid = uuid.uuid4().hex
+        d = datetime.utcnow().date() - timedelta(days=days_ago)
+        start = datetime.utcnow() - timedelta(days=days_ago)
+        iso = lambda x: x.isoformat(timespec="seconds") + "Z"
+        api_module._store_booking({
+            "id": bid, "cliente_id": "demo", "employee_id": "", "employee_name": "",
+            "nombre": "Inactivo", "email": "", "telefono": phone,
+            "servicio": "Masaje", "booking_date": d.isoformat(), "booking_time": "09:00",
+            "notas": "", "status": "completed", "provider_name": "internal", "provider_status": "internal",
+            "provider_booking_id": "", "provider_booking_url": "", "manage_token": f"mg_{bid}",
+            "timezone": "Europe/Madrid", "start_at": iso(start), "end_at": iso(start + timedelta(minutes=30)),
+            "confirmed_at": iso(start), "cancelled_at": "", "rescheduled_at": "",
+            "rescheduled_from_booking_id": "", "confirmation_email_sent_at": "", "reminder_24h_sent_at": "",
+            "reminder_2h_sent_at": "", "customer_email_status": "", "customer_email_last_error": "",
+            "source": "test", "created_at": iso(start),
+        })
+        return bid
+
+    sent = []
+
+    async def _fake_wa(**kwargs):
+        sent.append(kwargs.get("to_number"))
+        return True
+
+    monkeypatch.setattr(api_module, "_send_whatsapp_text", _fake_wa)
+    api_module.ai_rebooking_last_run = ""
+
+    _seed_completed("600900001", 40)   # elegible
+    _seed_completed("600900002", 5)    # demasiado reciente
+    _seed_completed("600900003", 40)   # tiene cita futura (abajo)
+    future_d = (datetime.utcnow().date() + timedelta(days=3)).isoformat()
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        fbid = uuid.uuid4().hex
+        conn.execute(
+            "INSERT INTO bookings (id,cliente_id,employee_id,employee_name,nombre,email,telefono,servicio,booking_date,booking_time,notas,status,provider_name,provider_status,manage_token,timezone,source,created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (fbid, "demo", "", "", "Futuro", "", "600900003", "Masaje", future_d, "11:00", "", "confirmed",
+             "internal", "internal", f"mg_{fbid}", "Europe/Madrid", "test", future_d + "T11:00:00Z"),
+        )
+        conn.commit()
+
+    asyncio.run(api_module._run_ai_rebooking_pass())
+    assert "600900001" in sent
+    assert "600900002" not in sent
+    assert "600900003" not in sent
+
+    sent.clear()
+    asyncio.run(api_module._run_ai_rebooking_pass())
+    assert "600900001" not in sent  # dedup
+
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM bookings WHERE cliente_id='demo' AND telefono LIKE '6009000%'")
+        conn.execute("DELETE FROM ai_rebooking_log WHERE cliente_id='demo'")
+        conn.execute("UPDATE client_channel_settings SET ai_rebooking_enabled=0 WHERE cliente_id='demo'")
+        conn.commit()
+
+
 def test_service_price_and_duration_parsing(api_module):
     assert api_module._parse_price_to_cents("45 €") == 4500
     assert api_module._parse_price_to_cents("Desde 30 €") == 3000
