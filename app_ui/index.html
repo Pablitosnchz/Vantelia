@@ -743,25 +743,10 @@
     .inf-trow .t-bar { height: 6px; border-radius: 3px; background: var(--accent); opacity: 0.85; min-width: 2px; }
     .inf-trow .t-val { color: var(--soft); white-space: nowrap; font-size: 0.78rem; }
 
-    /* ── Calendario: leyenda + drag & drop ── */
+    /* ── Calendario: leyenda de estados ── */
     .cd-legend { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-left: auto; }
     .cd-leg { display: inline-flex; align-items: center; gap: 5px; font-size: 0.74rem; color: var(--soft); }
     .cd-leg i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
-    .cd-leg-hint { color: var(--soft-2); font-style: italic; }
-    .cd-event { cursor: grab; }
-    .cd-event.cd-dragging { opacity: 0.4; cursor: grabbing; }
-    /* Mientras se arrastra, los eventos no capturan el puntero para que la
-       columna reciba dragover/drop en toda su altura. */
-    .cd-grid.cd-dragging-active .cd-event { pointer-events: none; }
-    .cd-body.cd-drop-active { box-shadow: inset 0 0 0 2px var(--accent, #00b1d9); border-radius: 6px; }
-    .cd-drop-ghost {
-      position: absolute; left: 2px; right: 2px; height: 2px; background: var(--accent, #00b1d9);
-      border-radius: 2px; pointer-events: none; z-index: 5; box-shadow: 0 0 6px var(--accent, #00b1d9);
-    }
-    .cd-drop-ghost::before {
-      content: attr(data-time); position: absolute; left: 0; top: -16px; font-size: 0.7rem;
-      font-weight: 700; color: var(--accent, #00b1d9); background: var(--panel, #0b1424); padding: 0 4px; border-radius: 3px;
-    }
     @media (max-width: 768px) { .cd-legend { display: none; } }
 
     /* ── Side panel (equipo editor) ── */
@@ -872,6 +857,94 @@
     .agenda-blocked-overlay strong { font-size: 1rem; color: var(--text); }
     .page-agenda-wrap { position: relative; }
     .nav-item.booking-nav-disabled { opacity: 0.35; pointer-events: none; }
+
+    /* ══════════════════════════════════════════════════════════
+       Capa de acabado profesional (global, no intrusiva)
+       ══════════════════════════════════════════════════════════ */
+
+    /* Scrollbars finos y temáticos en todo el panel */
+    * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.14) transparent; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.12); border-radius: 99px;
+      border: 2px solid transparent; background-clip: padding-box;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); background-clip: padding-box; }
+    ::-webkit-scrollbar-corner { background: transparent; }
+
+    /* Selección con el color de marca */
+    ::selection { background: rgba(0,209,255,0.28); color: var(--text); }
+
+    /* Anillo de foco accesible y consistente para teclado */
+    a:focus-visible, button:focus-visible, .nav-item:focus-visible,
+    .filter-chip:focus-visible, [tabindex]:focus-visible,
+    summary:focus-visible, [role="button"]:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent);
+      border-radius: 8px;
+    }
+
+    /* Botones: transición suave + feedback al pulsar */
+    .btn { transition: transform .14s ease, box-shadow .14s ease, background .14s ease, opacity .14s ease; }
+    .btn:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+    .btn-ghost:hover { background: rgba(255,255,255,0.04); }
+
+    /* Entrada suave al cambiar de pestaña (solo opacidad: sin romper position:fixed) */
+    .page.active { animation: pageFade .22s ease both; }
+    @keyframes pageFade { from { opacity: 0; } to { opacity: 1; } }
+
+    /* Indicador de pestaña activa en el sidebar (barra de acento) */
+    .nav-item.active::before {
+      content: ''; position: absolute; left: -16px; top: 50%; transform: translateY(-50%);
+      width: 3px; height: 18px; border-radius: 0 3px 3px 0;
+      background: linear-gradient(180deg, var(--accent), var(--accent-2));
+    }
+
+    /* Tarjetas interactivas: elevación coherente al pasar el ratón */
+    .employee-card, .chat-row, .sale-row {
+      transition: border-color .14s ease, transform .14s ease, box-shadow .14s ease;
+    }
+    .employee-card:hover, .chat-row:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 22px rgba(0,0,0,0.22);
+    }
+
+    /* Primitivo de carga (skeleton shimmer) reutilizable */
+    .skeleton {
+      position: relative; overflow: hidden;
+      background: rgba(255,255,255,0.05); border-radius: 8px;
+    }
+    .skeleton::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.07), transparent);
+      transform: translateX(-100%); animation: skShimmer 1.3s infinite;
+    }
+    @keyframes skShimmer { 100% { transform: translateX(100%); } }
+    .skeleton-line { height: 12px; margin: 8px 0; }
+    .skeleton-line.sk-60 { width: 60%; }
+    .skeleton-line.sk-40 { width: 40%; }
+
+    /* Estado vacío estandarizado */
+    .empty-state {
+      text-align: center; padding: 44px 24px; color: var(--soft);
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .empty-state .es-icon {
+      width: 48px; height: 48px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--accent-soft); color: var(--accent); font-size: 1.4rem;
+    }
+    .empty-state .es-title { font-weight: 600; color: var(--text); font-size: 0.95rem; }
+    .empty-state .es-sub { font-size: 0.84rem; color: var(--soft-2); max-width: 360px; }
+
+    /* Toast: barra de acento + ligero desenfoque para look premium */
+    .toast { backdrop-filter: blur(6px); border-left-width: 3px; }
+
+    /* Respeta la preferencia de menos movimiento */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+    }
   </style>
 </head>
 <body>
@@ -1942,7 +2015,6 @@
           <span class="cd-leg"><i style="background:#10b981"></i>Realizada</span>
           <span class="cd-leg"><i style="background:#ef4444"></i>No-show</span>
           <span class="cd-leg"><i style="background:#6b7280"></i>Cancelada</span>
-          <span class="cd-leg cd-leg-hint">✋ arrastra una cita para reprogramar</span>
         </div>
       </div>
       <div class="cd-scroll"><div class="cd-grid" id="cdGrid"></div></div>
@@ -5284,33 +5356,6 @@ function renderCitasDay(){
         const empId = c.type === 'prof' ? (c.emp ? c.emp.id : '') : (prof || '');
         openNewBookingDrawer({ date: c.dateKey, time: cdMinsToHora(mins), employeeId: empId }).catch(err => toast(err.message, 'error'));
       });
-      // Drop de una cita arrastrada → reprograma a esta columna/hora.
-      body.addEventListener('dragover', (e) => {
-        if (!cdDragId) return;
-        e.preventDefault();
-        try { e.dataTransfer.dropEffect = 'move'; } catch (err) {}
-        body.classList.add('cd-drop-active');
-        const mins = cdSnapMins(body, e.clientY, startMin, slotMin);
-        let g = body.querySelector('.cd-drop-ghost');
-        if (!g) { g = document.createElement('div'); g.className = 'cd-drop-ghost'; body.appendChild(g); }
-        g.style.top = ((mins - startMin) * CD_PX_PER_MIN) + 'px';
-        g.setAttribute('data-time', cdMinsToHora(mins));
-      });
-      body.addEventListener('dragleave', (e) => {
-        if (e.target !== body) return;
-        body.classList.remove('cd-drop-active');
-        const g = body.querySelector('.cd-drop-ghost'); if (g) g.remove();
-      });
-      body.addEventListener('drop', (e) => {
-        if (!cdDragId) return;
-        e.preventDefault();
-        const id = cdDragId; cdDragId = '';
-        const mins = cdSnapMins(body, e.clientY, startMin, slotMin);
-        const dragB = (citasState.dayItems || []).find(x => (x.booking_id || x.id) === id);
-        const empId = c.type === 'prof' ? (c.emp ? c.emp.id : '') : (dragB ? dragB.employee_id : (prof || ''));
-        cdClearDropArtifacts();
-        cdRescheduleDrop(id, empId, c.dateKey, cdMinsToHora(mins));
-      });
     }
 
     const band = (top, bot, opt) => {
@@ -5346,17 +5391,6 @@ function renderCitasDay(){
       const sub = c.type === 'day' ? (b.employee_name || b.servicio || 'Consulta') : (b.servicio || 'Consulta');
       btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(hora)} · ${escapeHtml(b.nombre || b.client_name || b.name || b.servicio || 'Cita')}</span><span class="cd-ev-tag" style="color:${base}">${escapeHtml(CD_ESTADO_TAG[est] || '')}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
       btn.addEventListener('click', () => cdSelect(b));
-      // Reprogramables (confirmada/pendiente) se pueden arrastrar a otra hora/columna.
-      if (est === 'confirmed' || est === 'pending' || est === 'pending_review'){
-        btn.draggable = true;
-        btn.addEventListener('dragstart', (ev) => {
-          cdDragId = b.booking_id || b.id || '';
-          btn.classList.add('cd-dragging');
-          document.getElementById('cdGrid')?.classList.add('cd-dragging-active');
-          try { ev.dataTransfer.setData('text/plain', cdDragId); ev.dataTransfer.effectAllowed = 'move'; } catch (err) {}
-        });
-        btn.addEventListener('dragend', () => { btn.classList.remove('cd-dragging'); cdDragId = ''; cdClearDropArtifacts(); });
-      }
       body.appendChild(btn);
     });
 
@@ -5376,13 +5410,6 @@ function cdSelect(b){
   document.getElementById('cdDetail').scrollIntoView({ behavior:'smooth', block:'nearest' });
 }
 
-// ── Drag & drop: reprogramar arrastrando la cita (hora + profesional) ──
-let cdDragId = '';
-function cdClearDropArtifacts(){
-  document.querySelectorAll('.cd-body.cd-drop-active').forEach(x => x.classList.remove('cd-drop-active'));
-  document.querySelectorAll('.cd-drop-ghost').forEach(x => x.remove());
-  document.getElementById('cdGrid')?.classList.remove('cd-dragging-active');
-}
 function cdSnapMins(body, clientY, startMin, slotMin){
   const rect = body.getBoundingClientRect();
   let mins = startMin + (clientY - rect.top) / CD_PX_PER_MIN;
@@ -5390,18 +5417,6 @@ function cdSnapMins(body, clientY, startMin, slotMin){
 }
 function cdMinsToHora(mins){
   return `${String(Math.floor(mins/60)).padStart(2,'0')}:${String(Math.floor(mins%60)).padStart(2,'0')}`;
-}
-async function cdRescheduleDrop(bookingId, employeeId, dateKey, hora){
-  try {
-    await api(`/auth/bookings/${encodeURIComponent(bookingId)}/reschedule`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ employee_id: employeeId || '', fecha: dateKey, hora }),
-    });
-    toast('Cita reprogramada.', 'success');
-  } catch (e) {
-    toast(e.message || 'Ese hueco no está disponible.', 'error');
-  }
-  loadCitasDay();
 }
 
 function cdRenderDetail(b){
