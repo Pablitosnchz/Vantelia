@@ -28,8 +28,17 @@ from api_models import (
     PortalEmployeePayload,
     PortalEmployeePublic,
     PortalEmployeesResponse,
+    PortalLocationPayload,
+    PortalLocationPublic,
+    PortalLocationsResponse,
+    PortalResourcePayload,
+    PortalResourcePublic,
+    PortalResourcesResponse,
     PortalSchedulePublic,
     PortalScheduleUpdatePayload,
+    ServiceLocationOverrideItem,
+    ServiceLocationOverridePayload,
+    ServiceLocationsResponse,
 )
 from backend import appstate, clients, db, emailing, messaging, security, settings, textnorm, timeutils
 
@@ -77,6 +86,17 @@ def _normalize_service_id(value: str) -> str:
 
 
 def _service_map_for_client(cliente_id: str) -> Dict[str, Dict[str, str]]:
+    with db._get_db_connection() as connection:
+        rows = connection.execute(
+            "SELECT slug, name FROM services WHERE cliente_id = ?",
+            (cliente_id,),
+        ).fetchall()
+    if rows:
+        return {
+            str(row["slug"]): {"id": str(row["slug"]), "nombre": str(row["name"])}
+            for row in rows
+            if row["slug"] and row["name"]
+        }
     return {
         str(service["id"]): service
         for service in _extract_services_from_info(cliente_id)
@@ -190,11 +210,19 @@ def _ensure_default_employees_for_all_clients() -> None:
         connection.commit()
 
 
-def _list_employee_rows(cliente_id: str, *, include_inactive: bool = True) -> List[sqlite3.Row]:
+def _list_employee_rows(
+    cliente_id: str,
+    *,
+    include_inactive: bool = True,
+    location_id: str = "",
+) -> List[sqlite3.Row]:
     clauses = ["cliente_id = ?"]
     params: List[Any] = [cliente_id]
     if not include_inactive:
         clauses.append("is_active = 1")
+    if location_id:
+        clauses.append("location_id = ?")
+        params.append(location_id)
     sql = (
         "SELECT * FROM employees WHERE "
         + " AND ".join(clauses)
@@ -204,8 +232,13 @@ def _list_employee_rows(cliente_id: str, *, include_inactive: bool = True) -> Li
         return connection.execute(sql, tuple(params)).fetchall()
 
 
-def _list_public_employee_rows(cliente_id: str, *, include_inactive: bool = False) -> List[sqlite3.Row]:
-    rows = _list_employee_rows(cliente_id, include_inactive=include_inactive)
+def _list_public_employee_rows(
+    cliente_id: str,
+    *,
+    include_inactive: bool = False,
+    location_id: str = "",
+) -> List[sqlite3.Row]:
+    rows = _list_employee_rows(cliente_id, include_inactive=include_inactive, location_id=location_id)
     public_rows = [
         row
         for row in rows
@@ -336,8 +369,72 @@ def _list_service_rows(cliente_id: str, *, include_inactive: bool = False) -> Li
         ).fetchall()
 
 
-def _catalog_services(cliente_id: str, *, include_inactive: bool = False) -> List[Dict[str, Any]]:
-    return [_service_row_to_public(r) for r in _list_service_rows(cliente_id, include_inactive=include_inactive)]
+def _service_overrides_for_location(cliente_id: str, location_id: str) -> Dict[str, sqlite3.Row]:
+    """Overrides de catalogo por centro (overlay): slug -> fila de override."""
+    if not location_id:
+        return {}
+    with db._get_db_connection() as connection:
+        rows = connection.execute(
+            "SELECT * FROM service_location_overrides WHERE cliente_id = ? AND location_id = ?",
+            (cliente_id, location_id),
+        ).fetchall()
+    return {row["service_slug"]: row for row in rows}
+
+
+def _apply_service_override(public: Dict[str, Any], override: Optional[sqlite3.Row]) -> Dict[str, Any]:
+    if override is None:
+        return public
+    if override["price_cents"] is not None:
+        price_cents = int(override["price_cents"])
+        public["price_cents"] = price_cents
+        public["price_label"] = textnorm._format_price_cents(price_cents)
+    if override["duration_minutes"] is not None and int(override["duration_minutes"]) > 0:
+        public["duration_minutes"] = int(override["duration_minutes"])
+    return public
+
+
+def _catalog_services(
+    cliente_id: str, *, include_inactive: bool = False, location_id: str = ""
+) -> List[Dict[str, Any]]:
+    overrides = _service_overrides_for_location(cliente_id, location_id)
+    items: List[Dict[str, Any]] = []
+    for row in _list_service_rows(cliente_id, include_inactive=include_inactive):
+        override = overrides.get(row["slug"])
+        if override is not None and not bool(override["is_available"]):
+            continue
+        items.append(_apply_service_override(_service_row_to_public(row), override))
+    return items
+
+
+def _get_service_override(cliente_id: str, slug: str, location_id: str) -> Optional[sqlite3.Row]:
+    if not location_id or not slug:
+        return None
+    with db._get_db_connection() as connection:
+        return connection.execute(
+            """
+            SELECT * FROM service_location_overrides
+            WHERE cliente_id = ? AND service_slug = ? AND location_id = ?
+            LIMIT 1
+            """,
+            (cliente_id, slug, location_id),
+        ).fetchone()
+
+
+def _service_available_at_location(cliente_id: str, slug: str, location_id: str) -> bool:
+    override = _get_service_override(cliente_id, slug, location_id)
+    return override is None or bool(override["is_available"])
+
+
+def _service_price_cents_resolved(
+    cliente_id: str, service_row: Optional[sqlite3.Row], location_id: str = ""
+) -> int:
+    """Precio efectivo de un servicio: override del centro si existe, si no el base."""
+    if service_row is None:
+        return 0
+    override = _get_service_override(cliente_id, service_row["slug"], location_id)
+    if override is not None and override["price_cents"] is not None:
+        return int(override["price_cents"])
+    return int(service_row["price_cents"] or 0)
 
 
 def _get_service_row(cliente_id: str, slug: str) -> Optional[sqlite3.Row]:
@@ -388,8 +485,19 @@ def _service_duration_minutes(
     cliente_id: str, servicio_name: str, employee_row: Optional[sqlite3.Row] = None
 ) -> int:
     row = _find_service_by_name(cliente_id, servicio_name) if servicio_name else None
-    if row and int(row["duration_minutes"] or 0) > 0:
-        return int(row["duration_minutes"])
+    if row is not None:
+        # La duracion efectiva depende del centro del profesional (override por centro).
+        location_id = ""
+        if employee_row is not None:
+            try:
+                location_id = employee_row["location_id"] or ""
+            except (IndexError, KeyError):
+                location_id = ""
+        override = _get_service_override(cliente_id, row["slug"], location_id)
+        if override is not None and override["duration_minutes"] is not None and int(override["duration_minutes"]) > 0:
+            return int(override["duration_minutes"])
+        if int(row["duration_minutes"] or 0) > 0:
+            return int(row["duration_minutes"])
     if employee_row is not None:
         return int(_employee_schedule_from_row(employee_row)["slot_minutes"])
     return int(_employee_defaults_for_client(cliente_id).get("slot_minutes", 30) or 30)
@@ -779,11 +887,28 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
             config.get("booking", {}).get("break_start", ""),
             config.get("booking", {}).get("break_end", ""),
         )
+        try:
+            default_employee_id = _default_employee_row(cliente_id)["id"]
+        except HTTPException:
+            default_employee_id = ""
+        previous_start = config.get("booking", {}).get("day_start", "09:00")
+        previous_end = config.get("booking", {}).get("day_end", "18:00")
+        if (start, end) != (previous_start, previous_end):
+            conflicts = _booking_conflicts_outside_schedule(
+                cliente_id,
+                start,
+                end,
+                employee_id=default_employee_id,
+            )
+            if conflicts:
+                raise HTTPException(
+                    status_code=409,
+                    detail=_schedule_conflict_detail(
+                        conflicts,
+                        "Hay citas activas fuera del nuevo horario. Cancelalas o reprogramalas antes.",
+                    ),
+                )
         if break_windows != previous_break_windows and break_windows:
-            try:
-                default_employee_id = _default_employee_row(cliente_id)["id"]
-            except HTTPException:
-                default_employee_id = ""
             conflicts = _booking_conflicts_for_break_windows(
                 cliente_id,
                 break_windows,
@@ -882,6 +1007,21 @@ def _update_employee_schedule(cliente_id: str, employee_id: str, data: PortalSch
                 ),
             )
     previous_schedule = _employee_schedule_from_row(row)
+    if (start, end) != (previous_schedule["day_start"], previous_schedule["day_end"]):
+        conflicts = _booking_conflicts_outside_schedule(
+            cliente_id,
+            start,
+            end,
+            employee_id=employee_id,
+        )
+        if conflicts:
+            raise HTTPException(
+                status_code=409,
+                detail=_schedule_conflict_detail(
+                    conflicts,
+                    "Hay citas activas fuera del nuevo horario. Cancelalas o reprogramalas antes.",
+                ),
+            )
     previous_break_windows = previous_schedule.get("break_windows", [])
     if break_windows != previous_break_windows and break_windows:
         conflicts = _booking_conflicts_for_break_windows(
@@ -948,6 +1088,7 @@ def _serialize_portal_employee(row: sqlite3.Row) -> PortalEmployeePublic:
         break_windows=schedule["break_windows"],
         closed_weekdays=schedule["closed_weekdays"],
         service_ids=service_ids,
+        location_id=row["location_id"] or "",
         allows_all_services=not service_ids,
         bookings_today=counters["today"],
         bookings_upcoming=counters["upcoming"],
@@ -1001,8 +1142,15 @@ def _validate_employee_payload(
         if "service_ids" in fields_set or existing_row is None
         else _employee_service_ids_from_row(existing_row, cliente_id)
     )
+    if "location_id" in fields_set:
+        location_id = _resolve_location_id(cliente_id, data.location_id, require_active=False)
+    elif existing_row is not None and (existing_row["location_id"] or ""):
+        location_id = existing_row["location_id"]
+    else:
+        location_id = _resolve_location_id(cliente_id, "", require_active=False)
     return {
         "name": textnorm._sanitize_text(data.name),
+        "location_id": location_id,
         "role_label": (
             textnorm._sanitize_text(data.role_label)
             if "role_label" in fields_set or existing_row is None
@@ -1063,10 +1211,10 @@ def _create_portal_employee(
             INSERT INTO employees (
                 id, cliente_id, name, role_label, color, is_active, is_default,
                 timezone, slot_minutes, day_start, day_end, break_start, break_end,
-                break_windows_json, closed_weekdays_json, service_ids_json,
+                break_windows_json, closed_weekdays_json, service_ids_json, location_id,
                 created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 employee_id,
@@ -1084,6 +1232,7 @@ def _create_portal_employee(
                 payload["break_windows_json"],
                 payload["closed_weekdays_json"],
                 payload["service_ids_json"],
+                payload["location_id"],
                 created_at,
                 created_at,
             ),
@@ -1149,7 +1298,42 @@ def _update_portal_employee(
             status_code=409,
             detail="Este profesional tiene citas futuras activas. Reasignalas o reprogramalas antes de desactivarlo.",
         )
-    previous_break_windows = _employee_schedule_from_row(row).get("break_windows", [])
+    previous_schedule = _employee_schedule_from_row(row)
+    previous_closed_weekdays = set(previous_schedule["closed_weekdays"])
+    newly_closed_weekdays = set(payload["closed_weekdays"]) - previous_closed_weekdays
+    if newly_closed_weekdays:
+        conflicts = _booking_conflicts_for_closed_weekdays(
+            cliente_id,
+            newly_closed_weekdays,
+            employee_id=employee_id,
+        )
+        if conflicts:
+            raise HTTPException(
+                status_code=409,
+                detail=_schedule_conflict_detail(
+                    conflicts,
+                    "Hay citas activas en los dias que quieres cerrar. Cancelalas o reprogramalas antes.",
+                ),
+            )
+    if (payload["day_start"], payload["day_end"]) != (
+        previous_schedule["day_start"],
+        previous_schedule["day_end"],
+    ):
+        conflicts = _booking_conflicts_outside_schedule(
+            cliente_id,
+            payload["day_start"],
+            payload["day_end"],
+            employee_id=employee_id,
+        )
+        if conflicts:
+            raise HTTPException(
+                status_code=409,
+                detail=_schedule_conflict_detail(
+                    conflicts,
+                    "Hay citas activas fuera del nuevo horario. Cancelalas o reprogramalas antes.",
+                ),
+            )
+    previous_break_windows = previous_schedule.get("break_windows", [])
     if payload["break_windows"] != previous_break_windows and payload["break_windows"]:
         conflicts = _booking_conflicts_for_break_windows(
             cliente_id,
@@ -1170,7 +1354,8 @@ def _update_portal_employee(
             UPDATE employees
             SET name = ?, role_label = ?, color = ?, is_active = ?, timezone = ?,
                 slot_minutes = ?, day_start = ?, day_end = ?, break_start = ?, break_end = ?,
-                break_windows_json = ?, closed_weekdays_json = ?, service_ids_json = ?, updated_at = ?
+                break_windows_json = ?, closed_weekdays_json = ?, service_ids_json = ?,
+                location_id = ?, updated_at = ?
             WHERE id = ? AND cliente_id = ?
             """,
             (
@@ -1187,6 +1372,7 @@ def _update_portal_employee(
                 payload["break_windows_json"],
                 payload["closed_weekdays_json"],
                 payload["service_ids_json"],
+                payload["location_id"],
                 timeutils._utc_now_iso(),
                 employee_id,
                 cliente_id,
@@ -1228,6 +1414,620 @@ def _delete_portal_employee(cliente_id: str, employee_id: str) -> None:
             (cliente_id, employee_id),
         )
         connection.commit()
+
+
+# ---------------------------------------------------------------------------
+# Centros (locations) — soporte multi-local por cliente
+# ---------------------------------------------------------------------------
+
+
+def _list_location_rows(cliente_id: str, *, include_inactive: bool = True) -> List[sqlite3.Row]:
+    clauses = ["cliente_id = ?"]
+    params: List[Any] = [cliente_id]
+    if not include_inactive:
+        clauses.append("is_active = 1")
+    sql = (
+        "SELECT * FROM locations WHERE "
+        + " AND ".join(clauses)
+        + " ORDER BY is_default DESC, sort_order ASC, name COLLATE NOCASE ASC"
+    )
+    with db._get_db_connection() as connection:
+        return connection.execute(sql, tuple(params)).fetchall()
+
+
+def _get_location_row(location_id: str, *, cliente_id: str = "") -> Optional[sqlite3.Row]:
+    clauses = ["id = ?"]
+    params: List[Any] = [location_id]
+    if cliente_id:
+        clauses.append("cliente_id = ?")
+        params.append(cliente_id)
+    with db._get_db_connection() as connection:
+        return connection.execute(
+            "SELECT * FROM locations WHERE " + " AND ".join(clauses) + " LIMIT 1",
+            tuple(params),
+        ).fetchone()
+
+
+def _default_location_id(cliente_id: str) -> str:
+    with db._get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT id FROM locations WHERE cliente_id = ? AND is_default = 1 LIMIT 1",
+            (cliente_id,),
+        ).fetchone()
+        if row:
+            return row["id"]
+        row = connection.execute(
+            "SELECT id FROM locations WHERE cliente_id = ? ORDER BY is_active DESC, sort_order ASC LIMIT 1",
+            (cliente_id,),
+        ).fetchone()
+        return row["id"] if row else ""
+
+
+def _resolve_location_id(cliente_id: str, location_id: str = "", *, require_active: bool = True) -> str:
+    """Devuelve un id de centro valido para el cliente. Cae al centro por defecto si vacio/invalido."""
+    if location_id:
+        row = _get_location_row(location_id, cliente_id=cliente_id)
+        if row and (not require_active or bool(row["is_active"])):
+            return row["id"]
+    return _default_location_id(cliente_id)
+
+
+def _location_employee_count(cliente_id: str, location_id: str) -> int:
+    with db._get_db_connection() as connection:
+        return int(
+            connection.execute(
+                "SELECT COUNT(*) FROM employees WHERE cliente_id = ? AND location_id = ?",
+                (cliente_id, location_id),
+            ).fetchone()[0]
+        )
+
+
+def _serialize_portal_location(row: sqlite3.Row) -> PortalLocationPublic:
+    return PortalLocationPublic(
+        location_id=row["id"],
+        cliente_id=row["cliente_id"],
+        name=row["name"],
+        address=row["address"] or "",
+        phone=row["phone"] or "",
+        timezone=row["timezone"] or settings.DEFAULT_TIMEZONE,
+        is_active=bool(row["is_active"]),
+        is_default=bool(row["is_default"]),
+        sort_order=int(row["sort_order"] or 0),
+        employee_count=_location_employee_count(row["cliente_id"], row["id"]),
+        resource_count=_location_room_count(row["cliente_id"], row["id"]),
+        whatsapp_phone_number_id=row["whatsapp_phone_number_id"] or "",
+        voice_phone_number=row["voice_phone_number"] or "",
+    )
+
+
+def _location_for_channel(
+    cliente_id: str, *, whatsapp_phone_number_id: str = "", voice_phone_number: str = ""
+) -> str:
+    """Resuelve el centro por el numero del canal entrante (un numero por centro).
+
+    Devuelve '' si el numero no esta mapeado a ningun centro: el flujo cae al
+    comportamiento sin filtro (el cliente final elige o se usa el default)."""
+    clauses: List[str] = []
+    params: List[Any] = []
+    if whatsapp_phone_number_id:
+        clauses.append("whatsapp_phone_number_id = ?")
+        params.append(whatsapp_phone_number_id.strip())
+    if voice_phone_number:
+        # Comparacion robusta a formato E.164: ignora '+' y espacios en ambos lados.
+        normalized = voice_phone_number.strip().replace("+", "").replace(" ", "")
+        clauses.append("REPLACE(REPLACE(voice_phone_number, '+', ''), ' ', '') = ?")
+        params.append(normalized)
+    if not clauses:
+        return ""
+    with db._get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT id FROM locations WHERE cliente_id = ? AND is_active = 1 AND ("
+            + " OR ".join(clauses)
+            + ") LIMIT 1",
+            tuple([cliente_id] + params),
+        ).fetchone()
+    return row["id"] if row else ""
+
+
+def _portal_locations_for_client(cliente_id: str) -> PortalLocationsResponse:
+    return PortalLocationsResponse(
+        items=[_serialize_portal_location(row) for row in _list_location_rows(cliente_id)]
+    )
+
+
+def _ensure_default_locations_for_all_clients() -> None:
+    """Garantiza un centro por defecto por cliente y rellena location_id en filas heredadas."""
+    now_iso = timeutils._utc_now().isoformat().replace("+00:00", "Z")
+    with db._get_db_connection() as connection:
+        for cliente_id in list(appstate.CONFIG_CLIENTES.keys()):
+            row = connection.execute(
+                "SELECT * FROM locations WHERE cliente_id = ? AND is_default = 1 LIMIT 1",
+                (cliente_id,),
+            ).fetchone()
+            if not row:
+                location_id = f"loc_{secrets.token_urlsafe(8)}"
+                config = clients._get_client_config(cliente_id)
+                contacto = config.get("contacto") if isinstance(config.get("contacto"), dict) else {}
+                booking_cfg = config.get("booking") if isinstance(config.get("booking"), dict) else {}
+                connection.execute(
+                    """
+                    INSERT INTO locations (
+                        id, cliente_id, name, address, phone, timezone,
+                        is_active, is_default, sort_order, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, 1, 1, 0, ?, ?)
+                    """,
+                    (
+                        location_id,
+                        cliente_id,
+                        config.get("nombre") or cliente_id,
+                        "",
+                        str((contacto or {}).get("telefono", "") or ""),
+                        (booking_cfg or {}).get("timezone") or settings.DEFAULT_TIMEZONE,
+                        now_iso,
+                        now_iso,
+                    ),
+                )
+                row = connection.execute("SELECT * FROM locations WHERE id = ?", (location_id,)).fetchone()
+            if row:
+                default_id = row["id"]
+                connection.execute(
+                    "UPDATE employees SET location_id = ? WHERE cliente_id = ? AND (location_id = '' OR location_id IS NULL)",
+                    (default_id, cliente_id),
+                )
+                # Citas/bloqueos heredan el centro de su profesional; el resto al centro por defecto.
+                connection.execute(
+                    """
+                    UPDATE bookings SET location_id = (
+                        SELECT location_id FROM employees WHERE employees.id = bookings.employee_id
+                    )
+                    WHERE cliente_id = ? AND (location_id = '' OR location_id IS NULL)
+                      AND employee_id <> ''
+                      AND EXISTS (SELECT 1 FROM employees WHERE employees.id = bookings.employee_id)
+                    """,
+                    (cliente_id,),
+                )
+                connection.execute(
+                    "UPDATE bookings SET location_id = ? WHERE cliente_id = ? AND (location_id = '' OR location_id IS NULL)",
+                    (default_id, cliente_id),
+                )
+                connection.execute(
+                    """
+                    UPDATE agenda_blocks SET location_id = (
+                        SELECT location_id FROM employees WHERE employees.id = agenda_blocks.employee_id
+                    )
+                    WHERE cliente_id = ? AND (location_id = '' OR location_id IS NULL)
+                      AND employee_id <> ''
+                      AND EXISTS (SELECT 1 FROM employees WHERE employees.id = agenda_blocks.employee_id)
+                    """,
+                    (cliente_id,),
+                )
+                connection.execute(
+                    "UPDATE agenda_blocks SET location_id = ? WHERE cliente_id = ? AND (location_id = '' OR location_id IS NULL)",
+                    (default_id, cliente_id),
+                )
+        connection.commit()
+
+
+def _create_portal_location(cliente_id: str, data: PortalLocationPayload) -> PortalLocationPublic:
+    name = textnorm._sanitize_text(data.name)
+    if len(name) < 2:
+        raise HTTPException(status_code=400, detail="El nombre del centro es obligatorio.")
+    now_iso = timeutils._utc_now_iso()
+    location_id = f"loc_{secrets.token_urlsafe(8)}"
+    with db._get_db_connection() as connection:
+        has_default = connection.execute(
+            "SELECT 1 FROM locations WHERE cliente_id = ? AND is_default = 1 LIMIT 1",
+            (cliente_id,),
+        ).fetchone()
+        next_order = connection.execute(
+            "SELECT COALESCE(MAX(sort_order), 0) + 1 FROM locations WHERE cliente_id = ?",
+            (cliente_id,),
+        ).fetchone()[0]
+        connection.execute(
+            """
+            INSERT INTO locations (
+                id, cliente_id, name, address, phone, timezone,
+                is_active, is_default, sort_order,
+                whatsapp_phone_number_id, voice_phone_number,
+                created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                location_id,
+                cliente_id,
+                name,
+                textnorm._sanitize_text(data.address),
+                textnorm._sanitize_text(data.phone),
+                textnorm._sanitize_text(data.timezone) or settings.DEFAULT_TIMEZONE,
+                1 if data.is_active else 0,
+                0 if has_default else 1,
+                int(next_order),
+                textnorm._sanitize_text(data.whatsapp_phone_number_id),
+                textnorm._sanitize_text(data.voice_phone_number),
+                now_iso,
+                now_iso,
+            ),
+        )
+        connection.commit()
+    return _serialize_portal_location(_get_location_row(location_id, cliente_id=cliente_id))
+
+
+def _update_portal_location(cliente_id: str, location_id: str, data: PortalLocationPayload) -> PortalLocationPublic:
+    row = _get_location_row(location_id, cliente_id=cliente_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Centro no encontrado.")
+    fields_set = set(getattr(data, "model_fields_set", set()))
+    name = textnorm._sanitize_text(data.name) if "name" in fields_set else (row["name"] or "")
+    if len(name) < 2:
+        raise HTTPException(status_code=400, detail="El nombre del centro es obligatorio.")
+    is_active = bool(data.is_active) if "is_active" in fields_set else bool(row["is_active"])
+    if bool(row["is_default"]) and not is_active:
+        raise HTTPException(status_code=409, detail="El centro principal no se puede desactivar.")
+    if bool(row["is_active"]) and not is_active and _location_employee_count(cliente_id, location_id):
+        raise HTTPException(
+            status_code=409,
+            detail="Este centro tiene profesionales asignados. Reasignalos a otro centro antes de desactivarlo.",
+        )
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            UPDATE locations
+            SET name = ?, address = ?, phone = ?, timezone = ?, is_active = ?,
+                whatsapp_phone_number_id = ?, voice_phone_number = ?, updated_at = ?
+            WHERE id = ? AND cliente_id = ?
+            """,
+            (
+                name,
+                textnorm._sanitize_text(data.address) if "address" in fields_set else (row["address"] or ""),
+                textnorm._sanitize_text(data.phone) if "phone" in fields_set else (row["phone"] or ""),
+                (textnorm._sanitize_text(data.timezone) or settings.DEFAULT_TIMEZONE)
+                if "timezone" in fields_set
+                else (row["timezone"] or settings.DEFAULT_TIMEZONE),
+                1 if is_active else 0,
+                textnorm._sanitize_text(data.whatsapp_phone_number_id)
+                if "whatsapp_phone_number_id" in fields_set
+                else (row["whatsapp_phone_number_id"] or ""),
+                textnorm._sanitize_text(data.voice_phone_number)
+                if "voice_phone_number" in fields_set
+                else (row["voice_phone_number"] or ""),
+                timeutils._utc_now_iso(),
+                location_id,
+                cliente_id,
+            ),
+        )
+        connection.commit()
+    return _serialize_portal_location(_get_location_row(location_id, cliente_id=cliente_id))
+
+
+def _delete_portal_location(cliente_id: str, location_id: str) -> None:
+    row = _get_location_row(location_id, cliente_id=cliente_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Centro no encontrado.")
+    if bool(row["is_default"]):
+        raise HTTPException(status_code=409, detail="El centro principal no se puede eliminar.")
+    if _location_employee_count(cliente_id, location_id):
+        raise HTTPException(
+            status_code=409,
+            detail="Este centro tiene profesionales asignados. Reasignalos a otro centro antes de eliminarlo.",
+        )
+    with db._get_db_connection() as connection:
+        connection.execute(
+            "DELETE FROM locations WHERE id = ? AND cliente_id = ?",
+            (location_id, cliente_id),
+        )
+        connection.execute(
+            "DELETE FROM resources WHERE cliente_id = ? AND location_id = ?",
+            (cliente_id, location_id),
+        )
+        connection.execute(
+            "DELETE FROM service_location_overrides WHERE cliente_id = ? AND location_id = ?",
+            (cliente_id, location_id),
+        )
+        connection.commit()
+
+
+# ---------------------------------------------------------------------------
+# Overrides de servicios por centro (carta/precios distintos por local)
+# ---------------------------------------------------------------------------
+
+
+def _set_service_location_override(
+    cliente_id: str, slug: str, location_id: str, data: "ServiceLocationOverridePayload"
+) -> None:
+    if not _get_service_row(cliente_id, slug):
+        raise HTTPException(status_code=404, detail="Servicio no encontrado.")
+    if not _get_location_row(location_id, cliente_id=cliente_id):
+        raise HTTPException(status_code=404, detail="Centro no encontrado.")
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO service_location_overrides
+                (cliente_id, service_slug, location_id, is_available, price_cents, duration_minutes, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(cliente_id, service_slug, location_id) DO UPDATE SET
+                is_available = excluded.is_available,
+                price_cents = excluded.price_cents,
+                duration_minutes = excluded.duration_minutes,
+                updated_at = excluded.updated_at
+            """,
+            (
+                cliente_id,
+                slug,
+                location_id,
+                1 if data.is_available else 0,
+                data.price_cents,
+                data.duration_minutes,
+                timeutils._utc_now_iso(),
+            ),
+        )
+        connection.commit()
+
+
+def _delete_service_location_override(cliente_id: str, slug: str, location_id: str) -> None:
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            DELETE FROM service_location_overrides
+            WHERE cliente_id = ? AND service_slug = ? AND location_id = ?
+            """,
+            (cliente_id, slug, location_id),
+        )
+        connection.commit()
+
+
+def _service_locations_overview(cliente_id: str, slug: str) -> "ServiceLocationsResponse":
+    """Vista por centro de un servicio: override + valores efectivos. Para el editor del portal."""
+    service_row = _get_service_row(cliente_id, slug)
+    if not service_row:
+        raise HTTPException(status_code=404, detail="Servicio no encontrado.")
+    base_price = int(service_row["price_cents"] or 0)
+    base_duration = int(service_row["duration_minutes"] or 0) or 30
+    items: List[ServiceLocationOverrideItem] = []
+    for loc in _list_location_rows(cliente_id):
+        override = _get_service_override(cliente_id, slug, loc["id"])
+        eff_price = (
+            int(override["price_cents"])
+            if override is not None and override["price_cents"] is not None
+            else base_price
+        )
+        eff_duration = (
+            int(override["duration_minutes"])
+            if override is not None and override["duration_minutes"] is not None and int(override["duration_minutes"]) > 0
+            else base_duration
+        )
+        items.append(
+            ServiceLocationOverrideItem(
+                location_id=loc["id"],
+                location_name=loc["name"],
+                is_default_location=bool(loc["is_default"]),
+                is_available=override is None or bool(override["is_available"]),
+                has_override=override is not None,
+                price_cents=int(override["price_cents"]) if override is not None and override["price_cents"] is not None else None,
+                duration_minutes=int(override["duration_minutes"]) if override is not None and override["duration_minutes"] is not None else None,
+                effective_price_cents=eff_price,
+                effective_price_label=textnorm._format_price_cents(eff_price),
+                effective_duration_minutes=eff_duration,
+            )
+        )
+    return ServiceLocationsResponse(service_slug=slug, items=items)
+
+
+# ---------------------------------------------------------------------------
+# Recursos (salas/carriles genericos por centro) y aforo
+# ---------------------------------------------------------------------------
+
+
+def _list_resource_rows(cliente_id: str, location_id: str = "", *, include_inactive: bool = True) -> List[sqlite3.Row]:
+    clauses = ["cliente_id = ?"]
+    params: List[Any] = [cliente_id]
+    if location_id:
+        clauses.append("location_id = ?")
+        params.append(location_id)
+    if not include_inactive:
+        clauses.append("is_active = 1")
+    with db._get_db_connection() as connection:
+        return connection.execute(
+            "SELECT * FROM resources WHERE " + " AND ".join(clauses)
+            + " ORDER BY sort_order ASC, name COLLATE NOCASE ASC",
+            tuple(params),
+        ).fetchall()
+
+
+def _serialize_portal_resource(row: sqlite3.Row) -> PortalResourcePublic:
+    return PortalResourcePublic(
+        resource_id=row["id"],
+        cliente_id=row["cliente_id"],
+        location_id=row["location_id"] or "",
+        name=row["name"],
+        is_active=bool(row["is_active"]),
+        sort_order=int(row["sort_order"] or 0),
+    )
+
+
+def _create_portal_resource(cliente_id: str, location_id: str, data: PortalResourcePayload) -> PortalResourcePublic:
+    if not _get_location_row(location_id, cliente_id=cliente_id):
+        raise HTTPException(status_code=404, detail="Centro no encontrado.")
+    name = textnorm._sanitize_text(data.name)
+    if not name:
+        raise HTTPException(status_code=400, detail="El nombre de la sala es obligatorio.")
+    now_iso = timeutils._utc_now_iso()
+    resource_id = f"res_{secrets.token_urlsafe(8)}"
+    with db._get_db_connection() as connection:
+        next_order = connection.execute(
+            "SELECT COALESCE(MAX(sort_order), 0) + 1 FROM resources WHERE cliente_id = ? AND location_id = ?",
+            (cliente_id, location_id),
+        ).fetchone()[0]
+        connection.execute(
+            """
+            INSERT INTO resources (id, cliente_id, location_id, name, is_active, sort_order, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (resource_id, cliente_id, location_id, name, 1 if data.is_active else 0, int(next_order), now_iso, now_iso),
+        )
+        connection.commit()
+        row = connection.execute("SELECT * FROM resources WHERE id = ?", (resource_id,)).fetchone()
+    return _serialize_portal_resource(row)
+
+
+def _update_portal_resource(cliente_id: str, resource_id: str, data: PortalResourcePayload) -> PortalResourcePublic:
+    with db._get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM resources WHERE id = ? AND cliente_id = ? LIMIT 1",
+            (resource_id, cliente_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Sala no encontrada.")
+        fields_set = set(getattr(data, "model_fields_set", set()))
+        name = textnorm._sanitize_text(data.name) if "name" in fields_set else (row["name"] or "")
+        if not name:
+            raise HTTPException(status_code=400, detail="El nombre de la sala es obligatorio.")
+        is_active = bool(data.is_active) if "is_active" in fields_set else bool(row["is_active"])
+        if bool(row["is_active"]) and not is_active and _active_future_bookings_for_resource(cliente_id, resource_id):
+            raise HTTPException(
+                status_code=409,
+                detail="Esta sala tiene citas futuras activas. Reasignalas antes de desactivarla.",
+            )
+        connection.execute(
+            "UPDATE resources SET name = ?, is_active = ?, updated_at = ? WHERE id = ? AND cliente_id = ?",
+            (name, 1 if is_active else 0, timeutils._utc_now_iso(), resource_id, cliente_id),
+        )
+        connection.commit()
+        refreshed = connection.execute("SELECT * FROM resources WHERE id = ?", (resource_id,)).fetchone()
+    return _serialize_portal_resource(refreshed)
+
+
+def _delete_portal_resource(cliente_id: str, resource_id: str) -> None:
+    with db._get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT id FROM resources WHERE id = ? AND cliente_id = ? LIMIT 1",
+            (resource_id, cliente_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Sala no encontrada.")
+        if _active_future_bookings_for_resource(cliente_id, resource_id):
+            raise HTTPException(
+                status_code=409,
+                detail="Esta sala tiene citas futuras activas. Reasignalas antes de eliminarla.",
+            )
+        connection.execute("DELETE FROM resources WHERE id = ? AND cliente_id = ?", (resource_id, cliente_id))
+        connection.commit()
+
+
+def _active_future_bookings_for_resource(cliente_id: str, resource_id: str) -> int:
+    with db._get_db_connection() as connection:
+        return int(
+            connection.execute(
+                """
+                SELECT COUNT(*) FROM bookings
+                WHERE cliente_id = ? AND resource_id = ?
+                  AND status IN ('confirmed', 'pending_review', 'pending_payment')
+                  AND (start_at = '' OR start_at >= ?)
+                """,
+                (cliente_id, resource_id, timeutils._utc_now_iso()),
+            ).fetchone()[0]
+        )
+
+
+def _location_room_count(cliente_id: str, location_id: str) -> int:
+    if not location_id:
+        return 0
+    with db._get_db_connection() as connection:
+        return int(
+            connection.execute(
+                "SELECT COUNT(*) FROM resources WHERE cliente_id = ? AND location_id = ? AND is_active = 1",
+                (cliente_id, location_id),
+            ).fetchone()[0]
+        )
+
+
+def _location_booked_intervals(
+    cliente_id: str, location_id: str, fecha: str, *, exclude_booking_id: str = ""
+) -> List[Tuple[int, int]]:
+    """Intervalos ocupados (min desde medianoche) de TODAS las citas activas del centro en el dia."""
+    if not location_id:
+        return []
+    clauses = [
+        "cliente_id = ?",
+        "location_id = ?",
+        "booking_date = ?",
+        "status IN ('confirmed', 'pending_review', 'pending_payment')",
+    ]
+    params: List[Any] = [cliente_id, location_id, fecha]
+    if exclude_booking_id:
+        clauses.append("id <> ?")
+        params.append(exclude_booking_id)
+    with db._get_db_connection() as connection:
+        rows = connection.execute(
+            "SELECT * FROM bookings WHERE " + " AND ".join(clauses),
+            tuple(params),
+        ).fetchall()
+    intervals: List[Tuple[int, int]] = []
+    for row in rows:
+        start_min = textnorm._time_to_min(row["booking_time"])
+        if start_min is None:
+            continue
+        intervals.append((start_min, start_min + _booking_row_duration_min(row, cliente_id)))
+    return intervals
+
+
+def _location_capacity_ok(
+    cliente_id: str,
+    location_id: str,
+    fecha: str,
+    start_min: int,
+    end_min: int,
+    *,
+    exclude_booking_id: str = "",
+) -> bool:
+    """Aforo de salas del centro: True si hay sala libre en [start,end).
+
+    Opt-in: un centro sin salas configuradas no limita aforo (solo limita el
+    personal). Con N salas activas, como mucho N citas pueden solaparse."""
+    room_count = _location_room_count(cliente_id, location_id)
+    if room_count <= 0:
+        return True
+    overlapping = 0
+    for b_start, b_end in _location_booked_intervals(
+        cliente_id, location_id, fecha, exclude_booking_id=exclude_booking_id
+    ):
+        if start_min < b_end and b_start < end_min:
+            overlapping += 1
+            if overlapping >= room_count:
+                return False
+    return True
+
+
+def _assign_free_resource(
+    cliente_id: str, location_id: str, fecha: str, start_min: int, end_min: int
+) -> str:
+    """Asigna una sala libre del centro para el intervalo dado. '' si no hay salas configuradas."""
+    rooms = _list_resource_rows(cliente_id, location_id, include_inactive=False)
+    if not rooms:
+        return ""
+    used: Set[str] = set()
+    with db._get_db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT * FROM bookings
+            WHERE cliente_id = ? AND location_id = ? AND booking_date = ?
+              AND status IN ('confirmed', 'pending_review', 'pending_payment')
+              AND resource_id <> ''
+            """,
+            (cliente_id, location_id, fecha),
+        ).fetchall()
+    for row in rows:
+        b_start = textnorm._time_to_min(row["booking_time"])
+        if b_start is None:
+            continue
+        b_end = b_start + _booking_row_duration_min(row, cliente_id)
+        if start_min < b_end and b_start < end_min:
+            used.add(row["resource_id"])
+    for room in rooms:
+        if room["id"] not in used:
+            return room["id"]
+    return ""
 
 
 def _schedule_preview_payload_from_config(cliente_id: str) -> PortalScheduleUpdatePayload:
@@ -1657,6 +2457,47 @@ def _booking_conflicts_for_break_windows(
     return conflicts
 
 
+def _booking_conflicts_outside_schedule(
+    cliente_id: str,
+    day_start: str,
+    day_end: str,
+    *,
+    employee_id: str = "",
+) -> List[sqlite3.Row]:
+    start_limit = textnorm._time_to_min(day_start)
+    end_limit = textnorm._time_to_min(day_end)
+    if start_limit is None or end_limit is None:
+        return []
+    today = timeutils._utc_now().date().isoformat()
+    now_utc = timeutils._utc_now()
+    with db._get_db_connection() as connection:
+        clauses = [
+            "cliente_id = ?",
+            "booking_date >= ?",
+            "status IN ('confirmed', 'pending_review', 'pending_payment')",
+        ]
+        params: List[Any] = [cliente_id, today]
+        if employee_id:
+            clauses.append("employee_id = ?")
+            params.append(employee_id)
+        rows = connection.execute(
+            "SELECT * FROM bookings WHERE " + " AND ".join(clauses) + " ORDER BY booking_date ASC, booking_time ASC",
+            tuple(params),
+        ).fetchall()
+    conflicts: List[sqlite3.Row] = []
+    for row in rows:
+        start_at = timeutils._from_utc_iso(row["start_at"] or "")
+        if start_at and start_at < now_utc:
+            continue
+        booking_start = textnorm._time_to_min(row["booking_time"])
+        if booking_start is None:
+            continue
+        booking_end = booking_start + _booking_row_duration_min(row, cliente_id)
+        if booking_start < start_limit or booking_end > end_limit:
+            conflicts.append(row)
+    return conflicts
+
+
 def _blocked_slots(cliente_id: str, fecha: str, *, employee_id: str = "") -> Set[str]:
     available_slots = _build_slots_for_day(cliente_id, fecha, employee_id=employee_id)
     if not available_slots:
@@ -1694,9 +2535,12 @@ async def _booking_slot_available(
     if hora not in grid:
         return False
     end_min = start_min + dur
-    return not (
-        _interval_overlaps(start_min, end_min, _booked_intervals(cliente_id, fecha, employee_id=employee_id))
-        or _interval_overlaps(start_min, end_min, _blocked_intervals(cliente_id, fecha, employee_id=employee_id))
+    if _interval_overlaps(start_min, end_min, _booked_intervals(cliente_id, fecha, employee_id=employee_id)):
+        return False
+    if _interval_overlaps(start_min, end_min, _blocked_intervals(cliente_id, fecha, employee_id=employee_id)):
+        return False
+    return _location_capacity_ok(
+        cliente_id, employee_row["location_id"] or "", fecha, start_min, end_min
     )
 
 
@@ -1725,14 +2569,30 @@ async def _employee_slot_sets_for_day(
         exclude_booking_id=exclude_booking_id,
     )
     blocked = _blocked_intervals(cliente_id, fecha, employee_id=employee["id"])
+    employee_location = employee["location_id"] or ""
+    room_count = _location_room_count(cliente_id, employee_location)
+    location_intervals = (
+        _location_booked_intervals(
+            cliente_id, employee_location, fecha, exclude_booking_id=exclude_booking_id
+        )
+        if room_count > 0
+        else []
+    )
     available: Set[str] = set()
     for slot in slots:
         start_min = textnorm._time_to_min(slot)
         if start_min is None:
             continue
         end_min = start_min + dur
-        if not _interval_overlaps(start_min, end_min, booked) and not _interval_overlaps(start_min, end_min, blocked):
-            available.add(slot)
+        if _interval_overlaps(start_min, end_min, booked) or _interval_overlaps(start_min, end_min, blocked):
+            continue
+        if room_count > 0:
+            overlapping = sum(
+                1 for b_start, b_end in location_intervals if start_min < b_end and b_start < end_min
+            )
+            if overlapping >= room_count:
+                continue
+        available.add(slot)
     return set(slots), available
 
 
@@ -1754,12 +2614,20 @@ async def _booking_slot_available_for_reschedule(
     if hora not in grid:
         return False
     end_min = start_min + dur
-    return not (
-        _interval_overlaps(
-            start_min, end_min,
-            _booked_intervals(cliente_id, fecha, employee_id=employee_id, exclude_booking_id=exclude_booking_id),
-        )
-        or _interval_overlaps(start_min, end_min, _blocked_intervals(cliente_id, fecha, employee_id=employee_id))
+    if _interval_overlaps(
+        start_min, end_min,
+        _booked_intervals(cliente_id, fecha, employee_id=employee_id, exclude_booking_id=exclude_booking_id),
+    ):
+        return False
+    if _interval_overlaps(start_min, end_min, _blocked_intervals(cliente_id, fecha, employee_id=employee_id)):
+        return False
+    return _location_capacity_ok(
+        cliente_id,
+        employee_row["location_id"] or "",
+        fecha,
+        start_min,
+        end_min,
+        exclude_booking_id=exclude_booking_id,
     )
 
 
@@ -1923,7 +2791,15 @@ def _extract_services_from_info(cliente_id: str) -> List[Dict[str, Any]]:
 
 
 def _services_for_employee(cliente_id: str, employee_row: Optional[sqlite3.Row]) -> List[Dict[str, Any]]:
-    services = _catalog_services(cliente_id)
+    # El catalogo se resuelve con los overrides del centro del profesional
+    # (carta/precios por centro): un servicio deshabilitado en su centro no se ofrece.
+    employee_location = ""
+    if employee_row is not None:
+        try:
+            employee_location = employee_row["location_id"] or ""
+        except (IndexError, KeyError):
+            employee_location = ""
+    services = _catalog_services(cliente_id, location_id=employee_location)
     if not employee_row:
         return services
     service_ids = _employee_service_ids_from_row(employee_row, cliente_id)
@@ -1937,6 +2813,13 @@ def _service_name_allowed_for_employee(cliente_id: str, employee_row: sqlite3.Ro
     normalized_name = textnorm._sanitize_text(service_name)
     if not normalized_name:
         return True
+    service_row = _find_service_by_name(cliente_id, normalized_name)
+    if service_row is not None:
+        available_ids = {
+            str(service.get("id") or "")
+            for service in _services_for_employee(cliente_id, employee_row)
+        }
+        return str(service_row["slug"] or "") in available_ids
     if not _employee_service_ids_from_row(employee_row, cliente_id):
         return True
     allowed_services = _services_for_employee(cliente_id, employee_row)
@@ -1950,10 +2833,11 @@ async def _public_slot_sets_for_day(
     fecha: str,
     *,
     servicio: str = "",
+    location_id: str = "",
 ) -> Tuple[Set[str], Set[str]]:
     all_slots: Set[str] = set()
     available_slots: Set[str] = set()
-    for employee_row in _list_public_employee_rows(cliente_id, include_inactive=False):
+    for employee_row in _list_public_employee_rows(cliente_id, include_inactive=False, location_id=location_id):
         if servicio and not _service_name_allowed_for_employee(cliente_id, employee_row, servicio):
             continue
         employee_slots, employee_available = await _employee_slot_sets_for_day(
@@ -1974,11 +2858,17 @@ async def _resolve_public_booking_employee(
     *,
     employee_id: str = "",
     servicio: str = "",
+    location_id: str = "",
 ) -> sqlite3.Row:
     if employee_id:
         employee_row = _resolve_employee_for_booking(cliente_id, employee_id)
         if bool(employee_row["is_default"]):
             raise HTTPException(status_code=400, detail="La agenda general no se puede seleccionar desde el formulario.")
+        if location_id and (employee_row["location_id"] or "") != location_id:
+            raise HTTPException(
+                status_code=400,
+                detail="El profesional seleccionado no pertenece al centro indicado.",
+            )
         if servicio and not _service_name_allowed_for_employee(cliente_id, employee_row, servicio):
             raise HTTPException(
                 status_code=400,
@@ -1988,7 +2878,7 @@ async def _resolve_public_booking_employee(
 
     candidates = [
         row
-        for row in _list_public_employee_rows(cliente_id, include_inactive=False)
+        for row in _list_public_employee_rows(cliente_id, include_inactive=False, location_id=location_id)
         if not servicio or _service_name_allowed_for_employee(cliente_id, row, servicio)
     ]
     if not candidates:

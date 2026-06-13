@@ -458,8 +458,12 @@ def _crm_contact_filters(
         params.append(status_filter)
     clean_tag = textnorm._sanitize_text(tag)[:80]
     if clean_tag:
-        clauses.append("EXISTS (SELECT 1 FROM json_each(c.tags_json) jt WHERE LOWER(jt.value) = LOWER(?))")
-        params.append(clean_tag)
+        # Match the exact JSON string value without requiring SQLite's optional
+        # JSON1 extension (some supported Python/SQLite builds omit json_each).
+        encoded_tag = json.dumps(clean_tag, ensure_ascii=False).casefold()
+        escaped_tag = encoded_tag.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        clauses.append("LOWER(c.tags_json) LIKE ? ESCAPE '\\'")
+        params.append(f"%{escaped_tag}%")
     clean_owner = textnorm._sanitize_text(owner)[:200]
     if clean_owner:
         clauses.append("LOWER(c.owner) = LOWER(?)")

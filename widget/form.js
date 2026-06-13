@@ -113,7 +113,10 @@ function validateField(inputId, validatorName) {
 }
 
 async function cargarServicios() {
-  const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/servicios/${WIDGET_CONFIG.clienteId}`);
+  const qs = WIDGET_CONFIG.locationId
+    ? `?location_id=${encodeURIComponent(WIDGET_CONFIG.locationId)}`
+    : "";
+  const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/servicios/${WIDGET_CONFIG.clienteId}${qs}`);
   services = Array.isArray(data.servicios) ? data.servicios : [];
 
   if (!services.length) {
@@ -122,7 +125,10 @@ async function cargarServicios() {
 }
 
 async function cargarProfesionales() {
-  const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/profesionales/${WIDGET_CONFIG.clienteId}`);
+  const qs = WIDGET_CONFIG.locationId
+    ? `?location_id=${encodeURIComponent(WIDGET_CONFIG.locationId)}`
+    : "";
+  const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/profesionales/${WIDGET_CONFIG.clienteId}${qs}`);
   employees = (Array.isArray(data.items) ? data.items : []).filter(e => !e.is_default);
 }
 
@@ -276,6 +282,7 @@ async function cargarSlots(fecha) {
     });
     if (requestEmployeeId) params.set("employee_id", requestEmployeeId);
     if (requestService) params.set("servicio", requestService);
+    if (WIDGET_CONFIG.locationId) params.set("location_id", WIDGET_CONFIG.locationId);
     const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/disponibilidad?${params.toString()}`);
     if (
       requestId !== slotsRequestSeq ||
@@ -414,6 +421,7 @@ async function confirmarCita() {
         telefono: citaData.telefono,
         servicio: citaData.servicio,
         employee_id: citaData.employeeId,
+        location_id: WIDGET_CONFIG.locationId,
         fecha: citaData.fecha,
         hora: citaData.hora,
         notas: citaData.notas,

@@ -66,6 +66,8 @@ def _init_database() -> None:
                 service_id TEXT NOT NULL DEFAULT '',
                 service_price_cents INTEGER NOT NULL DEFAULT 0,
                 payment_status TEXT NOT NULL DEFAULT 'not_required',
+                location_id TEXT NOT NULL DEFAULT '',
+                resource_id TEXT NOT NULL DEFAULT '',
                 source TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )
@@ -138,6 +140,10 @@ def _init_database() -> None:
             connection.execute("ALTER TABLE bookings ADD COLUMN service_price_cents INTEGER NOT NULL DEFAULT 0")
         if "payment_status" not in columns:
             connection.execute("ALTER TABLE bookings ADD COLUMN payment_status TEXT NOT NULL DEFAULT 'not_required'")
+        if "location_id" not in columns:
+            connection.execute("ALTER TABLE bookings ADD COLUMN location_id TEXT NOT NULL DEFAULT ''")
+        if "resource_id" not in columns:
+            connection.execute("ALTER TABLE bookings ADD COLUMN resource_id TEXT NOT NULL DEFAULT ''")
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_bookings_lookup
@@ -178,6 +184,7 @@ def _init_database() -> None:
                 break_windows_json TEXT NOT NULL DEFAULT '[]',
                 closed_weekdays_json TEXT NOT NULL DEFAULT '[]',
                 service_ids_json TEXT NOT NULL DEFAULT '[]',
+                location_id TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL DEFAULT ''
             )
@@ -207,6 +214,14 @@ def _init_database() -> None:
             connection.execute("ALTER TABLE employees ADD COLUMN break_end TEXT NOT NULL DEFAULT ''")
         if "break_windows_json" not in employee_columns:
             connection.execute("ALTER TABLE employees ADD COLUMN break_windows_json TEXT NOT NULL DEFAULT '[]'")
+        if "location_id" not in employee_columns:
+            connection.execute("ALTER TABLE employees ADD COLUMN location_id TEXT NOT NULL DEFAULT ''")
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_employees_location
+            ON employees(cliente_id, location_id, is_active)
+            """
+        )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS booking_audit (
@@ -231,6 +246,7 @@ def _init_database() -> None:
                 id TEXT PRIMARY KEY,
                 cliente_id TEXT NOT NULL,
                 employee_id TEXT NOT NULL DEFAULT '',
+                location_id TEXT NOT NULL DEFAULT '',
                 block_date TEXT NOT NULL,
                 start_time TEXT NOT NULL,
                 end_time TEXT NOT NULL,
@@ -283,11 +299,230 @@ def _init_database() -> None:
         }.items():
             if column_name not in service_columns:
                 connection.execute(f"ALTER TABLE services ADD COLUMN {column_name} {definition}")
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS locations (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                address TEXT NOT NULL DEFAULT '',
+                phone TEXT NOT NULL DEFAULT '',
+                timezone TEXT NOT NULL DEFAULT '',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                is_default INTEGER NOT NULL DEFAULT 0,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                whatsapp_phone_number_id TEXT NOT NULL DEFAULT '',
+                voice_phone_number TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_locations_lookup
+            ON locations(cliente_id, is_active, sort_order, name)
+            """
+        )
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_locations_default
+            ON locations(cliente_id, is_default)
+            WHERE is_default = 1
+            """
+        )
+        location_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(locations)").fetchall()
+        }
+        if "whatsapp_phone_number_id" not in location_columns:
+            connection.execute(
+                "ALTER TABLE locations ADD COLUMN whatsapp_phone_number_id TEXT NOT NULL DEFAULT ''"
+            )
+        if "voice_phone_number" not in location_columns:
+            connection.execute(
+                "ALTER TABLE locations ADD COLUMN voice_phone_number TEXT NOT NULL DEFAULT ''"
+            )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS service_location_overrides (
+                cliente_id TEXT NOT NULL,
+                service_slug TEXT NOT NULL,
+                location_id TEXT NOT NULL,
+                is_available INTEGER NOT NULL DEFAULT 1,
+                price_cents INTEGER,
+                duration_minutes INTEGER,
+                updated_at TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY (cliente_id, service_slug, location_id)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS resources (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                location_id TEXT NOT NULL DEFAULT '',
+                name TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_resources_lookup
+            ON resources(cliente_id, location_id, is_active, sort_order)
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS products (
+                cliente_id TEXT NOT NULL,
+                id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                price_cents INTEGER NOT NULL DEFAULT 0,
+                currency TEXT NOT NULL DEFAULT 'eur',
+                stock INTEGER,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY (cliente_id, id)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS product_sales (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                location_id TEXT NOT NULL DEFAULT '',
+                product_id TEXT NOT NULL,
+                product_name TEXT NOT NULL DEFAULT '',
+                qty INTEGER NOT NULL DEFAULT 1,
+                unit_price_cents INTEGER NOT NULL DEFAULT 0,
+                total_cents INTEGER NOT NULL DEFAULT 0,
+                booking_id TEXT NOT NULL DEFAULT '',
+                customer_name TEXT NOT NULL DEFAULT '',
+                customer_email TEXT NOT NULL DEFAULT '',
+                payment_method TEXT NOT NULL DEFAULT 'cash',
+                notes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_product_sales_lookup
+            ON product_sales(cliente_id, location_id, created_at)
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS packages (
+                cliente_id TEXT NOT NULL,
+                id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                items_json TEXT NOT NULL DEFAULT '[]',
+                price_cents INTEGER NOT NULL DEFAULT 0,
+                currency TEXT NOT NULL DEFAULT 'eur',
+                validity_days INTEGER NOT NULL DEFAULT 365,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY (cliente_id, id)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS package_purchases (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                package_id TEXT NOT NULL,
+                package_name TEXT NOT NULL DEFAULT '',
+                buyer_name TEXT NOT NULL DEFAULT '',
+                buyer_email TEXT NOT NULL DEFAULT '',
+                buyer_phone TEXT NOT NULL DEFAULT '',
+                price_cents INTEGER NOT NULL DEFAULT 0,
+                remaining_json TEXT NOT NULL DEFAULT '{}',
+                expires_at TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'active',
+                payment_method TEXT NOT NULL DEFAULT 'cash',
+                location_id TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_package_purchases_lookup
+            ON package_purchases(cliente_id, status, buyer_email, buyer_phone)
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gift_cards (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                code TEXT NOT NULL,
+                initial_cents INTEGER NOT NULL DEFAULT 0,
+                balance_cents INTEGER NOT NULL DEFAULT 0,
+                currency TEXT NOT NULL DEFAULT 'eur',
+                status TEXT NOT NULL DEFAULT 'active',
+                buyer_name TEXT NOT NULL DEFAULT '',
+                buyer_email TEXT NOT NULL DEFAULT '',
+                recipient_name TEXT NOT NULL DEFAULT '',
+                recipient_email TEXT NOT NULL DEFAULT '',
+                notes TEXT NOT NULL DEFAULT '',
+                expires_at TEXT NOT NULL DEFAULT '',
+                location_id TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_gift_cards_code
+            ON gift_cards(cliente_id, code)
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gift_card_transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id TEXT NOT NULL,
+                gift_card_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                amount_cents INTEGER NOT NULL DEFAULT 0,
+                balance_after_cents INTEGER NOT NULL DEFAULT 0,
+                booking_id TEXT NOT NULL DEFAULT '',
+                sale_id TEXT NOT NULL DEFAULT '',
+                notes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_gift_card_tx_lookup
+            ON gift_card_transactions(cliente_id, gift_card_id, created_at)
+            """
+        )
         agenda_columns = {
             row[1]: row for row in connection.execute("PRAGMA table_info(agenda_blocks)").fetchall()
         }
         if "employee_id" not in agenda_columns:
             connection.execute("ALTER TABLE agenda_blocks ADD COLUMN employee_id TEXT NOT NULL DEFAULT ''")
+        if "location_id" not in agenda_columns:
+            connection.execute("ALTER TABLE agenda_blocks ADD COLUMN location_id TEXT NOT NULL DEFAULT ''")
         connection.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_manage_token
@@ -545,6 +780,13 @@ def _init_database() -> None:
         connection.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_booking_payments_session ON booking_payments(checkout_session_id) WHERE checkout_session_id <> ''"
         )
+        booking_payment_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(booking_payments)").fetchall()
+        }
+        if "capture_method" not in booking_payment_columns:
+            connection.execute(
+                "ALTER TABLE booking_payments ADD COLUMN capture_method TEXT NOT NULL DEFAULT 'automatic'"
+            )
 
         # --- Vantelia 2.0 self-serve tables (Sem 1 migration) ---
         user_columns = {
@@ -561,6 +803,9 @@ def _init_database() -> None:
             connection.execute("ALTER TABLE users ADD COLUMN signup_source TEXT NOT NULL DEFAULT 'manual'")
         if "avatar_url" not in user_columns:
             connection.execute("ALTER TABLE users ADD COLUMN avatar_url TEXT NOT NULL DEFAULT ''")
+        if "portal_role" not in user_columns:
+            # Rol granular dentro del negocio: owner > manager > staff.
+            connection.execute("ALTER TABLE users ADD COLUMN portal_role TEXT NOT NULL DEFAULT 'owner'")
 
         connection.execute(
             """

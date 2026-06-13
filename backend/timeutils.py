@@ -6,10 +6,18 @@ cualquier codigo nuevo debe llamarlo en lugar de datetime.now(timezone.utc).
 """
 from __future__ import annotations
 
+import asyncio
+from functools import partial
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from backend import settings
+
+
+async def _to_thread(func: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+    """Python 3.8-compatible equivalent of asyncio.to_thread."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, partial(func, *args, **kwargs))
 
 
 def _utc_now() -> datetime:

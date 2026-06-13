@@ -186,3 +186,125 @@ async def auth_delete_user(
     return AuthSimpleResponse(ok=True, message="Usuario eliminado correctamente.")
 
 
+
+# ---------------------------------------------------------------------------
+# Equipo de acceso self-serve (F6): el owner del negocio gestiona sus usuarios
+# ---------------------------------------------------------------------------
+
+
+def _team_member_or_404(cliente_id: str, member_id: str) -> sqlite3.Row:
+    target = security._get_user_by_id(member_id)
+    if not target or target["role"] != "client" or (target["cliente_id"] or "") != cliente_id:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado en tu equipo.")
+    return target
+
+
+def _count_active_owners(cliente_id: str, *, exclude_user_id: str = "") -> int:
+    rows = security._list_users(role="client", cliente_id=cliente_id, include_inactive=False)
+    return sum(
+        1
+        for row in rows
+        if security._portal_role(row) == "owner" and row["id"] != exclude_user_id
+    )
+
+
+@app.get("/auth/app/team", response_model=AuthManagedUsersResponse)
+async def auth_app_team_list(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AuthManagedUsersResponse:
+    security._require_portal_min_role(user, "owner")
+    target_client_id = portal._portal_client_id_or_403(user, cliente_id)
+    rows = security._list_users(role="client", cliente_id=target_client_id, include_inactive=True)
+    return AuthManagedUsersResponse(
+        items=[security._serialize_managed_user(row) for row in rows],
+        total=len(rows),
+    )
+
+
+@app.post("/auth/app/team", response_model=AuthManagedUser)
+async def auth_app_team_create(
+    data: PortalTeamMemberPayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AuthManagedUser:
+    security._require_portal_min_role(user, "owner")
+    target_client_id = portal._portal_client_id_or_403(user, cliente_id)
+    max_users = clients._plan_feature(target_client_id, "max_users")
+    if max_users is not None and security._count_client_users(target_client_id) >= int(max_users):
+        limits = clients._plan_limits(clients._client_plan(target_client_id))
+        raise HTTPException(
+            status_code=403,
+            detail=f"Tu plan {limits.get('label')} permite hasta {max_users} usuario(s). Sube de plan para ampliar el equipo.",
+        )
+    if security._get_user_by_email(data.email):
+        raise HTTPException(status_code=409, detail="Ya existe un usuario con ese email.")
+    created = security._create_user(
+        email=data.email,
+        password=data.password,
+        role="client",
+        display_name=data.display_name or data.email.split("@")[0],
+        cliente_id=target_client_id,
+        portal_role=data.portal_role,
+    )
+    return security._serialize_managed_user(created)
+
+
+@app.post("/auth/app/team/{member_id}", response_model=AuthManagedUser)
+async def auth_app_team_update(
+    member_id: str,
+    data: PortalTeamMemberUpdatePayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AuthManagedUser:
+    security._require_portal_min_role(user, "owner")
+    target_client_id = portal._portal_client_id_or_403(user, cliente_id)
+    target = _team_member_or_404(target_client_id, member_id)
+    fields_set = set(getattr(data, "model_fields_set", set()))
+
+    new_role = data.portal_role if "portal_role" in fields_set and data.portal_role else ""
+    deactivating = "is_active" in fields_set and data.is_active is False
+    demoting = bool(new_role) and new_role != "owner" and security._portal_role(target) == "owner"
+    if (demoting or deactivating) and not _count_active_owners(target_client_id, exclude_user_id=target["id"]):
+        raise HTTPException(
+            status_code=409,
+            detail="El negocio necesita al menos un propietario activo.",
+        )
+    with db._get_db_connection() as connection:
+        if "display_name" in fields_set and data.display_name:
+            connection.execute(
+                "UPDATE users SET display_name = ? WHERE id = ?",
+                (data.display_name.strip(), target["id"]),
+            )
+        if new_role:
+            connection.execute(
+                "UPDATE users SET portal_role = ? WHERE id = ?", (new_role, target["id"])
+            )
+        if "is_active" in fields_set and data.is_active is not None:
+            connection.execute(
+                "UPDATE users SET is_active = ? WHERE id = ?",
+                (1 if data.is_active else 0, target["id"]),
+            )
+        connection.commit()
+    if deactivating:
+        security._delete_user_auth_sessions(target["id"])
+    return security._serialize_managed_user(security._get_user_by_id(target["id"]))
+
+
+@app.delete("/auth/app/team/{member_id}", response_model=AuthSimpleResponse)
+async def auth_app_team_delete(
+    member_id: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AuthSimpleResponse:
+    security._require_portal_min_role(user, "owner")
+    target_client_id = portal._portal_client_id_or_403(user, cliente_id)
+    target = _team_member_or_404(target_client_id, member_id)
+    if (
+        security._portal_role(target) == "owner"
+        and bool(target["is_active"])
+        and not _count_active_owners(target_client_id, exclude_user_id=target["id"])
+    ):
+        raise HTTPException(status_code=409, detail="El negocio necesita al menos un propietario activo.")
+    security._delete_user(target["id"])
+    return AuthSimpleResponse(ok=True, message="Usuario eliminado del equipo.")

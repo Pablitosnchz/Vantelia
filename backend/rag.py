@@ -194,6 +194,31 @@ def _cleanup_sessions(force: bool = False) -> None:
         settings.logger.info("Sesiones expiradas eliminadas: %s", len(expired_ids))
 
 
+def _locations_prompt_block(cliente_id: str) -> str:
+    """Bloque CENTROS para el system prompt: el agente conoce los locales del negocio
+    (multi-local). Vacio si el negocio tiene un unico centro."""
+    try:
+        rows = agenda._list_location_rows(cliente_id, include_inactive=False)
+    except Exception:  # noqa: BLE001
+        return ""
+    if len(rows) <= 1:
+        return ""
+    lines = [
+        "CENTROS DEL NEGOCIO (multi-local)",
+        "El negocio tiene varios centros. Cuando el usuario pregunte por direcciones, telefonos "
+        "o en que centro reservar, usa estos datos. Si pide cita y no ha dicho centro, "
+        "preguntale primero en que centro quiere la cita.",
+    ]
+    for row in rows:
+        parts = [str(row["name"])]
+        if row["address"]:
+            parts.append(str(row["address"]))
+        if row["phone"]:
+            parts.append(f"Tel: {row['phone']}")
+        lines.append("- " + " · ".join(parts))
+    return "\n".join(lines)
+
+
 def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
     nombre_empresa = config["nombre"]
     prompt_extra = config.get("prompt_extra", "")
@@ -228,6 +253,9 @@ def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
     if contacto.get("web"):
         contact_lines.append(f"- Web: {contacto['web']}")
     contact_block = "\n".join(contact_lines) if contact_lines else "- (no configurados; deriva al equipo humano cuando los pidan)"
+    locations_block = _locations_prompt_block(cliente_id)
+    if locations_block:
+        contact_block = f"{contact_block}\n\n{locations_block}"
 
     if booking_enabled:
         booking_rule = (
@@ -537,6 +565,18 @@ def _slot_matches_period(slot: str, period: str) -> bool:
     return True
 
 
+def _service_name_from_availability_message(cliente_id: str, message: str) -> str:
+    """Devuelve el servicio activo mencionado en una consulta de disponibilidad."""
+    message_key = agenda._service_match_key(message)
+    matches = [
+        str(service.get("nombre") or "")
+        for service in agenda._catalog_services(cliente_id)
+        if service.get("nombre")
+        and agenda._service_match_key(str(service["nombre"])) in message_key
+    ]
+    return max(matches, key=len, default="")
+
+
 def _availability_dates_from_message(message: str, timezone_name: str) -> List[date]:
     try:
         today = datetime.now(ZoneInfo(timezone_name)).date()
@@ -623,12 +663,15 @@ async def _availability_snapshot_for_day(
     target_date: date,
     *,
     period: str = "",
+    servicio: str = "",
 ) -> Dict[str, Any]:
     fecha_iso = target_date.isoformat()
     fecha_humana = textnorm._format_date_es(target_date)
     try:
         agenda._validate_booking_window(cliente_id, datetime.combine(target_date, datetime.min.time()))
-        all_slots, available_slots = await agenda._public_slot_sets_for_day(cliente_id, fecha_iso)
+        all_slots, available_slots = await agenda._public_slot_sets_for_day(
+            cliente_id, fecha_iso, servicio=servicio
+        )
     except HTTPException as exc:
         return {
             "date": target_date,
@@ -702,17 +745,22 @@ async def _find_next_available_snapshot(
     after_date: date,
     *,
     period: str = "",
+    servicio: str = "",
     max_days: int = 21,
 ) -> Optional[Dict[str, Any]]:
     for offset in range(1, max_days + 1):
         candidate = after_date + timedelta(days=offset)
-        snapshot = await _availability_snapshot_for_day(cliente_id, candidate, period=period)
+        snapshot = await _availability_snapshot_for_day(
+            cliente_id, candidate, period=period, servicio=servicio
+        )
         if snapshot.get("status") == "available":
             return snapshot
     if period:
         for offset in range(1, max_days + 1):
             candidate = after_date + timedelta(days=offset)
-            snapshot = await _availability_snapshot_for_day(cliente_id, candidate, period="")
+            snapshot = await _availability_snapshot_for_day(
+                cliente_id, candidate, period="", servicio=servicio
+            )
             if snapshot.get("status") == "available":
                 return snapshot
     return None
@@ -788,6 +836,7 @@ async def _build_chat_availability_answer(
         return _vacation_blocks_summary(cliente_id, timezone_name)
 
     period = _availability_time_period(message)
+    servicio = _service_name_from_availability_message(cliente_id, message)
     dates = _availability_dates_from_message(message, timezone_name)
     if not dates:
         return "Necesito que me indiques una fecha concreta para consultar la agenda real."
@@ -796,7 +845,9 @@ async def _build_chat_availability_answer(
         lines = ["He consultado la agenda real:"]
         shown_slots = 0
         for target_date in dates:
-            snapshot = await _availability_snapshot_for_day(cliente_id, target_date, period=period)
+            snapshot = await _availability_snapshot_for_day(
+                cliente_id, target_date, period=period, servicio=servicio
+            )
             slots = snapshot["period_available"] if period else snapshot["available"]
             if slots:
                 take = max(1, min(3, 8 - shown_slots))
@@ -814,7 +865,9 @@ async def _build_chat_availability_answer(
             lines.append("No veo huecos libres en ese intervalo. Puedo revisar otra fecha si me dices cual.")
         return "\n".join(lines)
 
-    snapshot = await _availability_snapshot_for_day(cliente_id, dates[0], period=period)
+    snapshot = await _availability_snapshot_for_day(
+        cliente_id, dates[0], period=period, servicio=servicio
+    )
     label = snapshot["label"]
     period_suffix = f" por la {period}" if period else ""
     slots = snapshot["period_available"] if period else snapshot["available"]
@@ -838,7 +891,9 @@ async def _build_chat_availability_answer(
         )
 
     if snapshot["status"] in {"closed", "blocked"}:
-        next_snapshot = await _find_next_available_snapshot(cliente_id, snapshot["date"], period=period)
+        next_snapshot = await _find_next_available_snapshot(
+            cliente_id, snapshot["date"], period=period, servicio=servicio
+        )
         text = f"Para el {label} estamos cerrados: {snapshot['reason']}."
         if next_snapshot:
             next_slots = next_snapshot["period_available"] if period else next_snapshot["available"]
@@ -849,7 +904,9 @@ async def _build_chat_availability_answer(
         return text
 
     if snapshot["status"] == "full":
-        next_snapshot = await _find_next_available_snapshot(cliente_id, snapshot["date"], period=period)
+        next_snapshot = await _find_next_available_snapshot(
+            cliente_id, snapshot["date"], period=period, servicio=servicio
+        )
         text = f"Para el {label} no queda disponibilidad: {snapshot['reason']}."
         if next_snapshot:
             next_slots = next_snapshot["period_available"] if period else next_snapshot["available"]

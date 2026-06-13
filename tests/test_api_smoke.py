@@ -770,6 +770,675 @@ def test_staff_can_create_booking_manually(client: TestClient, api_module):
         conn.commit()
 
 
+def test_multilocation_isolation_and_crud(client: TestClient, api_module):
+    user = api_module._get_user_by_email("admin@example.com")
+    raw_session = api_module._create_auth_session(user["id"])
+    cookies = {"vantelia_portal_session": raw_session}
+    origin = {"Origin": "http://testserver"}
+
+    # Centro por defecto auto-creado en el arranque.
+    locs = client.get("/auth/locations", params={"cliente_id": "demo"}, cookies=cookies).json()["items"]
+    assert len(locs) >= 1
+    default_loc = next(l for l in locs if l["is_default"])
+    loc_a = default_loc["location_id"]
+
+    # Crear segundo centro.
+    created = client.post(
+        "/auth/locations",
+        params={"cliente_id": "demo"},
+        cookies=cookies,
+        json={"name": "Centro Norte", "address": "C/ Norte 1", "phone": "910000000"},
+    )
+    assert created.status_code == 200, created.text
+    loc_b = created.json()["location_id"]
+    assert created.json()["is_default"] is False
+
+    # Empleado en A (default) y empleado en B.
+    emp_a = client.post(
+        "/auth/employees", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"name": "Ana A", "service_ids": []},
+    ).json()
+    emp_b = client.post(
+        "/auth/employees", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"name": "Bea B", "location_id": loc_b, "service_ids": []},
+    ).json()
+    assert emp_a["location_id"] == loc_a
+    assert emp_b["location_id"] == loc_b
+
+    # /profesionales filtra por centro.
+    only_b = client.get("/profesionales/demo", params={"location_id": loc_b}, headers=origin).json()["items"]
+    ids_b = {e["employee_id"] for e in only_b}
+    assert emp_b["employee_id"] in ids_b and emp_a["employee_id"] not in ids_b
+    only_a = client.get("/profesionales/demo", params={"location_id": loc_a}, headers=origin).json()["items"]
+    ids_a = {e["employee_id"] for e in only_a}
+    assert emp_a["employee_id"] in ids_a and emp_b["employee_id"] not in ids_a
+
+    # Aislamiento de agenda: reservar con Ana (A) no bloquea el mismo hueco de Bea (B).
+    target = datetime.utcnow().date() + timedelta(days=2)
+    while target.weekday() == 6:
+        target += timedelta(days=1)
+    fecha = target.isoformat()
+
+    booked = client.post(
+        "/auth/bookings", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"nombre": "Cliente A", "email": "", "telefono": "600000001", "servicio": "",
+              "employee_id": emp_a["employee_id"], "fecha": fecha, "hora": "09:00", "notas": ""},
+    )
+    assert booked.status_code == 200, booked.text
+    booking_id = booked.json()["booking_id"]
+
+    # La cita queda sellada con el centro de Ana (A).
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        loc_stamp = conn.execute(
+            "SELECT location_id FROM bookings WHERE id = ?", (booking_id,)
+        ).fetchone()[0]
+    assert loc_stamp == loc_a
+
+    # Disponibilidad de Bea (B) en el mismo hueco sigue libre.
+    disp = client.get(
+        "/disponibilidad",
+        params={"cliente_id": "demo", "fecha": fecha, "employee_id": emp_b["employee_id"]},
+        headers=origin,
+    ).json()
+    libre = {s["hora"]: s["disponible"] for s in disp["slots"]}
+    assert libre.get("09:00") is True
+
+    # Borrar centro con profesional asignado -> 409.
+    blocked = client.delete(f"/auth/locations/{loc_b}", params={"cliente_id": "demo"}, cookies=cookies)
+    assert blocked.status_code == 409
+
+    # Limpieza.
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM bookings WHERE id = ?", (booking_id,))
+        conn.execute("DELETE FROM employees WHERE id IN (?, ?)", (emp_a["employee_id"], emp_b["employee_id"]))
+        conn.execute("DELETE FROM locations WHERE id = ?", (loc_b,))
+        conn.commit()
+
+
+def test_service_location_overrides(client: TestClient, api_module):
+    """F1.5: carta/precios por centro via overlay de overrides."""
+    user = api_module._get_user_by_email("admin@example.com")
+    cookies = {"vantelia_portal_session": api_module._create_auth_session(user["id"])}
+    origin = {"Origin": "http://testserver"}
+
+    locs = client.get("/auth/locations", params={"cliente_id": "demo"}, cookies=cookies).json()["items"]
+    loc_a = next(l for l in locs if l["is_default"])["location_id"]
+    loc_b = client.post(
+        "/auth/locations", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"name": "Centro Override"},
+    ).json()["location_id"]
+
+    # Dos servicios base.
+    for nombre, dur, precio in (("Masaje base", 30, 5000), ("Solo en A", 30, 4000)):
+        r = client.post(
+            "/auth/services", params={"cliente_id": "demo"}, cookies=cookies,
+            json={"nombre": nombre, "duration_minutes": dur, "price_cents": precio},
+        )
+        assert r.status_code == 200, r.text
+
+    # Override en B: "Masaje base" cuesta 70EUR y dura 60 min; "Solo en A" no se ofrece.
+    r = client.put(
+        "/auth/services/masaje_base/locations/" + loc_b,
+        params={"cliente_id": "demo"}, cookies=cookies,
+        json={"is_available": True, "price_cents": 7000, "duration_minutes": 60},
+    )
+    assert r.status_code == 200, r.text
+    r = client.put(
+        "/auth/services/solo_en_a/locations/" + loc_b,
+        params={"cliente_id": "demo"}, cookies=cookies,
+        json={"is_available": False},
+    )
+    assert r.status_code == 200, r.text
+
+    # Catalogo publico por centro.
+    svcs_b = {s["id"]: s for s in client.get(
+        "/servicios/demo", params={"location_id": loc_b}, headers=origin
+    ).json()["servicios"]}
+    assert "solo_en_a" not in svcs_b
+    assert svcs_b["masaje_base"]["price_cents"] == 7000
+    assert svcs_b["masaje_base"]["duration_minutes"] == 60
+
+    svcs_a = {s["id"]: s for s in client.get(
+        "/servicios/demo", params={"location_id": loc_a}, headers=origin
+    ).json()["servicios"]}
+    assert "solo_en_a" in svcs_a
+    assert svcs_a["masaje_base"]["price_cents"] == 5000
+    assert svcs_a["masaje_base"]["duration_minutes"] == 30
+
+    # Duracion efectiva por centro del empleado.
+    emp_b = client.post(
+        "/auth/employees", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"name": "Empleada B Ovr", "location_id": loc_b, "service_ids": []},
+    ).json()
+    emp_row = api_module._get_employee_row(emp_b["employee_id"], cliente_id="demo")
+    assert api_module._service_duration_minutes("demo", "Masaje base", emp_row) == 60
+
+    # Reset del override -> vuelve a heredar.
+    r = client.delete(
+        "/auth/services/masaje_base/locations/" + loc_b,
+        params={"cliente_id": "demo"}, cookies=cookies,
+    )
+    assert r.status_code == 200
+    assert api_module._service_duration_minutes("demo", "Masaje base", emp_row) == 30
+
+    # Limpieza.
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM employees WHERE id = ?", (emp_b["employee_id"],))
+        conn.execute("DELETE FROM services WHERE cliente_id='demo' AND slug IN ('masaje_base','solo_en_a')")
+        conn.execute("DELETE FROM service_location_overrides WHERE cliente_id='demo'")
+        conn.execute("DELETE FROM locations WHERE id = ?", (loc_b,))
+        conn.commit()
+
+
+def test_portal_service_editor_exposes_multicenter_and_preauth_controls():
+    """El editor no debe depender de controles antiguos que rompan abrir/guardar."""
+    html = (REPO_ROOT / "app_ui" / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="svcPaymentType"' in html
+    assert '<option value="preauth">' in html
+    assert 'id="svcLocationsWrap"' in html
+    assert 'id="svcLocationsList"' in html
+    assert "document.getElementById('servicioNewBtn').addEventListener" in html
+    assert "row.querySelector('[data-edit]').addEventListener" in html
+    assert "await saveSvcLocations(saved.id)" in html
+    assert "svcDepositValue" not in html
+    assert "svcConfirmOnPaid" not in html
+
+
+def test_resources_capacity_limits_overlap(client: TestClient, api_module):
+    """F2: con N salas en el centro, max N citas solapadas aunque haya mas personal."""
+    user = api_module._get_user_by_email("admin@example.com")
+    cookies = {"vantelia_portal_session": api_module._create_auth_session(user["id"])}
+    origin = {"Origin": "http://testserver"}
+
+    loc = client.post(
+        "/auth/locations", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"name": "Centro Aforo"},
+    ).json()["location_id"]
+
+    emp1 = client.post(
+        "/auth/employees", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"name": "Aforo Uno", "location_id": loc, "service_ids": []},
+    ).json()
+    emp2 = client.post(
+        "/auth/employees", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"name": "Aforo Dos", "location_id": loc, "service_ids": []},
+    ).json()
+
+    # 1 sala para 2 profesionales.
+    r = client.post(
+        f"/auth/locations/{loc}/resources", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"name": "Sala unica"},
+    )
+    assert r.status_code == 200, r.text
+    sala_id = r.json()["resource_id"]
+
+    target = datetime.utcnow().date() + timedelta(days=3)
+    while target.weekday() == 6:
+        target += timedelta(days=1)
+    fecha = target.isoformat()
+
+    # Cita con emp1 a las 09:00 ocupa la unica sala.
+    booked = client.post(
+        "/auth/bookings", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"nombre": "Aforo Cli", "email": "", "telefono": "600333444", "servicio": "",
+              "employee_id": emp1["employee_id"], "fecha": fecha, "hora": "09:00", "notas": ""},
+    )
+    assert booked.status_code == 200, booked.text
+    booking_id = booked.json()["booking_id"]
+
+    # La cita lleva la sala asignada.
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        res_stamp = conn.execute(
+            "SELECT resource_id FROM bookings WHERE id = ?", (booking_id,)
+        ).fetchone()[0]
+    assert res_stamp == sala_id
+
+    # emp2 a las 09:00 -> sin sala libre: slot no disponible y reserva rechazada.
+    disp = client.get(
+        "/disponibilidad",
+        params={"cliente_id": "demo", "fecha": fecha, "employee_id": emp2["employee_id"]},
+        headers=origin,
+    ).json()
+    estado = {s["hora"]: s["disponible"] for s in disp["slots"]}
+    assert estado.get("09:00") is False
+    assert estado.get("09:30") is True
+
+    rejected = client.post(
+        "/auth/bookings", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"nombre": "Aforo Cli 2", "email": "", "telefono": "600555666", "servicio": "",
+              "employee_id": emp2["employee_id"], "fecha": fecha, "hora": "09:00", "notas": ""},
+    )
+    assert rejected.status_code == 409
+
+    # Con una segunda sala, el mismo hueco vuelve a estar disponible.
+    client.post(
+        f"/auth/locations/{loc}/resources", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"name": "Sala dos"},
+    )
+    disp2 = client.get(
+        "/disponibilidad",
+        params={"cliente_id": "demo", "fecha": fecha, "employee_id": emp2["employee_id"]},
+        headers=origin,
+    ).json()
+    estado2 = {s["hora"]: s["disponible"] for s in disp2["slots"]}
+    assert estado2.get("09:00") is True
+
+    # Limpieza.
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM bookings WHERE id = ?", (booking_id,))
+        conn.execute("DELETE FROM employees WHERE id IN (?, ?)", (emp1["employee_id"], emp2["employee_id"]))
+        conn.execute("DELETE FROM resources WHERE cliente_id='demo' AND location_id = ?", (loc,))
+        conn.execute("DELETE FROM locations WHERE id = ?", (loc,))
+        conn.commit()
+
+
+def test_preauth_capture_release_refund(client: TestClient, api_module, monkeypatch):
+    """F3: retencion sin cobro (capture manual) + cobrar/liberar/reembolsar desde el panel."""
+    user = api_module._get_user_by_email("admin@example.com")
+    cookies = {"vantelia_portal_session": api_module._create_auth_session(user["id"])}
+
+    calls = {"capture": [], "cancel": [], "refund": []}
+
+    class _FakePI:
+        @staticmethod
+        def capture(pi_id, **kwargs):
+            calls["capture"].append((pi_id, kwargs))
+            return SimpleNamespace(id=pi_id, status="succeeded")
+
+        @staticmethod
+        def cancel(pi_id, **kwargs):
+            calls["cancel"].append((pi_id, kwargs))
+            return SimpleNamespace(id=pi_id, status="canceled")
+
+    class _FakeRefund:
+        @staticmethod
+        def create(**kwargs):
+            calls["refund"].append(kwargs)
+            return SimpleNamespace(id="re_test", status="succeeded")
+
+    fake_stripe = SimpleNamespace(PaymentIntent=_FakePI, Refund=_FakeRefund, api_key="sk_test_dummy")
+    import backend.stripe_gateway as sg
+    monkeypatch.setattr(sg, "stripe", fake_stripe, raising=False)
+    monkeypatch.setattr(sg, "_stripe_init", lambda: None, raising=False)
+
+    _seed_times = {"cap": "09:00", "rel": "09:30", "wh": "10:00"}
+
+    def _seed_preauth_booking(suffix):
+        booking_id = f"bk_preauth_{suffix}"
+        now = api_module._utc_now_iso()
+        fecha = (datetime.utcnow().date() + timedelta(days=2)).isoformat()
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute(
+                """INSERT INTO bookings (id, cliente_id, employee_id, employee_name, nombre, email,
+                    telefono, servicio, booking_date, booking_time, notas, status, provider_name,
+                    provider_status, manage_token, timezone, start_at, end_at, confirmed_at,
+                    payment_status, source, created_at)
+                   VALUES (?, 'demo', '', '', 'Preauth Cli', 'pre@example.com', '', 'Masaje',
+                    ?, ?, '', 'confirmed', 'internal', 'internal', ?, 'Europe/Madrid',
+                    '', '', ?, 'preauthorized', 'vantelia_widget', ?)""",
+                (booking_id, fecha, _seed_times[suffix], f"tok_{suffix}", now, now),
+            )
+            conn.execute(
+                """INSERT INTO booking_payments (id, cliente_id, booking_id, stripe_account_id,
+                    checkout_session_id, payment_intent_id, amount_cents, currency, status,
+                    checkout_url, capture_method, created_at, updated_at)
+                   VALUES (?, 'demo', ?, 'acct_test', ?, ?, 5000, 'eur', 'preauthorized',
+                    'https://stripe.test/x', 'manual', ?, ?)""",
+                (f"pay_{suffix}", booking_id, f"cs_{suffix}", f"pi_{suffix}", now, now),
+            )
+            conn.commit()
+        return booking_id
+
+    # Capture parcial (penalizacion 30 EUR de una retencion de 50).
+    b1 = _seed_preauth_booking("cap")
+    r = client.post(
+        f"/auth/bookings/{b1}/payment/capture", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"amount_cents": 3000, "reason": "no-show"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["payment_status"] == "paid"
+    assert calls["capture"][0][0] == "pi_cap"
+    assert calls["capture"][0][1]["amount_to_capture"] == 3000
+    assert calls["capture"][0][1]["stripe_account"] == "acct_test"
+
+    # Refund parcial del pago capturado.
+    r = client.post(
+        f"/auth/bookings/{b1}/payment/refund", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"amount_cents": 1000, "reason": "gesto comercial"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["payment_status"] == "partially_refunded"
+    assert calls["refund"][0]["payment_intent"] == "pi_cap"
+    assert calls["refund"][0]["amount"] == 1000
+
+    # Release de otra retencion (cancelacion dentro de plazo).
+    b2 = _seed_preauth_booking("rel")
+    r = client.post(
+        f"/auth/bookings/{b2}/payment/release", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"reason": "cancelacion en plazo"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["payment_status"] == "released"
+    assert calls["cancel"][0][0] == "pi_rel"
+
+    # Release de una retencion ya cobrada -> 409.
+    r = client.post(
+        f"/auth/bookings/{b1}/payment/release", params={"cliente_id": "demo"}, cookies=cookies,
+        json={},
+    )
+    assert r.status_code == 409
+
+    # Webhook con capture manual marca preauthorized (no paid).
+    b3 = _seed_preauth_booking("wh")
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("UPDATE booking_payments SET status='pending', payment_intent_id='' WHERE booking_id=?", (b3,))
+        conn.execute("UPDATE bookings SET payment_status='pending' WHERE id=?", (b3,))
+        conn.commit()
+    handled = api_module.process_booking_payment_webhook(
+        {"id": "cs_wh2", "payment_intent": "pi_wh2",
+         "metadata": {"source": "booking_payment", "cliente_id": "demo", "booking_id": b3}}
+    )
+    assert handled is True
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        st = conn.execute("SELECT status FROM booking_payments WHERE booking_id=?", (b3,)).fetchone()[0]
+        bst = conn.execute("SELECT payment_status FROM bookings WHERE id=?", (b3,)).fetchone()[0]
+    assert st == "preauthorized"
+    assert bst == "preauthorized"
+
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM bookings WHERE id IN (?, ?, ?)", (b1, b2, b3))
+        conn.execute("DELETE FROM booking_payments WHERE booking_id IN (?, ?, ?)", (b1, b2, b3))
+        conn.commit()
+
+
+def test_channel_number_maps_to_location_and_prompt_lists_centers(client: TestClient, api_module):
+    """F1.6: numero entrante -> centro + el system prompt conoce los centros."""
+    user = api_module._get_user_by_email("admin@example.com")
+    cookies = {"vantelia_portal_session": api_module._create_auth_session(user["id"])}
+
+    loc = client.post(
+        "/auth/locations", params={"cliente_id": "demo"}, cookies=cookies,
+        json={
+            "name": "Centro Canal",
+            "address": "C/ Canal 5",
+            "whatsapp_phone_number_id": "999888777",
+            "voice_phone_number": "+34911000111",
+        },
+    ).json()["location_id"]
+
+    assert api_module._location_for_channel("demo", whatsapp_phone_number_id="999888777") == loc
+    assert api_module._location_for_channel("demo", voice_phone_number="+34911000111") == loc
+    assert api_module._location_for_channel("demo", voice_phone_number="34911000111") == loc
+    assert api_module._location_for_channel("demo", whatsapp_phone_number_id="000") == ""
+
+    # Con >1 centro, el prompt del agente lista los centros y pide elegir.
+    config = api_module.CONFIG_CLIENTES["demo"]
+    prompt = api_module._build_system_prompt("demo", config)
+    assert "CENTROS DEL NEGOCIO" in prompt
+    assert "Centro Canal" in prompt
+    assert "C/ Canal 5" in prompt
+
+    # Limpieza: con un solo centro el bloque desaparece.
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM locations WHERE id = ?", (loc,))
+        conn.commit()
+    prompt_single = api_module._build_system_prompt("demo", config)
+    assert "CENTROS DEL NEGOCIO" not in prompt_single
+
+
+def _portal_admin_cookies(api_module):
+    user = api_module._get_user_by_email("admin@example.com")
+    raw_session = api_module._create_auth_session(user["id"])
+    return {"vantelia_portal_session": raw_session}
+
+
+def test_commerce_products_packages_giftcards(client: TestClient, api_module):
+    cookies = _portal_admin_cookies(api_module)
+    params = {"cliente_id": "demo"}
+
+    # --- Producto: CRUD + venta con stock ---
+    r = client.post("/auth/products", params=params, cookies=cookies,
+                    json={"name": "Aceite esencial", "price_cents": 1500, "stock": 2})
+    assert r.status_code == 200, r.text
+    product_id = r.json()["id"]
+    r = client.post(f"/auth/products/{product_id}/sell", params=params, cookies=cookies,
+                    json={"qty": 2, "payment_method": "card", "customer_name": "Ana"})
+    assert r.status_code == 200, r.text
+    assert r.json()["total_cents"] == 3000
+    # Stock agotado -> 409
+    r = client.post(f"/auth/products/{product_id}/sell", params=params, cookies=cookies, json={"qty": 1})
+    assert r.status_code == 409
+    sales = client.get("/auth/product-sales", params=params, cookies=cookies).json()["items"]
+    assert any(s["product_id"] == product_id and s["total_cents"] == 3000 for s in sales)
+
+    # --- Bono: crear, vender, redimir hasta agotar ---
+    svc = client.post("/auth/services", params=params, cookies=cookies,
+                      json={"nombre": "Masaje Bono Test", "duration_minutes": 30, "price_cents": 6000})
+    assert svc.status_code == 200, svc.text
+    slug = svc.json()["id"]
+    r = client.post("/auth/packages", params=params, cookies=cookies,
+                    json={"name": "Bono 2 sesiones", "items": [{"service_slug": slug, "qty": 2}],
+                          "price_cents": 10000, "validity_days": 90})
+    assert r.status_code == 200, r.text
+    package_id = r.json()["id"]
+    r = client.post(f"/auth/packages/{package_id}/sell", params=params, cookies=cookies,
+                    json={"buyer_name": "Luis", "buyer_email": "luis@example.com"})
+    assert r.status_code == 200, r.text
+    purchase_id = r.json()["purchase_id"]
+    assert r.json()["remaining"][slug] == 2
+
+    seed_counter = {"n": 0}
+
+    def _seed_service_booking() -> str:
+        booking_id = uuid.uuid4().hex
+        seed_counter["n"] += 1
+        start = datetime.utcnow() + timedelta(days=3, minutes=30 * seed_counter["n"])
+        iso = lambda d: d.isoformat(timespec="seconds") + "Z"
+        api_module._store_booking({
+            "id": booking_id, "cliente_id": "demo", "employee_id": "", "employee_name": "",
+            "nombre": "Luis", "email": "luis@example.com", "telefono": "",
+            "servicio": "Masaje Bono Test", "booking_date": start.date().isoformat(),
+            "booking_time": start.strftime("%H:%M"), "notas": "", "status": "confirmed",
+            "provider_name": "internal", "provider_status": "confirmed", "provider_booking_id": "",
+            "provider_booking_url": "", "manage_token": f"mg_{booking_id}", "timezone": "Europe/Madrid",
+            "start_at": iso(start), "end_at": iso(start + timedelta(minutes=30)),
+            "confirmed_at": iso(start), "cancelled_at": "",
+            "rescheduled_at": "", "rescheduled_from_booking_id": "", "confirmation_email_sent_at": "",
+            "reminder_24h_sent_at": "", "reminder_2h_sent_at": "", "customer_email_status": "",
+            "customer_email_last_error": "", "service_id": slug, "service_price_cents": 6000,
+            "source": "test", "created_at": iso(start),
+        })
+        return booking_id
+
+    bk1, bk2, bk3 = _seed_service_booking(), _seed_service_booking(), _seed_service_booking()
+    r = client.post(f"/auth/package-purchases/{purchase_id}/redeem", params=params, cookies=cookies,
+                    json={"booking_id": bk1})
+    assert r.status_code == 200, r.text
+    assert r.json()["remaining"][slug] == 1
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        assert conn.execute("SELECT payment_status FROM bookings WHERE id = ?", (bk1,)).fetchone()[0] == "paid"
+    r = client.post(f"/auth/package-purchases/{purchase_id}/redeem", params=params, cookies=cookies,
+                    json={"booking_id": bk2})
+    assert r.status_code == 200
+    assert r.json()["purchase_status"] == "used"
+    # Sin sesiones restantes -> 409
+    r = client.post(f"/auth/package-purchases/{purchase_id}/redeem", params=params, cookies=cookies,
+                    json={"booking_id": bk3})
+    assert r.status_code == 409
+
+    # --- Gift card: emitir, parcial, cubrir ---
+    r = client.post("/auth/gift-cards", params=params, cookies=cookies,
+                    json={"amount_cents": 5000, "buyer_name": "Eva"})
+    assert r.status_code == 200, r.text
+    code_small = r.json()["code"]
+    assert code_small.startswith("GC-")
+    r = client.post("/auth/gift-cards/redeem", params=params, cookies=cookies,
+                    json={"code": code_small, "booking_id": bk3})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["covered"] is False and body["charged_cents"] == 5000 and body["remaining_due_cents"] == 1000
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        # Parcial: la cita NO queda pagada
+        assert conn.execute("SELECT payment_status FROM bookings WHERE id = ?", (bk3,)).fetchone()[0] != "paid"
+    bk4 = _seed_service_booking()
+    r = client.post("/auth/gift-cards", params=params, cookies=cookies, json={"amount_cents": 8000})
+    code_big = r.json()["code"]
+    r = client.post("/auth/gift-cards/redeem", params=params, cookies=cookies,
+                    json={"code": code_big, "booking_id": bk4})
+    assert r.status_code == 200 and r.json()["covered"] is True
+    assert r.json()["balance_after_cents"] == 2000
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        assert conn.execute("SELECT payment_status FROM bookings WHERE id = ?", (bk4,)).fetchone()[0] == "paid"
+
+    # Limpieza
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM bookings WHERE id IN (?, ?, ?, ?)", (bk1, bk2, bk3, bk4))
+        conn.execute("DELETE FROM products WHERE cliente_id = 'demo' AND id = ?", (product_id,))
+        conn.execute("DELETE FROM product_sales WHERE cliente_id = 'demo'")
+        conn.execute("DELETE FROM packages WHERE cliente_id = 'demo'")
+        conn.execute("DELETE FROM package_purchases WHERE cliente_id = 'demo'")
+        conn.execute("DELETE FROM gift_cards WHERE cliente_id = 'demo'")
+        conn.execute("DELETE FROM gift_card_transactions WHERE cliente_id = 'demo'")
+        conn.execute("DELETE FROM services WHERE cliente_id = 'demo' AND slug = ?", (slug,))
+        conn.commit()
+
+
+def test_analytics_overview_and_portal_roles(client: TestClient, api_module):
+    cookies = _portal_admin_cookies(api_module)
+    params = {"cliente_id": "demo"}
+
+    # Analytics responde con estructura completa para admin (owner)
+    r = client.get("/auth/analytics/overview", params=params, cookies=cookies)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    for key in ("kpis", "previous", "series", "by_service", "by_employee", "by_location"):
+        assert key in data
+    assert "revenue_cents" in data["kpis"] and "occupancy_rate" in data["kpis"]
+    csv_resp = client.get("/auth/analytics/export.csv", params=params, cookies=cookies)
+    assert csv_resp.status_code == 200 and "fecha;citas;ingresos_eur" in csv_resp.text
+
+    # Usuario staff: agenda si, gestion no
+    staff = api_module._create_user(
+        email="staff@example.com", password="staff-pass-123", role="client",
+        display_name="Staff Demo", cliente_id="demo", portal_role="staff",
+    )
+    staff_cookies = {"vantelia_portal_session": api_module._create_auth_session(staff["id"])}
+    me = client.get("/auth/me", cookies=staff_cookies)
+    assert me.status_code == 200 and me.json()["portal_role"] == "staff"
+    assert client.get("/auth/analytics/overview", cookies=staff_cookies).status_code == 403
+    assert client.post("/auth/services", cookies=staff_cookies,
+                       json={"nombre": "Prohibido", "price_cents": 100}).status_code == 403
+    assert client.post("/auth/employees", cookies=staff_cookies,
+                       json={"name": "Prohibido Tambien"}).status_code == 403
+    assert client.get("/auth/products", cookies=staff_cookies).status_code == 200
+    assert client.get("/auth/app/team", cookies=staff_cookies).status_code == 403
+
+    # Owner self-serve gestiona su equipo
+    owner = api_module._create_user(
+        email="owner@example.com", password="owner-pass-123", role="client",
+        display_name="Owner Demo", cliente_id="demo", portal_role="owner",
+    )
+    owner_cookies = {"vantelia_portal_session": api_module._create_auth_session(owner["id"])}
+    team = client.get("/auth/app/team", cookies=owner_cookies)
+    assert team.status_code == 200
+    r = client.post("/auth/app/team", cookies=owner_cookies,
+                    json={"email": "recep@example.com", "password": "recep-pass-123",
+                          "display_name": "Recepcion", "portal_role": "manager"})
+    assert r.status_code == 200 and r.json()["portal_role"] == "manager"
+    member_id = r.json()["user_id"]
+    r = client.post(f"/auth/app/team/{member_id}", cookies=owner_cookies, json={"portal_role": "staff"})
+    assert r.status_code == 200 and r.json()["portal_role"] == "staff"
+    # No puede dejar al negocio sin owner activo
+    r = client.post(f"/auth/app/team/{owner['id']}", cookies=owner_cookies, json={"portal_role": "staff"})
+    assert r.status_code == 409
+    assert client.delete(f"/auth/app/team/{member_id}", cookies=owner_cookies).status_code == 200
+
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM users WHERE email IN ('staff@example.com', 'owner@example.com', 'recep@example.com')")
+        conn.commit()
+
+
+def test_whatsapp_reminder_buttons_confirm_and_cancel(client: TestClient, api_module, monkeypatch):
+    sent_messages = []
+
+    async def _fake_send_text(**kwargs):
+        sent_messages.append(kwargs.get("text", ""))
+        return True
+
+    monkeypatch.setattr(api_module, "_send_whatsapp_text", _fake_send_text)
+
+    wa_seed_counter = {"n": 0}
+
+    def _seed_future_booking(phone: str) -> str:
+        booking_id = uuid.uuid4().hex
+        wa_seed_counter["n"] += 1
+        start = datetime.utcnow() + timedelta(days=2, minutes=30 * wa_seed_counter["n"])
+        iso = lambda d: d.isoformat(timespec="seconds") + "Z"
+        api_module._store_booking({
+            "id": booking_id, "cliente_id": "demo", "employee_id": "", "employee_name": "",
+            "nombre": "Cliente WA", "email": "wa@example.com", "telefono": phone,
+            "servicio": "Consulta", "booking_date": start.date().isoformat(),
+            "booking_time": start.strftime("%H:%M"), "notas": "", "status": "confirmed",
+            "provider_name": "internal", "provider_status": "confirmed", "provider_booking_id": "",
+            "provider_booking_url": "", "manage_token": f"mg_{booking_id}", "timezone": "Europe/Madrid",
+            "start_at": iso(start), "end_at": iso(start + timedelta(minutes=30)),
+            "confirmed_at": iso(start), "cancelled_at": "",
+            "rescheduled_at": "", "rescheduled_from_booking_id": "", "confirmation_email_sent_at": "",
+            "reminder_24h_sent_at": "", "reminder_2h_sent_at": "", "customer_email_status": "",
+            "customer_email_last_error": "", "source": "test", "created_at": iso(start),
+        })
+        return booking_id
+
+    class _FakeRequest:
+        client = None
+        base_url = "http://testserver/"
+        headers = {}
+
+    # Confirmacion de asistencia -> audit, sin cambio de estado
+    bk_ok = _seed_future_booking("+34600777001")
+    asyncio.run(
+        api_module._wa_handle_reminder_reply(
+            cliente_id="demo", phone_number_id="1234567890",
+            from_number="+34600777001", interactive_id=f"bkok_{bk_ok}", request=_FakeRequest(),
+        )
+    )
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        status_row = conn.execute("SELECT status FROM bookings WHERE id = ?", (bk_ok,)).fetchone()
+        audit = conn.execute(
+            "SELECT COUNT(*) FROM booking_audit WHERE booking_id = ? AND event_type = 'attendance_confirmed_by_customer'",
+            (bk_ok,),
+        ).fetchone()[0]
+    assert status_row[0] == "confirmed" and audit == 1
+    assert any("confirmada" in m for m in sent_messages)
+
+    # Cancelacion -> cita cancelada
+    bk_cancel = _seed_future_booking("+34600777002")
+    asyncio.run(
+        api_module._wa_handle_reminder_reply(
+            cliente_id="demo", phone_number_id="1234567890",
+            from_number="+34600777002", interactive_id=f"bkcancel_{bk_cancel}", request=_FakeRequest(),
+        )
+    )
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        assert conn.execute("SELECT status FROM bookings WHERE id = ?", (bk_cancel,)).fetchone()[0] == "cancelled"
+
+    # Telefono que no coincide -> no toca la cita
+    bk_other = _seed_future_booking("+34600777003")
+    asyncio.run(
+        api_module._wa_handle_reminder_reply(
+            cliente_id="demo", phone_number_id="1234567890",
+            from_number="+34699999999", interactive_id=f"bkcancel_{bk_other}", request=_FakeRequest(),
+        )
+    )
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        assert conn.execute("SELECT status FROM bookings WHERE id = ?", (bk_other,)).fetchone()[0] == "confirmed"
+
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM bookings WHERE id IN (?, ?, ?)", (bk_ok, bk_cancel, bk_other))
+        conn.commit()
+
+
 def test_service_price_and_duration_parsing(api_module):
     assert api_module._parse_price_to_cents("45 €") == 4500
     assert api_module._parse_price_to_cents("Desde 30 €") == 3000

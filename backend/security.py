@@ -49,6 +49,29 @@ def _verify_secret(raw_value: str, encoded: str) -> bool:
     return secrets.compare_digest(digest.hex(), expected)
 
 
+PORTAL_ROLE_LEVELS = {"staff": 1, "manager": 2, "owner": 3}
+
+
+def _portal_role(row: sqlite3.Row) -> str:
+    """Rol granular dentro del negocio. El admin Vantelia siempre opera como owner."""
+    if row["role"] == "admin":
+        return "owner"
+    try:
+        value = (row["portal_role"] or "owner").strip().lower()
+    except (IndexError, KeyError):
+        value = "owner"
+    return value if value in PORTAL_ROLE_LEVELS else "owner"
+
+
+def _require_portal_min_role(user: sqlite3.Row, minimum: str) -> None:
+    """403 si el rol del usuario no alcanza el minimo (staff < manager < owner)."""
+    if PORTAL_ROLE_LEVELS.get(_portal_role(user), 0) < PORTAL_ROLE_LEVELS.get(minimum, 3):
+        raise HTTPException(
+            status_code=403,
+            detail="Tu rol no permite esta accion. Pide acceso al propietario de la cuenta.",
+        )
+
+
 def _serialize_auth_user(row: sqlite3.Row) -> AuthUserPublic:
     cliente_id = row["cliente_id"] or ""
     plan = clients._client_plan(cliente_id) if cliente_id else settings.PLAN_DEFAULT
@@ -58,6 +81,7 @@ def _serialize_auth_user(row: sqlite3.Row) -> AuthUserPublic:
         email=row["email"],
         display_name=row["display_name"],
         role=row["role"],
+        portal_role=_portal_role(row),
         cliente_id=cliente_id,
         plan=plan,
         plan_label=str(limits.get("label") or plan.title()),
@@ -73,6 +97,7 @@ def _serialize_managed_user(row: sqlite3.Row) -> AuthManagedUser:
         email=row["email"],
         display_name=row["display_name"],
         role=row["role"],
+        portal_role=_portal_role(row),
         cliente_id=row["cliente_id"] or "",
         is_active=bool(row["is_active"]),
         created_at=row["created_at"] or "",
@@ -162,19 +187,32 @@ def _update_user_profile(user_id: str, *, email: str, display_name: str) -> sqli
         return updated
 
 
-def _create_user(*, email: str, password: str, role: str, display_name: str, cliente_id: str = "") -> sqlite3.Row:
+def _create_user(
+    *,
+    email: str,
+    password: str,
+    role: str,
+    display_name: str,
+    cliente_id: str = "",
+    portal_role: str = "owner",
+) -> sqlite3.Row:
     user_id = f"usr_{secrets.token_urlsafe(12)}"
     email_norm = textnorm._normalize_email(email)
     now_iso = timeutils._utc_now_iso()
     password_hash = _hash_secret(password)
+    portal_role_norm = portal_role if portal_role in PORTAL_ROLE_LEVELS else "owner"
     with db._get_db_connection() as connection:
         connection.execute(
             """
             INSERT INTO users (
-                id, email, password_hash, role, display_name, cliente_id, is_active, created_at, last_login_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, '')
+                id, email, password_hash, role, display_name, cliente_id, is_active,
+                created_at, last_login_at, portal_role
+            ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, '', ?)
             """,
-            (user_id, email_norm, password_hash, role, display_name.strip(), cliente_id.strip(), now_iso),
+            (
+                user_id, email_norm, password_hash, role, display_name.strip(),
+                cliente_id.strip(), now_iso, portal_role_norm,
+            ),
         )
         connection.commit()
         return connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()

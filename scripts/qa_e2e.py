@@ -74,6 +74,8 @@ os.environ.update({
     "PORTAL_COOKIE_NAME": "vantelia_portal_session", "PORTAL_COOKIE_DOMAIN": "",
     "REMINDER_RUN_INTERVAL_MINUTES": "0", "WEBHOOK_DEFAULT": "",
     "EXTRA_CORS_ORIGINS": "http://testserver",
+    "EMAIL_SEND_PROVIDER": "smtp", "SMTP_HOST": "", "SMTP_USERNAME": "",
+    "SMTP_PASSWORD": "", "SMTP_FROM_EMAIL": "", "SMTP_REPLY_TO": "",
     "WHATSAPP_VERIFY_TOKEN": "qa-wa-verify", "WHATSAPP_ACCESS_TOKEN": "qa-token",
     "WHATSAPP_APP_SECRET": "qa-wa-secret", "WHATSAPP_PHONE_CLIENT_MAP": "PH_qa:qa",
     "STRIPE_SECRET_KEY": "sk_test_dummy", "STRIPE_WEBHOOK_SECRET": "",

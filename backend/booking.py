@@ -92,13 +92,17 @@ def _booking_reminder_worker() -> None:
         appstate.booking_reminder_stop.wait(interval_seconds)
 
 
-def _public_services_for_booking(cliente_id: str, employee_id: str = "") -> List[Dict[str, Any]]:
+def _public_services_for_booking(
+    cliente_id: str, employee_id: str = "", location_id: str = ""
+) -> List[Dict[str, Any]]:
     if employee_id:
         employee_row = agenda._get_employee_row(employee_id, cliente_id=cliente_id)
         return agenda._services_for_employee(cliente_id, employee_row)
 
-    public_rows = agenda._list_public_employee_rows(cliente_id, include_inactive=False)
-    all_services = agenda._catalog_services(cliente_id)
+    public_rows = agenda._list_public_employee_rows(
+        cliente_id, include_inactive=False, location_id=location_id
+    )
+    all_services = agenda._catalog_services(cliente_id, location_id=location_id)
     if not public_rows:
         return all_services
 
@@ -487,11 +491,28 @@ async def _send_booking_whatsapp_reminder(
     to_number = _booking_customer_phone_for_channel(booking_row, "whatsapp")
     if not (phone_number_id and to_number):
         return False
+    message_text = _booking_message_text_for_channel(booking_row, kind, request, extra_message=extra_message)
+    # Recordatorios: botones interactivos de confirmacion de asistencia.
+    # La respuesta la procesa el webhook (bkok_/bkcancel_) y queda en booking_audit.
+    if kind in ("reminder_24h", "reminder_2h") and booking_row["status"] in ("confirmed", "pending_review"):
+        sent = await messaging._send_whatsapp_buttons(
+            cliente_id=booking_row["cliente_id"],
+            phone_number_id=phone_number_id,
+            to_number=to_number,
+            body=message_text,
+            buttons=[
+                (f"bkok_{booking_row['id']}", "✅ Confirmo"),
+                (f"bkcancel_{booking_row['id']}", "❌ Cancelar cita"),
+            ],
+        )
+        if sent:
+            return True
+        # Fallback a texto plano si la API rechaza el mensaje interactivo.
     return await messaging._send_whatsapp_text(
         cliente_id=booking_row["cliente_id"],
         phone_number_id=phone_number_id,
         to_number=to_number,
-        text=_booking_message_text_for_channel(booking_row, kind, request, extra_message=extra_message),
+        text=message_text,
     )
 
 
@@ -1217,6 +1238,34 @@ def _store_booking(record: Dict[str, Any]) -> None:
     if decision["payment_required"]:
         record["status"] = "pending_payment"
         record["confirmed_at"] = ""
+    location_id = record.get("location_id", "")
+    if not location_id and record.get("employee_id"):
+        employee_row = agenda._get_employee_row(record["employee_id"], cliente_id=record["cliente_id"])
+        if employee_row is not None:
+            location_id = employee_row["location_id"] or ""
+    if not location_id:
+        location_id = agenda._default_location_id(record["cliente_id"])
+    record["location_id"] = location_id
+    # Precio efectivo segun el centro (override por centro si existe).
+    if service is not None and location_id:
+        record["service_price_cents"] = agenda._service_price_cents_resolved(
+            record["cliente_id"], service, location_id
+        )
+    # Sala generica: asignacion best-effort si el centro tiene salas configuradas.
+    if not record.get("resource_id"):
+        start_min = textnorm._time_to_min(record.get("booking_time", ""))
+        if start_min is not None and location_id:
+            duration = agenda._service_duration_minutes(
+                record["cliente_id"],
+                record.get("servicio", ""),
+                agenda._get_employee_row(record.get("employee_id", ""), cliente_id=record["cliente_id"])
+                if record.get("employee_id")
+                else None,
+            )
+            record["resource_id"] = agenda._assign_free_resource(
+                record["cliente_id"], location_id, record.get("booking_date", ""), start_min, start_min + duration
+            )
+    record.setdefault("resource_id", "")
     with db._get_db_connection() as connection:
         if not record.get("booking_code"):
             record["booking_code"] = _unique_booking_code(connection, record["cliente_id"])
@@ -1230,9 +1279,9 @@ def _store_booking(record: Dict[str, Any]) -> None:
                 confirmed_at, cancelled_at, rescheduled_at, rescheduled_from_booking_id,
                 confirmation_email_sent_at, reminder_24h_sent_at, reminder_2h_sent_at,
                 customer_email_status, customer_email_last_error, booking_code,
-                service_id, service_price_cents, payment_status, source, created_at
+                service_id, service_price_cents, payment_status, location_id, resource_id, source, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record["id"],
@@ -1268,6 +1317,8 @@ def _store_booking(record: Dict[str, Any]) -> None:
                 record.get("service_id", ""),
                 int(record.get("service_price_cents", 0) or 0),
                 record.get("payment_status", "not_required"),
+                record.get("location_id", ""),
+                record.get("resource_id", ""),
                 record["source"],
                 record["created_at"],
             ),
@@ -2608,7 +2659,7 @@ def _create_customer_payment_link(
     persiste el customer_payment. Logica compartida por el portal (boton manual)
     y por la IA (web/WhatsApp/voz). Lanza HTTPException en cada error de negocio
     para que cada llamante mapee el detalle como prefiera. Sincrona (llama a
-    Stripe): los llamantes async deben envolverla en asyncio.to_thread."""
+    Stripe): los llamantes async deben envolverla en timeutils._to_thread."""
     booking_id = booking["id"]
     with db._get_db_connection() as connection:
         paid = connection.execute(
@@ -2724,7 +2775,7 @@ async def _ai_send_payment_link(
 
     base = base_url or textnorm._preferred_public_base_url()
     try:
-        row = await asyncio.to_thread(
+        row = await timeutils._to_thread(
             _create_customer_payment_link, cliente_id, booking, base_url=base, override_cents=None
         )
     except HTTPException as exc:
@@ -2766,7 +2817,7 @@ async def _ai_send_payment_link(
             f"<p>Un saludo,<br>{escape(nombre_negocio)}</p>"
         )
         try:
-            await asyncio.to_thread(emailing._send_client_email, cliente_id, email, subject, text_body, html_body, reply_to)
+            await timeutils._to_thread(emailing._send_client_email, cliente_id, email, subject, text_body, html_body, reply_to)
             sent = True
         except Exception as exc:  # noqa: BLE001
             settings.logger.error("[ai-pay] email fallo %s: %s", booking_id, exc)
@@ -2800,7 +2851,8 @@ def resolve_payment_requirement(
         (booking["service_price_cents"] if booking else service["price_cents"]) or 0
     ) if service else 0
     deposit = int(service["deposit_amount_cents"] or 0) if service else 0
-    amount = deposit if payment_type == "deposit" and deposit > 0 else full_amount
+    # preauth: retiene el deposito si esta configurado; si no, el importe completo.
+    amount = deposit if payment_type in ("deposit", "preauth") and deposit > 0 else full_amount
     account = stripe_gateway._stripe_connected_account_row(cliente_id)
     stripe_active = bool(account and account["status"] == "active" and stripe_gateway._stripe_configured())
     available = stripe_active and amount > 0 and mode != "payment_disabled"
@@ -2843,6 +2895,17 @@ def create_booking_payment_checkout(cliente_id: str, booking_id: str, request: O
     base_url = textnorm._preferred_public_base_url(request).rstrip("/")
     if not base_url:
         raise HTTPException(status_code=503, detail="APP_BASE_URL no configurada para generar enlaces de pago.")
+    # preauth: retencion sin cobro inmediato (capture manual desde el panel).
+    capture_method = "manual" if decision.get("payment_type") == "preauth" else "automatic"
+    payment_intent_data: Dict[str, Any] = {
+        "metadata": {
+            "source": "booking_payment",
+            "cliente_id": cliente_id,
+            "booking_id": booking_id,
+        },
+    }
+    if capture_method == "manual":
+        payment_intent_data["capture_method"] = "manual"
     try:
         session = stripe_gateway.stripe.checkout.Session.create(
             stripe_account=decision["stripe_account_id"],
@@ -2864,13 +2927,7 @@ def create_booking_payment_checkout(cliente_id: str, booking_id: str, request: O
                 "cliente_id": cliente_id,
                 "booking_id": booking_id,
             },
-            payment_intent_data={
-                "metadata": {
-                    "source": "booking_payment",
-                    "cliente_id": cliente_id,
-                    "booking_id": booking_id,
-                },
-            },
+            payment_intent_data=payment_intent_data,
         )
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("Stripe booking checkout fallo cliente=%s booking=%s: %s", cliente_id, booking_id, exc)
@@ -2881,17 +2938,19 @@ def create_booking_payment_checkout(cliente_id: str, booking_id: str, request: O
             """
             INSERT INTO booking_payments
                 (id, cliente_id, booking_id, stripe_account_id, checkout_session_id,
-                 amount_cents, currency, status, checkout_url, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+                 amount_cents, currency, status, checkout_url, capture_method, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
             ON CONFLICT(booking_id) DO UPDATE SET
                 checkout_session_id=excluded.checkout_session_id,
                 checkout_url=excluded.checkout_url,
+                capture_method=excluded.capture_method,
                 updated_at=excluded.updated_at
             """,
             (
                 f"pay_{secrets.token_urlsafe(10)}", cliente_id, booking_id,
                 decision["stripe_account_id"], session.id or "",
-                decision["amount_cents"], decision["currency"], session.url or "", now, now,
+                decision["amount_cents"], decision["currency"], session.url or "",
+                capture_method, now, now,
             ),
         )
         connection.execute(
@@ -2937,19 +2996,22 @@ def process_booking_payment_webhook(data_object: Dict[str, Any]) -> bool:
     payment_intent_id = str(data_object.get("payment_intent") or "")
     with db._get_db_connection() as connection:
         row = connection.execute(
-            "SELECT status FROM booking_payments WHERE booking_id = ?",
+            "SELECT status, capture_method FROM booking_payments WHERE booking_id = ?",
             (booking_id,),
         ).fetchone()
-        if row and row["status"] == "paid":
+        if row and row["status"] in ("paid", "preauthorized"):
             return True
+        # Retencion (capture manual): la tarjeta queda autorizada pero NO cobrada.
+        is_preauth = bool(row and row["capture_method"] == "manual")
+        new_status = "preauthorized" if is_preauth else "paid"
         connection.execute(
             """
             UPDATE booking_payments
-            SET status='paid', checkout_session_id=?, payment_intent_id=?,
+            SET status=?, checkout_session_id=?, payment_intent_id=?,
                 paid_at=?, updated_at=?
             WHERE booking_id=? AND cliente_id=?
             """,
-            (session_id, payment_intent_id, now, now, booking_id, cliente_id),
+            (new_status, session_id, payment_intent_id, "" if is_preauth else now, now, booking_id, cliente_id),
         )
         booking = connection.execute(
             "SELECT status FROM bookings WHERE id = ? AND cliente_id = ?",
@@ -2958,7 +3020,7 @@ def process_booking_payment_webhook(data_object: Dict[str, Any]) -> bool:
         connection.execute(
             """
             UPDATE bookings
-            SET payment_status='paid',
+            SET payment_status=?,
                 status=CASE WHEN status IN ('pending_payment', 'confirmed') THEN 'confirmed' ELSE status END,
                 confirmed_at=CASE
                     WHEN status IN ('pending_payment', 'confirmed') AND confirmed_at='' THEN ?
@@ -2966,10 +3028,14 @@ def process_booking_payment_webhook(data_object: Dict[str, Any]) -> bool:
                 END
             WHERE id=? AND cliente_id=?
             """,
-            (now, booking_id, cliente_id),
+            (new_status, now, booking_id, cliente_id),
         )
         connection.commit()
-    _record_booking_audit(booking_id, cliente_id, "booking_payment_paid", {"checkout_session_id": session_id})
+    _record_booking_audit(
+        booking_id, cliente_id,
+        "booking_payment_preauthorized" if is_preauth else "booking_payment_paid",
+        {"checkout_session_id": session_id},
+    )
     refreshed = _get_booking_row_by_id(booking_id)
     if refreshed and refreshed["status"] == "confirmed" and booking and booking["status"] == "pending_payment":
         try:
@@ -3012,6 +3078,130 @@ def process_booking_payment_expired_webhook(data_object: Dict[str, Any]) -> bool
         connection.commit()
     _record_booking_audit(booking_id, cliente_id, "booking_payment_expired", {})
     return True
+
+
+def _booking_payment_for_action(cliente_id: str, booking_id: str) -> sqlite3.Row:
+    booking_row = _load_booking_or_404(booking_id)
+    if booking_row["cliente_id"] != cliente_id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
+    payment = _booking_payment_row(booking_id)
+    if not payment or not payment["payment_intent_id"]:
+        raise HTTPException(status_code=409, detail="Esta reserva no tiene un pago Stripe asociado.")
+    return payment
+
+
+def capture_booking_payment(
+    cliente_id: str, booking_id: str, *, amount_cents: Optional[int] = None, reason: str = ""
+) -> Dict[str, Any]:
+    """Cobra una retencion (pre-auth): captura total o parcial del PaymentIntent.
+
+    Uso tipico: no-show o cancelacion fuera de plazo. La captura parcial libera
+    automaticamente el resto de la retencion en Stripe."""
+    payment = _booking_payment_for_action(cliente_id, booking_id)
+    if payment["status"] != "preauthorized":
+        raise HTTPException(status_code=409, detail="Solo se puede cobrar una retencion pendiente.")
+    amount = int(amount_cents or payment["amount_cents"] or 0)
+    if amount <= 0 or amount > int(payment["amount_cents"] or 0):
+        raise HTTPException(status_code=400, detail="Importe de cobro invalido.")
+    stripe_gateway._stripe_init()
+    try:
+        stripe_gateway.stripe.PaymentIntent.capture(
+            payment["payment_intent_id"],
+            amount_to_capture=amount,
+            stripe_account=payment["stripe_account_id"] or None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("Stripe capture fallo booking=%s: %s", booking_id, exc)
+        raise HTTPException(status_code=502, detail="No se pudo cobrar la retencion en Stripe.") from exc
+    now = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        connection.execute(
+            "UPDATE booking_payments SET status='paid', amount_cents=?, paid_at=?, updated_at=? WHERE booking_id=?",
+            (amount, now, now, booking_id),
+        )
+        connection.execute(
+            "UPDATE bookings SET payment_status='paid' WHERE id=? AND cliente_id=?",
+            (booking_id, cliente_id),
+        )
+        connection.commit()
+    _record_booking_audit(
+        booking_id, cliente_id, "booking_payment_captured",
+        {"amount_cents": amount, "reason": textnorm._sanitize_text(reason)},
+    )
+    return {"payment_status": "paid", "amount_cents": amount}
+
+
+def release_booking_payment(cliente_id: str, booking_id: str, *, reason: str = "") -> Dict[str, Any]:
+    """Libera una retencion sin cobrar (cancela el PaymentIntent pre-autorizado)."""
+    payment = _booking_payment_for_action(cliente_id, booking_id)
+    if payment["status"] != "preauthorized":
+        raise HTTPException(status_code=409, detail="Solo se puede liberar una retencion pendiente.")
+    stripe_gateway._stripe_init()
+    try:
+        stripe_gateway.stripe.PaymentIntent.cancel(
+            payment["payment_intent_id"],
+            stripe_account=payment["stripe_account_id"] or None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("Stripe release fallo booking=%s: %s", booking_id, exc)
+        raise HTTPException(status_code=502, detail="No se pudo liberar la retencion en Stripe.") from exc
+    now = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        connection.execute(
+            "UPDATE booking_payments SET status='released', updated_at=? WHERE booking_id=?",
+            (now, booking_id),
+        )
+        connection.execute(
+            "UPDATE bookings SET payment_status='released' WHERE id=? AND cliente_id=?",
+            (booking_id, cliente_id),
+        )
+        connection.commit()
+    _record_booking_audit(
+        booking_id, cliente_id, "booking_payment_released",
+        {"reason": textnorm._sanitize_text(reason)},
+    )
+    return {"payment_status": "released", "amount_cents": 0}
+
+
+def refund_booking_payment(
+    cliente_id: str, booking_id: str, *, amount_cents: Optional[int] = None, reason: str = ""
+) -> Dict[str, Any]:
+    """Reembolso total o parcial de un pago de cita ya cobrado."""
+    payment = _booking_payment_for_action(cliente_id, booking_id)
+    if payment["status"] not in ("paid", "partially_refunded"):
+        raise HTTPException(status_code=409, detail="Solo se puede reembolsar un pago cobrado.")
+    total = int(payment["amount_cents"] or 0)
+    amount = int(amount_cents or total)
+    if amount <= 0 or amount > total:
+        raise HTTPException(status_code=400, detail="Importe de reembolso invalido.")
+    stripe_gateway._stripe_init()
+    try:
+        refund_kwargs: Dict[str, Any] = {"payment_intent": payment["payment_intent_id"]}
+        if amount < total:
+            refund_kwargs["amount"] = amount
+        if payment["stripe_account_id"]:
+            refund_kwargs["stripe_account"] = payment["stripe_account_id"]
+        stripe_gateway.stripe.Refund.create(**refund_kwargs)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("Stripe refund fallo booking=%s: %s", booking_id, exc)
+        raise HTTPException(status_code=502, detail="No se pudo crear el reembolso en Stripe.") from exc
+    new_status = "refunded" if amount >= total else "partially_refunded"
+    now = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        connection.execute(
+            "UPDATE booking_payments SET status=?, refunded_at=?, updated_at=? WHERE booking_id=?",
+            (new_status, now, now, booking_id),
+        )
+        connection.execute(
+            "UPDATE bookings SET payment_status=? WHERE id=? AND cliente_id=?",
+            (new_status, booking_id, cliente_id),
+        )
+        connection.commit()
+    _record_booking_audit(
+        booking_id, cliente_id, "booking_payment_refunded",
+        {"amount_cents": amount, "partial": amount < total, "reason": textnorm._sanitize_text(reason)},
+    )
+    return {"payment_status": new_status, "amount_cents": amount}
 
 
 def _latest_booking_for_contact(

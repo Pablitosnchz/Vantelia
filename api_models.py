@@ -23,6 +23,7 @@ class DatosCita(BaseModel):
     telefono: str = Field(default="", max_length=30)
     servicio: str = Field(default="", max_length=120)
     employee_id: str = Field(default="", max_length=80)
+    location_id: str = Field(default="", max_length=64)
     fecha: str = Field(min_length=10, max_length=10)
     hora: str = Field(min_length=5, max_length=5)
     notas: str = Field(default="", max_length=500)
@@ -190,7 +191,7 @@ class ServicePayload(BaseModel):
     is_active: bool = True
     sort_order: int = Field(default=0, ge=0, le=9999)
     payment_mode: str = Field(default="payment_disabled", pattern=r"^(payment_disabled|payment_optional|payment_required)$")
-    payment_type: str = Field(default="full", pattern=r"^(full|deposit)$")
+    payment_type: str = Field(default="full", pattern=r"^(full|deposit|preauth)$")
     deposit_amount_cents: int = Field(default=0, ge=0, le=10_000_000)
     currency: str = Field(default="eur", pattern=r"^[a-zA-Z]{3}$")
 
@@ -203,9 +204,22 @@ class ServiceUpdatePayload(BaseModel):
     is_active: Optional[bool] = None
     sort_order: Optional[int] = Field(default=None, ge=0, le=9999)
     payment_mode: Optional[str] = Field(default=None, pattern=r"^(payment_disabled|payment_optional|payment_required)$")
-    payment_type: Optional[str] = Field(default=None, pattern=r"^(full|deposit)$")
+    payment_type: Optional[str] = Field(default=None, pattern=r"^(full|deposit|preauth)$")
     deposit_amount_cents: Optional[int] = Field(default=None, ge=0, le=10_000_000)
     currency: Optional[str] = Field(default=None, pattern=r"^[a-zA-Z]{3}$")
+
+
+class BookingPaymentActionPayload(BaseModel):
+    amount_cents: Optional[int] = Field(default=None, ge=1, le=10_000_000)
+    reason: str = Field(default="", max_length=300)
+
+
+class BookingPaymentActionResponse(BaseModel):
+    ok: bool = True
+    booking_id: str
+    payment_status: str = ""
+    amount_cents: int = 0
+    message: str = ""
 
 
 class ServicePaymentPolicyPayload(BaseModel):
@@ -272,6 +286,7 @@ class StaffBookingCreatePayload(BaseModel):
     telefono: str = Field(default="", max_length=40)
     servicio: str = Field(default="", max_length=160)
     employee_id: str = Field(default="", max_length=80)
+    location_id: str = Field(default="", max_length=64)
     fecha: str = Field(min_length=10, max_length=10)
     hora: str = Field(min_length=5, max_length=5)
     notas: str = Field(default="", max_length=1000)
@@ -334,6 +349,7 @@ class AuthUserPublic(BaseModel):
     email: str
     display_name: str
     role: str
+    portal_role: str = "owner"
     cliente_id: str = ""
     plan: str = PLAN_DEFAULT
     plan_label: str = "Free"
@@ -1033,6 +1049,7 @@ class AuthManagedUser(BaseModel):
     email: str
     display_name: str
     role: str
+    portal_role: str = "owner"
     cliente_id: str = ""
     is_active: bool
     created_at: str
@@ -1215,6 +1232,7 @@ class PortalEmployeePayload(BaseModel):
     break_windows: List[PortalScheduleBreakWindow] = Field(default_factory=list)
     closed_weekdays: List[int] = Field(default_factory=list)
     service_ids: List[str] = Field(default_factory=list)
+    location_id: str = Field(default="", max_length=64)
 
 
 class PortalEmployeePublic(BaseModel):
@@ -1234,6 +1252,7 @@ class PortalEmployeePublic(BaseModel):
     break_windows: List[PortalScheduleBreakWindow] = Field(default_factory=list)
     closed_weekdays: List[int] = Field(default_factory=list)
     service_ids: List[str] = Field(default_factory=list)
+    location_id: str = ""
     allows_all_services: bool = True
     bookings_today: int = 0
     bookings_upcoming: int = 0
@@ -1242,6 +1261,78 @@ class PortalEmployeePublic(BaseModel):
 
 class PortalEmployeesResponse(BaseModel):
     items: List[PortalEmployeePublic]
+
+
+class PortalLocationPayload(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    address: str = Field(default="", max_length=200)
+    phone: str = Field(default="", max_length=60)
+    timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
+    is_active: bool = True
+    whatsapp_phone_number_id: str = Field(default="", max_length=60)
+    voice_phone_number: str = Field(default="", max_length=40)
+
+
+class PortalLocationPublic(BaseModel):
+    location_id: str
+    cliente_id: str
+    name: str
+    address: str = ""
+    phone: str = ""
+    timezone: str = DEFAULT_TIMEZONE
+    is_active: bool = True
+    is_default: bool = False
+    sort_order: int = 0
+    employee_count: int = 0
+    resource_count: int = 0
+    whatsapp_phone_number_id: str = ""
+    voice_phone_number: str = ""
+
+
+class PortalLocationsResponse(BaseModel):
+    items: List[PortalLocationPublic]
+
+
+class ServiceLocationOverridePayload(BaseModel):
+    is_available: bool = True
+    price_cents: Optional[int] = Field(default=None, ge=0, le=10_000_000)
+    duration_minutes: Optional[int] = Field(default=None, ge=5, le=600)
+
+
+class ServiceLocationOverrideItem(BaseModel):
+    location_id: str
+    location_name: str = ""
+    is_default_location: bool = False
+    is_available: bool = True
+    has_override: bool = False
+    price_cents: Optional[int] = None
+    duration_minutes: Optional[int] = None
+    effective_price_cents: int = 0
+    effective_price_label: str = ""
+    effective_duration_minutes: int = 0
+
+
+class ServiceLocationsResponse(BaseModel):
+    service_slug: str
+    items: List[ServiceLocationOverrideItem]
+
+
+class PortalResourcePayload(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    is_active: bool = True
+
+
+class PortalResourcePublic(BaseModel):
+    resource_id: str
+    cliente_id: str
+    location_id: str
+    name: str
+    is_active: bool = True
+    sort_order: int = 0
+
+
+class PortalResourcesResponse(BaseModel):
+    items: List[PortalResourcePublic]
 
 
 class PortalDashboardResponse(BaseModel):
@@ -1608,3 +1699,86 @@ class OutreachTemplateOverride(BaseModel):
     subject_pool: str = ""
     body_text: str = ""
     body_html: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Comercio del portal (F4): productos, bonos y tarjetas regalo
+# ---------------------------------------------------------------------------
+
+
+class ProductPayload(BaseModel):
+    name: str = Field(default="", max_length=120)
+    description: str = Field(default="", max_length=600)
+    price_cents: int = Field(default=0, ge=0, le=10_000_000)
+    stock: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+    is_active: bool = True
+
+
+class ProductSalePayload(BaseModel):
+    qty: int = Field(default=1, ge=1, le=999)
+    booking_id: str = Field(default="", max_length=80)
+    customer_name: str = Field(default="", max_length=120)
+    customer_email: str = Field(default="", max_length=200)
+    payment_method: str = Field(default="cash", max_length=20)
+    location_id: str = Field(default="", max_length=64)
+    notes: str = Field(default="", max_length=500)
+
+
+class PackageItemPayload(BaseModel):
+    service_slug: str = Field(min_length=1, max_length=120)
+    qty: int = Field(default=1, ge=1, le=100)
+
+
+class PackagePayload(BaseModel):
+    name: str = Field(default="", max_length=120)
+    description: str = Field(default="", max_length=600)
+    items: List[PackageItemPayload] = Field(default_factory=list)
+    price_cents: int = Field(default=0, ge=0, le=10_000_000)
+    validity_days: int = Field(default=365, ge=1, le=3650)
+    is_active: bool = True
+
+
+class PackageSellPayload(BaseModel):
+    buyer_name: str = Field(default="", max_length=120)
+    buyer_email: str = Field(default="", max_length=200)
+    buyer_phone: str = Field(default="", max_length=40)
+    payment_method: str = Field(default="cash", max_length=20)
+    location_id: str = Field(default="", max_length=64)
+
+
+class PackageRedeemPayload(BaseModel):
+    booking_id: str = Field(min_length=3, max_length=80)
+
+
+class GiftCardIssuePayload(BaseModel):
+    amount_cents: int = Field(ge=100, le=10_000_000)
+    buyer_name: str = Field(default="", max_length=120)
+    buyer_email: str = Field(default="", max_length=200)
+    recipient_name: str = Field(default="", max_length=120)
+    recipient_email: str = Field(default="", max_length=200)
+    validity_days: int = Field(default=0, ge=0, le=3650)
+    location_id: str = Field(default="", max_length=64)
+    notes: str = Field(default="", max_length=500)
+
+
+class GiftCardRedeemPayload(BaseModel):
+    code: str = Field(min_length=4, max_length=20)
+    booking_id: str = Field(min_length=3, max_length=80)
+    amount_cents: Optional[int] = Field(default=None, ge=1, le=10_000_000)
+
+
+class GiftCardStatusPayload(BaseModel):
+    enabled: bool = True
+
+
+class PortalTeamMemberPayload(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    display_name: str = Field(default="", max_length=120)
+    portal_role: str = Field(default="staff", pattern="^(owner|manager|staff)$")
+
+
+class PortalTeamMemberUpdatePayload(BaseModel):
+    display_name: str = Field(default="", max_length=120)
+    portal_role: str = Field(default="", pattern="^(owner|manager|staff)$|^$")
+    is_active: Optional[bool] = None

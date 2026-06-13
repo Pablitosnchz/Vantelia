@@ -281,6 +281,7 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                             "customParameters", {}
                         ).get("call_sid", "")
                         state["from_number"] = voice._voice_call_from_number(state["call_sid"])
+                        state["location_id"] = voice._voice_call_location_id(state["call_sid"], cliente_id)
                     elif event == "stop":
                         break
             except WebSocketDisconnect:
@@ -332,6 +333,7 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                     result = await voice._voice_dispatch_tool(
                         cliente_id, fname, event.get("arguments", ""),
                         from_number=state.get("from_number", ""),
+                        location_id=state.get("location_id", ""),
                     )
                     if fname == "crear_cita" and result.get("ok"):
                         state["booked"] = True

@@ -228,8 +228,21 @@ async def _wa_send_service_picker(
     return True
 
 
-def _wa_employees_for_service(cliente_id: str, servicio: str) -> List[sqlite3.Row]:
-    rows = agenda._list_public_employee_rows(cliente_id, include_inactive=False)
+def _wa_location_id(cliente_id: str, phone_number_id: str) -> str:
+    """Centro asociado al numero de WhatsApp entrante (un numero por centro).
+    '' si el numero no esta mapeado: el flujo se comporta como mono-centro."""
+    if not phone_number_id:
+        return ""
+    return agenda._location_for_channel(cliente_id, whatsapp_phone_number_id=phone_number_id)
+
+
+def _wa_employees_for_service(
+    cliente_id: str, servicio: str, phone_number_id: str = ""
+) -> List[sqlite3.Row]:
+    location_id = _wa_location_id(cliente_id, phone_number_id)
+    rows = agenda._list_public_employee_rows(
+        cliente_id, include_inactive=False, location_id=location_id
+    )
     if not servicio:
         return [r for r in rows if not bool(r["is_default"])]
     return [
@@ -241,7 +254,7 @@ def _wa_employees_for_service(cliente_id: str, servicio: str) -> List[sqlite3.Ro
 async def _wa_send_employee_picker(
     *, cliente_id: str, phone_number_id: str, to_number: str, servicio: str,
 ) -> List[sqlite3.Row]:
-    employees = _wa_employees_for_service(cliente_id, servicio)
+    employees = _wa_employees_for_service(cliente_id, servicio, phone_number_id)
     if len(employees) <= 1:
         return employees
     rows: List[Dict[str, Any]] = []
@@ -353,7 +366,12 @@ async def _wa_send_date_picker(
                     servicio=servicio,
                 )
             else:
-                _, available = await agenda._public_slot_sets_for_day(cliente_id, candidate.isoformat(), servicio=servicio)
+                _, available = await agenda._public_slot_sets_for_day(
+                    cliente_id,
+                    candidate.isoformat(),
+                    servicio=servicio,
+                    location_id=_wa_location_id(cliente_id, phone_number_id),
+                )
         except Exception:
             available = set()
 
@@ -406,7 +424,12 @@ async def _wa_send_time_picker(
                 servicio=servicio,
             )
         else:
-            all_slots, available = await agenda._public_slot_sets_for_day(cliente_id, fecha_iso, servicio=servicio)
+            all_slots, available = await agenda._public_slot_sets_for_day(
+                cliente_id,
+                fecha_iso,
+                servicio=servicio,
+                location_id=_wa_location_id(cliente_id, phone_number_id),
+            )
     except HTTPException as exc:
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id,
@@ -489,7 +512,11 @@ async def _wa_send_availability_overview(
         if candidate.weekday() in closed:
             continue
         try:
-            _, available = await agenda._public_slot_sets_for_day(cliente_id, candidate.isoformat())
+            _, available = await agenda._public_slot_sets_for_day(
+                cliente_id,
+                candidate.isoformat(),
+                location_id=_wa_location_id(cliente_id, phone_number_id),
+            )
         except Exception:
             continue
         emoji = "✅" if available else "❌"
@@ -515,16 +542,29 @@ async def _wa_create_booking(
         booking_dt = textnorm._parse_date(flow.fecha)
         agenda._validate_booking_window(cliente_id, booking_dt)
 
-        employee_row = agenda._resolve_employee_for_booking(cliente_id, flow.employee_id)
+        wa_location_id = _wa_location_id(cliente_id, phone_number_id)
+        if flow.employee_id:
+            employee_row = agenda._resolve_employee_for_booking(cliente_id, flow.employee_id)
+        else:
+            # Sin preferencia: elegir entre los profesionales del centro del numero entrante.
+            employee_row = await agenda._resolve_public_booking_employee(
+                cliente_id,
+                flow.fecha,
+                flow.hora,
+                servicio=flow.servicio,
+                location_id=wa_location_id,
+            )
         booking_cfg = agenda._employee_schedule_from_row(employee_row)
         tz_name = booking_cfg.get("timezone") or settings.DEFAULT_TIMEZONE
         service_row = agenda._find_service_by_name(cliente_id, flow.servicio)
         service_duration = agenda._service_duration_minutes(cliente_id, flow.servicio, employee_row)
         service_id = service_row["slug"] if service_row else ""
-        service_price = int(service_row["price_cents"]) if service_row else 0
+        service_price = agenda._service_price_cents_resolved(
+            cliente_id, service_row, employee_row["location_id"] or ""
+        )
 
         if not await agenda._booking_slot_available(
-            cliente_id, flow.fecha, flow.hora, employee_id=flow.employee_id, duration_minutes=service_duration
+            cliente_id, flow.fecha, flow.hora, employee_id=employee_row["id"], duration_minutes=service_duration
         ):
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
@@ -682,6 +722,67 @@ async def _wa_create_booking(
     return True
 
 
+async def _wa_handle_reminder_reply(
+    *,
+    cliente_id: str,
+    phone_number_id: str,
+    from_number: str,
+    interactive_id: str,
+    request: Request,
+) -> None:
+    """Procesa los botones del recordatorio: bkok_<id> confirma asistencia,
+    bkcancel_<id> cancela la cita. Toda respuesta queda en booking_audit."""
+    confirming = interactive_id.startswith("bkok_")
+    booking_id = interactive_id.split("_", 1)[1] if "_" in interactive_id else ""
+    booking_row = booking._get_booking_row_by_id(booking_id) if booking_id else None
+    phone_norm = crm._normalize_phone_for_match(from_number)
+    row_phone_norm = crm._normalize_phone_for_match(booking_row["telefono"] or "") if booking_row else ""
+    if (
+        not booking_row
+        or booking_row["cliente_id"] != cliente_id
+        or not phone_norm
+        or phone_norm != row_phone_norm
+    ):
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text="No he podido localizar esa cita. Escribe *menu* si necesitas ayuda.",
+        )
+        return
+    if booking_row["status"] == "cancelled":
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text="Esa cita ya estaba cancelada. Escribe *menu* si quieres reservar otra.",
+        )
+        return
+    if confirming:
+        booking._record_booking_audit(
+            booking_row["id"], cliente_id, "attendance_confirmed_by_customer",
+            {"channel": "whatsapp", "via": "reminder_button"},
+        )
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text="✅ ¡Gracias! Tu asistencia queda confirmada. Te esperamos.",
+        )
+        return
+    result = await booking._cancel_booking_by_code(
+        cliente_id,
+        booking_row["booking_code"] or "",
+        trusted_phone=from_number,
+        source="whatsapp_reminder_button",
+        request=request,
+    )
+    if result.get("ok"):
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text="✅ Tu cita queda cancelada. Escribe *menu* si quieres reservar de nuevo.",
+        )
+    else:
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text=str(result.get("message") or "No se ha podido cancelar la cita. Escribe *menu* para gestionar tus citas."),
+        )
+
+
 async def _handle_whatsapp_message(
     *,
     cliente_id: str,
@@ -698,6 +799,17 @@ async def _handle_whatsapp_message(
 
     iid = (interactive_id or "").strip()
     text_norm = textnorm._strip_accents((incoming_text or "").lower().strip())
+
+    # Respuesta a los botones del recordatorio (confirmo / cancelar cita).
+    if iid.startswith("bkok_") or iid.startswith("bkcancel_"):
+        await _wa_handle_reminder_reply(
+            cliente_id=cliente_id,
+            phone_number_id=phone_number_id,
+            from_number=from_number,
+            interactive_id=iid,
+            request=request,
+        )
+        return
 
     # Comando "menu" siempre rompe flujo y muestra menu
     if iid in ("menu_main", "back_menu") or text_norm in ("menu", "menu principal", "inicio", "opciones", "principal"):
@@ -834,7 +946,7 @@ async def _handle_whatsapp_message(
             )
             return
         # Sin servicios: saltar a profesional
-        employees = _wa_employees_for_service(cliente_id, "")
+        employees = _wa_employees_for_service(cliente_id, "", phone_number_id)
         if len(employees) > 1:
             flow.flow = "booking_employee"
             await _wa_send_employee_picker(
@@ -1060,7 +1172,7 @@ async def _handle_whatsapp_message(
             return
         flow.servicio = chosen
 
-        employees = _wa_employees_for_service(cliente_id, flow.servicio)
+        employees = _wa_employees_for_service(cliente_id, flow.servicio, phone_number_id)
         if not employees:
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
@@ -1091,7 +1203,7 @@ async def _handle_whatsapp_message(
         if iid.startswith("emp_"):
             emp_id = iid[len("emp_"):]
         else:
-            for emp in _wa_employees_for_service(cliente_id, flow.servicio):
+            for emp in _wa_employees_for_service(cliente_id, flow.servicio, phone_number_id):
                 if textnorm._strip_accents(str(emp["name"]).lower()) == textnorm._strip_accents(incoming_text.lower().strip()):
                     emp_id = emp["id"]
                     break

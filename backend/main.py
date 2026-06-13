@@ -51,6 +51,9 @@ db._init_database()
 agenda._ensure_default_employees_for_all_clients()
 
 
+agenda._ensure_default_locations_for_all_clients()
+
+
 clients._sync_clientes_table_from_config()
 
 
@@ -273,4 +276,5 @@ from backend.routers import (  # noqa: E402,F401
     tracking,
     admin_captacion,
     voice_web,
+    portal_commerce,
 )

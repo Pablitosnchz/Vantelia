@@ -321,7 +321,7 @@ async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGene
 
     if data.website_url:
         try:
-            scrape_result = await asyncio.to_thread(
+            scrape_result = await timeutils._to_thread(
                 run_onboarding,
                 website_url=data.website_url,
                 api_key=settings.OPENAI_API_KEY,
@@ -391,7 +391,7 @@ async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGene
     )
 
     try:
-        await asyncio.to_thread(portal._save_admin_client_payload, cliente_id, payload, request)
+        await timeutils._to_thread(portal._save_admin_client_payload, cliente_id, payload, request)
         if scrape_result is not None:
             rag._seed_qa_from_onboarding(cliente_id, scrape_result)
     except HTTPException:

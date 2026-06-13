@@ -688,6 +688,61 @@
     .employee-role { color: var(--soft); font-size: 0.82rem; }
     .employee-status { font-size: 0.75rem; }
 
+    /* ── Ventas (productos / bonos / gift cards) ── */
+    .ventas-subtab { padding: 6px 14px; font-size: 0.84rem; border-radius: 999px; opacity: 0.7; }
+    .ventas-subtab.active { background: var(--accent); color: #00131a; opacity: 1; font-weight: 600; }
+    .sale-row {
+      display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+      background: var(--panel-2, rgba(255,255,255,0.03)); border: 1px solid var(--line, rgba(255,255,255,0.08));
+      border-radius: 10px; font-size: 0.86rem;
+    }
+    .sale-row .sale-main { flex: 1; min-width: 0; }
+    .sale-row .sale-amount { font-weight: 700; white-space: nowrap; }
+    .gift-code { font-family: monospace; font-weight: 700; letter-spacing: 0.5px; }
+    .pill { display:inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+    .pill-active { background: rgba(46,204,113,0.15); color: #2ecc71; }
+    .pill-used, .pill-redeemed { background: rgba(255,255,255,0.08); color: var(--soft); }
+    .pill-expired, .pill-disabled { background: rgba(231,76,60,0.15); color: #e74c3c; }
+
+    /* ── Informes (dashboard económico) ── */
+    .inf-kpis {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px; margin-bottom: 16px;
+    }
+    .inf-kpi {
+      position: relative; overflow: hidden; padding: 16px 18px; border-radius: 14px;
+      background: linear-gradient(145deg, rgba(0,177,217,0.10), rgba(255,255,255,0.02));
+      border: 1px solid var(--line, rgba(255,255,255,0.08));
+    }
+    .inf-kpi::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(420px 80px at 0% 0%, rgba(0,177,217,0.12), transparent 60%);
+    }
+    .inf-kpi .k-label { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--soft); }
+    .inf-kpi .k-value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; font-family: var(--font-title); }
+    .inf-kpi .k-delta { font-size: 0.76rem; margin-top: 4px; font-weight: 600; }
+    .inf-kpi .k-delta.up { color: #2ecc71; }
+    .inf-kpi .k-delta.down { color: #e74c3c; }
+    .inf-kpi .k-delta.flat { color: var(--soft); }
+    .inf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+    .inf-card {
+      background: var(--panel-2, rgba(255,255,255,0.03)); border: 1px solid var(--line, rgba(255,255,255,0.08));
+      border-radius: 14px; padding: 16px 18px; min-height: 200px;
+    }
+    .inf-card-wide { grid-column: span 2; }
+    @media (max-width: 900px) { .inf-card-wide { grid-column: span 1; } }
+    .inf-card-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+    .inf-card-sub { font-size: 0.76rem; color: var(--soft); }
+    .inf-chart { width: 100%; min-height: 170px; }
+    .inf-chart svg { width: 100%; height: auto; display: block; }
+    .inf-preset { padding: 5px 12px; font-size: 0.8rem; border-radius: 999px; opacity: 0.7; }
+    .inf-preset.active { background: var(--accent); color: #00131a; opacity: 1; font-weight: 600; }
+    .inf-table { display: flex; flex-direction: column; gap: 6px; }
+    .inf-trow { display: flex; align-items: center; gap: 8px; font-size: 0.84rem; }
+    .inf-trow .t-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .inf-trow .t-bar { height: 6px; border-radius: 3px; background: var(--accent); opacity: 0.85; min-width: 2px; }
+    .inf-trow .t-val { color: var(--soft); white-space: nowrap; font-size: 0.78rem; }
+
     /* ── Side panel (equipo editor) ── */
     .side-panel {
       position: fixed; top: 0; right: -360px; width: 340px; height: 100%;
@@ -812,6 +867,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
     <span>Overview</span>
   </div>
+  <div class="nav-item" data-tab="informes">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    <span>Informes</span>
+  </div>
   <div class="nav-item" data-tab="chats">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
     <span>Chats</span>
@@ -858,6 +917,10 @@
   <div class="nav-item" data-tab="servicios">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
     <span>Servicios</span>
+  </div>
+  <div class="nav-item" data-tab="ventas">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+    <span>Ventas</span>
   </div>
   <div class="nav-item" data-tab="horarios">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -1855,6 +1918,11 @@
       <p>Activa las citas para configurar el equipo de profesionales.</p>
       <button class="btn btn-primary" onclick="setTab('citas')">Ir a Citas</button>
     </div>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600;">Centros</h2>
+      <button class="btn btn-primary" id="centroNewBtn" style="margin-left:auto;">+ Nuevo centro</button>
+    </div>
+    <div class="employee-grid" id="centrosGrid" style="margin-bottom:28px;"></div>
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;">
       <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600;">Equipo</h2>
       <button class="btn btn-primary" id="equipoNewBtn" style="margin-left:auto;">+ Nuevo profesional</button>
@@ -1875,6 +1943,89 @@
     </div>
     <p class="panel-sub">Cada servicio tiene su propia duración y precio. La duración define cuánto bloquea en la agenda.</p>
     <div id="serviciosList" style="display:flex; flex-direction:column; gap:10px; margin-top:14px;"></div>
+  </section>
+
+  <!-- VENTAS (productos, bonos, tarjetas regalo) -->
+  <section class="page" id="page-ventas">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px; flex-wrap:wrap;">
+      <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600;">Ventas</h2>
+      <div class="ventas-subtabs" style="margin-left:auto; display:flex; gap:6px;">
+        <button class="btn ventas-subtab active" data-vtab="productos" type="button">Productos</button>
+        <button class="btn ventas-subtab" data-vtab="bonos" type="button">Bonos</button>
+        <button class="btn ventas-subtab" data-vtab="gift" type="button">Tarjetas regalo</button>
+      </div>
+    </div>
+    <p class="panel-sub" id="ventasSubText">Vende productos complementarios y registra cada venta en caja.</p>
+
+    <div id="ventasPanelProductos" class="ventas-panel">
+      <div style="display:flex; margin:12px 0;">
+        <button class="btn btn-primary" id="productNewBtn" style="margin-left:auto;">+ Nuevo producto</button>
+      </div>
+      <div class="employee-grid" id="productosGrid"></div>
+      <h3 style="font-size:0.95rem; margin:22px 0 8px; color:var(--soft);">Últimas ventas</h3>
+      <div id="ventasRecientes" style="display:flex; flex-direction:column; gap:6px;"></div>
+    </div>
+
+    <div id="ventasPanelBonos" class="ventas-panel" style="display:none;">
+      <div style="display:flex; margin:12px 0;">
+        <button class="btn btn-primary" id="packageNewBtn" style="margin-left:auto;">+ Nuevo bono</button>
+      </div>
+      <div class="employee-grid" id="bonosGrid"></div>
+      <h3 style="font-size:0.95rem; margin:22px 0 8px; color:var(--soft);">Bonos vendidos</h3>
+      <input type="text" class="field-input" id="purchasesSearch" placeholder="Buscar por nombre, email o teléfono…" style="max-width:340px; margin-bottom:10px;" />
+      <div id="purchasesList" style="display:flex; flex-direction:column; gap:6px;"></div>
+    </div>
+
+    <div id="ventasPanelGift" class="ventas-panel" style="display:none;">
+      <div style="display:flex; margin:12px 0;">
+        <button class="btn btn-primary" id="giftNewBtn" style="margin-left:auto;">+ Emitir tarjeta</button>
+      </div>
+      <input type="text" class="field-input" id="giftSearch" placeholder="Buscar por código, comprador…" style="max-width:340px; margin-bottom:10px;" />
+      <div id="giftList" style="display:flex; flex-direction:column; gap:6px;"></div>
+    </div>
+  </section>
+
+  <!-- INFORMES (dashboard económico) -->
+  <section class="page" id="page-informes">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+      <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600;">Informes</h2>
+      <div style="margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <select class="field-input" id="infLocation" style="width:auto; min-width:150px;"><option value="">Todos los centros</option></select>
+        <div class="inf-presets" style="display:flex; gap:4px;">
+          <button class="btn inf-preset" data-days="7" type="button">7d</button>
+          <button class="btn inf-preset active" data-days="30" type="button">30d</button>
+          <button class="btn inf-preset" data-days="90" type="button">90d</button>
+        </div>
+        <button class="btn btn-ghost" id="infExportBtn" type="button" title="Descargar CSV">⬇ CSV</button>
+      </div>
+    </div>
+    <div class="inf-kpis" id="infKpis"></div>
+    <div class="inf-grid">
+      <div class="inf-card inf-card-wide">
+        <div class="inf-card-head"><b>Ingresos</b><span class="inf-card-sub" id="infRevenueRange"></span></div>
+        <div id="chartRevenue" class="inf-chart"></div>
+      </div>
+      <div class="inf-card inf-card-wide">
+        <div class="inf-card-head"><b>Citas por día</b></div>
+        <div id="chartBookings" class="inf-chart"></div>
+      </div>
+      <div class="inf-card">
+        <div class="inf-card-head"><b>Por servicio</b></div>
+        <div id="chartServices" class="inf-chart inf-chart-donut"></div>
+      </div>
+      <div class="inf-card">
+        <div class="inf-card-head"><b>Por profesional</b></div>
+        <div id="tableEmployees" class="inf-table"></div>
+      </div>
+      <div class="inf-card">
+        <div class="inf-card-head"><b>Por centro</b></div>
+        <div id="tableLocations" class="inf-table"></div>
+      </div>
+      <div class="inf-card">
+        <div class="inf-card-head"><b>Por canal</b></div>
+        <div id="tableSources" class="inf-table"></div>
+      </div>
+    </div>
   </section>
 
   <!-- HORARIOS -->
@@ -2021,6 +2172,28 @@
       </div>
     </div>
 
+    <div class="panel-card" style="margin-top:18px;" id="accessTeamBlock">
+      <h2>Equipo de acceso</h2>
+      <p class="panel-sub">Quién puede entrar a este panel y con qué permisos. Propietario: todo. Encargado: gestión sin facturación ni cobros. Recepción: agenda, chats y ventas.</p>
+      <div id="accessTeamList" style="display:flex; flex-direction:column; gap:8px; margin:14px 0;"></div>
+      <div style="border-top:1px solid var(--line, rgba(255,255,255,0.08)); padding-top:14px;">
+        <b style="font-size:0.9rem;">Añadir acceso</b>
+        <div class="form-row" style="margin-top:10px;">
+          <div class="field"><label class="field-label">Email</label><input type="email" class="field-input" id="accessTeamEmail" /></div>
+          <div class="field"><label class="field-label">Nombre</label><input type="text" class="field-input" id="accessTeamName" maxlength="120" /></div>
+          <div class="field"><label class="field-label">Contraseña</label><input type="password" class="field-input" id="accessTeamPass" minlength="8" /></div>
+          <div class="field"><label class="field-label">Rol</label>
+            <select class="field-input" id="accessTeamRole">
+              <option value="staff">Recepción</option>
+              <option value="manager">Encargado</option>
+              <option value="owner">Propietario</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="accessTeamAddBtn" style="margin-top:12px;">+ Crear acceso</button>
+      </div>
+    </div>
+
     <div class="panel-card" style="margin-top:18px; border-color:var(--danger);">
       <h2 style="color:var(--danger);">Zona de peligro</h2>
       <p class="panel-sub">Cerrar sesión en este dispositivo.</p>
@@ -2052,6 +2225,7 @@
     <input type="hidden" id="equipoEditId" />
     <div class="field" style="margin-bottom:12px;"><label class="field-label">Nombre</label><input type="text" class="field-input" id="equipoNombre" maxlength="120" /></div>
     <div class="field" style="margin-bottom:12px;"><label class="field-label">Rol</label><input type="text" class="field-input" id="equipoRol" maxlength="80" /></div>
+    <div class="field" id="equipoCentroField" style="margin-bottom:12px;"><label class="field-label">Centro</label><select class="field-input" id="equipoCentro"></select></div>
     <div class="field" style="margin-bottom:12px;"><label class="field-label">Color</label><div class="color-row"><input type="color" id="equipoColor" /><input class="field-input" id="equipoColorText" maxlength="7" /></div></div>
     <label style="display:flex; align-items:center; gap:8px; margin-bottom:16px; color:var(--soft); font-size:0.88rem;"><input type="checkbox" id="equipoActivo" checked /> Activo</label>
     <div class="field" style="margin-bottom:12px;">
@@ -2062,6 +2236,118 @@
     <div style="display:flex; gap:10px; margin-top:18px;">
       <button class="btn btn-primary" id="equipoSaveBtn" style="flex:1;">Guardar</button>
       <button class="btn" id="equipoDeleteBtn" style="background:var(--danger-soft); color:var(--danger); border:1px solid var(--danger);">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Side panel: centro editor -->
+<div class="drawer-overlay" id="centroOverlay"></div>
+<div class="side-panel" id="centroPanel">
+  <div class="side-panel-head">
+    <b id="centroPanelTitle">Centro</b>
+    <button id="centroPanelClose">×</button>
+  </div>
+  <div class="side-panel-body">
+    <input type="hidden" id="centroEditId" />
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Nombre</label><input type="text" class="field-input" id="centroNombre" maxlength="120" /></div>
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Dirección</label><input type="text" class="field-input" id="centroDireccion" maxlength="200" /></div>
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Teléfono</label><input type="text" class="field-input" id="centroTelefono" maxlength="60" /></div>
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">WhatsApp del centro (phone_number_id)</label><input type="text" class="field-input" id="centroWaId" maxlength="60" placeholder="opcional · enruta los WhatsApp entrantes a este centro" /></div>
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Número de voz del centro</label><input type="text" class="field-input" id="centroVozNum" maxlength="40" placeholder="opcional · ej. +34911222333" /></div>
+    <div class="field" id="centroSalasWrap" style="display:none; margin-bottom:12px;">
+      <label class="field-label">Salas / recursos</label>
+      <div class="panel-sub" style="margin:0 0 8px;">Con salas configuradas, el aforo limita cuántas citas pueden solaparse en este centro. Sin salas, no hay límite por espacio.</div>
+      <div id="centroSalasList" style="display:flex; flex-direction:column; gap:6px;"></div>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <input type="text" class="field-input" id="centroSalaNueva" maxlength="120" placeholder="Nombre de sala (ej. Sala 1)" style="flex:1;" />
+        <button class="btn" id="centroSalaAddBtn" type="button">Añadir</button>
+      </div>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; margin-bottom:16px; color:var(--soft); font-size:0.88rem;"><input type="checkbox" id="centroActivo" checked /> Activo</label>
+    <div id="centroDefaultNote" style="display:none; font-size:0.82rem; color:var(--soft-2); padding:8px 10px; background:rgba(255,255,255,0.04); border-radius:8px; margin-bottom:12px;">Centro principal: no se puede desactivar ni eliminar. Puedes editar sus datos.</div>
+    <div style="display:flex; gap:10px; margin-top:18px;">
+      <button class="btn btn-primary" id="centroSaveBtn" style="flex:1;">Guardar</button>
+      <button class="btn" id="centroDeleteBtn" style="background:var(--danger-soft); color:var(--danger); border:1px solid var(--danger);">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Side panel: producto -->
+<div class="drawer-overlay" id="productOverlay"></div>
+<div class="side-panel" id="productPanel">
+  <div class="side-panel-head"><b id="productPanelTitle">Producto</b><button id="productPanelClose">×</button></div>
+  <div class="side-panel-body">
+    <input type="hidden" id="productEditId" />
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Nombre</label><input type="text" class="field-input" id="productNombre" maxlength="120" /></div>
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Precio (€)</label><input type="number" class="field-input" id="productPrecio" min="0" step="0.01" /></div>
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Stock (vacío = sin control)</label><input type="number" class="field-input" id="productStock" min="0" step="1" /></div>
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Descripción</label><textarea class="field-input" id="productDesc" rows="2" maxlength="600"></textarea></div>
+    <label style="display:flex; align-items:center; gap:8px; margin-bottom:16px; color:var(--soft); font-size:0.88rem;"><input type="checkbox" id="productActivo" checked /> Activo</label>
+    <div id="productSellBlock" style="display:none; border-top:1px solid var(--line, rgba(255,255,255,0.1)); padding-top:14px; margin-bottom:14px;">
+      <b style="font-size:0.9rem;">Registrar venta</b>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <input type="number" class="field-input" id="productSellQty" min="1" step="1" value="1" style="width:80px;" />
+        <select class="field-input" id="productSellMethod" style="flex:1;">
+          <option value="cash">Efectivo</option><option value="card">Tarjeta</option>
+          <option value="transfer">Transferencia</option><option value="other">Otro</option>
+        </select>
+      </div>
+      <input type="text" class="field-input" id="productSellCustomer" placeholder="Cliente (opcional)" style="margin-top:8px;" />
+      <button class="btn btn-primary" id="productSellBtn" style="width:100%; margin-top:10px;">💶 Cobrar venta</button>
+    </div>
+    <div style="display:flex; gap:10px; margin-top:8px;">
+      <button class="btn btn-primary" id="productSaveBtn" style="flex:1;">Guardar</button>
+      <button class="btn" id="productDeleteBtn" style="background:var(--danger-soft); color:var(--danger); border:1px solid var(--danger);">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Side panel: bono -->
+<div class="drawer-overlay" id="packageOverlay"></div>
+<div class="side-panel" id="packagePanel">
+  <div class="side-panel-head"><b id="packagePanelTitle">Bono</b><button id="packagePanelClose">×</button></div>
+  <div class="side-panel-body">
+    <input type="hidden" id="packageEditId" />
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Nombre</label><input type="text" class="field-input" id="packageNombre" maxlength="120" placeholder="Ej. Bono 5 masajes" /></div>
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Precio del bono (€)</label><input type="number" class="field-input" id="packagePrecio" min="0" step="0.01" /></div>
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Validez (días)</label><input type="number" class="field-input" id="packageValidez" min="1" step="1" value="365" /></div>
+    <div class="field" style="margin-bottom:12px;">
+      <label class="field-label">Sesiones incluidas</label>
+      <div id="packageItems" style="display:flex; flex-direction:column; gap:6px;"></div>
+      <button class="btn" id="packageAddItemBtn" type="button" style="margin-top:8px; font-size:0.82rem;">+ Añadir servicio</button>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; margin-bottom:16px; color:var(--soft); font-size:0.88rem;"><input type="checkbox" id="packageActivo" checked /> Activo</label>
+    <div id="packageSellBlock" style="display:none; border-top:1px solid var(--line, rgba(255,255,255,0.1)); padding-top:14px; margin-bottom:14px;">
+      <b style="font-size:0.9rem;">Vender este bono</b>
+      <input type="text" class="field-input" id="packageBuyerName" placeholder="Nombre del cliente" style="margin-top:10px;" />
+      <input type="email" class="field-input" id="packageBuyerEmail" placeholder="Email del cliente" style="margin-top:8px;" />
+      <input type="tel" class="field-input" id="packageBuyerPhone" placeholder="Teléfono (opcional)" style="margin-top:8px;" />
+      <select class="field-input" id="packageSellMethod" style="margin-top:8px;">
+        <option value="cash">Efectivo</option><option value="card">Tarjeta</option>
+        <option value="transfer">Transferencia</option><option value="other">Otro</option>
+      </select>
+      <button class="btn btn-primary" id="packageSellBtn" style="width:100%; margin-top:10px;">💶 Vender bono</button>
+    </div>
+    <div style="display:flex; gap:10px; margin-top:8px;">
+      <button class="btn btn-primary" id="packageSaveBtn" style="flex:1;">Guardar</button>
+      <button class="btn" id="packageDeleteBtn" style="background:var(--danger-soft); color:var(--danger); border:1px solid var(--danger);">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Side panel: tarjeta regalo -->
+<div class="drawer-overlay" id="giftOverlay"></div>
+<div class="side-panel" id="giftPanel">
+  <div class="side-panel-head"><b>Emitir tarjeta regalo</b><button id="giftPanelClose">×</button></div>
+  <div class="side-panel-body">
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Importe (€)</label><input type="number" class="field-input" id="giftImporte" min="1" step="0.01" /></div>
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Comprador</label><input type="text" class="field-input" id="giftBuyer" maxlength="120" placeholder="Nombre (opcional)" /></div>
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Para (destinatario)</label><input type="text" class="field-input" id="giftRecipient" maxlength="120" placeholder="Nombre (opcional)" /></div>
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Caducidad (días, 0 = sin caducidad)</label><input type="number" class="field-input" id="giftValidez" min="0" step="1" value="365" /></div>
+    <button class="btn btn-primary" id="giftIssueBtn" style="width:100%; margin-top:8px;">🎁 Emitir tarjeta</button>
+    <div id="giftIssued" style="display:none; margin-top:14px; padding:14px; border-radius:10px; background:rgba(46,204,113,0.1); border:1px solid rgba(46,204,113,0.3); text-align:center;">
+      <div style="font-size:0.8rem; color:var(--soft);">Código de la tarjeta</div>
+      <div class="gift-code" style="font-size:1.3rem; margin-top:4px;" id="giftIssuedCode"></div>
     </div>
   </div>
 </div>
@@ -2157,10 +2443,15 @@
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Duración (minutos) *</label><input type="number" class="field-input" id="svcDuracion" min="5" max="600" step="5" value="30" /></div>
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Precio (€)</label><input type="number" class="field-input" id="svcPrecio" min="0" step="0.01" placeholder="0 = a consultar" /></div>
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Cobro Stripe</label><select class="field-input" id="svcPaymentMode"><option value="payment_disabled">Sin cobro</option><option value="payment_optional">Pago opcional</option><option value="payment_required">Pago requerido</option></select></div>
-    <div class="field" style="margin-bottom:10px;"><label class="field-label">Tipo de cobro</label><select class="field-input" id="svcPaymentType"><option value="full">Importe completo</option><option value="deposit">Depósito</option></select></div>
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Tipo de cobro</label><select class="field-input" id="svcPaymentType"><option value="full">Importe completo</option><option value="deposit">Depósito</option><option value="preauth">Retención (sin cobro inmediato; se cobra desde el panel si procede)</option></select></div>
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Depósito (€)</label><input type="number" class="field-input" id="svcDeposit" min="0" step="0.01" placeholder="Solo para depósitos" /></div>
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Descripción</label><textarea class="field-input" id="svcDesc" rows="2" placeholder="opcional"></textarea></div>
     <label style="display:flex; align-items:center; gap:8px; margin-bottom:14px; cursor:pointer;"><input type="checkbox" id="svcActivo" checked /> <span>Activo (visible para reservar)</span></label>
+    <div class="field" id="svcLocationsWrap" style="display:none; margin-bottom:14px;">
+      <label class="field-label">Disponibilidad y precio por centro</label>
+      <div class="panel-sub" style="margin:0 0 8px;">Campos vacíos = hereda el precio y duración generales del servicio.</div>
+      <div id="svcLocationsList" style="display:flex; flex-direction:column; gap:8px;"></div>
+    </div>
     <input type="hidden" id="svcSlug" />
     <button class="btn btn-primary" id="svcSaveBtn" style="width:100%;">Guardar</button>
   </div>
@@ -2205,7 +2496,7 @@ const state = {
   session_id: 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
 };
 
-const TABS = ['overview','chats','knowledge','qa','tune','voz','whatsapp','appearance','payments','billing','canales','citas','equipo','servicios','horarios','mensajes','instalacion','cuenta'];
+const TABS = ['overview','informes','chats','knowledge','qa','tune','voz','whatsapp','appearance','payments','billing','canales','citas','equipo','servicios','ventas','horarios','mensajes','instalacion','cuenta'];
 const billingState = { period: 'monthly', plans: [], current: 'free', portal: false };
 
 function formatDetail(d) {
@@ -2282,7 +2573,7 @@ function setTab(tab) {
     knowledge:'Conocimiento', qa:'Q&A', tune:'Tune AI', voz:'Asistente de voz', whatsapp:'WhatsApp',
     appearance:'Apariencia', payments:'Cobros Stripe', billing:'Suscripción',
     citas:'Citas', equipo:'Equipo', servicios:'Servicios', horarios:'Horarios',
-    canales:'Canales de envio',
+    canales:'Canales de envio', ventas:'Ventas', informes:'Informes',
     mensajes:'Recordatorios y avisos', instalacion:'Instalación', cuenta:'Cuenta',
   };
   document.getElementById('pageTitle').textContent = titles[tab] || 'Panel';
@@ -2301,7 +2592,9 @@ function setTab(tab) {
   if (tab === 'horarios')   loadHorarios();
   if (tab === 'mensajes')   loadMensajes();
   if (tab === 'instalacion') loadInstalacion();
-  if (tab === 'cuenta')     loadCuenta();
+  if (tab === 'cuenta')     { loadCuenta(); loadAccessTeam(); }
+  if (tab === 'ventas')     loadVentas();
+  if (tab === 'informes')   loadInformes();
 }
 
 document.querySelectorAll('.nav-item').forEach(n => {
@@ -4459,6 +4752,61 @@ function renderServicios() {
     cont.appendChild(row);
   });
 }
+async function loadSvcLocations(slug) {
+  const wrap = document.getElementById('svcLocationsWrap');
+  const list = document.getElementById('svcLocationsList');
+  wrap.style.display = 'none';
+  list.innerHTML = '';
+  if (!slug) return;
+  try {
+    if (!allLocations.length) {
+      const locsRaw = await api('/auth/locations').catch(() => ({ items: [] }));
+      allLocations = Array.isArray(locsRaw) ? locsRaw : (locsRaw?.items || []);
+    }
+    if (allLocations.length <= 1) return;
+    const data = await api(`/auth/services/${encodeURIComponent(slug)}/locations`);
+    (data?.items || []).forEach(item => {
+      const row = document.createElement('div');
+      row.dataset.loc = item.location_id;
+      row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 10px; background:rgba(255,255,255,0.04); border-radius:8px; flex-wrap:wrap;';
+      row.innerHTML = `
+        <label style="display:flex; align-items:center; gap:6px; flex:1; min-width:120px; font-size:0.86rem; cursor:pointer;">
+          <input type="checkbox" data-avail ${item.is_available ? 'checked' : ''} />
+          <span>${escapeHtml(item.location_name)}</span>
+        </label>
+        <input type="number" class="field-input" data-price min="0" step="0.01" placeholder="${(item.effective_price_cents/100) || 'precio'}" value="${item.price_cents !== null && item.price_cents !== undefined ? (item.price_cents/100) : ''}" style="width:90px; padding:6px 8px;" title="Precio en este centro (€)" />
+        <input type="number" class="field-input" data-dur min="5" max="600" step="5" placeholder="${item.effective_duration_minutes} min" value="${item.duration_minutes !== null && item.duration_minutes !== undefined ? item.duration_minutes : ''}" style="width:80px; padding:6px 8px;" title="Duración en este centro (min)" />`;
+      list.appendChild(row);
+    });
+    wrap.style.display = '';
+  } catch(e) { /* sin centros o error: la sección queda oculta */ }
+}
+
+async function saveSvcLocations(slug) {
+  const wrap = document.getElementById('svcLocationsWrap');
+  if (!slug || wrap.style.display === 'none') return;
+  const rows = [...document.querySelectorAll('#svcLocationsList [data-loc]')];
+  for (const row of rows) {
+    const locId = row.dataset.loc;
+    const avail = row.querySelector('[data-avail]').checked;
+    const priceRaw = row.querySelector('[data-price]').value.trim();
+    const durRaw = row.querySelector('[data-dur]').value.trim();
+    const hasOverride = !avail || priceRaw !== '' || durRaw !== '';
+    try {
+      if (hasOverride) {
+        const body = { is_available: avail };
+        if (priceRaw !== '') body.price_cents = Math.round(parseFloat(priceRaw) * 100);
+        if (durRaw !== '') body.duration_minutes = parseInt(durRaw, 10);
+        await api(`/auth/services/${encodeURIComponent(slug)}/locations/${encodeURIComponent(locId)}`, {
+          method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body),
+        });
+      } else {
+        await api(`/auth/services/${encodeURIComponent(slug)}/locations/${encodeURIComponent(locId)}`, { method:'DELETE' });
+      }
+    } catch(e) { toast(`Centro ${locId}: ${e.message}`, 'error'); }
+  }
+}
+
 function openServiceDrawer(svc = null) {
   document.getElementById('serviceDrawerTitle').textContent = svc ? 'Editar servicio' : 'Nuevo servicio';
   document.getElementById('svcSlug').value = svc ? svc.id : '';
@@ -4470,11 +4818,9 @@ function openServiceDrawer(svc = null) {
   document.getElementById('svcDeposit').value = (svc && svc.deposit_amount_cents) ? (svc.deposit_amount_cents / 100) : '';
   document.getElementById('svcDesc').value = svc ? (svc.descripcion || '') : '';
   document.getElementById('svcActivo').checked = svc ? !!svc.is_active : true;
-  document.getElementById('svcPaymentMode').value = svc ? (svc.payment_mode || 'none') : 'none';
-  document.getElementById('svcDepositValue').value = svc ? (svc.deposit_value || 0) : 0;
-  document.getElementById('svcConfirmOnPaid').checked = svc ? !!svc.confirm_booking_on_paid : true;
   document.getElementById('serviceDrawer').classList.add('open');
   document.getElementById('serviceOverlay').classList.add('open');
+  loadSvcLocations(svc ? svc.id : '');
 }
 function closeServiceDrawer() {
   document.getElementById('serviceDrawer').classList.remove('open');
@@ -4497,20 +4843,10 @@ async function saveService() {
   const body = JSON.stringify({ nombre, duration_minutes: duration, price_cents, descripcion, is_active, payment_mode, payment_type, deposit_amount_cents, currency:'eur' });
   const btn = document.getElementById('svcSaveBtn'); const old = btn.textContent; btn.disabled = true; btn.textContent = 'Guardando…';
   try {
-    if (slug) await api(`/auth/services/${encodeURIComponent(slug)}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body });
-    else await api('/auth/services', { method:'POST', headers:{'Content-Type':'application/json'}, body });
-    const savedServices = await api('/auth/services?include_inactive=true');
-    const saved = (savedServices.items || []).find(item => item.nombre === nombre || item.id === slug);
-    if (saved) {
-      await api(`/auth/app/services/${encodeURIComponent(saved.id)}/payment-policy`, {
-        method:'PUT', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          mode: document.getElementById('svcPaymentMode').value,
-          deposit_value: parseInt(document.getElementById('svcDepositValue').value, 10) || 0,
-          confirm_booking_on_paid: document.getElementById('svcConfirmOnPaid').checked,
-        }),
-      });
-    }
+    const saved = slug
+      ? await api(`/auth/services/${encodeURIComponent(slug)}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body })
+      : await api('/auth/services', { method:'POST', headers:{'Content-Type':'application/json'}, body });
+    await saveSvcLocations(saved.id);
     toast('Servicio guardado', 'success');
     closeServiceDrawer();
     loadServicios();
@@ -4911,6 +5247,7 @@ function cdRenderDetail(b){
           <span class="badge ${badge}">${escapeHtml(CD_ESTADO_LABEL[est] || est)}</span>
           ${est === 'completed' && b.completed_source === 'auto' ? `<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);" title="Se completó automáticamente al pasar la hora. Confirma si el cliente asistió.">auto · sin confirmar</span>` : ''}
           ${b.booking_code ? `<span class="badge" style="background:var(--accent-soft); color:var(--accent); font-family:'Courier New',monospace; letter-spacing:.06em;">N.º ${escapeHtml(b.booking_code)}</span>` : ''}
+          ${{preauthorized:'<span class="badge" style="background:rgba(244,180,0,0.15); color:#f4b400;">💳 retención activa</span>',paid:'<span class="badge badge-confirmed">💳 pagado</span>',released:'<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">retención liberada</span>',refunded:'<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">reembolsado</span>',partially_refunded:'<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">reembolso parcial</span>'}[b.payment_status] || ''}
           <span>${escapeHtml(hora)} · ${escapeHtml(b.employee_name || 'Agenda')}</span>
           <span>${escapeHtml((b.servicio || 'Consulta') + cdServiceMeta(b))}</span>
         </div>
@@ -4925,7 +5262,12 @@ function cdRenderDetail(b){
       ${canAttend ? `<button class="btn ${est === 'completed' ? 'btn-primary' : 'btn-ghost'}" type="button" data-cd="attended" style="padding:6px 14px;">✓ Realizada</button>
       <button class="btn btn-ghost" type="button" data-cd="noshow" style="padding:6px 14px; color:var(--danger); border-color:var(--danger);${est === 'no_show' ? ' background:var(--danger-soft);' : ''}">✗ No vino</button>` : ''}
       ${b.manage_url ? `<button class="btn btn-ghost" type="button" data-cd="manage" style="padding:6px 14px;">Gestionar</button>` : ''}
-      ${est !== 'cancelled' ? `<button class="btn btn-ghost" type="button" data-cd="pay" style="padding:6px 14px;">💳 Cobrar</button>` : ''}
+      ${b.payment_status === 'preauthorized' ? `<button class="btn btn-primary" type="button" data-cd="capture" style="padding:6px 14px;">💳 Cobrar retención</button>
+      <button class="btn btn-ghost" type="button" data-cd="release" style="padding:6px 14px;">Liberar retención</button>` : ''}
+      ${(b.payment_status === 'paid' || b.payment_status === 'partially_refunded') ? `<button class="btn btn-ghost" type="button" data-cd="refund" style="padding:6px 14px;">↩ Reembolsar</button>` : ''}
+      ${est !== 'cancelled' && b.payment_status !== 'preauthorized' ? `<button class="btn btn-ghost" type="button" data-cd="pay" style="padding:6px 14px;">💳 Cobrar</button>` : ''}
+      ${est !== 'cancelled' && b.payment_status !== 'paid' ? `<button class="btn btn-ghost" type="button" data-cd="redeempkg" style="padding:6px 14px;">🎟 Bono</button>
+      <button class="btn btn-ghost" type="button" data-cd="redeemgift" style="padding:6px 14px;">🎁 Tarjeta regalo</button>` : ''}
       <button class="btn btn-ghost" type="button" data-cd="resched" style="padding:6px 14px;" ${canEdit ? '' : 'disabled'}>Reprogramar</button>
       <button class="btn btn-ghost" type="button" data-cd="cancel" style="padding:6px 14px; color:var(--danger); border-color:var(--danger);" ${canEdit ? '' : 'disabled'}>Cancelar</button>
     </div>`;
@@ -4952,6 +5294,71 @@ function cdRenderDetail(b){
             }
           } catch(e){ toast(e.message, 'error'); }
           finally { btn.disabled = false; btn.textContent = orig; }
+          return;
+        }
+        if (action === 'redeempkg'){
+          // Bono del cliente: localizar compras activas por email/teléfono de la cita.
+          const q = (b.email || b.client_email || b.telefono || b.client_phone || '').trim();
+          if (!q){ toast('La cita no tiene email ni teléfono para buscar bonos.', 'error'); return; }
+          let purchases = [];
+          try { purchases = ((await api(`/auth/package-purchases?status=active&q=${encodeURIComponent(q)}`)).items) || []; }
+          catch(e){ toast(e.message, 'error'); return; }
+          if (!purchases.length){ toast('Este cliente no tiene bonos activos.', 'error'); return; }
+          let chosen = purchases[0];
+          if (purchases.length > 1){
+            const menu = purchases.map((p, i) => `${i + 1}. ${p.package_name} (${p.remaining_total} sesiones)`).join('\n');
+            const ans = window.prompt(`Elige bono (número):\n${menu}`, '1');
+            if (ans === null) return;
+            chosen = purchases[parseInt(ans, 10) - 1];
+            if (!chosen){ toast('Selección inválida.', 'error'); return; }
+          }
+          try {
+            const r = await api(`/auth/package-purchases/${encodeURIComponent(chosen.purchase_id)}/redeem`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ booking_id: bid }) });
+            toast(`Sesión del bono descontada. Quedan ${Object.values(r.remaining).reduce((a, v) => a + v, 0)}.`, 'success');
+            loadCitasDay();
+          } catch(e){ toast(e.message, 'error'); }
+          return;
+        }
+        if (action === 'redeemgift'){
+          const code = window.prompt('Código de la tarjeta regalo (GC-XXXX-XXXX):', '');
+          if (!code) return;
+          try {
+            const r = await api('/auth/gift-cards/redeem', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: code.trim(), booking_id: bid }) });
+            if (r.covered) toast(`Cobrado con tarjeta. Saldo restante: ${(r.balance_after_cents/100).toFixed(2)} €`, 'success');
+            else toast(`Pago parcial: quedan ${(r.remaining_due_cents/100).toFixed(2)} € por cobrar.`, 'success');
+            loadCitasDay();
+          } catch(e){ toast(e.message, 'error'); }
+          return;
+        }
+        if (action === 'capture'){
+          const maxEur = b.payment_amount_cents ? (b.payment_amount_cents/100).toFixed(2) : '';
+          const ans = window.prompt(`Importe a cobrar de la retención (máx. ${maxEur} €). Vacío = importe completo:`, maxEur);
+          if (ans === null) return;
+          const body = {};
+          const eur = parseFloat((ans + '').replace(',', '.'));
+          if (ans.trim() !== '' && Number.isFinite(eur)) body.amount_cents = Math.round(eur * 100);
+          await api(`/auth/bookings/${bid}/payment/capture`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+          toast('Retención cobrada', 'success');
+          await loadCitasDay();
+          return;
+        }
+        if (action === 'release'){
+          if (!window.confirm('¿Liberar la retención sin cobrar? La tarjeta del cliente quedará sin cargo.')) return;
+          await api(`/auth/bookings/${bid}/payment/release`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({}) });
+          toast('Retención liberada', 'success');
+          await loadCitasDay();
+          return;
+        }
+        if (action === 'refund'){
+          const maxEur = b.payment_amount_cents ? (b.payment_amount_cents/100).toFixed(2) : '';
+          const ans = window.prompt(`Importe a reembolsar (máx. ${maxEur} €). Vacío = reembolso total:`, '');
+          if (ans === null) return;
+          const body = {};
+          const eur = parseFloat((ans + '').replace(',', '.'));
+          if (ans.trim() !== '' && Number.isFinite(eur)) body.amount_cents = Math.round(eur * 100);
+          await api(`/auth/bookings/${bid}/payment/refund`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+          toast('Reembolso creado', 'success');
+          await loadCitasDay();
           return;
         }
         if (action === 'attended' || action === 'noshow'){
@@ -4999,6 +5406,7 @@ document.querySelectorAll('#cdRange .filter-chip').forEach(chip => {
 
 // ── EQUIPO ────────────────────────────────────────────────────────────
 let allServices = [];
+let allLocations = [];
 
 function normalizeEmployeeItems(raw) {
   const items = Array.isArray(raw) ? raw : (raw?.items || []);
@@ -5013,10 +5421,16 @@ async function loadEquipo() {
   const grid = document.getElementById('equipoGrid');
   grid.innerHTML = '<div class="panel-sub">Cargando…</div>';
   try {
-    const [empsRaw, svcsRaw] = await Promise.all([api('/auth/employees'), api('/auth/services').catch(() => ({ items: [] }))]);
+    const [empsRaw, svcsRaw, locsRaw] = await Promise.all([
+      api('/auth/employees'),
+      api('/auth/services').catch(() => ({ items: [] })),
+      api('/auth/locations').catch(() => ({ items: [] })),
+    ]);
     const emps = Array.isArray(empsRaw) ? empsRaw : (empsRaw?.items || []);
     const svcs = Array.isArray(svcsRaw) ? svcsRaw : (svcsRaw?.items || []);
     allServices = svcs;
+    allLocations = Array.isArray(locsRaw) ? locsRaw : (locsRaw?.items || []);
+    renderCentros();
     citasState.employees = emps.map(e => ({ ...e, id: e.employee_id || e.id }));
     grid.innerHTML = '';
     if (!emps.length) { grid.innerHTML = '<div class="panel-sub">Sin profesionales. Crea el primero.</div>'; }
@@ -5036,6 +5450,7 @@ async function loadEquipo() {
           <span class="employee-name">${escapeHtml(emp.name)}</span>
         </div>
         <div class="employee-role">${escapeHtml(emp.role)}</div>
+        ${allLocations.length > 1 ? `<div class="employee-role" style="font-size:0.78rem; opacity:0.85;">📍 ${escapeHtml(locName(raw.location_id))}</div>` : ''}
         <div class="employee-status" style="color:${emp.active?'var(--success)':'var(--soft-2)'};">${emp.active?'Activo':'Inactivo'}</div>`;
       card.addEventListener('click', () => openEquipoPanel(emp));
       grid.appendChild(card);
@@ -5067,6 +5482,22 @@ function openEquipoPanel(emp) {
   document.getElementById('equipoColor').value = emp ? (emp.color||'#00D1FF') : '#00D1FF';
   document.getElementById('equipoColorText').value = emp ? (emp.color||'#00D1FF') : '#00D1FF';
   document.getElementById('equipoActivo').checked = emp ? !!emp.active : true;
+
+  // Centro: selector solo si hay más de un centro y no es la agenda general
+  const centroSel = document.getElementById('equipoCentro');
+  if (centroSel) {
+    centroSel.innerHTML = '';
+    allLocations.forEach(l => {
+      const o = document.createElement('option');
+      o.value = l.location_id;
+      o.textContent = l.name + (l.is_default ? ' (principal)' : '');
+      centroSel.appendChild(o);
+    });
+    const curLoc = emp ? (emp.raw?.location_id || '') : '';
+    if (curLoc) centroSel.value = curLoc;
+  }
+  const centroField = document.getElementById('equipoCentroField');
+  if (centroField) centroField.style.display = (isDefault || allLocations.length <= 1) ? 'none' : '';
 
   // Activo: oculto para la agenda general (siempre activa)
   const activoLabel = document.getElementById('equipoActivo')?.closest('label');
@@ -5132,6 +5563,9 @@ document.getElementById('equipoSaveBtn').addEventListener('click', async () => {
         is_active: document.getElementById('equipoActivo').checked,
         service_ids: [...document.querySelectorAll('#equipoServicesCheck input:checked')].map(c => c.value),
       };
+  if (!isDefault && allLocations.length > 1) {
+    payload.location_id = document.getElementById('equipoCentro').value || '';
+  }
   try {
     if (id) await api(`/auth/employees/${id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     else await api('/auth/employees', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
@@ -5153,6 +5587,675 @@ document.getElementById('equipoDeleteBtn').addEventListener('click', async () =>
     loadEquipo();
   } catch(e) { toast(e.message, 'error'); }
 });
+
+// ── CENTROS ───────────────────────────────────────────────────────────
+function locName(id) {
+  const l = allLocations.find(x => x.location_id === id);
+  return l ? l.name : (allLocations.find(x => x.is_default)?.name || 'Centro principal');
+}
+
+function renderCentros() {
+  const grid = document.getElementById('centrosGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  if (!allLocations.length) { grid.innerHTML = '<div class="panel-sub">Sin centros.</div>'; return; }
+  allLocations.forEach(l => {
+    const card = document.createElement('div'); card.className = 'employee-card';
+    card.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span class="employee-name">${escapeHtml(l.name)}</span>
+        ${l.is_default ? '<span style="font-size:0.7rem; color:var(--soft-2);">principal</span>' : ''}
+      </div>
+      <div class="employee-role">${escapeHtml(l.address || 'Sin dirección')}</div>
+      <div class="employee-status" style="color:var(--soft-2);">${l.employee_count || 0} profesional(es)${l.resource_count ? ` · ${l.resource_count} sala(s)` : ''}${l.is_active ? '' : ' · inactivo'}</div>`;
+    card.addEventListener('click', () => openCentroPanel(l));
+    grid.appendChild(card);
+  });
+}
+
+function openCentroPanel(loc) {
+  const isDefault = !!(loc && loc.is_default);
+  document.getElementById('centroEditId').value = loc ? loc.location_id : '';
+  document.getElementById('centroPanelTitle').textContent = loc ? (isDefault ? 'Centro principal' : 'Editar centro') : 'Nuevo centro';
+  document.getElementById('centroNombre').value = loc ? (loc.name || '') : '';
+  document.getElementById('centroDireccion').value = loc ? (loc.address || '') : '';
+  document.getElementById('centroTelefono').value = loc ? (loc.phone || '') : '';
+  document.getElementById('centroWaId').value = loc ? (loc.whatsapp_phone_number_id || '') : '';
+  document.getElementById('centroVozNum').value = loc ? (loc.voice_phone_number || '') : '';
+  document.getElementById('centroActivo').checked = loc ? !!loc.is_active : true;
+  const activoLabel = document.getElementById('centroActivo')?.closest('label');
+  if (activoLabel) activoLabel.style.display = isDefault ? 'none' : '';
+  document.getElementById('centroDefaultNote').style.display = isDefault ? '' : 'none';
+  document.getElementById('centroDeleteBtn').style.display = (loc && !isDefault) ? '' : 'none';
+  const salasWrap = document.getElementById('centroSalasWrap');
+  salasWrap.style.display = loc ? '' : 'none';
+  if (loc) loadCentroSalas(loc.location_id);
+  document.getElementById('centroPanel').classList.add('open');
+  document.getElementById('centroOverlay').classList.add('open');
+}
+
+async function loadCentroSalas(locationId) {
+  const list = document.getElementById('centroSalasList');
+  list.innerHTML = '<div class="panel-sub">Cargando…</div>';
+  try {
+    const r = await api(`/auth/locations/${encodeURIComponent(locationId)}/resources`);
+    const items = r?.items || [];
+    list.innerHTML = '';
+    if (!items.length) { list.innerHTML = '<div class="panel-sub" style="margin:0;">Sin salas. Este centro no limita por espacio.</div>'; return; }
+    items.forEach(res => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:6px 10px; background:rgba(255,255,255,0.04); border-radius:8px;';
+      row.innerHTML = `
+        <span style="flex:1; font-size:0.88rem;">${escapeHtml(res.name)}${res.is_active ? '' : ' <span style="color:var(--soft-2); font-size:0.78rem;">(inactiva)</span>'}</span>
+        <button class="btn btn-ghost" data-del style="padding:2px 10px; color:var(--danger); border-color:var(--danger); font-size:0.8rem;">Quitar</button>`;
+      row.querySelector('[data-del]').addEventListener('click', async () => {
+        try {
+          await api(`/auth/resources/${encodeURIComponent(res.resource_id)}`, { method:'DELETE' });
+          loadCentroSalas(locationId);
+        } catch(e) { toast(e.message, 'error'); }
+      });
+      list.appendChild(row);
+    });
+  } catch(e) { list.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+}
+
+document.getElementById('centroSalaAddBtn').addEventListener('click', async () => {
+  const locationId = document.getElementById('centroEditId').value;
+  const input = document.getElementById('centroSalaNueva');
+  const name = input.value.trim();
+  if (!locationId) { toast('Guarda el centro antes de añadir salas.', 'error'); return; }
+  if (!name) { toast('Escribe el nombre de la sala.', 'error'); return; }
+  try {
+    await api(`/auth/locations/${encodeURIComponent(locationId)}/resources`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name }),
+    });
+    input.value = '';
+    loadCentroSalas(locationId);
+  } catch(e) { toast(e.message, 'error'); }
+});
+
+function closeCentroPanel() {
+  document.getElementById('centroPanel').classList.remove('open');
+  document.getElementById('centroOverlay').classList.remove('open');
+}
+
+document.getElementById('centroNewBtn').addEventListener('click', () => openCentroPanel(null));
+document.getElementById('centroPanelClose').addEventListener('click', closeCentroPanel);
+document.getElementById('centroOverlay').addEventListener('click', closeCentroPanel);
+
+document.getElementById('centroSaveBtn').addEventListener('click', async () => {
+  const id = document.getElementById('centroEditId').value;
+  const name = document.getElementById('centroNombre').value.trim();
+  if (!name) { toast('El nombre del centro es obligatorio.', 'error'); return; }
+  const payload = {
+    name,
+    address: document.getElementById('centroDireccion').value.trim(),
+    phone: document.getElementById('centroTelefono').value.trim(),
+    whatsapp_phone_number_id: document.getElementById('centroWaId').value.trim(),
+    voice_phone_number: document.getElementById('centroVozNum').value.trim(),
+    is_active: document.getElementById('centroActivo').checked,
+  };
+  try {
+    if (id) await api(`/auth/locations/${id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    else await api('/auth/locations', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    toast('Centro guardado.', 'success');
+    closeCentroPanel();
+    loadEquipo();
+  } catch(e) { toast(e.message, 'error'); }
+});
+
+document.getElementById('centroDeleteBtn').addEventListener('click', async () => {
+  const id = document.getElementById('centroEditId').value;
+  if (!id) return;
+  const btn = document.getElementById('centroDeleteBtn');
+  if (btn.dataset.confirm !== '1') { btn.dataset.confirm = '1'; btn.textContent = '¿Confirmar?'; setTimeout(() => { btn.dataset.confirm = ''; btn.textContent = 'Eliminar'; }, 3000); return; }
+  try {
+    await api(`/auth/locations/${id}`, { method:'DELETE' });
+    toast('Centro eliminado', 'success');
+    closeCentroPanel();
+    loadEquipo();
+  } catch(e) { toast(e.message, 'error'); }
+});
+
+// ── VENTAS (productos, bonos, tarjetas regalo) ───────────────────────
+const ventasState = { tab: 'productos', products: [], packages: [], services: [] };
+
+function eur(cents) { return (Number(cents || 0) / 100).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }); }
+
+document.querySelectorAll('.ventas-subtab').forEach(b => b.addEventListener('click', () => {
+  ventasState.tab = b.getAttribute('data-vtab');
+  document.querySelectorAll('.ventas-subtab').forEach(x => x.classList.toggle('active', x === b));
+  document.getElementById('ventasPanelProductos').style.display = ventasState.tab === 'productos' ? '' : 'none';
+  document.getElementById('ventasPanelBonos').style.display = ventasState.tab === 'bonos' ? '' : 'none';
+  document.getElementById('ventasPanelGift').style.display = ventasState.tab === 'gift' ? '' : 'none';
+  document.getElementById('ventasSubText').textContent = ({
+    productos: 'Vende productos complementarios y registra cada venta en caja.',
+    bonos: 'Bonos de sesiones con descuento. Se rediman cita a cita desde la agenda.',
+    gift: 'Tarjetas regalo con saldo. Se usan como método de pago de cualquier cita.',
+  })[ventasState.tab];
+  loadVentas();
+}));
+
+async function loadVentas() {
+  if (ventasState.tab === 'productos') return loadVentasProductos();
+  if (ventasState.tab === 'bonos') return loadVentasBonos();
+  return loadVentasGift();
+}
+
+async function loadVentasProductos() {
+  const grid = document.getElementById('productosGrid');
+  grid.innerHTML = '<div class="panel-sub">Cargando…</div>';
+  try {
+    const [prods, sales] = await Promise.all([api('/auth/products'), api('/auth/product-sales')]);
+    ventasState.products = prods.items || [];
+    grid.innerHTML = '';
+    if (!ventasState.products.length) grid.innerHTML = '<div class="panel-sub">Sin productos. Crea el primero.</div>';
+    ventasState.products.forEach(p => {
+      const card = document.createElement('div'); card.className = 'employee-card';
+      card.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="employee-name">${escapeHtml(p.name)}</span>
+          ${p.is_active ? '' : '<span class="pill pill-disabled">inactivo</span>'}
+        </div>
+        <div class="employee-role">${eur(p.price_cents)}${p.stock !== null && p.stock !== undefined ? ` · stock ${p.stock}` : ''}</div>`;
+      card.addEventListener('click', () => openProductPanel(p));
+      grid.appendChild(card);
+    });
+    const recent = document.getElementById('ventasRecientes');
+    recent.innerHTML = (sales.items || []).slice(0, 12).map(s => `
+      <div class="sale-row">
+        <div class="sale-main">${escapeHtml(s.product_name)} ×${s.qty}${s.customer_name ? ` · ${escapeHtml(s.customer_name)}` : ''}
+          <span style="color:var(--soft-2); font-size:0.76rem;"> ${escapeHtml(String(s.created_at).slice(0, 10))}</span></div>
+        <div class="sale-amount">${eur(s.total_cents)}</div>
+      </div>`).join('') || '<div class="panel-sub">Aún no hay ventas registradas.</div>';
+  } catch (e) { grid.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+}
+
+function openProductPanel(p) {
+  document.getElementById('productEditId').value = p ? p.id : '';
+  document.getElementById('productPanelTitle').textContent = p ? 'Editar producto' : 'Nuevo producto';
+  document.getElementById('productNombre').value = p ? p.name : '';
+  document.getElementById('productPrecio').value = p ? (p.price_cents / 100) : '';
+  document.getElementById('productStock').value = (p && p.stock !== null && p.stock !== undefined) ? p.stock : '';
+  document.getElementById('productDesc').value = p ? (p.description || '') : '';
+  document.getElementById('productActivo').checked = p ? !!p.is_active : true;
+  document.getElementById('productSellBlock').style.display = p ? '' : 'none';
+  document.getElementById('productDeleteBtn').style.display = p ? '' : 'none';
+  document.getElementById('productPanel').classList.add('open');
+  document.getElementById('productOverlay').classList.add('open');
+}
+function closeProductPanel() { document.getElementById('productPanel').classList.remove('open'); document.getElementById('productOverlay').classList.remove('open'); }
+document.getElementById('productNewBtn').addEventListener('click', () => openProductPanel(null));
+document.getElementById('productPanelClose').addEventListener('click', closeProductPanel);
+document.getElementById('productOverlay').addEventListener('click', closeProductPanel);
+
+document.getElementById('productSaveBtn').addEventListener('click', async () => {
+  const id = document.getElementById('productEditId').value;
+  const stockRaw = document.getElementById('productStock').value;
+  const payload = {
+    name: document.getElementById('productNombre').value.trim(),
+    price_cents: Math.round(parseFloat(document.getElementById('productPrecio').value || '0') * 100),
+    stock: stockRaw === '' ? null : parseInt(stockRaw, 10),
+    description: document.getElementById('productDesc').value.trim(),
+    is_active: document.getElementById('productActivo').checked,
+  };
+  if (!payload.name) { toast('El nombre es obligatorio.', 'error'); return; }
+  try {
+    if (id) await api(`/auth/products/${encodeURIComponent(id)}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    else await api('/auth/products', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    toast('Producto guardado.', 'success'); closeProductPanel(); loadVentasProductos();
+  } catch (e) { toast(e.message, 'error'); }
+});
+
+document.getElementById('productDeleteBtn').addEventListener('click', async () => {
+  const id = document.getElementById('productEditId').value; if (!id) return;
+  const btn = document.getElementById('productDeleteBtn');
+  if (btn.dataset.confirm !== '1') { btn.dataset.confirm = '1'; btn.textContent = '¿Confirmar?'; setTimeout(() => { btn.dataset.confirm = ''; btn.textContent = 'Eliminar'; }, 3000); return; }
+  try { await api(`/auth/products/${encodeURIComponent(id)}`, { method:'DELETE' }); toast('Producto eliminado', 'success'); closeProductPanel(); loadVentasProductos(); }
+  catch (e) { toast(e.message, 'error'); }
+});
+
+document.getElementById('productSellBtn').addEventListener('click', async () => {
+  const id = document.getElementById('productEditId').value; if (!id) return;
+  try {
+    const r = await api(`/auth/products/${encodeURIComponent(id)}/sell`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        qty: parseInt(document.getElementById('productSellQty').value || '1', 10),
+        payment_method: document.getElementById('productSellMethod').value,
+        customer_name: document.getElementById('productSellCustomer').value.trim(),
+      }),
+    });
+    toast(`Venta registrada: ${eur(r.total_cents)}`, 'success'); closeProductPanel(); loadVentasProductos();
+  } catch (e) { toast(e.message, 'error'); }
+});
+
+async function loadVentasBonos() {
+  const grid = document.getElementById('bonosGrid');
+  grid.innerHTML = '<div class="panel-sub">Cargando…</div>';
+  try {
+    const [pkgs, svcs] = await Promise.all([api('/auth/packages'), api('/auth/services').catch(() => ({ items: [] }))]);
+    ventasState.packages = pkgs.items || [];
+    ventasState.services = (svcs.items || []);
+    grid.innerHTML = '';
+    if (!ventasState.packages.length) grid.innerHTML = '<div class="panel-sub">Sin bonos. Crea el primero (ej. Bono 5 sesiones -12%).</div>';
+    ventasState.packages.forEach(p => {
+      const sessions = (p.items || []).reduce((acc, it) => acc + (it.qty || 0), 0);
+      const card = document.createElement('div'); card.className = 'employee-card';
+      card.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="employee-name">${escapeHtml(p.name)}</span>
+          ${p.is_active ? '' : '<span class="pill pill-disabled">inactivo</span>'}
+        </div>
+        <div class="employee-role">${sessions} sesión(es) · ${eur(p.price_cents)} · ${p.validity_days} días</div>`;
+      card.addEventListener('click', () => openPackagePanel(p));
+      grid.appendChild(card);
+    });
+    await renderPurchases();
+  } catch (e) { grid.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+}
+
+async function renderPurchases() {
+  const q = document.getElementById('purchasesSearch').value.trim();
+  const list = document.getElementById('purchasesList');
+  try {
+    const r = await api(`/auth/package-purchases${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+    list.innerHTML = (r.items || []).slice(0, 30).map(p => `
+      <div class="sale-row">
+        <div class="sale-main">
+          <b>${escapeHtml(p.package_name)}</b> · ${escapeHtml(p.buyer_name || p.buyer_email || p.buyer_phone)}
+          <span class="pill pill-${escapeHtml(p.status)}">${escapeHtml(p.status)}</span>
+          <div style="color:var(--soft-2); font-size:0.76rem;">Quedan ${p.remaining_total} sesión(es)${p.expires_at ? ` · caduca ${String(p.expires_at).slice(0, 10)}` : ''}</div>
+        </div>
+        <div class="sale-amount">${eur(p.price_cents)}</div>
+      </div>`).join('') || '<div class="panel-sub">Sin bonos vendidos todavía.</div>';
+  } catch (e) { list.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+}
+document.getElementById('purchasesSearch').addEventListener('input', () => { clearTimeout(window.__pqT); window.__pqT = setTimeout(renderPurchases, 300); });
+
+function packageItemRow(item) {
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex; gap:6px; align-items:center;';
+  const sel = document.createElement('select'); sel.className = 'field-input pkg-item-svc'; sel.style.flex = '1';
+  ventasState.services.forEach(s => {
+    const o = document.createElement('option'); o.value = s.id; o.textContent = s.nombre || s.id;
+    if (item && item.service_slug === s.id) o.selected = true;
+    sel.appendChild(o);
+  });
+  const qty = document.createElement('input'); qty.type = 'number'; qty.min = '1'; qty.value = item ? item.qty : 1;
+  qty.className = 'field-input pkg-item-qty'; qty.style.width = '70px';
+  const del = document.createElement('button'); del.type = 'button'; del.className = 'btn'; del.textContent = '×';
+  del.addEventListener('click', () => row.remove());
+  row.append(sel, qty, del);
+  return row;
+}
+
+function openPackagePanel(p) {
+  document.getElementById('packageEditId').value = p ? p.id : '';
+  document.getElementById('packagePanelTitle').textContent = p ? 'Editar bono' : 'Nuevo bono';
+  document.getElementById('packageNombre').value = p ? p.name : '';
+  document.getElementById('packagePrecio').value = p ? (p.price_cents / 100) : '';
+  document.getElementById('packageValidez').value = p ? p.validity_days : 365;
+  document.getElementById('packageActivo').checked = p ? !!p.is_active : true;
+  const itemsWrap = document.getElementById('packageItems'); itemsWrap.innerHTML = '';
+  ((p && p.items && p.items.length) ? p.items : [null]).forEach(it => itemsWrap.appendChild(packageItemRow(it)));
+  document.getElementById('packageSellBlock').style.display = p ? '' : 'none';
+  document.getElementById('packageDeleteBtn').style.display = p ? '' : 'none';
+  document.getElementById('packagePanel').classList.add('open');
+  document.getElementById('packageOverlay').classList.add('open');
+}
+function closePackagePanel() { document.getElementById('packagePanel').classList.remove('open'); document.getElementById('packageOverlay').classList.remove('open'); }
+document.getElementById('packageNewBtn').addEventListener('click', () => openPackagePanel(null));
+document.getElementById('packagePanelClose').addEventListener('click', closePackagePanel);
+document.getElementById('packageOverlay').addEventListener('click', closePackagePanel);
+document.getElementById('packageAddItemBtn').addEventListener('click', () => document.getElementById('packageItems').appendChild(packageItemRow(null)));
+
+document.getElementById('packageSaveBtn').addEventListener('click', async () => {
+  const id = document.getElementById('packageEditId').value;
+  const items = [...document.querySelectorAll('#packageItems > div')].map(row => ({
+    service_slug: row.querySelector('.pkg-item-svc').value,
+    qty: parseInt(row.querySelector('.pkg-item-qty').value || '1', 10),
+  })).filter(it => it.service_slug);
+  const payload = {
+    name: document.getElementById('packageNombre').value.trim(),
+    price_cents: Math.round(parseFloat(document.getElementById('packagePrecio').value || '0') * 100),
+    validity_days: parseInt(document.getElementById('packageValidez').value || '365', 10),
+    items,
+    is_active: document.getElementById('packageActivo').checked,
+  };
+  if (!payload.name) { toast('El nombre es obligatorio.', 'error'); return; }
+  if (!items.length) { toast('Añade al menos un servicio al bono.', 'error'); return; }
+  try {
+    if (id) await api(`/auth/packages/${encodeURIComponent(id)}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    else await api('/auth/packages', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    toast('Bono guardado.', 'success'); closePackagePanel(); loadVentasBonos();
+  } catch (e) { toast(e.message, 'error'); }
+});
+
+document.getElementById('packageDeleteBtn').addEventListener('click', async () => {
+  const id = document.getElementById('packageEditId').value; if (!id) return;
+  const btn = document.getElementById('packageDeleteBtn');
+  if (btn.dataset.confirm !== '1') { btn.dataset.confirm = '1'; btn.textContent = '¿Confirmar?'; setTimeout(() => { btn.dataset.confirm = ''; btn.textContent = 'Eliminar'; }, 3000); return; }
+  try { await api(`/auth/packages/${encodeURIComponent(id)}`, { method:'DELETE' }); toast('Bono eliminado', 'success'); closePackagePanel(); loadVentasBonos(); }
+  catch (e) { toast(e.message, 'error'); }
+});
+
+document.getElementById('packageSellBtn').addEventListener('click', async () => {
+  const id = document.getElementById('packageEditId').value; if (!id) return;
+  const email = document.getElementById('packageBuyerEmail').value.trim();
+  const phone = document.getElementById('packageBuyerPhone').value.trim();
+  if (!email && !phone) { toast('Indica email o teléfono del cliente.', 'error'); return; }
+  try {
+    await api(`/auth/packages/${encodeURIComponent(id)}/sell`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        buyer_name: document.getElementById('packageBuyerName').value.trim(),
+        buyer_email: email, buyer_phone: phone,
+        payment_method: document.getElementById('packageSellMethod').value,
+      }),
+    });
+    toast('Bono vendido. Ya se puede redimir en citas.', 'success'); closePackagePanel(); loadVentasBonos();
+  } catch (e) { toast(e.message, 'error'); }
+});
+
+async function loadVentasGift() {
+  await renderGiftList();
+}
+async function renderGiftList() {
+  const q = document.getElementById('giftSearch').value.trim();
+  const list = document.getElementById('giftList');
+  list.innerHTML = '<div class="panel-sub">Cargando…</div>';
+  try {
+    const r = await api(`/auth/gift-cards${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+    list.innerHTML = (r.items || []).slice(0, 40).map(g => `
+      <div class="sale-row">
+        <div class="sale-main">
+          <span class="gift-code">${escapeHtml(g.code)}</span>
+          <span class="pill pill-${escapeHtml(g.status)}">${escapeHtml(g.status)}</span>
+          ${g.recipient_name || g.buyer_name ? `<span style="color:var(--soft); font-size:0.8rem;"> · ${escapeHtml(g.recipient_name || g.buyer_name)}</span>` : ''}
+          <div style="color:var(--soft-2); font-size:0.76rem;">Saldo ${eur(g.balance_cents)} de ${eur(g.initial_cents)}${g.expires_at ? ` · caduca ${String(g.expires_at).slice(0, 10)}` : ''}</div>
+        </div>
+        ${g.status === 'active' ? `<button class="btn btn-ghost" data-gift-disable="${escapeHtml(g.gift_card_id)}" style="font-size:0.78rem;">Desactivar</button>` : ''}
+      </div>`).join('') || '<div class="panel-sub">Sin tarjetas regalo emitidas.</div>';
+    list.querySelectorAll('[data-gift-disable]').forEach(b => b.addEventListener('click', async () => {
+      try { await api(`/auth/gift-cards/${encodeURIComponent(b.getAttribute('data-gift-disable'))}/status`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ enabled: false }) }); renderGiftList(); }
+      catch (e) { toast(e.message, 'error'); }
+    }));
+  } catch (e) { list.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+}
+document.getElementById('giftSearch').addEventListener('input', () => { clearTimeout(window.__gqT); window.__gqT = setTimeout(renderGiftList, 300); });
+document.getElementById('giftNewBtn').addEventListener('click', () => {
+  document.getElementById('giftIssued').style.display = 'none';
+  document.getElementById('giftPanel').classList.add('open');
+  document.getElementById('giftOverlay').classList.add('open');
+});
+function closeGiftPanel() { document.getElementById('giftPanel').classList.remove('open'); document.getElementById('giftOverlay').classList.remove('open'); }
+document.getElementById('giftPanelClose').addEventListener('click', closeGiftPanel);
+document.getElementById('giftOverlay').addEventListener('click', closeGiftPanel);
+document.getElementById('giftIssueBtn').addEventListener('click', async () => {
+  const amount = Math.round(parseFloat(document.getElementById('giftImporte').value || '0') * 100);
+  if (amount < 100) { toast('Importe mínimo: 1 €.', 'error'); return; }
+  try {
+    const r = await api('/auth/gift-cards', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        amount_cents: amount,
+        buyer_name: document.getElementById('giftBuyer').value.trim(),
+        recipient_name: document.getElementById('giftRecipient').value.trim(),
+        validity_days: parseInt(document.getElementById('giftValidez').value || '0', 10),
+      }),
+    });
+    document.getElementById('giftIssuedCode').textContent = r.code;
+    document.getElementById('giftIssued').style.display = '';
+    toast('Tarjeta emitida.', 'success'); renderGiftList();
+  } catch (e) { toast(e.message, 'error'); }
+});
+
+// ── INFORMES (dashboard económico) ────────────────────────────────────
+const infState = { days: 30, location: '' };
+
+document.querySelectorAll('.inf-preset').forEach(b => b.addEventListener('click', () => {
+  infState.days = parseInt(b.getAttribute('data-days'), 10);
+  document.querySelectorAll('.inf-preset').forEach(x => x.classList.toggle('active', x === b));
+  loadInformes();
+}));
+document.getElementById('infLocation').addEventListener('change', e => { infState.location = e.target.value; loadInformes(); });
+document.getElementById('infExportBtn').addEventListener('click', () => {
+  const { from, to } = infRange();
+  const params = new URLSearchParams({ date_from: from, date_to: to });
+  if (infState.location) params.set('location_id', infState.location);
+  window.open(`/auth/analytics/export.csv?${params.toString()}`, '_blank');
+});
+
+function infRange() {
+  const to = new Date();
+  const from = new Date(Date.now() - (infState.days - 1) * 86400000);
+  const fmt = d => d.toISOString().slice(0, 10);
+  return { from: fmt(from), to: fmt(to) };
+}
+
+async function loadInformes() {
+  try {
+    const locs = await api('/auth/locations').catch(() => ({ items: [] }));
+    const sel = document.getElementById('infLocation');
+    const current = sel.value;
+    while (sel.options.length > 1) sel.remove(1);
+    (locs.items || []).forEach(l => { const o = document.createElement('option'); o.value = l.location_id; o.textContent = l.name; sel.appendChild(o); });
+    if (current) sel.value = current;
+    sel.style.display = (locs.items || []).length > 1 ? '' : 'none';
+
+    const { from, to } = infRange();
+    const params = new URLSearchParams({ date_from: from, date_to: to });
+    if (infState.location) params.set('location_id', infState.location);
+    const data = await api(`/auth/analytics/overview?${params.toString()}`);
+    renderInfKpis(data);
+    document.getElementById('infRevenueRange').textContent = `${data.date_from} → ${data.date_to}`;
+    renderLineChart(document.getElementById('chartRevenue'), data.series.map(s => ({ x: s.date, y: s.revenue_cents / 100 })), { money: true });
+    renderBarChart(document.getElementById('chartBookings'), data.series.map(s => ({ x: s.date, y: s.bookings })));
+    renderDonut(document.getElementById('chartServices'), data.by_service.map(i => ({ label: i.label, value: i.bookings })));
+    renderRankTable(document.getElementById('tableEmployees'), data.by_employee);
+    renderRankTable(document.getElementById('tableLocations'), data.by_location);
+    renderRankTable(document.getElementById('tableSources'), data.by_source);
+  } catch (e) {
+    document.getElementById('infKpis').innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function kpiDelta(now, before) {
+  if (before === null || before === undefined || now === null || now === undefined) return '';
+  if (!before) return now ? '<span class="k-delta up">nuevo</span>' : '<span class="k-delta flat">—</span>';
+  const pct = ((now - before) / Math.abs(before)) * 100;
+  if (Math.abs(pct) < 0.5) return '<span class="k-delta flat">= igual</span>';
+  const cls = pct > 0 ? 'up' : 'down';
+  const arrow = pct > 0 ? '▲' : '▼';
+  return `<span class="k-delta ${cls}">${arrow} ${Math.abs(pct).toFixed(0)}% vs anterior</span>`;
+}
+
+function renderInfKpis(data) {
+  const k = data.kpis, p = data.previous;
+  const pct = v => (v === null || v === undefined) ? '—' : `${(v * 100).toFixed(0)}%`;
+  document.getElementById('infKpis').innerHTML = `
+    <div class="inf-kpi"><div class="k-label">Ingresos</div><div class="k-value">${eur(k.revenue_cents)}</div>${kpiDelta(k.revenue_cents, p.revenue_cents)}</div>
+    <div class="inf-kpi"><div class="k-label">Citas</div><div class="k-value">${k.bookings_total}</div>${kpiDelta(k.bookings_total, p.bookings_total)}</div>
+    <div class="inf-kpi"><div class="k-label">Ticket medio</div><div class="k-value">${eur(k.avg_ticket_cents)}</div>${kpiDelta(k.avg_ticket_cents, p.avg_ticket_cents)}</div>
+    <div class="inf-kpi"><div class="k-label">Asistencia</div><div class="k-value">${pct(k.attendance_rate)}</div>${kpiDelta(k.attendance_rate, p.attendance_rate)}</div>
+    <div class="inf-kpi"><div class="k-label">Ocupación</div><div class="k-value">${pct(k.occupancy_rate)}</div>${kpiDelta(k.occupancy_rate, p.occupancy_rate)}</div>
+    <div class="inf-kpi"><div class="k-label">Clientes nuevos</div><div class="k-value">${k.new_customers}</div>${kpiDelta(k.new_customers, p.new_customers)}</div>`;
+}
+
+function renderLineChart(el, points, opts = {}) {
+  if (!el) return;
+  const W = 600, H = 180, PAD = { l: 44, r: 8, t: 10, b: 22 };
+  if (!points.length) { el.innerHTML = '<div class="panel-sub">Sin datos en el rango.</div>'; return; }
+  const maxY = Math.max(...points.map(p => p.y), 1);
+  const xw = (W - PAD.l - PAD.r) / Math.max(points.length - 1, 1);
+  const yh = (H - PAD.t - PAD.b);
+  const xy = (p, i) => [PAD.l + i * xw, PAD.t + yh * (1 - p.y / maxY)];
+  const path = points.map((p, i) => { const [x, y] = xy(p, i); return `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`; }).join(' ');
+  const area = `${path} L${(PAD.l + (points.length - 1) * xw).toFixed(1)},${H - PAD.b} L${PAD.l},${H - PAD.b} Z`;
+  const fmtY = v => opts.money ? `${Math.round(v)}€` : Math.round(v);
+  const gridLines = [0, 0.5, 1].map(f => {
+    const y = PAD.t + yh * (1 - f);
+    return `<line x1="${PAD.l}" y1="${y}" x2="${W - PAD.r}" y2="${y}" stroke="rgba(255,255,255,0.07)" />
+            <text x="${PAD.l - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="rgba(255,255,255,0.45)">${fmtY(maxY * f)}</text>`;
+  }).join('');
+  const lastLabel = points[points.length - 1].x.slice(5), firstLabel = points[0].x.slice(5);
+  el.innerHTML = `
+  <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Evolución">
+    <defs><linearGradient id="gradRev" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="var(--accent, #00b1d9)" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="var(--accent, #00b1d9)" stop-opacity="0.02"/>
+    </linearGradient></defs>
+    ${gridLines}
+    <path d="${area}" fill="url(#gradRev)" />
+    <path d="${path}" fill="none" stroke="var(--accent, #00b1d9)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" />
+    <text x="${PAD.l}" y="${H - 6}" font-size="10" fill="rgba(255,255,255,0.45)">${firstLabel}</text>
+    <text x="${W - PAD.r}" y="${H - 6}" text-anchor="end" font-size="10" fill="rgba(255,255,255,0.45)">${lastLabel}</text>
+  </svg>`;
+}
+
+function renderBarChart(el, points) {
+  if (!el) return;
+  const W = 600, H = 180, PAD = { l: 30, r: 8, t: 10, b: 22 };
+  if (!points.length) { el.innerHTML = '<div class="panel-sub">Sin datos en el rango.</div>'; return; }
+  const maxY = Math.max(...points.map(p => p.y), 1);
+  const bw = (W - PAD.l - PAD.r) / points.length;
+  const yh = H - PAD.t - PAD.b;
+  const bars = points.map((p, i) => {
+    const h = yh * (p.y / maxY);
+    const x = PAD.l + i * bw + bw * 0.15;
+    return `<rect x="${x.toFixed(1)}" y="${(PAD.t + yh - h).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${h.toFixed(1)}" rx="2"
+            fill="var(--accent, #00b1d9)" opacity="${p.y ? 0.85 : 0.15}"><title>${p.x}: ${p.y}</title></rect>`;
+  }).join('');
+  el.innerHTML = `
+  <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Citas por día">
+    <line x1="${PAD.l}" y1="${H - PAD.b}" x2="${W - PAD.r}" y2="${H - PAD.b}" stroke="rgba(255,255,255,0.15)" />
+    <text x="${PAD.l - 6}" y="${PAD.t + 8}" text-anchor="end" font-size="10" fill="rgba(255,255,255,0.45)">${maxY}</text>
+    ${bars}
+    <text x="${PAD.l}" y="${H - 6}" font-size="10" fill="rgba(255,255,255,0.45)">${points[0].x.slice(5)}</text>
+    <text x="${W - PAD.r}" y="${H - 6}" text-anchor="end" font-size="10" fill="rgba(255,255,255,0.45)">${points[points.length - 1].x.slice(5)}</text>
+  </svg>`;
+}
+
+const DONUT_COLORS = ['#00b1d9', '#8e7dff', '#2ecc71', '#f4b400', '#ff8a65', '#e74c3c', '#5dade2', '#aab7b8'];
+
+function renderDonut(el, items) {
+  if (!el) return;
+  const data = items.filter(i => i.value > 0).slice(0, 7);
+  const total = data.reduce((a, i) => a + i.value, 0);
+  if (!total) { el.innerHTML = '<div class="panel-sub">Sin datos en el rango.</div>'; return; }
+  const R = 56, C = 70, circumference = 2 * Math.PI * R;
+  let offset = 0;
+  const segs = data.map((item, idx) => {
+    const frac = item.value / total;
+    const seg = `<circle r="${R}" cx="${C}" cy="${C}" fill="transparent"
+      stroke="${DONUT_COLORS[idx % DONUT_COLORS.length]}" stroke-width="18"
+      stroke-dasharray="${(frac * circumference).toFixed(2)} ${(circumference - frac * circumference).toFixed(2)}"
+      stroke-dashoffset="${(-offset * circumference).toFixed(2)}" transform="rotate(-90 ${C} ${C})">
+      <title>${escapeHtml(item.label)}: ${item.value}</title></circle>`;
+    offset += frac;
+    return seg;
+  }).join('');
+  const legend = data.map((item, idx) => `
+    <div class="inf-trow"><span style="width:10px; height:10px; border-radius:3px; background:${DONUT_COLORS[idx % DONUT_COLORS.length]}; flex-shrink:0;"></span>
+    <span class="t-label">${escapeHtml(item.label)}</span><span class="t-val">${item.value}</span></div>`).join('');
+  el.innerHTML = `
+    <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+      <svg viewBox="0 0 140 140" style="width:130px; flex-shrink:0;">${segs}
+        <text x="${C}" y="${C + 5}" text-anchor="middle" font-size="22" font-weight="700" fill="currentColor">${total}</text></svg>
+      <div style="flex:1; min-width:140px;">${legend}</div>
+    </div>`;
+}
+
+function renderRankTable(el, items) {
+  if (!el) return;
+  const data = (items || []).filter(i => i.bookings > 0).slice(0, 7);
+  if (!data.length) { el.innerHTML = '<div class="panel-sub">Sin datos en el rango.</div>'; return; }
+  const max = Math.max(...data.map(i => i.bookings), 1);
+  el.innerHTML = data.map(i => `
+    <div class="inf-trow">
+      <span class="t-label">${escapeHtml(i.label)}</span>
+      <span class="t-bar" style="width:${Math.max(4, (i.bookings / max) * 90)}px;"></span>
+      <span class="t-val">${i.bookings} · ${eur(i.revenue_cents)}</span>
+    </div>`).join('');
+}
+
+// ── EQUIPO DE ACCESO (roles del portal, solo owner) ───────────────────
+async function loadAccessTeam() {
+  const block = document.getElementById('accessTeamBlock');
+  if (!block) return;
+  if ((window.PORTAL_ROLE || 'owner') !== 'owner') { block.style.display = 'none'; return; }
+  block.style.display = '';
+  const list = document.getElementById('accessTeamList');
+  list.innerHTML = '<div class="panel-sub">Cargando…</div>';
+  try {
+    const r = await api('/auth/app/team');
+    const roleLabel = { owner: 'Propietario', manager: 'Encargado', staff: 'Recepción' };
+    list.innerHTML = (r.items || []).map(u => `
+      <div class="sale-row">
+        <div class="sale-main">
+          <b>${escapeHtml(u.display_name || u.email)}</b>
+          <span style="color:var(--soft-2); font-size:0.78rem;"> ${escapeHtml(u.email)}</span>
+          ${u.is_active ? '' : '<span class="pill pill-disabled">inactivo</span>'}
+        </div>
+        <select class="field-input" data-team-role="${escapeHtml(u.user_id)}" style="width:auto;">
+          ${['owner', 'manager', 'staff'].map(rl => `<option value="${rl}" ${u.portal_role === rl ? 'selected' : ''}>${roleLabel[rl]}</option>`).join('')}
+        </select>
+        <button class="btn btn-ghost" data-team-toggle="${escapeHtml(u.user_id)}" data-active="${u.is_active ? 1 : 0}" style="font-size:0.78rem;">${u.is_active ? 'Desactivar' : 'Activar'}</button>
+      </div>`).join('') || '<div class="panel-sub">Solo tú tienes acceso.</div>';
+    list.querySelectorAll('[data-team-role]').forEach(sel => sel.addEventListener('change', async () => {
+      try {
+        await api(`/auth/app/team/${encodeURIComponent(sel.getAttribute('data-team-role'))}`, {
+          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ portal_role: sel.value }),
+        });
+        toast('Rol actualizado.', 'success');
+      } catch (e) { toast(e.message, 'error'); loadAccessTeam(); }
+    }));
+    list.querySelectorAll('[data-team-toggle]').forEach(btn => btn.addEventListener('click', async () => {
+      try {
+        await api(`/auth/app/team/${encodeURIComponent(btn.getAttribute('data-team-toggle'))}`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ is_active: btn.getAttribute('data-active') !== '1' }),
+        });
+        loadAccessTeam();
+      } catch (e) { toast(e.message, 'error'); }
+    }));
+  } catch (e) { list.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+}
+
+document.getElementById('accessTeamAddBtn')?.addEventListener('click', async () => {
+  const email = document.getElementById('accessTeamEmail').value.trim();
+  const password = document.getElementById('accessTeamPass').value;
+  const name = document.getElementById('accessTeamName').value.trim();
+  const role = document.getElementById('accessTeamRole').value;
+  if (!email || password.length < 8) { toast('Email y contraseña (mín. 8 caracteres) obligatorios.', 'error'); return; }
+  try {
+    await api('/auth/app/team', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password, display_name: name, portal_role: role }),
+    });
+    toast('Acceso creado.', 'success');
+    document.getElementById('accessTeamEmail').value = '';
+    document.getElementById('accessTeamPass').value = '';
+    document.getElementById('accessTeamName').value = '';
+    loadAccessTeam();
+  } catch (e) { toast(e.message, 'error'); }
+});
+
+// ── ROLES: visibilidad de tabs según portal_role ──────────────────────
+const ROLE_HIDDEN_TABS = {
+  staff: ['informes', 'knowledge', 'qa', 'tune', 'voz', 'whatsapp', 'appearance', 'payments', 'billing', 'canales', 'equipo', 'servicios', 'horarios', 'mensajes', 'instalacion'],
+  manager: ['payments', 'billing', 'canales'],
+  owner: [],
+};
+
+function applyRoleVisibility(role) {
+  window.PORTAL_ROLE = role || 'owner';
+  const hidden = ROLE_HIDDEN_TABS[window.PORTAL_ROLE] || [];
+  document.querySelectorAll('.nav-item[data-tab]').forEach(n => {
+    n.style.display = hidden.includes(n.getAttribute('data-tab')) ? 'none' : '';
+  });
+}
 
 // ── HORARIOS ──────────────────────────────────────────────────────────
 function loadHorariosProfSelect(emps) {
@@ -5648,6 +6751,10 @@ document.getElementById('cuentaLogoutBtn').addEventListener('click', async () =>
 // ── Init ──────────────────────────────────────────────────────────────
 (async function init() {
   mountAdminImpersonationBanner();
+  try {
+    const me = await api('/auth/me');
+    applyRoleVisibility(me && me.portal_role);
+  } catch {}
   await Promise.all([loadOverview(), loadDeploy(), loadAppearance()]);
   moveStarterPanelToTune();
   loadInstalacion();

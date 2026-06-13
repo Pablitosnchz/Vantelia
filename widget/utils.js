@@ -42,11 +42,16 @@ function resolveClientId() {
   return String(window.IA_WIDGET_CLIENTE || dataset.client || "demo").trim();
 }
 
+function resolveLocationId() {
+  return String(window.IA_WIDGET_LOCATION || dataset.location || "").trim();
+}
+
 const storage = getSafeStorage();
 
 export const WIDGET_CONFIG = {
   apiUrl: resolveApiUrl(),
   clienteId: resolveClientId(),
+  locationId: resolveLocationId(),
   position: dataset.position === "left" ? "left" : "right",
   bookingEnabled: false,
   brandingText: "Powered by Vantelia",

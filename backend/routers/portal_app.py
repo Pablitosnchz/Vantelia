@@ -786,6 +786,7 @@ async def app_channels_email_settings(
     data: ChannelEmailSettingsPayload,
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> ChannelSettingsResponse:
+    security._require_portal_min_role(user, "owner")
     if data.provider not in {"vantelia_smtp", "gmail_oauth"}:
         raise HTTPException(status_code=400, detail="Proveedor de email no valido.")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
@@ -805,6 +806,7 @@ async def app_channels_email_settings(
 async def app_channels_google_connect(
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> ChannelConnectResponse:
+    security._require_portal_min_role(user, "owner")
     if not emailing._gmail_channel_configured():
         raise HTTPException(status_code=503, detail="La conexion con Gmail no esta configurada.")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
@@ -896,6 +898,7 @@ async def app_channels_google_callback(
 async def app_channels_google_disconnect(
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> ChannelSettingsResponse:
+    security._require_portal_min_role(user, "owner")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
     gmail = emailing._client_gmail_connection(cliente_id)
     if gmail and emailing._gmail_channel_configured():
@@ -951,6 +954,7 @@ async def app_channels_sms_settings(
     data: ChannelSmsSettingsPayload,
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> ChannelSettingsResponse:
+    security._require_portal_min_role(user, "owner")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
     if data.mode not in {"vantelia_default", "twilio_alphanumeric_sender", "twilio_dedicated_number"}:
         raise HTTPException(status_code=400, detail="Modo SMS no valido.")
@@ -1007,6 +1011,7 @@ async def app_payments_ai_send_toggle(
     data: AiSendTogglePayload,
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> ConnectAccountStatus:
+    security._require_portal_min_role(user, "owner")
     """Opt-in del negocio: permite que la IA envie enlaces de pago en su nombre."""
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
     booking._set_ai_send_enabled(cliente_id, data.enabled)
@@ -1018,6 +1023,7 @@ async def app_connect_start(
     request: Request,
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> ConnectStartResponse:
+    security._require_portal_min_role(user, "owner")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
     if settings.STRIPE_CONNECT_CLIENT_ID:
         state = security._oauth_create_state("stripe_connect", f"{cliente_id}:{user['id']}")
@@ -1173,6 +1179,7 @@ async def app_payment_refund(
     data: PaymentRefundPayload,
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> CustomerPaymentPublic:
+    security._require_portal_min_role(user, "owner")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
     with db._get_db_connection() as connection:
         payment = connection.execute(
@@ -2331,6 +2338,191 @@ async def auth_list_employees(
     return agenda._portal_employees_for_client(portal._portal_client_id_or_403(user, cliente_id))
 
 
+@app.get("/auth/locations", response_model=PortalLocationsResponse)
+async def auth_list_locations(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> PortalLocationsResponse:
+    return agenda._portal_locations_for_client(portal._portal_client_id_or_403(user, cliente_id))
+
+
+@app.post("/auth/locations", response_model=PortalLocationPublic)
+async def auth_create_location(
+    data: PortalLocationPayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> PortalLocationPublic:
+    security._require_portal_min_role(user, "manager")
+    return agenda._create_portal_location(portal._portal_client_id_or_403(user, cliente_id), data)
+
+
+@app.post("/auth/locations/{location_id}", response_model=PortalLocationPublic)
+async def auth_update_location(
+    location_id: str,
+    data: PortalLocationPayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> PortalLocationPublic:
+    security._require_portal_min_role(user, "manager")
+    return agenda._update_portal_location(
+        portal._portal_client_id_or_403(user, cliente_id), location_id, data
+    )
+
+
+@app.delete("/auth/locations/{location_id}", response_model=AuthSimpleResponse)
+async def auth_delete_location(
+    location_id: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AuthSimpleResponse:
+    security._require_portal_min_role(user, "manager")
+    agenda._delete_portal_location(portal._portal_client_id_or_403(user, cliente_id), location_id)
+    return AuthSimpleResponse(ok=True, message="Centro eliminado correctamente.")
+
+
+@app.get("/auth/locations/{location_id}/resources", response_model=PortalResourcesResponse)
+async def auth_list_resources(
+    location_id: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> PortalResourcesResponse:
+    target_client_id = portal._portal_client_id_or_403(user, cliente_id)
+    return PortalResourcesResponse(
+        items=[
+            agenda._serialize_portal_resource(row)
+            for row in agenda._list_resource_rows(target_client_id, location_id)
+        ]
+    )
+
+
+@app.post("/auth/locations/{location_id}/resources", response_model=PortalResourcePublic)
+async def auth_create_resource(
+    location_id: str,
+    data: PortalResourcePayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> PortalResourcePublic:
+    security._require_portal_min_role(user, "manager")
+    return agenda._create_portal_resource(
+        portal._portal_client_id_or_403(user, cliente_id), location_id, data
+    )
+
+
+@app.post("/auth/resources/{resource_id}", response_model=PortalResourcePublic)
+async def auth_update_resource(
+    resource_id: str,
+    data: PortalResourcePayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> PortalResourcePublic:
+    security._require_portal_min_role(user, "manager")
+    return agenda._update_portal_resource(
+        portal._portal_client_id_or_403(user, cliente_id), resource_id, data
+    )
+
+
+@app.delete("/auth/resources/{resource_id}", response_model=AuthSimpleResponse)
+async def auth_delete_resource(
+    resource_id: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AuthSimpleResponse:
+    security._require_portal_min_role(user, "manager")
+    agenda._delete_portal_resource(portal._portal_client_id_or_403(user, cliente_id), resource_id)
+    return AuthSimpleResponse(ok=True, message="Sala eliminada correctamente.")
+
+
+@app.post("/auth/bookings/{booking_id}/payment/capture", response_model=BookingPaymentActionResponse)
+async def auth_capture_booking_payment(
+    booking_id: str,
+    data: BookingPaymentActionPayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> BookingPaymentActionResponse:
+    target_client_id = portal._portal_client_id_or_403(user, cliente_id)
+    result = booking.capture_booking_payment(
+        target_client_id, booking_id, amount_cents=data.amount_cents, reason=data.reason
+    )
+    return BookingPaymentActionResponse(
+        booking_id=booking_id,
+        payment_status=result["payment_status"],
+        amount_cents=result["amount_cents"],
+        message="Retencion cobrada correctamente.",
+    )
+
+
+@app.post("/auth/bookings/{booking_id}/payment/release", response_model=BookingPaymentActionResponse)
+async def auth_release_booking_payment(
+    booking_id: str,
+    data: BookingPaymentActionPayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> BookingPaymentActionResponse:
+    target_client_id = portal._portal_client_id_or_403(user, cliente_id)
+    result = booking.release_booking_payment(target_client_id, booking_id, reason=data.reason)
+    return BookingPaymentActionResponse(
+        booking_id=booking_id,
+        payment_status=result["payment_status"],
+        amount_cents=result["amount_cents"],
+        message="Retencion liberada sin cobro.",
+    )
+
+
+@app.post("/auth/bookings/{booking_id}/payment/refund", response_model=BookingPaymentActionResponse)
+async def auth_refund_booking_payment(
+    booking_id: str,
+    data: BookingPaymentActionPayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> BookingPaymentActionResponse:
+    target_client_id = portal._portal_client_id_or_403(user, cliente_id)
+    result = booking.refund_booking_payment(
+        target_client_id, booking_id, amount_cents=data.amount_cents, reason=data.reason
+    )
+    return BookingPaymentActionResponse(
+        booking_id=booking_id,
+        payment_status=result["payment_status"],
+        amount_cents=result["amount_cents"],
+        message="Reembolso creado correctamente.",
+    )
+
+
+@app.get("/auth/services/{slug}/locations", response_model=ServiceLocationsResponse)
+async def auth_service_locations(
+    slug: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> ServiceLocationsResponse:
+    return agenda._service_locations_overview(portal._portal_client_id_or_403(user, cliente_id), slug)
+
+
+@app.put("/auth/services/{slug}/locations/{location_id}", response_model=ServiceLocationsResponse)
+async def auth_set_service_location_override(
+    slug: str,
+    location_id: str,
+    data: ServiceLocationOverridePayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> ServiceLocationsResponse:
+    security._require_portal_min_role(user, "manager")
+    target_client_id = portal._portal_client_id_or_403(user, cliente_id)
+    agenda._set_service_location_override(target_client_id, slug, location_id, data)
+    return agenda._service_locations_overview(target_client_id, slug)
+
+
+@app.delete("/auth/services/{slug}/locations/{location_id}", response_model=ServiceLocationsResponse)
+async def auth_reset_service_location_override(
+    slug: str,
+    location_id: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> ServiceLocationsResponse:
+    security._require_portal_min_role(user, "manager")
+    target_client_id = portal._portal_client_id_or_403(user, cliente_id)
+    agenda._delete_service_location_override(target_client_id, slug, location_id)
+    return agenda._service_locations_overview(target_client_id, slug)
+
+
 @app.get("/auth/services", response_model=ServicesResponse)
 async def auth_list_services(
     cliente_id: str = "",
@@ -2349,6 +2541,7 @@ async def auth_create_employee(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> PortalEmployeePublic:
+    security._require_portal_min_role(user, "manager")
     return agenda._create_portal_employee(
         portal._portal_client_id_or_403(user, cliente_id),
         data,
@@ -2363,6 +2556,7 @@ async def auth_update_employee(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> PortalEmployeePublic:
+    security._require_portal_min_role(user, "manager")
     return agenda._update_portal_employee(
         portal._portal_client_id_or_403(user, cliente_id),
         employee_id,
@@ -2377,6 +2571,7 @@ async def auth_delete_employee(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> AuthSimpleResponse:
+    security._require_portal_min_role(user, "manager")
     agenda._delete_portal_employee(portal._portal_client_id_or_403(user, cliente_id), employee_id)
     return AuthSimpleResponse(ok=True, message="Profesional eliminado correctamente.")
 
@@ -2446,7 +2641,9 @@ async def auth_create_booking(
     service_row = agenda._find_service_by_name(target_client_id, servicio)
     service_duration = agenda._service_duration_minutes(target_client_id, servicio, employee_row)
     service_id = service_row["slug"] if service_row else ""
-    service_price = int(service_row["price_cents"]) if service_row else 0
+    service_price = agenda._service_price_cents_resolved(
+        target_client_id, service_row, employee_row["location_id"] or ""
+    )
 
     # Limites de plan (salvo override admin del portal).
     if not portal._is_admin_client_portal_override(user, cliente_id):
@@ -2795,5 +2992,4 @@ async def auth_subscription_checkout(
         raise HTTPException(status_code=502, detail="No se pudo iniciar el proceso de pago.") from exc
 
     return SubscriptionCheckoutResponse(url=session.url, session_id=session.id)
-
 

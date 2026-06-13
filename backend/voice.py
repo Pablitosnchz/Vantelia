@@ -272,6 +272,24 @@ def _voice_call_from_number(call_sid: str) -> str:
         return ""
 
 
+def _voice_call_location_id(call_sid: str, cliente_id: str) -> str:
+    """Centro asociado a la linea LLAMADA (un numero por centro). '' si no mapeado."""
+    if not call_sid:
+        return ""
+    try:
+        with db._get_db_connection() as conn:
+            row = conn.execute(
+                "SELECT to_number FROM voice_calls WHERE call_sid = ? LIMIT 1",
+                (call_sid,),
+            ).fetchone()
+    except Exception:  # noqa: BLE001
+        return ""
+    to_number = (row[0] if row else "") or ""
+    if not to_number:
+        return ""
+    return agenda._location_for_channel(cliente_id, voice_phone_number=to_number)
+
+
 def _voice_load_knowledge(cliente_id: str, max_chars: int = 16000) -> str:
     """Lee los .txt del cliente para inyectar conocimiento en la sesion Realtime
     (la Realtime API no hace RAG; necesitamos el contexto en las instructions)."""
@@ -483,7 +501,9 @@ def _voice_booking_tools(cliente_id: str, config: Dict[str, Any]) -> List[Dict[s
     return tools
 
 
-async def _voice_check_availability(cliente_id: str, fecha: str, servicio: str = "") -> Dict[str, Any]:
+async def _voice_check_availability(
+    cliente_id: str, fecha: str, servicio: str = "", location_id: str = ""
+) -> Dict[str, Any]:
     config = appstate.CONFIG_CLIENTES.get(cliente_id)
     if not config or not _voice_booking_enabled(cliente_id, config):
         return {"ok": False, "error": "La reserva online no esta habilitada."}
@@ -494,7 +514,10 @@ async def _voice_check_availability(cliente_id: str, fecha: str, servicio: str =
         return {"ok": False, "error": str(exc.detail)}
     try:
         _all_slots, available = await agenda._public_slot_sets_for_day(
-            cliente_id, fecha, servicio=textnorm._sanitize_text(servicio or "")
+            cliente_id,
+            fecha,
+            servicio=textnorm._sanitize_text(servicio or ""),
+            location_id=location_id,
         )
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("[voice] disponibilidad fallo (%s): %s", cliente_id, exc)
@@ -512,6 +535,7 @@ async def _voice_perform_booking(
     hora: str,
     servicio: str = "",
     email: str = "",
+    location_id: str = "",
 ) -> Dict[str, Any]:
     """Crea una cita real reutilizando el motor de booking del widget. source='voice'."""
     config = appstate.CONFIG_CLIENTES.get(cliente_id)
@@ -535,7 +559,7 @@ async def _voice_perform_booking(
 
     try:
         employee_row = await agenda._resolve_public_booking_employee(
-            cliente_id, booking_date, booking_time, servicio=servicio
+            cliente_id, booking_date, booking_time, servicio=servicio, location_id=location_id
         )
     except HTTPException as exc:
         return {"ok": False, "error": str(exc.detail)}
@@ -543,7 +567,9 @@ async def _voice_perform_booking(
     service_row = agenda._find_service_by_name(cliente_id, servicio)
     service_duration = agenda._service_duration_minutes(cliente_id, servicio, employee_row)
     service_id = service_row["slug"] if service_row else ""
-    service_price = int(service_row["price_cents"]) if service_row else 0
+    service_price = agenda._service_price_cents_resolved(
+        cliente_id, service_row, employee_row["location_id"] or ""
+    )
 
     if not await agenda._booking_slot_available(
         cliente_id,
@@ -797,7 +823,7 @@ async def _voice_send_payment_link(
 
 
 async def _voice_dispatch_tool(
-    cliente_id: str, name: str, arguments_json: str, *, from_number: str = ""
+    cliente_id: str, name: str, arguments_json: str, *, from_number: str = "", location_id: str = ""
 ) -> Dict[str, Any]:
     try:
         args = json.loads(arguments_json or "{}")
@@ -807,7 +833,7 @@ async def _voice_dispatch_tool(
         args = {}
     if name == "consultar_disponibilidad":
         return await _voice_check_availability(
-            cliente_id, str(args.get("fecha", "")), str(args.get("servicio", ""))
+            cliente_id, str(args.get("fecha", "")), str(args.get("servicio", "")), location_id
         )
     if name == "crear_cita":
         return await _voice_perform_booking(
@@ -818,6 +844,7 @@ async def _voice_dispatch_tool(
             hora=str(args.get("hora", "")),
             servicio=str(args.get("servicio", "")),
             email=str(args.get("email", "")),
+            location_id=location_id,
         )
     if name == "cancelar_cita":
         return await _voice_cancel_booking(
@@ -988,7 +1015,7 @@ async def _voice_finalize_call(
     # booking_created refleja una cita realmente creada por voz; si no, caemos a
     # deteccion de intencion por palabras clave (lead sin reserva confirmada).
     booking_intent = booking_done or _voice_detect_booking_intent(transcript_text)
-    summary = await asyncio.to_thread(_voice_summarize, transcript_text)
+    summary = await timeutils._to_thread(_voice_summarize, transcript_text)
 
     from_number = ""
     if call_sid:

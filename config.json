@@ -217,7 +217,7 @@
       }
     }
   },
-  "demo_auto_the_nook_940b21": {
+  "thenook": {
     "nombre": "The Nook Madrid",
     "plan": "business",
     "subscription": {
@@ -261,7 +261,7 @@
       "sms_confirmation": true
     },
     "booking": {
-      "enabled": false,
+      "enabled": true,
       "timezone": "Europe/Madrid",
       "slot_minutes": 30,
       "day_start": "09:00",

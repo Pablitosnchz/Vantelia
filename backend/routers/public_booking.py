@@ -214,10 +214,31 @@ async def info_cliente(cliente_id: str, request: Request) -> ConfigPublicaClient
     )
 
 
-@app.get("/profesionales/{cliente_id}")
-async def public_employees(cliente_id: str, request: Request) -> Dict[str, List[Dict[str, Any]]]:
+@app.get("/centros/{cliente_id}")
+async def public_locations(cliente_id: str, request: Request) -> Dict[str, List[Dict[str, Any]]]:
     textnorm._assert_valid_client_id(cliente_id)
     security._enforce_allowed_origin(request, cliente_id)
+    return {
+        "items": [
+            {
+                "location_id": row["id"],
+                "name": row["name"],
+                "address": row["address"] or "",
+                "phone": row["phone"] or "",
+                "is_default": bool(row["is_default"]),
+            }
+            for row in agenda._list_location_rows(cliente_id, include_inactive=False)
+        ]
+    }
+
+
+@app.get("/profesionales/{cliente_id}")
+async def public_employees(
+    cliente_id: str, request: Request, location_id: str = ""
+) -> Dict[str, List[Dict[str, Any]]]:
+    textnorm._assert_valid_client_id(cliente_id)
+    security._enforce_allowed_origin(request, cliente_id)
+    location_filter = agenda._resolve_location_id(cliente_id, location_id) if location_id else ""
     return {
         "items": [
             {
@@ -226,10 +247,13 @@ async def public_employees(cliente_id: str, request: Request) -> Dict[str, List[
                 "role_label": row["role_label"] or "",
                 "color": agenda._normalize_employee_color(row["color"] or "#00b1d9"),
                 "is_default": bool(row["is_default"]),
+                "location_id": row["location_id"] or "",
                 "service_ids": agenda._employee_service_ids_from_row(row, cliente_id),
                 "allows_all_services": not agenda._employee_service_ids_from_row(row, cliente_id),
             }
-            for row in agenda._list_public_employee_rows(cliente_id, include_inactive=False)
+            for row in agenda._list_public_employee_rows(
+                cliente_id, include_inactive=False, location_id=location_filter
+            )
         ]
     }
 
@@ -294,6 +318,7 @@ async def disponibilidad(
     request: Request,
     employee_id: str = "",
     servicio: str = "",
+    location_id: str = "",
 ) -> RespuestaDisponibilidad:
     textnorm._assert_valid_client_id(cliente_id)
     security._enforce_allowed_origin(request, cliente_id)
@@ -306,10 +331,16 @@ async def disponibilidad(
 
     selected_day = textnorm._parse_date(fecha)
     agenda._validate_booking_window(cliente_id, selected_day)
+    location_filter = agenda._resolve_location_id(cliente_id, location_id) if location_id else ""
 
     try:
         if employee_id:
             employee_row = agenda._resolve_employee_for_booking(cliente_id, employee_id)
+            if servicio and not agenda._service_name_allowed_for_employee(cliente_id, employee_row, servicio):
+                raise HTTPException(
+                    status_code=400,
+                    detail="El servicio seleccionado no esta disponible para ese profesional.",
+                )
             slots, available_slots = await agenda._employee_slot_sets_for_day(
                 cliente_id,
                 fecha,
@@ -331,6 +362,7 @@ async def disponibilidad(
             cliente_id,
             fecha,
             servicio=textnorm._sanitize_text(servicio),
+            location_id=location_filter,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -383,18 +415,24 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
     telefono = textnorm._sanitize_text(data.telefono)
     servicio = textnorm._sanitize_text(data.servicio)
     notas = textnorm._sanitize_text(data.notas, allow_multiline=True)
+    location_filter = (
+        agenda._resolve_location_id(data.cliente_id, data.location_id) if data.location_id else ""
+    )
     employee_row = await agenda._resolve_public_booking_employee(
         data.cliente_id,
         booking_date,
         booking_time,
         employee_id=data.employee_id,
         servicio=servicio,
+        location_id=location_filter,
     )
 
     service_row = agenda._find_service_by_name(data.cliente_id, servicio)
     service_duration = agenda._service_duration_minutes(data.cliente_id, servicio, employee_row)
     service_id = service_row["slug"] if service_row else ""
-    service_price = int(service_row["price_cents"]) if service_row else 0
+    service_price = agenda._service_price_cents_resolved(
+        data.cliente_id, service_row, employee_row["location_id"] or ""
+    )
 
     if not await agenda._booking_slot_available(
         data.cliente_id, booking_date, booking_time,
@@ -571,10 +609,13 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
 
 
 @app.get("/servicios/{cliente_id}")
-async def servicios(cliente_id: str, request: Request, employee_id: str = "") -> Dict[str, List[Dict[str, Any]]]:
+async def servicios(
+    cliente_id: str, request: Request, employee_id: str = "", location_id: str = ""
+) -> Dict[str, List[Dict[str, Any]]]:
     textnorm._assert_valid_client_id(cliente_id)
     security._enforce_allowed_origin(request, cliente_id)
-    return {"servicios": booking._public_services_for_booking(cliente_id, employee_id)}
+    location_filter = agenda._resolve_location_id(cliente_id, location_id) if location_id else ""
+    return {"servicios": booking._public_services_for_booking(cliente_id, employee_id, location_filter)}
 
 
 @app.post("/auth/services", response_model=ServicePublic)
@@ -583,6 +624,7 @@ async def auth_create_service(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> ServicePublic:
+    security._require_portal_min_role(user, "manager")
     target_client_id = portal._portal_client_id_or_403(user, cliente_id)
     agenda._ensure_services_seeded(target_client_id)
     name = textnorm._sanitize_text(data.nombre)
@@ -619,6 +661,7 @@ async def auth_update_service(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> ServicePublic:
+    security._require_portal_min_role(user, "manager")
     target_client_id = portal._portal_client_id_or_403(user, cliente_id)
     row = agenda._get_service_row(target_client_id, slug)
     if not row:
@@ -628,6 +671,10 @@ async def auth_update_service(
         name = textnorm._sanitize_text(data.nombre)
         if not name:
             raise HTTPException(status_code=400, detail="Nombre de servicio invalido.")
+        duplicate_slug = agenda._normalize_service_id(name)
+        duplicate = agenda._get_service_row(target_client_id, duplicate_slug)
+        if duplicate is not None and duplicate["slug"] != slug:
+            raise HTTPException(status_code=409, detail="Ya existe un servicio con ese nombre.")
         updates["name"] = name
     if data.duration_minutes is not None:
         updates["duration_minutes"] = int(data.duration_minutes)
@@ -673,6 +720,7 @@ async def auth_delete_service(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> AuthSimpleResponse:
+    security._require_portal_min_role(user, "manager")
     target_client_id = portal._portal_client_id_or_403(user, cliente_id)
     if not agenda._get_service_row(target_client_id, slug):
         raise HTTPException(status_code=404, detail="Servicio no encontrado.")
@@ -685,7 +733,6 @@ async def auth_delete_service(
         )
         connection.commit()
     return AuthSimpleResponse(ok=True, message="Servicio eliminado.")
-
 
 
 
