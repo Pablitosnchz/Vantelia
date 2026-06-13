@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 CID = "thenook"
 EMAIL = "demo@thenook.es"
-PASSWORD = "TheNookDemo2025!"
+PASSWORD = "vantelia123"
 
 PASS = 0
 FAIL = 0

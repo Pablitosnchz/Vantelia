@@ -42,7 +42,7 @@ from api_models import (  # noqa: E402
 
 CID = "thenook"
 PORTAL_EMAIL = "demo@thenook.es"
-PORTAL_PASSWORD = "TheNookDemo2025!"
+PORTAL_PASSWORD = "vantelia123"
 
 RNG = random.Random(20260613)
 
