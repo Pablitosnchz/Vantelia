@@ -978,6 +978,9 @@
     /* Toast: barra de acento + ligero desenfoque para look premium */
     .toast { backdrop-filter: blur(6px); border-left-width: 3px; }
 
+    /* Clientes */
+    .cliente-name { font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
     /* Conversaciones (chat web / WhatsApp / voz) */
     .conv-chip { padding: 6px 12px; font-size: 0.83rem; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--soft); cursor: pointer; font-family: var(--font); transition: all .12s ease; }
     .conv-chip:hover { color: var(--text); border-color: var(--accent); }
@@ -7272,6 +7275,12 @@ function applyRoleVisibility(role, permissions) {
 const clientesState = { current: null };
 const CRM_STATUS_LABEL = { nuevo:'Nuevo', lead:'Lead', cliente:'Cliente', recurrente:'Recurrente', inactivo:'Inactivo', perdido:'Perdido' };
 
+function clienteInitials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
+}
+
 async function loadClientes() {
   const list = document.getElementById('clientesList');
   list.innerHTML = '<div class="panel-sub">Cargando…</div>';
@@ -7280,18 +7289,23 @@ async function loadClientes() {
     const data = await api(`/auth/app/contacts?page_size=100${q ? `&q=${encodeURIComponent(q)}` : ''}`);
     const items = data.items || [];
     if (!items.length) { list.innerHTML = '<div class="panel-sub">Sin clientes todavía. Se crean solos con cada reserva o conversación.</div>'; return; }
-    list.innerHTML = items.map(ct => `
+    list.innerHTML = items.map(ct => {
+      const nm = ct.name || ct.email || ct.phone || 'Cliente';
+      const meta = [ct.email || '', ct.phone || ''].filter(Boolean).join(' · ');
+      const seen = ct.last_seen_at ? `visto ${escapeHtml(String(ct.last_seen_at).slice(0,10))}` : '';
+      return `
       <div class="sale-row" data-contact="${escapeHtml(ct.id)}" style="cursor:pointer;">
+        <div class="avatar" style="flex-shrink:0;">${escapeHtml(clienteInitials(nm))}</div>
         <div class="sale-main">
-          <b>${escapeHtml(ct.name || ct.email || ct.phone || 'Cliente')}</b>
-          ${ct.status && ct.status !== 'nuevo' ? `<span class="pill pill-active" style="margin-left:6px;">${escapeHtml(CRM_STATUS_LABEL[ct.status] || ct.status)}</span>` : ''}
-          <div style="color:var(--soft-2); font-size:0.78rem;">
-            ${escapeHtml(ct.email || '')}${ct.email && ct.phone ? ' · ' : ''}${escapeHtml(ct.phone || '')}
-            ${ct.last_seen_at ? ` · visto ${escapeHtml(String(ct.last_seen_at).slice(0,10))}` : ''}
-          </div>
+          <div class="cliente-name">${escapeHtml(nm)}${ct.status && ct.status !== 'nuevo' ? ` <span class="pill pill-active">${escapeHtml(CRM_STATUS_LABEL[ct.status] || ct.status)}</span>` : ''}</div>
+          <div style="color:var(--soft-2); font-size:0.78rem;">${escapeHtml(meta)}${meta && seen ? ' · ' : ''}${seen}</div>
         </div>
-        <div class="sale-amount" style="font-weight:600; color:var(--soft);">${ct.bookings_count || 0} cita${(ct.bookings_count||0)===1?'':'s'}</div>
-      </div>`).join('');
+        <div class="sale-amount" style="text-align:right; color:var(--soft);">
+          <div style="font-weight:700; color:var(--text);">${ct.bookings_count || 0}</div>
+          <div style="font-size:0.7rem;">cita${(ct.bookings_count||0)===1?'':'s'}</div>
+        </div>
+      </div>`;
+    }).join('');
     list.querySelectorAll('[data-contact]').forEach(row => row.addEventListener('click', () => openClientePanel(row.getAttribute('data-contact'))));
   } catch (e) { list.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
 }
@@ -7307,6 +7321,8 @@ async function openClientePanel(contactId) {
     const data = await api(`/auth/app/contacts/${encodeURIComponent(contactId)}`);
     const ct = data.contact || {}; const acts = data.activity || [];
     clientesState.current = ct;
+    const canEdit = hasPerm('clients.edit');
+    const dis = canEdit ? '' : 'disabled';
     document.getElementById('clientePanelTitle').textContent = ct.name || ct.email || ct.phone || 'Cliente';
     const waPhone = (ct.phone || '').replace(/[^\d]/g, '');
     body.innerHTML = `
@@ -7321,19 +7337,29 @@ async function openClientePanel(contactId) {
         <div class="inf-kpi"><div class="k-label">Chats</div><div class="k-value">${ct.chats_count || 0}</div></div>
         <div class="inf-kpi"><div class="k-label">Llamadas</div><div class="k-value">${ct.voice_calls_count || 0}</div></div>
       </div>
-      <div class="field" style="margin-bottom:6px;">
-        <label class="field-label">Datos</label>
-        <div style="font-size:0.86rem; color:var(--soft);">
-          ${escapeHtml(ct.email || 'sin email')}${ct.phone ? ' · ' + escapeHtml(ct.phone) : ''}<br>
-          ${ct.first_seen_at ? 'Cliente desde ' + escapeHtml(String(ct.first_seen_at).slice(0,10)) : ''}
+      <div class="field" style="margin-bottom:8px;">
+        <label class="field-label">Datos del cliente</label>
+        <div class="form-row" style="margin-top:0;">
+          <div class="field"><label class="field-label">Nombre</label><input class="field-input" id="clienteNombre" maxlength="200" value="${escapeHtml(ct.name || '')}" ${dis}></div>
         </div>
+        <div class="form-row">
+          <div class="field"><label class="field-label">Email</label><input class="field-input" id="clienteEmail" type="email" maxlength="200" value="${escapeHtml(ct.email || '')}" ${dis}></div>
+          <div class="field"><label class="field-label">Teléfono</label><input class="field-input" id="clienteTelefono" maxlength="80" value="${escapeHtml(ct.phone || '')}" ${dis}></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label class="field-label">Estado</label>
+            <select class="field-input" id="clienteEstado" ${dis}>${['nuevo','lead','cliente','recurrente','inactivo','perdido'].map(s => `<option value="${s}" ${(ct.status || 'nuevo') === s ? 'selected' : ''}>${escapeHtml(CRM_STATUS_LABEL[s] || s)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label class="field-label">Etiquetas (separadas por coma)</label><input class="field-input" id="clienteTags" maxlength="400" value="${escapeHtml((ct.tags || []).join(', '))}" ${dis}></div>
+        </div>
+        ${ct.first_seen_at ? `<p class="panel-sub" style="margin:8px 0 0;">Cliente desde ${escapeHtml(String(ct.first_seen_at).slice(0,10))}</p>` : ''}
       </div>
       <div id="clienteBonos" style="margin:10px 0;"></div>
-      <div class="field" style="margin-bottom:12px;">
+      <div class="field" style="margin-bottom:10px;">
         <label class="field-label">Notas internas</label>
-        <textarea class="field-input" id="clienteNotas" rows="3" maxlength="8000">${escapeHtml(ct.notes || '')}</textarea>
-        <button class="btn btn-primary" id="clienteSaveNotas" style="margin-top:8px; font-size:0.82rem;">Guardar nota</button>
+        <textarea class="field-input" id="clienteNotas" rows="3" maxlength="8000" ${dis}>${escapeHtml(ct.notes || '')}</textarea>
       </div>
+      ${canEdit ? `<button class="btn btn-primary" id="clienteSaveBtn" style="width:100%; margin-bottom:8px;">Guardar cambios</button>` : '<p class="panel-sub" style="margin-bottom:8px;">Solo lectura: no tienes permiso para editar fichas.</p>'}
       <div class="field">
         <label class="field-label">Historial</label>
         <div id="clienteActividad" style="display:flex; flex-direction:column; gap:6px;">
@@ -7355,15 +7381,27 @@ async function openClientePanel(contactId) {
       setTab('citas');
       openNewBookingDrawer({ nombre: ct.name || '', email: ct.email || '', telefono: ct.phone || '' }).catch(err => toast(err.message, 'error'));
     });
-    document.getElementById('clienteSaveNotas').addEventListener('click', async () => {
+    const saveBtn = document.getElementById('clienteSaveBtn');
+    if (saveBtn) saveBtn.addEventListener('click', async () => {
+      const payload = {
+        name: document.getElementById('clienteNombre').value.trim(),
+        email: document.getElementById('clienteEmail').value.trim(),
+        phone: document.getElementById('clienteTelefono').value.trim(),
+        status: document.getElementById('clienteEstado').value,
+        notes: document.getElementById('clienteNotas').value,
+        tags: document.getElementById('clienteTags').value.split(',').map(s => s.trim()).filter(Boolean),
+      };
+      saveBtn.disabled = true; const o = saveBtn.textContent; saveBtn.textContent = 'Guardando…';
       try {
         await api(`/auth/app/contacts/${encodeURIComponent(ct.id)}`, {
-          method:'PUT', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ name: ct.name || '', email: ct.email || '', phone: ct.phone || '',
-            status: ct.status || 'nuevo', notes: document.getElementById('clienteNotas').value, tags: ct.tags || [] }),
+          method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload),
         });
-        toast('Nota guardada.', 'success');
+        toast('Cliente actualizado.', 'success');
+        Object.assign(ct, payload);
+        document.getElementById('clientePanelTitle').textContent = payload.name || payload.email || payload.phone || 'Cliente';
+        loadClientes();
       } catch (e) { toast(e.message, 'error'); }
+      finally { saveBtn.disabled = false; saveBtn.textContent = o; }
     });
   } catch (e) { body.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
 }
