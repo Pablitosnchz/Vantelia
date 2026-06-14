@@ -12,7 +12,7 @@ Ingresos = citas pagadas (snapshot service_price_cents, fecha de la cita)
            (ya contó al vender) — criterio contable estándar de los POS de
            belleza/bienestar.
 
-Todo filtrable por centro (location_id) y rango de fechas.
+Todo filtrable por centro (location_id), servicio (service_id) y rango de fechas.
 """
 from __future__ import annotations
 
@@ -52,17 +52,25 @@ def _loc_clause(location_id: str, column: str = "location_id") -> Tuple[str, Lis
     return "", []
 
 
+def _service_clause(service_id: str, column: str = "service_id") -> Tuple[str, List[Any]]:
+    if service_id:
+        return f" AND {column} = ?", [service_id]
+    return "", []
+
+
 def _bookings_aggregates(
-    connection: sqlite3.Connection, cliente_id: str, start: date, end: date, location_id: str
+    connection: sqlite3.Connection, cliente_id: str, start: date, end: date,
+    location_id: str, service_id: str,
 ) -> Dict[str, Any]:
     loc_sql, loc_params = _loc_clause(location_id)
-    base_params = [cliente_id, start.isoformat(), end.isoformat()] + loc_params
+    service_sql, service_params = _service_clause(service_id)
+    base_params = [cliente_id, start.isoformat(), end.isoformat()] + loc_params + service_params
     by_status: Dict[str, int] = {}
     for row in connection.execute(
         f"""
         SELECT status, COUNT(*) AS n
         FROM bookings
-        WHERE cliente_id = ? AND booking_date >= ? AND booking_date <= ?{loc_sql}
+        WHERE cliente_id = ? AND booking_date >= ? AND booking_date <= ?{loc_sql}{service_sql}
         GROUP BY status
         """,
         base_params,
@@ -72,7 +80,7 @@ def _bookings_aggregates(
         f"""
         SELECT COALESCE(SUM(service_price_cents), 0) AS cents, COUNT(*) AS n
         FROM bookings
-        WHERE cliente_id = ? AND booking_date >= ? AND booking_date <= ?{loc_sql}
+        WHERE cliente_id = ? AND booking_date >= ? AND booking_date <= ?{loc_sql}{service_sql}
           AND {REVENUE_BOOKING_FILTER}
         """,
         base_params,
@@ -101,9 +109,11 @@ def _sales_revenue(
 
 
 def _daily_series(
-    connection: sqlite3.Connection, cliente_id: str, start: date, end: date, location_id: str
+    connection: sqlite3.Connection, cliente_id: str, start: date, end: date,
+    location_id: str, service_id: str,
 ) -> List[Dict[str, Any]]:
     loc_sql, loc_params = _loc_clause(location_id)
+    service_sql, service_params = _service_clause(service_id)
     bookings_by_day: Dict[str, Dict[str, int]] = {}
     for row in connection.execute(
         f"""
@@ -111,19 +121,19 @@ def _daily_series(
                COUNT(*) AS total,
                COALESCE(SUM(CASE WHEN {REVENUE_BOOKING_FILTER} THEN service_price_cents ELSE 0 END), 0) AS cents
         FROM bookings
-        WHERE cliente_id = ? AND booking_date >= ? AND booking_date <= ?{loc_sql}
+        WHERE cliente_id = ? AND booking_date >= ? AND booking_date <= ?{loc_sql}{service_sql}
           AND status != 'cancelled'
         GROUP BY booking_date
         """,
-        [cliente_id, start.isoformat(), end.isoformat()] + loc_params,
+        [cliente_id, start.isoformat(), end.isoformat()] + loc_params + service_params,
     ):
         bookings_by_day[row["d"]] = {"bookings": int(row["total"]), "cents": int(row["cents"] or 0)}
     extras_by_day: Dict[str, int] = {}
-    for table, expr in (
+    for table, expr in (() if service_id else (
         ("product_sales", "total_cents"),
         ("package_purchases", "price_cents"),
         ("gift_cards", "initial_cents"),
-    ):
+    )):
         for row in connection.execute(
             f"""
             SELECT substr(created_at, 1, 10) AS d, COALESCE(SUM({expr}), 0) AS cents
@@ -152,22 +162,24 @@ def _daily_series(
 
 def _breakdown(
     connection: sqlite3.Connection, cliente_id: str, start: date, end: date,
-    location_id: str, column: str, label_fallback: str, limit: int = 8,
+    location_id: str, service_id: str, column: str, label_fallback: str, limit: int = 8,
 ) -> List[Dict[str, Any]]:
     loc_sql, loc_params = _loc_clause(location_id)
+    service_sql, service_params = _service_clause(service_id)
     rows = connection.execute(
         f"""
         SELECT COALESCE(NULLIF({column}, ''), ?) AS label,
                COUNT(*) AS total,
                COALESCE(SUM(CASE WHEN {REVENUE_BOOKING_FILTER} THEN service_price_cents ELSE 0 END), 0) AS cents
         FROM bookings
-        WHERE cliente_id = ? AND booking_date >= ? AND booking_date <= ?{loc_sql}
+        WHERE cliente_id = ? AND booking_date >= ? AND booking_date <= ?{loc_sql}{service_sql}
           AND status != 'cancelled'
         GROUP BY label
         ORDER BY total DESC
         LIMIT ?
         """,
-        [label_fallback, cliente_id, start.isoformat(), end.isoformat()] + loc_params + [limit],
+        [label_fallback, cliente_id, start.isoformat(), end.isoformat()]
+        + loc_params + service_params + [limit],
     ).fetchall()
     return [
         {"label": row["label"], "bookings": int(row["total"]), "revenue_cents": int(row["cents"] or 0)}
@@ -214,26 +226,29 @@ def _employee_available_minutes(row: sqlite3.Row, start: date, end: date) -> int
 
 
 def _occupancy_rate(
-    connection: sqlite3.Connection, cliente_id: str, start: date, end: date, location_id: str
+    connection: sqlite3.Connection, cliente_id: str, start: date, end: date,
+    location_id: str, service_id: str,
 ) -> float:
     employees = [
         row
         for row in agenda._list_employee_rows(cliente_id, include_inactive=False, location_id=location_id)
-        if not bool(row["is_default"]) or True  # la agenda general tambien suma capacidad
+        if not service_id or not agenda._employee_service_ids_from_row(row, cliente_id)
+        or service_id in agenda._employee_service_ids_from_row(row, cliente_id)
     ]
     available = sum(_employee_available_minutes(row, start, end) for row in employees)
     if available <= 0:
         return 0.0
     loc_sql, loc_params = _loc_clause(location_id)
+    service_sql, service_params = _service_clause(service_id)
     booked = 0
     for row in connection.execute(
         f"""
         SELECT start_at, end_at
         FROM bookings
-        WHERE cliente_id = ? AND booking_date >= ? AND booking_date <= ?{loc_sql}
+        WHERE cliente_id = ? AND booking_date >= ? AND booking_date <= ?{loc_sql}{service_sql}
           AND status IN ('confirmed', 'pending_review', 'completed', 'no_show')
         """,
-        [cliente_id, start.isoformat(), end.isoformat()] + loc_params,
+        [cliente_id, start.isoformat(), end.isoformat()] + loc_params + service_params,
     ):
         try:
             start_dt = datetime.fromisoformat(str(row["start_at"]).replace("Z", "+00:00"))
@@ -245,29 +260,32 @@ def _occupancy_rate(
 
 
 def _new_customers(
-    connection: sqlite3.Connection, cliente_id: str, start: date, end: date, location_id: str
+    connection: sqlite3.Connection, cliente_id: str, start: date, end: date,
+    location_id: str, service_id: str,
 ) -> int:
     loc_sql, loc_params = _loc_clause(location_id)
+    service_sql, service_params = _service_clause(service_id)
     row = connection.execute(
         f"""
         SELECT COUNT(*) AS n FROM (
             SELECT LOWER(email) AS e, MIN(booking_date) AS first_date
             FROM bookings
-            WHERE cliente_id = ? AND email != ''{loc_sql}
+            WHERE cliente_id = ? AND email != ''{loc_sql}{service_sql}
             GROUP BY LOWER(email)
         )
         WHERE first_date >= ? AND first_date <= ?
         """,
-        [cliente_id] + loc_params + [start.isoformat(), end.isoformat()],
+        [cliente_id] + loc_params + service_params + [start.isoformat(), end.isoformat()],
     ).fetchone()
     return int(row["n"] or 0)
 
 
 def _kpis_for_range(
-    connection: sqlite3.Connection, cliente_id: str, start: date, end: date, location_id: str
+    connection: sqlite3.Connection, cliente_id: str, start: date, end: date,
+    location_id: str, service_id: str,
 ) -> Dict[str, Any]:
-    agg = _bookings_aggregates(connection, cliente_id, start, end, location_id)
-    extras = (
+    agg = _bookings_aggregates(connection, cliente_id, start, end, location_id, service_id)
+    extras = 0 if service_id else (
         _sales_revenue(connection, "product_sales", "total_cents", cliente_id, start, end, location_id)
         + _sales_revenue(connection, "package_purchases", "price_cents", cliente_id, start, end, location_id)
         + _sales_revenue(connection, "gift_cards", "initial_cents", cliente_id, start, end, location_id)
@@ -287,30 +305,34 @@ def _kpis_for_range(
         "attendance_rate": round(completed / finished, 4) if finished else None,
         "avg_ticket_cents": int(agg["revenue_cents"] / agg["paid_count"]) if agg["paid_count"] else 0,
         "extras_revenue_cents": extras,
-        "new_customers": _new_customers(connection, cliente_id, start, end, location_id),
+        "new_customers": _new_customers(connection, cliente_id, start, end, location_id, service_id),
     }
 
 
 def _overview(
-    cliente_id: str, *, location_id: str = "", date_from: str = "", date_to: str = ""
+    cliente_id: str, *, location_id: str = "", service_id: str = "",
+    date_from: str = "", date_to: str = "",
 ) -> Dict[str, Any]:
     start, end = _parse_range(date_from, date_to)
     location_filter = (
         agenda._resolve_location_id(cliente_id, location_id, require_active=False) if location_id else ""
     )
+    service_filter = agenda._normalize_service_id(service_id) if service_id else ""
+    if service_filter and not agenda._get_service_row(cliente_id, service_filter):
+        raise HTTPException(status_code=404, detail="Servicio no encontrado.")
     span = (end - start).days + 1
     prev_end = start - timedelta(days=1)
     prev_start = prev_end - timedelta(days=span - 1)
     with db._get_db_connection() as connection:
-        current = _kpis_for_range(connection, cliente_id, start, end, location_filter)
-        previous = _kpis_for_range(connection, cliente_id, prev_start, prev_end, location_filter)
-        current["occupancy_rate"] = _occupancy_rate(connection, cliente_id, start, end, location_filter)
-        previous["occupancy_rate"] = _occupancy_rate(connection, cliente_id, prev_start, prev_end, location_filter)
-        series = _daily_series(connection, cliente_id, start, end, location_filter)
-        by_service = _breakdown(connection, cliente_id, start, end, location_filter, "servicio", "Sin servicio")
-        by_employee = _breakdown(connection, cliente_id, start, end, location_filter, "employee_name", "Sin asignar")
-        by_source = _breakdown(connection, cliente_id, start, end, location_filter, "source", "otro")
-        by_location_raw = _breakdown(connection, cliente_id, start, end, "", "location_id", "", limit=20)
+        current = _kpis_for_range(connection, cliente_id, start, end, location_filter, service_filter)
+        previous = _kpis_for_range(connection, cliente_id, prev_start, prev_end, location_filter, service_filter)
+        current["occupancy_rate"] = _occupancy_rate(connection, cliente_id, start, end, location_filter, service_filter)
+        previous["occupancy_rate"] = _occupancy_rate(connection, cliente_id, prev_start, prev_end, location_filter, service_filter)
+        series = _daily_series(connection, cliente_id, start, end, location_filter, service_filter)
+        by_service = _breakdown(connection, cliente_id, start, end, location_filter, service_filter, "servicio", "Sin servicio")
+        by_employee = _breakdown(connection, cliente_id, start, end, location_filter, service_filter, "employee_name", "Sin asignar")
+        by_source = _breakdown(connection, cliente_id, start, end, location_filter, service_filter, "source", "otro")
+        by_location_raw = _breakdown(connection, cliente_id, start, end, "", service_filter, "location_id", "", limit=20)
     location_names = {
         row["id"]: row["name"] for row in agenda._list_location_rows(cliente_id)
     }
@@ -322,6 +344,7 @@ def _overview(
         "date_from": start.isoformat(),
         "date_to": end.isoformat(),
         "location_id": location_filter,
+        "service_id": service_filter,
         "kpis": current,
         "previous": previous,
         "series": series,
@@ -333,9 +356,13 @@ def _overview(
 
 
 def _export_csv(
-    cliente_id: str, *, location_id: str = "", date_from: str = "", date_to: str = ""
+    cliente_id: str, *, location_id: str = "", service_id: str = "",
+    date_from: str = "", date_to: str = "",
 ) -> str:
-    data = _overview(cliente_id, location_id=location_id, date_from=date_from, date_to=date_to)
+    data = _overview(
+        cliente_id, location_id=location_id, service_id=service_id,
+        date_from=date_from, date_to=date_to,
+    )
     lines = ["fecha;citas;ingresos_eur"]
     for item in data["series"]:
         lines.append(f"{item['date']};{item['bookings']};{item['revenue_cents'] / 100:.2f}")

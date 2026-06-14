@@ -1,5 +1,6 @@
 .env
 .env.*
+.gh_token
 deploy/known_hosts
 deploy/ssh-askpass.cmd
 deploy/vantelia_deploy*
