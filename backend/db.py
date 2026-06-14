@@ -456,6 +456,16 @@ def _init_database() -> None:
             ON product_sales(cliente_id, location_id, created_at)
             """
         )
+        # Venta de producto con cobro online (Stripe): status + enlace al pago.
+        product_sales_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(product_sales)").fetchall()
+        }
+        for column_name, definition in {
+            "status": "TEXT NOT NULL DEFAULT 'paid'",
+            "customer_payment_id": "TEXT NOT NULL DEFAULT ''",
+        }.items():
+            if column_name not in product_sales_columns:
+                connection.execute(f"ALTER TABLE product_sales ADD COLUMN {column_name} {definition}")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS packages (
@@ -1131,6 +1141,16 @@ def _init_database() -> None:
             WHERE stripe_checkout_session_id <> ''
             """
         )
+        # Cobro POS (mostrador / productos sobre la cita): kind + lineas del carrito.
+        customer_payments_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(customer_payments)").fetchall()
+        }
+        for column_name, definition in {
+            "kind": "TEXT NOT NULL DEFAULT 'booking'",
+            "line_items_json": "TEXT NOT NULL DEFAULT ''",
+        }.items():
+            if column_name not in customer_payments_columns:
+                connection.execute(f"ALTER TABLE customer_payments ADD COLUMN {column_name} {definition}")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS customer_payment_events (

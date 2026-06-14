@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 
-from backend import agenda, booking, db, textnorm, timeutils
+from backend import agenda, booking, db, settings, stripe_gateway, textnorm, timeutils
 
 PAYMENT_METHODS = {"cash", "card", "transfer", "stripe", "gift_card", "other"}
 
@@ -249,6 +249,217 @@ def _list_product_sales(
         }
         for r in rows
     ]
+
+
+# ---------------------------------------------------------------------------
+# Cobro POS con Stripe: QR/enlace en mostrador (#1) y producto sobre la cita (#2)
+#
+# A diferencia de _sell_product (registro manual de efectivo/datafono), aqui el
+# cliente paga DE VERDAD con su tarjeta via Stripe Checkout sobre la cuenta
+# Connect del negocio. La venta NO se registra hasta que el webhook confirma el
+# pago (_finalize_pos_payment), evitando ventas fantasma. El precio sale siempre
+# del catalogo/snapshot, nunca del request.
+# ---------------------------------------------------------------------------
+
+
+def _qr_svg(url: str) -> str:
+    """SVG del QR para el enlace de pago. Cadena vacia si segno no esta disponible
+    (el panel cae a mostrar solo el enlace)."""
+    if not url:
+        return ""
+    try:
+        import io
+        import segno
+        buf = io.StringIO()
+        segno.make(url, error="m").save(buf, kind="svg", scale=5, border=2, xmldecl=False, svgclass="vqr")
+        return buf.getvalue()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _pos_resolve_lines(cliente_id: str, items: Any) -> List[Dict[str, Any]]:
+    """Valida [{product_id, qty}] -> lineas con precio del catalogo + control de stock."""
+    lines: List[Dict[str, Any]] = []
+    for it in items or []:
+        pid = textnorm._sanitize_text(
+            getattr(it, "product_id", "") or (it.get("product_id") if isinstance(it, dict) else "")
+        )
+        qty = int(getattr(it, "qty", 0) or (it.get("qty", 0) if isinstance(it, dict) else 0) or 0)
+        if not pid or qty < 1:
+            continue
+        row = _get_product_row(cliente_id, pid)
+        if not row or not bool(row["is_active"]):
+            raise HTTPException(status_code=404, detail="Producto no disponible.")
+        qty = min(qty, 999)
+        if row["stock"] is not None and int(row["stock"]) < qty:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Stock insuficiente de {row['name']}: quedan {int(row['stock'])}.",
+            )
+        lines.append({
+            "type": "product", "product_id": pid, "name": row["name"],
+            "qty": qty, "unit_price_cents": int(row["price_cents"] or 0),
+        })
+    return lines
+
+
+def create_pos_payment_link(
+    cliente_id: str, *, items: Any, booking_id: str = "", base_url: str = "",
+    customer_name: str = "", customer_email: str = "",
+) -> Dict[str, Any]:
+    """Crea un Stripe Checkout (cuenta Connect del negocio) para un cobro de
+    mostrador: productos y/o el servicio de una cita. Devuelve enlace + QR. La venta
+    se materializa en el webhook (_finalize_pos_payment)."""
+    booking_id = textnorm._sanitize_text(booking_id or "")
+    lines = _pos_resolve_lines(cliente_id, items)
+    booking_row = None
+    location_id = ""
+    if booking_id:
+        booking_row = booking._get_booking_row_by_id(booking_id)
+        if not booking_row or booking_row["cliente_id"] != cliente_id:
+            raise HTTPException(status_code=404, detail="Cita no encontrada.")
+        location_id = booking_row["location_id"] or ""
+        svc_cents = int(booking_row["service_price_cents"] or 0)
+        if svc_cents > 0 and (booking_row["payment_status"] or "") != "paid":
+            lines.insert(0, {
+                "type": "booking", "booking_id": booking_id,
+                "name": booking_row["servicio"] or "Cita", "qty": 1, "unit_price_cents": svc_cents,
+            })
+    if not lines:
+        raise HTTPException(status_code=400, detail="Anade al menos un producto o un importe a cobrar.")
+    amount = sum(int(l["unit_price_cents"]) * int(l["qty"]) for l in lines)
+    if amount < 50:
+        raise HTTPException(status_code=400, detail="El importe minimo de cobro es 0,50 EUR.")
+
+    account = booking._connect_account_status(cliente_id, refresh=True)
+    if not account.connected or not account.charges_enabled:
+        raise HTTPException(status_code=409, detail="Conecta y activa Stripe antes de cobrar.")
+
+    payment_id, now = "pay_" + secrets.token_hex(10), timeutils._utc_now_iso()
+    metadata = {
+        "source": "customer_payment", "kind": "pos", "payment_id": payment_id,
+        "cliente_id": cliente_id, "booking_id": booking_id,
+    }
+    base = (base_url or "").rstrip("/")
+    stripe_gateway._stripe_init()
+    stripe_lines = [
+        {
+            "price_data": {"currency": "eur", "unit_amount": int(l["unit_price_cents"]),
+                           "product_data": {"name": l["name"]}},
+            "quantity": int(l["qty"]),
+        }
+        for l in lines
+    ]
+    try:
+        kwargs: Dict[str, Any] = dict(
+            mode="payment", line_items=stripe_lines, metadata=metadata,
+            success_url=f"{base}/dashboard?pos=success", cancel_url=f"{base}/dashboard?pos=cancel",
+            stripe_account=account.stripe_account_id,
+        )
+        email = textnorm._sanitize_text(customer_email or (booking_row["email"] if booking_row else ""))
+        if email:
+            kwargs["customer_email"] = email
+        session = stripe_gateway.stripe.checkout.Session.create(**kwargs)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("No se pudo crear checkout POS %s: %s", cliente_id, exc)
+        raise HTTPException(status_code=502, detail="No se pudo crear el enlace de pago.") from exc
+
+    checkout_url = textnorm._object_get(session, "url", "")
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO customer_payments
+                (id, cliente_id, contact_id, booking_id, service_id, service_name, stripe_account_id,
+                 stripe_checkout_session_id, amount_cents, currency, status, checkout_url,
+                 kind, line_items_json, created_at, updated_at)
+            VALUES (?, ?, '', ?, '', ?, ?, ?, ?, 'eur', 'pending', ?, 'pos', ?, ?, ?)
+            """,
+            (
+                payment_id, cliente_id, booking_id,
+                textnorm._sanitize_text(customer_name or "")[:120],
+                account.stripe_account_id, textnorm._object_get(session, "id", ""),
+                amount, checkout_url, json.dumps(lines, ensure_ascii=False), now, now,
+            ),
+        )
+        connection.commit()
+    return {
+        "payment_id": payment_id, "url": checkout_url, "amount_cents": amount,
+        "currency": "eur", "status": "pending", "qr_svg": _qr_svg(checkout_url),
+        "line_items": lines,
+    }
+
+
+def pos_payment_status(cliente_id: str, payment_id: str) -> Dict[str, Any]:
+    with db._get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM customer_payments WHERE id=? AND cliente_id=? AND kind='pos'",
+            (payment_id, cliente_id),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Cobro no encontrado.")
+    return {
+        "payment_id": row["id"], "status": row["status"],
+        "amount_cents": int(row["amount_cents"] or 0),
+        "paid": row["status"] == "paid", "url": row["checkout_url"] or "",
+    }
+
+
+def _finalize_pos_payment(connection: sqlite3.Connection, payment: sqlite3.Row, now: str) -> None:
+    """Materializa un cobro POS pagado: registra las ventas de producto (descontando
+    stock) y marca la cita como pagada. Idempotente y usa la conexion/transaccion del
+    webhook (no hace commit)."""
+    cliente_id = payment["cliente_id"]
+    pay_id = payment["id"]
+    booking_id = payment["booking_id"] or ""
+    try:
+        lines = json.loads(payment["line_items_json"] or "[]")
+    except (ValueError, TypeError):
+        lines = []
+    already = connection.execute(
+        "SELECT COUNT(*) FROM product_sales WHERE customer_payment_id=?", (pay_id,)
+    ).fetchone()[0]
+    location_id = ""
+    if booking_id:
+        brow = connection.execute(
+            "SELECT location_id FROM bookings WHERE id=? AND cliente_id=?", (booking_id, cliente_id)
+        ).fetchone()
+        if brow:
+            location_id = brow["location_id"] or ""
+    if not already:
+        for l in lines:
+            if l.get("type") != "product":
+                continue
+            qty = max(1, int(l.get("qty") or 1))
+            unit = int(l.get("unit_price_cents") or 0)
+            sale_id = "sale_" + secrets.token_urlsafe(8)
+            connection.execute(
+                """
+                INSERT INTO product_sales
+                    (id, cliente_id, location_id, product_id, product_name, qty, unit_price_cents,
+                     total_cents, booking_id, customer_name, customer_email, payment_method, notes,
+                     status, customer_payment_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', 'stripe', '', 'paid', ?, ?)
+                """,
+                (
+                    sale_id, cliente_id, location_id, l.get("product_id", ""), l.get("name", ""),
+                    qty, unit, unit * qty, booking_id, pay_id, now,
+                ),
+            )
+            connection.execute(
+                "UPDATE products SET stock = CASE WHEN stock IS NULL THEN NULL ELSE MAX(0, stock - ?) END, "
+                "updated_at=? WHERE cliente_id=? AND id=?",
+                (qty, now, cliente_id, l.get("product_id", "")),
+            )
+    if booking_id:
+        connection.execute(
+            "UPDATE bookings SET payment_status='paid' WHERE id=? AND cliente_id=? AND payment_status!='paid'",
+            (booking_id, cliente_id),
+        )
+        connection.execute(
+            "INSERT INTO booking_audit (booking_id, cliente_id, event_type, payload_json, created_at) "
+            "VALUES (?, ?, 'booking_paid_pos', ?, ?)",
+            (booking_id, cliente_id, json.dumps({"payment_id": pay_id, "amount_cents": int(payment["amount_cents"] or 0)}), now),
+        )
 
 
 # ---------------------------------------------------------------------------

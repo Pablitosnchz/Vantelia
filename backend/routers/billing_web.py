@@ -62,6 +62,7 @@ from backend import (
     booking,
     chat,
     clients,
+    commerce,
     crm,
     db,
     demo_agenda,
@@ -291,6 +292,10 @@ async def stripe_connect_webhook(request: Request) -> Dict[str, Any]:
                             "INSERT INTO booking_audit (booking_id, cliente_id, event_type, payload_json, created_at) VALUES (?, ?, 'booking_confirmed_by_payment', ?, ?)",
                             (booking_row["id"], cliente_id, json.dumps({"payment_id": payment["id"]}), now),
                         )
+            # Cobro POS pagado: materializa ventas de producto + marca la cita pagada.
+            payment_kind = payment["kind"] if "kind" in payment.keys() else "booking"
+            if new_status == "paid" and payment_kind == "pos":
+                commerce._finalize_pos_payment(connection, payment, now)
             connection.commit()
         else:
             connection.commit()

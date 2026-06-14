@@ -1776,6 +1776,35 @@ class ProductSalePayload(BaseModel):
     notes: str = Field(default="", max_length=500)
 
 
+class PosItemPayload(BaseModel):
+    product_id: str = Field(min_length=1, max_length=80)
+    qty: int = Field(default=1, ge=1, le=999)
+
+
+class PosChargePayload(BaseModel):
+    items: List[PosItemPayload] = Field(default_factory=list)
+    booking_id: str = Field(default="", max_length=80)
+    customer_name: str = Field(default="", max_length=120)
+    customer_email: str = Field(default="", max_length=200)
+
+
+class PosChargeResponse(BaseModel):
+    payment_id: str
+    url: str = ""
+    amount_cents: int = 0
+    currency: str = "eur"
+    status: str = "pending"
+    qr_svg: str = ""
+
+
+class PosChargeStatusResponse(BaseModel):
+    payment_id: str
+    status: str = "pending"
+    amount_cents: int = 0
+    paid: bool = False
+    url: str = ""
+
+
 class PackageItemPayload(BaseModel):
     service_slug: str = Field(min_length=1, max_length=120)
     qty: int = Field(default=1, ge=1, le=100)

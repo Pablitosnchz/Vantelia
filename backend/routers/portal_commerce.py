@@ -11,10 +11,10 @@ from __future__ import annotations
 import sqlite3
 from typing import Any, Dict, List
 
-from fastapi import Depends, Response
+from fastapi import Depends, Request, Response
 
 from api_models import *  # noqa: F401,F403
-from backend import analytics, commerce, portal, security
+from backend import analytics, commerce, portal, security, textnorm
 from backend.main import app
 
 
@@ -90,6 +90,45 @@ async def auth_list_product_sales(
             target, location_id=location_id, date_from=date_from, date_to=date_to
         )
     }
+
+
+# ---------------------------------------------------------------------------
+# Cobro POS con Stripe (QR/enlace en mostrador + producto sobre la cita)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/auth/pos/charge", response_model=PosChargeResponse)
+async def auth_pos_charge(
+    data: PosChargePayload,
+    request: Request,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> PosChargeResponse:
+    """Genera un enlace+QR de Stripe para cobrar productos (mostrador) y/o el
+    servicio de una cita. El cliente paga con tarjeta; la venta se materializa al
+    confirmar el webhook."""
+    security._require_portal_permission(user, "commerce.sell")
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    result = commerce.create_pos_payment_link(
+        target,
+        items=data.items,
+        booking_id=data.booking_id,
+        base_url=textnorm._public_base_url(request),
+        customer_name=data.customer_name,
+        customer_email=data.customer_email,
+    )
+    return PosChargeResponse(**{k: result[k] for k in ("payment_id", "url", "amount_cents", "currency", "status", "qr_svg")})
+
+
+@app.get("/auth/pos/charge/{payment_id}", response_model=PosChargeStatusResponse)
+async def auth_pos_charge_status(
+    payment_id: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> PosChargeStatusResponse:
+    security._require_portal_permission(user, "commerce.sell")
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    return PosChargeStatusResponse(**commerce.pos_payment_status(target, payment_id))
 
 
 # ---------------------------------------------------------------------------
