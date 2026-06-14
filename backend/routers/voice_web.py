@@ -168,6 +168,10 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
         "assistant_item_id": "",
         "assistant_audio_started_at": None,
         "assistant_audio_generated_ms": 0,
+        # Reanudacion tras barge-in: marca si el ultimo turno del asistente fue
+        # interrumpido y guarda lo que estaba diciendo (para retomar / pedir confirmacion).
+        "was_interrupted": False,
+        "last_assistant_snippet": "",
     }
     transcript: List[Dict[str, str]] = []
     started_monotonic = time.time()
@@ -200,24 +204,15 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                         "output_modalities": ["audio"],
                         "instructions": voice._voice_build_instructions(cliente_id, config),
                         "audio": {
+                            # Telefonia: linea/altavoz => far_field por defecto. El bloque
+                            # (semantic_vad + noise_reduction + whisper) se comparte con el
+                            # navegador via voice._voice_audio_input_config para que ambos
+                            # canales ignoren igual el eco/ruido de fondo. Al detectar habla
+                            # truncamos manualmente el audio pendiente de Twilio para que el
+                            # modelo no repita la frase completa.
                             "input": {
                                 "format": {"type": "audio/pcmu"},
-                                # semantic_vad en vez de server_vad: en telefonia no hay
-                                # AEC y el eco de la linea se colaba como inbound; con un
-                                # VAD por amplitud eso disparaba una respuesta al propio
-                                # audio (se corta + repite). El VAD semantico solo abre
-                                # turno cuando de verdad habla el llamante, asi que ignora
-                                # eco/ruido de la linea. eagerness=low es conservador;
-                                # interrupt_response=True permite un barge-in natural. Al
-                                # detectar habla truncamos manualmente el audio pendiente de
-                                # Twilio para que el modelo no repita la frase completa.
-                                "turn_detection": {
-                                    "type": "semantic_vad",
-                                    "eagerness": "low",
-                                    "create_response": True,
-                                    "interrupt_response": True,
-                                },
-                                "transcription": {"model": "whisper-1"},
+                                **voice._voice_audio_input_config(voice_cfg, default_noise="far_field"),
                             },
                             "output": {
                                 "format": {"type": "audio/pcmu"},
@@ -320,9 +315,37 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                             )
                         )
                 elif etype == "response.output_audio_transcript.done":
-                    _append_transcript("assistant", event.get("transcript", ""))
+                    assistant_text = event.get("transcript", "")
+                    _append_transcript("assistant", assistant_text)
+                    # Recuerda por donde iba el asistente, por si le interrumpen.
+                    snippet = (assistant_text or "").strip()
+                    if snippet:
+                        state["last_assistant_snippet"] = snippet[-240:]
                 elif etype == "conversation.item.input_audio_transcription.completed":
-                    _append_transcript("user", event.get("transcript", ""))
+                    user_text = event.get("transcript", "")
+                    _append_transcript("user", user_text)
+                    # Red de seguridad: si interrumpio pero no se entendio lo que dijo,
+                    # pedimos confirmacion para continuar en vez de adivinar o callar.
+                    if state.get("was_interrupted"):
+                        state["was_interrupted"] = False
+                        if voice._voice_is_unintelligible(user_text):
+                            await openai_ws.send(json.dumps({
+                                "type": "conversation.item.create",
+                                "item": {
+                                    "type": "message",
+                                    "role": "user",
+                                    "content": [{
+                                        "type": "input_text",
+                                        "text": (
+                                            "[sistema] El llamante te interrumpio pero no se ha entendido lo que ha dicho. "
+                                            "No inventes ni te quedes en silencio: discúlpate brevemente ('perdona, no te he "
+                                            "pillado bien') y pregunta si quiere que continues con lo que le estabas explicando, "
+                                            "nombrandolo y retomando justo donde lo dejaste."
+                                        ),
+                                    }],
+                                },
+                            }))
+                            await openai_ws.send(json.dumps({"type": "response.create"}))
                 elif etype == "response.output_item.added":
                     item = event.get("item", {}) or {}
                     if item.get("type") == "function_call" and item.get("call_id"):
@@ -351,7 +374,11 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                     )
                     await openai_ws.send(json.dumps({"type": "response.create"}))
                 elif etype == "input_audio_buffer.speech_started":
-                    await voice._voice_truncate_interrupted_response(openai_ws, websocket, state)
+                    truncated = await voice._voice_truncate_interrupted_response(openai_ws, websocket, state)
+                    # Solo marca interrupcion si habia audio del asistente sonando (barge-in
+                    # real); el habla en silencio es un turno normal, no una interrupcion.
+                    if truncated:
+                        state["was_interrupted"] = True
                 elif etype == "error":
                     settings.logger.warning("[voice] OpenAI error %s: %s", cliente_id, event.get("error"))
 

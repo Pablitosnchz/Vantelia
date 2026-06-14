@@ -73,6 +73,54 @@ def _app_voice_response(cliente_id: str, request: Request) -> "AppVoiceResponse"
     )
 
 
+VOICE_NOISE_REDUCTION_TYPES = {"near_field", "far_field"}
+VOICE_VAD_EAGERNESS_LEVELS = {"low", "medium", "high", "auto"}
+
+
+def _voice_audio_input_config(voice_cfg: Dict[str, Any], *, default_noise: str = "far_field") -> Dict[str, Any]:
+    """Bloque `audio.input` compartido por navegador (WebRTC) y telefono (Twilio).
+
+    Centraliza turn detection + transcripcion + reduccion de ruido para que las dos
+    rutas tengan exactamente el mismo comportamiento ante ruido e interrupciones.
+
+    - semantic_vad: un modelo decide si REALMENTE hablo una persona (no por amplitud),
+      asi el eco/ruido de fondo no abre un turno falso. eagerness=low (configurable) es
+      conservador: maxima inmunidad al ruido, hay que hablar claro para interrumpir.
+    - noise_reduction: filtro nativo de OpenAI. far_field para sala/altavoz/linea,
+      near_field para micro cercano/auriculares. Es la palanca directa contra el ruido.
+    - interrupt_response=True: el llamante puede cortar (barge-in) como en una llamada real.
+    """
+    voice_cfg = voice_cfg or {}
+    eagerness = str(voice_cfg.get("vad_eagerness") or "low").strip().lower()
+    if eagerness not in VOICE_VAD_EAGERNESS_LEVELS:
+        eagerness = "low"
+    noise_type = str(voice_cfg.get("noise_reduction") or default_noise).strip().lower()
+    if noise_type not in VOICE_NOISE_REDUCTION_TYPES:
+        noise_type = default_noise
+    return {
+        "turn_detection": {
+            "type": "semantic_vad",
+            "eagerness": eagerness,
+            "create_response": True,
+            "interrupt_response": True,
+        },
+        "noise_reduction": {"type": noise_type},
+        "transcription": {"model": "whisper-1"},
+    }
+
+
+def _voice_is_unintelligible(transcript: str) -> bool:
+    """True si la transcripcion de un turno del llamante no aporta nada util (vacia, solo
+    signos/ruido o demasiado corta). Sirve para la red de seguridad de reanudacion: cuando
+    el llamante interrumpe pero no se entiende, pedimos confirmacion para continuar."""
+    text = (transcript or "").strip()
+    if not text:
+        return True
+    # Solo letras/numeros cuentan como contenido real.
+    meaningful = re.sub(r"[^0-9a-záéíóúüñ]", "", text.lower())
+    return len(meaningful) < 2
+
+
 async def _mint_voice_session(
     cliente_id: str,
     config: Dict[str, Any],
@@ -97,22 +145,10 @@ async def _mint_voice_session(
             "model": realtime_model,
             "instructions": _voice_build_instructions(cliente_id, config),
             "audio": {
-                "input": {
-                    # semantic_vad: un modelo decide si REALMENTE hablo una persona, en
-                    # vez de medir amplitud (server_vad). El eco residual y el ruido de
-                    # fondo ya no se cuelan como un turno falso (causa de los cortes +
-                    # bucle). eagerness=low => espera y es conservador antes de tomar el
-                    # turno. interrupt_response=True permite interrumpir como en una llamada
-                    # real. En WebRTC OpenAI conoce el audio reproducido y trunca
-                    # automaticamente la parte que el usuario no llego a oir.
-                    "turn_detection": {
-                        "type": "semantic_vad",
-                        "eagerness": "low",
-                        "create_response": True,
-                        "interrupt_response": True,
-                    },
-                    "transcription": {"model": "whisper-1"},
-                },
+                # Navegador WebRTC: micro cercano/auriculares => near_field por defecto.
+                # En WebRTC OpenAI conoce el audio reproducido y trunca automaticamente la
+                # parte que el usuario no llego a oir al interrumpir.
+                "input": _voice_audio_input_config(voice_cfg, default_noise="near_field"),
                 "output": {"voice": openai_voice},
             },
             "tools": _voice_booking_tools(cliente_id, config),
@@ -317,20 +353,32 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
 
     voice_rules = (
         "\n\nCANAL: LLAMADA TELEFONICA POR VOZ. Eres la recepcionista del negocio, una persona real, no un robot.\n"
+        "TONO Y FORMA (habla como una persona):\n"
         "- Habla SIEMPRE en espanol de Espana, con tono calido y cercano, como alguien que coge el telefono en recepcion.\n"
-        "- Frases cortas, una idea por turno. Nada de parrafos ni listas largas leidas en voz alta.\n"
+        "- Frases cortas, UNA idea por turno. Nada de parrafos ni listas largas leidas de un tiron.\n"
         "- Usa con naturalidad y moderacion expresiones como 'vale', 'perfecto', 'claro', 'un momento', 'a ver'.\n"
         "- Di numeros, horas y precios en palabras naturales: 'las cinco y media', 'a las diez de la manana', 'cuarenta euros'.\n"
         "- No leas en voz alta URLs, simbolos, markdown, asteriscos ni emojis.\n"
         "- NUNCA digas que eres una IA, un asistente virtual, un modelo o un sistema; ni menciones herramientas internas, "
         "ni codigos, ni etiquetas entre corchetes como [MOSTRAR_FORMULARIO].\n"
-        "- No te cortes por ruidos, respiraciones o monosilabos accidentales. Si el llamante te interrumpe claramente, "
-        "termina la palabra o frase corta en curso y escucha.\n"
-        "- Si una intervencion corta tu respuesta, no reinicies ni repitas la frase desde el principio. Responde primero "
-        "a lo que haya dicho la persona y, si aun falta informacion util, retoma desde la siguiente idea no escuchada.\n"
-        "- Si no entiendes algo, pide con amabilidad que lo repita.\n"
         "- Empieza saludando breve y preguntando en que puedes ayudar. Saluda UNA sola vez al "
         "principio de la llamada: no vuelvas a presentarte ni a repetir el saludo despues.\n"
+        "INFORMACION POR TROZOS (clave para sonar humana):\n"
+        "- Cuando enumeres servicios, horarios o precios, da solo DOS o TRES y haz una pausa preguntando "
+        "'¿quieres que te siga contando?' o '¿te cuento mas?'. No sueltes la lista entera de golpe.\n"
+        "- Asi el llamante puede pararte cuando ya tiene lo que necesita, como en una conversacion real.\n"
+        "INTERRUPCIONES (comportate como un humano al que cortan):\n"
+        "- No te cortes por ruidos, respiraciones, toses o monosilabos accidentales. Solo cedes el turno "
+        "si el llamante habla de verdad y claro.\n"
+        "- Si te interrumpe y le entiendes: NO reinicies ni repitas la frase desde el principio. Atiende "
+        "primero lo que te ha dicho y, si aun falta algo util, retoma desde la siguiente idea que no habias dicho.\n"
+        "- Si te interrumpe y NO entiendes lo que ha dicho (te llego ruido o algo confuso): no adivines ni "
+        "te quedes mudo. Discúlpate breve ('perdona, no te he pillado bien') y pregunta si quieres que "
+        "continues con lo que le estabas explicando, NOMBRANDOLO. Por ejemplo, si ibas por los servicios: "
+        "'¿sigo contandote los servicios?'. Recuerda siempre por donde ibas y ofrece retomarlo justo ahi.\n"
+        "- Si te pide que sigas, continua exactamente desde donde lo dejaste, sin repetir lo ya dicho.\n"
+        "- Si no entiendes una peticion normal, pide con amabilidad que la repita.\n"
+        "SILENCIO Y RUIDO:\n"
         "- NUNCA repitas la misma frase dos veces seguidas. Si solo oyes silencio, ruido de fondo "
         "o un eco de tu propia voz, NO respondas ni te repitas: espera en silencio a que la persona "
         "hable. Si tras una pausa larga no dice nada, pregunta una sola vez '¿Sigue ahi?' y vuelve a esperar.\n"

@@ -5256,10 +5256,10 @@ def test_voice_uses_shared_identity_and_greeting(api_module):
 
 
 def test_voice_instructions_resume_after_interruption_without_repeating(api_module):
-    instructions = api_module._voice_build_instructions("demo", api_module.CONFIG_CLIENTES["demo"])
+    instructions = api_module._voice_build_instructions("demo", api_module.CONFIG_CLIENTES["demo"]).lower()
 
     assert "no reinicies ni repitas la frase desde el principio" in instructions
-    assert "retoma desde la siguiente idea no escuchada" in instructions
+    assert "retoma desde la siguiente idea" in instructions
 
 
 def test_app_livechat_402_when_free_plan(client: TestClient, api_module, monkeypatch):
@@ -6582,3 +6582,39 @@ def test_granular_permissions(client: TestClient, api_module):
             connection.execute("DELETE FROM user_permission_overrides WHERE user_id = ?", (staff_id,))
             connection.commit()
         api_module._delete_user(staff_id)
+
+
+def test_voice_audio_input_config_noise_and_vad(api_module):
+    # Defaults: far_field + semantic_vad low + interrupt + whisper.
+    cfg = api_module._voice_audio_input_config({})
+    assert cfg["noise_reduction"]["type"] == "far_field"
+    assert cfg["turn_detection"]["type"] == "semantic_vad"
+    assert cfg["turn_detection"]["eagerness"] == "low"
+    assert cfg["turn_detection"]["interrupt_response"] is True
+    assert cfg["transcription"]["model"] == "whisper-1"
+    # Navegador: near_field por defecto.
+    assert api_module._voice_audio_input_config({}, default_noise="near_field")["noise_reduction"]["type"] == "near_field"
+    # Override por tenant.
+    over = api_module._voice_audio_input_config({"noise_reduction": "near_field", "vad_eagerness": "medium"})
+    assert over["noise_reduction"]["type"] == "near_field"
+    assert over["turn_detection"]["eagerness"] == "medium"
+    # Valores invalidos -> fallback seguro.
+    bad = api_module._voice_audio_input_config({"noise_reduction": "xxx", "vad_eagerness": "turbo"})
+    assert bad["noise_reduction"]["type"] == "far_field"
+    assert bad["turn_detection"]["eagerness"] == "low"
+
+
+def test_voice_is_unintelligible(api_module):
+    for empty in ["", "   ", "...", "¿?", "-", "a"]:
+        assert api_module._voice_is_unintelligible(empty) is True, empty
+    for real in ["ok", "si", "hola", "los servicios", "no"]:
+        assert api_module._voice_is_unintelligible(real) is False, real
+
+
+def test_voice_instructions_have_resume_protocol(api_module):
+    config = api_module._get_client_config("demo")
+    text = api_module._voice_build_instructions("demo", config).lower()
+    assert "no te he pillado" in text
+    assert "sigo contandote" in text or "continues con lo que" in text
+    # Listar por trozos para sonar humano.
+    assert "trozos" in text or "dos o tres" in text
