@@ -4,16 +4,25 @@ import asyncio
 import sqlite3
 from datetime import datetime, timedelta
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover - Python 3.8
+    from backports.zoneinfo import ZoneInfo
+
 import pytest
 from fastapi.testclient import TestClient
 
 
 CID = "qa_multicanal"
 ORIGIN = {"Origin": "http://testserver"}
+# Misma zona horaria que usa el agente al resolver "proximo lunes": si la fixture
+# calculara la fecha en UTC, cerca de medianoche UTC el dia podria diferir del que
+# resuelve el chat (Europe/Madrid) y el test seria flaky en CI.
+_TEST_TZ = "Europe/Madrid"
 
 
 def _next_monday() -> str:
-    day = datetime.now().date() + timedelta(days=1)
+    day = datetime.now(ZoneInfo(_TEST_TZ)).date() + timedelta(days=1)
     while day.weekday() != 0:
         day += timedelta(days=1)
     return day.isoformat()
