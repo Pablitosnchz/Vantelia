@@ -275,17 +275,18 @@ export function inyectarEstilos(color, accentColor) {
     .ia-w-icon-btn:hover { background: rgba(255, 255, 255, 0.26); }
     .ia-w-icon-btn svg { width: 18px; height: 18px; }
 
-    /* Overlay de voz en el widget */
+    /* La llamada de voz ocupa el propio panel del chat (no toda la pantalla) */
     .ia-v-overlay {
-      position: fixed; inset: 0; z-index: 2147483646;
-      background: rgba(6, 12, 24, 0.74); backdrop-filter: blur(6px);
-      display: flex; align-items: center; justify-content: center; padding: 20px;
+      position: absolute; inset: 0; z-index: 6;
+      display: flex; align-items: center; justify-content: center; padding: 22px;
+      background: linear-gradient(180deg, #14213d, #0b1220);
+      color: #fff; border-radius: inherit;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      animation: ia-fade-in 0.18s ease;
     }
     .ia-v-card {
-      width: 100%; max-width: 340px; border-radius: 22px; padding: 30px 24px 24px;
-      text-align: center; background: linear-gradient(180deg, #14213d, #0b1220);
-      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5); color: #fff;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      width: 100%; max-width: 320px; text-align: center;
+      background: transparent; box-shadow: none; padding: 0;
     }
     .ia-v-avatar {
       width: 96px; height: 96px; margin: 0 auto 16px; border-radius: 999px;

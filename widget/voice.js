@@ -38,7 +38,9 @@ function buildOverlay(cfg) {
       </div>
     </div>
     <audio id="ia-v-audio" autoplay></audio>`;
-  document.body.appendChild(o);
+  // La llamada sale DENTRO del panel del chat (no a pantalla completa).
+  const mount = byId("ia-w-chat") || document.body;
+  mount.appendChild(o);
   byId("ia-v-name").textContent = cfg.nombre || "Asistente de voz";
   byId("ia-v-mute").addEventListener("click", toggleMute);
   byId("ia-v-hang").addEventListener("click", () => endCall());
