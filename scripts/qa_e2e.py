@@ -370,6 +370,69 @@ if ch.status_code == 200 and ch.json():
     if sid:
         chk("chats: detalle", client.get(f"/auth/chats/{sid}", params=P, cookies=COOK))
 
+# ── NUEVAS FUNCIONES (politica cancelacion, permisos, POS, conversaciones,
+#    recordatorios/llamadas, voz widget, demo completa) ──────────────
+# Politica de cancelacion/no-show
+chk("cancelacion: GET politica", gp("/auth/app/cancellation-policy"))
+chk("cancelacion: PUT politica", client.put("/auth/app/cancellation-policy", params=P, cookies=COOK,
+    json={"enabled": True, "free_cancel_hours": 24, "late_cancel_fee_pct": 50, "no_show_fee_pct": 100}), soft=(422,))
+mb2 = pp("/auth/bookings", {"nombre": "Cancel QA", "email": "c@qa.com", "telefono": "600111222",
+    "servicio": "Masaje QA", "employee_id": emp_id, "fecha": future_date(2), "hora": "11:00", "notas": ""})
+chk("cancelacion: alta cita para preview", mb2, soft=(409,))
+if mb2.status_code == 200:
+    cbid = mb2.json().get("booking_id")
+    chk("cancelacion: preview", client.get(f"/auth/bookings/{cbid}/cancellation-preview", cookies=COOK))
+
+# Recordatorios / llamadas de confirmacion
+chk("recordatorios: GET config", gp("/auth/app/reminders"))
+chk("recordatorios: PUT config", client.put("/auth/app/reminders", params=P, cookies=COOK,
+    json={"call_fallback": False, "quiet_start": "21:00", "quiet_end": "09:00", "daily_call_cap": 20}), soft=(422,))
+if mb2.status_code == 200 and cbid:
+    # Sin numero Twilio -> confirm-call debe dar 409 controlado (no romper).
+    chk("recordatorios: confirm-call sin numero -> 409", client.post(f"/auth/bookings/{cbid}/confirm-call", cookies=COOK), ok=(409,), soft=(403,))
+
+# Permisos granulares
+chk("permisos: catalogo", gp("/auth/app/permissions/catalog"))
+stf = pp("/auth/app/team", {"email": f"staff{uuid.uuid4().hex[:6]}@qa.com", "password": "staffpass123",
+    "display_name": "Recepcion QA", "portal_role": "staff"})
+chk("permisos: crear staff", stf, soft=(403, 409))
+if stf.status_code == 200:
+    sid_user = stf.json().get("user_id")
+    chk("permisos: GET de usuario", client.get(f"/auth/app/team/{sid_user}/permissions", params=P, cookies=COOK))
+    chk("permisos: PUT override", client.put(f"/auth/app/team/{sid_user}/permissions", params=P, cookies=COOK,
+        json={"overrides": {"reports.view": "allow", "agenda.cancel": "deny"}}), soft=(422,))
+
+# Conversaciones unificadas
+chk("conversaciones: listar", gp("/auth/conversations"))
+chk("conversaciones: filtro voz", client.get("/auth/conversations", params={**P, "channel": "voice"}, cookies=COOK))
+
+# Comercio (Ventas): producto + venta manual
+prod = pp("/auth/products", {"name": "Aceite QA", "price_cents": 1500, "stock": 5})
+chk("ventas: crear producto", prod, soft=(403, 422))
+if prod.status_code == 200:
+    pid = prod.json().get("id")
+    chk("ventas: vender (efectivo)", client.post(f"/auth/products/{pid}/sell", params=P, cookies=COOK,
+        json={"qty": 2, "payment_method": "cash"}))
+    chk("ventas: POS charge sin Stripe -> 409", client.post("/auth/pos/charge", params=P, cookies=COOK,
+        json={"items": [{"product_id": pid, "qty": 1}]}), ok=(409,), soft=(403,))
+
+# Voz en el widget (gating publico)
+cfgpub = client.get(f"/cliente/{CID}", headers={"Origin": "http://testserver"})
+assert_true("voz widget: flag en config publica", cfgpub.status_code == 200 and "voice_widget_enabled" in cfgpub.json(), cfgpub.text[:120])
+assert_true("voz widget: sesion sin opt-in -> 403",
+    client.post(f"/voice/widget/{CID}/session", headers={"Origin": "http://testserver"}, json={}).status_code == 403)
+
+# Demo completa (admin): agenda + comercio
+chk("demo: generar completa", client.post(f"/admin/clientes/{CID}/demo-agenda", headers=HDR))
+with db() as c:
+    nloc = c.execute("SELECT COUNT(*) FROM locations WHERE cliente_id=? AND id LIKE 'locdemo_%'", (CID,)).fetchone()[0]
+    nprod = c.execute("SELECT COUNT(*) FROM products WHERE cliente_id=? AND id LIKE 'proddemo_%'", (CID,)).fetchone()[0]
+assert_true("demo: crea centros y productos", nloc > 0 and nprod > 0, f"loc={nloc} prod={nprod}")
+chk("demo: borrar completa", client.delete(f"/admin/clientes/{CID}/demo-agenda", headers=HDR))
+with db() as c:
+    left = c.execute("SELECT COUNT(*) FROM products WHERE cliente_id=? AND id LIKE 'proddemo_%'", (CID,)).fetchone()[0]
+assert_true("demo: purga deja cero productos demo", left == 0, f"left={left}")
+
 # ── RESUMEN ────────────────────────────────────────────────────────
 print(f"\nPASS: {len(PASS)}   WARN: {len(WARN)}   BUG: {len(BUG)}\n")
 if BUG:
