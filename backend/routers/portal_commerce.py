@@ -39,7 +39,7 @@ async def auth_create_product(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Dict[str, Any]:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     return commerce._create_product(portal._portal_client_id_or_403(user, cliente_id), data)
 
 
@@ -50,7 +50,7 @@ async def auth_update_product(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Dict[str, Any]:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     return commerce._update_product(portal._portal_client_id_or_403(user, cliente_id), product_id, data)
 
 
@@ -60,7 +60,7 @@ async def auth_delete_product(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> AuthSimpleResponse:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     commerce._delete_product(portal._portal_client_id_or_403(user, cliente_id), product_id)
     return AuthSimpleResponse(ok=True, message="Producto eliminado.")
 
@@ -72,6 +72,7 @@ async def auth_sell_product(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Dict[str, Any]:
+    security._require_portal_permission(user, "commerce.sell")
     return commerce._sell_product(portal._portal_client_id_or_403(user, cliente_id), product_id, data)
 
 
@@ -112,7 +113,7 @@ async def auth_create_package(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Dict[str, Any]:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     return commerce._create_package(portal._portal_client_id_or_403(user, cliente_id), data)
 
 
@@ -123,7 +124,7 @@ async def auth_update_package(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Dict[str, Any]:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     return commerce._update_package(portal._portal_client_id_or_403(user, cliente_id), package_id, data)
 
 
@@ -133,7 +134,7 @@ async def auth_delete_package(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> AuthSimpleResponse:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     commerce._delete_package(portal._portal_client_id_or_403(user, cliente_id), package_id)
     return AuthSimpleResponse(ok=True, message="Bono eliminado.")
 
@@ -145,6 +146,7 @@ async def auth_sell_package(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Dict[str, Any]:
+    security._require_portal_permission(user, "commerce.sell")
     return commerce._sell_package(portal._portal_client_id_or_403(user, cliente_id), package_id, data)
 
 
@@ -166,6 +168,7 @@ async def auth_redeem_package(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Dict[str, Any]:
+    security._require_portal_permission(user, "commerce.sell")
     target = portal._portal_client_id_or_403(user, cliente_id)
     return commerce._redeem_package_for_booking(target, purchase_id, data.booking_id)
 
@@ -192,6 +195,7 @@ async def auth_issue_gift_card(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Dict[str, Any]:
+    security._require_portal_permission(user, "commerce.sell")
     return commerce._issue_gift_card(portal._portal_client_id_or_403(user, cliente_id), data)
 
 
@@ -202,7 +206,7 @@ async def auth_gift_card_status(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Dict[str, Any]:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     target = portal._portal_client_id_or_403(user, cliente_id)
     return commerce._set_gift_card_status(target, gift_card_id, data.enabled)
 
@@ -213,6 +217,7 @@ async def auth_redeem_gift_card(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Dict[str, Any]:
+    security._require_portal_permission(user, "commerce.sell")
     target = portal._portal_client_id_or_403(user, cliente_id)
     return commerce._redeem_gift_card_for_booking(
         target, data.code, data.booking_id, amount_cents=data.amount_cents
@@ -228,27 +233,33 @@ async def auth_redeem_gift_card(
 async def auth_analytics_overview(
     cliente_id: str = "",
     location_id: str = "",
+    service_id: str = "",
     date_from: str = "",
     date_to: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Dict[str, Any]:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "reports.view")
     target = portal._portal_client_id_or_403(user, cliente_id)
-    return analytics._overview(target, location_id=location_id, date_from=date_from, date_to=date_to)
+    return analytics._overview(
+        target, location_id=location_id, service_id=service_id,
+        date_from=date_from, date_to=date_to,
+    )
 
 
 @app.get("/auth/analytics/export.csv")
 async def auth_analytics_export(
     cliente_id: str = "",
     location_id: str = "",
+    service_id: str = "",
     date_from: str = "",
     date_to: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Response:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "reports.export")
     target = portal._portal_client_id_or_403(user, cliente_id)
     csv_text = analytics._export_csv(
-        target, location_id=location_id, date_from=date_from, date_to=date_to
+        target, location_id=location_id, service_id=service_id,
+        date_from=date_from, date_to=date_to,
     )
     return Response(
         content=csv_text,

@@ -6518,3 +6518,67 @@ def test_service_cancellation_override_resolves(client: TestClient, api_module):
                 connection.execute("DELETE FROM services WHERE cliente_id='demo' AND slug=?", (slug,))
             connection.execute("DELETE FROM cancellation_policies WHERE cliente_id = 'demo'")
             connection.commit()
+
+
+def test_granular_permissions(client: TestClient, api_module):
+    owner_cookies = _portal_admin_cookies(api_module)
+    # Crea un usuario staff real en el tenant demo (evita limites de plan).
+    staff = api_module._create_user(
+        email="staff_perm@example.com", password="staffpass123", role="client",
+        display_name="Recepcion Test", cliente_id="demo", portal_role="staff",
+    )
+    staff_id = staff["id"]
+    staff_cookies = {"vantelia_portal_session": api_module._create_auth_session(staff_id)}
+    created_bookings = []
+    try:
+        # --- Defaults de rol staff ---
+        me = client.get("/auth/me", cookies=staff_cookies).json()
+        perms = set(me.get("permissions") or [])
+        assert "agenda.cancel" in perms
+        assert "payments.refund" not in perms
+        assert "reports.view" not in perms
+        assert "channels.manage" not in perms
+
+        # staff no ve informes ni reembolsa
+        assert client.get("/auth/analytics/overview", cookies=staff_cookies).status_code == 403
+        assert client.post("/auth/bookings/nope/payment/refund", cookies=staff_cookies, json={}).status_code == 403
+
+        # --- Owner afina permisos del staff ---
+        r = client.put(
+            f"/auth/app/team/{staff_id}/permissions", params={"cliente_id": "demo"}, cookies=owner_cookies,
+            json={"overrides": {"reports.view": "allow", "agenda.cancel": "deny", "channels.manage": "allow"}},
+        )
+        assert r.status_code == 200, r.text
+
+        # reports.view concedido -> 200; channels.manage NO delegable -> sigue sin efecto
+        me2 = client.get("/auth/me", cookies=staff_cookies).json()
+        perms2 = set(me2.get("permissions") or [])
+        assert "reports.view" in perms2
+        assert "agenda.cancel" not in perms2
+        assert "channels.manage" not in perms2
+        assert client.get("/auth/analytics/overview", cookies=staff_cookies).status_code == 200
+
+        # agenda.cancel denegado -> cancelar una cita real da 403
+        rec = _build_booking_record(api_module, booking_time="11:00")
+        api_module._store_booking(rec); created_bookings.append(rec["id"])
+        cc = client.post(f"/auth/bookings/{rec['id']}/cancel", cookies=staff_cookies)
+        assert cc.status_code == 403, cc.text
+
+        # El owner (admin) sigue pudiendo cancelar
+        ok = client.post(f"/auth/bookings/{rec['id']}/cancel", cookies=owner_cookies)
+        assert ok.status_code == 200, ok.text
+
+        # GET permissions refleja override y owner_only bloqueado
+        detail = client.get(f"/auth/app/team/{staff_id}/permissions", params={"cliente_id": "demo"}, cookies=owner_cookies).json()
+        by_key = {it["key"]: it for it in detail["items"]}
+        assert by_key["reports.view"]["override"] == "allow" and by_key["reports.view"]["effective"] is True
+        assert by_key["agenda.cancel"]["override"] == "deny" and by_key["agenda.cancel"]["effective"] is False
+        assert by_key["channels.manage"]["owner_only"] is True and by_key["channels.manage"]["effective"] is False
+    finally:
+        with api_module._get_db_connection() as connection:
+            for bid in created_bookings:
+                connection.execute("DELETE FROM bookings WHERE id = ?", (bid,))
+                connection.execute("DELETE FROM booking_audit WHERE booking_id = ?", (bid,))
+            connection.execute("DELETE FROM user_permission_overrides WHERE user_id = ?", (staff_id,))
+            connection.commit()
+        api_module._delete_user(staff_id)

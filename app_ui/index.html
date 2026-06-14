@@ -978,6 +978,22 @@
     /* Toast: barra de acento + ligero desenfoque para look premium */
     .toast { backdrop-filter: blur(6px); border-left-width: 3px; }
 
+    /* Editor de permisos por usuario */
+    #permsPanel { width: min(480px, 96vw); right: calc(-1 * min(480px, 96vw) - 24px); }
+    #permsPanel.open { right: 0; }
+    .perm-module-title { font-size: 0.72rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
+    .perm-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+    .perm-row:last-child { border-bottom: 0; }
+    .perm-row .perm-label { flex: 1; font-size: 0.88rem; }
+    .perm-row .perm-label small { display: block; color: var(--soft-2); font-size: 0.72rem; }
+    .perm-seg { display: inline-flex; background: rgba(7,16,31,0.6); border: 1px solid var(--line-strong); border-radius: 9px; padding: 2px; }
+    .perm-seg button { background: transparent; border: 0; color: var(--soft); cursor: pointer; font-size: 0.74rem; font-weight: 600; padding: 5px 9px; border-radius: 7px; font-family: var(--font); }
+    .perm-seg button.on { color: var(--text); }
+    .perm-seg button.on[data-state="allow"] { background: rgba(0,245,212,0.18); color: var(--success); }
+    .perm-seg button.on[data-state="deny"] { background: var(--danger-soft); color: var(--danger); }
+    .perm-seg button.on[data-state="default"] { background: var(--accent-soft); color: var(--accent); }
+    .perm-owner-note { padding: 16px; border-radius: 12px; background: var(--accent-soft); color: var(--text); font-size: 0.88rem; }
+
     /* Diálogo de confirmación contextual (modal accesible) */
     .vdialog-backdrop {
       display: none; position: fixed; inset: 0; z-index: 300;
@@ -2027,7 +2043,7 @@
         <button class="btn btn-ghost" id="citasViewCal" style="padding:8px 14px;" title="Vista calendario mensual">Calendario</button>
       </div>
       <div style="margin-left:auto; display:flex; gap:8px;">
-        <button class="btn btn-primary" id="citasNuevaBtn" style="padding:8px 14px;" title="Crear una cita manualmente">+ Nueva cita</button>
+        <button class="btn btn-primary" id="citasNuevaBtn" data-perm="agenda.create" style="padding:8px 14px;" title="Crear una cita manualmente">+ Nueva cita</button>
         <a class="btn btn-ghost" href="/auth/bookings/export">CSV</a>
       </div>
     </div>
@@ -2128,7 +2144,7 @@
     </div>
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
       <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600;">Servicios</h2>
-      <button class="btn btn-primary" id="servicioNewBtn" style="margin-left:auto;">+ Nuevo servicio</button>
+      <button class="btn btn-primary" id="servicioNewBtn" data-perm="catalog.manage" style="margin-left:auto;">+ Nuevo servicio</button>
     </div>
     <p class="panel-sub">Cada servicio tiene su propia duración y precio. La duración define cuánto bloquea en la agenda.</p>
     <div id="serviciosList" style="display:flex; flex-direction:column; gap:10px; margin-top:14px;"></div>
@@ -2148,7 +2164,7 @@
 
     <div id="ventasPanelProductos" class="ventas-panel">
       <div style="display:flex; margin:12px 0;">
-        <button class="btn btn-primary" id="productNewBtn" style="margin-left:auto;">+ Nuevo producto</button>
+        <button class="btn btn-primary" id="productNewBtn" data-perm="catalog.manage" style="margin-left:auto;">+ Nuevo producto</button>
       </div>
       <div class="employee-grid" id="productosGrid"></div>
       <h3 style="font-size:0.95rem; margin:22px 0 8px; color:var(--soft);">Últimas ventas</h3>
@@ -2157,7 +2173,7 @@
 
     <div id="ventasPanelBonos" class="ventas-panel" style="display:none;">
       <div style="display:flex; margin:12px 0;">
-        <button class="btn btn-primary" id="packageNewBtn" style="margin-left:auto;">+ Nuevo bono</button>
+        <button class="btn btn-primary" id="packageNewBtn" data-perm="catalog.manage" style="margin-left:auto;">+ Nuevo bono</button>
       </div>
       <div class="employee-grid" id="bonosGrid"></div>
       <h3 style="font-size:0.95rem; margin:22px 0 8px; color:var(--soft);">Bonos vendidos</h3>
@@ -2167,7 +2183,7 @@
 
     <div id="ventasPanelGift" class="ventas-panel" style="display:none;">
       <div style="display:flex; margin:12px 0;">
-        <button class="btn btn-primary" id="giftNewBtn" style="margin-left:auto;">+ Emitir tarjeta</button>
+        <button class="btn btn-primary" id="giftNewBtn" data-perm="commerce.sell" style="margin-left:auto;">+ Emitir tarjeta</button>
       </div>
       <input type="text" class="field-input" id="giftSearch" placeholder="Buscar por código, comprador…" style="max-width:340px; margin-bottom:10px;" />
       <div id="giftList" style="display:flex; flex-direction:column; gap:6px;"></div>
@@ -5651,18 +5667,18 @@ function cdRenderDetail(b){
       <button class="btn btn-ghost" type="button" data-cd="close" style="padding:6px 12px;">Cerrar</button>
     </div>
     <div class="cd-detail-actions">
-      ${canAttend ? `<button class="btn ${est === 'completed' ? 'btn-primary' : 'btn-ghost'}" type="button" data-cd="attended" style="padding:6px 14px;">✓ Realizada</button>
+      ${canAttend && hasPerm('agenda.attendance') ? `<button class="btn ${est === 'completed' ? 'btn-primary' : 'btn-ghost'}" type="button" data-cd="attended" style="padding:6px 14px;">✓ Realizada</button>
       <button class="btn btn-ghost" type="button" data-cd="noshow" style="padding:6px 14px; color:var(--danger); border-color:var(--danger);${est === 'no_show' ? ' background:var(--danger-soft);' : ''}">✗ No vino</button>` : ''}
       ${b.manage_url ? `<button class="btn btn-ghost" type="button" data-cd="manage" style="padding:6px 14px;">Gestionar</button>` : ''}
-      ${b.payment_status === 'preauthorized' ? `<button class="btn btn-primary" type="button" data-cd="capture" style="padding:6px 14px;">💳 Cobrar retención</button>
+      ${b.payment_status === 'preauthorized' && hasPerm('payments.capture') ? `<button class="btn btn-primary" type="button" data-cd="capture" style="padding:6px 14px;">💳 Cobrar retención</button>
       <button class="btn btn-ghost" type="button" data-cd="release" style="padding:6px 14px;">Liberar retención</button>` : ''}
-      ${(b.payment_status === 'paid' || b.payment_status === 'partially_refunded') ? `<button class="btn btn-ghost" type="button" data-cd="refund" style="padding:6px 14px;">↩ Reembolsar</button>` : ''}
+      ${(b.payment_status === 'paid' || b.payment_status === 'partially_refunded') && hasPerm('payments.refund') ? `<button class="btn btn-ghost" type="button" data-cd="refund" style="padding:6px 14px;">↩ Reembolsar</button>` : ''}
       ${est !== 'cancelled' && b.payment_status !== 'preauthorized' ? `<button class="btn btn-ghost" type="button" data-cd="pay" style="padding:6px 14px;">💳 Cobrar</button>` : ''}
-      ${est !== 'cancelled' && b.payment_status !== 'paid' ? `<button class="btn btn-ghost" type="button" data-cd="redeempkg" style="padding:6px 14px;">🎟 Bono</button>
+      ${est !== 'cancelled' && b.payment_status !== 'paid' && hasPerm('commerce.sell') ? `<button class="btn btn-ghost" type="button" data-cd="redeempkg" style="padding:6px 14px;">🎟 Bono</button>
       <button class="btn btn-ghost" type="button" data-cd="redeemgift" style="padding:6px 14px;">🎁 Tarjeta regalo</button>` : ''}
-      ${est !== 'cancelled' ? `<button class="btn btn-ghost" type="button" data-cd="rebook" style="padding:6px 14px;">🔁 Reservar siguiente</button>` : ''}
+      ${est !== 'cancelled' && hasPerm('agenda.create') ? `<button class="btn btn-ghost" type="button" data-cd="rebook" style="padding:6px 14px;">🔁 Reservar siguiente</button>` : ''}
       <button class="btn btn-ghost" type="button" data-cd="resched" style="padding:6px 14px;" ${canEdit ? '' : 'disabled'}>Reprogramar</button>
-      <button class="btn btn-ghost" type="button" data-cd="cancel" style="padding:6px 14px; color:var(--danger); border-color:var(--danger);" ${canEdit ? '' : 'disabled'}>Cancelar</button>
+      ${hasPerm('agenda.cancel') ? `<button class="btn btn-ghost" type="button" data-cd="cancel" style="padding:6px 14px; color:var(--danger); border-color:var(--danger);" ${canEdit ? '' : 'disabled'}>Cancelar</button>` : ''}
     </div>`;
   d.querySelectorAll('button[data-cd]').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -6738,8 +6754,11 @@ async function loadAccessTeam() {
         <select class="field-input" data-team-role="${escapeHtml(u.user_id)}" style="width:auto;">
           ${['owner', 'manager', 'staff'].map(rl => `<option value="${rl}" ${u.portal_role === rl ? 'selected' : ''}>${roleLabel[rl]}</option>`).join('')}
         </select>
+        ${u.portal_role === 'owner' ? '' : `<button class="btn btn-ghost" data-team-perms="${escapeHtml(u.user_id)}" data-name="${escapeHtml(u.display_name || u.email)}" style="font-size:0.78rem;">Permisos</button>`}
         <button class="btn btn-ghost" data-team-toggle="${escapeHtml(u.user_id)}" data-active="${u.is_active ? 1 : 0}" style="font-size:0.78rem;">${u.is_active ? 'Desactivar' : 'Activar'}</button>
       </div>`).join('') || '<div class="panel-sub">Solo tú tienes acceso.</div>';
+    list.querySelectorAll('[data-team-perms]').forEach(btn => btn.addEventListener('click', () =>
+      openPermsPanel(btn.getAttribute('data-team-perms'), btn.getAttribute('data-name'))));
     list.querySelectorAll('[data-team-role]').forEach(sel => sel.addEventListener('change', async () => {
       try {
         await api(`/auth/app/team/${encodeURIComponent(sel.getAttribute('data-team-role'))}`, {
@@ -6776,6 +6795,80 @@ document.getElementById('accessTeamAddBtn')?.addEventListener('click', async () 
     document.getElementById('accessTeamPass').value = '';
     document.getElementById('accessTeamName').value = '';
     loadAccessTeam();
+  } catch (e) { toast(e.message, 'error'); }
+});
+
+// ── Editor de permisos por usuario (matriz por acción) ────────────────
+let permsState = { userId: '', items: [] };
+function closePermsPanel() {
+  document.getElementById('permsPanel').classList.remove('open');
+  document.getElementById('permsOverlay').classList.remove('open');
+}
+async function openPermsPanel(userId, userName) {
+  permsState = { userId, items: [] };
+  document.getElementById('permsPanelTitle').textContent = `Permisos · ${userName || ''}`;
+  const matrix = document.getElementById('permsMatrix');
+  matrix.innerHTML = '<div class="panel-sub">Cargando…</div>';
+  document.getElementById('permsPanel').classList.add('open');
+  document.getElementById('permsOverlay').classList.add('open');
+  try {
+    const r = await api(`/auth/app/team/${encodeURIComponent(userId)}/permissions`);
+    permsState.items = r.items || [];
+    const roleLabel = { owner: 'Propietario', manager: 'Encargado', staff: 'Recepción' };
+    document.getElementById('permsPanelSub').textContent =
+      `Rol ${roleLabel[r.portal_role] || r.portal_role}. "Por defecto" sigue al rol; puedes permitir o denegar acciones concretas.`;
+    if (r.is_owner) {
+      matrix.innerHTML = '<div class="perm-owner-note">Este usuario es propietario: tiene acceso total, no editable.</div>';
+      document.getElementById('permsSaveBtn').style.display = 'none';
+      document.getElementById('permsResetBtn').style.display = 'none';
+      return;
+    }
+    document.getElementById('permsSaveBtn').style.display = '';
+    document.getElementById('permsResetBtn').style.display = '';
+    const modules = [];
+    const byModule = {};
+    permsState.items.forEach(it => { if (!byModule[it.module]) { byModule[it.module] = []; modules.push(it.module); } byModule[it.module].push(it); });
+    matrix.innerHTML = modules.map(mod => `
+      <div>
+        <div class="perm-module-title">${escapeHtml(mod)}</div>
+        ${byModule[mod].map(it => permRowHtml(it)).join('')}
+      </div>`).join('');
+    matrix.querySelectorAll('.perm-seg button').forEach(b => b.addEventListener('click', () => {
+      const key = b.getAttribute('data-key'), state = b.getAttribute('data-state');
+      const item = permsState.items.find(x => x.key === key);
+      if (!item || item.owner_only) return;
+      item.override = state;
+      b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x.getAttribute('data-state') === state));
+    }));
+  } catch (e) { matrix.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+}
+function permRowHtml(it) {
+  const defLabel = it.default ? 'Por defecto (✓)' : 'Por defecto (✗)';
+  if (it.owner_only) {
+    return `<div class="perm-row"><div class="perm-label">${escapeHtml(it.label)}<small>Solo propietario</small></div><span class="pill pill-disabled">No delegable</span></div>`;
+  }
+  const seg = ['default', 'allow', 'deny'].map(st => {
+    const lbl = st === 'default' ? defLabel : (st === 'allow' ? 'Permitir' : 'Denegar');
+    return `<button type="button" data-key="${escapeHtml(it.key)}" data-state="${st}" class="${it.override === st ? 'on' : ''}">${lbl}</button>`;
+  }).join('');
+  return `<div class="perm-row"><div class="perm-label">${escapeHtml(it.label)}</div><div class="perm-seg">${seg}</div></div>`;
+}
+document.getElementById('permsClose')?.addEventListener('click', closePermsPanel);
+document.getElementById('permsOverlay')?.addEventListener('click', closePermsPanel);
+document.getElementById('permsResetBtn')?.addEventListener('click', () => {
+  permsState.items.forEach(it => { if (!it.owner_only) it.override = 'default'; });
+  document.querySelectorAll('#permsMatrix .perm-seg').forEach(seg =>
+    seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.getAttribute('data-state') === 'default')));
+});
+document.getElementById('permsSaveBtn')?.addEventListener('click', async () => {
+  const overrides = {};
+  permsState.items.forEach(it => { if (!it.owner_only) overrides[it.key] = it.override || 'default'; });
+  try {
+    await api(`/auth/app/team/${encodeURIComponent(permsState.userId)}/permissions`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ overrides }),
+    });
+    toast('Permisos guardados.', 'success');
+    closePermsPanel();
   } catch (e) { toast(e.message, 'error'); }
 });
 
@@ -6828,18 +6921,35 @@ document.getElementById('cpSaveBtn')?.addEventListener('click', async () => {
   } catch (e) { toast(e.message, 'error'); }
 });
 
-// ── ROLES: visibilidad de tabs según portal_role ──────────────────────
+// ── ROLES + PERMISOS: visibilidad de tabs y acciones ──────────────────
 const ROLE_HIDDEN_TABS = {
   staff: ['informes', 'knowledge', 'qa', 'tune', 'voz', 'whatsapp', 'appearance', 'payments', 'billing', 'canales', 'equipo', 'servicios', 'horarios', 'mensajes', 'instalacion'],
   manager: ['payments', 'billing', 'canales'],
   owner: [],
 };
+// Pestañas que dependen de un permiso de accion concreto (además del rol).
+const TAB_PERMISSION = { informes: 'reports.view', servicios: 'catalog.manage' };
 
-function applyRoleVisibility(role) {
+// ¿El usuario actual tiene el permiso? El owner siempre sí. Sin set cargado, permisivo.
+function hasPerm(key) {
+  if ((window.PORTAL_ROLE || 'owner') === 'owner') return true;
+  if (!window.PORTAL_PERMS) return true;
+  return window.PORTAL_PERMS.has(key);
+}
+
+function applyRoleVisibility(role, permissions) {
   window.PORTAL_ROLE = role || 'owner';
+  if (Array.isArray(permissions)) window.PORTAL_PERMS = new Set(permissions);
   const hidden = ROLE_HIDDEN_TABS[window.PORTAL_ROLE] || [];
   document.querySelectorAll('.nav-item[data-tab]').forEach(n => {
-    n.style.display = hidden.includes(n.getAttribute('data-tab')) ? 'none' : '';
+    const tab = n.getAttribute('data-tab');
+    const reqPerm = TAB_PERMISSION[tab];
+    const hide = hidden.includes(tab) || (reqPerm && !hasPerm(reqPerm));
+    n.style.display = hide ? 'none' : '';
+  });
+  // Elementos estáticos marcados con data-perm.
+  document.querySelectorAll('[data-perm]').forEach(el => {
+    el.style.display = hasPerm(el.getAttribute('data-perm')) ? '' : 'none';
   });
 }
 
@@ -7470,7 +7580,7 @@ document.getElementById('cuentaLogoutBtn').addEventListener('click', async () =>
   let initialTab = 'informes';
   try {
     const me = await api('/auth/me');
-    applyRoleVisibility(me && me.portal_role);
+    applyRoleVisibility(me && me.portal_role, me && me.permissions);
     if (me && me.portal_role === 'staff') initialTab = 'chats';
   } catch {}
   if (!portalTabChosenByUser) setTab(initialTab);
@@ -7480,5 +7590,22 @@ document.getElementById('cuentaLogoutBtn').addEventListener('click', async () =>
   mountVanteliaWidget();
 })();
 </script>
+
+<!-- Editor de permisos por usuario (matriz por acción) -->
+<div class="drawer-overlay" id="permsOverlay"></div>
+<div class="side-panel" id="permsPanel">
+  <div class="bot-drawer-head" style="padding:16px 18px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px;">
+    <b id="permsPanelTitle" style="flex:1;">Permisos</b>
+    <button class="btn btn-ghost" id="permsClose" style="padding:4px 10px;">✕</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:18px;">
+    <p class="panel-sub" id="permsPanelSub" style="margin-bottom:14px;"></p>
+    <div id="permsMatrix" style="display:flex; flex-direction:column; gap:16px;"></div>
+  </div>
+  <div style="padding:14px 18px; border-top:1px solid var(--line); display:flex; gap:10px;">
+    <button class="btn btn-primary" id="permsSaveBtn" style="flex:1;">Guardar permisos</button>
+    <button class="btn btn-ghost" id="permsResetBtn">Restablecer al rol</button>
+  </div>
+</div>
 </body>
 </html>

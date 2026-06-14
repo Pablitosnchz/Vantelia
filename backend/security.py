@@ -72,6 +72,116 @@ def _require_portal_min_role(user: sqlite3.Row, minimum: str) -> None:
         )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Permisos granulares por accion (estilo Square/Fresha/Mindbody)
+#
+# Los roles (owner > manager > staff) son PRESETS de permisos. El propietario
+# puede afinar permiso a permiso por usuario (allow/deny) sobre ese preset.
+# El owner (y el admin Vantelia) siempre tienen acceso total, no editable.
+# Algunos permisos son "owner_only" (config sensible) y no se delegan.
+# ─────────────────────────────────────────────────────────────────────────────
+
+PORTAL_PERMISSIONS: List[Dict[str, Any]] = [
+    {"key": "agenda.create", "module": "Agenda", "label": "Crear citas manuales"},
+    {"key": "agenda.cancel", "module": "Agenda", "label": "Cancelar citas"},
+    {"key": "agenda.attendance", "module": "Agenda", "label": "Marcar asistencia / no-show"},
+    {"key": "payments.capture", "module": "Pagos", "label": "Cobrar o liberar retenciones"},
+    {"key": "payments.refund", "module": "Pagos", "label": "Reembolsar pagos"},
+    {"key": "commerce.sell", "module": "Mostrador", "label": "Vender y redimir (productos, bonos, gift cards)"},
+    {"key": "catalog.manage", "module": "Catálogo", "label": "Gestionar servicios, productos, bonos y centros"},
+    {"key": "clients.edit", "module": "Clientes", "label": "Editar fichas de cliente"},
+    {"key": "reports.view", "module": "Informes", "label": "Ver informes"},
+    {"key": "reports.export", "module": "Informes", "label": "Exportar informes"},
+    {"key": "channels.manage", "module": "Configuración", "label": "Canales de envío", "owner_only": True},
+    {"key": "billing.manage", "module": "Configuración", "label": "Pagos Stripe y facturación", "owner_only": True},
+    {"key": "team.manage", "module": "Configuración", "label": "Equipo y permisos", "owner_only": True},
+]
+
+PORTAL_PERMISSION_KEYS = {p["key"] for p in PORTAL_PERMISSIONS}
+_OWNER_ONLY_PERMISSIONS = {p["key"] for p in PORTAL_PERMISSIONS if p.get("owner_only")}
+
+# Default por rol (el owner siempre tiene todo, se resuelve aparte).
+PORTAL_ROLE_DEFAULT_PERMISSIONS: Dict[str, set] = {
+    "manager": {
+        "agenda.create", "agenda.cancel", "agenda.attendance",
+        "payments.capture", "commerce.sell",
+        "catalog.manage", "clients.edit", "reports.view", "reports.export",
+    },
+    "staff": {
+        "agenda.create", "agenda.cancel", "agenda.attendance", "commerce.sell",
+    },
+}
+
+
+def _role_default_permissions(role: str) -> set:
+    if role == "owner":
+        return set(PORTAL_PERMISSION_KEYS)
+    return set(PORTAL_ROLE_DEFAULT_PERMISSIONS.get(role, set()))
+
+
+def _user_permission_overrides(user_id: str) -> Dict[str, bool]:
+    with db._get_db_connection() as connection:
+        rows = connection.execute(
+            "SELECT permission_key, allowed FROM user_permission_overrides WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+    return {row["permission_key"]: bool(row["allowed"]) for row in rows}
+
+
+def _effective_permissions(user: sqlite3.Row) -> Dict[str, bool]:
+    """Permiso efectivo por clave para el usuario (default de rol + overrides)."""
+    role = _portal_role(user)
+    if role == "owner" or user["role"] == "admin":
+        return {key: True for key in PORTAL_PERMISSION_KEYS}
+    base = _role_default_permissions(role)
+    effective = {key: (key in base) for key in PORTAL_PERMISSION_KEYS}
+    for key, allowed in _user_permission_overrides(user["id"]).items():
+        if key in PORTAL_PERMISSION_KEYS and key not in _OWNER_ONLY_PERMISSIONS:
+            effective[key] = allowed
+    return effective
+
+
+def _user_has_permission(user: sqlite3.Row, permission_key: str) -> bool:
+    if _portal_role(user) == "owner" or user["role"] == "admin":
+        return True
+    return _effective_permissions(user).get(permission_key, False)
+
+
+def _require_portal_permission(user: sqlite3.Row, permission_key: str) -> None:
+    """403 si el usuario no tiene el permiso de accion concreto."""
+    if not _user_has_permission(user, permission_key):
+        raise HTTPException(
+            status_code=403,
+            detail="No tienes permiso para esta accion. Pide acceso al propietario de la cuenta.",
+        )
+
+
+def _set_user_permission_override(
+    cliente_id: str, user_id: str, permission_key: str, value: Optional[bool]
+) -> None:
+    """value True/False fija override; None lo elimina (vuelve al default del rol)."""
+    if permission_key not in PORTAL_PERMISSION_KEYS or permission_key in _OWNER_ONLY_PERMISSIONS:
+        return
+    with db._get_db_connection() as connection:
+        if value is None:
+            connection.execute(
+                "DELETE FROM user_permission_overrides WHERE user_id = ? AND permission_key = ?",
+                (user_id, permission_key),
+            )
+        else:
+            connection.execute(
+                """
+                INSERT INTO user_permission_overrides
+                    (user_id, cliente_id, permission_key, allowed, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, permission_key) DO UPDATE SET
+                    allowed = excluded.allowed, updated_at = excluded.updated_at
+                """,
+                (user_id, cliente_id, permission_key, 1 if value else 0, timeutils._utc_now_iso()),
+            )
+        connection.commit()
+
+
 def _serialize_auth_user(row: sqlite3.Row) -> AuthUserPublic:
     cliente_id = row["cliente_id"] or ""
     plan = clients._client_plan(cliente_id) if cliente_id else settings.PLAN_DEFAULT
@@ -88,6 +198,7 @@ def _serialize_auth_user(row: sqlite3.Row) -> AuthUserPublic:
         last_login_at=row["last_login_at"] or "",
         as_admin_session=_session_is_impersonated(row),
         impersonator_email=_session_impersonator_email(row),
+        permissions=sorted(k for k, v in _effective_permissions(row).items() if v),
     )
 
 

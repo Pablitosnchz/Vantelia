@@ -407,6 +407,7 @@ class AuthUserPublic(BaseModel):
     last_login_at: str = ""
     as_admin_session: bool = False
     impersonator_email: str = ""
+    permissions: List[str] = Field(default_factory=list)
 
 
 class AuthLoginResponse(BaseModel):
@@ -1833,3 +1834,25 @@ class PortalTeamMemberUpdatePayload(BaseModel):
     display_name: str = Field(default="", max_length=120)
     portal_role: str = Field(default="", pattern="^(owner|manager|staff)$|^$")
     is_active: Optional[bool] = None
+
+
+class PortalPermissionItem(BaseModel):
+    key: str
+    module: str
+    label: str
+    owner_only: bool = False
+    default: bool = False
+    effective: bool = False
+    override: str = "default"  # default | allow | deny
+
+
+class PortalUserPermissionsResponse(BaseModel):
+    user_id: str
+    portal_role: str
+    is_owner: bool = False
+    items: List[PortalPermissionItem] = Field(default_factory=list)
+
+
+class PortalPermissionUpdatePayload(BaseModel):
+    # Mapa permiso -> "default" | "allow" | "deny"
+    overrides: Dict[str, str] = Field(default_factory=dict)

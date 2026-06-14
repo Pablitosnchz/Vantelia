@@ -308,3 +308,85 @@ async def auth_app_team_delete(
         raise HTTPException(status_code=409, detail="El negocio necesita al menos un propietario activo.")
     security._delete_user(target["id"])
     return AuthSimpleResponse(ok=True, message="Usuario eliminado del equipo.")
+
+
+def _permission_items_for(target: sqlite3.Row) -> List[PortalPermissionItem]:
+    role = security._portal_role(target)
+    is_owner = role == "owner" or target["role"] == "admin"
+    defaults = security._role_default_permissions(role)
+    overrides = security._user_permission_overrides(target["id"])
+    effective = security._effective_permissions(target)
+    items: List[PortalPermissionItem] = []
+    for perm in security.PORTAL_PERMISSIONS:
+        key = perm["key"]
+        owner_only = bool(perm.get("owner_only"))
+        default_allowed = True if is_owner else (key in defaults)
+        if key in overrides and not owner_only and not is_owner:
+            override_state = "allow" if overrides[key] else "deny"
+        else:
+            override_state = "default"
+        items.append(PortalPermissionItem(
+            key=key, module=perm["module"], label=perm["label"], owner_only=owner_only,
+            default=default_allowed,
+            effective=True if is_owner else bool(effective.get(key, False)),
+            override=override_state,
+        ))
+    return items
+
+
+@app.get("/auth/app/team/{member_id}/permissions", response_model=PortalUserPermissionsResponse)
+async def auth_app_team_permissions_get(
+    member_id: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> PortalUserPermissionsResponse:
+    security._require_portal_min_role(user, "owner")
+    target_client_id = portal._portal_client_id_or_403(user, cliente_id)
+    target = _team_member_or_404(target_client_id, member_id)
+    role = security._portal_role(target)
+    return PortalUserPermissionsResponse(
+        user_id=target["id"],
+        portal_role=role,
+        is_owner=(role == "owner" or target["role"] == "admin"),
+        items=_permission_items_for(target),
+    )
+
+
+@app.put("/auth/app/team/{member_id}/permissions", response_model=PortalUserPermissionsResponse)
+async def auth_app_team_permissions_put(
+    member_id: str,
+    data: PortalPermissionUpdatePayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> PortalUserPermissionsResponse:
+    """Afina permisos por accion de un miembro (solo owner). Los owners tienen
+    acceso total no editable; los permisos owner_only no se delegan."""
+    security._require_portal_min_role(user, "owner")
+    target_client_id = portal._portal_client_id_or_403(user, cliente_id)
+    target = _team_member_or_404(target_client_id, member_id)
+    if security._portal_role(target) == "owner" or target["role"] == "admin":
+        raise HTTPException(status_code=409, detail="Un propietario ya tiene acceso total.")
+    for key, state in (data.overrides or {}).items():
+        if key not in security.PORTAL_PERMISSION_KEYS:
+            continue
+        if state == "allow":
+            security._set_user_permission_override(target_client_id, target["id"], key, True)
+        elif state == "deny":
+            security._set_user_permission_override(target_client_id, target["id"], key, False)
+        else:  # default
+            security._set_user_permission_override(target_client_id, target["id"], key, None)
+    role = security._portal_role(target)
+    return PortalUserPermissionsResponse(
+        user_id=target["id"],
+        portal_role=role,
+        is_owner=False,
+        items=_permission_items_for(target),
+    )
+
+
+@app.get("/auth/app/permissions/catalog")
+async def auth_app_permissions_catalog(
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    security._require_portal_min_role(user, "owner")
+    return {"items": security.PORTAL_PERMISSIONS}

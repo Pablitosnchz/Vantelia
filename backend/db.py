@@ -318,6 +318,23 @@ def _init_database() -> None:
             )
             """
         )
+        # Permisos granulares por usuario (override sobre el default del rol).
+        # allowed: 1 = concedido, 0 = denegado. Sin fila = hereda el rol.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_permission_overrides (
+                user_id TEXT NOT NULL,
+                cliente_id TEXT NOT NULL,
+                permission_key TEXT NOT NULL,
+                allowed INTEGER NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY (user_id, permission_key)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_user_perm_overrides ON user_permission_overrides(user_id)"
+        )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS locations (

@@ -675,6 +675,7 @@ async def app_contact_create(
     data: CRMContactPayload,
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> CRMContactPublic:
+    security._require_portal_permission(user, "clients.edit")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
     contact_id = crm._crm_upsert_contact(
         cliente_id, name=data.name, email=data.email, phone=data.phone,
@@ -691,6 +692,7 @@ async def app_contact_update(
     data: CRMContactPayload,
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> CRMContactPublic:
+    security._require_portal_permission(user, "clients.edit")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
     status_value = data.status if data.status in crm.CRM_CONTACT_STATUSES else "nuevo"
     tags = list(dict.fromkeys(textnorm._sanitize_text(tag)[:80] for tag in data.tags if textnorm._sanitize_text(tag)))[:30]
@@ -2433,7 +2435,7 @@ async def auth_create_location(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> PortalLocationPublic:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     return agenda._create_portal_location(portal._portal_client_id_or_403(user, cliente_id), data)
 
 
@@ -2444,7 +2446,7 @@ async def auth_update_location(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> PortalLocationPublic:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     return agenda._update_portal_location(
         portal._portal_client_id_or_403(user, cliente_id), location_id, data
     )
@@ -2456,7 +2458,7 @@ async def auth_delete_location(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> AuthSimpleResponse:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     agenda._delete_portal_location(portal._portal_client_id_or_403(user, cliente_id), location_id)
     return AuthSimpleResponse(ok=True, message="Centro eliminado correctamente.")
 
@@ -2483,7 +2485,7 @@ async def auth_create_resource(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> PortalResourcePublic:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     return agenda._create_portal_resource(
         portal._portal_client_id_or_403(user, cliente_id), location_id, data
     )
@@ -2496,7 +2498,7 @@ async def auth_update_resource(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> PortalResourcePublic:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     return agenda._update_portal_resource(
         portal._portal_client_id_or_403(user, cliente_id), resource_id, data
     )
@@ -2508,7 +2510,7 @@ async def auth_delete_resource(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> AuthSimpleResponse:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     agenda._delete_portal_resource(portal._portal_client_id_or_403(user, cliente_id), resource_id)
     return AuthSimpleResponse(ok=True, message="Sala eliminada correctamente.")
 
@@ -2520,6 +2522,7 @@ async def auth_capture_booking_payment(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> BookingPaymentActionResponse:
+    security._require_portal_permission(user, "payments.capture")
     target_client_id = portal._portal_client_id_or_403(user, cliente_id)
     result = booking.capture_booking_payment(
         target_client_id, booking_id, amount_cents=data.amount_cents, reason=data.reason
@@ -2539,6 +2542,7 @@ async def auth_release_booking_payment(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> BookingPaymentActionResponse:
+    security._require_portal_permission(user, "payments.capture")
     target_client_id = portal._portal_client_id_or_403(user, cliente_id)
     result = booking.release_booking_payment(target_client_id, booking_id, reason=data.reason)
     return BookingPaymentActionResponse(
@@ -2556,6 +2560,7 @@ async def auth_refund_booking_payment(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> BookingPaymentActionResponse:
+    security._require_portal_permission(user, "payments.refund")
     target_client_id = portal._portal_client_id_or_403(user, cliente_id)
     result = booking.refund_booking_payment(
         target_client_id, booking_id, amount_cents=data.amount_cents, reason=data.reason
@@ -2585,7 +2590,7 @@ async def auth_set_service_location_override(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> ServiceLocationsResponse:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     target_client_id = portal._portal_client_id_or_403(user, cliente_id)
     agenda._set_service_location_override(target_client_id, slug, location_id, data)
     return agenda._service_locations_overview(target_client_id, slug)
@@ -2598,7 +2603,7 @@ async def auth_reset_service_location_override(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> ServiceLocationsResponse:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     target_client_id = portal._portal_client_id_or_403(user, cliente_id)
     agenda._delete_service_location_override(target_client_id, slug, location_id)
     return agenda._service_locations_overview(target_client_id, slug)
@@ -2622,7 +2627,7 @@ async def auth_create_employee(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> PortalEmployeePublic:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     return agenda._create_portal_employee(
         portal._portal_client_id_or_403(user, cliente_id),
         data,
@@ -2637,7 +2642,7 @@ async def auth_update_employee(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> PortalEmployeePublic:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     return agenda._update_portal_employee(
         portal._portal_client_id_or_403(user, cliente_id),
         employee_id,
@@ -2652,7 +2657,7 @@ async def auth_delete_employee(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> AuthSimpleResponse:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     agenda._delete_portal_employee(portal._portal_client_id_or_403(user, cliente_id), employee_id)
     return AuthSimpleResponse(ok=True, message="Profesional eliminado correctamente.")
 
@@ -2701,6 +2706,7 @@ async def auth_create_booking(
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> BookingActionResponse:
     """Alta manual de cita desde el portal (walk-in / cita por telefono)."""
+    security._require_portal_permission(user, "agenda.create")
     target_client_id = portal._portal_client_id_or_403(user, cliente_id)
     config = clients._get_client_config(target_client_id)
     if not config["booking"]["enabled"]:
@@ -2841,6 +2847,7 @@ async def auth_cancel_booking(
     booking_row = booking._load_booking_or_404(booking_id)
     if user["role"] != "admin" and booking_row["cliente_id"] != user["cliente_id"]:
         raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
+    security._require_portal_permission(user, "agenda.cancel")
 
     if booking_row["status"] == "cancelled":
         return BookingActionResponse(
@@ -2907,6 +2914,7 @@ async def auth_mark_booking_attendance(
     booking_row = booking._load_booking_or_404(booking_id)
     if user["role"] != "admin" and booking_row["cliente_id"] != user["cliente_id"]:
         raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
+    security._require_portal_permission(user, "agenda.attendance")
     if booking_row["status"] == "cancelled":
         raise HTTPException(status_code=409, detail="No se puede marcar la asistencia de una cita cancelada.")
     start_at = booking_row["start_at"] or ""

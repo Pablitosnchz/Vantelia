@@ -14,12 +14,12 @@ informes.
 No es correcto afirmar todavia que cumple **todos** los requisitos del PDF de
 forma profesional. El cumplimiento actual es:
 
-- **Completo o practicamente completo:** 8 areas (incluye ya la politica
-  automatica de cancelacion/no-show por ventana temporal y por servicio,
-  cerrada el 14/06/2026).
-- **Parcial con una base funcional util:** 5 areas.
-- **No implementado como lo pide el pliego:** reserva entrante por email y
-  permisos configurables por accion.
+- **Completo o practicamente completo:** 9 areas (incluyen ya la politica
+  automatica de cancelacion/no-show y los permisos granulares por accion,
+  cerrados el 14/06/2026).
+- **Parcial con una base funcional util:** 4 areas.
+- **No implementado como lo pide el pliego:** reserva entrante por email
+  como canal conversacional.
 - **Pendiente de certificacion real:** proveedores externos, carga,
   accesibilidad completa y recuperacion operativa.
 
@@ -46,7 +46,7 @@ flowchart LR
 | 8. Historial de actividad | **Mayormente completo** | Timeline de cita, CRM, filtros, exportaciones y auditoria de pagos/notificaciones. | Conviene unificar una busqueda transversal de actividad por cliente, fecha, servicio y actor. |
 | 9. Panel de administracion | **Mayormente completo** | Agenda, empleados, centros, salas, servicios, bloqueos, usuarios y operacion manual. | Los workers viven con el proceso web; para operacion profesional deben separarse y monitorizarse. |
 | 10. Dashboard | **Completo funcionalmente** | KPIs, graficos interactivos, ampliacion, CSV y filtros por centro, servicio y fechas. | Faltan informes programados, comparativas guardadas y objetivos configurables. |
-| T1. Roles y permisos granulares | **Parcial** | Roles fijos `owner`, `manager`, `staff` aplicados en API y UI. | No se pueden asignar permisos por accion/modulo a cada usuario. |
+| T1. Roles y permisos granulares | **Completo** | Roles como presets + **permisos por accion/modulo con override allow/deny por usuario** (matriz en UI, enforce en API, `/auth/me` expone permisos efectivos). Cerrado el 14/06/2026. | El owner siempre tiene acceso total y los permisos sensibles (canales, pagos, equipo) no se delegan, por diseno. |
 | T2. Auditoria de acciones | **Mayormente completo** | Timeline de reservas, pagos, comercio, canales e impersonacion. | Falta catalogo formal que garantice auditoria para toda mutacion administrativa. |
 | T3. Notificaciones y alertas | **Parcial** | Notificaciones a cliente y registro de envio/fallo. | Faltan bandeja de alertas internas, severidad, responsables, escalado y cierre. |
 
@@ -103,8 +103,8 @@ Fuentes consultadas:
 ```mermaid
 flowchart TD
     DONE[Cerrado 14/06/2026] --> C[Politica automatica cancelacion/no-show]
+    DONE --> R[Permisos granulares por accion]
     P0[P0 - No prometer como completo] --> E[Reserva entrante por email]
-    P0 --> R[Permisos por accion]
     P1[P1 - Operacion profesional] --> W[Workers separados + observabilidad]
     P1 --> X[Pruebas sandbox Meta/Twilio/Stripe]
     P1 --> A[Accesibilidad + visual regression]

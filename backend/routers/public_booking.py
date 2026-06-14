@@ -624,7 +624,7 @@ async def auth_create_service(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> ServicePublic:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     target_client_id = portal._portal_client_id_or_403(user, cliente_id)
     agenda._ensure_services_seeded(target_client_id)
     name = textnorm._sanitize_text(data.nombre)
@@ -666,7 +666,7 @@ async def auth_update_service(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> ServicePublic:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     target_client_id = portal._portal_client_id_or_403(user, cliente_id)
     row = agenda._get_service_row(target_client_id, slug)
     if not row:
@@ -734,7 +734,7 @@ async def auth_delete_service(
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> AuthSimpleResponse:
-    security._require_portal_min_role(user, "manager")
+    security._require_portal_permission(user, "catalog.manage")
     target_client_id = portal._portal_client_id_or_403(user, cliente_id)
     if not agenda._get_service_row(target_client_id, slug):
         raise HTTPException(status_code=404, detail="Servicio no encontrado.")
