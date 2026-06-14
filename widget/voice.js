@@ -61,6 +61,7 @@ function removeOverlay() {
 }
 
 function endCall(title, hint) {
+  logCall();
   teardown();
   if (title || hint) { setStatus(title || "Llamada finalizada"); if (hint) setHint(hint); speaking(false); }
   const wasActive = !!v;
@@ -95,6 +96,11 @@ function micError(e) {
   else fail("No se pudo abrir el micrófono", "Revisa los permisos del navegador.");
 }
 
+function pushTranscript(role, text) {
+  const clean = (text || "").trim();
+  if (v && clean) v.transcript.push({ role, text: clean, ts: new Date().toISOString() });
+}
+
 function handleEvent(ev) {
   const type = (ev && ev.type) || "";
   if (type.indexOf("output_audio.delta") >= 0 || type.indexOf("audio.delta") >= 0) {
@@ -105,11 +111,28 @@ function handleEvent(ev) {
     speaking(false); if (v) setStatus("En llamada");
   } else if (type === "input_audio_buffer.speech_started") {
     setHint("Te escucho…");
+  } else if (type === "response.output_audio_transcript.done") {
+    pushTranscript("assistant", ev.transcript);
+  } else if (type === "conversation.item.input_audio_transcription.completed") {
+    pushTranscript("user", ev.transcript);
   } else if (type === "response.function_call_arguments.done") {
     runTool(ev);
   } else if (type === "error") {
     endCall("La llamada terminó", "El asistente devolvió un error.");
   }
+}
+
+function logCall() {
+  // Registra la transcripcion en el backend para que salga en Conversaciones.
+  if (!v || !v.transcript || !v.transcript.length) return;
+  const payload = JSON.stringify({
+    transcript: v.transcript,
+    duration_seconds: Math.max(0, Math.round((Date.now() - (v.startedAt || Date.now())) / 1000)),
+  });
+  const url = `${WIDGET_CONFIG.apiUrl}/voice/widget/${encodeURIComponent(WIDGET_CONFIG.clienteId)}/log`;
+  try {
+    fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, keepalive: true }).catch(() => {});
+  } catch (_) {}
 }
 
 async function runTool(ev) {
@@ -148,7 +171,7 @@ async function postSDP(model, sdp, secret) {
 export async function startVoice(cfg) {
   if (v) return;
   buildOverlay(cfg || {});
-  v = { muted: false, pc: null, dc: null, micStream: null, timerId: null, maxId: null, speakId: null, seconds: 0 };
+  v = { muted: false, pc: null, dc: null, micStream: null, timerId: null, maxId: null, speakId: null, seconds: 0, transcript: [], startedAt: Date.now() };
   setStatus("Pidiendo micrófono…"); setHint("Permite el micrófono para empezar a hablar.");
   trackWidgetEvent("widget_voice_started");
   try { v.micStream = await getMic(); } catch (e) { micError(e); return; }

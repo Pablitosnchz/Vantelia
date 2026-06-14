@@ -6765,3 +6765,15 @@ def test_mark_booking_confirmed_by_customer(api_module):
             conn.execute("DELETE FROM bookings WHERE id=?", (rec["id"],))
             conn.execute("DELETE FROM booking_audit WHERE booking_id=?", (rec["id"],))
             conn.commit()
+
+
+def test_alerts_and_widget_voice_log_gating(client: TestClient, api_module):
+    cookies = _portal_admin_cookies(api_module)
+    a = client.get("/auth/app/alerts", params={"cliente_id": "demo"}, cookies=cookies)
+    assert a.status_code == 200
+    body = a.json()
+    assert "total" in body and isinstance(body.get("items"), list)
+    # Log de voz del widget sin opt-in -> 403.
+    r = client.post("/voice/widget/demo/log", headers={"Origin": "http://testserver"},
+                    json={"transcript": [{"role": "user", "text": "hola"}], "duration_seconds": 5})
+    assert r.status_code == 403

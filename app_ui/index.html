@@ -978,6 +978,27 @@
     /* Toast: barra de acento + ligero desenfoque para look premium */
     .toast { backdrop-filter: blur(6px); border-left-width: 3px; }
 
+    /* Topbar acciones: buscar + avisos */
+    .topbar-right { display: flex; align-items: center; gap: 10px; }
+    .ts-icon-btn { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--soft); cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative; transition: all .12s ease; }
+    .ts-icon-btn:hover { color: var(--text); border-color: var(--accent); }
+    .ts-icon-btn svg { width: 18px; height: 18px; }
+    .alerts-wrap { position: relative; }
+    .alerts-badge { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px; background: var(--danger); color: #0B132B; font-size: 0.62rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+    .alerts-pop { display: none; position: absolute; right: 0; top: calc(100% + 8px); width: 300px; background: var(--panel-2); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 18px 40px rgba(0,0,0,.45); padding: 8px; z-index: 60; }
+    .alerts-pop.open { display: block; }
+    .alerts-row { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; }
+    .alerts-row:hover { background: rgba(255,255,255,.05); }
+    .alerts-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    /* Búsqueda global (command palette) */
+    .gsearch-backdrop { display: none; position: fixed; inset: 0; z-index: 320; background: rgba(4,8,16,.55); backdrop-filter: blur(4px); padding-top: 12vh; justify-content: center; }
+    .gsearch-backdrop.open { display: flex; }
+    .gsearch-box { width: 100%; max-width: 560px; height: max-content; background: var(--panel-2); border: 1px solid var(--line-strong); border-radius: 16px; box-shadow: 0 30px 80px rgba(0,0,0,.5); padding: 14px; }
+    #gsearchResults { margin-top: 10px; max-height: 52vh; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+    .gs-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; cursor: pointer; font-size: 0.88rem; }
+    .gs-item:hover { background: rgba(255,255,255,.05); }
+    .gs-group { font-size: 0.66rem; text-transform: uppercase; letter-spacing: .08em; color: var(--soft-2); margin: 8px 4px 2px; font-weight: 700; }
+
     /* Clientes */
     .cliente-name { font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
@@ -1176,6 +1197,17 @@
       </button>
       <div class="page-title" id="pageTitle">Informes</div>
     </div>
+    <div class="topbar-right">
+      <button class="ts-icon-btn" id="globalSearchBtn" type="button" title="Buscar (Ctrl+K)" aria-label="Buscar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+      <div class="alerts-wrap" id="alertsWrap">
+        <button class="ts-icon-btn" id="alertsBtn" type="button" title="Avisos" aria-label="Avisos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="alerts-badge" id="alertsBadge" style="display:none;">0</span>
+        </button>
+        <div class="alerts-pop" id="alertsPop"></div>
+      </div>
     <div class="user-menu" id="userMenu">
       <div class="user-chip" id="userChip">
         <div class="avatar" id="userAvatar">U</div>
@@ -1190,6 +1222,15 @@
         <button id="changePwdBtn" type="button">Cambiar contraseña</button>
         <button id="logoutBtn" type="button">Cerrar sesión</button>
       </div>
+    </div>
+    </div>
+  </div>
+
+  <!-- Búsqueda global (clientes y conversaciones) -->
+  <div class="gsearch-backdrop" id="gsearchBackdrop">
+    <div class="gsearch-box" role="dialog" aria-modal="true" aria-label="Buscar">
+      <input type="text" id="gsearchInput" class="field-input" placeholder="Buscar cliente o conversación por nombre, email o teléfono…" autocomplete="off" />
+      <div id="gsearchResults"></div>
     </div>
   </div>
 
@@ -2138,9 +2179,9 @@
         <button class="gcal-nav-btn" id="cdNext" aria-label="Siguiente">&#8250;</button>
         <h2 class="gcal-month-title" id="cdTitle">Día</h2>
         <div class="cd-range" id="cdRange">
-          <button class="filter-chip active" type="button" data-range="1">1 día</button>
+          <button class="filter-chip active" type="button" data-range="1">Día</button>
           <button class="filter-chip" type="button" data-range="3">3 días</button>
-          <button class="filter-chip" type="button" data-range="7">7 días</button>
+          <button class="filter-chip" type="button" data-range="7">Semana</button>
         </div>
         <span class="panel-sub" id="cdMeta" style="margin:0;"></span>
         <div class="cd-legend" id="cdLegend" aria-hidden="true">
@@ -2162,6 +2203,7 @@
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
       <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600;">Clientes</h2>
       <input type="text" class="field-input" id="clientesSearch" placeholder="Buscar por nombre, email o teléfono…" style="margin-left:auto; max-width:340px;" />
+      <button class="btn btn-primary" id="clienteNewBtn" data-perm="clients.edit" type="button">+ Nuevo cliente</button>
     </div>
     <p class="panel-sub">Ficha de cada cliente: historial de visitas, gasto, bonos y notas. Se rellena solo desde las reservas y conversaciones.</p>
     <div id="clientesList" style="display:flex; flex-direction:column; gap:6px; margin-top:14px;"></div>
@@ -2981,6 +3023,23 @@ function confirmDialog({ title = 'Confirmar', bodyHtml = '', confirmLabel = 'Con
     back.classList.add('open');
     ok.focus();
   });
+}
+
+// Modal de importe (sustituye a window.prompt en cobros/reembolsos). Devuelve cents o null.
+async function promptAmount({ title = 'Importe', label = 'Importe (€)', defaultEur = '', maxEur = null } = {}) {
+  const maxTxt = (maxEur != null) ? ` <span style="color:var(--soft-2);">(máx. ${Number(maxEur).toFixed(2)} €)</span>` : '';
+  const ok = await confirmDialog({
+    title,
+    confirmLabel: 'Continuar',
+    bodyHtml: `<label class="field-label">${escapeHtml(label)}${maxTxt}</label>
+      <input class="field-input" id="vdlgAmount" type="number" min="0.5" step="0.01" value="${escapeHtml(String(defaultEur || ''))}" style="margin-top:6px; font-size:1.1rem;" />`,
+  });
+  if (!ok) return null;
+  const el = document.getElementById('vdlgAmount');
+  const eur = parseFloat(String(el && el.value || '').replace(',', '.'));
+  if (!Number.isFinite(eur) || eur < 0.5) { toast('Importe inválido (mínimo 0,50 €).', 'error'); return null; }
+  if (maxEur != null && eur > Number(maxEur) + 0.0001) { toast(`El máximo es ${Number(maxEur).toFixed(2)} €.`, 'error'); return null; }
+  return Math.round(eur * 100);
 }
 
 // Bloque HTML con el desglose de la política para el diálogo de cancelar/no-show.
@@ -5875,13 +5934,11 @@ function cdRenderDetail(b){
         if (action === 'manage'){ if (b.manage_url) window.open(b.manage_url, '_blank', 'noopener,noreferrer'); return; }
         if (action === 'pay'){
           const def = b.service_price_cents ? (b.service_price_cents/100).toFixed(2) : '';
-          const ans = window.prompt('Importe a cobrar en EUR (mínimo 0,50):', def);
-          if (ans === null) return;
-          const eur = parseFloat((ans + '').replace(',', '.'));
-          if (!Number.isFinite(eur) || eur < 0.5){ toast('Importe inválido (mínimo 0,50 €).', 'error'); return; }
+          const cents = await promptAmount({ title: 'Cobrar cita', label: 'Importe a cobrar (€)', defaultEur: def });
+          if (cents === null) return;
           btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Generando…';
           try {
-            const data = await api(`/auth/app/bookings/${encodeURIComponent(bid)}/payment-link`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount_cents: Math.round(eur * 100) }) });
+            const data = await api(`/auth/app/bookings/${encodeURIComponent(bid)}/payment-link`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount_cents: cents }) });
             if (data.checkout_url){
               try { await navigator.clipboard.writeText(data.checkout_url); toast('Enlace de pago copiado al portapapeles', 'success'); }
               catch { toast('Enlace de pago creado', 'success'); }
@@ -5969,12 +6026,10 @@ function cdRenderDetail(b){
           return;
         }
         if (action === 'capture'){
-          const maxEur = b.payment_amount_cents ? (b.payment_amount_cents/100).toFixed(2) : '';
-          const ans = window.prompt(`Importe a cobrar de la retención (máx. ${maxEur} €). Vacío = importe completo:`, maxEur);
-          if (ans === null) return;
-          const body = {};
-          const eur = parseFloat((ans + '').replace(',', '.'));
-          if (ans.trim() !== '' && Number.isFinite(eur)) body.amount_cents = Math.round(eur * 100);
+          const maxEur = b.payment_amount_cents ? (b.payment_amount_cents/100) : null;
+          const cents = await promptAmount({ title: 'Cobrar retención', label: 'Importe a cobrar (€)', defaultEur: maxEur != null ? maxEur.toFixed(2) : '', maxEur });
+          if (cents === null) return;
+          const body = { amount_cents: cents };
           await api(`/auth/bookings/${bid}/payment/capture`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
           toast('Retención cobrada', 'success');
           await loadCitasDay();
@@ -5988,13 +6043,10 @@ function cdRenderDetail(b){
           return;
         }
         if (action === 'refund'){
-          const maxEur = b.payment_amount_cents ? (b.payment_amount_cents/100).toFixed(2) : '';
-          const ans = window.prompt(`Importe a reembolsar (máx. ${maxEur} €). Vacío = reembolso total:`, '');
-          if (ans === null) return;
-          const body = {};
-          const eur = parseFloat((ans + '').replace(',', '.'));
-          if (ans.trim() !== '' && Number.isFinite(eur)) body.amount_cents = Math.round(eur * 100);
-          await api(`/auth/bookings/${bid}/payment/refund`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+          const maxEur = b.payment_amount_cents ? (b.payment_amount_cents/100) : null;
+          const cents = await promptAmount({ title: 'Reembolsar', label: 'Importe a reembolsar (€)', defaultEur: maxEur != null ? maxEur.toFixed(2) : '', maxEur });
+          if (cents === null) return;
+          await api(`/auth/bookings/${bid}/payment/refund`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount_cents: cents }) });
           toast('Reembolso creado', 'success');
           await loadCitasDay();
           return;
@@ -6057,6 +6109,13 @@ document.getElementById('cdNext').addEventListener('click', () => { const step =
 document.querySelectorAll('#cdRange .filter-chip').forEach(chip => {
   chip.addEventListener('click', () => {
     citasState.dayRange = Number(chip.dataset.range) || 1;
+    // En vista Semana, encuadra desde el lunes de la semana visible.
+    if (citasState.dayRange === 7) {
+      const d = new Date(citasState.dayDate || new Date());
+      const dow = (d.getDay() + 6) % 7; // lunes=0
+      d.setDate(d.getDate() - dow);
+      citasState.dayDate = d;
+    }
     cdSyncRangeChips();
     loadCitasDay();
   });
@@ -7411,6 +7470,114 @@ async function loadClientes() {
 }
 document.getElementById('clientesSearch').addEventListener('input', () => { clearTimeout(window.__clT); window.__clT = setTimeout(loadClientes, 300); });
 
+function openNewClientePanel() {
+  document.getElementById('clientePanelTitle').textContent = 'Nuevo cliente';
+  const body = document.getElementById('clientePanelBody');
+  body.innerHTML = `
+    <div class="field" style="margin-bottom:8px;">
+      <label class="field-label">Datos del cliente</label>
+      <div class="form-row" style="margin-top:0;"><div class="field"><label class="field-label">Nombre</label><input class="field-input" id="nuevoNombre" maxlength="200" placeholder="Nombre y apellidos"></div></div>
+      <div class="form-row">
+        <div class="field"><label class="field-label">Email</label><input class="field-input" id="nuevoEmail" type="email" maxlength="200"></div>
+        <div class="field"><label class="field-label">Teléfono</label><input class="field-input" id="nuevoTelefono" maxlength="80"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label class="field-label">Estado</label>
+          <select class="field-input" id="nuevoEstado">${['nuevo','lead','cliente','recurrente','inactivo','perdido'].map(s => `<option value="${s}">${escapeHtml(CRM_STATUS_LABEL[s] || s)}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label class="field-label">Etiquetas (coma)</label><input class="field-input" id="nuevoTags" maxlength="400"></div>
+      </div>
+      <div class="field" style="margin-top:8px;"><label class="field-label">Notas internas</label><textarea class="field-input" id="nuevoNotas" rows="3" maxlength="8000"></textarea></div>
+    </div>
+    <button class="btn btn-primary" id="nuevoClienteSaveBtn" style="width:100%;">Crear cliente</button>`;
+  document.getElementById('clientePanel').classList.add('open');
+  document.getElementById('clienteOverlay').classList.add('open');
+  document.getElementById('nuevoClienteSaveBtn').addEventListener('click', async () => {
+    const payload = {
+      name: document.getElementById('nuevoNombre').value.trim(),
+      email: document.getElementById('nuevoEmail').value.trim(),
+      phone: document.getElementById('nuevoTelefono').value.trim(),
+      status: document.getElementById('nuevoEstado').value,
+      notes: document.getElementById('nuevoNotas').value,
+      tags: document.getElementById('nuevoTags').value.split(',').map(s => s.trim()).filter(Boolean),
+      source: 'manual',
+    };
+    if (!payload.name && !payload.email && !payload.phone) { toast('Indica al menos nombre, email o teléfono.', 'error'); return; }
+    const btn = document.getElementById('nuevoClienteSaveBtn'); btn.disabled = true; const o = btn.textContent; btn.textContent = 'Creando…';
+    try {
+      const r = await api('/auth/app/contacts', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      toast('Cliente creado.', 'success');
+      closeClientePanel(); loadClientes();
+      if (r && r.id) openClientePanel(r.id);
+    } catch (e) { toast(e.message, 'error'); btn.disabled = false; btn.textContent = o; }
+  });
+}
+document.getElementById('clienteNewBtn')?.addEventListener('click', openNewClientePanel);
+
+// ── AVISOS (bandeja) ──────────────────────────────────────────────────
+async function loadAlerts() {
+  try {
+    const d = await api('/auth/app/alerts');
+    window.__alerts = d;
+    const badge = document.getElementById('alertsBadge');
+    const n = (d.items || []).length;
+    if (n) { badge.style.display = ''; badge.textContent = String(n); } else { badge.style.display = 'none'; }
+  } catch (e) {}
+}
+function renderAlertsPop() {
+  const pop = document.getElementById('alertsPop'); const d = window.__alerts || { items: [] };
+  if (!d.items || !d.items.length) { pop.innerHTML = '<div class="panel-sub" style="padding:12px;">Todo al día. Sin avisos.</div>'; return; }
+  const col = { warn: 'var(--warning)', danger: 'var(--danger)' };
+  pop.innerHTML = d.items.map(a => `<div class="alerts-row" data-tab="${escapeHtml(a.tab)}"><span class="alerts-dot" style="background:${col[a.severity] || 'var(--soft)'}"></span><span>${escapeHtml(a.label)}</span></div>`).join('');
+  pop.querySelectorAll('[data-tab]').forEach(r => r.addEventListener('click', () => { pop.classList.remove('open'); setTab(r.getAttribute('data-tab')); }));
+}
+document.getElementById('alertsBtn')?.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  const pop = document.getElementById('alertsPop');
+  if (pop.classList.contains('open')) { pop.classList.remove('open'); return; }
+  await loadAlerts(); renderAlertsPop(); pop.classList.add('open');
+});
+document.addEventListener('click', (e) => {
+  const w = document.getElementById('alertsWrap');
+  if (w && !w.contains(e.target)) document.getElementById('alertsPop')?.classList.remove('open');
+});
+
+// ── BÚSQUEDA GLOBAL (Ctrl+K) ──────────────────────────────────────────
+let __gsT = null;
+function openGSearch() {
+  document.getElementById('gsearchBackdrop').classList.add('open');
+  const i = document.getElementById('gsearchInput'); i.value = '';
+  document.getElementById('gsearchResults').innerHTML = '<div class="panel-sub" style="padding:8px;">Busca clientes y conversaciones por nombre, email o teléfono.</div>';
+  setTimeout(() => i.focus(), 30);
+}
+function closeGSearch() { document.getElementById('gsearchBackdrop').classList.remove('open'); }
+async function runGSearch(q) {
+  const box = document.getElementById('gsearchResults');
+  if (!q || q.length < 2) { box.innerHTML = '<div class="panel-sub" style="padding:8px;">Escribe al menos 2 caracteres.</div>'; return; }
+  box.innerHTML = '<div class="panel-sub" style="padding:8px;">Buscando…</div>';
+  try {
+    const [cl, cv] = await Promise.all([
+      api(`/auth/app/contacts?page_size=8&q=${encodeURIComponent(q)}`).catch(() => ({ items: [] })),
+      api(`/auth/conversations?limit=8&q=${encodeURIComponent(q)}`).catch(() => ({ items: [] })),
+    ]);
+    let html = '';
+    const cls = cl.items || [];
+    if (cls.length) html += '<div class="gs-group">Clientes</div>' + cls.map(c => `<div class="gs-item" data-kind="cliente" data-id="${escapeHtml(c.id)}">👤 ${escapeHtml(c.name || c.email || c.phone || 'Cliente')}<span style="color:var(--soft-2); margin-left:auto; font-size:0.78rem;">${escapeHtml(c.email || c.phone || '')}</span></div>`).join('');
+    const cvs = cv.items || [];
+    if (cvs.length) html += '<div class="gs-group">Conversaciones</div>' + cvs.map(c => { const m = (typeof CONV_CHANNEL !== 'undefined' && CONV_CHANNEL[c.channel]) || { ico: '💬', label: 'Chat' }; return `<div class="gs-item" data-kind="conv" data-ck="${escapeHtml(c.kind)}" data-cid="${escapeHtml(c.id)}">${m.ico} ${escapeHtml(c.contact || m.label)}<span style="color:var(--soft-2); margin-left:auto; font-size:0.78rem;">${escapeHtml((c.preview || '').slice(0, 40))}</span></div>`; }).join('');
+    box.innerHTML = html || '<div class="panel-sub" style="padding:8px;">Sin resultados.</div>';
+    box.querySelectorAll('[data-kind="cliente"]').forEach(el => el.addEventListener('click', () => { closeGSearch(); setTab('clientes'); openClientePanel(el.getAttribute('data-id')); }));
+    box.querySelectorAll('[data-kind="conv"]').forEach(el => el.addEventListener('click', () => { closeGSearch(); setTab('chats'); loadConvDetail({ kind: el.getAttribute('data-ck'), id: el.getAttribute('data-cid'), channel: '', contact: '' }); }));
+  } catch (e) { box.innerHTML = `<div class="panel-sub" style="padding:8px;">${escapeHtml(e.message)}</div>`; }
+}
+document.getElementById('globalSearchBtn')?.addEventListener('click', openGSearch);
+document.getElementById('gsearchBackdrop')?.addEventListener('click', (e) => { if (e.target.id === 'gsearchBackdrop') closeGSearch(); });
+document.getElementById('gsearchInput')?.addEventListener('input', (e) => { clearTimeout(__gsT); __gsT = setTimeout(() => runGSearch(e.target.value.trim()), 250); });
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openGSearch(); }
+  else if (e.key === 'Escape') closeGSearch();
+});
+
 const CRM_ACT_ICON = { booking:'📅', lead:'📨', chat:'💬', voice_call:'📞', note:'📝' };
 
 async function openClientePanel(contactId) {
@@ -8061,6 +8228,7 @@ document.getElementById('cuentaLogoutBtn').addEventListener('click', async () =>
   } catch {}
   if (!portalTabChosenByUser) setTab(initialTab);
   await Promise.all([loadOverview(), loadDeploy(), loadAppearance()]);
+  loadAlerts();
   moveStarterPanelToTune();
   loadInstalacion();
   mountVanteliaWidget();

@@ -335,6 +335,48 @@ async def auth_chat_detail(
     )
 
 
+@app.get("/auth/app/alerts")
+async def app_alerts(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """Bandeja de avisos operativos: citas sin confirmar, retenciones por capturar,
+    pagos fallidos y stock bajo. Conteos rapidos para el badge del panel."""
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    now_iso = timeutils._utc_now_iso()
+    items: List[Dict[str, Any]] = []
+    with db._get_db_connection() as conn:
+        pending = conn.execute(
+            "SELECT COUNT(*) FROM bookings WHERE cliente_id=? AND status='pending_review' AND start_at>=?",
+            (target, now_iso),
+        ).fetchone()[0]
+        preauth = conn.execute(
+            "SELECT COUNT(*) FROM booking_payments WHERE cliente_id=? AND status='preauthorized'",
+            (target,),
+        ).fetchone()[0]
+        failed = conn.execute(
+            "SELECT COUNT(*) FROM customer_payments WHERE cliente_id=? AND status='failed'",
+            (target,),
+        ).fetchone()[0]
+        low_stock = conn.execute(
+            "SELECT COUNT(*) FROM products WHERE cliente_id=? AND is_active=1 AND stock IS NOT NULL AND stock<=3",
+            (target,),
+        ).fetchone()[0]
+    if pending:
+        items.append({"type": "pending_bookings", "count": int(pending), "tab": "citas",
+                      "label": f"{pending} cita(s) sin confirmar", "severity": "warn"})
+    if preauth and security._user_has_permission(user, "payments.capture"):
+        items.append({"type": "preauth_hold", "count": int(preauth), "tab": "citas",
+                      "label": f"{preauth} retención(es) por cobrar o liberar", "severity": "warn"})
+    if failed and security._user_has_permission(user, "payments.refund"):
+        items.append({"type": "failed_payments", "count": int(failed), "tab": "citas",
+                      "label": f"{failed} pago(s) fallido(s)", "severity": "danger"})
+    if low_stock and security._user_has_permission(user, "catalog.manage"):
+        items.append({"type": "low_stock", "count": int(low_stock), "tab": "ventas",
+                      "label": f"{low_stock} producto(s) con stock bajo", "severity": "warn"})
+    return {"total": sum(i["count"] for i in items), "items": items}
+
+
 @app.get("/auth/conversations", response_model=ConversationsResponse)
 async def auth_conversations(
     cliente_id: str = "",

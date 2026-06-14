@@ -296,6 +296,61 @@ async def widget_voice_tool(cliente_id: str, request: Request) -> Dict[str, Any]
     return await voice._voice_dispatch_tool(cliente_id, name, arguments)
 
 
+@app.post("/voice/widget/{cliente_id}/log", include_in_schema=False)
+async def widget_voice_log(cliente_id: str, request: Request) -> Dict[str, Any]:
+    """Registra la transcripcion de una llamada de voz del widget (al colgar) para que
+    aparezca en Conversaciones, como las llamadas de telefono. Mismo gating."""
+    textnorm._assert_valid_client_id(cliente_id)
+    config = clients._get_client_config(cliente_id)
+    security._enforce_allowed_origin(request, cliente_id)
+    if not voice._voice_widget_enabled(cliente_id, config):
+        raise HTTPException(status_code=403, detail="La voz no esta activada en este widget.")
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"widget_voice_log:{cliente_id}:{client_ip}", 20)
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    raw = (body or {}).get("transcript") if isinstance(body, dict) else None
+    transcript: List[Dict[str, str]] = []
+    for item in (raw or [])[:300]:
+        if not isinstance(item, dict):
+            continue
+        text = textnorm._sanitize_text(str(item.get("text", "")), allow_multiline=True)[:2000]
+        if not text:
+            continue
+        role = "assistant" if str(item.get("role")) in ("assistant", "bot") else "user"
+        transcript.append({"role": role, "text": text, "ts": str(item.get("ts", ""))[:40]})
+    if not transcript:
+        return {"ok": True, "skipped": True}
+    try:
+        duration = max(0, min(7200, int((body or {}).get("duration_seconds") or 0)))
+    except (TypeError, ValueError):
+        duration = 0
+    text_all = "\n".join(f"{i['role']}: {i['text']}" for i in transcript)
+    summary = await timeutils._to_thread(voice._voice_summarize, text_all)
+    booking_created = 1 if voice._voice_detect_booking_intent(text_all) else 0
+    now = timeutils._utc_now().isoformat()
+    call_sid = "widget_" + secrets.token_hex(8)
+    try:
+        with db._get_db_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO voice_calls (call_sid, cliente_id, from_number, to_number, started_at, ended_at,
+                                         duration_seconds, status, transcript_json, summary, booking_created,
+                                         direction, purpose)
+                VALUES (?, ?, '', '', ?, ?, ?, 'completed', ?, ?, ?, 'inbound', 'widget')
+                """,
+                (call_sid, cliente_id, now, now, duration,
+                 json.dumps(transcript, ensure_ascii=False), summary, booking_created),
+            )
+            conn.commit()
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("[voice] no se pudo registrar llamada de widget %s: %s", cliente_id, exc)
+        return {"ok": False}
+    return {"ok": True}
+
+
 @app.post("/demo/generate", response_model=DemoGenerateResponse)
 async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGenerateResponse:
     client_ip = request.client.host if request.client else "unknown"
