@@ -266,6 +266,54 @@ export function inyectarEstilos(color, accentColor) {
       padding: 0;
     }
 
+    #ia-w-header-actions { display: inline-flex; align-items: center; gap: 8px; }
+    .ia-w-icon-btn {
+      width: 34px; height: 34px; border: 0; border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14); color: #fff; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; padding: 0;
+    }
+    .ia-w-icon-btn:hover { background: rgba(255, 255, 255, 0.26); }
+    .ia-w-icon-btn svg { width: 18px; height: 18px; }
+
+    /* Overlay de voz en el widget */
+    .ia-v-overlay {
+      position: fixed; inset: 0; z-index: 2147483646;
+      background: rgba(6, 12, 24, 0.74); backdrop-filter: blur(6px);
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .ia-v-card {
+      width: 100%; max-width: 340px; border-radius: 22px; padding: 30px 24px 24px;
+      text-align: center; background: linear-gradient(180deg, #14213d, #0b1220);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5); color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .ia-v-avatar {
+      width: 96px; height: 96px; margin: 0 auto 16px; border-radius: 999px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem; font-weight: 700; color: #04121a;
+      background: linear-gradient(135deg, ${color}, #00f5d4); position: relative;
+    }
+    .ia-v-avatar::after {
+      content: ""; position: absolute; inset: -8px; border-radius: 999px;
+      border: 2px solid ${alpha(color, 0.5)}; opacity: 0; transform: scale(0.9);
+    }
+    .ia-v-avatar.speaking::after { animation: iaVPulse 1.1s ease-out infinite; }
+    @keyframes iaVPulse { 0% { opacity: 0.8; transform: scale(0.92); } 100% { opacity: 0; transform: scale(1.28); } }
+    .ia-v-name { font-weight: 700; font-size: 1.25rem; }
+    .ia-v-status { margin-top: 6px; color: rgba(255, 255, 255, 0.68); font-size: 0.95rem; min-height: 20px; }
+    .ia-v-timer { margin-top: 12px; font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+    .ia-v-hint { margin-top: 14px; color: rgba(255, 255, 255, 0.5); font-size: 0.84rem; line-height: 1.5; }
+    .ia-v-actions { display: flex; gap: 12px; justify-content: center; margin-top: 22px; }
+    .ia-v-btn {
+      appearance: none; cursor: pointer; font: inherit; font-weight: 600; font-size: 0.92rem;
+      border: 1px solid rgba(255, 255, 255, 0.16); color: #fff; background: rgba(255, 255, 255, 0.08);
+      padding: 12px 18px; border-radius: 999px;
+    }
+    .ia-v-btn:hover { background: rgba(255, 255, 255, 0.16); }
+    .ia-v-btn.ia-v-hang { background: #ef4444; border-color: #ef4444; }
+    .ia-v-btn.ia-v-hang:hover { background: #dc2626; }
+    @media (prefers-reduced-motion: reduce) { .ia-v-avatar.speaking::after { animation: none; } }
+
     #ia-w-msgs {
       flex: 1;
       padding: 14px;

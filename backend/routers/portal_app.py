@@ -1964,6 +1964,10 @@ async def app_voice_post(
         if data.openai_voice is not None:
             v = textnorm._sanitize_text(data.openai_voice).lower()
             voice_row["openai_voice"] = v if v in textnorm.VOICE_ALLOWED_OPENAI_VOICES else (voice_row.get("openai_voice") or "alloy")
+        if data.widget_enabled is not None:
+            if data.widget_enabled and not voice._client_voice_plan_enabled(cliente_id):
+                raise HTTPException(status_code=403, detail="La voz en el widget requiere plan Business.")
+            voice_row["widget_enabled"] = bool(data.widget_enabled)
         cfg["voice"] = voice_row
         next_configs[cliente_id] = cfg
         clients._update_runtime_configs(next_configs)

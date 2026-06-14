@@ -250,6 +250,52 @@ async def demo_voice_tool(cliente_id: str, request: Request) -> Dict[str, Any]:
     return await voice._voice_dispatch_tool_demo(cliente_id, name, arguments)
 
 
+@app.post("/voice/widget/{cliente_id}/session", include_in_schema=False)
+async def widget_voice_session(cliente_id: str, request: Request) -> Dict[str, Any]:
+    """Token efimero para la voz EN EL WIDGET embebido en la web del negocio. Opt-in por
+    negocio (voice.widget_enabled) + plan Business. A diferencia del demo, usa tools REALES:
+    el cliente final reserva/cancela de verdad. Protegido por origen permitido + rate limit."""
+    textnorm._assert_valid_client_id(cliente_id)
+    config = clients._get_client_config(cliente_id)  # 404 si no existe
+    security._enforce_allowed_origin(request, cliente_id)
+    if not voice._voice_widget_enabled(cliente_id, config):
+        raise HTTPException(status_code=403, detail="La voz no esta activada en este widget.")
+    if not settings.OPENAI_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El asistente de voz no esta disponible ahora mismo.",
+        )
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"widget_voice:{cliente_id}:{client_ip}", settings.DEMO_VOICE_RATE_LIMIT)
+    voice_cfg = config.get("voice") or {}
+    max_seconds = int(voice_cfg.get("max_duration_seconds") or 0) or settings.DEMO_VOICE_MAX_SECONDS
+    return await voice._mint_voice_session(cliente_id, config, max_seconds=max_seconds, log_tag="widget-voice")
+
+
+@app.post("/voice/widget/{cliente_id}/tool", include_in_schema=False)
+async def widget_voice_tool(cliente_id: str, request: Request) -> Dict[str, Any]:
+    """Ejecuta una tool de la voz del widget contra la agenda REAL del negocio (reservar,
+    consultar, cancelar/reprogramar con verificacion). Mismo gating que la sesion."""
+    textnorm._assert_valid_client_id(cliente_id)
+    config = clients._get_client_config(cliente_id)
+    security._enforce_allowed_origin(request, cliente_id)
+    if not voice._voice_widget_enabled(cliente_id, config):
+        raise HTTPException(status_code=403, detail="La voz no esta activada en este widget.")
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"widget_voice_tool:{cliente_id}:{client_ip}", 30)
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    name = str(body.get("name", ""))
+    arguments = body.get("arguments", "")
+    if not isinstance(arguments, str):
+        arguments = json.dumps(arguments, ensure_ascii=False)
+    return await voice._voice_dispatch_tool(cliente_id, name, arguments)
+
+
 @app.post("/demo/generate", response_model=DemoGenerateResponse)
 async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGenerateResponse:
     client_ip = request.client.host if request.client else "unknown"

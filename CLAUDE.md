@@ -215,6 +215,8 @@ Snippet esperado:
 
 No cambies nombres de atributos `data-*` ni estructura publica sin compatibilidad hacia atras.
 
+**Voz en el widget (opt-in):** si el negocio activa `voice.widget_enabled` (config + plan Business; toggle "Voz en el widget web" en pestana Asistente de voz del portal), el widget muestra un boton de microfono que abre una llamada de voz (WebRTC directo a OpenAI Realtime) con tools REALES (reserva de verdad). `GET /cliente/{id}` expone `voice_widget_enabled`. Endpoints publicos: `POST /voice/widget/{cliente_id}/session` y `POST /voice/widget/{cliente_id}/tool` (gating: `_voice_widget_enabled` + `_enforce_allowed_origin` + rate limit; el `/tool` ejecuta `_voice_dispatch_tool` real). NO usar prefijo `/widget/...` (colisiona con el static mount). Front: `widget/voice.js` (overlay `.ia-v-*`), boton en `widget/ui.js`, CSS en `widget/styles.js`. Tras tocar el widget, `npm run build`.
+
 ## Web publica en Hostinger
 
 Dominio: `https://www.vantelia.es`.

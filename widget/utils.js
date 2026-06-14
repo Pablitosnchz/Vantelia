@@ -57,6 +57,7 @@ export const WIDGET_CONFIG = {
   brandingText: "Powered by Vantelia",
   contactEmail: "",
   contactPhone: "",
+  voiceWidgetEnabled: false,
 };
 
 const sessionStorageKey = `ia_session_${WIDGET_CONFIG.clienteId}`;
@@ -100,6 +101,7 @@ export function applyPublicConfig(config = {}) {
   WIDGET_CONFIG.brandingText = config.branding_text || WIDGET_CONFIG.brandingText;
   WIDGET_CONFIG.contactEmail = config.contact_email || "";
   WIDGET_CONFIG.contactPhone = config.contact_phone || "";
+  WIDGET_CONFIG.voiceWidgetEnabled = Boolean(config.voice_widget_enabled);
 }
 
 export function escapeHtml(value) {

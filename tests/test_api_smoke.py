@@ -6715,3 +6715,16 @@ def test_demo_commerce_seed_and_purge(api_module):
                             ("package_purchases", "ppdemo_")):
             assert c.execute(f"SELECT COUNT(*) FROM {table} WHERE cliente_id='demo' AND id LIKE ?", (pref + "%",)).fetchone()[0] == 0
         assert c.execute("SELECT COUNT(*) FROM gift_card_transactions WHERE cliente_id='demo' AND gift_card_id LIKE 'gcdemo_%'").fetchone()[0] == 0
+
+
+def test_widget_voice_gating_and_public_flag(client: TestClient, api_module):
+    # Por defecto la voz en widget esta desactivada.
+    cfg = client.get("/cliente/demo", headers={"Origin": "http://testserver"}).json()
+    assert cfg["voice_widget_enabled"] is False
+    assert api_module._voice_widget_enabled("demo") is False
+    # Endpoints publicos de voz del widget rechazan si no hay opt-in (403).
+    r = client.post("/voice/widget/demo/session", headers={"Origin": "http://testserver"}, json={})
+    assert r.status_code == 403
+    r2 = client.post("/voice/widget/demo/tool", headers={"Origin": "http://testserver"},
+                     json={"name": "consultar_disponibilidad", "arguments": "{}"})
+    assert r2.status_code == 403

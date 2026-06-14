@@ -1,5 +1,15 @@
 import { agregarAccionesIniciales, agregarMensaje, enviarMensaje } from "./chat.js";
 import { escapeHtml, scrollMsgs, trackWidgetEvent, WIDGET_CONFIG } from "./utils.js";
+import { startVoice } from "./voice.js";
+
+function getMicIcon() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z" />
+      <path d="M19 11a7 7 0 0 1-14 0M12 18v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+    </svg>
+  `;
+}
 
 let abierto = false;
 
@@ -100,7 +110,10 @@ export function construirWidget(cfg) {
             <p>Asistente oficial</p>
           </div>
         </div>
-        <button id="ia-w-close" type="button" aria-label="Cerrar chat">${getCloseIcon()}</button>
+        <div id="ia-w-header-actions">
+          ${cfg.voice_widget_enabled ? `<button id="ia-w-voice" type="button" class="ia-w-icon-btn" aria-label="Hablar por voz" title="Hablar por voz">${getMicIcon()}</button>` : ""}
+          <button id="ia-w-close" type="button" aria-label="Cerrar chat">${getCloseIcon()}</button>
+        </div>
       </header>
       <div id="ia-w-msgs" role="log" aria-live="polite" aria-atomic="false"></div>
       <div id="ia-w-input-area">
@@ -126,6 +139,7 @@ export function construirWidget(cfg) {
 
   document.getElementById("ia-w-btn")?.addEventListener("click", () => toggleChat());
   document.getElementById("ia-w-close")?.addEventListener("click", () => toggleChat(false));
+  document.getElementById("ia-w-voice")?.addEventListener("click", () => startVoice(cfg));
   document.getElementById("ia-w-send")?.addEventListener("click", enviarMensaje);
   document.getElementById("ia-w-input")?.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {

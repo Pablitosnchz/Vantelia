@@ -110,6 +110,7 @@ class ConfigPublicaCliente(BaseModel):
     contact_email: str
     contact_phone: str
     starter_questions: List[str] = Field(default_factory=list)
+    voice_widget_enabled: bool = False
 
 
 class SlotDisponibilidad(BaseModel):
@@ -885,6 +886,7 @@ class AppVoicePayload(BaseModel):
     enabled: Optional[bool] = None
     twilio_phone_number: Optional[str] = Field(default=None, max_length=32)
     openai_voice: Optional[str] = Field(default=None, max_length=40)
+    widget_enabled: Optional[bool] = None
 
 
 class AppVoiceResponse(BaseModel):
@@ -895,6 +897,7 @@ class AppVoiceResponse(BaseModel):
     openai_voice: str = ""
     webhook_url: str = ""
     plan_allows_voice: bool = False
+    widget_enabled: bool = False
     status: str = "disabled"
     status_label: str = "Desactivado"
 

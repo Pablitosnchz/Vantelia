@@ -211,6 +211,7 @@ async def info_cliente(cliente_id: str, request: Request) -> ConfigPublicaClient
         contact_email=contacto.get("email", ""),
         contact_phone=contacto.get("telefono", ""),
         starter_questions=starter_questions,
+        voice_widget_enabled=voice._voice_widget_enabled(cliente_id, config),
     )
 
 

@@ -48,6 +48,19 @@ def _client_voice_plan_enabled(cliente_id: str) -> bool:
     return bool(clients._plan_limits(clients._client_plan(cliente_id)).get("voice_enabled"))
 
 
+def _voice_widget_enabled(cliente_id: str, config: Optional[Dict[str, Any]] = None) -> bool:
+    """True si el negocio ha activado la voz EN EL WIDGET web (opt-in) y cumple los
+    requisitos de voz (habilitada + plan Business). Permite que el cliente final pulse
+    'hablar por voz' en el widget embebido."""
+    config = config if config is not None else appstate.CONFIG_CLIENTES.get(cliente_id, {})
+    voice_cfg = (config or {}).get("voice", {}) or {}
+    return (
+        bool(voice_cfg.get("enabled", False))
+        and bool(voice_cfg.get("widget_enabled", False))
+        and _client_voice_plan_enabled(cliente_id)
+    )
+
+
 def _app_voice_response(cliente_id: str, request: Request) -> "AppVoiceResponse":
     cfg = appstate.CONFIG_CLIENTES.get(cliente_id, {})
     voice_cfg = cfg.get("voice", {}) or {}
@@ -68,6 +81,7 @@ def _app_voice_response(cliente_id: str, request: Request) -> "AppVoiceResponse"
         openai_voice=str(voice_cfg.get("openai_voice", "") or ""),
         webhook_url=webhook_url,
         plan_allows_voice=plan_ok,
+        widget_enabled=bool(voice_cfg.get("widget_enabled", False)) and enabled,
         status=status_value,
         status_label=status_label,
     )

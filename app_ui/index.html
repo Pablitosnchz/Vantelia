@@ -1708,6 +1708,10 @@
           <input type="checkbox" id="vozEnabled" />
           <span><b>Asistente de voz activo</b><br><span class="panel-sub" style="margin:0;">Atenderá las llamadas que lleguen al número conectado.</span></span>
         </label>
+        <label style="display:flex; align-items:center; gap:10px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.4);">
+          <input type="checkbox" id="vozWidgetEnabled" />
+          <span><b>Voz en el widget web</b><br><span class="panel-sub" style="margin:0;">Añade un botón de micrófono en el chat de tu web para que el visitante hable por voz (y reserve). Requiere el asistente de voz activo.</span></span>
+        </label>
         <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
           <button class="btn btn-primary" id="vozSaveBtn" type="button">Guardar cambios</button>
           <button class="btn btn-ghost" id="vozTestBtn" type="button">📞 Probar en el navegador</button>
@@ -4090,6 +4094,7 @@ function renderVoice(data) {
   voiceState = data || {};
   document.getElementById('vozVoice').value = data.openai_voice || '';
   document.getElementById('vozEnabled').checked = !!data.enabled;
+  document.getElementById('vozWidgetEnabled').checked = !!data.widget_enabled;
   document.getElementById('vozPhone').value = data.twilio_phone_number || '';
   document.getElementById('vozWebhookUrl').value = data.webhook_url || '';
 
@@ -4122,6 +4127,7 @@ document.getElementById('vozSaveBtn').addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         enabled,
+        widget_enabled: document.getElementById('vozWidgetEnabled').checked,
         openai_voice: document.getElementById('vozVoice').value,
         twilio_phone_number: document.getElementById('vozPhone').value.trim(),
       }),
