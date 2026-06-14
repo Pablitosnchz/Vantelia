@@ -902,6 +902,21 @@ class AppVoiceResponse(BaseModel):
     status_label: str = "Desactivado"
 
 
+class ReminderConfigPayload(BaseModel):
+    call_fallback: Optional[bool] = None
+    quiet_start: Optional[str] = Field(default=None, max_length=5)
+    quiet_end: Optional[str] = Field(default=None, max_length=5)
+    daily_call_cap: Optional[int] = Field(default=None, ge=0, le=500)
+
+
+class ReminderConfigResponse(BaseModel):
+    call_fallback: bool = False
+    quiet_start: str = "21:00"
+    quiet_end: str = "09:00"
+    daily_call_cap: int = 30
+    voice_call_available: bool = False  # hay voz + numero para poder llamar
+
+
 class AppLiveChatSession(BaseModel):
     id: str
     chat_session_id: str

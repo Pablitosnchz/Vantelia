@@ -159,10 +159,27 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
 
     await websocket.accept()
 
+    # Modo SALIENTE (llamada de confirmacion): los parametros llegan en el query string
+    # de la URL del Stream (disponibles ya al aceptar, antes del evento 'start').
+    qp = websocket.query_params
+    call_mode = (qp.get("mode") or "").strip().lower()
+    outbound_booking_id = (qp.get("booking_id") or "").strip()
+    outbound_to = (qp.get("to") or "").strip()
+    outbound_booking = None
+    if call_mode == "confirm" and outbound_booking_id:
+        try:
+            row = booking._get_booking_row_by_id(outbound_booking_id)
+            if row and row["cliente_id"] == cliente_id:
+                outbound_booking = row
+        except Exception:  # noqa: BLE001
+            outbound_booking = None
+
     state: Dict[str, Any] = {
         "stream_sid": "",
         "call_sid": "",
         "booked": False,
+        "mode": call_mode,
+        "outbound_booking_id": outbound_booking_id if outbound_booking is not None else "",
         "fn_names": {},
         "latest_media_timestamp": 0,
         "assistant_item_id": "",
@@ -193,6 +210,16 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
         await websocket.close(code=1011)
         return
 
+    # Instrucciones, tools y saludo segun el tipo de llamada (entrante vs confirmacion saliente).
+    if outbound_booking is not None:
+        instructions_text = voice._voice_outbound_confirm_instructions(cliente_id, config, outbound_booking)
+        tools_list = voice._voice_booking_tools(cliente_id, config, include_confirm=True)
+        greeting_text = voice._voice_outbound_greeting(config, outbound_booking)
+    else:
+        instructions_text = voice._voice_build_instructions(cliente_id, config)
+        tools_list = voice._voice_booking_tools(cliente_id, config)
+        greeting_text = textnorm._voice_default_greeting(config, voice_cfg)
+
     try:
         await openai_ws.send(
             json.dumps(
@@ -202,7 +229,7 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                         "type": "realtime",
                         "model": realtime_model,
                         "output_modalities": ["audio"],
-                        "instructions": voice._voice_build_instructions(cliente_id, config),
+                        "instructions": instructions_text,
                         "audio": {
                             # Telefonia: linea/altavoz => far_field por defecto. El bloque
                             # (semantic_vad + noise_reduction + whisper) se comparte con el
@@ -219,17 +246,14 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                                 "voice": voice_cfg.get("openai_voice") or settings.VOICE_OPENAI_VOICE,
                             },
                         },
-                        "tools": voice._voice_booking_tools(cliente_id, config),
+                        "tools": tools_list,
                         "tool_choice": "auto",
                     },
                 }
             )
         )
 
-        # Prioridad del saludo: greeting de voz especifico -> mensaje de bienvenida
-        # de "Apariencia" (bienvenida) -> default con el nombre del asistente de voz.
-        # Compartido con el test del panel y la demo via _voice_default_greeting.
-        greeting = textnorm._voice_default_greeting(config, voice_cfg)
+        # Saludo inicial (entrante: bienvenida; saliente: script de confirmacion).
         await openai_ws.send(
             json.dumps(
                 {
@@ -240,7 +264,7 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                         "content": [
                             {
                                 "type": "input_text",
-                                "text": f'Inicia la llamada saludando exactamente con: "{greeting}"',
+                                "text": f'Inicia la llamada saludando exactamente con: "{greeting_text}"',
                             }
                         ],
                     },
@@ -275,8 +299,14 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                         state["call_sid"] = start.get("callSid", "") or start.get(
                             "customParameters", {}
                         ).get("call_sid", "")
-                        state["from_number"] = voice._voice_call_from_number(state["call_sid"])
-                        state["location_id"] = voice._voice_call_location_id(state["call_sid"], cliente_id)
+                        if outbound_booking is not None:
+                            # Saliente: el numero del cliente es el destino; queda verificado
+                            # para cancelar/reprogramar sin pedir codigo de reserva.
+                            state["from_number"] = outbound_to
+                            state["location_id"] = outbound_booking["location_id"] or ""
+                        else:
+                            state["from_number"] = voice._voice_call_from_number(state["call_sid"])
+                            state["location_id"] = voice._voice_call_location_id(state["call_sid"], cliente_id)
                     elif event == "stop":
                         break
             except WebSocketDisconnect:
@@ -353,11 +383,17 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                 elif etype == "response.function_call_arguments.done":
                     call_id = event.get("call_id", "")
                     fname = event.get("name") or state["fn_names"].get(call_id, "")
-                    result = await voice._voice_dispatch_tool(
-                        cliente_id, fname, event.get("arguments", ""),
-                        from_number=state.get("from_number", ""),
-                        location_id=state.get("location_id", ""),
-                    )
+                    if fname == "confirmar_cita" and state.get("outbound_booking_id"):
+                        ok = booking._mark_booking_confirmed_by_customer(
+                            state["outbound_booking_id"], cliente_id, channel="voice_outbound"
+                        )
+                        result = {"ok": bool(ok), "confirmada": bool(ok)}
+                    else:
+                        result = await voice._voice_dispatch_tool(
+                            cliente_id, fname, event.get("arguments", ""),
+                            from_number=state.get("from_number", ""),
+                            location_id=state.get("location_id", ""),
+                        )
                     if fname == "crear_cita" and result.get("ok"):
                         state["booked"] = True
                     await openai_ws.send(

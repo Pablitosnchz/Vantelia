@@ -314,6 +314,96 @@ def _voice_twiml_connect_stream(ws_url: str, call_sid: str) -> Response:
     return Response(content=twiml, media_type="application/xml")
 
 
+def _voice_outbound_greeting(config: Dict[str, Any], booking_row: sqlite3.Row) -> str:
+    nombre = (config.get("nombre") or "el negocio").strip()
+    servicio = (booking_row["servicio"] or "su cita") if booking_row else "su cita"
+    return (
+        f"Hola, le llamo de {nombre} para confirmar su cita de {servicio}. "
+        "¿Le sigue viniendo bien?"
+    )
+
+
+def _voice_outbound_confirm_instructions(cliente_id: str, config: Dict[str, Any], booking_row: sqlite3.Row) -> str:
+    base = _voice_build_instructions(cliente_id, config)
+    nombre = (booking_row["nombre"] or "el cliente") if booking_row else "el cliente"
+    servicio = (booking_row["servicio"] or "su cita") if booking_row else "su cita"
+    fecha = booking_row["booking_date"] if booking_row else ""
+    hora = booking_row["booking_time"] if booking_row else ""
+    extra = (
+        "\n\nLLAMADA SALIENTE DE CONFIRMACION (tu llamas al cliente, no al reves).\n"
+        f"- Llamas a {nombre} para confirmar su cita: {servicio} el {fecha} a las {hora}.\n"
+        "- Saluda, di de parte de que negocio llamas y pide que confirme la asistencia. Se breve y cordial.\n"
+        "- Si confirma, llama a la herramienta confirmar_cita y despidete dando las gracias.\n"
+        "- Si quiere cancelar o cambiar la hora, usa cancelar_cita o reprogramar_cita (el telefono ya esta "
+        "verificado por ser una llamada a su numero; no pidas codigo de reserva).\n"
+        "- Si pide que no le llamen, discref pide disculpas, dile que tomas nota y despidete sin insistir.\n"
+        "- No alargues: es una llamada de cortesia para confirmar.\n"
+    )
+    return base + extra
+
+
+def _voice_place_outbound_call(
+    cliente_id: str, booking_row: sqlite3.Row, *, base_url: str = "", purpose: str = "confirm"
+) -> Dict[str, Any]:
+    """Lanza una llamada SALIENTE de IA (Twilio Calls API) que conecta con el puente
+    Realtime en modo confirmacion. Sincrona (red): envolver en _to_thread desde async.
+    Gating: plan Business + numero Twilio del negocio + telefono del cliente."""
+    config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
+    voice_cfg = config.get("voice") or {}
+    if not _client_voice_plan_enabled(cliente_id):
+        return {"ok": False, "error": "La voz requiere plan Business."}
+    from_number = str(voice_cfg.get("twilio_phone_number") or settings.TWILIO_DEFAULT_PHONE_NUMBER or "").strip()
+    to_number = str((booking_row["telefono"] if booking_row else "") or "").strip()
+    sid, tok = settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN
+    if not from_number:
+        return {"ok": False, "error": "El negocio no tiene numero de voz configurado."}
+    if not to_number:
+        return {"ok": False, "error": "La cita no tiene telefono al que llamar."}
+    if not (sid and tok):
+        return {"ok": False, "error": "La telefonia no esta configurada."}
+    base = (base_url or settings.APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
+    ws_base = base.replace("https://", "wss://", 1).replace("http://", "ws://", 1)
+    ws_url = (
+        f"{ws_base}/voice/stream/{cliente_id}"
+        f"?mode=confirm&booking_id={quote(str(booking_row['id']))}&to={quote(to_number)}"
+    )
+    twiml = (
+        '<?xml version="1.0" encoding="UTF-8"?><Response><Connect>'
+        f'<Stream url="{escape(ws_url, quote=True)}"></Stream></Connect></Response>'
+    )
+    try:
+        url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Calls.json"
+        with httpx.Client(timeout=20) as client:
+            resp = client.post(url, data={"To": to_number, "From": from_number, "Twiml": twiml}, auth=(sid, tok))
+        if resp.status_code >= 300:
+            settings.logger.error("[voice] Twilio call error (%s): %s", resp.status_code, resp.text[:300])
+            return {"ok": False, "error": "No se pudo iniciar la llamada."}
+        call_sid = str((resp.json() or {}).get("sid", ""))
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("[voice] outbound call exception (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No se pudo iniciar la llamada."}
+    try:
+        with db._get_db_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO voice_calls (call_sid, cliente_id, from_number, to_number, started_at, status,
+                                         direction, purpose, booking_id)
+                VALUES (?, ?, ?, ?, ?, 'in_progress', 'outbound', ?, ?)
+                ON CONFLICT(call_sid) DO UPDATE SET direction='outbound',
+                    purpose=excluded.purpose, booking_id=excluded.booking_id
+                """,
+                (call_sid, cliente_id, from_number, to_number, timeutils._utc_now().isoformat(),
+                 purpose, str(booking_row["id"])),
+            )
+            conn.commit()
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("[voice] no se pudo registrar llamada saliente %s: %s", call_sid, exc)
+    booking._record_booking_audit(
+        booking_row["id"], cliente_id, "confirm_call_placed", {"call_sid": call_sid, "purpose": purpose}
+    )
+    return {"ok": True, "call_sid": call_sid}
+
+
 def _voice_call_register(call_sid: str, cliente_id: str, from_number: str, to_number: str) -> None:
     now_iso = timeutils._utc_now().isoformat()
     try:
@@ -492,8 +582,11 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
     return base + voice_rules + booking_block + knowledge_block
 
 
-def _voice_booking_tools(cliente_id: str, config: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Herramientas Realtime para agendar en vivo. Vacio si el cliente no tiene reserva."""
+def _voice_booking_tools(
+    cliente_id: str, config: Dict[str, Any], *, include_confirm: bool = False
+) -> List[Dict[str, Any]]:
+    """Herramientas Realtime para agendar en vivo. Vacio si el cliente no tiene reserva.
+    include_confirm=True anade `confirmar_cita` (llamadas salientes de confirmacion)."""
     if not _voice_booking_enabled(cliente_id, config):
         return []
     tools: List[Dict[str, Any]] = [
@@ -594,6 +687,18 @@ def _voice_booking_tools(cliente_id: str, config: Dict[str, Any]) -> List[Dict[s
                     },
                     "required": [],
                 },
+            }
+        )
+    if include_confirm:
+        tools.append(
+            {
+                "type": "function",
+                "name": "confirmar_cita",
+                "description": (
+                    "Marca como CONFIRMADA la cita por la que llamas cuando el cliente confirma su asistencia. "
+                    "No necesita parametros."
+                ),
+                "parameters": {"type": "object", "properties": {}, "required": []},
             }
         )
     return tools

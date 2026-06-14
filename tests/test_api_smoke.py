@@ -6728,3 +6728,40 @@ def test_widget_voice_gating_and_public_flag(client: TestClient, api_module):
     r2 = client.post("/voice/widget/demo/tool", headers={"Origin": "http://testserver"},
                      json={"name": "consultar_disponibilidad", "arguments": "{}"})
     assert r2.status_code == 403
+
+
+def test_reminders_call_gating(client: TestClient, api_module):
+    cookies = _portal_admin_cookies(api_module)
+    g = client.get("/auth/app/reminders", params={"cliente_id": "demo"}, cookies=cookies).json()
+    assert g["call_fallback"] is False and g["daily_call_cap"] == 30
+    assert g["voice_call_available"] is False  # demo sin numero de voz
+    assert api_module._reminder_calls_ok_now("demo") is False
+    rec = _build_booking_record(api_module, booking_time="13:00")
+    api_module._store_booking(rec)
+    try:
+        # Sin Twilio/numero/plan -> no se puede llamar.
+        res = api_module._voice_place_outbound_call("demo", api_module._get_booking_row_by_id(rec["id"]))
+        assert res["ok"] is False
+        r = client.post(f"/auth/bookings/{rec['id']}/confirm-call", cookies=cookies)
+        assert r.status_code == 409
+    finally:
+        with api_module._get_db_connection() as conn:
+            conn.execute("DELETE FROM bookings WHERE id=?", (rec["id"],))
+            conn.execute("DELETE FROM booking_audit WHERE booking_id=?", (rec["id"],))
+            conn.commit()
+
+
+def test_mark_booking_confirmed_by_customer(api_module):
+    rec = _build_booking_record(api_module, booking_time="13:30", status="pending_review")
+    api_module._store_booking(rec)
+    try:
+        assert api_module._mark_booking_confirmed_by_customer(rec["id"], "demo", channel="voice_outbound") is True
+        row = api_module._get_booking_row_by_id(rec["id"])
+        assert row["status"] == "confirmed"
+        events = [r["event_type"] for r in api_module._list_booking_audit_rows(rec["id"])]
+        assert "attendance_confirmed_by_customer" in events
+    finally:
+        with api_module._get_db_connection() as conn:
+            conn.execute("DELETE FROM bookings WHERE id=?", (rec["id"],))
+            conn.execute("DELETE FROM booking_audit WHERE booking_id=?", (rec["id"],))
+            conn.commit()

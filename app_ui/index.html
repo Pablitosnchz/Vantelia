@@ -2372,6 +2372,24 @@
         <button class="btn btn-primary" id="mensajesGuardarBtn">Guardar avisos</button>
       </div>
     </div>
+
+    <div class="panel-card" id="remindersCallCard" style="margin-top:18px;">
+      <h2>📞 Llamadas de confirmación por IA</h2>
+      <p class="panel-sub">La IA puede llamar al cliente para confirmar su cita. Manual siempre disponible desde el detalle de cita. Aquí activas la llamada <b>automática 24h antes</b> solo si el cliente no ha confirmado por otros canales. Requiere asistente de voz + número, y tiene coste por llamada.</p>
+      <div id="remCallNotice" class="panel-sub" style="display:none; margin:10px 0; padding:12px; border:1px solid rgba(245,158,11,0.35); border-radius:10px; background:rgba(245,158,11,0.08); color:#fde68a;">Activa el asistente de voz y conecta un número en la pestaña <b>Asistente de voz</b> para poder llamar.</div>
+      <label style="display:flex; align-items:center; gap:10px; margin-top:8px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.4);">
+        <input type="checkbox" id="remCallFallback" />
+        <span><b>Llamada automática 24h antes</b><br><span class="panel-sub" style="margin:0;">Solo si la cita no está confirmada por WhatsApp/email.</span></span>
+      </label>
+      <div class="form-row">
+        <div class="field"><label class="field-label">No llamar desde</label><input class="field-input" id="remQuietStart" type="time" /></div>
+        <div class="field"><label class="field-label">No llamar hasta</label><input class="field-input" id="remQuietEnd" type="time" /></div>
+        <div class="field"><label class="field-label">Máx. llamadas/día</label><input class="field-input" id="remDailyCap" type="number" min="0" max="500" step="1" /></div>
+      </div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-primary" id="remSaveBtn" type="button">Guardar llamadas</button>
+      </div>
+    </div>
   </section>
 
   <!-- INSTALACION -->
@@ -2990,7 +3008,7 @@ function setTab(tab) {
   if (tab === 'equipo')     loadEquipo();
   if (tab === 'servicios')  loadServicios();
   if (tab === 'horarios')   loadHorarios();
-  if (tab === 'mensajes')   loadMensajes();
+  if (tab === 'mensajes')   { loadMensajes(); loadReminders(); }
   if (tab === 'instalacion') loadInstalacion();
   if (tab === 'cuenta')     { loadCuenta(); loadAccessTeam(); loadRebookingAi(); loadCancellationPolicy(); }
   if (tab === 'ventas')     loadVentas();
@@ -5786,6 +5804,8 @@ function cdRenderDetail(b){
       ${(b.payment_status === 'paid' || b.payment_status === 'partially_refunded') && hasPerm('payments.refund') ? `<button class="btn btn-ghost" type="button" data-cd="refund" style="padding:6px 14px;">↩ Reembolsar</button>` : ''}
       ${est !== 'cancelled' && b.payment_status !== 'preauthorized' ? `<button class="btn btn-ghost" type="button" data-cd="pay" style="padding:6px 14px;">💳 Cobrar</button>` : ''}
       ${est !== 'cancelled' && hasPerm('commerce.sell') ? `<button class="btn btn-ghost" type="button" data-cd="poscharge" style="padding:6px 14px;">📲 Cobrar + producto (QR)</button>` : ''}
+      ${est !== 'cancelled' && (b.telefono || b.client_phone) && hasPerm('agenda.attendance') ? `<button class="btn btn-ghost" type="button" data-cd="confirmcall" style="padding:6px 14px;">📞 Llamar para confirmar</button>` : ''}
+      ${est !== 'cancelled' && hasPerm('agenda.attendance') ? `<button class="btn btn-ghost" type="button" data-cd="sendconfirm" style="padding:6px 14px;">✉ Enviar confirmación</button>` : ''}
       ${est !== 'cancelled' && b.payment_status !== 'paid' && hasPerm('commerce.sell') ? `<button class="btn btn-ghost" type="button" data-cd="redeempkg" style="padding:6px 14px;">🎟 Bono</button>
       <button class="btn btn-ghost" type="button" data-cd="redeemgift" style="padding:6px 14px;">🎁 Tarjeta regalo</button>` : ''}
       ${est !== 'cancelled' && hasPerm('agenda.create') ? `<button class="btn btn-ghost" type="button" data-cd="rebook" style="padding:6px 14px;">🔁 Reservar siguiente</button>` : ''}
@@ -5815,6 +5835,26 @@ function cdRenderDetail(b){
             }
           } catch(e){ toast(e.message, 'error'); }
           finally { btn.disabled = false; btn.textContent = orig; }
+          return;
+        }
+        if (action === 'confirmcall'){
+          const okC = await confirmDialog({
+            title: 'Llamar para confirmar',
+            bodyHtml: `<p>La IA llamará por teléfono a <b>${escapeHtml(b.nombre || 'el cliente')}</b> para confirmar la cita. Tiene coste por llamada.</p>`,
+            confirmLabel: 'Llamar ahora',
+          });
+          if (!okC) return;
+          try {
+            await api(`/auth/bookings/${bid}/confirm-call`, { method:'POST' });
+            toast('Llamada de confirmación en curso.', 'success');
+          } catch(e){ toast(e.message, 'error'); }
+          return;
+        }
+        if (action === 'sendconfirm'){
+          try {
+            await api(`/auth/bookings/${bid}/send-confirmation`, { method:'POST' });
+            toast('Confirmación enviada.', 'success');
+          } catch(e){ toast(e.message, 'error'); }
           return;
         }
         if (action === 'poscharge'){
@@ -7711,6 +7751,29 @@ async function loadMensajes() {
     renderMensajesAccordions();
   } catch(e) { toast(e.message, 'error'); }
 }
+
+async function loadReminders() {
+  const card = document.getElementById('remindersCallCard'); if (!card) return;
+  try {
+    const r = await api('/auth/app/reminders');
+    document.getElementById('remCallFallback').checked = !!r.call_fallback;
+    document.getElementById('remQuietStart').value = r.quiet_start || '21:00';
+    document.getElementById('remQuietEnd').value = r.quiet_end || '09:00';
+    document.getElementById('remDailyCap').value = r.daily_call_cap != null ? r.daily_call_cap : 30;
+    document.getElementById('remCallNotice').style.display = r.voice_call_available ? 'none' : '';
+  } catch (e) {}
+}
+document.getElementById('remSaveBtn')?.addEventListener('click', async () => {
+  const body = {
+    call_fallback: document.getElementById('remCallFallback').checked,
+    quiet_start: document.getElementById('remQuietStart').value || '21:00',
+    quiet_end: document.getElementById('remQuietEnd').value || '09:00',
+    daily_call_cap: parseInt(document.getElementById('remDailyCap').value, 10) || 0,
+  };
+  try { await api('/auth/app/reminders', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    toast('Llamadas guardadas.', 'success'); loadReminders();
+  } catch (e) { toast(e.message, 'error'); }
+});
 
 function msgBackendKey(key) {
   return ({

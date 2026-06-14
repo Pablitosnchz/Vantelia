@@ -1126,6 +1126,20 @@ def _record_booking_audit(
         connection.commit()
 
 
+def _mark_booking_confirmed_by_customer(booking_id: str, cliente_id: str, *, channel: str = "voice") -> bool:
+    """El cliente confirma su asistencia (boton WhatsApp, llamada saliente, etc.).
+    Registra auditoria y pasa pending_review -> confirmed. Idempotente."""
+    row = _get_booking_row_by_id(booking_id)
+    if not row or row["cliente_id"] != cliente_id or row["status"] == "cancelled":
+        return False
+    if row["status"] == "pending_review":
+        _update_booking_record(booking_id, status="confirmed", confirmed_at=timeutils._utc_now_iso())
+    _record_booking_audit(
+        booking_id, cliente_id, "attendance_confirmed_by_customer", {"channel": channel}
+    )
+    return True
+
+
 def _list_booking_audit_rows(booking_id: str, *, limit: int = 80) -> List[sqlite3.Row]:
     with db._get_db_connection() as connection:
         return connection.execute(
@@ -2602,6 +2616,68 @@ def _auto_confirm_pending_bookings() -> int:
     return confirmed
 
 
+def _reminders_config(cliente_id: str) -> Dict[str, Any]:
+    """Config de llamadas de confirmacion del tenant (con defaults conservadores)."""
+    cfg = (appstate.CONFIG_CLIENTES.get(cliente_id) or {}).get("reminders") or {}
+    try:
+        cap = int(cfg.get("daily_call_cap") or 30)
+    except (TypeError, ValueError):
+        cap = 30
+    return {
+        "call_fallback": bool(cfg.get("call_fallback", False)),
+        "quiet_start": str(cfg.get("quiet_start") or "21:00"),
+        "quiet_end": str(cfg.get("quiet_end") or "09:00"),
+        "daily_call_cap": max(0, min(500, cap)),
+    }
+
+
+def _booking_confirmed_by_customer(booking_id: str) -> bool:
+    with db._get_db_connection() as connection:
+        return connection.execute(
+            "SELECT 1 FROM booking_audit WHERE booking_id=? AND event_type='attendance_confirmed_by_customer' LIMIT 1",
+            (booking_id,),
+        ).fetchone() is not None
+
+
+def _confirm_call_already_placed(booking_id: str) -> bool:
+    with db._get_db_connection() as connection:
+        return connection.execute(
+            "SELECT 1 FROM booking_audit WHERE booking_id=? AND event_type='confirm_call_placed' LIMIT 1",
+            (booking_id,),
+        ).fetchone() is not None
+
+
+def _outbound_calls_today(cliente_id: str) -> int:
+    start = timeutils._utc_now().strftime("%Y-%m-%dT00:00:00")
+    with db._get_db_connection() as connection:
+        return int(connection.execute(
+            "SELECT COUNT(*) FROM voice_calls WHERE cliente_id=? AND direction='outbound' AND started_at>=?",
+            (cliente_id, start),
+        ).fetchone()[0])
+
+
+def _reminder_calls_ok_now(cliente_id: str, rcfg: Optional[Dict[str, Any]] = None) -> bool:
+    """True si se puede colocar una llamada de confirmacion ahora: hay numero + creds,
+    estamos fuera de las quiet hours (hora local del tenant) y bajo el cap diario."""
+    rcfg = rcfg or _reminders_config(cliente_id)
+    config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
+    voice_cfg = config.get("voice") or {}
+    if not (voice_cfg.get("twilio_phone_number") and settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN):
+        return False
+    tz_name = (config.get("booking") or {}).get("timezone") or settings.DEFAULT_TIMEZONE
+    try:
+        now_local = datetime.now(ZoneInfo(tz_name))
+    except Exception:  # noqa: BLE001
+        now_local = timeutils._utc_now()
+    cur = now_local.hour * 60 + now_local.minute
+    qs = textnorm._time_to_min(rcfg["quiet_start"]) or 1260
+    qe = textnorm._time_to_min(rcfg["quiet_end"]) or 540
+    quiet = (cur >= qs or cur < qe) if qs > qe else (qs <= cur < qe)
+    if quiet:
+        return False
+    return _outbound_calls_today(cliente_id) < int(rcfg["daily_call_cap"])
+
+
 async def _run_booking_reminders(request: Optional[Request] = None) -> AdminReminderRunResult:
     now_utc = timeutils._utc_now()
     _auto_confirm_pending_bookings()
@@ -2622,6 +2698,22 @@ async def _run_booking_reminders(request: Optional[Request] = None) -> AdminRemi
                     sent_column="reminder_24h_sent_at",
                 )
                 sent_24h += 1
+                # Fallback opt-in: llamada de confirmacion por IA si el negocio lo activo,
+                # la cita no esta confirmada y estamos en horario permitido + bajo el cap.
+                try:
+                    rcfg = _reminders_config(row["cliente_id"])
+                    if (
+                        rcfg["call_fallback"]
+                        and not _booking_confirmed_by_customer(row["id"])
+                        and not _confirm_call_already_placed(row["id"])
+                        and _reminder_calls_ok_now(row["cliente_id"], rcfg)
+                    ):
+                        from backend import voice as _voice  # late import: evita circular
+                        await timeutils._to_thread(
+                            _voice._voice_place_outbound_call, row["cliente_id"], row, purpose="confirm"
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    settings.logger.error("Fallback de llamada fallo %s: %s", row["id"], exc)
                 continue
 
             if not row["reminder_2h_sent_at"] and _booking_due_for_reminder(row, now_utc, settings.REMINDER_2H_HOURS):

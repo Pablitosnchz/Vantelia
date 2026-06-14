@@ -1337,6 +1337,17 @@ def _init_database() -> None:
             )
             """
         )
+        # Llamadas salientes (confirmacion de citas): direccion + cita + proposito.
+        voice_calls_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(voice_calls)").fetchall()
+        }
+        for column_name, definition in {
+            "direction": "TEXT NOT NULL DEFAULT 'inbound'",
+            "purpose": "TEXT NOT NULL DEFAULT ''",
+            "booking_id": "TEXT NOT NULL DEFAULT ''",
+        }.items():
+            if column_name not in voice_calls_columns:
+                connection.execute(f"ALTER TABLE voice_calls ADD COLUMN {column_name} {definition}")
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_voice_calls_cliente ON voice_calls(cliente_id, started_at)"
         )

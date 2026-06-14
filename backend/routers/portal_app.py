@@ -1140,6 +1140,94 @@ async def app_cancellation_policy_put(
     return CancellationPolicyResponse(**saved)
 
 
+@app.get("/auth/app/reminders", response_model=ReminderConfigResponse)
+async def app_reminders_get(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> ReminderConfigResponse:
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    rcfg = booking._reminders_config(target)
+    vcfg = (appstate.CONFIG_CLIENTES.get(target) or {}).get("voice") or {}
+    available = bool(vcfg.get("twilio_phone_number") and voice._client_voice_plan_enabled(target))
+    return ReminderConfigResponse(voice_call_available=available, **rcfg)
+
+
+@app.put("/auth/app/reminders", response_model=ReminderConfigResponse)
+async def app_reminders_put(
+    data: ReminderConfigPayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> ReminderConfigResponse:
+    """Config de llamadas de confirmacion (fallback automatico, quiet hours, cap)."""
+    security._require_portal_min_role(user, "manager")
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    with appstate.state_lock:
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+        cfg = next_configs.get(target, {})
+        rem = dict(cfg.get("reminders", {}) or {})
+        if data.call_fallback is not None:
+            rem["call_fallback"] = bool(data.call_fallback)
+        if data.quiet_start is not None:
+            rem["quiet_start"] = textnorm._sanitize_text(data.quiet_start)[:5] or "21:00"
+        if data.quiet_end is not None:
+            rem["quiet_end"] = textnorm._sanitize_text(data.quiet_end)[:5] or "09:00"
+        if data.daily_call_cap is not None:
+            rem["daily_call_cap"] = max(0, min(500, int(data.daily_call_cap)))
+        cfg["reminders"] = rem
+        next_configs[target] = cfg
+        clients._update_runtime_configs(next_configs)
+    clients._persist_configs_to_disk(next_configs)
+    rcfg = booking._reminders_config(target)
+    vcfg = (appstate.CONFIG_CLIENTES.get(target) or {}).get("voice") or {}
+    available = bool(vcfg.get("twilio_phone_number") and voice._client_voice_plan_enabled(target))
+    return ReminderConfigResponse(voice_call_available=available, **rcfg)
+
+
+@app.post("/auth/bookings/{booking_id}/confirm-call", response_model=BookingActionResponse)
+async def auth_booking_confirm_call(
+    booking_id: str,
+    request: Request,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> BookingActionResponse:
+    """Lanza una llamada de IA al cliente para confirmar su cita (manual)."""
+    booking_row = booking._load_booking_or_404(booking_id)
+    if user["role"] != "admin" and booking_row["cliente_id"] != user["cliente_id"]:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
+    security._require_portal_permission(user, "agenda.attendance")
+    if booking_row["status"] == "cancelled":
+        raise HTTPException(status_code=409, detail="No se puede llamar para una cita cancelada.")
+    result = await timeutils._to_thread(
+        voice._voice_place_outbound_call, booking_row["cliente_id"], booking_row,
+        base_url=textnorm._public_base_url(request),
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=409, detail=result.get("error") or "No se pudo iniciar la llamada.")
+    return BookingActionResponse(
+        ok=True, booking_id=booking_id, estado=booking_row["status"],
+        mensaje="Llamada de confirmacion en curso.",
+    )
+
+
+@app.post("/auth/bookings/{booking_id}/send-confirmation", response_model=BookingActionResponse)
+async def auth_booking_send_confirmation(
+    booking_id: str,
+    request: Request,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> BookingActionResponse:
+    """Reenvia la confirmacion de la cita por los canales configurados (email/WhatsApp/SMS)."""
+    booking_row = booking._load_booking_or_404(booking_id)
+    if user["role"] != "admin" and booking_row["cliente_id"] != user["cliente_id"]:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
+    security._require_portal_permission(user, "agenda.attendance")
+    await booking._send_booking_reminder_by_kind(booking_row, "confirmed", request, respect_enabled=False)
+    booking._record_booking_audit(booking_id, booking_row["cliente_id"], "confirmation_resent",
+                                  {"by": user["id"]})
+    return BookingActionResponse(
+        ok=True, booking_id=booking_id, estado=booking_row["status"],
+        mensaje="Confirmacion enviada.",
+    )
+
+
 @app.get("/auth/bookings/{booking_id}/cancellation-preview", response_model=CancellationPreviewResponse)
 async def auth_booking_cancellation_preview(
     booking_id: str,
