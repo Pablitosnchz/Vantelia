@@ -6585,23 +6585,31 @@ def test_granular_permissions(client: TestClient, api_module):
 
 
 def test_voice_audio_input_config_noise_and_vad(api_module):
-    # Defaults: far_field + semantic_vad low + interrupt + whisper.
+    # Defaults: far_field + server_vad rapido (0.5 s) + interrupt + whisper.
     cfg = api_module._voice_audio_input_config({})
     assert cfg["noise_reduction"]["type"] == "far_field"
-    assert cfg["turn_detection"]["type"] == "semantic_vad"
-    assert cfg["turn_detection"]["eagerness"] == "low"
+    assert cfg["turn_detection"]["type"] == "server_vad"
+    assert cfg["turn_detection"]["silence_duration_ms"] == 500
     assert cfg["turn_detection"]["interrupt_response"] is True
     assert cfg["transcription"]["model"] == "whisper-1"
     # Navegador: near_field por defecto.
     assert api_module._voice_audio_input_config({}, default_noise="near_field")["noise_reduction"]["type"] == "near_field"
-    # Override por tenant.
-    over = api_module._voice_audio_input_config({"noise_reduction": "near_field", "vad_eagerness": "medium"})
+    # Override por tenant: tiempo de respuesta + umbral.
+    over = api_module._voice_audio_input_config({"noise_reduction": "near_field", "vad_silence_ms": 800, "vad_threshold": 0.7})
     assert over["noise_reduction"]["type"] == "near_field"
-    assert over["turn_detection"]["eagerness"] == "medium"
+    assert over["turn_detection"]["silence_duration_ms"] == 800
+    assert over["turn_detection"]["threshold"] == 0.7
+    # Clamp de silencio a rango seguro.
+    assert api_module._voice_audio_input_config({"vad_silence_ms": 50})["turn_detection"]["silence_duration_ms"] == 200
+    assert api_module._voice_audio_input_config({"vad_silence_ms": 9000})["turn_detection"]["silence_duration_ms"] == 2000
+    # Opt-in semantic_vad si se prefiere robustez sobre velocidad.
+    sem = api_module._voice_audio_input_config({"vad_type": "semantic_vad"})
+    assert sem["turn_detection"]["type"] == "semantic_vad"
+    assert sem["turn_detection"]["eagerness"] == "high"
     # Valores invalidos -> fallback seguro.
-    bad = api_module._voice_audio_input_config({"noise_reduction": "xxx", "vad_eagerness": "turbo"})
+    bad = api_module._voice_audio_input_config({"noise_reduction": "xxx", "vad_type": "turbo"})
     assert bad["noise_reduction"]["type"] == "far_field"
-    assert bad["turn_detection"]["eagerness"] == "low"
+    assert bad["turn_detection"]["type"] == "server_vad"
 
 
 def test_voice_is_unintelligible(api_module):

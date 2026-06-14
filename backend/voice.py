@@ -75,6 +75,10 @@ def _app_voice_response(cliente_id: str, request: Request) -> "AppVoiceResponse"
 
 VOICE_NOISE_REDUCTION_TYPES = {"near_field", "far_field"}
 VOICE_VAD_EAGERNESS_LEVELS = {"low", "medium", "high", "auto"}
+VOICE_VAD_TYPES = {"server_vad", "semantic_vad"}
+# Silencio (ms) que espera tras dejar de oir voz antes de responder. El cliente
+# quiere ~0.5-1 s: por defecto 500 ms (respuesta rapida tras interrumpir).
+VOICE_VAD_SILENCE_MS_DEFAULT = 500
 
 
 def _voice_audio_input_config(voice_cfg: Dict[str, Any], *, default_noise: str = "far_field") -> Dict[str, Any]:
@@ -83,27 +87,59 @@ def _voice_audio_input_config(voice_cfg: Dict[str, Any], *, default_noise: str =
     Centraliza turn detection + transcripcion + reduccion de ruido para que las dos
     rutas tengan exactamente el mismo comportamiento ante ruido e interrupciones.
 
-    - semantic_vad: un modelo decide si REALMENTE hablo una persona (no por amplitud),
-      asi el eco/ruido de fondo no abre un turno falso. eagerness=low (configurable) es
-      conservador: maxima inmunidad al ruido, hay que hablar claro para interrumpir.
+    - server_vad (por defecto): detecta fin de turno por silencio con un tiempo EXACTO
+      (`silence_duration_ms`), asi la respuesta llega rapido tras hablar/interrumpir
+      (~0.5 s). `threshold` alto + `noise_reduction` evitan que el ruido abra turnos.
+      Alternativa `semantic_vad` (voice_cfg.vad_type) si se prefiere robustez sobre
+      velocidad.
     - noise_reduction: filtro nativo de OpenAI. far_field para sala/altavoz/linea,
       near_field para micro cercano/auriculares. Es la palanca directa contra el ruido.
     - interrupt_response=True: el llamante puede cortar (barge-in) como en una llamada real.
     """
     voice_cfg = voice_cfg or {}
-    eagerness = str(voice_cfg.get("vad_eagerness") or "low").strip().lower()
-    if eagerness not in VOICE_VAD_EAGERNESS_LEVELS:
-        eagerness = "low"
     noise_type = str(voice_cfg.get("noise_reduction") or default_noise).strip().lower()
     if noise_type not in VOICE_NOISE_REDUCTION_TYPES:
         noise_type = default_noise
-    return {
-        "turn_detection": {
+    vad_type = str(voice_cfg.get("vad_type") or "server_vad").strip().lower()
+    if vad_type not in VOICE_VAD_TYPES:
+        vad_type = "server_vad"
+
+    if vad_type == "semantic_vad":
+        eagerness = str(voice_cfg.get("vad_eagerness") or "high").strip().lower()
+        if eagerness not in VOICE_VAD_EAGERNESS_LEVELS:
+            eagerness = "high"
+        turn_detection: Dict[str, Any] = {
             "type": "semantic_vad",
             "eagerness": eagerness,
             "create_response": True,
             "interrupt_response": True,
-        },
+        }
+    else:
+        try:
+            silence_ms = int(voice_cfg.get("vad_silence_ms") or VOICE_VAD_SILENCE_MS_DEFAULT)
+        except (TypeError, ValueError):
+            silence_ms = VOICE_VAD_SILENCE_MS_DEFAULT
+        silence_ms = max(200, min(2000, silence_ms))
+        try:
+            threshold = float(voice_cfg.get("vad_threshold") or 0.6)
+        except (TypeError, ValueError):
+            threshold = 0.6
+        threshold = max(0.0, min(1.0, threshold))
+        try:
+            prefix_ms = int(voice_cfg.get("vad_prefix_padding_ms") or 300)
+        except (TypeError, ValueError):
+            prefix_ms = 300
+        prefix_ms = max(0, min(1000, prefix_ms))
+        turn_detection = {
+            "type": "server_vad",
+            "threshold": threshold,
+            "prefix_padding_ms": prefix_ms,
+            "silence_duration_ms": silence_ms,
+            "create_response": True,
+            "interrupt_response": True,
+        }
+    return {
+        "turn_detection": turn_detection,
         "noise_reduction": {"type": noise_type},
         "transcription": {"model": "whisper-1"},
     }
