@@ -66,6 +66,36 @@ class ChatSessionDetail(BaseModel):
     messages: List[ChatMessagePublic]
 
 
+class ConversationSummary(BaseModel):
+    id: str
+    kind: str = "chat"          # chat | voice
+    channel: str = "web"        # web | whatsapp | voice
+    contact: str = ""
+    started_at: str = ""
+    last_at: str = ""
+    preview: str = ""
+    message_count: int = 0
+    duration_seconds: int = 0
+    booking_created: bool = False
+    intents: List[str] = Field(default_factory=list)
+
+
+class ConversationsResponse(BaseModel):
+    items: List[ConversationSummary] = Field(default_factory=list)
+
+
+class ConversationMessage(BaseModel):
+    role: str = "user"
+    content: str = ""
+    created_at: str = ""
+
+
+class ConversationDetail(BaseModel):
+    conversation: ConversationSummary
+    messages: List[ConversationMessage] = Field(default_factory=list)
+    summary_text: str = ""
+
+
 class ConfigPublicaCliente(BaseModel):
     nombre: str
     icono: str

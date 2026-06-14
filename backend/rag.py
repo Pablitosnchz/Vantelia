@@ -1006,6 +1006,35 @@ def _chat_session_summary_from_row(row: sqlite3.Row) -> ChatSessionSummary:
     )
 
 
+def _conversation_chat_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    """Resumen de conversacion unificado a partir de una fila de chat_sessions.
+    Distingue canal web vs WhatsApp por el origin (whatsapp:<numero>)."""
+    keys = row.keys() if hasattr(row, "keys") else []
+    origin = (row["origin"] or "") if "origin" in keys else ""
+    if origin.startswith("whatsapp:"):
+        channel = "whatsapp"
+        contact = origin.split("whatsapp:", 1)[1].strip() or "WhatsApp"
+    else:
+        channel = "web"
+        contact = "Web"
+    live_count = row["live_message_count"] if "live_message_count" in keys else None
+    count_val = int(live_count) if live_count is not None else int(row["message_count"] or 0)
+    last_msg = (row["last_message"] or "") if "last_message" in keys else ""
+    return {
+        "id": row["id"],
+        "kind": "chat",
+        "channel": channel,
+        "contact": contact,
+        "started_at": row["started_at"] or "",
+        "last_at": row["last_message_at"] or row["started_at"] or "",
+        "preview": last_msg,
+        "message_count": count_val,
+        "duration_seconds": 0,
+        "booking_created": False,
+        "intents": textnorm._safe_json_list(row["intents_json"] or "[]"),
+    }
+
+
 def _chat_message_from_row(row: sqlite3.Row) -> ChatMessagePublic:
     return ChatMessagePublic(
         message_id=int(row["id"]),

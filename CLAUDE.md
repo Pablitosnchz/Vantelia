@@ -140,6 +140,7 @@ Endpoints de portal/auth:
 - `POST /auth/login`, `/auth/logout`
 - `POST /auth/password/change`, `/auth/password/forgot`, `/auth/password/reset`
 - `GET /auth/me`, `/auth/dashboard`, `/auth/bookings`, `/auth/chats`
+- `GET /auth/conversations` (historial unificado: chat web + WhatsApp + voz, etiquetado por `channel`, filtros `channel`/`q`) y `GET /auth/conversations/{kind}/{id}` (`kind`=chat|voice; voz devuelve transcripcion + `summary_text` + duracion). Mezcla `chat_sessions` (web vs `origin` `whatsapp:<num>`) con `voice_calls` (`transcript_json`). Helpers `rag._conversation_chat_dict`, `voice._list_voice_calls`/`_voice_conversation_dict`/`_voice_call_detail_dict`. UI: pestana "Chats" -> "Conversaciones" (filtros por canal + buscador + transcripcion; la voz muestra cabecera con duracion/resultado/resumen).
 - `GET/POST /auth/ai-config`, `/auth/brain`, `/auth/schedule`
 - Gestion de empleados, bloqueos, citas, usuarios y exportaciones bajo `/auth/*`.
 

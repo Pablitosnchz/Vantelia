@@ -6630,3 +6630,65 @@ def test_voice_instructions_have_resume_protocol(api_module):
     assert "sigo contandote" in text or "continues con lo que" in text
     # Listar por trozos para sonar humano.
     assert "trozos" in text or "dos o tres" in text
+
+
+def test_conversations_unify_web_whatsapp_and_voice(client: TestClient, api_module):
+    cookies = _portal_admin_cookies(api_module)
+    params = {"cliente_id": "demo"}
+    now = api_module._utc_now_iso()
+    suffix = uuid.uuid4().hex[:8]
+    web_id = f"sess_web_{suffix}"
+    wa_id = f"sess_wa_{suffix}"
+    call_sid = f"CA_{suffix}"
+    try:
+        with api_module._get_db_connection() as conn:
+            for sid, origin in ((web_id, "https://acme.example"), (wa_id, "whatsapp:+34611000111")):
+                conn.execute(
+                    "INSERT INTO chat_sessions (id, cliente_id, origin, user_agent, started_at, last_message_at, message_count, intents_json) "
+                    "VALUES (?, 'demo', ?, '', ?, ?, 1, '[]')",
+                    (sid, origin, now, now),
+                )
+                conn.execute(
+                    "INSERT INTO chat_messages (session_id, cliente_id, role, content, intent, created_at) VALUES (?, 'demo', 'user', ?, '', ?)",
+                    (sid, f"hola desde {origin}", now),
+                )
+            conn.execute(
+                "INSERT INTO voice_calls (call_sid, cliente_id, from_number, started_at, ended_at, duration_seconds, status, transcript_json, summary, booking_created) "
+                "VALUES (?, 'demo', '+34699888777', ?, ?, 125, 'completed', ?, 'Cliente pidió cita de masaje.', 1)",
+                (call_sid, now, now, json.dumps([
+                    {"role": "assistant", "text": "Hola, ¿en qué le ayudo?", "ts": now},
+                    {"role": "user", "text": "Quiero un masaje el martes", "ts": now},
+                ], ensure_ascii=False)),
+            )
+            conn.commit()
+            voice_pk = conn.execute("SELECT id FROM voice_calls WHERE call_sid=?", (call_sid,)).fetchone()["id"]
+
+        # Lista unificada: aparecen los 3 canales con su etiqueta.
+        data = client.get("/auth/conversations", params=params, cookies=cookies).json()
+        by_id = {it["id"]: it for it in data["items"]}
+        assert by_id[web_id]["channel"] == "web"
+        assert by_id[wa_id]["channel"] == "whatsapp" and "+34611000111" in by_id[wa_id]["contact"]
+        voice_item = by_id[str(voice_pk)]
+        assert voice_item["channel"] == "voice" and voice_item["kind"] == "voice"
+        assert voice_item["duration_seconds"] == 125 and voice_item["booking_created"] is True
+
+        # Filtro por canal.
+        voz = client.get("/auth/conversations", params={**params, "channel": "voice"}, cookies=cookies).json()
+        assert all(it["channel"] == "voice" for it in voz["items"])
+        assert str(voice_pk) in {it["id"] for it in voz["items"]}
+
+        # Detalle de voz: transcripción + resumen.
+        det = client.get(f"/auth/conversations/voice/{voice_pk}", params=params, cookies=cookies).json()
+        assert det["summary_text"].startswith("Cliente pidió")
+        assert [m["content"] for m in det["messages"]] == ["Hola, ¿en qué le ayudo?", "Quiero un masaje el martes"]
+
+        # Detalle de chat WhatsApp.
+        det2 = client.get(f"/auth/conversations/chat/{wa_id}", params=params, cookies=cookies).json()
+        assert det2["conversation"]["channel"] == "whatsapp"
+        assert det2["messages"][0]["content"].startswith("hola desde whatsapp")
+    finally:
+        with api_module._get_db_connection() as conn:
+            conn.execute("DELETE FROM chat_messages WHERE session_id IN (?, ?)", (web_id, wa_id))
+            conn.execute("DELETE FROM chat_sessions WHERE id IN (?, ?)", (web_id, wa_id))
+            conn.execute("DELETE FROM voice_calls WHERE call_sid=?", (call_sid,))
+            conn.commit()

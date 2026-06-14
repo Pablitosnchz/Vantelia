@@ -978,6 +978,30 @@
     /* Toast: barra de acento + ligero desenfoque para look premium */
     .toast { backdrop-filter: blur(6px); border-left-width: 3px; }
 
+    /* Conversaciones (chat web / WhatsApp / voz) */
+    .conv-chip { padding: 6px 12px; font-size: 0.83rem; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--soft); cursor: pointer; font-family: var(--font); transition: all .12s ease; }
+    .conv-chip:hover { color: var(--text); border-color: var(--accent); }
+    .conv-chip.active { background: var(--accent); color: #00131a; border-color: var(--accent); font-weight: 600; }
+    .conv-row { display: flex; gap: 10px; align-items: flex-start; }
+    .conv-ch-ico { width: 32px; height: 32px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 0.95rem; flex-shrink: 0; }
+    .conv-ch-web { background: rgba(0,209,255,0.14); }
+    .conv-ch-whatsapp { background: rgba(37,211,102,0.16); }
+    .conv-ch-voice { background: rgba(168,85,247,0.16); }
+    .conv-row .conv-main { flex: 1; min-width: 0; }
+    .conv-row .conv-name { font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 6px; }
+    .conv-badge { display: inline-block; font-size: 0.64rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: rgba(255,255,255,0.08); color: var(--soft); text-transform: uppercase; letter-spacing: .03em; }
+    .conv-badge.book { background: rgba(0,245,212,0.16); color: var(--success); }
+    .conv-detail-head { display: flex; align-items: center; gap: 12px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
+    .conv-detail-head .conv-name { font-family: var(--font-title); font-size: 1.05rem; }
+    .conv-meta-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .conv-meta-pill { font-size: 0.78rem; color: var(--soft); background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; }
+    .conv-meta-pill b { color: var(--text); }
+    .conv-summary { background: var(--accent-soft); border: 1px solid rgba(0,209,255,0.25); border-radius: 12px; padding: 12px 14px; font-size: 0.86rem; line-height: 1.5; margin-bottom: 14px; }
+    .conv-summary .cs-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-weight: 700; display: block; margin-bottom: 4px; }
+    .conv-thread { display: flex; flex-direction: column; gap: 4px; max-height: 56vh; overflow-y: auto; padding-right: 4px; }
+    .conv-msg-role { font-size: 0.66rem; color: var(--soft-2); margin: 6px 2px 0; }
+    .conv-msg-role.right { text-align: right; }
+
     /* Cobro POS con QR */
     #posQrBox svg, #posQrBox .vqr { width: 100%; height: auto; display: block; }
     .pos-line { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 0.88rem; }
@@ -1313,16 +1337,28 @@
   <!-- CHATS -->
   <section class="page" id="page-chats">
     <div class="panel-card">
-      <h2>Historial de chats</h2>
-      <p class="panel-sub">Últimas conversaciones con tu asistente.</p>
-      <div style="display:grid; grid-template-columns: 1fr 1.4fr; gap:18px; margin-top: 12px;" id="chatsLayout">
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0;">Conversaciones</h2>
+          <p class="panel-sub" style="margin:3px 0 0;">Chat web, WhatsApp y llamadas de voz, con su transcripción completa.</p>
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:14px 0 4px;">
+        <input type="text" class="field-input" id="convSearch" placeholder="Buscar por contacto o mensaje…" style="max-width:300px;" />
+        <div id="convFilters" style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="conv-chip active" type="button" data-conv-ch="">Todos</button>
+          <button class="conv-chip" type="button" data-conv-ch="web">🌐 Web</button>
+          <button class="conv-chip" type="button" data-conv-ch="whatsapp">🟢 WhatsApp</button>
+          <button class="conv-chip" type="button" data-conv-ch="voice">📞 Voz</button>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1fr 1.5fr; gap:18px; margin-top:10px;" id="chatsLayout">
         <div class="chat-list" id="chatList">
           <div class="panel-sub" style="margin:0;">Cargando…</div>
         </div>
-        <div class="panel-card" style="margin:0;">
-          <h2 id="chatDetailTitle">Selecciona una conversación</h2>
-          <p class="panel-sub" id="chatDetailMeta"></p>
-          <div id="chatDetailMessages"></div>
+        <div class="panel-card" style="margin:0; min-height:340px;">
+          <div id="convDetailEmpty" class="empty-state"><div class="es-icon">💬</div><div class="es-title">Selecciona una conversación</div><div class="es-sub">Elige un chat o una llamada para ver la transcripción completa.</div></div>
+          <div id="convDetail" style="display:none;"></div>
         </div>
       </div>
     </div>
@@ -3274,22 +3310,49 @@ async function saveAppearance() {
 }
 
 // ── Chats ─────────────────────────────────────────────────────────────
+const convState = { channel: '', q: '', current: null, searchTimer: null };
+const CONV_CHANNEL = {
+  web:      { ico: '🌐', label: 'Web',      cls: 'conv-ch-web' },
+  whatsapp: { ico: '🟢', label: 'WhatsApp', cls: 'conv-ch-whatsapp' },
+  voice:    { ico: '📞', label: 'Voz',      cls: 'conv-ch-voice' },
+};
+function convChannelMeta(ch) { return CONV_CHANNEL[ch] || CONV_CHANNEL.web; }
+function convWhen(iso) { return iso ? new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; }
+function convDuration(s) { s = Math.max(0, parseInt(s, 10) || 0); const m = Math.floor(s / 60), r = s % 60; return m ? `${m} min ${r}s` : `${r}s`; }
+
 async function loadChats() {
   const list = document.getElementById('chatList');
   list.innerHTML = '<div class="panel-sub" style="margin:0;">Cargando…</div>';
+  const params = new URLSearchParams({ limit: '120' });
+  if (convState.channel) params.set('channel', convState.channel);
+  if (convState.q) params.set('q', convState.q);
   try {
-    const rows = await api('/auth/chats?limit=50');
+    const data = await api('/auth/conversations?' + params.toString());
+    const rows = data.items || [];
     if (!rows.length) {
-      list.innerHTML = '<div class="panel-sub" style="margin:0;">Sin conversaciones todavía. Cuando alguien hable con tu asistente, aparecerán aquí.</div>';
+      list.innerHTML = '<div class="panel-sub" style="margin:0;">Sin conversaciones todavía. Cuando alguien hable con tu asistente por web, WhatsApp o teléfono, aparecerán aquí.</div>';
       return;
     }
     list.innerHTML = '';
     rows.forEach(row => {
+      const meta = convChannelMeta(row.channel);
       const div = document.createElement('div');
       div.className = 'chat-row';
-      const when = row.last_message_at ? new Date(row.last_message_at).toLocaleString() : '';
-      div.innerHTML = `<div class="when">${escapeHtml(when)}</div><div class="preview">${escapeHtml(row.last_message || '(sin mensajes)')}</div>`;
-      div.addEventListener('click', () => loadChatDetail(row.session_id || row.id, when));
+      if (convState.current && convState.current.kind === row.kind && convState.current.id === row.id) div.style.borderColor = 'var(--accent)';
+      const badges = [];
+      if (row.kind === 'voice') badges.push(`<span class="conv-badge">${escapeHtml(convDuration(row.duration_seconds))}</span>`);
+      if (row.booking_created) badges.push('<span class="conv-badge book">📅 reservó</span>');
+      (row.intents || []).slice(0, 1).forEach(i => badges.push(`<span class="conv-badge">${escapeHtml(i)}</span>`));
+      div.innerHTML = `
+        <div class="conv-row">
+          <div class="conv-ch-ico ${meta.cls}">${meta.ico}</div>
+          <div class="conv-main">
+            <div class="conv-name">${escapeHtml(row.contact || meta.label)} ${badges.join(' ')}</div>
+            <div class="when">${escapeHtml(convWhen(row.last_at))}</div>
+            <div class="preview">${escapeHtml(row.preview || '(sin mensajes)')}</div>
+          </div>
+        </div>`;
+      div.addEventListener('click', () => loadConvDetail(row));
       list.appendChild(div);
     });
   } catch (err) {
@@ -3297,27 +3360,56 @@ async function loadChats() {
   }
 }
 
-async function loadChatDetail(sessionId, when) {
-  document.getElementById('chatDetailTitle').textContent = 'Conversación';
-  document.getElementById('chatDetailMeta').textContent = when || '';
-  const cont = document.getElementById('chatDetailMessages');
+async function loadConvDetail(row) {
+  convState.current = { kind: row.kind, id: row.id };
+  loadChats();  // refresca el resaltado de selección
+  document.getElementById('convDetailEmpty').style.display = 'none';
+  const cont = document.getElementById('convDetail');
+  cont.style.display = '';
   cont.innerHTML = '<div class="panel-sub" style="margin:0;">Cargando…</div>';
   try {
-    const data = await api('/auth/chats/' + encodeURIComponent(sessionId));
-    cont.innerHTML = '';
-    (data.messages || []).forEach(m => {
-      const div = document.createElement('div');
-      div.className = 'chat-detail-msg ' + (m.role === 'assistant' || m.role === 'bot' ? 'bot' : 'user');
-      div.textContent = m.content || '';
-      cont.appendChild(div);
-    });
-    if (!data.messages || !data.messages.length) {
-      cont.innerHTML = '<div class="panel-sub" style="margin:0;">Esta conversación no tiene mensajes guardados.</div>';
-    }
+    const data = await api(`/auth/conversations/${encodeURIComponent(row.kind)}/${encodeURIComponent(row.id)}`);
+    const c = data.conversation || row;
+    const meta = convChannelMeta(c.channel);
+    const isVoice = c.kind === 'voice';
+    const pills = [`<span class="conv-meta-pill">${meta.ico} <b>${escapeHtml(meta.label)}</b></span>`,
+      `<span class="conv-meta-pill">${escapeHtml(convWhen(c.last_at))}</span>`];
+    if (isVoice) pills.push(`<span class="conv-meta-pill">⏱ <b>${escapeHtml(convDuration(c.duration_seconds))}</b></span>`);
+    else pills.push(`<span class="conv-meta-pill"><b>${c.message_count || (data.messages || []).length}</b> mensajes</span>`);
+    if (c.booking_created) pills.push('<span class="conv-meta-pill" style="color:var(--success);"><b>📅 Reservó cita</b></span>');
+    const summary = (data.summary_text || '').trim()
+      ? `<div class="conv-summary"><span class="cs-label">Resumen de la llamada</span>${escapeHtml(data.summary_text)}</div>` : '';
+    const roleLabelLeft = isVoice ? 'Recepción' : 'Asistente';
+    const roleLabelRight = isVoice ? 'Cliente' : 'Cliente';
+    const thread = (data.messages || []).map(m => {
+      const isBot = m.role === 'assistant' || m.role === 'bot';
+      const lbl = isBot ? roleLabelLeft : roleLabelRight;
+      return `<div class="conv-msg-role${isBot ? '' : ' right'}">${escapeHtml(lbl)}</div>
+        <div class="chat-detail-msg ${isBot ? 'bot' : 'user'}">${escapeHtml(m.content || '')}</div>`;
+    }).join('') || '<div class="panel-sub" style="margin:0;">Esta conversación no tiene mensajes guardados.</div>';
+    cont.innerHTML = `
+      <div class="conv-detail-head">
+        <div class="conv-ch-ico ${meta.cls}" style="width:38px;height:38px;">${meta.ico}</div>
+        <div><div class="conv-name">${escapeHtml(c.contact || meta.label)}</div><div class="panel-sub" style="margin:0;">${escapeHtml(meta.label)}</div></div>
+      </div>
+      <div class="conv-meta-grid">${pills.join('')}</div>
+      ${summary}
+      <div class="conv-thread">${thread}</div>`;
   } catch (err) {
     cont.innerHTML = `<div class="panel-sub" style="margin:0;">${escapeHtml(err.message)}</div>`;
   }
 }
+
+document.getElementById('convFilters')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-conv-ch]'); if (!btn) return;
+  convState.channel = btn.getAttribute('data-conv-ch') || '';
+  document.querySelectorAll('#convFilters .conv-chip').forEach(x => x.classList.toggle('active', x === btn));
+  loadChats();
+});
+document.getElementById('convSearch')?.addEventListener('input', (e) => {
+  clearTimeout(convState.searchTimer);
+  convState.searchTimer = setTimeout(() => { convState.q = e.target.value.trim(); loadChats(); }, 300);
+});
 
 // ── Right panel preview chat ──────────────────────────────────────────
 async function sendPreviewMessage(text) {

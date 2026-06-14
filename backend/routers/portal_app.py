@@ -335,6 +335,62 @@ async def auth_chat_detail(
     )
 
 
+@app.get("/auth/conversations", response_model=ConversationsResponse)
+async def auth_conversations(
+    cliente_id: str = "",
+    channel: str = "",
+    q: str = "",
+    limit: int = 80,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> ConversationsResponse:
+    """Historial unificado: chat web, WhatsApp y llamadas de voz en una sola lista,
+    etiquetadas por canal y ordenadas por actividad reciente."""
+    target = portal._portal_client_id_or_403(user, cliente_id) if (user["role"] != "admin" or cliente_id) else ""
+    channel = (channel or "").strip().lower()
+    items: List[Dict[str, Any]] = []
+    if channel in ("", "web", "whatsapp"):
+        for row in rag._list_chat_session_rows(cliente_id=target, limit=200):
+            d = rag._conversation_chat_dict(row)
+            if channel and d["channel"] != channel:
+                continue
+            items.append(d)
+    if channel in ("", "voice"):
+        for row in voice._list_voice_calls(target, limit=200):
+            items.append(voice._voice_conversation_dict(row))
+    ql = (q or "").strip().lower()
+    if ql:
+        items = [c for c in items if ql in (str(c.get("contact", "")) + " " + str(c.get("preview", ""))).lower()]
+    items.sort(key=lambda c: c.get("last_at") or c.get("started_at") or "", reverse=True)
+    capped = items[: max(1, min(int(limit or 80), 200))]
+    return ConversationsResponse(items=[ConversationSummary(**c) for c in capped])
+
+
+@app.get("/auth/conversations/{kind}/{conv_id}", response_model=ConversationDetail)
+async def auth_conversation_detail(
+    kind: str,
+    conv_id: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> ConversationDetail:
+    target = portal._portal_client_id_or_403(user, cliente_id) if (user["role"] != "admin" or cliente_id) else ""
+    if kind == "voice":
+        d = voice._voice_call_detail_dict(conv_id, cliente_id=target)
+        return ConversationDetail(
+            conversation=ConversationSummary(**d["conversation"]),
+            messages=[ConversationMessage(**m) for m in d["messages"]],
+            summary_text=d["summary_text"],
+        )
+    session_row = rag._load_chat_session_or_404(conv_id, cliente_id=target)
+    return ConversationDetail(
+        conversation=ConversationSummary(**rag._conversation_chat_dict(session_row)),
+        messages=[
+            ConversationMessage(role=r["role"], content=r["content"], created_at=r["created_at"])
+            for r in rag._load_chat_message_rows(conv_id)
+        ],
+        summary_text="",
+    )
+
+
 # --- Vantelia 2.0 dashboard endpoints (Sem 3) ---
 
 

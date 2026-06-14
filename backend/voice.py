@@ -1046,6 +1046,84 @@ def _voice_pcmu_duration_ms(audio_b64: str) -> int:
         return 0
 
 
+def _list_voice_calls(cliente_id: str = "", *, limit: int = 160) -> List[sqlite3.Row]:
+    """Llamadas de voz para el historial unificado de conversaciones."""
+    clauses: List[str] = []
+    params: List[Any] = []
+    if cliente_id:
+        clauses.append("cliente_id = ?")
+        params.append(cliente_id)
+    where_sql = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    params.append(max(1, min(limit, 300)))
+    with db._get_db_connection() as connection:
+        return connection.execute(
+            f"SELECT * FROM voice_calls {where_sql} ORDER BY started_at DESC LIMIT ?", params
+        ).fetchall()
+
+
+def _voice_call_transcript(row: sqlite3.Row) -> List[Dict[str, Any]]:
+    try:
+        return json.loads(row["transcript_json"] or "[]") or []
+    except (ValueError, TypeError):
+        return []
+
+
+def _voice_conversation_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    """Resumen de conversacion unificado para una llamada de voz."""
+    transcript = _voice_call_transcript(row)
+    preview = ""
+    for item in reversed(transcript):
+        text = (item.get("text") or "").strip()
+        if text:
+            preview = text
+            break
+    return {
+        "id": str(row["id"]),
+        "kind": "voice",
+        "channel": "voice",
+        "contact": (row["from_number"] or "").strip() or "Llamada",
+        "started_at": row["started_at"] or "",
+        "last_at": row["ended_at"] or row["started_at"] or "",
+        "preview": preview,
+        "message_count": len(transcript),
+        "duration_seconds": int(row["duration_seconds"] or 0),
+        "booking_created": bool(row["booking_created"]),
+        "intents": [],
+    }
+
+
+def _voice_call_detail_dict(conv_id: str, *, cliente_id: str = "") -> Dict[str, Any]:
+    """Detalle (transcripcion + resumen) de una llamada para el panel de conversaciones."""
+    try:
+        numeric_id = int(str(conv_id).strip())
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=404, detail="Llamada no encontrada.")
+    clauses = ["id = ?"]
+    params: List[Any] = [numeric_id]
+    if cliente_id:
+        clauses.append("cliente_id = ?")
+        params.append(cliente_id)
+    with db._get_db_connection() as connection:
+        row = connection.execute(
+            f"SELECT * FROM voice_calls WHERE {' AND '.join(clauses)} LIMIT 1", params
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Llamada no encontrada.")
+    messages = [
+        {
+            "role": (item.get("role") or "user"),
+            "content": (item.get("text") or ""),
+            "created_at": (item.get("ts") or ""),
+        }
+        for item in _voice_call_transcript(row)
+    ]
+    return {
+        "conversation": _voice_conversation_dict(row),
+        "messages": messages,
+        "summary_text": row["summary"] or "",
+    }
+
+
 def _voice_interruption_audio_end_ms(state: Dict[str, Any]) -> int:
     started_at = state.get("assistant_audio_started_at")
     if started_at is None:
