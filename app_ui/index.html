@@ -978,6 +978,13 @@
     /* Toast: barra de acento + ligero desenfoque para look premium */
     .toast { backdrop-filter: blur(6px); border-left-width: 3px; }
 
+    /* Menús de acciones de la cita (Cobrar ▾ / ⋯ Más) */
+    .cd-menu { position: relative; display: inline-block; }
+    .cd-menu-pop { display: none; position: absolute; left: 0; top: calc(100% + 6px); min-width: 230px; background: var(--panel-2); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 18px 40px rgba(0,0,0,.45); padding: 6px; z-index: 30; }
+    .cd-menu-pop.open { display: block; }
+    .cd-menu-item { display: block; width: 100%; text-align: left; background: transparent; border: 0; color: var(--text); cursor: pointer; padding: 9px 10px; border-radius: 7px; font-size: 0.86rem; font-family: var(--font); }
+    .cd-menu-item:hover { background: rgba(255,255,255,.06); }
+
     /* Topbar acciones: buscar + avisos */
     .topbar-right { display: flex; align-items: center; gap: 10px; }
     .ts-icon-btn { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--soft); cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative; transition: all .12s ease; }
@@ -5888,6 +5895,28 @@ function cdRenderDetail(b){
   const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '--:--');
   const canEdit = (b.can_cancel !== false) && est !== 'cancelled' && est !== 'completed' && est !== 'no_show';
   const canAttend = b.can_mark_attendance === true && est !== 'cancelled';
+  const notCancelled = est !== 'cancelled';
+  const mItem = (cd, label, extra = '') => `<button class="cd-menu-item" type="button" data-cd="${cd}"${extra}>${label}</button>`;
+  // Menú "Cobrar ▾" (pagos y canjes) y overflow "⋯ Más" (acciones secundarias).
+  const cobrarItems = [];
+  if (notCancelled && b.payment_status !== 'preauthorized') cobrarItems.push(mItem('pay', '💳 Enlace de pago'));
+  if (notCancelled && hasPerm('commerce.sell')) cobrarItems.push(mItem('poscharge', '📲 QR + producto'));
+  if (notCancelled && b.payment_status !== 'paid' && hasPerm('commerce.sell')) {
+    cobrarItems.push(mItem('redeempkg', '🎟 Redimir bono'));
+    cobrarItems.push(mItem('redeemgift', '🎁 Redimir tarjeta regalo'));
+  }
+  if (b.payment_status === 'preauthorized' && hasPerm('payments.capture')) {
+    cobrarItems.push(mItem('capture', '💳 Cobrar retención'));
+    cobrarItems.push(mItem('release', '🔓 Liberar retención'));
+  }
+  if ((b.payment_status === 'paid' || b.payment_status === 'partially_refunded') && hasPerm('payments.refund')) {
+    cobrarItems.push(mItem('refund', '↩ Reembolsar'));
+  }
+  const moreItems = [];
+  if (notCancelled && (b.telefono || b.client_phone) && hasPerm('agenda.attendance')) moreItems.push(mItem('confirmcall', '📞 Llamar para confirmar'));
+  if (notCancelled && hasPerm('agenda.attendance')) moreItems.push(mItem('sendconfirm', '✉ Enviar confirmación'));
+  if (notCancelled && hasPerm('agenda.create')) moreItems.push(mItem('rebook', '🔁 Reservar siguiente'));
+  if (b.manage_url) moreItems.push(mItem('manage', '🔗 Gestionar (enlace cliente)'));
   const d = document.getElementById('cdDetail'); d.style.display = '';
   d.innerHTML = `
     <div class="cd-detail-head">
@@ -5911,22 +5940,28 @@ function cdRenderDetail(b){
     <div class="cd-detail-actions">
       ${canAttend && hasPerm('agenda.attendance') ? `<button class="btn ${est === 'completed' ? 'btn-primary' : 'btn-ghost'}" type="button" data-cd="attended" style="padding:6px 14px;">✓ Realizada</button>
       <button class="btn btn-ghost" type="button" data-cd="noshow" style="padding:6px 14px; color:var(--danger); border-color:var(--danger);${est === 'no_show' ? ' background:var(--danger-soft);' : ''}">✗ No vino</button>` : ''}
-      ${b.manage_url ? `<button class="btn btn-ghost" type="button" data-cd="manage" style="padding:6px 14px;">Gestionar</button>` : ''}
-      ${b.payment_status === 'preauthorized' && hasPerm('payments.capture') ? `<button class="btn btn-primary" type="button" data-cd="capture" style="padding:6px 14px;">💳 Cobrar retención</button>
-      <button class="btn btn-ghost" type="button" data-cd="release" style="padding:6px 14px;">Liberar retención</button>` : ''}
-      ${(b.payment_status === 'paid' || b.payment_status === 'partially_refunded') && hasPerm('payments.refund') ? `<button class="btn btn-ghost" type="button" data-cd="refund" style="padding:6px 14px;">↩ Reembolsar</button>` : ''}
-      ${est !== 'cancelled' && b.payment_status !== 'preauthorized' ? `<button class="btn btn-ghost" type="button" data-cd="pay" style="padding:6px 14px;">💳 Cobrar</button>` : ''}
-      ${est !== 'cancelled' && hasPerm('commerce.sell') ? `<button class="btn btn-ghost" type="button" data-cd="poscharge" style="padding:6px 14px;">📲 Cobrar + producto (QR)</button>` : ''}
-      ${est !== 'cancelled' && (b.telefono || b.client_phone) && hasPerm('agenda.attendance') ? `<button class="btn btn-ghost" type="button" data-cd="confirmcall" style="padding:6px 14px;">📞 Llamar para confirmar</button>` : ''}
-      ${est !== 'cancelled' && hasPerm('agenda.attendance') ? `<button class="btn btn-ghost" type="button" data-cd="sendconfirm" style="padding:6px 14px;">✉ Enviar confirmación</button>` : ''}
-      ${est !== 'cancelled' && b.payment_status !== 'paid' && hasPerm('commerce.sell') ? `<button class="btn btn-ghost" type="button" data-cd="redeempkg" style="padding:6px 14px;">🎟 Bono</button>
-      <button class="btn btn-ghost" type="button" data-cd="redeemgift" style="padding:6px 14px;">🎁 Tarjeta regalo</button>` : ''}
-      ${est !== 'cancelled' && hasPerm('agenda.create') ? `<button class="btn btn-ghost" type="button" data-cd="rebook" style="padding:6px 14px;">🔁 Reservar siguiente</button>` : ''}
+      ${cobrarItems.length ? `<div class="cd-menu"><button class="btn btn-primary cd-menu-trigger" type="button" style="padding:6px 14px;">💳 Cobrar ▾</button><div class="cd-menu-pop">${cobrarItems.join('')}</div></div>` : ''}
       <button class="btn btn-ghost" type="button" data-cd="resched" style="padding:6px 14px;" ${canEdit ? '' : 'disabled'}>Reprogramar</button>
       ${hasPerm('agenda.cancel') ? `<button class="btn btn-ghost" type="button" data-cd="cancel" style="padding:6px 14px; color:var(--danger); border-color:var(--danger);" ${canEdit ? '' : 'disabled'}>Cancelar</button>` : ''}
+      ${moreItems.length ? `<div class="cd-menu"><button class="btn btn-ghost cd-menu-trigger" type="button" style="padding:6px 12px;" title="Más acciones">⋯ Más</button><div class="cd-menu-pop">${moreItems.join('')}</div></div>` : ''}
     </div>`;
+  // Menús desplegables (Cobrar ▾ / ⋯ Más): abrir/cerrar.
+  d.querySelectorAll('.cd-menu-trigger').forEach(tr => tr.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const pop = tr.nextElementSibling;
+    const willOpen = pop && !pop.classList.contains('open');
+    d.querySelectorAll('.cd-menu-pop.open').forEach(p => p.classList.remove('open'));
+    if (willOpen) pop.classList.add('open');
+  }));
+  if (!window.__cdMenuOutside) {
+    window.__cdMenuOutside = true;
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.cd-menu')) document.querySelectorAll('.cd-menu-pop.open').forEach(p => p.classList.remove('open'));
+    });
+  }
   d.querySelectorAll('button[data-cd]').forEach(btn => {
     btn.addEventListener('click', async () => {
+      document.querySelectorAll('.cd-menu-pop.open').forEach(p => p.classList.remove('open'));
       const action = btn.dataset.cd;
       const bid = b.booking_id || b.id || '';
       try {
