@@ -1159,61 +1159,58 @@
   <!-- INFORMES: resumen operativo + rendimiento economico -->
   <section class="page active" id="page-informes">
 
-    <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+    <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:14px; flex-wrap:wrap;">
       <div>
-        <h2 style="font-family:var(--font-title); font-size:1.25rem; font-weight:650; margin-bottom:4px;">Resumen operativo</h2>
+        <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600; margin-bottom:3px;">Resumen operativo</h2>
         <p class="panel-sub" style="margin:0;">Actividad del asistente, consumo y estado de canales.</p>
       </div>
     </div>
 
-    <!-- Stats grid -->
-    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:12px; margin-bottom:16px;">
+    <!-- Stats grid (mismo lenguaje visual que rendimiento económico) -->
+    <div class="inf-kpis">
 
-      <div class="stat-card ov-stat">
-        <div class="ov-stat-label">Conversaciones hoy</div>
-        <div class="ov-stat-value" id="stUsersToday">0</div>
-        <div class="ov-stat-sub" id="stMessagesToday">0 mensajes</div>
+      <div class="inf-kpi">
+        <div class="k-label">Conversaciones hoy</div>
+        <div class="k-value" id="stUsersToday">0</div>
+        <div class="k-delta flat" id="stMessagesToday">0 mensajes</div>
       </div>
 
-      <div class="stat-card ov-stat">
-        <div class="ov-stat-label">Sesiones totales</div>
-        <div class="ov-stat-value" id="stSessTotal">0</div>
-        <div class="ov-stat-sub">historial completo</div>
+      <div class="inf-kpi">
+        <div class="k-label">Sesiones totales</div>
+        <div class="k-value" id="stSessTotal">0</div>
+        <div class="k-delta flat">historial completo</div>
       </div>
 
-      <div class="stat-card ov-stat">
-        <div class="ov-stat-label">Leads captados</div>
-        <div class="ov-stat-value" id="stLeads">0</div>
-        <div class="ov-stat-sub">contactos recogidos</div>
+      <div class="inf-kpi">
+        <div class="k-label">Leads captados</div>
+        <div class="k-value" id="stLeads">0</div>
+        <div class="k-delta flat">contactos recogidos</div>
       </div>
 
-      <div class="stat-card ov-stat">
-        <div class="ov-stat-label">Conocimiento</div>
-        <div class="ov-stat-value" id="stTrainBytes">0</div>
-        <div class="ov-stat-sub">caracteres indexados</div>
+      <div class="inf-kpi">
+        <div class="k-label">Conocimiento</div>
+        <div class="k-value" id="stTrainBytes">0</div>
+        <div class="k-delta flat">caracteres indexados</div>
       </div>
 
-      <div class="stat-card ov-stat" id="stCardCitasHoy" style="display:none;">
-        <div class="ov-stat-label">Citas hoy</div>
-        <div class="ov-stat-value" id="stCitasHoy">0</div>
-        <div class="ov-stat-sub" id="stCitasUpcoming">0 próximas (7 días)</div>
+      <div class="inf-kpi" id="stCardCitasHoy" style="display:none;">
+        <div class="k-label">Citas hoy</div>
+        <div class="k-value" id="stCitasHoy">0</div>
+        <div class="k-delta flat" id="stCitasUpcoming">0 próximas (7 días)</div>
       </div>
 
-      <div class="stat-card ov-stat ov-stat-quota">
-        <div class="ov-stat-label">Mensajes · plan <span id="stPlan" style="color:var(--accent); text-transform:uppercase; font-size:0.7rem;">free</span></div>
-        <div class="ov-stat-value"><span id="stMsgUsed">0</span><span style="font-size:1rem; font-weight:400; color:var(--soft);">/<span id="stMsgQuota">50</span></span></div>
-        <div style="margin-top:8px;"><div class="progress" style="height:4px;"><div class="progress-bar" id="stMsgBar" style="width:0%"></div></div></div>
-        <div class="ov-stat-sub" id="stMsgBarLabel">este periodo</div>
+      <div class="inf-kpi">
+        <div class="k-label">Mensajes · plan <span id="stPlan" style="color:var(--accent); text-transform:uppercase; font-size:0.7rem;">free</span></div>
+        <div class="k-value"><span id="stMsgUsed">0</span><span style="font-size:1rem; font-weight:400; color:var(--soft);">/<span id="stMsgQuota">50</span></span></div>
+        <div style="margin:6px 0 2px;"><div class="progress" style="height:4px;"><div class="progress-bar" id="stMsgBar" style="width:0%"></div></div></div>
+        <div class="k-delta flat" id="stMsgBarLabel">este periodo</div>
       </div>
 
     </div>
 
-    <!-- Canales -->
-    <div class="panel-card" style="margin-bottom:16px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
-        <h2 style="margin:0;">Canales activos</h2>
-        <span class="panel-sub" style="margin:0;">Estado de cada canal de tu asistente</span>
-      </div>
+    <!-- Canales (tarjeta homogénea estilo informes) -->
+    <div class="inf-card inf-card-wide" style="margin:14px 0 16px;">
+      <div class="inf-card-head"><b>Canales activos</b><span class="inf-card-sub">Estado de cada canal de tu asistente</span></div>
       <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px;" id="ovChannelsGrid">
 
         <div class="ov-channel-card">
@@ -6499,16 +6496,37 @@ function openInfChartModal(card) {
   const modal = document.getElementById('infChartModal');
   const content = document.getElementById('infChartModalContent');
   if (!modal || !content || !card) return;
-  const clone = card.cloneNode(true);
-  clone.querySelectorAll('.inf-expand-btn, .inf-chart-tooltip').forEach(el => el.remove());
-  clone.classList.remove('inf-card-wide');
-  content.replaceChildren(clone);
-  clone.querySelectorAll('.inf-chart').forEach(bindChartTooltip);
+  const chartId = (card.querySelector('.inf-chart') || {}).id || '';
+  const cache = window.__infCharts || {};
+  const wrap = document.createElement('div');
+  wrap.className = 'inf-card';
+  const head = card.querySelector('.inf-card-head');
+  if (head) { const h = head.cloneNode(true); h.querySelectorAll('.inf-expand-btn').forEach(el => el.remove()); wrap.appendChild(h); }
+  const chartDiv = document.createElement('div');
+  chartDiv.className = 'inf-chart';
+  wrap.appendChild(chartDiv);
+  content.replaceChildren(wrap);
+  if (chartId === 'chartRevenue') renderLineChart(chartDiv, cache.revenue || [], { money: true, detailed: true });
+  else if (chartId === 'chartBookings') renderBarChart(chartDiv, cache.bookings || [], { detailed: true });
+  else if (chartId === 'chartServices') renderDonut(chartDiv, cache.services || [], { detailed: true });
+  else {
+    // Fallback: clona el contenido tal cual (rankings u otros).
+    const clone = card.cloneNode(true);
+    clone.querySelectorAll('.inf-expand-btn, .inf-chart-tooltip').forEach(el => el.remove());
+    clone.classList.remove('inf-card-wide');
+    content.replaceChildren(clone);
+    clone.querySelectorAll('.inf-chart').forEach(bindChartTooltip);
+    modal.classList.add('open');
+    return;
+  }
+  bindChartTooltip(chartDiv);
   modal.classList.add('open');
 }
 
 function setupInteractiveReportCards() {
+  // Solo las tarjetas con gráfico (línea/barras/donut) son ampliables.
   document.querySelectorAll('#page-informes .inf-card').forEach(card => {
+    if (!card.querySelector('.inf-chart')) return;
     if (card.querySelector('.inf-expand-btn')) return;
     const button = document.createElement('button');
     button.type = 'button';
@@ -6592,9 +6610,15 @@ async function loadInformes() {
     const data = await api(`/auth/analytics/overview?${params.toString()}`);
     renderInfKpis(data);
     document.getElementById('infRevenueRange').textContent = `${data.date_from} → ${data.date_to}`;
-    renderLineChart(document.getElementById('chartRevenue'), data.series.map(s => ({ x: s.date, y: s.revenue_cents / 100 })), { money: true });
-    renderBarChart(document.getElementById('chartBookings'), data.series.map(s => ({ x: s.date, y: s.bookings })));
-    renderDonut(document.getElementById('chartServices'), data.by_service.map(i => ({ label: i.label, value: i.bookings })));
+    // Cachea las series para poder re-renderizar en detalle al ampliar.
+    window.__infCharts = {
+      revenue: data.series.map(s => ({ x: s.date, y: s.revenue_cents / 100 })),
+      bookings: data.series.map(s => ({ x: s.date, y: s.bookings })),
+      services: data.by_service.map(i => ({ label: i.label, value: i.bookings })),
+    };
+    renderLineChart(document.getElementById('chartRevenue'), window.__infCharts.revenue, { money: true });
+    renderBarChart(document.getElementById('chartBookings'), window.__infCharts.bookings);
+    renderDonut(document.getElementById('chartServices'), window.__infCharts.services);
     renderRankTable(document.getElementById('tableEmployees'), data.by_employee);
     renderRankTable(document.getElementById('tableLocations'), data.by_location);
     renderRankTable(document.getElementById('tableSources'), data.by_source);
@@ -6627,9 +6651,25 @@ function renderInfKpis(data) {
     <div class="inf-kpi"><div class="k-label">Clientes nuevos</div><div class="k-value">${k.new_customers}</div>${kpiDelta(k.new_customers, p.new_customers)}</div>`;
 }
 
+// Etiqueta de fecha corta dd/mm a partir de YYYY-MM-DD.
+function _fmtDayMonth(d) {
+  const parts = String(d).split('-');
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}` : String(d).slice(5);
+}
+// Índices de etiquetas X equiespaciadas (máx n).
+function _xTickIdx(len, n) {
+  if (len <= n) return Array.from({ length: len }, (_, i) => i);
+  const step = (len - 1) / (n - 1);
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(Math.round(i * step));
+  return Array.from(new Set(out));
+}
+
 function renderLineChart(el, points, opts = {}) {
   if (!el) return;
-  const W = 600, H = 180, PAD = { l: 44, r: 8, t: 10, b: 22 };
+  const detailed = !!opts.detailed;
+  const W = detailed ? 900 : 600, H = detailed ? 440 : 180;
+  const PAD = detailed ? { l: 64, r: 22, t: 22, b: 64 } : { l: 44, r: 8, t: 10, b: 22 };
   if (!points.length) { el.innerHTML = '<div class="panel-sub">Sin datos en el rango.</div>'; return; }
   const maxY = Math.max(...points.map(p => p.y), 1);
   const xw = (W - PAD.l - PAD.r) / Math.max(points.length - 1, 1);
@@ -6639,62 +6679,93 @@ function renderLineChart(el, points, opts = {}) {
   const area = `${path} L${(PAD.l + (points.length - 1) * xw).toFixed(1)},${H - PAD.b} L${PAD.l},${H - PAD.b} Z`;
   const fmtY = v => opts.money ? `${Math.round(v)}€` : Math.round(v);
   const valueLabel = v => opts.money ? eur(Math.round(v * 100)) : `${Math.round(v)} citas`;
-  const hitRadius = Math.max(0.8, Math.min(10, xw * 0.45));
+  const fs = detailed ? 13 : 10;
+  const hitRadius = Math.max(0.8, Math.min(detailed ? 18 : 10, xw * 0.45));
   const marks = points.map((p, i) => {
     const [x, y] = xy(p, i);
     const tip = escapeHtml(`${p.x} · ${valueLabel(p.y)}`);
-    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.2" fill="var(--accent, #00b1d9)" stroke="rgba(4,12,24,.9)" stroke-width="1.5" pointer-events="none"/>
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${detailed ? 3.8 : 3.2}" fill="var(--accent, #00b1d9)" stroke="rgba(4,12,24,.9)" stroke-width="1.5" pointer-events="none"/>
       <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${hitRadius.toFixed(2)}" fill="transparent" data-chart-tip="${tip}"/>`;
   }).join('');
-  const gridLines = [0, 0.5, 1].map(f => {
+  const yFracs = detailed ? [0, 0.25, 0.5, 0.75, 1] : [0, 0.5, 1];
+  const gridLines = yFracs.map(f => {
     const y = PAD.t + yh * (1 - f);
     return `<line x1="${PAD.l}" y1="${y}" x2="${W - PAD.r}" y2="${y}" stroke="rgba(255,255,255,0.07)" />
-            <text x="${PAD.l - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="rgba(255,255,255,0.45)">${fmtY(maxY * f)}</text>`;
+            <text x="${PAD.l - 8}" y="${y + 4}" text-anchor="end" font-size="${fs}" fill="rgba(255,255,255,0.5)">${fmtY(maxY * f)}</text>`;
   }).join('');
-  const lastLabel = points[points.length - 1].x.slice(5), firstLabel = points[0].x.slice(5);
+  let xLabels;
+  if (detailed) {
+    xLabels = _xTickIdx(points.length, 12).map(i => {
+      const x = PAD.l + i * xw;
+      return `<line x1="${x.toFixed(1)}" y1="${PAD.t}" x2="${x.toFixed(1)}" y2="${H - PAD.b}" stroke="rgba(255,255,255,0.04)" />
+        <text x="${x.toFixed(1)}" y="${H - PAD.b + 20}" text-anchor="end" font-size="${fs}" fill="rgba(255,255,255,0.55)" transform="rotate(-35 ${x.toFixed(1)} ${H - PAD.b + 20})">${_fmtDayMonth(points[i].x)}</text>`;
+    }).join('');
+  } else {
+    xLabels = `<text x="${PAD.l}" y="${H - 6}" font-size="${fs}" fill="rgba(255,255,255,0.45)">${points[0].x.slice(5)}</text>
+      <text x="${W - PAD.r}" y="${H - 6}" text-anchor="end" font-size="${fs}" fill="rgba(255,255,255,0.45)">${points[points.length - 1].x.slice(5)}</text>`;
+  }
+  const gid = 'gradRev' + (detailed ? 'D' : '');
   el.innerHTML = `
-  <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Evolución">
-    <defs><linearGradient id="gradRev" x1="0" y1="0" x2="0" y2="1">
+  <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="${detailed ? 'xMidYMid meet' : 'none'}" role="img" aria-label="Evolución">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="var(--accent, #00b1d9)" stop-opacity="0.35"/>
       <stop offset="100%" stop-color="var(--accent, #00b1d9)" stop-opacity="0.02"/>
     </linearGradient></defs>
     ${gridLines}
-    <path d="${area}" fill="url(#gradRev)" />
-    <path d="${path}" fill="none" stroke="var(--accent, #00b1d9)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" />
+    ${xLabels}
+    <path d="${area}" fill="url(#${gid})" />
+    <path d="${path}" fill="none" stroke="var(--accent, #00b1d9)" stroke-width="${detailed ? 2.8 : 2.4}" stroke-linejoin="round" stroke-linecap="round" />
     ${marks}
-    <text x="${PAD.l}" y="${H - 6}" font-size="10" fill="rgba(255,255,255,0.45)">${firstLabel}</text>
-    <text x="${W - PAD.r}" y="${H - 6}" text-anchor="end" font-size="10" fill="rgba(255,255,255,0.45)">${lastLabel}</text>
   </svg>`;
 }
 
-function renderBarChart(el, points) {
+function renderBarChart(el, points, opts = {}) {
   if (!el) return;
-  const W = 600, H = 180, PAD = { l: 30, r: 8, t: 10, b: 22 };
+  const detailed = !!opts.detailed;
+  const W = detailed ? 900 : 600, H = detailed ? 440 : 180;
+  const PAD = detailed ? { l: 56, r: 20, t: 22, b: 64 } : { l: 30, r: 8, t: 10, b: 22 };
   if (!points.length) { el.innerHTML = '<div class="panel-sub">Sin datos en el rango.</div>'; return; }
   const maxY = Math.max(...points.map(p => p.y), 1);
   const bw = (W - PAD.l - PAD.r) / points.length;
   const yh = H - PAD.t - PAD.b;
+  const fs = detailed ? 13 : 10;
   const bars = points.map((p, i) => {
     const h = yh * (p.y / maxY);
     const x = PAD.l + i * bw + bw * 0.15;
     return `<rect x="${x.toFixed(1)}" y="${(PAD.t + yh - h).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${Math.max(h, 2).toFixed(1)}" rx="3"
             fill="var(--accent, #00b1d9)" opacity="${p.y ? 0.85 : 0.15}" data-chart-tip="${escapeHtml(`${p.x} · ${p.y} citas`)}"/>`;
   }).join('');
+  let yAxis, xLabels;
+  if (detailed) {
+    yAxis = [0, 0.25, 0.5, 0.75, 1].map(f => {
+      const y = PAD.t + yh * (1 - f);
+      return `<line x1="${PAD.l}" y1="${y}" x2="${W - PAD.r}" y2="${y}" stroke="rgba(255,255,255,0.07)" />
+        <text x="${PAD.l - 8}" y="${y + 4}" text-anchor="end" font-size="${fs}" fill="rgba(255,255,255,0.5)">${Math.round(maxY * f)}</text>`;
+    }).join('');
+    xLabels = _xTickIdx(points.length, 12).map(i => {
+      const x = PAD.l + i * bw + bw * 0.5;
+      return `<text x="${x.toFixed(1)}" y="${H - PAD.b + 20}" text-anchor="end" font-size="${fs}" fill="rgba(255,255,255,0.55)" transform="rotate(-35 ${x.toFixed(1)} ${H - PAD.b + 20})">${_fmtDayMonth(points[i].x)}</text>`;
+    }).join('');
+  } else {
+    yAxis = `<line x1="${PAD.l}" y1="${H - PAD.b}" x2="${W - PAD.r}" y2="${H - PAD.b}" stroke="rgba(255,255,255,0.15)" />
+      <text x="${PAD.l - 6}" y="${PAD.t + 8}" text-anchor="end" font-size="${fs}" fill="rgba(255,255,255,0.45)">${maxY}</text>`;
+    xLabels = `<text x="${PAD.l}" y="${H - 6}" font-size="${fs}" fill="rgba(255,255,255,0.45)">${points[0].x.slice(5)}</text>
+      <text x="${W - PAD.r}" y="${H - 6}" text-anchor="end" font-size="${fs}" fill="rgba(255,255,255,0.45)">${points[points.length - 1].x.slice(5)}</text>`;
+  }
   el.innerHTML = `
-  <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Citas por día">
-    <line x1="${PAD.l}" y1="${H - PAD.b}" x2="${W - PAD.r}" y2="${H - PAD.b}" stroke="rgba(255,255,255,0.15)" />
-    <text x="${PAD.l - 6}" y="${PAD.t + 8}" text-anchor="end" font-size="10" fill="rgba(255,255,255,0.45)">${maxY}</text>
+  <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="${detailed ? 'xMidYMid meet' : 'none'}" role="img" aria-label="Citas por día">
+    ${yAxis}
     ${bars}
-    <text x="${PAD.l}" y="${H - 6}" font-size="10" fill="rgba(255,255,255,0.45)">${points[0].x.slice(5)}</text>
-    <text x="${W - PAD.r}" y="${H - 6}" text-anchor="end" font-size="10" fill="rgba(255,255,255,0.45)">${points[points.length - 1].x.slice(5)}</text>
+    ${xLabels}
   </svg>`;
 }
 
 const DONUT_COLORS = ['#00b1d9', '#8e7dff', '#2ecc71', '#f4b400', '#ff8a65', '#e74c3c', '#5dade2', '#aab7b8'];
 
-function renderDonut(el, items) {
+function renderDonut(el, items, opts = {}) {
   if (!el) return;
-  const data = items.filter(i => i.value > 0).slice(0, 7);
+  const detailed = !!opts.detailed;
+  const data = items.filter(i => i.value > 0).slice(0, detailed ? 12 : 7);
   const total = data.reduce((a, i) => a + i.value, 0);
   if (!total) { el.innerHTML = '<div class="panel-sub">Sin datos en el rango.</div>'; return; }
   const R = 56, C = 70, circumference = 2 * Math.PI * R;
@@ -6711,12 +6782,12 @@ function renderDonut(el, items) {
   }).join('');
   const legend = data.map((item, idx) => `
     <div class="inf-trow"><span style="width:10px; height:10px; border-radius:3px; background:${DONUT_COLORS[idx % DONUT_COLORS.length]}; flex-shrink:0;"></span>
-    <span class="t-label">${escapeHtml(item.label)}</span><span class="t-val">${item.value}</span></div>`).join('');
+    <span class="t-label">${escapeHtml(item.label)}</span><span class="t-val">${item.value}${detailed ? ` · ${((item.value / total) * 100).toFixed(0)}%` : ''}</span></div>`).join('');
   el.innerHTML = `
-    <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
-      <svg viewBox="0 0 140 140" style="width:130px; flex-shrink:0;">${segs}
+    <div style="display:flex; gap:${detailed ? 28 : 16}px; align-items:center; flex-wrap:wrap; ${detailed ? 'justify-content:center;' : ''}">
+      <svg viewBox="0 0 140 140" style="width:${detailed ? 240 : 130}px; flex-shrink:0;">${segs}
         <text x="${C}" y="${C + 5}" text-anchor="middle" font-size="22" font-weight="700" fill="currentColor">${total}</text></svg>
-      <div style="flex:1; min-width:140px;">${legend}</div>
+      <div style="flex:1; min-width:${detailed ? 260 : 140}px; ${detailed ? 'font-size:0.95rem;' : ''}">${legend}</div>
     </div>`;
 }
 
