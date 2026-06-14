@@ -1,5 +1,8 @@
 # QA funcional completa - 13 de junio de 2026
 
+Especificacion funcional de referencia:
+[`REQUISITOS_FUNCIONALES_VANTELIA_2026-06-13.md`](./REQUISITOS_FUNCIONALES_VANTELIA_2026-06-13.md).
+
 ## Alcance
 
 Auditoria ejecutada sobre entornos temporales aislados. No se modificaron clientes,
@@ -69,6 +72,7 @@ Tambien se comprobo:
 - Proteccion al desactivar o borrar centros, profesionales y salas con dependencias.
 - Proteccion al recortar horarios o cerrar dias que contienen citas futuras.
 - Bonos caducados o usados en otro servicio; gift cards inexistentes, desactivadas o caducadas.
+- Informes filtrables por centro, servicio y rango personalizado; CSV respeta los mismos filtros.
 
 ## Recorrido manual real de navegador
 
@@ -81,9 +85,11 @@ Chromium/Playwright como un propietario real:
 - Guarda, vuelve a abrirlo con `Editar` y comprueba dos filas de centro.
 - Verifica que el tipo de cobro guardado sigue siendo `preauth`.
 - Abre Ventas e Informes.
+- Filtra Informes por servicio y rango de fechas personalizado.
+- Comprueba tooltips, ampliacion de graficos y navegacion movil sin desbordamiento.
 - Falla ante cualquier error de consola o respuesta incorrecta.
 
-Resultado: PASS.
+Resultado: PASS en escritorio y viewport movil.
 
 ## Matriz completa del pliego
 
@@ -171,7 +177,7 @@ python scripts/qa_e2e.py
 66 PASS, 0 WARN, 0 BUG
 
 python -m pytest -q
-283 passed, 0 failed
+285 passed, 0 failed
 
 npm run build:widget
 OK

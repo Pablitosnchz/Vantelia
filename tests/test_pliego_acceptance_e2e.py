@@ -423,9 +423,23 @@ def test_full_pliego_as_owner_manager_and_staff(acceptance, monkeypatch):
     assert analytics_b.status_code == 200 and analytics_a.status_code == 200
     assert analytics_b.json()["kpis"]["extras_revenue_cents"] >= 18000
     assert analytics_a.json()["kpis"]["extras_revenue_cents"] == 0
+    analytics_service = client.get(
+        "/auth/analytics/overview",
+        params={**params, "service_id": service["id"]},
+        cookies=manager_cookies,
+    )
+    assert analytics_service.status_code == 200, analytics_service.text
+    assert analytics_service.json()["service_id"] == service["id"]
+    assert analytics_service.json()["kpis"]["extras_revenue_cents"] == 0
+    assert all(item["label"] == service["nombre"] for item in analytics_service.json()["by_service"])
+    assert client.get(
+        "/auth/analytics/overview",
+        params={**params, "service_id": "servicio-inexistente"},
+        cookies=manager_cookies,
+    ).status_code == 404
     export = client.get(
         "/auth/analytics/export.csv",
-        params={**params, "location_id": location_b["location_id"]},
+        params={**params, "location_id": location_b["location_id"], "service_id": service["id"]},
         cookies=manager_cookies,
     )
     assert export.status_code == 200 and "fecha;citas;ingresos_eur" in export.text

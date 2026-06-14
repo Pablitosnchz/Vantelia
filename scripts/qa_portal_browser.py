@@ -136,8 +136,14 @@ def main() -> int:
                 page.locator("#password").fill(PASSWORD)
                 page.locator("#loginBtn").click()
                 page.wait_for_url("**/app")
+                page.get_by_role("heading", name="Resumen operativo", exact=True).wait_for()
+                assert page.locator('.nav-item[data-tab="overview"]').count() == 0
+                assert page.locator('.nav-item[data-tab="informes"]').count() == 1
+                assert page.get_by_role("heading", name="Accesos rápidos", exact=True).count() == 0
+                assert page.get_by_role("heading", name="Probar asistente", exact=True).count() == 0
 
                 page.locator('.nav-item[data-tab="servicios"]').click()
+                page.locator("#page-servicios.active").wait_for()
                 page.locator("#servicioNewBtn").click()
                 page.locator("#svcNombre").fill("Servicio Browser Retencion")
                 page.locator("#svcDuracion").fill("45")
@@ -165,14 +171,48 @@ def main() -> int:
                 page.locator("#serviceClose").click()
 
                 page.locator('.nav-item[data-tab="ventas"]').click()
+                page.locator("#page-ventas.active").wait_for()
                 page.get_by_role("heading", name="Ventas", exact=True).wait_for()
                 page.locator('.nav-item[data-tab="informes"]').click()
-                page.get_by_role("heading", name="Informes", exact=True).wait_for()
+                page.locator("#page-informes.active").wait_for()
+                page.wait_for_function("() => document.querySelectorAll('#infService option').length >= 2")
+                assert page.locator("#infService option").count() >= 2
+                selected_service = page.locator("#infService option", has_text="Servicio Browser Retencion").get_attribute("value")
+                with page.expect_response(
+                    lambda response: "/auth/analytics/overview" in response.url
+                    and f"service_id={selected_service}" in response.url
+                ) as service_report:
+                    page.locator("#infService").select_option(selected_service)
+                assert service_report.value.json()["service_id"] == selected_service
+                page.locator("#infDateFrom").fill("2026-01-01")
+                page.locator("#infDateTo").fill("2026-12-31")
+                with page.expect_response(
+                    lambda response: "/auth/analytics/overview" in response.url
+                    and f"service_id={selected_service}" in response.url
+                    and "date_from=2026-01-01" in response.url
+                ) as custom_report:
+                    page.locator("#infDateTo").press("Tab")
+                assert custom_report.value.json()["service_id"] == selected_service
+                assert "date_from=2026-01-01" in custom_report.value.url
+                page.get_by_role("heading", name="Rendimiento económico", exact=True).wait_for()
+                page.locator("#chartRevenue [data-chart-tip]").first.hover()
+                page.locator("#chartRevenue .inf-chart-tooltip.visible").wait_for()
+                page.locator(".inf-expand-btn").first.click()
+                page.locator("#infChartModal.open").wait_for()
+                page.locator("#infChartModalClose").click()
+                page.set_viewport_size({"width": 390, "height": 844})
+                page.locator("#navBurger").click()
+                page.locator("#sidebar.mobile-open").wait_for()
+                page.locator('.nav-item[data-tab="informes"]').click()
+                assert page.locator("#sidebar.mobile-open").count() == 0
+                assert page.locator("#page-informes").evaluate(
+                    "(element) => element.scrollWidth <= element.clientWidth + 2"
+                )
                 browser.close()
 
                 if console_errors:
                     raise AssertionError(f"Errores de consola: {console_errors}")
-            print("PASS: login, nuevo servicio, Retencion, editar, centros, Ventas e Informes")
+            print("PASS: Informes, filtros, graficos, servicios, centros, Ventas y responsive movil")
             return 0
         finally:
             process.terminate()
