@@ -2831,6 +2831,60 @@
   </div>
 </div>
 
+<!-- Cobro POS con QR (mostrador + producto sobre la cita) -->
+<div class="vdialog-backdrop" id="posBackdrop">
+  <div class="vdialog" id="posDialog" role="dialog" aria-modal="true" aria-labelledby="posTitle" style="max-width:480px;">
+    <div class="vdialog-title" id="posTitle">Cobrar con tarjeta</div>
+    <!-- Fase 1: carrito -->
+    <div id="posCartPhase">
+      <div class="vdialog-body" style="margin-bottom:6px;">El cliente paga con su tarjeta escaneando un QR de Stripe. La venta se registra sola al confirmarse el pago.</div>
+      <div id="posLines" style="display:flex; flex-direction:column; gap:6px; margin:10px 0;"></div>
+      <div style="display:flex; gap:8px; margin-top:6px;">
+        <select class="field-input" id="posProductSel" style="flex:1;"></select>
+        <input type="number" class="field-input" id="posProductQty" min="1" step="1" value="1" style="width:72px;" />
+        <button class="btn btn-ghost" id="posAddBtn" type="button">Añadir</button>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-top:14px; font-size:1.05rem;">
+        <span style="color:var(--soft);">Total</span><b id="posTotal">0,00 €</b>
+      </div>
+      <div class="vdialog-actions">
+        <button class="btn btn-ghost" id="posCancelBtn" type="button">Cerrar</button>
+        <button class="btn btn-primary" id="posGenBtn" type="button">Generar QR de cobro</button>
+      </div>
+    </div>
+    <!-- Fase 2: QR + estado -->
+    <div id="posQrPhase" style="display:none; text-align:center;">
+      <div id="posQrBox" style="background:#fff; border-radius:14px; padding:14px; width:240px; margin:8px auto 12px; display:flex; align-items:center; justify-content:center;"></div>
+      <div style="font-size:1.3rem; font-weight:700;" id="posQrAmount">0,00 €</div>
+      <div id="posStatus" class="panel-sub" style="margin:8px 0 4px;">Esperando el pago…</div>
+      <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;">
+        <button class="btn btn-ghost" id="posCopyBtn" type="button">Copiar enlace</button>
+        <button class="btn btn-ghost" id="posOpenBtn" type="button">Abrir enlace</button>
+      </div>
+      <div class="vdialog-actions" style="justify-content:center;">
+        <button class="btn btn-primary" id="posDoneBtn" type="button">Hecho</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Editor de permisos por usuario (matriz por acción) -->
+<div class="drawer-overlay" id="permsOverlay"></div>
+<div class="side-panel" id="permsPanel">
+  <div class="bot-drawer-head" style="padding:16px 18px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px;">
+    <b id="permsPanelTitle" style="flex:1;">Permisos</b>
+    <button class="btn btn-ghost" id="permsClose" style="padding:4px 10px;">✕</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:18px;">
+    <p class="panel-sub" id="permsPanelSub" style="margin-bottom:14px;"></p>
+    <div id="permsMatrix" style="display:flex; flex-direction:column; gap:16px;"></div>
+  </div>
+  <div style="padding:14px 18px; border-top:1px solid var(--line); display:flex; gap:10px;">
+    <button class="btn btn-primary" id="permsSaveBtn" style="flex:1;">Guardar permisos</button>
+    <button class="btn btn-ghost" id="permsResetBtn">Restablecer al rol</button>
+  </div>
+</div>
+
 <script>
 'use strict';
 
@@ -8012,59 +8066,5 @@ document.getElementById('cuentaLogoutBtn').addEventListener('click', async () =>
   mountVanteliaWidget();
 })();
 </script>
-
-<!-- Cobro POS con QR (mostrador + producto sobre la cita) -->
-<div class="vdialog-backdrop" id="posBackdrop">
-  <div class="vdialog" id="posDialog" role="dialog" aria-modal="true" aria-labelledby="posTitle" style="max-width:480px;">
-    <div class="vdialog-title" id="posTitle">Cobrar con tarjeta</div>
-    <!-- Fase 1: carrito -->
-    <div id="posCartPhase">
-      <div class="vdialog-body" style="margin-bottom:6px;">El cliente paga con su tarjeta escaneando un QR de Stripe. La venta se registra sola al confirmarse el pago.</div>
-      <div id="posLines" style="display:flex; flex-direction:column; gap:6px; margin:10px 0;"></div>
-      <div style="display:flex; gap:8px; margin-top:6px;">
-        <select class="field-input" id="posProductSel" style="flex:1;"></select>
-        <input type="number" class="field-input" id="posProductQty" min="1" step="1" value="1" style="width:72px;" />
-        <button class="btn btn-ghost" id="posAddBtn" type="button">Añadir</button>
-      </div>
-      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-top:14px; font-size:1.05rem;">
-        <span style="color:var(--soft);">Total</span><b id="posTotal">0,00 €</b>
-      </div>
-      <div class="vdialog-actions">
-        <button class="btn btn-ghost" id="posCancelBtn" type="button">Cerrar</button>
-        <button class="btn btn-primary" id="posGenBtn" type="button">Generar QR de cobro</button>
-      </div>
-    </div>
-    <!-- Fase 2: QR + estado -->
-    <div id="posQrPhase" style="display:none; text-align:center;">
-      <div id="posQrBox" style="background:#fff; border-radius:14px; padding:14px; width:240px; margin:8px auto 12px; display:flex; align-items:center; justify-content:center;"></div>
-      <div style="font-size:1.3rem; font-weight:700;" id="posQrAmount">0,00 €</div>
-      <div id="posStatus" class="panel-sub" style="margin:8px 0 4px;">Esperando el pago…</div>
-      <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;">
-        <button class="btn btn-ghost" id="posCopyBtn" type="button">Copiar enlace</button>
-        <button class="btn btn-ghost" id="posOpenBtn" type="button">Abrir enlace</button>
-      </div>
-      <div class="vdialog-actions" style="justify-content:center;">
-        <button class="btn btn-primary" id="posDoneBtn" type="button">Hecho</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Editor de permisos por usuario (matriz por acción) -->
-<div class="drawer-overlay" id="permsOverlay"></div>
-<div class="side-panel" id="permsPanel">
-  <div class="bot-drawer-head" style="padding:16px 18px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px;">
-    <b id="permsPanelTitle" style="flex:1;">Permisos</b>
-    <button class="btn btn-ghost" id="permsClose" style="padding:4px 10px;">✕</button>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:18px;">
-    <p class="panel-sub" id="permsPanelSub" style="margin-bottom:14px;"></p>
-    <div id="permsMatrix" style="display:flex; flex-direction:column; gap:16px;"></div>
-  </div>
-  <div style="padding:14px 18px; border-top:1px solid var(--line); display:flex; gap:10px;">
-    <button class="btn btn-primary" id="permsSaveBtn" style="flex:1;">Guardar permisos</button>
-    <button class="btn btn-ghost" id="permsResetBtn">Restablecer al rol</button>
-  </div>
-</div>
 </body>
 </html>
