@@ -407,11 +407,15 @@ async def admin_generar_demo_agenda(cliente_id: str) -> AuthSimpleResponse:
     if cliente_id not in appstate.CONFIG_CLIENTES:
         raise HTTPException(status_code=404, detail="Cliente no encontrado.")
     result = demo_agenda._seed_demo_agenda(cliente_id)
+    com = result.get("commerce", {}) or {}
     return AuthSimpleResponse(
         ok=True,
         message=(
-            f"Agenda demo generada: {result['bookings_created']} citas en "
-            f"{result['employees_created']} profesionales."
+            f"Demo generada: {result['bookings_created']} citas en "
+            f"{result['employees_created']} profesionales, "
+            f"{com.get('locations', 0)} centros, {com.get('products', 0)} productos, "
+            f"{com.get('packages', 0)} bonos, {com.get('gift_cards', 0)} tarjetas regalo "
+            f"y {com.get('sales', 0)} ventas."
         ),
     )
 
@@ -426,11 +430,15 @@ async def admin_borrar_demo_agenda(cliente_id: str) -> AuthSimpleResponse:
     (citas con source='demo_seed' y profesionales demo 'empdemo_*')."""
     textnorm._assert_valid_client_id(cliente_id)
     result = demo_agenda._purge_demo_agenda(cliente_id)
+    com = result.get("commerce", {}) or {}
     return AuthSimpleResponse(
         ok=True,
         message=(
-            f"Agenda demo eliminada: {result['bookings_removed']} citas y "
-            f"{result['employees_removed']} profesionales demo."
+            f"Demo eliminada: {result['bookings_removed']} citas, "
+            f"{result['employees_removed']} profesionales, "
+            f"{com.get('locations', 0)} centros, {com.get('products', 0)} productos, "
+            f"{com.get('packages', 0)} bonos, {com.get('gift_cards', 0)} tarjetas regalo "
+            f"y {com.get('sales', 0)} ventas demo."
         ),
     )
 

@@ -149,8 +149,8 @@ Endpoints admin con token:
 - `POST /admin/alta-express`
 - `POST /admin/reindex/{cliente_id}`
 - `GET /admin/stats`
-- `POST /admin/clientes/{cliente_id}/demo-agenda` — genera datos demo en la agenda (~1 mes de citas repartidas entre 3 profesionales `empdemo_*`, citas marcadas `source='demo_seed'`). Idempotente: regenera limpiando lo anterior. No toca datos reales.
-- `DELETE /admin/clientes/{cliente_id}/demo-agenda` — borra todos los datos demo (bookings `demo_seed` + empleados `empdemo_*` + sus bloqueos/auditoria).
+- `POST /admin/clientes/{cliente_id}/demo-agenda` — genera una **demo completa** para enseñar al cliente: agenda (~1 mes de citas entre 3 profesionales `empdemo_*`, `source='demo_seed'`) **+ comercio** (centros `locdemo_*`, productos `proddemo_*`, bonos `pkgdemo_*`, tarjetas regalo `gcdemo_*`, ventas `saledemo_*` y package_purchases `ppdemo_*`). Idempotente: regenera limpiando lo anterior. No toca datos reales. Seeder en `demo_agenda._seed_demo_agenda` (+ `_seed_demo_commerce`).
+- `DELETE /admin/clientes/{cliente_id}/demo-agenda` — borra **todos** los datos demo por prefijo de id (citas `demo_seed` + empleados `empdemo_*` + bloqueos/auditoria + centros/productos/bonos/gift cards/ventas demo). `demo_agenda._purge_demo_agenda` (+ `_purge_demo_commerce`).
 - Endpoints de clientes, bookings y chats definidos cerca del bloque admin.
 
 ## Configuracion multi-tenant

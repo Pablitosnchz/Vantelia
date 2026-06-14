@@ -1095,6 +1095,27 @@ DEMO_EMPLOYEE_ID_PREFIX = "empdemo_"
 
 DEMO_BOOKING_SOURCE = "demo_seed"
 
+# Prefijos de id para los datos demo de comercio/centros (purga limpia sin tocar
+# datos reales del cliente).
+DEMO_LOCATION_ID_PREFIX = "locdemo_"
+DEMO_PRODUCT_ID_PREFIX = "proddemo_"
+DEMO_PACKAGE_ID_PREFIX = "pkgdemo_"
+DEMO_PACKAGE_PURCHASE_ID_PREFIX = "ppdemo_"
+DEMO_GIFTCARD_ID_PREFIX = "gcdemo_"
+DEMO_SALE_ID_PREFIX = "saledemo_"
+
+_DEMO_LOCATIONS = [
+    ("Sede Centro (demo)", "Calle Mayor 1"),
+    ("Sede Norte (demo)", "Av. del Parque 22"),
+]
+
+_DEMO_PRODUCTS = [
+    ("Aceite esencial de lavanda (demo)", 1500, 30),
+    ("Crema hidratante premium (demo)", 2400, 20),
+    ("Vela aromatica (demo)", 1200, 40),
+    ("Pack bienestar regalo (demo)", 3900, 15),
+]
+
 
 def _sync_demo_bookings_for_service(
     cliente_id: str,
@@ -1246,10 +1267,159 @@ def _purge_demo_agenda(cliente_id: str) -> Dict[str, int]:
             (cliente_id, f"{DEMO_EMPLOYEE_ID_PREFIX}%"),
         )
         connection.commit()
+    commerce_removed = _purge_demo_commerce(cliente_id)
     return {
         "bookings_removed": int(bookings_removed or 0),
         "employees_removed": int(employees_removed or 0),
+        "commerce": commerce_removed,
     }
+
+
+def _purge_demo_commerce(cliente_id: str) -> Dict[str, int]:
+    """Borra centros, productos, bonos, gift cards y ventas demo (por prefijo de id)."""
+    like = lambda p: p + "%"
+    with db._get_db_connection() as connection:
+        connection.execute(
+            "DELETE FROM gift_card_transactions WHERE cliente_id=? AND gift_card_id LIKE ?",
+            (cliente_id, like(DEMO_GIFTCARD_ID_PREFIX)),
+        )
+        gift = connection.execute(
+            "DELETE FROM gift_cards WHERE cliente_id=? AND id LIKE ?",
+            (cliente_id, like(DEMO_GIFTCARD_ID_PREFIX)),
+        ).rowcount
+        sales = connection.execute(
+            "DELETE FROM product_sales WHERE cliente_id=? AND (id LIKE ? OR product_id LIKE ?)",
+            (cliente_id, like(DEMO_SALE_ID_PREFIX), like(DEMO_PRODUCT_ID_PREFIX)),
+        ).rowcount
+        products = connection.execute(
+            "DELETE FROM products WHERE cliente_id=? AND id LIKE ?",
+            (cliente_id, like(DEMO_PRODUCT_ID_PREFIX)),
+        ).rowcount
+        connection.execute(
+            "DELETE FROM package_purchases WHERE cliente_id=? AND (id LIKE ? OR package_id LIKE ?)",
+            (cliente_id, like(DEMO_PACKAGE_PURCHASE_ID_PREFIX), like(DEMO_PACKAGE_ID_PREFIX)),
+        )
+        packages = connection.execute(
+            "DELETE FROM packages WHERE cliente_id=? AND id LIKE ?",
+            (cliente_id, like(DEMO_PACKAGE_ID_PREFIX)),
+        ).rowcount
+        locations = connection.execute(
+            "DELETE FROM locations WHERE cliente_id=? AND id LIKE ?",
+            (cliente_id, like(DEMO_LOCATION_ID_PREFIX)),
+        ).rowcount
+        connection.commit()
+    return {
+        "locations_removed": int(locations or 0),
+        "products_removed": int(products or 0),
+        "packages_removed": int(packages or 0),
+        "gift_cards_removed": int(gift or 0),
+        "sales_removed": int(sales or 0),
+    }
+
+
+def _seed_demo_commerce(cliente_id: str) -> Dict[str, int]:
+    """Siembra centros, productos, bonos, gift cards y ventas demo para enseñar al
+    cliente como luce su negocio con todo en marcha. Todo con id 'demo' para poder
+    borrarlo despues sin tocar datos reales."""
+    now = timeutils._utc_now_iso()
+    today = datetime.now().date()
+    rng = random.Random(f"{cliente_id}:commerce:{today.isoformat()}")
+    counts = {"locations": 0, "products": 0, "packages": 0, "gift_cards": 0, "sales": 0}
+
+    # Servicio de referencia para los bonos (real si existe; si no, generico).
+    svc = None
+    try:
+        catalog = agenda._catalog_services(cliente_id)
+        if catalog:
+            svc = catalog[0]
+    except Exception:  # noqa: BLE001
+        svc = None
+    svc_slug = str((svc or {}).get("id") or (svc or {}).get("slug") or "sesion")
+    svc_name = str((svc or {}).get("nombre") or (svc or {}).get("name") or "Sesion")
+    try:
+        svc_price = int((svc or {}).get("price_cents") or 0) or 5000
+    except (TypeError, ValueError):
+        svc_price = 5000
+
+    loc_ids: List[str] = []
+    products: List[Tuple[str, str, int]] = []
+    packages: List[Tuple[str, str, int, int]] = []
+    with db._get_db_connection() as connection:
+        for idx, (name, addr) in enumerate(_DEMO_LOCATIONS):
+            lid = DEMO_LOCATION_ID_PREFIX + secrets.token_urlsafe(6)
+            connection.execute(
+                "INSERT INTO locations (id, cliente_id, name, address, phone, timezone, is_active, is_default, "
+                "sort_order, whatsapp_phone_number_id, voice_phone_number, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, '', '', 1, 0, ?, '', '', ?, ?)",
+                (lid, cliente_id, name, addr, 10 + idx, now, now),
+            )
+            loc_ids.append(lid)
+            counts["locations"] += 1
+        for name, price, stock in _DEMO_PRODUCTS:
+            pid = DEMO_PRODUCT_ID_PREFIX + secrets.token_urlsafe(6)
+            connection.execute(
+                "INSERT INTO products (cliente_id, id, name, description, price_cents, currency, stock, "
+                "is_active, sort_order, created_at, updated_at) VALUES (?, ?, ?, '', ?, 'eur', ?, 1, 0, ?, ?)",
+                (cliente_id, pid, name, price, stock, now, now),
+            )
+            products.append((pid, name, price))
+            counts["products"] += 1
+        for sessions, discount in ((5, 0.10), (10, 0.15)):
+            pid = DEMO_PACKAGE_ID_PREFIX + secrets.token_urlsafe(6)
+            price = int(svc_price * sessions * (1 - discount))
+            items = json.dumps([{"service_slug": svc_slug, "qty": sessions}], ensure_ascii=False)
+            pname = f"Bono {sessions} {svc_name} (demo)"
+            connection.execute(
+                "INSERT INTO packages (cliente_id, id, name, description, items_json, price_cents, currency, "
+                "validity_days, is_active, sort_order, created_at, updated_at) VALUES (?, ?, ?, '', ?, ?, 'eur', 180, 1, 0, ?, ?)",
+                (cliente_id, pid, pname, items, price, now, now),
+            )
+            packages.append((pid, pname, price, sessions))
+            counts["packages"] += 1
+        for amount in (5000, 10000, 3000):
+            gid = DEMO_GIFTCARD_ID_PREFIX + secrets.token_urlsafe(6)
+            code = "GC-DEMO-" + secrets.token_hex(2).upper()
+            connection.execute(
+                "INSERT INTO gift_cards (id, cliente_id, code, initial_cents, balance_cents, currency, status, "
+                "buyer_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'eur', 'active', ?, ?, ?)",
+                (gid, cliente_id, code, amount, amount, rng.choice(_DEMO_CUSTOMER_NAMES), now, now),
+            )
+            connection.execute(
+                "INSERT INTO gift_card_transactions (cliente_id, gift_card_id, kind, amount_cents, "
+                "balance_after_cents, created_at) VALUES (?, ?, 'issue', ?, ?, ?)",
+                (cliente_id, gid, amount, amount, now),
+            )
+            counts["gift_cards"] += 1
+        # Ventas de producto (~3 semanas) para que Ventas e Informes muestren datos.
+        for _ in range(rng.randint(16, 26)):
+            pid, pname, price = rng.choice(products)
+            qty = rng.randint(1, 3)
+            day = today - timedelta(days=rng.randint(0, 27))
+            sid = DEMO_SALE_ID_PREFIX + secrets.token_urlsafe(6)
+            connection.execute(
+                "INSERT INTO product_sales (id, cliente_id, location_id, product_id, product_name, qty, "
+                "unit_price_cents, total_cents, booking_id, customer_name, customer_email, payment_method, "
+                "notes, status, customer_payment_id, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, '', ?, 'demo', 'paid', '', ?)",
+                (sid, cliente_id, rng.choice(loc_ids + [""]), pid, pname, qty, price, price * qty,
+                 rng.choice(_DEMO_CUSTOMER_NAMES), rng.choice(["cash", "card", "card", "transfer"]),
+                 day.isoformat() + "T12:00:00Z"),
+            )
+            counts["sales"] += 1
+        # Bonos vendidos (package_purchases).
+        for pid, pname, price, sessions in packages:
+            day = today - timedelta(days=rng.randint(1, 20))
+            ppid = DEMO_PACKAGE_PURCHASE_ID_PREFIX + secrets.token_urlsafe(6)
+            remaining = json.dumps({svc_slug: sessions}, ensure_ascii=False)
+            connection.execute(
+                "INSERT INTO package_purchases (id, cliente_id, package_id, package_name, buyer_name, buyer_email, "
+                "buyer_phone, price_cents, remaining_json, expires_at, status, payment_method, location_id, "
+                "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, '', 'active', 'card', '', ?, ?)",
+                (ppid, cliente_id, pid, pname, rng.choice(_DEMO_CUSTOMER_NAMES),
+                 f"demo+{secrets.token_hex(3)}@example.com", price, remaining, day.isoformat() + "T12:00:00Z", now),
+            )
+        connection.commit()
+    return counts
 
 
 def _create_demo_employees(cliente_id: str) -> List[Dict[str, Any]]:
@@ -1418,10 +1588,13 @@ def _seed_demo_agenda(cliente_id: str) -> Dict[str, Any]:
         if bookings_created >= max_bookings:
             break
 
+    commerce = _seed_demo_commerce(cliente_id)
+
     return {
         "employees_created": len(employees),
         "bookings_created": bookings_created,
         "timezone": tz_name,
+        "commerce": commerce,
     }
 
 

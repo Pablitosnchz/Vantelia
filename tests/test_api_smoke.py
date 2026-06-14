@@ -6692,3 +6692,26 @@ def test_conversations_unify_web_whatsapp_and_voice(client: TestClient, api_modu
             conn.execute("DELETE FROM chat_sessions WHERE id IN (?, ?)", (web_id, wa_id))
             conn.execute("DELETE FROM voice_calls WHERE call_sid=?", (call_sid,))
             conn.commit()
+
+
+def test_demo_commerce_seed_and_purge(api_module):
+    counts = api_module._seed_demo_commerce("demo")
+    assert counts["locations"] >= 1 and counts["products"] >= 1
+    assert counts["packages"] >= 1 and counts["gift_cards"] >= 1 and counts["sales"] >= 1
+    try:
+        with api_module._get_db_connection() as c:
+            assert c.execute("SELECT COUNT(*) FROM locations WHERE cliente_id='demo' AND id LIKE 'locdemo_%'").fetchone()[0] == counts["locations"]
+            assert c.execute("SELECT COUNT(*) FROM products WHERE cliente_id='demo' AND id LIKE 'proddemo_%'").fetchone()[0] == counts["products"]
+            assert c.execute("SELECT COUNT(*) FROM gift_cards WHERE cliente_id='demo' AND id LIKE 'gcdemo_%'").fetchone()[0] == counts["gift_cards"]
+            assert c.execute("SELECT COUNT(*) FROM product_sales WHERE cliente_id='demo' AND id LIKE 'saledemo_%'").fetchone()[0] == counts["sales"]
+            assert c.execute("SELECT COUNT(*) FROM packages WHERE cliente_id='demo' AND id LIKE 'pkgdemo_%'").fetchone()[0] == counts["packages"]
+    finally:
+        removed = api_module._purge_demo_commerce("demo")
+    assert removed["locations_removed"] == counts["locations"]
+    assert removed["products_removed"] == counts["products"]
+    with api_module._get_db_connection() as c:
+        for table, pref in (("locations", "locdemo_"), ("products", "proddemo_"), ("packages", "pkgdemo_"),
+                            ("gift_cards", "gcdemo_"), ("product_sales", "saledemo_"),
+                            ("package_purchases", "ppdemo_")):
+            assert c.execute(f"SELECT COUNT(*) FROM {table} WHERE cliente_id='demo' AND id LIKE ?", (pref + "%",)).fetchone()[0] == 0
+        assert c.execute("SELECT COUNT(*) FROM gift_card_transactions WHERE cliente_id='demo' AND gift_card_id LIKE 'gcdemo_%'").fetchone()[0] == 0
