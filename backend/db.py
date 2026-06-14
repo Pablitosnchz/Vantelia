@@ -296,9 +296,28 @@ def _init_database() -> None:
             "payment_type": "TEXT NOT NULL DEFAULT 'full'",
             "deposit_amount_cents": "INTEGER NOT NULL DEFAULT 0",
             "currency": "TEXT NOT NULL DEFAULT 'eur'",
+            # Override de politica de cancelacion por servicio (NULL = hereda del tenant).
+            "cancel_free_hours": "INTEGER",
+            "cancel_late_fee_pct": "INTEGER",
+            "no_show_fee_pct": "INTEGER",
         }.items():
             if column_name not in service_columns:
                 connection.execute(f"ALTER TABLE services ADD COLUMN {column_name} {definition}")
+        # Politica de cancelacion/no-show por tenant (generica, opt-in).
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cancellation_policies (
+                cliente_id TEXT PRIMARY KEY,
+                enabled INTEGER NOT NULL DEFAULT 0,
+                free_cancel_hours INTEGER NOT NULL DEFAULT 24,
+                late_cancel_fee_pct INTEGER NOT NULL DEFAULT 0,
+                no_show_fee_pct INTEGER NOT NULL DEFAULT 100,
+                auto_apply INTEGER NOT NULL DEFAULT 1,
+                policy_text TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS locations (

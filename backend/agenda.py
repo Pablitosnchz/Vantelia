@@ -312,7 +312,18 @@ def _service_row_to_public(row: sqlite3.Row) -> Dict[str, Any]:
         "currency": (row["currency"] or "eur").lower(),
         "deposit_value": int(policy["deposit_value"] or 0) if policy else 0,
         "confirm_booking_on_paid": bool(policy["confirm_booking_on_paid"]) if policy else True,
+        "cancel_free_hours": _row_int_or_none(row, "cancel_free_hours"),
+        "cancel_late_fee_pct": _row_int_or_none(row, "cancel_late_fee_pct"),
+        "no_show_fee_pct": _row_int_or_none(row, "no_show_fee_pct"),
     }
+
+
+def _row_int_or_none(row: sqlite3.Row, key: str) -> Optional[int]:
+    try:
+        value = row[key]
+    except (KeyError, IndexError):
+        return None
+    return None if value is None else int(value)
 
 
 def _services_count(cliente_id: str) -> int:

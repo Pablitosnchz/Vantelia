@@ -726,15 +726,52 @@
     .inf-kpi .k-delta.flat { color: var(--soft); }
     .inf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
     .inf-card {
+      position: relative;
       background: var(--panel-2, rgba(255,255,255,0.03)); border: 1px solid var(--line, rgba(255,255,255,0.08));
-      border-radius: 14px; padding: 16px 18px; min-height: 200px;
+      border-radius: 16px; padding: 18px 20px; min-height: 200px;
+      box-shadow: 0 16px 38px rgba(0,0,0,0.14);
+      transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
     }
+    .inf-card:hover { border-color: rgba(0,177,217,0.34); transform: translateY(-1px); box-shadow: 0 20px 44px rgba(0,0,0,0.22); }
     .inf-card-wide { grid-column: span 2; }
     @media (max-width: 900px) { .inf-card-wide { grid-column: span 1; } }
-    .inf-card-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+    .inf-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-right: 34px; }
     .inf-card-sub { font-size: 0.76rem; color: var(--soft); }
-    .inf-chart { width: 100%; min-height: 170px; }
+    .inf-chart { position: relative; width: 100%; min-height: 170px; }
     .inf-chart svg { width: 100%; height: auto; display: block; }
+    .inf-chart [data-chart-tip] { cursor: crosshair; transition: opacity .14s ease, filter .14s ease; }
+    .inf-chart [data-chart-tip]:hover { opacity: 1 !important; filter: brightness(1.2) drop-shadow(0 0 5px rgba(0,177,217,.45)); }
+    .inf-chart-tooltip {
+      position: absolute; z-index: 5; pointer-events: none; opacity: 0;
+      transform: translate(-50%, calc(-100% - 12px)); transition: opacity .1s ease;
+      padding: 8px 10px; border-radius: 9px; white-space: nowrap;
+      color: #f7fbff; background: rgba(4,12,24,.96); border: 1px solid rgba(0,177,217,.34);
+      box-shadow: 0 12px 28px rgba(0,0,0,.35); font-size: .76rem; font-weight: 600;
+    }
+    .inf-chart-tooltip.visible { opacity: 1; }
+    .inf-expand-btn {
+      position: absolute; top: 12px; right: 12px; z-index: 2;
+      width: 30px; height: 30px; padding: 0; border-radius: 9px;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: var(--soft); background: rgba(255,255,255,.035); border: 1px solid var(--line);
+      cursor: pointer;
+    }
+    .inf-expand-btn:hover { color: var(--accent); background: var(--accent-soft); border-color: rgba(0,177,217,.4); }
+    .inf-expand-btn svg { width: 15px; height: 15px; }
+    .inf-chart-modal {
+      position: fixed; inset: 0; z-index: 250; display: none; align-items: center; justify-content: center;
+      padding: 28px; background: rgba(1,7,16,.82); backdrop-filter: blur(10px);
+    }
+    .inf-chart-modal.open { display: flex; }
+    .inf-chart-modal-dialog {
+      position: relative; width: min(1180px, 96vw); max-height: 92vh; overflow: auto;
+      border-radius: 20px; background: var(--panel); border: 1px solid rgba(0,177,217,.26);
+      box-shadow: 0 28px 90px rgba(0,0,0,.58); padding: 22px;
+    }
+    .inf-chart-modal-close { position: sticky; top: 0; float: right; z-index: 6; }
+    .inf-chart-modal .inf-card { border: 0; box-shadow: none; transform: none; background: transparent; padding: 8px; min-height: 0; }
+    .inf-chart-modal .inf-chart { min-height: 360px; }
+    .inf-chart-modal .inf-chart svg { min-height: 360px; }
     .inf-preset { padding: 5px 12px; font-size: 0.8rem; border-radius: 999px; opacity: 0.7; }
     .inf-preset.active { background: var(--accent); color: #00131a; opacity: 1; font-weight: 600; }
     .inf-table { display: flex; flex-direction: column; gap: 6px; }
@@ -941,6 +978,34 @@
     /* Toast: barra de acento + ligero desenfoque para look premium */
     .toast { backdrop-filter: blur(6px); border-left-width: 3px; }
 
+    /* Diálogo de confirmación contextual (modal accesible) */
+    .vdialog-backdrop {
+      display: none; position: fixed; inset: 0; z-index: 300;
+      background: rgba(4,8,16,0.62); backdrop-filter: blur(4px);
+      align-items: center; justify-content: center; padding: 24px;
+    }
+    .vdialog-backdrop.open { display: flex; }
+    .vdialog {
+      width: 100%; max-width: 440px;
+      background: var(--panel-2); border: 1px solid var(--line-strong);
+      border-radius: 18px; padding: 22px 22px 18px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+      animation: pageFade .16s ease both;
+    }
+    .vdialog-title { font-family: var(--font-title); font-size: 1.1rem; font-weight: 600; margin-bottom: 10px; }
+    .vdialog-body { font-size: 0.9rem; color: var(--soft); line-height: 1.55; }
+    .vdialog-body b { color: var(--text); }
+    .vdialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+    .vdialog-policy {
+      margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--line);
+      font-size: 0.86rem;
+    }
+    .vdialog-policy .vp-line { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+    .vdialog-policy .vp-fee { color: var(--warning); font-weight: 700; }
+    .vdialog-policy .vp-refund { color: var(--success); font-weight: 700; }
+    .vdialog-policy .vp-note { color: var(--soft-2); font-size: 0.8rem; margin-top: 6px; }
+
     /* Respeta la preferencia de menos movimiento */
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
@@ -960,11 +1025,7 @@
   </div>
 
   <div class="sidebar-section" data-label="Asistente IA">Asistente IA</div>
-  <div class="nav-item active" data-tab="overview">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-    <span>Overview</span>
-  </div>
-  <div class="nav-item" data-tab="informes">
+  <div class="nav-item active" data-tab="informes">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     <span>Informes</span>
   </div>
@@ -1060,7 +1121,7 @@
       <button class="nav-burger" id="navBurger" type="button" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
-      <div class="page-title" id="pageTitle">Overview</div>
+      <div class="page-title" id="pageTitle">Informes</div>
     </div>
     <div class="user-menu" id="userMenu">
       <div class="user-chip" id="userChip">
@@ -1079,8 +1140,15 @@
     </div>
   </div>
 
-  <!-- OVERVIEW -->
-  <section class="page active" id="page-overview">
+  <!-- INFORMES: resumen operativo + rendimiento economico -->
+  <section class="page active" id="page-informes">
+
+    <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+      <div>
+        <h2 style="font-family:var(--font-title); font-size:1.25rem; font-weight:650; margin-bottom:4px;">Resumen operativo</h2>
+        <p class="panel-sub" style="margin:0;">Actividad del asistente, consumo y estado de canales.</p>
+      </div>
+    </div>
 
     <!-- Stats grid -->
     <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:12px; margin-bottom:16px;">
@@ -1176,7 +1244,7 @@
     </div>
 
     <!-- Accesos rápidos + demo -->
-    <div style="display:grid; grid-template-columns:1fr auto; gap:12px; align-items:start;">
+    <div style="display:none;" aria-hidden="true">
 
       <div class="panel-card">
         <h2 style="margin-bottom:12px;">Accesos rápidos</h2>
@@ -2107,16 +2175,22 @@
   </section>
 
   <!-- INFORMES (dashboard económico) -->
-  <section class="page" id="page-informes">
+  <section id="informesEconomic" style="display:none;">
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
-      <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600;">Informes</h2>
+      <div>
+        <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600; margin-bottom:3px;">Rendimiento económico</h2>
+        <p class="panel-sub" style="margin:0;">Analiza ingresos, citas, ocupación y rendimiento por dimensión.</p>
+      </div>
       <div style="margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
         <select class="field-input" id="infLocation" style="width:auto; min-width:150px;"><option value="">Todos los centros</option></select>
+        <select class="field-input" id="infService" style="width:auto; min-width:170px;"><option value="">Todos los servicios</option></select>
         <div class="inf-presets" style="display:flex; gap:4px;">
           <button class="btn inf-preset" data-days="7" type="button">7d</button>
           <button class="btn inf-preset active" data-days="30" type="button">30d</button>
           <button class="btn inf-preset" data-days="90" type="button">90d</button>
         </div>
+        <input class="field-input" id="infDateFrom" type="date" title="Fecha desde" style="width:auto;" />
+        <input class="field-input" id="infDateTo" type="date" title="Fecha hasta" style="width:auto;" />
         <button class="btn btn-ghost" id="infExportBtn" type="button" title="Descargar CSV">⬇ CSV</button>
       </div>
     </div>
@@ -2321,6 +2395,38 @@
       <label style="display:flex; align-items:center; gap:10px; margin-top:12px; font-size:0.9rem;">
         <input type="checkbox" id="rebookingAiToggle" /> Activar rebooking automático por WhatsApp
       </label>
+    </div>
+
+    <div class="panel-card" style="margin-top:18px;" id="cancelPolicyBlock">
+      <h2>Política de cancelación y no-show</h2>
+      <p class="panel-sub">Cuando está activa, el sistema aplica automáticamente la penalización o el reembolso sobre el pago ya autorizado de la cita (retención o cobro). No genera cargos nuevos: solo usa lo que el cliente autorizó al reservar.</p>
+      <label style="display:flex; align-items:center; gap:10px; margin-top:6px; font-size:0.9rem;">
+        <input type="checkbox" id="cpEnabled" /> Aplicar política automáticamente
+      </label>
+      <div class="form-row">
+        <div class="field">
+          <label class="field-label">Cancelación gratis hasta (horas antes)</label>
+          <input class="field-input" id="cpFreeHours" type="number" min="0" max="720" step="1" />
+        </div>
+        <div class="field">
+          <label class="field-label">Penalización por cancelación tardía (%)</label>
+          <input class="field-input" id="cpLateFee" type="number" min="0" max="100" step="1" />
+        </div>
+        <div class="field">
+          <label class="field-label">Penalización por no-show (%)</label>
+          <input class="field-input" id="cpNoShowFee" type="number" min="0" max="100" step="1" />
+        </div>
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label class="field-label">Texto de la política (se muestra al cliente)</label>
+        <textarea class="field-textarea" id="cpText" maxlength="1200" placeholder="Ej.: Cancela gratis hasta 24 h antes. Después se aplica el 50% del importe. El no-show se cobra al 100%."></textarea>
+      </div>
+      <label style="display:flex; align-items:center; gap:10px; margin-top:10px; font-size:0.86rem; color:var(--soft);">
+        <input type="checkbox" id="cpAutoApply" checked /> Cobrar/reembolsar automáticamente (si se desmarca, solo se registra el cálculo para gestión manual)
+      </label>
+      <div style="margin-top:14px;">
+        <button class="btn btn-primary" id="cpSaveBtn" type="button">Guardar política</button>
+      </div>
     </div>
 
     <div class="panel-card" style="margin-top:18px; border-color:var(--danger);">
@@ -2581,6 +2687,13 @@
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Cobro Stripe</label><select class="field-input" id="svcPaymentMode"><option value="payment_disabled">Sin cobro</option><option value="payment_optional">Pago opcional</option><option value="payment_required">Pago requerido</option></select></div>
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Tipo de cobro</label><select class="field-input" id="svcPaymentType"><option value="full">Importe completo</option><option value="deposit">Depósito</option><option value="preauth">Retención (sin cobro inmediato; se cobra desde el panel si procede)</option></select></div>
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Depósito (€)</label><input type="number" class="field-input" id="svcDeposit" min="0" step="0.01" placeholder="Solo para depósitos" /></div>
+    <div style="margin:6px 0 10px; padding:12px 12px 4px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,0.02);">
+      <div class="ap-block-title" style="margin-bottom:8px;">Política de cancelación (opcional)</div>
+      <p class="panel-sub" style="margin:0 0 10px; font-size:0.78rem;">Vacío = hereda la política general del negocio. Rellena solo si este servicio tiene reglas propias.</p>
+      <div class="field" style="margin-bottom:10px;"><label class="field-label">Cancelación gratis hasta (h antes)</label><input type="number" class="field-input" id="svcCancelFree" min="0" max="720" step="1" placeholder="heredar" /></div>
+      <div class="field" style="margin-bottom:10px;"><label class="field-label">Penalización cancelación tardía (%)</label><input type="number" class="field-input" id="svcLateFee" min="0" max="100" step="1" placeholder="heredar" /></div>
+      <div class="field" style="margin-bottom:10px;"><label class="field-label">Penalización no-show (%)</label><input type="number" class="field-input" id="svcNoShowFee" min="0" max="100" step="1" placeholder="heredar" /></div>
+    </div>
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Descripción</label><textarea class="field-input" id="svcDesc" rows="2" placeholder="opcional"></textarea></div>
     <label style="display:flex; align-items:center; gap:8px; margin-bottom:14px; cursor:pointer;"><input type="checkbox" id="svcActivo" checked /> <span>Activo (visible para reservar)</span></label>
     <div class="field" id="svcLocationsWrap" style="display:none; margin-bottom:14px;">
@@ -2612,6 +2725,25 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Diálogo de confirmación reutilizable (sustituye a window.confirm en acciones sensibles) -->
+<div class="vdialog-backdrop" id="vdialogBackdrop">
+  <div class="vdialog" role="dialog" aria-modal="true" aria-labelledby="vdialogTitle">
+    <div class="vdialog-title" id="vdialogTitle"></div>
+    <div class="vdialog-body" id="vdialogBody"></div>
+    <div class="vdialog-actions">
+      <button class="btn btn-ghost" id="vdialogCancel" type="button">Volver</button>
+      <button class="btn btn-primary" id="vdialogOk" type="button">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div class="inf-chart-modal" id="infChartModal" role="dialog" aria-modal="true" aria-label="Gráfico ampliado">
+  <div class="inf-chart-modal-dialog">
+    <button class="btn btn-ghost inf-chart-modal-close" id="infChartModalClose" type="button">Cerrar</button>
+    <div id="infChartModalContent"></div>
+  </div>
+</div>
+
 <script>
 'use strict';
 
@@ -2632,7 +2764,7 @@ const state = {
   session_id: 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
 };
 
-const TABS = ['overview','informes','chats','knowledge','qa','tune','voz','whatsapp','appearance','payments','billing','canales','citas','clientes','equipo','servicios','ventas','horarios','mensajes','instalacion','cuenta'];
+const TABS = ['informes','chats','knowledge','qa','tune','voz','whatsapp','appearance','payments','billing','canales','citas','clientes','equipo','servicios','ventas','horarios','mensajes','instalacion','cuenta'];
 const billingState = { period: 'monthly', plans: [], current: 'free', portal: false };
 
 function formatDetail(d) {
@@ -2676,12 +2808,75 @@ function toast(msg, type) {
   toast._t = setTimeout(() => { el.classList.remove('visible'); }, 2200);
 }
 
+// Diálogo de confirmación con contexto. Devuelve Promise<boolean>.
+function confirmDialog({ title = 'Confirmar', bodyHtml = '', confirmLabel = 'Confirmar', danger = false } = {}) {
+  return new Promise((resolve) => {
+    const back = document.getElementById('vdialogBackdrop');
+    document.getElementById('vdialogTitle').textContent = title;
+    document.getElementById('vdialogBody').innerHTML = bodyHtml;
+    const ok = document.getElementById('vdialogOk');
+    const cancel = document.getElementById('vdialogCancel');
+    ok.textContent = confirmLabel;
+    ok.classList.toggle('btn-primary', !danger);
+    ok.style.cssText = danger ? 'background:var(--danger);color:#0B132B;border:0;' : '';
+    let done = false;
+    const close = (val) => {
+      if (done) return; done = true;
+      back.classList.remove('open');
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      back.removeEventListener('click', onBack);
+      document.removeEventListener('keydown', onKey);
+      resolve(val);
+    };
+    const onOk = () => close(true);
+    const onCancel = () => close(false);
+    const onBack = (e) => { if (e.target === back) close(false); };
+    const onKey = (e) => { if (e.key === 'Escape') close(false); if (e.key === 'Enter') close(true); };
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+    back.addEventListener('click', onBack);
+    document.addEventListener('keydown', onKey);
+    back.classList.add('open');
+    ok.focus();
+  });
+}
+
+// Bloque HTML con el desglose de la política para el diálogo de cancelar/no-show.
+function cancellationPolicyHtml(outcome) {
+  if (!outcome || !outcome.enabled) return '';
+  const eur = (c) => (Math.round(c) / 100).toLocaleString('es-ES', { style: 'currency', currency: (outcome.currency || 'eur').toUpperCase() });
+  const fee = outcome.fee_cents || 0;
+  const refund = outcome.refund_cents || 0;
+  const hasPrice = (outcome.price_cents || 0) > 0;
+  let rows = '';
+  if (outcome.kind === 'cancel') {
+    rows += `<div class="vp-line"><span>Margen sin coste</span><span>${outcome.free_cancel_hours} h antes</span></div>`;
+    if (outcome.hours_until != null) rows += `<div class="vp-line"><span>Faltan para la cita</span><span>${outcome.hours_until} h</span></div>`;
+  }
+  if (hasPrice) {
+    rows += `<div class="vp-line"><span>Penalización (${outcome.fee_pct}%)</span><span class="vp-fee">${eur(fee)}</span></div>`;
+    if (refund > 0) rows += `<div class="vp-line"><span>Se devuelve al cliente</span><span class="vp-refund">${eur(refund)}</span></div>`;
+  }
+  const note = outcome.kind === 'cancel'
+    ? (outcome.within_free_window ? 'Dentro del margen: sin penalización. La retención se libera automáticamente.' : 'Fuera de plazo: se aplicará la penalización sobre el pago autorizado.')
+    : 'No-show: se aplicará la penalización configurada sobre el pago autorizado.';
+  return `<div class="vdialog-policy">${rows}<div class="vp-note">${escapeHtml(note)}${outcome.policy_text ? ' · ' + escapeHtml(outcome.policy_text) : ''}</div></div>`;
+}
+
+async function fetchCancellationPreview(bookingId) {
+  try { return await api(`/auth/bookings/${encodeURIComponent(bookingId)}/cancellation-preview`); }
+  catch (e) { return null; }
+}
+
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
 // ── Tab routing ───────────────────────────────────────────────────────
+let portalTabChosenByUser = false;
+
 function setTab(tab) {
   if (!TABS.includes(tab)) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -2705,7 +2900,7 @@ function setTab(tab) {
   document.getElementById('page-' + tab).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.getAttribute('data-tab') === tab));
   const titles = {
-    overview:'Overview', chats:'Chats',
+    chats:'Chats',
     knowledge:'Conocimiento', qa:'Q&A', tune:'Tune AI', voz:'Asistente de voz', whatsapp:'WhatsApp',
     appearance:'Apariencia', payments:'Cobros Stripe', billing:'Suscripción',
     citas:'Citas', clientes:'Clientes', equipo:'Equipo', servicios:'Servicios', horarios:'Horarios',
@@ -2728,7 +2923,7 @@ function setTab(tab) {
   if (tab === 'horarios')   loadHorarios();
   if (tab === 'mensajes')   loadMensajes();
   if (tab === 'instalacion') loadInstalacion();
-  if (tab === 'cuenta')     { loadCuenta(); loadAccessTeam(); loadRebookingAi(); }
+  if (tab === 'cuenta')     { loadCuenta(); loadAccessTeam(); loadRebookingAi(); loadCancellationPolicy(); }
   if (tab === 'ventas')     loadVentas();
   if (tab === 'informes')   loadInformes();
   if (tab === 'clientes')   loadClientes();
@@ -2736,6 +2931,7 @@ function setTab(tab) {
 
 document.querySelectorAll('.nav-item').forEach(n => {
   n.addEventListener('click', () => {
+    portalTabChosenByUser = true;
     const tab = n.getAttribute('data-tab');
     setTab(tab);
     closeMobileNav();
@@ -4987,6 +5183,10 @@ function openServiceDrawer(svc = null) {
   document.getElementById('svcPaymentMode').value = svc ? (svc.payment_mode || 'payment_disabled') : 'payment_disabled';
   document.getElementById('svcPaymentType').value = svc ? (svc.payment_type || 'full') : 'full';
   document.getElementById('svcDeposit').value = (svc && svc.deposit_amount_cents) ? (svc.deposit_amount_cents / 100) : '';
+  const ovSet = (id, v) => { document.getElementById(id).value = (v === null || v === undefined) ? '' : v; };
+  ovSet('svcCancelFree', svc ? svc.cancel_free_hours : null);
+  ovSet('svcLateFee', svc ? svc.cancel_late_fee_pct : null);
+  ovSet('svcNoShowFee', svc ? svc.no_show_fee_pct : null);
   document.getElementById('svcDesc').value = svc ? (svc.descripcion || '') : '';
   document.getElementById('svcActivo').checked = svc ? !!svc.is_active : true;
   document.getElementById('serviceDrawer').classList.add('open');
@@ -5011,7 +5211,12 @@ async function saveService() {
   const is_active = document.getElementById('svcActivo').checked;
   if (!nombre) { toast('El nombre es obligatorio.', 'error'); return; }
   if (!duration || duration < 5) { toast('La duración mínima es 5 minutos.', 'error'); return; }
-  const body = JSON.stringify({ nombre, duration_minutes: duration, price_cents, descripcion, is_active, payment_mode, payment_type, deposit_amount_cents, currency:'eur' });
+  // Overrides de política por servicio: vacío = heredar (en edición -1 limpia, en alta null omite).
+  const ovVal = (id) => { const v = document.getElementById(id).value.trim(); if (v === '') return slug ? -1 : null; const n = parseInt(v, 10); return isNaN(n) ? (slug ? -1 : null) : n; };
+  const cancel_free_hours = ovVal('svcCancelFree');
+  const cancel_late_fee_pct = ovVal('svcLateFee');
+  const no_show_fee_pct = ovVal('svcNoShowFee');
+  const body = JSON.stringify({ nombre, duration_minutes: duration, price_cents, descripcion, is_active, payment_mode, payment_type, deposit_amount_cents, currency:'eur', cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct });
   const btn = document.getElementById('svcSaveBtn'); const old = btn.textContent; btn.disabled = true; btn.textContent = 'Guardando…';
   try {
     const saved = slug
@@ -5560,16 +5765,36 @@ function cdRenderDetail(b){
           await loadCitasDay();
           return;
         }
-        if (action === 'attended' || action === 'noshow'){
-          await api(`/auth/bookings/${bid}/attendance`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ attended: action === 'attended' }) });
-          toast(action === 'attended' ? 'Cita marcada como realizada' : 'Cita marcada como no asistida', 'success');
+        if (action === 'attended'){
+          await api(`/auth/bookings/${bid}/attendance`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ attended: true }) });
+          toast('Cita marcada como realizada', 'success');
+          loadCitasAttendanceStats();
+          await loadCitasDay();
+          return;
+        }
+        if (action === 'noshow'){
+          const prev = await fetchCancellationPreview(bid);
+          const okNs = await confirmDialog({
+            title: 'Marcar como no asistida',
+            bodyHtml: `<p>El cliente no se presentó a la cita de <b>${escapeHtml(b.nombre || 'el cliente')}</b>.</p>${cancellationPolicyHtml(prev && prev.no_show)}`,
+            confirmLabel: 'Marcar no-show', danger: true,
+          });
+          if (!okNs) return;
+          await api(`/auth/bookings/${bid}/attendance`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ attended: false }) });
+          toast('Cita marcada como no asistida', 'success');
           loadCitasAttendanceStats();
           await loadCitasDay();
           return;
         }
         if (action === 'resched'){ openReschedDrawer(b); return; }
         if (action === 'cancel'){
-          if (!window.confirm('¿Cancelar esta cita?')) return;
+          const prev = await fetchCancellationPreview(bid);
+          const okC = await confirmDialog({
+            title: '¿Cancelar esta cita?',
+            bodyHtml: `<p>Se cancelará la cita de <b>${escapeHtml(b.nombre || 'el cliente')}</b>${b.fecha ? ' (' + escapeHtml(b.fecha + ' ' + (b.hora || '')) + ')' : ''}.</p>${cancellationPolicyHtml(prev && prev.cancel)}`,
+            confirmLabel: 'Cancelar cita', danger: true,
+          });
+          if (!okC) return;
           await api(`/auth/bookings/${bid}/cancel`, { method:'POST' });
           toast('Cita cancelada', 'success');
           await loadCitasDay();
@@ -6217,22 +6442,104 @@ document.getElementById('giftIssueBtn').addEventListener('click', async () => {
 });
 
 // ── INFORMES (dashboard económico) ────────────────────────────────────
-const infState = { days: 30, location: '' };
+const infState = { days: 30, location: '', service: '', dateFrom: '', dateTo: '' };
+
+function mergeInformesSections() {
+  const page = document.getElementById('page-informes');
+  const economic = document.getElementById('informesEconomic');
+  if (!page || !economic) return;
+  economic.style.display = '';
+  while (economic.firstChild) page.appendChild(economic.firstChild);
+  economic.remove();
+}
+
+function bindChartTooltip(chart) {
+  if (!chart) return;
+  let tip = chart.querySelector('.inf-chart-tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.className = 'inf-chart-tooltip';
+    chart.appendChild(tip);
+  }
+  chart.querySelectorAll('[data-chart-tip]').forEach(mark => {
+    mark.addEventListener('pointerenter', () => {
+      tip.textContent = mark.getAttribute('data-chart-tip') || '';
+      tip.classList.add('visible');
+    });
+    mark.addEventListener('pointermove', event => {
+      const rect = chart.getBoundingClientRect();
+      tip.style.left = `${Math.max(44, Math.min(rect.width - 44, event.clientX - rect.left))}px`;
+      tip.style.top = `${Math.max(38, event.clientY - rect.top)}px`;
+    });
+    mark.addEventListener('pointerleave', () => tip.classList.remove('visible'));
+  });
+}
+
+function closeInfChartModal() {
+  document.getElementById('infChartModal')?.classList.remove('open');
+}
+
+function openInfChartModal(card) {
+  const modal = document.getElementById('infChartModal');
+  const content = document.getElementById('infChartModalContent');
+  if (!modal || !content || !card) return;
+  const clone = card.cloneNode(true);
+  clone.querySelectorAll('.inf-expand-btn, .inf-chart-tooltip').forEach(el => el.remove());
+  clone.classList.remove('inf-card-wide');
+  content.replaceChildren(clone);
+  clone.querySelectorAll('.inf-chart').forEach(bindChartTooltip);
+  modal.classList.add('open');
+}
+
+function setupInteractiveReportCards() {
+  document.querySelectorAll('#page-informes .inf-card').forEach(card => {
+    if (card.querySelector('.inf-expand-btn')) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'inf-expand-btn';
+    button.title = 'Ampliar gráfico';
+    button.setAttribute('aria-label', 'Ampliar gráfico');
+    button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5"/></svg>';
+    button.addEventListener('click', () => openInfChartModal(card));
+    card.appendChild(button);
+  });
+}
+
+document.getElementById('infChartModalClose')?.addEventListener('click', closeInfChartModal);
+document.getElementById('infChartModal')?.addEventListener('click', event => {
+  if (event.target.id === 'infChartModal') closeInfChartModal();
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeInfChartModal();
+});
 
 document.querySelectorAll('.inf-preset').forEach(b => b.addEventListener('click', () => {
   infState.days = parseInt(b.getAttribute('data-days'), 10);
+  infState.dateFrom = '';
+  infState.dateTo = '';
+  document.getElementById('infDateFrom').value = '';
+  document.getElementById('infDateTo').value = '';
   document.querySelectorAll('.inf-preset').forEach(x => x.classList.toggle('active', x === b));
   loadInformes();
 }));
 document.getElementById('infLocation').addEventListener('change', e => { infState.location = e.target.value; loadInformes(); });
+document.getElementById('infService').addEventListener('change', e => { infState.service = e.target.value; loadInformes(); });
+['infDateFrom', 'infDateTo'].forEach(id => document.getElementById(id).addEventListener('change', () => {
+  infState.dateFrom = document.getElementById('infDateFrom').value;
+  infState.dateTo = document.getElementById('infDateTo').value;
+  document.querySelectorAll('.inf-preset').forEach(x => x.classList.remove('active'));
+  if (infState.dateFrom && infState.dateTo) loadInformes();
+}));
 document.getElementById('infExportBtn').addEventListener('click', () => {
   const { from, to } = infRange();
   const params = new URLSearchParams({ date_from: from, date_to: to });
   if (infState.location) params.set('location_id', infState.location);
+  if (infState.service) params.set('service_id', infState.service);
   window.open(`/auth/analytics/export.csv?${params.toString()}`, '_blank');
 });
 
 function infRange() {
+  if (infState.dateFrom && infState.dateTo) return { from: infState.dateFrom, to: infState.dateTo };
   const to = new Date();
   const from = new Date(Date.now() - (infState.days - 1) * 86400000);
   const fmt = d => d.toISOString().slice(0, 10);
@@ -6241,17 +6548,31 @@ function infRange() {
 
 async function loadInformes() {
   try {
-    const locs = await api('/auth/locations').catch(() => ({ items: [] }));
+    const [locs, services] = await Promise.all([
+      api('/auth/locations').catch(() => ({ items: [] })),
+      api('/auth/services').catch(() => ({ items: [] })),
+    ]);
     const sel = document.getElementById('infLocation');
     const current = sel.value;
     while (sel.options.length > 1) sel.remove(1);
     (locs.items || []).forEach(l => { const o = document.createElement('option'); o.value = l.location_id; o.textContent = l.name; sel.appendChild(o); });
     if (current) sel.value = current;
     sel.style.display = (locs.items || []).length > 1 ? '' : 'none';
+    const serviceSel = document.getElementById('infService');
+    const currentService = serviceSel.value;
+    while (serviceSel.options.length > 1) serviceSel.remove(1);
+    (services.items || []).filter(s => s.activo !== false && s.is_active !== false).forEach(s => {
+      const o = document.createElement('option');
+      o.value = s.id || s.slug;
+      o.textContent = s.nombre || s.name;
+      serviceSel.appendChild(o);
+    });
+    if (currentService) serviceSel.value = currentService;
 
     const { from, to } = infRange();
     const params = new URLSearchParams({ date_from: from, date_to: to });
     if (infState.location) params.set('location_id', infState.location);
+    if (infState.service) params.set('service_id', infState.service);
     const data = await api(`/auth/analytics/overview?${params.toString()}`);
     renderInfKpis(data);
     document.getElementById('infRevenueRange').textContent = `${data.date_from} → ${data.date_to}`;
@@ -6261,6 +6582,8 @@ async function loadInformes() {
     renderRankTable(document.getElementById('tableEmployees'), data.by_employee);
     renderRankTable(document.getElementById('tableLocations'), data.by_location);
     renderRankTable(document.getElementById('tableSources'), data.by_source);
+    document.querySelectorAll('#page-informes .inf-chart').forEach(bindChartTooltip);
+    setupInteractiveReportCards();
   } catch (e) {
     document.getElementById('infKpis').innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`;
   }
@@ -6299,6 +6622,14 @@ function renderLineChart(el, points, opts = {}) {
   const path = points.map((p, i) => { const [x, y] = xy(p, i); return `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`; }).join(' ');
   const area = `${path} L${(PAD.l + (points.length - 1) * xw).toFixed(1)},${H - PAD.b} L${PAD.l},${H - PAD.b} Z`;
   const fmtY = v => opts.money ? `${Math.round(v)}€` : Math.round(v);
+  const valueLabel = v => opts.money ? eur(Math.round(v * 100)) : `${Math.round(v)} citas`;
+  const hitRadius = Math.max(0.8, Math.min(10, xw * 0.45));
+  const marks = points.map((p, i) => {
+    const [x, y] = xy(p, i);
+    const tip = escapeHtml(`${p.x} · ${valueLabel(p.y)}`);
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.2" fill="var(--accent, #00b1d9)" stroke="rgba(4,12,24,.9)" stroke-width="1.5" pointer-events="none"/>
+      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${hitRadius.toFixed(2)}" fill="transparent" data-chart-tip="${tip}"/>`;
+  }).join('');
   const gridLines = [0, 0.5, 1].map(f => {
     const y = PAD.t + yh * (1 - f);
     return `<line x1="${PAD.l}" y1="${y}" x2="${W - PAD.r}" y2="${y}" stroke="rgba(255,255,255,0.07)" />
@@ -6314,6 +6645,7 @@ function renderLineChart(el, points, opts = {}) {
     ${gridLines}
     <path d="${area}" fill="url(#gradRev)" />
     <path d="${path}" fill="none" stroke="var(--accent, #00b1d9)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" />
+    ${marks}
     <text x="${PAD.l}" y="${H - 6}" font-size="10" fill="rgba(255,255,255,0.45)">${firstLabel}</text>
     <text x="${W - PAD.r}" y="${H - 6}" text-anchor="end" font-size="10" fill="rgba(255,255,255,0.45)">${lastLabel}</text>
   </svg>`;
@@ -6329,8 +6661,8 @@ function renderBarChart(el, points) {
   const bars = points.map((p, i) => {
     const h = yh * (p.y / maxY);
     const x = PAD.l + i * bw + bw * 0.15;
-    return `<rect x="${x.toFixed(1)}" y="${(PAD.t + yh - h).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${h.toFixed(1)}" rx="2"
-            fill="var(--accent, #00b1d9)" opacity="${p.y ? 0.85 : 0.15}"><title>${p.x}: ${p.y}</title></rect>`;
+    return `<rect x="${x.toFixed(1)}" y="${(PAD.t + yh - h).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${Math.max(h, 2).toFixed(1)}" rx="3"
+            fill="var(--accent, #00b1d9)" opacity="${p.y ? 0.85 : 0.15}" data-chart-tip="${escapeHtml(`${p.x} · ${p.y} citas`)}"/>`;
   }).join('');
   el.innerHTML = `
   <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Citas por día">
@@ -6356,8 +6688,8 @@ function renderDonut(el, items) {
     const seg = `<circle r="${R}" cx="${C}" cy="${C}" fill="transparent"
       stroke="${DONUT_COLORS[idx % DONUT_COLORS.length]}" stroke-width="18"
       stroke-dasharray="${(frac * circumference).toFixed(2)} ${(circumference - frac * circumference).toFixed(2)}"
-      stroke-dashoffset="${(-offset * circumference).toFixed(2)}" transform="rotate(-90 ${C} ${C})">
-      <title>${escapeHtml(item.label)}: ${item.value}</title></circle>`;
+      stroke-dashoffset="${(-offset * circumference).toFixed(2)}" transform="rotate(-90 ${C} ${C})"
+      data-chart-tip="${escapeHtml(`${item.label} · ${item.value} citas · ${(frac * 100).toFixed(0)}%`)}"></circle>`;
     offset += frac;
     return seg;
   }).join('');
@@ -6463,6 +6795,37 @@ document.getElementById('rebookingAiToggle')?.addEventListener('change', async (
     await api('/auth/app/rebooking-ai', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ enabled: e.target.checked }) });
     toast(e.target.checked ? 'Rebooking IA activado.' : 'Rebooking IA desactivado.', 'success');
   } catch (err) { toast(err.message, 'error'); e.target.checked = !e.target.checked; }
+});
+
+// ── Política de cancelación / no-show (config manager+) ────────────────
+async function loadCancellationPolicy() {
+  const block = document.getElementById('cancelPolicyBlock');
+  if (!block) return;
+  if ((window.PORTAL_ROLE || 'owner') === 'staff') { block.style.display = 'none'; return; }
+  block.style.display = '';
+  try {
+    const p = await api('/auth/app/cancellation-policy');
+    document.getElementById('cpEnabled').checked = !!p.enabled;
+    document.getElementById('cpFreeHours').value = p.free_cancel_hours;
+    document.getElementById('cpLateFee').value = p.late_cancel_fee_pct;
+    document.getElementById('cpNoShowFee').value = p.no_show_fee_pct;
+    document.getElementById('cpAutoApply').checked = !!p.auto_apply;
+    document.getElementById('cpText').value = p.policy_text || '';
+  } catch (e) {}
+}
+document.getElementById('cpSaveBtn')?.addEventListener('click', async () => {
+  const body = {
+    enabled: document.getElementById('cpEnabled').checked,
+    free_cancel_hours: parseInt(document.getElementById('cpFreeHours').value, 10) || 0,
+    late_cancel_fee_pct: parseInt(document.getElementById('cpLateFee').value, 10) || 0,
+    no_show_fee_pct: parseInt(document.getElementById('cpNoShowFee').value, 10) || 0,
+    auto_apply: document.getElementById('cpAutoApply').checked,
+    policy_text: document.getElementById('cpText').value,
+  };
+  try {
+    await api('/auth/app/cancellation-policy', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    toast('Política guardada.', 'success');
+  } catch (e) { toast(e.message, 'error'); }
 });
 
 // ── ROLES: visibilidad de tabs según portal_role ──────────────────────
@@ -6732,7 +7095,13 @@ function clearHorarioConflictNotice(){ closeHorarioConflictModal(); }
 async function cancelConflictBooking(booking){
   const bid = booking.booking_id || booking.id;
   if (!bid) return;
-  if (!window.confirm(`¿Cancelar la cita de ${booking.nombre || 'el cliente'} (${booking.fecha || ''} ${booking.hora || ''})?`)) return;
+  const prev = await fetchCancellationPreview(bid);
+  const okC = await confirmDialog({
+    title: '¿Cancelar esta cita?',
+    bodyHtml: `<p>Se cancelará la cita de <b>${escapeHtml(booking.nombre || 'el cliente')}</b> (${escapeHtml((booking.fecha || '') + ' ' + (booking.hora || ''))}).</p>${cancellationPolicyHtml(prev && prev.cancel)}`,
+    confirmLabel: 'Cancelar cita', danger: true,
+  });
+  if (!okC) return;
   try {
     await api(`/auth/bookings/${encodeURIComponent(bid)}/cancel`, { method:'POST' });
     toast('Cita cancelada', 'success');
@@ -7097,10 +7466,14 @@ document.getElementById('cuentaLogoutBtn').addEventListener('click', async () =>
 // ── Init ──────────────────────────────────────────────────────────────
 (async function init() {
   mountAdminImpersonationBanner();
+  mergeInformesSections();
+  let initialTab = 'informes';
   try {
     const me = await api('/auth/me');
     applyRoleVisibility(me && me.portal_role);
+    if (me && me.portal_role === 'staff') initialTab = 'chats';
   } catch {}
+  if (!portalTabChosenByUser) setTab(initialTab);
   await Promise.all([loadOverview(), loadDeploy(), loadAppearance()]);
   moveStarterPanelToTune();
   loadInstalacion();

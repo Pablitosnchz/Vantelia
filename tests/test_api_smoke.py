@@ -6423,3 +6423,98 @@ def test_required_payment_expiry_releases_booking_and_stripe_unavailable_does_no
             connection.execute("DELETE FROM services WHERE cliente_id = 'demo' AND slug = ?", (service_slug,))
             connection.execute("DELETE FROM stripe_connected_accounts WHERE cliente_id = 'demo'")
             connection.commit()
+
+
+def test_cancellation_policy_engine(client: TestClient, api_module):
+    cookies = _portal_admin_cookies(api_module)
+    params = {"cliente_id": "demo"}
+    iso = lambda d: d.isoformat(timespec="seconds") + "Z"
+    now = api_module.datetime.utcnow()
+
+    # Configura la politica via endpoint (admin = owner -> pasa el guard manager+).
+    r = client.put("/auth/app/cancellation-policy", params=params, cookies=cookies, json={
+        "enabled": True, "free_cancel_hours": 24, "late_cancel_fee_pct": 50,
+        "no_show_fee_pct": 100, "auto_apply": True, "policy_text": "Cancela gratis 24h antes.",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["late_cancel_fee_pct"] == 50
+    g = client.get("/auth/app/cancellation-policy", params=params, cookies=cookies).json()
+    assert g["enabled"] is True and g["no_show_fee_pct"] == 100 and g["free_cancel_hours"] == 24
+
+    # Validacion de rango: >100 -> 422.
+    bad = client.put("/auth/app/cancellation-policy", params=params, cookies=cookies,
+                     json={"late_cancel_fee_pct": 250})
+    assert bad.status_code == 422
+
+    created = []
+    try:
+        # Fuera de plazo (faltan 5h, margen 24h) -> penalizacion 50%.
+        late = _build_booking_record(
+            api_module, service_id="svc-x", service_price_cents=6000, booking_time="08:00",
+            start_at=iso(now + api_module.timedelta(hours=5)),
+            end_at=iso(now + api_module.timedelta(hours=6)))
+        api_module._store_booking(late); created.append(late["id"])
+        prev = client.get(f"/auth/bookings/{late['id']}/cancellation-preview", cookies=cookies).json()
+        assert prev["cancel"]["within_free_window"] is False
+        assert prev["cancel"]["fee_pct"] == 50 and prev["cancel"]["fee_cents"] == 3000
+        assert prev["cancel"]["refund_cents"] == 3000
+        assert prev["no_show"]["fee_cents"] == 6000
+
+        # Dentro de plazo (faltan 48h) -> sin penalizacion.
+        early = _build_booking_record(
+            api_module, service_id="svc-x", service_price_cents=6000, booking_time="09:30",
+            start_at=iso(now + api_module.timedelta(hours=48)),
+            end_at=iso(now + api_module.timedelta(hours=49)))
+        api_module._store_booking(early); created.append(early["id"])
+        prev2 = client.get(f"/auth/bookings/{early['id']}/cancellation-preview", cookies=cookies).json()
+        assert prev2["cancel"]["within_free_window"] is True
+        assert prev2["cancel"]["fee_cents"] == 0 and prev2["cancel"]["refund_cents"] == 6000
+
+        # Cancelar la cita tardia (sin pago) -> registra la evaluacion de politica.
+        cc = client.post(f"/auth/bookings/{late['id']}/cancel", cookies=cookies)
+        assert cc.status_code == 200, cc.text
+        events = [row["event_type"] for row in api_module._list_booking_audit_rows(late["id"])]
+        assert "cancellation_policy_evaluated" in events
+        assert "booking_cancelled" in events
+    finally:
+        with api_module._get_db_connection() as connection:
+            for bid in created:
+                connection.execute("DELETE FROM bookings WHERE id = ?", (bid,))
+                connection.execute("DELETE FROM booking_audit WHERE booking_id = ?", (bid,))
+            connection.execute("DELETE FROM cancellation_policies WHERE cliente_id = 'demo'")
+            connection.commit()
+
+
+def test_service_cancellation_override_resolves(client: TestClient, api_module):
+    cookies = _portal_admin_cookies(api_module)
+    params = {"cliente_id": "demo"}
+    # Politica tenant: no-show 100%.
+    client.put("/auth/app/cancellation-policy", params=params, cookies=cookies,
+               json={"enabled": True, "no_show_fee_pct": 100, "free_cancel_hours": 24})
+    slug = None
+    try:
+        svc = client.post("/auth/services", params=params, cookies=cookies, json={
+            "nombre": "Masaje Override Test", "duration_minutes": 30, "price_cents": 8000,
+            "no_show_fee_pct": 30})
+        assert svc.status_code == 200, svc.text
+        slug = svc.json()["id"]
+        assert svc.json()["no_show_fee_pct"] == 30
+        # El override del servicio (30%) gana sobre el tenant (100%).
+        rec = _build_booking_record(api_module, service_id=slug, service_price_cents=8000,
+                                    servicio="Masaje Override Test")
+        api_module._store_booking(rec)
+        try:
+            outcome = api_module.compute_cancellation_outcome(
+                api_module._load_booking_or_404(rec["id"]), kind="no_show")
+            assert outcome["fee_pct"] == 30 and outcome["fee_cents"] == 2400
+        finally:
+            with api_module._get_db_connection() as connection:
+                connection.execute("DELETE FROM bookings WHERE id = ?", (rec["id"],))
+                connection.execute("DELETE FROM booking_audit WHERE booking_id = ?", (rec["id"],))
+                connection.commit()
+    finally:
+        with api_module._get_db_connection() as connection:
+            if slug:
+                connection.execute("DELETE FROM services WHERE cliente_id='demo' AND slug=?", (slug,))
+            connection.execute("DELETE FROM cancellation_policies WHERE cliente_id = 'demo'")
+            connection.commit()

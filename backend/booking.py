@@ -1961,6 +1961,12 @@ async def _cancel_booking_core(
             **(audit_extra or {}),
         },
     )
+    # Aplica automaticamente la politica de cancelacion (penalizacion/reembolso)
+    # sobre el pago ya autorizado. No bloquea la cancelacion si algo falla.
+    try:
+        apply_cancellation_policy(booking_row, kind="cancel", actor_source=source)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("Politica de cancelacion fallo %s: %s", booking_id, exc)
     refreshed = _load_booking_or_404(booking_id)
     crm._crm_upsert_contact(
         refreshed["cliente_id"], name=refreshed["nombre"], email=refreshed["email"],
@@ -3346,6 +3352,240 @@ def refund_booking_payment(
         {"amount_cents": amount, "partial": amount < total, "reason": textnorm._sanitize_text(reason)},
     )
     return {"payment_status": new_status, "amount_cents": amount}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Politica de cancelacion / no-show automatica y configurable (generica por tenant)
+#
+# El pliego exige que el sistema aplique automaticamente la politica de
+# cancelacion (reembolsos o penalizaciones segun ventana temporal). Es opt-in:
+# por defecto deshabilitada para no sorprender a tenants existentes. Cuando esta
+# activa y auto_apply=1, al cancelar o marcar no-show se actua sobre el pago ya
+# autorizado (captura penalizacion de una retencion, libera el resto o reembolsa
+# la parte no penalizada de un pago ya cobrado). Nunca crea cargos nuevos: solo
+# opera sobre dinero que el cliente ya autorizo en la reserva.
+# ─────────────────────────────────────────────────────────────────────────────
+
+DEFAULT_CANCELLATION_POLICY: Dict[str, Any] = {
+    "enabled": False,
+    "free_cancel_hours": 24,
+    "late_cancel_fee_pct": 0,
+    "no_show_fee_pct": 100,
+    "auto_apply": True,
+    "policy_text": "",
+}
+
+
+def _clamp_pct(value: Any, default: int = 0) -> int:
+    try:
+        return max(0, min(100, int(value)))
+    except (TypeError, ValueError):
+        return default
+
+
+def get_cancellation_policy(cliente_id: str) -> Dict[str, Any]:
+    """Politica de cancelacion del tenant (con defaults si no hay fila)."""
+    with db._get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM cancellation_policies WHERE cliente_id=?",
+            (cliente_id,),
+        ).fetchone()
+    if row is None:
+        return dict(DEFAULT_CANCELLATION_POLICY)
+    return {
+        "enabled": bool(row["enabled"]),
+        "free_cancel_hours": max(0, int(row["free_cancel_hours"] or 0)),
+        "late_cancel_fee_pct": _clamp_pct(row["late_cancel_fee_pct"]),
+        "no_show_fee_pct": _clamp_pct(row["no_show_fee_pct"], 100),
+        "auto_apply": bool(row["auto_apply"]),
+        "policy_text": str(row["policy_text"] or ""),
+    }
+
+
+def save_cancellation_policy(cliente_id: str, **fields: Any) -> Dict[str, Any]:
+    """Crea/actualiza la politica del tenant. Valida y normaliza los valores."""
+    current = get_cancellation_policy(cliente_id)
+    merged = {**current, **{k: v for k, v in fields.items() if v is not None}}
+    enabled = 1 if merged.get("enabled") else 0
+    auto_apply = 1 if merged.get("auto_apply", True) else 0
+    free_hours = max(0, int(merged.get("free_cancel_hours") or 0))
+    late_pct = _clamp_pct(merged.get("late_cancel_fee_pct"))
+    no_show_pct = _clamp_pct(merged.get("no_show_fee_pct"), 100)
+    policy_text = textnorm._sanitize_text(str(merged.get("policy_text") or ""), allow_multiline=True)[:1200]
+    now = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO cancellation_policies
+                (cliente_id, enabled, free_cancel_hours, late_cancel_fee_pct,
+                 no_show_fee_pct, auto_apply, policy_text, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(cliente_id) DO UPDATE SET
+                enabled=excluded.enabled,
+                free_cancel_hours=excluded.free_cancel_hours,
+                late_cancel_fee_pct=excluded.late_cancel_fee_pct,
+                no_show_fee_pct=excluded.no_show_fee_pct,
+                auto_apply=excluded.auto_apply,
+                policy_text=excluded.policy_text,
+                updated_at=excluded.updated_at
+            """,
+            (cliente_id, enabled, free_hours, late_pct, no_show_pct, auto_apply, policy_text, now),
+        )
+        connection.commit()
+    return get_cancellation_policy(cliente_id)
+
+
+def _service_policy_overrides(cliente_id: str, slug: str) -> Dict[str, Optional[int]]:
+    """Overrides de politica por servicio (NULL = hereda del tenant)."""
+    if not slug:
+        return {}
+    with db._get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct "
+            "FROM services WHERE cliente_id=? AND slug=?",
+            (cliente_id, slug),
+        ).fetchone()
+    if row is None:
+        return {}
+    out: Dict[str, Optional[int]] = {}
+    if row["cancel_free_hours"] is not None:
+        out["free_cancel_hours"] = max(0, int(row["cancel_free_hours"]))
+    if row["cancel_late_fee_pct"] is not None:
+        out["late_cancel_fee_pct"] = _clamp_pct(row["cancel_late_fee_pct"])
+    if row["no_show_fee_pct"] is not None:
+        out["no_show_fee_pct"] = _clamp_pct(row["no_show_fee_pct"])
+    return out
+
+
+def _resolve_cancellation_policy_for_booking(booking_row: sqlite3.Row) -> Dict[str, Any]:
+    cliente_id = booking_row["cliente_id"]
+    policy = get_cancellation_policy(cliente_id)
+    try:
+        slug = booking_row["service_id"] or ""
+    except (KeyError, IndexError):
+        slug = ""
+    policy.update(_service_policy_overrides(cliente_id, slug))
+    return policy
+
+
+def _hours_until_booking(booking_row: sqlite3.Row, *, now: Optional[datetime] = None) -> Optional[float]:
+    start_at = ""
+    try:
+        start_at = booking_row["start_at"] or ""
+    except (KeyError, IndexError):
+        start_at = ""
+    if not start_at:
+        return None
+    start_dt = timeutils._from_utc_iso(start_at)
+    if not start_dt:
+        return None
+    ref = now or timeutils._utc_now()
+    return (start_dt - ref).total_seconds() / 3600.0
+
+
+def compute_cancellation_outcome(
+    booking_row: sqlite3.Row, *, kind: str = "cancel", now: Optional[datetime] = None
+) -> Dict[str, Any]:
+    """Calcula penalizacion/reembolso segun la politica, sin tocar Stripe.
+
+    kind: 'cancel' (aplica ventana de cortesia) o 'no_show' (siempre penaliza).
+    """
+    policy = _resolve_cancellation_policy_for_booking(booking_row)
+    try:
+        price_cents = int(booking_row["service_price_cents"] or 0)
+    except (KeyError, IndexError, TypeError):
+        price_cents = 0
+    hours_until = _hours_until_booking(booking_row, now=now)
+    within_free = False
+    if kind == "no_show":
+        fee_pct = int(policy["no_show_fee_pct"])
+    else:
+        within_free = (
+            hours_until is None
+            or hours_until >= float(policy["free_cancel_hours"])
+        )
+        fee_pct = 0 if within_free else int(policy["late_cancel_fee_pct"])
+    fee_cents = round(price_cents * fee_pct / 100) if price_cents > 0 else 0
+    refund_cents = max(0, price_cents - fee_cents) if price_cents > 0 else 0
+    return {
+        "enabled": bool(policy["enabled"]),
+        "auto_apply": bool(policy["auto_apply"]),
+        "kind": kind,
+        "within_free_window": within_free,
+        "free_cancel_hours": int(policy["free_cancel_hours"]),
+        "hours_until": None if hours_until is None else round(hours_until, 1),
+        "fee_pct": fee_pct,
+        "fee_cents": fee_cents,
+        "refund_cents": refund_cents,
+        "price_cents": price_cents,
+        "currency": "eur",
+        "policy_text": str(policy["policy_text"] or ""),
+    }
+
+
+def apply_cancellation_policy(
+    booking_row: sqlite3.Row, *, kind: str, actor_source: str = "system"
+) -> Dict[str, Any]:
+    """Aplica automaticamente la politica al cancelar o marcar no-show.
+
+    Solo actua sobre el pago ya autorizado de la cita (retencion o cobro). Es
+    idempotente y nunca bloquea el flujo de cancelacion: si Stripe falla, deja
+    constancia en auditoria y devuelve el calculo para gestion manual.
+    """
+    outcome = compute_cancellation_outcome(booking_row, kind=kind)
+    cliente_id = booking_row["cliente_id"]
+    booking_id = booking_row["id"]
+    outcome["action"] = "none"
+    if not outcome["enabled"]:
+        return outcome
+    # Registro informativo siempre que la politica este activa.
+    _record_booking_audit(
+        booking_id, cliente_id, "cancellation_policy_evaluated",
+        {
+            "kind": kind, "source": actor_source,
+            "fee_pct": outcome["fee_pct"], "fee_cents": outcome["fee_cents"],
+            "refund_cents": outcome["refund_cents"],
+            "within_free_window": outcome["within_free_window"],
+        },
+    )
+    if not outcome["auto_apply"]:
+        return outcome
+    payment = _booking_payment_row(booking_id)
+    if payment is None:
+        return outcome
+    status = payment["status"]
+    held_or_paid = int(payment["amount_cents"] or 0)
+    fee = int(outcome["fee_cents"])
+    try:
+        if status == "preauthorized":
+            if fee <= 0:
+                release_booking_payment(cliente_id, booking_id, reason=f"politica:{kind}:cortesia")
+                outcome["action"] = "released"
+            else:
+                charge = min(fee, held_or_paid)
+                capture_booking_payment(cliente_id, booking_id, amount_cents=charge, reason=f"politica:{kind}")
+                outcome["action"] = "charged"
+                outcome["charged_cents"] = charge
+        elif status in ("paid", "partially_refunded"):
+            refund_amt = max(0, held_or_paid - fee)
+            if refund_amt > 0:
+                refund_booking_payment(cliente_id, booking_id, amount_cents=refund_amt, reason=f"politica:{kind}")
+                outcome["action"] = "refunded"
+                outcome["refunded_cents"] = refund_amt
+        _record_booking_audit(
+            booking_id, cliente_id, "cancellation_policy_applied",
+            {"kind": kind, "source": actor_source, "action": outcome["action"],
+             "fee_cents": fee, "fee_pct": outcome["fee_pct"]},
+        )
+    except HTTPException as exc:
+        settings.logger.warning(
+            "No se pudo aplicar politica de cancelacion booking=%s: %s", booking_id, exc.detail
+        )
+        _record_booking_audit(
+            booking_id, cliente_id, "cancellation_policy_failed",
+            {"kind": kind, "source": actor_source, "error": str(getattr(exc, "detail", exc))},
+        )
+    return outcome
 
 
 def _latest_booking_for_contact(

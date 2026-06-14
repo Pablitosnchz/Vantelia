@@ -1052,6 +1052,53 @@ async def app_rebooking_ai_toggle(
     return {"enabled": bool(data.enabled)}
 
 
+@app.get("/auth/app/cancellation-policy", response_model=CancellationPolicyResponse)
+async def app_cancellation_policy_get(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> CancellationPolicyResponse:
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    return CancellationPolicyResponse(**booking.get_cancellation_policy(target))
+
+
+@app.put("/auth/app/cancellation-policy", response_model=CancellationPolicyResponse)
+async def app_cancellation_policy_put(
+    data: CancellationPolicyPayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> CancellationPolicyResponse:
+    """Politica de cancelacion/no-show del negocio (config manager+)."""
+    security._require_portal_min_role(user, "manager")
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    saved = booking.save_cancellation_policy(
+        target,
+        enabled=data.enabled,
+        free_cancel_hours=data.free_cancel_hours,
+        late_cancel_fee_pct=data.late_cancel_fee_pct,
+        no_show_fee_pct=data.no_show_fee_pct,
+        auto_apply=data.auto_apply,
+        policy_text=data.policy_text,
+    )
+    return CancellationPolicyResponse(**saved)
+
+
+@app.get("/auth/bookings/{booking_id}/cancellation-preview", response_model=CancellationPreviewResponse)
+async def auth_booking_cancellation_preview(
+    booking_id: str,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> CancellationPreviewResponse:
+    """Calcula penalizacion/reembolso (cancelar ahora vs no-show) para mostrarlo
+    en el panel antes de confirmar. No toca Stripe."""
+    booking_row = booking._load_booking_or_404(booking_id)
+    if user["role"] != "admin" and booking_row["cliente_id"] != user["cliente_id"]:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
+    return CancellationPreviewResponse(
+        booking_id=booking_id,
+        cancel=CancellationOutcome(**booking.compute_cancellation_outcome(booking_row, kind="cancel")),
+        no_show=CancellationOutcome(**booking.compute_cancellation_outcome(booking_row, kind="no_show")),
+    )
+
+
 @app.post("/auth/app/payments/connect/start", response_model=ConnectStartResponse)
 async def app_connect_start(
     request: Request,
@@ -2825,6 +2872,11 @@ async def auth_cancel_booking(
             "reason_sent_to_customer": bool(cancel_reason),
         },
     )
+    # Aplica la politica de cancelacion (penalizacion/reembolso) automaticamente.
+    try:
+        booking.apply_cancellation_policy(booking_row, kind="cancel", actor_source="portal")
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("Politica de cancelacion fallo %s: %s", booking_id, exc)
     refreshed = booking._load_booking_or_404(booking_id)
     try:
         await booking._send_booking_reminder_by_kind(
@@ -2875,6 +2927,12 @@ async def auth_mark_booking_attendance(
             "attended": bool(data.attended),
         },
     )
+    # No-show: aplica automaticamente la penalizacion de la politica del negocio.
+    if not data.attended:
+        try:
+            booking.apply_cancellation_policy(booking_row, kind="no_show", actor_source="portal")
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.error("Politica no-show fallo %s: %s", booking_id, exc)
     refreshed = booking._load_booking_or_404(booking_id)
     crm._crm_upsert_contact(
         refreshed["cliente_id"], name=refreshed["nombre"], email=refreshed["email"],

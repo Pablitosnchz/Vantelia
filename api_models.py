@@ -163,6 +163,45 @@ class BookingAttendancePayload(BaseModel):
     attended: bool
 
 
+class CancellationPolicyPayload(BaseModel):
+    enabled: Optional[bool] = None
+    free_cancel_hours: Optional[int] = Field(default=None, ge=0, le=720)
+    late_cancel_fee_pct: Optional[int] = Field(default=None, ge=0, le=100)
+    no_show_fee_pct: Optional[int] = Field(default=None, ge=0, le=100)
+    auto_apply: Optional[bool] = None
+    policy_text: Optional[str] = Field(default=None, max_length=1200)
+
+
+class CancellationPolicyResponse(BaseModel):
+    enabled: bool = False
+    free_cancel_hours: int = 24
+    late_cancel_fee_pct: int = 0
+    no_show_fee_pct: int = 100
+    auto_apply: bool = True
+    policy_text: str = ""
+
+
+class CancellationOutcome(BaseModel):
+    enabled: bool = False
+    auto_apply: bool = True
+    kind: str = "cancel"
+    within_free_window: bool = False
+    free_cancel_hours: int = 24
+    hours_until: Optional[float] = None
+    fee_pct: int = 0
+    fee_cents: int = 0
+    refund_cents: int = 0
+    price_cents: int = 0
+    currency: str = "eur"
+    policy_text: str = ""
+
+
+class CancellationPreviewResponse(BaseModel):
+    booking_id: str
+    cancel: CancellationOutcome
+    no_show: CancellationOutcome
+
+
 class ServicePublic(BaseModel):
     id: str
     nombre: str
@@ -177,6 +216,9 @@ class ServicePublic(BaseModel):
     currency: str = "eur"
     deposit_value: int = 0
     confirm_booking_on_paid: bool = True
+    cancel_free_hours: Optional[int] = None
+    cancel_late_fee_pct: Optional[int] = None
+    no_show_fee_pct: Optional[int] = None
 
 
 class ServicesResponse(BaseModel):
@@ -194,6 +236,9 @@ class ServicePayload(BaseModel):
     payment_type: str = Field(default="full", pattern=r"^(full|deposit|preauth)$")
     deposit_amount_cents: int = Field(default=0, ge=0, le=10_000_000)
     currency: str = Field(default="eur", pattern=r"^[a-zA-Z]{3}$")
+    cancel_free_hours: Optional[int] = Field(default=None, ge=0, le=720)
+    cancel_late_fee_pct: Optional[int] = Field(default=None, ge=0, le=100)
+    no_show_fee_pct: Optional[int] = Field(default=None, ge=0, le=100)
 
 
 class ServiceUpdatePayload(BaseModel):
@@ -207,6 +252,9 @@ class ServiceUpdatePayload(BaseModel):
     payment_type: Optional[str] = Field(default=None, pattern=r"^(full|deposit|preauth)$")
     deposit_amount_cents: Optional[int] = Field(default=None, ge=0, le=10_000_000)
     currency: Optional[str] = Field(default=None, pattern=r"^[a-zA-Z]{3}$")
+    cancel_free_hours: Optional[int] = Field(default=None, ge=-1, le=720)
+    cancel_late_fee_pct: Optional[int] = Field(default=None, ge=-1, le=100)
+    no_show_fee_pct: Optional[int] = Field(default=None, ge=-1, le=100)
 
 
 class BookingPaymentActionPayload(BaseModel):

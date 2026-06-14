@@ -639,15 +639,20 @@ async def auth_create_service(
             """
             INSERT INTO services
             (cliente_id, slug, name, duration_minutes, price_cents, description, is_active, sort_order,
-             payment_mode, payment_type, deposit_amount_cents, currency, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             payment_mode, payment_type, deposit_amount_cents, currency,
+             cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 target_client_id, slug, name, int(data.duration_minutes), int(data.price_cents),
                 textnorm._sanitize_text(data.descripcion, allow_multiline=True),
                 1 if data.is_active else 0, int(data.sort_order),
                 data.payment_mode, data.payment_type, int(data.deposit_amount_cents),
-                data.currency.lower(), now, now,
+                data.currency.lower(),
+                None if data.cancel_free_hours is None else int(data.cancel_free_hours),
+                None if data.cancel_late_fee_pct is None else int(data.cancel_late_fee_pct),
+                None if data.no_show_fee_pct is None else int(data.no_show_fee_pct),
+                now, now,
             ),
         )
         connection.commit()
@@ -694,6 +699,15 @@ async def auth_update_service(
         updates["deposit_amount_cents"] = int(data.deposit_amount_cents)
     if data.currency is not None:
         updates["currency"] = data.currency.lower()
+    # Overrides de politica de cancelacion por servicio: -1 = reset a heredar (NULL).
+    for field_name, col in (
+        ("cancel_free_hours", "cancel_free_hours"),
+        ("cancel_late_fee_pct", "cancel_late_fee_pct"),
+        ("no_show_fee_pct", "no_show_fee_pct"),
+    ):
+        value = getattr(data, field_name)
+        if value is not None:
+            updates[col] = None if int(value) < 0 else int(value)
     if updates:
         updates["updated_at"] = timeutils._utc_now_iso()
         assignments = ", ".join(f"{col} = ?" for col in updates)
