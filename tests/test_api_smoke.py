@@ -1944,7 +1944,11 @@ def test_today_availability_hides_past_slots_and_rejects_past_booking(
     booking_cfg = api_module.CONFIG_CLIENTES["demo"]["booking"]
     previous_closed = list(booking_cfg.get("closed_weekdays", []))
     tz = api_module.ZoneInfo("Europe/Madrid")
+    # Fija "hoy" en un dia laborable (lunes-viernes) para que el horario por defecto
+    # (09:00) tenga manana abierta SIEMPRE; si no, el test era flaky en fin de semana.
     today = datetime.now(tz).date()
+    while today.weekday() >= 5:  # 5=sabado, 6=domingo
+        today += timedelta(days=1)
     fixed_now = datetime(today.year, today.month, today.day, 9, 15, tzinfo=tz)
     monkeypatch.setattr(api_module, "_utc_now", lambda: fixed_now.astimezone(api_module.timezone.utc))
     booking_cfg["closed_weekdays"] = []
