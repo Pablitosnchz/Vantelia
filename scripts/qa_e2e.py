@@ -387,6 +387,21 @@ if mb2.status_code == 200:
 chk("recordatorios: GET config", gp("/auth/app/reminders"))
 chk("recordatorios: PUT config", client.put("/auth/app/reminders", params=P, cookies=COOK,
     json={"call_fallback": False, "quiet_start": "21:00", "quiet_end": "09:00", "daily_call_cap": 20}), soft=(422,))
+
+# Seguimiento (flujo de confirmacion por plan)
+fu = gp("/auth/app/follow-up")
+chk("seguimiento: GET", fu)
+if fu.status_code == 200:
+    js = fu.json()
+    assert_true("seguimiento: 4 pasos (escalera)",
+                [s["key"] for s in js.get("steps", [])] == ["confirmed", "reminder_24h", "call", "reminder_2h"], str(js.get("steps")))
+    assert_true("seguimiento: email siempre disponible", js.get("channel_availability", {}).get("email") is True)
+chk("seguimiento: PUT", client.put("/auth/app/follow-up", params=P, cookies=COOK,
+    json={"email_confirm_button": True, "suppress_2h_if_confirmed": True, "call_enabled": False,
+          "call_hours_before": 5, "quiet_start": "21:00", "quiet_end": "09:00", "daily_call_cap": 20,
+          "message_template_channels": {"reminder_24h": {"email": True, "whatsapp": True, "sms": False}}}), soft=(422,))
+# Confirmacion 1-clic por email: token invalido -> 404
+chk("seguimiento: confirm token invalido -> 404", client.get("/booking/confirm/zzz-no-existe"), ok=(404,))
 if mb2.status_code == 200 and cbid:
     # Sin numero Twilio -> confirm-call debe dar 409 controlado (no romper).
     chk("recordatorios: confirm-call sin numero -> 409", client.post(f"/auth/bookings/{cbid}/confirm-call", cookies=COOK), ok=(409,), soft=(403,))

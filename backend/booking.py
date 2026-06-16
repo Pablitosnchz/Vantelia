@@ -374,6 +374,7 @@ def _booking_email_bodies(
     contact_phone: str,
     message_templates: Optional[Dict[str, str]] = None,
     extra_message: str = "",
+    confirm_url: str = "",
 ) -> Tuple[str, str]:
     service_name = booking_row["servicio"] or "Consulta"
     try:
@@ -397,17 +398,37 @@ def _booking_email_bodies(
         booking_code = (booking_row["booking_code"] or "").strip()
     except (KeyError, IndexError):
         booking_code = ""
+    show_confirm = bool(confirm_url) and status_key in ("confirmed", "reminder_24h")
     manage_line = f"\nGestiona tu cita aqui: {manage_url}\n" if manage_url else ""
-    manage_html = (
+    if show_confirm:
+        manage_line = (
+            f"\nConfirma tu asistencia: {confirm_url}\n"
+            + (f"Cancelar o cambiar la cita: {manage_url}\n" if manage_url else "")
+        )
+    confirm_button_html = (
         (
-            f'<p style="margin:20px 0;">'
+            f'<a href="{escape(confirm_url)}" '
+            f'style="display:inline-block;margin:0 8px 8px 0;padding:12px 20px;border-radius:12px;'
+            f'background:#16a34a;color:#ffffff;text-decoration:none;font-weight:700;">'
+            f'&#10003; Confirmar asistencia</a>'
+        )
+        if show_confirm
+        else ""
+    )
+    manage_button_label = "Cancelar o cambiar" if show_confirm else "Gestionar cita"
+    manage_button_html = (
+        (
             f'<a href="{escape(manage_url)}" '
-            f'style="display:inline-block;padding:12px 18px;border-radius:12px;'
+            f'style="display:inline-block;margin:0 8px 8px 0;padding:12px 18px;border-radius:12px;'
             f'background:#0b6b8a;color:#ffffff;text-decoration:none;font-weight:700;">'
-            f'Gestionar cita'
-            f"</a></p>"
+            f'{manage_button_label}</a>'
         )
         if manage_url
+        else ""
+    )
+    manage_html = (
+        f'<p style="margin:20px 0;">{confirm_button_html}{manage_button_html}</p>'
+        if (manage_button_html or confirm_button_html)
         else ""
     )
     contact_lines = []
@@ -515,6 +536,9 @@ def _booking_message_preview(
         schedule.message_templates = templates
     booking_row, context, manage_url = _booking_preview_context(cliente_id, schedule, request)
     subject = _booking_email_subject(kind, context["company_name"], booking_row)
+    preview_confirm_url = ""
+    if kind in ("confirmed", "reminder_24h") and _follow_up_config(cliente_id)["email_confirm_button"]:
+        preview_confirm_url = _booking_row_confirm_url(booking_row, request) or "https://app.vantelia.es/booking/confirm/preview"
     text_body, html_body = _booking_email_bodies(
         booking_row,
         context["company_name"],
@@ -523,6 +547,7 @@ def _booking_message_preview(
         context["contact_email"],
         context["contact_phone"],
         context["message_templates"],
+        confirm_url=preview_confirm_url,
     )
     return PortalMessagePreviewResponse(
         kind=kind,
@@ -546,6 +571,9 @@ def _send_booking_email(
     manage_url = _booking_row_manage_url(booking_row, request)
     contact_email = config.get("contacto", {}).get("email", "")
     contact_phone = config.get("contacto", {}).get("telefono", "")
+    confirm_url = ""
+    if status_key in ("confirmed", "reminder_24h") and _follow_up_config(booking_row["cliente_id"])["email_confirm_button"]:
+        confirm_url = _booking_row_confirm_url(booking_row, request)
     subject = _booking_email_subject(status_key, company_name, booking_row)
     text_body, html_body = _booking_email_bodies(
         booking_row,
@@ -556,6 +584,7 @@ def _send_booking_email(
         contact_phone,
         config.get("booking", {}).get("message_templates", {}),
         extra_message,
+        confirm_url=confirm_url,
     )
     emailing._send_email_message(
         booking_row["email"],
@@ -1103,6 +1132,65 @@ def _build_booking_manage_url(
     return f"{base_url}/booking/manage/{manage_token}{suffix}"
 
 
+def _build_booking_confirm_url(manage_token: str, request: Optional[Request] = None) -> str:
+    """Enlace 1-clic de confirmacion de asistencia por email (reusa manage_token)."""
+    if not manage_token:
+        return ""
+    base_url = textnorm._preferred_public_base_url(request)
+    if not base_url:
+        return ""
+    return f"{base_url}/booking/confirm/{manage_token}"
+
+
+def _booking_row_confirm_url(row: sqlite3.Row, request: Optional[Request] = None) -> str:
+    try:
+        token = row["manage_token"]
+    except (KeyError, IndexError):
+        return ""
+    return _build_booking_confirm_url(token, request)
+
+
+def _booking_confirm_result_page(company_name: str, *, state: str, when_text: str = "", manage_url: str = "") -> str:
+    """Pagina HTML autocontenida que ve el cliente al pulsar 'Confirmar' en el email."""
+    palette = {
+        "confirmed": ("#16a34a", "✓", "Asistencia confirmada",
+                      "Gracias, hemos registrado que asistiras a tu cita."),
+        "already": ("#16a34a", "✓", "Ya estaba confirmada",
+                    "Tu asistencia ya constaba como confirmada. No tienes que hacer nada mas."),
+        "cancelled": ("#b91c1c", "!", "Esta cita esta cancelada",
+                      "No es posible confirmar una cita cancelada."),
+        "invalid": ("#b91c1c", "!", "Enlace no valido",
+                    "Este enlace de confirmacion no es valido o ha caducado."),
+    }
+    color, icon, title, subtitle = palette.get(state, palette["invalid"])
+    when_html = (
+        f'<p style="margin:6px 0 0;color:#475569;font-size:15px;">{escape(when_text)}</p>'
+        if when_text else ""
+    )
+    manage_html = (
+        f'<a href="{escape(manage_url)}" style="display:inline-block;margin-top:22px;padding:11px 18px;'
+        f'border-radius:12px;background:#0b6b8a;color:#fff;text-decoration:none;font-weight:600;">'
+        f'Gestionar mi cita</a>'
+        if manage_url else ""
+    )
+    return (
+        f'<!doctype html><html lang="es"><head><meta charset="utf-8">'
+        f'<meta name="viewport" content="width=device-width,initial-scale=1">'
+        f'<title>{escape(title)}</title></head>'
+        f'<body style="margin:0;font-family:Arial,Helvetica,sans-serif;background:#f1f5f9;color:#0f172a;">'
+        f'<div style="max-width:460px;margin:8vh auto;padding:0 18px;">'
+        f'<div style="background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:34px 28px;text-align:center;'
+        f'box-shadow:0 18px 50px rgba(15,23,42,.08);">'
+        f'<div style="width:64px;height:64px;border-radius:50%;margin:0 auto 18px;display:flex;align-items:center;'
+        f'justify-content:center;background:{color}1a;color:{color};font-size:32px;font-weight:700;">{icon}</div>'
+        f'<h1 style="margin:0;font-size:22px;">{escape(title)}</h1>'
+        f'<p style="margin:10px 0 0;color:#475569;font-size:15px;line-height:1.5;">{escape(subtitle)}</p>'
+        f'{when_html}{manage_html}'
+        f'<p style="margin:26px 0 0;color:#94a3b8;font-size:13px;">{escape(company_name)}</p>'
+        f'</div></div></body></html>'
+    )
+
+
 def _record_booking_audit(
     booking_id: str,
     cliente_id: str,
@@ -1303,9 +1391,15 @@ def _booking_row_manage_url(
     return _build_booking_manage_url(row["manage_token"], request, viewer=viewer)
 
 
-def _serialize_booking_row(row: sqlite3.Row, request: Optional[Request] = None) -> Dict[str, Any]:
+def _serialize_booking_row(
+    row: sqlite3.Row,
+    request: Optional[Request] = None,
+    *,
+    service_meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     config = clients._get_client_config(row["cliente_id"])
-    service_meta = agenda._booking_display_service_meta(row, row["cliente_id"])
+    if service_meta is None:
+        service_meta = agenda._booking_display_service_meta(row, row["cliente_id"])
     return {
         "booking_id": row["id"],
         "cliente_id": row["cliente_id"],
@@ -1597,11 +1691,67 @@ def _booking_admin_summary_from_row(
     )
 
 
+_PAYMENT_UNSET = object()
+
+
+def _latest_payments_for_bookings(
+    cliente_id: str, booking_ids: List[str]
+) -> Dict[str, sqlite3.Row]:
+    """Ultimo customer_payment por booking_id en UNA query (batch para listados)."""
+    out: Dict[str, sqlite3.Row] = {}
+    ids = [bid for bid in booking_ids if bid]
+    if not cliente_id or not ids:
+        return out
+    with db._get_db_connection() as connection:
+        for start in range(0, len(ids), 400):
+            chunk = ids[start:start + 400]
+            placeholders = ",".join("?" for _ in chunk)
+            rows = connection.execute(
+                f"SELECT * FROM customer_payments WHERE cliente_id=? AND booking_id IN ({placeholders}) "
+                "ORDER BY created_at ASC",
+                (cliente_id, *chunk),
+            ).fetchall()
+            for payment in rows:
+                out[payment["booking_id"]] = payment  # ASC -> ultimo gana = mas reciente
+    return out
+
+
+def _portal_booking_summaries(
+    rows: List[sqlite3.Row],
+    request: Optional[Request] = None,
+    *,
+    cliente_id: str = "",
+) -> List[PortalBookingSummary]:
+    """Construye los resumenes de un listado prefetcheando servicio + pago en
+    batch (evita el N+1 de 2 conexiones SQLite por fila). Solo aplica el batch si
+    todas las filas son del mismo ``cliente_id``; si no, cae al per-row."""
+    if not rows:
+        return []
+    meta_index: Dict[str, Dict[str, Any]] = {}
+    payments_index: Dict[str, sqlite3.Row] = {}
+    if cliente_id:
+        meta_index = agenda._booking_service_meta_index(cliente_id, rows)
+        payments_index = _latest_payments_for_bookings(cliente_id, [row["id"] for row in rows])
+        return [
+            _portal_booking_summary_from_row(
+                row,
+                request,
+                service_meta=meta_index.get(row["id"]),
+                payment=payments_index.get(row["id"]),
+            )
+            for row in rows
+        ]
+    return [_portal_booking_summary_from_row(row, request) for row in rows]
+
+
 def _portal_booking_summary_from_row(
     row: sqlite3.Row,
     request: Optional[Request] = None,
+    *,
+    service_meta: Optional[Dict[str, Any]] = None,
+    payment: Any = _PAYMENT_UNSET,
 ) -> PortalBookingSummary:
-    data = _serialize_booking_row(row, request)
+    data = _serialize_booking_row(row, request, service_meta=service_meta)
     status_value = data["estado"]
     start_at_dt = timeutils._from_utc_iso(data["start_at"])
     is_past = bool(start_at_dt and start_at_dt < timeutils._utc_now())
@@ -1609,11 +1759,12 @@ def _portal_booking_summary_from_row(
     # La asistencia se marca en citas pasadas no canceladas; permite tambien
     # corregir una completada-auto -> no_show (o viceversa) despues.
     can_mark_attendance = status_value != "cancelled" and (is_past or status_value in {"completed", "no_show"})
-    with db._get_db_connection() as connection:
-        payment = connection.execute(
-            "SELECT * FROM customer_payments WHERE cliente_id=? AND booking_id=? ORDER BY created_at DESC LIMIT 1",
-            (row["cliente_id"], row["id"]),
-        ).fetchone()
+    if payment is _PAYMENT_UNSET:
+        with db._get_db_connection() as connection:
+            payment = connection.execute(
+                "SELECT * FROM customer_payments WHERE cliente_id=? AND booking_id=? ORDER BY created_at DESC LIMIT 1",
+                (row["cliente_id"], row["id"]),
+            ).fetchone()
     return PortalBookingSummary(
         booking_id=data["booking_id"],
         empresa=data["empresa"],
@@ -2424,9 +2575,9 @@ async def _send_booking_reminder_by_kind(
         )
         return
 
-    channels = textnorm._normalize_message_template_channels(
-        config.get("booking", {}).get("message_template_channels", {})
-    ).get(kind, {"email": True, "whatsapp": False, "sms": False})
+    channels = agenda._effective_followup_channels(booking_row["cliente_id"]).get(
+        kind, {"email": True, "whatsapp": False, "sms": False}
+    )
     availability = agenda._reminder_channel_availability(booking_row["cliente_id"])
     sent_channels: List[str] = []
     failed_channels: Dict[str, str] = {}
@@ -2523,8 +2674,53 @@ def _booking_due_for_reminder(row: sqlite3.Row, now_utc: datetime, hours_before:
     if not start_at or row["status"] != "confirmed":
         return False
     lower_bound = now_utc + timedelta(hours=hours_before)
-    upper_bound = lower_bound + timedelta(minutes=45)
+    # Banda tolerante a una pasada perdida del worker: cubre >= 2 intervalos para
+    # que un run retrasado no salte el recordatorio. No se ensancha hacia abajo
+    # (mantiene el anclaje ~24h, asi el texto "manana" sigue siendo correcto).
+    grace_minutes = max(45, settings.REMINDER_RUN_INTERVAL_MINUTES * 2)
+    upper_bound = lower_bound + timedelta(minutes=grace_minutes)
     return lower_bound <= start_at <= upper_bound
+
+
+def _bookings_due_for_reminders(now_utc: datetime, *, limit: int = 5000) -> List[sqlite3.Row]:
+    """Citas candidatas de Seguimiento (recordatorio 24h/2h Y llamada de confirmacion),
+    acotadas por FECHA (no por volumen total): confirmadas en la franja de los
+    proximos ~2 dias. El gate exacto de cada accion lo aplican despues
+    ``_booking_due_for_reminder`` / ``_call_due_for_booking``.
+
+    Sustituye al antiguo ``_list_booking_rows(limit=500)`` que, ordenado por fecha
+    ASC, en tenants con historico grande gastaba el cupo en citas viejas y nunca
+    alcanzaba las futuras -> 0 recordatorios y 0 llamadas. No filtra por
+    recordatorio-pendiente para que una cita ya recordada siga siendo candidata a
+    la llamada de escalado.
+    """
+    today = now_utc.date()
+    date_from = (today - timedelta(days=1)).isoformat()
+    date_to = (today + timedelta(days=2)).isoformat()
+    with db._get_db_connection() as connection:
+        return connection.execute(
+            """
+            SELECT * FROM bookings
+            WHERE status = 'confirmed'
+              AND booking_date >= ?
+              AND booking_date <= ?
+            ORDER BY booking_date ASC, booking_time ASC
+            LIMIT ?
+            """,
+            (date_from, date_to, limit),
+        ).fetchall()
+
+
+def _call_due_for_booking(row: sqlite3.Row, now_utc: datetime, hours_before: int) -> bool:
+    """True si la cita entra en la ventana de la llamada de confirmacion (escalado):
+    confirmada, futura y a <= ``hours_before`` (pero aun a mas de la ventana del 2h,
+    para no llamar pegado a la cita). El "solo si no confirmada" lo decide el caller."""
+    start_at = timeutils._from_utc_iso(row["start_at"])
+    if not start_at or row["status"] != "confirmed":
+        return False
+    hours_until = (start_at - now_utc).total_seconds() / 3600.0
+    floor = max(0, settings.REMINDER_2H_HOURS)
+    return floor < hours_until <= hours_before
 
 
 def _auto_complete_past_bookings() -> int:
@@ -2616,18 +2812,124 @@ def _auto_confirm_pending_bookings() -> int:
     return confirmed
 
 
-def _reminders_config(cliente_id: str) -> Dict[str, Any]:
-    """Config de llamadas de confirmacion del tenant (con defaults conservadores)."""
+def _follow_up_config(cliente_id: str) -> Dict[str, Any]:
+    """Config canonica del flujo de Seguimiento del tenant. Lee de config['reminders']
+    (clave historica) y resuelve los campos nuevos con defaults conservadores.
+    ``call_fallback`` se mantiene como alias de lectura/escritura de ``call_enabled``."""
     cfg = (appstate.CONFIG_CLIENTES.get(cliente_id) or {}).get("reminders") or {}
     try:
         cap = int(cfg.get("daily_call_cap") or 30)
     except (TypeError, ValueError):
         cap = 30
+    try:
+        call_hours = int(cfg.get("call_hours_before") or 5)
+    except (TypeError, ValueError):
+        call_hours = 5
+    # call_enabled es el nombre nuevo; call_fallback el historico. Si el tenant nunca
+    # lo guardo, default inteligente: ON solo si es Business CON numero de voz listo
+    # (sin numero la llamada nunca se coloca, asi que es inocuo).
+    if "call_enabled" in cfg or "call_fallback" in cfg:
+        call_enabled = bool(cfg.get("call_enabled", cfg.get("call_fallback", False)))
+    else:
+        voice_ready = bool(clients._plan_feature(cliente_id, "voice_enabled")) and bool(
+            (appstate.CONFIG_CLIENTES.get(cliente_id) or {}).get("voice", {}).get("twilio_phone_number")
+        )
+        call_enabled = voice_ready
     return {
-        "call_fallback": bool(cfg.get("call_fallback", False)),
+        "call_enabled": call_enabled,
+        "call_fallback": call_enabled,  # alias de compat (lectura)
+        "call_hours_before": max(1, min(24, call_hours)),
         "quiet_start": str(cfg.get("quiet_start") or "21:00"),
         "quiet_end": str(cfg.get("quiet_end") or "09:00"),
         "daily_call_cap": max(0, min(500, cap)),
+        "email_confirm_button": bool(cfg.get("email_confirm_button", True)),
+        "suppress_2h_if_confirmed": bool(cfg.get("suppress_2h_if_confirmed", True)),
+    }
+
+
+def _reminders_config(cliente_id: str) -> Dict[str, Any]:
+    """Compat: shape historico (call_fallback, quiet_start/end, daily_call_cap)."""
+    fu = _follow_up_config(cliente_id)
+    return {
+        "call_fallback": fu["call_fallback"],
+        "quiet_start": fu["quiet_start"],
+        "quiet_end": fu["quiet_end"],
+        "daily_call_cap": fu["daily_call_cap"],
+    }
+
+
+_FOLLOW_UP_STEP_DEFS = [
+    ("confirmed", "Confirmacion de la cita", "Al reservar", 0,
+     "Se envia al instante cuando el cliente reserva."),
+    ("reminder_24h", "Recordatorio 24 h", "24 h antes", 24,
+     "Recordatorio con opcion de confirmar o cancelar."),
+    ("call", "Llamada de confirmacion IA", "", 0,
+     "Solo si el cliente aun no ha confirmado por otros canales."),
+    ("reminder_2h", "Recordatorio 2 h", "2 h antes", 2,
+     "Ultimo aviso antes de la cita."),
+]
+
+
+def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
+    """Estado completo del Seguimiento para el portal: config + capacidades por plan +
+    flujo efectivo (pasos con canales activos/bloqueados). Fuente de verdad backend."""
+    fu = _follow_up_config(cliente_id)
+    plan = clients._client_plan(cliente_id)
+    plan_label = settings.PLAN_LIMITS.get(plan, {}).get("label", plan.title())
+    avail = agenda._reminder_channel_availability(cliente_id)
+    wa_plan = bool(clients._plan_feature(cliente_id, "whatsapp_enabled"))
+    voice_plan = bool(clients._plan_feature(cliente_id, "voice_enabled"))
+    wa_available = bool(avail["whatsapp"]["available"])
+    sms_available = bool(avail["sms"]["available"])
+    voice_number = bool((appstate.CONFIG_CLIENTES.get(cliente_id) or {}).get("voice", {}).get("twilio_phone_number"))
+    voice_available = voice_plan and voice_number
+    voice_reason = "Disponible." if voice_available else ("Requiere plan Business." if not voice_plan else "Conecta un numero en Asistente de voz.")
+    eff = agenda._effective_followup_channels(cliente_id)
+
+    def _msg_channels(kind: str) -> List[Dict[str, Any]]:
+        chs = eff.get(kind, {"email": True, "whatsapp": False, "sms": False})
+        wa_active = bool(chs.get("whatsapp")) and wa_available
+        return [
+            {"channel": "email", "label": "Email", "active": bool(chs.get("email")),
+             "available": True, "locked": False, "recommended": False, "plan_needed": "", "reason": "Disponible."},
+            {"channel": "whatsapp", "label": "WhatsApp", "active": wa_active,
+             "available": wa_available, "locked": not wa_plan, "plan_needed": "" if wa_plan else "Pro",
+             "recommended": wa_available and not wa_active and kind in ("confirmed", "reminder_24h"),
+             "reason": avail["whatsapp"]["reason"]},
+            {"channel": "sms", "label": "SMS", "active": bool(chs.get("sms")) and sms_available,
+             "available": sms_available, "locked": False, "recommended": False, "plan_needed": "", "reason": avail["sms"]["reason"]},
+        ]
+
+    steps: List[Dict[str, Any]] = []
+    for key, label, when, offset, note in _FOLLOW_UP_STEP_DEFS:
+        if key == "call":
+            when = f"{fu['call_hours_before']} h antes"
+            offset = int(fu["call_hours_before"])
+            channels = [{
+                "channel": "call", "label": "Llamada IA",
+                "active": bool(fu["call_enabled"]) and voice_available,
+                "available": voice_available, "locked": not voice_plan,
+                "plan_needed": "" if voice_plan else "Business", "reason": voice_reason,
+            }]
+        else:
+            channels = _msg_channels(key)
+        steps.append({"key": key, "label": label, "when": when, "offset_hours": offset,
+                      "channels": channels, "note": note})
+
+    return {
+        "plan": plan, "plan_label": plan_label,
+        "whatsapp_available": wa_available, "voice_available": voice_available,
+        "channel_availability": {
+            "email": True, "whatsapp": wa_available, "sms": sms_available, "voice": voice_available,
+            "whatsapp_reason": avail["whatsapp"]["reason"], "sms_reason": avail["sms"]["reason"],
+            "voice_reason": voice_reason,
+        },
+        "call_enabled": fu["call_enabled"], "call_hours_before": fu["call_hours_before"],
+        "quiet_start": fu["quiet_start"], "quiet_end": fu["quiet_end"],
+        "daily_call_cap": fu["daily_call_cap"],
+        "email_confirm_button": fu["email_confirm_button"],
+        "suppress_2h_if_confirmed": fu["suppress_2h_if_confirmed"],
+        "steps": steps,
     }
 
 
@@ -2681,7 +2983,7 @@ def _reminder_calls_ok_now(cliente_id: str, rcfg: Optional[Dict[str, Any]] = Non
 async def _run_booking_reminders(request: Optional[Request] = None) -> AdminReminderRunResult:
     now_utc = timeutils._utc_now()
     _auto_confirm_pending_bookings()
-    rows, _ = _list_booking_rows(limit=500)
+    rows = _bookings_due_for_reminders(now_utc)
     processed = 0
     sent_24h = 0
     sent_2h = 0
@@ -2689,6 +2991,7 @@ async def _run_booking_reminders(request: Optional[Request] = None) -> AdminRemi
 
     for row in rows:
         processed += 1
+        fu = _follow_up_config(row["cliente_id"])
         try:
             if not row["reminder_24h_sent_at"] and _booking_due_for_reminder(row, now_utc, settings.REMINDER_24H_HOURS):
                 await _send_booking_reminder_by_kind(
@@ -2698,32 +3001,41 @@ async def _run_booking_reminders(request: Optional[Request] = None) -> AdminRemi
                     sent_column="reminder_24h_sent_at",
                 )
                 sent_24h += 1
-                # Fallback opt-in: llamada de confirmacion por IA si el negocio lo activo,
-                # la cita no esta confirmada y estamos en horario permitido + bajo el cap.
-                try:
-                    rcfg = _reminders_config(row["cliente_id"])
-                    if (
-                        rcfg["call_fallback"]
-                        and not _booking_confirmed_by_customer(row["id"])
-                        and not _confirm_call_already_placed(row["id"])
-                        and _reminder_calls_ok_now(row["cliente_id"], rcfg)
-                    ):
-                        from backend import voice as _voice  # late import: evita circular
-                        await timeutils._to_thread(
-                            _voice._voice_place_outbound_call, row["cliente_id"], row, purpose="confirm"
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    settings.logger.error("Fallback de llamada fallo %s: %s", row["id"], exc)
-                continue
+            elif not row["reminder_2h_sent_at"] and _booking_due_for_reminder(row, now_utc, settings.REMINDER_2H_HOURS):
+                # Escalera: no molestar con el 2h a quien ya confirmo (opt-in).
+                if fu["suppress_2h_if_confirmed"] and _booking_confirmed_by_customer(row["id"]):
+                    _mark_booking_email_result(
+                        row["id"], status="skipped:confirmed", sent_column="reminder_2h_sent_at", error="",
+                    )
+                    _record_booking_audit(
+                        row["id"], row["cliente_id"], "booking_email_skipped",
+                        {"kind": "reminder_2h", "reason": "already_confirmed"},
+                    )
+                else:
+                    await _send_booking_reminder_by_kind(
+                        row,
+                        "reminder_2h",
+                        request,
+                        sent_column="reminder_2h_sent_at",
+                    )
+                    sent_2h += 1
 
-            if not row["reminder_2h_sent_at"] and _booking_due_for_reminder(row, now_utc, settings.REMINDER_2H_HOURS):
-                await _send_booking_reminder_by_kind(
-                    row,
-                    "reminder_2h",
-                    request,
-                    sent_column="reminder_2h_sent_at",
-                )
-                sent_2h += 1
+            # Llamada IA como ULTIMO escalon (T-call_hours_before), independiente de los
+            # recordatorios y SOLO si el cliente sigue sin confirmar. Opt-in + Business.
+            if (
+                fu["call_enabled"]
+                and _call_due_for_booking(row, now_utc, fu["call_hours_before"])
+                and not _booking_confirmed_by_customer(row["id"])
+                and not _confirm_call_already_placed(row["id"])
+                and _reminder_calls_ok_now(row["cliente_id"])
+            ):
+                try:
+                    from backend import voice as _voice  # late import: evita circular
+                    await timeutils._to_thread(
+                        _voice._voice_place_outbound_call, row["cliente_id"], row, purpose="confirm"
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    settings.logger.error("Llamada de confirmacion fallo %s: %s", row["id"], exc)
         except Exception as exc:  # noqa: BLE001
             failed += 1
             settings.logger.error("No se ha podido enviar recordatorio de %s: %s", row["id"], exc)

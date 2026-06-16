@@ -1087,6 +1087,52 @@
     .vdialog-policy .vp-refund { color: var(--success); font-weight: 700; }
     .vdialog-policy .vp-note { color: var(--soft-2); font-size: 0.8rem; margin-top: 6px; }
 
+    /* ===== Seguimiento (escalera de confirmación) ===== */
+    .fu-plan-badge { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px;
+      font-size:0.74rem; font-weight:700; letter-spacing:.03em; text-transform:uppercase;
+      color:var(--accent); background:var(--accent-soft); border:1px solid var(--accent); white-space:nowrap; }
+    .fu-timeline { position:relative; display:flex; flex-direction:column; gap:0; }
+    .fu-step { position:relative; display:flex; gap:16px; padding:0 0 22px 0; }
+    .fu-step:last-child { padding-bottom:0; }
+    .fu-step-rail { position:relative; flex:0 0 36px; display:flex; flex-direction:column; align-items:center; }
+    .fu-dot { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+      font-size:0.78rem; font-weight:700; color:var(--accent); background:var(--accent-soft);
+      border:1.5px solid var(--accent); z-index:1; }
+    .fu-step.fu-muted .fu-dot { color:var(--soft-2); background:rgba(255,255,255,0.03); border-color:var(--line); }
+    .fu-line { position:absolute; top:36px; bottom:-2px; width:2px; background:linear-gradient(var(--accent), var(--line)); opacity:.5; }
+    .fu-step:last-child .fu-line { display:none; }
+    .fu-step-body { flex:1; min-width:0; border:1px solid var(--line); border-radius:14px; padding:14px 16px;
+      background:rgba(7,16,31,0.4); }
+    .fu-step.fu-muted .fu-step-body { opacity:.72; }
+    .fu-step-head { display:flex; justify-content:space-between; gap:10px; align-items:baseline; flex-wrap:wrap; }
+    .fu-step-when { font-size:0.74rem; font-weight:700; color:var(--accent-2); text-transform:uppercase; letter-spacing:.04em; }
+    .fu-step-title { font-weight:700; color:var(--text); margin:2px 0 0; }
+    .fu-step-note { font-size:0.78rem; color:var(--soft-2); margin:4px 0 0; }
+    .fu-chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    .fu-chip { display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:9px;
+      border:1px solid var(--line); background:rgba(255,255,255,0.03); color:var(--soft); cursor:pointer;
+      font-size:0.82rem; user-select:none; transition:all .12s ease; }
+    .fu-chip:hover { border-color:var(--accent); }
+    .fu-chip.fu-on { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); font-weight:600; }
+    .fu-chip.fu-locked { cursor:not-allowed; opacity:.6; border-style:dashed; }
+    .fu-chip.fu-locked:hover { border-color:var(--line); }
+    .fu-chip input { display:none; }
+    .fu-chip .fu-ico { font-size:0.9rem; }
+    .fu-lock-badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.66rem; font-weight:700;
+      text-transform:uppercase; letter-spacing:.03em; color:#fde68a; background:rgba(245,158,11,0.12);
+      border:1px solid rgba(245,158,11,0.4); }
+    .fu-rec-badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.64rem; font-weight:700;
+      text-transform:uppercase; letter-spacing:.03em; color:var(--accent-2); background:rgba(0,177,217,0.1);
+      border:1px solid rgba(0,177,217,0.35); }
+    .fu-chip.fu-rec { border-color:rgba(0,177,217,0.45); border-style:dashed; }
+    .fu-settings { border-top:1px solid var(--line); margin-top:20px; padding-top:18px; }
+    .fu-h3 { font-family:var(--font-title); font-size:0.98rem; margin:0 0 14px; }
+    .fu-switch { display:flex; align-items:flex-start; gap:11px; margin:0 0 12px; padding:12px 14px;
+      border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.4); }
+    .fu-switch input { margin-top:3px; }
+    .fu-call-block { border:1px dashed var(--line); border-radius:12px; padding:12px 14px; margin-top:4px; }
+    .fu-call-block.fu-disabled { opacity:.55; }
+
     /* Respeta la preferencia de menos movimiento */
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
@@ -1170,8 +1216,8 @@
     <span>Horarios</span>
   </div>
   <div class="nav-item" data-tab="mensajes">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-    <span>Recordatorios</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <span>Seguimiento</span>
   </div>
 
   <div class="sidebar-divider"></div>
@@ -2410,33 +2456,61 @@
   <section class="page page-agenda-wrap" id="page-mensajes">
     <div class="agenda-blocked-overlay" id="overlayMensajes">
       <strong>Sección desactivada</strong>
-      <p>Activa las citas para personalizar recordatorios y avisos.</p>
+      <p>Activa las citas para configurar el seguimiento del cliente.</p>
       <button class="btn btn-primary" onclick="setTab('citas')">Ir a Citas</button>
     </div>
-    <div class="panel-card">
-      <h2>Recordatorios y avisos</h2>
-      <p class="panel-sub">Personaliza los avisos de agenda y elige si cada uno se envía por email, WhatsApp o SMS.</p>
-      <div id="mensajesAccordions" style="margin-top:14px;"></div>
-      <div style="margin-top:18px;">
-        <button class="btn btn-primary" id="mensajesGuardarBtn">Guardar avisos</button>
+
+    <!-- SEGUIMIENTO: escalera de confirmación por plan -->
+    <div class="panel-card" id="followUpCard">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0;">Seguimiento del cliente</h2>
+          <p class="panel-sub" style="margin:6px 0 0;">El camino de contacto desde que el cliente reserva hasta su cita. Cada paso escala solo si <b>no ha confirmado</b> antes. Email siempre; WhatsApp y llamada según tu plan.</p>
+        </div>
+        <span id="fuPlanBadge" class="fu-plan-badge">—</span>
+      </div>
+      <div id="fuTimeline" class="fu-timeline" style="margin-top:20px;">
+        <div class="panel-sub">Cargando…</div>
+      </div>
+
+      <div class="fu-settings" id="fuSettings" style="margin-top:8px;">
+        <h3 class="fu-h3">Ajustes del seguimiento</h3>
+        <label class="fu-switch">
+          <input type="checkbox" id="fuEmailConfirm" />
+          <span><b>Botón “Confirmar asistencia” en el email</b><br><span class="panel-sub" style="margin:0;">El cliente confirma con 1 clic desde el correo. Reduce ausencias. Recomendado.</span></span>
+        </label>
+        <label class="fu-switch">
+          <input type="checkbox" id="fuSuppress2h" />
+          <span><b>No enviar el aviso de 2 h si ya confirmó</b><br><span class="panel-sub" style="margin:0;">Evita molestar a quien ya dijo que viene.</span></span>
+        </label>
+        <div class="fu-call-block" id="fuCallBlock">
+          <label class="fu-switch">
+            <input type="checkbox" id="fuCallEnabled" />
+            <span><b>Llamada de confirmación por IA</b> <span class="fu-lock-badge" id="fuCallLock" style="display:none;">Business</span><br><span class="panel-sub" style="margin:0;">Llama automáticamente unas horas antes solo si el cliente no ha confirmado. Tiene coste por llamada.</span></span>
+          </label>
+          <div class="form-row" id="fuCallParams">
+            <div class="field"><label class="field-label">Horas antes de llamar</label><input class="field-input" id="fuCallHours" type="number" min="1" max="24" step="1" /></div>
+            <div class="field"><label class="field-label">No llamar desde</label><input class="field-input" id="fuQuietStart" type="time" /></div>
+            <div class="field"><label class="field-label">No llamar hasta</label><input class="field-input" id="fuQuietEnd" type="time" /></div>
+            <div class="field"><label class="field-label">Máx. llamadas/día</label><input class="field-input" id="fuDailyCap" type="number" min="0" max="500" step="1" /></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:18px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+        <button class="btn btn-primary" id="fuSaveBtn" type="button">Guardar seguimiento</button>
+        <button class="btn btn-ghost" id="fuPreviewBtn" type="button">👁 Vista del cliente</button>
+        <span class="panel-sub" id="fuUpsell" style="margin:0; display:none;"></span>
       </div>
     </div>
 
-    <div class="panel-card" id="remindersCallCard" style="margin-top:18px;">
-      <h2>📞 Llamadas de confirmación por IA</h2>
-      <p class="panel-sub">La IA puede llamar al cliente para confirmar su cita. Manual siempre disponible desde el detalle de cita. Aquí activas la llamada <b>automática 24h antes</b> solo si el cliente no ha confirmado por otros canales. Requiere asistente de voz + número, y tiene coste por llamada.</p>
-      <div id="remCallNotice" class="panel-sub" style="display:none; margin:10px 0; padding:12px; border:1px solid rgba(245,158,11,0.35); border-radius:10px; background:rgba(245,158,11,0.08); color:#fde68a;">Activa el asistente de voz y conecta un número en la pestaña <b>Asistente de voz</b> para poder llamar.</div>
-      <label style="display:flex; align-items:center; gap:10px; margin-top:8px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.4);">
-        <input type="checkbox" id="remCallFallback" />
-        <span><b>Llamada automática 24h antes</b><br><span class="panel-sub" style="margin:0;">Solo si la cita no está confirmada por WhatsApp/email.</span></span>
-      </label>
-      <div class="form-row">
-        <div class="field"><label class="field-label">No llamar desde</label><input class="field-input" id="remQuietStart" type="time" /></div>
-        <div class="field"><label class="field-label">No llamar hasta</label><input class="field-input" id="remQuietEnd" type="time" /></div>
-        <div class="field"><label class="field-label">Máx. llamadas/día</label><input class="field-input" id="remDailyCap" type="number" min="0" max="500" step="1" /></div>
-      </div>
-      <div style="margin-top:14px;">
-        <button class="btn btn-primary" id="remSaveBtn" type="button">Guardar llamadas</button>
+    <!-- Editor de textos de cada aviso (se mantiene) -->
+    <div class="panel-card" style="margin-top:18px;">
+      <h2>Textos de los avisos</h2>
+      <p class="panel-sub">Personaliza el texto de cada mensaje. Los canales (Email/WhatsApp/SMS) se configuran arriba, en el seguimiento.</p>
+      <div id="mensajesAccordions" style="margin-top:14px;"></div>
+      <div style="margin-top:18px;">
+        <button class="btn btn-primary" id="mensajesGuardarBtn">Guardar textos</button>
       </div>
     </div>
   </section>
@@ -3112,7 +3186,7 @@ function setTab(tab) {
     appearance:'Apariencia', payments:'Cobros Stripe', billing:'Suscripción',
     citas:'Citas', clientes:'Clientes', equipo:'Equipo', servicios:'Servicios', horarios:'Horarios',
     canales:'Canales de envio', ventas:'Ventas', informes:'Informes',
-    mensajes:'Recordatorios y avisos', instalacion:'Instalación', cuenta:'Cuenta',
+    mensajes:'Seguimiento', instalacion:'Instalación', cuenta:'Cuenta',
   };
   document.getElementById('pageTitle').textContent = titles[tab] || 'Panel';
   if (tab === 'chats')      loadChats();
@@ -3128,7 +3202,7 @@ function setTab(tab) {
   if (tab === 'equipo')     loadEquipo();
   if (tab === 'servicios')  loadServicios();
   if (tab === 'horarios')   loadHorarios();
-  if (tab === 'mensajes')   { loadMensajes(); loadReminders(); }
+  if (tab === 'mensajes')   { loadMensajes(); loadFollowUp(); }
   if (tab === 'instalacion') loadInstalacion();
   if (tab === 'cuenta')     { loadCuenta(); loadAccessTeam(); loadRebookingAi(); loadCancellationPolicy(); }
   if (tab === 'ventas')     loadVentas();
@@ -8008,28 +8082,135 @@ async function loadMensajes() {
   } catch(e) { toast(e.message, 'error'); }
 }
 
-async function loadReminders() {
-  const card = document.getElementById('remindersCallCard'); if (!card) return;
+// ── SEGUIMIENTO (escalera de confirmación) ──────────────────────────────
+let followUpState = null;        // último GET /auth/app/follow-up
+let fuChannelEdits = {};         // kind -> {email,whatsapp,sms} ediciones locales
+const FU_CH_ICON = { email:'✉', whatsapp:'🟢', sms:'💬', call:'📞' };
+
+async function loadFollowUp() {
+  const card = document.getElementById('followUpCard'); if (!card) return;
   try {
-    const r = await api('/auth/app/reminders');
-    document.getElementById('remCallFallback').checked = !!r.call_fallback;
-    document.getElementById('remQuietStart').value = r.quiet_start || '21:00';
-    document.getElementById('remQuietEnd').value = r.quiet_end || '09:00';
-    document.getElementById('remDailyCap').value = r.daily_call_cap != null ? r.daily_call_cap : 30;
-    document.getElementById('remCallNotice').style.display = r.voice_call_available ? 'none' : '';
+    const data = await api('/auth/app/follow-up');
+    followUpState = data;
+    fuChannelEdits = {};
+    renderFollowUp(data);
   } catch (e) {}
 }
-document.getElementById('remSaveBtn')?.addEventListener('click', async () => {
+
+function fuEffectiveChannels(kind) {
+  if (fuChannelEdits[kind]) return fuChannelEdits[kind];
+  const step = (followUpState && followUpState.steps || []).find(s => s.key === kind);
+  const out = {};
+  ((step && step.channels) || []).forEach(c => { out[c.channel] = c.active; });
+  return out;
+}
+
+function fuToggleCallBlock() {
+  const cb = document.getElementById('fuCallEnabled');
+  const on = cb.checked && !cb.disabled;
+  document.getElementById('fuCallBlock').classList.toggle('fu-disabled', !on);
+}
+
+function renderFollowUp(data) {
+  document.getElementById('fuPlanBadge').textContent = 'Plan ' + (data.plan_label || data.plan || '');
+  document.getElementById('fuEmailConfirm').checked = !!data.email_confirm_button;
+  document.getElementById('fuSuppress2h').checked = !!data.suppress_2h_if_confirmed;
+  const callOn = document.getElementById('fuCallEnabled');
+  callOn.checked = !!data.call_enabled;
+  callOn.disabled = !data.voice_available;
+  document.getElementById('fuCallLock').style.display = data.voice_available ? 'none' : 'inline-block';
+  document.getElementById('fuCallHours').value = data.call_hours_before != null ? data.call_hours_before : 5;
+  document.getElementById('fuQuietStart').value = data.quiet_start || '21:00';
+  document.getElementById('fuQuietEnd').value = data.quiet_end || '09:00';
+  document.getElementById('fuDailyCap').value = data.daily_call_cap != null ? data.daily_call_cap : 30;
+  fuToggleCallBlock();
+
+  const tl = document.getElementById('fuTimeline');
+  tl.innerHTML = (data.steps || []).map(step => {
+    const anyActive = (step.channels || []).some(c => c.active);
+    const chips = (step.channels || []).map(c => {
+      const cls = 'fu-chip' + (c.active ? ' fu-on' : '') + (c.locked ? ' fu-locked' : '') + (c.recommended ? ' fu-rec' : '');
+      const lockBadge = c.locked && c.plan_needed ? `<span class="fu-lock-badge">${escapeHtml(c.plan_needed)}</span>` : '';
+      const recBadge = (c.recommended && !c.locked) ? `<span class="fu-rec-badge">Recomendado</span>` : '';
+      const title = c.locked ? escapeHtml(c.reason || ('Disponible en ' + c.plan_needed)) : (c.recommended ? 'Recomendado para reducir ausencias' : '');
+      return `<label class="${cls}" title="${title}" data-kind="${step.key}" data-channel="${c.channel}">
+        <span class="fu-ico">${FU_CH_ICON[c.channel]||''}</span>${escapeHtml(c.label)} ${lockBadge}${recBadge}</label>`;
+    }).join('');
+    const dot = (step.when.replace(/[^0-9]/g,'') || '✓');
+    return `<div class="fu-step ${anyActive?'':'fu-muted'}">
+      <div class="fu-step-rail"><div class="fu-dot">${dot}</div><div class="fu-line"></div></div>
+      <div class="fu-step-body">
+        <div class="fu-step-head"><span class="fu-step-when">${escapeHtml(step.when)}</span></div>
+        <div class="fu-step-title">${escapeHtml(step.label)}</div>
+        <div class="fu-step-note">${escapeHtml(step.note||'')}</div>
+        <div class="fu-chips">${chips}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  tl.querySelectorAll('.fu-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const kind = chip.dataset.kind, channel = chip.dataset.channel;
+      if (channel === 'call') { document.getElementById('fuCallEnabled').focus(); return; }
+      if (chip.classList.contains('fu-locked')) { toast('Disponible en un plan superior.', 'error'); return; }
+      const cur = fuEffectiveChannels(kind);
+      fuChannelEdits[kind] = Object.assign({}, cur, { [channel]: !cur[channel] });
+      chip.classList.toggle('fu-on');
+      const stepEl = chip.closest('.fu-step');
+      if (stepEl) stepEl.classList.toggle('fu-muted', !stepEl.querySelector('.fu-chip.fu-on'));
+    });
+  });
+}
+
+document.getElementById('fuCallEnabled')?.addEventListener('change', fuToggleCallBlock);
+
+document.getElementById('fuSaveBtn')?.addEventListener('click', async () => {
+  const channels = {};
+  (followUpState && followUpState.steps || []).forEach(step => {
+    if (step.key === 'call') return;
+    channels[step.key] = fuEffectiveChannels(step.key);
+  });
+  const callCb = document.getElementById('fuCallEnabled');
   const body = {
-    call_fallback: document.getElementById('remCallFallback').checked,
-    quiet_start: document.getElementById('remQuietStart').value || '21:00',
-    quiet_end: document.getElementById('remQuietEnd').value || '09:00',
-    daily_call_cap: parseInt(document.getElementById('remDailyCap').value, 10) || 0,
+    email_confirm_button: document.getElementById('fuEmailConfirm').checked,
+    suppress_2h_if_confirmed: document.getElementById('fuSuppress2h').checked,
+    call_enabled: callCb.checked && !callCb.disabled,
+    call_hours_before: parseInt(document.getElementById('fuCallHours').value, 10) || 5,
+    quiet_start: document.getElementById('fuQuietStart').value || '21:00',
+    quiet_end: document.getElementById('fuQuietEnd').value || '09:00',
+    daily_call_cap: parseInt(document.getElementById('fuDailyCap').value, 10) || 0,
+    message_template_channels: channels,
   };
-  try { await api('/auth/app/reminders', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    toast('Llamadas guardadas.', 'success'); loadReminders();
+  try {
+    await api('/auth/app/follow-up', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    toast('Seguimiento guardado.', 'success');
+    loadFollowUp();
   } catch (e) { toast(e.message, 'error'); }
 });
+
+document.getElementById('fuPreviewBtn')?.addEventListener('click', async () => {
+  try {
+    const r = await api('/auth/schedule/message-preview', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ kind:'reminder_24h' }) });
+    fuShowPreview(r);
+  } catch (e) { toast(e.message, 'error'); }
+});
+
+function fuShowPreview(r) {
+  const html = (r.html_body || '').trim();
+  const inner = html || ('<pre style="padding:18px;white-space:pre-wrap;color:#0f172a;font-family:Arial,sans-serif;">'+escapeHtml(r.text_body||'')+'</pre>');
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(2,8,20,.7);backdrop-filter:blur(4px);';
+  wrap.innerHTML = `<div style="max-width:680px;width:100%;max-height:86vh;overflow:auto;background:#fff;border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.5);">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #e2e8f0;background:#f8fafc;">
+        <strong style="color:#0f172a;font-family:Arial,sans-serif;">Vista del cliente · ${escapeHtml(r.subject||'Email')}</strong>
+        <button class="btn btn-ghost" id="fuPvClose" type="button">Cerrar</button>
+      </div>
+      <div>${inner}</div>
+    </div>`;
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  document.body.appendChild(wrap);
+  document.getElementById('fuPvClose').addEventListener('click', () => wrap.remove());
+}
 
 function msgBackendKey(key) {
   return ({
@@ -8044,19 +8225,13 @@ function msgBackendKey(key) {
 function buildMensajesPayload() {
   const message_templates = {};
   const message_template_enabled = {};
-  const message_template_channels = {};
   MSG_TEMPLATES.forEach(tpl => {
     const key = msgBackendKey(tpl.key);
     message_templates[key] = document.querySelector(`.msg-content[data-key="${tpl.key}"]`)?.value || mensajesData[key] || '';
     message_template_enabled[key] = !!(document.querySelector(`.msg-enabled[data-key="${tpl.key}"]`)?.checked);
-    if (tpl.channels) {
-      message_template_channels[key] = {};
-      ['email', 'whatsapp', 'sms'].forEach(channel => {
-        const input = document.querySelector(`.msg-channel[data-key="${tpl.key}"][data-channel="${channel}"]`);
-        message_template_channels[key][channel] = !!(input && input.checked && !input.disabled);
-      });
-    }
   });
+  // Los canales por aviso los gestiona la sección Seguimiento (timeline). Aquí
+  // solo se guardan textos + activación, sin pisar message_template_channels.
   return {
     enabled: mensajesSchedule.enabled !== false,
     timezone: mensajesSchedule.timezone || 'Europe/Madrid',
@@ -8069,7 +8244,6 @@ function buildMensajesPayload() {
     closed_weekdays: mensajesSchedule.closed_weekdays || mensajesSchedule.closed_days || [],
     message_templates,
     message_template_enabled,
-    message_template_channels,
   };
 }
 
@@ -8078,6 +8252,9 @@ function msgChannelMeta(channel) {
 }
 
 function renderMsgChannels(tpl, key) {
+  // Los canales se gestionan en la sección Seguimiento (timeline). Aquí solo texto.
+  return '';
+  /* eslint-disable no-unreachable */
   if (!tpl.channels) return '';
   const saved = mensajesChannels[key] || {};
   const parts = [

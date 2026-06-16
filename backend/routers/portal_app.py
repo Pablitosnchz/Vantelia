@@ -242,7 +242,7 @@ async def auth_bookings(
         scope=normalized_scope,
     )
     return PortalBookingsResponse(
-        items=[booking._portal_booking_summary_from_row(row, request) for row in rows],
+        items=booking._portal_booking_summaries(rows, request, cliente_id=target_client_id),
         total=total,
         limit=effective_limit,
         offset=max(0, offset),
@@ -1223,6 +1223,57 @@ async def app_reminders_put(
     vcfg = (appstate.CONFIG_CLIENTES.get(target) or {}).get("voice") or {}
     available = bool(vcfg.get("twilio_phone_number") and voice._client_voice_plan_enabled(target))
     return ReminderConfigResponse(voice_call_available=available, **rcfg)
+
+
+@app.get("/auth/app/follow-up", response_model=FollowUpResponse)
+async def app_follow_up_get(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> FollowUpResponse:
+    """Estado del Seguimiento: config + capacidades por plan + flujo efectivo."""
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    return FollowUpResponse(**booking._follow_up_overview_dict(target))
+
+
+@app.put("/auth/app/follow-up", response_model=FollowUpResponse)
+async def app_follow_up_put(
+    data: FollowUpPayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> FollowUpResponse:
+    """Guarda el flujo de Seguimiento (escalera de confirmacion). manager+."""
+    security._require_portal_min_role(user, "manager")
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    with appstate.state_lock:
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+        cfg = next_configs.get(target, {})
+        rem = dict(cfg.get("reminders", {}) or {})
+        if data.call_enabled is not None:
+            rem["call_enabled"] = bool(data.call_enabled)
+            rem["call_fallback"] = bool(data.call_enabled)  # alias historico sincronizado
+        if data.call_hours_before is not None:
+            rem["call_hours_before"] = max(1, min(24, int(data.call_hours_before)))
+        if data.quiet_start is not None:
+            rem["quiet_start"] = textnorm._sanitize_text(data.quiet_start)[:5] or "21:00"
+        if data.quiet_end is not None:
+            rem["quiet_end"] = textnorm._sanitize_text(data.quiet_end)[:5] or "09:00"
+        if data.daily_call_cap is not None:
+            rem["daily_call_cap"] = max(0, min(500, int(data.daily_call_cap)))
+        if data.email_confirm_button is not None:
+            rem["email_confirm_button"] = bool(data.email_confirm_button)
+        if data.suppress_2h_if_confirmed is not None:
+            rem["suppress_2h_if_confirmed"] = bool(data.suppress_2h_if_confirmed)
+        cfg["reminders"] = rem
+        if data.message_template_channels is not None:
+            booking_cfg = dict(cfg.get("booking", {}) or {})
+            booking_cfg["message_template_channels"] = textnorm._normalize_message_template_channels(
+                data.message_template_channels
+            )
+            cfg["booking"] = booking_cfg
+        next_configs[target] = cfg
+        clients._update_runtime_configs(next_configs)
+    clients._persist_configs_to_disk(next_configs)
+    return FollowUpResponse(**booking._follow_up_overview_dict(target))
 
 
 @app.post("/auth/bookings/{booking_id}/confirm-call", response_model=BookingActionResponse)

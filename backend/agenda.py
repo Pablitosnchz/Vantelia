@@ -763,6 +763,29 @@ def _reminder_channel_availability(cliente_id: str) -> Dict[str, Dict[str, Any]]
     }
 
 
+def _effective_followup_channels(cliente_id: str) -> Dict[str, Dict[str, bool]]:
+    """Canales efectivos por aviso (Seguimiento), tal y como el tenant los tiene
+    guardados. Es la fuente que usa el motor de envio: nunca activa un canal nuevo
+    por su cuenta (sin sorpresas de coste). La recomendacion de activar WhatsApp en
+    pro/business se expone aparte en el overview (campo ``recommended``) para que el
+    negocio la confirme con un guardado."""
+    booking_cfg = (clients._get_client_config(cliente_id).get("booking", {}) or {})
+    return textnorm._normalize_message_template_channels(
+        booking_cfg.get("message_template_channels") or {}
+    )
+
+
+def _followup_channel_recommended(cliente_id: str, kind: str, channel: str) -> bool:
+    """True si conviene sugerir (sin activar) un canal para este aviso segun el plan:
+    WhatsApp en 'confirmed'/'reminder_24h' cuando esta disponible y aun no activo."""
+    if channel != "whatsapp" or kind not in ("confirmed", "reminder_24h"):
+        return False
+    if not _reminder_channel_availability(cliente_id).get("whatsapp", {}).get("available"):
+        return False
+    current = _effective_followup_channels(cliente_id).get(kind, {})
+    return not bool(current.get("whatsapp"))
+
+
 def _portal_schedule_from_config(cliente_id: str) -> PortalSchedulePublic:
     config = clients._get_client_config(cliente_id)
     booking_row = config["booking"]
@@ -2227,6 +2250,62 @@ def _booking_display_service_meta(row: sqlite3.Row, cliente_id: str) -> Dict[str
         "service_price_cents": price_cents,
         "service_price_label": textnorm._format_price_cents(price_cents),
     }
+
+
+def _booking_service_meta_index(
+    cliente_id: str, rows: List[sqlite3.Row]
+) -> Dict[str, Dict[str, Any]]:
+    """Version BATCH de ``_booking_display_service_meta`` para listados grandes.
+
+    Carga el catalogo de servicios UNA vez y resuelve la meta de cada cita en
+    memoria (replicando la logica de ``_booking_catalog_service_row``: por slug y
+    si no por nombre normalizado), evitando 1-2 conexiones SQLite por fila. El
+    resultado es identico al per-row salvo en el ``fallback`` (servicio no
+    catalogado), que es poco frecuente.
+    """
+    out: Dict[str, Dict[str, Any]] = {}
+    if not rows:
+        return out
+    service_rows = _list_service_rows(cliente_id, include_inactive=True)
+    by_slug: Dict[str, sqlite3.Row] = {}
+    by_key: Dict[str, sqlite3.Row] = {}
+    for candidate in service_rows:
+        slug = candidate["slug"] or ""
+        if slug:
+            by_slug.setdefault(slug, candidate)
+        key = _service_match_key(candidate["name"] or "")
+        if key:
+            by_key.setdefault(key, candidate)
+    for row in rows:
+        try:
+            service_id = row["service_id"] or ""
+        except (KeyError, IndexError):
+            service_id = ""
+        service_row = by_slug.get(service_id) if service_id else None
+        if service_row is None:
+            name_clean = textnorm._sanitize_text(row["servicio"] or "")
+            variants = [name_clean]
+            if " · " in name_clean:
+                variants.append(name_clean.split(" · ", 1)[0].strip())
+            for variant in variants:
+                if not variant:
+                    continue
+                service_row = by_slug.get(_normalize_service_id(variant)) or by_key.get(
+                    _service_match_key(variant)
+                )
+                if service_row is not None:
+                    break
+        if service_row is not None:
+            price_cents = int(service_row["price_cents"] or 0)
+            out[row["id"]] = {
+                "service_id": service_row["slug"] or "",
+                "service_duration_minutes": int(service_row["duration_minutes"] or 0),
+                "service_price_cents": price_cents,
+                "service_price_label": textnorm._format_price_cents(price_cents),
+            }
+        else:
+            out[row["id"]] = _booking_display_service_meta(row, cliente_id)
+    return out
 
 
 def _booked_intervals(

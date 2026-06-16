@@ -1439,6 +1439,180 @@ def test_whatsapp_reminder_buttons_confirm_and_cancel(client: TestClient, api_mo
         conn.commit()
 
 
+def test_reminders_reach_future_bookings_past_legacy_window(client: TestClient, api_module):
+    """Regresion: con muchas citas viejas, el recordatorio de una cita futura
+    (rank > 500 en orden fecha ASC) debe seguir seleccionandose. El antiguo
+    ``_list_booking_rows(limit=500)`` la perdia; ``_bookings_due_for_reminders``
+    la encuentra porque filtra por fecha, no por volumen."""
+    now = api_module._utc_now()
+    old_day = (now - timedelta(days=120)).date().isoformat()
+    # 520 citas viejas confirmadas: empujan cualquier futura mas alla del rank 500.
+    old_rows = [
+        (
+            f"old_rem_{i}", "demo", f"oldemp_{i}", "", "Viejo", "", "", "", old_day, "10:00", "",
+            "confirmed", "internal", "confirmed", f"mg_old_{i}", "Europe/Madrid",
+            f"{old_day}T08:00:00Z", f"{old_day}T08:30:00Z", "seed_old", old_day + "T08:00:00Z", "", "",
+        )
+        for i in range(520)
+    ]
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.executemany(
+            "INSERT INTO bookings (id, cliente_id, employee_id, employee_name, nombre, email, telefono, "
+            "servicio, booking_date, booking_time, notas, status, provider_name, provider_status, "
+            "manage_token, timezone, start_at, end_at, source, created_at, reminder_24h_sent_at, "
+            "reminder_2h_sent_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            old_rows,
+        )
+        conn.commit()
+
+    # Cita futura ~24h+20min: dentro de la ventana del recordatorio 24h.
+    start = now + timedelta(hours=24, minutes=20)
+    iso = lambda d: d.isoformat(timespec="seconds").replace("+00:00", "") + "Z"
+    future_id = "fut_rem_" + uuid.uuid4().hex
+    api_module._store_booking({
+        "id": future_id, "cliente_id": "demo", "employee_id": "", "employee_name": "",
+        "nombre": "Cliente Futuro", "email": "fut@example.com", "telefono": "+34600111000",
+        "servicio": "", "booking_date": start.date().isoformat(), "booking_time": start.strftime("%H:%M"),
+        "notas": "", "status": "confirmed", "provider_name": "internal", "provider_status": "confirmed",
+        "provider_booking_id": "", "provider_booking_url": "", "manage_token": f"mg_{future_id}",
+        "timezone": "Europe/Madrid", "start_at": iso(start), "end_at": iso(start + timedelta(minutes=30)),
+        "confirmed_at": iso(start), "cancelled_at": "", "rescheduled_at": "", "rescheduled_from_booking_id": "",
+        "confirmation_email_sent_at": "", "reminder_24h_sent_at": "", "reminder_2h_sent_at": "",
+        "customer_email_status": "", "customer_email_last_error": "", "source": "test", "created_at": iso(now),
+    })
+
+    try:
+        # El path legacy (oldest-500) NO la veria.
+        legacy_rows, _ = api_module._list_booking_rows(limit=500)
+        assert future_id not in {r["id"] for r in legacy_rows}
+        # El nuevo selector SI la incluye y el gate exacto la marca como debida.
+        cand = api_module._bookings_due_for_reminders(now)
+        cand_ids = {r["id"] for r in cand}
+        assert future_id in cand_ids
+        assert not (cand_ids & {f"old_rem_{i}" for i in range(520)})  # excluye las viejas
+        future_row = api_module._get_booking_row_by_id(future_id)
+        assert api_module._booking_due_for_reminder(future_row, now, api_module.REMINDER_24H_HOURS)
+    finally:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("DELETE FROM bookings WHERE id = ? OR id LIKE 'old_rem_%'", (future_id,))
+            conn.commit()
+
+
+def _seed_confirmed_booking(api_module, *, booking_id, start, status="confirmed", reminder_24h_sent=""):
+    iso = lambda d: d.isoformat(timespec="seconds").replace("+00:00", "") + "Z"
+    api_module._store_booking({
+        "id": booking_id, "cliente_id": "demo", "employee_id": "", "employee_name": "",
+        "nombre": "Cliente FU", "email": "fu@example.com", "telefono": "+34600222333",
+        "servicio": "", "booking_date": start.date().isoformat(), "booking_time": start.strftime("%H:%M"),
+        "notas": "", "status": status, "provider_name": "internal", "provider_status": status,
+        "provider_booking_id": "", "provider_booking_url": "", "manage_token": f"mg_{booking_id}",
+        "timezone": "Europe/Madrid", "start_at": iso(start), "end_at": iso(start + timedelta(minutes=30)),
+        "confirmed_at": iso(start), "cancelled_at": "", "rescheduled_at": "", "rescheduled_from_booking_id": "",
+        "confirmation_email_sent_at": "", "reminder_24h_sent_at": reminder_24h_sent, "reminder_2h_sent_at": "",
+        "customer_email_status": "", "customer_email_last_error": "", "source": "test", "created_at": iso(start),
+    })
+
+
+def test_email_confirm_link_marks_attendance(client: TestClient, api_module):
+    """Boton 1-clic del email: confirma asistencia, idempotente, token invalido -> 404."""
+    start = api_module._utc_now() + timedelta(days=2)
+    bid = "conf_" + uuid.uuid4().hex
+    _seed_confirmed_booking(api_module, booking_id=bid, start=start)
+    token = f"mg_{bid}"
+    try:
+        assert client.get("/booking/confirm/nope-" + uuid.uuid4().hex).status_code == 404
+        r1 = client.get(f"/booking/confirm/{token}")
+        assert r1.status_code == 200 and "confirm" in r1.text.lower()
+
+        def _audit_count():
+            with sqlite3.connect(api_module.DB_PATH) as conn:
+                return conn.execute(
+                    "SELECT COUNT(*) FROM booking_audit WHERE booking_id=? AND event_type='attendance_confirmed_by_customer'",
+                    (bid,),
+                ).fetchone()[0]
+
+        assert _audit_count() == 1
+        assert client.get(f"/booking/confirm/{token}").status_code == 200  # idempotente
+        assert _audit_count() == 1  # no duplica el audit
+    finally:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("DELETE FROM bookings WHERE id=?", (bid,))
+            conn.execute("DELETE FROM booking_audit WHERE booking_id=?", (bid,))
+            conn.commit()
+
+
+def test_followup_suppress_2h_if_confirmed(client: TestClient, api_module, monkeypatch):
+    """El aviso de 2h NO se envia si el cliente ya confirmo (escalera). Control: si
+    NO ha confirmado, si se envia."""
+    sent = []
+
+    async def _rec(row, kind, *a, **k):
+        sent.append((row["id"], kind))
+
+    monkeypatch.setattr("backend.booking._send_booking_reminder_by_kind", _rec)
+    now = api_module._utc_now()
+    start = now + timedelta(hours=2, minutes=20)  # dentro de la ventana del 2h
+    past24 = (now - timedelta(hours=1)).isoformat()
+    confirmed_id = "fu2c_" + uuid.uuid4().hex
+    control_id = "fu2n_" + uuid.uuid4().hex
+    _seed_confirmed_booking(api_module, booking_id=confirmed_id, start=start, reminder_24h_sent=past24)
+    _seed_confirmed_booking(api_module, booking_id=control_id, start=start + timedelta(minutes=5), reminder_24h_sent=past24)
+    api_module._mark_booking_confirmed_by_customer(confirmed_id, "demo", channel="email")
+    try:
+        asyncio.run(api_module._run_booking_reminders())
+        kinds_confirmed = [k for (bid, k) in sent if bid == confirmed_id]
+        kinds_control = [k for (bid, k) in sent if bid == control_id]
+        assert "reminder_2h" not in kinds_confirmed  # suprimido
+        assert "reminder_2h" in kinds_control        # control si lo recibe
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            skipped = conn.execute(
+                "SELECT COUNT(*) FROM booking_audit WHERE booking_id=? AND event_type='booking_email_skipped'",
+                (confirmed_id,),
+            ).fetchone()[0]
+        assert skipped >= 1
+    finally:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("DELETE FROM bookings WHERE id IN (?, ?)", (confirmed_id, control_id))
+            conn.execute("DELETE FROM booking_audit WHERE booking_id IN (?, ?)", (confirmed_id, control_id))
+            conn.commit()
+
+
+def test_call_due_window():
+    """`_call_due_for_booking`: dentro de la ventana T-X (y por encima del 2h) -> True."""
+    from backend import booking as bk
+    now = bk.timeutils._utc_now()
+
+    def _row(hours):
+        start = now + timedelta(hours=hours)
+        return {"status": "confirmed", "start_at": start.isoformat().replace("+00:00", "") + "Z"}
+
+    assert bk._call_due_for_booking(_row(4), now, 5) is True      # 4h fuera, <=5h
+    assert bk._call_due_for_booking(_row(1), now, 5) is False     # 1h: ya pegado (<=2h)
+    assert bk._call_due_for_booking(_row(9), now, 5) is False     # 9h: aun lejos
+
+
+def test_followup_overview_endpoint_capabilities(client: TestClient, api_module):
+    """GET /auth/app/follow-up expone pasos + capacidades; la llamada queda
+    bloqueada si el plan no tiene voz."""
+    cookies = _portal_admin_cookies(api_module)
+    r = client.get("/auth/app/follow-up", params={"cliente_id": "demo"}, cookies=cookies)
+    assert r.status_code == 200
+    data = r.json()
+    keys = [s["key"] for s in data["steps"]]
+    assert keys == ["confirmed", "reminder_24h", "call", "reminder_2h"]
+    assert data["channel_availability"]["email"] is True
+    assert isinstance(data["email_confirm_button"], bool)
+    call_step = next(s for s in data["steps"] if s["key"] == "call")
+    call_chan = call_step["channels"][0]
+    assert call_chan["channel"] == "call"
+    # locked = gating por PLAN; si esta bloqueado, la voz no puede estar disponible.
+    if call_chan["locked"]:
+        assert data["voice_available"] is False
+    # un canal activo nunca puede estar bloqueado
+    if call_chan["active"]:
+        assert call_chan["locked"] is False
+
+
 def test_reschedule_via_drag_payload_moves_booking(client: TestClient, api_module):
     cookies = _portal_admin_cookies(api_module)
     target = datetime.utcnow().date() + timedelta(days=2)

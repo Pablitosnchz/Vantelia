@@ -96,6 +96,27 @@ async def booking_manage_page(manage_token: str, request: Request) -> HTMLRespon
     return HTMLResponse(booking._booking_manage_page(booking_row, viewer=viewer))
 
 
+@app.get("/booking/confirm/{manage_token}", include_in_schema=False)
+async def booking_confirm_page(manage_token: str, request: Request) -> HTMLResponse:
+    """Confirmacion de asistencia 1-clic desde el email (reusa manage_token)."""
+    booking_row = booking._load_booking_by_token_or_404(manage_token)
+    company = clients._get_client_config(booking_row["cliente_id"])["nombre"]
+    when_text = booking._booking_datetime_display(booking_row)
+    manage_url = booking._booking_row_manage_url(booking_row, request)
+    if booking_row["status"] == "cancelled":
+        return HTMLResponse(
+            booking._booking_confirm_result_page(company, state="cancelled", when_text=when_text, manage_url=manage_url)
+        )
+    already = booking._booking_confirmed_by_customer(booking_row["id"])
+    if not already:
+        booking._mark_booking_confirmed_by_customer(booking_row["id"], booking_row["cliente_id"], channel="email")
+    return HTMLResponse(
+        booking._booking_confirm_result_page(
+            company, state=("already" if already else "confirmed"), when_text=when_text, manage_url=manage_url
+        )
+    )
+
+
 @app.get("/booking/manage/{manage_token}/data", response_model=BookingDetailPublic)
 async def booking_manage_data(manage_token: str, request: Request) -> BookingDetailPublic:
     booking_row = booking._load_booking_by_token_or_404(manage_token)

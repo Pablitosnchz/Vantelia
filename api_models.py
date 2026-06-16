@@ -917,6 +917,66 @@ class ReminderConfigResponse(BaseModel):
     voice_call_available: bool = False  # hay voz + numero para poder llamar
 
 
+# --- Seguimiento del cliente (flujo de confirmacion por plan) ---
+
+class FollowUpPayload(BaseModel):
+    call_enabled: Optional[bool] = None
+    call_hours_before: Optional[int] = Field(default=None, ge=1, le=24)
+    quiet_start: Optional[str] = Field(default=None, max_length=5)
+    quiet_end: Optional[str] = Field(default=None, max_length=5)
+    daily_call_cap: Optional[int] = Field(default=None, ge=0, le=500)
+    email_confirm_button: Optional[bool] = None
+    suppress_2h_if_confirmed: Optional[bool] = None
+    # Override explicito de canales por aviso: {kind: {email,whatsapp,sms}}
+    message_template_channels: Optional[Dict[str, Dict[str, bool]]] = None
+
+
+class FollowUpChannelAvailability(BaseModel):
+    email: bool = True
+    whatsapp: bool = False
+    sms: bool = False
+    voice: bool = False
+    whatsapp_reason: str = ""
+    sms_reason: str = ""
+    voice_reason: str = ""
+
+
+class FollowUpStepChannel(BaseModel):
+    channel: str            # email | whatsapp | sms | call
+    label: str
+    active: bool = False
+    available: bool = True
+    locked: bool = False    # bloqueado por plan
+    recommended: bool = False  # disponible y sugerido por plan, aun sin activar
+    plan_needed: str = ""   # "Pro" | "Business" cuando locked
+    reason: str = ""
+
+
+class FollowUpStep(BaseModel):
+    key: str                # confirmed | reminder_24h | call | reminder_2h
+    label: str
+    when: str               # "Al reservar", "24 h antes", ...
+    offset_hours: int = 0
+    channels: List[FollowUpStepChannel] = []
+    note: str = ""
+
+
+class FollowUpResponse(BaseModel):
+    plan: str = "free"
+    plan_label: str = "Free"
+    whatsapp_available: bool = False
+    voice_available: bool = False
+    channel_availability: FollowUpChannelAvailability = FollowUpChannelAvailability()
+    call_enabled: bool = False
+    call_hours_before: int = 5
+    quiet_start: str = "21:00"
+    quiet_end: str = "09:00"
+    daily_call_cap: int = 30
+    email_confirm_button: bool = True
+    suppress_2h_if_confirmed: bool = True
+    steps: List[FollowUpStep] = []
+
+
 class AppLiveChatSession(BaseModel):
     id: str
     chat_session_id: str
