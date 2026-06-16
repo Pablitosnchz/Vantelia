@@ -2879,6 +2879,7 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
     avail = agenda._reminder_channel_availability(cliente_id)
     wa_plan = bool(clients._plan_feature(cliente_id, "whatsapp_enabled"))
     voice_plan = bool(clients._plan_feature(cliente_id, "voice_enabled"))
+    sms_plan = bool(clients._plan_feature(cliente_id, "sms_enabled"))
     wa_available = bool(avail["whatsapp"]["available"])
     sms_available = bool(avail["sms"]["available"])
     voice_number = bool((appstate.CONFIG_CLIENTES.get(cliente_id) or {}).get("voice", {}).get("twilio_phone_number"))
@@ -2897,7 +2898,9 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
              "recommended": wa_available and not wa_active and kind in ("confirmed", "reminder_24h"),
              "reason": avail["whatsapp"]["reason"]},
             {"channel": "sms", "label": "SMS", "active": bool(chs.get("sms")) and sms_available,
-             "available": sms_available, "locked": False, "recommended": False, "plan_needed": "", "reason": avail["sms"]["reason"]},
+             "available": sms_available, "locked": not sms_plan, "plan_needed": "" if sms_plan else "Business",
+             "recommended": False,
+             "reason": "Requiere plan Business." if not sms_plan else avail["sms"]["reason"]},
         ]
 
     steps: List[Dict[str, Any]] = []

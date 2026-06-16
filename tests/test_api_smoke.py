@@ -1611,6 +1611,13 @@ def test_followup_overview_endpoint_capabilities(client: TestClient, api_module)
     # un canal activo nunca puede estar bloqueado
     if call_chan["active"]:
         assert call_chan["locked"] is False
+    # SMS tambien gateado por plan (Business): si esta bloqueado, no disponible ni activo.
+    r24 = next(s for s in data["steps"] if s["key"] == "reminder_24h")
+    sms_chan = next(c for c in r24["channels"] if c["channel"] == "sms")
+    if sms_chan["locked"]:
+        assert sms_chan["plan_needed"] == "Business"
+        assert sms_chan["active"] is False
+        assert data["channel_availability"]["sms"] is False
 
 
 def test_reschedule_via_drag_payload_moves_booking(client: TestClient, api_module):

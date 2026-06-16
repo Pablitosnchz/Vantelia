@@ -767,6 +767,9 @@ def _channel_settings_public(cliente_id: str) -> ChannelSettingsResponse:
     else:
         sender = channel_settings["sms_sender"] or ""
         sms_available = channel_settings["sms_sender_status"] == "active"
+    # SMS es canal de pago (Twilio): gateado a plan Business, como la llamada IA.
+    if not clients._plan_feature(cliente_id, "sms_enabled"):
+        sms_available = False
     return ChannelSettingsResponse(
         email=ChannelEmailStatus(
             provider=channel_settings["email_provider"] or "vantelia_smtp",

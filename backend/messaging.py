@@ -23,6 +23,10 @@ from fastapi import HTTPException, Request
 from backend import appstate, clients, db, security, settings, textnorm, timeutils
 
 async def _send_client_sms(cliente_id: str, to_number: str, body: str) -> bool:
+    # SMS gateado a plan Business (canal de pago Twilio). Defensa en profundidad.
+    if not clients._plan_feature(cliente_id, "sms_enabled"):
+        security._channel_audit(cliente_id, "sms", "send_rejected", "plan", False, "Plan sin SMS.")
+        return False
     channel_settings = security._ensure_channel_settings(cliente_id)
     mode = channel_settings["sms_mode"] or "vantelia_default"
     sender = ""

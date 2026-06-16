@@ -1062,6 +1062,9 @@ async def app_channels_sms_settings(
 ) -> ChannelSettingsResponse:
     security._require_portal_min_role(user, "owner")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    clients._require_plan_feature(
+        cliente_id, "sms_enabled", "El envio por SMS esta disponible desde el plan Business."
+    )
     if data.mode not in {"vantelia_default", "twilio_alphanumeric_sender", "twilio_dedicated_number"}:
         raise HTTPException(status_code=400, detail="Modo SMS no valido.")
     settings = security._ensure_channel_settings(cliente_id)
