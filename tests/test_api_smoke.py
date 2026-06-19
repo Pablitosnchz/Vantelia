@@ -133,6 +133,27 @@ def client(api_module):
     return TestClient(api_module.app)
 
 
+@pytest.fixture(autouse=True)
+def _no_real_outbound_email(monkeypatch, api_module):
+    """Nunca enviar emails reales en tests (regla CLAUDE.md).
+
+    El entorno de test carga el .env del proyecto, asi que si hay SMTP/Gmail validos
+    los envios saldrian de verdad. Bloqueamos el transporte de mas bajo nivel para que
+    el envio falle de forma deterministica (equivale a "correo no entregado"); los
+    tests que necesitan un 'enviado' OK parchean una capa superior (_send_booking_email).
+    """
+    from backend import emailing as _em
+
+    def _blocked(*_a, **_k):
+        raise RuntimeError("test: envio de email real deshabilitado")
+
+    # Capa de RED mas baja (no el despachador _send_email_object): asi un test que
+    # comprueba la seleccion de proveedor puede sobreescribir estos patches.
+    monkeypatch.setattr(_em, "_smtp_send_message", _blocked, raising=False)
+    monkeypatch.setattr(_em, "_gmail_send_message", _blocked, raising=False)
+    monkeypatch.setattr(_em, "_send_gmail_message", _blocked, raising=False)
+
+
 class _FakeStripeSession:
     id = "cs_test_vantelia"
     url = "https://checkout.stripe.test/session/cs_test_vantelia"
@@ -1599,7 +1620,12 @@ def test_followup_overview_endpoint_capabilities(client: TestClient, api_module)
     assert r.status_code == 200
     data = r.json()
     keys = [s["key"] for s in data["steps"]]
-    assert keys == ["confirmed", "reminder_24h", "call", "reminder_2h"]
+    assert keys == ["confirmed", "reminder_24h", "call", "reminder_2h", "review"]
+    review_step = next(s for s in data["steps"] if s["key"] == "review")
+    assert "enabled" in review_step and "needs_setup" in review_step
+    # Sin enlace configurado en demo, el paso pide setup y no esta activo.
+    assert review_step["needs_setup"] is True
+    assert review_step["enabled"] is False
     assert data["channel_availability"]["email"] is True
     assert isinstance(data["email_confirm_button"], bool)
     call_step = next(s for s in data["steps"] if s["key"] == "call")
@@ -1618,6 +1644,89 @@ def test_followup_overview_endpoint_capabilities(client: TestClient, api_module)
         assert sms_chan["plan_needed"] == "Business"
         assert sms_chan["active"] is False
         assert data["channel_availability"]["sms"] is False
+
+
+def test_reviews_overview_and_save_endpoint(client: TestClient, api_module):
+    """GET/PUT /auth/app/reviews: config post-cita + canales por plan + validacion de enlace."""
+    cookies = _portal_admin_cookies(api_module)
+    r = client.get("/auth/app/reviews", params={"cliente_id": "demo"}, cookies=cookies)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["enabled"] is False
+    assert data["default_message"]
+    chans = {c["channel"] for c in data["channels"]}
+    assert chans == {"email", "whatsapp", "sms"}
+    email_chan = next(c for c in data["channels"] if c["channel"] == "email")
+    assert email_chan["locked"] is False and email_chan["available"] is True
+
+    saved = client.put(
+        "/auth/app/reviews", params={"cliente_id": "demo"}, cookies=cookies,
+        json={"enabled": True, "link": "https://g.page/r/demo/review",
+              "delay_hours": 6, "channels": {"email": True, "whatsapp": False, "sms": False},
+              "message": "Gracias {empresa}, reseña: {enlace}"},
+    )
+    assert saved.status_code == 200, saved.text
+    out = saved.json()
+    assert out["enabled"] is True
+    assert out["link_valid"] is True
+    assert out["platform_label"] == "Dejar resena en Google"
+    assert out["delay_hours"] == 6
+    assert out["preview_html"]
+    # SMS gateado por plan: si bloqueado, nunca activo.
+    sms_chan = next(c for c in out["channels"] if c["channel"] == "sms")
+    if sms_chan["locked"]:
+        assert sms_chan["active"] is False
+
+
+def test_review_request_engine_sends_and_dedups(api_module, monkeypatch):
+    """El motor post-cita envia la peticion de resena una sola vez por cita completada."""
+    from backend import booking as bk, emailing as em
+
+    sent = []
+    monkeypatch.setattr(em, "_send_client_email",
+                        lambda cid, to, subject, text, html="", reply_to=None: sent.append((to, subject)) or "vantelia_smtp")
+
+    api_module.CONFIG_CLIENTES["demo"]["reviews"] = {
+        "enabled": True, "link": "https://g.page/r/demo/review", "delay_hours": 3,
+        "channels": {"email": True, "whatsapp": False, "sms": False},
+    }
+    now = api_module._utc_now()
+    end_at = (now - timedelta(hours=5)).isoformat().replace("+00:00", "") + "Z"
+    booking_id = "bk_review_demo"
+    api_module._store_booking({
+        "id": booking_id, "cliente_id": "demo", "employee_id": "default_rev", "employee_name": "Equipo",
+        "nombre": "Cliente Resena", "email": "review@example.com", "telefono": "+34600123456",
+        "servicio": "Consulta", "booking_date": "2099-01-01", "booking_time": "10:00", "notas": "",
+        "status": "completed", "provider_name": "internal", "provider_status": "completed",
+        "provider_booking_id": "", "provider_booking_url": "", "manage_token": "manage_rev",
+        "timezone": "Europe/Madrid", "start_at": end_at, "end_at": end_at,
+        "confirmed_at": "", "cancelled_at": "", "rescheduled_at": "", "rescheduled_from_booking_id": "",
+        "confirmation_email_sent_at": "", "reminder_24h_sent_at": "", "reminder_2h_sent_at": "",
+        "customer_email_status": "", "customer_email_last_error": "", "booking_code": "",
+        "completed_source": "auto", "service_id": "consulta", "service_price_cents": 0,
+        "source": "test_review", "created_at": api_module._utc_now_iso(),
+    })
+    try:
+        n1 = asyncio.run(bk._run_review_requests(now))
+        assert n1 == 1
+        assert len(sent) == 1 and sent[0][0] == "review@example.com"
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            row = conn.execute("SELECT review_request_sent_at FROM bookings WHERE id=?", (booking_id,)).fetchone()
+            assert row and row[0]
+            audit = conn.execute(
+                "SELECT COUNT(*) FROM booking_audit WHERE booking_id=? AND event_type='review_request_sent'",
+                (booking_id,),
+            ).fetchone()[0]
+            assert audit == 1
+        # Segunda pasada: ya marcada -> no reenvia.
+        n2 = asyncio.run(bk._run_review_requests(now))
+        assert n2 == 0 and len(sent) == 1
+    finally:
+        api_module.CONFIG_CLIENTES["demo"].pop("reviews", None)
+        with api_module._get_db_connection() as conn:
+            conn.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+            conn.execute("DELETE FROM booking_audit WHERE booking_id=?", (booking_id,))
+            conn.commit()
 
 
 def test_reschedule_via_drag_payload_moves_booking(client: TestClient, api_module):
@@ -1705,6 +1814,310 @@ def test_ai_rebooking_selects_inactive_and_dedups(api_module, monkeypatch):
         conn.execute("DELETE FROM ai_rebooking_log WHERE cliente_id='demo'")
         conn.execute("UPDATE client_channel_settings SET ai_rebooking_enabled=0 WHERE cliente_id='demo'")
         conn.commit()
+
+
+def test_gift_card_assign_to_client_and_movements(client: TestClient, api_module):
+    """Asignar una tarjeta regalo existente a un cliente: dedup, reasignacion forzada
+    y trazabilidad (movimientos issue + assign)."""
+    cookies = _portal_admin_cookies(api_module)
+    params = {"cliente_id": "demo"}
+    r = client.post("/auth/gift-cards", params=params, cookies=cookies, json={"amount_cents": 5000})
+    assert r.status_code == 200, r.text
+    code = r.json()["code"]
+    gid = r.json()["gift_card_id"]
+    try:
+        # Asignar a Ana por codigo.
+        r = client.post("/auth/gift-cards/assign", params=params, cookies=cookies,
+                        json={"code": code, "recipient_name": "Ana Cliente", "recipient_email": "ana@example.com"})
+        assert r.status_code == 200, r.text
+        assert r.json()["recipient_email"] == "ana@example.com"
+        kinds = [t["kind"] for t in r.json()["transactions"]]
+        assert "assign" in kinds and "issue" in kinds
+        # Reasignar al MISMO cliente -> 409 (duplicado).
+        r = client.post("/auth/gift-cards/assign", params=params, cookies=cookies,
+                        json={"code": code, "recipient_email": "ana@example.com"})
+        assert r.status_code == 409 and "este cliente" in r.json()["detail"]
+        # Asignar a OTRO cliente sin force -> 409.
+        r = client.post("/auth/gift-cards/assign", params=params, cookies=cookies,
+                        json={"code": code, "recipient_name": "Beto", "recipient_email": "beto@example.com"})
+        assert r.status_code == 409 and "reasignar" in r.json()["detail"].lower()
+        # Con force -> 200 y queda a nombre de Beto.
+        r = client.post("/auth/gift-cards/assign", params=params, cookies=cookies,
+                        json={"code": code, "recipient_name": "Beto", "recipient_email": "beto@example.com", "force": True})
+        assert r.status_code == 200 and r.json()["recipient_email"] == "beto@example.com"
+        # La tarjeta aparece al buscar por el email del destinatario.
+        listed = client.get("/auth/gift-cards", params={**params, "q": "beto@example.com"}, cookies=cookies).json()["items"]
+        assert any(g["gift_card_id"] == gid for g in listed)
+        # Detalle con movimientos.
+        detail = client.get(f"/auth/gift-cards/{gid}", params=params, cookies=cookies).json()
+        assert detail["gift_card_id"] == gid and len(detail["transactions"]) >= 3
+        # Codigo inexistente -> 404.
+        r = client.post("/auth/gift-cards/assign", params=params, cookies=cookies,
+                        json={"code": "GC-ZZZZ-ZZZZ", "recipient_name": "X"})
+        assert r.status_code == 404
+    finally:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("DELETE FROM gift_cards WHERE cliente_id='demo'")
+            conn.execute("DELETE FROM gift_card_transactions WHERE cliente_id='demo'")
+            conn.commit()
+
+
+def test_reschedule_changes_employee_and_preserves_payment(client: TestClient, api_module):
+    """Reprogramar permite cambiar de profesional y conserva el estado de pago y la
+    trazabilidad (audit booking_rescheduled)."""
+    cookies = _portal_admin_cookies(api_module)
+    params = {"cliente_id": "demo"}
+    # Segundo profesional.
+    emp = client.post("/auth/employees", params=params, cookies=cookies,
+                      json={"name": "Pro Dos", "role_label": "", "color": "#ff8800"})
+    assert emp.status_code == 200, emp.text
+    emp2 = emp.json().get("employee_id") or emp.json().get("id")
+    target = datetime.utcnow().date() + timedelta(days=2)
+    while target.weekday() == 6:
+        target += timedelta(days=1)
+    fecha = target.isoformat()
+    created = client.post("/auth/bookings", params=params, cookies=cookies,
+                          json={"nombre": "Resched Cliente", "email": "rs@example.com", "telefono": "600111222",
+                                "servicio": "", "employee_id": "", "fecha": fecha, "hora": "09:00", "notas": ""})
+    assert created.status_code == 200, created.text
+    bid = created.json()["booking_id"]
+    try:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("UPDATE bookings SET payment_status='paid' WHERE id=?", (bid,))
+            conn.commit()
+        # Reprogramar a otra hora Y otro profesional.
+        r = client.post(f"/auth/bookings/{bid}/reschedule", cookies=cookies,
+                        json={"employee_id": emp2, "fecha": fecha, "hora": "09:30"})
+        assert r.status_code == 200, r.text
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            row = conn.execute("SELECT booking_time, employee_id, payment_status FROM bookings WHERE id=?", (bid,)).fetchone()
+            assert row[0] == "09:30" and row[1] == emp2 and row[2] == "paid"
+            audit = conn.execute(
+                "SELECT COUNT(*) FROM booking_audit WHERE booking_id=? AND event_type='booking_rescheduled'", (bid,)
+            ).fetchone()[0]
+            assert audit >= 1
+        # El payload legacy {new_datetime} ya no es valido (contrato fecha/hora).
+        r = client.post(f"/auth/bookings/{bid}/reschedule", cookies=cookies, json={"new_datetime": fecha + "T10:00:00"})
+        assert r.status_code == 422
+    finally:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("DELETE FROM bookings WHERE id=?", (bid,))
+            conn.execute("DELETE FROM booking_audit WHERE booking_id=?", (bid,))
+            conn.execute("DELETE FROM employees WHERE id=?", (emp2,))
+            conn.commit()
+
+
+def test_confirm_call_dedup_and_validations(client: TestClient, api_module, monkeypatch):
+    """Llamar para confirmar: coloca la llamada (proveedor simulado), evita duplicados
+    recientes y devuelve errores claros sin telefono o en citas no activas."""
+    from backend import booking as bk
+    cookies = _portal_admin_cookies(api_module)
+    placed = []
+
+    def _fake_place(cliente_id, booking_row, *, base_url="", purpose="confirm"):
+        bk._record_booking_audit(booking_row["id"], cliente_id, "confirm_call_placed",
+                                 {"call_sid": "CA_test", "purpose": purpose})
+        placed.append(booking_row["id"])
+        return {"ok": True, "call_sid": "CA_test"}
+
+    monkeypatch.setattr("backend.voice._voice_place_outbound_call", _fake_place)
+    now = api_module._utc_now()
+    bid = "cc_" + uuid.uuid4().hex
+    _seed_confirmed_booking(api_module, booking_id=bid, start=now + timedelta(days=1, minutes=11))
+    bid_np = "ccnp_" + uuid.uuid4().hex
+    _seed_confirmed_booking(api_module, booking_id=bid_np, start=now + timedelta(days=1, minutes=41))
+    try:
+        r = client.post(f"/auth/bookings/{bid}/confirm-call", cookies=cookies)
+        assert r.status_code == 200, r.text
+        assert placed == [bid]
+        # Dedup: segundo intento inmediato -> 409.
+        r = client.post(f"/auth/bookings/{bid}/confirm-call", cookies=cookies)
+        assert r.status_code == 409 and "reciente" in r.json()["detail"].lower()
+        # Sin telefono -> 409 claro.
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("UPDATE bookings SET telefono='' WHERE id=?", (bid_np,)); conn.commit()
+        r = client.post(f"/auth/bookings/{bid_np}/confirm-call", cookies=cookies)
+        assert r.status_code == 409 and "telefono" in r.json()["detail"].lower()
+        # Cita cancelada -> 409.
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("UPDATE bookings SET status='cancelled' WHERE id=?", (bid_np,)); conn.commit()
+        r = client.post(f"/auth/bookings/{bid_np}/confirm-call", cookies=cookies)
+        assert r.status_code == 409
+    finally:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("DELETE FROM bookings WHERE id IN (?, ?)", (bid, bid_np))
+            conn.execute("DELETE FROM booking_audit WHERE booking_id IN (?, ?)", (bid, bid_np))
+            conn.commit()
+
+
+def test_confirm_call_clear_error_without_voice_number(client: TestClient, api_module):
+    """Sin numero de voz configurado, la llamada falla con un mensaje claro (no 500)."""
+    cookies = _portal_admin_cookies(api_module)
+    now = api_module._utc_now()
+    bid = "ccv_" + uuid.uuid4().hex
+    _seed_confirmed_booking(api_module, booking_id=bid, start=now + timedelta(days=1, hours=2, minutes=13))
+    try:
+        r = client.post(f"/auth/bookings/{bid}/confirm-call", cookies=cookies)
+        assert r.status_code == 409
+        assert "voz" in r.json()["detail"].lower() or "telefon" in r.json()["detail"].lower()
+    finally:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("DELETE FROM bookings WHERE id=?", (bid,))
+            conn.execute("DELETE FROM booking_audit WHERE booking_id=?", (bid,))
+            conn.commit()
+
+
+def test_send_confirmation_validates_and_reports(client: TestClient, api_module, monkeypatch):
+    """Enviar confirmacion: 409 claro si no hay email o el correo no esta configurado;
+    200 con canal entregado cuando el envio funciona; registra confirmation_resent."""
+    from backend import booking as bk
+    cookies = _portal_admin_cookies(api_module)
+    now = api_module._utc_now()
+    # Cita SIN email -> 409 claro.
+    bid_ne = "scne_" + uuid.uuid4().hex
+    _seed_confirmed_booking(api_module, booking_id=bid_ne, start=now + timedelta(days=1, hours=3, minutes=17))
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("UPDATE bookings SET email='' WHERE id=?", (bid_ne,)); conn.commit()
+    # Cita CON email (correo no configurado en test) -> 409 con motivo concreto.
+    bid_em = "scem_" + uuid.uuid4().hex
+    _seed_confirmed_booking(api_module, booking_id=bid_em, start=now + timedelta(days=1, hours=3, minutes=47))
+    try:
+        r = client.post(f"/auth/bookings/{bid_ne}/send-confirmation", cookies=cookies)
+        assert r.status_code == 409 and "email" in r.json()["detail"].lower()
+
+        r = client.post(f"/auth/bookings/{bid_em}/send-confirmation", cookies=cookies)
+        assert r.status_code == 409  # correo no configurado -> error concreto
+
+        # Con envio funcionando -> 200 + audit.
+        monkeypatch.setattr("backend.booking._send_booking_email", lambda *a, **k: None)
+        r = client.post(f"/auth/bookings/{bid_em}/send-confirmation", cookies=cookies)
+        assert r.status_code == 200, r.text
+        assert "email" in r.json()["mensaje"].lower()
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            n = conn.execute(
+                "SELECT COUNT(*) FROM booking_audit WHERE booking_id=? AND event_type='confirmation_resent'", (bid_em,)
+            ).fetchone()[0]
+            assert n >= 1
+    finally:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("DELETE FROM bookings WHERE id IN (?, ?)", (bid_ne, bid_em))
+            conn.execute("DELETE FROM booking_audit WHERE booking_id IN (?, ?)", (bid_ne, bid_em))
+            conn.commit()
+
+
+def test_follow_up_ladder_end_to_end(client: TestClient, api_module, monkeypatch):
+    """Escalera de Seguimiento de punta a punta en una pasada, sin envios reales:
+    recordatorio 24h, recordatorio 2h y llamada de confirmacion (proveedor simulado)."""
+    from backend import booking as bk
+    sent = []
+
+    async def _rec(row, kind, *a, **k):
+        sent.append((row["id"], kind))
+        return {"sent": ["email"], "failed": {}, "skipped": {}}
+
+    calls = []
+
+    def _fake_place(cliente_id, booking_row, *, base_url="", purpose="confirm"):
+        bk._record_booking_audit(booking_row["id"], cliente_id, "confirm_call_placed", {"purpose": purpose})
+        calls.append(booking_row["id"])
+        return {"ok": True, "call_sid": "CA_x"}
+
+    monkeypatch.setattr("backend.booking._send_booking_reminder_by_kind", _rec)
+    monkeypatch.setattr("backend.voice._voice_place_outbound_call", _fake_place)
+    # Gate de llamada (quiet hours/twilio) neutralizado en test: solo nos interesa la escalera.
+    monkeypatch.setattr("backend.booking._reminder_calls_ok_now", lambda *a, **k: True)
+    # Activa la llamada de confirmacion del tenant via config['reminders'].
+    cfg = api_module.CONFIG_CLIENTES["demo"]
+    prev_reminders = cfg.get("reminders")
+    cfg["reminders"] = {"call_enabled": True, "call_hours_before": 5, "daily_call_cap": 50}
+    now = api_module._utc_now()
+    b24 = "lad24_" + uuid.uuid4().hex   # a ~24h -> recordatorio 24h
+    b2 = "lad2_" + uuid.uuid4().hex     # a ~2h, ya enviado 24h -> recordatorio 2h
+    bcall = "ladc_" + uuid.uuid4().hex  # a ~4h, sin confirmar -> llamada
+    _seed_confirmed_booking(api_module, booking_id=b24, start=now + timedelta(hours=24, minutes=10))
+    _seed_confirmed_booking(api_module, booking_id=b2, start=now + timedelta(hours=2, minutes=10),
+                            reminder_24h_sent=(now - timedelta(hours=20)).isoformat())
+    _seed_confirmed_booking(api_module, booking_id=bcall, start=now + timedelta(hours=4, minutes=10),
+                            reminder_24h_sent=(now - timedelta(hours=2)).isoformat())
+    try:
+        asyncio.run(api_module._run_booking_reminders())
+        assert (b24, "reminder_24h") in sent
+        assert (b2, "reminder_2h") in sent
+        # La llamada se coloca para la cita en ventana T-5 aun sin confirmar.
+        assert bcall in calls
+    finally:
+        if prev_reminders is None:
+            cfg.pop("reminders", None)
+        else:
+            cfg["reminders"] = prev_reminders
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("DELETE FROM bookings WHERE id IN (?, ?, ?)", (b24, b2, bcall))
+            conn.execute("DELETE FROM booking_audit WHERE booking_id IN (?, ?, ?)", (b24, b2, bcall))
+            conn.execute("DELETE FROM voice_calls WHERE cliente_id='demo'")
+            conn.commit()
+
+
+def test_follow_up_test_endpoint_each_phase(client: TestClient, api_module, monkeypatch):
+    """Los botones de 'Probar' del Seguimiento ejecutan la fase real contra un
+    destinatario de prueba, reportan por canal y no dejan rastro en la agenda."""
+    cookies = _portal_admin_cookies(api_module)
+    params = {"cliente_id": "demo"}
+
+    # El overview expone destinatarios de prueba por defecto.
+    ov = client.get("/auth/app/follow-up", params=params, cookies=cookies).json()
+    assert "default_test_email" in ov and "default_test_phone" in ov
+
+    # Email sin SMTP -> canal email no entregado (failed/skipped) con motivo.
+    # Y los 3 canales SIEMPRE aparecen: los no activos en la fase como 'inactive'.
+    r = client.post("/auth/app/follow-up/test", params=params, cookies=cookies,
+                    json={"step": "confirmed", "email": "probar@example.com"})
+    assert r.status_code == 200, r.text
+    chans = {x["channel"]: x for x in r.json()["results"]}
+    assert set(chans) == {"email", "whatsapp", "sms"}
+    assert chans["email"]["status"] in ("failed", "skipped") and chans["email"]["detail"]
+    # WhatsApp/SMS no activos por defecto en la demo -> reportados como inactive.
+    assert chans["whatsapp"]["status"] == "inactive" and chans["sms"]["status"] == "inactive"
+
+    # Con el envío funcionando -> email 'sent'.
+    monkeypatch.setattr("backend.booking._send_booking_email", lambda *a, **k: None)
+    r = client.post("/auth/app/follow-up/test", params=params, cookies=cookies,
+                    json={"step": "reminder_24h", "email": "probar@example.com"})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert any(x["channel"] == "email" and x["status"] == "sent" for x in r.json()["results"])
+
+    # Llamada de prueba con proveedor simulado.
+    placed = []
+
+    def _fake_place(cliente_id, booking_row, *, base_url="", purpose="confirm"):
+        placed.append(booking_row["id"])
+        return {"ok": True, "call_sid": "CA_x"}
+
+    monkeypatch.setattr("backend.voice._voice_place_outbound_call", _fake_place)
+    r = client.post("/auth/app/follow-up/test", params=params, cookies=cookies,
+                    json={"step": "call", "phone": "+34600111222"})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert placed and placed[0].startswith("futest_")
+
+    # Sin destinatario y sin contacto del negocio -> 400 (fase de mensaje).
+    import json as _json
+    cfg = api_module.CONFIG_CLIENTES["demo"]
+    prev_contact = _json.loads(_json.dumps(cfg.get("contacto", {})))
+    cfg["contacto"] = {}
+    try:
+        r = client.post("/auth/app/follow-up/test", params=params, cookies=cookies, json={"step": "confirmed"})
+        assert r.status_code == 400
+    finally:
+        cfg["contacto"] = prev_contact
+
+    # Reseña: 200 (si hay enlace) o 409 (si falta), nunca 500.
+    r = client.post("/auth/app/follow-up/test", params=params, cookies=cookies,
+                    json={"step": "review", "email": "x@example.com"})
+    assert r.status_code in (200, 409)
+
+    # Cita efímera: sin rastro en agenda ni auditoría.
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM bookings WHERE id LIKE 'futest_%'").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM booking_audit WHERE booking_id LIKE 'futest_%'").fetchone()[0] == 0
 
 
 def test_service_price_and_duration_parsing(api_module):

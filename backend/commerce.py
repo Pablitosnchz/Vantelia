@@ -263,16 +263,26 @@ def _list_product_sales(
 
 
 def _qr_svg(url: str) -> str:
-    """SVG del QR para el enlace de pago. Cadena vacia si segno no esta disponible
-    (el panel cae a mostrar solo el enlace)."""
+    """Devuelve un <img> PNG (data-URI) con el QR del enlace de pago, listo para
+    inyectar en el panel. Cadena vacia si segno no esta disponible (cae al enlace).
+
+    Se usa PNG raster (no SVG): el writer SVG de segno dibuja los modulos como
+    lineas con `stroke`, que al escalar producen grosores desiguales y un QR
+    ilegible. El PNG a escala alta es exacto y se escanea siempre.
+    Robustez: border=4 (quiet zone del spec), fondo blanco solido (contraste),
+    error="m" (~15% correccion). Nombre historico por compat del campo `qr_svg`."""
     if not url:
         return ""
     try:
+        import base64
         import io
         import segno
-        buf = io.StringIO()
-        segno.make(url, error="m").save(buf, kind="svg", scale=5, border=2, xmldecl=False, svgclass="vqr")
-        return buf.getvalue()
+        buf = io.BytesIO()
+        segno.make(url, error="m").save(
+            buf, kind="png", scale=10, border=4, dark="#000000", light="#ffffff",
+        )
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        return f'<img class="vqr" alt="Codigo QR de pago" src="data:image/png;base64,{b64}">'
     except Exception:  # noqa: BLE001
         return ""
 
@@ -881,9 +891,12 @@ def _list_gift_cards(cliente_id: str, *, q: str = "", status: str = "", limit: i
         clauses.append("status = ?")
         params.append(status)
     if q:
-        clauses.append("(code LIKE ? OR buyer_name LIKE ? OR buyer_email LIKE ? OR recipient_name LIKE ?)")
+        clauses.append(
+            "(code LIKE ? OR buyer_name LIKE ? OR buyer_email LIKE ? "
+            "OR recipient_name LIKE ? OR recipient_email LIKE ?)"
+        )
         like = f"%{q.strip()}%"
-        params.extend([like, like, like, like])
+        params.extend([like, like, like, like, like])
     with db._get_db_connection() as connection:
         rows = connection.execute(
             "SELECT * FROM gift_cards WHERE " + " AND ".join(clauses)
@@ -929,6 +942,116 @@ def _set_gift_card_status(cliente_id: str, gift_card_id: str, enabled: bool) -> 
         connection.commit()
         row = connection.execute("SELECT * FROM gift_cards WHERE id = ?", (gift_card_id,)).fetchone()
     return _gift_card_to_public(row)
+
+
+def _gift_card_transaction_to_public(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "id": int(row["id"]),
+        "kind": row["kind"],
+        "amount_cents": int(row["amount_cents"] or 0),
+        "balance_after_cents": int(row["balance_after_cents"] or 0),
+        "booking_id": row["booking_id"] or "",
+        "sale_id": row["sale_id"] or "",
+        "notes": row["notes"] or "",
+        "created_at": row["created_at"],
+    }
+
+
+def _list_gift_card_transactions(cliente_id: str, gift_card_id: str, *, limit: int = 100) -> List[Dict[str, Any]]:
+    with db._get_db_connection() as connection:
+        rows = connection.execute(
+            "SELECT * FROM gift_card_transactions WHERE cliente_id = ? AND gift_card_id = ? "
+            "ORDER BY created_at DESC, id DESC LIMIT ?",
+            (cliente_id, gift_card_id, max(1, min(500, limit))),
+        ).fetchall()
+    return [_gift_card_transaction_to_public(row) for row in rows]
+
+
+def _gift_card_detail(cliente_id: str, gift_card_id: str) -> Dict[str, Any]:
+    """Tarjeta regalo + sus movimientos (emision, asignaciones y canjes) para la ficha
+    del cliente / panel de Ventas."""
+    with db._get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM gift_cards WHERE cliente_id = ? AND id = ? LIMIT 1",
+            (cliente_id, gift_card_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Tarjeta regalo no encontrada.")
+        row = _refresh_gift_card_expiry(connection, row)
+    card = _gift_card_to_public(row)
+    card["transactions"] = _list_gift_card_transactions(cliente_id, gift_card_id)
+    return card
+
+
+def _assign_gift_card_to_contact(
+    cliente_id: str,
+    *,
+    gift_card_id: str = "",
+    code: str = "",
+    recipient_name: str = "",
+    recipient_email: str = "",
+    recipient_phone: str = "",
+    force: bool = False,
+) -> Dict[str, Any]:
+    """Asigna una tarjeta regalo EXISTENTE a un cliente (la pone a su nombre).
+
+    Localiza la tarjeta por id o por codigo. Evita asignaciones duplicadas: si ya
+    esta asignada a ese mismo cliente devuelve 409; si esta asignada a otro distinto
+    exige ``force``. Deja rastro como movimiento ``assign`` para la trazabilidad."""
+    name = textnorm._sanitize_text(recipient_name or "")
+    email = textnorm._sanitize_text(recipient_email or "").lower()
+    phone = textnorm._sanitize_text(recipient_phone or "")
+    if not (name or email or phone):
+        raise HTTPException(status_code=400, detail="Indica al menos nombre, email o telefono del cliente.")
+    with db._get_db_connection() as connection:
+        if gift_card_id:
+            row = connection.execute(
+                "SELECT * FROM gift_cards WHERE cliente_id = ? AND id = ? LIMIT 1",
+                (cliente_id, gift_card_id),
+            ).fetchone()
+        else:
+            row = connection.execute(
+                "SELECT * FROM gift_cards WHERE cliente_id = ? AND code = ? LIMIT 1",
+                (cliente_id, (code or "").strip().upper()),
+            ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Tarjeta regalo no encontrada. Revisa el codigo.")
+        row = _refresh_gift_card_expiry(connection, row)
+        if row["status"] in {"disabled", "expired"}:
+            raise HTTPException(
+                status_code=409,
+                detail=f"La tarjeta no esta disponible para asignar (estado: {row['status']}).",
+            )
+        current_email = (row["recipient_email"] or "").lower()
+        current_name = row["recipient_name"] or ""
+        already_same = (email and current_email == email) or (
+            not email and not current_email and name and current_name == name
+        )
+        if already_same:
+            raise HTTPException(status_code=409, detail="Esta tarjeta ya esta asignada a este cliente.")
+        if (current_email or current_name) and not force:
+            who = current_name or current_email
+            raise HTTPException(
+                status_code=409,
+                detail=f"Esta tarjeta ya esta asignada a {who}. Marca reasignar para cambiarla.",
+            )
+        now_iso = timeutils._utc_now_iso()
+        connection.execute(
+            "UPDATE gift_cards SET recipient_name = ?, recipient_email = ?, updated_at = ? WHERE id = ?",
+            (name or current_name, email or current_email, now_iso, row["id"]),
+        )
+        note_who = name or email or phone
+        connection.execute(
+            """
+            INSERT INTO gift_card_transactions (cliente_id, gift_card_id, kind, amount_cents,
+                                                balance_after_cents, notes, created_at)
+            VALUES (?, ?, 'assign', 0, ?, ?, ?)
+            """,
+            (cliente_id, row["id"], int(row["balance_cents"] or 0), f"Asignada a {note_who}", now_iso),
+        )
+        connection.commit()
+        card_id = row["id"]
+    return _gift_card_detail(cliente_id, card_id)
 
 
 def _redeem_gift_card_for_booking(

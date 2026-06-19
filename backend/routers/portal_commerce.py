@@ -238,6 +238,38 @@ async def auth_issue_gift_card(
     return commerce._issue_gift_card(portal._portal_client_id_or_403(user, cliente_id), data)
 
 
+@app.post("/auth/gift-cards/assign")
+async def auth_assign_gift_card(
+    data: GiftCardAssignPayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """Asigna una tarjeta regalo EXISTENTE a un cliente (la pone a su nombre)."""
+    security._require_portal_permission(user, "commerce.sell")
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    return commerce._assign_gift_card_to_contact(
+        target,
+        gift_card_id=data.gift_card_id,
+        code=data.code,
+        recipient_name=data.recipient_name,
+        recipient_email=data.recipient_email,
+        recipient_phone=data.recipient_phone,
+        force=data.force,
+    )
+
+
+@app.get("/auth/gift-cards/{gift_card_id}")
+async def auth_gift_card_detail(
+    gift_card_id: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """Detalle de una tarjeta regalo + sus movimientos (emision, asignaciones, canjes)."""
+    security._require_portal_permission(user, "commerce.sell")
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    return commerce._gift_card_detail(target, gift_card_id)
+
+
 @app.post("/auth/gift-cards/{gift_card_id}/status")
 async def auth_gift_card_status(
     gift_card_id: str,

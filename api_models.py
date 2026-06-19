@@ -353,6 +353,7 @@ class PaymentLinkPayload(BaseModel):
 class PaymentLinkResponse(BaseModel):
     payment: CustomerPaymentPublic
     checkout_url: str
+    qr_svg: str = ""
 
 
 class PaymentRefundPayload(BaseModel):
@@ -953,12 +954,14 @@ class FollowUpStepChannel(BaseModel):
 
 
 class FollowUpStep(BaseModel):
-    key: str                # confirmed | reminder_24h | call | reminder_2h
+    key: str                # confirmed | reminder_24h | call | reminder_2h | review
     label: str
     when: str               # "Al reservar", "24 h antes", ...
     offset_hours: int = 0
     channels: List[FollowUpStepChannel] = []
     note: str = ""
+    enabled: bool = True     # paso activo (para pasos opt-in como la reseña post-cita)
+    needs_setup: bool = False  # requiere configuracion extra (p.ej. enlace de resena)
 
 
 class FollowUpResponse(BaseModel):
@@ -975,6 +978,61 @@ class FollowUpResponse(BaseModel):
     email_confirm_button: bool = True
     suppress_2h_if_confirmed: bool = True
     steps: List[FollowUpStep] = []
+    default_test_email: str = ""
+    default_test_phone: str = ""
+
+
+class FollowUpTestPayload(BaseModel):
+    """Probar una fase del Seguimiento contra un destinatario de prueba."""
+    step: str = Field(pattern="^(confirmed|reminder_24h|reminder_2h|call|review)$")
+    email: str = Field(default="", max_length=200)
+    phone: str = Field(default="", max_length=30)
+
+
+class FollowUpTestChannelResult(BaseModel):
+    channel: str
+    label: str = ""
+    status: str  # sent | failed | skipped
+    detail: str = ""
+
+
+class FollowUpTestResponse(BaseModel):
+    ok: bool
+    step: str
+    to_email: str = ""
+    to_phone: str = ""
+    results: List[FollowUpTestChannelResult] = []
+
+
+class ReviewRequestPayload(BaseModel):
+    """Config del seguimiento post-cita (peticion de resena al cliente final)."""
+    enabled: Optional[bool] = None
+    link: Optional[str] = Field(default=None, max_length=600)
+    platform: Optional[str] = Field(default=None, max_length=60)
+    delay_hours: Optional[int] = Field(default=None, ge=1, le=168)
+    only_manual_attendance: Optional[bool] = None
+    message: Optional[str] = Field(default=None, max_length=800)
+    channels: Optional[Dict[str, bool]] = None
+
+
+class ReviewRequestResponse(BaseModel):
+    plan: str = "free"
+    plan_label: str = "Free"
+    enabled: bool = False
+    link: str = ""
+    platform: str = ""           # etiqueta de plataforma (Google, Trustpilot, ...)
+    platform_label: str = ""     # texto del boton ("Dejar resena en Google")
+    delay_hours: int = 3
+    only_manual_attendance: bool = False
+    message: str = ""
+    default_message: str = ""
+    channels: List[FollowUpStepChannel] = []
+    channel_availability: FollowUpChannelAvailability = FollowUpChannelAvailability()
+    sent_30d: int = 0
+    link_valid: bool = False
+    preview_subject: str = ""
+    preview_html: str = ""
+    preview_text: str = ""
 
 
 class AppLiveChatSession(BaseModel):
@@ -1345,6 +1403,7 @@ class PortalBookingSummary(BaseModel):
     email: str
     telefono: str = ""
     servicio: str
+    notas: str = ""
     fecha: str
     hora: str
     timezone: str
@@ -1958,6 +2017,16 @@ class GiftCardRedeemPayload(BaseModel):
 
 class GiftCardStatusPayload(BaseModel):
     enabled: bool = True
+
+
+class GiftCardAssignPayload(BaseModel):
+    """Asignar una tarjeta regalo existente a un cliente (por id o por codigo)."""
+    gift_card_id: str = Field(default="", max_length=64)
+    code: str = Field(default="", max_length=20)
+    recipient_name: str = Field(default="", max_length=120)
+    recipient_email: str = Field(default="", max_length=200)
+    recipient_phone: str = Field(default="", max_length=30)
+    force: bool = False
 
 
 class PortalTeamMemberPayload(BaseModel):

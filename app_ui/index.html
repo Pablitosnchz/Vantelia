@@ -704,6 +704,74 @@
     .pill-used, .pill-redeemed { background: rgba(255,255,255,0.08); color: var(--soft); }
     .pill-expired, .pill-disabled { background: rgba(231,76,60,0.15); color: #e74c3c; }
 
+    /* ── Ventas: rediseño (estilo Fresha/Square) ── */
+    .ventas-subtab { border:1px solid var(--line); background:var(--panel-2); color:var(--soft); transition:all .12s ease; }
+    .ventas-subtab:hover { border-color:var(--accent); color:var(--text); }
+    .vsell-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(158px,1fr)); gap:12px; margin:16px 0 24px; }
+    .vsell-kpi { display:flex; align-items:center; gap:12px; padding:14px 16px; border:1px solid var(--line); border-radius:14px;
+      background:linear-gradient(135deg, var(--panel-2), var(--panel)); }
+    .vsell-kpi-ic { width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:1.2rem;
+      background:var(--accent-soft); color:var(--accent); flex-shrink:0; }
+    .vsell-kpi.warn .vsell-kpi-ic { background:rgba(255,200,87,0.14); color:var(--warning); }
+    .vsell-kpi.ok .vsell-kpi-ic { background:rgba(0,245,212,0.12); color:var(--success); }
+    .vsell-kpi-val { font-family:var(--font-title); font-size:1.4rem; font-weight:700; line-height:1.1; }
+    .vsell-kpi-lbl { font-size:0.74rem; color:var(--soft); text-transform:uppercase; letter-spacing:.03em; margin-top:2px; }
+    .vsell-kpi-sub { font-size:0.72rem; color:var(--soft-2); margin-top:1px; }
+    .vsell-section-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:0 0 14px; }
+    .vsell-section-head h3 { font-family:var(--font-title); font-size:1rem; margin:0; display:inline; }
+    .vsell-count { color:var(--soft-2); font-size:0.82rem; margin-left:8px; }
+    .vsell-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
+    .vsell-card { position:relative; background:var(--panel-2); border:1px solid var(--line); border-radius:16px; padding:16px;
+      cursor:pointer; transition:transform .12s ease, border-color .12s ease, box-shadow .12s ease; display:flex; flex-direction:column; gap:10px; min-height:128px; }
+    .vsell-card:hover { border-color:var(--accent); transform:translateY(-2px); box-shadow:0 12px 28px rgba(0,0,0,.28); }
+    .vsell-card.is-off { opacity:.55; }
+    .vsell-card-top { display:flex; align-items:center; gap:10px; }
+    .vsell-ava { width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; font-size:1.15rem;
+      background:var(--accent-soft); color:var(--accent); flex-shrink:0; }
+    .vsell-ava-bono { background:rgba(0,245,212,0.12); color:var(--success); }
+    .vsell-card-name { font-weight:700; font-size:0.95rem; line-height:1.2; min-width:0; }
+    .vsell-price { font-family:var(--font-title); font-size:1.5rem; font-weight:700; line-height:1; }
+    .vsell-price-sub { font-size:0.78rem; color:var(--soft-2); font-weight:500; }
+    .vsell-card-meta { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
+    .vchip { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:999px; font-size:0.72rem; font-weight:600;
+      background:rgba(255,255,255,0.05); color:var(--soft); border:1px solid var(--line); }
+    .vchip.warn { background:rgba(255,200,87,0.12); color:var(--warning); border-color:rgba(255,200,87,0.3); }
+    .vchip.ok { background:rgba(0,245,212,0.12); color:var(--success); border-color:rgba(0,245,212,0.3); }
+    .vsell-card-act { position:absolute; top:12px; right:12px; opacity:0; transition:opacity .12s ease; }
+    .vsell-card:hover .vsell-card-act { opacity:1; }
+    .vsell-card-act .btn { padding:5px 10px; font-size:0.74rem; }
+    @media (hover:none) { .vsell-card-act { opacity:1; } }
+    .vsell-list { display:flex; flex-direction:column; gap:8px; }
+    .vsell-row { display:flex; align-items:center; gap:12px; padding:11px 14px; background:var(--panel-2); border:1px solid var(--line); border-radius:12px; }
+    .vsell-row-ic { width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:0.95rem;
+      background:var(--accent-soft); color:var(--accent); flex-shrink:0; }
+    .vsell-row-main { flex:1; min-width:0; }
+    .vsell-row-title { font-weight:600; font-size:0.88rem; }
+    .vsell-row-sub { color:var(--soft-2); font-size:0.76rem; margin-top:2px; }
+    .vsell-row-amt { font-weight:700; white-space:nowrap; font-size:0.95rem; }
+    .vsell-bar { height:6px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden; }
+    .vsell-bar > i { display:block; height:100%; border-radius:999px; background:linear-gradient(90deg,var(--accent-2),var(--accent)); }
+    .vsell-empty { text-align:center; padding:38px 20px; border:1px dashed var(--line); border-radius:16px; color:var(--soft); }
+    .vsell-empty-ic { font-size:2.4rem; margin-bottom:10px; opacity:.85; }
+    .vsell-empty b { display:block; color:var(--text); margin-bottom:4px; font-size:0.95rem; }
+    /* Tarjeta regalo (visual de gradiente) */
+    .vsell-giftgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(258px,1fr)); gap:14px; }
+    .vgift { position:relative; border-radius:16px; padding:18px; color:#04121c; overflow:hidden;
+      background:linear-gradient(135deg,#00F5D4,#00D1FF); box-shadow:0 10px 26px rgba(0,209,255,0.18); }
+    .vgift.is-off { background:linear-gradient(135deg,#9aa7b2,#6b7c8a); box-shadow:none; }
+    .vgift::after { content:""; position:absolute; right:-30px; top:-30px; width:120px; height:120px; border-radius:50%; background:rgba(255,255,255,0.16); }
+    .vgift-brand { font-weight:800; font-size:0.74rem; letter-spacing:.06em; text-transform:uppercase; opacity:.9; }
+    .vgift-pill { position:relative; z-index:1; font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.04em;
+      background:rgba(0,0,0,0.18); padding:3px 9px; border-radius:999px; }
+    .vgift-code { position:relative; z-index:1; font-family:'Courier New',monospace; font-weight:800; font-size:1.28rem; letter-spacing:1px; margin:14px 0 8px; }
+    .vgift-bal { position:relative; z-index:1; font-size:0.92rem; opacity:.9; }
+    .vgift-bal b { font-size:1.5rem; }
+    .vgift .vsell-bar { background:rgba(0,0,0,0.18); margin:9px 0 8px; }
+    .vgift .vsell-bar > i { background:rgba(0,0,0,0.5); }
+    .vgift-foot { position:relative; z-index:1; display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:0.74rem; opacity:.9; }
+    .vgift-disable { background:rgba(0,0,0,0.18); border:none; color:#04121c; border-radius:8px; padding:4px 10px; font-size:0.72rem; font-weight:800; cursor:pointer; }
+    .vgift-disable:hover { background:rgba(0,0,0,0.3); }
+
     /* ── Informes (dashboard económico) ── */
     .inf-kpis {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -1132,6 +1200,66 @@
     .fu-switch input { margin-top:3px; }
     .fu-call-block { border:1px dashed var(--line); border-radius:12px; padding:12px 14px; margin-top:4px; }
     .fu-call-block.fu-disabled { opacity:.55; }
+
+    /* Nodo de reseña dentro de la escalera */
+    .fu-step-review .fu-dot { color:#f59e0b; background:rgba(245,158,11,0.12); border-color:#f59e0b; }
+    .fu-step.fu-muted.fu-step-review .fu-dot { color:var(--soft-2); background:rgba(255,255,255,0.03); border-color:var(--line); }
+    .fu-step-review .fu-line { display:none; }
+    .fu-setup-badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.64rem; font-weight:700;
+      text-transform:uppercase; letter-spacing:.03em; color:#fda4af; background:rgba(244,63,94,0.12);
+      border:1px solid rgba(244,63,94,0.4); }
+    .fu-review-cta { margin-top:12px; background:none; border:none; padding:0; cursor:pointer; font-size:0.82rem;
+      font-weight:700; color:#fbbf24; font-family:inherit; }
+    .fu-review-cta:hover { text-decoration:underline; }
+
+    /* QR de cobro (Stripe): PNG ráster a tamaño fijo escaneable sobre fondo blanco */
+    img.vqr { display:block; width:240px; height:240px; image-rendering:auto; }
+
+    /* ===== Seguimiento post-cita: reseñas ===== */
+    .rv-card { overflow:hidden; }
+    @keyframes rvPulse { 0% { box-shadow:0 0 0 0 rgba(245,158,11,0.55); } 100% { box-shadow:0 0 0 16px rgba(245,158,11,0); } }
+    .rv-card.rv-pulse { animation:rvPulse 1.4s ease-out 1; border-color:#f59e0b; }
+    .rv-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; }
+    .rv-head-main { display:flex; gap:14px; align-items:flex-start; min-width:0; }
+    .rv-stars { font-size:1.5rem; color:#f59e0b; line-height:1; flex-shrink:0; letter-spacing:1px;
+      text-shadow:0 0 18px rgba(245,158,11,0.45); }
+    .rv-head-side { display:flex; align-items:center; gap:12px; }
+    .rv-sent-badge { display:inline-flex; align-items:center; gap:6px; padding:5px 11px; border-radius:999px;
+      font-size:0.72rem; font-weight:700; color:#fbbf24; background:rgba(245,158,11,0.12);
+      border:1px solid rgba(245,158,11,0.4); white-space:nowrap; }
+    /* Interruptor maestro */
+    .rv-master { position:relative; display:inline-block; cursor:pointer; }
+    .rv-master input { position:absolute; opacity:0; width:0; height:0; }
+    .rv-master-track { display:block; width:52px; height:30px; border-radius:999px; background:var(--line);
+      border:1px solid var(--line); transition:background .18s ease; }
+    .rv-master-thumb { position:absolute; top:3px; left:3px; width:24px; height:24px; border-radius:50%;
+      background:#fff; box-shadow:0 2px 6px rgba(0,0,0,.4); transition:transform .18s ease; }
+    .rv-master input:checked + .rv-master-track { background:#f59e0b; border-color:#f59e0b; }
+    .rv-master input:checked + .rv-master-track .rv-master-thumb { transform:translateX(22px); }
+    .rv-body { margin-top:20px; transition:opacity .18s ease; }
+    .rv-card.rv-off .rv-body { opacity:.45; pointer-events:none; filter:grayscale(.3); }
+    .rv-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+    @media (max-width:880px) { .rv-grid { grid-template-columns:1fr; } }
+    .rv-col { min-width:0; }
+    .rv-link-wrap { position:relative; display:flex; align-items:center; }
+    .rv-link-ico { position:absolute; left:12px; font-size:0.95rem; pointer-events:none; opacity:.7; }
+    .rv-link-input { padding-left:36px !important; }
+    .rv-link-wrap.rv-ok .rv-link-input { border-color:var(--success); }
+    .rv-link-wrap.rv-bad .rv-link-input { border-color:#ef6a6a; }
+    .rv-help { margin-top:10px; padding:12px 14px; border:1px dashed var(--line); border-radius:10px;
+      background:rgba(7,16,31,0.4); font-size:0.84rem; color:var(--soft); }
+    .rv-help ol { margin:8px 0 0; padding-left:18px; line-height:1.7; }
+    .rv-help code { color:var(--accent-2); }
+    .rv-chips { display:flex; gap:8px; flex-wrap:wrap; }
+    .rv-switch { display:flex; align-items:flex-start; gap:11px; padding:12px 14px;
+      border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.4); }
+    .rv-switch input { margin-top:3px; }
+    .rv-msg { font-size:0.88rem; line-height:1.55; }
+    .rv-preview { margin-top:14px; border:1px solid var(--line); border-radius:12px; overflow:hidden;
+      background:#f5f8fb; }
+    .rv-preview-label { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+      color:#64748b; padding:8px 12px; background:#e9eff5; border-bottom:1px solid #d8e2ee; }
+    .rv-preview-frame { max-height:300px; overflow:auto; }
 
     /* Respeta la preferencia de menos movimiento */
     @media (prefers-reduced-motion: reduce) {
@@ -2308,30 +2436,38 @@
     <p class="panel-sub" id="ventasSubText">Vende productos complementarios y registra cada venta en caja.</p>
 
     <div id="ventasPanelProductos" class="ventas-panel">
-      <div style="display:flex; margin:12px 0;">
-        <button class="btn btn-primary" id="productNewBtn" data-perm="catalog.manage" style="margin-left:auto;">+ Nuevo producto</button>
+      <div class="vsell-kpis" id="prodKpis"></div>
+      <div class="vsell-section-head">
+        <div><h3>Catálogo</h3><span class="vsell-count" id="prodCount"></span></div>
+        <button class="btn btn-primary" id="productNewBtn" data-perm="catalog.manage" type="button">+ Nuevo producto</button>
       </div>
-      <div class="employee-grid" id="productosGrid"></div>
-      <h3 style="font-size:0.95rem; margin:22px 0 8px; color:var(--soft);">Últimas ventas</h3>
-      <div id="ventasRecientes" style="display:flex; flex-direction:column; gap:6px;"></div>
+      <div class="vsell-grid" id="productosGrid"></div>
+      <div class="vsell-section-head" style="margin-top:26px;"><div><h3>Últimas ventas</h3></div></div>
+      <div class="vsell-list" id="ventasRecientes"></div>
     </div>
 
     <div id="ventasPanelBonos" class="ventas-panel" style="display:none;">
-      <div style="display:flex; margin:12px 0;">
-        <button class="btn btn-primary" id="packageNewBtn" data-perm="catalog.manage" style="margin-left:auto;">+ Nuevo bono</button>
+      <div class="vsell-kpis" id="bonoKpis"></div>
+      <div class="vsell-section-head">
+        <div><h3>Catálogo de bonos</h3><span class="vsell-count" id="bonoCount"></span></div>
+        <button class="btn btn-primary" id="packageNewBtn" data-perm="catalog.manage" type="button">+ Nuevo bono</button>
       </div>
-      <div class="employee-grid" id="bonosGrid"></div>
-      <h3 style="font-size:0.95rem; margin:22px 0 8px; color:var(--soft);">Bonos vendidos</h3>
-      <input type="text" class="field-input" id="purchasesSearch" placeholder="Buscar por nombre, email o teléfono…" style="max-width:340px; margin-bottom:10px;" />
-      <div id="purchasesList" style="display:flex; flex-direction:column; gap:6px;"></div>
+      <div class="vsell-grid" id="bonosGrid"></div>
+      <div class="vsell-section-head" style="margin-top:26px;">
+        <div><h3>Bonos vendidos</h3></div>
+        <input type="text" class="field-input" id="purchasesSearch" placeholder="Buscar comprador…" style="max-width:280px;" />
+      </div>
+      <div class="vsell-list" id="purchasesList"></div>
     </div>
 
     <div id="ventasPanelGift" class="ventas-panel" style="display:none;">
-      <div style="display:flex; margin:12px 0;">
-        <button class="btn btn-primary" id="giftNewBtn" data-perm="commerce.sell" style="margin-left:auto;">+ Emitir tarjeta</button>
+      <div class="vsell-kpis" id="giftKpis"></div>
+      <div class="vsell-section-head">
+        <div><h3>Tarjetas regalo</h3><span class="vsell-count" id="giftCount"></span></div>
+        <button class="btn btn-primary" id="giftNewBtn" data-perm="commerce.sell" type="button">+ Emitir tarjeta</button>
       </div>
-      <input type="text" class="field-input" id="giftSearch" placeholder="Buscar por código, comprador…" style="max-width:340px; margin-bottom:10px;" />
-      <div id="giftList" style="display:flex; flex-direction:column; gap:6px;"></div>
+      <input type="text" class="field-input" id="giftSearch" placeholder="Buscar por código o comprador…" style="max-width:320px; margin-bottom:14px;" />
+      <div class="vsell-giftgrid" id="giftList"></div>
     </div>
   </section>
 
@@ -2465,7 +2601,7 @@
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap;">
         <div>
           <h2 style="margin:0;">Seguimiento del cliente</h2>
-          <p class="panel-sub" style="margin:6px 0 0;">El camino de contacto desde que el cliente reserva hasta su cita. Cada paso escala solo si <b>no ha confirmado</b> antes. Email siempre; WhatsApp y llamada según tu plan.</p>
+          <p class="panel-sub" style="margin:6px 0 0;">El camino de contacto desde que el cliente reserva hasta <b>después</b> de su cita. Cada paso escala solo si <b>no ha confirmado</b> antes; al final, le pides una reseña. Email siempre; WhatsApp y llamada según tu plan.</p>
         </div>
         <span id="fuPlanBadge" class="fu-plan-badge">—</span>
       </div>
@@ -2501,6 +2637,90 @@
         <button class="btn btn-primary" id="fuSaveBtn" type="button">Guardar seguimiento</button>
         <button class="btn btn-ghost" id="fuPreviewBtn" type="button">👁 Vista del cliente</button>
         <span class="panel-sub" id="fuUpsell" style="margin:0; display:none;"></span>
+      </div>
+    </div>
+
+    <!-- SEGUIMIENTO POST-CITA: peticion de resena -->
+    <div class="panel-card rv-card" id="reviewCard" style="margin-top:18px;">
+      <div class="rv-head">
+        <div class="rv-head-main">
+          <div class="rv-stars">★★★★★</div>
+          <div>
+            <h2 style="margin:0;">Pide reseñas tras la cita</h2>
+            <p class="panel-sub" style="margin:6px 0 0;">Cuando termina la cita, enviamos automáticamente a tu cliente un mensaje invitándole a dejar una reseña en Google (o donde tú elijas). Más reseñas = más clientes nuevos.</p>
+          </div>
+        </div>
+        <div class="rv-head-side">
+          <span id="rvSentBadge" class="rv-sent-badge" style="display:none;"></span>
+          <label class="rv-master">
+            <input type="checkbox" id="rvEnabled" />
+            <span class="rv-master-track"><span class="rv-master-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+
+      <div id="rvBody" class="rv-body">
+        <div class="rv-grid">
+          <div class="rv-col">
+            <label class="field-label">Enlace de reseñas</label>
+            <div class="rv-link-wrap">
+              <span class="rv-link-ico" id="rvLinkIco">🔗</span>
+              <input class="field-input rv-link-input" id="rvLink" type="url" inputmode="url" placeholder="https://g.page/r/tu-negocio/review" maxlength="600" />
+            </div>
+            <p class="panel-sub rv-hint" id="rvLinkHint" style="margin:6px 0 0;">Pega el enlace directo a reseñas de tu ficha de Google. <a href="#" id="rvHelpToggle" style="color:var(--accent-2);">¿Cómo lo consigo?</a></p>
+            <div id="rvHelp" class="rv-help" style="display:none;">
+              <b>Conseguir tu enlace de Google en 30 s</b>
+              <ol>
+                <li>Entra en tu <b>Perfil de Empresa de Google</b> (google.com/business).</li>
+                <li>Pulsa <b>“Pedir reseñas”</b> / <b>“Comparte tu formulario de reseñas”</b>.</li>
+                <li>Copia el enlace corto (tipo <code>g.page/r/…/review</code>) y pégalo aquí.</li>
+              </ol>
+              <p class="panel-sub" style="margin:6px 0 0;">También sirve Trustpilot, Tripadvisor, Yelp, Facebook… cualquier URL pública de reseñas.</p>
+            </div>
+
+            <div class="form-row" style="margin-top:14px;">
+              <div class="field">
+                <label class="field-label">Plataforma (opcional)</label>
+                <input class="field-input" id="rvPlatform" type="text" maxlength="60" placeholder="Se detecta sola (Google)" />
+              </div>
+              <div class="field">
+                <label class="field-label">Enviar después de la cita</label>
+                <select class="field-input" id="rvDelay">
+                  <option value="1">1 hora</option>
+                  <option value="2">2 horas</option>
+                  <option value="3">3 horas</option>
+                  <option value="6">6 horas</option>
+                  <option value="24">1 día</option>
+                  <option value="48">2 días</option>
+                  <option value="72">3 días</option>
+                </select>
+              </div>
+            </div>
+
+            <label class="field-label" style="margin-top:14px;">Canales de envío</label>
+            <div class="rv-chips" id="rvChips"></div>
+
+            <label class="rv-switch" style="margin-top:14px;">
+              <input type="checkbox" id="rvOnlyManual" />
+              <span><b>Solo a quien el equipo marcó como “asistió”</b><br><span class="panel-sub" style="margin:0;">Si lo dejas apagado, se pide reseña a toda cita completada (asistencia presunta).</span></span>
+            </label>
+          </div>
+
+          <div class="rv-col">
+            <label class="field-label">Mensaje</label>
+            <textarea class="field-textarea rv-msg" id="rvMessage" maxlength="800" rows="6" placeholder="Mensaje para tu cliente…"></textarea>
+            <p class="panel-sub" style="margin:6px 0 0;">Variables: <code>{empresa}</code> <code>{nombre}</code> <code>{servicio}</code> <code>{enlace}</code>. En el email el enlace aparece como botón.</p>
+            <div class="rv-preview" id="rvPreview">
+              <div class="rv-preview-label">Vista previa del email</div>
+              <div class="rv-preview-frame" id="rvPreviewFrame"></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:18px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <button class="btn btn-primary" id="rvSaveBtn" type="button">Guardar</button>
+          <span class="panel-sub" id="rvStatus" style="margin:0;"></span>
+        </div>
       </div>
     </div>
 
@@ -2840,8 +3060,13 @@
   </div>
   <div style="padding:18px; overflow-y:auto; flex:1;">
     <p class="panel-sub" id="reschedDesc"></p>
-    <div class="field" style="margin:14px 0 10px;"><label class="field-label">Fecha</label><input type="date" class="field-input" id="reschedDate" /></div>
-    <div id="reschedSlots" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;"></div>
+    <div class="field" style="margin:14px 0 10px;"><label class="field-label">Profesional</label>
+      <select class="field-input" id="reschedProf"></select>
+      <span class="panel-sub" id="reschedProfHint" style="margin:4px 0 0; display:none;"></span>
+    </div>
+    <div class="field" style="margin:0 0 10px;"><label class="field-label">Fecha</label><input type="date" class="field-input" id="reschedDate" /></div>
+    <label class="field-label">Hueco disponible</label>
+    <div id="reschedSlots" style="display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px;"></div>
     <input type="hidden" id="reschedBookingId" />
     <input type="hidden" id="reschedSlotSelected" />
     <button class="btn btn-primary" id="reschedConfirmBtn" disabled style="width:100%;">Confirmar reprogramación</button>
@@ -2977,7 +3202,7 @@
     </div>
     <!-- Fase 2: QR + estado -->
     <div id="posQrPhase" style="display:none; text-align:center;">
-      <div id="posQrBox" style="background:#fff; border-radius:14px; padding:14px; width:240px; margin:8px auto 12px; display:flex; align-items:center; justify-content:center;"></div>
+      <div id="posQrBox" style="background:#fff; border-radius:14px; padding:14px; margin:8px auto 12px; display:inline-block; line-height:0;"></div>
       <div style="font-size:1.3rem; font-weight:700;" id="posQrAmount">0,00 €</div>
       <div id="posStatus" class="panel-sub" style="margin:8px 0 4px;">Esperando el pago…</div>
       <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;">
@@ -3202,7 +3427,7 @@ function setTab(tab) {
   if (tab === 'equipo')     loadEquipo();
   if (tab === 'servicios')  loadServicios();
   if (tab === 'horarios')   loadHorarios();
-  if (tab === 'mensajes')   { loadMensajes(); loadFollowUp(); }
+  if (tab === 'mensajes')   { loadMensajes(); loadFollowUp(); loadReviews(); }
   if (tab === 'instalacion') loadInstalacion();
   if (tab === 'cuenta')     { loadCuenta(); loadAccessTeam(); loadRebookingAi(); loadCancellationPolicy(); }
   if (tab === 'ventas')     loadVentas();
@@ -5246,6 +5471,33 @@ function _switchToCalView() {
 let reschedCurrentBooking = null;
 let reschedOnDone = null;
 
+// Profesionales compatibles con el servicio de la cita (con service_ids del endpoint público).
+async function reschedLoadCompatibleProfs(b) {
+  const sel = document.getElementById('reschedProf');
+  const hint = document.getElementById('reschedProfHint');
+  sel.innerHTML = '<option value="">Cargando…</option>';
+  hint.style.display = 'none';
+  let items = [];
+  try {
+    const r = await api(`/profesionales/${encodeURIComponent(state.cliente_id)}`);
+    items = (r.items || r || []).map(e => ({ id: e.employee_id || e.id, name: e.name || 'Profesional',
+      service_ids: e.service_ids || [], allows_all: e.allows_all_services !== false ? (e.allows_all_services || !(e.service_ids || []).length) : false }));
+  } catch { items = []; }
+  const svcSlug = b.service_id || '';
+  // Solo profesionales que pueden dar este servicio (o cualquiera si no hay slug/restricción).
+  let compat = items.filter(e => !svcSlug || e.allows_all || (e.service_ids || []).includes(svcSlug));
+  if (!compat.length) compat = items;  // fallback defensivo: nunca dejar el selector vacío
+  sel.innerHTML = compat.length
+    ? compat.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`).join('')
+    : '<option value="">Agenda general</option>';
+  // Preselecciona el profesional actual si sigue siendo compatible.
+  if (b.employee_id && compat.some(e => e.id === b.employee_id)) sel.value = b.employee_id;
+  if (svcSlug && items.length && compat.length < items.length) {
+    hint.textContent = 'Solo se muestran profesionales que ofrecen este servicio.';
+    hint.style.display = '';
+  }
+}
+
 async function openReschedDrawer(b, onDone) {
   reschedCurrentBooking = b || null;
   reschedOnDone = (typeof onDone === 'function') ? onDone : null;
@@ -5256,33 +5508,38 @@ async function openReschedDrawer(b, onDone) {
   const dateRef = b.start_at || b.fecha || b.datetime || b.date || '';
   document.getElementById('reschedDate').value = dateRef.slice(0,10);
   document.getElementById('reschedConfirmBtn').disabled = true;
+  document.getElementById('reschedSlots').innerHTML = '';
   document.getElementById('reschedDrawer').classList.add('open');
   document.getElementById('reschedOverlay').classList.add('open');
+  await reschedLoadCompatibleProfs(b);
   await loadReschedSlots();
 }
 
 async function loadReschedSlots() {
   const date = document.getElementById('reschedDate').value;
+  const empId = document.getElementById('reschedProf').value || '';
   const slotsDiv = document.getElementById('reschedSlots');
+  document.getElementById('reschedSlotSelected').value = '';
+  document.getElementById('reschedConfirmBtn').disabled = true;
   if (!date) { slotsDiv.innerHTML = '<div class="panel-sub">Selecciona una fecha.</div>'; return; }
   slotsDiv.innerHTML = '<div class="panel-sub">Cargando huecos…</div>';
   try {
     let params = `cliente_id=${encodeURIComponent(state.cliente_id)}&fecha=${encodeURIComponent(date)}`;
-    if (reschedCurrentBooking?.employee_id) params += `&employee_id=${encodeURIComponent(reschedCurrentBooking.employee_id)}`;
+    if (empId) params += `&employee_id=${encodeURIComponent(empId)}`;
     if (reschedCurrentBooking?.servicio) params += `&servicio=${encodeURIComponent(reschedCurrentBooking.servicio)}`;
     const data = await api(`/disponibilidad?${params}`);
     const allSlots = data.slots || data || [];
     const slots = allSlots.filter(s => s.disponible !== false);
     slotsDiv.innerHTML = '';
-    if (!slots.length) { slotsDiv.innerHTML = '<div class="panel-sub">Sin huecos disponibles ese día.</div>'; return; }
+    if (!slots.length) { slotsDiv.innerHTML = '<div class="panel-sub">Sin huecos disponibles ese día para este profesional.</div>'; return; }
     slots.forEach(s => {
       const hora = s.hora || s.time || String(s);
       const btn = document.createElement('button');
-      btn.className = 'filter-chip'; btn.textContent = hora;
+      btn.type = 'button'; btn.className = 'filter-chip'; btn.textContent = hora;
       btn.addEventListener('click', () => {
         slotsDiv.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
         btn.classList.add('active');
-        document.getElementById('reschedSlotSelected').value = s.datetime || (date + 'T' + hora + ':00');
+        document.getElementById('reschedSlotSelected').value = hora;
         document.getElementById('reschedConfirmBtn').disabled = false;
       });
       slotsDiv.appendChild(btn);
@@ -5291,17 +5548,24 @@ async function loadReschedSlots() {
 }
 
 document.getElementById('reschedDate').addEventListener('change', loadReschedSlots);
+document.getElementById('reschedProf').addEventListener('change', loadReschedSlots);
 document.getElementById('reschedConfirmBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('reschedConfirmBtn');
   const id = document.getElementById('reschedBookingId').value;
-  const dt = document.getElementById('reschedSlotSelected').value;
+  const fecha = document.getElementById('reschedDate').value;
+  const hora = document.getElementById('reschedSlotSelected').value;
+  const employee_id = document.getElementById('reschedProf').value || '';
+  if (!fecha || !hora) { toast('Elige fecha y hueco.', 'error'); return; }
+  const old = btn.textContent; btn.disabled = true; btn.textContent = 'Reprogramando…';
   try {
-    await api(`/auth/bookings/${id}/reschedule`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ new_datetime: dt }) });
+    await api(`/auth/bookings/${id}/reschedule`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ fecha, hora, employee_id }) });
     toast('Cita reprogramada', 'success');
     document.getElementById('reschedDrawer').classList.remove('open');
     document.getElementById('reschedOverlay').classList.remove('open');
     loadCitas();
     const cb = reschedOnDone; reschedOnDone = null; if (cb) cb();
   } catch(e) { toast(e.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = old; }
 });
 document.getElementById('reschedClose').addEventListener('click', () => { reschedOnDone = null; document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
 document.getElementById('reschedOverlay').addEventListener('click', () => { reschedOnDone = null; document.getElementById('reschedDrawer').classList.remove('open'); document.getElementById('reschedOverlay').classList.remove('open'); });
@@ -5987,10 +6251,12 @@ function cdRenderDetail(b){
     cobrarItems.push(mItem('refund', '↩ Reembolsar'));
   }
   const moreItems = [];
+  if (b.email || b.client_email || b.telefono || b.client_phone || b.nombre || b.client_name) moreItems.push(mItem('vercliente', '👤 Ver cliente'));
   if (notCancelled && (b.telefono || b.client_phone) && hasPerm('agenda.attendance')) moreItems.push(mItem('confirmcall', '📞 Llamar para confirmar'));
   if (notCancelled && hasPerm('agenda.attendance')) moreItems.push(mItem('sendconfirm', '✉ Enviar confirmación'));
   if (notCancelled && hasPerm('agenda.create')) moreItems.push(mItem('rebook', '🔁 Reservar siguiente'));
-  if (b.manage_url) moreItems.push(mItem('manage', '🔗 Gestionar (enlace cliente)'));
+  if (est === 'completed' && (b.email || b.client_email || b.telefono || b.client_phone) && hasPerm('agenda.attendance')) moreItems.push(mItem('reviewreq', '⭐ Pedir reseña'));
+  moreItems.push(mItem('manage', '🗂 Gestionar cita'));
   const d = document.getElementById('cdDetail'); d.style.display = '';
   d.innerHTML = `
     <div class="cd-detail-head">
@@ -6040,7 +6306,7 @@ function cdRenderDetail(b){
       const bid = b.booking_id || b.id || '';
       try {
         if (action === 'close'){ citasState.selectedDayBookingId = ''; d.style.display = 'none'; renderCitasDay(); return; }
-        if (action === 'manage'){ if (b.manage_url) window.open(b.manage_url, '_blank', 'noopener,noreferrer'); return; }
+        if (action === 'manage'){ openManageBookingModal(b); return; }
         if (action === 'pay'){
           const def = b.service_price_cents ? (b.service_price_cents/100).toFixed(2) : '';
           const cents = await promptAmount({ title: 'Cobrar cita', label: 'Importe a cobrar (€)', defaultEur: def });
@@ -6049,9 +6315,7 @@ function cdRenderDetail(b){
           try {
             const data = await api(`/auth/app/bookings/${encodeURIComponent(bid)}/payment-link`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount_cents: cents }) });
             if (data.checkout_url){
-              try { await navigator.clipboard.writeText(data.checkout_url); toast('Enlace de pago copiado al portapapeles', 'success'); }
-              catch { toast('Enlace de pago creado', 'success'); }
-              window.open(data.checkout_url, '_blank', 'noopener,noreferrer');
+              showPaymentQrDialog({ qrSvg: data.qr_svg || '', url: data.checkout_url, amountCents: cents, title: 'Cobrar cita' });
             }
           } catch(e){ toast(e.message, 'error'); }
           finally { btn.disabled = false; btn.textContent = orig; }
@@ -6074,6 +6338,20 @@ function cdRenderDetail(b){
           try {
             await api(`/auth/bookings/${bid}/send-confirmation`, { method:'POST' });
             toast('Confirmación enviada.', 'success');
+          } catch(e){ toast(e.message, 'error'); }
+          return;
+        }
+        if (action === 'vercliente'){ await openClienteFromBooking(b); return; }
+        if (action === 'reviewreq'){
+          const okR = await confirmDialog({
+            title: 'Pedir reseña',
+            bodyHtml: `<p>Se enviará a <b>${escapeHtml(b.nombre || 'el cliente')}</b> una invitación a dejar una reseña, por los canales activos en Seguimiento. <span style="color:var(--soft-2);">Configura el enlace en Seguimiento → Pide reseñas.</span></p>`,
+            confirmLabel: 'Enviar ahora',
+          });
+          if (!okR) return;
+          try {
+            await api(`/auth/bookings/${bid}/review-request`, { method:'POST' });
+            toast('Petición de reseña enviada.', 'success');
           } catch(e){ toast(e.message, 'error'); }
           return;
         }
@@ -6197,6 +6475,127 @@ function cdRenderDetail(b){
       } catch(e){ toast(e.message, 'error'); }
     });
   });
+}
+
+// Modal centrado de gestión de cita (sustituye al enlace cliente como interfaz del personal).
+// Reúne datos básicos de cita + cliente y las acciones permitidas. El enlace público del
+// cliente sigue disponible (botón "Copiar enlace"), pero no se usa como panel interno.
+function openManageBookingModal(b){
+  const bid = b.booking_id || b.id || '';
+  const est = cdEstado(b);
+  const badge = { confirmed:'badge-confirmed', pending:'badge-pending', cancelled:'badge-cancelled', completed:'badge-completed', no_show:'badge-noshow' }[est] || 'badge-pending';
+  const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '--:--');
+  const canEdit = (b.can_cancel !== false) && est !== 'cancelled' && est !== 'completed' && est !== 'no_show';
+  const canAttend = b.can_mark_attendance === true && est !== 'cancelled';
+  const notCancelled = est !== 'cancelled';
+  const canEditClient = hasPerm('clients.edit');
+  const dis = canEditClient ? '' : 'disabled';
+  const pay = { preauthorized:'💳 retención activa', paid:'💳 pagado', released:'retención liberada', refunded:'reembolsado', partially_refunded:'reembolso parcial' }[b.payment_status] || '';
+  const wrap = vModal(`
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+      <span class="badge ${badge}">${escapeHtml(CD_ESTADO_LABEL[est] || est)}</span>
+      ${b.booking_code ? `<span class="badge" style="background:var(--accent-soft); color:var(--accent); font-family:'Courier New',monospace;">N.º ${escapeHtml(b.booking_code)}</span>` : ''}
+      ${pay ? `<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">${pay}</span>` : ''}
+    </div>
+    <div class="inf-kpis" style="grid-template-columns:repeat(2,1fr); margin-bottom:14px;">
+      <div class="inf-kpi"><div class="k-label">Fecha y hora</div><div class="k-value" style="font-size:0.92rem;">${escapeHtml((b.fecha || '') + ' · ' + hora)}</div></div>
+      <div class="inf-kpi"><div class="k-label">Profesional</div><div class="k-value" style="font-size:0.92rem;">${escapeHtml(b.employee_name || 'Agenda')}</div></div>
+      <div class="inf-kpi"><div class="k-label">Servicio</div><div class="k-value" style="font-size:0.92rem;">${escapeHtml((b.servicio || 'Consulta') + cdServiceMeta(b))}</div></div>
+      <div class="inf-kpi"><div class="k-label">Centro</div><div class="k-value" style="font-size:0.92rem;">${escapeHtml(b.location_name || '—')}</div></div>
+    </div>
+    <div class="field" style="margin-bottom:8px;">
+      <label class="field-label">Datos del cliente</label>
+      <div class="form-row" style="margin-top:0;">
+        <div class="field"><label class="field-label">Nombre</label><input class="field-input" id="mgNombre" maxlength="80" value="${escapeHtml(b.nombre || b.client_name || '')}" ${dis}></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label class="field-label">Email</label><input class="field-input" id="mgEmail" type="email" maxlength="200" value="${escapeHtml(b.email || b.client_email || '')}" ${dis}></div>
+        <div class="field"><label class="field-label">Teléfono</label><input class="field-input" id="mgTelefono" maxlength="30" value="${escapeHtml(b.telefono || b.client_phone || '')}" ${dis}></div>
+      </div>
+      <div class="field"><label class="field-label">Notas internas</label><textarea class="field-input" id="mgNotas" rows="2" maxlength="500" ${dis}>${escapeHtml(b.notas || '')}</textarea></div>
+    </div>
+    ${canEditClient ? `<button class="btn btn-primary" id="mgSave" style="width:100%; margin-bottom:12px;">Guardar datos</button>` : '<p class="panel-sub" style="margin:0 0 12px;">Solo lectura: no tienes permiso para editar datos del cliente.</p>'}
+    <label class="field-label">Acciones</label>
+    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;">
+      ${canEdit ? `<button class="btn btn-ghost" data-mg="resched">📅 Reprogramar / cambiar profesional</button>` : ''}
+      ${canAttend && hasPerm('agenda.attendance') ? `<button class="btn btn-ghost" data-mg="attended">✓ Realizada</button><button class="btn btn-ghost" data-mg="noshow" style="color:var(--danger); border-color:var(--danger);">✗ No vino</button>` : ''}
+      ${notCancelled && hasPerm('agenda.attendance') ? `<button class="btn btn-ghost" data-mg="sendconfirm">✉ Enviar confirmación</button>` : ''}
+      ${notCancelled && (b.telefono || b.client_phone) && hasPerm('agenda.attendance') ? `<button class="btn btn-ghost" data-mg="confirmcall">📞 Llamar para confirmar</button>` : ''}
+      <button class="btn btn-ghost" data-mg="vercliente">👤 Ver ficha del cliente</button>
+      ${canEdit && hasPerm('agenda.cancel') ? `<button class="btn btn-ghost" data-mg="cancel" style="color:var(--danger); border-color:var(--danger);">✕ Cancelar cita</button>` : ''}
+      ${b.manage_url ? `<button class="btn btn-ghost" data-mg="copylink">🔗 Copiar enlace para el cliente</button>` : ''}
+    </div>
+  `, { title: 'Gestionar cita', maxw: 540 });
+
+  const close = () => wrap.remove();
+  const refresh = async () => { try { await loadCitasDay(); } catch {} };
+
+  const saveBtn = wrap.querySelector('#mgSave');
+  if (saveBtn) saveBtn.addEventListener('click', async () => {
+    const nombre = wrap.querySelector('#mgNombre').value.trim();
+    if (nombre.length < 2) { toast('El nombre es obligatorio.', 'error'); return; }
+    const payload = {
+      nombre, email: wrap.querySelector('#mgEmail').value.trim(), telefono: wrap.querySelector('#mgTelefono').value.trim(),
+      servicio: b.servicio || '', employee_id: b.employee_id || '', fecha: b.fecha || '', hora: b.hora || '',
+      notas: wrap.querySelector('#mgNotas').value,
+    };
+    if (!payload.fecha || !payload.hora) { toast('Faltan fecha/hora de la cita.', 'error'); return; }
+    saveBtn.disabled = true; const o = saveBtn.textContent; saveBtn.textContent = 'Guardando…';
+    try {
+      await api(`/auth/bookings/${encodeURIComponent(bid)}/update`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      toast('Datos guardados.', 'success'); Object.assign(b, { nombre: payload.nombre, email: payload.email, telefono: payload.telefono, notas: payload.notas });
+      await refresh();
+    } catch (e) { toast(e.message, 'error'); }
+    finally { saveBtn.disabled = false; saveBtn.textContent = o; }
+  });
+
+  wrap.querySelectorAll('[data-mg]').forEach(btn => btn.addEventListener('click', async () => {
+    const action = btn.dataset.mg;
+    try {
+      if (action === 'resched'){ close(); openReschedDrawer(b, refresh); return; }
+      if (action === 'vercliente'){ close(); await openClienteFromBooking(b); return; }
+      if (action === 'copylink'){
+        try { await navigator.clipboard.writeText(b.manage_url); toast('Enlace copiado.', 'success'); }
+        catch { toast('No se pudo copiar. Enlace: ' + b.manage_url, 'error'); }
+        return;
+      }
+      if (action === 'sendconfirm'){
+        btn.disabled = true;
+        try { const r = await api(`/auth/bookings/${bid}/send-confirmation`, { method:'POST' }); toast(r.mensaje || 'Confirmación enviada.', 'success'); }
+        catch(e){ toast(e.message, 'error'); } finally { btn.disabled = false; }
+        return;
+      }
+      if (action === 'confirmcall'){
+        const ok = await confirmDialog({ title: 'Llamar para confirmar', bodyHtml: `<p>La IA llamará a <b>${escapeHtml(b.nombre || 'el cliente')}</b> para confirmar la cita. Tiene coste por llamada.</p>`, confirmLabel: 'Llamar ahora' });
+        if (!ok) return;
+        btn.disabled = true;
+        try { await api(`/auth/bookings/${bid}/confirm-call`, { method:'POST' }); toast('Llamada de confirmación en curso.', 'success'); }
+        catch(e){ toast(e.message, 'error'); } finally { btn.disabled = false; }
+        return;
+      }
+      if (action === 'attended'){
+        await api(`/auth/bookings/${bid}/attendance`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ attended: true }) });
+        toast('Cita marcada como realizada', 'success'); loadCitasAttendanceStats(); close(); await refresh();
+        return;
+      }
+      if (action === 'noshow'){
+        const prev = await fetchCancellationPreview(bid);
+        const ok = await confirmDialog({ title: 'Marcar como no asistida', bodyHtml: `<p>El cliente no se presentó a la cita de <b>${escapeHtml(b.nombre || 'el cliente')}</b>.</p>${cancellationPolicyHtml(prev && prev.no_show)}`, confirmLabel: 'Marcar no-show', danger: true });
+        if (!ok) return;
+        await api(`/auth/bookings/${bid}/attendance`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ attended: false }) });
+        toast('Cita marcada como no asistida', 'success'); loadCitasAttendanceStats(); close(); await refresh();
+        return;
+      }
+      if (action === 'cancel'){
+        const prev = await fetchCancellationPreview(bid);
+        const ok = await confirmDialog({ title: '¿Cancelar esta cita?', bodyHtml: `<p>Se cancelará la cita de <b>${escapeHtml(b.nombre || 'el cliente')}</b>${b.fecha ? ' (' + escapeHtml(b.fecha + ' ' + (b.hora || '')) + ')' : ''}.</p>${cancellationPolicyHtml(prev && prev.cancel)}`, confirmLabel: 'Cancelar cita', danger: true });
+        if (!ok) return;
+        await api(`/auth/bookings/${bid}/cancel`, { method:'POST' });
+        toast('Cita cancelada', 'success'); close(); await refresh();
+        return;
+      }
+    } catch(e){ toast(e.message, 'error'); }
+  }));
 }
 
 function _switchToDayView(){
@@ -6574,32 +6973,71 @@ async function loadVentas() {
   return loadVentasGift();
 }
 
+// ── Helpers de Ventas (rediseño) ──
+const VSELL_LOW_STOCK = 5;
+function vKpi(icon, value, label, sub = '', tone = '') {
+  return `<div class="vsell-kpi ${tone}"><div class="vsell-kpi-ic">${icon}</div><div><div class="vsell-kpi-val">${value}</div><div class="vsell-kpi-lbl">${escapeHtml(label)}</div>${sub ? `<div class="vsell-kpi-sub">${escapeHtml(sub)}</div>` : ''}</div></div>`;
+}
+function vEmpty(icon, title, sub = '') {
+  return `<div class="vsell-empty"><div class="vsell-empty-ic">${icon}</div><b>${escapeHtml(title)}</b>${sub ? `<span class="panel-sub" style="margin:0;">${escapeHtml(sub)}</span>` : ''}</div>`;
+}
+function vMethodLabel(m) {
+  return ({ cash: 'Efectivo', card: 'Datáfono', transfer: 'Transferencia', stripe: 'Tarjeta', gift_card: 'Tarjeta regalo', other: 'Otro' })[m] || '';
+}
+function vStatusLabel(s) {
+  return ({ active: 'Activo', used: 'Agotado', expired: 'Caducado', redeemed: 'Canjeado', disabled: 'Anulado' })[s] || s;
+}
+
 async function loadVentasProductos() {
   const grid = document.getElementById('productosGrid');
   grid.innerHTML = '<div class="panel-sub">Cargando…</div>';
   try {
     const [prods, sales] = await Promise.all([api('/auth/products'), api('/auth/product-sales')]);
     ventasState.products = prods.items || [];
-    grid.innerHTML = '';
-    if (!ventasState.products.length) grid.innerHTML = '<div class="panel-sub">Sin productos. Crea el primero.</div>';
-    ventasState.products.forEach(p => {
-      const card = document.createElement('div'); card.className = 'employee-card';
-      card.innerHTML = `
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span class="employee-name">${escapeHtml(p.name)}</span>
-          ${p.is_active ? '' : '<span class="pill pill-disabled">inactivo</span>'}
-        </div>
-        <div class="employee-role">${eur(p.price_cents)}${p.stock !== null && p.stock !== undefined ? ` · stock ${p.stock}` : ''}</div>`;
-      card.addEventListener('click', () => openProductPanel(p));
-      grid.appendChild(card);
-    });
-    const recent = document.getElementById('ventasRecientes');
-    recent.innerHTML = (sales.items || []).slice(0, 12).map(s => `
-      <div class="sale-row">
-        <div class="sale-main">${escapeHtml(s.product_name)} ×${s.qty}${s.customer_name ? ` · ${escapeHtml(s.customer_name)}` : ''}
-          <span style="color:var(--soft-2); font-size:0.76rem;"> ${escapeHtml(String(s.created_at).slice(0, 10))}</span></div>
-        <div class="sale-amount">${eur(s.total_cents)}</div>
-      </div>`).join('') || '<div class="panel-sub">Aún no hay ventas registradas.</div>';
+    const items = ventasState.products;
+    const saleItems = sales.items || [];
+    const today = new Date().toISOString().slice(0, 10);
+    const todaySales = saleItems.filter(s => String(s.created_at).slice(0, 10) === today);
+    const revToday = todaySales.reduce((a, s) => a + (s.total_cents || 0), 0);
+    const lowStock = items.filter(p => p.stock !== null && p.stock !== undefined && p.stock <= VSELL_LOW_STOCK && p.is_active);
+    document.getElementById('prodKpis').innerHTML =
+      vKpi('💶', eur(revToday), 'Ingresos hoy', `${todaySales.length} venta${todaySales.length === 1 ? '' : 's'}`, 'ok') +
+      vKpi('🛒', String(saleItems.length), 'Ventas totales') +
+      vKpi('📦', String(items.filter(p => p.is_active).length), 'Productos activos') +
+      vKpi('⚠️', String(lowStock.length), 'Stock bajo', lowStock.length ? `≤ ${VSELL_LOW_STOCK} uds` : 'todo ok', lowStock.length ? 'warn' : '');
+    document.getElementById('prodCount').textContent = items.length ? `${items.length} producto${items.length === 1 ? '' : 's'}` : '';
+    const canSell = hasPerm('commerce.sell');
+    grid.innerHTML = items.length ? items.map(p => {
+      const hasStock = p.stock !== null && p.stock !== undefined;
+      const low = hasStock && p.stock <= VSELL_LOW_STOCK;
+      const stockChip = hasStock
+        ? `<span class="vchip ${low ? 'warn' : ''}">${low ? '⚠ ' : ''}${p.stock} en stock</span>`
+        : '<span class="vchip">sin control de stock</span>';
+      return `<div class="vsell-card ${p.is_active ? '' : 'is-off'}" data-prod="${escapeHtml(p.id)}">
+        ${canSell && p.is_active ? `<div class="vsell-card-act"><button class="btn btn-primary" data-prod-charge="${escapeHtml(p.id)}" title="Cobrar con QR">📲 Cobrar</button></div>` : ''}
+        <div class="vsell-card-top"><div class="vsell-ava">🧴</div><div class="vsell-card-name">${escapeHtml(p.name)}${p.is_active ? '' : ' <span class="pill pill-disabled">inactivo</span>'}</div></div>
+        <div class="vsell-price">${eur(p.price_cents)}</div>
+        <div class="vsell-card-meta">${stockChip}</div>
+      </div>`;
+    }).join('') : vEmpty('📦', 'Aún no hay productos', 'Crea tu primer producto para venderlo en mostrador.');
+    grid.querySelectorAll('[data-prod]').forEach(c => c.addEventListener('click', () => {
+      const p = ventasState.products.find(x => x.id === c.getAttribute('data-prod')); if (p) openProductPanel(p);
+    }));
+    grid.querySelectorAll('[data-prod-charge]').forEach(b => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const p = ventasState.products.find(x => x.id === b.getAttribute('data-prod-charge'));
+      if (p) openPosCharge({ presetProductId: p.id, presetQty: 1, onPaid: () => loadVentasProductos() });
+    }));
+    document.getElementById('ventasRecientes').innerHTML = saleItems.length
+      ? saleItems.slice(0, 14).map(s => {
+        const sub = [s.customer_name, vMethodLabel(s.payment_method), String(s.created_at).slice(0, 10)].filter(Boolean).join(' · ');
+        return `<div class="vsell-row">
+          <div class="vsell-row-ic">🛒</div>
+          <div class="vsell-row-main"><div class="vsell-row-title">${escapeHtml(s.product_name)} ×${s.qty}</div><div class="vsell-row-sub">${escapeHtml(sub)}</div></div>
+          <div class="vsell-row-amt">${eur(s.total_cents)}</div>
+        </div>`;
+      }).join('')
+      : vEmpty('🧾', 'Sin ventas todavía', 'Las ventas de productos aparecerán aquí.');
   } catch (e) { grid.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
 }
 
@@ -6788,27 +7226,67 @@ document.getElementById('productChargeQrBtn')?.addEventListener('click', () => {
   openPosCharge({ presetProductId: id, presetQty: qty, customerName: name, onPaid: () => loadVentasProductos() });
 });
 
+// Diálogo simple con QR + enlace para un cobro con tarjeta (enlace de pago de cita).
+function showPaymentQrDialog({ qrSvg = '', url = '', amountCents = 0, title = 'Cobro con tarjeta' } = {}) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(2,8,20,.7);backdrop-filter:blur(4px);';
+  const qrInner = qrSvg
+    ? `<div style="background:#fff;padding:14px;border-radius:14px;display:inline-block;line-height:0;">${qrSvg}</div>`
+    : `<div style="color:#64748b;font-size:0.85rem;padding:18px;">No se pudo generar el QR. Comparte el enlace de abajo.</div>`;
+  wrap.innerHTML = `<div style="max-width:380px;width:100%;background:#fff;border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden;font-family:Arial,sans-serif;color:#0B132B;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #e2e8f0;background:#f8fafc;">
+        <strong>${escapeHtml(title)}</strong>
+        <button class="btn btn-ghost" id="pqClose" type="button">Cerrar</button>
+      </div>
+      <div style="padding:22px;text-align:center;">
+        <p style="margin:0 0 6px;color:#475569;font-size:0.85rem;">El cliente escanea el QR para pagar con tarjeta</p>
+        <div style="font-size:1.6rem;font-weight:800;margin:0 0 14px;">${escapeHtml(eur(amountCents))}</div>
+        ${qrInner}
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:18px;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="pqCopy" type="button">Copiar enlace</button>
+          <button class="btn btn-ghost" id="pqOpen" type="button">Abrir</button>
+        </div>
+      </div>
+    </div>`;
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  document.body.appendChild(wrap);
+  document.getElementById('pqClose').addEventListener('click', () => wrap.remove());
+  document.getElementById('pqCopy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(url); toast('Enlace copiado', 'success'); } catch { toast('No se pudo copiar', 'error'); }
+  });
+  document.getElementById('pqOpen').addEventListener('click', () => { if (url) window.open(url, '_blank', 'noopener,noreferrer'); });
+}
+
 async function loadVentasBonos() {
   const grid = document.getElementById('bonosGrid');
   grid.innerHTML = '<div class="panel-sub">Cargando…</div>';
   try {
-    const [pkgs, svcs] = await Promise.all([api('/auth/packages'), api('/auth/services').catch(() => ({ items: [] }))]);
+    const [pkgs, svcs, purch] = await Promise.all([
+      api('/auth/packages'),
+      api('/auth/services').catch(() => ({ items: [] })),
+      api('/auth/package-purchases').catch(() => ({ items: [] })),
+    ]);
     ventasState.packages = pkgs.items || [];
     ventasState.services = (svcs.items || []);
-    grid.innerHTML = '';
-    if (!ventasState.packages.length) grid.innerHTML = '<div class="panel-sub">Sin bonos. Crea el primero (ej. Bono 5 sesiones -12%).</div>';
-    ventasState.packages.forEach(p => {
-      const sessions = (p.items || []).reduce((acc, it) => acc + (it.qty || 0), 0);
-      const card = document.createElement('div'); card.className = 'employee-card';
-      card.innerHTML = `
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span class="employee-name">${escapeHtml(p.name)}</span>
-          ${p.is_active ? '' : '<span class="pill pill-disabled">inactivo</span>'}
-        </div>
-        <div class="employee-role">${sessions} sesión(es) · ${eur(p.price_cents)} · ${p.validity_days} días</div>`;
-      card.addEventListener('click', () => openPackagePanel(p));
-      grid.appendChild(card);
-    });
+    const cat = ventasState.packages;
+    const activePurch = (purch.items || []).filter(p => p.status === 'active');
+    const pendingSessions = activePurch.reduce((a, p) => a + (p.remaining_total || 0), 0);
+    document.getElementById('bonoKpis').innerHTML =
+      vKpi('🎟', String(cat.filter(p => p.is_active).length), 'Bonos en catálogo') +
+      vKpi('✅', String(activePurch.length), 'Bonos activos', 'vendidos sin agotar', 'ok') +
+      vKpi('🔁', String(pendingSessions), 'Sesiones pendientes', 'por redimir');
+    document.getElementById('bonoCount').textContent = cat.length ? `${cat.length} bono${cat.length === 1 ? '' : 's'}` : '';
+    grid.innerHTML = cat.length ? cat.map(p => {
+      const sessions = (p.items || []).reduce((a, it) => a + (it.qty || 0), 0);
+      return `<div class="vsell-card ${p.is_active ? '' : 'is-off'}" data-pkg="${escapeHtml(p.id)}">
+        <div class="vsell-card-top"><div class="vsell-ava vsell-ava-bono">🎟</div><div class="vsell-card-name">${escapeHtml(p.name)}${p.is_active ? '' : ' <span class="pill pill-disabled">inactivo</span>'}</div></div>
+        <div class="vsell-price">${eur(p.price_cents)}</div>
+        <div class="vsell-card-meta"><span class="vchip ok">${sessions} sesión${sessions === 1 ? '' : 'es'}</span><span class="vchip">caduca ${p.validity_days} días</span></div>
+      </div>`;
+    }).join('') : vEmpty('🎟', 'Sin bonos', 'Crea un bono (ej. 5 sesiones con descuento) para fidelizar.');
+    grid.querySelectorAll('[data-pkg]').forEach(c => c.addEventListener('click', () => {
+      const p = ventasState.packages.find(x => x.id === c.getAttribute('data-pkg')); if (p) openPackagePanel(p);
+    }));
     await renderPurchases();
   } catch (e) { grid.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
 }
@@ -6818,15 +7296,18 @@ async function renderPurchases() {
   const list = document.getElementById('purchasesList');
   try {
     const r = await api(`/auth/package-purchases${q ? `?q=${encodeURIComponent(q)}` : ''}`);
-    list.innerHTML = (r.items || []).slice(0, 30).map(p => `
-      <div class="sale-row">
-        <div class="sale-main">
-          <b>${escapeHtml(p.package_name)}</b> · ${escapeHtml(p.buyer_name || p.buyer_email || p.buyer_phone)}
-          <span class="pill pill-${escapeHtml(p.status)}">${escapeHtml(p.status)}</span>
-          <div style="color:var(--soft-2); font-size:0.76rem;">Quedan ${p.remaining_total} sesión(es)${p.expires_at ? ` · caduca ${String(p.expires_at).slice(0, 10)}` : ''}</div>
+    const items = r.items || [];
+    list.innerHTML = items.length ? items.slice(0, 40).map(p => {
+      const who = p.buyer_name || p.buyer_email || p.buyer_phone || '—';
+      return `<div class="vsell-row">
+        <div class="vsell-row-ic">🎟</div>
+        <div class="vsell-row-main">
+          <div class="vsell-row-title">${escapeHtml(p.package_name)} <span class="pill pill-${escapeHtml(p.status)}">${escapeHtml(vStatusLabel(p.status))}</span></div>
+          <div class="vsell-row-sub">${escapeHtml(who)} · quedan ${p.remaining_total} sesión(es)${p.expires_at ? ` · caduca ${String(p.expires_at).slice(0, 10)}` : ''}</div>
         </div>
-        <div class="sale-amount">${eur(p.price_cents)}</div>
-      </div>`).join('') || '<div class="panel-sub">Sin bonos vendidos todavía.</div>';
+        <div class="vsell-row-amt">${eur(p.price_cents)}</div>
+      </div>`;
+    }).join('') : vEmpty('🎟', q ? 'Sin resultados' : 'Sin bonos vendidos', q ? 'Prueba otra búsqueda.' : 'Vende un bono desde la ficha de un cliente o desde el catálogo.');
   } catch (e) { list.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
 }
 document.getElementById('purchasesSearch').addEventListener('input', () => { clearTimeout(window.__pqT); window.__pqT = setTimeout(renderPurchases, 300); });
@@ -6925,16 +7406,30 @@ async function renderGiftList() {
   list.innerHTML = '<div class="panel-sub">Cargando…</div>';
   try {
     const r = await api(`/auth/gift-cards${q ? `?q=${encodeURIComponent(q)}` : ''}`);
-    list.innerHTML = (r.items || []).slice(0, 40).map(g => `
-      <div class="sale-row">
-        <div class="sale-main">
-          <span class="gift-code">${escapeHtml(g.code)}</span>
-          <span class="pill pill-${escapeHtml(g.status)}">${escapeHtml(g.status)}</span>
-          ${g.recipient_name || g.buyer_name ? `<span style="color:var(--soft); font-size:0.8rem;"> · ${escapeHtml(g.recipient_name || g.buyer_name)}</span>` : ''}
-          <div style="color:var(--soft-2); font-size:0.76rem;">Saldo ${eur(g.balance_cents)} de ${eur(g.initial_cents)}${g.expires_at ? ` · caduca ${String(g.expires_at).slice(0, 10)}` : ''}</div>
+    const items = r.items || [];
+    const active = items.filter(g => g.status === 'active');
+    const circulating = active.reduce((a, g) => a + (g.balance_cents || 0), 0);
+    document.getElementById('giftKpis').innerHTML =
+      vKpi('🎁', String(active.length), 'Tarjetas activas', '', 'ok') +
+      vKpi('💳', eur(circulating), 'Saldo en circulación', 'pendiente de canjear') +
+      vKpi('🧾', String(items.length), 'Emitidas (total)');
+    document.getElementById('giftCount').textContent = items.length ? `${items.length} tarjeta${items.length === 1 ? '' : 's'}` : '';
+    list.innerHTML = items.length ? items.slice(0, 60).map(g => {
+      const off = g.status !== 'active';
+      const pct = g.initial_cents > 0 ? Math.max(0, Math.min(100, Math.round((g.balance_cents / g.initial_cents) * 100))) : 0;
+      const who = g.recipient_name || g.buyer_name || '';
+      const footLeft = [who, g.expires_at ? `caduca ${String(g.expires_at).slice(0, 10)}` : ''].filter(Boolean).join(' · ');
+      return `<div class="vgift ${off ? 'is-off' : ''}">
+        <div style="display:flex; justify-content:space-between; align-items:center; position:relative; z-index:1;">
+          <span class="vgift-brand">🎁 Tarjeta regalo</span>
+          <span class="vgift-pill">${escapeHtml(vStatusLabel(g.status))}</span>
         </div>
-        ${g.status === 'active' ? `<button class="btn btn-ghost" data-gift-disable="${escapeHtml(g.gift_card_id)}" style="font-size:0.78rem;">Desactivar</button>` : ''}
-      </div>`).join('') || '<div class="panel-sub">Sin tarjetas regalo emitidas.</div>';
+        <div class="vgift-code">${escapeHtml(g.code)}</div>
+        <div class="vgift-bal"><b>${eur(g.balance_cents)}</b> / ${eur(g.initial_cents)}</div>
+        <div class="vsell-bar"><i style="width:${pct}%"></i></div>
+        <div class="vgift-foot"><span>${escapeHtml(footLeft)}</span>${g.status === 'active' ? `<button class="vgift-disable" data-gift-disable="${escapeHtml(g.gift_card_id)}">Desactivar</button>` : ''}</div>
+      </div>`;
+    }).join('') : vEmpty('🎁', q ? 'Sin resultados' : 'Sin tarjetas regalo', q ? 'Prueba otra búsqueda.' : 'Emite la primera: un ingreso anticipado que fideliza.');
     list.querySelectorAll('[data-gift-disable]').forEach(b => b.addEventListener('click', async () => {
       try { await api(`/auth/gift-cards/${encodeURIComponent(b.getAttribute('data-gift-disable'))}/status`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ enabled: false }) }); renderGiftList(); }
       catch (e) { toast(e.message, 'error'); }
@@ -7706,7 +8201,11 @@ async function openClientePanel(contactId) {
         ${ct.phone ? `<a class="btn btn-ghost" href="tel:${escapeHtml(ct.phone)}" style="font-size:0.82rem;">📞 Llamar</a>` : ''}
         ${waPhone ? `<a class="btn btn-ghost" href="https://wa.me/${escapeHtml(waPhone)}" target="_blank" rel="noopener" style="font-size:0.82rem;">💬 WhatsApp</a>` : ''}
         ${ct.email ? `<a class="btn btn-ghost" href="mailto:${escapeHtml(ct.email)}" style="font-size:0.82rem;">✉ Email</a>` : ''}
-        <button class="btn btn-primary" id="clienteRebookBtn" style="font-size:0.82rem;">🔁 Reservar siguiente</button>
+        <button class="btn btn-primary" id="clienteRebookBtn" style="font-size:0.82rem;">🔁 Nueva cita</button>
+        ${hasPerm('commerce.sell') ? `
+        <button class="btn btn-ghost" id="clienteSellBonoBtn" style="font-size:0.82rem;">🎟 Vender bono</button>
+        <button class="btn btn-ghost" id="clienteGiftBtn" style="font-size:0.82rem;">🎁 Tarjeta regalo</button>
+        <button class="btn btn-ghost" id="clientePosBtn" style="font-size:0.82rem;">🛒 Cobrar / producto</button>` : ''}
       </div>
       <div class="inf-kpis" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); margin-bottom:14px;">
         <div class="inf-kpi"><div class="k-label">Citas</div><div class="k-value">${ct.bookings_count || 0}</div></div>
@@ -7757,6 +8256,12 @@ async function openClientePanel(contactId) {
       setTab('citas');
       openNewBookingDrawer({ nombre: ct.name || '', email: ct.email || '', telefono: ct.phone || '' }).catch(err => toast(err.message, 'error'));
     });
+    document.getElementById('clientePosBtn')?.addEventListener('click', () => {
+      closeClientePanel();
+      openPosCharge({ customerName: ct.name || '', customerEmail: ct.email || '', onPaid: () => loadClientes() });
+    });
+    document.getElementById('clienteSellBonoBtn')?.addEventListener('click', () => sellBonoDialog(ct));
+    document.getElementById('clienteGiftBtn')?.addEventListener('click', () => issueGiftDialog(ct));
     const saveBtn = document.getElementById('clienteSaveBtn');
     if (saveBtn) saveBtn.addEventListener('click', async () => {
       const payload = {
@@ -7790,11 +8295,16 @@ async function loadClienteBonos(email) {
       api(`/auth/gift-cards?q=${encodeURIComponent(email)}`).catch(() => ({ items: [] })),
     ]);
     const bonos = (pk.items || []).filter(p => p.remaining_total > 0);
-    const gifts = (gc.items || []).filter(g => g.status === 'active' && g.balance_cents > 0);
+    // Tarjetas regalo del cliente (incluye agotadas/deshabilitadas para trazabilidad).
+    const gifts = (gc.items || []);
     if (!bonos.length && !gifts.length) { el.innerHTML = ''; return; }
+    const GC_ST = { active:'activa', redeemed:'agotada', disabled:'desactivada', expired:'caducada' };
     el.innerHTML = `<label class="field-label">Bonos y saldo</label>` +
       bonos.map(b => `<div class="sale-row" style="padding:8px 12px;"><div class="sale-main">🎟 ${escapeHtml(b.package_name)} · ${b.remaining_total} sesión(es)</div></div>`).join('') +
-      gifts.map(g => `<div class="sale-row" style="padding:8px 12px;"><div class="sale-main">🎁 ${escapeHtml(g.code)} · saldo ${eur(g.balance_cents)}</div></div>`).join('');
+      gifts.map(g => `<div class="sale-row" style="padding:8px 12px; cursor:pointer;" data-gift="${escapeHtml(g.gift_card_id)}" data-gcode="${escapeHtml(g.code)}" title="Ver movimientos">
+        <div class="sale-main">🎁 ${escapeHtml(g.code)} · saldo ${eur(g.balance_cents)} <span style="color:var(--soft-2); font-size:0.76rem;">· ${escapeHtml(GC_ST[g.status] || g.status)}</span></div>
+        <div class="t-val" style="color:var(--soft-2); font-size:0.78rem;">Ver ›</div></div>`).join('');
+    el.querySelectorAll('[data-gift]').forEach(row => row.addEventListener('click', () => giftCardMovementsDialog(row.getAttribute('data-gift'), row.getAttribute('data-gcode'))));
   } catch { el.innerHTML = ''; }
 }
 
@@ -7804,6 +8314,177 @@ function closeClientePanel() {
 }
 document.getElementById('clientePanelClose').addEventListener('click', closeClientePanel);
 document.getElementById('clienteOverlay').addEventListener('click', closeClientePanel);
+
+// Desde una cita: resuelve la ficha del cliente (por email/teléfono) y la abre en Clientes.
+async function openClienteFromBooking(b) {
+  const email = b.email || b.client_email || '';
+  const phone = b.telefono || b.client_phone || '';
+  const q = email || phone || b.nombre || b.client_name || '';
+  if (!q) { toast('La cita no tiene datos de contacto.', 'error'); return; }
+  try {
+    const d = await api(`/auth/app/contacts?q=${encodeURIComponent(q)}&page_size=10`);
+    const items = d.items || [];
+    let match = null;
+    if (email) match = items.find(c => (c.email || '').toLowerCase() === email.toLowerCase());
+    if (!match && phone) { const pn = phone.replace(/\D/g, ''); if (pn) match = items.find(c => (c.phone || '').replace(/\D/g, '') === pn); }
+    if (!match) match = items[0];
+    if (!match) { toast('No se encontró la ficha de este cliente.', 'error'); return; }
+    setTab('clientes');
+    openClientePanel(match.id);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// Modal genérico reutilizable: devuelve el wrapper (con [data-vm-close] ya enganchado).
+function vModal(innerHtml, { title = '', maxw = 420 } = {}) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(2,8,20,.7);backdrop-filter:blur(4px);';
+  wrap.innerHTML = `<div class="panel-card" style="max-width:${maxw}px;width:100%;max-height:88vh;overflow:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;">
+      <h3 style="margin:0;font-family:var(--font-title);font-size:1.05rem;">${escapeHtml(title)}</h3>
+      <button class="btn btn-ghost" data-vm-close type="button">Cerrar</button>
+    </div>${innerHtml}</div>`;
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  document.body.appendChild(wrap);
+  wrap.querySelector('[data-vm-close]').addEventListener('click', () => wrap.remove());
+  return wrap;
+}
+
+// Vender un bono del catálogo a un cliente concreto (prefijado).
+async function sellBonoDialog(ct) {
+  if (!ct.email && !ct.phone) { toast('Añade email o teléfono al cliente antes de venderle un bono.', 'error'); return; }
+  let pkgs = [];
+  try { pkgs = (await api('/auth/packages')).items || []; } catch (e) { toast(e.message, 'error'); return; }
+  pkgs = pkgs.filter(p => p.is_active !== false);
+  if (!pkgs.length) { toast('No hay bonos en el catálogo. Créalos en Ventas → Bonos.', 'error'); return; }
+  const opts = pkgs.map(p => {
+    const sessions = (p.items || []).reduce((a, it) => a + (it.qty || 0), 0);
+    return `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} · ${eur(p.price_cents)}${sessions ? ` · ${sessions} ses.` : ''}</option>`;
+  }).join('');
+  const wrap = vModal(`
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Bono</label><select class="field-input" id="vbPkg">${opts}</select></div>
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Método de pago</label>
+      <select class="field-input" id="vbMethod"><option value="cash">Efectivo</option><option value="card">Datáfono</option><option value="transfer">Transferencia</option><option value="other">Otro</option></select></div>
+    <p class="panel-sub" style="margin:0 0 12px;">Cliente: <b>${escapeHtml(ct.name || ct.email || ct.phone || '—')}</b></p>
+    <button class="btn btn-primary" id="vbConfirm" style="width:100%;">Vender bono</button>
+  `, { title: 'Vender bono' });
+  wrap.querySelector('#vbConfirm').addEventListener('click', async () => {
+    const id = wrap.querySelector('#vbPkg').value;
+    const btn = wrap.querySelector('#vbConfirm'); btn.disabled = true; const o = btn.textContent; btn.textContent = 'Vendiendo…';
+    try {
+      await api(`/auth/packages/${encodeURIComponent(id)}/sell`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ buyer_name: ct.name || '', buyer_email: ct.email || '', buyer_phone: ct.phone || '', payment_method: wrap.querySelector('#vbMethod').value }),
+      });
+      toast('Bono vendido. Ya se puede redimir en sus citas.', 'success');
+      wrap.remove();
+      if (ct.email) loadClienteBonos(ct.email);
+    } catch (e) { toast(e.message, 'error'); btn.disabled = false; btn.textContent = o; }
+  });
+}
+
+// Emitir una tarjeta regalo NUEVA a nombre del cliente, o ASIGNAR una existente.
+async function issueGiftDialog(ct) {
+  const who = escapeHtml(ct.name || ct.email || ct.phone || '—');
+  const wrap = vModal(`
+    <div class="seg-switch" style="display:flex; gap:6px; margin-bottom:14px;">
+      <button class="btn btn-primary" data-gtab="new" style="flex:1; padding:7px;">Nueva tarjeta</button>
+      <button class="btn btn-ghost" data-gtab="assign" style="flex:1; padding:7px;">Asignar existente</button>
+    </div>
+    <div data-gpane="new">
+      <div class="field" style="margin-bottom:10px;"><label class="field-label">Importe (€)</label><input class="field-input" id="vgAmount" type="number" min="1" step="0.01" placeholder="50,00"></div>
+      <div class="field" style="margin-bottom:10px;"><label class="field-label">Validez (días · 0 = sin caducidad)</label><input class="field-input" id="vgDays" type="number" min="0" step="1" value="0"></div>
+      <div class="field" style="margin-bottom:10px;"><label class="field-label">Notas (opcional)</label><input class="field-input" id="vgNotes" maxlength="500"></div>
+      <button class="btn btn-primary" id="vgConfirm" style="width:100%;">Emitir y asignar a ${who}</button>
+    </div>
+    <div data-gpane="assign" style="display:none;">
+      <div class="field" style="margin-bottom:10px;"><label class="field-label">Código de la tarjeta</label><input class="field-input" id="vgCode" maxlength="20" placeholder="GC-XXXX-XXXX" style="text-transform:uppercase;"></div>
+      <p class="panel-sub" style="margin:0 0 12px;">Se asignará al cliente <b>${who}</b>. Si ya está a nombre de otra persona, se te pedirá confirmar.</p>
+      <button class="btn btn-primary" id="vgAssign" style="width:100%;">Asignar a ${who}</button>
+    </div>
+    <p class="panel-sub" style="margin:12px 0 0;">Cliente: <b>${who}</b></p>
+  `, { title: 'Tarjeta regalo' });
+  wrap.querySelectorAll('[data-gtab]').forEach(tab => tab.addEventListener('click', () => {
+    const k = tab.dataset.gtab;
+    wrap.querySelectorAll('[data-gtab]').forEach(t => {
+      const active = t === tab;
+      t.classList.toggle('btn-primary', active);
+      t.classList.toggle('btn-ghost', !active);
+    });
+    wrap.querySelectorAll('[data-gpane]').forEach(p => p.style.display = (p.dataset.gpane === k) ? '' : 'none');
+  }));
+  wrap.querySelector('#vgConfirm').addEventListener('click', async () => {
+    const eurVal = parseFloat((wrap.querySelector('#vgAmount').value || '').replace(',', '.'));
+    if (!eurVal || eurVal <= 0) { toast('Indica un importe válido.', 'error'); return; }
+    const cents = Math.round(eurVal * 100);
+    const btn = wrap.querySelector('#vgConfirm'); btn.disabled = true; const o = btn.textContent; btn.textContent = 'Emitiendo…';
+    try {
+      const r = await api('/auth/gift-cards', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount_cents: cents, buyer_name: ct.name || '', buyer_email: ct.email || '',
+          recipient_name: ct.name || '', recipient_email: ct.email || '',
+          validity_days: parseInt(wrap.querySelector('#vgDays').value, 10) || 0, notes: wrap.querySelector('#vgNotes').value || '' }),
+      });
+      toast(`Tarjeta emitida: ${r.code} · ${eur(cents)}`, 'success');
+      wrap.remove();
+      if (ct.email) loadClienteBonos(ct.email);
+    } catch (e) { toast(e.message, 'error'); btn.disabled = false; btn.textContent = o; }
+  });
+  wrap.querySelector('#vgAssign').addEventListener('click', async () => {
+    const code = (wrap.querySelector('#vgCode').value || '').trim().toUpperCase();
+    if (!code) { toast('Indica el código de la tarjeta.', 'error'); return; }
+    const btn = wrap.querySelector('#vgAssign'); btn.disabled = true; const o = btn.textContent; btn.textContent = 'Asignando…';
+    const payload = { code, recipient_name: ct.name || '', recipient_email: ct.email || '', recipient_phone: ct.phone || '' };
+    try {
+      await assignGiftCard(payload);
+      toast('Tarjeta asignada al cliente.', 'success');
+      wrap.remove();
+      if (ct.email) loadClienteBonos(ct.email);
+    } catch (e) { toast(e.message, 'error'); btn.disabled = false; btn.textContent = o; }
+  });
+}
+
+// Asigna una tarjeta existente; si ya está a nombre de otra persona (409), ofrece reasignar.
+async function assignGiftCard(payload) {
+  try {
+    return await api('/auth/gift-cards/assign', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  } catch (e) {
+    if (/ya esta asignada a (?!este)/i.test(e.message || '')) {
+      const ok = await confirmDialog({ title: 'Reasignar tarjeta', bodyHtml: `<p>${escapeHtml(e.message)}</p>`, confirmLabel: 'Reasignar' });
+      if (!ok) throw new Error('Asignación cancelada.');
+      return await api('/auth/gift-cards/assign', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ...payload, force: true }) });
+    }
+    throw e;
+  }
+}
+
+// Ver movimientos de una tarjeta regalo (emisión, asignaciones, canjes).
+async function giftCardMovementsDialog(giftCardId, code) {
+  const wrap = vModal('<div id="gcMovBody" class="panel-sub">Cargando…</div>', { title: `Tarjeta ${code || ''}`.trim(), maxw: 480 });
+  const slot = wrap.querySelector('#gcMovBody');
+  try {
+    const g = await api(`/auth/gift-cards/${encodeURIComponent(giftCardId)}`);
+    const GC_TX = { issue: 'Emisión', redeem: 'Canje', assign: 'Asignación', adjust: 'Ajuste' };
+    const txs = g.transactions || [];
+    const rows = txs.length ? txs.map(t => `
+      <div class="sale-row" style="padding:8px 12px;">
+        <div class="sale-main">${escapeHtml(GC_TX[t.kind] || t.kind)}${t.notes ? ` · <span style="color:var(--soft-2);">${escapeHtml(t.notes)}</span>` : ''}
+          <div style="color:var(--soft-2); font-size:0.76rem;">${escapeHtml(String(t.created_at || '').slice(0,16).replace('T',' '))} · saldo ${eur(t.balance_after_cents)}</div>
+        </div>
+        <div class="t-val">${t.kind === 'redeem' ? '−' : (t.kind === 'issue' ? '+' : '')}${t.amount_cents ? eur(t.amount_cents) : ''}</div>
+      </div>`).join('') : '<div class="panel-sub">Sin movimientos.</div>';
+    const stBadge = { active:'badge-confirmed', redeemed:'badge-completed', disabled:'badge-cancelled', expired:'badge-cancelled' }[g.status] || 'badge-pending';
+    slot.classList.remove('panel-sub');
+    slot.innerHTML = `
+      <div class="inf-kpis" style="grid-template-columns:repeat(3,1fr); margin-bottom:12px;">
+        <div class="inf-kpi"><div class="k-label">Saldo</div><div class="k-value">${eur(g.balance_cents)}</div></div>
+        <div class="inf-kpi"><div class="k-label">Emitida</div><div class="k-value">${eur(g.initial_cents)}</div></div>
+        <div class="inf-kpi"><div class="k-label">Estado</div><div class="k-value"><span class="badge ${stBadge}">${escapeHtml(g.status)}</span></div></div>
+      </div>
+      ${g.recipient_name || g.recipient_email ? `<p class="panel-sub" style="margin:0 0 10px;">Asignada a <b>${escapeHtml(g.recipient_name || g.recipient_email)}</b></p>` : ''}
+      <label class="field-label">Movimientos</label>
+      <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">${rows}</div>`;
+  } catch (e) { slot.textContent = e.message; }
+}
 
 // ── HORARIOS ──────────────────────────────────────────────────────────
 function loadHorariosProfSelect(emps) {
@@ -8127,6 +8808,7 @@ function renderFollowUp(data) {
 
   const tl = document.getElementById('fuTimeline');
   tl.innerHTML = (data.steps || []).map(step => {
+    const isReview = step.key === 'review';
     const anyActive = (step.channels || []).some(c => c.active);
     const chips = (step.channels || []).map(c => {
       const cls = 'fu-chip' + (c.active ? ' fu-on' : '') + (c.locked ? ' fu-locked' : '') + (c.recommended ? ' fu-rec' : '');
@@ -8136,14 +8818,23 @@ function renderFollowUp(data) {
       return `<label class="${cls}" title="${title}" data-kind="${step.key}" data-channel="${c.channel}">
         <span class="fu-ico">${FU_CH_ICON[c.channel]||''}</span>${escapeHtml(c.label)} ${lockBadge}${recBadge}</label>`;
     }).join('');
-    const dot = (step.when.replace(/[^0-9]/g,'') || '✓');
-    return `<div class="fu-step ${anyActive?'':'fu-muted'}">
+    const muted = isReview ? !step.enabled : !anyActive;
+    const dot = isReview ? '★' : (step.when.replace(/[^0-9]/g,'') || '✓');
+    const tagBadge = isReview
+      ? (step.needs_setup
+          ? `<span class="fu-setup-badge">Falta el enlace</span>`
+          : (step.enabled ? `<span class="fu-rec-badge">Activo</span>` : `<span class="fu-lock-badge" style="color:var(--soft-2);background:rgba(255,255,255,0.04);border-color:var(--line);">Desactivado</span>`))
+      : '';
+    const cta = isReview ? `<button type="button" class="fu-review-cta" data-fu-review-cta>${step.needs_setup ? 'Configurar reseñas' : 'Editar reseñas'} ⌄</button>` : '';
+    return `<div class="fu-step ${muted?'fu-muted':''} ${isReview?'fu-step-review':''}">
       <div class="fu-step-rail"><div class="fu-dot">${dot}</div><div class="fu-line"></div></div>
       <div class="fu-step-body">
-        <div class="fu-step-head"><span class="fu-step-when">${escapeHtml(step.when)}</span></div>
+        <div class="fu-step-head"><span class="fu-step-when">${escapeHtml(step.when)}</span>${tagBadge}</div>
         <div class="fu-step-title">${escapeHtml(step.label)}</div>
         <div class="fu-step-note">${escapeHtml(step.note||'')}</div>
         <div class="fu-chips">${chips}</div>
+        <div style="margin-top:8px;"><button type="button" class="btn btn-ghost fu-test-btn" data-fu-test="${step.key}" style="padding:5px 12px; font-size:0.8rem;">▶ Probar esta fase</button></div>
+        ${cta}
       </div>
     </div>`;
   }).join('');
@@ -8151,6 +8842,7 @@ function renderFollowUp(data) {
   tl.querySelectorAll('.fu-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       const kind = chip.dataset.kind, channel = chip.dataset.channel;
+      if (kind === 'review') { fuJumpToReviewCard(); return; }
       if (channel === 'call') { document.getElementById('fuCallEnabled').focus(); return; }
       if (chip.classList.contains('fu-locked')) { toast('Disponible en un plan superior.', 'error'); return; }
       const cur = fuEffectiveChannels(kind);
@@ -8160,6 +8852,79 @@ function renderFollowUp(data) {
       if (stepEl) stepEl.classList.toggle('fu-muted', !stepEl.querySelector('.fu-chip.fu-on'));
     });
   });
+  tl.querySelectorAll('[data-fu-review-cta]').forEach(b => b.addEventListener('click', fuJumpToReviewCard));
+  tl.querySelectorAll('[data-fu-test]').forEach(b => b.addEventListener('click', () => {
+    const st = ((followUpState && followUpState.steps) || []).find(s => s.key === b.dataset.fuTest);
+    if (st) openFollowUpTest(st);
+  }));
+}
+
+// Probar de verdad una fase del Seguimiento: envía a un destinatario de prueba y
+// muestra, por canal, si se entregó, falló (con motivo) o se omitió (sin configurar).
+function openFollowUpTest(step) {
+  const data = followUpState || {};
+  const isCall = step.key === 'call';
+  const FU_TEST_ST = {
+    sent: { ico: '✓', color: 'var(--success, #16a34a)', label: 'Enviado' },
+    failed: { ico: '✗', color: 'var(--danger)', label: 'Error' },
+    skipped: { ico: '⏭', color: 'var(--soft-2)', label: 'Omitido' },
+    inactive: { ico: '⊘', color: '#f59e0b', label: 'No activo' },
+  };
+  const wrap = vModal(`
+    <p class="panel-sub" style="margin:0 0 12px;">Se ejecuta esta fase <b>de verdad</b> contra el destinatario de prueba (no crea ninguna cita). Úsalo para comprobar que tu configuración funciona.</p>
+    ${isCall ? '' : `<div class="field" style="margin-bottom:10px;"><label class="field-label">Email de prueba</label><input class="field-input" id="fuTestEmail" type="email" maxlength="200" value="${escapeHtml(data.default_test_email || '')}" placeholder="tu@email.com"></div>`}
+    <div class="field" style="margin-bottom:12px;"><label class="field-label">Teléfono de prueba${isCall ? '' : ' (para WhatsApp/SMS)'}</label><input class="field-input" id="fuTestPhone" maxlength="30" value="${escapeHtml(data.default_test_phone || '')}" placeholder="+34 600 000 000"></div>
+    <button class="btn btn-primary" id="fuTestSend" style="width:100%;">${isCall ? 'Hacer llamada de prueba' : 'Enviar prueba'}</button>
+    <div id="fuTestResults" style="margin-top:14px;"></div>
+  `, { title: `Probar: ${step.label}`, maxw: 460 });
+  const out = wrap.querySelector('#fuTestResults');
+  wrap.querySelector('#fuTestSend').addEventListener('click', async () => {
+    const btn = wrap.querySelector('#fuTestSend');
+    const email = isCall ? '' : (wrap.querySelector('#fuTestEmail')?.value || '').trim();
+    const phone = (wrap.querySelector('#fuTestPhone')?.value || '').trim();
+    if (isCall && !phone) { toast('Indica un teléfono para la llamada de prueba.', 'error'); return; }
+    if (!isCall && !email && !phone) { toast('Indica un email o teléfono de prueba.', 'error'); return; }
+    const o = btn.textContent; btn.disabled = true; btn.textContent = 'Probando…';
+    out.innerHTML = '<div class="panel-sub">Ejecutando…</div>';
+    try {
+      const r = await api('/auth/app/follow-up/test', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ step: step.key, email, phone }) });
+      const results = r.results || [];
+      const rows = results.map(res => {
+        const st = FU_TEST_ST[res.status] || FU_TEST_ST.skipped;
+        return `<div class="sale-row" style="padding:8px 12px; align-items:flex-start;">
+          <div class="sale-main"><b style="color:${st.color};">${st.ico} ${escapeHtml(res.label || res.channel)}</b> — ${escapeHtml(st.label)}
+            ${res.detail ? `<div style="color:var(--soft-2); font-size:0.78rem; margin-top:2px;">${escapeHtml(res.detail)}</div>` : ''}</div></div>`;
+      }).join('');
+      // Resumen: distingue "se envió por algún canal" de "ninguno activo / todo falló".
+      const sentN = results.filter(x => x.status === 'sent').length;
+      const activeN = results.filter(x => x.status !== 'inactive').length;
+      let banner = '';
+      if (!results.length) {
+        banner = '';
+      } else if (activeN === 0) {
+        banner = `<div class="panel-sub" style="color:#f59e0b; margin:0 0 8px;">⚠ Ningún canal activo en esta fase. Enciende los canales que quieras en la escalera y pulsa “Guardar”.</div>`;
+      } else if (sentN === 0) {
+        banner = `<div class="panel-sub" style="color:var(--danger); margin:0 0 8px;">✗ No se entregó por ningún canal activo. Revisa el motivo de cada canal abajo.</div>`;
+      } else {
+        banner = `<div class="panel-sub" style="color:var(--success, #16a34a); margin:0 0 8px;">✓ Enviado por ${sentN} canal(es). Comprueba que te llega.</div>`;
+      }
+      out.innerHTML = results.length
+        ? `<label class="field-label">Resultado</label>${banner}<div style="display:flex; flex-direction:column; gap:6px; margin-top:2px;">${rows}</div>`
+        : '<div class="panel-sub">Sin resultado.</div>';
+    } catch (e) {
+      out.innerHTML = `<div class="panel-sub" style="color:var(--danger);">${escapeHtml(e.message)}</div>`;
+    } finally { btn.disabled = false; btn.textContent = o; }
+  });
+}
+
+function fuJumpToReviewCard() {
+  const card = document.getElementById('reviewCard');
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  card.classList.remove('rv-pulse');
+  void card.offsetWidth;  // reinicia la animación
+  card.classList.add('rv-pulse');
+  setTimeout(() => card.classList.remove('rv-pulse'), 1600);
 }
 
 document.getElementById('fuCallEnabled')?.addEventListener('change', fuToggleCallBlock);
@@ -8167,7 +8932,7 @@ document.getElementById('fuCallEnabled')?.addEventListener('change', fuToggleCal
 document.getElementById('fuSaveBtn')?.addEventListener('click', async () => {
   const channels = {};
   (followUpState && followUpState.steps || []).forEach(step => {
-    if (step.key === 'call') return;
+    if (step.key === 'call' || step.key === 'review') return;  // review se guarda en su propia tarjeta
     channels[step.key] = fuEffectiveChannels(step.key);
   });
   const callCb = document.getElementById('fuCallEnabled');
@@ -8211,6 +8976,157 @@ function fuShowPreview(r) {
   document.body.appendChild(wrap);
   document.getElementById('fuPvClose').addEventListener('click', () => wrap.remove());
 }
+
+/* ===== Seguimiento post-cita: petición de reseña ===== */
+let reviewState = null;
+let rvChannelEdits = null;
+const RV_CH_ICON = { email:'✉', whatsapp:'🟢', sms:'💬' };
+
+async function loadReviews() {
+  const card = document.getElementById('reviewCard'); if (!card) return;
+  try {
+    const data = await api('/auth/app/reviews');
+    reviewState = data;
+    rvChannelEdits = null;
+    renderReviews(data);
+  } catch (e) {}
+}
+
+function rvActiveChannels() {
+  if (rvChannelEdits) return rvChannelEdits;
+  const out = {};
+  ((reviewState && reviewState.channels) || []).forEach(c => { out[c.channel] = c.active; });
+  return out;
+}
+
+function renderReviews(data) {
+  const card = document.getElementById('reviewCard');
+  document.getElementById('rvEnabled').checked = !!data.enabled;
+  card.classList.toggle('rv-off', !data.enabled);
+  document.getElementById('rvLink').value = data.link || '';
+  document.getElementById('rvPlatform').value = data.platform || '';
+  document.getElementById('rvDelay').value = String(data.delay_hours || 3);
+  document.getElementById('rvOnlyManual').checked = !!data.only_manual_attendance;
+  document.getElementById('rvMessage').value = data.message || data.default_message || '';
+  const badge = document.getElementById('rvSentBadge');
+  if ((data.sent_30d || 0) > 0) { badge.style.display='inline-flex'; badge.textContent = '★ ' + data.sent_30d + ' enviadas (30 d)'; }
+  else { badge.style.display='none'; }
+  renderRvChips();
+  rvValidateLink();
+  rvRenderPreview();
+}
+
+function renderRvChips() {
+  const cont = document.getElementById('rvChips');
+  const active = rvActiveChannels();
+  cont.innerHTML = ((reviewState && reviewState.channels) || []).map(c => {
+    const on = !!active[c.channel] && !c.locked;
+    const cls = 'fu-chip' + (on ? ' fu-on' : '') + (c.locked ? ' fu-locked' : '');
+    const lock = c.locked && c.plan_needed ? `<span class="fu-lock-badge">${escapeHtml(c.plan_needed)}</span>` : '';
+    const title = c.locked ? escapeHtml(c.reason || ('Disponible en ' + c.plan_needed)) : escapeHtml(c.reason || '');
+    return `<label class="${cls}" title="${title}" data-channel="${c.channel}"><span class="fu-ico">${RV_CH_ICON[c.channel]||''}</span>${escapeHtml(c.label)} ${lock}</label>`;
+  }).join('');
+  cont.querySelectorAll('.fu-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      if (chip.classList.contains('fu-locked')) { toast('Disponible en un plan superior.', 'error'); return; }
+      const ch = chip.dataset.channel;
+      const cur = rvActiveChannels();
+      rvChannelEdits = Object.assign({}, cur, { [ch]: !cur[ch] });
+      chip.classList.toggle('fu-on');
+    });
+  });
+}
+
+function rvPlatformLabel() {
+  const plat = (document.getElementById('rvPlatform').value || '').trim();
+  if (plat) return 'Dejar reseña en ' + plat;
+  const low = (document.getElementById('rvLink').value || '').toLowerCase();
+  if (/google|g\.page|goo\.gl|maps\.app/.test(low)) return 'Dejar reseña en Google';
+  if (low.includes('trustpilot')) return 'Dejar reseña en Trustpilot';
+  if (low.includes('tripadvisor')) return 'Dejar reseña en Tripadvisor';
+  if (low.includes('yelp')) return 'Dejar reseña en Yelp';
+  if (low.includes('facebook') || low.includes('fb.com')) return 'Dejar reseña en Facebook';
+  return 'Dejar tu reseña';
+}
+
+function rvValidateLink() {
+  const wrap = document.getElementById('rvLink').closest('.rv-link-wrap');
+  const v = (document.getElementById('rvLink').value || '').trim().toLowerCase();
+  wrap.classList.remove('rv-ok', 'rv-bad');
+  if (!v) return;
+  if (v.startsWith('http://') || v.startsWith('https://')) wrap.classList.add('rv-ok');
+  else wrap.classList.add('rv-bad');
+}
+
+function rvRenderMessage(enlace) {
+  const tpl = (document.getElementById('rvMessage').value || '').trim()
+    || (reviewState && reviewState.default_message) || '';
+  const empresa = state.nombre || 'tu negocio';
+  let out = tpl.replace(/\{empresa\}/g, empresa)
+    .replace(/\{nombre\}/g, 'Ana')
+    .replace(/\{servicio\}/g, 'tu cita')
+    .replace(/\{enlace\}/g, enlace || '');
+  out = out.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  return out;
+}
+
+function rvRenderPreview() {
+  const link = (document.getElementById('rvLink').value || '').trim() || '#';
+  const empresa = state.nombre || 'tu negocio';
+  const intro = escapeHtml(rvRenderMessage('')).replace(/\n/g, '<br>');
+  const label = rvPlatformLabel();
+  document.getElementById('rvPreviewFrame').innerHTML = `
+    <div style="font-family:Arial,sans-serif;padding:22px;background:#f5f8fb;color:#102033;">
+      <div style="background:#fff;border:1px solid #d8e2ee;border-radius:18px;padding:26px 22px;text-align:center;">
+        <div style="font-size:30px;line-height:1;margin-bottom:8px;color:#f59e0b;">★★★★★</div>
+        <p style="margin:0 0 20px;line-height:1.6;font-size:14px;color:#33475b;">${intro}</p>
+        <p style="margin:0;"><span style="display:inline-block;padding:12px 24px;border-radius:12px;background:#f59e0b;color:#fff;font-weight:700;font-size:15px;">★ ${escapeHtml(label)}</span></p>
+        <p style="margin:16px 0 0;font-size:12px;color:#90a4b8;">${escapeHtml(empresa)}</p>
+      </div>
+    </div>`;
+}
+
+(function bindReviewUI() {
+  const enabled = document.getElementById('rvEnabled');
+  if (!enabled) return;
+  enabled.addEventListener('change', () => {
+    document.getElementById('reviewCard').classList.toggle('rv-off', !enabled.checked);
+  });
+  ['rvLink', 'rvPlatform'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', () => { rvValidateLink(); rvRenderPreview(); });
+  });
+  document.getElementById('rvMessage')?.addEventListener('input', rvRenderPreview);
+  document.getElementById('rvHelpToggle')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const h = document.getElementById('rvHelp');
+    h.style.display = h.style.display === 'none' ? 'block' : 'none';
+  });
+  document.getElementById('rvSaveBtn')?.addEventListener('click', async () => {
+    const link = (document.getElementById('rvLink').value || '').trim();
+    const enabledOn = document.getElementById('rvEnabled').checked;
+    if (enabledOn && !(link.toLowerCase().startsWith('http://') || link.toLowerCase().startsWith('https://'))) {
+      toast('Añade un enlace de reseñas válido (https://…) para activarlo.', 'error');
+      document.getElementById('rvLink').focus();
+      return;
+    }
+    const active = rvActiveChannels();
+    const body = {
+      enabled: enabledOn,
+      link: link,
+      platform: (document.getElementById('rvPlatform').value || '').trim(),
+      delay_hours: parseInt(document.getElementById('rvDelay').value, 10) || 3,
+      only_manual_attendance: document.getElementById('rvOnlyManual').checked,
+      message: document.getElementById('rvMessage').value || '',
+      channels: { email: !!active.email, whatsapp: !!active.whatsapp, sms: !!active.sms },
+    };
+    try {
+      await api('/auth/app/reviews', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      toast('Seguimiento de reseñas guardado.', 'success');
+      loadReviews();
+      loadFollowUp();  // refresca el nodo de reseña en la escalera
+    } catch (e) { toast(e.message, 'error'); }
+  });
+})();
 
 function msgBackendKey(key) {
   return ({

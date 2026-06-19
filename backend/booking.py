@@ -86,6 +86,13 @@ def _booking_reminder_worker() -> None:
                     result.sent_2h,
                     result.failed,
                 )
+            # Seguimiento post-cita: peticiones de resena (opt-in por negocio).
+            try:
+                review_sent = asyncio.run(_run_review_requests())
+                if review_sent:
+                    settings.logger.info("Peticiones de resena enviadas: %s", review_sent)
+            except Exception as exc:  # noqa: BLE001
+                settings.logger.error("Error en el envio de peticiones de resena: %s", exc)
             # Rebooking proactivo por IA (opt-in por negocio, como mucho 1 pasada/dia).
             try:
                 if _ai_rebooking_due():
@@ -1774,6 +1781,7 @@ def _portal_booking_summary_from_row(
         email=data["email"],
         telefono=data.get("telefono", ""),
         servicio=data["servicio"],
+        notas=data.get("notas", ""),
         fecha=data["fecha"],
         hora=data["hora"],
         timezone=data["timezone"],
@@ -2546,7 +2554,16 @@ async def _send_booking_reminder_by_kind(
     sent_column: str = "",
     extra_message: str = "",
     respect_enabled: bool = True,
-) -> None:
+    raise_on_failure: bool = True,
+) -> Dict[str, Any]:
+    """Envia el aviso de la cita por los canales efectivos del tenant para ``kind``.
+
+    Devuelve ``{"sent": [...], "failed": {canal: error}, "skipped": {canal: motivo}}``
+    para que quien llama (p. ej. el reenvio manual de confirmacion) sepa exactamente
+    que se entrego. Los callers automaticos pueden ignorar el retorno. Cuando no se
+    entrega por ningun canal y ``raise_on_failure`` es True (comportamiento historico
+    de los flujos automaticos) se lanza ``RuntimeError``; con False se devuelve el
+    resultado con los errores en ``failed`` para que el caller los muestre."""
     if kind not in settings.DEFAULT_MESSAGE_TEMPLATE_CHANNELS:
         await _send_booking_email_by_kind(
             booking_row,
@@ -2556,7 +2573,7 @@ async def _send_booking_reminder_by_kind(
             extra_message=extra_message,
             respect_enabled=respect_enabled,
         )
-        return
+        return {"sent": ["email"], "failed": {}, "skipped": {}}
 
     config = clients._get_client_config(booking_row["cliente_id"])
     if respect_enabled and not _booking_email_enabled(config, kind):
@@ -2573,7 +2590,7 @@ async def _send_booking_reminder_by_kind(
             "booking_email_skipped",
             {"kind": kind, "reason": "disabled"},
         )
-        return
+        return {"sent": [], "failed": {}, "skipped": {"all": "disabled"}}
 
     channels = agenda._effective_followup_channels(booking_row["cliente_id"]).get(
         kind, {"email": True, "whatsapp": False, "sms": False}
@@ -2597,7 +2614,7 @@ async def _send_booking_reminder_by_kind(
             "booking_email_skipped",
             {"kind": kind, "reason": "no_channels"},
         )
-        return
+        return {"sent": [], "failed": {}, "skipped": {"all": "no_channels"}}
 
     if channels.get("email"):
         try:
@@ -2661,12 +2678,80 @@ async def _send_booking_reminder_by_kind(
                 "extra_message": bool(extra_message),
             },
         )
-        return
+        return {"sent": sent_channels, "failed": failed_channels, "skipped": skipped_channels}
 
-    raise RuntimeError(
-        "No se ha podido enviar el aviso por ningun canal: "
-        + "; ".join(f"{name}: {err}" for name, err in failed_channels.items())
+    # No se entrego por ningun canal: deja rastro y, segun el caller, lanza o devuelve.
+    _record_booking_audit(
+        booking_row["id"],
+        booking_row["cliente_id"],
+        "booking_email_failed",
+        {"kind": kind, "failed": failed_channels},
     )
+    if raise_on_failure:
+        raise RuntimeError(
+            "No se ha podido enviar el aviso por ningun canal: "
+            + "; ".join(f"{name}: {err}" for name, err in failed_channels.items())
+        )
+    return {"sent": [], "failed": failed_channels, "skipped": skipped_channels}
+
+
+_REMINDER_CHANNEL_LABELS = {"email": "email", "whatsapp": "WhatsApp", "sms": "SMS"}
+
+
+async def _resend_booking_confirmation(
+    booking_row: sqlite3.Row, request: Optional[Request] = None, *, by_user: str = ""
+) -> Dict[str, Any]:
+    """Reenvio MANUAL de la confirmacion de una cita (boton del panel).
+
+    A diferencia del flujo automatico, valida por adelantado que haya un canal con
+    datos de contacto y devuelve/lanza un error concreto (email ausente, correo sin
+    configurar, etc.) para que el panel lo muestre. Registra ``confirmation_resent``
+    solo cuando se entrega de verdad."""
+    cliente_id = booking_row["cliente_id"]
+    if booking_row["status"] == "cancelled":
+        raise HTTPException(status_code=409, detail="No se puede enviar la confirmacion de una cita cancelada.")
+    channels = agenda._effective_followup_channels(cliente_id).get(
+        "confirmed", {"email": True, "whatsapp": False, "sms": False}
+    )
+    has_email = bool((booking_row["email"] or "").strip())
+    phone_sms = _booking_customer_phone_for_channel(booking_row, "sms")
+    phone_wa = _booking_customer_phone_for_channel(booking_row, "whatsapp")
+    wants_email, wants_wa, wants_sms = (
+        bool(channels.get("email")),
+        bool(channels.get("whatsapp")),
+        bool(channels.get("sms")),
+    )
+    if not (wants_email or wants_wa or wants_sms):
+        raise HTTPException(
+            status_code=409,
+            detail="No hay ningun canal activo para la confirmacion. Activalo en Seguimiento.",
+        )
+    deliverable = (wants_email and has_email) or (wants_wa and phone_wa) or (wants_sms and phone_sms)
+    if not deliverable:
+        if wants_email and not (wants_wa or wants_sms):
+            raise HTTPException(
+                status_code=409,
+                detail="Esta cita no tiene email. Anade un email al cliente o activa WhatsApp/SMS en Seguimiento.",
+            )
+        raise HTTPException(
+            status_code=409,
+            detail="No hay datos de contacto validos para los canales activos (email/telefono).",
+        )
+    result = await _send_booking_reminder_by_kind(
+        booking_row, "confirmed", request, respect_enabled=False, raise_on_failure=False
+    )
+    if not result["sent"]:
+        detail = "; ".join(f"{name}: {err}" for name, err in result["failed"].items())
+        raise HTTPException(status_code=409, detail=detail or "No se pudo enviar la confirmacion.")
+    _record_booking_audit(
+        booking_row["id"], cliente_id, "confirmation_resent",
+        {"by": by_user, "channels": result["sent"]},
+    )
+    return result
+
+
+def _confirmation_channels_label(channels: List[str]) -> str:
+    return ", ".join(_REMINDER_CHANNEL_LABELS.get(c, c) for c in channels)
 
 
 def _booking_due_for_reminder(row: sqlite3.Row, now_utc: datetime, hours_before: int) -> bool:
@@ -2874,6 +2959,7 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
     """Estado completo del Seguimiento para el portal: config + capacidades por plan +
     flujo efectivo (pasos con canales activos/bloqueados). Fuente de verdad backend."""
     fu = _follow_up_config(cliente_id)
+    contacto = (appstate.CONFIG_CLIENTES.get(cliente_id) or {}).get("contacto", {}) or {}
     plan = clients._client_plan(cliente_id)
     plan_label = settings.PLAN_LIMITS.get(plan, {}).get("label", plan.title())
     avail = agenda._reminder_channel_availability(cliente_id)
@@ -2919,6 +3005,37 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
         steps.append({"key": key, "label": label, "when": when, "offset_hours": offset,
                       "channels": channels, "note": note})
 
+    # Paso final post-cita: peticion de resena (opt-in, detalle en su tarjeta).
+    rev = _reviews_config(cliente_id)
+    rev_link_ok = _review_link_valid(rev["link"])
+    rev_on = bool(rev["enabled"]) and rev_link_ok
+    rev_ch = rev["channels"]
+    review_channels = [
+        {"channel": "email", "label": "Email",
+         "active": bool(rev_ch.get("email")) and rev_on,
+         "available": True, "locked": False, "recommended": False, "plan_needed": "", "reason": "Disponible."},
+        {"channel": "whatsapp", "label": "WhatsApp",
+         "active": bool(rev_ch.get("whatsapp")) and wa_available and rev_on,
+         "available": wa_available, "locked": not wa_plan, "plan_needed": "" if wa_plan else "Pro",
+         "recommended": False, "reason": avail["whatsapp"]["reason"]},
+        {"channel": "sms", "label": "SMS",
+         "active": bool(rev_ch.get("sms")) and sms_available and rev_on,
+         "available": sms_available, "locked": not sms_plan, "plan_needed": "" if sms_plan else "Business",
+         "recommended": False, "reason": "Requiere plan Business." if not sms_plan else avail["sms"]["reason"]},
+    ]
+    rev_delay = int(rev["delay_hours"])
+    if rev_delay < 24:
+        rev_when = f"{rev_delay} h después"
+    else:
+        rev_days = rev_delay // 24
+        rev_when = f"{rev_days} día{'s' if rev_days > 1 else ''} después"
+    steps.append({
+        "key": "review", "label": "Pide una reseña", "when": rev_when, "offset_hours": 0,
+        "channels": review_channels,
+        "note": "Cuando la cita se completa, invita al cliente a dejarte una reseña en Google o donde elijas.",
+        "enabled": rev_on, "needs_setup": not rev_link_ok,
+    })
+
     return {
         "plan": plan, "plan_label": plan_label,
         "whatsapp_available": wa_available, "voice_available": voice_available,
@@ -2933,7 +3050,435 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
         "email_confirm_button": fu["email_confirm_button"],
         "suppress_2h_if_confirmed": fu["suppress_2h_if_confirmed"],
         "steps": steps,
+        "default_test_email": str(contacto.get("email", "") or ""),
+        "default_test_phone": str(contacto.get("telefono", "") or ""),
     }
+
+
+# ---------------------------------------------------------------------------
+# Probar el Seguimiento de verdad (botones de test de cada fase)
+# ---------------------------------------------------------------------------
+
+
+class _EphemeralBookingRow:
+    """Cita en memoria para PROBAR una fase del Seguimiento sin tocar la agenda.
+
+    Imita el acceso por nombre de columna de ``sqlite3.Row`` (devuelve '' si falta),
+    asi el envio real (plantillas, canales, SMTP/WhatsApp/SMS/voz) corre igual que en
+    produccion pero sin crear la cita, sin CRM y sin recordatorios persistidos."""
+
+    def __init__(self, data: Dict[str, Any]):
+        self._d = data
+
+    def __getitem__(self, key: str) -> Any:
+        return self._d.get(key, "")
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._d.get(key, default)
+
+    def keys(self):  # noqa: D401
+        return self._d.keys()
+
+
+def _format_test_channel_results(
+    active: Dict[str, Any],
+    sent: List[str],
+    failed: Dict[str, str],
+    skipped: Dict[str, str],
+) -> List[Dict[str, str]]:
+    """Resultado por canal de una prueba. Siempre incluye los 3 canales (email,
+    WhatsApp, SMS): los activos en la fase se intentan (sent/failed/skipped) y los
+    inactivos se reportan como ``inactive`` para que el negocio vea por que no salio."""
+    labels = {"email": "Email", "whatsapp": "WhatsApp", "sms": "SMS"}
+    out: List[Dict[str, str]] = []
+    for ch in ("email", "whatsapp", "sms"):
+        if not active.get(ch):
+            out.append({
+                "channel": ch, "label": labels[ch], "status": "inactive",
+                "detail": "No esta activo en esta fase. Activalo en la escalera y pulsa Guardar para enviarlo.",
+            })
+        elif ch in sent:
+            out.append({"channel": ch, "label": labels[ch], "status": "sent", "detail": "Enviado correctamente."})
+        elif ch in failed:
+            out.append({"channel": ch, "label": labels[ch], "status": "failed", "detail": failed[ch]})
+        elif ch in skipped:
+            out.append({"channel": ch, "label": labels[ch], "status": "skipped", "detail": skipped[ch]})
+        else:
+            out.append({"channel": ch, "label": labels[ch], "status": "skipped", "detail": "No se intento."})
+    return out
+
+
+async def _run_follow_up_test(
+    cliente_id: str, step: str, request: Optional[Request] = None, *, email: str = "", phone: str = ""
+) -> Dict[str, Any]:
+    """Ejecuta REALMENTE una fase del Seguimiento contra un destinatario de prueba.
+
+    Usa una cita efimera (no se guarda nada en la agenda). Devuelve, por canal, si se
+    entrego, fallo (con el motivo concreto) u omitio (no configurado / no disponible en
+    el plan), para que el negocio compruebe su configuracion sin esperar a una cita real."""
+    valid = {"confirmed", "reminder_24h", "reminder_2h", "call", "review"}
+    if step not in valid:
+        raise HTTPException(status_code=400, detail="Fase de seguimiento desconocida.")
+    config = clients._get_client_config(cliente_id)
+    contacto = config.get("contacto", {}) or {}
+    to_email = textnorm._sanitize_text(email or contacto.get("email", "") or "")
+    to_phone = textnorm._sanitize_text(phone or contacto.get("telefono", "") or "")
+    if step == "call" and not to_phone:
+        raise HTTPException(status_code=400, detail="Indica un telefono de prueba para la llamada.")
+    if step != "call" and not (to_email or to_phone):
+        raise HTTPException(status_code=400, detail="Indica un email o telefono de prueba.")
+
+    bid = f"futest_{secrets.token_hex(8)}"
+    tz_name = (config.get("booking", {}) or {}).get("timezone") or settings.DEFAULT_TIMEZONE
+    booking_date = (timeutils._utc_now() + timedelta(days=7)).strftime("%Y-%m-%d")
+    booking_time = "10:00"
+    try:
+        start_local, end_local = agenda._booking_start_end(
+            cliente_id, booking_date, booking_time, employee_id="", duration_minutes=30
+        )
+        start_at, end_at = timeutils._to_utc_iso(start_local), timeutils._to_utc_iso(end_local)
+    except Exception:  # noqa: BLE001
+        start_at = end_at = ""
+    row = _EphemeralBookingRow({
+        "id": bid, "cliente_id": cliente_id, "employee_id": "", "employee_name": "",
+        "nombre": "Prueba de Seguimiento", "email": to_email, "telefono": to_phone,
+        "servicio": "Cita de prueba", "booking_date": booking_date, "booking_time": booking_time,
+        "notas": "", "status": "confirmed", "provider_name": "internal", "provider_status": "confirmed",
+        "provider_booking_id": "", "provider_booking_url": "", "manage_token": f"mg_{bid}",
+        "timezone": tz_name, "start_at": start_at, "end_at": end_at, "booking_code": "PRUEBA",
+        "service_id": "", "service_price_cents": 0, "payment_status": "not_required",
+        "location_id": agenda._default_location_id(cliente_id), "source": "followup_test",
+    })
+    base_url = textnorm._public_base_url(request) if request else ""
+    try:
+        if step == "call":
+            from backend import voice as _voice  # late import: evita circular
+            res = await timeutils._to_thread(
+                _voice._voice_place_outbound_call, cliente_id, row, base_url=base_url
+            )
+            ok = bool(res.get("ok"))
+            return {
+                "ok": ok, "step": step, "to_email": "", "to_phone": to_phone,
+                "results": [{
+                    "channel": "call", "label": "Llamada IA",
+                    "status": "sent" if ok else "failed",
+                    "detail": "Llamada de prueba en curso." if ok else (res.get("error") or "No se pudo llamar."),
+                }],
+            }
+        if step == "review":
+            cfg = _reviews_config(cliente_id)
+            if not _review_link_valid(cfg["link"]):
+                raise HTTPException(status_code=409, detail="Configura primero el enlace de resenas en Seguimiento.")
+            res = await _send_review_request(row, request, cfg=cfg, manual=True)
+            sent = res.get("sent_channels", []) or []
+            results = _format_test_channel_results(cfg["channels"], sent, res.get("failed", {}) or {}, {})
+            return {"ok": bool(sent), "step": step, "to_email": to_email, "to_phone": to_phone, "results": results}
+        # Mensajes de la escalera (confirmed / reminder_24h / reminder_2h).
+        active = agenda._effective_followup_channels(cliente_id).get(
+            step, {"email": True, "whatsapp": False, "sms": False}
+        )
+        res = await _send_booking_reminder_by_kind(
+            row, step, request, respect_enabled=False, raise_on_failure=False
+        )
+        results = _format_test_channel_results(active, res["sent"], res["failed"], res["skipped"])
+        return {"ok": bool(res["sent"]), "step": step, "to_email": to_email, "to_phone": to_phone, "results": results}
+    finally:
+        # La cita es efimera, pero el envio deja auditoria/llamada bajo el id de prueba.
+        try:
+            with db._get_db_connection() as connection:
+                connection.execute("DELETE FROM booking_audit WHERE booking_id = ?", (bid,))
+                connection.execute("DELETE FROM voice_calls WHERE booking_id = ?", (bid,))
+                connection.commit()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Seguimiento post-cita: peticion de resena (Google/Trustpilot/...)
+# ---------------------------------------------------------------------------
+
+_REVIEW_DEFAULT_MESSAGE = (
+    "Gracias por tu visita a {empresa}. Esperamos que todo haya ido genial.\n\n"
+    "Si te apetece, nos ayudarias muchisimo dejando una resena: {enlace}\n\n"
+    "Solo te llevara un minuto. ¡Gracias y hasta pronto!"
+)
+# Al activar la funcion no queremos disparar peticiones a citas viejas: solo se
+# consideran citas completadas dentro de esta ventana (tolera caidas del worker).
+_REVIEW_MAX_LOOKBACK_HOURS = 14 * 24
+
+
+def _review_link_valid(link: str) -> bool:
+    low = (link or "").strip().lower()
+    return low.startswith("http://") or low.startswith("https://")
+
+
+def _review_platform_label(link: str, platform: str) -> str:
+    """Texto del boton segun la plataforma (auto-detectada por la URL si no se fija)."""
+    name = (platform or "").strip()
+    if not name:
+        low = (link or "").lower()
+        if any(k in low for k in ("google", "g.page", "goo.gl", "maps.app")):
+            name = "Google"
+        elif "trustpilot" in low:
+            name = "Trustpilot"
+        elif "tripadvisor" in low:
+            name = "Tripadvisor"
+        elif "yelp" in low:
+            name = "Yelp"
+        elif "facebook" in low or "fb.com" in low:
+            name = "Facebook"
+    return f"Dejar resena en {name}" if name else "Dejar tu resena"
+
+
+def _reviews_config(cliente_id: str) -> Dict[str, Any]:
+    """Config canonica del seguimiento post-cita del tenant (clave config['reviews'])."""
+    cfg = (appstate.CONFIG_CLIENTES.get(cliente_id) or {}).get("reviews") or {}
+    try:
+        delay = int(cfg.get("delay_hours", 3))
+    except (TypeError, ValueError):
+        delay = 3
+    channels = cfg.get("channels") or {}
+    return {
+        "enabled": bool(cfg.get("enabled", False)),
+        "link": str(cfg.get("link", "") or "").strip(),
+        "platform": str(cfg.get("platform", "") or "").strip(),
+        "delay_hours": max(1, min(168, delay)),
+        "only_manual_attendance": bool(cfg.get("only_manual_attendance", False)),
+        "message": str(cfg.get("message", "") or ""),
+        "channels": {
+            "email": bool(channels.get("email", True)),
+            "whatsapp": bool(channels.get("whatsapp", False)),
+            "sms": bool(channels.get("sms", False)),
+        },
+    }
+
+
+def _render_review_message(
+    template: str, *, empresa: str = "", nombre: str = "", servicio: str = "", enlace: str = "",
+) -> str:
+    base = (template or "").strip() or _REVIEW_DEFAULT_MESSAGE
+    rendered = (
+        base.replace("{empresa}", empresa or "")
+        .replace("{nombre}", nombre or "")
+        .replace("{servicio}", servicio or "")
+        .replace("{enlace}", enlace or "")
+    )
+    # Limpieza cuando {enlace} se elimina (version HTML con boton aparte).
+    rendered = re.sub(r"[ \t]{2,}", " ", rendered)
+    rendered = re.sub(r"\n{3,}", "\n\n", rendered).strip()
+    return rendered
+
+
+def _review_email_bodies(
+    cfg: Dict[str, Any], *, empresa: str, nombre: str, servicio: str,
+) -> Tuple[str, str]:
+    """(text_body, html_body) del email de peticion de resena."""
+    link = cfg["link"]
+    label = _review_platform_label(link, cfg["platform"])
+    text_body = _render_review_message(
+        cfg["message"], empresa=empresa, nombre=nombre, servicio=servicio, enlace=link,
+    )
+    # El HTML usa boton para el enlace -> renderiza el mensaje sin la URL inline.
+    intro = _render_review_message(
+        cfg["message"], empresa=empresa, nombre=nombre, servicio=servicio, enlace="",
+    )
+    intro_html = escape(intro).replace("\n", "<br>")
+    button = (
+        f'<a href="{escape(link)}" '
+        f'style="display:inline-block;padding:14px 28px;border-radius:12px;'
+        f'background:#f59e0b;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;">'
+        f'&#9733; {escape(label)}</a>'
+    )
+    html_body = (
+        f'<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;'
+        f'padding:24px;background:#f5f8fb;color:#102033;">'
+        f'<div style="background:#ffffff;border:1px solid #d8e2ee;border-radius:18px;'
+        f'padding:28px 24px;text-align:center;">'
+        f'<div style="font-size:34px;line-height:1;margin-bottom:10px;">'
+        f'&#11088;&#11088;&#11088;&#11088;&#11088;</div>'
+        f'<p style="margin:0 0 22px;line-height:1.6;font-size:15px;color:#33475b;">{intro_html}</p>'
+        f'<p style="margin:0 0 8px;">{button}</p>'
+        f'<p style="margin:18px 0 0;font-size:12px;color:#90a4b8;">{escape(empresa)}</p>'
+        f"</div></div>"
+    )
+    return text_body, html_body
+
+
+def _review_email_subject(empresa: str) -> str:
+    return f"¿Que tal tu experiencia con {empresa}?"
+
+
+def _review_requests_sent_30d(cliente_id: str) -> int:
+    since = (timeutils._utc_now() - timedelta(days=30)).isoformat()
+    with db._get_db_connection() as connection:
+        return int(connection.execute(
+            "SELECT COUNT(*) FROM booking_audit WHERE cliente_id=? AND event_type='review_request_sent' AND created_at>=?",
+            (cliente_id, since),
+        ).fetchone()[0])
+
+
+def _reviews_overview_dict(cliente_id: str, request: Optional[Request] = None) -> Dict[str, Any]:
+    """Estado del seguimiento post-cita para el portal: config + canales por plan +
+    vista previa del email. Fuente de verdad backend (la UI solo refleja)."""
+    cfg = _reviews_config(cliente_id)
+    plan = clients._client_plan(cliente_id)
+    plan_label = settings.PLAN_LIMITS.get(plan, {}).get("label", plan.title())
+    avail = agenda._reminder_channel_availability(cliente_id)
+    wa_plan = bool(clients._plan_feature(cliente_id, "whatsapp_enabled"))
+    sms_plan = bool(clients._plan_feature(cliente_id, "sms_enabled"))
+    wa_available = bool(avail["whatsapp"]["available"])
+    sms_available = bool(avail["sms"]["available"])
+    ch = cfg["channels"]
+    channels = [
+        {"channel": "email", "label": "Email", "active": bool(ch.get("email")),
+         "available": True, "locked": False, "recommended": False, "plan_needed": "", "reason": "Disponible."},
+        {"channel": "whatsapp", "label": "WhatsApp", "active": bool(ch.get("whatsapp")) and wa_available,
+         "available": wa_available, "locked": not wa_plan, "plan_needed": "" if wa_plan else "Pro",
+         "recommended": wa_available and not bool(ch.get("whatsapp")), "reason": avail["whatsapp"]["reason"]},
+        {"channel": "sms", "label": "SMS", "active": bool(ch.get("sms")) and sms_available,
+         "available": sms_available, "locked": not sms_plan, "plan_needed": "" if sms_plan else "Business",
+         "recommended": False, "reason": "Requiere plan Business." if not sms_plan else avail["sms"]["reason"]},
+    ]
+    config = clients._get_client_config(cliente_id)
+    empresa = config["nombre"]
+    preview_text, preview_html = _review_email_bodies(
+        cfg, empresa=empresa, nombre="Ana", servicio="tu cita",
+    )
+    return {
+        "plan": plan, "plan_label": plan_label,
+        "enabled": cfg["enabled"], "link": cfg["link"], "platform": cfg["platform"],
+        "platform_label": _review_platform_label(cfg["link"], cfg["platform"]),
+        "delay_hours": cfg["delay_hours"], "only_manual_attendance": cfg["only_manual_attendance"],
+        "message": cfg["message"], "default_message": _REVIEW_DEFAULT_MESSAGE,
+        "channels": channels,
+        "channel_availability": {
+            "email": True, "whatsapp": wa_available, "sms": sms_available, "voice": False,
+            "whatsapp_reason": avail["whatsapp"]["reason"], "sms_reason": avail["sms"]["reason"],
+            "voice_reason": "",
+        },
+        "sent_30d": _review_requests_sent_30d(cliente_id),
+        "link_valid": _review_link_valid(cfg["link"]),
+        "preview_subject": _review_email_subject(empresa),
+        "preview_html": preview_html,
+        "preview_text": preview_text,
+    }
+
+
+async def _send_review_request(
+    booking_row: sqlite3.Row,
+    request: Optional[Request] = None,
+    *,
+    cfg: Optional[Dict[str, Any]] = None,
+    manual: bool = False,
+) -> Dict[str, Any]:
+    """Envia la peticion de resena por los canales activos. Marca la cita para no
+    repetir (idempotente) y deja auditoria. Nunca lanza por canal: agrega resultados."""
+    cliente_id = booking_row["cliente_id"]
+    cfg = cfg or _reviews_config(cliente_id)
+    if not _review_link_valid(cfg["link"]):
+        return {"sent_channels": [], "skipped": "no_link"}
+    config = clients._get_client_config(cliente_id)
+    empresa = config["nombre"]
+    nombre = (booking_row["nombre"] or "").split(" ")[0] if booking_row["nombre"] else ""
+    servicio = booking_row["servicio"] or "tu cita"
+    availability = agenda._reminder_channel_availability(cliente_id)
+    ch = cfg["channels"]
+    sent_channels: List[str] = []
+    failed: Dict[str, str] = {}
+
+    if ch.get("email") and (booking_row["email"] or "").strip():
+        try:
+            text_body, html_body = _review_email_bodies(cfg, empresa=empresa, nombre=nombre, servicio=servicio)
+            emailing._send_client_email(
+                cliente_id, booking_row["email"], _review_email_subject(empresa), text_body, html_body,
+            )
+            sent_channels.append("email")
+        except Exception as exc:  # noqa: BLE001
+            failed["email"] = str(exc)
+
+    plain_text = _render_review_message(
+        cfg["message"], empresa=empresa, nombre=nombre, servicio=servicio, enlace=cfg["link"],
+    )
+    if ch.get("whatsapp") and availability.get("whatsapp", {}).get("available"):
+        whatsapp_cfg = config.get("whatsapp", {}) or {}
+        phone_number_id = str(whatsapp_cfg.get("phone_number_id", "") or "").strip()
+        to_number = _booking_customer_phone_for_channel(booking_row, "whatsapp")
+        if phone_number_id and to_number:
+            try:
+                if await messaging._send_whatsapp_text(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id,
+                    to_number=to_number, text=plain_text,
+                ):
+                    sent_channels.append("whatsapp")
+                else:
+                    failed["whatsapp"] = "No se pudo entregar WhatsApp."
+            except Exception as exc:  # noqa: BLE001
+                failed["whatsapp"] = str(exc)
+
+    if ch.get("sms") and availability.get("sms", {}).get("available"):
+        to_number = _booking_customer_phone_for_channel(booking_row, "sms")
+        if to_number:
+            try:
+                if await messaging._send_client_sms(cliente_id, to_number, plain_text):
+                    sent_channels.append("sms")
+                else:
+                    failed["sms"] = "No se pudo entregar SMS."
+            except Exception as exc:  # noqa: BLE001
+                failed["sms"] = str(exc)
+
+    # Marca la cita aunque no se entregara nada: evita reprocesar en cada pasada.
+    _update_booking_record(booking_row["id"], review_request_sent_at=timeutils._utc_now_iso())
+    _record_booking_audit(
+        booking_row["id"], cliente_id, "review_request_sent",
+        {"channels": sent_channels, "failed": failed, "manual": manual},
+    )
+    return {"sent_channels": sent_channels, "failed": failed}
+
+
+def _bookings_due_for_review(
+    cliente_id: str, now_utc: datetime, cfg: Dict[str, Any], *, limit: int = 500,
+) -> List[sqlite3.Row]:
+    # end_at se guarda con sufijo "Z" (_to_utc_iso): normaliza los limites igual
+    # para que la comparacion lexicografica sea correcta en el borde.
+    upper = (now_utc - timedelta(hours=cfg["delay_hours"])).isoformat().replace("+00:00", "Z")
+    lower = (now_utc - timedelta(hours=_REVIEW_MAX_LOOKBACK_HOURS)).isoformat().replace("+00:00", "Z")
+    query = (
+        "SELECT * FROM bookings WHERE cliente_id=? AND status='completed' "
+        "AND review_request_sent_at='' AND end_at<>'' AND end_at<=? AND end_at>=? "
+    )
+    params: List[Any] = [cliente_id, upper, lower]
+    if cfg["only_manual_attendance"]:
+        query += "AND completed_source='manual' "
+    query += "ORDER BY end_at ASC LIMIT ?"
+    params.append(limit)
+    with db._get_db_connection() as connection:
+        return connection.execute(query, tuple(params)).fetchall()
+
+
+async def _run_review_requests(
+    now_utc: Optional[datetime] = None, request: Optional[Request] = None,
+) -> int:
+    now_utc = now_utc or timeutils._utc_now()
+    total = 0
+    for cliente_id in list(appstate.CONFIG_CLIENTES.keys()):
+        cfg = _reviews_config(cliente_id)
+        if not (cfg["enabled"] and _review_link_valid(cfg["link"])):
+            continue
+        if not any(cfg["channels"].get(name) for name in ("email", "whatsapp", "sms")):
+            continue
+        try:
+            rows = _bookings_due_for_review(cliente_id, now_utc, cfg)
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.error("Resenas: error listando citas de %s: %s", cliente_id, exc)
+            continue
+        for row in rows:
+            try:
+                res = await _send_review_request(row, request, cfg=cfg)
+                if res.get("sent_channels"):
+                    total += 1
+            except Exception as exc:  # noqa: BLE001
+                settings.logger.error("Resenas: error enviando %s: %s", row["id"], exc)
+    return total
 
 
 def _booking_confirmed_by_customer(booking_id: str) -> bool:
@@ -2949,6 +3494,19 @@ def _confirm_call_already_placed(booking_id: str) -> bool:
         return connection.execute(
             "SELECT 1 FROM booking_audit WHERE booking_id=? AND event_type='confirm_call_placed' LIMIT 1",
             (booking_id,),
+        ).fetchone() is not None
+
+
+def _recent_confirm_call_placed(booking_id: str, *, within_minutes: int = 15) -> bool:
+    """True si ya se coloco una llamada de confirmacion para esta cita en los ultimos
+    ``within_minutes``. Evita llamadas duplicadas accidentales (doble clic, reintentos)
+    sin impedir un reintento legitimo pasado un rato."""
+    cutoff = (timeutils._utc_now() - timedelta(minutes=within_minutes)).strftime("%Y-%m-%dT%H:%M:%S")
+    with db._get_db_connection() as connection:
+        return connection.execute(
+            "SELECT 1 FROM booking_audit WHERE booking_id=? AND event_type='confirm_call_placed' "
+            "AND created_at >= ? LIMIT 1",
+            (booking_id, cutoff),
         ).fetchone() is not None
 
 

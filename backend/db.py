@@ -59,6 +59,7 @@ def _init_database() -> None:
                 confirmation_email_sent_at TEXT NOT NULL DEFAULT '',
                 reminder_24h_sent_at TEXT NOT NULL DEFAULT '',
                 reminder_2h_sent_at TEXT NOT NULL DEFAULT '',
+                review_request_sent_at TEXT NOT NULL DEFAULT '',
                 customer_email_status TEXT NOT NULL DEFAULT '',
                 customer_email_last_error TEXT NOT NULL DEFAULT '',
                 booking_code TEXT NOT NULL DEFAULT '',
@@ -121,6 +122,10 @@ def _init_database() -> None:
         if "reminder_2h_sent_at" not in columns:
             connection.execute(
                 "ALTER TABLE bookings ADD COLUMN reminder_2h_sent_at TEXT NOT NULL DEFAULT ''"
+            )
+        if "review_request_sent_at" not in columns:
+            connection.execute(
+                "ALTER TABLE bookings ADD COLUMN review_request_sent_at TEXT NOT NULL DEFAULT ''"
             )
         if "customer_email_status" not in columns:
             connection.execute(

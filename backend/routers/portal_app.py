@@ -62,6 +62,7 @@ from backend import (
     booking,
     chat,
     clients,
+    commerce,
     crm,
     db,
     demo_agenda,
@@ -1279,19 +1280,117 @@ async def app_follow_up_put(
     return FollowUpResponse(**booking._follow_up_overview_dict(target))
 
 
+@app.post("/auth/app/follow-up/test", response_model=FollowUpTestResponse)
+async def app_follow_up_test(
+    data: FollowUpTestPayload,
+    request: Request,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> FollowUpTestResponse:
+    """Prueba REAL de una fase del Seguimiento (envio/llamada) a un destinatario de
+    prueba. Devuelve por canal si se entrego, fallo o se omitio. manager+ (coste real)."""
+    security._require_portal_min_role(user, "manager")
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    result = await booking._run_follow_up_test(
+        target, data.step, request, email=data.email, phone=data.phone
+    )
+    return FollowUpTestResponse(**result)
+
+
+@app.get("/auth/app/reviews", response_model=ReviewRequestResponse)
+async def app_reviews_get(
+    request: Request,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> ReviewRequestResponse:
+    """Estado del seguimiento post-cita: config + canales por plan + vista previa."""
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    return ReviewRequestResponse(**booking._reviews_overview_dict(target, request))
+
+
+@app.put("/auth/app/reviews", response_model=ReviewRequestResponse)
+async def app_reviews_put(
+    data: ReviewRequestPayload,
+    request: Request,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> ReviewRequestResponse:
+    """Guarda el seguimiento post-cita (peticion de resena). manager+."""
+    security._require_portal_min_role(user, "manager")
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    with appstate.state_lock:
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+        cfg = next_configs.get(target, {})
+        rev = dict(cfg.get("reviews", {}) or {})
+        if data.enabled is not None:
+            rev["enabled"] = bool(data.enabled)
+        if data.link is not None:
+            rev["link"] = textnorm._sanitize_text(data.link)[:600]
+        if data.platform is not None:
+            rev["platform"] = textnorm._sanitize_text(data.platform)[:60]
+        if data.delay_hours is not None:
+            rev["delay_hours"] = max(1, min(168, int(data.delay_hours)))
+        if data.only_manual_attendance is not None:
+            rev["only_manual_attendance"] = bool(data.only_manual_attendance)
+        if data.message is not None:
+            rev["message"] = textnorm._sanitize_text(data.message, allow_multiline=True)[:800]
+        if data.channels is not None:
+            rev["channels"] = {
+                "email": bool(data.channels.get("email", True)),
+                "whatsapp": bool(data.channels.get("whatsapp", False)),
+                "sms": bool(data.channels.get("sms", False)),
+            }
+        cfg["reviews"] = rev
+        next_configs[target] = cfg
+        clients._update_runtime_configs(next_configs)
+    clients._persist_configs_to_disk(next_configs)
+    return ReviewRequestResponse(**booking._reviews_overview_dict(target, request))
+
+
+@app.post("/auth/bookings/{booking_id}/review-request", response_model=BookingActionResponse)
+async def auth_booking_review_request(
+    booking_id: str,
+    request: Request,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> BookingActionResponse:
+    """Envia manualmente la peticion de resena de una cita (staff)."""
+    booking_row = booking._load_booking_or_404(booking_id)
+    if user["role"] != "admin" and booking_row["cliente_id"] != user["cliente_id"]:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
+    security._require_portal_permission(user, "agenda.attendance")
+    cfg = booking._reviews_config(booking_row["cliente_id"])
+    if not booking._review_link_valid(cfg["link"]):
+        raise HTTPException(status_code=409, detail="Configura primero el enlace de resenas en Seguimiento.")
+    res = await booking._send_review_request(booking_row, request, cfg=cfg, manual=True)
+    if not res.get("sent_channels"):
+        raise HTTPException(status_code=409, detail="No se pudo enviar (sin contacto valido o canal activo).")
+    return BookingActionResponse(
+        ok=True, booking_id=booking_id, estado=booking_row["status"],
+        mensaje="Peticion de resena enviada.",
+    )
+
+
 @app.post("/auth/bookings/{booking_id}/confirm-call", response_model=BookingActionResponse)
 async def auth_booking_confirm_call(
     booking_id: str,
     request: Request,
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> BookingActionResponse:
-    """Lanza una llamada de IA al cliente para confirmar su cita (manual)."""
+    """Lanza una llamada de IA al cliente para confirmar su cita (manual).
+
+    Valida estado, telefono y dedup: no coloca una segunda llamada si ya hay una
+    reciente para la misma cita (doble clic/reintento). Si falta configuracion de voz,
+    telefono o creditos, devuelve un 409 con el motivo concreto."""
     booking_row = booking._load_booking_or_404(booking_id)
     if user["role"] != "admin" and booking_row["cliente_id"] != user["cliente_id"]:
         raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
     security._require_portal_permission(user, "agenda.attendance")
-    if booking_row["status"] == "cancelled":
-        raise HTTPException(status_code=409, detail="No se puede llamar para una cita cancelada.")
+    if booking_row["status"] in {"cancelled", "completed", "no_show"}:
+        raise HTTPException(status_code=409, detail="Solo se puede llamar para confirmar citas activas.")
+    if not (booking_row["telefono"] or "").strip():
+        raise HTTPException(status_code=409, detail="La cita no tiene telefono al que llamar.")
+    if booking._recent_confirm_call_placed(booking_id):
+        raise HTTPException(status_code=409, detail="Ya hay una llamada de confirmacion reciente para esta cita.")
     result = await timeutils._to_thread(
         voice._voice_place_outbound_call, booking_row["cliente_id"], booking_row,
         base_url=textnorm._public_base_url(request),
@@ -1310,17 +1409,18 @@ async def auth_booking_send_confirmation(
     request: Request,
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> BookingActionResponse:
-    """Reenvia la confirmacion de la cita por los canales configurados (email/WhatsApp/SMS)."""
+    """Reenvia la confirmacion de la cita por los canales configurados (email/WhatsApp/SMS).
+
+    Valida contacto y configuracion: si no hay email/telefono o el correo no esta
+    configurado, devuelve un 409 con el motivo concreto en vez de un exito falso."""
     booking_row = booking._load_booking_or_404(booking_id)
     if user["role"] != "admin" and booking_row["cliente_id"] != user["cliente_id"]:
         raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
     security._require_portal_permission(user, "agenda.attendance")
-    await booking._send_booking_reminder_by_kind(booking_row, "confirmed", request, respect_enabled=False)
-    booking._record_booking_audit(booking_id, booking_row["cliente_id"], "confirmation_resent",
-                                  {"by": user["id"]})
+    result = await booking._resend_booking_confirmation(booking_row, request, by_user=user["id"])
     return BookingActionResponse(
         ok=True, booking_id=booking_id, estado=booking_row["status"],
-        mensaje="Confirmacion enviada.",
+        mensaje=f"Confirmacion enviada por {booking._confirmation_channels_label(result['sent'])}.",
     )
 
 
@@ -1489,7 +1589,10 @@ async def app_booking_payment_link(
     row = booking._create_customer_payment_link(
         cliente_id, booking_row, base_url=textnorm._public_base_url(request), override_cents=data.amount_cents
     )
-    return PaymentLinkResponse(payment=booking._payment_public(row), checkout_url=row["checkout_url"])
+    return PaymentLinkResponse(
+        payment=booking._payment_public(row), checkout_url=row["checkout_url"],
+        qr_svg=commerce._qr_svg(row["checkout_url"]),
+    )
 
 
 

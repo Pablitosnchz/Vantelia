@@ -88,6 +88,26 @@ def test_pos_charge_product_creates_link_and_finalizes(client, api_module, monke
             conn.commit()
 
 
+def test_qr_svg_generates_scannable_png_when_segno_available():
+    """El QR se entrega como <img> PNG (data-URI): el SVG de segno usa strokes que
+    al escalar quedan ilegibles. Verifica img + PNG base64 + clase para el CSS."""
+    try:
+        import segno  # noqa: F401
+    except Exception:  # pragma: no cover
+        import pytest
+        pytest.skip("segno no instalado en este entorno")
+    import base64
+    from backend import commerce
+    out = commerce._qr_svg("https://checkout.stripe.com/c/pay/cs_live_" + "x" * 120)
+    assert out.startswith('<img class="vqr"')
+    assert 'src="data:image/png;base64,' in out
+    b64 = out.split("base64,", 1)[1].split('"', 1)[0]
+    raw = base64.b64decode(b64)
+    assert raw[:8] == b"\x89PNG\r\n\x1a\n"  # firma PNG valida
+    assert len(raw) > 200
+    assert commerce._qr_svg("") == ""
+
+
 def test_pos_charge_on_booking_marks_paid(client, api_module, monkeypatch, portal_cookies):
     suffix = uuid.uuid4().hex[:8]
     booking_id = f"bk_pos_{suffix}"
