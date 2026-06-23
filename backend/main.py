@@ -263,6 +263,7 @@ from backend.routers import (  # noqa: E402,F401
     auth_oauth,
     onboarding_web,
     portal_app,
+    portal_content,
     billing_web,
     portal_users,
     ui_pages,
