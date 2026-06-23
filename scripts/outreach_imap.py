@@ -30,6 +30,7 @@ import imaplib
 import logging
 import os
 import re
+import socket
 import sqlite3
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
@@ -119,17 +120,24 @@ def _connect_imap() -> imaplib.IMAP4 | None:
     port = int(os.getenv("IMAP_PORT", "993"))
     use_ssl = os.getenv("IMAP_USE_SSL", "true").strip().lower() in {"1", "true", "yes", "on"}
     folder = os.getenv("IMAP_FOLDER", "INBOX").strip() or "INBOX"
+    # El kwarg timeout= de IMAP4/IMAP4_SSL es Python 3.9+. El proyecto soporta 3.8,
+    # asi que acotamos connect+login+select via el timeout por defecto del socket
+    # (lo hereda la conexion al crearse) y lo restauramos al salir.
+    prev_timeout = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(25)
     try:
         if use_ssl:
-            client: imaplib.IMAP4 = imaplib.IMAP4_SSL(host, port, timeout=25)
+            client: imaplib.IMAP4 = imaplib.IMAP4_SSL(host, port)
         else:
-            client = imaplib.IMAP4(host, port, timeout=25)
+            client = imaplib.IMAP4(host, port)
         client.login(user, password)
         client.select(folder)
         return client
     except Exception as exc:  # noqa: BLE001
         logger.warning("IMAP poller: no se pudo conectar (%s)", exc)
         return None
+    finally:
+        socket.setdefaulttimeout(prev_timeout)
 
 
 def _search_recent_uids(client: imaplib.IMAP4, lookback_days: int) -> list[bytes]:
