@@ -1427,6 +1427,12 @@ async def app_follow_up_put(
             rem["email_confirm_button"] = bool(data.email_confirm_button)
         if data.suppress_2h_if_confirmed is not None:
             rem["suppress_2h_if_confirmed"] = bool(data.suppress_2h_if_confirmed)
+        if data.voice_otp_channels is not None:
+            rem["voice_otp_channels"] = {
+                "email": bool(data.voice_otp_channels.get("email")),
+                "whatsapp": bool(data.voice_otp_channels.get("whatsapp")),
+                "sms": bool(data.voice_otp_channels.get("sms")),
+            }
         cfg["reminders"] = rem
         if data.message_template_channels is not None:
             booking_cfg = dict(cfg.get("booking", {}) or {})

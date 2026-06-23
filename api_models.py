@@ -996,6 +996,8 @@ class FollowUpPayload(BaseModel):
     suppress_2h_if_confirmed: Optional[bool] = None
     # Override explicito de canales por aviso: {kind: {email,whatsapp,sms}}
     message_template_channels: Optional[Dict[str, Dict[str, bool]]] = None
+    # Canales permitidos para el codigo de verificacion por voz (OTP). Todos a false = desactivado.
+    voice_otp_channels: Optional[Dict[str, bool]] = None
 
 
 class FollowUpChannelAvailability(BaseModel):

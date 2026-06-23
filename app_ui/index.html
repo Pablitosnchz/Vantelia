@@ -9083,13 +9083,14 @@ function renderFollowUp(data) {
         <span class="fu-ico">${FU_CH_ICON[c.channel]||''}</span>${escapeHtml(c.label)} ${lockBadge}${recBadge}</label>`;
     }).join('');
     const isOtp = step.key === 'voice_otp';
-    const muted = (isReview || isOtp) ? !step.enabled : !anyActive;
+    const muted = isReview ? !step.enabled : !anyActive;
     const dot = isReview ? '★' : (isOtp ? '🔒' : (step.when.replace(/[^0-9]/g,'') || '✓'));
+    const otpBadge = !data.voice_available ? 'Requiere voz' : (anyActive ? 'Automático' : 'Desactivado');
     const tagBadge = isReview
       ? (step.needs_setup
           ? `<span class="fu-setup-badge">Falta el enlace</span>`
           : (step.enabled ? `<span class="fu-rec-badge">Activo</span>` : `<span class="fu-lock-badge" style="color:var(--soft-2);background:rgba(255,255,255,0.04);border-color:var(--line);">Desactivado</span>`))
-      : (isOtp ? `<span class="fu-rec-badge">${step.enabled ? 'Automático' : 'Requiere voz'}</span>` : '');
+      : (isOtp ? `<span class="fu-rec-badge">${otpBadge}</span>` : '');
     const cta = isReview ? `<button type="button" class="fu-review-cta" data-fu-review-cta>${step.needs_setup ? 'Configurar reseñas' : 'Editar reseñas'} ⌄</button>` : '';
     return `<div class="fu-step ${muted?'fu-muted':''} ${isReview?'fu-step-review':''}">
       <div class="fu-step-rail"><div class="fu-dot">${dot}</div><div class="fu-line"></div></div>
@@ -9108,7 +9109,6 @@ function renderFollowUp(data) {
     chip.addEventListener('click', () => {
       const kind = chip.dataset.kind, channel = chip.dataset.channel;
       if (kind === 'review') { fuJumpToReviewCard(); return; }
-      if (kind === 'voice_otp') return;  // informativo: el OTP elige canal automaticamente
       if (channel === 'call') { document.getElementById('fuCallEnabled').focus(); return; }
       if (chip.classList.contains('fu-locked')) { toast('Disponible en un plan superior.', 'error'); return; }
       const cur = fuEffectiveChannels(kind);
@@ -9200,9 +9200,10 @@ document.getElementById('fuCallEnabled')?.addEventListener('change', fuToggleCal
 document.getElementById('fuSaveBtn')?.addEventListener('click', async () => {
   const channels = {};
   (followUpState && followUpState.steps || []).forEach(step => {
-    if (step.key === 'call' || step.key === 'review' || step.key === 'voice_otp') return;  // no son canales de aviso editables
+    if (step.key === 'call' || step.key === 'review' || step.key === 'voice_otp') return;  // call/review/otp se guardan aparte
     channels[step.key] = fuEffectiveChannels(step.key);
   });
+  const hasOtp = (followUpState && followUpState.steps || []).some(s => s.key === 'voice_otp');
   const callCb = document.getElementById('fuCallEnabled');
   const body = {
     email_confirm_button: document.getElementById('fuEmailConfirm').checked,
@@ -9214,6 +9215,7 @@ document.getElementById('fuSaveBtn')?.addEventListener('click', async () => {
     daily_call_cap: parseInt(document.getElementById('fuDailyCap').value, 10) || 0,
     message_template_channels: channels,
   };
+  if (hasOtp) body.voice_otp_channels = fuEffectiveChannels('voice_otp');
   try {
     await api('/auth/app/follow-up', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
     toast('Seguimiento guardado.', 'success');

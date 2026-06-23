@@ -602,6 +602,23 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
             "telefono y motivo, y di que el equipo les llamara para confirmar.\n"
         )
 
+    # Si el negocio desactivo la verificacion por codigo (todos los canales OFF en Seguimiento),
+    # el asistente verifica por telefono/email en vez de enviar un OTP.
+    try:
+        _otp_on = any((booking._follow_up_config(cliente_id).get("voice_otp_channels") or {}).values())
+    except Exception:  # noqa: BLE001
+        _otp_on = True
+    if not _otp_on:
+        booking_block = booking_block.replace(
+            "- VERIFICACION DE IDENTIDAD (antes de cambiar o cancelar): una vez confirmada la cita, usa "
+            "enviar_codigo_verificacion para mandarle un codigo de 4 digitos a su telefono o email registrado; dile "
+            "por que medio se lo has enviado (NUNCA leas tu el codigo). Pide que te lo lea y validalo con "
+            "verificar_codigo. Solo si verificar_codigo devuelve ok puedes continuar. Si el codigo no llega o no "
+            "tiene contacto registrado, puedes verificar pidiendo el telefono o el email de la reserva.\n",
+            "- VERIFICACION DE IDENTIDAD (antes de cambiar o cancelar): por seguridad pide el telefono o el email "
+            "con el que se hizo la reserva y solo continua si coincide. No uses enviar_codigo_verificacion.\n",
+        )
+
     knowledge = _voice_load_knowledge(cliente_id)
     knowledge_block = (
         f"\n\nBASE DE CONOCIMIENTO DEL NEGOCIO (es tu unica fuente para datos concretos como servicios, "
@@ -1064,13 +1081,14 @@ def _voice_pick_otp_channel(cliente_id: str, booking_row: sqlite3.Row) -> Tuple[
     del cliente (reusa _reminder_channel_availability): SMS > WhatsApp > email. Devuelve
     (canal, destino, enmascarado) o ('', '', '') si no hay contacto/canal."""
     avail = agenda._reminder_channel_availability(cliente_id)
+    allowed = booking._follow_up_config(cliente_id).get("voice_otp_channels", {}) or {}
     phone = (booking_row["telefono"] or "").strip()
     email = (booking_row["email"] or "").strip()
-    if phone and avail.get("sms", {}).get("available"):
+    if phone and allowed.get("sms") and avail.get("sms", {}).get("available"):
         return "sms", phone, _voice_mask_phone(phone)
-    if phone and avail.get("whatsapp", {}).get("available"):
+    if phone and allowed.get("whatsapp") and avail.get("whatsapp", {}).get("available"):
         return "whatsapp", phone, _voice_mask_phone(phone)
-    if email:
+    if email and allowed.get("email"):
         return "email", email, _voice_mask_email(email)
     return "", "", ""
 
@@ -1087,6 +1105,10 @@ async def _voice_send_verification_code(
         return {"ok": False, "error": "No encuentro ninguna cita con ese numero de reserva."}
     if row["status"] in ("cancelled", "completed", "no_show"):
         return {"ok": False, "error": "Esa cita no se puede modificar."}
+    allowed = booking._follow_up_config(cliente_id).get("voice_otp_channels", {}) or {}
+    if not any(allowed.values()):
+        return {"ok": False, "disabled": True,
+                "error": "La verificación por código está desactivada para este negocio."}
     try:
         security._check_rate_limit(f"voice_otp:{cliente_id}:{row['id']}", 3)
     except HTTPException:

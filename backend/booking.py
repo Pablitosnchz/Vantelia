@@ -2957,6 +2957,11 @@ def _follow_up_config(cliente_id: str) -> Dict[str, Any]:
         "daily_call_cap": max(0, min(500, cap)),
         "email_confirm_button": bool(cfg.get("email_confirm_button", True)),
         "suppress_2h_if_confirmed": bool(cfg.get("suppress_2h_if_confirmed", True)),
+        # Canales permitidos para el OTP de voz. Default historico: todos ON (comportamiento
+        # previo). Todos en false = verificacion por codigo desactivada (cae a telefono/email).
+        "voice_otp_channels": (
+            {k: bool((cfg.get("voice_otp_channels") or {}).get(k, True)) for k in ("email", "whatsapp", "sms")}
+        ),
     }
 
 
@@ -3068,13 +3073,14 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
     # temporizado: lo dispara el asistente de voz. Solo se muestra si el plan incluye voz.
     # Los "canales" indican como se entrega el codigo al cliente (primer disponible).
     if voice_plan:
+        otp_cfg = fu["voice_otp_channels"]
         otp_channels = [
-            {"channel": "email", "label": "Email", "active": True,
+            {"channel": "email", "label": "Email", "active": bool(otp_cfg.get("email")),
              "available": True, "locked": False, "recommended": False, "plan_needed": "", "reason": "Disponible."},
-            {"channel": "whatsapp", "label": "WhatsApp", "active": wa_available,
+            {"channel": "whatsapp", "label": "WhatsApp", "active": bool(otp_cfg.get("whatsapp")) and wa_available,
              "available": wa_available, "locked": not wa_plan, "plan_needed": "" if wa_plan else "Pro",
              "recommended": False, "reason": avail["whatsapp"]["reason"]},
-            {"channel": "sms", "label": "SMS", "active": sms_available,
+            {"channel": "sms", "label": "SMS", "active": bool(otp_cfg.get("sms")) and sms_available,
              "available": sms_available, "locked": not sms_plan, "plan_needed": "" if sms_plan else "Business",
              "recommended": False, "reason": avail["sms"]["reason"]},
         ]
@@ -3082,9 +3088,9 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
             "key": "voice_otp", "label": "Verificación por código (voz)",
             "when": "Al cambiar o cancelar", "offset_hours": 0, "channels": otp_channels,
             "note": ("Antes de cambiar o cancelar una cita por voz, el asistente envía al cliente un código "
-                     "de 4 dígitos a su teléfono o email y le pide que lo lea. Se entrega por el primer canal "
-                     "disponible (SMS, WhatsApp o email)."),
-            "enabled": voice_available,
+                     "de 4 dígitos por los canales que actives aquí y le pide que lo lea. Apaga todos para "
+                     "desactivar la verificación por código (se pedirá teléfono o email en su lugar)."),
+            "enabled": voice_available and any(c["active"] for c in otp_channels),
         })
 
     return {
@@ -3235,10 +3241,11 @@ async def _run_follow_up_test(
                 "Es una prueba del sistema de verificación por voz."
             )
             otp_avail = agenda._reminder_channel_availability(cliente_id)
+            otp_cfg = _follow_up_config(cliente_id)["voice_otp_channels"]
             attempt = {
-                "email": bool(to_email),
-                "whatsapp": bool(to_phone) and bool(otp_avail["whatsapp"]["available"]),
-                "sms": bool(to_phone) and bool(otp_avail["sms"]["available"]),
+                "email": bool(to_email) and bool(otp_cfg.get("email")),
+                "whatsapp": bool(to_phone) and bool(otp_avail["whatsapp"]["available"]) and bool(otp_cfg.get("whatsapp")),
+                "sms": bool(to_phone) and bool(otp_avail["sms"]["available"]) and bool(otp_cfg.get("sms")),
             }
             otp_sent: List[str] = []
             otp_failed: Dict[str, str] = {}
@@ -3272,9 +3279,9 @@ async def _run_follow_up_test(
                 except Exception as exc:  # noqa: BLE001
                     otp_failed["sms"] = str(exc)[:200]
             otp_skipped = {
-                "email": "" if attempt["email"] else "Indica un email de prueba.",
-                "whatsapp": "" if attempt["whatsapp"] else "Requiere teléfono y WhatsApp disponible.",
-                "sms": "" if attempt["sms"] else "Requiere teléfono y SMS (plan Business).",
+                "email": ("Desactivado en Seguimiento." if not otp_cfg.get("email") else "Indica un email de prueba."),
+                "whatsapp": ("Desactivado en Seguimiento." if not otp_cfg.get("whatsapp") else "Requiere teléfono y WhatsApp disponible."),
+                "sms": ("Desactivado en Seguimiento." if not otp_cfg.get("sms") else "Requiere teléfono y SMS (plan Business)."),
             }
             otp_labels = {"email": "Email", "whatsapp": "WhatsApp", "sms": "SMS"}
             otp_results: List[Dict[str, str]] = []
