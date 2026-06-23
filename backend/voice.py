@@ -571,9 +571,14 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
             "- crear_cita devuelve un numero de reserva (formato R y cuatro caracteres, por ejemplo R-7F4K). "
             "Diselo al cliente deletreado, letra a letra y digito a digito, y pidele que lo apunte porque le servira "
             "para cambiar o cancelar la cita.\n"
-            "- CANCELAR: si piden cancelar, pide su numero de reserva y usa la herramienta cancelar_cita. "
-            "REPROGRAMAR: pide el numero de reserva y la nueva fecha/hora (comprueba antes huecos con "
-            "consultar_disponibilidad) y usa reprogramar_cita.\n"
+            "- CAMBIAR O CANCELAR UNA CITA: cuando el cliente quiera reprogramar o cancelar, pide PRIMERO su "
+            "numero de reserva (R-XXXX) y llama de inmediato a consultar_cita. NO pidas mas datos ni des por hecho "
+            "que conoces la cita hasta que consultar_cita devuelva ok. Si devuelve ok, dile en voz alta que cita has "
+            "encontrado (servicio, dia y hora) y pide que confirme que es esa. Solo entonces: para CANCELAR usa "
+            "cancelar_cita con ese mismo numero; para REPROGRAMAR pide la nueva fecha/hora, comprueba huecos con "
+            "consultar_disponibilidad y usa reprogramar_cita.\n"
+            "- Si consultar_cita devuelve que no encuentra la reserva, dilo enseguida y pide que te repita el numero; "
+            "NO sigas el proceso como si la cita existiera.\n"
             "- Seguridad: estas herramientas solo funcionan si el telefono desde el que llaman coincide con el de la "
             "reserva. Si devuelven needs_verification, pide con tacto el telefono o el email con el que reservaron y "
             "vuelve a intentarlo pasando ese dato. No confirmes una cancelacion o cambio sin que la herramienta "
@@ -646,6 +651,27 @@ def _voice_booking_tools(
                     "email": {"type": "string", "description": "Email (opcional)"},
                 },
                 "required": ["nombre", "telefono", "fecha", "hora"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "consultar_cita",
+            "description": (
+                "Busca una cita por su numero de reserva (formato R-XXXX) y devuelve sus datos: "
+                "servicio, fecha, hora, profesional y estado. USALA SIEMPRE LA PRIMERA cuando el "
+                "cliente quiera cancelar o cambiar una cita: sirve para confirmar que la reserva EXISTE "
+                "y es suya ANTES de pedir cualquier otro dato. Si el telefono de la llamada no coincide "
+                "con el de la reserva, pide el telefono o el email con el que reservo y pasalo en "
+                "'telefono' o 'email'. No continues con el cambio o la cancelacion hasta que devuelva ok."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "codigo_reserva": {"type": "string", "description": "Numero de reserva, formato R-XXXX"},
+                    "telefono": {"type": "string", "description": "Telefono de la reserva, si el cliente lo facilita (opcional)"},
+                    "email": {"type": "string", "description": "Email de la reserva, si el cliente lo facilita (opcional)"},
+                },
+                "required": ["codigo_reserva"],
             },
         },
         {
@@ -939,6 +965,41 @@ async def _voice_lookup_and_verify_booking(
     return row, None
 
 
+_VOICE_STATUS_ES = {
+    "confirmed": "confirmada",
+    "pending_review": "pendiente de confirmar",
+    "cancelled": "cancelada",
+    "completed": "ya realizada",
+    "no_show": "marcada como no presentada",
+}
+
+
+async def _voice_lookup_booking(
+    cliente_id: str,
+    codigo_reserva: str,
+    *,
+    from_number: str = "",
+    telefono: str = "",
+    email: str = "",
+) -> Dict[str, Any]:
+    """Tool de voz: localiza una cita por numero de reserva y verifica titularidad, para que el
+    asistente confirme DE QUE cita se trata antes de cancelar o reprogramar. Solo lectura."""
+    row, error = await _voice_lookup_and_verify_booking(
+        cliente_id, codigo_reserva, from_number=from_number, telefono=telefono, email=email
+    )
+    if error:
+        return error
+    return {
+        "ok": True,
+        "codigo_reserva": row["booking_code"] or "",
+        "servicio": row["servicio"] or "",
+        "fecha": row["booking_date"] or "",
+        "hora": row["booking_time"] or "",
+        "profesional": row["employee_name"] or "",
+        "estado": _VOICE_STATUS_ES.get(row["status"], row["status"] or ""),
+    }
+
+
 async def _voice_cancel_booking(
     cliente_id: str,
     codigo_reserva: str,
@@ -1070,6 +1131,14 @@ async def _voice_dispatch_tool(
             email=str(args.get("email", "")),
             location_id=location_id,
         )
+    if name == "consultar_cita":
+        return await _voice_lookup_booking(
+            cliente_id,
+            str(args.get("codigo_reserva", "")),
+            from_number=from_number,
+            telefono=str(args.get("telefono", "")),
+            email=str(args.get("email", "")),
+        )
     if name == "cancelar_cita":
         return await _voice_cancel_booking(
             cliente_id,
@@ -1113,7 +1182,7 @@ async def _voice_dispatch_tool_demo(cliente_id: str, name: str, arguments_json: 
         return await _voice_check_availability(
             cliente_id, str(args.get("fecha", "")), str(args.get("servicio", ""))
         )
-    if name in {"crear_cita", "cancelar_cita", "reprogramar_cita"}:
+    if name in {"crear_cita", "cancelar_cita", "reprogramar_cita", "consultar_cita"}:
         return {
             "ok": False,
             "demo": True,
