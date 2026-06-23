@@ -3106,12 +3106,10 @@ def _build_booking_record(api_module, **overrides):
 
 
 def test_booking_code_generation_format(api_module):
-    pattern = re.compile(r"^R-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$")
+    pattern = re.compile(r"^R-[0-9]{6}$")
     for _ in range(50):
         code = api_module._generate_booking_code()
         assert pattern.match(code), code
-    # Sin caracteres ambiguos
-    assert not any(c in code for c in "01OIL")
 
 
 def test_phone_normalization_for_match(api_module):
@@ -3125,7 +3123,7 @@ def test_booking_code_lookup_and_contact_verification(api_module):
     try:
         api_module._store_booking(record)
         code = record["booking_code"]
-        assert re.match(r"^R-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$", code)
+        assert re.match(r"^R-[0-9]{6}$", code)
 
         # Lookup por codigo (scoped al cliente), tolerante a espacios/mayusculas
         row = api_module._get_booking_row_by_code("demo", code.lower())
@@ -3176,7 +3174,7 @@ def test_backfill_assigns_codes_to_active_bookings_only(api_module):
             code_canc = conn.execute(
                 "SELECT booking_code FROM bookings WHERE id = ?", (ids["cancelled"],)
             ).fetchone()[0]
-        assert re.match(r"^R-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$", code_conf)
+        assert re.match(r"^R-[0-9]{6}$", code_conf)
         assert code_canc == ""  # cancelada: no necesita codigo
 
         # Idempotencia: una segunda pasada no reasigna nada de estas dos
@@ -6790,6 +6788,101 @@ def test_voice_booking_tools_absent_when_booking_disabled(api_module):
     cfg_disabled["booking"] = dict(cfg_enabled["booking"])
     cfg_disabled["booking"]["enabled"] = False
     assert api_module._voice_booking_tools("demo", cfg_disabled) == []
+
+
+def test_voice_booking_code_is_digits_and_regex_back_compatible(api_module):
+    code = api_module._generate_booking_code()
+    assert code.startswith("R-") and code[2:].isdigit() and len(code[2:]) == 6
+    # La extraccion reconoce el formato nuevo (6 digitos) y el antiguo (4 alfanumericos).
+    assert api_module._extract_booking_code_from_text("mi reserva es R-481523") == "R-481523"
+    assert api_module._extract_booking_code_from_text("codigo R-7F4K gracias") == "R-7F4K"
+
+
+def test_voice_otp_lets_owner_verify_from_another_phone(vantelia_env_factory, monkeypatch):
+    import asyncio
+    import json as _json
+    from datetime import datetime, timedelta
+
+    cfg = {
+        "otpqa": {
+            "nombre": "OTP QA", "icono": "QA", "color": "#00b1d9", "bienvenida": "Hola",
+            "prompt_extra": "", "allowed_origins": ["http://testserver"],
+            "contacto": {"email": "qa@example.com", "telefono": "+34600000000"},
+            "branding": {"powered_by": "Vantelia"}, "plan": "business",
+            "subscription": {"plan": "business", "status": "active"},
+            "whatsapp": {"enabled": False, "phone_number_id": ""},
+            "voice": {"enabled": True, "twilio_phone_number": "+34910000001"},
+            "booking": {"enabled": True, "timezone": "Europe/Madrid", "slot_minutes": 30,
+                        "day_start": "09:00", "day_end": "18:00", "closed_weekdays": [6],
+                        "provider": "internal", "success_message": "ok"},
+        }
+    }
+    api = vantelia_env_factory(cfg, info_txt="SERVICIOS Y PRECIOS:\n")
+    from backend import appstate, emailing, messaging
+
+    monkeypatch.setattr(emailing, "_send_client_email", lambda *a, **k: "test")
+
+    async def _ok_sms(cliente_id, to_number, body):
+        return True
+
+    monkeypatch.setattr(messaging, "_send_client_sms", _ok_sms)
+
+    day = datetime.now().date() + timedelta(days=2)
+    while day.weekday() == 6:
+        day += timedelta(days=1)
+    fecha = day.isoformat()
+    owner, other = "+34600111222", "+34999000000"
+
+    created = asyncio.run(api._voice_dispatch_tool(
+        "otpqa", "crear_cita",
+        _json.dumps({"nombre": "Cli", "telefono": owner, "email": "cli@test.com",
+                     "fecha": fecha, "hora": "10:00", "servicio": ""}),
+        from_number=owner))
+    assert created["ok"], created
+    bid = created["booking_id"]
+    with api._get_db_connection() as connection:
+        code = connection.execute(
+            "SELECT booking_code FROM bookings WHERE id=?", (bid,)
+        ).fetchone()["booking_code"]
+
+    # consultar_cita localiza la cita desde otro telefono (la lectura no exige titularidad).
+    looked = asyncio.run(api._voice_dispatch_tool(
+        "otpqa", "consultar_cita", _json.dumps({"codigo_reserva": code}), from_number=other))
+    assert looked["ok"] and looked["hora"] == "10:00"
+
+    # Sin OTP y desde otro telefono no se puede reprogramar.
+    blocked = asyncio.run(api._voice_dispatch_tool(
+        "otpqa", "reprogramar_cita",
+        _json.dumps({"codigo_reserva": code, "fecha": fecha, "hora": "11:00"}), from_number=other))
+    assert blocked["ok"] is False and blocked.get("needs_verification")
+
+    sent = asyncio.run(api._voice_dispatch_tool(
+        "otpqa", "enviar_codigo_verificacion", _json.dumps({"codigo_reserva": code}), from_number=other))
+    assert sent["ok"], sent
+    otp = appstate.voice_otp["otpqa:" + bid]["code"]
+
+    wrong = "0000" if otp != "0000" else "1111"
+    bad = asyncio.run(api._voice_dispatch_tool(
+        "otpqa", "verificar_codigo",
+        _json.dumps({"codigo_reserva": code, "codigo": wrong}), from_number=other))
+    assert bad["ok"] is False
+
+    good = asyncio.run(api._voice_dispatch_tool(
+        "otpqa", "verificar_codigo",
+        _json.dumps({"codigo_reserva": code, "codigo": otp}), from_number=other))
+    assert good["ok"]
+
+    done = asyncio.run(api._voice_dispatch_tool(
+        "otpqa", "reprogramar_cita",
+        _json.dumps({"codigo_reserva": code, "fecha": fecha, "hora": "11:00"}), from_number=other))
+    assert done["ok"], done
+    with api._get_db_connection() as connection:
+        when = connection.execute(
+            "SELECT booking_time FROM bookings WHERE id=?", (bid,)
+        ).fetchone()["booking_time"]
+    assert when == "11:00"
+
+
 def test_gmail_tokens_are_encrypted_and_connection_status_is_safe(client: TestClient, api_module):
     with api_module._get_db_connection() as connection:
         connection.execute("DELETE FROM gmail_connections")

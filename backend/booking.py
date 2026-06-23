@@ -746,7 +746,10 @@ _BOOKING_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
 
 
 def _generate_booking_code() -> str:
-    suffix = "".join(secrets.choice(_BOOKING_CODE_ALPHABET) for _ in range(4))
+    # Solo digitos: mucho mas facil de dictar y oir por telefono ("R, uno, dos, tres...").
+    # 6 digitos mantienen un espacio amplio (1M) por cliente. Los codigos antiguos
+    # alfanumericos siguen siendo validos (ver BOOKING_CODE_RE / _get_booking_row_by_code).
+    suffix = "".join(secrets.choice("0123456789") for _ in range(6))
     return f"R-{suffix}"
 
 
@@ -796,7 +799,9 @@ def _get_booking_row_by_code(cliente_id: str, code: str) -> Optional[sqlite3.Row
     return None
 
 
-BOOKING_CODE_RE = re.compile(r"\bR[\s-]?([23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4})\b", re.IGNORECASE)
+# Acepta el formato nuevo (R + 6 digitos) y el antiguo (R + 4 alfanumericos) para no
+# romper enlaces/citas existentes.
+BOOKING_CODE_RE = re.compile(r"\bR[\s-]?([0-9]{6}|[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4})\b", re.IGNORECASE)
 
 
 def _extract_booking_code_from_text(text: str) -> str:

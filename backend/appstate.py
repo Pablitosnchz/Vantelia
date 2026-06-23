@@ -64,6 +64,10 @@ whatsapp_flows: Dict[str, WAFlowState] = {}
 indices: Dict[str, Any] = {}
 sesiones: Dict[str, SessionState] = {}
 rate_limit_buckets: Dict[str, List[float]] = {}
+# OTP de verificacion del asistente de voz (cancelar/reprogramar). Clave
+# "cliente_id:booking_id" -> {code, expires_at, attempts, verified, channel}.
+# En memoria a proposito: efimero (TTL corto), no necesita persistencia.
+voice_otp: Dict[str, Dict[str, Any]] = {}
 last_cleanup_run = 0.0
 state_lock = threading.RLock()
 booking_reminder_stop = threading.Event()

@@ -32,7 +32,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AppVoiceResponse, BookingReschedulePayload
-from backend import agenda, appstate, booking, chat, clients, crm, db, demo_agenda, messaging, rag, security, settings, textnorm, timeutils
+from backend import agenda, appstate, booking, chat, clients, crm, db, demo_agenda, emailing, messaging, rag, security, settings, textnorm, timeutils
 
 def _client_voice_plan_enabled(cliente_id: str) -> bool:
     """Whether the voice channel (phone) is available in the client's effective plan.
@@ -571,14 +571,18 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
             "- crear_cita devuelve un numero de reserva (formato R y cuatro caracteres, por ejemplo R-7F4K). "
             "Diselo al cliente deletreado, letra a letra y digito a digito, y pidele que lo apunte porque le servira "
             "para cambiar o cancelar la cita.\n"
-            "- CAMBIAR O CANCELAR UNA CITA: cuando el cliente quiera reprogramar o cancelar, pide PRIMERO su "
-            "numero de reserva (R-XXXX) y llama de inmediato a consultar_cita. NO pidas mas datos ni des por hecho "
-            "que conoces la cita hasta que consultar_cita devuelva ok. Si devuelve ok, dile en voz alta que cita has "
-            "encontrado (servicio, dia y hora) y pide que confirme que es esa. Solo entonces: para CANCELAR usa "
-            "cancelar_cita con ese mismo numero; para REPROGRAMAR pide la nueva fecha/hora, comprueba huecos con "
-            "consultar_disponibilidad y usa reprogramar_cita.\n"
-            "- Si consultar_cita devuelve que no encuentra la reserva, dilo enseguida y pide que te repita el numero; "
-            "NO sigas el proceso como si la cita existiera.\n"
+            "- CAMBIAR O CANCELAR UNA CITA: pide el numero de reserva (formato R y seis digitos) y llama a "
+            "consultar_cita DE INMEDIATO, en el mismo turno y SIN anunciarlo (no digas 'un momento, lo compruebo': "
+            "la consulta es instantanea). Cuando devuelva ok, di en voz alta que cita has encontrado (servicio, dia "
+            "y hora) y pide que confirme que es esa. Si no la encuentra, dilo enseguida y pide que repita el numero; "
+            "NO sigas como si la cita existiera.\n"
+            "- VERIFICACION DE IDENTIDAD (antes de cambiar o cancelar): una vez confirmada la cita, usa "
+            "enviar_codigo_verificacion para mandarle un codigo de 4 digitos a su telefono o email registrado; dile "
+            "por que medio se lo has enviado (NUNCA leas tu el codigo). Pide que te lo lea y validalo con "
+            "verificar_codigo. Solo si verificar_codigo devuelve ok puedes continuar. Si el codigo no llega o no "
+            "tiene contacto registrado, puedes verificar pidiendo el telefono o el email de la reserva.\n"
+            "- Tras verificar: para CANCELAR usa cancelar_cita con ese mismo numero; para REPROGRAMAR pide la nueva "
+            "fecha/hora, comprueba huecos con consultar_disponibilidad y usa reprogramar_cita.\n"
             "- Seguridad: estas herramientas solo funcionan si el telefono desde el que llaman coincide con el de la "
             "reserva. Si devuelven needs_verification, pide con tacto el telefono o el email con el que reservaron y "
             "vuelve a intentarlo pasando ese dato. No confirmes una cancelacion o cambio sin que la herramienta "
@@ -712,6 +716,40 @@ def _voice_booking_tools(
                     "email": {"type": "string", "description": "Email de la reserva, si el cliente lo facilita (opcional)"},
                 },
                 "required": ["codigo_reserva", "fecha", "hora"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "enviar_codigo_verificacion",
+            "description": (
+                "Envia al cliente un codigo de verificacion de 4 digitos por SMS, WhatsApp o email "
+                "(al telefono o email REGISTRADO en la cita) para confirmar su identidad ANTES de "
+                "cancelar o reprogramar. Usala despues de consultar_cita. Luego pide al cliente que te "
+                "lea el codigo y validalo con verificar_codigo. NUNCA leas tu el codigo en voz alta; "
+                "solo di por que medio se lo has enviado."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "codigo_reserva": {"type": "string", "description": "Numero de reserva (R y 6 digitos)"},
+                },
+                "required": ["codigo_reserva"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "verificar_codigo",
+            "description": (
+                "Comprueba el codigo de 4 digitos que el cliente lee tras enviar_codigo_verificacion. "
+                "Si devuelve ok, ya puedes cancelar o reprogramar esa cita."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "codigo_reserva": {"type": "string", "description": "Numero de reserva (R y 6 digitos)"},
+                    "codigo": {"type": "string", "description": "Codigo de 4 digitos leido por el cliente"},
+                },
+                "required": ["codigo_reserva", "codigo"],
             },
         },
     ]
@@ -982,13 +1020,12 @@ async def _voice_lookup_booking(
     telefono: str = "",
     email: str = "",
 ) -> Dict[str, Any]:
-    """Tool de voz: localiza una cita por numero de reserva y verifica titularidad, para que el
-    asistente confirme DE QUE cita se trata antes de cancelar o reprogramar. Solo lectura."""
-    row, error = await _voice_lookup_and_verify_booking(
-        cliente_id, codigo_reserva, from_number=from_number, telefono=telefono, email=email
-    )
-    if error:
-        return error
+    """Tool de voz: localiza una cita por numero de reserva y devuelve su resumen para que el
+    asistente confirme DE QUE cita se trata. El numero de reserva actua de clave de busqueda;
+    la titularidad para CAMBIAR/CANCELAR se exige aparte (telefono de la llamada o codigo OTP)."""
+    row = booking._get_booking_row_by_code(cliente_id, codigo_reserva)
+    if not row:
+        return {"ok": False, "error": "No encuentro ninguna cita con ese numero de reserva. Pide que lo repita."}
     return {
         "ok": True,
         "codigo_reserva": row["booking_code"] or "",
@@ -1000,6 +1037,158 @@ async def _voice_lookup_booking(
     }
 
 
+# ── Verificacion por codigo OTP (SMS / WhatsApp / email del contacto de la cita) ──
+VOICE_OTP_TTL_SECONDS = 300       # el codigo caduca a los 5 minutos
+VOICE_OTP_MAX_ATTEMPTS = 3        # intentos de lectura antes de invalidar
+
+
+def _voice_otp_key(cliente_id: str, booking_id: str) -> str:
+    return f"{cliente_id}:{booking_id}"
+
+
+def _voice_mask_phone(phone: str) -> str:
+    digits = re.sub(r"\D", "", phone or "")
+    return ("***" + digits[-3:]) if len(digits) >= 3 else "***"
+
+
+def _voice_mask_email(email: str) -> str:
+    email = (email or "").strip()
+    if "@" not in email:
+        return "***"
+    local, _, domain = email.partition("@")
+    return f"{(local[:1] or '*')}***@{domain}"
+
+
+def _voice_pick_otp_channel(cliente_id: str, booking_row: sqlite3.Row) -> Tuple[str, str, str]:
+    """Mejor canal para enviar el OTP al contacto REGISTRADO de la cita, segun plan y config
+    del cliente (reusa _reminder_channel_availability): SMS > WhatsApp > email. Devuelve
+    (canal, destino, enmascarado) o ('', '', '') si no hay contacto/canal."""
+    avail = agenda._reminder_channel_availability(cliente_id)
+    phone = (booking_row["telefono"] or "").strip()
+    email = (booking_row["email"] or "").strip()
+    if phone and avail.get("sms", {}).get("available"):
+        return "sms", phone, _voice_mask_phone(phone)
+    if phone and avail.get("whatsapp", {}).get("available"):
+        return "whatsapp", phone, _voice_mask_phone(phone)
+    if email:
+        return "email", email, _voice_mask_email(email)
+    return "", "", ""
+
+
+async def _voice_send_verification_code(
+    cliente_id: str, codigo_reserva: str, *, from_number: str = "",
+) -> Dict[str, Any]:
+    """Tool de voz: envia un codigo OTP de 4 digitos al contacto registrado de la cita para
+    verificar identidad antes de cancelar/reprogramar. Reusa los canales del cliente
+    (_send_client_email / _send_client_sms / _send_whatsapp_text) con su remitente configurado,
+    o el de Vantelia como soporte. No expone el codigo al asistente para leerlo en voz alta."""
+    row = booking._get_booking_row_by_code(cliente_id, codigo_reserva)
+    if not row:
+        return {"ok": False, "error": "No encuentro ninguna cita con ese numero de reserva."}
+    if row["status"] in ("cancelled", "completed", "no_show"):
+        return {"ok": False, "error": "Esa cita no se puede modificar."}
+    try:
+        security._check_rate_limit(f"voice_otp:{cliente_id}:{row['id']}", 3)
+    except HTTPException:
+        return {"ok": False, "error": "Se han enviado demasiados codigos. Espera un momento."}
+    channel, dest, masked = _voice_pick_otp_channel(cliente_id, row)
+    if not channel:
+        return {
+            "ok": False, "no_contact": True,
+            "error": "La cita no tiene telefono ni email registrado, no puedo enviar el codigo.",
+        }
+    code = f"{secrets.randbelow(10000):04d}"
+    empresa = (clients._get_client_config(cliente_id) or {}).get("nombre", "")
+    body = (
+        f"Tu codigo de verificacion{(' de ' + empresa) if empresa else ''} es {code}. "
+        "Lo necesitas para confirmar el cambio o la cancelacion de tu cita. Caduca en 5 minutos."
+    )
+    sent = False
+    try:
+        if channel == "email":
+            emailing._send_client_email(
+                cliente_id, dest,
+                f"Codigo de verificacion{(' - ' + empresa) if empresa else ''}", body, "",
+            )
+            sent = True
+        elif channel == "sms":
+            sent = await messaging._send_client_sms(cliente_id, dest, body)
+        elif channel == "whatsapp":
+            whatsapp_cfg = (clients._get_client_config(cliente_id).get("whatsapp", {}) or {})
+            pnid = str(whatsapp_cfg.get("phone_number_id", "") or "").strip()
+            wa_to = booking._booking_customer_phone_for_channel(row, "whatsapp")
+            if pnid and wa_to:
+                sent = await messaging._send_whatsapp_text(
+                    cliente_id=cliente_id, phone_number_id=pnid, to_number=wa_to, text=body,
+                )
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("[voice] envio de OTP fallo (%s): %s", cliente_id, exc)
+        sent = False
+    if not sent:
+        return {"ok": False, "error": "No se pudo enviar el codigo. Prueba a verificar por otro medio."}
+    with appstate.state_lock:
+        appstate.voice_otp[_voice_otp_key(cliente_id, row["id"])] = {
+            "code": code, "expires_at": time.time() + VOICE_OTP_TTL_SECONDS,
+            "attempts": 0, "verified": False, "channel": channel,
+        }
+    booking._record_booking_audit(row["id"], cliente_id, "voice_otp_sent", {"channel": channel})
+    return {"ok": True, "canal": channel, "destino": masked}
+
+
+def _voice_verify_code(cliente_id: str, codigo_reserva: str, codigo: str) -> Dict[str, Any]:
+    """Tool de voz: valida el OTP que el cliente lee en voz alta. Un solo uso, con TTL y
+    maximo de intentos. Si es correcto marca la cita como verificada para esta sesion."""
+    row = booking._get_booking_row_by_code(cliente_id, codigo_reserva)
+    if not row:
+        return {"ok": False, "error": "No encuentro esa reserva."}
+    key = _voice_otp_key(cliente_id, row["id"])
+    digits = re.sub(r"\D", "", codigo or "")
+    with appstate.state_lock:
+        entry = appstate.voice_otp.get(key)
+        if not entry:
+            return {"ok": False, "error": "No hay ningun codigo pendiente. Envia uno nuevo."}
+        if time.time() > entry["expires_at"]:
+            appstate.voice_otp.pop(key, None)
+            return {"ok": False, "expired": True, "error": "El codigo ha caducado. Envia uno nuevo."}
+        if entry["attempts"] >= VOICE_OTP_MAX_ATTEMPTS:
+            appstate.voice_otp.pop(key, None)
+            return {"ok": False, "too_many": True, "error": "Demasiados intentos. Envia un codigo nuevo."}
+        entry["attempts"] += 1
+        if not secrets.compare_digest(digits, str(entry["code"])):
+            return {"ok": False, "error": "El codigo no coincide. Pide que lo repita."}
+        entry["verified"] = True
+    booking._record_booking_audit(row["id"], cliente_id, "voice_otp_verified", {})
+    return {"ok": True}
+
+
+def _voice_booking_otp_verified(cliente_id: str, booking_id: str) -> bool:
+    with appstate.state_lock:
+        entry = appstate.voice_otp.get(_voice_otp_key(cliente_id, booking_id))
+        if not entry or not entry.get("verified"):
+            return False
+        if time.time() > entry["expires_at"]:
+            appstate.voice_otp.pop(_voice_otp_key(cliente_id, booking_id), None)
+            return False
+        return True
+
+
+async def _voice_lookup_for_mutation(
+    cliente_id: str, codigo_reserva: str, *, from_number: str = "", telefono: str = "", email: str = "",
+) -> Tuple[Optional[sqlite3.Row], Optional[Dict[str, Any]]]:
+    """Como _voice_lookup_and_verify_booking pero acepta TAMBIEN un OTP verificado como prueba
+    de titularidad (ademas del telefono de la llamada o el telefono/email aportado). Asi un
+    cliente que llama desde otro numero puede verificarse con el codigo que recibe."""
+    row, error = await _voice_lookup_and_verify_booking(
+        cliente_id, codigo_reserva, from_number=from_number, telefono=telefono, email=email,
+    )
+    if not error:
+        return row, None
+    candidate = booking._get_booking_row_by_code(cliente_id, codigo_reserva)
+    if candidate and _voice_booking_otp_verified(cliente_id, candidate["id"]):
+        return candidate, None
+    return None, error
+
+
 async def _voice_cancel_booking(
     cliente_id: str,
     codigo_reserva: str,
@@ -1009,7 +1198,7 @@ async def _voice_cancel_booking(
     email: str = "",
     motivo: str = "",
 ) -> Dict[str, Any]:
-    row, error = await _voice_lookup_and_verify_booking(
+    row, error = await _voice_lookup_for_mutation(
         cliente_id, codigo_reserva, from_number=from_number, telefono=telefono, email=email
     )
     if error:
@@ -1045,7 +1234,7 @@ async def _voice_reschedule_booking(
     telefono: str = "",
     email: str = "",
 ) -> Dict[str, Any]:
-    row, error = await _voice_lookup_and_verify_booking(
+    row, error = await _voice_lookup_for_mutation(
         cliente_id, codigo_reserva, from_number=from_number, telefono=telefono, email=email
     )
     if error:
@@ -1139,6 +1328,14 @@ async def _voice_dispatch_tool(
             telefono=str(args.get("telefono", "")),
             email=str(args.get("email", "")),
         )
+    if name == "enviar_codigo_verificacion":
+        return await _voice_send_verification_code(
+            cliente_id, str(args.get("codigo_reserva", "")), from_number=from_number,
+        )
+    if name == "verificar_codigo":
+        return _voice_verify_code(
+            cliente_id, str(args.get("codigo_reserva", "")), str(args.get("codigo", "")),
+        )
     if name == "cancelar_cita":
         return await _voice_cancel_booking(
             cliente_id,
@@ -1182,7 +1379,10 @@ async def _voice_dispatch_tool_demo(cliente_id: str, name: str, arguments_json: 
         return await _voice_check_availability(
             cliente_id, str(args.get("fecha", "")), str(args.get("servicio", ""))
         )
-    if name in {"crear_cita", "cancelar_cita", "reprogramar_cita", "consultar_cita"}:
+    if name in {
+        "crear_cita", "cancelar_cita", "reprogramar_cita", "consultar_cita",
+        "enviar_codigo_verificacion", "verificar_codigo",
+    }:
         return {
             "ok": False,
             "demo": True,
