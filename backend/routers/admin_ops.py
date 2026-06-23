@@ -85,6 +85,19 @@ from backend import (
 )
 from backend.main import app
 
+
+@app.get("/admin/workers", dependencies=[Depends(security._require_admin_token)])
+async def admin_workers() -> Dict[str, Any]:
+    """Observabilidad de los hilos de fondo (P8): estado vivo/muerto de cada worker
+    registrado en el lifespan + uptime del proceso. Solo admin."""
+    return {
+        "started_at": appstate.STARTED_AT.isoformat(),
+        "uptime_seconds": int((timeutils._utc_now() - appstate.STARTED_AT).total_seconds()),
+        "reminders_enabled": settings.REMINDER_RUN_INTERVAL_MINUTES > 0,
+        "workers": appstate.worker_status(),
+    }
+
+
 @app.post("/admin/reindex/{cliente_id}", dependencies=[Depends(security._require_admin_token)])
 async def reindexar(cliente_id: str) -> Dict[str, str]:
     textnorm._assert_valid_client_id(cliente_id)

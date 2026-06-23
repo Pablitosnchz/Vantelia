@@ -74,3 +74,25 @@ outreach_imap_thread: Optional[threading.Thread] = None
 outreach_autopilot_stop = threading.Event()
 outreach_autopilot_thread: Optional[threading.Thread] = None
 STARTED_AT = datetime.now(timezone.utc)
+
+# --- Observabilidad de workers de fondo (P8) ---------------------------------
+# Registro central de hilos daemon arrancados en el lifespan, para poder
+# inspeccionar su estado (vivo/started_at) desde GET /admin/workers sin tener
+# que tocar el bucle interno de cada worker.
+worker_registry: Dict[str, threading.Thread] = {}
+worker_registry_lock = threading.Lock()
+
+
+def register_worker(name: str, thread: threading.Thread) -> None:
+    """Registra (o re-registra) un worker de fondo por nombre."""
+    with worker_registry_lock:
+        worker_registry[name] = thread
+
+
+def worker_status() -> List[Dict[str, Any]]:
+    """Estado de los workers registrados: nombre + si el hilo sigue vivo."""
+    with worker_registry_lock:
+        return [
+            {"name": name, "alive": bool(thread and thread.is_alive())}
+            for name, thread in sorted(worker_registry.items())
+        ]

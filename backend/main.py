@@ -3,10 +3,15 @@
 Importar este modulo inicializa el runtime (directorios, esquema SQLite,
 empleados por defecto, sync de clientes, validacion y llama-index) y crea
 `app`. api.py lo re-exporta para mantener `uvicorn api:app`.
+
+El ciclo de vida usa un unico `lifespan` (no `@app.on_event`, deprecado): al
+arrancar lanza los hilos de fondo y los registra en appstate para observabilidad
+(GET /admin/workers); al apagar les pide parar.
 """
 from __future__ import annotations
 
 import threading
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
@@ -63,10 +68,121 @@ clients._validate_runtime_config()
 rag._setup_llama_index()
 
 
+def _start_background_workers() -> None:
+    """Arranca los hilos daemon de fondo. Idempotente (no duplica si ya viven) y
+    registra cada uno en appstate.worker_registry para GET /admin/workers.
+
+    Mismos gates que antes: disponibilidad de dependencias (IMAP/IG/TK), credenciales
+    y, para recordatorios, REMINDER_RUN_INTERVAL_MINUTES > 0."""
+    try:
+        purged_at_boot = demo_agenda._purge_expired_demos()
+        if purged_at_boot:
+            settings.logger.info("Demos expiradas purgadas al arranque: %s", purged_at_boot)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("Error purgando demos al arranque: %s", exc)
+
+    try:
+        booking._backfill_booking_codes()
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("Error en backfill de codigos de reserva al arranque: %s", exc)
+
+    if outreach.OUTREACH_IMAP_AVAILABLE and (not appstate.outreach_imap_thread or not appstate.outreach_imap_thread.is_alive()):
+        appstate.outreach_imap_stop.clear()
+        appstate.outreach_imap_thread = threading.Thread(
+            target=outreach._outreach_imap_worker, name="vantelia-outreach-imap", daemon=True,
+        )
+        appstate.outreach_imap_thread.start()
+        appstate.register_worker("outreach-imap", appstate.outreach_imap_thread)
+
+    if not appstate.outreach_autopilot_thread or not appstate.outreach_autopilot_thread.is_alive():
+        appstate.outreach_autopilot_stop.clear()
+        appstate.outreach_autopilot_thread = threading.Thread(
+            target=outreach._outreach_autopilot_worker, name="vantelia-outreach-autopilot", daemon=True,
+        )
+        appstate.outreach_autopilot_thread.start()
+        appstate.register_worker("outreach-autopilot", appstate.outreach_autopilot_thread)
+
+    if not outreach.outreach_autonomous_thread or not outreach.outreach_autonomous_thread.is_alive():
+        outreach.outreach_autonomous_stop.clear()
+        outreach.outreach_autonomous_thread = threading.Thread(
+            target=outreach._outreach_autonomous_worker, name="vantelia-outreach-autonomous", daemon=True,
+        )
+        outreach.outreach_autonomous_thread.start()
+        appstate.register_worker("outreach-autonomous", outreach.outreach_autonomous_thread)
+
+    if instagram.IG_REPLIES_AVAILABLE and (not instagram.ig_replies_thread or not instagram.ig_replies_thread.is_alive()):
+        instagram.ig_replies_stop.clear()
+        instagram.ig_replies_thread = threading.Thread(target=instagram._ig_replies_worker, name="vantelia-ig-replies", daemon=True)
+        instagram.ig_replies_thread.start()
+        appstate.register_worker("ig-replies", instagram.ig_replies_thread)
+    if instagram.IG_AVAILABLE and (not instagram.ig_autopilot_thread or not instagram.ig_autopilot_thread.is_alive()):
+        instagram.ig_autopilot_stop.clear()
+        instagram.ig_autopilot_thread = threading.Thread(target=instagram._ig_autopilot_worker, name="vantelia-ig-autopilot", daemon=True)
+        instagram.ig_autopilot_thread.start()
+        appstate.register_worker("ig-autopilot", instagram.ig_autopilot_thread)
+    if instagram.IG_AVAILABLE and (not instagram.ig_campaign_thread or not instagram.ig_campaign_thread.is_alive()):
+        try:
+            instagram._ig_campaign_migrate()
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.warning("ig_campaign migrate fallo: %s", exc)
+        instagram.ig_campaign_stop.clear()
+        instagram.ig_campaign_thread = threading.Thread(target=instagram._ig_campaign_worker, name="vantelia-ig-campaign", daemon=True)
+        instagram.ig_campaign_thread.start()
+        appstate.register_worker("ig-campaign", instagram.ig_campaign_thread)
+
+    if tiktok.TK_AVAILABLE:
+        try:
+            tiktok._tk_migrate()
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.warning("tk_campaign migrate fallo: %s", exc)
+        if not tiktok.tk_campaign_thread or not tiktok.tk_campaign_thread.is_alive():
+            tiktok.tk_campaign_stop.clear()
+            tiktok.tk_campaign_thread = threading.Thread(target=tiktok._tk_campaign_worker, name="vantelia-tk-campaign", daemon=True)
+            tiktok.tk_campaign_thread.start()
+            appstate.register_worker("tk-campaign", tiktok.tk_campaign_thread)
+
+    if settings.REMINDER_RUN_INTERVAL_MINUTES <= 0:
+        settings.logger.info("Recordatorios automaticos desactivados (REMINDER_RUN_INTERVAL_MINUTES <= 0).")
+    elif not (appstate.booking_reminder_thread and appstate.booking_reminder_thread.is_alive()):
+        appstate.booking_reminder_stop.clear()
+        appstate.booking_reminder_thread = threading.Thread(
+            target=booking._booking_reminder_worker, name="vantelia-booking-reminders", daemon=True,
+        )
+        appstate.booking_reminder_thread.start()
+        appstate.register_worker("booking-reminders", appstate.booking_reminder_thread)
+
+    if messaging._voice_twilio_configured():
+        settings.logger.info("Voice channel enabled (Twilio configurado).")
+    else:
+        settings.logger.info("Voice channel DISABLED - missing Twilio credentials.")
+
+
+def _stop_background_workers() -> None:
+    """Senala a todos los workers de fondo que paren (idempotente)."""
+    appstate.booking_reminder_stop.set()
+    appstate.outreach_imap_stop.set()
+    appstate.outreach_autopilot_stop.set()
+    outreach.outreach_autonomous_stop.set()
+    instagram.ig_replies_stop.set()
+    instagram.ig_autopilot_stop.set()
+    instagram.ig_campaign_stop.set()
+    tiktok.tk_campaign_stop.set()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _start_background_workers()
+    try:
+        yield
+    finally:
+        _stop_background_workers()
+
+
 app = FastAPI(
     title="Vantelia Embedded Chat API",
     description="Backend multiempresa para chat embebible con RAG y flujo profesional de leads.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
@@ -97,71 +213,6 @@ app.mount("/widget", StaticFiles(directory=str(settings.WIDGET_DIR)), name="widg
 
 if settings.BRAND_DIR.exists():
     app.mount("/brand-assets", StaticFiles(directory=str(settings.BRAND_DIR)), name="brand-assets")
-
-
-@app.on_event("startup")
-async def startup_background_services() -> None:
-    try:
-        purged_at_boot = demo_agenda._purge_expired_demos()
-        if purged_at_boot:
-            settings.logger.info("Demos expiradas purgadas al arranque: %s", purged_at_boot)
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.error("Error purgando demos al arranque: %s", exc)
-
-    try:
-        booking._backfill_booking_codes()
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.error("Error en backfill de codigos de reserva al arranque: %s", exc)
-
-    if outreach.OUTREACH_IMAP_AVAILABLE and (not appstate.outreach_imap_thread or not appstate.outreach_imap_thread.is_alive()):
-        appstate.outreach_imap_stop.clear()
-        appstate.outreach_imap_thread = threading.Thread(
-            target=outreach._outreach_imap_worker,
-            name="vantelia-outreach-imap",
-            daemon=True,
-        )
-        appstate.outreach_imap_thread.start()
-
-    if not appstate.outreach_autopilot_thread or not appstate.outreach_autopilot_thread.is_alive():
-        appstate.outreach_autopilot_stop.clear()
-        appstate.outreach_autopilot_thread = threading.Thread(
-            target=outreach._outreach_autopilot_worker,
-            name="vantelia-outreach-autopilot",
-            daemon=True,
-        )
-        appstate.outreach_autopilot_thread.start()
-
-    if not outreach.outreach_autonomous_thread or not outreach.outreach_autonomous_thread.is_alive():
-        outreach.outreach_autonomous_stop.clear()
-        outreach.outreach_autonomous_thread = threading.Thread(
-            target=outreach._outreach_autonomous_worker,
-            name="vantelia-outreach-autonomous",
-            daemon=True,
-        )
-        outreach.outreach_autonomous_thread.start()
-
-    if settings.REMINDER_RUN_INTERVAL_MINUTES <= 0:
-        settings.logger.info("Recordatorios automaticos desactivados (REMINDER_RUN_INTERVAL_MINUTES <= 0).")
-        return
-
-    if appstate.booking_reminder_thread and appstate.booking_reminder_thread.is_alive():
-        return
-
-    appstate.booking_reminder_stop.clear()
-    appstate.booking_reminder_thread = threading.Thread(
-        target=booking._booking_reminder_worker,
-        name="vantelia-booking-reminders",
-        daemon=True,
-    )
-    appstate.booking_reminder_thread.start()
-
-
-@app.on_event("shutdown")
-async def shutdown_background_services() -> None:
-    appstate.booking_reminder_stop.set()
-    appstate.outreach_imap_stop.set()
-    appstate.outreach_autopilot_stop.set()
-    outreach.outreach_autonomous_stop.set()
 
 
 def _build_cors_headers(origin: str) -> Dict[str, str]:
@@ -201,60 +252,6 @@ async def dynamic_cors_middleware(request: Request, call_next: Any) -> Response:
 
 
 security._ensure_default_portal_admin()
-
-
-@app.on_event("startup")
-async def _ig_startup_workers() -> None:
-    if instagram.IG_REPLIES_AVAILABLE and (not instagram.ig_replies_thread or not instagram.ig_replies_thread.is_alive()):
-        instagram.ig_replies_stop.clear()
-        instagram.ig_replies_thread = threading.Thread(target=instagram._ig_replies_worker, name="vantelia-ig-replies", daemon=True)
-        instagram.ig_replies_thread.start()
-    if instagram.IG_AVAILABLE and (not instagram.ig_autopilot_thread or not instagram.ig_autopilot_thread.is_alive()):
-        instagram.ig_autopilot_stop.clear()
-        instagram.ig_autopilot_thread = threading.Thread(target=instagram._ig_autopilot_worker, name="vantelia-ig-autopilot", daemon=True)
-        instagram.ig_autopilot_thread.start()
-    if instagram.IG_AVAILABLE and (not instagram.ig_campaign_thread or not instagram.ig_campaign_thread.is_alive()):
-        try:
-            instagram._ig_campaign_migrate()
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.warning("ig_campaign migrate fallo: %s", exc)
-        instagram.ig_campaign_stop.clear()
-        instagram.ig_campaign_thread = threading.Thread(target=instagram._ig_campaign_worker, name="vantelia-ig-campaign", daemon=True)
-        instagram.ig_campaign_thread.start()
-
-
-@app.on_event("shutdown")
-async def _ig_shutdown_workers() -> None:
-    instagram.ig_replies_stop.set()
-    instagram.ig_autopilot_stop.set()
-    instagram.ig_campaign_stop.set()
-
-
-@app.on_event("startup")
-async def _tk_startup_workers() -> None:
-    if tiktok.TK_AVAILABLE:
-        try:
-            tiktok._tk_migrate()
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.warning("tk_campaign migrate fallo: %s", exc)
-        if not tiktok.tk_campaign_thread or not tiktok.tk_campaign_thread.is_alive():
-            tiktok.tk_campaign_stop.clear()
-            tiktok.tk_campaign_thread = threading.Thread(target=tiktok._tk_campaign_worker, name="vantelia-tk-campaign", daemon=True)
-            tiktok.tk_campaign_thread.start()
-
-
-@app.on_event("shutdown")
-async def _tk_shutdown_workers() -> None:
-    tiktok.tk_campaign_stop.set()
-
-
-@app.on_event("startup")
-async def _voice_startup_log() -> None:
-    if messaging._voice_twilio_configured():
-        settings.logger.info("Voice channel enabled (Twilio configurado).")
-    else:
-        settings.logger.info("Voice channel DISABLED - missing Twilio credentials.")
-
 
 
 # Registrar endpoints: el orden de import preserva el orden de rutas del monolito.
