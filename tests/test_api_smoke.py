@@ -1620,7 +1620,10 @@ def test_followup_overview_endpoint_capabilities(client: TestClient, api_module)
     assert r.status_code == 200
     data = r.json()
     keys = [s["key"] for s in data["steps"]]
-    assert keys == ["confirmed", "reminder_24h", "call", "reminder_2h", "review"]
+    # demo es plan business (incluye voz) -> aparece el paso de verificacion por codigo.
+    assert keys == ["confirmed", "reminder_24h", "call", "reminder_2h", "review", "voice_otp"]
+    otp_step = next(s for s in data["steps"] if s["key"] == "voice_otp")
+    assert "enabled" in otp_step and [c["channel"] for c in otp_step["channels"]] == ["email", "whatsapp", "sms"]
     review_step = next(s for s in data["steps"] if s["key"] == "review")
     assert "enabled" in review_step and "needs_setup" in review_step
     # Sin enlace configurado en demo, el paso pide setup y no esta activo.

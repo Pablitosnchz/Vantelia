@@ -1358,6 +1358,24 @@ def _booking_audit_entry_from_row(row: sqlite3.Row) -> BookingAuditEntry:
     elif event_type == "booking_email_failed":
         title = "Email fallido"
         detail = f"Fallo el envio de {_booking_email_kind_label(str(payload.get('kind', '')))}."
+    elif event_type == "voice_otp_sent":
+        title = "Codigo de verificacion enviado"
+        ch = {"sms": "SMS", "whatsapp": "WhatsApp", "email": "email"}.get(str(payload.get("channel", "")), "")
+        detail = f"Se envio al cliente un codigo de verificacion por {ch}." if ch else "Se envio al cliente un codigo de verificacion."
+    elif event_type == "voice_otp_verified":
+        title = "Identidad verificada con codigo"
+        detail = "El cliente confirmo su identidad con el codigo de verificacion antes de cambiar o cancelar."
+    elif event_type == "attendance_confirmed_by_customer":
+        title = "Asistencia confirmada por el cliente"
+        ch = {"voice": "llamada", "whatsapp": "WhatsApp", "email": "email"}.get(str(payload.get("channel", "")), "")
+        detail = f"El cliente confirmo su asistencia por {ch}." if ch else "El cliente confirmo su asistencia."
+    elif event_type == "review_request_sent":
+        title = "Peticion de resena enviada"
+        chs = [str(c) for c in (payload.get("channels") or [])]
+        detail = ("Se invito al cliente a dejar una resena por " + ", ".join(chs) + ".") if chs else "Se proceso la peticion de resena."
+    elif event_type == "ai_payment_link_sent":
+        title = "Enlace de pago enviado por la IA"
+        detail = "El asistente envio al cliente un enlace para pagar su cita."
 
     return BookingAuditEntry(
         audit_id=int(row["id"]),
@@ -3046,6 +3064,29 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
         "enabled": rev_on, "needs_setup": not rev_link_ok,
     })
 
+    # Verificacion de identidad por codigo (OTP) al cambiar/cancelar por voz. No es un aviso
+    # temporizado: lo dispara el asistente de voz. Solo se muestra si el plan incluye voz.
+    # Los "canales" indican como se entrega el codigo al cliente (primer disponible).
+    if voice_plan:
+        otp_channels = [
+            {"channel": "email", "label": "Email", "active": True,
+             "available": True, "locked": False, "recommended": False, "plan_needed": "", "reason": "Disponible."},
+            {"channel": "whatsapp", "label": "WhatsApp", "active": wa_available,
+             "available": wa_available, "locked": not wa_plan, "plan_needed": "" if wa_plan else "Pro",
+             "recommended": False, "reason": avail["whatsapp"]["reason"]},
+            {"channel": "sms", "label": "SMS", "active": sms_available,
+             "available": sms_available, "locked": not sms_plan, "plan_needed": "" if sms_plan else "Business",
+             "recommended": False, "reason": avail["sms"]["reason"]},
+        ]
+        steps.append({
+            "key": "voice_otp", "label": "Verificación por código (voz)",
+            "when": "Al cambiar o cancelar", "offset_hours": 0, "channels": otp_channels,
+            "note": ("Antes de cambiar o cancelar una cita por voz, el asistente envía al cliente un código "
+                     "de 4 dígitos a su teléfono o email y le pide que lo lea. Se entrega por el primer canal "
+                     "disponible (SMS, WhatsApp o email)."),
+            "enabled": voice_available,
+        })
+
     return {
         "plan": plan, "plan_label": plan_label,
         "whatsapp_available": wa_available, "voice_available": voice_available,
@@ -3127,7 +3168,7 @@ async def _run_follow_up_test(
     Usa una cita efimera (no se guarda nada en la agenda). Devuelve, por canal, si se
     entrego, fallo (con el motivo concreto) u omitio (no configurado / no disponible en
     el plan), para que el negocio compruebe su configuracion sin esperar a una cita real."""
-    valid = {"confirmed", "reminder_24h", "reminder_2h", "call", "review"}
+    valid = {"confirmed", "reminder_24h", "reminder_2h", "call", "review", "voice_otp"}
     if step not in valid:
         raise HTTPException(status_code=400, detail="Fase de seguimiento desconocida.")
     config = clients._get_client_config(cliente_id)
@@ -3184,6 +3225,68 @@ async def _run_follow_up_test(
             sent = res.get("sent_channels", []) or []
             results = _format_test_channel_results(cfg["channels"], sent, res.get("failed", {}) or {}, {})
             return {"ok": bool(sent), "step": step, "to_email": to_email, "to_phone": to_phone, "results": results}
+        if step == "voice_otp":
+            # Prueba de entrega del codigo de verificacion: envia un codigo de muestra a los
+            # canales disponibles (no guarda OTP ni cita). Reusa los mismos senders del cliente.
+            sample = f"{secrets.randbelow(10000):04d}"
+            empresa = config.get("nombre", "")
+            otp_body = (
+                f"Tu código de verificación{(' de ' + empresa) if empresa else ''} es {sample}. "
+                "Es una prueba del sistema de verificación por voz."
+            )
+            otp_avail = agenda._reminder_channel_availability(cliente_id)
+            attempt = {
+                "email": bool(to_email),
+                "whatsapp": bool(to_phone) and bool(otp_avail["whatsapp"]["available"]),
+                "sms": bool(to_phone) and bool(otp_avail["sms"]["available"]),
+            }
+            otp_sent: List[str] = []
+            otp_failed: Dict[str, str] = {}
+            if attempt["email"]:
+                try:
+                    emailing._send_client_email(
+                        cliente_id, to_email,
+                        f"Código de verificación (prueba){(' - ' + empresa) if empresa else ''}", otp_body, "",
+                    )
+                    otp_sent.append("email")
+                except Exception as exc:  # noqa: BLE001
+                    otp_failed["email"] = str(exc)[:200]
+            if attempt["whatsapp"]:
+                wa_cfg = config.get("whatsapp", {}) or {}
+                pnid = str(wa_cfg.get("phone_number_id", "") or "").strip()
+                try:
+                    if pnid and await messaging._send_whatsapp_text(
+                        cliente_id=cliente_id, phone_number_id=pnid, to_number=to_phone, text=otp_body,
+                    ):
+                        otp_sent.append("whatsapp")
+                    else:
+                        otp_failed["whatsapp"] = "No se pudo entregar WhatsApp."
+                except Exception as exc:  # noqa: BLE001
+                    otp_failed["whatsapp"] = str(exc)[:200]
+            if attempt["sms"]:
+                try:
+                    if await messaging._send_client_sms(cliente_id, to_phone, otp_body):
+                        otp_sent.append("sms")
+                    else:
+                        otp_failed["sms"] = "No se pudo entregar SMS."
+                except Exception as exc:  # noqa: BLE001
+                    otp_failed["sms"] = str(exc)[:200]
+            otp_skipped = {
+                "email": "" if attempt["email"] else "Indica un email de prueba.",
+                "whatsapp": "" if attempt["whatsapp"] else "Requiere teléfono y WhatsApp disponible.",
+                "sms": "" if attempt["sms"] else "Requiere teléfono y SMS (plan Business).",
+            }
+            otp_labels = {"email": "Email", "whatsapp": "WhatsApp", "sms": "SMS"}
+            otp_results: List[Dict[str, str]] = []
+            for ch in ("sms", "whatsapp", "email"):  # orden de preferencia real del OTP
+                if ch in otp_sent:
+                    status, detail = "sent", "Código de prueba enviado."
+                elif ch in otp_failed:
+                    status, detail = "failed", otp_failed[ch]
+                else:
+                    status, detail = "inactive", otp_skipped[ch] or "No disponible."
+                otp_results.append({"channel": ch, "label": otp_labels[ch], "status": status, "detail": detail})
+            return {"ok": bool(otp_sent), "step": step, "to_email": to_email, "to_phone": to_phone, "results": otp_results}
         # Mensajes de la escalera (confirmed / reminder_24h / reminder_2h).
         active = (
             {name: bool(channels.get(name)) for name in ("email", "whatsapp", "sms")}

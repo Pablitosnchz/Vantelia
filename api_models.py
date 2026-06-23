@@ -1050,7 +1050,7 @@ class FollowUpResponse(BaseModel):
 
 class FollowUpTestPayload(BaseModel):
     """Probar una fase del Seguimiento contra un destinatario de prueba."""
-    step: str = Field(pattern="^(confirmed|reminder_24h|reminder_2h|call|review)$")
+    step: str = Field(pattern="^(confirmed|reminder_24h|reminder_2h|call|review|voice_otp)$")
     email: str = Field(default="", max_length=200)
     phone: str = Field(default="", max_length=30)
     channels: Optional[Dict[str, bool]] = None

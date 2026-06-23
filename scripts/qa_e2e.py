@@ -393,8 +393,8 @@ fu = gp("/auth/app/follow-up")
 chk("seguimiento: GET", fu)
 if fu.status_code == 200:
     js = fu.json()
-    assert_true("seguimiento: 4 pasos (escalera)",
-                [s["key"] for s in js.get("steps", [])] == ["confirmed", "reminder_24h", "call", "reminder_2h"], str(js.get("steps")))
+    assert_true("seguimiento: escalera base correcta",
+                [s["key"] for s in js.get("steps", [])][:4] == ["confirmed", "reminder_24h", "call", "reminder_2h"], str(js.get("steps")))
     assert_true("seguimiento: email siempre disponible", js.get("channel_availability", {}).get("email") is True)
 chk("seguimiento: PUT", client.put("/auth/app/follow-up", params=P, cookies=COOK,
     json={"email_confirm_button": True, "suppress_2h_if_confirmed": True, "call_enabled": False,
