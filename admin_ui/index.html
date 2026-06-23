@@ -142,7 +142,7 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
   gap: 18px;
   padding: 14px 24px;
   border-bottom: 1px solid var(--line);
-  background: rgba(11,16,28,0.85);
+  background: rgba(17,32,58,0.92);     /* tono --panel translucido, unificado con el sidebar */
   backdrop-filter: blur(18px) saturate(1.4);
   z-index: 30;
   position: sticky;
@@ -216,7 +216,7 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
   grid-row: 2;
   width: var(--side-w);
   border-right: 1px solid var(--line);
-  background: rgba(8,12,22,0.94);
+  background: var(--panel);            /* tono panel de app_ui (misma linea estilografica) */
   backdrop-filter: blur(16px);
   padding: 18px 14px 24px;
   display: flex;
@@ -324,9 +324,9 @@ p { margin: 0; line-height: 1.6; color: var(--text-2); }
   align-items: center;
   justify-content: center;
   border-radius: 9px;
-  background: rgba(0,209,255,0.10);
-  border: 1px solid rgba(0,209,255,0.22);
-  color: var(--accent) !important;
+  background: transparent;             /* nav "lean" estilo portal: icono plano en reposo */
+  border: 1px solid transparent;
+  color: var(--soft) !important;       /* el acento aparece en hover/activo */
   font-family: var(--font-title);
   font-size: 11px;
   font-weight: 800;
