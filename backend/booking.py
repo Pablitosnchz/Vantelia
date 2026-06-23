@@ -572,7 +572,7 @@ def _send_booking_email(
     request: Optional[Request] = None,
     *,
     extra_message: str = "",
-) -> None:
+) -> str:
     config = clients._get_client_config(booking_row["cliente_id"])
     company_name = config["nombre"]
     manage_url = _booking_row_manage_url(booking_row, request)
@@ -593,12 +593,12 @@ def _send_booking_email(
         extra_message,
         confirm_url=confirm_url,
     )
-    emailing._send_email_message(
+    return emailing._send_client_email(
+        booking_row["cliente_id"],
         booking_row["email"],
         subject,
         text_body,
         html_body,
-        cliente_id=booking_row["cliente_id"],
     )
 
 
@@ -2555,6 +2555,7 @@ async def _send_booking_reminder_by_kind(
     extra_message: str = "",
     respect_enabled: bool = True,
     raise_on_failure: bool = True,
+    channel_override: Optional[Dict[str, bool]] = None,
 ) -> Dict[str, Any]:
     """Envia el aviso de la cita por los canales efectivos del tenant para ``kind``.
 
@@ -2592,8 +2593,12 @@ async def _send_booking_reminder_by_kind(
         )
         return {"sent": [], "failed": {}, "skipped": {"all": "disabled"}}
 
-    channels = agenda._effective_followup_channels(booking_row["cliente_id"]).get(
-        kind, {"email": True, "whatsapp": False, "sms": False}
+    channels = (
+        {name: bool(channel_override.get(name)) for name in ("email", "whatsapp", "sms")}
+        if channel_override is not None
+        else agenda._effective_followup_channels(booking_row["cliente_id"]).get(
+            kind, {"email": True, "whatsapp": False, "sms": False}
+        )
     )
     availability = agenda._reminder_channel_availability(booking_row["cliente_id"])
     sent_channels: List[str] = []
@@ -3109,7 +3114,8 @@ def _format_test_channel_results(
 
 
 async def _run_follow_up_test(
-    cliente_id: str, step: str, request: Optional[Request] = None, *, email: str = "", phone: str = ""
+    cliente_id: str, step: str, request: Optional[Request] = None, *, email: str = "", phone: str = "",
+    channels: Optional[Dict[str, bool]] = None,
 ) -> Dict[str, Any]:
     """Ejecuta REALMENTE una fase del Seguimiento contra un destinatario de prueba.
 
@@ -3174,11 +3180,15 @@ async def _run_follow_up_test(
             results = _format_test_channel_results(cfg["channels"], sent, res.get("failed", {}) or {}, {})
             return {"ok": bool(sent), "step": step, "to_email": to_email, "to_phone": to_phone, "results": results}
         # Mensajes de la escalera (confirmed / reminder_24h / reminder_2h).
-        active = agenda._effective_followup_channels(cliente_id).get(
-            step, {"email": True, "whatsapp": False, "sms": False}
+        active = (
+            {name: bool(channels.get(name)) for name in ("email", "whatsapp", "sms")}
+            if channels is not None
+            else agenda._effective_followup_channels(cliente_id).get(
+                step, {"email": True, "whatsapp": False, "sms": False}
+            )
         )
         res = await _send_booking_reminder_by_kind(
-            row, step, request, respect_enabled=False, raise_on_failure=False
+            row, step, request, respect_enabled=False, raise_on_failure=False, channel_override=active
         )
         results = _format_test_channel_results(active, res["sent"], res["failed"], res["skipped"])
         return {"ok": bool(res["sent"]), "step": step, "to_email": to_email, "to_phone": to_phone, "results": results}
@@ -3758,6 +3768,10 @@ def _ai_payment_delivery_available(cliente_id: str, method: str) -> bool:
     if provider == "gmail_oauth":
         gmail = emailing._client_gmail_connection(cliente_id)
         if gmail and gmail["status"] == "active":
+            return True
+        return bool(settings["email_fallback_enabled"] and emailing._email_delivery_configured())
+    if provider == "client_smtp":
+        if emailing._client_smtp_configured(settings):
             return True
         return bool(settings["email_fallback_enabled"] and emailing._email_delivery_configured())
     return emailing._email_delivery_configured()

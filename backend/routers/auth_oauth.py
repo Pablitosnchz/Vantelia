@@ -324,6 +324,7 @@ async def auth_google_callback(
 @app.get("/admin/email-channels/status", dependencies=[Depends(security._require_admin_token)])
 async def admin_email_channels_status() -> Dict[str, Any]:
     row = emailing._gmail_connection()
+    smtp_settings = emailing._smtp_public_settings()
     gmail_ready = security._gmail_oauth_configured() and emailing._gmail_connected()
     if settings.EMAIL_SEND_PROVIDER == "gmail":
         active_provider = "gmail" if gmail_ready else "none"
@@ -346,9 +347,40 @@ async def admin_email_channels_status() -> Dict[str, Any]:
         },
         "smtp": {
             "configured": emailing._smtp_configured(),
-            "from_email": settings.SMTP_FROM_EMAIL if emailing._smtp_configured() else "",
+            "from_email": smtp_settings["from_email"],
+            "from_name": smtp_settings["from_name"],
+            "reply_to": smtp_settings["reply_to"],
         },
     }
+
+
+class AdminEmailSmtpSettingsPayload(BaseModel):
+    host: str = Field(default="", max_length=200)
+    port: int = Field(default=587, ge=1, le=65535)
+    username: str = Field(default="", max_length=200)
+    password: str = Field(default="", max_length=500)
+    starttls: bool = True
+    from_email: EmailStr
+    from_name: str = Field(default="Vantelia", max_length=80)
+    reply_to: str = Field(default="", max_length=200)
+
+
+@app.post("/admin/email-channels/smtp-settings", dependencies=[Depends(security._require_admin_token)])
+async def admin_email_channels_smtp_settings(data: AdminEmailSmtpSettingsPayload) -> Dict[str, Any]:
+    try:
+        smtp_settings = emailing._smtp_update_public_settings(
+            from_email=str(data.from_email),
+            from_name=data.from_name,
+            reply_to=data.reply_to,
+            host=data.host,
+            port=data.port,
+            username=data.username,
+            password=data.password,
+            starttls=data.starttls,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "smtp": {"configured": emailing._smtp_configured(), **smtp_settings}}
 
 
 @app.get("/admin/email-channels/gmail/connect", include_in_schema=False)

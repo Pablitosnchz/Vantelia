@@ -2259,15 +2259,48 @@
   <section class="page" id="page-canales">
     <div class="panel-card">
       <h2>Email remitente</h2>
-      <p class="panel-sub">Conecta Google para que los correos salgan realmente desde tu cuenta. Vantelia seguira disponible como alternativa.</p>
+      <p class="panel-sub">Conecta Google o configura una cuenta SMTP propia para que los correos salgan desde tu negocio. Vantelia seguira disponible como alternativa.</p>
       <div id="channelEmailStatus" class="panel-sub" style="margin:14px 0;">Consultando estado...</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <div class="form-row">
+        <div class="field">
+          <label class="field-label">Enviar desde</label>
+          <select class="field-input" id="channelEmailProvider">
+            <option value="vantelia_smtp">Vantelia</option>
+            <option value="gmail_oauth">Google conectado</option>
+            <option value="client_smtp">Otra cuenta SMTP</option>
+          </select>
+        </div>
+      </div>
+      <div id="channelGoogleBlock" style="display:none;gap:10px;flex-wrap:wrap;margin-top:14px;">
         <button class="btn btn-primary" id="channelGoogleConnect" type="button">Conectar Google</button>
         <button class="btn btn-ghost" id="channelGoogleDisconnect" type="button">Desconectar</button>
       </div>
-      <label style="display:flex;gap:10px;align-items:center;margin-top:14px;">
+      <div id="channelSmtpBlock" style="display:none;margin-top:14px;">
+        <div class="form-row">
+          <div class="field"><label class="field-label">Servidor SMTP</label><input class="field-input" id="channelSmtpHost" placeholder="smtp.tudominio.com" /></div>
+          <div class="field"><label class="field-label">Puerto</label><input class="field-input" id="channelSmtpPort" type="number" min="1" max="65535" step="1" value="587" /></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label class="field-label">Usuario SMTP</label><input class="field-input" id="channelSmtpUsername" autocomplete="username" placeholder="reservas@tuempresa.com" /></div>
+          <div class="field"><label class="field-label">Contrasena SMTP</label><input class="field-input" id="channelSmtpPassword" type="password" autocomplete="new-password" placeholder="Dejar vacio para conservarla" /></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label class="field-label">Remitente</label><input class="field-input" id="channelSmtpFromEmail" type="email" placeholder="reservas@tuempresa.com" /></div>
+          <div class="field"><label class="field-label">Nombre remitente</label><input class="field-input" id="channelSmtpFromName" maxlength="80" placeholder="Tu negocio" /></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label class="field-label">Responder a</label><input class="field-input" id="channelSmtpReplyTo" type="email" placeholder="info@tuempresa.com" /></div>
+          <label style="display:flex;gap:10px;align-items:center;margin-top:28px;">
+            <input type="checkbox" id="channelSmtpStarttls" checked />
+            <span>Usar STARTTLS</span>
+          </label>
+        </div>
+        <div class="panel-sub" id="channelSmtpPasswordStatus" style="margin:8px 0 0;">Contrasena: sin configurar</div>
+        <button class="btn btn-primary" id="channelSmtpSave" type="button" style="margin-top:10px;">Guardar cuenta SMTP</button>
+      </div>
+      <label id="channelFallbackBlock" style="display:none;gap:10px;align-items:center;margin-top:14px;">
         <input type="checkbox" id="channelEmailFallback" checked />
-        <span>Usar Vantelia si Google deja de estar disponible</span>
+        <span>Usar Vantelia si mi cuenta deja de estar disponible</span>
       </label>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
         <input class="field-input" id="channelEmailTestTarget" type="email" placeholder="Email para la prueba" style="flex:1;min-width:240px;" />
@@ -2275,24 +2308,63 @@
       </div>
     </div>
     <div class="panel-card" style="margin-top:18px;">
-      <h2>SMS remitente</h2>
-      <p class="panel-sub">Puedes usar el canal gestionado por Vantelia o solicitar un nombre comercial registrado. Un Sender ID comercial es unidireccional: el cliente no puede responder.</p>
+      <h2>Numeros SMS del asistente</h2>
+      <p class="panel-sub">Elige desde que identidad enviara SMS tu asistente. Vantelia puede gestionarlo por ti, o puedes conectar una cuenta Twilio propia si ya tienes el numero autorizado para SMS.</p>
       <div id="channelSmsStatus" class="panel-sub" style="margin:14px 0;">Consultando estado...</div>
       <div class="form-row">
         <div class="field">
           <label class="field-label">Modo</label>
           <select class="field-input" id="channelSmsMode">
-            <option value="vantelia_default">Gestionado por Vantelia</option>
-            <option value="twilio_alphanumeric_sender">Nombre comercial registrado</option>
-            <option value="twilio_dedicated_number">Numero dedicado provisionado</option>
+            <option value="vantelia_default">Usar numero gestionado por Vantelia</option>
+            <option value="twilio_dedicated_number">Solicitar mi numero para SMS</option>
+            <option value="twilio_own_account">Conectar mi cuenta Twilio</option>
+            <option value="twilio_alphanumeric_sender">Solicitar nombre comercial</option>
           </select>
         </div>
-        <div class="field">
+        <div class="field" id="channelSmsSenderBlock">
           <label class="field-label">Nombre comercial (3-11 caracteres)</label>
           <input class="field-input" id="channelSmsSender" maxlength="11" placeholder="MIEMPRESA" />
         </div>
+        <div class="field" id="channelSmsPhoneBlock" style="display:none;">
+          <label class="field-label">Numero que quieres usar</label>
+          <input class="field-input" id="channelSmsRequestedPhone" maxlength="40" placeholder="+34 600 123 456" />
+        </div>
       </div>
-      <button class="btn btn-primary" id="channelSmsSave" type="button">Guardar / solicitar registro</button>
+      <div id="channelSmsRequestBlock" style="display:none;margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:12px;background:rgba(0,177,217,0.08);">
+        <div class="panel-sub" id="channelSmsRequestHelp" style="margin:0 0 10px;">Crearemos una solicitud para que Vantelia revise y active el remitente.</div>
+        <textarea class="field-input" id="channelSmsRequestNotes" rows="3" placeholder="Notas para soporte: operador actual, pais, uso previsto, volumen aproximado..."></textarea>
+      </div>
+      <div id="channelSmsTwilioBlock" style="display:none;margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:12px;background:rgba(7,16,31,0.35);">
+        <div class="form-row">
+          <div class="field">
+            <label class="field-label">Account SID</label>
+            <input class="field-input" id="channelSmsTwilioSid" placeholder="AC..." autocomplete="off" />
+          </div>
+          <div class="field">
+            <label class="field-label">Auth Token</label>
+            <input class="field-input" id="channelSmsTwilioToken" type="password" placeholder="Token de Twilio" autocomplete="new-password" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label class="field-label">Tipo de remitente</label>
+            <select class="field-input" id="channelSmsTwilioKind">
+              <option value="number">Numero SMS autorizado</option>
+              <option value="alphanumeric">Nombre comercial autorizado</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label">Remitente</label>
+            <input class="field-input" id="channelSmsTwilioSender" placeholder="+34600123456 o MIEMPRESA" />
+          </div>
+        </div>
+        <div class="panel-sub" style="margin:0;">Guardamos las credenciales cifradas. Despues envia un SMS de prueba para confirmar que Twilio acepta ese remitente.</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;">
+        <button class="btn btn-primary" id="channelSmsSave" type="button">Guardar</button>
+        <span class="panel-sub" id="channelSmsSaveHint" style="margin:0;"></span>
+      </div>
+      <div id="channelRequestsList" style="display:grid;gap:8px;margin-top:14px;"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
         <input class="field-input" id="channelSmsTestTarget" placeholder="+34600123456" style="flex:1;min-width:240px;" />
         <button class="btn btn-ghost" id="channelSmsTest" type="button">Enviar SMS de prueba</button>
@@ -4384,6 +4456,8 @@ document.getElementById('tnSaveAdvancedBtn')?.addEventListener('click', async ()
 });
 
 let whatsappState = {};
+let channelLastEmailProvider = 'vantelia_smtp';
+let channelLastSmsMode = 'vantelia_default';
 
 function renderWhatsAppChecklist(data) {
   const items = [
@@ -4577,8 +4651,24 @@ document.getElementById('vozSaveBtn').addEventListener('click', async () => {
 document.getElementById('vozGoBillingBtn').addEventListener('click', () => setTab('billing'));
 document.getElementById('vozGoAppearance').addEventListener('click', (e) => { e.preventDefault(); setTab('appearance'); });
 document.getElementById('vozCopyWebhookBtn').addEventListener('click', () => copyFieldValue('vozWebhookUrl'));
-document.getElementById('vozRequestBtn').addEventListener('click', () => {
+document.getElementById('vozRequestBtn').addEventListener('click', async () => {
   const phone = (document.getElementById('vozPhone').value || '').trim();
+  if (!phone) { toast('Indica el numero de telefono antes de solicitar la instalacion.', 'error'); return; }
+  try {
+    await api('/auth/app/channels/requests', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        channel:'voice',
+        request_type:'voice_install',
+        requested_phone:phone,
+        notes:'Instalar asistente de voz en este numero.',
+      }),
+    });
+    toast('Solicitud enviada a Vantelia. Te avisaremos cuando este listo.', 'success');
+    loadChannelRequests();
+  } catch(e) { toast(e.message, 'error'); }
+  return;
   if (!phone) { toast('Indica el número de teléfono antes de solicitar la instalación.', 'error'); return; }
   const empresa = state.nombre || state.cliente_id;
   const userEmail = (document.getElementById('userEmail')?.textContent || '').trim();
@@ -5274,23 +5364,108 @@ async function loadChannels() {
     const data = await api('/auth/app/channels');
     const email = data.email || {};
     const sms = data.sms || {};
-    document.getElementById('channelEmailStatus').textContent = email.connected
-      ? `Google conectado: ${email.account_name || email.account_email} (${email.account_email}) · estado ${email.status}`
-      : `Los correos se envian mediante Vantelia.${email.last_error ? ` Ultimo error: ${email.last_error}` : ''}`;
+    const providerLabel = email.provider === 'gmail_oauth' ? 'Google' : (email.provider === 'client_smtp' ? 'SMTP propio' : 'Vantelia');
+    const accountLabel = email.provider === 'gmail_oauth' && email.connected
+      ? `${email.account_name || email.account_email} (${email.account_email})`
+      : (email.provider === 'client_smtp' && email.smtp_configured ? (email.smtp_from_email || email.smtp_username || email.smtp_host) : '');
+    document.getElementById('channelEmailStatus').textContent =
+      `${providerLabel}${accountLabel ? `: ${accountLabel}` : ''}.${email.last_error ? ` Ultimo error: ${email.last_error}` : ''}`;
+    document.getElementById('channelEmailProvider').value = email.provider || 'vantelia_smtp';
+    channelLastEmailProvider = email.provider || 'vantelia_smtp';
+    document.getElementById('channelEmailProvider').dataset.googleConnected = email.connected ? '1' : '0';
+    document.getElementById('channelEmailProvider').dataset.smtpConfigured = email.smtp_configured ? '1' : '0';
     document.getElementById('channelGoogleConnect').disabled = !email.google_configured;
     document.getElementById('channelGoogleConnect').textContent = email.google_configured
       ? (email.connected ? 'Reconectar Google' : 'Conectar Google')
       : 'Google pendiente de configurar por Vantelia';
     document.getElementById('channelGoogleDisconnect').style.display = email.connected ? '' : 'none';
+    document.getElementById('channelSmtpHost').value = email.smtp_host || '';
+    document.getElementById('channelSmtpPort').value = email.smtp_port || 587;
+    document.getElementById('channelSmtpUsername').value = email.smtp_username || '';
+    document.getElementById('channelSmtpPassword').value = '';
+    document.getElementById('channelSmtpFromEmail').value = email.smtp_from_email || '';
+    document.getElementById('channelSmtpFromName').value = email.smtp_from_name || '';
+    document.getElementById('channelSmtpReplyTo').value = email.smtp_reply_to || '';
+    document.getElementById('channelSmtpStarttls').checked = email.smtp_starttls !== false;
+    document.getElementById('channelSmtpPasswordStatus').textContent =
+      `Contrasena: ${email.smtp_password_configured ? 'guardada' : 'sin configurar'}`;
+    renderEmailProviderControls();
     document.getElementById('channelEmailFallback').checked = email.fallback_enabled !== false;
-    document.getElementById('channelEmailFallback').disabled = !email.connected;
+    renderEmailProviderControls();
     document.getElementById('channelSmsMode').value = sms.mode || 'vantelia_default';
+    channelLastSmsMode = sms.mode || 'vantelia_default';
     document.getElementById('channelSmsSender').value = sms.sender || '';
-    document.getElementById('channelSmsSender').disabled = sms.mode !== 'twilio_alphanumeric_sender';
+    renderSmsModeControls();
     document.getElementById('channelSmsStatus').textContent =
       `Remitente: ${sms.sender || 'gestionado por Vantelia'} · estado: ${sms.sender_status || 'no configurado'}${sms.available ? ' · disponible' : ' · no disponible'}`;
     document.getElementById('channelSmsTest').disabled = !sms.available;
+    loadChannelRequests();
   } catch(e) { toast(e.message, 'error'); }
+}
+function renderEmailProviderControls() {
+  const provider = document.getElementById('channelEmailProvider').value;
+  document.getElementById('channelGoogleBlock').style.display = provider === 'gmail_oauth' ? 'flex' : 'none';
+  document.getElementById('channelSmtpBlock').style.display = provider === 'client_smtp' ? '' : 'none';
+  document.getElementById('channelFallbackBlock').style.display = provider === 'vantelia_smtp' ? 'none' : 'flex';
+  document.getElementById('channelEmailFallback').disabled = provider === 'vantelia_smtp';
+}
+function channelRequestTypeLabel(type) {
+  return {
+    managed_number: 'Numero gestionado',
+    dedicated_number: 'Numero dedicado',
+    alphanumeric_sender: 'Nombre comercial',
+    twilio_own_account: 'Twilio propio',
+    voice_install: 'Voz en mi numero',
+  }[type] || type;
+}
+function channelRequestStatusLabel(status) {
+  return {
+    pending: 'Pendiente',
+    in_progress: 'En revision',
+    active: 'Activo',
+    rejected: 'Rechazado',
+    cancelled: 'Cancelado',
+  }[status] || status;
+}
+function renderSmsModeControls() {
+  const mode = document.getElementById('channelSmsMode').value;
+  const isAlpha = mode === 'twilio_alphanumeric_sender';
+  const isDedicated = mode === 'twilio_dedicated_number';
+  const isOwnTwilio = mode === 'twilio_own_account';
+  document.getElementById('channelSmsSenderBlock').style.display = isAlpha ? '' : 'none';
+  document.getElementById('channelSmsPhoneBlock').style.display = isDedicated ? '' : 'none';
+  document.getElementById('channelSmsRequestBlock').style.display = (isAlpha || isDedicated) ? '' : 'none';
+  document.getElementById('channelSmsTwilioBlock').style.display = isOwnTwilio ? '' : 'none';
+  document.getElementById('channelSmsSave').textContent = mode === 'vantelia_default'
+    ? 'Usar Vantelia'
+    : isOwnTwilio ? 'Conectar Twilio' : 'Enviar solicitud';
+  document.getElementById('channelSmsSaveHint').textContent = mode === 'vantelia_default'
+    ? 'Los SMS saldran desde el remitente gestionado por Vantelia.'
+    : isOwnTwilio
+    ? 'Necesitas un remitente alojado o autorizado en tu cuenta Twilio.'
+    : 'Vantelia revisara la solicitud y activara el remitente cuando este listo.';
+  document.getElementById('channelSmsRequestHelp').textContent = isAlpha
+    ? 'El nombre comercial es unidireccional: tus clientes no podran responder al SMS.'
+    : 'Para usar tu numero, normalmente hay que provisionarlo, portarlo o configurar un numero Twilio y el desvio correspondiente.';
+}
+async function loadChannelRequests() {
+  const box = document.getElementById('channelRequestsList');
+  if (!box) return;
+  try {
+    const items = await api('/auth/app/channels/requests');
+    const visible = (items || []).filter(r => ['sms', 'voice'].includes(r.channel));
+    box.innerHTML = visible.length ? visible.map(r => `
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,0.04);">
+        <div>
+          <strong>${escapeHtml(r.channel === 'sms' ? 'SMS' : 'Voz')} - ${escapeHtml(channelRequestTypeLabel(r.request_type))}</strong>
+          <div class="panel-sub" style="margin:3px 0 0;">${escapeHtml(r.requested_phone || r.requested_sender || 'Sin remitente')} - ${escapeHtml(r.created_at || '')}</div>
+          ${r.admin_notes ? `<div class="panel-sub" style="margin:5px 0 0;">${escapeHtml(r.admin_notes)}</div>` : ''}
+        </div>
+        <span style="white-space:nowrap;font-size:.78rem;padding:4px 9px;border-radius:999px;background:rgba(0,177,217,.16);color:var(--accent);">${escapeHtml(channelRequestStatusLabel(r.status))}</span>
+      </div>`).join('') : '';
+  } catch(e) {
+    box.innerHTML = '';
+  }
 }
 document.getElementById('channelGoogleConnect').addEventListener('click', async () => {
   try {
@@ -5305,14 +5480,60 @@ document.getElementById('channelGoogleDisconnect').addEventListener('click', asy
     toast('Google desconectado', 'success'); loadChannels();
   } catch(e) { toast(e.message, 'error'); }
 });
+document.getElementById('channelEmailProvider').addEventListener('change', async e => {
+  const provider = e.target.value;
+  if (provider !== channelLastEmailProvider) {
+    const labels = { vantelia_smtp:'Vantelia', gmail_oauth:'Google', client_smtp:'SMTP propio' };
+    const ok = window.confirm(`Vas a cambiar el canal activo de email de ${labels[channelLastEmailProvider] || channelLastEmailProvider} a ${labels[provider] || provider}. Los siguientes emails saldran por el nuevo canal; el anterior dejara de usarse como canal principal. Continuar?`);
+    if (!ok) {
+      e.target.value = channelLastEmailProvider;
+      renderEmailProviderControls();
+      return;
+    }
+  }
+  renderEmailProviderControls();
+  if (provider === 'client_smtp') return;
+  if (provider === 'gmail_oauth' && e.target.dataset.googleConnected !== '1') return;
+  try {
+    await api('/auth/app/channels/email/settings', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ provider, fallback_enabled: document.getElementById('channelEmailFallback').checked }),
+    });
+    toast('Proveedor guardado', 'success');
+    channelLastEmailProvider = provider;
+    loadChannels();
+  } catch(err) { toast(err.message, 'error'); loadChannels(); }
+});
 document.getElementById('channelEmailFallback').addEventListener('change', async e => {
   try {
     await api('/auth/app/channels/email/settings', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ provider:'gmail_oauth', fallback_enabled:e.target.checked }),
+      body:JSON.stringify({ provider:document.getElementById('channelEmailProvider').value, fallback_enabled:e.target.checked }),
     });
     toast('Preferencia guardada', 'success');
   } catch(err) { toast(err.message, 'error'); loadChannels(); }
+});
+document.getElementById('channelSmtpSave').addEventListener('click', async () => {
+  const body = {
+    host: document.getElementById('channelSmtpHost').value.trim(),
+    port: parseInt(document.getElementById('channelSmtpPort').value || '587', 10) || 587,
+    username: document.getElementById('channelSmtpUsername').value.trim(),
+    password: document.getElementById('channelSmtpPassword').value.trim(),
+    from_email: document.getElementById('channelSmtpFromEmail').value.trim(),
+    from_name: document.getElementById('channelSmtpFromName').value.trim(),
+    reply_to: document.getElementById('channelSmtpReplyTo').value.trim(),
+    starttls: document.getElementById('channelSmtpStarttls').checked,
+    fallback_enabled: document.getElementById('channelEmailFallback').checked,
+  };
+  if (!body.host) { toast('Indica el servidor SMTP.', 'error'); return; }
+  if (!body.from_email && !body.username) { toast('Indica el email remitente o usuario SMTP.', 'error'); return; }
+  try {
+    await api('/auth/app/channels/email/smtp/settings', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body),
+    });
+    toast('Cuenta SMTP guardada', 'success');
+    loadChannels();
+  } catch(e) { toast(e.message, 'error'); }
 });
 document.getElementById('channelEmailTest').addEventListener('click', async () => {
   const target = document.getElementById('channelEmailTestTarget').value.trim();
@@ -5324,18 +5545,61 @@ document.getElementById('channelEmailTest').addEventListener('click', async () =
   } catch(e) { toast(e.message, 'error'); }
 });
 document.getElementById('channelSmsMode').addEventListener('change', e => {
-  document.getElementById('channelSmsSender').disabled = e.target.value !== 'twilio_alphanumeric_sender';
+  const next = e.target.value;
+  if (next !== channelLastSmsMode) {
+    const labels = {
+      vantelia_default:'Vantelia',
+      twilio_dedicated_number:'numero dedicado',
+      twilio_own_account:'Twilio propio',
+      twilio_alphanumeric_sender:'nombre comercial',
+    };
+    const ok = window.confirm(`Vas a cambiar el modo SMS de ${labels[channelLastSmsMode] || channelLastSmsMode} a ${labels[next] || next}. Hasta que se guarde o se active el nuevo canal, los SMS pueden dejar de salir por el remitente anterior. Continuar?`);
+    if (!ok) {
+      e.target.value = channelLastSmsMode;
+      renderSmsModeControls();
+      return;
+    }
+  }
+  renderSmsModeControls();
 });
 document.getElementById('channelSmsSave').addEventListener('click', async () => {
   try {
+    const mode = document.getElementById('channelSmsMode').value;
+    if (mode === 'twilio_own_account') {
+      await api('/auth/app/channels/sms/twilio-settings', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          account_sid: document.getElementById('channelSmsTwilioSid').value.trim(),
+          auth_token: document.getElementById('channelSmsTwilioToken').value.trim(),
+          sender_kind: document.getElementById('channelSmsTwilioKind').value,
+          sender: document.getElementById('channelSmsTwilioSender').value.trim(),
+        }),
+      });
+      toast('Cuenta Twilio conectada. Envia una prueba para validarla.', 'success');
+      loadChannels();
+      return;
+    }
+    if (mode === 'twilio_alphanumeric_sender' || mode === 'twilio_dedicated_number') {
+      const body = {
+        channel: 'sms',
+        request_type: mode === 'twilio_alphanumeric_sender' ? 'alphanumeric_sender' : 'dedicated_number',
+        requested_sender: document.getElementById('channelSmsSender').value.trim(),
+        requested_phone: document.getElementById('channelSmsRequestedPhone').value.trim(),
+        notes: document.getElementById('channelSmsRequestNotes').value.trim(),
+      };
+      await api('/auth/app/channels/requests', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body),
+      });
+      toast('Solicitud enviada a Vantelia.', 'success');
+      loadChannels();
+      return;
+    }
     await api('/auth/app/channels/sms/settings', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        mode:document.getElementById('channelSmsMode').value,
-        sender:document.getElementById('channelSmsSender').value.trim(),
-      }),
+      body:JSON.stringify({ mode:'vantelia_default', sender:'' }),
     });
-    toast('Configuracion SMS guardada', 'success'); loadChannels();
+    channelLastSmsMode = 'vantelia_default';
+    toast('SMS gestionado por Vantelia activado', 'success'); loadChannels();
   } catch(e) { toast(e.message, 'error'); }
 });
 document.getElementById('channelSmsTest').addEventListener('click', async () => {
@@ -6256,7 +6520,7 @@ function cdRenderDetail(b){
   if (notCancelled && hasPerm('agenda.attendance')) moreItems.push(mItem('sendconfirm', '✉ Enviar confirmación'));
   if (notCancelled && hasPerm('agenda.create')) moreItems.push(mItem('rebook', '🔁 Reservar siguiente'));
   if (est === 'completed' && (b.email || b.client_email || b.telefono || b.client_phone) && hasPerm('agenda.attendance')) moreItems.push(mItem('reviewreq', '⭐ Pedir reseña'));
-  moreItems.push(mItem('manage', '🗂 Gestionar cita'));
+  moreItems.push(mItem('manage', b.manage_url ? '🔗 Gestionar (enlace cliente)' : '🗂 Gestionar cita'));
   const d = document.getElementById('cdDetail'); d.style.display = '';
   d.innerHTML = `
     <div class="cd-detail-head">
@@ -8887,7 +9151,9 @@ function openFollowUpTest(step) {
     const o = btn.textContent; btn.disabled = true; btn.textContent = 'Probando…';
     out.innerHTML = '<div class="panel-sub">Ejecutando…</div>';
     try {
-      const r = await api('/auth/app/follow-up/test', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ step: step.key, email, phone }) });
+      const payload = { step: step.key, email, phone };
+      if (!isCall && step.key !== 'review') payload.channels = fuEffectiveChannels(step.key);
+      const r = await api('/auth/app/follow-up/test', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
       const results = r.results || [];
       const rows = results.map(res => {
         const st = FU_TEST_ST[res.status] || FU_TEST_ST.skipped;

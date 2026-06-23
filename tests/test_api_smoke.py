@@ -6872,6 +6872,71 @@ def test_email_provider_auto_prefers_gmail_and_falls_back_to_smtp(api_module, mo
     assert sent == ["smtp"]
 
 
+def test_admin_can_change_vantelia_fallback_sender(client: TestClient, api_module, monkeypatch):
+    from cryptography.fernet import Fernet
+
+    monkeypatch.setattr(api_module, "OAUTH_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    monkeypatch.setattr(api_module, "SMTP_HOST", "smtp.env.local")
+    monkeypatch.setattr(api_module, "EMAIL_SEND_PROVIDER", "smtp")
+    sent = {}
+
+    def fake_smtp_send(msg):
+        sent["host"] = api_module._smtp_host()
+        sent["port"] = api_module._smtp_port()
+        sent["starttls"] = api_module._smtp_starttls()
+        sent["login"] = (api_module._smtp_username(), api_module._smtp_password())
+        sent["from"] = msg["From"]
+        sent["reply_to"] = msg.get("Reply-To", "")
+
+    monkeypatch.setattr(api_module, "_smtp_send_message", fake_smtp_send)
+
+    try:
+        response = client.post(
+            "/admin/email-channels/smtp-settings",
+            headers={"Authorization": "Bearer test-admin-token"},
+            json={
+                "host": "smtp.vantelia.test",
+                "port": 2525,
+                "username": "no-reply@vantelia.es",
+                "password": "smtp-secret",
+                "starttls": True,
+                "from_email": "operaciones@example.com",
+                "from_name": "Operaciones Vantelia",
+                "reply_to": "soporte@example.com",
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["smtp"]["from_email"] == "operaciones@example.com"
+        assert response.json()["smtp"]["password_configured"] == "1"
+        with api_module._get_db_connection() as connection:
+            row = connection.execute(
+                "SELECT value FROM system_settings WHERE key='smtp_password_encrypted'"
+            ).fetchone()
+        assert row is not None
+        assert "smtp-secret" not in row["value"]
+        assert api_module._decrypt_channel_secret(row["value"]) == "smtp-secret"
+
+        api_module._send_email_message("destino@example.com", "Prueba", "Hola")
+        assert sent["host"] == "smtp.vantelia.test"
+        assert sent["port"] == 2525
+        assert sent["starttls"] is True
+        assert sent["login"] == ("no-reply@vantelia.es", "smtp-secret")
+        assert sent["from"] == "Operaciones Vantelia <operaciones@example.com>"
+        assert sent["reply_to"] == "soporte@example.com"
+    finally:
+        with api_module._get_db_connection() as connection:
+            connection.execute(
+                """
+                DELETE FROM system_settings
+                WHERE key IN (
+                    'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password_encrypted',
+                    'smtp_starttls', 'smtp_from_email', 'smtp_from_name', 'smtp_reply_to'
+                )
+                """
+            )
+            connection.commit()
+
+
 def test_client_gmail_connection_is_encrypted_and_isolated(api_module):
     with api_module._get_db_connection() as connection:
         connection.execute("DELETE FROM gmail_connections WHERE id IN ('client_a', 'client_b')")

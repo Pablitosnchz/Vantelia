@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
@@ -9,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from cryptography.fernet import Fernet
 
+from backend import channel_requests
 from test_booking_exhaustive import api_module, client  # noqa: F401
 from test_crm_light import portal_cookies  # noqa: F401
 
@@ -46,6 +48,22 @@ def _seed_gmail(api_module, cliente_id: str = "demo", *, status: str = "active")
             ),
         )
         connection.commit()
+
+
+def _seed_channel_booking(api_module, booking_id: str, cliente_id: str = "demo"):
+    start = datetime.now(timezone.utc) + timedelta(days=2)
+    iso = lambda d: d.isoformat(timespec="seconds").replace("+00:00", "") + "Z"
+    api_module._store_booking({
+        "id": booking_id, "cliente_id": cliente_id, "employee_id": "", "employee_name": "",
+        "nombre": "Cliente Canal", "email": "cliente@example.com", "telefono": "+34600111222",
+        "servicio": "Consulta", "booking_date": start.date().isoformat(), "booking_time": start.strftime("%H:%M"),
+        "notas": "", "status": "confirmed", "provider_name": "internal", "provider_status": "confirmed",
+        "provider_booking_id": "", "provider_booking_url": "", "manage_token": f"mg_{booking_id}",
+        "timezone": "Europe/Madrid", "start_at": iso(start), "end_at": iso(start + timedelta(minutes=30)),
+        "confirmed_at": iso(start), "cancelled_at": "", "rescheduled_at": "", "rescheduled_from_booking_id": "",
+        "confirmation_email_sent_at": "", "reminder_24h_sent_at": "", "reminder_2h_sent_at": "",
+        "customer_email_status": "", "customer_email_last_error": "", "source": "test", "created_at": iso(start),
+    })
 
 
 def test_channel_secrets_are_encrypted(api_module):
@@ -119,6 +137,44 @@ def test_send_client_email_uses_gmail(api_module, monkeypatch):
     assert captured == {"cliente_id": "demo", "to": "target@example.com", "from": "demo@example.com"}
 
 
+def test_booking_email_uses_connected_client_gmail(api_module, monkeypatch):
+    _seed_gmail(api_module)
+    api_module._ensure_channel_settings("demo")
+    with api_module._get_db_connection() as connection:
+        connection.execute(
+            "UPDATE client_channel_settings SET email_provider='gmail_oauth' WHERE cliente_id='demo'"
+        )
+        connection.commit()
+
+    captured = {}
+    monkeypatch.setattr(
+        api_module,
+        "_send_gmail_message",
+        lambda cliente_id, row, to, subject, text, html="", reply_to=None: captured.update(
+            {"cliente_id": cliente_id, "to": to, "from": row["account_email"], "subject": subject}
+        ),
+    )
+    monkeypatch.setattr(
+        api_module,
+        "_send_email_message",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("No debe saltarse el canal del cliente")),
+    )
+
+    booking_id = "chanmail_" + uuid.uuid4().hex
+    try:
+        _seed_channel_booking(api_module, booking_id)
+        provider = api_module._send_booking_email(api_module._get_booking_row_by_id(booking_id), "confirmed")
+    finally:
+        with api_module._get_db_connection() as connection:
+            connection.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+            connection.commit()
+
+    assert provider == "gmail_oauth"
+    assert captured["cliente_id"] == "demo"
+    assert captured["to"] == "cliente@example.com"
+    assert captured["from"] == "demo@example.com"
+
+
 def test_send_client_email_falls_back_to_vantelia(api_module, monkeypatch):
     _seed_gmail(api_module, status="error")
     api_module._ensure_channel_settings("demo")
@@ -131,6 +187,61 @@ def test_send_client_email_falls_back_to_vantelia(api_module, monkeypatch):
     monkeypatch.setattr(api_module, "_send_email_message", lambda to, *a, **k: captured.update({"to": to}))
     assert api_module._send_client_email("demo", "fallback@example.com", "Asunto", "Texto") == "vantelia_smtp"
     assert captured["to"] == "fallback@example.com"
+
+
+def test_client_smtp_settings_are_encrypted_and_used(client, portal_cookies, api_module, monkeypatch):
+    api_module._ensure_channel_settings("demo")
+    response = client.post(
+        "/auth/app/channels/email/smtp/settings",
+        cookies=portal_cookies,
+        json={
+            "host": "smtp.cliente.test",
+            "port": 2525,
+            "username": "reservas@cliente.test",
+            "password": "smtp-client-secret",
+            "starttls": True,
+            "from_email": "reservas@cliente.test",
+            "from_name": "Cliente Test",
+            "reply_to": "info@cliente.test",
+            "fallback_enabled": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    email = response.json()["email"]
+    assert email["provider"] == "client_smtp"
+    assert email["smtp_configured"] is True
+    assert email["smtp_password_configured"] is True
+
+    row = api_module._ensure_channel_settings("demo")
+    assert "smtp-client-secret" not in row["email_smtp_password_encrypted"]
+    assert api_module._decrypt_channel_secret(row["email_smtp_password_encrypted"]) == "smtp-client-secret"
+
+    captured = {}
+    monkeypatch.setattr(
+        api_module,
+        "_send_client_smtp_message",
+        lambda cliente_id, settings_row, to, subject, text, html="", reply_to=None: captured.update(
+            {
+                "cliente_id": cliente_id,
+                "to": to,
+                "host": settings_row["email_smtp_host"],
+                "from": settings_row["email_smtp_from_email"],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        api_module,
+        "_send_email_message",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("No debe usar el respaldo Vantelia")),
+    )
+    provider = api_module._send_client_email("demo", "destino@example.com", "Asunto", "Texto")
+    assert provider == "client_smtp"
+    assert captured == {
+        "cliente_id": "demo",
+        "to": "destino@example.com",
+        "host": "smtp.cliente.test",
+        "from": "reservas@cliente.test",
+    }
 
 
 def test_gmail_refresh_updates_encrypted_token(api_module, monkeypatch):
@@ -218,3 +329,113 @@ def test_sms_settings_reject_arbitrary_dedicated_number(client, portal_cookies):
         json={"mode": "twilio_dedicated_number", "sender": "+34600123456"},
     )
     assert response.status_code == 400
+
+
+def test_channel_request_created_and_listed(client, portal_cookies, api_module, monkeypatch):
+    monkeypatch.setattr(channel_requests.emailing, "_email_delivery_configured", lambda: False)
+    response = client.post(
+        "/auth/app/channels/requests",
+        cookies=portal_cookies,
+        json={
+            "channel": "sms",
+            "request_type": "alphanumeric_sender",
+            "requested_sender": "demoid",
+            "notes": "Alta de marca",
+        },
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["cliente_id"] == "demo"
+    assert data["requested_sender"] == "DEMOID"
+    assert data["status"] == "pending"
+
+    listing = client.get("/auth/app/channels/requests", cookies=portal_cookies)
+    assert listing.status_code == 200
+    assert any(item["id"] == data["id"] for item in listing.json())
+
+
+def test_client_twilio_sms_settings_are_encrypted_and_active(client, portal_cookies, api_module):
+    response = client.post(
+        "/auth/app/channels/sms/twilio-settings",
+        cookies=portal_cookies,
+        json={
+            "account_sid": "AC1234567890abcdef",
+            "auth_token": "client-twilio-token",
+            "sender_kind": "number",
+            "sender": "+34600123456",
+        },
+    )
+    assert response.status_code == 200, response.text
+    sms = response.json()["sms"]
+    assert sms["mode"] == "twilio_dedicated_number"
+    assert sms["sender"] == "+34600123456"
+    assert sms["sender_status"] == "active"
+
+    row = api_module._ensure_channel_settings("demo")
+    assert "client-twilio-token" not in row["sms_twilio_auth_token_encrypted"]
+    assert api_module._decrypt_channel_secret(row["sms_twilio_auth_token_encrypted"]) == "client-twilio-token"
+
+
+def test_admin_can_activate_sms_request(client, portal_cookies, api_module, monkeypatch):
+    monkeypatch.setattr(channel_requests.emailing, "_email_delivery_configured", lambda: False)
+    created = client.post(
+        "/auth/app/channels/requests",
+        cookies=portal_cookies,
+        json={
+            "channel": "sms",
+            "request_type": "dedicated_number",
+            "requested_phone": "+34600999888",
+        },
+    )
+    assert created.status_code == 200, created.text
+    request_id = created.json()["id"]
+    headers = {"Authorization": "Bearer test-admin-token"}
+    response = client.post(
+        "/admin/clientes/demo/sms",
+        headers=headers,
+        json={
+            "mode": "twilio_dedicated_number",
+            "sender": "+34600999888",
+            "sender_status": "active",
+            "account_sid": "ACabcdef1234567890",
+            "auth_token": "admin-twilio-token",
+            "request_id": request_id,
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["sms"]["available"] is True
+    listed = client.get("/admin/channel-requests?status=active", headers=headers)
+    assert listed.status_code == 200
+    assert any(item["id"] == request_id for item in listed.json()["items"])
+
+
+def test_follow_up_test_uses_vantelia_managed_sms(client, portal_cookies, api_module, monkeypatch):
+    monkeypatch.setattr(api_module, "TWILIO_ACCOUNT_SID", "AC_GLOBAL")
+    monkeypatch.setattr(api_module, "TWILIO_AUTH_TOKEN", "global-token")
+    monkeypatch.setattr(api_module, "TWILIO_SMS_SENDER", "+18038849920")
+    api_module._ensure_channel_settings("demo")
+    with api_module._get_db_connection() as connection:
+        connection.execute(
+            "UPDATE client_channel_settings SET sms_mode='vantelia_default' WHERE cliente_id='demo'"
+        )
+        connection.commit()
+    captured = {}
+
+    async def capture_sms(to, sender, body, **kwargs):
+        captured.update({"to": to, "sender": sender, "body": body})
+        return True
+
+    monkeypatch.setattr(api_module, "_send_twilio_sms", capture_sms)
+    response = client.post(
+        "/auth/app/follow-up/test",
+        cookies=portal_cookies,
+        json={
+            "step": "reminder_24h",
+            "phone": "+34600123456",
+            "channels": {"email": False, "whatsapp": False, "sms": True},
+        },
+    )
+    assert response.status_code == 200, response.text
+    results = {item["channel"]: item for item in response.json()["results"]}
+    assert results["sms"]["status"] == "sent"
+    assert captured["sender"] == "+18038849920"

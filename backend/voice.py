@@ -363,13 +363,34 @@ def _voice_place_outbound_call(
         return {"ok": False, "error": "La telefonia no esta configurada."}
     base = (base_url or settings.APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
     ws_base = base.replace("https://", "wss://", 1).replace("http://", "ws://", 1)
+    # El contexto de la cita viaja en el query string ademas del id: asi el puente
+    # arma la llamada SALIENTE de confirmacion aunque la cita no este en la agenda
+    # (prueba del Seguimiento con cita efimera) o se borre entre el lanzamiento y la
+    # conexion de Twilio, sin degradar a modo entrante.
     ws_url = (
         f"{ws_base}/voice/stream/{cliente_id}"
         f"?mode=confirm&booking_id={quote(str(booking_row['id']))}&to={quote(to_number)}"
+        f"&b_nombre={quote(str(booking_row['nombre'] or ''))}"
+        f"&b_servicio={quote(str(booking_row['servicio'] or ''))}"
+        f"&b_fecha={quote(str(booking_row['booking_date'] or ''))}"
+        f"&b_hora={quote(str(booking_row['booking_time'] or ''))}"
+    )
+    # El contexto va tambien como <Parameter> (customParameters en el evento 'start'):
+    # redundancia con el query string por si algun proxy/Twilio no preserva la query.
+    def _p(name: str, value: Any) -> str:
+        return f'<Parameter name="{name}" value="{escape(str(value or ""), quote=True)}"/>'
+    params_xml = (
+        _p("mode", "confirm")
+        + _p("booking_id", booking_row["id"])
+        + _p("to", to_number)
+        + _p("b_nombre", booking_row["nombre"])
+        + _p("b_servicio", booking_row["servicio"])
+        + _p("b_fecha", booking_row["booking_date"])
+        + _p("b_hora", booking_row["booking_time"])
     )
     twiml = (
         '<?xml version="1.0" encoding="UTF-8"?><Response><Connect>'
-        f'<Stream url="{escape(ws_url, quote=True)}"></Stream></Connect></Response>'
+        f'<Stream url="{escape(ws_url, quote=True)}">{params_xml}</Stream></Connect></Response>'
     )
     try:
         url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Calls.json"

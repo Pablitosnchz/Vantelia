@@ -735,6 +735,15 @@ class ChannelEmailStatus(BaseModel):
     status: str = "not_connected"
     last_error: str = ""
     google_configured: bool = False
+    smtp_configured: bool = False
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_from_email: str = ""
+    smtp_from_name: str = ""
+    smtp_reply_to: str = ""
+    smtp_starttls: bool = True
+    smtp_password_configured: bool = False
 
 
 class ChannelSmsStatus(BaseModel):
@@ -759,9 +768,66 @@ class ChannelEmailSettingsPayload(BaseModel):
     fallback_enabled: bool = True
 
 
+class ChannelEmailSmtpSettingsPayload(BaseModel):
+    host: str = Field(default="", max_length=200)
+    port: int = Field(default=587, ge=1, le=65535)
+    username: str = Field(default="", max_length=200)
+    password: str = Field(default="", max_length=500)
+    starttls: bool = True
+    from_email: str = Field(default="", max_length=200)
+    from_name: str = Field(default="", max_length=80)
+    reply_to: str = Field(default="", max_length=200)
+    fallback_enabled: bool = True
+
+
 class ChannelSmsSettingsPayload(BaseModel):
     mode: str = Field(default="vantelia_default", max_length=40)
     sender: str = Field(default="", max_length=32)
+
+
+class ChannelSmsTwilioSettingsPayload(BaseModel):
+    account_sid: str = Field(default="", max_length=120)
+    auth_token: str = Field(default="", max_length=240)
+    sender: str = Field(default="", max_length=32)
+    sender_kind: str = Field(default="number", max_length=32)
+
+
+class ChannelProvisioningRequest(BaseModel):
+    id: str
+    cliente_id: str
+    channel: str
+    request_type: str
+    requested_sender: str = ""
+    requested_phone: str = ""
+    contact_name: str = ""
+    contact_email: str = ""
+    notes: str = ""
+    status: str = "pending"
+    admin_notes: str = ""
+    created_at: str
+    updated_at: str
+
+
+class ChannelProvisioningRequestPayload(BaseModel):
+    channel: str = Field(default="sms", max_length=20)
+    request_type: str = Field(default="managed_number", max_length=40)
+    requested_sender: str = Field(default="", max_length=32)
+    requested_phone: str = Field(default="", max_length=40)
+    notes: str = Field(default="", max_length=1000)
+
+
+class AdminChannelRequestUpdatePayload(BaseModel):
+    status: str = Field(default="in_progress", max_length=30)
+    admin_notes: str = Field(default="", max_length=1000)
+
+
+class AdminSmsSettingsPayload(BaseModel):
+    mode: str = Field(default="vantelia_default", max_length=40)
+    sender: str = Field(default="", max_length=32)
+    sender_status: str = Field(default="active", max_length=40)
+    account_sid: str = Field(default="", max_length=120)
+    auth_token: str = Field(default="", max_length=240)
+    request_id: str = Field(default="", max_length=80)
 
 
 class ChannelTestPayload(BaseModel):
@@ -987,6 +1053,7 @@ class FollowUpTestPayload(BaseModel):
     step: str = Field(pattern="^(confirmed|reminder_24h|reminder_2h|call|review)$")
     email: str = Field(default="", max_length=200)
     phone: str = Field(default="", max_length=30)
+    channels: Optional[Dict[str, bool]] = None
 
 
 class FollowUpTestChannelResult(BaseModel):
@@ -1002,6 +1069,37 @@ class FollowUpTestResponse(BaseModel):
     to_email: str = ""
     to_phone: str = ""
     results: List[FollowUpTestChannelResult] = []
+
+
+class ReviewRequestPayload(BaseModel):
+    """Config del seguimiento post-cita (peticion de resena al cliente final)."""
+    enabled: Optional[bool] = None
+    link: Optional[str] = Field(default=None, max_length=600)
+    platform: Optional[str] = Field(default=None, max_length=60)
+    delay_hours: Optional[int] = Field(default=None, ge=1, le=168)
+    only_manual_attendance: Optional[bool] = None
+    message: Optional[str] = Field(default=None, max_length=800)
+    channels: Optional[Dict[str, bool]] = None
+
+
+class ReviewRequestResponse(BaseModel):
+    plan: str = "free"
+    plan_label: str = "Free"
+    enabled: bool = False
+    link: str = ""
+    platform: str = ""           # etiqueta de plataforma (Google, Trustpilot, ...)
+    platform_label: str = ""     # texto del boton ("Dejar resena en Google")
+    delay_hours: int = 3
+    only_manual_attendance: bool = False
+    message: str = ""
+    default_message: str = ""
+    channels: List[FollowUpStepChannel] = []
+    channel_availability: FollowUpChannelAvailability = FollowUpChannelAvailability()
+    sent_30d: int = 0
+    link_valid: bool = False
+    preview_subject: str = ""
+    preview_html: str = ""
+    preview_text: str = ""
 
 
 class ReviewRequestPayload(BaseModel):

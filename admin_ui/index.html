@@ -3064,13 +3064,33 @@ tbody tr:last-child td { border-bottom: none; }
             <div class="actions" style="margin-top:12px;">
               <select id="voiceConfigClient"></select>
             </div>
+            <div class="card" style="padding:16px;margin-top:12px;background:linear-gradient(135deg,#f8fafc,#ecfeff);border:1px solid #bae6fd;">
+              <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+                <div>
+                  <strong>Solicitudes de canales</strong>
+                  <p class="muted" style="margin:4px 0 0;font-size:13px;">Voz, SMS dedicado y nombres comerciales solicitados desde el portal cliente.</p>
+                </div>
+                <div class="actions">
+                  <select id="channelReqStatus">
+                    <option value="">Todas</option>
+                    <option value="pending">Pendientes</option>
+                    <option value="in_progress">En revision</option>
+                    <option value="active">Activas</option>
+                    <option value="rejected">Rechazadas</option>
+                  </select>
+                  <button class="ghost small" type="button" id="channelReqRefreshBtn">Actualizar</button>
+                </div>
+              </div>
+              <div id="channelReqList" style="display:grid;gap:8px;margin-top:12px;"></div>
+              <div id="channelReqDetail" style="display:none;margin-top:12px;padding:12px;border-radius:10px;background:#fff;border:1px solid #e2e8f0;"></div>
+            </div>
             <div id="voiceConfigCard" class="card" style="padding:16px;margin-top:12px;">
               <div class="muted">Selecciona un cliente para ver su configuracion de voz.</div>
             </div>
             <div class="card" style="padding:14px;margin-top:12px;background:#f8fafc;border:1px solid #e2e8f0;">
               <strong>Como activar la voz en un cliente</strong>
               <ol style="font-size:13px;line-height:1.7;margin:8px 0 0 18px;color:#475569;">
-                <li>Asigna un numero Twilio al cliente en <code>config.json</code> (bloque <code>voice</code>, campo <code>twilio_phone_number</code>, y <code>enabled: true</code>).</li>
+                <li>Usa la bandeja de solicitudes para activar el numero Twilio del cliente o actualizalo desde el endpoint admin de voz.</li>
                 <li>En la consola Twilio, apunta el webhook de voz del numero a <code>https://app.vantelia.es/voice/&lt;cliente_id&gt;</code> (HTTP POST) y el Status Callback a <code>/voice/status/&lt;cliente_id&gt;</code>.</li>
                 <li>El cliente configura en su operadora un <strong>desvio de llamada</strong> (incondicional o si no contesta) hacia el numero Twilio.</li>
                 <li>Listo: las llamadas al numero de la empresa las atiende la IA con su mismo cerebro RAG y, si detecta intencion de cita, envia un SMS con el enlace.</li>
@@ -3193,6 +3213,41 @@ tbody tr:last-child td { border-bottom: none; }
               <div><span class="muted">Canal activo</span><div id="emailChannelActive" style="font-weight:700;margin-top:4px;">Cargando...</div></div>
               <div><span class="muted">Cuenta Gmail</span><div id="emailChannelAccount" style="font-weight:700;margin-top:4px;">-</div></div>
               <div><span class="muted">Respaldo SMTP</span><div id="emailChannelSmtp" style="font-weight:700;margin-top:4px;">-</div></div>
+            </div>
+            <div class="grid" style="margin-top:12px;align-items:end;">
+              <label>Servidor SMTP
+                <input id="emailChannelSmtpHost" type="text" placeholder="smtp.hostinger.com" />
+              </label>
+              <label>Puerto
+                <input id="emailChannelSmtpPort" type="number" min="1" max="65535" step="1" placeholder="587" />
+              </label>
+              <label>Usuario SMTP
+                <input id="emailChannelSmtpUser" type="text" placeholder="no-reply@vantelia.es" autocomplete="username" />
+              </label>
+            </div>
+            <div class="grid" style="margin-top:12px;align-items:end;">
+              <label>Contraseña SMTP
+                <input id="emailChannelSmtpPass" type="password" placeholder="Dejar vacío para conservarla" autocomplete="new-password" />
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;margin-top:22px;">
+                <input id="emailChannelSmtpStarttls" type="checkbox" style="width:auto;" />
+                <span>Usar STARTTLS</span>
+              </label>
+              <div><span class="muted">Contraseña</span><div id="emailChannelSmtpPassStatus" style="font-weight:700;margin-top:4px;">-</div></div>
+            </div>
+            <div class="grid" style="margin-top:12px;align-items:end;">
+              <label>Remitente respaldo
+                <input id="emailChannelFromEmail" type="email" placeholder="info@vantelia.es" />
+              </label>
+              <label>Nombre remitente
+                <input id="emailChannelFromName" type="text" maxlength="80" placeholder="Vantelia" />
+              </label>
+              <label>Responder a
+                <input id="emailChannelReplyTo" type="email" placeholder="soporte@vantelia.es" />
+              </label>
+            </div>
+            <div class="actions" style="margin-top:10px;">
+              <button class="secondary small" type="button" id="emailChannelSaveSmtpBtn">Guardar respaldo</button>
             </div>
             <p id="emailChannelMessage" class="muted" style="font-size:12px;margin:10px 0 0;"></p>
           </div>
@@ -6775,9 +6830,27 @@ a {
         const message = ORQ("#emailChannelMessage");
         const connect = ORQ("#emailChannelConnectBtn");
         const disconnect = ORQ("#emailChannelDisconnectBtn");
+        const smtpHost = ORQ("#emailChannelSmtpHost");
+        const smtpPort = ORQ("#emailChannelSmtpPort");
+        const smtpUser = ORQ("#emailChannelSmtpUser");
+        const smtpPass = ORQ("#emailChannelSmtpPass");
+        const smtpStarttls = ORQ("#emailChannelSmtpStarttls");
+        const smtpPassStatus = ORQ("#emailChannelSmtpPassStatus");
+        const fromEmail = ORQ("#emailChannelFromEmail");
+        const fromName = ORQ("#emailChannelFromName");
+        const replyTo = ORQ("#emailChannelReplyTo");
         if (active) active.textContent = data.active_provider === "gmail" ? "Gmail API" : data.active_provider === "smtp" ? "SMTP" : "Sin configurar";
         if (account) account.textContent = gmail.connected ? gmail.email : "No conectado";
-        if (smtpEl) smtpEl.textContent = smtp.configured ? `Activo (${smtp.from_email})` : "No configurado";
+        if (smtpEl) smtpEl.textContent = smtp.configured ? `Activo (${smtp.from_email})` : `No configurado (${smtp.from_email || "sin remitente"})`;
+        if (smtpHost) smtpHost.value = smtp.host || "";
+        if (smtpPort) smtpPort.value = smtp.port || "587";
+        if (smtpUser) smtpUser.value = smtp.username || "";
+        if (smtpPass) smtpPass.value = "";
+        if (smtpStarttls) smtpStarttls.checked = smtp.starttls !== "0" && smtp.starttls !== false;
+        if (smtpPassStatus) smtpPassStatus.textContent = smtp.password_configured === "1" || smtp.password_configured === true ? "Guardada" : "Sin configurar";
+        if (fromEmail) fromEmail.value = smtp.from_email || "";
+        if (fromName) fromName.value = smtp.from_name || "Vantelia";
+        if (replyTo) replyTo.value = smtp.reply_to || "";
         if (connect) connect.textContent = gmail.connected ? "Cambiar cuenta Google" : "Conectar Google";
         if (disconnect) disconnect.style.display = gmail.connected ? "" : "none";
         if (message) {
@@ -6795,6 +6868,12 @@ a {
           if (senderPreview) senderPreview.value = sender;
           const summarySender = ORQ("#cwSummarySender");
           if (summarySender) summarySender.textContent = gmail.email;
+        } else if (smtp.from_email) {
+          const sender = `${smtp.from_name || "Vantelia"} <${smtp.from_email}>`;
+          const senderPreview = ORQ("#cwSenderPreview");
+          if (senderPreview) senderPreview.value = sender;
+          const summarySender = ORQ("#cwSummarySender");
+          if (summarySender) summarySender.textContent = smtp.from_email;
         }
       }
 
@@ -6810,6 +6889,37 @@ a {
           await orFetch("/admin/email-channels/gmail", { method: "DELETE" });
           await loadEmailChannels();
           showStatus("Gmail desconectado.", "success");
+        } catch (error) {
+          showStatus(error.message, "error");
+        }
+      });
+      ORQ("#emailChannelSaveSmtpBtn")?.addEventListener("click", async () => {
+        const body = {
+          host: (ORQ("#emailChannelSmtpHost")?.value || "").trim(),
+          port: parseInt((ORQ("#emailChannelSmtpPort")?.value || "587").trim(), 10) || 587,
+          username: (ORQ("#emailChannelSmtpUser")?.value || "").trim(),
+          password: (ORQ("#emailChannelSmtpPass")?.value || "").trim(),
+          starttls: !!ORQ("#emailChannelSmtpStarttls")?.checked,
+          from_email: (ORQ("#emailChannelFromEmail")?.value || "").trim(),
+          from_name: (ORQ("#emailChannelFromName")?.value || "").trim() || "Vantelia",
+          reply_to: (ORQ("#emailChannelReplyTo")?.value || "").trim(),
+        };
+        if (!body.host) {
+          showStatus("Indica el servidor SMTP de respaldo.", "error");
+          return;
+        }
+        if (!body.from_email) {
+          showStatus("Indica el email remitente de respaldo.", "error");
+          return;
+        }
+        try {
+          await orFetch("/admin/email-channels/smtp-settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          await loadEmailChannels();
+          showStatus("Remitente de respaldo actualizado.", "success");
         } catch (error) {
           showStatus(error.message, "error");
         }
@@ -11256,7 +11366,7 @@ a {
     (function() {
       const VQ = (sel) => document.querySelector(sel);
       const VALL = (sel) => document.querySelectorAll(sel);
-      let voiceState = { tab: "calls", loaded: false, page: 1, hasMore: false, clients: [] };
+      let voiceState = { tab: "calls", loaded: false, page: 1, hasMore: false, clients: [], requests: [] };
 
       async function vFetch(url, opts) {
         opts = opts || {};
@@ -11311,7 +11421,7 @@ a {
           p.style.display = active ? "" : "none";
         });
         if (tab === "calls") loadVoiceCalls(true);
-        if (tab === "config") renderVoiceConfig();
+        if (tab === "config") { renderVoiceConfig(); loadChannelRequestsAdmin(); }
       }
 
       async function loadVoiceClients() {
@@ -11328,6 +11438,139 @@ a {
         if (filter) filter.innerHTML = `<option value="">Todos los clientes</option>` + optsHtml;
         const cfg = VQ("#voiceConfigClient");
         if (cfg) cfg.innerHTML = `<option value="">Selecciona un cliente</option>` + optsHtml;
+      }
+
+      function reqTypeLabel(type) {
+        return {
+          voice_install: "Instalar voz",
+          dedicated_number: "Numero SMS",
+          managed_number: "Numero gestionado",
+          alphanumeric_sender: "Nombre comercial",
+          twilio_own_account: "Twilio propio",
+        }[type] || type;
+      }
+
+      function reqStatusLabel(status) {
+        return {
+          pending: "Pendiente",
+          in_progress: "En revision",
+          active: "Activo",
+          rejected: "Rechazado",
+          cancelled: "Cancelado",
+        }[status] || status;
+      }
+
+      async function loadChannelRequestsAdmin() {
+        const box = VQ("#channelReqList");
+        if (!box) return;
+        const status = VQ("#channelReqStatus")?.value || "";
+        box.innerHTML = `<div class="muted">Cargando solicitudes...</div>`;
+        try {
+          const params = new URLSearchParams();
+          if (status) params.set("status", status);
+          const data = await vFetch(`/admin/channel-requests?${params.toString()}`);
+          voiceState.requests = data.items || [];
+        } catch (e) {
+          box.innerHTML = `<div class="muted" style="color:#b91c1c;">${vEsc(e.message)}</div>`;
+          return;
+        }
+        box.innerHTML = voiceState.requests.length ? voiceState.requests.map(r => `
+          <button type="button" data-channel-req="${vEsc(r.id)}" style="text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:10px;padding:10px 12px;cursor:pointer;">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+              <strong>${vEsc(r.channel.toUpperCase())} · ${vEsc(reqTypeLabel(r.request_type))}</strong>
+              ${statusBadge(r.status)}
+            </div>
+            <div class="muted" style="font-size:12px;margin-top:4px;">${vEsc(r.cliente_id)} · ${vEsc(r.requested_phone || r.requested_sender || "sin remitente")} · ${vEsc(fmtWhen(r.created_at))}</div>
+          </button>`).join("") : `<div class="muted">Sin solicitudes con este filtro.</div>`;
+        VALL("[data-channel-req]").forEach(btn => btn.addEventListener("click", () => openChannelRequest(btn.dataset.channelReq)));
+      }
+
+      function openChannelRequest(id) {
+        const req = voiceState.requests.find(r => r.id === id);
+        const detail = VQ("#channelReqDetail");
+        if (!req || !detail) return;
+        const client = voiceState.clients.find(c => c.cliente_id === req.cliente_id) || {};
+        const requested = req.requested_phone || req.requested_sender || "";
+        const smsMode = req.request_type === "alphanumeric_sender" ? "twilio_alphanumeric_sender" : "twilio_dedicated_number";
+        detail.style.display = "";
+        detail.innerHTML = `
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+            <div>
+              <strong>${vEsc(client.nombre || req.cliente_id)}</strong>
+              <div class="muted" style="font-size:12px;">${vEsc(req.cliente_id)} · ${vEsc(reqTypeLabel(req.request_type))} · ${vEsc(reqStatusLabel(req.status))}</div>
+            </div>
+            <div class="actions">
+              <button class="ghost small" type="button" data-req-status="in_progress">En revision</button>
+              <button class="ghost small" type="button" data-req-status="rejected">Rechazar</button>
+            </div>
+          </div>
+          <p class="muted" style="font-size:13px;margin-top:8px;">Solicitado: <strong>${vEsc(requested || "-")}</strong>${req.notes ? ` · ${vEsc(req.notes)}` : ""}</p>
+          <label style="margin-top:10px;">Notas admin<textarea id="channelReqAdminNotes" rows="2" style="width:100%;">${vEsc(req.admin_notes || "")}</textarea></label>
+          ${req.channel === "sms" ? `
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:10px;">
+              <label>Modo SMS<select id="channelReqSmsMode"><option value="twilio_dedicated_number">Numero dedicado</option><option value="twilio_alphanumeric_sender">Nombre comercial</option><option value="vantelia_default">Vantelia</option></select></label>
+              <label>Remitente<input id="channelReqSmsSender" value="${vEsc(requested)}" placeholder="+34600123456 o MARCA" /></label>
+              <label>Account SID<input id="channelReqSmsSid" placeholder="Opcional si usa cuenta global" /></label>
+              <label>Auth Token<input id="channelReqSmsToken" type="password" placeholder="Opcional si usa cuenta global" /></label>
+            </div>
+            <button class="primary" type="button" id="channelReqActivateSms" style="margin-top:10px;">Activar SMS</button>
+          ` : `
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:10px;">
+              <label>Numero Twilio / desvio<input id="channelReqVoiceNumber" value="${vEsc(requested)}" placeholder="+34600123456" /></label>
+            </div>
+            <button class="primary" type="button" id="channelReqActivateVoice" style="margin-top:10px;">Activar voz</button>
+          `}
+        `;
+        const modeEl = VQ("#channelReqSmsMode");
+        if (modeEl) modeEl.value = smsMode;
+        VALL("[data-req-status]").forEach(btn => btn.addEventListener("click", () => updateChannelRequestStatus(req.id, btn.dataset.reqStatus)));
+        VQ("#channelReqActivateSms")?.addEventListener("click", () => activateChannelRequestSms(req));
+        VQ("#channelReqActivateVoice")?.addEventListener("click", () => activateChannelRequestVoice(req));
+      }
+
+      async function updateChannelRequestStatus(id, status) {
+        try {
+          await vFetch(`/admin/channel-requests/${encodeURIComponent(id)}`, {
+            method: "POST",
+            body: JSON.stringify({ status, admin_notes: VQ("#channelReqAdminNotes")?.value || "" }),
+          });
+          showStatus("Solicitud actualizada.", "success");
+          await loadChannelRequestsAdmin();
+        } catch (e) { showStatus(e.message, "error"); }
+      }
+
+      async function activateChannelRequestSms(req) {
+        try {
+          await vFetch(`/admin/clientes/${encodeURIComponent(req.cliente_id)}/sms`, {
+            method: "POST",
+            body: JSON.stringify({
+              mode: VQ("#channelReqSmsMode")?.value || "twilio_dedicated_number",
+              sender: VQ("#channelReqSmsSender")?.value || "",
+              sender_status: "active",
+              account_sid: VQ("#channelReqSmsSid")?.value || "",
+              auth_token: VQ("#channelReqSmsToken")?.value || "",
+              request_id: req.id,
+            }),
+          });
+          showStatus("SMS activado para el cliente.", "success");
+          await loadChannelRequestsAdmin();
+        } catch (e) { showStatus(e.message, "error"); }
+      }
+
+      async function activateChannelRequestVoice(req) {
+        try {
+          await vFetch(`/admin/clientes/${encodeURIComponent(req.cliente_id)}/voice`, {
+            method: "POST",
+            body: JSON.stringify({
+              enabled: true,
+              twilio_phone_number: VQ("#channelReqVoiceNumber")?.value || "",
+              request_id: req.id,
+            }),
+          });
+          showStatus("Voz activada para el cliente.", "success");
+          await loadVoiceClients();
+          await loadChannelRequestsAdmin();
+        } catch (e) { showStatus(e.message, "error"); }
       }
 
       async function loadVoiceCalls(reset) {
@@ -11445,7 +11688,7 @@ a {
             <div><span class="muted">Webhook de voz:</span> <code>https://app.vantelia.es/voice/${vEsc(cid)}</code></div>
             <div><span class="muted">Status callback:</span> <code>https://app.vantelia.es/voice/status/${vEsc(cid)}</code></div>
           </div>
-          <p class="muted" style="font-size:12px;margin-top:10px;">El estado y el numero se editan en <code>config.json</code> (bloque <code>voice</code>). Esta vista es de solo lectura.</p>`;
+          <p class="muted" style="font-size:12px;margin-top:10px;">Las solicitudes de voz y SMS se gestionan desde la bandeja superior; el backend persiste la voz en la configuracion del cliente.</p>`;
       }
 
       VQ("#voiceRefreshBtn")?.addEventListener("click", () => { loadVoiceClients().then(() => loadVoiceCalls(true)); });
@@ -11453,6 +11696,8 @@ a {
       VQ("#voiceFilterStatus")?.addEventListener("change", () => loadVoiceCalls(true));
       VQ("#voiceLoadMoreBtn")?.addEventListener("click", () => { voiceState.page += 1; loadVoiceCalls(false); });
       VQ("#voiceConfigClient")?.addEventListener("change", renderVoiceConfig);
+      VQ("#channelReqRefreshBtn")?.addEventListener("click", loadChannelRequestsAdmin);
+      VQ("#channelReqStatus")?.addEventListener("change", loadChannelRequestsAdmin);
       VQ("#voiceDrawerClose")?.addEventListener("click", closeVoiceDrawer);
       VQ("#voiceDrawerOverlay")?.addEventListener("click", closeVoiceDrawer);
       VALL("[data-voice-tab]").forEach(b => b.addEventListener("click", () => setVoiceTab(b.dataset.voiceTab)));

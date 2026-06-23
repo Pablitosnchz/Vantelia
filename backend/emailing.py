@@ -369,7 +369,135 @@ def _send_payment_failed_emails(
 
 
 def _smtp_configured() -> bool:
-    return bool(settings.SMTP_HOST and settings.SMTP_FROM_EMAIL)
+    return bool(_smtp_host() and _smtp_from_email())
+
+
+def _system_setting_get(key: str, default: str = "") -> str:
+    try:
+        with db._get_db_connection() as connection:
+            row = connection.execute("SELECT value FROM system_settings WHERE key = ?", (key,)).fetchone()
+        return str(row["value"] or "") if row else default
+    except Exception:  # noqa: BLE001
+        return default
+
+
+def _system_setting_set(key: str, value: str) -> None:
+    now = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO system_settings (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+            """,
+            (key, value, now),
+        )
+        connection.commit()
+
+
+def _normalize_sender_email(value: str, fallback: str = "") -> str:
+    return textnorm._normalize_email(parseaddr(str(value or "").strip())[1] or fallback)
+
+
+def _smtp_from_email() -> str:
+    return _normalize_sender_email(
+        _system_setting_get("smtp_from_email", settings.SMTP_FROM_EMAIL),
+        settings.DEFAULT_VANTELIA_FROM_EMAIL,
+    )
+
+
+def _smtp_from_name() -> str:
+    return textnorm._sanitize_text(
+        _system_setting_get("smtp_from_name", settings.SMTP_FROM_NAME),
+    ) or "Vantelia"
+
+
+def _smtp_reply_to() -> str:
+    return _normalize_sender_email(
+        _system_setting_get("smtp_reply_to", settings.SMTP_REPLY_TO),
+        settings.DEFAULT_VANTELIA_SUPPORT_EMAIL,
+    )
+
+
+def _smtp_host() -> str:
+    return textnorm._sanitize_text(_system_setting_get("smtp_host", settings.SMTP_HOST))
+
+
+def _smtp_port() -> int:
+    raw = textnorm._sanitize_text(_system_setting_get("smtp_port", str(settings.SMTP_PORT)))
+    try:
+        port = int(raw)
+    except (TypeError, ValueError):
+        port = settings.SMTP_PORT
+    return max(1, min(65535, port))
+
+
+def _smtp_username() -> str:
+    return textnorm._sanitize_text(_system_setting_get("smtp_username", settings.SMTP_USERNAME))
+
+
+def _smtp_password_encrypted() -> str:
+    return _system_setting_get("smtp_password_encrypted", "")
+
+
+def _smtp_password() -> str:
+    encrypted = _smtp_password_encrypted()
+    if encrypted:
+        return security._decrypt_channel_secret(encrypted)
+    return settings.SMTP_PASSWORD
+
+
+def _smtp_starttls() -> bool:
+    raw = textnorm._sanitize_text(_system_setting_get("smtp_starttls", "1" if settings.SMTP_STARTTLS else "0")).lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _smtp_public_settings() -> Dict[str, str]:
+    return {
+        "host": _smtp_host(),
+        "port": str(_smtp_port()),
+        "username": _smtp_username(),
+        "starttls": "1" if _smtp_starttls() else "0",
+        "from_email": _smtp_from_email(),
+        "from_name": _smtp_from_name(),
+        "reply_to": _smtp_reply_to(),
+        "password_configured": "1" if bool(_smtp_password_encrypted() or settings.SMTP_PASSWORD) else "0",
+    }
+
+
+def _smtp_update_public_settings(
+    *,
+    from_email: str,
+    from_name: str = "",
+    reply_to: str = "",
+    host: str = "",
+    port: int = 587,
+    username: str = "",
+    password: str = "",
+    starttls: bool = True,
+) -> Dict[str, str]:
+    clean_from = _normalize_sender_email(from_email, "")
+    if not clean_from:
+        raise ValueError("Indica un email remitente valido.")
+    clean_host = textnorm._sanitize_text(host or settings.SMTP_HOST)
+    if not clean_host:
+        raise ValueError("Indica el servidor SMTP de respaldo.")
+    clean_port = max(1, min(65535, int(port or settings.SMTP_PORT)))
+    clean_username = textnorm._sanitize_text(username)
+    if clean_username and not (password or _smtp_password_encrypted() or settings.SMTP_PASSWORD):
+        raise ValueError("Indica la contrasena SMTP para ese usuario.")
+    clean_name = textnorm._sanitize_text(from_name or settings.SMTP_FROM_NAME) or "Vantelia"
+    clean_reply = _normalize_sender_email(reply_to, clean_from)
+    _system_setting_set("smtp_host", clean_host)
+    _system_setting_set("smtp_port", str(clean_port))
+    _system_setting_set("smtp_username", clean_username)
+    _system_setting_set("smtp_starttls", "1" if starttls else "0")
+    _system_setting_set("smtp_from_email", clean_from)
+    _system_setting_set("smtp_from_name", clean_name)
+    _system_setting_set("smtp_reply_to", clean_reply)
+    if password:
+        _system_setting_set("smtp_password_encrypted", security._encrypt_channel_secret(password))
+    return _smtp_public_settings()
 
 
 def _gmail_encrypt(value: str) -> str:
@@ -523,13 +651,14 @@ def _gmail_send_message(message: EmailMessage, cliente_id: str = "") -> None:
 def _smtp_send_message(message: EmailMessage) -> None:
     if not _smtp_configured():
         raise RuntimeError("El sistema SMTP no esta configurado. Revisa SMTP_HOST y SMTP_FROM_EMAIL.")
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20) as smtp:
+    with smtplib.SMTP(_smtp_host(), _smtp_port(), timeout=20) as smtp:
         smtp.ehlo()
-        if settings.SMTP_STARTTLS:
+        if _smtp_starttls():
             smtp.starttls()
             smtp.ehlo()
-        if settings.SMTP_USERNAME:
-            smtp.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+        username = _smtp_username()
+        if username:
+            smtp.login(username, _smtp_password())
         smtp.send_message(message)
 
 
@@ -556,9 +685,11 @@ def _send_email_object(message: EmailMessage, cliente_id: str = "") -> None:
 
 
 def _email_sender() -> str:
-    if settings.SMTP_FROM_NAME:
-        return formataddr((settings.SMTP_FROM_NAME, settings.SMTP_FROM_EMAIL))
-    return settings.SMTP_FROM_EMAIL
+    from_name = _smtp_from_name()
+    from_email = _smtp_from_email()
+    if from_name:
+        return formataddr((from_name, from_email))
+    return from_email
 
 
 def _send_email_message(
@@ -576,7 +707,7 @@ def _send_email_message(
     message["Subject"] = subject
     message["From"] = _email_sender()
     message["To"] = to_email
-    reply_addr = (reply_to or settings.SMTP_REPLY_TO or "").strip()
+    reply_addr = (reply_to or _smtp_reply_to() or "").strip()
     if reply_addr:
         message["Reply-To"] = reply_addr
     message.set_content(text_body)
@@ -670,6 +801,63 @@ def _send_gmail_message(
     response.raise_for_status()
 
 
+def _client_smtp_configured(channel_settings: sqlite3.Row) -> bool:
+    return bool(
+        str(channel_settings["email_smtp_host"] or "").strip()
+        and str(channel_settings["email_smtp_from_email"] or "").strip()
+    )
+
+
+def _client_smtp_password(channel_settings: sqlite3.Row) -> str:
+    encrypted = str(channel_settings["email_smtp_password_encrypted"] or "")
+    return security._decrypt_channel_secret(encrypted) if encrypted else ""
+
+
+def _send_client_smtp_message(
+    cliente_id: str,
+    channel_settings: sqlite3.Row,
+    to_email: str,
+    subject: str,
+    text_body: str,
+    html_body: str = "",
+    reply_to: Optional[str] = None,
+) -> None:
+    if not _client_smtp_configured(channel_settings):
+        raise RuntimeError("El SMTP propio del cliente no esta configurado.")
+    host = str(channel_settings["email_smtp_host"] or "").strip()
+    port = int(channel_settings["email_smtp_port"] or 587)
+    username = str(channel_settings["email_smtp_username"] or "").strip()
+    password = _client_smtp_password(channel_settings)
+    from_email = _normalize_sender_email(channel_settings["email_smtp_from_email"], "")
+    from_name = textnorm._sanitize_text(channel_settings["email_smtp_from_name"] or "") or from_email
+    reply_addr = (reply_to or _normalize_sender_email(channel_settings["email_smtp_reply_to"], "") or from_email).strip()
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = formataddr((from_name, from_email))
+    message["To"] = to_email
+    if reply_addr:
+        message["Reply-To"] = reply_addr
+    message.set_content(text_body)
+    if html_body:
+        message.add_alternative(html_body, subtype="html")
+
+    with smtplib.SMTP(host, port, timeout=20) as smtp:
+        smtp.ehlo()
+        if bool(channel_settings["email_smtp_starttls"]):
+            smtp.starttls()
+            smtp.ehlo()
+        if username:
+            smtp.login(username, password)
+        smtp.send_message(message)
+    with db._get_db_connection() as connection:
+        connection.execute(
+            "UPDATE client_channel_settings SET last_error='', updated_at=? WHERE cliente_id=?",
+            (timeutils._utc_now_iso(), cliente_id),
+        )
+        connection.commit()
+
+
 def _send_client_email(
     cliente_id: str, to_email: str, subject: str, text_body: str,
     html_body: str = "", reply_to: Optional[str] = None,
@@ -696,6 +884,25 @@ def _send_client_email(
                     raise
         elif not channel_settings["email_fallback_enabled"]:
             raise RuntimeError("La cuenta de Google remitente no esta disponible.")
+    elif provider == "client_smtp":
+        if _client_smtp_configured(channel_settings):
+            try:
+                _send_client_smtp_message(cliente_id, channel_settings, to_email, subject, text_body, html_body, reply_to)
+                security._channel_audit(cliente_id, "email", "send", provider, True)
+                return provider
+            except Exception as exc:  # noqa: BLE001
+                error = str(exc)[:500]
+                with db._get_db_connection() as connection:
+                    connection.execute(
+                        "UPDATE client_channel_settings SET last_error=?, updated_at=? WHERE cliente_id=?",
+                        (error, timeutils._utc_now_iso(), cliente_id),
+                    )
+                    connection.commit()
+                security._channel_audit(cliente_id, "email", "send_failed", provider, False, error)
+                if not channel_settings["email_fallback_enabled"]:
+                    raise
+        elif not channel_settings["email_fallback_enabled"]:
+            raise RuntimeError("El SMTP propio del cliente no esta configurado.")
     _send_email_message(to_email, subject, text_body, html_body, reply_to)
     security._channel_audit(cliente_id, "email", "send", "vantelia_smtp", True)
     return "vantelia_smtp"
@@ -780,6 +987,15 @@ def _channel_settings_public(cliente_id: str) -> ChannelSettingsResponse:
             status=str(gmail["status"] or "not_connected") if gmail else "not_connected",
             last_error=str(gmail["last_error"] or "") if gmail else "",
             google_configured=_gmail_channel_configured(),
+            smtp_configured=_client_smtp_configured(channel_settings),
+            smtp_host=str(channel_settings["email_smtp_host"] or ""),
+            smtp_port=int(channel_settings["email_smtp_port"] or 587),
+            smtp_username=str(channel_settings["email_smtp_username"] or ""),
+            smtp_from_email=str(channel_settings["email_smtp_from_email"] or ""),
+            smtp_from_name=str(channel_settings["email_smtp_from_name"] or ""),
+            smtp_reply_to=str(channel_settings["email_smtp_reply_to"] or ""),
+            smtp_starttls=bool(channel_settings["email_smtp_starttls"]),
+            smtp_password_configured=bool(channel_settings["email_smtp_password_encrypted"]),
         ),
         sms=ChannelSmsStatus(
             mode=sms_mode,

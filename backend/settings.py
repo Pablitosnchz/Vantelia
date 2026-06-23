@@ -113,23 +113,21 @@ SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME", "").strip()
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "").strip()
-ALLOWED_VANTELIA_SENDER_EMAILS = {"info@vantelia.es", "soporte@vantelia.es"}
 DEFAULT_VANTELIA_FROM_EMAIL = "info@vantelia.es"
 DEFAULT_VANTELIA_SUPPORT_EMAIL = "soporte@vantelia.es"
 
 
-def _allowed_vantelia_email(value: str, fallback: str) -> str:
+def _email_or_fallback(value: str, fallback: str) -> str:
     parsed = parseaddr(str(value or "").strip())[1].lower()
-    fallback_email = fallback if fallback in ALLOWED_VANTELIA_SENDER_EMAILS else DEFAULT_VANTELIA_FROM_EMAIL
-    return parsed if parsed in ALLOWED_VANTELIA_SENDER_EMAILS else fallback_email
+    return parsed or fallback
 
 
-SMTP_FROM_EMAIL = _allowed_vantelia_email(
+SMTP_FROM_EMAIL = _email_or_fallback(
     os.getenv("SMTP_FROM_EMAIL", "").strip(),
     DEFAULT_VANTELIA_FROM_EMAIL,
 )
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Vantelia").strip()
-SMTP_REPLY_TO = _allowed_vantelia_email(
+SMTP_REPLY_TO = _email_or_fallback(
     os.getenv("SMTP_REPLY_TO", "").strip(),
     DEFAULT_VANTELIA_SUPPORT_EMAIL,
 )
@@ -155,7 +153,7 @@ PORTAL_ADMIN_PASSWORD = os.getenv("PORTAL_ADMIN_PASSWORD", "").strip()
 PORTAL_ADMIN_NAME = os.getenv("PORTAL_ADMIN_NAME", "Administrador Vantelia").strip()
 MARKETING_SITE_URL = os.getenv("MARKETING_SITE_URL", "https://vantelia.es").strip()
 PORTAL_SUPPORT_EMAIL = (
-    _allowed_vantelia_email(os.getenv("PORTAL_SUPPORT_EMAIL", "").strip(), SMTP_REPLY_TO)
+    _email_or_fallback(os.getenv("PORTAL_SUPPORT_EMAIL", "").strip(), SMTP_REPLY_TO)
 )
 CONSULTA_NOTIFICATION_EMAIL = (
     parseaddr(os.getenv("CONSULTA_NOTIFICATION_EMAIL", "").strip())[1]

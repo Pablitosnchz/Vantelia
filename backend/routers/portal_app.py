@@ -60,6 +60,7 @@ from backend import (
     appstate,
     billing,
     booking,
+    channel_requests,
     chat,
     clients,
     commerce,
@@ -894,11 +895,15 @@ async def app_channels_email_settings(
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> ChannelSettingsResponse:
     security._require_portal_min_role(user, "owner")
-    if data.provider not in {"vantelia_smtp", "gmail_oauth"}:
+    if data.provider not in {"vantelia_smtp", "gmail_oauth", "client_smtp"}:
         raise HTTPException(status_code=400, detail="Proveedor de email no valido.")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
     if data.provider == "gmail_oauth" and not emailing._client_gmail_connection(cliente_id):
         raise HTTPException(status_code=400, detail="Conecta primero una cuenta de Google.")
+    if data.provider == "client_smtp":
+        current = security._ensure_channel_settings(cliente_id)
+        if not emailing._client_smtp_configured(current):
+            raise HTTPException(status_code=400, detail="Configura primero tu cuenta SMTP.")
     security._ensure_channel_settings(cliente_id)
     with db._get_db_connection() as connection:
         connection.execute(
@@ -906,6 +911,57 @@ async def app_channels_email_settings(
             (data.provider, int(data.fallback_enabled), timeutils._utc_now_iso(), cliente_id),
         )
         connection.commit()
+    return emailing._channel_settings_public(cliente_id)
+
+
+@app.post("/auth/app/channels/email/smtp/settings", response_model=ChannelSettingsResponse)
+async def app_channels_email_smtp_settings(
+    data: ChannelEmailSmtpSettingsPayload,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> ChannelSettingsResponse:
+    security._require_portal_min_role(user, "owner")
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    current = security._ensure_channel_settings(cliente_id)
+    host = textnorm._sanitize_text(data.host)
+    username = textnorm._sanitize_text(data.username)
+    from_email = textnorm._normalize_email(data.from_email or username)
+    reply_to = textnorm._normalize_email(data.reply_to or from_email)
+    from_name = textnorm._sanitize_text(data.from_name) or from_email
+    if not host:
+        raise HTTPException(status_code=400, detail="Indica el servidor SMTP.")
+    if not from_email:
+        raise HTTPException(status_code=400, detail="Indica el email remitente.")
+    if username and not (data.password or current["email_smtp_password_encrypted"]):
+        raise HTTPException(status_code=400, detail="Indica la contrasena SMTP.")
+    encrypted_password = current["email_smtp_password_encrypted"]
+    if data.password:
+        encrypted_password = security._encrypt_channel_secret(data.password)
+    now = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            UPDATE client_channel_settings SET
+                email_provider='client_smtp',
+                email_fallback_enabled=?,
+                email_smtp_host=?,
+                email_smtp_port=?,
+                email_smtp_username=?,
+                email_smtp_password_encrypted=?,
+                email_smtp_from_email=?,
+                email_smtp_from_name=?,
+                email_smtp_reply_to=?,
+                email_smtp_starttls=?,
+                last_error='',
+                updated_at=?
+            WHERE cliente_id=?
+            """,
+            (
+                int(data.fallback_enabled), host, int(data.port), username, encrypted_password,
+                from_email, from_name, reply_to, int(data.starttls), now, cliente_id,
+            ),
+        )
+        connection.commit()
+    security._channel_audit(cliente_id, "email", "smtp_configured", "client_smtp", True)
     return emailing._channel_settings_public(cliente_id)
 
 
@@ -1091,6 +1147,110 @@ async def app_channels_sms_settings(
         connection.commit()
     security._channel_audit(cliente_id, "sms", "settings_updated", data.mode, True, sender_status)
     return emailing._channel_settings_public(cliente_id)
+
+
+@app.post("/auth/app/channels/sms/twilio-settings", response_model=ChannelSettingsResponse)
+async def app_channels_sms_twilio_settings(
+    data: ChannelSmsTwilioSettingsPayload,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> ChannelSettingsResponse:
+    security._require_portal_min_role(user, "owner")
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    clients._require_plan_feature(
+        cliente_id, "sms_enabled", "El envio por SMS esta disponible desde el plan Business."
+    )
+    sender = data.sender.strip()
+    kind = data.sender_kind.strip().lower()
+    if kind not in {"number", "alphanumeric"}:
+        raise HTTPException(status_code=400, detail="Tipo de remitente SMS no valido.")
+    if not re.fullmatch(r"AC[a-zA-Z0-9]{8,}", data.account_sid.strip()):
+        raise HTTPException(status_code=400, detail="Account SID de Twilio no valido.")
+    if len(data.auth_token.strip()) < 12:
+        raise HTTPException(status_code=400, detail="Indica el Auth Token de Twilio.")
+    if kind == "number":
+        if not re.fullmatch(r"\+[1-9]\d{7,14}", sender):
+            raise HTTPException(status_code=400, detail="El numero remitente debe estar en formato E.164, por ejemplo +34600123456.")
+        sms_mode = "twilio_dedicated_number"
+    else:
+        sender = sender.upper()
+        if not re.fullmatch(r"(?=.*[A-Z])[A-Z0-9 ]{3,11}", sender):
+            raise HTTPException(status_code=400, detail="El Sender ID debe tener 3-11 caracteres y alguna letra.")
+        sms_mode = "twilio_alphanumeric_sender"
+    security._ensure_channel_settings(cliente_id)
+    now = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            UPDATE client_channel_settings
+            SET sms_mode=?, sms_sender=?, sms_sender_status='active',
+                sms_twilio_account_sid_encrypted=?, sms_twilio_auth_token_encrypted=?,
+                updated_at=?
+            WHERE cliente_id=?
+            """,
+            (
+                sms_mode,
+                sender,
+                security._encrypt_channel_secret(data.account_sid.strip()),
+                security._encrypt_channel_secret(data.auth_token.strip()),
+                now,
+                cliente_id,
+            ),
+        )
+        connection.commit()
+    security._channel_audit(cliente_id, "sms", "twilio_configured", sms_mode, True, sender)
+    return emailing._channel_settings_public(cliente_id)
+
+
+@app.get("/auth/app/channels/requests", response_model=List[ChannelProvisioningRequest])
+async def app_channels_requests(
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> List[ChannelProvisioningRequest]:
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    return [
+        ChannelProvisioningRequest(**item)
+        for item in channel_requests.list_requests(cliente_id=cliente_id, limit=50)
+    ]
+
+
+@app.post("/auth/app/channels/requests", response_model=ChannelProvisioningRequest)
+async def app_channels_request_create(
+    data: ChannelProvisioningRequestPayload,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> ChannelProvisioningRequest:
+    security._require_portal_min_role(user, "owner")
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    channel = data.channel.strip().lower()
+    request_type = data.request_type.strip().lower()
+    if channel == "sms":
+        clients._require_plan_feature(
+            cliente_id, "sms_enabled", "El envio por SMS esta disponible desde el plan Business."
+        )
+    if channel == "voice" and not voice._client_voice_plan_enabled(cliente_id):
+        raise HTTPException(status_code=403, detail="El asistente de voz esta disponible en el plan Business.")
+    requested_sender = data.requested_sender.strip()
+    requested_phone = data.requested_phone.strip()
+    if request_type == "alphanumeric_sender":
+        requested_sender = requested_sender.upper()
+        if not re.fullmatch(r"(?=.*[A-Z])[A-Z0-9 ]{3,11}", requested_sender):
+            raise HTTPException(status_code=400, detail="El Sender ID debe tener 3-11 caracteres y alguna letra.")
+    if request_type in {"managed_number", "dedicated_number", "voice_install"}:
+        if not requested_phone:
+            raise HTTPException(status_code=400, detail="Indica el numero que quieres usar.")
+        requested_phone = textnorm._sanitize_text(requested_phone)[:40]
+    try:
+        item = channel_requests.create_request(
+            cliente_id=cliente_id,
+            channel=channel,
+            request_type=request_type,
+            requested_sender=requested_sender,
+            requested_phone=requested_phone,
+            contact_name=str(user["display_name"] or ""),
+            contact_email=str(user["email"] or ""),
+            notes=data.notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ChannelProvisioningRequest(**item)
 
 
 @app.post("/auth/app/channels/sms/test", response_model=AuthSimpleResponse)
@@ -1292,7 +1452,7 @@ async def app_follow_up_test(
     security._require_portal_min_role(user, "manager")
     target = portal._portal_client_id_or_403(user, cliente_id)
     result = await booking._run_follow_up_test(
-        target, data.step, request, email=data.email, phone=data.phone
+        target, data.step, request, email=data.email, phone=data.phone, channels=data.channels
     )
     return FollowUpTestResponse(**result)
 
@@ -2730,7 +2890,7 @@ async def auth_schedule_message_test(
     target_email = str(data.target_email or data.test_email or user["email"] or "").strip()
     if not target_email:
         raise HTTPException(status_code=400, detail="Indica un email donde enviar la prueba.")
-    emailing._send_email_message(target_email, preview.subject, preview.text_body, preview.html_body, cliente_id=target_client_id)
+    emailing._send_client_email(target_client_id, target_email, preview.subject, preview.text_body, preview.html_body)
     return AuthSimpleResponse(ok=True, message=f"Correo de prueba enviado a {target_email}.")
 
 

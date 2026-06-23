@@ -754,7 +754,15 @@ def _reminder_channel_availability(cliente_id: str) -> Dict[str, Dict[str, Any]]
 
     channel_status = emailing._channel_settings_public(cliente_id)
     sms_ready = channel_status.sms.available
-    sms_reason = "Disponible." if sms_ready else "Configura y activa un remitente en Canales de envio."
+    sms_plan = bool(clients._plan_feature(cliente_id, "sms_enabled"))
+    if sms_ready:
+        sms_reason = "Disponible."
+    elif not sms_plan:
+        sms_reason = "SMS requiere plan Business."
+    elif channel_status.sms.mode == "vantelia_default":
+        sms_reason = "El SMS gestionado por Vantelia no esta disponible: falta configurar Twilio o el remitente global."
+    else:
+        sms_reason = "Configura y activa un remitente en Canales de envio."
 
     return {
         "email": {"available": True, "reason": "Disponible.", "label": "Email"},

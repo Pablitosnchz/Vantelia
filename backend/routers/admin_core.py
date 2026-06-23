@@ -60,6 +60,7 @@ from backend import (
     appstate,
     billing,
     booking,
+    channel_requests,
     chat,
     clients,
     crm,
@@ -496,6 +497,7 @@ class AdminVoicePayload(BaseModel):
     twilio_phone_number: Optional[str] = Field(default=None, max_length=32)
     openai_voice: Optional[str] = Field(default=None, max_length=40)
     greeting: Optional[str] = Field(default=None, max_length=600)
+    request_id: Optional[str] = Field(default=None, max_length=80)
 
 
 @app.post("/admin/clientes/{cliente_id}/voice", dependencies=[Depends(security._require_admin_token)])
@@ -531,6 +533,11 @@ async def admin_set_voice(cliente_id: str, data: AdminVoicePayload) -> Dict[str,
         next_configs[cliente_id] = cfg
         clients._update_runtime_configs(next_configs)
     clients._persist_configs_to_disk(next_configs)
+    if data.request_id:
+        try:
+            channel_requests.update_request_status(data.request_id, status="active", admin_notes="Voz activada desde admin.")
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Solicitud no encontrada.") from None
     resolved = voice._get_voice_config(cliente_id)
     return {
         "ok": True,
@@ -543,6 +550,96 @@ async def admin_set_voice(cliente_id: str, data: AdminVoicePayload) -> Dict[str,
         "webhook_active": resolved is not None,
         "webhook_url": f"{settings.APP_BASE_URL.rstrip('/')}/voice/{cliente_id}" if settings.APP_BASE_URL else f"/voice/{cliente_id}",
     }
+
+
+@app.get("/admin/channel-requests", dependencies=[Depends(security._require_admin_token)])
+async def admin_channel_requests(
+    status: str = "",
+    cliente_id: str = "",
+    limit: int = 100,
+) -> Dict[str, Any]:
+    return {
+        "ok": True,
+        "items": channel_requests.list_requests(status=status.strip(), cliente_id=cliente_id.strip(), limit=limit),
+    }
+
+
+@app.post("/admin/channel-requests/{request_id}", dependencies=[Depends(security._require_admin_token)])
+async def admin_channel_request_update(
+    request_id: str,
+    data: AdminChannelRequestUpdatePayload,
+) -> Dict[str, Any]:
+    try:
+        item = channel_requests.update_request_status(
+            request_id, status=data.status, admin_notes=data.admin_notes
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada.") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "item": item}
+
+
+@app.post("/admin/clientes/{cliente_id}/sms", dependencies=[Depends(security._require_admin_token)])
+async def admin_set_sms(cliente_id: str, data: AdminSmsSettingsPayload) -> Dict[str, Any]:
+    textnorm._assert_valid_client_id(cliente_id)
+    if cliente_id not in appstate.CONFIG_CLIENTES:
+        raise HTTPException(status_code=404, detail=f"Cliente '{cliente_id}' no encontrado.")
+    if data.mode not in {"vantelia_default", "twilio_alphanumeric_sender", "twilio_dedicated_number"}:
+        raise HTTPException(status_code=400, detail="Modo SMS no valido.")
+    if data.sender_status not in {"not_configured", "pending_registration", "active", "error"}:
+        raise HTTPException(status_code=400, detail="Estado SMS no valido.")
+    sender = data.sender.strip()
+    if data.mode == "twilio_dedicated_number" and not re.fullmatch(r"\+[1-9]\d{7,14}", sender):
+        raise HTTPException(status_code=400, detail="El numero SMS debe estar en formato E.164.")
+    if data.mode == "twilio_alphanumeric_sender":
+        sender = sender.upper()
+        if not re.fullmatch(r"(?=.*[A-Z])[A-Z0-9 ]{3,11}", sender):
+            raise HTTPException(status_code=400, detail="El Sender ID debe tener 3-11 caracteres y alguna letra.")
+    security._ensure_channel_settings(cliente_id)
+    current = security._ensure_channel_settings(cliente_id)
+    sid_encrypted = current["sms_twilio_account_sid_encrypted"] or ""
+    token_encrypted = current["sms_twilio_auth_token_encrypted"] or ""
+    if data.account_sid.strip():
+        if not re.fullmatch(r"AC[a-zA-Z0-9]{8,}", data.account_sid.strip()):
+            raise HTTPException(status_code=400, detail="Account SID de Twilio no valido.")
+        sid_encrypted = security._encrypt_channel_secret(data.account_sid.strip())
+    if data.auth_token.strip():
+        if len(data.auth_token.strip()) < 12:
+            raise HTTPException(status_code=400, detail="Auth Token de Twilio no valido.")
+        token_encrypted = security._encrypt_channel_secret(data.auth_token.strip())
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            UPDATE client_channel_settings
+            SET sms_mode=?, sms_sender=?, sms_sender_status=?,
+                sms_twilio_account_sid_encrypted=?, sms_twilio_auth_token_encrypted=?,
+                updated_at=?
+            WHERE cliente_id=?
+            """,
+            (
+                data.mode,
+                sender,
+                data.sender_status,
+                sid_encrypted,
+                token_encrypted,
+                timeutils._utc_now_iso(),
+                cliente_id,
+            ),
+        )
+        connection.commit()
+    security._channel_audit(cliente_id, "sms", "admin_configured", data.mode, True, data.sender_status)
+    if data.request_id:
+        try:
+            channel_requests.update_request_status(
+                data.request_id,
+                status="active" if data.sender_status == "active" else "in_progress",
+                admin_notes="SMS actualizado desde admin.",
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Solicitud no encontrada.") from None
+    public = emailing._channel_settings_public(cliente_id).model_dump()
+    return {"ok": True, "cliente_id": cliente_id, "sms": public["sms"]}
 
 
 class AdminClienteAssignOwnerPayload(BaseModel):

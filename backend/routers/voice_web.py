@@ -159,27 +159,22 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
 
     await websocket.accept()
 
-    # Modo SALIENTE (llamada de confirmacion): los parametros llegan en el query string
-    # de la URL del Stream (disponibles ya al aceptar, antes del evento 'start').
-    qp = websocket.query_params
-    call_mode = (qp.get("mode") or "").strip().lower()
-    outbound_booking_id = (qp.get("booking_id") or "").strip()
-    outbound_to = (qp.get("to") or "").strip()
-    outbound_booking = None
-    if call_mode == "confirm" and outbound_booking_id:
-        try:
-            row = booking._get_booking_row_by_id(outbound_booking_id)
-            if row and row["cliente_id"] == cliente_id:
-                outbound_booking = row
-        except Exception:  # noqa: BLE001
-            outbound_booking = None
+    # El contexto de una llamada SALIENTE de confirmacion (mode/booking_id + datos de la
+    # cita) llega en los customParameters del evento 'start': Twilio NO preserva el query
+    # string del Stream (verificado en produccion). Por eso la sesion de OpenAI se configura
+    # al recibir ese 'start', no al aceptar. El query string se conserva como FALLBACK por si
+    # algun entorno si lo reenvia.
+    qp_fallback = dict(websocket.query_params)
 
     state: Dict[str, Any] = {
         "stream_sid": "",
         "call_sid": "",
         "booked": False,
-        "mode": call_mode,
-        "outbound_booking_id": outbound_booking_id if outbound_booking is not None else "",
+        "mode": "",
+        "outbound": False,
+        # Solo las citas reales se marcan confirmadas; en la prueba queda vacio.
+        "outbound_booking_id": "",
+        "session_configured": False,
         "fn_names": {},
         "latest_media_timestamp": 0,
         "assistant_item_id": "",
@@ -210,17 +205,59 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
         await websocket.close(code=1011)
         return
 
-    # Instrucciones, tools y saludo segun el tipo de llamada (entrante vs confirmacion saliente).
-    if outbound_booking is not None:
-        instructions_text = voice._voice_outbound_confirm_instructions(cliente_id, config, outbound_booking)
-        tools_list = voice._voice_booking_tools(cliente_id, config, include_confirm=True)
-        greeting_text = voice._voice_outbound_greeting(config, outbound_booking)
-    else:
-        instructions_text = voice._voice_build_instructions(cliente_id, config)
-        tools_list = voice._voice_booking_tools(cliente_id, config)
-        greeting_text = textnorm._voice_default_greeting(config, voice_cfg)
-
-    try:
+    async def _configure_realtime_session(params: Dict[str, str]) -> None:
+        """Configura la sesion Realtime (instrucciones, tools y saludo) en cuanto se
+        conocen los parametros del Stream (customParameters del 'start' + query como
+        fallback). Distingue ENTRANTE (la IA es el asistente: '¿en que puedo ayudarte?')
+        de SALIENTE de confirmacion (la IA llama al cliente y le pide que confirme su
+        cita). Idempotente: solo configura una vez por llamada."""
+        if state["session_configured"]:
+            return
+        state["session_configured"] = True
+        call_mode = (params.get("mode") or "").strip().lower()
+        outbound_booking = None
+        if call_mode == "confirm":
+            # Llamada SALIENTE: la IA llama al cliente. La cita puede ser real (se marca
+            # confirmada al colgar) o de prueba del Seguimiento (nunca se persiste).
+            booking_id = (params.get("booking_id") or "").strip()
+            if booking_id:
+                try:
+                    row = booking._get_booking_row_by_id(booking_id)
+                    if row and row["cliente_id"] == cliente_id:
+                        outbound_booking = row
+                        state["outbound_booking_id"] = booking_id
+                except Exception:  # noqa: BLE001
+                    outbound_booking = None
+            if outbound_booking is None:
+                # Sin cita persistida: cita efimera con los datos del Stream para mantener
+                # el guion de confirmacion saliente (prueba de Seguimiento o cita borrada).
+                outbound_booking = booking._EphemeralBookingRow({
+                    "id": booking_id or "outbound_test",
+                    "cliente_id": cliente_id,
+                    "nombre": (params.get("b_nombre") or "").strip(),
+                    "servicio": (params.get("b_servicio") or "").strip(),
+                    "booking_date": (params.get("b_fecha") or "").strip(),
+                    "booking_time": (params.get("b_hora") or "").strip(),
+                    "telefono": (params.get("to") or "").strip(),
+                    "location_id": "",
+                })
+            state["mode"] = "confirm"
+            state["outbound"] = True
+            # Numero del cliente (destino): verificado por ser una llamada a su numero, asi
+            # puede cancelar/reprogramar sin pedir codigo de reserva.
+            state["from_number"] = (params.get("to") or "").strip()
+            state["location_id"] = outbound_booking["location_id"] or ""
+            instructions_text = voice._voice_outbound_confirm_instructions(cliente_id, config, outbound_booking)
+            tools_list = voice._voice_booking_tools(cliente_id, config, include_confirm=True)
+            greeting_text = voice._voice_outbound_greeting(config, outbound_booking)
+        else:
+            instructions_text = voice._voice_build_instructions(cliente_id, config)
+            tools_list = voice._voice_booking_tools(cliente_id, config)
+            greeting_text = textnorm._voice_default_greeting(config, voice_cfg)
+        settings.logger.info(
+            "[voice] stream %s sesion configurada mode=%s outbound=%s",
+            cliente_id, call_mode or "inbound", state["outbound"],
+        )
         await openai_ws.send(
             json.dumps(
                 {
@@ -252,7 +289,6 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                 }
             )
         )
-
         # Saludo inicial (entrante: bienvenida; saliente: script de confirmacion).
         await openai_ws.send(
             json.dumps(
@@ -273,6 +309,7 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
         )
         await openai_ws.send(json.dumps({"type": "response.create"}))
 
+    try:
         async def twilio_to_openai() -> None:
             try:
                 async for raw in websocket.iter_text():
@@ -295,16 +332,15 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                         )
                     elif event == "start":
                         start = message.get("start", {})
+                        custom = start.get("customParameters", {}) or {}
                         state["stream_sid"] = start.get("streamSid", "")
-                        state["call_sid"] = start.get("callSid", "") or start.get(
-                            "customParameters", {}
-                        ).get("call_sid", "")
-                        if outbound_booking is not None:
-                            # Saliente: el numero del cliente es el destino; queda verificado
-                            # para cancelar/reprogramar sin pedir codigo de reserva.
-                            state["from_number"] = outbound_to
-                            state["location_id"] = outbound_booking["location_id"] or ""
-                        else:
+                        state["call_sid"] = start.get("callSid", "") or custom.get("call_sid", "")
+                        # customParameters mandan; el query string es solo fallback.
+                        params = {**qp_fallback, **custom}
+                        await _configure_realtime_session(params)
+                        if not state["outbound"]:
+                            # Entrante: resolvemos numero/centro por el call_sid (el saliente
+                            # ya los fijo desde los parametros de la cita).
                             state["from_number"] = voice._voice_call_from_number(state["call_sid"])
                             state["location_id"] = voice._voice_call_location_id(state["call_sid"], cliente_id)
                     elif event == "stop":
@@ -383,10 +419,14 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                 elif etype == "response.function_call_arguments.done":
                     call_id = event.get("call_id", "")
                     fname = event.get("name") or state["fn_names"].get(call_id, "")
-                    if fname == "confirmar_cita" and state.get("outbound_booking_id"):
-                        ok = booking._mark_booking_confirmed_by_customer(
-                            state["outbound_booking_id"], cliente_id, channel="voice_outbound"
-                        )
+                    if fname == "confirmar_cita" and state.get("outbound"):
+                        rid = state.get("outbound_booking_id")
+                        if rid:
+                            ok = booking._mark_booking_confirmed_by_customer(
+                                rid, cliente_id, channel="voice_outbound"
+                            )
+                        else:
+                            ok = True  # prueba de Seguimiento: no hay cita real que marcar
                         result = {"ok": bool(ok), "confirmada": bool(ok)}
                     else:
                         result = await voice._voice_dispatch_tool(

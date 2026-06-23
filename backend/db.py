@@ -1172,6 +1172,17 @@ def _init_database() -> None:
             "CREATE INDEX IF NOT EXISTS idx_customer_payment_events_client ON customer_payment_events(cliente_id, created_at)"
         )
 
+        # Ajustes globales editables desde admin (no secretos).
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS system_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+
         # Canales de envio multi-tenant. Los secretos OAuth se guardan cifrados.
         connection.execute(
             """
@@ -1197,6 +1208,18 @@ def _init_database() -> None:
             connection.execute(
                 "ALTER TABLE client_channel_settings ADD COLUMN ai_rebooking_enabled INTEGER NOT NULL DEFAULT 0"
             )
+        for column_name, definition in {
+            "email_smtp_host": "TEXT NOT NULL DEFAULT ''",
+            "email_smtp_port": "INTEGER NOT NULL DEFAULT 587",
+            "email_smtp_username": "TEXT NOT NULL DEFAULT ''",
+            "email_smtp_password_encrypted": "TEXT NOT NULL DEFAULT ''",
+            "email_smtp_from_email": "TEXT NOT NULL DEFAULT ''",
+            "email_smtp_from_name": "TEXT NOT NULL DEFAULT ''",
+            "email_smtp_reply_to": "TEXT NOT NULL DEFAULT ''",
+            "email_smtp_starttls": "INTEGER NOT NULL DEFAULT 1",
+        }.items():
+            if column_name not in channel_settings_cols:
+                connection.execute(f"ALTER TABLE client_channel_settings ADD COLUMN {column_name} {definition}")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS ai_rebooking_log (
@@ -1261,6 +1284,32 @@ def _init_database() -> None:
         )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_client_channel_audit_client ON client_channel_audit(cliente_id, created_at)"
+        )
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS client_channel_requests (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                request_type TEXT NOT NULL,
+                requested_sender TEXT NOT NULL DEFAULT '',
+                requested_phone TEXT NOT NULL DEFAULT '',
+                contact_name TEXT NOT NULL DEFAULT '',
+                contact_email TEXT NOT NULL DEFAULT '',
+                notes TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'pending',
+                admin_notes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_client_channel_requests_status ON client_channel_requests(status, created_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_client_channel_requests_client ON client_channel_requests(cliente_id, created_at)"
         )
 
         connection.execute(
