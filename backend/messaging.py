@@ -10,6 +10,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
@@ -22,7 +23,38 @@ from fastapi import HTTPException, Request
 
 from backend import appstate, clients, db, security, settings, textnorm, timeutils
 
+
+def _normalize_sms_recipient(to_number: str, *, default_country_code: str = "34") -> str:
+    """Normaliza destinatarios SMS a E.164.
+
+    En voz es normal que el cliente dicte un movil nacional sin prefijo ("600...").
+    Twilio espera E.164, asi que por defecto asumimos Espana para numeros nacionales
+    de 9 digitos que empiezan por 6/7/8/9.
+    """
+    raw = textnorm._sanitize_text(to_number or "").strip()
+    if not raw:
+        return ""
+    digits = re.sub(r"\D", "", raw)
+    if not digits:
+        return ""
+    if raw.startswith("+"):
+        return "+" + digits
+    if digits.startswith("00") and len(digits) > 4:
+        return "+" + digits[2:]
+    if len(digits) == 9 and digits[0] in {"6", "7", "8", "9"}:
+        return f"+{default_country_code}{digits}"
+    if digits.startswith(default_country_code) and len(digits) >= 11:
+        return "+" + digits
+    if len(digits) >= 10:
+        return "+" + digits
+    return ""
+
+
 async def _send_client_sms(cliente_id: str, to_number: str, body: str) -> bool:
+    to_number = _normalize_sms_recipient(to_number)
+    if not to_number:
+        security._channel_audit(cliente_id, "sms", "send_rejected", "invalid_recipient", False, "Telefono SMS invalido.")
+        return False
     # SMS gateado a plan Business (canal de pago Twilio). Defensa en profundidad.
     if not clients._plan_feature(cliente_id, "sms_enabled"):
         security._channel_audit(cliente_id, "sms", "send_rejected", "plan", False, "Plan sin SMS.")

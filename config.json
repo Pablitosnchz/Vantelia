@@ -1,6 +1,7 @@
 {
   "van": {
     "nombre": "Van",
+    "empresa": "Vantelia",
     "plan": "free",
     "subscription": {
       "plan": "free"
@@ -62,7 +63,7 @@
       "success_message": "Tu solicitud de cita ha quedado registrada correctamente.",
       "message_templates": {
         "confirmed": "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.",
-        "reminder_24h": "Te recordamos que manana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
+        "reminder_24h": "Te recordamos que mañana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
         "reminder_2h": "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.",
         "cancelled": "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.",
         "rescheduled": "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla."
@@ -132,7 +133,7 @@
       "success_message": "Tu cita ha quedado registrada correctamente. Nuestro equipo revisara la solicitud y te contactara si necesita ajustar algo.",
       "message_templates": {
         "confirmed": "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.",
-        "reminder_24h": "Te recordamos que manana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
+        "reminder_24h": "Te recordamos que mañana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
         "reminder_2h": "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.",
         "cancelled": "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.",
         "rescheduled": "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla."
@@ -203,7 +204,7 @@
       "success_message": "La solicitud demo ha quedado registrada correctamente.",
       "message_templates": {
         "confirmed": "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.",
-        "reminder_24h": "Te recordamos que manana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
+        "reminder_24h": "Te recordamos que mañana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
         "reminder_2h": "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.",
         "cancelled": "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.",
         "rescheduled": "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla."
@@ -283,7 +284,7 @@
       "success_message": "Tu solicitud de cita ha quedado registrada correctamente.",
       "message_templates": {
         "confirmed": "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.",
-        "reminder_24h": "Te recordamos que manana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
+        "reminder_24h": "Te recordamos que mañana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
         "reminder_2h": "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.",
         "cancelled": "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.",
         "rescheduled": "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla."
@@ -350,7 +351,7 @@
       "success_message": "Tu cita en Vibes Studio ha quedado registrada. Adri o el equipo te confirmaran el hueco en breve.",
       "message_templates": {
         "confirmed": "Tu cita en Vibes Studio ha quedado confirmada. Debajo tienes los detalles y tu enlace para gestionarla si necesitas cambiar algo.",
-        "reminder_24h": "Te recordamos que manana tienes cita en Vibes Studio. Si necesitas ajustarla, usa tu enlace de gestion.",
+        "reminder_24h": "Te recordamos que mañana tienes cita en Vibes Studio. Si necesitas ajustarla, usa tu enlace de gestion.",
         "reminder_2h": "Tu cita en Vibes Studio empieza en menos de 2 horas. Te dejamos los detalles y el enlace de gestion.",
         "cancelled": "Tu cita en Vibes Studio ha sido cancelada. Puedes reservar otra cuando quieras.",
         "rescheduled": "Tu cita en Vibes Studio se ha actualizado. Revisa los nuevos datos en tu enlace de gestion."
@@ -424,7 +425,7 @@
       "success_message": "Tu solicitud de consulta ha quedado registrada correctamente. Te contactaremos para confirmar los detalles.",
       "message_templates": {
         "confirmed": "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.",
-        "reminder_24h": "Te recordamos que manana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
+        "reminder_24h": "Te recordamos que mañana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
         "reminder_2h": "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.",
         "cancelled": "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.",
         "rescheduled": "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla."

@@ -1428,6 +1428,20 @@ def _update_portal_employee(
             """,
             (payload["name"], cliente_id, employee_id),
         )
+        # Si el profesional cambia de centro, sus citas se mudan con el (todas) y se
+        # despega cualquier sala asignada (pertenecia al centro anterior). El profesional
+        # queda solo en el centro nuevo (employees.location_id ya actualizado arriba).
+        new_location = payload["location_id"] or ""
+        old_location = (row["location_id"] or "")
+        if new_location != old_location:
+            connection.execute(
+                """
+                UPDATE bookings
+                SET location_id = ?, resource_id = ''
+                WHERE cliente_id = ? AND employee_id = ?
+                """,
+                (new_location, cliente_id, employee_id),
+            )
         connection.commit()
     refreshed = _get_employee_row(employee_id, cliente_id=cliente_id)
     if not refreshed:

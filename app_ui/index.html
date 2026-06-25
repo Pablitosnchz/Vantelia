@@ -482,6 +482,7 @@
     }
     .toast.visible { opacity: 1; transform: translateX(-50%) translateY(-4px); }
     .toast.success { border-color: var(--accent-2); color: var(--accent-2); }
+    .toast.warning { border-color: var(--warning); color: var(--warning); }
     .toast.error { border-color: var(--danger); color: var(--danger); }
 
     .sidebar-toggle {
@@ -644,6 +645,7 @@
     .cd-ev-svc { font-size:0.72rem; color:var(--soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .cd-event.compact { padding-top:3px; padding-bottom:3px; }
     .cd-event.compact .cd-ev-svc { display:none; }
+    .cd-ev-pay { flex:0 0 auto; font-size:0.68rem; font-weight:800; margin-left:3px; }
     .cd-detail { margin-top:14px; background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
     .cd-detail-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; flex-wrap:wrap; }
     .cd-detail-title { font-family:var(--font-title); font-size:1rem; font-weight:700; }
@@ -902,6 +904,7 @@
     .badge-confirmed { background: rgba(0,245,212,0.12); color: var(--success); }
     .badge-cancelled { background: var(--danger-soft); color: var(--danger); }
     .badge-completed { background: rgba(16,185,129,0.14); color: #34d399; }
+    .badge-done { background: rgba(14,165,233,0.14); color: #38bdf8; }
     .badge-noshow { background: rgba(239,68,68,0.15); color: #f87171; }
 
     /* responsive */
@@ -1155,62 +1158,121 @@
     .vdialog-policy .vp-refund { color: var(--success); font-weight: 700; }
     .vdialog-policy .vp-note { color: var(--soft-2); font-size: 0.8rem; margin-top: 6px; }
 
-    /* ===== Seguimiento (escalera de confirmación) ===== */
-    .fu-plan-badge { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px;
-      font-size:0.74rem; font-weight:700; letter-spacing:.03em; text-transform:uppercase;
-      color:var(--accent); background:var(--accent-soft); border:1px solid var(--accent); white-space:nowrap; }
+    /* ===== Seguimiento — recorrido del cliente ===== */
+    /* Cabecera-hero del flujo */
+    .flow-hero { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; flex-wrap:wrap;
+      padding:20px 22px; margin-bottom:18px; border:1px solid var(--line-strong); border-radius:16px;
+      background:linear-gradient(135deg, rgba(0,209,255,0.08), rgba(0,245,212,0.03)); }
+    .flow-hero h2 { font-family:var(--font-title); font-size:1.18rem; margin:0; }
+    .flow-hero .panel-sub { margin:7px 0 0; max-width:580px; }
+    .flow-plan { display:flex; flex-direction:column; align-items:flex-end; gap:7px; min-width:0; }
+    .fu-plan-badge { display:inline-flex; align-items:center; gap:6px; padding:7px 15px; border-radius:999px;
+      font-size:0.76rem; font-weight:700; letter-spacing:.03em; text-transform:uppercase;
+      color:#0B132B; background:linear-gradient(135deg, var(--accent), var(--accent-2)); border:0; white-space:nowrap;
+      box-shadow:0 8px 20px rgba(0,209,255,0.28); }
+    /* Encabezados de sub-sección numerados */
+    .flow-sec-head { display:flex; align-items:flex-start; gap:11px; margin:26px 0 14px; }
+    .flow-sec-num { flex:0 0 28px; width:28px; height:28px; border-radius:9px; display:flex; align-items:center; justify-content:center;
+      font-family:var(--font-title); font-weight:700; font-size:0.9rem; color:var(--accent); background:var(--accent-soft);
+      border:1px solid var(--accent); margin-top:1px; }
+    .flow-sec-head h3 { font-family:var(--font-title); font-size:1.02rem; margin:0; }
+    .flow-sec-head .panel-sub { margin:2px 0 0; font-size:0.82rem; }
+    /* Leyenda: canal por paso vs orden de entrega */
+    .fu-legend { display:flex; gap:18px; flex-wrap:wrap; align-items:center; padding:11px 15px; margin-bottom:18px;
+      border:1px dashed var(--line-strong); border-radius:12px; background:rgba(7,16,31,0.45); font-size:0.81rem; color:var(--soft); }
+    .fu-legend b { color:var(--text); font-weight:600; }
+    .fu-legend-item { display:inline-flex; align-items:center; gap:7px; }
+    /* Conector vertical entre tarjetas del flujo */
+    .flow-connector { display:flex; align-items:center; justify-content:center; gap:12px; margin:18px 0;
+      color:var(--soft-2); font-size:0.72rem; text-transform:uppercase; letter-spacing:.07em; font-weight:700; }
+    .flow-connector::before, .flow-connector::after { content:""; height:1px; flex:1; max-width:140px;
+      background:linear-gradient(90deg, transparent, var(--line-strong)); }
+    .flow-connector::after { background:linear-gradient(90deg, var(--line-strong), transparent); }
+
+    /* Timeline (escalera) */
     .fu-timeline { position:relative; display:flex; flex-direction:column; gap:0; }
-    .fu-step { position:relative; display:flex; gap:16px; padding:0 0 22px 0; }
+    .fu-step { position:relative; display:flex; gap:18px; padding:0 0 18px 0; }
     .fu-step:last-child { padding-bottom:0; }
-    .fu-step-rail { position:relative; flex:0 0 36px; display:flex; flex-direction:column; align-items:center; }
-    .fu-dot { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-      font-size:0.78rem; font-weight:700; color:var(--accent); background:var(--accent-soft);
-      border:1.5px solid var(--accent); z-index:1; }
-    .fu-step.fu-muted .fu-dot { color:var(--soft-2); background:rgba(255,255,255,0.03); border-color:var(--line); }
-    .fu-line { position:absolute; top:36px; bottom:-2px; width:2px; background:linear-gradient(var(--accent), var(--line)); opacity:.5; }
+    .fu-step-rail { position:relative; flex:0 0 40px; display:flex; flex-direction:column; align-items:center; }
+    .fu-dot { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+      font-size:0.92rem; font-weight:700; color:var(--accent); background:var(--accent-soft);
+      border:1.5px solid var(--accent); z-index:1; transition:all .16s ease; box-shadow:0 0 0 4px rgba(0,209,255,0.06); }
+    .fu-step.fu-muted .fu-dot { color:var(--soft-2); background:rgba(255,255,255,0.03); border-color:var(--line); box-shadow:none; }
+    .fu-line { position:absolute; top:40px; bottom:-2px; width:2px; background:linear-gradient(var(--accent), rgba(0,209,255,0.12)); opacity:.6; }
+    .fu-step.fu-muted .fu-line { background:var(--line); opacity:.5; }
     .fu-step:last-child .fu-line { display:none; }
-    .fu-step-body { flex:1; min-width:0; border:1px solid var(--line); border-radius:14px; padding:14px 16px;
-      background:rgba(7,16,31,0.4); }
-    .fu-step.fu-muted .fu-step-body { opacity:.72; }
-    .fu-step-head { display:flex; justify-content:space-between; gap:10px; align-items:baseline; flex-wrap:wrap; }
-    .fu-step-when { font-size:0.74rem; font-weight:700; color:var(--accent-2); text-transform:uppercase; letter-spacing:.04em; }
-    .fu-step-title { font-weight:700; color:var(--text); margin:2px 0 0; }
-    .fu-step-note { font-size:0.78rem; color:var(--soft-2); margin:4px 0 0; }
-    .fu-chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
-    .fu-chip { display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:9px;
-      border:1px solid var(--line); background:rgba(255,255,255,0.03); color:var(--soft); cursor:pointer;
+    .fu-step-body { flex:1; min-width:0; border:1px solid var(--line); border-radius:14px; padding:15px 17px;
+      background:rgba(7,16,31,0.45); transition:border-color .16s ease; }
+    .fu-step:not(.fu-muted) .fu-step-body { border-color:var(--line-strong); }
+    .fu-step:not(.fu-muted):hover .fu-step-body { border-color:var(--accent); }
+    .fu-step.fu-muted .fu-step-body { opacity:.78; }
+    .fu-step-head { display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; }
+    .fu-step-when { font-size:0.72rem; font-weight:700; color:var(--accent-2); text-transform:uppercase; letter-spacing:.05em; }
+    .fu-step.fu-muted .fu-step-when { color:var(--soft-2); }
+    .fu-step-title { font-weight:700; color:var(--text); margin:3px 0 0; font-size:0.98rem; }
+    .fu-step-note { font-size:0.8rem; color:var(--soft-2); margin:5px 0 0; line-height:1.5; }
+    /* Badge de estado unificado para todos los pasos */
+    .fu-state { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:999px;
+      font-size:0.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; white-space:nowrap; }
+    .fu-state-on { color:var(--accent-2); background:rgba(0,245,212,0.1); border:1px solid rgba(0,245,212,0.4); }
+    .fu-state-off { color:var(--soft-2); background:rgba(255,255,255,0.04); border:1px solid var(--line); }
+    .fu-state-plan { color:#fde68a; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.4); }
+    .fu-state-setup { color:#fda4af; background:rgba(244,63,94,0.12); border:1px solid rgba(244,63,94,0.4); }
+    .fu-chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:13px; }
+    .fu-chip { display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border-radius:10px;
+      border:1px solid var(--line-strong); background:rgba(255,255,255,0.03); color:var(--soft); cursor:pointer;
       font-size:0.82rem; user-select:none; transition:all .12s ease; }
-    .fu-chip:hover { border-color:var(--accent); }
-    .fu-chip.fu-on { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); font-weight:600; }
-    .fu-chip.fu-locked { cursor:not-allowed; opacity:.6; border-style:dashed; }
-    .fu-chip.fu-locked:hover { border-color:var(--line); }
+    .fu-chip:hover { border-color:var(--accent); color:var(--text); }
+    .fu-chip.fu-on { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); font-weight:600;
+      box-shadow:0 2px 10px rgba(0,209,255,0.12); }
+    .fu-chip.fu-locked { cursor:not-allowed; opacity:.65; border-style:dashed; }
+    .fu-chip.fu-locked:hover { border-color:var(--line); color:var(--soft); }
     .fu-chip input { display:none; }
-    .fu-chip .fu-ico { font-size:0.9rem; }
-    .fu-lock-badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.66rem; font-weight:700;
-      text-transform:uppercase; letter-spacing:.03em; color:#fde68a; background:rgba(245,158,11,0.12);
+    .fu-chip .fu-ico { font-size:0.92rem; }
+    .fu-lock-badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.62rem; font-weight:700;
+      text-transform:uppercase; letter-spacing:.03em; color:#fde68a; background:rgba(245,158,11,0.14);
       border:1px solid rgba(245,158,11,0.4); }
-    .fu-rec-badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.64rem; font-weight:700;
-      text-transform:uppercase; letter-spacing:.03em; color:var(--accent-2); background:rgba(0,177,217,0.1);
-      border:1px solid rgba(0,177,217,0.35); }
-    .fu-chip.fu-rec { border-color:rgba(0,177,217,0.45); border-style:dashed; }
-    .fu-settings { border-top:1px solid var(--line); margin-top:20px; padding-top:18px; }
-    .fu-h3 { font-family:var(--font-title); font-size:0.98rem; margin:0 0 14px; }
-    .fu-switch { display:flex; align-items:flex-start; gap:11px; margin:0 0 12px; padding:12px 14px;
-      border:1px solid var(--line); border-radius:10px; background:rgba(7,16,31,0.4); }
+    .fu-rec-badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.62rem; font-weight:700;
+      text-transform:uppercase; letter-spacing:.03em; color:var(--accent-2); background:rgba(0,245,212,0.1);
+      border:1px solid rgba(0,245,212,0.35); }
+    .fu-chip.fu-rec { border-color:rgba(0,245,212,0.45); border-style:dashed; }
+    .fu-test-btn { margin-top:12px; }
+
+    /* Ajustes — cómo se entrega */
+    .fu-settings { margin-top:6px; }
+    .fu-switch { display:flex; align-items:flex-start; gap:11px; margin:0 0 12px; padding:13px 15px;
+      border:1px solid var(--line); border-radius:12px; background:rgba(7,16,31,0.4); transition:border-color .14s ease; }
+    .fu-switch:hover { border-color:var(--line-strong); }
     .fu-switch input { margin-top:3px; }
-    .fu-call-block { border:1px dashed var(--line); border-radius:12px; padding:12px 14px; margin-top:4px; }
+    .fu-priority { margin:0 0 12px; padding:14px 15px; border:1px solid var(--line); border-radius:12px; background:rgba(7,16,31,0.4); }
+    .fu-priority-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:12px; }
+    .fu-priority .field-label { margin-bottom:5px; }
+    .fu-prio-flow { display:flex; align-items:center; gap:7px; margin-top:12px; flex-wrap:wrap; font-size:0.78rem; color:var(--soft-2); }
+    .fu-prio-step { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:8px;
+      border:1px solid var(--line-strong); background:rgba(255,255,255,0.03); color:var(--soft); font-weight:600; }
+    .fu-call-block { border:1px dashed var(--line-strong); border-radius:12px; padding:14px 15px; margin-top:4px; }
     .fu-call-block.fu-disabled { opacity:.55; }
 
     /* Nodo de reseña dentro de la escalera */
-    .fu-step-review .fu-dot { color:#f59e0b; background:rgba(245,158,11,0.12); border-color:#f59e0b; }
-    .fu-step.fu-muted.fu-step-review .fu-dot { color:var(--soft-2); background:rgba(255,255,255,0.03); border-color:var(--line); }
+    .fu-step-review .fu-dot { color:#f59e0b; background:rgba(245,158,11,0.14); border-color:#f59e0b; box-shadow:0 0 0 4px rgba(245,158,11,0.07); }
+    .fu-step.fu-muted.fu-step-review .fu-dot { color:var(--soft-2); background:rgba(255,255,255,0.03); border-color:var(--line); box-shadow:none; }
     .fu-step-review .fu-line { display:none; }
-    .fu-setup-badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.64rem; font-weight:700;
-      text-transform:uppercase; letter-spacing:.03em; color:#fda4af; background:rgba(244,63,94,0.12);
-      border:1px solid rgba(244,63,94,0.4); }
-    .fu-review-cta { margin-top:12px; background:none; border:none; padding:0; cursor:pointer; font-size:0.82rem;
+    .fu-review-cta { margin-top:13px; background:none; border:none; padding:0; cursor:pointer; font-size:0.83rem;
       font-weight:700; color:#fbbf24; font-family:inherit; }
     .fu-review-cta:hover { text-decoration:underline; }
+
+    @media (max-width: 720px) {
+      .fu-priority-grid { grid-template-columns:1fr; }
+      .flow-hero { padding:16px; }
+      .flow-plan { align-items:flex-start; }
+      .flow-plan .panel-sub { text-align:left !important; }
+      .fu-step { gap:13px; }
+      .fu-step-rail { flex-basis:34px; }
+      .fu-dot { width:34px; height:34px; font-size:0.82rem; }
+      .fu-line { top:34px; }
+      .fu-step-body { padding:13px 14px; }
+      .flow-sec-head { margin-top:22px; }
+    }
 
     /* QR de cobro (Stripe): PNG ráster a tamaño fijo escaneable sobre fondo blanco */
     img.vqr { display:block; width:240px; height:240px; image-rendering:auto; }
@@ -1624,6 +1686,11 @@
           <div class="field">
             <label class="field-label">Nombre del bot</label>
             <input class="field-input" id="apNombre" maxlength="120" />
+          </div>
+          <div class="field">
+            <label class="field-label">Nombre del negocio</label>
+            <input class="field-input" id="apEmpresa" maxlength="120" placeholder="Ej. Vantelia" />
+            <p class="panel-sub" style="margin:5px 0 0; font-size:0.74rem;">Vacío = se usa el nombre del bot.</p>
           </div>
           <div class="field">
             <label class="field-label">Icono (fallback)</label>
@@ -2438,11 +2505,14 @@
         </div>
         <span class="panel-sub" id="cdMeta" style="margin:0;"></span>
         <div class="cd-legend" id="cdLegend" aria-hidden="true">
-          <span class="cd-leg"><i style="background:#0ea5e9"></i>Confirmada</span>
-          <span class="cd-leg"><i style="background:#f59e0b"></i>Pendiente</span>
-          <span class="cd-leg"><i style="background:#10b981"></i>Realizada</span>
-          <span class="cd-leg"><i style="background:#ef4444"></i>No-show</span>
+          <span class="cd-leg"><i style="background:#f59e0b"></i>Sin confirmar</span>
+          <span class="cd-leg"><i style="background:#10b981"></i>Confirmada</span>
+          <span class="cd-leg"><i style="background:#0ea5e9"></i>Realizada</span>
+          <span class="cd-leg"><i style="background:#ef4444"></i>No vino</span>
           <span class="cd-leg"><i style="background:#6b7280"></i>Cancelada</span>
+          <span class="cd-leg" style="margin-left:8px; padding-left:8px; border-left:1px solid var(--line);"><b style="color:#10b981; font-size:1.05em;">€</b>&nbsp;Pagado</span>
+          <span class="cd-leg"><b style="color:#f59e0b; font-size:1.05em;">€</b>&nbsp;Retenido</span>
+          <span class="cd-leg"><b style="color:#ef4444; font-size:1.05em;">€</b>&nbsp;Sin pagar</span>
         </div>
       </div>
       <div class="cd-scroll"><div class="cd-grid" id="cdGrid"></div></div>
@@ -2670,19 +2740,40 @@
 
     <!-- SEGUIMIENTO: escalera de confirmación por plan -->
     <div class="panel-card" id="followUpCard">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap;">
+      <div class="flow-hero">
         <div>
-          <h2 style="margin:0;">Seguimiento del cliente</h2>
-          <p class="panel-sub" style="margin:6px 0 0;">El camino de contacto desde que el cliente reserva hasta <b>después</b> de su cita. Cada paso escala solo si <b>no ha confirmado</b> antes; al final, le pides una reseña. Email siempre; WhatsApp y llamada según tu plan.</p>
+          <h2>Seguimiento del cliente</h2>
+          <p class="panel-sub">El recorrido de contacto desde que el cliente reserva hasta <b>después</b> de su cita. Cada paso escala solo si <b>no ha confirmado</b> antes; al final le pides una reseña.</p>
         </div>
-        <span id="fuPlanBadge" class="fu-plan-badge">—</span>
+        <div class="flow-plan">
+          <span id="fuPlanBadge" class="fu-plan-badge">—</span>
+          <span class="panel-sub" style="margin:0; font-size:0.74rem; text-align:right;">Email siempre · WhatsApp y llamada según tu plan</span>
+        </div>
       </div>
-      <div id="fuTimeline" class="fu-timeline" style="margin-top:20px;">
+
+      <div class="flow-sec-head">
+        <span class="flow-sec-num">1</span>
+        <div>
+          <h3>El recorrido</h3>
+          <p class="panel-sub">Enciende los canales de cada paso y compruébalo con “Probar esta fase”.</p>
+        </div>
+      </div>
+      <div class="fu-legend">
+        <span class="fu-legend-item">✉ <b>Canal por paso</b>: las vías que usa cada aviso.</span>
+        <span class="fu-legend-item">↓ <b>Orden de entrega</b>: si un paso tiene varias, envía por una sola.</span>
+      </div>
+      <div id="fuTimeline" class="fu-timeline" style="margin-top:4px;">
         <div class="panel-sub">Cargando…</div>
       </div>
 
-      <div class="fu-settings" id="fuSettings" style="margin-top:8px;">
-        <h3 class="fu-h3">Ajustes del seguimiento</h3>
+      <div class="flow-sec-head">
+        <span class="flow-sec-num">2</span>
+        <div>
+          <h3>Cómo se entrega</h3>
+          <p class="panel-sub">Reglas globales de confirmación y orden de los canales.</p>
+        </div>
+      </div>
+      <div class="fu-settings" id="fuSettings">
         <label class="fu-switch">
           <input type="checkbox" id="fuEmailConfirm" />
           <span><b>Botón “Confirmar asistencia” en el email</b><br><span class="panel-sub" style="margin:0;">El cliente confirma con 1 clic desde el correo. Reduce ausencias. Recomendado.</span></span>
@@ -2691,8 +2782,18 @@
           <input type="checkbox" id="fuSuppress2h" />
           <span><b>No enviar el aviso de 2 h si ya confirmó</b><br><span class="panel-sub" style="margin:0;">Evita molestar a quien ya dijo que viene.</span></span>
         </label>
+        <div class="fu-priority">
+          <div><b>Orden de entrega</b></div>
+          <p class="panel-sub" style="margin:5px 0 0;">Cuando un paso tiene varios canales encendidos, el aviso se envía por <b>uno solo</b>. Se intenta este orden y, si la cita no tiene ese dato o falla, pasa al siguiente canal activo.</p>
+          <div class="fu-priority-grid">
+            <div class="field"><label class="field-label">1. Prioridad</label><select class="field-input" id="fuPriority1"></select></div>
+            <div class="field"><label class="field-label">2. Respaldo</label><select class="field-input" id="fuPriority2"></select></div>
+            <div class="field"><label class="field-label">3. Último recurso</label><select class="field-input" id="fuPriority3"></select></div>
+          </div>
+          <div class="fu-prio-flow" id="fuPrioFlow"></div>
+        </div>
         <div class="fu-call-block" id="fuCallBlock">
-          <label class="fu-switch">
+          <label class="fu-switch" style="margin:0; border:0; padding:0; background:none;">
             <input type="checkbox" id="fuCallEnabled" />
             <span><b>Llamada de confirmación por IA</b> <span class="fu-lock-badge" id="fuCallLock" style="display:none;">Business</span><br><span class="panel-sub" style="margin:0;">Llama automáticamente unas horas antes solo si el cliente no ha confirmado. Tiene coste por llamada.</span></span>
           </label>
@@ -2712,8 +2813,11 @@
       </div>
     </div>
 
+    <!-- conector visual hacia el paso final del recorrido -->
+    <div class="flow-connector"><span>tras la cita</span></div>
+
     <!-- SEGUIMIENTO POST-CITA: peticion de resena -->
-    <div class="panel-card rv-card" id="reviewCard" style="margin-top:18px;">
+    <div class="panel-card rv-card" id="reviewCard" style="margin-top:0;">
       <div class="rv-head">
         <div class="rv-head-main">
           <div class="rv-stars">★★★★★</div>
@@ -2796,8 +2900,11 @@
       </div>
     </div>
 
+    <!-- conector visual hacia el contenido de los mensajes -->
+    <div class="flow-connector"><span>el contenido</span></div>
+
     <!-- Editor de textos de cada aviso (se mantiene) -->
-    <div class="panel-card" style="margin-top:18px;">
+    <div class="panel-card" style="margin-top:0;">
       <h2>Textos de los avisos</h2>
       <p class="panel-sub">Personaliza el texto de cada mensaje. Los canales (Email/WhatsApp/SMS) se configuran arriba, en el seguimiento.</p>
       <div id="mensajesAccordions" style="margin-top:14px;"></div>
@@ -3646,6 +3753,7 @@ async function loadAppearance() {
     state.accent_color = data.accent_color || '';
     state.icono = data.icono;
     state.nombre = data.nombre;
+    state.empresa = data.empresa || '';
     state.bienvenida = data.bienvenida;
     state.prompt_extra = data.prompt_extra;
     state.logo_url = data.logo_url || '';
@@ -3665,6 +3773,7 @@ async function loadAppearance() {
     document.getElementById('apAccentText').value = state.accent_color || '';
 
     document.getElementById('apNombre').value = state.nombre;
+    document.getElementById('apEmpresa').value = state.empresa || '';
     document.getElementById('apIcono').value = state.icono;
     document.getElementById('apColor').value = state.color;
     document.getElementById('apColorText').value = state.color;
@@ -3789,6 +3898,7 @@ async function saveAppearance() {
     const origins = document.getElementById('apOrigins').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
     const payload = {
       nombre: document.getElementById('apNombre').value.trim(),
+      empresa: document.getElementById('apEmpresa').value.trim(),
       icono: document.getElementById('apIcono').value.trim(),
       color: document.getElementById('apColor').value,
       accent_color: (document.getElementById('apAccentText').value.trim() || document.getElementById('apAccent').value || ''),
@@ -3809,6 +3919,7 @@ async function saveAppearance() {
     state.accent_color = data.accent_color || '';
     state.icono = data.icono;
     state.nombre = data.nombre;
+    state.empresa = data.empresa || '';
     state.bienvenida = data.bienvenida;
     state.prompt_extra = data.prompt_extra;
     state.logo_url = data.logo_url || '';
@@ -4084,7 +4195,7 @@ document.getElementById('apAccentText').addEventListener('input', e => {
     scheduleAutoSave(500);
   }
 });
-['apNombre','apIcono','apBienvenida','apPromptExtra','apOrigins'].forEach((id) => {
+['apNombre','apEmpresa','apIcono','apBienvenida','apPromptExtra','apOrigins'].forEach((id) => {
   const node = document.getElementById(id);
   if (node) node.addEventListener('input', () => scheduleAutoSave(700));
 });
@@ -4707,6 +4818,7 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
 
   let pc=null, dc=null, micStream=null, timerId=null, maxId=null, speakId=null;
   let seconds=0, muted=false, active=false, ended=false, MAXS=120;
+  let transcript=[], startedAt=0, transcriptLogged=false;
 
   const setStatus = t => { statusEl.textContent = t; };
   const setHint = t => { hintEl.textContent = t; };
@@ -4730,10 +4842,28 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
     muteBtn.style.display=''; muteBtn.textContent='Silenciar'; muteBtn.classList.remove('on');
     hangBtn.textContent='Colgar'; hangBtn.classList.add('hang');
   }
-  function closeOverlay(){ cleanup(); resetUI(); overlay.classList.remove('open'); document.body.style.overflow=''; }
+  function pushTranscript(role, text){
+    const clean = String(text || '').trim();
+    if(clean) transcript.push({ role: role === 'assistant' ? 'assistant' : 'user', text: clean, ts: new Date().toISOString() });
+  }
+  function logTranscript(){
+    if(transcriptLogged || !transcript.length) return;
+    transcriptLogged = true;
+    const elapsed = startedAt ? Math.max(0, Math.round((Date.now() - startedAt) / 1000)) : seconds;
+    try{
+      fetch('/auth/app/voice/log', {
+        method:'POST',
+        credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ transcript, duration_seconds: elapsed }),
+        keepalive:true
+      }).catch(()=>{});
+    }catch(_){}
+  }
+  function closeOverlay(){ logTranscript(); cleanup(); resetUI(); overlay.classList.remove('open'); document.body.style.overflow=''; }
   function endCall(reason, detail){
     if(ended) return;
-    ended=true; cleanup();
+    ended=true; logTranscript(); cleanup();
     setStatus(reason||'Llamada finalizada');
     setHint(detail||'La llamada ha terminado.');
     muteBtn.style.display='none';
@@ -4774,6 +4904,10 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
       speaking(false); if(active) setStatus('En llamada');
     } else if(type==='input_audio_buffer.speech_started'){
       if(active) setHint('Te escucho…');
+    } else if(type==='response.output_audio_transcript.done'){
+      pushTranscript('assistant', ev.transcript);
+    } else if(type==='conversation.item.input_audio_transcription.completed'){
+      pushTranscript('user', ev.transcript);
     } else if(type==='response.function_call_arguments.done'){
       runTool(ev);
     } else if(type==='error'){
@@ -4784,6 +4918,16 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
   // El navegador habla directo con OpenAI; ejecutamos aqui las funciones que pide el modelo
   // (consultar disponibilidad, agendar...) contra el backend del propio cliente y devolvemos
   // el resultado por el data channel. Sin esto el asistente se queda esperando -> silencio.
+  function toolFollowupPrompt(name, result){
+    if(!result || typeof result !== 'object') return '';
+    const msg = String(result.mensaje_voz || result.mensaje || result.error || '').trim();
+    if(!msg) return '';
+    if(result.needs_service) return '[sistema] Falta el servicio. Pregunta esto en una sola frase natural, sin anadir pasos: "' + msg + '"';
+    if(name === 'verificar_codigo' && result.ok) return '[sistema] El codigo ya esta verificado. Si el cliente ya habia pedido cancelar o reprogramar, llama ahora a la herramienta correspondiente sin hablar todavia. Si no hay accion pendiente, di una sola frase natural: "' + msg + '"';
+    if(result.ok) return '[sistema] Di esta idea en una sola frase natural, sin anadir pasos ni explicaciones: "' + msg + '"';
+    if(!result.ok) return '[sistema] Di este problema de forma breve y, si procede, pregunta el siguiente dato minimo: "' + msg + '"';
+    return msg ? '[sistema] Di una sola frase natural: "' + msg + '"' : '';
+  }
   async function runTool(ev){
     const name = ev && ev.name;
     const callId = ev && ev.call_id;
@@ -4800,6 +4944,10 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
     }catch(e){ result = { ok:false, error:'No se pudo consultar ahora mismo.' }; }
     try{
       dc.send(JSON.stringify({ type:'conversation.item.create', item:{ type:'function_call_output', call_id:callId, output: JSON.stringify(result) } }));
+      const followup = toolFollowupPrompt(name, result);
+      if(followup){
+        dc.send(JSON.stringify({ type:'conversation.item.create', item:{ type:'message', role:'user', content:[{ type:'input_text', text:followup }] } }));
+      }
       dc.send(JSON.stringify({ type:'response.create' }));
     }catch(_){}
   }
@@ -4818,6 +4966,7 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
     avatarEl.textContent = ((state.nombre||'IA').trim()[0]||'IA').toUpperCase();
     nameEl.textContent = (state.nombre || 'Asistente de voz');
     active=true;
+    transcript=[]; transcriptLogged=false; startedAt=Date.now();
     overlay.classList.add('open'); document.body.style.overflow='hidden';
     setStatus('Pidiendo micrófono…'); timerEl.textContent='00:00'; setHint('Permite el micrófono para empezar a hablar.');
     muted=false;
@@ -5942,10 +6091,14 @@ document.getElementById('nbConfirmBtn').addEventListener('click', async () => {
     notas: document.getElementById('nbNotas').value.trim(),
   };
   if (!payload.nombre || !payload.fecha || !payload.hora) { toast('Completa nombre, fecha y hora.', 'error'); return; }
+  if (!payload.email && !payload.telefono) {
+    const ok = window.confirm('Esta cita no tiene email ni telefono. Se creara igualmente, pero no recibira confirmaciones ni recordatorios automaticos. ¿Quieres continuar?');
+    if (!ok) return;
+  }
   const old = btn.textContent; btn.disabled = true; btn.textContent = 'Creando…';
   try {
-    await api('/auth/bookings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    toast('Cita creada', 'success');
+    const created = await api('/auth/bookings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    toast(created.warning || 'Cita creada', created.warning ? 'warning' : 'success');
     closeNewBookingDrawer();
     citasState.dayDate = new Date(`${payload.fecha}T00:00:00`);
     citasState.view = 'day';
@@ -6064,6 +6217,14 @@ function closeServiceDrawer() {
   document.getElementById('serviceDrawer').classList.remove('open');
   document.getElementById('serviceOverlay').classList.remove('open');
 }
+// Tras crear/editar/eliminar un servicio: propaga el cambio del catálogo al resto de
+// la app sin recargar la página -> selectores que usan allServices + vista de Citas
+// (calendario/día) para que la duración/precio/pago queden al día.
+async function afterServiceCatalogChange() {
+  try { const s = await api('/auth/services'); allServices = Array.isArray(s) ? s : (s.items || allServices); } catch {}
+  try { await loadCitas(); } catch {}
+}
+
 async function saveService() {
   const slug = document.getElementById('svcSlug').value;
   const nombre = document.getElementById('svcNombre').value.trim();
@@ -6093,12 +6254,13 @@ async function saveService() {
     toast('Servicio guardado', 'success');
     closeServiceDrawer();
     loadServicios();
+    afterServiceCatalogChange();
   } catch(e) { toast(e.message, 'error'); }
   finally { btn.disabled = false; btn.textContent = old; }
 }
 async function deleteService(svc) {
   if (!window.confirm(`¿Eliminar el servicio “${svc.nombre}”?`)) return;
-  try { await api(`/auth/services/${encodeURIComponent(svc.id)}`, { method:'DELETE' }); toast('Servicio eliminado', 'success'); loadServicios(); }
+  try { await api(`/auth/services/${encodeURIComponent(svc.id)}`, { method:'DELETE' }); toast('Servicio eliminado', 'success'); loadServicios(); afterServiceCatalogChange(); }
   catch(e) { toast(e.message, 'error'); }
 }
 document.getElementById('servicioNewBtn').addEventListener('click', () => openServiceDrawer());
@@ -6188,8 +6350,8 @@ function renderCalendar() {
       const dt = b.start_at ? new Date(b.start_at) : null;
       const hora = b.hora || (dt ? dt.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'}) : '');
       const label = [hora, escapeHtml(b.nombre || '')].filter(Boolean).join(' ');
-      const color = CAL_STATUS_COLORS[b.estado || b.status] || CAL_STATUS_COLORS.pending;
-      html += `<span class="gcal-event-pill" style="background:${color}" title="${escapeHtml(b.nombre||'')} — ${escapeHtml(b.servicio||'')} ${hora}">${label}</span>`;
+      const view = cdView(b);
+      html += `<span class="gcal-event-pill" style="background:${view.color}" title="${escapeHtml(b.nombre||'')} — ${escapeHtml(b.servicio||'')} ${hora} · ${escapeHtml(view.label)}">${label}</span>`;
     });
     if (extra > 0) html += `<span class="gcal-more">+${extra} más</span>`;
 
@@ -6211,10 +6373,39 @@ document.getElementById('calToday').addEventListener('click', async () => { cons
 // ── CITAS · Vista Día (timeline por profesional) ──────────────────────
 const CD_PX_PER_MIN = 1.4, CD_AXIS_STEP = 30, CD_MIN_BLOCK_H = 22, CD_GENERAL_KEY = '__general__';
 const CD_ESTADO_NORM  = { confirmed:'confirmed', pending:'pending', pending_review:'pending', completed:'completed', cancelled:'cancelled', no_show:'no_show' };
-const CD_ESTADO_TAG   = { confirmed:'Conf', pending:'Pend', completed:'Hecho', cancelled:'Canc', no_show:'No vino' };
-const CD_ESTADO_LABEL = { confirmed:'Confirmada', pending:'Pendiente', completed:'Completada', cancelled:'Cancelada', no_show:'No asistió' };
 
 function cdEstado(b){ return CD_ESTADO_NORM[b.estado || b.status] || 'pending'; }
+
+// Estado VISIBLE de la cita, simplificado a un solo eje claro:
+//  · Futuro  -> ¿el cliente confirmó?  SIN CONF (ámbar) / CONF (verde)
+//  · Pasado  -> Realizada (verde) / No vino (rojo)
+//  · Cancelada (gris)
+// El estado interno confirmed/pending_review es implícito (está en agenda = reservada).
+// cdEstado() sigue siendo el estado crudo (lógica). El pago va en cdPayMark (eje aparte).
+function cdView(b){
+  const raw = b.estado || b.status || '';
+  if (raw === 'cancelled') return { key:'cancelled', label:'Cancelada', tag:'Canc', color:'#6b7280', badge:'badge-cancelled' };
+  if (raw === 'no_show')   return { key:'no_show', label:'No vino', tag:'No vino', color:'#ef4444', badge:'badge-noshow' };
+  const startMs = b.start_at ? Date.parse(b.start_at) : NaN;
+  const isPast = raw === 'completed' || (!isNaN(startMs) && startMs < Date.now());
+  if (isPast) return { key:'done', label:'Realizada', tag:'Hecho', color:'#0ea5e9', badge:'badge-done' };
+  if (b.customer_confirmed) return { key:'confirmed', label:'Confirmada', tag:'CONF', color:'#10b981', badge:'badge-confirmed' };
+  return { key:'unconfirmed', label:'Sin confirmar', tag:'SIN CONF', color:'#f59e0b', badge:'badge-pending' };
+}
+
+// Indicador de pago (eje independiente). SOLO aparece si el servicio requiere pago o
+// depósito (pay_state pending/paid/preauthorized). Gratis / en mostrador / opcional sin
+// pagar -> nada. Pagado = ✓€ verde; por pagar = € rojo; retención = € ámbar.
+const CD_PAY = {
+  paid:          { sym:'€', color:'#10b981', title:'Pagado' },
+  preauthorized: { sym:'€', color:'#f59e0b', title:'Retención activa (tarjeta retenida)' },
+  pending:       { sym:'€', color:'#ef4444', title:'Por pagar' },
+};
+function cdPayMark(b){
+  const p = CD_PAY[b.pay_state];
+  if (!p) return '';
+  return `<span class="cd-ev-pay" style="color:${p.color}" title="${p.title}">${p.sym}</span>`;
+}
 function cdHexToRgba(hex, a){
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
   if (!m) return `rgba(0,209,255,${a})`;
@@ -6447,11 +6638,11 @@ function renderCitasDay(){
 
     const evs = bookings.map(b => { const s = cdBookingStartMin(b); if (s === null) return null; return { b, startM:s, endM:s + cdDur(b, c.emp) }; }).filter(Boolean);
     cdPackLanes(evs).forEach(ev => {
-      const b = ev.b, est = cdEstado(b);
+      const b = ev.b, est = cdEstado(b), view = cdView(b);
       const top = (ev.startM - startMin) * CD_PX_PER_MIN;
       const h = Math.max(CD_MIN_BLOCK_H, (ev.endM - ev.startM) * CD_PX_PER_MIN) - 2;
       const lc = ev.laneCount || 1, wPct = 100/lc, lPct = ev.lane * wPct;
-      const base = CAL_STATUS_COLORS[est] || CAL_STATUS_COLORS.pending;
+      const base = view.color;
       const leftColor = c.type === 'day' ? cdEmpColor(b) : c.color;
       const btn = document.createElement('button'); btn.type = 'button';
       btn.className = 'cd-event' + (h < 46 ? ' compact' : '') + (est === 'cancelled' ? ' cancelled' : '');
@@ -6461,7 +6652,7 @@ function renderCitasDay(){
       if ((b.booking_id || b.id) === citasState.selectedDayBookingId) btn.classList.add('selected');
       const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '');
       const sub = c.type === 'day' ? (b.employee_name || b.servicio || 'Consulta') : (b.servicio || 'Consulta');
-      btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(hora)} · ${escapeHtml(b.nombre || b.client_name || b.name || b.servicio || 'Cita')}</span><span class="cd-ev-tag" style="color:${base}">${escapeHtml(CD_ESTADO_TAG[est] || '')}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
+      btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(hora)} · ${escapeHtml(b.nombre || b.client_name || b.name || b.servicio || 'Cita')}</span><span class="cd-ev-tag" style="color:${base}" title="${escapeHtml(view.label)}">${escapeHtml(view.tag)}${cdPayMark(b)}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
       btn.addEventListener('click', () => cdSelect(b));
       body.appendChild(btn);
     });
@@ -6493,25 +6684,31 @@ function cdMinsToHora(mins){
 
 function cdRenderDetail(b){
   const est = cdEstado(b);
-  const badge = { confirmed:'badge-confirmed', pending:'badge-pending', cancelled:'badge-cancelled', completed:'badge-completed', no_show:'badge-noshow' }[est] || 'badge-pending';
+  const view = cdView(b);
+  const badge = view.badge;
   const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '--:--');
   const canEdit = (b.can_cancel !== false) && est !== 'cancelled' && est !== 'completed' && est !== 'no_show';
   const canAttend = b.can_mark_attendance === true && est !== 'cancelled';
   const notCancelled = est !== 'cancelled';
   const mItem = (cd, label, extra = '') => `<button class="cd-menu-item" type="button" data-cd="${cd}"${extra}>${label}</button>`;
   // Menú "Cobrar ▾" (pagos y canjes) y overflow "⋯ Más" (acciones secundarias).
+  // El estado de pago puede venir de dos sistemas: el pago directo (customer_payments,
+  // b.payment_status) o el pago de la reserva con depósito/retención (booking_payments,
+  // b.pay_state). Unificamos ambos para que captura/liberación/reembolso aparezcan siempre.
+  const payPreauth = b.payment_status === 'preauthorized' || b.pay_state === 'preauthorized';
+  const payPaid = b.payment_status === 'paid' || b.payment_status === 'partially_refunded' || b.pay_state === 'paid';
   const cobrarItems = [];
-  if (notCancelled && b.payment_status !== 'preauthorized') cobrarItems.push(mItem('pay', '💳 Enlace de pago'));
+  if (notCancelled && !payPreauth) cobrarItems.push(mItem('pay', '💳 Enlace de pago'));
   if (notCancelled && hasPerm('commerce.sell')) cobrarItems.push(mItem('poscharge', '📲 QR + producto'));
-  if (notCancelled && b.payment_status !== 'paid' && hasPerm('commerce.sell')) {
+  if (notCancelled && !payPaid && hasPerm('commerce.sell')) {
     cobrarItems.push(mItem('redeempkg', '🎟 Redimir bono'));
     cobrarItems.push(mItem('redeemgift', '🎁 Redimir tarjeta regalo'));
   }
-  if (b.payment_status === 'preauthorized' && hasPerm('payments.capture')) {
+  if (payPreauth && hasPerm('payments.capture')) {
     cobrarItems.push(mItem('capture', '💳 Cobrar retención'));
     cobrarItems.push(mItem('release', '🔓 Liberar retención'));
   }
-  if ((b.payment_status === 'paid' || b.payment_status === 'partially_refunded') && hasPerm('payments.refund')) {
+  if (payPaid && hasPerm('payments.refund')) {
     cobrarItems.push(mItem('refund', '↩ Reembolsar'));
   }
   const moreItems = [];
@@ -6527,10 +6724,12 @@ function cdRenderDetail(b){
       <div>
         <div class="cd-detail-title">${escapeHtml(b.nombre || b.client_name || b.name || 'Cita')}</div>
         <div class="cd-detail-meta">
-          <span class="badge ${badge}">${escapeHtml(CD_ESTADO_LABEL[est] || est)}</span>
-          ${est === 'completed' && b.completed_source === 'auto' ? `<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);" title="Se completó automáticamente al pasar la hora. Confirma si el cliente asistió.">auto · sin confirmar</span>` : ''}
+          <span class="badge ${badge}" title="${escapeHtml(view.key === 'confirmed' ? 'El cliente confirmó la asistencia.' : view.key === 'unconfirmed' ? 'Reservada, pendiente de que el cliente confirme.' : view.label)}">${escapeHtml(view.label)}</span>
           ${b.booking_code ? `<span class="badge" style="background:var(--accent-soft); color:var(--accent); font-family:'Courier New',monospace; letter-spacing:.06em;">N.º ${escapeHtml(b.booking_code)}</span>` : ''}
-          ${{preauthorized:'<span class="badge" style="background:rgba(244,180,0,0.15); color:#f4b400;">💳 retención activa</span>',paid:'<span class="badge badge-confirmed">💳 pagado</span>',released:'<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">retención liberada</span>',refunded:'<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">reembolsado</span>',partially_refunded:'<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">reembolso parcial</span>'}[b.payment_status] || ''}
+          ${{preauthorized:'<span class="badge" style="background:rgba(244,180,0,0.15); color:#f4b400;">💳 Retención activa</span>',paid:'<span class="badge badge-confirmed">Pagado</span>',released:'<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">retención liberada</span>',refunded:'<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">reembolsado</span>',partially_refunded:'<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">reembolso parcial</span>'}[b.payment_status] || ''}
+          ${(!b.payment_status && b.pay_state === 'pending') ? '<span class="badge" style="background:rgba(239,68,68,0.14); color:#ef4444;">💳 Por pagar</span>' : ''}
+          ${(!b.payment_status && b.pay_state === 'paid') ? '<span class="badge badge-confirmed">Pagado</span>' : ''}
+          ${(!b.payment_status && b.pay_state === 'preauthorized') ? '<span class="badge" style="background:rgba(244,180,0,0.15); color:#f4b400;">💳 Retención activa</span>' : ''}
           <span>${escapeHtml(hora)} · ${escapeHtml(b.employee_name || 'Agenda')}</span>
           <span>${escapeHtml((b.servicio || 'Consulta') + cdServiceMeta(b))}</span>
         </div>
@@ -6624,7 +6823,7 @@ function cdRenderDetail(b){
             bookingId: bid,
             serviceLabel: (b.servicio || 'Cita'),
             serviceCents: b.service_price_cents || 0,
-            servicePaid: b.payment_status === 'paid',
+            servicePaid: b.payment_status === 'paid' || b.pay_state === 'paid',
             customerName: b.nombre || b.client_name || '',
             customerEmail: b.email || b.client_email || '',
             onPaid: () => loadCitasDay(),
@@ -6747,19 +6946,25 @@ function cdRenderDetail(b){
 function openManageBookingModal(b){
   const bid = b.booking_id || b.id || '';
   const est = cdEstado(b);
-  const badge = { confirmed:'badge-confirmed', pending:'badge-pending', cancelled:'badge-cancelled', completed:'badge-completed', no_show:'badge-noshow' }[est] || 'badge-pending';
+  const view = cdView(b);
+  const badge = view.badge;
   const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '--:--');
   const canEdit = (b.can_cancel !== false) && est !== 'cancelled' && est !== 'completed' && est !== 'no_show';
   const canAttend = b.can_mark_attendance === true && est !== 'cancelled';
   const notCancelled = est !== 'cancelled';
   const canEditClient = hasPerm('clients.edit');
   const dis = canEditClient ? '' : 'disabled';
-  const pay = { preauthorized:'💳 retención activa', paid:'💳 pagado', released:'retención liberada', refunded:'reembolsado', partially_refunded:'reembolso parcial' }[b.payment_status] || '';
+  const _payGreen = '<span class="badge badge-confirmed">Pagado</span>';
+  const _payRed = '<span class="badge" style="background:rgba(239,68,68,0.14); color:#ef4444;">💳 Por pagar</span>';
+  const _payAmber = '<span class="badge" style="background:rgba(244,180,0,0.15); color:#f4b400;">💳 Retención activa</span>';
+  const _payGrey = (t) => `<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">${t}</span>`;
+  const payBadge = ({ preauthorized:_payAmber, paid:_payGreen, released:_payGrey('retención liberada'), refunded:_payGrey('reembolsado'), partially_refunded:_payGrey('reembolso parcial') }[b.payment_status])
+    || (b.payment_status ? '' : ({ paid:_payGreen, pending:_payRed, preauthorized:_payAmber }[b.pay_state] || ''));
   const wrap = vModal(`
     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-      <span class="badge ${badge}">${escapeHtml(CD_ESTADO_LABEL[est] || est)}</span>
+      <span class="badge ${badge}" title="${escapeHtml(view.label)}">${escapeHtml(view.label)}</span>
       ${b.booking_code ? `<span class="badge" style="background:var(--accent-soft); color:var(--accent); font-family:'Courier New',monospace;">N.º ${escapeHtml(b.booking_code)}</span>` : ''}
-      ${pay ? `<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">${pay}</span>` : ''}
+      ${payBadge}
     </div>
     <div class="inf-kpis" style="grid-template-columns:repeat(2,1fr); margin-bottom:14px;">
       <div class="inf-kpi"><div class="k-label">Fecha y hora</div><div class="k-value" style="font-size:0.92rem;">${escapeHtml((b.fecha || '') + ' · ' + hora)}</div></div>
@@ -9050,6 +9255,43 @@ function fuEffectiveChannels(kind) {
   return out;
 }
 
+function fuNormalizePriority(order) {
+  const allowed = ['email', 'whatsapp', 'sms'];
+  const out = [];
+  (Array.isArray(order) ? order : []).forEach(ch => {
+    if (allowed.includes(ch) && !out.includes(ch)) out.push(ch);
+  });
+  allowed.forEach(ch => { if (!out.includes(ch)) out.push(ch); });
+  return out;
+}
+
+function fuSetPriority(order) {
+  const labels = { email:'Email', whatsapp:'WhatsApp', sms:'SMS' };
+  const normalized = fuNormalizePriority(order);
+  ['fuPriority1', 'fuPriority2', 'fuPriority3'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = ['email', 'whatsapp', 'sms'].map(ch => `<option value="${ch}">${labels[ch]}</option>`).join('');
+    el.value = normalized[i];
+  });
+  fuRenderPrioFlow();
+}
+
+// Muestra el orden real de envío como cadena visual: Email → WhatsApp → SMS.
+function fuRenderPrioFlow() {
+  const el = document.getElementById('fuPrioFlow'); if (!el) return;
+  const labels = { email:'Email', whatsapp:'WhatsApp', sms:'SMS' };
+  const ico = { email:'✉', whatsapp:'🟢', sms:'💬' };
+  const order = fuDeliveryPriority();
+  el.innerHTML = '<span>Se intenta en orden:</span>' + order.map((ch, i) =>
+    `${i > 0 ? '<span>→</span>' : ''}<span class="fu-prio-step">${ico[ch] || ''} ${labels[ch] || ch}</span>`
+  ).join('');
+}
+
+function fuDeliveryPriority() {
+  return fuNormalizePriority(['fuPriority1', 'fuPriority2', 'fuPriority3'].map(id => document.getElementById(id)?.value));
+}
+
 function fuToggleCallBlock() {
   const cb = document.getElementById('fuCallEnabled');
   const on = cb.checked && !cb.disabled;
@@ -9060,6 +9302,7 @@ function renderFollowUp(data) {
   document.getElementById('fuPlanBadge').textContent = 'Plan ' + (data.plan_label || data.plan || '');
   document.getElementById('fuEmailConfirm').checked = !!data.email_confirm_button;
   document.getElementById('fuSuppress2h').checked = !!data.suppress_2h_if_confirmed;
+  fuSetPriority(data.delivery_priority || ['email', 'whatsapp', 'sms']);
   const callOn = document.getElementById('fuCallEnabled');
   callOn.checked = !!data.call_enabled;
   callOn.disabled = !data.voice_available;
@@ -9086,11 +9329,19 @@ function renderFollowUp(data) {
     const muted = isReview ? !step.enabled : !anyActive;
     const dot = isReview ? '★' : (isOtp ? '🔒' : (step.when.replace(/[^0-9]/g,'') || '✓'));
     const otpBadge = !data.voice_available ? 'Requiere voz' : (anyActive ? 'Automático' : 'Desactivado');
-    const tagBadge = isReview
-      ? (step.needs_setup
-          ? `<span class="fu-setup-badge">Falta el enlace</span>`
-          : (step.enabled ? `<span class="fu-rec-badge">Activo</span>` : `<span class="fu-lock-badge" style="color:var(--soft-2);background:rgba(255,255,255,0.04);border-color:var(--line);">Desactivado</span>`))
-      : (isOtp ? `<span class="fu-rec-badge">${otpBadge}</span>` : '');
+    let tagBadge;
+    if (isReview) {
+      tagBadge = step.needs_setup
+        ? `<span class="fu-state fu-state-setup">Falta el enlace</span>`
+        : (step.enabled ? `<span class="fu-state fu-state-on">Activo</span>` : `<span class="fu-state fu-state-off">Desactivado</span>`);
+    } else if (isOtp) {
+      const ocls = !data.voice_available ? 'fu-state-plan' : (anyActive ? 'fu-state-on' : 'fu-state-off');
+      tagBadge = `<span class="fu-state ${ocls}">${otpBadge}</span>`;
+    } else {
+      tagBadge = anyActive
+        ? `<span class="fu-state fu-state-on">Activo</span>`
+        : `<span class="fu-state fu-state-off">Desactivado</span>`;
+    }
     const cta = isReview ? `<button type="button" class="fu-review-cta" data-fu-review-cta>${step.needs_setup ? 'Configurar reseñas' : 'Editar reseñas'} ⌄</button>` : '';
     return `<div class="fu-step ${muted?'fu-muted':''} ${isReview?'fu-step-review':''}">
       <div class="fu-step-rail"><div class="fu-dot">${dot}</div><div class="fu-line"></div></div>
@@ -9196,6 +9447,9 @@ function fuJumpToReviewCard() {
 }
 
 document.getElementById('fuCallEnabled')?.addEventListener('change', fuToggleCallBlock);
+['fuPriority1', 'fuPriority2', 'fuPriority3'].forEach(id => {
+  document.getElementById(id)?.addEventListener('change', () => fuSetPriority(fuDeliveryPriority()));
+});
 
 document.getElementById('fuSaveBtn')?.addEventListener('click', async () => {
   const channels = {};
@@ -9213,6 +9467,7 @@ document.getElementById('fuSaveBtn')?.addEventListener('click', async () => {
     quiet_start: document.getElementById('fuQuietStart').value || '21:00',
     quiet_end: document.getElementById('fuQuietEnd').value || '09:00',
     daily_call_cap: parseInt(document.getElementById('fuDailyCap').value, 10) || 0,
+    delivery_priority: fuDeliveryPriority(),
     message_template_channels: channels,
   };
   if (hasOtp) body.voice_otp_channels = fuEffectiveChannels('voice_otp');

@@ -46,6 +46,33 @@ from api_models import (
 )
 from backend import agenda, appstate, clients, crm, db, emailing, messaging, rag, security, settings, stripe_gateway, textnorm, timeutils
 
+_FOLLOWUP_DELIVERY_CHANNELS = ("email", "whatsapp", "sms")
+_BOOKING_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
+
+
+def _normalize_followup_delivery_priority(value: Any) -> List[str]:
+    raw = value if isinstance(value, list) else []
+    out: List[str] = []
+    for item in raw:
+        channel = str(item or "").strip().lower()
+        if channel in _FOLLOWUP_DELIVERY_CHANNELS and channel not in out:
+            out.append(channel)
+    for channel in _FOLLOWUP_DELIVERY_CHANNELS:
+        if channel not in out:
+            out.append(channel)
+    return out
+
+
+def _booking_email_looks_valid(email: str) -> bool:
+    return bool(_BOOKING_EMAIL_RE.match(textnorm._normalize_email(email)))
+
+
+def _booking_has_reminder_contact(email: str, telefono: str) -> bool:
+    if _booking_email_looks_valid(email):
+        return True
+    return bool(messaging._normalize_sms_recipient(telefono))
+
+
 def _booking_reminder_worker() -> None:
     interval_seconds = max(300, settings.REMINDER_RUN_INTERVAL_MINUTES * 60)
     if settings.REMINDER_RUN_INTERVAL_MINUTES <= 0:
@@ -355,7 +382,7 @@ def _booking_email_subject(
     if status_key == "rescheduled":
         return f"Tu cita con {company_name} ha cambiado de fecha"
     if status_key == "reminder_24h":
-        return f"Recordatorio: manana tienes {service_name} con {company_name}"
+        return f"Recordatorio: mañana tienes {service_name} con {company_name}"
     if status_key == "reminder_2h":
         return f"Recordatorio: tu cita con {company_name} empieza pronto"
     return f"Tu cita con {company_name} ha sido confirmada"
@@ -1507,15 +1534,22 @@ async def _reschedule_provider_booking(
     )
 
 
-def _store_booking(record: Dict[str, Any]) -> None:
+def _store_booking(record: Dict[str, Any], *, skip_payment: bool = False) -> None:
     service = agenda._get_service_row(record["cliente_id"], record.get("service_id", "")) or agenda._find_service_by_name(
         record["cliente_id"], record.get("servicio", "")
     )
-    decision = resolve_payment_requirement(record["cliente_id"], service)
-    record["payment_status"] = decision["payment_status"]
-    if decision["payment_required"]:
-        record["status"] = "pending_payment"
-        record["confirmed_at"] = ""
+    # skip_payment: usado por el sembrado de demo. Mantiene el payment_status que trae
+    # el record (valor visual) y NO crea checkouts Stripe reales. Sin esto, un servicio
+    # con payment_required dispararia create_booking_payment_checkout por cada cita demo
+    # (bloquea el worker sincrono -> 504).
+    if not skip_payment:
+        decision = resolve_payment_requirement(record["cliente_id"], service)
+        record["payment_status"] = decision["payment_status"]
+        if decision["payment_required"]:
+            record["status"] = "pending_payment"
+            record["confirmed_at"] = ""
+    else:
+        record.setdefault("payment_status", "not_required")
     location_id = record.get("location_id", "")
     if not location_id and record.get("employee_id"):
         employee_row = agenda._get_employee_row(record["employee_id"], cliente_id=record["cliente_id"])
@@ -1602,7 +1636,8 @@ def _store_booking(record: Dict[str, Any]) -> None:
             ),
         )
         connection.commit()
-    _booking_payment_after_store(record["id"])
+    if not skip_payment:
+        _booking_payment_after_store(record["id"])
     booking_status = "confirmado" if record.get("status") == "confirmed" else "cita_pendiente"
     crm._crm_upsert_contact(
         record["cliente_id"],
@@ -1746,6 +1781,30 @@ def _latest_payments_for_bookings(
     return out
 
 
+def _customer_confirmed_index(cliente_id: str, booking_ids: List[str]) -> set:
+    """IDs de citas con confirmacion explicita del cliente final (audit
+    ``attendance_confirmed_by_customer``), en UNA query batch para listados.
+    Distinto del estado ``confirmed`` de la cita (hueco activo): aqui solo
+    entran las que el cliente confirmo via recordatorio/llamada/email."""
+    out: set = set()
+    ids = [bid for bid in booking_ids if bid]
+    if not cliente_id or not ids:
+        return out
+    with db._get_db_connection() as connection:
+        for start in range(0, len(ids), 400):
+            chunk = ids[start:start + 400]
+            placeholders = ",".join("?" for _ in chunk)
+            rows = connection.execute(
+                f"SELECT DISTINCT booking_id FROM booking_audit "
+                f"WHERE cliente_id=? AND event_type='attendance_confirmed_by_customer' "
+                f"AND booking_id IN ({placeholders})",
+                (cliente_id, *chunk),
+            ).fetchall()
+            for r in rows:
+                out.add(r["booking_id"])
+    return out
+
+
 def _portal_booking_summaries(
     rows: List[sqlite3.Row],
     request: Optional[Request] = None,
@@ -1762,12 +1821,14 @@ def _portal_booking_summaries(
     if cliente_id:
         meta_index = agenda._booking_service_meta_index(cliente_id, rows)
         payments_index = _latest_payments_for_bookings(cliente_id, [row["id"] for row in rows])
+        confirmed_index = _customer_confirmed_index(cliente_id, [row["id"] for row in rows])
         return [
             _portal_booking_summary_from_row(
                 row,
                 request,
                 service_meta=meta_index.get(row["id"]),
                 payment=payments_index.get(row["id"]),
+                customer_confirmed=row["id"] in confirmed_index,
             )
             for row in rows
         ]
@@ -1780,6 +1841,7 @@ def _portal_booking_summary_from_row(
     *,
     service_meta: Optional[Dict[str, Any]] = None,
     payment: Any = _PAYMENT_UNSET,
+    customer_confirmed: Optional[bool] = None,
 ) -> PortalBookingSummary:
     data = _serialize_booking_row(row, request, service_meta=service_meta)
     status_value = data["estado"]
@@ -1795,6 +1857,13 @@ def _portal_booking_summary_from_row(
                 "SELECT * FROM customer_payments WHERE cliente_id=? AND booking_id=? ORDER BY created_at DESC LIMIT 1",
                 (row["cliente_id"], row["id"]),
             ).fetchone()
+    if customer_confirmed is None:
+        with db._get_db_connection() as connection:
+            customer_confirmed = bool(connection.execute(
+                "SELECT 1 FROM booking_audit WHERE booking_id=? "
+                "AND event_type='attendance_confirmed_by_customer' LIMIT 1",
+                (row["id"],),
+            ).fetchone())
     return PortalBookingSummary(
         booking_id=data["booking_id"],
         empresa=data["empresa"],
@@ -1821,6 +1890,7 @@ def _portal_booking_summary_from_row(
         service_price_cents=int(data.get("service_price_cents", 0) or 0),
         service_price_label=data.get("service_price_label", ""),
         payment_status=payment["status"] if payment else "",
+        pay_state=(row["payment_status"] if "payment_status" in row.keys() else "") or "",
         payment_amount_cents=int(payment["amount_cents"] or 0) if payment else 0,
         payment_checkout_url=payment["checkout_url"] if payment else "",
         start_at=data["start_at"],
@@ -1828,6 +1898,7 @@ def _portal_booking_summary_from_row(
         can_cancel=can_edit,
         can_reschedule=can_edit,
         can_mark_attendance=can_mark_attendance,
+        customer_confirmed=bool(customer_confirmed),
     )
 
 
@@ -2627,8 +2698,11 @@ async def _send_booking_reminder_by_kind(
     sent_channels: List[str] = []
     failed_channels: Dict[str, str] = {}
     skipped_channels: Dict[str, str] = {}
+    followup_cfg = _follow_up_config(booking_row["cliente_id"])
+    delivery_priority = followup_cfg.get("delivery_priority") or list(_FOLLOWUP_DELIVERY_CHANNELS)
+    prefer_single_delivery = respect_enabled and channel_override is None
 
-    if not any(bool(channels.get(name)) for name in ("email", "whatsapp", "sms")):
+    if not any(bool(channels.get(name)) for name in _FOLLOWUP_DELIVERY_CHANNELS):
         if sent_column:
             _mark_booking_email_result(
                 booking_row["id"],
@@ -2644,17 +2718,22 @@ async def _send_booking_reminder_by_kind(
         )
         return {"sent": [], "failed": {}, "skipped": {"all": "no_channels"}}
 
-    if channels.get("email"):
-        try:
-            _send_booking_email(booking_row, kind, request, extra_message=extra_message)
-            sent_channels.append("email")
-        except Exception as exc:  # noqa: BLE001
-            failed_channels["email"] = str(exc)
+    async def _attempt_channel(channel_name: str) -> None:
+        if channel_name == "email":
+            if not (booking_row["email"] or "").strip():
+                skipped_channels["email"] = "La cita no tiene email."
+                return
+            try:
+                _send_booking_email(booking_row, kind, request, extra_message=extra_message)
+                sent_channels.append("email")
+            except Exception as exc:  # noqa: BLE001
+                failed_channels["email"] = str(exc)
+            return
 
-    if channels.get("whatsapp"):
-        if not availability.get("whatsapp", {}).get("available"):
-            skipped_channels["whatsapp"] = str(availability.get("whatsapp", {}).get("reason", "No disponible."))
-        else:
+        if channel_name == "whatsapp":
+            if not availability.get("whatsapp", {}).get("available"):
+                skipped_channels["whatsapp"] = str(availability.get("whatsapp", {}).get("reason", "No disponible."))
+                return
             try:
                 if await _send_booking_whatsapp_reminder(
                     booking_row,
@@ -2667,11 +2746,12 @@ async def _send_booking_reminder_by_kind(
                     failed_channels["whatsapp"] = "No se pudo entregar WhatsApp o falta telefono valido."
             except Exception as exc:  # noqa: BLE001
                 failed_channels["whatsapp"] = str(exc)
+            return
 
-    if channels.get("sms"):
-        if not availability.get("sms", {}).get("available"):
-            skipped_channels["sms"] = str(availability.get("sms", {}).get("reason", "No disponible."))
-        else:
+        if channel_name == "sms":
+            if not availability.get("sms", {}).get("available"):
+                skipped_channels["sms"] = str(availability.get("sms", {}).get("reason", "No disponible."))
+                return
             try:
                 if await _send_booking_sms_reminder(
                     booking_row,
@@ -2684,6 +2764,23 @@ async def _send_booking_reminder_by_kind(
                     failed_channels["sms"] = "No se pudo entregar SMS o falta telefono valido."
             except Exception as exc:  # noqa: BLE001
                 failed_channels["sms"] = str(exc)
+
+    if prefer_single_delivery:
+        # En produccion los canales activos son una lista de respaldo, no envios
+        # duplicados: se intenta el orden elegido y se para al primer canal entregado.
+        for channel_name in delivery_priority:
+            if not channels.get(channel_name):
+                continue
+            await _attempt_channel(channel_name)
+            if sent_channels:
+                for skipped_name in _FOLLOWUP_DELIVERY_CHANNELS:
+                    if channels.get(skipped_name) and skipped_name not in sent_channels and skipped_name not in failed_channels and skipped_name not in skipped_channels:
+                        skipped_channels[skipped_name] = f"Ya se envio por {sent_channels[0]}."
+                break
+    else:
+        for channel_name in _FOLLOWUP_DELIVERY_CHANNELS:
+            if channels.get(channel_name):
+                await _attempt_channel(channel_name)
 
     if sent_channels or skipped_channels:
         status_value = kind if sent_channels == ["email"] else f"{kind}:{','.join(sent_channels or ['skipped'])}"
@@ -2957,6 +3054,7 @@ def _follow_up_config(cliente_id: str) -> Dict[str, Any]:
         "daily_call_cap": max(0, min(500, cap)),
         "email_confirm_button": bool(cfg.get("email_confirm_button", True)),
         "suppress_2h_if_confirmed": bool(cfg.get("suppress_2h_if_confirmed", True)),
+        "delivery_priority": _normalize_followup_delivery_priority(cfg.get("delivery_priority")),
         # Canales permitidos para el OTP de voz. Default historico: todos ON (comportamiento
         # previo). Todos en false = verificacion por codigo desactivada (cae a telefono/email).
         "voice_otp_channels": (
@@ -3106,6 +3204,7 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
         "daily_call_cap": fu["daily_call_cap"],
         "email_confirm_button": fu["email_confirm_button"],
         "suppress_2h_if_confirmed": fu["suppress_2h_if_confirmed"],
+        "delivery_priority": fu["delivery_priority"],
         "steps": steps,
         "default_test_email": str(contacto.get("email", "") or ""),
         "default_test_phone": str(contacto.get("telefono", "") or ""),
@@ -3906,11 +4005,19 @@ def _create_customer_payment_link(
     Stripe): los llamantes async deben envolverla en timeutils._to_thread."""
     booking_id = booking["id"]
     with db._get_db_connection() as connection:
+        # Dedup contra LOS DOS sistemas de pago: el pago directo (customer_payments)
+        # y el pago de la reserva con depósito/retención (bookings.payment_status).
+        # Sin esto, una cita ya pagada por depósito (sin fila customer_payments) pasaría
+        # el dedup y permitiría un segundo cobro.
         paid = connection.execute(
             "SELECT 1 FROM customer_payments WHERE cliente_id=? AND booking_id=? AND status='paid' LIMIT 1",
             (cliente_id, booking_id),
         ).fetchone()
-    if paid:
+        bk = connection.execute(
+            "SELECT payment_status FROM bookings WHERE cliente_id=? AND id=? LIMIT 1",
+            (cliente_id, booking_id),
+        ).fetchone()
+    if paid or (bk and (bk["payment_status"] or "") == "paid"):
         raise HTTPException(status_code=409, detail="Esta cita ya tiene un pago completado.")
     account = _connect_account_status(cliente_id, refresh=True)
     if not account.connected or not account.charges_enabled:
@@ -4407,13 +4514,68 @@ def release_booking_payment(cliente_id: str, booking_id: str, *, reason: str = "
     return {"payment_status": "released", "amount_cents": 0}
 
 
+def _refund_customer_payment_for_booking(
+    cliente_id: str, booking_id: str, *, amount_cents: Optional[int] = None, reason: str = ""
+) -> Dict[str, Any]:
+    """Reembolsa el ultimo customer_payment cobrado de una cita (pago por enlace/POS).
+    Fallback de ``refund_booking_payment`` cuando la cita no se pago por la reserva
+    (booking_payments) sino por un enlace directo o POS (customer_payments)."""
+    with db._get_db_connection() as connection:
+        payment = connection.execute(
+            "SELECT * FROM customer_payments WHERE cliente_id=? AND booking_id=? "
+            "AND status IN ('paid','partially_refunded') ORDER BY created_at DESC LIMIT 1",
+            (cliente_id, booking_id),
+        ).fetchone()
+    if not payment or not payment["stripe_payment_intent_id"]:
+        raise HTTPException(status_code=409, detail="Esta cita no tiene un pago reembolsable.")
+    total = int(payment["amount_cents"] or 0)
+    amount = int(amount_cents or total)
+    if amount <= 0 or amount > total:
+        raise HTTPException(status_code=400, detail="Importe de reembolso invalido.")
+    stripe_gateway._stripe_init()
+    kwargs: Dict[str, Any] = {"payment_intent": payment["stripe_payment_intent_id"]}
+    if payment["stripe_account_id"]:
+        kwargs["stripe_account"] = payment["stripe_account_id"]
+    if amount < total:
+        kwargs["amount"] = amount
+    try:
+        stripe_gateway.stripe.Refund.create(**kwargs)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("Stripe refund (customer_payment) fallo booking=%s: %s", booking_id, exc)
+        raise HTTPException(status_code=502, detail="No se pudo crear el reembolso en Stripe.") from exc
+    new_status = "refunded" if amount >= total else "partially_refunded"
+    now = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        connection.execute(
+            "UPDATE customer_payments SET status=?, updated_at=? WHERE id=?",
+            (new_status, now, payment["id"]),
+        )
+        connection.execute(
+            "UPDATE bookings SET payment_status=? WHERE id=? AND cliente_id=? AND payment_status='paid'",
+            (new_status, booking_id, cliente_id),
+        )
+        connection.commit()
+    _record_booking_audit(
+        booking_id, cliente_id, "booking_payment_refunded",
+        {"amount_cents": amount, "partial": amount < total, "reason": textnorm._sanitize_text(reason), "via": "customer_payment"},
+    )
+    return {"payment_status": new_status, "amount_cents": amount}
+
+
 def refund_booking_payment(
     cliente_id: str, booking_id: str, *, amount_cents: Optional[int] = None, reason: str = ""
 ) -> Dict[str, Any]:
-    """Reembolso total o parcial de un pago de cita ya cobrado."""
-    payment = _booking_payment_for_action(cliente_id, booking_id)
-    if payment["status"] not in ("paid", "partially_refunded"):
-        raise HTTPException(status_code=409, detail="Solo se puede reembolsar un pago cobrado.")
+    """Reembolso total o parcial de un pago de cita ya cobrado. Cubre los DOS sistemas:
+    pago de la reserva (booking_payments) y, como fallback, pago directo por enlace/POS
+    (customer_payments). Asi el boton "Reembolsar" del detalle de cita funciona siempre."""
+    booking_row = _load_booking_or_404(booking_id)
+    if booking_row["cliente_id"] != cliente_id:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta reserva.")
+    payment = _booking_payment_row(booking_id)
+    if not payment or not payment["payment_intent_id"] or payment["status"] not in ("paid", "partially_refunded"):
+        return _refund_customer_payment_for_booking(
+            cliente_id, booking_id, amount_cents=amount_cents, reason=reason
+        )
     total = int(payment["amount_cents"] or 0)
     amount = int(amount_cents or total)
     if amount <= 0 or amount > total:

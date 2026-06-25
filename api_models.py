@@ -19,7 +19,7 @@ class MensajeChat(BaseModel):
 class DatosCita(BaseModel):
     cliente_id: str = Field(min_length=2, max_length=80)
     nombre: str = Field(min_length=2, max_length=80)
-    email: EmailStr
+    email: str = Field(default="", max_length=200)
     telefono: str = Field(default="", max_length=30)
     servicio: str = Field(default="", max_length=120)
     employee_id: str = Field(default="", max_length=80)
@@ -172,6 +172,7 @@ class BookingActionResponse(BaseModel):
     booking_id: str
     estado: str
     mensaje: str
+    warning: str = ""
     employee_id: str = ""
     employee_name: str = ""
     manage_url: str = ""
@@ -587,6 +588,7 @@ class AppDeployResponse(BaseModel):
 
 class AppAppearancePayload(BaseModel):
     nombre: Optional[str] = Field(default=None, max_length=120)
+    empresa: Optional[str] = Field(default=None, max_length=120)
     color: Optional[str] = Field(default=None, max_length=7)
     accent_color: Optional[str] = Field(default=None, max_length=7)
     icono: Optional[str] = Field(default=None, max_length=12)
@@ -604,6 +606,7 @@ class AppAppearanceResponse(BaseModel):
     ok: bool
     cliente_id: str
     nombre: str
+    empresa: str = ""
     color: str
     accent_color: str = ""
     icono: str
@@ -996,6 +999,8 @@ class FollowUpPayload(BaseModel):
     suppress_2h_if_confirmed: Optional[bool] = None
     # Override explicito de canales por aviso: {kind: {email,whatsapp,sms}}
     message_template_channels: Optional[Dict[str, Dict[str, bool]]] = None
+    # Orden real de entrega: se intenta un solo canal por aviso y se cae al siguiente si falta dato/falla.
+    delivery_priority: Optional[List[str]] = None
     # Canales permitidos para el codigo de verificacion por voz (OTP). Todos a false = desactivado.
     voice_otp_channels: Optional[Dict[str, bool]] = None
 
@@ -1045,6 +1050,7 @@ class FollowUpResponse(BaseModel):
     daily_call_cap: int = 30
     email_confirm_button: bool = True
     suppress_2h_if_confirmed: bool = True
+    delivery_priority: List[str] = Field(default_factory=lambda: ["email", "whatsapp", "sms"])
     steps: List[FollowUpStep] = []
     default_test_email: str = ""
     default_test_phone: str = ""
@@ -1520,6 +1526,7 @@ class PortalBookingSummary(BaseModel):
     service_price_cents: int = 0
     service_price_label: str = ""
     payment_status: str = ""
+    pay_state: str = ""
     payment_amount_cents: int = 0
     payment_checkout_url: str = ""
     start_at: str = ""
@@ -1527,6 +1534,7 @@ class PortalBookingSummary(BaseModel):
     can_cancel: bool = True
     can_reschedule: bool = True
     can_mark_attendance: bool = False
+    customer_confirmed: bool = False
 
 
 class PortalBookingsResponse(BaseModel):

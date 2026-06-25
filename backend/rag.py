@@ -220,7 +220,18 @@ def _locations_prompt_block(cliente_id: str) -> str:
 
 
 def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
-    nombre_empresa = config["nombre"]
+    # "nombre" = nombre del bot (campo Apariencia "Nombre del bot"). "empresa" = nombre del
+    # negocio (campo Apariencia "Nombre del negocio"); si esta vacio, el negocio toma el del bot
+    # (compatibilidad con clientes que solo rellenaron un nombre).
+    nombre_bot = config["nombre"]
+    empresa_field = str(config.get("empresa", "") or "").strip()
+    nombre_empresa = empresa_field or nombre_bot
+    bot_identity_block = ""
+    if empresa_field and empresa_field != nombre_bot:
+        bot_identity_block = (
+            f"- Te llamas {nombre_bot} (es el nombre del asistente, NO del negocio). Cuando te "
+            f"presentes o te pregunten como te llamas, di que te llamas {nombre_bot}.\n"
+        )
     prompt_extra = config.get("prompt_extra", "")
     booking_enabled = config["booking"]["enabled"]
     contacto = config.get("contacto", {})
@@ -292,7 +303,7 @@ Eres el asistente virtual oficial de {nombre_empresa}. Atiendes a clientes y vis
 
 Identidad y marca:
 - Empresa: {nombre_empresa}
-- Marca visible: {branding.get("powered_by", "Powered by Vantelia")}
+{bot_identity_block}- Marca visible: {branding.get("powered_by", "Powered by Vantelia")}
 {prompt_extra}
 
 Datos de contacto verificados:

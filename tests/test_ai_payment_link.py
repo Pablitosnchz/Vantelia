@@ -168,6 +168,27 @@ def test_ai_send_amount_is_not_set_by_customer(api_module, monkeypatch):
     assert captured_session["line_items"][0]["price_data"]["unit_amount"] == 10000
 
 
+def test_payment_link_blocked_when_booking_already_paid_via_deposit(api_module):
+    """Regresion doble cobro: una cita ya pagada por la reserva (bookings.payment_status
+    ='paid', sin fila customer_payments) debe bloquear un segundo enlace de pago."""
+    import sqlite3
+    from fastapi import HTTPException
+
+    suffix = uuid.uuid4().hex[:8]
+    booking_id = _seed_booking(
+        api_module, suffix, source="vantelia_widget",
+        email=f"paid-{suffix}@example.com", telefono="",
+    )
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("UPDATE bookings SET payment_status='paid' WHERE id=?", (booking_id,))
+        conn.commit()
+    with pytest.raises(HTTPException) as exc:
+        api_module._create_customer_payment_link(
+            "demo", _booking_row(api_module, booking_id), base_url="https://app.test.local"
+        )
+    assert exc.value.status_code == 409
+
+
 def test_ai_send_blocked_when_opt_in_disabled(api_module, monkeypatch):
     suffix = uuid.uuid4().hex[:8]
     _seed_connect_account(api_module)

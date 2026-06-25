@@ -554,6 +554,7 @@ async def app_appearance_get(
         ok=True,
         cliente_id=cliente_id,
         nombre=cfg.get("nombre", ""),
+        empresa=cfg.get("empresa", ""),
         color=cfg.get("color", "#00b1d9"),
         accent_color=cfg.get("accent_color", ""),
         icono=cfg.get("icono", "AI"),
@@ -579,6 +580,9 @@ async def app_appearance_post(
         cfg = next_configs.get(cliente_id, {})
         if data.nombre is not None:
             cfg["nombre"] = textnorm._sanitize_text(data.nombre)[:120] or cliente_id
+        if data.empresa is not None:
+            # Nombre del negocio (separado del nombre del bot). Vacio = usa el del bot.
+            cfg["empresa"] = textnorm._sanitize_text(data.empresa)[:120]
         if data.color is not None:
             color = textnorm._sanitize_text(data.color)
             if re.match(r"^#[0-9A-Fa-f]{6}$", color):
@@ -1427,6 +1431,8 @@ async def app_follow_up_put(
             rem["email_confirm_button"] = bool(data.email_confirm_button)
         if data.suppress_2h_if_confirmed is not None:
             rem["suppress_2h_if_confirmed"] = bool(data.suppress_2h_if_confirmed)
+        if data.delivery_priority is not None:
+            rem["delivery_priority"] = booking._normalize_followup_delivery_priority(data.delivery_priority)
         if data.voice_otp_channels is not None:
             rem["voice_otp_channels"] = {
                 "email": bool(data.voice_otp_channels.get("email")),
@@ -1973,6 +1979,67 @@ async def app_voice_tool(
     if not isinstance(arguments, str):
         arguments = json.dumps(arguments, ensure_ascii=False)
     return await voice._voice_dispatch_tool(cliente_id, name, arguments, from_number="")
+
+
+@app.post("/auth/app/voice/log", include_in_schema=False)
+async def app_voice_log(
+    request: Request,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """Registra la transcripcion de la prueba de voz del panel del cliente.
+
+    El panel habla directo con OpenAI por WebRTC; sin este endpoint la llamada de prueba
+    solo vive en el navegador y se pierde al cerrar.
+    """
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    if not voice._client_voice_plan_enabled(cliente_id):
+        raise HTTPException(status_code=403, detail="El asistente de voz estÃ¡ disponible en el plan Business.")
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"app_voice_log:{cliente_id}:{client_ip}", 30)
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    raw = (body or {}).get("transcript") if isinstance(body, dict) else None
+    transcript: List[Dict[str, str]] = []
+    for item in (raw or [])[:300]:
+        if not isinstance(item, dict):
+            continue
+        text = textnorm._sanitize_text(str(item.get("text", "")), allow_multiline=True)[:2000]
+        if not text:
+            continue
+        role = "assistant" if str(item.get("role")) in ("assistant", "bot") else "user"
+        transcript.append({"role": role, "text": text, "ts": str(item.get("ts", ""))[:40]})
+    if not transcript:
+        return {"ok": True, "skipped": True}
+    try:
+        duration = max(0, min(7200, int((body or {}).get("duration_seconds") or 0)))
+    except (TypeError, ValueError):
+        duration = 0
+    text_all = "\n".join(f"{i['role']}: {i['text']}" for i in transcript)
+    summary = await timeutils._to_thread(voice._voice_summarize, text_all)
+    booking_created = 1 if voice._voice_detect_booking_intent(text_all) else 0
+    now = timeutils._utc_now().isoformat()
+    call_sid = "app_" + secrets.token_hex(8)
+    try:
+        with db._get_db_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO voice_calls (call_sid, cliente_id, from_number, to_number, started_at, ended_at,
+                                         duration_seconds, status, transcript_json, summary, booking_created,
+                                         direction, purpose)
+                VALUES (?, ?, '', '', ?, ?, ?, 'completed', ?, ?, ?, 'inbound', 'app_test')
+                """,
+                (call_sid, cliente_id, now, now, duration,
+                 json.dumps(transcript, ensure_ascii=False), summary, booking_created),
+            )
+            conn.commit()
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("[voice] no se pudo registrar prueba de voz del panel %s: %s", cliente_id, exc)
+        return {"ok": False}
+    return {"ok": True, "call_sid": call_sid}
 
 
 # --- Sem 4: Live Chat (Pro gate stub) --------------------------------------
@@ -2728,10 +2795,17 @@ async def auth_create_booking(
     nombre = textnorm._sanitize_text(data.nombre)
     if not nombre:
         raise HTTPException(status_code=400, detail="El nombre del cliente es obligatorio.")
-    email = textnorm._sanitize_text(data.email)
+    email = textnorm._normalize_email(data.email)
     telefono = textnorm._sanitize_text(data.telefono)
     servicio = textnorm._sanitize_text(data.servicio)
     notas = textnorm._sanitize_text(data.notas, allow_multiline=True)
+    if email and not booking._booking_email_looks_valid(email):
+        raise HTTPException(status_code=400, detail="Indica un email valido o deja el email vacio.")
+    missing_reminder_contact = not booking._booking_has_reminder_contact(email, telefono)
+    contact_warning = (
+        "Cita creada sin email ni telefono valido: no recibira confirmaciones ni recordatorios automaticos."
+        if missing_reminder_contact else ""
+    )
 
     employee_row = agenda._resolve_employee_for_booking(target_client_id, data.employee_id, require_active=False)
     service_row = agenda._find_service_by_name(target_client_id, servicio)
@@ -2818,9 +2892,16 @@ async def auth_create_booking(
             "employee_name": employee_row["name"],
         },
     )
+    if missing_reminder_contact:
+        booking._record_booking_audit(
+            booking_id,
+            target_client_id,
+            "booking_contact_missing",
+            {"source": "portal_manual", "warning": contact_warning},
+        )
 
     booking_row = booking._get_booking_row_by_id(booking_id)
-    if booking_row and email:
+    if booking_row and not missing_reminder_contact:
         try:
             await booking._send_booking_reminder_by_kind(
                 booking_row,
@@ -2837,7 +2918,8 @@ async def auth_create_booking(
         ok=True,
         booking_id=booking_id,
         estado=booking_row["status"] if booking_row else "confirmed",
-        mensaje="Cita creada correctamente.",
+        mensaje=contact_warning or "Cita creada correctamente.",
+        warning=contact_warning,
         employee_id=employee_row["id"],
         employee_name=employee_row["name"],
         manage_url=booking._build_booking_manage_url(manage_token, request),

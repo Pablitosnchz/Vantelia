@@ -186,16 +186,17 @@ def _normalize_voice_config(payload: Any) -> Dict[str, Any]:
 
 
 def _voice_default_greeting(config: Dict[str, Any], voice_cfg: Dict[str, Any]) -> str:
-    """Saludo con el que 'descuelga' el asistente de voz. Usa el mensaje de bienvenida
-    de Apariencia (config.bienvenida) para que sea el MISMO agente que web y WhatsApp.
-    Orden: saludo de voz especifico (solo via admin) -> bienvenida de Apariencia ->
-    default. Compartido por telefono, test del panel y demo."""
-    explicit = _sanitize_text(str(voice_cfg.get("greeting", "") or ""), allow_multiline=True)
-    if explicit:
-        return explicit
+    """Saludo con el que 'descuelga' el asistente de voz ENTRANTE. Es el MISMO mensaje de
+    bienvenida (config.bienvenida, seccion Apariencia) que abre el chat web y WhatsApp, para
+    que la IA arranque igual en todos los canales. Orden: bienvenida de Apariencia -> saludo
+    de voz especifico (campo admin, solo si no hay bienvenida) -> default. La llamada SALIENTE
+    de confirmacion usa su propio guion (_voice_outbound_greeting), no este."""
     bienvenida = _sanitize_text(str(config.get("bienvenida", "") or ""), allow_multiline=True)
     if bienvenida:
         return bienvenida
+    explicit = _sanitize_text(str(voice_cfg.get("greeting", "") or ""), allow_multiline=True)
+    if explicit:
+        return explicit
     nombre = config.get("nombre", "") or "la empresa"
     return f"Hola, soy el asistente de {nombre}. En que puedo ayudarte?"
 

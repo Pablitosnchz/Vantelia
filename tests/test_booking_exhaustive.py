@@ -929,7 +929,7 @@ def test_voice_booking_outside_hours_fails(api_module):
         telefono="+34600999000",
         fecha=fecha,
         hora="22:00",
-        servicio="",
+        servicio="Fisioterapia general",
     ))
     assert result["ok"] is False, f"Esperaba fallo por hora fuera de horario: {result}"
 
@@ -946,7 +946,7 @@ def test_voice_booking_on_closed_weekday_fails(api_module):
         telefono="+34600999002",
         fecha=fecha,
         hora="10:00",
-        servicio="",
+        servicio="Fisioterapia general",
     ))
     assert result["ok"] is False, f"Domingo cerrado debe fallar: {result}"
 
@@ -961,7 +961,7 @@ def test_voice_booking_sets_source_voice(api_module):
         telefono="+34600777888",
         fecha=fecha,
         hora=avail["huecos"][0],
-        servicio="",
+        servicio="Fisioterapia general",
     ))
     assert result["ok"] is True, result
     booking_id = result["booking_id"]

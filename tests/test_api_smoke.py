@@ -570,6 +570,18 @@ def test_admin_demo_agenda_seed_and_purge(client: TestClient, api_module):
             ).fetchone()[0]
         return bookings, emps
 
+    def _active_locations():
+        with sqlite3.connect(db_path) as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM locations WHERE cliente_id='demo' AND is_active=1"
+            ).fetchone()[0]
+
+    def _booking_location_spread():
+        with sqlite3.connect(db_path) as conn:
+            return conn.execute(
+                "SELECT COUNT(DISTINCT location_id) FROM bookings WHERE cliente_id='demo' AND source='demo_seed'"
+            ).fetchone()[0]
+
     # Protegido sin token de admin.
     assert client.post("/admin/clientes/demo/demo-agenda").status_code == 401
 
@@ -578,12 +590,16 @@ def test_admin_demo_agenda_seed_and_purge(client: TestClient, api_module):
     assert gen.json()["ok"] is True
     bookings, emps = _counts()
     assert bookings > 0
-    assert emps == len(api_module._DEMO_PROFESSIONALS)
+    # Un equipo por centro: empleados = centros activos * tamaño de equipo demo.
+    assert emps == _active_locations() * api_module._DEMO_TEAM_SIZE
+    # La demo crea centros adicionales y reparte la agenda: citas en >1 centro.
+    assert _active_locations() > 1
+    assert _booking_location_spread() > 1
 
-    # Idempotente: regenerar no acumula profesionales demo.
+    # Idempotente: regenerar no acumula profesionales ni centros demo.
     assert client.post("/admin/clientes/demo/demo-agenda", headers=headers).status_code == 200
     _, emps_again = _counts()
-    assert emps_again == len(api_module._DEMO_PROFESSIONALS)
+    assert emps_again == _active_locations() * api_module._DEMO_TEAM_SIZE
 
     rm = client.delete("/admin/clientes/demo/demo-agenda", headers=headers)
     assert rm.status_code == 200
@@ -621,6 +637,50 @@ def test_demo_voice_session_requires_openai_key(client: TestClient):
 def test_demo_voice_session_unknown_client_404(client: TestClient):
     resp = client.post("/demo/clientequenoexiste/voice/session")
     assert resp.status_code == 404
+
+
+def test_admin_app_and_onboarding_redirect_to_dashboard(client: TestClient, api_module):
+    # Un admin no tiene portal de cliente ni onboarding. Si llega a /app o /onboarding
+    # (bookmark o ?next heredado tras login), debe ir a /dashboard, NO al wizard.
+    cookies = _portal_admin_cookies(api_module)
+    r_app = client.get("/app", cookies=cookies, follow_redirects=False)
+    assert r_app.status_code in (302, 307)
+    assert r_app.headers["location"] == "/dashboard"
+    r_onb = client.get("/onboarding", cookies=cookies, follow_redirects=False)
+    assert r_onb.status_code in (302, 307)
+    assert r_onb.headers["location"] == "/dashboard"
+    # El panel admin sigue sirviendose en /dashboard (sin redirigir).
+    r_dash = client.get("/dashboard", cookies=cookies, follow_redirects=False)
+    assert r_dash.status_code == 200
+
+
+def test_demo_seed_never_touches_payment_logic(api_module, monkeypatch):
+    # Regresion 504: el sembrado demo debe usar skip_payment y NO pasar por la logica
+    # de pago. Antes, un servicio demo payment_required disparaba un checkout Stripe real
+    # por cada cita (flood sincrono que bloqueaba el worker -> 504). Forzamos fallo si se
+    # invoca cualquiera de las dos funciones de pago durante el seed.
+    from backend import booking as bk, demo_agenda as da
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("el sembrado demo no debe invocar la logica de pago")
+
+    monkeypatch.setattr(bk, "resolve_payment_requirement", _boom)
+    monkeypatch.setattr(bk, "_booking_payment_after_store", _boom)
+    try:
+        da._seed_demo_agenda("demo")
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM bookings WHERE cliente_id='demo' AND source=?",
+                (api_module.DEMO_BOOKING_SOURCE,),
+            ).fetchone()[0]
+            pending_pay = conn.execute(
+                "SELECT COUNT(*) FROM bookings WHERE cliente_id='demo' AND source=? AND status='pending_payment'",
+                (api_module.DEMO_BOOKING_SOURCE,),
+            ).fetchone()[0]
+        assert total > 0
+        assert pending_pay == 0
+    finally:
+        da._purge_demo_agenda("demo")
 
 
 def test_demo_agenda_uses_visible_services_catalog(client: TestClient, api_module):
@@ -670,13 +730,23 @@ def test_demo_agenda_uses_visible_services_catalog(client: TestClient, api_modul
                     (cliente_id, api_module.DEMO_BOOKING_SOURCE),
                 ).fetchall()
             }
-        assert services == {"Masaje visible"}
+            demo_services_seeded = conn.execute(
+                "SELECT COUNT(*) FROM services WHERE cliente_id = ? AND slug LIKE ?",
+                (cliente_id, api_module.DEMO_SERVICE_SLUG_PREFIX + "%"),
+            ).fetchone()[0]
         assert rows
-        for _, start_at, end_at, service_id, service_price_cents in rows:
+        # El catalogo real visible del tenant se sigue respetando (se reserva).
+        assert "Masaje visible" in services
+        # Y ademas el demo siembra servicios propios de varias casuisticas de pago.
+        assert demo_services_seeded > 0
+        assert any(s != "Masaje visible" for s in services)
+        # Las citas del servicio real visible mantienen su duracion/precio del catalogo.
+        masaje_rows = [r for r in rows if r[3] == "masaje_visible"]
+        assert masaje_rows
+        for _, start_at, end_at, service_id, service_price_cents in masaje_rows:
             start_dt = datetime.fromisoformat(start_at.replace("Z", "+00:00"))
             end_dt = datetime.fromisoformat(end_at.replace("Z", "+00:00"))
             assert int((end_dt - start_dt).total_seconds() // 60) == 55
-            assert service_id == "masaje_visible"
             assert service_price_cents == 6000
     finally:
         info_path.write_text(original_info, encoding="utf-8")
@@ -786,9 +856,70 @@ def test_staff_can_create_booking_manually(client: TestClient, api_module):
     )
     assert r2.status_code == 409
 
+    r3 = client.post(
+        "/auth/bookings",
+        params={"cliente_id": "demo"},
+        cookies=cookies,
+        json={
+            "nombre": "Sin Contacto", "email": "", "telefono": "", "servicio": "",
+            "employee_id": "", "fecha": fecha, "hora": "09:30", "notas": "",
+        },
+    )
+    assert r3.status_code == 200, r3.text
+    no_contact_id = r3.json()["booking_id"]
+    assert r3.json()["warning"]
     with sqlite3.connect(api_module.DB_PATH) as conn:
-        conn.execute("DELETE FROM bookings WHERE id = ?", (booking_id,))
+        missing_event = conn.execute(
+            "SELECT COUNT(*) FROM booking_audit WHERE booking_id=? AND event_type='booking_contact_missing'",
+            (no_contact_id,),
+        ).fetchone()[0]
+    assert missing_event == 1
+
+    with sqlite3.connect(api_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM bookings WHERE id IN (?, ?)", (booking_id, no_contact_id))
         conn.commit()
+
+
+def test_public_booking_requires_contact_but_accepts_phone_only(client: TestClient, api_module):
+    origin = {"Origin": "http://testserver"}
+    target = datetime.utcnow().date() + timedelta(days=17)
+    while target.weekday() == 6:
+        target += timedelta(days=1)
+    fecha = target.isoformat()
+
+    missing = client.post(
+        "/agendar",
+        headers=origin,
+        json={
+            "cliente_id": "demo", "nombre": "Sin Contacto", "email": "", "telefono": "",
+            "servicio": "", "employee_id": "", "fecha": fecha, "hora": "09:00", "notas": "",
+        },
+    )
+    assert missing.status_code == 400
+    assert "email o telefono" in missing.json()["detail"].lower()
+
+    phone_only = client.post(
+        "/agendar",
+        headers=origin,
+        json={
+            "cliente_id": "demo", "nombre": "Solo Telefono", "email": "", "telefono": "600111222",
+            "servicio": "", "employee_id": "", "fecha": fecha, "hora": "09:00", "notas": "",
+        },
+    )
+    assert phone_only.status_code == 200, phone_only.text
+    booking_id = phone_only.json()["booking_id"]
+    try:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            row = conn.execute(
+                "SELECT email, telefono, source FROM bookings WHERE id = ?",
+                (booking_id,),
+            ).fetchone()
+        assert row == ("", "600111222", "widget")
+    finally:
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("DELETE FROM bookings WHERE id = ?", (booking_id,))
+            conn.execute("DELETE FROM booking_audit WHERE booking_id = ?", (booking_id,))
+            conn.commit()
 
 
 def test_multilocation_isolation_and_crud(client: TestClient, api_module):
@@ -1519,11 +1650,14 @@ def test_reminders_reach_future_bookings_past_legacy_window(client: TestClient, 
             conn.commit()
 
 
-def _seed_confirmed_booking(api_module, *, booking_id, start, status="confirmed", reminder_24h_sent=""):
+def _seed_confirmed_booking(
+    api_module, *, booking_id, start, status="confirmed", reminder_24h_sent="",
+    email="fu@example.com", telefono="+34600222333",
+):
     iso = lambda d: d.isoformat(timespec="seconds").replace("+00:00", "") + "Z"
     api_module._store_booking({
         "id": booking_id, "cliente_id": "demo", "employee_id": "", "employee_name": "",
-        "nombre": "Cliente FU", "email": "fu@example.com", "telefono": "+34600222333",
+        "nombre": "Cliente FU", "email": email, "telefono": telefono,
         "servicio": "", "booking_date": start.date().isoformat(), "booking_time": start.strftime("%H:%M"),
         "notas": "", "status": status, "provider_name": "internal", "provider_status": status,
         "provider_booking_id": "", "provider_booking_url": "", "manage_token": f"mg_{booking_id}",
@@ -1598,6 +1732,98 @@ def test_followup_suppress_2h_if_confirmed(client: TestClient, api_module, monke
             conn.commit()
 
 
+def test_followup_uses_single_channel_priority_and_fallback(api_module, monkeypatch):
+    """Si hay varios canales activos, el envio real usa un solo canal:
+    primero el prioritario y luego respaldo si falta el dato."""
+    from backend import agenda as agenda_module
+    from backend import booking as booking_module
+
+    original_channels = api_module.CONFIG_CLIENTES["demo"]["booking"].get("message_template_channels")
+    original_reminders = api_module.CONFIG_CLIENTES["demo"].get("reminders")
+    api_module.CONFIG_CLIENTES["demo"]["booking"]["message_template_channels"] = {
+        "reminder_24h": {"email": True, "whatsapp": False, "sms": True}
+    }
+    api_module.CONFIG_CLIENTES["demo"]["reminders"] = dict(original_reminders or {})
+    monkeypatch.setattr(
+        agenda_module,
+        "_reminder_channel_availability",
+        lambda _cid: {
+            "email": {"available": True, "reason": "Disponible."},
+            "whatsapp": {"available": False, "reason": "No disponible."},
+            "sms": {"available": True, "reason": "Disponible."},
+        },
+    )
+
+    sent_email = []
+    sent_sms = []
+    monkeypatch.setattr(
+        booking_module,
+        "_send_booking_email",
+        lambda row, kind, request=None, extra_message="": sent_email.append(row["email"]),
+    )
+
+    async def _fake_sms(row, kind, request=None, extra_message=""):
+        sent_sms.append(row["telefono"])
+        return True
+
+    monkeypatch.setattr(booking_module, "_send_booking_sms_reminder", _fake_sms)
+
+    start = api_module._utc_now() + timedelta(days=1)
+    with_email = "fu_pref_email_" + uuid.uuid4().hex
+    no_email = "fu_pref_sms_" + uuid.uuid4().hex
+    _seed_confirmed_booking(
+        api_module,
+        booking_id=with_email,
+        start=start,
+        email="pref@example.com",
+        telefono="+34600111222",
+    )
+    _seed_confirmed_booking(
+        api_module,
+        booking_id=no_email,
+        start=start + timedelta(minutes=5),
+        email="",
+        telefono="+34600333444",
+    )
+    try:
+        with api_module._get_db_connection() as connection:
+            row_email = connection.execute("SELECT * FROM bookings WHERE id=?", (with_email,)).fetchone()
+            row_sms = connection.execute("SELECT * FROM bookings WHERE id=?", (no_email,)).fetchone()
+
+        res_email = asyncio.run(booking_module._send_booking_reminder_by_kind(row_email, "reminder_24h"))
+        assert res_email["sent"] == ["email"]
+        assert sent_email == ["pref@example.com"]
+        assert sent_sms == []
+        assert res_email["skipped"]["sms"] == "Ya se envio por email."
+
+        res_sms = asyncio.run(booking_module._send_booking_reminder_by_kind(row_sms, "reminder_24h"))
+        assert res_sms["sent"] == ["sms"]
+        assert sent_sms == ["+34600333444"]
+        assert res_sms["skipped"]["email"] == "La cita no tiene email."
+
+        api_module.CONFIG_CLIENTES["demo"]["reminders"]["delivery_priority"] = ["sms", "email", "whatsapp"]
+        sent_email.clear()
+        sent_sms.clear()
+        res_priority = asyncio.run(booking_module._send_booking_reminder_by_kind(row_email, "reminder_24h"))
+        assert res_priority["sent"] == ["sms"]
+        assert sent_email == []
+        assert sent_sms == ["+34600111222"]
+        assert res_priority["skipped"]["email"] == "Ya se envio por sms."
+    finally:
+        if original_channels is None:
+            api_module.CONFIG_CLIENTES["demo"]["booking"].pop("message_template_channels", None)
+        else:
+            api_module.CONFIG_CLIENTES["demo"]["booking"]["message_template_channels"] = original_channels
+        if original_reminders is None:
+            api_module.CONFIG_CLIENTES["demo"].pop("reminders", None)
+        else:
+            api_module.CONFIG_CLIENTES["demo"]["reminders"] = original_reminders
+        with sqlite3.connect(api_module.DB_PATH) as conn:
+            conn.execute("DELETE FROM bookings WHERE id IN (?, ?)", (with_email, no_email))
+            conn.execute("DELETE FROM booking_audit WHERE booking_id IN (?, ?)", (with_email, no_email))
+            conn.commit()
+
+
 def test_call_due_window():
     """`_call_due_for_booking`: dentro de la ventana T-X (y por encima del 2h) -> True."""
     from backend import booking as bk
@@ -1631,6 +1857,7 @@ def test_followup_overview_endpoint_capabilities(client: TestClient, api_module)
     assert review_step["enabled"] is False
     assert data["channel_availability"]["email"] is True
     assert isinstance(data["email_confirm_button"], bool)
+    assert data["delivery_priority"] == ["email", "whatsapp", "sms"]
     call_step = next(s for s in data["steps"] if s["key"] == "call")
     call_chan = call_step["channels"][0]
     assert call_chan["channel"] == "call"
@@ -1647,6 +1874,33 @@ def test_followup_overview_endpoint_capabilities(client: TestClient, api_module)
         assert sms_chan["plan_needed"] == "Business"
         assert sms_chan["active"] is False
         assert data["channel_availability"]["sms"] is False
+
+
+def test_followup_save_delivery_priority(client: TestClient, api_module):
+    """PUT /auth/app/follow-up guarda el orden de entrega y completa canales omitidos."""
+    from backend import clients as clients_module
+
+    cookies = _portal_admin_cookies(api_module)
+    original_reminders = json.loads(json.dumps(api_module.CONFIG_CLIENTES["demo"].get("reminders")))
+    try:
+        r = client.put(
+            "/auth/app/follow-up",
+            params={"cliente_id": "demo"},
+            cookies=cookies,
+            json={"delivery_priority": ["sms", "email"]},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["delivery_priority"] == ["sms", "email", "whatsapp"]
+        assert api_module.CONFIG_CLIENTES["demo"]["reminders"]["delivery_priority"] == ["sms", "email", "whatsapp"]
+    finally:
+        next_configs = json.loads(json.dumps(api_module.CONFIG_CLIENTES))
+        if original_reminders is None:
+            next_configs["demo"].pop("reminders", None)
+        else:
+            next_configs["demo"]["reminders"] = original_reminders
+        clients_module._update_runtime_configs(next_configs)
+        clients_module._persist_configs_to_disk(next_configs)
 
 
 def test_reviews_overview_and_save_endpoint(client: TestClient, api_module):
@@ -3119,6 +3373,13 @@ def test_phone_normalization_for_match(api_module):
     assert api_module._normalize_phone_for_match("+34 611 22 23 33") == "611222333"
     assert api_module._normalize_phone_for_match("0034611222333") == "611222333"
     assert api_module._normalize_phone_for_match("611222333") == "611222333"
+
+
+def test_sms_recipient_normalization_adds_spanish_prefix(api_module):
+    assert api_module._normalize_sms_recipient("600 111 222") == "+34600111222"
+    assert api_module._normalize_sms_recipient("0034 600 111 222") == "+34600111222"
+    assert api_module._normalize_sms_recipient("+34 600 111 222") == "+34600111222"
+    assert api_module._normalize_sms_recipient("123") == ""
 
 
 def test_booking_code_lookup_and_contact_verification(api_module):
@@ -5837,6 +6098,40 @@ def test_app_voice_settings_plan_gate_and_session(client: TestClient, api_module
     assert api_module.CONFIG_CLIENTES[cliente_id]["voice"]["enabled"] is True
     assert api_module.CONFIG_CLIENTES[cliente_id]["voice"]["openai_voice"] == "verse"
 
+    logged = client.post(
+        "/auth/app/voice/log",
+        cookies=cookies,
+        json={
+            "duration_seconds": 12,
+            "transcript": [
+                {"role": "assistant", "text": "Hola, soy el asistente.", "ts": "2026-06-24T10:00:00Z"},
+                {"role": "user", "text": "Quiero probar una llamada.", "ts": "2026-06-24T10:00:02Z"},
+            ],
+        },
+    )
+    assert logged.status_code == 200, logged.text
+    call_sid = logged.json()["call_sid"]
+    with api_module._get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT * "
+            "FROM voice_calls WHERE call_sid=?",
+            (call_sid,),
+        ).fetchone()
+        assert row is not None
+        assert row["cliente_id"] == cliente_id
+        assert row["duration_seconds"] == 12
+        assert row["status"] == "completed"
+        assert row["direction"] == "inbound"
+        assert row["purpose"] == "app_test"
+        stored_transcript = json.loads(row["transcript_json"])
+        assert stored_transcript[0]["role"] == "assistant"
+        assert stored_transcript[1]["text"] == "Quiero probar una llamada."
+        conversation = api_module._voice_conversation_dict(row)
+        assert conversation["contact"] == "Prueba del panel"
+        assert conversation["intents"] == ["prueba"]
+        connection.execute("DELETE FROM voice_calls WHERE call_sid=?", (call_sid,))
+        connection.commit()
+
     # Con plan Business pero sin OPENAI_API_KEY -> 503: no se mintea token real.
     monkeypatch.setattr(api_module, "OPENAI_API_KEY", "")
     assert client.post("/auth/app/voice/session", cookies=cookies).status_code == 503
@@ -6757,6 +7052,7 @@ def test_voice_booking_tool_creates_real_booking(api_module):
     assert avail["ok"] is True, avail
     assert avail["hay_huecos"] is True, avail
     hora = avail["huecos"][0]
+    servicio = api_module._voice_service_options("demo")[0]
 
     result = asyncio.run(
         api_module._voice_perform_booking(
@@ -6765,7 +7061,7 @@ def test_voice_booking_tool_creates_real_booking(api_module):
             telefono="+34600111222",
             fecha=fecha,
             hora=hora,
-            servicio="",
+            servicio=servicio,
         )
     )
     assert result["ok"] is True, result
@@ -6779,12 +7075,145 @@ def test_voice_booking_tool_creates_real_booking(api_module):
     assert row["source"] == "voice"
     assert row["status"] == "confirmed"
     assert row["telefono"] == "+34600111222"
+    assert result["mensaje_voz"].startswith("Perfecto, la cita queda confirmada")
+
+
+def test_voice_booking_tool_requires_service_when_catalog_exists(api_module):
+    import asyncio
+    from datetime import datetime, timedelta
+
+    day = datetime.now().date() + timedelta(days=1)
+    while day.weekday() == 6:
+        day += timedelta(days=1)
+    fecha = day.isoformat()
+
+    result = asyncio.run(
+        api_module._voice_perform_booking(
+            "demo",
+            nombre="Cliente Voz Sin Servicio",
+            telefono="+34600111333",
+            fecha=fecha,
+            hora="10:00",
+            servicio="",
+        )
+    )
+    assert result["ok"] is False
+    assert result["needs_service"] is True
+    assert result["missing_field"] == "servicio"
+    assert "servicio" in result["mensaje_voz"].lower()
+
+
+def test_voice_booking_rejects_unknown_service_and_bad_phone(api_module):
+    import asyncio
+    from datetime import datetime, timedelta
+
+    day = datetime.now().date() + timedelta(days=1)
+    while day.weekday() == 6:
+        day += timedelta(days=1)
+    fecha = day.isoformat()
+
+    unknown_service = asyncio.run(
+        api_module._voice_perform_booking(
+            "demo",
+            nombre="Cliente Voz Servicio Inventado",
+            telefono="600111333",
+            fecha=fecha,
+            hora="10:00",
+            servicio="Masaje deportivo",
+        )
+    )
+    assert unknown_service["ok"] is False
+    assert unknown_service["needs_service"] is True
+    assert "no encuentro" in unknown_service["mensaje_voz"].lower()
+
+    bad_phone = asyncio.run(
+        api_module._voice_perform_booking(
+            "demo",
+            nombre="Cliente Voz Telefono Corto",
+            telefono="65 802 001",
+            fecha=fecha,
+            hora="10:00",
+            servicio=api_module._voice_service_options("demo")[0],
+        )
+    )
+    assert bad_phone["ok"] is False
+    assert bad_phone["needs_phone"] is True
+    assert bad_phone["missing_field"] == "telefono"
+    assert "nueve digitos" in bad_phone["mensaje_voz"].lower()
+
+
+def test_voice_services_match_active_portal_services(client: TestClient, api_module):
+    cookies = _portal_admin_cookies(api_module)
+    suffix = uuid.uuid4().hex[:8]
+    active_name = f"Voz Catalogo Real {suffix}"
+    inactive_name = f"Voz Inactivo No Decir {suffix}"
+    created_slugs = []
+    try:
+        active = client.post(
+            "/auth/services",
+            params={"cliente_id": "demo"},
+            cookies=cookies,
+            json={
+                "nombre": active_name,
+                "duration_minutes": 30,
+                "price_cents": 2500,
+                "is_active": True,
+            },
+        )
+        assert active.status_code == 200, active.text
+        created_slugs.append(active.json()["id"])
+        inactive = client.post(
+            "/auth/services",
+            params={"cliente_id": "demo"},
+            cookies=cookies,
+            json={
+                "nombre": inactive_name,
+                "duration_minutes": 30,
+                "price_cents": 2500,
+                "is_active": False,
+            },
+        )
+        assert inactive.status_code == 200, inactive.text
+        created_slugs.append(inactive.json()["id"])
+
+        portal_items = client.get(
+            "/auth/services",
+            params={"cliente_id": "demo", "include_inactive": True},
+            cookies=cookies,
+        ).json()["items"]
+        assert any(item["nombre"] == active_name and item["is_active"] for item in portal_items)
+        assert any(item["nombre"] == inactive_name and not item["is_active"] for item in portal_items)
+
+        voice_options = api_module._voice_service_options("demo")
+        assert active_name in voice_options
+        assert inactive_name not in voice_options
+        assert set(voice_options) == {
+            item["nombre"] for item in portal_items if item["is_active"]
+        }
+
+        instructions = api_module._voice_build_instructions("demo", api_module.CONFIG_CLIENTES["demo"])
+        assert active_name in instructions
+        assert inactive_name not in instructions
+    finally:
+        with api_module._get_db_connection() as connection:
+            for slug in created_slugs:
+                connection.execute(
+                    "DELETE FROM service_location_overrides WHERE cliente_id = 'demo' AND service_slug = ?",
+                    (slug,),
+                )
+                connection.execute(
+                    "DELETE FROM services WHERE cliente_id = 'demo' AND slug = ?",
+                    (slug,),
+                )
+            connection.commit()
 
 
 def test_voice_booking_tools_absent_when_booking_disabled(api_module):
     cfg_enabled = api_module.CONFIG_CLIENTES["demo"]
     tools = api_module._voice_booking_tools("demo", cfg_enabled)
     assert any(t["name"] == "crear_cita" for t in tools)
+    crear = next(t for t in tools if t["name"] == "crear_cita")
+    assert "servicio" in crear["parameters"]["required"]
 
     # A config with booking disabled exposes no tools.
     cfg_disabled = dict(cfg_enabled)
@@ -6821,11 +7250,23 @@ def test_voice_otp_lets_owner_verify_from_another_phone(vantelia_env_factory, mo
         }
     }
     api = vantelia_env_factory(cfg, info_txt="SERVICIOS Y PRECIOS:\n")
-    from backend import appstate, emailing, messaging
+    from backend import agenda, appstate, emailing, messaging
 
     monkeypatch.setattr(emailing, "_send_client_email", lambda *a, **k: "test")
+    monkeypatch.setattr(
+        agenda,
+        "_reminder_channel_availability",
+        lambda cliente_id: {
+            "sms": {"available": True},
+            "whatsapp": {"available": False},
+            "email": {"available": True},
+        },
+    )
+
+    sent_sms = {}
 
     async def _ok_sms(cliente_id, to_number, body):
+        sent_sms["to_number"] = to_number
         return True
 
     monkeypatch.setattr(messaging, "_send_client_sms", _ok_sms)
@@ -6834,7 +7275,7 @@ def test_voice_otp_lets_owner_verify_from_another_phone(vantelia_env_factory, mo
     while day.weekday() == 6:
         day += timedelta(days=1)
     fecha = day.isoformat()
-    owner, other = "+34600111222", "+34999000000"
+    owner, other = "600111222", "+34999000000"
 
     created = asyncio.run(api._voice_dispatch_tool(
         "otpqa", "crear_cita",
@@ -6862,6 +7303,9 @@ def test_voice_otp_lets_owner_verify_from_another_phone(vantelia_env_factory, mo
     sent = asyncio.run(api._voice_dispatch_tool(
         "otpqa", "enviar_codigo_verificacion", _json.dumps({"codigo_reserva": code}), from_number=other))
     assert sent["ok"], sent
+    assert sent_sms["to_number"] == "+34600111222"
+    assert "codigo" in sent["mensaje_voz"].lower()
+    assert api._voice_tool_followup_prompt("enviar_codigo_verificacion", sent)
     otp = appstate.voice_otp["otpqa:" + bid]["code"]
 
     wrong = "0000" if otp != "0000" else "1111"
@@ -6874,16 +7318,27 @@ def test_voice_otp_lets_owner_verify_from_another_phone(vantelia_env_factory, mo
         "otpqa", "verificar_codigo",
         _json.dumps({"codigo_reserva": code, "codigo": otp}), from_number=other))
     assert good["ok"]
+    assert good["mensaje_voz"] == "Perfecto, codigo verificado."
+    assert "llama ahora a la herramienta" in api._voice_tool_followup_prompt("verificar_codigo", good)
 
     done = asyncio.run(api._voice_dispatch_tool(
         "otpqa", "reprogramar_cita",
         _json.dumps({"codigo_reserva": code, "fecha": fecha, "hora": "11:00"}), from_number=other))
     assert done["ok"], done
+    assert done["mensaje_voz"].startswith("Listo, he verificado el codigo y he reprogramado")
+    assert api._voice_tool_followup_prompt("reprogramar_cita", done)
     with api._get_db_connection() as connection:
         when = connection.execute(
             "SELECT booking_time FROM bookings WHERE id=?", (bid,)
         ).fetchone()["booking_time"]
     assert when == "11:00"
+
+    cancelled = asyncio.run(api._voice_dispatch_tool(
+        "otpqa", "cancelar_cita",
+        _json.dumps({"codigo_reserva": code}), from_number=other))
+    assert cancelled["ok"], cancelled
+    assert cancelled["mensaje_voz"] == "Listo, he verificado el codigo y he cancelado la cita."
+    assert api._voice_tool_followup_prompt("cancelar_cita", cancelled)
 
 
 def test_gmail_tokens_are_encrypted_and_connection_status_is_safe(client: TestClient, api_module):
@@ -7344,11 +7799,12 @@ def test_granular_permissions(client: TestClient, api_module):
 
 
 def test_voice_audio_input_config_noise_and_vad(api_module):
-    # Defaults: far_field + server_vad rapido (0.5 s) + interrupt + whisper.
+    # Defaults: far_field + server_vad agil pero estable (0.65 s) + interrupt + whisper.
     cfg = api_module._voice_audio_input_config({})
     assert cfg["noise_reduction"]["type"] == "far_field"
     assert cfg["turn_detection"]["type"] == "server_vad"
-    assert cfg["turn_detection"]["silence_duration_ms"] == 500
+    assert cfg["turn_detection"]["silence_duration_ms"] == 650
+    assert cfg["turn_detection"]["threshold"] == 0.72
     assert cfg["turn_detection"]["interrupt_response"] is True
     assert cfg["transcription"]["model"] == "whisper-1"
     # Navegador: near_field por defecto.
@@ -7385,6 +7841,10 @@ def test_voice_instructions_have_resume_protocol(api_module):
     assert "sigo contandote" in text or "continues con lo que" in text
     # Listar por trozos para sonar humano.
     assert "trozos" in text or "dos o tres" in text
+    assert "catalogo real de servicios" in text
+    assert "responde solo con los datos de esta lista" in text
+    assert "si hay catalogo real de servicios arriba, ese catalogo manda" in text
+    assert "si el cliente lo da o dice que prefiere recibir avisos por email" in text
 
 
 def test_conversations_unify_web_whatsapp_and_voice(client: TestClient, api_module):

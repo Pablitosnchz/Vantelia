@@ -15,6 +15,8 @@ let citaData = {};
 let currentStep = 0;
 let services = [];
 let employees = [];
+let locations = [];
+let effectiveLocationId = "";
 let slotsDisponibles = [];
 let slotsRequestSeq = 0;
 let loadedSlotsKey = "";
@@ -44,7 +46,24 @@ function resetState() {
   currentStep = 0;
   services = [];
   employees = [];
+  locations = [];
+  // Centro fijado por el snippet (data-location) o, si no, el que elija el cliente.
+  effectiveLocationId = WIDGET_CONFIG.locationId || "";
   slotsDisponibles = [];
+}
+
+async function cargarCentros() {
+  // Solo necesitamos elegir centro si el negocio tiene >1 y el snippet no fija uno.
+  if (WIDGET_CONFIG.locationId) { locations = []; return; }
+  try {
+    const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/centros/${WIDGET_CONFIG.clienteId}`);
+    locations = Array.isArray(data.items) ? data.items : [];
+  } catch (_) {
+    locations = [];
+  }
+  if (locations.length > 1 && !effectiveLocationId) {
+    effectiveLocationId = locations[0].location_id; // por defecto el primero; el cliente puede cambiarlo
+  }
 }
 
 const validaciones = {
@@ -57,12 +76,12 @@ const validaciones = {
     return "";
   },
   email(valor) {
-    if (!valor) return "El email es obligatorio.";
+    if (!valor) return "";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(valor)) return "El email no es valido.";
     return "";
   },
   telefono(valor) {
-    if (!valor) return "El telefono es obligatorio.";
+    if (!valor) return "";
     const limpio = valor.replace(/[\s\-().]/g, "");
     if (!/^\+?\d{9,15}$/.test(limpio)) return "Introduce un telefono valido.";
     return "";
@@ -76,6 +95,21 @@ const validaciones = {
     return "";
   },
 };
+
+function validateReminderContact(emailInputId, phoneInputId) {
+  const email = document.getElementById(emailInputId)?.value.trim() || "";
+  const telefono = document.getElementById(phoneInputId)?.value.trim() || "";
+  const emailOk = validateField(emailInputId, "email");
+  const phoneOk = validateField(phoneInputId, "telefono");
+  if (!emailOk || !phoneOk) return false;
+  if (!email && !telefono) {
+    const message = "Indica al menos email o telefono para enviarte confirmaciones y recordatorios.";
+    setFieldError(emailInputId, message);
+    setFieldError(phoneInputId, message);
+    return false;
+  }
+  return true;
+}
 
 function setFieldError(inputId, message) {
   const input = document.getElementById(inputId);
@@ -113,8 +147,8 @@ function validateField(inputId, validatorName) {
 }
 
 async function cargarServicios() {
-  const qs = WIDGET_CONFIG.locationId
-    ? `?location_id=${encodeURIComponent(WIDGET_CONFIG.locationId)}`
+  const qs = effectiveLocationId
+    ? `?location_id=${encodeURIComponent(effectiveLocationId)}`
     : "";
   const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/servicios/${WIDGET_CONFIG.clienteId}${qs}`);
   services = Array.isArray(data.servicios) ? data.servicios : [];
@@ -125,8 +159,8 @@ async function cargarServicios() {
 }
 
 async function cargarProfesionales() {
-  const qs = WIDGET_CONFIG.locationId
-    ? `?location_id=${encodeURIComponent(WIDGET_CONFIG.locationId)}`
+  const qs = effectiveLocationId
+    ? `?location_id=${encodeURIComponent(effectiveLocationId)}`
     : "";
   const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/profesionales/${WIDGET_CONFIG.clienteId}${qs}`);
   employees = (Array.isArray(data.items) ? data.items : []).filter(e => !e.is_default);
@@ -282,7 +316,7 @@ async function cargarSlots(fecha) {
     });
     if (requestEmployeeId) params.set("employee_id", requestEmployeeId);
     if (requestService) params.set("servicio", requestService);
-    if (WIDGET_CONFIG.locationId) params.set("location_id", WIDGET_CONFIG.locationId);
+    if (effectiveLocationId) params.set("location_id", effectiveLocationId);
     const data = await fetchJson(`${WIDGET_CONFIG.apiUrl}/disponibilidad?${params.toString()}`);
     if (
       requestId !== slotsRequestSeq ||
@@ -421,7 +455,7 @@ async function confirmarCita() {
         telefono: citaData.telefono,
         servicio: citaData.servicio,
         employee_id: citaData.employeeId,
-        location_id: WIDGET_CONFIG.locationId,
+        location_id: effectiveLocationId,
         fecha: citaData.fecha,
         hora: citaData.hora,
         notas: citaData.notas,
@@ -509,6 +543,7 @@ export async function mostrarFormulario() {
   trackWidgetEvent("booking_form_opened");
 
   try {
+    await cargarCentros();
     await cargarServicios();
     await cargarProfesionales();
   } catch (error) {
@@ -528,6 +563,14 @@ export async function mostrarFormulario() {
   const form = document.createElement("div");
   form.className = "ia-form-card";
   form.id = "ia-form-cita";
+  // Selector de centro: solo si el negocio tiene >1 centro y el snippet no fija uno.
+  const showCenters = locations.length > 1;
+  const centerPickerHtml = showCenters
+    ? `<label class="ia-form-label" for="ia-f-centro">Centro</label>
+        <select id="ia-f-centro">${locations
+          .map((loc) => `<option value="${escapeHtml(loc.location_id)}"${loc.location_id === effectiveLocationId ? " selected" : ""}>${escapeHtml(loc.name)}</option>`)
+          .join("")}</select>`
+    : "";
   form.innerHTML = `
     <div class="ia-form-header">
       <h4>Solicitar cita</h4>
@@ -549,6 +592,7 @@ export async function mostrarFormulario() {
 
         <label class="ia-form-label" for="ia-f-tel">Telefono</label>
         <input id="ia-f-tel" type="tel" autocomplete="tel" maxlength="30" />
+        <p class="ia-form-note">Indica email o telefono para recibir confirmaciones y recordatorios.</p>
 
         <div class="ia-form-actions">
           <button id="ia-f-next0" class="ia-form-btn primary" type="button">Siguiente</button>
@@ -556,6 +600,7 @@ export async function mostrarFormulario() {
       </div>
 
       <div class="ia-form-step" data-step="1">
+        ${centerPickerHtml}
         <div id="ia-f-employee-wrap" class="hidden">
           <label class="ia-form-label" for="ia-f-employee">Profesional</label>
           <select id="ia-f-employee"></select>
@@ -612,6 +657,23 @@ export async function mostrarFormulario() {
     ? (_selectedServiceName(serviceSelect, 0) || "Consulta general")
     : "";
 
+  // Cambiar de centro recarga profesionales y servicios de ESE centro.
+  if (showCenters) {
+    document.getElementById("ia-f-centro")?.addEventListener("change", async (event) => {
+      effectiveLocationId = event.target.value || "";
+      try {
+        await cargarServicios();
+        await cargarProfesionales();
+      } catch (_) {}
+      fillEmployeeOptions(employeeSelect, employeeWrap);
+      fillServiceOptions(serviceSelect);
+      citaData.servicio = serviceSelect && !serviceSelect.disabled
+        ? (_selectedServiceName(serviceSelect, serviceSelect.selectedIndex >= 0 ? serviceSelect.selectedIndex : 0) || "")
+        : "";
+      invalidateSlots();
+    });
+  }
+
   const dateInput = document.getElementById("ia-f-fecha");
   const today = new Date();
   dateInput.min = formatLocalDate(today);
@@ -628,8 +690,7 @@ export async function mostrarFormulario() {
   document.getElementById("ia-f-next0")?.addEventListener("click", () => {
     const isValid =
       validateField("ia-f-nombre", "nombre") &&
-      validateField("ia-f-email", "email") &&
-      validateField("ia-f-tel", "telefono");
+      validateReminderContact("ia-f-email", "ia-f-tel");
 
     if (!isValid) return;
 

@@ -300,7 +300,7 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                         "content": [
                             {
                                 "type": "input_text",
-                                "text": f'Inicia la llamada saludando exactamente con: "{greeting_text}"',
+                                "text": f'Tu PRIMER mensaje debe ser, palabra por palabra y sin cambiar ningun nombre propio (di los nombres tal cual aparecen), EXACTAMENTE este y nada mas: "{greeting_text}"',
                             }
                         ],
                     },
@@ -448,7 +448,35 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                             }
                         )
                     )
-                    await openai_ws.send(json.dumps({"type": "response.create"}))
+                    followup_prompt = voice._voice_tool_followup_prompt(fname, result)
+                    if followup_prompt:
+                        await openai_ws.send(
+                            json.dumps(
+                                {
+                                    "type": "conversation.item.create",
+                                    "item": {
+                                        "type": "message",
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "input_text",
+                                                "text": followup_prompt,
+                                            }
+                                        ],
+                                    },
+                                }
+                            )
+                        )
+                    # NO disparamos response.create aqui: la respuesta que emitio la
+                    # function_call sigue ACTIVA y OpenAI rechazaria un nuevo response.create
+                    # ("conversation already has an active response"), dejando al asistente
+                    # MUDO hasta el siguiente turno del usuario. Lo lanzamos al recibir el
+                    # response.done de esa respuesta (abajo).
+                    state["pending_tool_response"] = True
+                elif etype == "response.done":
+                    if state.get("pending_tool_response"):
+                        state["pending_tool_response"] = False
+                        await openai_ws.send(json.dumps({"type": "response.create"}))
                 elif etype == "input_audio_buffer.speech_started":
                     truncated = await voice._voice_truncate_interrupted_response(openai_ws, websocket, state)
                     # Solo marca interrupcion si habia audio del asistente sonando (barge-in

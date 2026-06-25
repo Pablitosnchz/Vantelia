@@ -1103,6 +1103,23 @@ DEMO_PACKAGE_ID_PREFIX = "pkgdemo_"
 DEMO_PACKAGE_PURCHASE_ID_PREFIX = "ppdemo_"
 DEMO_GIFTCARD_ID_PREFIX = "gcdemo_"
 DEMO_SALE_ID_PREFIX = "saledemo_"
+DEMO_SERVICE_SLUG_PREFIX = "svcdemo_"
+
+# Servicios demo que cubren TODAS las casuisticas de pago/politica para enseñar
+# al cliente cada caso posible. Genericos (validos para cualquier negocio).
+#   payment_mode: payment_disabled (sin Stripe) | payment_optional | payment_required
+#   payment_type: full | deposit | preauth
+_DEMO_SERVICE_SPECS = [
+    # nombre, duracion, precio_cents, mode, type, deposito_cents, cancel_free_h, late_pct, noshow_pct, activo
+    ("Consulta de valoracion", 20, 0, "payment_disabled", "full", 0, None, None, None, True),
+    ("Sesion estandar", 45, 4000, "payment_disabled", "full", 0, None, None, None, True),
+    ("Sesion premium", 60, 7500, "payment_optional", "full", 0, None, None, None, True),
+    ("Tratamiento completo", 75, 12000, "payment_required", "full", 0, None, None, None, True),
+    ("Primera sesion con deposito", 60, 9000, "payment_required", "deposit", 3000, None, None, None, True),
+    ("Reserva garantizada", 50, 6000, "payment_required", "preauth", 0, None, None, None, True),
+    ("Sesion con politica estricta", 60, 8000, "payment_required", "full", 0, 48, 50, 100, True),
+    ("Servicio fuera de catalogo", 30, 3000, "payment_disabled", "full", 0, None, None, None, False),
+]
 
 _DEMO_LOCATIONS = [
     ("Sede Centro (demo)", "Calle Mayor 1"),
@@ -1177,7 +1194,20 @@ _DEMO_PROFESSIONALS = [
     {"name": "Laura Fernandez", "role_label": "Profesional", "color": "#00b1d9"},
     {"name": "Carlos Ruiz", "role_label": "Profesional", "color": "#7c5cff"},
     {"name": "Marta Gomez", "role_label": "Profesional", "color": "#f4795b"},
+    {"name": "Javier Moreno", "role_label": "Profesional", "color": "#2ecc71"},
+    {"name": "Elena Navarro", "role_label": "Profesional", "color": "#e84393"},
+    {"name": "David Castro", "role_label": "Profesional", "color": "#0984e3"},
+    {"name": "Sara Iglesias", "role_label": "Profesional", "color": "#00cec9"},
+    {"name": "Pablo Ortega", "role_label": "Profesional", "color": "#fdcb6e"},
+    {"name": "Nuria Vidal", "role_label": "Profesional", "color": "#d63031"},
+    {"name": "Sergio Ramos", "role_label": "Profesional", "color": "#6c5ce7"},
+    {"name": "Andrea Soler", "role_label": "Profesional", "color": "#e17055"},
+    {"name": "Hugo Marin", "role_label": "Profesional", "color": "#16a085"},
 ]
+
+# Profesionales por centro en la demo. El pool de arriba es mayor para que cada centro
+# tenga gente DISTINTA (nombres y colores no se repiten entre centros).
+_DEMO_TEAM_SIZE = 3
 
 
 _DEMO_CUSTOMER_NAMES = [
@@ -1202,6 +1232,58 @@ def _is_bookable_demo_service(service: Dict[str, Any]) -> bool:
         return False
     discount_markers = ("bono", "bonos", "descuento", "dto", "%")
     return not any(marker in text for marker in discount_markers)
+
+
+def _seed_demo_services(cliente_id: str) -> List[Dict[str, Any]]:
+    """Crea servicios demo (slug ``svcdemo_*``) cubriendo cada caso de pago/politica.
+    Idempotente (INSERT OR REPLACE). Devuelve los activos en forma de catalogo para
+    poder reservar contra ellos. No toca los servicios reales del tenant."""
+    now = timeutils._utc_now_iso()
+    out: List[Dict[str, Any]] = []
+    with db._get_db_connection() as connection:
+        for order, spec in enumerate(_DEMO_SERVICE_SPECS):
+            name, dur, price, mode, ptype, deposit, free_h, late_pct, noshow_pct, active = spec
+            slug = DEMO_SERVICE_SLUG_PREFIX + agenda._normalize_service_id(name)
+            connection.execute(
+                """
+                INSERT OR REPLACE INTO services (
+                    cliente_id, slug, name, duration_minutes, price_cents, description,
+                    is_active, sort_order, payment_mode, payment_type, deposit_amount_cents,
+                    currency, created_at, updated_at, cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'eur', ?, ?, ?, ?, ?)
+                """,
+                (
+                    cliente_id, slug, name, int(dur), int(price), "Servicio de demostracion.",
+                    1 if active else 0, 900 + order, mode, ptype, int(deposit),
+                    now, now, free_h, late_pct, noshow_pct,
+                ),
+            )
+            if active:
+                out.append({
+                    "id": slug, "nombre": name, "duration_minutes": int(dur),
+                    "price_cents": int(price), "payment_mode": mode, "payment_type": ptype,
+                })
+        connection.commit()
+    return out
+
+
+def _purge_demo_services(cliente_id: str) -> int:
+    """Borra los servicios demo (slug ``svcdemo_*``) + sus overrides por centro."""
+    like = DEMO_SERVICE_SLUG_PREFIX + "%"
+    with db._get_db_connection() as connection:
+        try:
+            connection.execute(
+                "DELETE FROM service_location_overrides WHERE cliente_id = ? AND service_slug LIKE ?",
+                (cliente_id, like),
+            )
+        except Exception:  # noqa: BLE001 - tabla opcional
+            pass
+        removed = connection.execute(
+            "DELETE FROM services WHERE cliente_id = ? AND slug LIKE ?",
+            (cliente_id, like),
+        ).rowcount
+        connection.commit()
+    return removed
 
 
 def _demo_service_names(cliente_id: str) -> List[str]:
@@ -1240,12 +1322,15 @@ def _demo_services(cliente_id: str) -> List[Dict[str, Any]]:
 
 def _purge_demo_agenda(cliente_id: str) -> Dict[str, int]:
     """Borra todos los datos demo (bookings + empleados demo) de un cliente."""
+    emp_like = f"{DEMO_EMPLOYEE_ID_PREFIX}%"
     with db._get_db_connection() as connection:
+        # Las citas demo varian el source (canal), pero SIEMPRE estan en empleados demo.
+        # Identificamos por source historico OR por empleado demo (cubre ambos casos).
         booking_ids = [
             row["id"]
             for row in connection.execute(
-                "SELECT id FROM bookings WHERE cliente_id = ? AND source = ?",
-                (cliente_id, DEMO_BOOKING_SOURCE),
+                "SELECT id FROM bookings WHERE cliente_id = ? AND (source = ? OR employee_id LIKE ?)",
+                (cliente_id, DEMO_BOOKING_SOURCE, emp_like),
             ).fetchall()
         ]
         if booking_ids:
@@ -1255,22 +1340,24 @@ def _purge_demo_agenda(cliente_id: str) -> Dict[str, int]:
                 (cliente_id, *booking_ids),
             )
         bookings_removed = connection.execute(
-            "DELETE FROM bookings WHERE cliente_id = ? AND source = ?",
-            (cliente_id, DEMO_BOOKING_SOURCE),
+            "DELETE FROM bookings WHERE cliente_id = ? AND (source = ? OR employee_id LIKE ?)",
+            (cliente_id, DEMO_BOOKING_SOURCE, emp_like),
         ).rowcount
         employees_removed = connection.execute(
             "DELETE FROM employees WHERE cliente_id = ? AND id LIKE ?",
-            (cliente_id, f"{DEMO_EMPLOYEE_ID_PREFIX}%"),
+            (cliente_id, emp_like),
         ).rowcount
         connection.execute(
             "DELETE FROM agenda_blocks WHERE cliente_id = ? AND employee_id LIKE ?",
-            (cliente_id, f"{DEMO_EMPLOYEE_ID_PREFIX}%"),
+            (cliente_id, emp_like),
         )
         connection.commit()
+    services_removed = _purge_demo_services(cliente_id)
     commerce_removed = _purge_demo_commerce(cliente_id)
     return {
         "bookings_removed": int(bookings_removed or 0),
         "employees_removed": int(employees_removed or 0),
+        "services_removed": int(services_removed or 0),
         "commerce": commerce_removed,
     }
 
@@ -1317,6 +1404,26 @@ def _purge_demo_commerce(cliente_id: str) -> Dict[str, int]:
     }
 
 
+def _seed_demo_locations(cliente_id: str) -> List[str]:
+    """Crea los centros demo (locdemo_*) y devuelve sus ids. Se siembra ANTES que la agenda
+    para que los empleados y las citas demo se repartan tambien en estos centros (si no,
+    nacerian vacios)."""
+    now = timeutils._utc_now_iso()
+    loc_ids: List[str] = []
+    with db._get_db_connection() as connection:
+        for idx, (name, addr) in enumerate(_DEMO_LOCATIONS):
+            lid = DEMO_LOCATION_ID_PREFIX + secrets.token_urlsafe(6)
+            connection.execute(
+                "INSERT INTO locations (id, cliente_id, name, address, phone, timezone, is_active, is_default, "
+                "sort_order, whatsapp_phone_number_id, voice_phone_number, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, '', '', 1, 0, ?, '', '', ?, ?)",
+                (lid, cliente_id, name, addr, 10 + idx, now, now),
+            )
+            loc_ids.append(lid)
+        connection.commit()
+    return loc_ids
+
+
 def _seed_demo_commerce(cliente_id: str) -> Dict[str, int]:
     """Siembra centros, productos, bonos, gift cards y ventas demo para enseñar al
     cliente como luce su negocio con todo en marcha. Todo con id 'demo' para poder
@@ -1341,20 +1448,29 @@ def _seed_demo_commerce(cliente_id: str) -> Dict[str, int]:
     except (TypeError, ValueError):
         svc_price = 5000
 
-    loc_ids: List[str] = []
     products: List[Tuple[str, str, int]] = []
     packages: List[Tuple[str, str, int, int]] = []
     with db._get_db_connection() as connection:
-        for idx, (name, addr) in enumerate(_DEMO_LOCATIONS):
-            lid = DEMO_LOCATION_ID_PREFIX + secrets.token_urlsafe(6)
-            connection.execute(
-                "INSERT INTO locations (id, cliente_id, name, address, phone, timezone, is_active, is_default, "
-                "sort_order, whatsapp_phone_number_id, voice_phone_number, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, '', '', 1, 0, ?, '', '', ?, ?)",
-                (lid, cliente_id, name, addr, 10 + idx, now, now),
-            )
-            loc_ids.append(lid)
-            counts["locations"] += 1
+        # Los centros demo ya se crearon ANTES de la agenda (_seed_demo_locations) para que
+        # tengan profesionales y citas. Aqui solo los leemos para asociar ventas/bonos.
+        loc_ids = [
+            str(row["id"]) for row in connection.execute(
+                "SELECT id FROM locations WHERE cliente_id=? AND id LIKE ?",
+                (cliente_id, DEMO_LOCATION_ID_PREFIX + "%"),
+            ).fetchall()
+        ]
+        if not loc_ids:
+            # Llamada directa (sin _seed_demo_agenda): creamos los centros demo aqui mismo.
+            for idx, (name, addr) in enumerate(_DEMO_LOCATIONS):
+                lid = DEMO_LOCATION_ID_PREFIX + secrets.token_urlsafe(6)
+                connection.execute(
+                    "INSERT INTO locations (id, cliente_id, name, address, phone, timezone, is_active, is_default, "
+                    "sort_order, whatsapp_phone_number_id, voice_phone_number, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, '', '', 1, 0, ?, '', '', ?, ?)",
+                    (lid, cliente_id, name, addr, 10 + idx, now, now),
+                )
+                loc_ids.append(lid)
+        counts["locations"] = len(loc_ids)
         for name, price, stock in _DEMO_PRODUCTS:
             pid = DEMO_PRODUCT_ID_PREFIX + secrets.token_urlsafe(6)
             connection.execute(
@@ -1427,29 +1543,50 @@ def _create_demo_employees(cliente_id: str) -> List[Dict[str, Any]]:
     created_at = timeutils._utc_now_iso()
     closed_json = json.dumps(defaults["closed_weekdays"])
     break_windows_json = json.dumps(defaults.get("break_windows", []))
+    # Reparte los profesionales demo entre TODOS los centros del negocio (>=1 por centro)
+    # para que la demo muestre agenda en cada local. _store_booking sella la cita al centro
+    # del empleado, asi que basta con asignar location_id aqui.
+    try:
+        loc_rows = agenda._list_location_rows(cliente_id, include_inactive=False)
+    except Exception:  # noqa: BLE001
+        loc_rows = []
+    loc_ids = [str(row["id"]) for row in loc_rows] or [""]
+    # Equipo por centro (_DEMO_TEAM_SIZE profesionales en cada local) tomando perfiles
+    # DISTINTOS del pool con un contador global: asi cada centro tiene gente diferente
+    # (nombres y colores no se repiten entre centros mientras alcance el pool).
+    plan = []
+    k = 0
+    for loc_id in loc_ids:
+        for _ in range(_DEMO_TEAM_SIZE):
+            plan.append((loc_id, _DEMO_PROFESSIONALS[k % len(_DEMO_PROFESSIONALS)]))
+            k += 1
     employees: List[Dict[str, Any]] = []
     with db._get_db_connection() as connection:
-        for profile in _DEMO_PROFESSIONALS:
+        for location_id, profile in plan:
             employee_id = f"{DEMO_EMPLOYEE_ID_PREFIX}{secrets.token_urlsafe(6)}"
             connection.execute(
                 """
                 INSERT INTO employees (
                     id, cliente_id, name, role_label, color, is_active, is_default,
                     timezone, slot_minutes, day_start, day_end, break_start, break_end,
-                    break_windows_json, closed_weekdays_json, service_ids_json,
+                    break_windows_json, closed_weekdays_json, service_ids_json, location_id,
                     created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?)
+                VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)
                 """,
                 (
                     employee_id, cliente_id, profile["name"], profile["role_label"], profile["color"],
                     defaults["timezone"], int(defaults["slot_minutes"]),
                     defaults["day_start"], defaults["day_end"],
                     defaults["break_start"], defaults["break_end"], break_windows_json, closed_json,
+                    location_id,
                     created_at, created_at,
                 ),
             )
-            employees.append({"id": employee_id, "name": profile["name"], "color": profile["color"]})
+            employees.append({
+                "id": employee_id, "name": profile["name"], "color": profile["color"],
+                "location_id": location_id,
+            })
         connection.commit()
     return employees
 
@@ -1458,10 +1595,15 @@ def _seed_demo_agenda(cliente_id: str) -> Dict[str, Any]:
     """Genera ~1 mes de citas demo repartidas entre varios profesionales.
 
     Idempotente: limpia datos demo previos antes de regenerar. Todas las citas
-    quedan marcadas con source='demo_seed' y los profesionales con id 'empdemo_*'
-    para poder borrarlas despues sin tocar datos reales del cliente.
+    quedan con source='demo_seed' y en profesionales 'empdemo_*' para poder
+    borrarlas despues sin tocar datos reales. Cubre todos los estados (confirmada,
+    pendiente, completada auto/manual, no-show, cancelada), confirmacion del cliente
+    y siembra servicios demo (svcdemo_*) con todas las casuisticas de pago/politica.
     """
     _purge_demo_agenda(cliente_id)
+    # Crea los centros demo ANTES de sembrar empleados/citas, para que la agenda (equipo +
+    # citas) se reparta tambien en ellos. Si no, los centros demo quedarian sin agenda.
+    _seed_demo_locations(cliente_id)
 
     defaults = agenda._employee_defaults_for_client(cliente_id)
     tz_name = defaults["timezone"] or settings.DEFAULT_TIMEZONE
@@ -1493,12 +1635,23 @@ def _seed_demo_agenda(cliente_id: str) -> Dict[str, Any]:
         day_slots = ["10:00", "11:00", "12:00", "16:00", "17:00"]
 
     employees = _create_demo_employees(cliente_id)
-    services = _demo_services(cliente_id)
+    # Servicios demo (todas las casuisticas de pago/politica) + catalogo real, deduplicado.
+    # Garantiza que cada caso aparezca reservado en la agenda. El perfil de pago se deriva
+    # del propio servicio (payment_mode/payment_type), no de un round-robin artificial.
+    demo_svcs = _seed_demo_services(cliente_id)
+    demo_ids = {d["id"] for d in demo_svcs}
+    services = demo_svcs + [
+        s for s in _demo_services(cliente_id)
+        if str(s.get("id") or s.get("slug") or "") not in demo_ids
+    ]
+    services = services[:16]
     today = datetime.now(tz).date()
     rng = random.Random(f"{cliente_id}:{today.isoformat()}")
     created_at = timeutils._utc_now_iso()
     bookings_created = 0
-    max_bookings = 350
+    # Escala el volumen con el nº de empleados para que cada centro quede poblado
+    # (~120 citas/profesional, como el demo original de 3 profesionales), con techo.
+    max_bookings = min(120 * max(1, len(employees)), 1500)
     end_day_min = textnorm._time_to_min(end_dt.strftime("%H:%M")) or (24 * 60)
     occupied_by_employee_day: Dict[Tuple[str, str], List[Tuple[int, int]]] = {}
 
@@ -1545,10 +1698,32 @@ def _seed_demo_agenda(cliente_id: str) -> Dict[str, Any]:
                     continue
                 start_local = datetime.fromisoformat(f"{day.isoformat()}T{hora}:00").replace(tzinfo=tz)
                 end_local = start_local + timedelta(minutes=service_duration)
+                # Estado: pasado -> completada (auto/manual) / no-show / cancelada;
+                # futuro -> pendiente de revision / confirmada. Cubre todas las casuisticas.
                 if is_past:
-                    status_value = "cancelled" if rng.random() < 0.18 else "completed"
+                    r = rng.random()
+                    status_value = "cancelled" if r < 0.15 else "no_show" if r < 0.30 else "completed"
+                    completed_source = ("auto" if rng.random() < 0.4 else "manual") if status_value == "completed" else ""
                 else:
                     status_value = "pending_review" if rng.random() < 0.2 else "confirmed"
+                    completed_source = ""
+                # Perfil de pago derivado del PROPIO servicio (con/sin Stripe, deposito, retencion).
+                svc_mode = str(service.get("payment_mode") or "payment_disabled")
+                svc_ptype = str(service.get("payment_type") or "full")
+                if service_price <= 0 or svc_mode == "payment_disabled":
+                    pay_profile = "none"
+                elif svc_ptype == "preauth":
+                    pay_profile = "preauth"
+                else:
+                    pay_profile = "full"
+                if pay_profile == "none" or status_value == "cancelled":
+                    pay_status = "not_required"
+                elif status_value in ("completed", "no_show"):
+                    pay_status = "paid" if rng.random() < 0.8 else "not_required"
+                elif pay_profile == "preauth":
+                    pay_status = "preauthorized" if rng.random() < 0.7 else "pending"
+                else:  # full / optional
+                    pay_status = "paid" if rng.random() < 0.55 else "pending"
                 booking_id = secrets.token_urlsafe(16)
                 record = {
                     "id": booking_id,
@@ -1576,13 +1751,33 @@ def _seed_demo_agenda(cliente_id: str) -> Dict[str, Any]:
                     **booking._booking_blank_tracking_fields(),
                     "service_id": service_id,
                     "service_price_cents": service_price,
+                    "payment_status": pay_status,
                     "source": DEMO_BOOKING_SOURCE,
                     "created_at": created_at,
                 }
                 try:
-                    booking._store_booking(record)
+                    # skip_payment=True: cita demo VISUAL, sin crear checkouts Stripe reales.
+                    booking._store_booking(record, skip_payment=True)
                 except sqlite3.IntegrityError:
                     continue
+                # completed_source no lo escribe el INSERT base; lo ajustamos por UPDATE.
+                if completed_source:
+                    with db._get_db_connection() as _conn:
+                        _conn.execute(
+                            "UPDATE bookings SET completed_source=? WHERE id=?",
+                            (completed_source, booking_id),
+                        )
+                        _conn.commit()
+                # Para que la demo enseñe la distinción "cita confirmada" (hueco activo)
+                # vs "cliente confirmó asistencia", sembramos confirmación explícita del
+                # cliente en ~55% de las citas futuras confirmadas (audit -> marca ✓).
+                if not is_past and status_value == "confirmed" and rng.random() < 0.55:
+                    booking._record_booking_audit(
+                        booking_id,
+                        cliente_id,
+                        "attendance_confirmed_by_customer",
+                        {"channel": rng.choice(["whatsapp", "voice", "email"]), "source": "demo_seed"},
+                    )
                 occupied.append((start_min, end_min))
                 bookings_created += 1
         if bookings_created >= max_bookings:

@@ -34,6 +34,11 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
 from api_models import AppVoiceResponse, BookingReschedulePayload
 from backend import agenda, appstate, booking, chat, clients, crm, db, demo_agenda, emailing, messaging, rag, security, settings, textnorm, timeutils
 
+# Tareas en segundo plano (envios best-effort que no deben bloquear la respuesta de voz).
+# Guardamos referencia para que asyncio no las recolecte antes de completarse.
+_VOICE_BG_TASKS: set = set()
+
+
 def _client_voice_plan_enabled(cliente_id: str) -> bool:
     """Whether the voice channel (phone) is available in the client's effective plan.
 
@@ -90,9 +95,9 @@ def _app_voice_response(cliente_id: str, request: Request) -> "AppVoiceResponse"
 VOICE_NOISE_REDUCTION_TYPES = {"near_field", "far_field"}
 VOICE_VAD_EAGERNESS_LEVELS = {"low", "medium", "high", "auto"}
 VOICE_VAD_TYPES = {"server_vad", "semantic_vad"}
-# Silencio (ms) que espera tras dejar de oir voz antes de responder. El cliente
-# quiere ~0.5-1 s: por defecto 500 ms (respuesta rapida tras interrumpir).
-VOICE_VAD_SILENCE_MS_DEFAULT = 500
+# Silencio (ms) que espera tras dejar de oir voz antes de responder. 650 ms sigue
+# siendo agil, pero evita que respiraciones/eco corten al asistente con tanta facilidad.
+VOICE_VAD_SILENCE_MS_DEFAULT = 650
 
 
 def _voice_audio_input_config(voice_cfg: Dict[str, Any], *, default_noise: str = "far_field") -> Dict[str, Any]:
@@ -103,7 +108,7 @@ def _voice_audio_input_config(voice_cfg: Dict[str, Any], *, default_noise: str =
 
     - server_vad (por defecto): detecta fin de turno por silencio con un tiempo EXACTO
       (`silence_duration_ms`), asi la respuesta llega rapido tras hablar/interrumpir
-      (~0.5 s). `threshold` alto + `noise_reduction` evitan que el ruido abra turnos.
+      (~0.6 s). `threshold` alto + `noise_reduction` evitan que el ruido abra turnos.
       Alternativa `semantic_vad` (voice_cfg.vad_type) si se prefiere robustez sobre
       velocidad.
     - noise_reduction: filtro nativo de OpenAI. far_field para sala/altavoz/linea,
@@ -135,9 +140,9 @@ def _voice_audio_input_config(voice_cfg: Dict[str, Any], *, default_noise: str =
             silence_ms = VOICE_VAD_SILENCE_MS_DEFAULT
         silence_ms = max(200, min(2000, silence_ms))
         try:
-            threshold = float(voice_cfg.get("vad_threshold") or 0.6)
+            threshold = float(voice_cfg.get("vad_threshold") or 0.72)
         except (TypeError, ValueError):
-            threshold = 0.6
+            threshold = 0.72
         threshold = max(0.0, min(1.0, threshold))
         try:
             prefix_ms = int(voice_cfg.get("vad_prefix_padding_ms") or 300)
@@ -155,7 +160,9 @@ def _voice_audio_input_config(voice_cfg: Dict[str, Any], *, default_noise: str =
     return {
         "turn_detection": turn_detection,
         "noise_reduction": {"type": noise_type},
-        "transcription": {"model": "whisper-1"},
+        # El cliente final siempre habla espanol: fijamos el idioma para que Whisper
+        # no transcriba "si" como "see" ni mezcle otros idiomas en frases cortas.
+        "transcription": {"model": "whisper-1", "language": "es"},
     }
 
 
@@ -327,16 +334,22 @@ def _voice_outbound_confirm_instructions(cliente_id: str, config: Dict[str, Any]
     base = _voice_build_instructions(cliente_id, config)
     nombre = (booking_row["nombre"] or "el cliente") if booking_row else "el cliente"
     servicio = (booking_row["servicio"] or "su cita") if booking_row else "su cita"
+    tz = config.get("booking", {}).get("timezone", settings.DEFAULT_TIMEZONE)
     fecha = booking_row["booking_date"] if booking_row else ""
     hora = booking_row["booking_time"] if booking_row else ""
+    fecha_voz = _voice_say_date(fecha, tz) if fecha else "su proxima cita"
+    hora_voz = _voice_say_time(hora) if hora else ""
     extra = (
-        "\n\nLLAMADA SALIENTE DE CONFIRMACION (tu llamas al cliente, no al reves).\n"
-        f"- Llamas a {nombre} para confirmar su cita: {servicio} el {fecha} a las {hora}.\n"
-        "- Saluda, di de parte de que negocio llamas y pide que confirme la asistencia. Se breve y cordial.\n"
-        "- Si confirma, llama a la herramienta confirmar_cita y despidete dando las gracias.\n"
-        "- Si quiere cancelar o cambiar la hora, usa cancelar_cita o reprogramar_cita (el telefono ya esta "
-        "verificado por ser una llamada a su numero; no pidas codigo de reserva).\n"
-        "- Si pide que no le llamen, discref pide disculpas, dile que tomas nota y despidete sin insistir.\n"
+        "\n\nLLAMADA SALIENTE DE CONFIRMACION (TU llamas al cliente; ya tienes su cita delante).\n"
+        f"- Llamas a {nombre} para confirmar su cita: {servicio}, {fecha_voz} a {hora_voz}.\n"
+        "- YA SABES cual es la cita. NO pidas el numero de reserva, NO uses consultar_cita y NO envies codigo "
+        "de verificacion: el telefono ya esta verificado por ser una llamada a su propio numero.\n"
+        "- Saluda, di de parte de que negocio llamas y pide que confirme la asistencia. Breve y cordial.\n"
+        "- Si confirma (un 'si', 'vale', 'perfecto' o similar), llama de inmediato a confirmar_cita y despidete "
+        "dando las gracias. No vuelvas a pedir datos ni repitas el proceso.\n"
+        "- Si quiere cancelar, usa cancelar_cita; si quiere otra hora, mira huecos y usa reprogramar_cita. No "
+        "pidas codigo de reserva (ya esta verificado).\n"
+        "- Si pide que no le llamen, pide disculpas, toma nota y despidete sin insistir.\n"
         "- No alargues: es una llamada de cortesia para confirmar.\n"
     )
     return base + extra
@@ -509,8 +522,226 @@ def _voice_booking_enabled(cliente_id: str, config: Dict[str, Any]) -> bool:
     return bool(config.get("booking", {}).get("enabled")) and clients._client_booking_plan_enabled(cliente_id)
 
 
+def _voice_service_options(cliente_id: str, location_id: str = "") -> List[str]:
+    try:
+        services = booking._public_services_for_booking(cliente_id, location_id=location_id)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("[voice] no se pudieron cargar servicios (%s): %s", cliente_id, exc)
+        return []
+    names: List[str] = []
+    for service in services:
+        if not isinstance(service, dict):
+            continue
+        name = textnorm._sanitize_text(str(service.get("nombre") or service.get("name") or ""))
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _voice_service_catalog(cliente_id: str, location_id: str = "") -> List[str]:
+    """Lineas 'Nombre · N min · precio' del catalogo real, para que el asistente pueda
+    enumerar y presupuestar por voz sin inventarse precios ni duraciones."""
+    try:
+        services = booking._public_services_for_booking(cliente_id, location_id=location_id)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("[voice] no se pudo cargar el catalogo (%s): %s", cliente_id, exc)
+        return []
+    lines: List[str] = []
+    seen: set = set()
+    for service in services:
+        if not isinstance(service, dict):
+            continue
+        name = textnorm._sanitize_text(str(service.get("nombre") or service.get("name") or ""))
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        parts = [name]
+        try:
+            dur = int(service.get("duration_minutes") or 0)
+        except (TypeError, ValueError):
+            dur = 0
+        if dur > 0:
+            parts.append(f"{dur} min")
+        try:
+            price_cents = int(service.get("price_cents") or 0)
+        except (TypeError, ValueError):
+            price_cents = 0
+        price_label = textnorm._sanitize_text(str(service.get("price_label") or ""))
+        if price_cents > 0 and price_label:
+            parts.append(price_label)
+        elif price_cents <= 0:
+            parts.append("a consultar")
+        lines.append("- " + " · ".join(parts))
+    return lines
+
+
+def _voice_resolve_location_id(cliente_id: str, centro: str) -> str:
+    """Resuelve el nombre de centro que dice el cliente a su location_id. '' si no encaja."""
+    centro = textnorm._sanitize_text(centro or "").strip()
+    if not centro:
+        return ""
+    try:
+        rows = agenda._list_location_rows(cliente_id, include_inactive=False)
+    except Exception:  # noqa: BLE001
+        return ""
+
+    def _norm(value: str) -> str:
+        value = unicodedata.normalize("NFKD", (value or "").lower())
+        return "".join(c for c in value if not unicodedata.combining(c)).strip()
+
+    key = _norm(centro)
+    if not key:
+        return ""
+    for row in rows:  # match exacto por nombre
+        if _norm(str(row["name"])) == key:
+            return str(row["id"])
+    for row in rows:  # match parcial: "centro" -> "Sede Centro"
+        nk = _norm(str(row["name"]))
+        if nk and (key in nk or nk in key):
+            return str(row["id"])
+    return ""
+
+
+def _voice_service_required_response(cliente_id: str, location_id: str = "", *, invalid: str = "") -> Dict[str, Any]:
+    options = _voice_service_options(cliente_id, location_id)
+    visible = options[:5]
+    if invalid:
+        prompt = "No encuentro ese servicio en la agenda. Pregunta cual quiere reservar"
+    else:
+        prompt = "Antes de reservar necesito saber que servicio quiere"
+    if visible:
+        prompt += ": " + ", ".join(visible[:3])
+        if len(visible) > 3:
+            prompt += ", u otro de la lista"
+    prompt += "."
+    return {
+        "ok": False,
+        "needs_service": True,
+        "missing_field": "servicio",
+        "servicios_disponibles": visible,
+        "error": prompt,
+        "mensaje_voz": prompt,
+    }
+
+
+def _voice_normalize_booking_phone(phone: str) -> str:
+    """Telefono de cliente para una reserva de voz.
+
+    En llamadas ES es comun dictar solo los 9 digitos. Si el modelo pierde un
+    digito, devolvemos vacio para que pregunte otra vez antes de crear la cita.
+    """
+    return messaging._normalize_sms_recipient(phone)
+
+
+# Espanol hablado para fechas y horas: evita que el modelo lea "2026-06-26" o
+# "once cero cero". Queremos "el 26 de junio" y "las once de la manana".
+_VOICE_HOUR_WORDS = {
+    1: "la una", 2: "las dos", 3: "las tres", 4: "las cuatro", 5: "las cinco",
+    6: "las seis", 7: "las siete", 8: "las ocho", 9: "las nueve", 10: "las diez",
+    11: "las once", 12: "las doce",
+}
+_VOICE_MONTHS_ES = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+    "septiembre", "octubre", "noviembre", "diciembre",
+]
+_VOICE_WEEKDAYS_ES = [
+    "lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo",
+]
+
+
+def _voice_time_period_es(hour24: int) -> str:
+    if 5 <= hour24 < 13:
+        return "de la manana"
+    if 13 <= hour24 < 21:
+        return "de la tarde"
+    return "de la noche"
+
+
+def _voice_say_time(hora: str, with_period: bool = True) -> str:
+    """'11:00' -> 'las once de la manana'; '09:30' -> 'las nueve y media de la manana'.
+
+    with_period=False omite 'de la manana/tarde/noche' (util al enumerar varias horas
+    seguidas y decir el tramo una sola vez al final).
+    """
+    try:
+        parts = str(hora).split(":")
+        h = int(parts[0])
+        m = int(parts[1]) if len(parts) > 1 else 0
+    except (ValueError, IndexError):
+        return str(hora)
+    period_h = (h + 1) % 24 if m == 45 else h
+    if period_h == 12 and m == 0:
+        return "las doce del mediodia" if with_period else "las doce"
+    if period_h == 0 and m == 0:
+        return "las doce de la noche" if with_period else "las doce"
+    h12 = period_h % 12 or 12
+    base_h = _VOICE_HOUR_WORDS.get(h12, f"las {h12}")
+    if m == 0:
+        frac = ""
+    elif m == 15:
+        frac = " y cuarto"
+    elif m == 30:
+        frac = " y media"
+    elif m == 45:
+        frac = " menos cuarto"
+    else:
+        frac = f" y {m}"
+    period = f" {_voice_time_period_es(period_h)}" if with_period else ""
+    return f"{base_h}{frac}{period}"
+
+
+def _voice_say_date(fecha: str, tz: str = "") -> str:
+    """'2026-06-26' -> 'hoy' / 'manana' / 'el viernes 26 de junio'."""
+    try:
+        d = datetime.strptime(str(fecha), "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return str(fecha)
+    if tz:
+        try:
+            today = datetime.now(ZoneInfo(tz)).date()
+            delta = (d - today).days
+            if delta == 0:
+                return "hoy"
+            if delta == 1:
+                return "manana"
+        except Exception:  # noqa: BLE001
+            pass
+    return f"el {_VOICE_WEEKDAYS_ES[d.weekday()]} {d.day} de {_VOICE_MONTHS_ES[d.month - 1]}"
+
+
+def _voice_join_es(items: List[str]) -> str:
+    items = [i for i in items if i]
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    return ", ".join(items[:-1]) + " y " + items[-1]
+
+
 def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
     base = rag._build_system_prompt(cliente_id, config)
+    # En una llamada de voz no existe el formulario del chat: quita cualquier
+    # instruccion del sentinel [MOSTRAR_FORMULARIO] para que el modelo no lo narre
+    # ni se quede esperando a "mostrar" nada. En voz se reserva con herramientas.
+    base = "\n".join(
+        line for line in base.split("\n") if settings.BOOKING_SENTINEL not in line
+    )
+    service_catalog = _voice_service_catalog(cliente_id)
+    if service_catalog:
+        listed_services = "\n".join(service_catalog[:40])
+        services_block = (
+            "\nCATALOGO REAL DE SERVICIOS (nombre, duracion y precio) PARA RESERVAR, ENUMERAR Y PRESUPUESTAR:\n"
+            f"{listed_services}\n"
+            "- Si el cliente pregunta que servicios hay, cuanto cuestan o cuanto duran, responde SOLO con los datos "
+            "de esta lista. No uses ejemplos, categorias ni precios de la base de conocimiento si no estan aqui.\n"
+            "- Di los precios y las duraciones en palabras naturales ('cuarenta euros', 'una hora', 'cuarenta y cinco "
+            "minutos'). Si un servicio aparece 'a consultar', no inventes una cifra: dilo y ofrece confirmarlo.\n"
+            "- Si el cliente pide un servicio que no esta en esta lista, no lo aceptes como sinonimo ni lo confirmes. "
+            "Dile que no lo encuentras y ofrece 2 o 3 servicios reales de la lista.\n"
+            "- Para reservar, el parametro servicio de las herramientas debe ser uno de estos nombres, exactamente.\n"
+        )
+    else:
+        services_block = ""
 
     voice_rules = (
         "\n\nCANAL: LLAMADA TELEFONICA POR VOZ. Eres la recepcionista del negocio, una persona real, no un robot.\n"
@@ -518,7 +749,12 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
         "- Habla SIEMPRE en espanol de Espana, con tono calido y cercano, como alguien que coge el telefono en recepcion.\n"
         "- Frases cortas, UNA idea por turno. Nada de parrafos ni listas largas leidas de un tiron.\n"
         "- Usa con naturalidad y moderacion expresiones como 'vale', 'perfecto', 'claro', 'un momento', 'a ver'.\n"
-        "- Di numeros, horas y precios en palabras naturales: 'las cinco y media', 'a las diez de la manana', 'cuarenta euros'.\n"
+        "- Di numeros, horas, fechas y precios SIEMPRE en palabras naturales de Espana: 'las cinco y media', "
+        "'a las diez de la manana', 'cuarenta euros', 'el 26 de junio'. NUNCA leas una hora como '09:00' ni digas "
+        "'cero cero' (di 'las nueve', no 'nueve cero cero'); NUNCA leas una fecha tipo '2026-06-26' (di el dia y el "
+        "mes, o 'manana'/'hoy').\n"
+        "- Mantente humana y directa: una frase natural por turno, con palabras como 'vale', 'perfecto' o 'listo' "
+        "cuando encajen. No seas seca ni telegrafica, pero no expliques el proceso interno.\n"
         "- No leas en voz alta URLs, simbolos, markdown, asteriscos ni emojis.\n"
         "- NUNCA digas que eres una IA, un asistente virtual, un modelo o un sistema; ni menciones herramientas internas, "
         "ni codigos, ni etiquetas entre corchetes como [MOSTRAR_FORMULARIO].\n"
@@ -561,15 +797,38 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
             "- Consultar la agenda es instantaneo. Puedes decir una frase muy breve como 'un momento' "
             "justo antes de mirar la disponibilidad, pero NO te quedes esperando sin mas: llama a la "
             "herramienta en el mismo turno. Nunca prometas que 'ahora lo miras' sin usar la herramienta.\n"
-            "- Para ver huecos libres usa la herramienta consultar_disponibilidad(fecha). Ofrece solo 2 o 3 "
-            "horas concretas, no leas la lista entera.\n"
-            "- Antes de reservar confirma en voz alta: nombre, telefono, servicio, dia y hora.\n"
-            "- Pide el telefono y repitelo para asegurarte de que lo has cogido bien.\n"
-            "- Crea la reserva con la herramienta crear_cita. Si devuelve ok, confirma con naturalidad que la "
-            "cita queda hecha y que recibira un SMS con los detalles. Si devuelve error, explica el motivo con "
-            "tacto y ofrece otra hora.\n"
-            "- crear_cita devuelve un numero de reserva (formato R y cuatro caracteres, por ejemplo R-7F4K). "
-            "Diselo al cliente deletreado, letra a letra y digito a digito, y pidele que lo apunte porque le servira "
+            "- Si el cliente quiere una cita y no ha dicho el servicio, preguntale primero que servicio quiere. "
+            "No consultes disponibilidad ni crees la cita con un servicio generico o vacio.\n"
+            "- Para ver huecos libres usa la herramienta consultar_disponibilidad(fecha). Ofrece 2 o 3 horas "
+            "concretas pero DEJA CLARO que hay mas si las hay (por ejemplo 'y tambien me quedan por la tarde' o "
+            "'tengo mas horas ese dia'); no des a entender que solo quedan esas tres ni leas la lista entera. Si el "
+            "cliente pide una franja ('por la tarde', 'a partir de las cinco') o que le digas mas, ofrece huecos de "
+            "esa franja a partir de la lista de la herramienta.\n"
+            "- REGLA DE ORO DE LA HORA: solo puedes ofrecer, aceptar o confirmar una hora que consultar_disponibilidad "
+            "acabe de devolver como libre. Esa lista de huecos es la UNICA fuente de horas reservables: no te inventes "
+            "horas ni propongas una hora que no este en ella.\n"
+            "- Si el cliente pide o propone una hora concreta (por ejemplo 'a las tres'), comprueba si esta en la ultima "
+            "lista de huecos. Si esta, sigue. Si NO esta, es de otro dia, o tienes cualquier duda, vuelve a llamar a "
+            "consultar_disponibilidad ANTES de responder y solo aceptala si aparece libre. NUNCA digas 'si, sin problema' "
+            "ni 'reservamos a las X' a una hora que no acabas de ver libre en la herramienta.\n"
+            "- Si esa hora no esta libre, dilo con tacto y ofrece 2 o 3 horas reales de la lista. La confirmacion "
+            "definitiva la da crear_cita: hasta que no devuelva ok, la cita NO esta hecha (no la des por reservada).\n"
+            "- Antes de reservar confirma en voz alta: nombre, telefono, servicio, dia y hora (y el centro "
+            "si el negocio tiene varios).\n"
+            "- Pide el telefono y repitelo para asegurarte de que lo has cogido bien. En Espana debe tener 9 digitos "
+            "(o +34 seguido de 9 digitos). Si no estas segura de todos los digitos, no confirmes: pide que lo repita.\n"
+            "- El email no es obligatorio por telefono. Si el cliente lo da o dice que prefiere recibir avisos por email, "
+            "pidelo y pasalo en crear_cita; si no, continua solo con telefono.\n"
+            "- Crea la reserva con la herramienta crear_cita. Despues de usar una herramienta, responde SIEMPRE en "
+            "voz alta de forma breve. Si el resultado trae mensaje_voz, dilo casi literal y no anadas explicaciones.\n"
+            "- En cuanto el cliente confirme los datos, LLAMA a crear_cita en ESE MISMO turno. Como mucho di "
+            "'un momento' UNA vez; no anuncies dos veces que vas a crearla, no describas el proceso interno y no "
+            "esperes entre turnos: crear la cita es inmediato. Cuando la herramienta responda, da una sola frase "
+            "de confirmacion.\n"
+            "- Si crear_cita devuelve ok, confirma claramente que la cita queda confirmada. Si devuelve error, "
+            "explica el motivo con tacto y ofrece otra hora.\n"
+            "- crear_cita devuelve un numero de reserva (formato R y seis digitos, por ejemplo R-481523). "
+            "Diselo al cliente digito a digito y pidele que lo apunte porque le servira "
             "para cambiar o cancelar la cita.\n"
             "- CAMBIAR O CANCELAR UNA CITA: pide el numero de reserva (formato R y seis digitos) y llama a "
             "consultar_cita DE INMEDIATO, en el mismo turno y SIN anunciarlo (no digas 'un momento, lo compruebo': "
@@ -583,6 +842,10 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
             "tiene contacto registrado, puedes verificar pidiendo el telefono o el email de la reserva.\n"
             "- Tras verificar: para CANCELAR usa cancelar_cita con ese mismo numero; para REPROGRAMAR pide la nueva "
             "fecha/hora, comprueba huecos con consultar_disponibilidad y usa reprogramar_cita.\n"
+            "- No narres pasos internos. Evita frases como 'voy a proceder', 'espera un segundo', 'la cancelo ahora' "
+            "o 'ya puedo proceder'. Si el codigo se verifica y ya sabes que quiere cancelar o reprogramar, ejecuta "
+            "la accion directamente y da UNA sola frase final humana: por ejemplo, 'Listo, he verificado el codigo "
+            "y he cancelado la cita.'\n"
             "- Seguridad: estas herramientas solo funcionan si el telefono desde el que llaman coincide con el de la "
             "reserva. Si devuelven needs_verification, pide con tacto el telefono o el email con el que reservaron y "
             "vuelve a intentarlo pasando ese dato. No confirmes una cancelacion o cambio sin que la herramienta "
@@ -596,6 +859,15 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
                 "enviar_enlace_pago. Le llegara un SMS con un enlace seguro. No leas la URL en voz alta: solo di "
                 "que le envias el enlace por mensaje. Si devuelve error, explicalo con tacto.\n"
             )
+        try:
+            if len(agenda._list_location_rows(cliente_id, include_inactive=False)) > 1:
+                booking_block += (
+                    "- CENTRO (este negocio tiene VARIOS centros): pregunta SIEMPRE en que centro quiere la cita "
+                    "ANTES de mirar disponibilidad, y pasa ese centro en el parametro 'centro' de "
+                    "consultar_disponibilidad y de crear_cita. La disponibilidad y la reserva seran de ese centro.\n"
+                )
+        except Exception:  # noqa: BLE001
+            pass
     else:
         booking_block = (
             "\nAGENDA: la reserva online no esta activa para este negocio. Si piden cita, recoge nombre, "
@@ -621,12 +893,12 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
 
     knowledge = _voice_load_knowledge(cliente_id)
     knowledge_block = (
-        f"\n\nBASE DE CONOCIMIENTO DEL NEGOCIO (es tu unica fuente para datos concretos como servicios, "
-        f"precios, horarios o direccion; si algo no esta aqui, dilo y ofrece que el equipo lo confirme):\n{knowledge}\n"
+        f"\n\nBASE DE CONOCIMIENTO DEL NEGOCIO (para datos generales como direccion, condiciones o FAQs. "
+        f"Si hay CATALOGO REAL DE SERVICIOS arriba, ese catalogo manda para nombres de servicios y reservas):\n{knowledge}\n"
         if knowledge
         else ""
     )
-    return base + voice_rules + booking_block + knowledge_block
+    return base + voice_rules + services_block + booking_block + knowledge_block
 
 
 def _voice_booking_tools(
@@ -636,21 +908,23 @@ def _voice_booking_tools(
     include_confirm=True anade `confirmar_cita` (llamadas salientes de confirmacion)."""
     if not _voice_booking_enabled(cliente_id, config):
         return []
+    service_required = bool(_voice_service_options(cliente_id))
     tools: List[Dict[str, Any]] = [
         {
             "type": "function",
             "name": "consultar_disponibilidad",
             "description": (
                 "Devuelve las horas libres de un dia concreto. Llamala antes de proponer horas. "
-                "La fecha debe ir en formato YYYY-MM-DD."
+                "La fecha debe ir en formato YYYY-MM-DD. Si hay catalogo de servicios, pregunta "
+                "primero el servicio y pasalo aqui."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "fecha": {"type": "string", "description": "Fecha en formato YYYY-MM-DD"},
-                    "servicio": {"type": "string", "description": "Servicio solicitado (opcional)"},
+                    "servicio": {"type": "string", "description": "Servicio solicitado por el cliente"},
                 },
-                "required": ["fecha"],
+                "required": ["fecha", "servicio"] if service_required else ["fecha"],
             },
         },
         {
@@ -659,19 +933,21 @@ def _voice_booking_tools(
             "description": (
                 "Crea y confirma una cita. Llamala solo despues de haber confirmado con el cliente nombre, "
                 "telefono, servicio, fecha (YYYY-MM-DD) y hora (HH:MM en 24h), y tras comprobar disponibilidad. "
-                "Devuelve un numero de reserva (formato R-XXXX): comunicaselo al cliente y pidele que lo guarde."
+                "El servicio debe ser el que el cliente ha elegido, no una etiqueta generica. Devuelve un numero "
+                "de reserva (formato R-XXXXXX): comunicaselo al cliente y pidele que lo guarde."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "nombre": {"type": "string"},
                     "telefono": {"type": "string"},
-                    "servicio": {"type": "string"},
+                    "servicio": {"type": "string", "description": "Servicio exacto elegido por el cliente"},
                     "fecha": {"type": "string", "description": "YYYY-MM-DD"},
                     "hora": {"type": "string", "description": "HH:MM en 24h"},
                     "email": {"type": "string", "description": "Email (opcional)"},
                 },
-                "required": ["nombre", "telefono", "fecha", "hora"],
+                "required": ["nombre", "telefono", "servicio", "fecha", "hora"]
+                if service_required else ["nombre", "telefono", "fecha", "hora"],
             },
         },
         {
@@ -803,6 +1079,27 @@ def _voice_booking_tools(
                 "parameters": {"type": "object", "properties": {}, "required": []},
             }
         )
+    # Multi-centro: el cliente debe decir EN QUE centro quiere la cita. Anadimos el
+    # parametro `centro` (obligatorio) a consultar_disponibilidad y crear_cita para que
+    # la disponibilidad y la reserva se acoten a ese centro. Solo si hay >1 centro.
+    try:
+        multi_location = len(agenda._list_location_rows(cliente_id, include_inactive=False)) > 1
+    except Exception:  # noqa: BLE001
+        multi_location = False
+    if multi_location:
+        centro_prop = {
+            "type": "string",
+            "description": (
+                "Centro o sede del negocio donde quiere la cita (uno de los centros listados en el "
+                "prompt). Preguntalo antes si el cliente no lo ha dicho."
+            ),
+        }
+        for tool in tools:
+            if tool.get("name") in ("consultar_disponibilidad", "crear_cita"):
+                tool["parameters"]["properties"]["centro"] = centro_prop
+                required = tool["parameters"].get("required") or []
+                if "centro" not in required:
+                    tool["parameters"]["required"] = required + ["centro"]
     return tools
 
 
@@ -828,7 +1125,40 @@ async def _voice_check_availability(
         settings.logger.error("[voice] disponibilidad fallo (%s): %s", cliente_id, exc)
         return {"ok": False, "error": "No se pudo consultar la disponibilidad."}
     slots = sorted(available)
-    return {"ok": True, "fecha": fecha, "huecos": slots[:20], "hay_huecos": bool(slots)}
+    visible_slots = slots[:3]
+    if visible_slots:
+        # Enumera 2-3 horas "desnudas" y di el tramo (manana/tarde) una sola vez al final.
+        spoken = _voice_join_es([_voice_say_time(s, with_period=False) for s in visible_slots])
+        try:
+            last_visible_h = int(visible_slots[-1].split(":")[0])
+            spoken = f"{spoken} {_voice_time_period_es(last_visible_h)}"
+        except (ValueError, IndexError):
+            last_visible_h = 0
+        later = slots[len(visible_slots):]
+        if later:
+            # Deja claro que hay MAS horas (no solo estas 3). Si las siguientes caen por la
+            # tarde y estas eran de manana, nombra la tarde; si no, hint generico.
+            try:
+                has_afternoon_later = any(int(s.split(":")[0]) >= 14 for s in later)
+            except (ValueError, IndexError):
+                has_afternoon_later = False
+            extra = (
+                "y tambien me quedan horas por la tarde"
+                if (has_afternoon_later and last_visible_h < 14)
+                else "y tengo mas horas libres ese dia"
+            )
+            voice_message = f"Vale, para empezar tengo {spoken}, {extra}. ¿Que franja te viene mejor, o te digo mas?"
+        else:
+            voice_message = f"Vale, tengo {spoken}. ¿Cual te encaja?"
+    else:
+        voice_message = "No veo huecos libres ese dia, puedo mirarte otro."
+    return {
+        "ok": True,
+        "fecha": fecha,
+        "huecos": slots[:20],
+        "hay_huecos": bool(slots),
+        "mensaje_voz": voice_message,
+    }
 
 
 async def _voice_perform_booking(
@@ -853,6 +1183,26 @@ async def _voice_perform_booking(
     email = textnorm._sanitize_text(email or "")
     if not nombre or not telefono:
         return {"ok": False, "error": "Faltan el nombre o el telefono del cliente."}
+    telefono_normalizado = _voice_normalize_booking_phone(telefono)
+    if not telefono_normalizado:
+        msg = "No he cogido bien el telefono. Repitemelo con los nueve digitos, por favor."
+        return {
+            "ok": False,
+            "needs_phone": True,
+            "missing_field": "telefono",
+            "error": msg,
+            "mensaje_voz": msg,
+        }
+    telefono = telefono_normalizado
+    service_options = _voice_service_options(cliente_id, location_id)
+    service_row = None
+    if service_options:
+        if not servicio:
+            return _voice_service_required_response(cliente_id, location_id)
+        service_row = agenda._find_service_by_name(cliente_id, servicio)
+        if service_row is None:
+            return _voice_service_required_response(cliente_id, location_id, invalid=servicio)
+        servicio = service_row["name"] or servicio
 
     try:
         booking_date_dt = textnorm._parse_date(fecha)
@@ -869,7 +1219,6 @@ async def _voice_perform_booking(
     except HTTPException as exc:
         return {"ok": False, "error": str(exc.detail)}
 
-    service_row = agenda._find_service_by_name(cliente_id, servicio)
     service_duration = agenda._service_duration_minutes(cliente_id, servicio, employee_row)
     service_id = service_row["slug"] if service_row else ""
     service_price = agenda._service_price_cents_resolved(
@@ -883,7 +1232,21 @@ async def _voice_perform_booking(
         employee_id=employee_row["id"],
         duration_minutes=service_duration,
     ):
-        return {"ok": False, "error": "Ese horario ya no esta disponible. Ofrece otra hora."}
+        # Devolvemos alternativas reales del mismo dia para que el asistente las ofrezca
+        # tal cual (sin inventarse horas) en vez de un "ofrece otra hora" a ciegas.
+        alt = await _voice_check_availability(cliente_id, booking_date, servicio=servicio, location_id=location_id)
+        huecos = alt.get("huecos") or []
+        if huecos:
+            visibles = huecos[:3]
+            spoken = _voice_join_es([_voice_say_time(s, with_period=False) for s in visibles])
+            try:
+                spoken = f"{spoken} {_voice_time_period_es(int(visibles[-1].split(':')[0]))}"
+            except (ValueError, IndexError):
+                pass
+            msg = f"Vaya, esa hora se acaba de ocupar. Para ese dia me quedan {spoken}. ¿Cual te encaja?"
+        else:
+            msg = "Vaya, esa hora ya no esta disponible y no me quedan huecos ese dia. ¿Probamos otro dia?"
+        return {"ok": False, "no_disponible": True, "huecos": huecos[:20], "error": msg, "mensaje_voz": msg}
 
     booking_id = f"bk_{secrets.token_urlsafe(10)}"
     manage_token = booking._generate_manage_token()
@@ -968,15 +1331,66 @@ async def _voice_perform_booking(
     )
     stored_booking = booking._get_booking_row_by_id(booking_id)
     payment_row = booking._booking_payment_row(booking_id)
+    booking_status = stored_booking["status"] if stored_booking else record.get("status", "confirmed")
+    booking_code = record.get("booking_code", "")
+    service_label = servicio or "cita"
+    fecha_voz = _voice_say_date(booking_date, booking_timezone)
+    hora_voz = _voice_say_time(booking_time)
+    if booking_status == "pending_payment":
+        voice_message = (
+            f"Perfecto, la cita queda reservada para {fecha_voz} a {hora_voz}, pendiente de pago. "
+            f"Codigo {booking_code}."
+        )
+    else:
+        voice_message = (
+            f"Perfecto, la cita queda confirmada para {fecha_voz} a {hora_voz}. Codigo {booking_code}."
+        )
+
+    # Confirmacion transaccional (email/SMS/WhatsApp) con nº de reserva + enlace de gestion,
+    # igual que una reserva web. La enviamos EN SEGUNDO PLANO para no anadir latencia a la voz
+    # (el asistente confirma de viva voz al instante; el envio SMTP/SMS puede tardar segundos).
+    # El canal anunciado se calcula con una comprobacion rapida de config (sin red), respetando
+    # la prioridad de entrega. Best-effort: la cita ya esta creada aunque el envio falle.
+    confirmacion_canal = ""
+    if booking_status != "pending_payment" and stored_booking is not None:
+        try:
+            fu = booking._follow_up_config(cliente_id)
+            enabled = agenda._effective_followup_channels(cliente_id).get("confirmed", {}) or {}
+            avail = agenda._reminder_channel_availability(cliente_id)
+            for ch in (fu.get("delivery_priority") or ["email", "whatsapp", "sms"]):
+                if enabled.get(ch) and (ch == "email" or avail.get(ch, {}).get("available")):
+                    confirmacion_canal = ch
+                    break
+        except Exception:  # noqa: BLE001
+            confirmacion_canal = ""
+        try:
+            _task = asyncio.create_task(
+                booking._send_booking_reminder_by_kind(
+                    stored_booking, "confirmed", None,
+                    sent_column="confirmation_email_sent_at", raise_on_failure=False,
+                )
+            )
+            _VOICE_BG_TASKS.add(_task)
+            _task.add_done_callback(_VOICE_BG_TASKS.discard)
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.error("[voice] confirmacion no programada (%s): %s", cliente_id, exc)
+    if confirmacion_canal == "email":
+        voice_message += " Te envio la confirmacion por correo."
+    elif confirmacion_canal in ("sms", "whatsapp"):
+        voice_message += " Te envio la confirmacion por mensaje."
+
     return {
         "ok": True,
         "booking_id": booking_id,
-        "codigo_reserva": record.get("booking_code", ""),
+        "codigo_reserva": booking_code,
         "fecha": booking_date,
         "hora": booking_time,
-        "servicio": servicio or "cita",
+        "servicio": service_label,
         "empleado": employee_row["name"],
         "manage_url": booking._build_booking_manage_url(manage_token),
+        "estado": booking_status,
+        "mensaje_voz": voice_message,
+        "confirmacion_canal": confirmacion_canal,
         "payment_status": stored_booking["payment_status"] if stored_booking else "not_required",
         "payment_url": payment_row["checkout_url"] if payment_row else "",
         "mensaje_pago": (
@@ -1051,6 +1465,11 @@ async def _voice_lookup_booking(
         "hora": row["booking_time"] or "",
         "profesional": row["employee_name"] or "",
         "estado": _VOICE_STATUS_ES.get(row["status"], row["status"] or ""),
+        "mensaje_voz": (
+            f"Vale, tengo una cita de {row['servicio'] or 'consulta'} "
+            f"{_voice_say_date(row['booking_date'], row['timezone'] or settings.DEFAULT_TIMEZONE)} "
+            f"a {_voice_say_time(row['booking_time'])}. ¿Es esa?"
+        ),
     }
 
 
@@ -1083,11 +1502,13 @@ def _voice_pick_otp_channel(cliente_id: str, booking_row: sqlite3.Row) -> Tuple[
     avail = agenda._reminder_channel_availability(cliente_id)
     allowed = booking._follow_up_config(cliente_id).get("voice_otp_channels", {}) or {}
     phone = (booking_row["telefono"] or "").strip()
+    sms_phone = messaging._normalize_sms_recipient(phone)
+    whatsapp_phone = booking._booking_customer_phone_for_channel(booking_row, "whatsapp")
     email = (booking_row["email"] or "").strip()
-    if phone and allowed.get("sms") and avail.get("sms", {}).get("available"):
-        return "sms", phone, _voice_mask_phone(phone)
-    if phone and allowed.get("whatsapp") and avail.get("whatsapp", {}).get("available"):
-        return "whatsapp", phone, _voice_mask_phone(phone)
+    if sms_phone and allowed.get("sms") and avail.get("sms", {}).get("available"):
+        return "sms", sms_phone, _voice_mask_phone(sms_phone)
+    if whatsapp_phone and allowed.get("whatsapp") and avail.get("whatsapp", {}).get("available"):
+        return "whatsapp", whatsapp_phone, _voice_mask_phone(whatsapp_phone)
     if email and allowed.get("email"):
         return "email", email, _voice_mask_email(email)
     return "", "", ""
@@ -1154,7 +1575,15 @@ async def _voice_send_verification_code(
             "attempts": 0, "verified": False, "channel": channel,
         }
     booking._record_booking_audit(row["id"], cliente_id, "voice_otp_sent", {"channel": channel})
-    return {"ok": True, "canal": channel, "destino": masked}
+    channel_label = {"sms": "SMS", "whatsapp": "WhatsApp", "email": "email"}.get(channel, channel)
+    return {
+        "ok": True,
+        "canal": channel,
+        "destino": masked,
+        "mensaje_voz": (
+            f"Te he enviado el codigo por {channel_label} a {masked}; dimelo cuando lo tengas."
+        ),
+    }
 
 
 def _voice_verify_code(cliente_id: str, codigo_reserva: str, codigo: str) -> Dict[str, Any]:
@@ -1180,7 +1609,10 @@ def _voice_verify_code(cliente_id: str, codigo_reserva: str, codigo: str) -> Dic
             return {"ok": False, "error": "El codigo no coincide. Pide que lo repita."}
         entry["verified"] = True
     booking._record_booking_audit(row["id"], cliente_id, "voice_otp_verified", {})
-    return {"ok": True}
+    return {
+        "ok": True,
+        "mensaje_voz": "Perfecto, codigo verificado.",
+    }
 
 
 def _voice_booking_otp_verified(cliente_id: str, booking_id: str) -> bool:
@@ -1226,9 +1658,15 @@ async def _voice_cancel_booking(
     if error:
         return error
     if row["status"] == "cancelled":
-        return {"ok": True, "ya_cancelada": True, "mensaje": "Esa cita ya estaba cancelada."}
+        return {
+            "ok": True,
+            "ya_cancelada": True,
+            "mensaje": "Esa cita ya estaba cancelada.",
+            "mensaje_voz": "Esa cita ya estaba cancelada.",
+        }
     if row["status"] == "completed":
         return {"ok": False, "error": "Esa cita ya se ha realizado y no se puede cancelar."}
+    verified_by_code = _voice_booking_otp_verified(cliente_id, row["id"])
     try:
         await booking._cancel_booking_core(
             row, source="voice", reason=textnorm._sanitize_text(motivo, allow_multiline=True),
@@ -1243,6 +1681,10 @@ async def _voice_cancel_booking(
         "fecha": row["booking_date"],
         "hora": row["booking_time"],
         "mensaje": "Cita cancelada correctamente.",
+        "mensaje_voz": (
+            "Listo, he verificado el codigo y he cancelado la cita."
+            if verified_by_code else "Listo, he cancelado la cita."
+        ),
     }
 
 
@@ -1261,6 +1703,7 @@ async def _voice_reschedule_booking(
     )
     if error:
         return error
+    verified_by_code = _voice_booking_otp_verified(cliente_id, row["id"])
     payload = booking._booking_update_payload_from_reschedule(
         row, BookingReschedulePayload(fecha=textnorm._sanitize_text(fecha), hora=textnorm._sanitize_text(hora))
     )
@@ -1271,12 +1714,20 @@ async def _voice_reschedule_booking(
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("[voice] reprogramacion fallo (%s): %s", cliente_id, exc)
         return {"ok": False, "error": "No se pudo reprogramar la cita."}
+    tz = row["timezone"] or settings.DEFAULT_TIMEZONE
+    fecha_voz = _voice_say_date(textnorm._sanitize_text(fecha), tz)
+    hora_voz = _voice_say_time(textnorm._sanitize_text(hora))
     return {
         "ok": True,
         "codigo_reserva": row["booking_code"] or "",
         "fecha": textnorm._sanitize_text(fecha),
         "hora": textnorm._sanitize_text(hora),
         "mensaje": "Cita reprogramada correctamente. El numero de reserva sigue siendo el mismo.",
+        "mensaje_voz": (
+            f"Listo, he verificado el codigo y he reprogramado la cita para {fecha_voz} a {hora_voz}."
+            if verified_by_code
+            else f"Listo, he reprogramado la cita para {fecha_voz} a {hora_voz}."
+        ),
     }
 
 
@@ -1327,9 +1778,12 @@ async def _voice_dispatch_tool(
         args = {}
     if not isinstance(args, dict):
         args = {}
+    # Centro efectivo: si la linea/numero ya esta atada a un centro (location_id), manda esa;
+    # si no (numero generico o widget), usamos el centro que el cliente eligio (arg `centro`).
+    effective_location = location_id or _voice_resolve_location_id(cliente_id, str(args.get("centro", "")))
     if name == "consultar_disponibilidad":
         return await _voice_check_availability(
-            cliente_id, str(args.get("fecha", "")), str(args.get("servicio", "")), location_id
+            cliente_id, str(args.get("fecha", "")), str(args.get("servicio", "")), effective_location
         )
     if name == "crear_cita":
         return await _voice_perform_booking(
@@ -1340,7 +1794,7 @@ async def _voice_dispatch_tool(
             hora=str(args.get("hora", "")),
             servicio=str(args.get("servicio", "")),
             email=str(args.get("email", "")),
-            location_id=location_id,
+            location_id=effective_location,
         )
     if name == "consultar_cita":
         return await _voice_lookup_booking(
@@ -1384,6 +1838,48 @@ async def _voice_dispatch_tool(
             from_number=from_number,
         )
     return {"ok": False, "error": "Funcion desconocida."}
+
+
+def _voice_tool_followup_prompt(tool_name: str, result: Dict[str, Any]) -> str:
+    if not isinstance(result, dict):
+        return ""
+    message = textnorm._sanitize_text(str(
+        result.get("mensaje_voz") or result.get("mensaje") or result.get("error") or ""
+    ))
+    if not message:
+        return ""
+    if result.get("needs_service"):
+        return (
+            "[sistema] Falta el servicio. Pregunta esto en una sola frase natural, sin anadir pasos: "
+            f"\"{message}\""
+        )
+    if tool_name == "crear_cita" and result.get("ok"):
+        return (
+            "[sistema] Di esta confirmacion en una sola frase natural. No anadas pasos ni explicaciones: "
+            f"\"{message}\""
+        )
+    if tool_name == "verificar_codigo" and result.get("ok"):
+        return (
+            "[sistema] El codigo ya esta verificado. Si el cliente ya habia pedido cancelar o reprogramar, "
+            "llama ahora a la herramienta correspondiente sin hablar todavia. Si no hay accion pendiente, "
+            f"di una sola frase natural: \"{message}\""
+        )
+    if tool_name in {
+        "consultar_disponibilidad", "consultar_cita", "enviar_codigo_verificacion",
+        "cancelar_cita", "reprogramar_cita", "enviar_enlace_pago",
+    } and result.get("ok"):
+        return (
+            "[sistema] Di esta idea en una sola frase natural, sin anadir pasos ni explicaciones: "
+            f"\"{message}\""
+        )
+    if not result.get("ok"):
+        return (
+            "[sistema] Di este problema de forma breve y, si procede, pregunta el siguiente dato minimo: "
+            f"\"{message}\""
+        )
+    if message:
+        return f"[sistema] Responde ahora en voz alta con este resultado: \"{message}\""
+    return ""
 
 
 async def _voice_dispatch_tool_demo(cliente_id: str, name: str, arguments_json: str) -> Dict[str, Any]:
@@ -1502,6 +1998,8 @@ def _voice_call_transcript(row: sqlite3.Row) -> List[Dict[str, Any]]:
 def _voice_conversation_dict(row: sqlite3.Row) -> Dict[str, Any]:
     """Resumen de conversacion unificado para una llamada de voz."""
     transcript = _voice_call_transcript(row)
+    purpose = (row["purpose"] or "").strip() if "purpose" in row.keys() else ""
+    is_app_test = purpose == "app_test"
     preview = ""
     for item in reversed(transcript):
         text = (item.get("text") or "").strip()
@@ -1512,14 +2010,14 @@ def _voice_conversation_dict(row: sqlite3.Row) -> Dict[str, Any]:
         "id": str(row["id"]),
         "kind": "voice",
         "channel": "voice",
-        "contact": (row["from_number"] or "").strip() or "Llamada",
+        "contact": "Prueba del panel" if is_app_test else ((row["from_number"] or "").strip() or "Llamada"),
         "started_at": row["started_at"] or "",
         "last_at": row["ended_at"] or row["started_at"] or "",
         "preview": preview,
         "message_count": len(transcript),
         "duration_seconds": int(row["duration_seconds"] or 0),
         "booking_created": bool(row["booking_created"]),
-        "intents": [],
+        "intents": ["prueba"] if is_app_test else [],
     }
 
 

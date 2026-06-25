@@ -101,6 +101,17 @@ function pushTranscript(role, text) {
   if (v && clean) v.transcript.push({ role, text: clean, ts: new Date().toISOString() });
 }
 
+function toolFollowupPrompt(name, result) {
+  if (!result || typeof result !== "object") return "";
+  const msg = String(result.mensaje_voz || result.mensaje || result.error || "").trim();
+  if (!msg) return "";
+  if (result.needs_service) return `[sistema] Falta el servicio. Pregunta esto en una sola frase natural, sin anadir pasos: "${msg}"`;
+  if (name === "verificar_codigo" && result.ok) return `[sistema] El codigo ya esta verificado. Si el cliente ya habia pedido cancelar o reprogramar, llama ahora a la herramienta correspondiente sin hablar todavia. Si no hay accion pendiente, di una sola frase natural: "${msg}"`;
+  if (result.ok) return `[sistema] Di esta idea en una sola frase natural, sin anadir pasos ni explicaciones: "${msg}"`;
+  if (!result.ok) return `[sistema] Di este problema de forma breve y, si procede, pregunta el siguiente dato minimo: "${msg}"`;
+  return `[sistema] Di una sola frase natural: "${msg}"`;
+}
+
 function handleEvent(ev) {
   const type = (ev && ev.type) || "";
   if (type.indexOf("output_audio.delta") >= 0 || type.indexOf("audio.delta") >= 0) {
@@ -109,6 +120,9 @@ function handleEvent(ev) {
     if (v) v.speakId = setTimeout(() => { speaking(false); if (v) setStatus("En llamada"); }, 650);
   } else if (type === "response.done" || type.indexOf("output_audio.done") >= 0) {
     speaking(false); if (v) setStatus("En llamada");
+    if (type === "response.done" && v && v.expectingToolResponse) {
+      v.fnResponseDone = true; maybeCreateToolResponse();
+    }
   } else if (type === "input_audio_buffer.speech_started") {
     setHint("Te escucho…");
   } else if (type === "response.output_audio_transcript.done") {
@@ -141,6 +155,11 @@ async function runTool(ev) {
   const argsStr = (ev && ev.arguments) || "{}";
   if (!name || !callId || !v || !v.dc) return;
   setHint("Un momento, lo compruebo…");
+  // La respuesta que emitió la function_call sigue ACTIVA: no podemos pedir
+  // response.create hasta que llegue su response.done (si no, OpenAI lo rechaza y
+  // el asistente se queda mudo hasta que el usuario vuelve a hablar). Latch: lo
+  // disparamos cuando estén LOS DOS — output enviado y response.done recibido.
+  v.expectingToolResponse = true; v.fnOutputReady = false; v.fnResponseDone = false;
   let result;
   try {
     const r = await fetch(`${WIDGET_CONFIG.apiUrl}/voice/widget/${encodeURIComponent(WIDGET_CONFIG.clienteId)}/tool`, {
@@ -151,8 +170,25 @@ async function runTool(ev) {
   } catch (_) { result = { ok: false, error: "No se pudo consultar ahora mismo." }; }
   try {
     v.dc.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify(result) } }));
-    v.dc.send(JSON.stringify({ type: "response.create" }));
+    const followup = toolFollowupPrompt(name, result);
+    if (followup) {
+      v.dc.send(JSON.stringify({
+        type: "conversation.item.create",
+        item: { type: "message", role: "user", content: [{ type: "input_text", text: followup }] },
+      }));
+    }
+    v.fnOutputReady = true;
+    maybeCreateToolResponse();
   } catch (_) {}
+}
+
+// Dispara el response.create del resultado del tool solo cuando se cumplen las dos
+// condiciones (output enviado + response.done de la respuesta de la function_call).
+function maybeCreateToolResponse() {
+  if (v && v.fnOutputReady && v.fnResponseDone && v.dc) {
+    v.fnOutputReady = false; v.fnResponseDone = false; v.expectingToolResponse = false;
+    try { v.dc.send(JSON.stringify({ type: "response.create" })); } catch (_) {}
+  }
 }
 
 async function postSDP(model, sdp, secret) {
@@ -205,7 +241,7 @@ export async function startVoice(cfg) {
       try {
         const g = sess.greeting || "";
         if (g) {
-          v.dc.send(JSON.stringify({ type: "conversation.item.create", item: { type: "message", role: "user", content: [{ type: "input_text", text: 'Inicia la llamada saludando exactamente con: "' + g + '"' }] } }));
+          v.dc.send(JSON.stringify({ type: "conversation.item.create", item: { type: "message", role: "user", content: [{ type: "input_text", text: 'Tu primer mensaje debe ser, palabra por palabra y sin cambiar ningún nombre propio (di los nombres tal cual aparecen), exactamente este y nada más: "' + g + '"' }] } }));
           v.dc.send(JSON.stringify({ type: "response.create" }));
         }
       } catch (_) {}

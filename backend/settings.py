@@ -410,7 +410,7 @@ DEFAULT_MESSAGE_TEMPLATES = {
         "si necesitas hacer algun cambio."
     ),
     "reminder_24h": (
-        "Te recordamos que manana tienes una cita programada. Si necesitas revisarla o ajustarla, "
+        "Te recordamos que mañana tienes una cita programada. Si necesitas revisarla o ajustarla, "
         "puedes hacerlo desde tu enlace de gestion."
     ),
     "reminder_2h": (

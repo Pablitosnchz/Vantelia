@@ -434,9 +434,14 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
     booking_date = booking_date_dt.strftime("%Y-%m-%d")
     booking_time = textnorm._parse_time(data.hora).strftime("%H:%M")
     nombre = textnorm._sanitize_text(data.nombre)
+    email = textnorm._normalize_email(data.email)
     telefono = textnorm._sanitize_text(data.telefono)
     servicio = textnorm._sanitize_text(data.servicio)
     notas = textnorm._sanitize_text(data.notas, allow_multiline=True)
+    if email and not booking._booking_email_looks_valid(email):
+        raise HTTPException(status_code=400, detail="Indica un email valido o deja el email vacio y usa un telefono.")
+    if not booking._booking_has_reminder_contact(email, telefono):
+        raise HTTPException(status_code=400, detail="Indica al menos un email o telefono para poder enviar confirmaciones y recordatorios.")
     location_filter = (
         agenda._resolve_location_id(data.cliente_id, data.location_id) if data.location_id else ""
     )
@@ -485,7 +490,7 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
         "employee_id": employee_row["id"],
         "employee_name": employee_row["name"],
         "nombre": nombre,
-        "email": str(data.email),
+        "email": email,
         "telefono": telefono,
         "servicio": servicio,
         "fecha": booking_date,
@@ -502,7 +507,7 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
         "employee_id": employee_row["id"],
         "employee_name": employee_row["name"],
         "nombre": nombre,
-        "email": str(data.email),
+        "email": email,
         "telefono": telefono,
         "servicio": servicio,
         "fecha": booking_date,
@@ -545,7 +550,7 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
         "employee_id": employee_row["id"],
         "employee_name": employee_row["name"],
         "nombre": nombre,
-        "email": str(data.email),
+        "email": email,
         "telefono": telefono,
         "servicio": servicio,
         "booking_date": booking_date,

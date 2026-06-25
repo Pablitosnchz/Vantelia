@@ -114,6 +114,10 @@ async def onboarding_entry(
     user = security._get_authenticated_portal_user_or_none(portal_session)
     if not user:
         return RedirectResponse("/acceso?next=/onboarding")
+    # El admin no hace onboarding (no tiene tenant propio). Si llega aqui via ?next
+    # heredado, mandarlo a su panel en vez de mostrarle el wizard.
+    if user["role"] == "admin":
+        return RedirectResponse("/dashboard")
     index_path = settings.ONBOARDING_UI_DIR / "index.html"
     if not index_path.exists():
         raise HTTPException(status_code=404, detail="Wizard de onboarding no disponible.")
@@ -134,6 +138,11 @@ async def app_entry(
     user = security._get_authenticated_portal_user_or_none(portal_session)
     if not user:
         return RedirectResponse("/acceso?next=/app")
+    # El admin no tiene portal de cliente: su sitio es /dashboard (admin_ui). Sin este
+    # guard, un admin que llega a /app (bookmark o ?next heredado) cae en /onboarding
+    # porque no tiene cliente_id.
+    if user["role"] == "admin":
+        return RedirectResponse("/dashboard")
     # If no cliente_id yet, push to wizard.
     if not (user["cliente_id"] or "").strip():
         return RedirectResponse("/onboarding")
