@@ -238,6 +238,7 @@ class ServicePublic(BaseModel):
     id: str
     nombre: str
     descripcion: str = ""
+    image_url: str = ""
     duration_minutes: int = 30
     price_cents: int = 0
     price_label: str = ""
@@ -271,6 +272,7 @@ class ServicePayload(BaseModel):
     cancel_free_hours: Optional[int] = Field(default=None, ge=0, le=720)
     cancel_late_fee_pct: Optional[int] = Field(default=None, ge=0, le=100)
     no_show_fee_pct: Optional[int] = Field(default=None, ge=0, le=100)
+    image_url: str = Field(default="", max_length=500)
 
 
 class ServiceUpdatePayload(BaseModel):
@@ -287,6 +289,7 @@ class ServiceUpdatePayload(BaseModel):
     cancel_free_hours: Optional[int] = Field(default=None, ge=-1, le=720)
     cancel_late_fee_pct: Optional[int] = Field(default=None, ge=-1, le=100)
     no_show_fee_pct: Optional[int] = Field(default=None, ge=-1, le=100)
+    image_url: Optional[str] = Field(default=None, max_length=500)
 
 
 class BookingPaymentActionPayload(BaseModel):
@@ -2028,6 +2031,7 @@ class ProductPayload(BaseModel):
     price_cents: int = Field(default=0, ge=0, le=10_000_000)
     stock: Optional[int] = Field(default=None, ge=0, le=1_000_000)
     is_active: bool = True
+    image_url: str = Field(default="", max_length=500)
 
 
 class ProductSalePayload(BaseModel):
@@ -2081,6 +2085,7 @@ class PackagePayload(BaseModel):
     price_cents: int = Field(default=0, ge=0, le=10_000_000)
     validity_days: int = Field(default=365, ge=1, le=3650)
     is_active: bool = True
+    image_url: str = Field(default="", max_length=500)
 
 
 class PackageSellPayload(BaseModel):

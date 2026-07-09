@@ -836,6 +836,14 @@
     .central-line-sub { color:var(--soft); font-size:.76rem; margin-top:2px; }
     .central-line button { border:0; background:transparent; color:var(--soft-2); cursor:pointer; font-size:1rem; }
     .central-line button:hover { color:var(--danger); }
+    /* Preview de imagen (editores de catalogo) */
+    .imgprev { display:none; margin-top:8px; border:1px solid var(--line); border-radius:10px; overflow:hidden; height:110px; background:var(--panel-2); }
+    .imgprev.on { display:block; }
+    .imgprev img { width:100%; height:100%; object-fit:cover; display:block; }
+    /* Miniatura en las tarjetas del catalogo del mostrador */
+    .central-thumb { margin:-12px -12px 2px; height:96px; border-radius:11px 11px 0 0; overflow:hidden; background:var(--panel); }
+    .central-thumb img { width:100%; height:100%; object-fit:cover; display:block; transition:transform .4s ease; }
+    .central-card:hover .central-thumb img { transform:scale(1.05); }
     /* Autocomplete de cliente (CRM) en la central de mostrador */
     .central-ac { position:relative; }
     .central-ac-pop { position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:40; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:0 14px 34px rgba(0,0,0,.5); display:none; max-height:260px; overflow-y:auto; }
@@ -2924,7 +2932,18 @@
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:12px;">
           <input type="color" id="shopAccentPick" value="#9a7b4f" class="so-swatch">
           <input class="field-input" id="shopAccent" maxlength="7" placeholder="#9a7b4f (vacío = color de marca)" style="max-width:240px;">
-          <button class="btn btn-primary" type="button" id="shopAccentSave">Guardar color</button>
+        </div>
+        <div class="field" style="margin-top:12px;">
+          <label class="field-label">Foto de cabecera de la central (URL)</label>
+          <input type="url" class="field-input" id="shopHeroImg" maxlength="500" placeholder="https://… (vacío = gradiente con tu color)">
+          <div class="imgprev" id="shopHeroImgPrev"></div>
+        </div>
+        <div class="field" style="margin-top:12px;">
+          <label class="field-label">Frase de bienvenida</label>
+          <input class="field-input" id="shopHeroTagline" maxlength="140" placeholder="Elige servicio, día y hora. Confirmación al momento.">
+        </div>
+        <div style="margin-top:12px;">
+          <button class="btn btn-primary" type="button" id="shopAccentSave">Guardar apariencia</button>
         </div>
       </div>
 
@@ -3592,6 +3611,11 @@
     <div class="field" style="margin-bottom:12px;"><label class="field-label">Precio (€)</label><input type="number" class="field-input" id="productPrecio" min="0" step="0.01" /></div>
     <div class="field" style="margin-bottom:12px;"><label class="field-label">Stock (vacío = sin control)</label><input type="number" class="field-input" id="productStock" min="0" step="1" /></div>
     <div class="field" style="margin-bottom:12px;"><label class="field-label">Descripción</label><textarea class="field-input" id="productDesc" rows="2" maxlength="600"></textarea></div>
+    <div class="field" style="margin-bottom:12px;">
+      <label class="field-label">Imagen (URL)</label>
+      <input type="url" class="field-input" id="productImagen" maxlength="500" placeholder="https://… (tienda online y mostrador)" />
+      <div class="imgprev" id="productImagenPrev"></div>
+    </div>
     <label style="display:flex; align-items:center; gap:8px; margin-bottom:16px; color:var(--soft); font-size:0.88rem;"><input type="checkbox" id="productActivo" checked /> Activo</label>
     <div id="productSellBlock" style="display:none; border-top:1px solid var(--line, rgba(255,255,255,0.1)); padding-top:14px; margin-bottom:14px;">
       <b style="font-size:0.9rem;">Registrar venta</b>
@@ -3624,6 +3648,11 @@
     <div class="field" style="margin-bottom:12px;"><label class="field-label">Nombre</label><input type="text" class="field-input" id="packageNombre" maxlength="120" placeholder="Ej. Bono 5 masajes" /></div>
     <div class="field" style="margin-bottom:12px;"><label class="field-label">Precio del bono (€)</label><input type="number" class="field-input" id="packagePrecio" min="0" step="0.01" /></div>
     <div class="field" style="margin-bottom:12px;"><label class="field-label">Validez (días)</label><input type="number" class="field-input" id="packageValidez" min="1" step="1" value="365" /></div>
+    <div class="field" style="margin-bottom:12px;">
+      <label class="field-label">Imagen (URL)</label>
+      <input type="url" class="field-input" id="packageImagen" maxlength="500" placeholder="https://… (tienda online y mostrador)" />
+      <div class="imgprev" id="packageImagenPrev"></div>
+    </div>
     <div class="field" style="margin-bottom:12px;">
       <label class="field-label">Sesiones incluidas</label>
       <div id="packageItems" style="display:flex; flex-direction:column; gap:6px;"></div>
@@ -3771,6 +3800,11 @@
       <div class="field" style="margin-bottom:10px;"><label class="field-label">Penalización no-show (%)</label><input type="number" class="field-input" id="svcNoShowFee" min="0" max="100" step="1" placeholder="heredar" /></div>
     </div>
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Descripción</label><textarea class="field-input" id="svcDesc" rows="2" placeholder="opcional"></textarea></div>
+    <div class="field" style="margin-bottom:10px;">
+      <label class="field-label">Imagen (URL)</label>
+      <input type="url" class="field-input" id="svcImagen" maxlength="500" placeholder="https://… (se muestra en tu central de reservas)" />
+      <div class="imgprev" id="svcImagenPrev"></div>
+    </div>
     <label style="display:flex; align-items:center; gap:8px; margin-bottom:14px; cursor:pointer;"><input type="checkbox" id="svcActivo" checked /> <span>Activo (visible para reservar)</span></label>
     <div class="field" id="svcLocationsWrap" style="display:none; margin-bottom:14px;">
       <label class="field-label">Disponibilidad y precio por centro</label>
@@ -6866,6 +6900,8 @@ function openServiceDrawer(svc = null) {
   ovSet('svcLateFee', svc ? svc.cancel_late_fee_pct : null);
   ovSet('svcNoShowFee', svc ? svc.no_show_fee_pct : null);
   document.getElementById('svcDesc').value = svc ? (svc.descripcion || '') : '';
+  document.getElementById('svcImagen').value = svc ? (svc.image_url || '') : '';
+  refreshImagePreview('svcImagen', 'svcImagenPrev');
   document.getElementById('svcActivo').checked = svc ? !!svc.is_active : true;
   document.getElementById('serviceDrawer').classList.add('open');
   document.getElementById('serviceOverlay').classList.add('open');
@@ -6902,7 +6938,8 @@ async function saveService() {
   const cancel_free_hours = ovVal('svcCancelFree');
   const cancel_late_fee_pct = ovVal('svcLateFee');
   const no_show_fee_pct = ovVal('svcNoShowFee');
-  const body = JSON.stringify({ nombre, duration_minutes: duration, price_cents, descripcion, is_active, payment_mode, payment_type, deposit_amount_cents, currency:'eur', cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct });
+  const image_url = document.getElementById('svcImagen').value.trim();
+  const body = JSON.stringify({ nombre, duration_minutes: duration, price_cents, descripcion, is_active, payment_mode, payment_type, deposit_amount_cents, currency:'eur', cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct, image_url });
   const btn = document.getElementById('svcSaveBtn'); const old = btn.textContent; btn.disabled = true; btn.textContent = 'Guardando…';
   try {
     const saved = slug
@@ -8715,7 +8752,8 @@ function renderCentralCatalog() {
       const id = s.id || s.slug || centralServiceName(s);
       const off = s.is_active === false || s.activo === false;
       const meta = centralServiceMeta(s).map(x => `<span>${escapeHtml(x)}</span>`).join('');
-      return `<article class="central-card ${off ? 'is-off' : ''}" data-central-card="service" data-central-id="${escapeHtml(id)}">
+      const thumb = s.image_url ? `<div class="central-thumb"><img src="${escapeHtml(s.image_url)}" alt="" loading="lazy"></div>` : '';
+      return `<article class="central-card ${off ? 'is-off' : ''}" data-central-card="service" data-central-id="${escapeHtml(id)}">${thumb}
         <div class="central-card-name">${escapeHtml(centralServiceName(s) || 'Servicio')}</div>
         <div class="central-card-meta">${meta || '<span>Servicio</span>'}</div>
         <div class="central-card-price">${escapeHtml(s.price_label || 'Precio a consultar')}</div>
@@ -8727,7 +8765,8 @@ function renderCentralCatalog() {
     grid.innerHTML = items.length ? items.map(p => {
       const stock = p.stock === null || p.stock === undefined ? 'sin control de stock' : `${p.stock} en stock`;
       const out = p.stock !== null && p.stock !== undefined && Number(p.stock) <= 0;
-      return `<article class="central-card ${p.is_active === false || out ? 'is-off' : ''}" data-central-card="product" data-central-id="${escapeHtml(p.id)}">
+      const thumb = p.image_url ? `<div class="central-thumb"><img src="${escapeHtml(p.image_url)}" alt="" loading="lazy"></div>` : '';
+      return `<article class="central-card ${p.is_active === false || out ? 'is-off' : ''}" data-central-card="product" data-central-id="${escapeHtml(p.id)}">${thumb}
         <div class="central-card-name">${escapeHtml(p.name || 'Producto')}</div>
         <div class="central-card-meta"><span>${escapeHtml(stock)}</span>${p.is_active === false ? '<span>inactivo</span>' : ''}</div>
         <div class="central-card-price">${eur(p.price_cents)}</div>
@@ -8738,7 +8777,8 @@ function renderCentralCatalog() {
     const items = (ventasState.packages || []).filter(p => match(`${p.name} ${p.description || ''}`));
     grid.innerHTML = items.length ? items.map(p => {
       const sessions = (p.items || []).reduce((a, it) => a + (Number(it.qty) || 0), 0);
-      return `<article class="central-card ${p.is_active === false ? 'is-off' : ''}" data-central-card="package" data-central-id="${escapeHtml(p.id)}">
+      const thumb = p.image_url ? `<div class="central-thumb"><img src="${escapeHtml(p.image_url)}" alt="" loading="lazy"></div>` : '';
+      return `<article class="central-card ${p.is_active === false ? 'is-off' : ''}" data-central-card="package" data-central-id="${escapeHtml(p.id)}">${thumb}
         <div class="central-card-name">${escapeHtml(p.name || 'Bono')}</div>
         <div class="central-card-meta"><span>${sessions || (p.items || []).length} sesion(es)</span><span>${p.validity_days || 365} dias</span></div>
         <div class="central-card-price">${eur(p.price_cents)}</div>
@@ -9032,6 +9072,8 @@ function openProductPanel(p) {
   document.getElementById('productPrecio').value = p ? (p.price_cents / 100) : '';
   document.getElementById('productStock').value = (p && p.stock !== null && p.stock !== undefined) ? p.stock : '';
   document.getElementById('productDesc').value = p ? (p.description || '') : '';
+  document.getElementById('productImagen').value = p ? (p.image_url || '') : '';
+  refreshImagePreview('productImagen', 'productImagenPrev');
   document.getElementById('productActivo').checked = p ? !!p.is_active : true;
   document.getElementById('productSellBlock').style.display = p ? '' : 'none';
   document.getElementById('productDeleteBtn').style.display = p ? '' : 'none';
@@ -9052,6 +9094,7 @@ document.getElementById('productSaveBtn').addEventListener('click', async () => 
     stock: stockRaw === '' ? null : parseInt(stockRaw, 10),
     description: document.getElementById('productDesc').value.trim(),
     is_active: document.getElementById('productActivo').checked,
+    image_url: document.getElementById('productImagen').value.trim(),
   };
   if (!payload.name) { toast('El nombre es obligatorio.', 'error'); return; }
   try {
@@ -9323,6 +9366,8 @@ function openPackagePanel(p) {
   document.getElementById('packageNombre').value = p ? p.name : '';
   document.getElementById('packagePrecio').value = p ? (p.price_cents / 100) : '';
   document.getElementById('packageValidez').value = p ? p.validity_days : 365;
+  document.getElementById('packageImagen').value = p ? (p.image_url || '') : '';
+  refreshImagePreview('packageImagen', 'packageImagenPrev');
   document.getElementById('packageActivo').checked = p ? !!p.is_active : true;
   const itemsWrap = document.getElementById('packageItems'); itemsWrap.innerHTML = '';
   ((p && p.items && p.items.length) ? p.items : [null]).forEach(it => itemsWrap.appendChild(packageItemRow(it)));
@@ -9349,6 +9394,7 @@ document.getElementById('packageSaveBtn').addEventListener('click', async () => 
     validity_days: parseInt(document.getElementById('packageValidez').value || '365', 10),
     items,
     is_active: document.getElementById('packageActivo').checked,
+    image_url: document.getElementById('packageImagen').value.trim(),
   };
   if (!payload.name) { toast('El nombre es obligatorio.', 'error'); return; }
   if (!items.length) { toast('Añade al menos un servicio al bono.', 'error'); return; }
@@ -9536,6 +9582,9 @@ async function loadShopPublicConfig() {
       const ac = cfg.accent_color || '';
       document.getElementById('shopAccent').value = ac;
       if (ac) document.getElementById('shopAccentPick').value = ac;
+      document.getElementById('shopHeroImg').value = cfg.hero_image_url || '';
+      document.getElementById('shopHeroTagline').value = cfg.hero_tagline || '';
+      refreshImagePreview('shopHeroImg', 'shopHeroImgPrev');
     }
     if (prodCard) {
       document.getElementById('shopProdEnabled').checked = !!cfg.enabled_products;
@@ -9620,8 +9669,32 @@ document.getElementById('shopPkgSave').addEventListener('click', () => {
   }).catch(e => toast(e.message, 'error'));
 });
 document.getElementById('shopAccentSave').addEventListener('click', () => {
-  saveShopPublic({ accent_color: document.getElementById('shopAccent').value.trim() })
-    .catch(e => toast(e.message, 'error'));
+  saveShopPublic({
+    accent_color: document.getElementById('shopAccent').value.trim(),
+    hero_image_url: document.getElementById('shopHeroImg').value.trim(),
+    hero_tagline: document.getElementById('shopHeroTagline').value.trim(),
+  }).catch(e => toast(e.message, 'error'));
+});
+
+// Preview en vivo de un campo de imagen (URL http/https valida -> miniatura).
+function refreshImagePreview(inputId, prevId) {
+  const input = document.getElementById(inputId);
+  const prev = document.getElementById(prevId);
+  if (!input || !prev) return;
+  const url = input.value.trim();
+  if (/^https?:\/\/\S+$/.test(url)) {
+    prev.innerHTML = `<img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.closest('.imgprev').classList.remove('on')">`;
+    prev.classList.add('on');
+  } else {
+    prev.classList.remove('on');
+    prev.innerHTML = '';
+  }
+}
+[['svcImagen','svcImagenPrev'],['productImagen','productImagenPrev'],['packageImagen','packageImagenPrev'],['shopHeroImg','shopHeroImgPrev']].forEach(([i, p]) => {
+  document.getElementById(i)?.addEventListener('input', () => {
+    clearTimeout(window['__imgprev_' + i]);
+    window['__imgprev_' + i] = setTimeout(() => refreshImagePreview(i, p), 300);
+  });
 });
 document.getElementById('shopProdSave').addEventListener('click', () => {
   saveShopPublic({

@@ -305,6 +305,8 @@ def _init_database() -> None:
             "cancel_free_hours": "INTEGER",
             "cancel_late_fee_pct": "INTEGER",
             "no_show_fee_pct": "INTEGER",
+            # Imagen del servicio (URL configurable; se muestra en la central publica).
+            "image_url": "TEXT NOT NULL DEFAULT ''",
         }.items():
             if column_name not in service_columns:
                 connection.execute(f"ALTER TABLE services ADD COLUMN {column_name} {definition}")
@@ -471,6 +473,12 @@ def _init_database() -> None:
         }.items():
             if column_name not in product_sales_columns:
                 connection.execute(f"ALTER TABLE product_sales ADD COLUMN {column_name} {definition}")
+        # Imagen de producto (URL configurable; tienda online + mostrador).
+        product_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(products)").fetchall()
+        }
+        if "image_url" not in product_columns:
+            connection.execute("ALTER TABLE products ADD COLUMN image_url TEXT NOT NULL DEFAULT ''")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS packages (
@@ -526,6 +534,12 @@ def _init_database() -> None:
             connection.execute(
                 "ALTER TABLE package_purchases ADD COLUMN customer_payment_id TEXT NOT NULL DEFAULT ''"
             )
+        # Imagen de bono (URL configurable; tienda online + mostrador).
+        package_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(packages)").fetchall()
+        }
+        if "image_url" not in package_columns:
+            connection.execute("ALTER TABLE packages ADD COLUMN image_url TEXT NOT NULL DEFAULT ''")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS gift_cards (

@@ -472,7 +472,15 @@ def _product_to_public(row: sqlite3.Row) -> Dict[str, Any]:
         "stock": row["stock"],
         "is_active": bool(row["is_active"]),
         "sort_order": int(row["sort_order"] or 0),
+        "image_url": _row_image_url(row),
     }
+
+
+def _row_image_url(row: sqlite3.Row) -> str:
+    try:
+        return str(row["image_url"] or "")
+    except (KeyError, IndexError):
+        return ""
 
 
 def _list_products(cliente_id: str, *, include_inactive: bool = True) -> List[Dict[str, Any]]:
@@ -511,8 +519,8 @@ def _create_product(cliente_id: str, data: Any) -> Dict[str, Any]:
         connection.execute(
             """
             INSERT INTO products (cliente_id, id, name, description, price_cents, currency,
-                                  stock, is_active, sort_order, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'eur', ?, ?, ?, ?, ?)
+                                  stock, is_active, sort_order, image_url, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'eur', ?, ?, ?, ?, ?, ?)
             """,
             (
                 cliente_id,
@@ -523,6 +531,7 @@ def _create_product(cliente_id: str, data: Any) -> Dict[str, Any]:
                 data.stock if data.stock is None else max(0, int(data.stock)),
                 1 if data.is_active else 0,
                 int(next_order),
+                textnorm._public_image_url(data.image_url),
                 now_iso,
                 now_iso,
             ),
@@ -543,7 +552,7 @@ def _update_product(cliente_id: str, product_id: str, data: Any) -> Dict[str, An
         connection.execute(
             """
             UPDATE products
-            SET name = ?, description = ?, price_cents = ?, stock = ?, is_active = ?, updated_at = ?
+            SET name = ?, description = ?, price_cents = ?, stock = ?, is_active = ?, image_url = ?, updated_at = ?
             WHERE cliente_id = ? AND id = ?
             """,
             (
@@ -554,6 +563,7 @@ def _update_product(cliente_id: str, product_id: str, data: Any) -> Dict[str, An
                 (data.stock if data.stock is None else max(0, int(data.stock)))
                 if "stock" in fields_set else row["stock"],
                 (1 if data.is_active else 0) if "is_active" in fields_set else row["is_active"],
+                textnorm._public_image_url(data.image_url) if "image_url" in fields_set else _row_image_url(row),
                 timeutils._utc_now_iso(),
                 cliente_id,
                 product_id,
@@ -918,6 +928,7 @@ def _package_to_public(row: sqlite3.Row) -> Dict[str, Any]:
         "validity_days": int(row["validity_days"] or 365),
         "is_active": bool(row["is_active"]),
         "sort_order": int(row["sort_order"] or 0),
+        "image_url": _row_image_url(row),
     }
 
 
@@ -958,8 +969,8 @@ def _create_package(cliente_id: str, data: Any) -> Dict[str, Any]:
         connection.execute(
             """
             INSERT INTO packages (cliente_id, id, name, description, items_json, price_cents,
-                                  currency, validity_days, is_active, sort_order, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'eur', ?, ?, ?, ?, ?)
+                                  currency, validity_days, is_active, sort_order, image_url, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'eur', ?, ?, ?, ?, ?, ?)
             """,
             (
                 cliente_id,
@@ -971,6 +982,7 @@ def _create_package(cliente_id: str, data: Any) -> Dict[str, Any]:
                 max(1, min(3650, int(data.validity_days or 365))),
                 1 if data.is_active else 0,
                 int(next_order),
+                textnorm._public_image_url(data.image_url),
                 now_iso,
                 now_iso,
             ),
@@ -996,7 +1008,7 @@ def _update_package(cliente_id: str, package_id: str, data: Any) -> Dict[str, An
             """
             UPDATE packages
             SET name = ?, description = ?, items_json = ?, price_cents = ?,
-                validity_days = ?, is_active = ?, updated_at = ?
+                validity_days = ?, is_active = ?, image_url = ?, updated_at = ?
             WHERE cliente_id = ? AND id = ?
             """,
             (
@@ -1007,6 +1019,7 @@ def _update_package(cliente_id: str, package_id: str, data: Any) -> Dict[str, An
                 max(0, int(data.price_cents)) if "price_cents" in fields_set else int(row["price_cents"] or 0),
                 max(1, min(3650, int(data.validity_days))) if "validity_days" in fields_set else int(row["validity_days"] or 365),
                 (1 if data.is_active else 0) if "is_active" in fields_set else row["is_active"],
+                textnorm._public_image_url(data.image_url) if "image_url" in fields_set else _row_image_url(row),
                 timeutils._utc_now_iso(),
                 cliente_id,
                 package_id,
@@ -2386,6 +2399,9 @@ def _shop_public_config(cliente_id: str) -> Dict[str, Any]:
         "intro_text": textnorm._sanitize_text(str(raw.get("intro_text") or ""))[:300],
         "pickup_note": textnorm._sanitize_text(str(raw.get("pickup_note") or ""))[:200],
         "accent_color": accent,
+        # Personalizacion de la central publica (hero): foto de cabecera + frase.
+        "hero_image_url": textnorm._public_image_url(raw.get("hero_image_url")),
+        "hero_tagline": textnorm._sanitize_text(str(raw.get("hero_tagline") or ""))[:140],
     }
 
 
@@ -2861,6 +2877,9 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
   }
   .card:hover { transform: translateY(-3px); box-shadow: 0 2px 4px rgba(35,32,29,.05), 0 16px 34px rgba(35,32,29,.10); }
   .card.picked { border-color: var(--acc); box-shadow: 0 0 0 2px rgba(var(--acc-rgb),.28), var(--shadow); }
+  .card-media { margin: -20px -20px 2px; height: 152px; border-radius: 17px 17px 0 0; overflow: hidden; background: #f4f1ec; }
+  .card-media img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .5s ease; }
+  .card:hover .card-media img { transform: scale(1.05); }
   .card-top { display: flex; align-items: flex-start; gap: 12px; }
   .ic { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
         background: rgba(var(--acc-rgb),.10); color: var(--acc); }
@@ -3062,7 +3081,8 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
     var per = sess > 0 ? '<span class="per">' + eur(Math.round(p.price_cents / sess)) + " / sesión</span>" : "";
     var card = document.createElement("div"); card.className = "card";
     card.innerHTML =
-      '<div class="card-top"><div class="ic">' + IC_TICKET + '</div>'
+      (p.image_url ? '<div class="card-media"><img src="' + esc(p.image_url) + '" alt="" loading="lazy"></div>' : "")
+      + '<div class="card-top"><div class="ic">' + IC_TICKET + '</div>'
         + '<div><span class="badge">Bono</span><h3>' + esc(p.name) + "</h3></div></div>"
       + (p.description ? '<div class="desc">' + esc(p.description) + "</div>" : "")
       + (chips ? '<div class="chips">' + chips + "</div>" : "")
@@ -3088,7 +3108,8 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
     }
     var card = document.createElement("div"); card.className = "card"; card.dataset.pid = p.id;
     card.innerHTML =
-      '<div class="card-top"><div class="ic">' + IC_BAG + "</div>"
+      (p.image_url ? '<div class="card-media"><img src="' + esc(p.image_url) + '" alt="" loading="lazy"></div>' : "")
+      + '<div class="card-top"><div class="ic">' + IC_BAG + "</div>"
         + "<div><h3>" + esc(p.name) + "</h3>" + (stockHtml ? '<div class="meta" style="margin-top:4px">' + stockHtml + "</div>" : "") + "</div></div>"
       + (p.description ? '<div class="desc">' + esc(p.description) + "</div>" : "")
       + '<div class="spacer"></div>'
@@ -3321,17 +3342,17 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
   .trust-chip { font-size: 12.5px; font-weight: 700; padding: 7px 12px; border-radius: 999px; background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.2); backdrop-filter: blur(8px); }
 
   /* ── Layout ───────────────────────────────────────────── */
-  .wrap { position: relative; width: min(1140px, 100%); margin: -92px auto 40px; padding: 0 18px; display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 20px; align-items: start; }
+  .wrap { position: relative; width: min(1180px, 100%); margin: -96px auto 48px; padding: 0 20px; display: grid; grid-template-columns: minmax(0, 1fr) 336px; gap: 26px; align-items: start; }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; animation: riseIn .5s cubic-bezier(.22,.9,.3,1) both; }
   @keyframes riseIn { from { opacity: 0; transform: translateY(16px); } }
-  .panel-head { padding: 22px 24px 0; }
+  .panel-head { padding: 28px 30px 0; }
   .panel-title { font-size: 21px; font-weight: 850; letter-spacing: -.01em; }
   .panel-sub { color: var(--muted); font-size: 14px; line-height: 1.5; margin-top: 5px; }
 
   /* Progreso + pasos */
-  .wiz-track { height: 4px; border-radius: 99px; background: color-mix(in srgb, var(--accent) 12%, #eef2f7); margin: 18px 24px 0; overflow: hidden; }
+  .wiz-track { height: 4px; border-radius: 99px; background: color-mix(in srgb, var(--accent) 12%, #eef2f7); margin: 22px 30px 0; overflow: hidden; }
   .wiz-track > i { display: block; height: 100%; width: 25%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 65%, #fff)); transition: width .4s cubic-bezier(.22,.9,.3,1); }
-  .wizard-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 14px 24px 18px; }
+  .wizard-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 16px 30px 20px; }
   .step { display: flex; align-items: center; justify-content: center; gap: 7px; border: 0; background: none; color: var(--muted); font-weight: 800; font-size: 12.5px; cursor: pointer; padding: 6px 4px; border-radius: 10px; transition: color .15s; }
   .step .n { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 900; background: #eef2f7; color: var(--muted); border: 1.5px solid var(--line); transition: all .2s; flex: none; }
   .step.on { color: var(--accent); }
@@ -3340,18 +3361,27 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
   .step.done .n { background: var(--ok-soft); border-color: var(--ok-line); color: var(--ok); }
   .step:hover { color: var(--ink); }
 
-  .form { padding: 4px 24px 24px; display: grid; gap: 18px; }
+  .form { padding: 6px 30px 28px; display: grid; gap: 22px; }
   .step-panel { display: none; gap: 16px; }
-  .step-panel.on { display: grid; animation: fadeSlide .32s cubic-bezier(.22,.9,.3,1); }
+  .step-panel.on { display: grid; gap: 20px; animation: fadeSlide .32s cubic-bezier(.22,.9,.3,1); }
   @keyframes fadeSlide { from { opacity: 0; transform: translateX(14px); } }
   .fld-label { font-size: 12px; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; color: #475569; }
 
   /* Tarjetas de servicio */
-  .choice-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 11px; }
-  .choice-card { position: relative; border: 1.5px solid var(--line); border-radius: 14px; background: #fff; padding: 15px 16px; display: grid; gap: 9px; text-align: left; cursor: pointer; transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease, background .16s ease; }
+  .choice-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); gap: 14px; }
+  .choice-card { position: relative; border: 1.5px solid var(--line); border-radius: 16px; background: #fff; padding: 0; display: grid; text-align: left; cursor: pointer; overflow: hidden; transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease, background .16s ease; animation: cardIn .45s cubic-bezier(.22,.9,.3,1) backwards; }
+  .choice-card:nth-child(2) { animation-delay: .05s; } .choice-card:nth-child(3) { animation-delay: .1s; }
+  .choice-card:nth-child(4) { animation-delay: .15s; } .choice-card:nth-child(5) { animation-delay: .2s; }
+  .choice-card:nth-child(6) { animation-delay: .25s; } .choice-card:nth-child(n+7) { animation-delay: .3s; }
+  @keyframes cardIn { from { opacity: 0; transform: translateY(10px); } }
+  .choice-media { height: 138px; background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 14%, #f1f5f9), #f1f5f9); overflow: hidden; }
+  .choice-media.ph { display: flex; align-items: center; justify-content: center; font-size: 38px; font-weight: 900; color: color-mix(in srgb, var(--accent) 45%, #cbd5e1); letter-spacing: .02em; }
+  .choice-media img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .55s cubic-bezier(.2,.8,.2,1); }
+  .choice-card:hover .choice-media img { transform: scale(1.06); }
+  .choice-body { padding: 15px 17px 16px; display: grid; gap: 9px; }
   .choice-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: 0 14px 34px -14px color-mix(in srgb, var(--accent) 35%, rgba(15,23,42,.3)); }
   .choice-card.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, #fff); box-shadow: 0 14px 34px -14px color-mix(in srgb, var(--accent) 45%, rgba(15,23,42,.3)); }
-  .choice-card.on::after { content: "✓"; position: absolute; top: -9px; right: -9px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 14px; font-weight: 900; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 45%, transparent); animation: popBadge .25s cubic-bezier(.3,1.6,.5,1); }
+  .choice-card.on::after { content: "✓"; position: absolute; top: 9px; right: 9px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 14px; font-weight: 900; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 45%, transparent); animation: popBadge .25s cubic-bezier(.3,1.6,.5,1); }
   @keyframes popBadge { from { transform: scale(.4); opacity: 0; } }
   .choice-row { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
   .choice-title { font-weight: 850; line-height: 1.25; letter-spacing: -.01em; }
@@ -3360,8 +3390,8 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
   .choice-meta span { border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; background: #f8fafc; }
 
   /* Tarjetas de centro / profesional */
-  .pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
-  .pick-card { position: relative; display: flex; align-items: center; gap: 11px; border: 1.5px solid var(--line); border-radius: 13px; background: #fff; padding: 11px 13px; cursor: pointer; text-align: left; transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
+  .pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 12px; }
+  .pick-card { position: relative; display: flex; align-items: center; gap: 12px; border: 1.5px solid var(--line); border-radius: 14px; background: #fff; padding: 13px 15px; cursor: pointer; text-align: left; transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease; animation: cardIn .4s cubic-bezier(.22,.9,.3,1) backwards; }
   .pick-card:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
   .pick-card.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, #fff); }
   .pick-card.on::after { content: "✓"; position: absolute; top: -8px; right: -8px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 900; display: flex; align-items: center; justify-content: center; animation: popBadge .25s cubic-bezier(.3,1.6,.5,1); }
@@ -3372,7 +3402,7 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
 
   /* Selector de día */
   .date-strip { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: thin; }
-  .day-chip { flex: none; min-width: 62px; display: grid; justify-items: center; gap: 1px; border: 1.5px solid var(--line); border-radius: 13px; background: #fff; padding: 9px 8px 7px; cursor: pointer; transition: all .15s ease; }
+  .day-chip { flex: none; min-width: 68px; display: grid; justify-items: center; gap: 1px; border: 1.5px solid var(--line); border-radius: 13px; background: #fff; padding: 9px 8px 7px; cursor: pointer; transition: all .15s ease; }
   .day-chip:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); transform: translateY(-1px); }
   .day-chip .day-dow { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
   .day-chip .day-num { font-size: 19px; font-weight: 900; line-height: 1.1; }
@@ -3387,8 +3417,8 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
   /* Huecos */
   .slots { display: grid; gap: 14px; min-height: 60px; }
   .slot-glabel { font-size: 11px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
-  .slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; }
-  .slot { border: 1.5px solid var(--line); background: #fff; border-radius: 11px; padding: 11px 8px; font-weight: 800; font-size: 14px; color: var(--ink); cursor: pointer; transition: all .14s ease; }
+  .slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 9px; }
+  .slot { border: 1.5px solid var(--line); background: #fff; border-radius: 12px; padding: 12px 8px; font-weight: 800; font-size: 14.5px; color: var(--ink); cursor: pointer; transition: all .14s ease; }
   .slot:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
   .slot.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); box-shadow: 0 10px 22px -8px color-mix(in srgb, var(--accent) 55%, transparent); }
   .empty { color: var(--muted); font-size: 14px; line-height: 1.5; padding: 14px 16px; border: 1.5px dashed var(--line); border-radius: 12px; background: #fbfcfe; }
@@ -3505,7 +3535,7 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
         <div class="eyebrow"><span></span>Reservas online</div>
       </div>
       <h1>__BUSINESS__</h1>
-      <p class="lead">Elige servicio, dia y hora. Confirmacion al momento, sin llamadas ni esperas.</p>
+      <p class="lead">__TAGLINE__</p>
       <div class="trust">
         <span class="trust-chip">⚡ Confirmacion inmediata</span>
         <span class="trust-chip">🔔 Recordatorios automaticos</span>
@@ -3763,9 +3793,16 @@ async function loadServices() {
     const meta = [];
     if (s.duration_minutes) meta.push("<span>⏱ " + esc(String(s.duration_minutes)) + " min</span>");
     const price = s.price_label ? '<span class="choice-price">' + esc(s.price_label) + "</span>" : "";
-    return '<button type="button" class="choice-card" data-svc="' + i + '">'
+    // Con catalogo mixto (unas con foto, otras sin), las cards sin foto llevan un
+    // placeholder con la inicial para mantener alturas uniformes.
+    const anyMedia = st.services.some(function (x) { return x.image_url; });
+    const media = s.image_url
+      ? '<div class="choice-media"><img src="' + esc(s.image_url) + '" alt="" loading="lazy"></div>'
+      : (anyMedia ? '<div class="choice-media ph">' + esc(serviceName(s).charAt(0).toUpperCase()) + "</div>" : "");
+    return '<button type="button" class="choice-card" data-svc="' + i + '">' + media
+      + '<div class="choice-body">'
       + '<div class="choice-row"><div class="choice-title">' + esc(serviceName(s)) + "</div>" + price + "</div>"
-      + '<div class="choice-meta">' + (meta.join("") || "<span>Servicio</span>") + "</div></button>";
+      + '<div class="choice-meta">' + (meta.join("") || "<span>Servicio</span>") + "</div></div></button>";
   }).join("");
   wrap.querySelectorAll("[data-svc]").forEach(function (card) {
     card.addEventListener("click", function () {
@@ -4058,9 +4095,9 @@ def central_public_page_html(cliente_id: str, embed: bool = False) -> str:
     color = raw_color if _GIFT_ACCENT_RE.match(raw_color) else "#0f766e"
     # Mismo criterio que /tienda: el color de acento configurado en el panel
     # (Ventas > Central online > Apariencia) manda sobre el color de marca del widget.
-    shop_accent = _shop_public_config(cliente_id).get("accent_color") or ""
-    if shop_accent:
-        color = shop_accent
+    shop_cfg = _shop_public_config(cliente_id)
+    if shop_cfg.get("accent_color"):
+        color = shop_cfg["accent_color"]
     contacto = config.get("contacto") or {}
     contact_bits = " &middot; ".join(
         html_mod.escape(x) for x in (
@@ -4108,15 +4145,25 @@ def central_public_page_html(cliente_id: str, embed: bool = False) -> str:
     if not channels:
         channels.append('<div class="empty">No hay canales publicos activos.</div>')
 
-    # Hero SIEMPRE con el gradiente del color del negocio, nunca con assets de la
-    # marca Vantelia (brand_assets/ es la identidad de la plataforma, no del tenant).
-    hero_bg = (
-        f"background: linear-gradient(120deg, "
-        f"color-mix(in srgb, {color} 88%, #06121f), "
-        f"color-mix(in srgb, {color} 46%, #0b1526), "
-        f"color-mix(in srgb, {color} 72%, #123049));"
-    )
-    hero_anim = "hero-anim"
+    # Hero: foto configurada por el negocio (Ventas > Central online > Apariencia)
+    # con overlay para legibilidad; sin foto, gradiente animado del color de marca.
+    # Nunca assets de Vantelia (brand_assets/ es la identidad de la plataforma).
+    hero_photo = shop_cfg.get("hero_image_url") or ""
+    if hero_photo:
+        hero_bg = (
+            f'background: linear-gradient(105deg, rgba(6,10,24,.86), rgba(6,10,24,.36)), '
+            f'url("{html_mod.escape(hero_photo)}") center / cover no-repeat;'
+        )
+        hero_anim = ""
+    else:
+        hero_bg = (
+            f"background: linear-gradient(120deg, "
+            f"color-mix(in srgb, {color} 88%, #06121f), "
+            f"color-mix(in srgb, {color} 46%, #0b1526), "
+            f"color-mix(in srgb, {color} 72%, #123049));"
+        )
+        hero_anim = "hero-anim"
+    tagline = shop_cfg.get("hero_tagline") or "Elige servicio, dia y hora. Confirmacion al momento, sin llamadas ni esperas."
 
     # Monograma: el icono/emoji configurado del negocio si existe; si no, su inicial.
     icono = textnorm._sanitize_text(str(config.get("icono") or "")).strip()
@@ -4137,6 +4184,7 @@ def central_public_page_html(cliente_id: str, embed: bool = False) -> str:
         ("__HERO_BG__", hero_bg),
         ("__HERO_ANIM__", hero_anim),
         ("__MONOGRAM__", html_mod.escape(monogram)),
+        ("__TAGLINE__", html_mod.escape(tagline)),
         ("__EMBED_CLASS__", "embed" if embed else ""),
         ("__BOOKING_DISABLED__", "" if booking_enabled else 'style="display:none"'),
         ("__BOOKING_AVAILABLE_STYLE__", 'style="display:none"' if booking_enabled else ""),

@@ -388,6 +388,20 @@ def _public_base_url(request: Request) -> str:
 
 
 
+def _public_image_url(value) -> str:
+    """Sanea una URL de imagen configurable por el tenant (catalogo/hero).
+    Solo http(s), sin comillas ni espacios, max 500 chars. Invalida -> ''. """
+    url = str(value or "").strip()
+    if not url or len(url) > 500:
+        return ""
+    if not (url.startswith("https://") or url.startswith("http://")):
+        return ""
+    bad = ['"', "'", '<', '>', ' ']
+    if any(ch in url for ch in bad) or any(ord(ch) < 32 for ch in url):
+        return ""
+    return url
+
+
 def _format_price_cents(cents: int) -> str:
     cents = int(cents or 0)
     if cents <= 0:

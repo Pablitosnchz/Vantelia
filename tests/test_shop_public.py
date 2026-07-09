@@ -319,3 +319,61 @@ def test_central_summary_counts_today(client, api_module, portal_cookies):
             conn.execute("DELETE FROM package_purchases WHERE cliente_id='demo' AND id=?", (f"pp_{suffix}",))
             conn.execute("DELETE FROM gift_cards WHERE cliente_id='demo' AND id=?", (f"gc_{suffix}",))
             conn.commit()
+
+
+def test_central_customization_hero_and_images(client, api_module, portal_cookies):
+    """Personalizacion: hero (foto+frase) via shop-public y foto por servicio/producto/bono."""
+    try:
+        r = client.put(
+            "/auth/app/shop-public", cookies=portal_cookies,
+            json={"hero_image_url": "https://example.com/spa.jpg", "hero_tagline": "Tu momento de calma."},
+        )
+        assert r.status_code == 200, r.text
+        cfg = r.json()
+        assert cfg["hero_image_url"] == "https://example.com/spa.jpg"
+        assert cfg["hero_tagline"] == "Tu momento de calma."
+        # URL invalida (esquema no http/https) -> se descarta en el saneado
+        r2 = client.put("/auth/app/shop-public", cookies=portal_cookies,
+                        json={"hero_image_url": "javascript:alert(1)"})
+        assert r2.json()["hero_image_url"] == ""
+
+        # La central publica pinta la frase y la foto del hero
+        client.put("/auth/app/shop-public", cookies=portal_cookies,
+                   json={"hero_image_url": "https://example.com/spa.jpg", "hero_tagline": "Tu momento de calma."})
+        page = client.get("/central/demo").text
+        assert "Tu momento de calma." in page
+        assert "https://example.com/spa.jpg" in page
+
+        # Servicio con imagen: alta + roundtrip + expuesta en el publico /servicios
+        rs = client.post("/auth/services", cookies=portal_cookies,
+                         json={"nombre": "Facial Img Test", "duration_minutes": 30,
+                               "image_url": "https://example.com/facial.jpg"})
+        assert rs.status_code == 200, rs.text
+        slug = rs.json()["id"]
+        assert rs.json()["image_url"] == "https://example.com/facial.jpg"
+        pub = client.get("/servicios/demo", headers={"Origin": "http://testserver"}).json()["servicios"]
+        mine = [s for s in pub if s["id"] == slug][0]
+        assert mine["image_url"] == "https://example.com/facial.jpg"
+        # PATCH la limpia
+        rp = client.patch(f"/auth/services/{slug}", cookies=portal_cookies, json={"image_url": ""})
+        assert rp.json()["image_url"] == ""
+
+        # Producto y bono con imagen
+        rprod = client.post("/auth/products", cookies=portal_cookies,
+                            json={"name": "Crema Img", "price_cents": 1500,
+                                  "image_url": "https://example.com/crema.jpg"})
+        assert rprod.json()["image_url"] == "https://example.com/crema.jpg"
+        rpkg = client.post("/auth/packages", cookies=portal_cookies,
+                           json={"name": "Bono Img", "price_cents": 9000,
+                                 "items": [{"service_slug": slug, "qty": 3}],
+                                 "image_url": "https://example.com/bono.jpg"})
+        assert rpkg.status_code == 200, rpkg.text
+        assert rpkg.json()["image_url"] == "https://example.com/bono.jpg"
+    finally:
+        client.put("/auth/app/shop-public", cookies=portal_cookies,
+                   json={"hero_image_url": "", "hero_tagline": ""})
+        with api_module._get_db_connection() as conn:
+            conn.execute("DELETE FROM services WHERE cliente_id='demo' AND name IN ('Facial Img Test')")
+            conn.execute("DELETE FROM products WHERE cliente_id='demo' AND name='Crema Img'")
+            conn.execute("DELETE FROM packages WHERE cliente_id='demo' AND name='Bono Img'")
+            conn.commit()

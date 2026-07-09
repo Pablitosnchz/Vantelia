@@ -3271,6 +3271,10 @@ async def app_shop_public_put(
         if "accent_color" in data:
             ac = textnorm._sanitize_text(str(data.get("accent_color") or "")).strip()
             sp["accent_color"] = ac if commerce._GIFT_ACCENT_RE.match(ac) else ""
+        if "hero_image_url" in data:
+            sp["hero_image_url"] = textnorm._public_image_url(data.get("hero_image_url"))
+        if "hero_tagline" in data:
+            sp["hero_tagline"] = textnorm._sanitize_text(str(data.get("hero_tagline") or ""))[:140]
         cfg["shop_public"] = sp
         next_configs[target] = cfg
         clients._update_runtime_configs(next_configs)
