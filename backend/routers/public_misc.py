@@ -206,7 +206,9 @@ async def central_public_page(cliente_id: str, request: Request) -> HTMLResponse
         raise HTTPException(status_code=404, detail="La central publica no esta disponible.")
     client_ip = request.client.host if request.client else "unknown"
     security._check_rate_limit(f"central_page:{cliente_id}:{client_ip}", 30)
-    return HTMLResponse(commerce.central_public_page_html(cliente_id))
+    # ?embed=1: version sin hero/laterales para incrustar via iframe en la web del negocio.
+    embed = (request.query_params.get("embed") or "").strip().lower() in ("1", "true", "si")
+    return HTMLResponse(commerce.central_public_page_html(cliente_id, embed=embed))
 
 
 @app.get("/gift/{cliente_id}", include_in_schema=False)

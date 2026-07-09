@@ -2953,6 +2953,7 @@
             <div class="so-note" id="bookingPubNote" style="display:none;"></div>
             <div class="so-actions">
               <button class="btn btn-ghost" id="bookingPubGoCitas" type="button">Configurar agenda</button>
+              <button class="btn btn-ghost" id="bookingPubEmbed" type="button" style="display:none;" title="Copia un iframe listo para pegar en tu web">&lt;/&gt; Código para tu web</button>
             </div>
           </div>
         </article>
@@ -9493,6 +9494,7 @@ function renderBookingPublicStatus() {
   const enabled = state.bookingEnabled !== false && !!publicUrl;
   if (link) link.style.display = 'none';
   if (note) note.style.display = 'none';
+  const embedBtn = document.getElementById('bookingPubEmbed');
   if (enabled) {
     pill.className = 'so-pill live';
     pill.textContent = '● En vivo';
@@ -9501,11 +9503,19 @@ function renderBookingPublicStatus() {
     if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(publicUrl).then(() => toast('Enlace copiado', 'ok'));
     if (link) link.style.display = 'flex';
     if (topLink) { topLink.href = publicUrl; topLink.classList.remove('is-off'); }
+    if (embedBtn) {
+      embedBtn.style.display = '';
+      embedBtn.onclick = () => {
+        const iframe = `<iframe src="${publicUrl}?embed=1" style="width:100%;min-height:760px;border:0;border-radius:16px;" loading="lazy" title="Reservas online"></iframe>`;
+        navigator.clipboard.writeText(iframe).then(() => toast('Código copiado. Pégalo en tu web y las reservas aparecen integradas.', 'ok'));
+      };
+    }
   } else {
     pill.className = 'so-pill warn';
     pill.textContent = '● Agenda desactivada';
     if (note) { note.textContent = 'Activa las citas para publicar la central pública.'; note.style.display = ''; }
     if (topLink) topLink.classList.add('is-off');
+    if (embedBtn) embedBtn.style.display = 'none';
   }
 }
 document.getElementById('bookingPubGoCitas')?.addEventListener('click', () => setTab('citas'));

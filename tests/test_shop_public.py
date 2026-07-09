@@ -75,8 +75,17 @@ def test_central_public_page_renders_booking_first(client, api_module):
         "employee_id: st.empId",                # ...y por profesional
         'id="bookingDone"',                     # panel de exito tras reservar
         "function showDone",
+        'id="dateStrip"',                       # selector de dias tipo Fresha/Doctolib
+        "function buildDateStrip",
+        "function renderRail",                  # resumen en vivo de la reserva
+        "function slotPeriod",                  # huecos agrupados manana/tarde/noche
     ):
         assert token in html, token
+    # Version embed (?embed=1): sin hero/laterales, para iframe en la web del negocio.
+    r_embed = client.get("/central/demo?embed=1")
+    assert r_embed.status_code == 200
+    assert 'class="embed"' in r_embed.text
+    assert 'class=""' in html or 'class="embed"' not in html  # la normal NO va en modo embed
 
 
 def test_shop_page_renders_with_opt_in(client, api_module, monkeypatch, portal_cookies):
