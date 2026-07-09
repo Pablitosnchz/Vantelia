@@ -3402,7 +3402,7 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
   .msum { display: none; }
 
   /* Navegación */
-  .wizard-nav { display: flex; justify-content: space-between; gap: 10px; align-items: center; border-top: 1px solid var(--line); padding-top: 18px; }
+  .wizard-nav { display: flex; justify-content: space-between; gap: 10px; align-items: center; border-top: 1px solid var(--line); padding: 16px 0 14px; position: sticky; bottom: 0; background: #fff; z-index: 5; }
   .primary { border: 0; border-radius: 13px; background: var(--accent); color: var(--accent-ink); min-height: 50px; padding: 0 22px; font-weight: 850; font-size: 15px; cursor: pointer; display: inline-flex; justify-content: center; align-items: center; gap: 8px; text-decoration: none; transition: transform .15s ease, box-shadow .15s ease, filter .15s ease; box-shadow: 0 12px 26px -10px color-mix(in srgb, var(--accent) 60%, transparent); }
   .primary:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 16px 32px -10px color-mix(in srgb, var(--accent) 65%, transparent); }
   .primary:active { transform: translateY(0); }
@@ -3928,6 +3928,7 @@ async function loadSlots() {
         st.hour = btn.dataset.h || "";
         $("hora").value = st.hour;
         renderRail();
+        setTimeout(function () { if (st.step === 2 && st.hour) showStep(3); }, 320);
       });
     });
   } catch (e) {
@@ -4055,6 +4056,11 @@ def central_public_page_html(cliente_id: str, embed: bool = False) -> str:
     business = html_mod.escape(str(config.get("empresa") or config.get("nombre") or "Nuestro negocio"))
     raw_color = str((config.get("branding") or {}).get("color") or config.get("color") or "#0f766e")
     color = raw_color if _GIFT_ACCENT_RE.match(raw_color) else "#0f766e"
+    # Mismo criterio que /tienda: el color de acento configurado en el panel
+    # (Ventas > Central online > Apariencia) manda sobre el color de marca del widget.
+    shop_accent = _shop_public_config(cliente_id).get("accent_color") or ""
+    if shop_accent:
+        color = shop_accent
     contacto = config.get("contacto") or {}
     contact_bits = " &middot; ".join(
         html_mod.escape(x) for x in (
@@ -4102,28 +4108,22 @@ def central_public_page_html(cliente_id: str, embed: bool = False) -> str:
     if not channels:
         channels.append('<div class="empty">No hay canales publicos activos.</div>')
 
-    bg_url = (
-        textnorm._brand_asset_public_path("fondo-desktop.png")
-        or textnorm._brand_asset_public_path("Fondo_Web.png")
+    # Hero SIEMPRE con el gradiente del color del negocio, nunca con assets de la
+    # marca Vantelia (brand_assets/ es la identidad de la plataforma, no del tenant).
+    hero_bg = (
+        f"background: linear-gradient(120deg, "
+        f"color-mix(in srgb, {color} 88%, #06121f), "
+        f"color-mix(in srgb, {color} 46%, #0b1526), "
+        f"color-mix(in srgb, {color} 72%, #123049));"
     )
-    if bg_url:
-        # Foto de marca: overlay oscuro para legibilidad, sin animacion de fondo.
-        hero_bg = (
-            f'background: linear-gradient(105deg, rgba(6,10,24,.88), rgba(6,10,24,.38)), '
-            f'url("{html_mod.escape(bg_url)}") center / cover no-repeat;'
-        )
-        hero_anim = ""
-    else:
-        # Sin foto: gradiente de marca animado (clase hero-anim).
-        hero_bg = (
-            f"background: linear-gradient(120deg, "
-            f"color-mix(in srgb, {color} 88%, #06121f), "
-            f"color-mix(in srgb, {color} 46%, #0b1526), "
-            f"color-mix(in srgb, {color} 72%, #123049));"
-        )
-        hero_anim = "hero-anim"
+    hero_anim = "hero-anim"
 
-    monogram = next((ch for ch in str(config.get("empresa") or config.get("nombre") or "V") if ch.isalnum()), "V").upper()
+    # Monograma: el icono/emoji configurado del negocio si existe; si no, su inicial.
+    icono = textnorm._sanitize_text(str(config.get("icono") or "")).strip()
+    if icono and not icono.isascii():
+        monogram = icono[:2]
+    else:
+        monogram = next((ch for ch in str(config.get("empresa") or config.get("nombre") or "V") if ch.isalnum()), "V").upper()
 
     cfg_json = json.dumps(
         {"clienteId": cliente_id, "bookingEnabled": bool(booking_enabled)},
