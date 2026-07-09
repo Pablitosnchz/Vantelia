@@ -201,11 +201,6 @@ def _voice_default_greeting(config: Dict[str, Any], voice_cfg: Dict[str, Any]) -
     return f"Hola, soy el asistente de {nombre}. En que puedo ayudarte?"
 
 
-def _normalize_optional_time_value(value: Any) -> str:
-    candidate = _sanitize_text(str(value or ""))
-    return candidate if settings.TIME_PATTERN.match(candidate) else ""
-
-
 def _normalize_required_time_value(value: Any, field_label: str) -> str:
     candidate = _sanitize_text(str(value or ""))
     if not settings.TIME_PATTERN.match(candidate):

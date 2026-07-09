@@ -1,31 +1,17 @@
 """Helpers del panel admin y portal cliente (payloads, stats, analytics) (refactor F3)."""
 from __future__ import annotations
 
-import asyncio
-import base64
-import csv
 import hashlib
-import hmac
 import json
-import os
-import random
 import re
 import secrets
 import sqlite3
-import threading
-import time
-import unicodedata
-import uuid
-from datetime import date, datetime, timedelta, timezone
-from html import escape
-from io import StringIO
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 import copy
-import httpx
-from fastapi import BackgroundTasks, Cookie, Header, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import Cookie, Header, HTTPException, Request, status
 
 try:
     from zoneinfo import ZoneInfo
@@ -33,7 +19,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AdminClientePayload, AdminClienteSaveResult, AppOverviewStats, PortalAgendaBlock, PortalAiConfigPayload, PortalAiConfigPublic, PortalBookingSummary
-from backend import agenda, appstate, booking, clients, crm, db, demo_agenda, rag, security, settings, textnorm, timeutils
+from backend import agenda, appstate, booking, clients, commerce, db, rag, security, settings, textnorm, timeutils
 
 def _client_payload_from_config(config: Dict[str, Any], info_txt: str) -> AdminClientePayload:
     return AdminClientePayload(
@@ -255,6 +241,8 @@ def _save_admin_client_payload(
     clients._persist_configs_to_disk(next_configs)
     rag._write_info_txt(cliente_id, data.info_txt)
     clients._update_runtime_configs(next_configs)
+    agenda._sync_services_from_info(cliente_id, data.info_txt, deactivate_missing=True)
+    commerce._seed_commerce_from_info(cliente_id, data.info_txt)
     rag._invalidate_client_runtime(cliente_id)
 
     reindexed = False

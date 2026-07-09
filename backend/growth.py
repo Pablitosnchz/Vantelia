@@ -1,37 +1,15 @@
 """Plan de escala: metricas growth_* y revision semanal (refactor F3)."""
 from __future__ import annotations
 
-import asyncio
-import base64
-import csv
-import hashlib
-import hmac
 import json
-import os
-import random
-import re
-import secrets
 import sqlite3
-import threading
-import time
-import unicodedata
-import uuid
-from datetime import date, datetime, timedelta, timezone
-from html import escape
-from io import StringIO
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from datetime import date, timedelta
+from typing import Any, Dict, Optional
 
-import httpx
-from fastapi import BackgroundTasks, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import HTTPException
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python 3.8 compatibility
-    from backports.zoneinfo import ZoneInfo
 
-from backend import appstate, db, outreach, settings, textnorm, timeutils
+from backend import textnorm, timeutils
 
 GROWTH_STAGES = {
     "identificada", "contactada", "conversacion", "descubrimiento", "demo",

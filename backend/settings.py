@@ -84,13 +84,17 @@ try:
 except ValueError:
     VOICE_MAX_DURATION_SECONDS = 300
 VOICE_OPENAI_VOICE = os.getenv("VOICE_OPENAI_VOICE", "alloy").strip() or "alloy"
-# Modelo Realtime GA por defecto: el mini es mas barato y sobra para recepcionista
-# (citas, horarios, FAQs). Override por cliente con voice.realtime_model.
+# Modelo Realtime GA por defecto. Usamos el FULL (`gpt-realtime`): es bastante mas fiable
+# que el mini siguiendo instrucciones, llamando tools y entendiendo codigos/fechas (clave en
+# el navegador, que no tiene las redes deterministas del puente de Twilio). Override por
+# cliente con voice.realtime_model (selector en el panel admin -> Clientes).
 # (La API beta `gpt-4o-*-realtime-preview` fue retirada en mayo 2026.)
 VOICE_REALTIME_MODEL = (
-    os.getenv("VOICE_REALTIME_MODEL", "gpt-realtime-mini").strip()
-    or "gpt-realtime-mini"
+    os.getenv("VOICE_REALTIME_MODEL", "gpt-realtime").strip()
+    or "gpt-realtime"
 )
+# Modelos Realtime que el panel admin permite elegir por cliente.
+VOICE_REALTIME_MODELS = ("gpt-realtime", "gpt-realtime-mini")
 # Demo de voz en el navegador (llamada simulada, sin telefono): tope de duracion
 # y rate limit por IP para acotar el gasto de minutos Realtime en una pagina publica.
 try:

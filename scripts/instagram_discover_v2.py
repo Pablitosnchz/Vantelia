@@ -17,8 +17,8 @@ import os
 import random
 import re
 import time
-from dataclasses import dataclass, field
-from typing import Iterable, List, Optional, Set
+from dataclasses import dataclass
+from typing import List, Optional, Set
 
 import httpx
 
@@ -165,18 +165,6 @@ def _places_search(sector: str, city: str, api_key: str, http: httpx.Client) -> 
         return []
 
 
-def _place_details(place: dict, api_key: str, http: httpx.Client) -> Optional[dict]:
-    """Con Places API (New), website ya viene en la respuesta de search.
-    Esta funcion queda como passthrough para mantener compat con el flujo."""
-    if not place:
-        return None
-    return {
-        "name": place.get("name", ""),
-        "website": place.get("website", ""),
-        "rating": place.get("rating", 0),
-    }
-
-
 def _extract_ig_handle_from_website(url: str, http: httpx.Client) -> Optional[str]:
     if not url:
         return None
@@ -194,44 +182,6 @@ def _extract_ig_handle_from_website(url: str, http: httpx.Client) -> Optional[st
     except Exception:
         return None
 
-
-def _fetch_ig_profile_meta(username: str, http: httpx.Client) -> dict:
-    """Fetch publico instagram.com/{username}/ y parsea meta og:description.
-    Sin login. Devuelve {ok, bio, is_business_hint}."""
-    try:
-        r = http.get(
-            f"https://www.instagram.com/{username}/",
-            timeout=12.0,
-            follow_redirects=True,
-            headers={
-                "User-Agent": DEFAULT_UA,
-                "Accept-Language": "es-ES,es;q=0.9",
-            },
-        )
-        if r.status_code != 200:
-            return {"ok": False}
-        html = r.text
-        # og:description suele tener "1,234 Followers, 567 Following, ... - @user en Instagram: \"bio\""
-        m_desc = re.search(r'<meta property="og:description" content="([^"]+)"', html)
-        m_title = re.search(r'<meta property="og:title" content="([^"]+)"', html)
-        bio = (m_desc.group(1) if m_desc else "").strip()
-        title = (m_title.group(1) if m_title else "").strip()
-        if not bio and not title:
-            return {"ok": False}
-        # Heuristica is_business: titulo con barra vertical o paréntesis sugiere brand
-        is_business = bool(re.search(r"[|()·–-]", title)) or len(bio) > 60
-        # Followers heuristic
-        followers = 0
-        fm = re.search(r"([\d.,]+)\s*Followers", bio, re.IGNORECASE)
-        if fm:
-            try:
-                followers = int(fm.group(1).replace(",", "").replace(".", ""))
-            except Exception:
-                followers = 0
-        return {"ok": True, "bio": bio[:280], "title": title[:180],
-                "is_business_hint": is_business, "followers": followers}
-    except Exception:
-        return {"ok": False}
 
 
 def discover_real(

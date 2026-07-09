@@ -12,7 +12,7 @@ import os
 import secrets
 import sqlite3
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
@@ -337,15 +337,6 @@ def _get_user_by_google_sub(google_sub: str) -> Optional[sqlite3.Row]:
         return connection.execute(
             "SELECT * FROM users WHERE google_sub = ?", (sub,)
         ).fetchone()
-
-
-def _link_google_to_user(user_id: str, google_sub: str, avatar_url: str = "") -> None:
-    with db._get_db_connection() as connection:
-        connection.execute(
-            "UPDATE users SET google_sub = ?, email_verified = 1, avatar_url = ? WHERE id = ?",
-            (google_sub.strip(), avatar_url.strip(), user_id),
-        )
-        connection.commit()
 
 
 def _create_user_self_serve(
@@ -851,7 +842,21 @@ def _get_authenticated_portal_user_or_none(
 ) -> Optional[sqlite3.Row]:
     if not portal_session:
         return None
-    return _get_session_user(portal_session)
+    user = _get_session_user(portal_session)
+    if user is None:
+        return None
+    # Defensa en profundidad: si el tenant del usuario ya no existe (cliente borrado o
+    # demo expirada), la sesion deja de valer YA. Sin esto, un usuario huerfano podia
+    # seguir entrando a un panel a medias. Los self-serve sin bot (cliente_id vacio,
+    # wizard pendiente) y los admin siguen entrando con normalidad.
+    if user["role"] == "client":
+        cliente_id = (user["cliente_id"] or "").strip()
+        if cliente_id and cliente_id not in appstate.CONFIG_CLIENTES:
+            settings.logger.warning(
+                "Sesion rechazada: usuario %s apunta a tenant inexistente %s", user["email"], cliente_id
+            )
+            return None
+    return user
 
 
 def _require_authenticated_portal_user(

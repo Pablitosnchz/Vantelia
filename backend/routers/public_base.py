@@ -5,83 +5,19 @@ registro de rutas identico al monolito original.
 """
 from __future__ import annotations
 
-import asyncio
-import copy
-import base64
-import csv
-import hashlib
-import hmac
-import json
-import os
-import random
-import re
-import secrets
-import shutil
-import sqlite3
-import threading
-import time
-import unicodedata
-import uuid
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from email.message import EmailMessage
-from email.utils import formataddr, parseaddr
 from html import escape
-from io import StringIO
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from typing import Any, Dict, List
 
-import httpx
 from fastapi import (
-    BackgroundTasks,
-    Cookie,
-    Depends,
-    Header,
     HTTPException,
-    Request,
-    Response,
-    WebSocket,
-    WebSocketDisconnect,
-    status,
 )
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
-from pydantic import BaseModel, EmailStr, Field
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python 3.8 compatibility
-    from backports.zoneinfo import ZoneInfo
 
-import onboarding_utils
 from api_models import *  # noqa: F401,F403
 from backend import (
-    agenda,
     appstate,
-    billing,
-    booking,
-    chat,
-    clients,
-    crm,
-    db,
-    demo_agenda,
-    emailing,
-    growth,
-    instagram,
-    messaging,
-    onboarding,
-    outreach,
-    portal,
-    rag,
-    security,
     settings,
-    stripe_gateway,
-    textnorm,
-    tiktok,
-    timeutils,
-    voice,
-    wa_capture,
-    whatsapp,
 )
 from backend.main import app
 
@@ -192,158 +128,6 @@ async def legal_document(documento: str) -> HTMLResponse:
 
 
 
-from api_models import (
-    MensajeChat,
-    DatosCita,
-    RespuestaChat,
-    WhatsAppWebhookStatus,
-    ChatSessionSummary,
-    ChatMessagePublic,
-    ChatSessionDetail,
-    ConfigPublicaCliente,
-    SlotDisponibilidad,
-    RespuestaDisponibilidad,
-    RespuestaAgendado,
-    BookingDetailPublic,
-    BookingActionResponse,
-    BookingReschedulePayload,
-    BookingCancelPayload,
-    BookingAttendancePayload,
-    StaffBookingCreatePayload,
-    ServicePublic,
-    ServicesResponse,
-    ServicePayload,
-    ServiceUpdatePayload,
-    ServicePaymentPolicyPayload,
-    ConnectAccountStatus,
-    AiSendTogglePayload,
-    ConnectStartResponse,
-    CustomerPaymentPublic,
-    CustomerPaymentsResponse,
-    PaymentLinkPayload,
-    PaymentLinkResponse,
-    PaymentRefundPayload,
-    BookingUpdatePayload,
-    AdminBookingResumen,
-    AdminReminderRunResult,
-    AuthLoginPayload,
-    AuthUserPublic,
-    AuthLoginResponse,
-    AuthSimpleResponse,
-    AuthSignupPayload,
-    AuthSignupResponse,
-    OnboardingStartPayload,
-    OnboardingStartResponse,
-    OnboardingLearnPayload,
-    OnboardingLearnResponse,
-    OnboardingPersonalityPayload,
-    OnboardingPersonalityResponse,
-    OnboardingFinalizeResponse,
-    OnboardingStateResponse,
-    AppOverviewSubscription,
-    AppOverviewStats,
-    AppOverviewChannels,
-    AppOverviewResponse,
-    AppDeployResponse,
-    AppAppearancePayload,
-    AppAppearanceResponse,
-    AppLeadPublic,
-    AppLeadPayload,
-    AppLeadsListResponse,
-    CRMContactPayload,
-    CRMContactPublic,
-    CRMContactListItem,
-    CRMContactsListResponse,
-    CRMContactActivity,
-    CRMContactDetailResponse,
-    ChannelEmailStatus,
-    ChannelSmsStatus,
-    ChannelSettingsResponse,
-    ChannelConnectResponse,
-    ChannelEmailSettingsPayload,
-    ChannelSmsSettingsPayload,
-    ChannelTestPayload,
-    AppQAItem,
-    AppQAPayload,
-    AppQAUpdatePayload,
-    AppQAListResponse,
-    AppKnowledgeItem,
-    AppKnowledgeListResponse,
-    AppKnowledgeTextPayload,
-    AppKnowledgeUrlPayload,
-    AppKnowledgeReindexResponse,
-    AppTunePayload,
-    AppTuneResponse,
-    AppServiceProduct,
-    AppServicesResponse,
-    AppServicesPayload,
-    AppWhatsAppPayload,
-    AppWhatsAppResponse,
-    AppVoicePayload,
-    AppVoiceResponse,
-    AppLiveChatSession,
-    BillingPlanTier,
-    BillingSubscriptionPublic,
-    BillingStateResponse,
-    BillingCheckoutPayload,
-    BillingCheckoutResponse,
-    AppTrackEventPayload,
-    BillingPortalResponse,
-    StripeConnectStateResponse,
-    StripeConnectStartResponse,
-    BookingPaymentStateResponse,
-    GmailClientStateResponse,
-    ConsultaLeadPayload,
-    DemoGeneratePayload,
-    DemoGenerateResponse,
-    SubscriptionUsage,
-    SubscriptionFeatures,
-    SubscriptionPublic,
-    SubscriptionCheckoutPayload,
-    SubscriptionCheckoutResponse,
-    PublicCheckoutStatusResponse,
-    SubscriptionPortalResponse,
-    AuthManagedUser,
-    AuthManagedUsersResponse,
-    AuthPasswordChangePayload,
-    AuthPasswordForgotPayload,
-    AuthPasswordResetPayload,
-    AuthProfileUpdatePayload,
-    PortalAiConfigPayload,
-    PortalAiConfigPublic,
-    PortalBrainPayload,
-    PortalBrainPublic,
-    PortalScheduleUpdatePayload,
-    PortalAgendaBlockPayload,
-    PortalAgendaBlock,
-    PortalSchedulePublic,
-    PortalAgendaBlockCreateResponse,
-    PortalBookingSummary,
-    PortalBookingsResponse,
-    PortalEmployeePayload,
-    PortalEmployeePublic,
-    PortalEmployeesResponse,
-    PortalDashboardResponse,
-    PortalMessagePreviewPayload,
-    PortalMessagePreviewResponse,
-    BookingAuditEntry,
-    BookingAuditResponse,
-    PortalCreateUserPayload,
-    AdminClientePayload,
-    AdminClienteResumen,
-    AdminClienteDetalle,
-    AdminClienteSaveResult,
-    AdminClienteAuditEntry,
-    AdminClienteAuditResponse,
-    AdminImpersonateResponse,
-    AdminImpersonateEndResponse,
-    AdminAltaExpressPayload,
-    AdminAltaExpressResponse,
-    GrowthDailyPayload,
-    GrowthOpportunityPayload,
-    GrowthWeeklyReviewPayload,
-    GrowthPlanTaskPayload,
-)
 
 
 
@@ -853,13 +637,6 @@ from api_models import (
 
 
 
-COMMERCIAL_INTENT_LABELS = {
-    "diagnostico": "diagnostico inteligente",
-    "recomendador": "recomendador de servicios",
-    "estimador": "calculadora o estimador",
-    "comparador": "comparador de opciones",
-    "booking": "agenda",
-}
 
 
 

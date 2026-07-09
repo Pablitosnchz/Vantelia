@@ -12,7 +12,7 @@ import re
 import secrets
 import sqlite3
 import unicodedata
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import HTTPException, status
@@ -33,14 +33,13 @@ from api_models import (
     PortalLocationsResponse,
     PortalResourcePayload,
     PortalResourcePublic,
-    PortalResourcesResponse,
     PortalSchedulePublic,
     PortalScheduleUpdatePayload,
     ServiceLocationOverrideItem,
     ServiceLocationOverridePayload,
     ServiceLocationsResponse,
 )
-from backend import appstate, clients, db, emailing, messaging, security, settings, textnorm, timeutils
+from backend import appstate, clients, db, emailing, messaging, settings, textnorm, timeutils
 
 EMPLOYEE_COLOR_PALETTE = [
     "#00b1d9",
@@ -366,6 +365,90 @@ def _ensure_services_seeded(cliente_id: str) -> None:
         connection.commit()
 
 
+def _sync_services_from_info(
+    cliente_id: str,
+    info_txt: str = "",
+    *,
+    deactivate_missing: bool = False,
+) -> Dict[str, int]:
+    """Crea/actualiza en la tabla services los servicios detectados en info.txt.
+
+    Por defecto no elimina servicios existentes: puede haber ajustes manuales,
+    overrides por centro o servicios temporales que no conviene borrar durante
+    un scrapeo incremental. Los rebrains que reemplazan el conocimiento pueden
+    pasar deactivate_missing=True para ocultar servicios antiguos.
+    """
+    seeded = _extract_services_from_info(cliente_id)
+    if not seeded:
+        return {"created": 0, "updated": 0, "detected": 0}
+
+    now = timeutils._utc_now_iso()
+    created = 0
+    updated = 0
+    with db._get_db_connection() as connection:
+        seen_slugs: Set[str] = set()
+        for idx, svc in enumerate(seeded):
+            slug = _normalize_service_id(svc.get("nombre") or svc.get("id") or "")
+            if not slug:
+                continue
+            seen_slugs.add(slug)
+            name = textnorm._sanitize_text(svc.get("nombre") or slug)[:160]
+            description = textnorm._sanitize_text(
+                svc.get("descripcion") or "", allow_multiline=True
+            )[:800]
+            duration = int(svc.get("duration_minutes") or 0) or 30
+            price_cents = max(0, int(svc.get("price_cents") or 0))
+            existing = connection.execute(
+                "SELECT slug FROM services WHERE cliente_id = ? AND slug = ? LIMIT 1",
+                (cliente_id, slug),
+            ).fetchone()
+            if existing:
+                connection.execute(
+                    """
+                    UPDATE services
+                    SET name = ?, duration_minutes = ?, price_cents = ?,
+                        description = ?, is_active = 1, updated_at = ?
+                    WHERE cliente_id = ? AND slug = ?
+                    """,
+                    (name, duration, price_cents, description, now, cliente_id, slug),
+                )
+                updated += 1
+            else:
+                connection.execute(
+                    """
+                    INSERT INTO services
+                    (cliente_id, slug, name, duration_minutes, price_cents, description,
+                     is_active, sort_order, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                    """,
+                    (
+                        cliente_id,
+                        slug,
+                        name,
+                        duration,
+                        price_cents,
+                        description,
+                        idx,
+                        now,
+                        now,
+                    ),
+                )
+                created += 1
+        if deactivate_missing and seen_slugs:
+            placeholders = ",".join("?" for _ in seen_slugs)
+            connection.execute(
+                f"""
+                UPDATE services
+                SET is_active = 0, updated_at = ?
+                WHERE cliente_id = ?
+                  AND slug NOT IN ({placeholders})
+                """,
+                (now, cliente_id, *sorted(seen_slugs)),
+            )
+        connection.commit()
+    return {"created": created, "updated": updated, "detected": len(seeded)}
+
+
 def _list_service_rows(cliente_id: str, *, include_inactive: bool = False) -> List[sqlite3.Row]:
     _ensure_services_seeded(cliente_id)
     clauses = ["cliente_id = ?"]
@@ -429,11 +512,6 @@ def _get_service_override(cliente_id: str, slug: str, location_id: str) -> Optio
             """,
             (cliente_id, slug, location_id),
         ).fetchone()
-
-
-def _service_available_at_location(cliente_id: str, slug: str, location_id: str) -> bool:
-    override = _get_service_override(cliente_id, slug, location_id)
-    return override is None or bool(override["is_available"])
 
 
 def _service_price_cents_resolved(
@@ -783,17 +861,6 @@ def _effective_followup_channels(cliente_id: str) -> Dict[str, Dict[str, bool]]:
     )
 
 
-def _followup_channel_recommended(cliente_id: str, kind: str, channel: str) -> bool:
-    """True si conviene sugerir (sin activar) un canal para este aviso segun el plan:
-    WhatsApp en 'confirmed'/'reminder_24h' cuando esta disponible y aun no activo."""
-    if channel != "whatsapp" or kind not in ("confirmed", "reminder_24h"):
-        return False
-    if not _reminder_channel_availability(cliente_id).get("whatsapp", {}).get("available"):
-        return False
-    current = _effective_followup_channels(cliente_id).get(kind, {})
-    return not bool(current.get("whatsapp"))
-
-
 def _portal_schedule_from_config(cliente_id: str) -> PortalSchedulePublic:
     config = clients._get_client_config(cliente_id)
     booking_row = config["booking"]
@@ -863,6 +930,10 @@ def _portal_schedule_from_employee(cliente_id: str, employee_id: str) -> PortalS
             for block in _list_agenda_blocks(
                 cliente_id,
                 employee_id=employee_id,
+                # Los bloqueos generales (vacaciones/festivos del negocio) tambien
+                # afectan a este profesional: se listan junto a los suyos para que
+                # el calendario filtrado por profesional no los pierda.
+                include_general=True,
                 date_from=today,
                 date_to=future_limit,
             )
@@ -951,10 +1022,12 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
                     ),
                 )
         if break_windows != previous_break_windows and break_windows:
+            # El descanso general aplica a TODO el equipo: valida contra las citas
+            # de todos los profesionales, no solo la agenda general.
             conflicts = _booking_conflicts_for_break_windows(
                 cliente_id,
                 break_windows,
-                employee_id=default_employee_id,
+                employee_id="",
             )
             if conflicts:
                 raise HTTPException(
@@ -2193,7 +2266,11 @@ def _build_slots_for_day(
     current = start_dt
     tzinfo = ZoneInfo(booking_cfg["timezone"])
     now_local = timeutils._utc_now().astimezone(tzinfo)
+    # Descansos propios del profesional + descansos GENERALES del negocio (cierre de
+    # mediodia y similares): el descanso general aplica a todo el equipo en todos los
+    # canales (widget, portal, chat, voz, WhatsApp).
     break_intervals = _break_intervals_from_windows(booking_cfg.get("break_windows", []))
+    break_intervals.extend(_break_intervals_from_windows(_client_break_windows(config)))
     while current + timedelta(minutes=span) <= end_dt:
         slot = current.strftime("%H:%M")
         slot_start_min = textnorm._time_to_min(slot)
@@ -2226,6 +2303,26 @@ def _break_intervals_from_windows(windows: Any) -> List[Tuple[int, int]]:
         if start_min is not None and end_min is not None and start_min < end_min:
             intervals.append((start_min, end_min))
     return intervals
+
+
+def _client_break_windows(config: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Descansos GENERALES del negocio (config['booking']), normalizados.
+
+    Semantica: el descanso del horario general es un cierre del NEGOCIO (p.ej. parada
+    de comida) y aplica a TODO el equipo ademas de los descansos propios de cada
+    profesional. Los descansos escalonados por persona se configuran por profesional
+    dejando el general vacio."""
+    booking_row = (config or {}).get("booking") or {}
+    try:
+        return textnorm._normalize_break_windows(
+            booking_row.get("day_start", "09:00"),
+            booking_row.get("day_end", "18:00"),
+            booking_row.get("break_windows", []),
+            booking_row.get("break_start", ""),
+            booking_row.get("break_end", ""),
+        )
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _booking_row_duration_min(row: sqlite3.Row, cliente_id: str) -> int:
@@ -2610,31 +2707,6 @@ def _booking_conflicts_outside_schedule(
     return conflicts
 
 
-def _blocked_slots(cliente_id: str, fecha: str, *, employee_id: str = "") -> Set[str]:
-    available_slots = _build_slots_for_day(cliente_id, fecha, employee_id=employee_id)
-    if not available_slots:
-        return set()
-    employee_row = _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
-    slot_minutes = int(_employee_schedule_from_row(employee_row)["slot_minutes"])
-    blocked: Set[str] = set()
-    rows = _list_agenda_blocks(
-        cliente_id,
-        employee_id=employee_id or "",
-        include_general=bool(employee_id),
-        date_from=fecha,
-        date_to=fecha,
-    )
-    for row in rows:
-        block_start = textnorm._parse_time(row["start_time"])
-        block_end = textnorm._parse_time(row["end_time"])
-        for slot in available_slots:
-            slot_start = textnorm._parse_time(slot)
-            slot_end = slot_start + timedelta(minutes=slot_minutes)
-            if slot_start < block_end and slot_end > block_start:
-                blocked.add(slot)
-    return blocked
-
-
 async def _booking_slot_available(
     cliente_id: str, fecha: str, hora: str, *, employee_id: str = "", duration_minutes: Optional[int] = None
 ) -> bool:
@@ -2777,7 +2849,10 @@ def _extract_services_from_info(cliente_id: str) -> List[Dict[str, Any]]:
             cents = textnorm._parse_price_to_cents(clean)
             if cents:
                 current["price_cents"] = cents
-        if ("duracion" in prefix_lower or "duración" in prefix_lower) and not current.get("duration_minutes"):
+        if (
+            ("duracion" in prefix_lower or "duración" in prefix_lower)
+            or textnorm._parse_duration_minutes_text(clean)
+        ) and not current.get("duration_minutes"):
             minutes = textnorm._parse_duration_minutes_text(clean)
             if minutes:
                 current["duration_minutes"] = minutes
@@ -2797,7 +2872,11 @@ def _extract_services_from_info(cliente_id: str) -> List[Dict[str, Any]]:
         known_detail_labels = {
             "precio", "tarifa", "coste", "duracion", "duración", "descripcion",
             "descripción", "detalle", "incluye", "ideal para", "para quien",
+            "fuente", "source", "url",
         }
+        first_label_match = re.match(r"^([^:]{1,60}):", raw)
+        if first_label_match and first_label_match.group(1).strip().lower() in known_detail_labels:
+            return False
         parts: List[str] = []
         colon_match = re.match(r"^([^:]{2,90}):\s*(.+)$", raw)
         if colon_match and colon_match.group(1).strip().lower() not in known_detail_labels:
@@ -2855,7 +2934,10 @@ def _extract_services_from_info(cliente_id: str) -> List[Dict[str, Any]]:
             continue
 
         if en_seccion and valor.endswith(":") and valor.upper() == valor and len(valor) > 3:
-            break
+            en_seccion = False
+            current = None
+            current_category = ""
+            continue
 
         if not en_seccion:
             continue
@@ -3069,3 +3151,63 @@ def _is_open_now(booking_cfg: Dict[str, Any], now_dt: datetime) -> Optional[bool
         return None
 
 
+
+
+def _weekly_schedule_matrix(cliente_id: str, config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Matriz semanal REAL del negocio (lunes=0..domingo=6): por dia, si esta cerrado y la
+    envolvente de horas de apertura. Derivada de los MISMOS profesionales publicos que usa
+    la disponibilidad (un dia esta 'cerrado' solo si NINGUN profesional activo trabaja ese
+    dia); si no hay profesionales, cae al horario base de config['booking']. Fuente unica
+    compartida por los prompts de voz (voice._voice_schedule_block) y de chat
+    (rag._build_system_prompt): el horario contado nunca contradice la agenda real.
+
+    Devuelve [] si la reserva esta desactivada o el negocio esta cerrado los 7 dias.
+    Cada elemento: {"weekday": 0-6, "closed": bool, "start": "HH:MM", "end": "HH:MM"}.
+    """
+    booking_cfg = (config or {}).get("booking") or {}
+    if not booking_cfg.get("enabled", True):
+        return []
+
+    def _norm_hhmm(value: Any, default: str) -> str:
+        try:
+            return textnorm._parse_time(str(value)).strftime("%H:%M")
+        except Exception:  # noqa: BLE001
+            return default
+
+    try:
+        rows = _list_public_employee_rows(cliente_id, include_inactive=False)
+        schedules = [_employee_schedule_from_row(row) for row in rows]
+    except Exception:  # noqa: BLE001
+        schedules = []
+
+    matrix: List[Dict[str, Any]] = []
+    source = "employees" if schedules else "config"
+    if schedules:
+        for wd in range(7):
+            open_today = [s for s in schedules if wd not in set(s.get("closed_weekdays") or [])]
+            if not open_today:
+                matrix.append({"weekday": wd, "closed": True, "start": "", "end": "", "source": source})
+                continue
+            starts = [_norm_hhmm(s.get("day_start"), "09:00") for s in open_today]
+            ends = [_norm_hhmm(s.get("day_end"), "18:00") for s in open_today]
+            matrix.append({"weekday": wd, "closed": False, "start": min(starts), "end": max(ends), "source": source})
+    else:
+        day_start = _norm_hhmm(booking_cfg.get("day_start", "09:00"), "09:00")
+        day_end = _norm_hhmm(booking_cfg.get("day_end", "18:00"), "18:00")
+        closed: Set[int] = set()
+        for d in (booking_cfg.get("closed_weekdays") or []):
+            try:
+                di = int(d)
+                if 0 <= di <= 6:
+                    closed.add(di)
+            except (TypeError, ValueError):
+                continue
+        for wd in range(7):
+            if wd in closed:
+                matrix.append({"weekday": wd, "closed": True, "start": "", "end": "", "source": source})
+            else:
+                matrix.append({"weekday": wd, "closed": False, "start": day_start, "end": day_end, "source": source})
+
+    if all(item["closed"] for item in matrix):
+        return []
+    return matrix

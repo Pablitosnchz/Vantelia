@@ -182,6 +182,13 @@ export function inyectarEstilos(color, accentColor) {
       position: fixed;
       right: 24px;
       bottom: 100px;
+      /* Blindaje: la web anfitriona puede estilizar <section>/<header> genericos
+         (padding enorme, min-height 90vh...); estas propiedades se fijan aqui para
+         que el panel no herede nada raro. */
+      padding: 0;
+      margin: 0;
+      min-height: 0;
+      max-height: none;
       width: min(392px, calc(100vw - 36px));
       height: min(760px, calc(100vh - 112px));
       background: var(--ia-surface);
@@ -199,6 +206,10 @@ export function inyectarEstilos(color, accentColor) {
     }
 
     #ia-w-header {
+      position: static;
+      min-height: 0;
+      margin: 0;
+      flex: 0 0 auto;
       background:
         radial-gradient(circle at top right, rgba(255, 255, 255, 0.16), transparent 28%),
         linear-gradient(135deg, var(--ia-color-dark), var(--ia-color));

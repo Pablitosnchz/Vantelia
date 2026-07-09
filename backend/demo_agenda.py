@@ -14,16 +14,16 @@ import time
 from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 
 try:
     from zoneinfo import ZoneInfo
 except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
-from backend import agenda, appstate, booking, clients, db, rag, security, settings, textnorm, timeutils
+from backend import agenda, appstate, booking, clients, db, settings, textnorm, timeutils
 
 DEMO_TENANT_PREFIX = "demo_auto_"
 
@@ -71,6 +71,10 @@ def _purge_expired_demos() -> int:
         try:
             if cliente_id in appstate.CONFIG_CLIENTES:
                 clients._delete_client_everywhere(cliente_id)
+            else:
+                # Huerfana (config ya no existe pero quedan datos/usuarios): limpiar
+                # igualmente para que nadie pueda seguir entrando con esa cuenta.
+                clients._purge_client_data(cliente_id)
             registry.pop(cliente_id, None)
             settings.logger.info("Demo expirada eliminada: %s", cliente_id)
         except Exception as exc:  # noqa: BLE001
@@ -279,6 +283,8 @@ VOICE_DEMO_TEMPLATE = """
     try{
       dc.send(JSON.stringify({ type:'conversation.item.create', item:{ type:'function_call_output', call_id:callId, output: JSON.stringify(result) } }));
       dc.send(JSON.stringify({ type:'response.create' }));
+      // Colgado suave: el asistente pidio terminar (se ha despedido); cerramos tras dejarle hablar.
+      if(result && result.end_call){ setTimeout(function(){ if(active) endCall('Llamada finalizada','El asistente ha terminado la llamada.'); }, 6000); }
     }catch(_){}
   }
 
@@ -1284,10 +1290,6 @@ def _purge_demo_services(cliente_id: str) -> int:
         ).rowcount
         connection.commit()
     return removed
-
-
-def _demo_service_names(cliente_id: str) -> List[str]:
-    return [service["nombre"] for service in _demo_services(cliente_id)]
 
 
 def _demo_services(cliente_id: str) -> List[Dict[str, Any]]:

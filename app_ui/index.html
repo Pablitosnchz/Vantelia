@@ -574,12 +574,14 @@
     .gcal-day.today .gcal-day-num { background:var(--accent,#00d1ff); color:#000; font-weight:700; }
     .gcal-event-pill {
       display:block; width:100%; margin-bottom:2px; padding:2px 6px; border-radius:4px;
+      border:0; font-family:var(--font); text-align:left;
       font-size:0.7rem; font-weight:500; color:#fff; cursor:pointer;
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.9;
-      transition:opacity .1s;
+      transition:opacity .1s, transform .1s ease;
     }
     .gcal-event-pill:hover { opacity:1; }
-    .gcal-more { font-size:0.68rem; color:var(--accent); padding:1px 3px; cursor:pointer; display:block; }
+    .gcal-event-pill:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+    .gcal-more { display:block; width:max-content; max-width:100%; border:0; background:transparent; font-family:var(--font); font-size:0.68rem; color:var(--accent); padding:1px 3px; cursor:pointer; }
     .gcal-more:hover { text-decoration:underline; }
     .gcal-day.closed {
       background: linear-gradient(180deg, rgba(239,68,68,0.045), rgba(239,68,68,0.015));
@@ -600,6 +602,101 @@
     .gcal-day.blocked:hover { background: rgba(245,158,11,0.09); }
     .gcal-day.closed.blocked { box-shadow: inset 0 0 0 1px rgba(245,158,11,0.62), inset 3px 0 0 rgba(239,68,68,0.72); }
     .gcal-day-tag.blocked { background:rgba(245,158,11,0.13); color:#fde68a; border:1px solid rgba(245,158,11,0.38); }
+
+    /* Panel de gestion de cita */
+    .booking-manage-modal {
+      max-width: min(900px, 96vw) !important;
+      padding: 0;
+      overflow: hidden !important;
+      border-color: rgba(0,209,255,0.18);
+      box-shadow: 0 30px 90px rgba(0,0,0,0.52);
+    }
+    .booking-manage-modal > div:first-child {
+      padding: 16px 18px;
+      margin: 0 !important;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(135deg, rgba(0,209,255,0.08), rgba(0,245,212,0.02));
+    }
+    .booking-manage-modal > div:first-child h3 { font-size: 1rem !important; }
+    .mg-panel-body { max-height: calc(88vh - 68px); overflow: auto; padding: 18px; }
+    .mg-hero {
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+      padding-bottom: 16px; border-bottom: 1px solid var(--line);
+    }
+    .mg-eyebrow {
+      color: var(--accent); font-size: .72rem; font-weight: 800;
+      letter-spacing: .1em; text-transform: uppercase; margin-bottom: 5px;
+    }
+    .mg-title { font-family: var(--font-title); font-size: 1.2rem; line-height: 1.2; margin: 0; }
+    .mg-subtitle { color: var(--soft); font-size: .86rem; margin-top: 5px; }
+    .mg-badges { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; align-items: flex-start; }
+    .mg-tabs {
+      display: flex; gap: 6px; flex-wrap: wrap; margin: 16px 0 14px;
+      border-bottom: 1px solid var(--line); padding-bottom: 8px;
+    }
+    .mg-tab {
+      border: 1px solid transparent; background: transparent; color: var(--soft);
+      font-family: var(--font); font-size: .82rem; font-weight: 700;
+      padding: 8px 12px; border-radius: 8px; cursor: pointer;
+    }
+    .mg-tab:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+    .mg-tab.active { color: var(--accent); border-color: rgba(0,209,255,.28); background: var(--accent-soft); }
+    .mg-tab-panel { display: none; }
+    .mg-tab-panel.active { display: block; }
+    .mg-summary-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr); gap: 16px; }
+    .mg-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 0; }
+    .mg-kpis .inf-kpi { border-radius: 10px; padding: 13px 14px; }
+    .mg-kpis .inf-kpi .k-value { font-size: .95rem; line-height: 1.35; word-break: break-word; }
+    .mg-section-title {
+      color: var(--soft); font-size: .76rem; font-weight: 800; letter-spacing: .08em;
+      text-transform: uppercase; margin: 0 0 9px;
+    }
+    .mg-info-list { display: grid; gap: 8px; margin-top: 14px; }
+    .mg-info-row {
+      display: grid; grid-template-columns: 118px minmax(0,1fr); gap: 10px;
+      padding: 8px 0; border-bottom: 1px solid var(--line);
+      font-size: .86rem;
+    }
+    .mg-info-row:last-child { border-bottom: 0; }
+    .mg-info-row span:first-child { color: var(--soft); font-weight: 700; }
+    .mg-info-row span:last-child { min-width: 0; overflow-wrap: anywhere; }
+    .mg-side {
+      display: flex; flex-direction: column; gap: 14px;
+      border-left: 1px solid var(--line); padding-left: 16px;
+    }
+    .mg-contact-name { font-family: var(--font-title); font-size: 1rem; font-weight: 700; margin-bottom: 7px; }
+    .mg-contact-line { color: var(--soft); font-size: .84rem; overflow-wrap: anywhere; margin-top: 4px; }
+    .mg-notes {
+      min-height: 92px; color: var(--soft); font-size: .86rem; line-height: 1.5;
+      padding: 11px 12px; border: 1px dashed var(--line-strong); border-radius: 10px;
+      background: rgba(7,16,31,0.26); white-space: pre-wrap;
+    }
+    .mg-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+    .mg-action-group { padding: 13px 0; border-bottom: 1px solid var(--line); }
+    .mg-action-group:last-child { border-bottom: 0; }
+    .mg-action-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .mg-action-grid .btn { padding: 8px 12px; font-size: .82rem; }
+    .mg-action-grid .btn[disabled] { opacity: .45; cursor: not-allowed; }
+    .mg-timeline { display: grid; gap: 10px; }
+    .mg-timeline-item {
+      display: grid; grid-template-columns: 12px minmax(0,1fr); gap: 10px;
+      padding-bottom: 10px; border-bottom: 1px solid var(--line);
+    }
+    .mg-timeline-item:last-child { border-bottom: 0; padding-bottom: 0; }
+    .mg-timeline-dot { width: 9px; height: 9px; margin-top: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+    .mg-timeline-title { font-weight: 700; font-size: .88rem; }
+    .mg-timeline-meta { color: var(--soft-2); font-size: .76rem; margin-top: 2px; }
+    .mg-timeline-detail { color: var(--soft); font-size: .82rem; line-height: 1.45; margin-top: 4px; }
+    @media (max-width: 760px) {
+      .booking-manage-modal { width: 100% !important; max-width: 100% !important; max-height: 94vh !important; }
+      .mg-panel-body { padding: 14px; max-height: calc(94vh - 64px); }
+      .mg-hero { flex-direction: column; }
+      .mg-badges { justify-content: flex-start; }
+      .mg-summary-grid { grid-template-columns: 1fr; }
+      .mg-side { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 14px; }
+      .mg-kpis { grid-template-columns: 1fr; }
+      .mg-info-row { grid-template-columns: 1fr; gap: 3px; }
+    }
 
     /* ── Vista Día: timeline por profesional ── */
     .cd-scroll { overflow-x:auto; overflow-y:hidden; border:1px solid var(--line); border-radius:12px; background:var(--panel); }
@@ -709,6 +806,109 @@
     /* ── Ventas: rediseño (estilo Fresha/Square) ── */
     .ventas-subtab { border:1px solid var(--line); background:var(--panel-2); color:var(--soft); transition:all .12s ease; }
     .ventas-subtab:hover { border-color:var(--accent); color:var(--text); }
+
+    /* Ventas: central de mostrador */
+    .central-shell { display:grid; grid-template-columns:minmax(0, 1.35fr) minmax(340px, .65fr); gap:16px; align-items:start; margin-top:16px; }
+    .central-catalog, .central-ticket { border:1px solid var(--line); border-radius:16px; background:var(--panel); overflow:hidden; }
+    .central-catalog-head, .central-ticket-head { padding:16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .central-title { font-family:var(--font-title); font-size:1rem; font-weight:700; margin:0; }
+    .central-tabs { display:flex; gap:6px; flex-wrap:wrap; }
+    .central-tab { border:1px solid var(--line); background:var(--panel-2); color:var(--soft); border-radius:999px; padding:7px 12px; font-size:.82rem; cursor:pointer; font-family:var(--font); }
+    .central-tab:hover { color:var(--text); border-color:var(--accent); }
+    .central-tab.active { background:var(--accent); border-color:var(--accent); color:#00131a; font-weight:700; }
+    .central-search { padding:12px 16px; border-bottom:1px solid var(--line); }
+    .central-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px; padding:14px; max-height:620px; overflow:auto; }
+    .central-card { border:1px solid var(--line); border-radius:12px; background:var(--panel-2); padding:12px; display:flex; flex-direction:column; gap:9px; min-height:132px; cursor:pointer; transition:border-color .12s ease, transform .12s ease; }
+    .central-card:hover { border-color:var(--accent); transform:translateY(-1px); }
+    .central-card.is-off { opacity:.55; }
+    .central-card-name { font-weight:750; line-height:1.25; overflow-wrap:anywhere; }
+    .central-card-meta { display:flex; flex-wrap:wrap; gap:6px; color:var(--soft); font-size:.78rem; }
+    .central-card-meta span { border:1px solid var(--line); border-radius:999px; padding:3px 8px; background:rgba(255,255,255,.03); }
+    .central-card-price { font-family:var(--font-title); font-weight:750; font-size:1.05rem; margin-top:auto; }
+    .central-card-actions { display:flex; gap:7px; flex-wrap:wrap; }
+    .central-card-actions .btn { padding:6px 10px; font-size:.8rem; }
+    .central-ticket { position:sticky; top:76px; }
+    .central-ticket-body { padding:16px; display:grid; gap:14px; }
+    .central-customer-grid { display:grid; gap:8px; }
+    .central-lines { display:grid; gap:8px; min-height:74px; }
+    .central-line { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; align-items:center; padding:9px 10px; border:1px solid var(--line); border-radius:10px; background:var(--panel-2); }
+    .central-line-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; }
+    .central-line-sub { color:var(--soft); font-size:.76rem; margin-top:2px; }
+    .central-line button { border:0; background:transparent; color:var(--soft-2); cursor:pointer; font-size:1rem; }
+    .central-line button:hover { color:var(--danger); }
+    /* Autocomplete de cliente (CRM) en la central de mostrador */
+    .central-ac { position:relative; }
+    .central-ac-pop { position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:40; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:0 14px 34px rgba(0,0,0,.5); display:none; max-height:260px; overflow-y:auto; }
+    .central-ac-pop.open { display:block; }
+    .central-ac-item { padding:9px 11px; cursor:pointer; display:flex; flex-direction:column; gap:2px; border-bottom:1px solid var(--line); }
+    .central-ac-item:last-child { border-bottom:0; }
+    .central-ac-item:hover { background:var(--panel-2); }
+    .central-ac-name { font-weight:700; font-size:.86rem; }
+    .central-ac-sub { color:var(--soft); font-size:.74rem; }
+    /* Activos del cliente (bonos y tarjetas) en el ticket */
+    .central-assets { border:1px solid var(--line); border-radius:10px; background:var(--panel-2); padding:10px 12px; display:grid; gap:7px; }
+    .central-assets-head { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:.78rem; color:var(--soft); }
+    .central-asset { display:flex; align-items:center; gap:7px; font-size:.82rem; flex-wrap:wrap; }
+    /* Aviso de saldo del cliente en el detalle de cita */
+    .cd-assets { display:flex; gap:9px; flex-wrap:wrap; align-items:center; padding:9px 12px; border:1px solid rgba(0,245,212,.28); border-radius:10px; background:rgba(0,245,212,.06); font-size:.82rem; }
+    .cd-assets .btn { padding:4px 10px; font-size:.76rem; }
+    .cd-assets .panel-sub { margin:0; }
+    .central-total { display:flex; justify-content:space-between; align-items:baseline; padding-top:8px; border-top:1px solid var(--line); }
+    .central-total b { font-family:var(--font-title); font-size:1.35rem; }
+    .central-actions { display:grid; gap:8px; }
+    .central-actions-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .central-actions .btn { justify-content:center; }
+    .central-muted { color:var(--soft); font-size:.84rem; line-height:1.45; }
+    @media (max-width: 980px) {
+      .central-shell { grid-template-columns:1fr; }
+      .central-ticket { position:static; }
+      .central-grid { max-height:none; }
+    }
+
+    /* ── Ventas: Central online (config consolidada) ── */
+    .shoponline-lead { display:flex; flex-wrap:wrap; gap:14px; align-items:center; padding:16px 18px; margin:16px 0 16px; border:1px solid var(--line); border-radius:16px; background:linear-gradient(135deg, var(--panel-2), var(--panel)); }
+    .shoponline-lead .so-ic { width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:22px; background:rgba(255,255,255,0.05); flex:none; }
+    .shoponline-lead .so-txt { flex:1; min-width:220px; }
+    .shoponline-lead .so-txt b { font-size:0.98rem; }
+    .shoponline-links { display:flex; gap:8px; flex-wrap:wrap; }
+    .so-link { display:inline-flex; align-items:center; gap:7px; padding:9px 14px; border-radius:10px; font-size:0.85rem; font-weight:600; border:1px solid var(--line); background:var(--panel-2); color:var(--text); transition:all .12s ease; }
+    .so-link:hover { border-color:var(--accent); }
+    .so-link.is-off { opacity:0.4; pointer-events:none; }
+    .shoponline-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:18px; align-items:start; }
+    .shoponline-grid .panel-card { margin-top:0 !important; }
+    .so-appearance { margin:0 0 16px; }
+    .so-swatch { width:44px; height:38px; padding:2px; border:1px solid var(--line); border-radius:8px; background:none; cursor:pointer; }
+
+    /* Canal de venta online (tarjeta) */
+    .so-channel { padding:0 !important; overflow:hidden; display:flex; flex-direction:column; transition:border-color .15s ease, box-shadow .15s ease; }
+    .so-channel:hover { border-color:color-mix(in srgb, var(--accent) 40%, var(--line)); }
+    .so-channel-head { display:flex; align-items:flex-start; gap:13px; padding:18px 18px 16px; flex-wrap:wrap; }
+    .so-badge { width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:23px; flex:none; }
+    .so-badge.bono { background:rgba(154,123,79,0.18); }
+    .so-badge.prod { background:rgba(56,132,255,0.16); }
+    .so-badge.gift { background:rgba(232,93,160,0.16); }
+    .so-titles { flex:1 1 210px; min-width:0; }
+    .so-titles h3 { margin:0; font-size:1.02rem; font-weight:600; }
+    .so-titles p { margin:4px 0 0; line-height:1.4; }
+    .so-head-right { display:flex; flex-direction:column; align-items:flex-end; gap:9px; flex:0 0 auto; margin-left:auto; }
+    .so-pill { display:inline-flex; align-items:center; gap:5px; font-size:.7rem; font-weight:700; letter-spacing:.02em; padding:4px 10px; border-radius:999px; white-space:nowrap; }
+    .so-pill.live { background:rgba(46,204,113,0.16); color:#2ecc71; }
+    .so-pill.warn { background:rgba(245,158,11,0.16); color:#f59e0b; }
+    .so-pill.off  { background:rgba(255,255,255,0.06); color:var(--soft); }
+    .so-channel-body { display:flex; flex-direction:column; gap:14px; padding:16px 18px 18px; border-top:1px solid var(--line); }
+    .so-field { display:flex; flex-direction:column; gap:6px; }
+    .so-field .field-label { margin:0; }
+    .so-opt { color:var(--soft); font-weight:400; }
+    .so-grid4 { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; }
+    .so-linkbox { display:flex; align-items:center; gap:9px; padding:9px 11px; border:1px solid var(--line); border-radius:11px;
+      background:linear-gradient(135deg, var(--panel-2), var(--panel)); }
+    .so-linkbox-ic { opacity:.55; flex:none; font-size:.9rem; }
+    .so-url { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.8rem; color:var(--soft); }
+    .so-iconbtn { flex:none; width:33px; height:33px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:var(--text);
+      display:inline-flex; align-items:center; justify-content:center; cursor:pointer; text-decoration:none; font-size:.85rem; transition:all .12s ease; }
+    .so-iconbtn:hover { border-color:var(--accent); color:var(--accent); transform:translateY(-1px); }
+    .so-note { font-size:.82rem; line-height:1.4; padding:9px 11px; border-radius:10px; background:rgba(245,158,11,0.1); color:#f59e0b; }
+    .so-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:2px; }
     .vsell-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(158px,1fr)); gap:12px; margin:16px 0 24px; }
     .vsell-kpi { display:flex; align-items:center; gap:12px; padding:14px 16px; border:1px solid var(--line); border-radius:14px;
       background:linear-gradient(135deg, var(--panel-2), var(--panel)); }
@@ -1218,25 +1418,13 @@
     .fu-state-off { color:var(--soft-2); background:rgba(255,255,255,0.04); border:1px solid var(--line); }
     .fu-state-plan { color:#fde68a; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.4); }
     .fu-state-setup { color:#fda4af; background:rgba(244,63,94,0.12); border:1px solid rgba(244,63,94,0.4); }
-    .fu-chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:13px; }
-    .fu-chip { display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border-radius:10px;
-      border:1px solid var(--line-strong); background:rgba(255,255,255,0.03); color:var(--soft); cursor:pointer;
-      font-size:0.82rem; user-select:none; transition:all .12s ease; }
-    .fu-chip:hover { border-color:var(--accent); color:var(--text); }
-    .fu-chip.fu-on { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); font-weight:600;
-      box-shadow:0 2px 10px rgba(0,209,255,0.12); }
-    .fu-chip.fu-locked { cursor:not-allowed; opacity:.65; border-style:dashed; }
-    .fu-chip.fu-locked:hover { border-color:var(--line); color:var(--soft); }
-    .fu-chip input { display:none; }
-    .fu-chip .fu-ico { font-size:0.92rem; }
+    /* Insignias de plan/recomendación (en los chips de canal globales) */
     .fu-lock-badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.62rem; font-weight:700;
       text-transform:uppercase; letter-spacing:.03em; color:#fde68a; background:rgba(245,158,11,0.14);
       border:1px solid rgba(245,158,11,0.4); }
     .fu-rec-badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.62rem; font-weight:700;
       text-transform:uppercase; letter-spacing:.03em; color:var(--accent-2); background:rgba(0,245,212,0.1);
       border:1px solid rgba(0,245,212,0.35); }
-    .fu-chip.fu-rec { border-color:rgba(0,245,212,0.45); border-style:dashed; }
-    .fu-test-btn { margin-top:12px; }
 
     /* Ajustes — cómo se entrega */
     .fu-settings { margin-top:6px; }
@@ -1260,6 +1448,35 @@
     .fu-review-cta { margin-top:13px; background:none; border:none; padding:0; cursor:pointer; font-size:0.83rem;
       font-weight:700; color:#fbbf24; font-family:inherit; }
     .fu-review-cta:hover { text-decoration:underline; }
+
+    /* Canales globales (una sola tira para todos los avisos) */
+    .fu-gchips { display:flex; gap:9px; flex-wrap:wrap; margin:2px 0 4px; }
+    .fu-gchip { display:inline-flex; align-items:center; gap:8px; padding:9px 15px; border-radius:11px;
+      border:1px solid var(--line); background:rgba(255,255,255,0.02); color:var(--soft); font-size:0.9rem;
+      font-family:inherit; cursor:pointer; transition:.15s; }
+    .fu-gchip:hover { border-color:var(--accent); color:var(--text); }
+    .fu-gchip.fu-on { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); font-weight:600;
+      box-shadow:0 0 0 1px var(--accent) inset; }
+    .fu-gchip.fu-locked { cursor:not-allowed; opacity:.6; border-style:dashed; }
+    .fu-gchip.fu-locked:hover { border-color:var(--line); color:var(--soft); }
+    .fu-gchip .fu-ico { font-size:0.95rem; }
+    .fu-gchips-note { margin:0 0 18px; font-size:0.8rem; font-weight:600; min-height:1px; }
+
+    /* Toggle on/off por paso del recorrido */
+    .fu-step-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:13px; }
+    .fu-step-actions .btn { padding:5px 12px; font-size:0.8rem; }
+    .fu-toggle { display:inline-flex; align-items:center; gap:9px; cursor:pointer; user-select:none; }
+    .fu-toggle input { display:none; }
+    .fu-toggle-track { position:relative; width:42px; height:24px; border-radius:999px; background:var(--line-strong);
+      transition:.18s; flex:0 0 auto; }
+    .fu-toggle-thumb { position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%;
+      background:#fff; transition:.18s; box-shadow:0 1px 3px rgba(0,0,0,0.3); }
+    .fu-toggle input:checked + .fu-toggle-track { background:var(--accent); }
+    .fu-toggle input:checked + .fu-toggle-track .fu-toggle-thumb { left:21px; }
+    .fu-toggle-label { font-size:0.8rem; font-weight:600; color:var(--soft); }
+    .fu-toggle input:checked ~ .fu-toggle-label { color:var(--accent); }
+    .fu-toggle-locked { opacity:.55; cursor:not-allowed; }
+    .fu-step-warn { margin-top:8px; font-size:0.76rem; color:#f59e0b; }
 
     @media (max-width: 720px) {
       .fu-priority-grid { grid-template-columns:1fr; }
@@ -1328,6 +1545,9 @@
       *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
     }
   </style>
+  <!-- Núcleo determinista compartido de la voz (mismas funciones puras que el widget embebido).
+       Expone window.VanteliaVoiceCore; la voz arranca al pulsar (ya cargado). Ver widget/voice_core.js. -->
+  <script type="module" src="/widget/voice_core.js"></script>
 </head>
 <body>
 
@@ -2015,6 +2235,11 @@
           <label class="field-label">Número de teléfono para el asistente</label>
           <input class="field-input" id="vozPhone" type="tel" placeholder="+34 900 123 456" autocomplete="tel" />
         </div>
+        <div class="field" style="margin-top:12px;">
+          <label class="field-label">Transferir a una persona (opcional)</label>
+          <input class="field-input" id="vozTransfer" type="tel" placeholder="+34 600 000 000" autocomplete="tel" />
+          <span class="panel-sub" style="margin:6px 0 0;">Si lo rellenas, cuando el cliente pida hablar con una persona el asistente desvía la llamada a este número. Vacío = no transfiere (toma nota).</span>
+        </div>
         <div style="display:flex; gap:12px; margin-top:14px; flex-wrap:wrap; align-items:center;">
           <button class="btn btn-primary" id="vozRequestBtn" type="button">Solicitar instalación</button>
           <span class="panel-sub" style="margin:0;">Te respondemos en menos de 24h hábiles.</span>
@@ -2570,14 +2795,74 @@
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px; flex-wrap:wrap;">
       <h2 style="font-family:var(--font-title); font-size:1.2rem; font-weight:600;">Ventas</h2>
       <div class="ventas-subtabs" style="margin-left:auto; display:flex; gap:6px;">
-        <button class="btn ventas-subtab active" data-vtab="productos" type="button">Productos</button>
+        <button class="btn ventas-subtab active" data-vtab="central" type="button">Central</button>
+        <button class="btn ventas-subtab" data-vtab="online" type="button" data-perm="catalog.manage">Central online</button>
+        <button class="btn ventas-subtab" data-vtab="productos" type="button">Productos</button>
         <button class="btn ventas-subtab" data-vtab="bonos" type="button">Bonos</button>
         <button class="btn ventas-subtab" data-vtab="gift" type="button">Tarjetas regalo</button>
       </div>
     </div>
-    <p class="panel-sub" id="ventasSubText">Vende productos complementarios y registra cada venta en caja.</p>
+    <p class="panel-sub" id="ventasSubText">Reserva citas, cobra productos y vende bonos o tarjetas desde una sola central de mostrador.</p>
 
-    <div id="ventasPanelProductos" class="ventas-panel">
+    <div id="ventasPanelCentral" class="ventas-panel">
+      <div class="vsell-kpis" id="centralKpis" style="margin-top:12px;"></div>
+      <div class="central-shell">
+        <section class="central-catalog">
+          <div class="central-catalog-head">
+            <div style="flex:1; min-width:220px;">
+              <h3 class="central-title">Catálogo operativo</h3>
+              <p class="panel-sub" style="margin:4px 0 0;">Servicios para reservar, productos para cobrar, bonos y tarjetas en el mismo flujo.</p>
+            </div>
+            <div class="central-tabs" id="centralCatalogTabs">
+              <button class="central-tab active" type="button" data-central-tab="servicios">Servicios</button>
+              <button class="central-tab" type="button" data-central-tab="productos">Productos</button>
+              <button class="central-tab" type="button" data-central-tab="bonos">Bonos</button>
+              <button class="central-tab" type="button" data-central-tab="tarjetas">Tarjetas</button>
+            </div>
+          </div>
+          <div class="central-search">
+            <input class="field-input" id="centralSearch" placeholder="Buscar servicio, producto, bono o tarjeta..." />
+          </div>
+          <div class="central-grid" id="centralCatalogGrid"></div>
+        </section>
+
+        <aside class="central-ticket">
+          <div class="central-ticket-head">
+            <div>
+              <h3 class="central-title">Cliente y ticket</h3>
+              <p class="panel-sub" style="margin:4px 0 0;">Datos del cliente para cita o cobro.</p>
+            </div>
+          </div>
+          <div class="central-ticket-body">
+            <div class="central-customer-grid">
+              <div class="central-ac">
+                <input class="field-input" id="centralCustomerName" maxlength="120" placeholder="Buscar cliente o escribir nombre…" autocomplete="off" style="width:100%;" />
+                <div class="central-ac-pop" id="centralCustomerSug"></div>
+              </div>
+              <input class="field-input" id="centralCustomerEmail" maxlength="200" placeholder="Email (opcional)" />
+              <input class="field-input" id="centralCustomerPhone" maxlength="40" placeholder="Teléfono (opcional)" />
+            </div>
+            <div class="central-assets" id="centralAssets" style="display:none;"></div>
+            <div>
+              <div class="field-label" style="margin-bottom:8px;">Ticket de productos</div>
+              <div class="central-lines" id="centralCartLines"></div>
+              <div class="central-total"><span class="panel-sub" style="margin:0;">Total</span><b id="centralCartTotal">0,00 €</b></div>
+            </div>
+            <div class="central-actions">
+              <button class="btn btn-primary" id="centralCartCharge" type="button" disabled>Cobrar ticket con QR</button>
+              <div class="central-actions-row">
+                <button class="btn btn-ghost" id="centralNewBookingBtn" type="button">Nueva cita</button>
+                <button class="btn btn-ghost" id="centralGiftBtn" type="button">Emitir tarjeta</button>
+              </div>
+              <button class="btn btn-ghost" id="centralClearCart" type="button" disabled>Vaciar ticket</button>
+            </div>
+            <div class="central-muted">Mostrador conectado con agenda, caja y catálogo.</div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div id="ventasPanelProductos" class="ventas-panel" style="display:none;">
       <div class="vsell-kpis" id="prodKpis"></div>
       <div class="vsell-section-head">
         <div><h3>Catálogo</h3><span class="vsell-count" id="prodCount"></span></div>
@@ -2610,6 +2895,172 @@
       </div>
       <input type="text" class="field-input" id="giftSearch" placeholder="Buscar por código o comprador…" style="max-width:320px; margin-bottom:14px;" />
       <div class="vsell-giftgrid" id="giftList"></div>
+    </div>
+
+    <!-- CENTRAL ONLINE (config consolidada de reservas + paginas publicas /tienda y /gift) -->
+    <div id="ventasPanelOnline" class="ventas-panel" style="display:none;">
+      <!-- Lead + accesos rapidos a las paginas publicas -->
+      <div class="shoponline-lead">
+        <div class="so-ic">C</div>
+        <div class="so-txt">
+          <b>Tu central online, con tu marca</b>
+          <p class="panel-sub" style="margin:2px 0 0;">Tus clientes reservan cita, pagan si hace falta y tambien compran bonos, productos o tarjetas regalo desde una experiencia conectada.</p>
+        </div>
+        <div class="shoponline-links">
+          <a class="so-link is-off" id="soLinkReservas" target="_blank" rel="noopener">Ver central</a>
+          <a class="so-link is-off" id="soLinkTienda" target="_blank" rel="noopener">Ver ventas</a>
+          <a class="so-link is-off" id="soLinkGift" target="_blank" rel="noopener">🎁 Ver tarjetas</a>
+        </div>
+      </div>
+
+      <!-- Apariencia: color de acento (compartido por la pagina /tienda) -->
+      <div class="panel-card so-appearance" data-perm="catalog.manage" style="padding:16px;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <div style="flex:1; min-width:220px;">
+            <h3 style="margin:0;">Apariencia de la central</h3>
+            <p class="panel-sub" style="margin:4px 0 0;">Color de acento (botones y detalles) de tus paginas publicas. Dejalo vacio para usar el color de tu marca.</p>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:12px;">
+          <input type="color" id="shopAccentPick" value="#9a7b4f" class="so-swatch">
+          <input class="field-input" id="shopAccent" maxlength="7" placeholder="#9a7b4f (vacío = color de marca)" style="max-width:240px;">
+          <button class="btn btn-primary" type="button" id="shopAccentSave">Guardar color</button>
+        </div>
+      </div>
+
+      <!-- Canales de venta online -->
+      <div class="shoponline-grid">
+
+        <!-- Reservas online -->
+        <article class="panel-card so-channel" id="bookingPublicCard" data-perm="catalog.manage">
+          <div class="so-channel-head">
+            <div class="so-badge prod">R</div>
+            <div class="so-titles">
+              <h3>Central pública</h3>
+              <p class="panel-sub">El cliente reserva cita y accede a bonos, productos o tarjetas desde un único enlace con tu marca.</p>
+            </div>
+            <div class="so-head-right">
+              <span class="so-pill off" id="bookingPubPill">○ Pendiente</span>
+            </div>
+          </div>
+          <div class="so-channel-body">
+            <div class="so-linkbox" id="bookingPubLink" style="display:none;">
+              <span class="so-linkbox-ic">🔗</span>
+              <span class="so-url" id="bookingPubUrl"></span>
+              <button class="so-iconbtn" id="bookingPubCopy" type="button" title="Copiar enlace">📋</button>
+              <a class="so-iconbtn" id="bookingPubOpen" target="_blank" rel="noopener" title="Abrir central">↗</a>
+            </div>
+            <div class="so-note" id="bookingPubNote" style="display:none;"></div>
+            <div class="so-actions">
+              <button class="btn btn-ghost" id="bookingPubGoCitas" type="button">Configurar agenda</button>
+            </div>
+          </div>
+        </article>
+
+        <!-- Bonos online -->
+        <article class="panel-card so-channel" id="shopPkgCard" data-perm="catalog.manage">
+          <div class="so-channel-head">
+            <div class="so-badge bono">🎟</div>
+            <div class="so-titles">
+              <h3>Bonos online</h3>
+              <p class="panel-sub">Compran el bono en tu página y pagan con tarjeta; queda activo al instante y llega por email.</p>
+            </div>
+            <div class="so-head-right">
+              <span class="so-pill off" id="shopPkgPill">○ Desactivada</span>
+              <label class="switch"><input type="checkbox" id="shopPkgEnabled"><span class="slider"></span></label>
+            </div>
+          </div>
+          <div class="so-channel-body" id="shopPkgBody" style="display:none;">
+            <div class="so-field">
+              <label class="field-label">Texto de introducción del canal de bonos <span class="so-opt">(opcional)</span></label>
+              <input class="field-input" id="shopIntro" maxlength="300" placeholder="Ahorra con nuestros bonos de sesiones…">
+            </div>
+            <div class="so-linkbox" id="shopPkgLink" style="display:none;">
+              <span class="so-linkbox-ic">🔗</span>
+              <span class="so-url" id="shopPkgUrl"></span>
+              <button class="so-iconbtn" id="shopPkgCopy" type="button" title="Copiar enlace">📋</button>
+              <a class="so-iconbtn" id="shopPkgOpen" target="_blank" rel="noopener" title="Abrir bonos online">↗</a>
+            </div>
+            <div class="so-note" id="shopPkgNote" style="display:none;"></div>
+            <div class="so-actions">
+              <button class="btn btn-primary" id="shopPkgSave" type="button">Guardar cambios</button>
+            </div>
+          </div>
+        </article>
+
+        <!-- Productos online -->
+        <article class="panel-card so-channel" id="shopProdCard" data-perm="catalog.manage">
+          <div class="so-channel-head">
+            <div class="so-badge prod">🛒</div>
+            <div class="so-titles">
+              <h3>Productos online</h3>
+              <p class="panel-sub">La venta se registra sola y descuenta stock. Tu cliente recoge el pedido en el centro.</p>
+            </div>
+            <div class="so-head-right">
+              <span class="so-pill off" id="shopProdPill">○ Desactivada</span>
+              <label class="switch"><input type="checkbox" id="shopProdEnabled"><span class="slider"></span></label>
+            </div>
+          </div>
+          <div class="so-channel-body" id="shopProdBody" style="display:none;">
+            <div class="so-field">
+              <label class="field-label">Nota de recogida <span class="so-opt">(se muestra al comprar y en el email)</span></label>
+              <input class="field-input" id="shopPickupNote" maxlength="200" placeholder="Recoge tu pedido en recepción, de lunes a sábado.">
+            </div>
+            <div class="so-linkbox" id="shopProdLink" style="display:none;">
+              <span class="so-linkbox-ic">🔗</span>
+              <span class="so-url" id="shopProdUrl"></span>
+              <button class="so-iconbtn" id="shopProdCopy" type="button" title="Copiar enlace">📋</button>
+              <a class="so-iconbtn" id="shopProdOpen" target="_blank" rel="noopener" title="Abrir productos online">↗</a>
+            </div>
+            <div class="so-note" id="shopProdNote" style="display:none;"></div>
+            <div class="so-actions">
+              <button class="btn btn-primary" id="shopProdSave" type="button">Guardar cambios</button>
+            </div>
+          </div>
+        </article>
+
+        <!-- Tarjetas regalo online -->
+        <article class="panel-card so-channel" id="giftPublicCard" data-perm="catalog.manage">
+          <div class="so-channel-head">
+            <div class="so-badge gift">🎁</div>
+            <div class="so-titles">
+              <h3>Tarjetas regalo online</h3>
+              <p class="panel-sub">Las compran en tu página y llegan por email, al instante o el día que elijan.</p>
+            </div>
+            <div class="so-head-right">
+              <span class="so-pill off" id="giftPubPill">○ Desactivada</span>
+              <label class="switch"><input type="checkbox" id="giftPubEnabled"><span class="slider"></span></label>
+            </div>
+          </div>
+          <div class="so-channel-body" id="giftPubBody" style="display:none;">
+            <div class="so-grid4">
+              <div class="so-field"><label class="field-label">Importes sugeridos <span class="so-opt">(€)</span></label><input class="field-input" id="giftPubAmounts" placeholder="30, 50, 100"></div>
+              <div class="so-field"><label class="field-label">Mínimo <span class="so-opt">(€)</span></label><input class="field-input" type="number" id="giftPubMin" min="1"></div>
+              <div class="so-field"><label class="field-label">Máximo <span class="so-opt">(€)</span></label><input class="field-input" type="number" id="giftPubMax" min="1"></div>
+              <div class="so-field"><label class="field-label">Caducidad <span class="so-opt">(días, 0=sin)</span></label><input class="field-input" type="number" id="giftPubValidity" min="0"></div>
+            </div>
+            <div class="so-field">
+              <label class="field-label">Texto de introducción <span class="so-opt">(opcional)</span></label>
+              <input class="field-input" id="giftPubIntro" maxlength="300" placeholder="Regala una experiencia…">
+            </div>
+            <div class="so-field">
+              <label class="field-label">Condiciones para el asistente <span class="so-opt">(caducidad, canje, cambios, descuentos)</span></label>
+              <textarea class="field-input" id="giftPubKnowledge" maxlength="3000" rows="5" placeholder="Ej.: No caducan, se pueden usar en cualquier centro y transferir a familiares o amigos."></textarea>
+            </div>
+            <div class="so-linkbox" id="giftPubLink" style="display:none;">
+              <span class="so-linkbox-ic">🔗</span>
+              <span class="so-url" id="giftPubUrl"></span>
+              <button class="so-iconbtn" id="giftPubCopy" type="button" title="Copiar enlace">📋</button>
+              <a class="so-iconbtn" id="giftPubOpen" target="_blank" rel="noopener" title="Abrir página">↗</a>
+            </div>
+            <div class="so-note" id="giftPubNote" style="display:none;"></div>
+            <div class="so-actions">
+              <button class="btn btn-primary" id="giftPubSave" type="button">Guardar cambios</button>
+            </div>
+          </div>
+        </article>
+
+      </div>
     </div>
   </section>
 
@@ -2685,6 +3136,7 @@
       </div>
       <div style="margin-top:14px;">
         <label class="field-label">Descansos diarios</label>
+        <p class="panel-sub" id="horBreaksHint" style="margin:6px 0 0;">Los descansos del horario general (p. ej. parada de comida) cierran la agenda de todo el equipo. Para descansos escalonados, configúralos por profesional.</p>
         <div id="horBreaksList" style="display:flex; flex-direction:column; gap:8px; margin-top:8px;"></div>
         <div class="form-row" style="margin-top:10px;">
           <div class="field"><label class="field-label">Inicio descanso</label><input type="time" class="field-input" id="horBreakNewStart" /></div>
@@ -2713,7 +3165,7 @@
 
     <div class="panel-card" style="margin-top:18px;">
       <h2>Bloqueos de agenda</h2>
-      <p class="panel-sub">Períodos en los que no se aceptan citas.</p>
+      <p class="panel-sub">Períodos en los que no se aceptan citas (vacaciones, festivos, ausencias). Con "Horario general" el bloqueo cierra todo el negocio; con un profesional seleccionado, solo su agenda. Sin horas = día completo.</p>
       <div id="horBlocksList" style="margin-bottom:14px; display:flex; flex-direction:column; gap:8px;"></div>
       <div class="form-row">
         <div class="field"><label class="field-label">Desde</label><input type="date" class="field-input" id="horBlockStart" /></div>
@@ -2754,23 +3206,29 @@
       <div class="flow-sec-head">
         <span class="flow-sec-num">1</span>
         <div>
-          <h3>El recorrido</h3>
-          <p class="panel-sub">Enciende los canales de cada paso y compruébalo con “Probar esta fase”.</p>
+          <h3>Canales de aviso</h3>
+          <p class="panel-sub">Elige por dónde se envían <b>todos</b> los avisos, confirmaciones y la reseña. Si no enciendes ninguno, <b>no se enviará ningún recordatorio</b>.</p>
         </div>
       </div>
-      <div class="fu-legend">
-        <span class="fu-legend-item">✉ <b>Canal por paso</b>: las vías que usa cada aviso.</span>
-        <span class="fu-legend-item">↓ <b>Orden de entrega</b>: si un paso tiene varias, envía por una sola.</span>
+      <div id="fuGlobalChannels" class="fu-gchips"><div class="panel-sub">Cargando…</div></div>
+      <div class="fu-gchips-note panel-sub" id="fuGlobalNote"></div>
+
+      <div class="flow-sec-head">
+        <span class="flow-sec-num">2</span>
+        <div>
+          <h3>El recorrido</h3>
+          <p class="panel-sub">Enciende o apaga cada aviso. Compruébalo con “Probar esta fase”.</p>
+        </div>
       </div>
       <div id="fuTimeline" class="fu-timeline" style="margin-top:4px;">
         <div class="panel-sub">Cargando…</div>
       </div>
 
       <div class="flow-sec-head">
-        <span class="flow-sec-num">2</span>
+        <span class="flow-sec-num">3</span>
         <div>
           <h3>Cómo se entrega</h3>
-          <p class="panel-sub">Reglas globales de confirmación y orden de los canales.</p>
+          <p class="panel-sub">Reglas globales de confirmación, orden de los canales y ajustes de la llamada.</p>
         </div>
       </div>
       <div class="fu-settings" id="fuSettings">
@@ -2784,7 +3242,7 @@
         </label>
         <div class="fu-priority">
           <div><b>Orden de entrega</b></div>
-          <p class="panel-sub" style="margin:5px 0 0;">Cuando un paso tiene varios canales encendidos, el aviso se envía por <b>uno solo</b>. Se intenta este orden y, si la cita no tiene ese dato o falla, pasa al siguiente canal activo.</p>
+          <p class="panel-sub" style="margin:5px 0 0;">Si tienes varios canales encendidos, cada aviso se envía por <b>uno solo</b>. Se intenta este orden y, si la cita no tiene ese dato o falla, pasa al siguiente canal activo.</p>
           <div class="fu-priority-grid">
             <div class="field"><label class="field-label">1. Prioridad</label><select class="field-input" id="fuPriority1"></select></div>
             <div class="field"><label class="field-label">2. Respaldo</label><select class="field-input" id="fuPriority2"></select></div>
@@ -2793,11 +3251,13 @@
           <div class="fu-prio-flow" id="fuPrioFlow"></div>
         </div>
         <div class="fu-call-block" id="fuCallBlock">
-          <label class="fu-switch" style="margin:0; border:0; padding:0; background:none;">
-            <input type="checkbox" id="fuCallEnabled" />
-            <span><b>Llamada de confirmación por IA</b> <span class="fu-lock-badge" id="fuCallLock" style="display:none;">Business</span><br><span class="panel-sub" style="margin:0;">Llama automáticamente unas horas antes solo si el cliente no ha confirmado. Tiene coste por llamada.</span></span>
-          </label>
-          <div class="form-row" id="fuCallParams">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+            <div><b>📞 Ajustes de la llamada de confirmación por IA</b><br><span class="panel-sub" style="margin:0;">Se activa o desactiva arriba, en el recorrido. Aquí defines cuándo llama y los topes.</span></div>
+            <span class="fu-state" id="fuCallStateBadge">—</span>
+          </div>
+          <!-- estado de la llamada (lo controla el paso del recorrido) -->
+          <input type="checkbox" id="fuCallEnabled" style="display:none;" />
+          <div class="form-row" id="fuCallParams" style="margin-top:12px;">
             <div class="field"><label class="field-label">Horas antes de llamar</label><input class="field-input" id="fuCallHours" type="number" min="1" max="24" step="1" /></div>
             <div class="field"><label class="field-label">No llamar desde</label><input class="field-input" id="fuQuietStart" type="time" /></div>
             <div class="field"><label class="field-label">No llamar hasta</label><input class="field-input" id="fuQuietEnd" type="time" /></div>
@@ -2875,6 +3335,7 @@
 
             <label class="field-label" style="margin-top:14px;">Canales de envío</label>
             <div class="rv-chips" id="rvChips"></div>
+            <p class="panel-sub" style="margin:6px 0 0; font-size:0.76rem;">Se envía por los canales que actives arriba, en <b>Canales de aviso</b>.</p>
 
             <label class="rv-switch" style="margin-top:14px;">
               <input type="checkbox" id="rvOnlyManual" />
@@ -3428,6 +3889,7 @@ const state = {
   install_snippet: '',
   share_link: '',
   demo_url: '',
+  central_url: '',
   api_base_url: window.location.origin,
   session_id: 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
 };
@@ -3609,7 +4071,7 @@ function setTab(tab) {
   if (tab === 'mensajes')   { loadMensajes(); loadFollowUp(); loadReviews(); }
   if (tab === 'instalacion') loadInstalacion();
   if (tab === 'cuenta')     { loadCuenta(); loadAccessTeam(); loadRebookingAi(); loadCancellationPolicy(); }
-  if (tab === 'ventas')     loadVentas();
+  if (tab === 'ventas')     openVentas();
   if (tab === 'informes')   loadInformes();
   if (tab === 'clientes')   loadClientes();
 }
@@ -3705,9 +4167,11 @@ async function loadDeploy() {
     state.install_snippet = data.install_snippet;
     state.share_link = data.share_link;
     state.demo_url = data.demo_url;
+    state.central_url = data.central_url || '';
     state.api_base_url = data.api_base_url || state.api_base_url;
     document.getElementById('overviewDemoUrl').value = data.demo_url;
     document.getElementById('openDemoBtn').href = data.demo_url;
+    if (typeof renderBookingPublicStatus === 'function') renderBookingPublicStatus();
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -3727,6 +4191,7 @@ function _applyBookingEnabledState(enabled) {
       ? 'La IA puede agendar citas. Desactívalo para deshabilitar toda la agenda.'
       : 'Las citas están desactivadas. La IA no puede agendar ni aparece el botón de cita.';
   }
+  if (typeof renderBookingPublicStatus === 'function') renderBookingPublicStatus();
 }
 
 document.getElementById('bookingEnabledToggle').addEventListener('change', async (e) => {
@@ -3969,6 +4434,7 @@ async function loadChats() {
       const badges = [];
       if (row.kind === 'voice') badges.push(`<span class="conv-badge">${escapeHtml(convDuration(row.duration_seconds))}</span>`);
       if (row.booking_created) badges.push('<span class="conv-badge book">📅 reservó</span>');
+      if (row.outcome_label && row.outcome !== 'reservada') badges.push(`<span class="conv-badge">${escapeHtml(row.outcome_label)}</span>`);
       (row.intents || []).slice(0, 1).forEach(i => badges.push(`<span class="conv-badge">${escapeHtml(i)}</span>`));
       div.innerHTML = `
         <div class="conv-row">
@@ -4004,6 +4470,7 @@ async function loadConvDetail(row) {
     if (isVoice) pills.push(`<span class="conv-meta-pill">⏱ <b>${escapeHtml(convDuration(c.duration_seconds))}</b></span>`);
     else pills.push(`<span class="conv-meta-pill"><b>${c.message_count || (data.messages || []).length}</b> mensajes</span>`);
     if (c.booking_created) pills.push('<span class="conv-meta-pill" style="color:var(--success);"><b>📅 Reservó cita</b></span>');
+    if (c.outcome_label && c.outcome !== 'reservada') pills.push(`<span class="conv-meta-pill"><b>${escapeHtml(c.outcome_label)}</b></span>`);
     const summary = (data.summary_text || '').trim()
       ? `<div class="conv-summary"><span class="cs-label">Resumen de la llamada</span>${escapeHtml(data.summary_text)}</div>` : '';
     const roleLabelLeft = isVoice ? 'Recepción' : 'Asistente';
@@ -4094,17 +4561,6 @@ async function sendPreviewMessage(text) {
 }
 
 // ── Widget injection for Test tab ─────────────────────────────────────
-function ensureWidgetLoaded() {
-  if (document.querySelector('script[data-vantelia-test]')) return;
-  const s = document.createElement('script');
-  s.src = `/widget/widget.min.js?v=${Date.now()}`;
-  s.setAttribute('data-api', window.location.origin);
-  s.setAttribute('data-client', state.cliente_id);
-  s.setAttribute('data-position', 'right');
-  s.setAttribute('data-vantelia-test', '1');
-  document.body.appendChild(s);
-}
-
 // ── User menu ─────────────────────────────────────────────────────────
 const userMenu = document.getElementById('userMenu');
 document.getElementById('userChip').addEventListener('click', () => userMenu.classList.toggle('open'));
@@ -4718,6 +5174,8 @@ function renderVoice(data) {
   document.getElementById('vozEnabled').checked = !!data.enabled;
   document.getElementById('vozWidgetEnabled').checked = !!data.widget_enabled;
   document.getElementById('vozPhone').value = data.twilio_phone_number || '';
+  const vozTransfer = document.getElementById('vozTransfer');
+  if (vozTransfer) vozTransfer.value = data.transfer_number || '';
   document.getElementById('vozWebhookUrl').value = data.webhook_url || '';
 
   const pill = document.getElementById('vozStatusPill');
@@ -4752,6 +5210,7 @@ document.getElementById('vozSaveBtn').addEventListener('click', async () => {
         widget_enabled: document.getElementById('vozWidgetEnabled').checked,
         openai_voice: document.getElementById('vozVoice').value,
         twilio_phone_number: document.getElementById('vozPhone').value.trim(),
+        transfer_number: (document.getElementById('vozTransfer') || {}).value ? document.getElementById('vozTransfer').value.trim() : '',
       }),
     });
     renderVoice(data);
@@ -4818,7 +5277,25 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
 
   let pc=null, dc=null, micStream=null, timerId=null, maxId=null, speakId=null;
   let seconds=0, muted=false, active=false, ended=false, MAXS=120;
-  let transcript=[], startedAt=0, transcriptLogged=false;
+  const SILENCE_WATCHDOG_MS = 1700;
+  const ACTIVE_RESPONSE_GRACE_MS = 8000;
+  const POST_CANCEL_WATCHDOG_MS = 850;
+  let transcript=[], startedAt=0, transcriptLogged=false, callOutcome='';
+  // Latch del resultado de tool: no podemos pedir response.create hasta que llegue el
+  // response.done de la respuesta que emitio la function_call (si no, OpenAI lo rechaza
+  // por "active response" y el asistente se queda MUDO hasta que el usuario habla otra vez).
+  let expectingToolResponse=false, fnOutputReady=false, fnResponseDone=false, pendingToolFollowup='';
+  // Red anti-silencio: si el modelo ANUNCIA que va a comprobar algo ("un momento, consulto
+  // la disponibilidad") pero termina el turno SIN llamar a la herramienta, lo empujamos a
+  // ejecutarla en vez de quedarnos esperando a que el cliente insista. Una vez por turno.
+  let lastAssistantText='', lastUserText='', autoNudgeUsed=false, confirmationNudgeUsed=false, contactConfirmationNudgeUsed=false;
+  let lastToolName='', lastToolResult={};
+  let responseDoneSeen=false;
+  let turnHadAssistantOutput=false, turnHadFunctionCall=false;
+  let responseActive=false, responseActiveStartedAt=0, responseCancelPending=false, responseCancelStartedAt=0;
+  let silenceWatchdogId=null, silenceWatchdogReason='', silenceWatchdogUsed=false, silenceRecoveries=0;
+  let pendingBookingSlot=null, pendingBookingContact=null;
+  let endCallPending=false;
 
   const setStatus = t => { statusEl.textContent = t; };
   const setHint = t => { hintEl.textContent = t; };
@@ -4830,6 +5307,7 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
     if(timerId){clearInterval(timerId);timerId=null;}
     if(maxId){clearTimeout(maxId);maxId=null;}
     if(speakId){clearTimeout(speakId);speakId=null;}
+    clearSilenceWatchdog();
     speaking(false);
     try{ if(dc) dc.close(); }catch(e){}
     try{ if(pc) pc.close(); }catch(e){}
@@ -4839,12 +5317,56 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
   }
   function resetUI(){
     ended=false;
+    expectingToolResponse=false; fnOutputReady=false; fnResponseDone=false; pendingToolFollowup='';
+    lastAssistantText=''; lastUserText=''; autoNudgeUsed=false; confirmationNudgeUsed=false; contactConfirmationNudgeUsed=false;
+    lastToolName=''; lastToolResult={};
+    responseDoneSeen=false;
+    turnHadAssistantOutput=false; turnHadFunctionCall=false;
+    responseActive=false; responseActiveStartedAt=0; responseCancelPending=false; responseCancelStartedAt=0;
+    silenceWatchdogId=null; silenceWatchdogReason=''; silenceWatchdogUsed=false; silenceRecoveries=0;
+    pendingBookingSlot=null; pendingBookingContact=null;
+    endCallPending=false;
     muteBtn.style.display=''; muteBtn.textContent='Silenciar'; muteBtn.classList.remove('on');
     hangBtn.textContent='Colgar'; hangBtn.classList.add('hang');
   }
   function pushTranscript(role, text){
     const clean = String(text || '').trim();
     if(clean) transcript.push({ role: role === 'assistant' ? 'assistant' : 'user', text: clean, ts: new Date().toISOString() });
+  }
+  // Funciones puras delegadas al n\u00facleo compartido (widget/voice_core.js) para no duplicar la
+  // l\u00f3gica fina de detecci\u00f3n entre el portal y el widget embebido.
+  const VC = () => (window.VanteliaVoiceCore || {});
+  function normalizeVoiceText(text){ return VC().normalizeVoiceText(text); }
+  function isUnintelligibleText(text){ return VC().isUnintelligibleText(text); }
+  function clearSilenceWatchdog(){
+    if(!silenceWatchdogId) return;
+    clearTimeout(silenceWatchdogId);
+    silenceWatchdogId=null;
+    silenceWatchdogReason='';
+    silenceWatchdogUsed=false;
+  }
+  function armSilenceWatchdog(reason){
+    if(!active || !dc) return;
+    if(silenceWatchdogId) clearTimeout(silenceWatchdogId);
+    silenceWatchdogReason=reason||'';
+    silenceWatchdogUsed=false;
+    silenceWatchdogId=setTimeout(runSilenceWatchdog, SILENCE_WATCHDOG_MS);
+  }
+  function armPostCancelWatchdog(){
+    if(!active || !dc) return;
+    if(silenceWatchdogId) clearTimeout(silenceWatchdogId);
+    silenceWatchdogUsed=false;
+    silenceWatchdogId=setTimeout(runSilenceWatchdog, POST_CANCEL_WATCHDOG_MS);
+  }
+  function cancelActiveResponse(){
+    if(!active || !dc || responseCancelPending) return false;
+    try{ dc.send(JSON.stringify({type:'response.cancel'})); }catch(_){}
+    responseCancelPending=true;
+    responseCancelStartedAt=Date.now();
+    responseActive=false;
+    responseActiveStartedAt=0;
+    armPostCancelWatchdog();
+    return true;
   }
   function logTranscript(){
     if(transcriptLogged || !transcript.length) return;
@@ -4855,7 +5377,7 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
         method:'POST',
         credentials:'same-origin',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ transcript, duration_seconds: elapsed }),
+        body: JSON.stringify({ transcript, duration_seconds: elapsed, outcome: callOutcome || '' }),
         keepalive:true
       }).catch(()=>{});
     }catch(_){}
@@ -4896,19 +5418,55 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
   }
   function handleEvent(ev){
     const type=(ev&&ev.type)||'';
-    if(type.indexOf('output_audio.delta')>=0 || type.indexOf('audio.delta')>=0){
+    if(type==='response.created'){
+      responseActive=true;
+      responseActiveStartedAt=Date.now();
+    } else if(type.indexOf('output_audio.delta')>=0 || type.indexOf('audio.delta')>=0){
+      turnHadAssistantOutput=true; silenceRecoveries=0; responseCancelPending=false; responseCancelStartedAt=0; clearSilenceWatchdog();
       setStatus('Hablando…'); speaking(true);
       if(speakId) clearTimeout(speakId);
       speakId=setTimeout(()=>{ speaking(false); if(active) setStatus('En llamada'); }, 650);
     } else if(type==='response.done' || type.indexOf('output_audio.done')>=0){
       speaking(false); if(active) setStatus('En llamada');
+      if(type==='response.done'){
+        responseActive=false;
+        responseActiveStartedAt=0;
+        responseCancelPending=false;
+        responseCancelStartedAt=0;
+        responseDoneSeen=true;
+        if(expectingToolResponse){ fnResponseDone=true; maybeCreateToolResponse(); }
+        // Colgado limpio (paridad con telefono): el asistente pidio finalizar_llamada y ya
+        // dijo la despedida -> colgamos tras dejar sonar el audio pendiente.
+        if(endCallPending && turnHadAssistantOutput && !expectingToolResponse){
+          endCallPending=false;
+          clearSilenceWatchdog();
+          setTimeout(()=>endCall('Llamada finalizada','El asistente ha terminado la llamada.'), 3500);
+        }
+        // Si el turno cerro sin audio y sin tool pendiente, el watchdog dara UN empujon interno.
+      }
     } else if(type==='input_audio_buffer.speech_started'){
       if(active) setHint('Te escucho…');
     } else if(type==='response.output_audio_transcript.done'){
+      lastAssistantText = String(ev.transcript||'');
+      if(ev.transcript){ turnHadAssistantOutput=true; silenceRecoveries=0; responseCancelPending=false; responseCancelStartedAt=0; clearSilenceWatchdog(); }
       pushTranscript('assistant', ev.transcript);
     } else if(type==='conversation.item.input_audio_transcription.completed'){
+      autoNudgeUsed = false;  // nuevo turno del cliente: rearma la red anti-silencio
+      confirmationNudgeUsed = false;
+      contactConfirmationNudgeUsed = false;
+      lastUserText = String(ev.transcript||'');
+      responseDoneSeen=false;
+      turnHadAssistantOutput=false;
+      turnHadFunctionCall=false;
+      silenceRecoveries=0;
+      if(pendingBookingSlot){
+        const contact=extractBookingContact(ev.transcript);
+        if(contact) pendingBookingContact=contact;
+      }
+      armSilenceWatchdog(isUnintelligibleText(ev.transcript) ? 'unintelligible_user' : 'user_turn');
       pushTranscript('user', ev.transcript);
     } else if(type==='response.function_call_arguments.done'){
+      turnHadFunctionCall=true; clearSilenceWatchdog();
       runTool(ev);
     } else if(type==='error'){
       const em=(ev&&ev.error&&(ev.error.message||ev.error.code))||'';
@@ -4918,22 +5476,85 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
   // El navegador habla directo con OpenAI; ejecutamos aqui las funciones que pide el modelo
   // (consultar disponibilidad, agendar...) contra el backend del propio cliente y devolvemos
   // el resultado por el data channel. Sin esto el asistente se queda esperando -> silencio.
-  function toolFollowupPrompt(name, result){
-    if(!result || typeof result !== 'object') return '';
-    const msg = String(result.mensaje_voz || result.mensaje || result.error || '').trim();
-    if(!msg) return '';
-    if(result.needs_service) return '[sistema] Falta el servicio. Pregunta esto en una sola frase natural, sin anadir pasos: "' + msg + '"';
-    if(name === 'verificar_codigo' && result.ok) return '[sistema] El codigo ya esta verificado. Si el cliente ya habia pedido cancelar o reprogramar, llama ahora a la herramienta correspondiente sin hablar todavia. Si no hay accion pendiente, di una sola frase natural: "' + msg + '"';
-    if(result.ok) return '[sistema] Di esta idea en una sola frase natural, sin anadir pasos ni explicaciones: "' + msg + '"';
-    if(!result.ok) return '[sistema] Di este problema de forma breve y, si procede, pregunta el siguiente dato minimo: "' + msg + '"';
-    return msg ? '[sistema] Di una sola frase natural: "' + msg + '"' : '';
+  function toolResponseInstruction(name, result){ return VC().toolResponseInstruction(name, result); }
+  function sendResponse(instructions, toolChoice){
+    if(!dc) return false;
+    const payload={type:'response.create'};
+    if(instructions) payload.response={instructions};
+    if(payload.response && toolChoice) payload.response.tool_choice=toolChoice;
+    try{
+      dc.send(JSON.stringify(payload));
+      responseActive=true;
+      responseActiveStartedAt=Date.now();
+      armSilenceWatchdog('response_create');
+      return true;
+    }catch(_){ return false; }
   }
+  function speakSystemText(text){
+    if(!dc || !text) return false;
+    try{
+      dc.send(JSON.stringify({type:'conversation.item.create', item:{type:'message', role:'user', content:[{type:'input_text', text}]} }));
+      return true;
+    }catch(_){ return false; }
+  }
+  function speakToolResult(name, result){
+    const instruction=toolResponseInstruction(name, result);
+    if(!instruction) return sendResponse('', '');
+    speakSystemText('[sistema] Resultado interno de ' + name + ': ' + JSON.stringify(result) + '\n' + instruction);
+    return sendResponse(instruction, 'none');
+  }
+  // Empujon INTERNO cuando el modelo se queda mudo: el modelo decide que decir/hacer con sus
+  // palabras (tool_choice libre). Sin frases fijas. Mismo espiritu que el motor de telefono.
+  function continueNudge(){
+    if(!active || !dc || expectingToolResponse) return false;
+    speakSystemText((VC().CONTINUE_NUDGE_TEXT) || '[sistema] Continua la conversacion de forma natural.');
+    return sendResponse('', '');
+  }
+  function runSilenceWatchdog(){
+    if(!active || !dc || silenceWatchdogUsed || expectingToolResponse) return;
+    silenceWatchdogId=null;
+    if(responseCancelPending){
+      if(Date.now() - (responseCancelStartedAt || 0) < 800){
+        armPostCancelWatchdog();
+        return;
+      }
+      responseCancelPending=false;
+      responseCancelStartedAt=0;
+      responseActive=false;
+      responseActiveStartedAt=0;
+    }
+    if(turnHadAssistantOutput || turnHadFunctionCall){
+      clearSilenceWatchdog();
+      return;
+    }
+    if(silenceRecoveries>=3) return;
+    silenceWatchdogUsed=true;
+    if(responseActive){
+      const activeFor = Date.now() - (responseActiveStartedAt || Date.now());
+      if(activeFor < ACTIVE_RESPONSE_GRACE_MS){
+        silenceWatchdogUsed=false;
+        armPostCancelWatchdog();
+        return;
+      }
+      silenceWatchdogUsed=false;
+      cancelActiveResponse();
+      return;
+    }
+    silenceRecoveries++;
+    continueNudge();
+  }
+  function extractBookingContact(text){ return VC().extractBookingContact(text); }
   async function runTool(ev){
     const name = ev && ev.name;
     const callId = ev && ev.call_id;
     const argsStr = (ev && ev.arguments) || '{}';
     if(!name || !callId || !dc) return;
+    let parsedArgs={};
+    try{ parsedArgs=JSON.parse(argsStr||'{}')||{}; }catch(_){ parsedArgs={}; }
     if(active) setHint('Un momento, lo compruebo…');
+    // Latch: la respuesta que emitio la function_call sigue ACTIVA. Disparamos el
+    // response.create del resultado solo cuando esten LOS DOS (output enviado + response.done).
+    expectingToolResponse=true; fnOutputReady=false; fnResponseDone=!!responseDoneSeen; pendingToolFollowup='';
     let result;
     try{
       const r = await fetch('/auth/app/voice/tool', {
@@ -4942,14 +5563,48 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
       });
       result = r.ok ? await r.json() : { ok:false, error:'No se pudo consultar ahora mismo.' };
     }catch(e){ result = { ok:false, error:'No se pudo consultar ahora mismo.' }; }
+    if(name==='consultar_disponibilidad' && result && result.ok && result.hora && result.hora_disponible === true){
+      pendingBookingSlot = {
+        servicio:String(parsedArgs.servicio||''),
+        centro:String(parsedArgs.centro||''),
+        fecha:String(result.fecha||parsedArgs.fecha||''),
+        fecha_texto:String(parsedArgs.fecha_texto||result.fecha_texto||result.fecha||''),
+        hora:String(result.hora||parsedArgs.hora||'')
+      };
+      pendingBookingContact = null;
+    }else if(name==='crear_cita' && result && result.ok){
+      pendingBookingSlot = null;
+      pendingBookingContact = null;
+    }else if((name==='cancelar_cita' || name==='reprogramar_cita') && result && result.ok){
+      pendingBookingSlot = null;
+      pendingBookingContact = null;
+    }
+    if(result && result.end_call) endCallPending=true;
+    // Etiqueta de resultado (paridad con el motor de telefono): la ultima accion gana.
+    if(result && result.ok){
+      if(name==='crear_cita') callOutcome='reservada';
+      else if(name==='cancelar_cita') callOutcome='cancelada';
+      else if(name==='reprogramar_cita') callOutcome='reprogramada';
+      else if(name==='transferir_a_humano' && result.transfer) callOutcome='transferida';
+    }
+    lastToolName=name;
+    lastToolResult=result || {};
     try{
       dc.send(JSON.stringify({ type:'conversation.item.create', item:{ type:'function_call_output', call_id:callId, output: JSON.stringify(result) } }));
-      const followup = toolFollowupPrompt(name, result);
-      if(followup){
-        dc.send(JSON.stringify({ type:'conversation.item.create', item:{ type:'message', role:'user', content:[{ type:'input_text', text:followup }] } }));
-      }
-      dc.send(JSON.stringify({ type:'response.create' }));
+      const followup = toolResponseInstruction(name, result);
+      pendingToolFollowup = followup || '';
+      fnOutputReady=true; maybeCreateToolResponse();
     }catch(_){}
+  }
+  // Dispara el response.create del resultado del tool solo cuando se cumplen las dos
+  // condiciones (output enviado + response.done de la respuesta de la function_call).
+  function maybeCreateToolResponse(){
+    if(fnOutputReady && fnResponseDone && dc){
+      fnOutputReady=false; fnResponseDone=false; expectingToolResponse=false;
+      const followup = pendingToolFollowup || '';
+      pendingToolFollowup = '';
+      sendResponse(followup, followup ? 'none' : '');
+    }
   }
   async function postSDP(model, sdp, secret){
     const eps=['https://api.openai.com/v1/realtime/calls?model='+model, 'https://api.openai.com/v1/realtime?model='+model];
@@ -4966,7 +5621,7 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
     avatarEl.textContent = ((state.nombre||'IA').trim()[0]||'IA').toUpperCase();
     nameEl.textContent = (state.nombre || 'Asistente de voz');
     active=true;
-    transcript=[]; transcriptLogged=false; startedAt=Date.now();
+    transcript=[]; transcriptLogged=false; callOutcome=''; startedAt=Date.now();
     overlay.classList.add('open'); document.body.style.overflow='hidden';
     setStatus('Pidiendo micrófono…'); timerEl.textContent='00:00'; setHint('Permite el micrófono para empezar a hablar.');
     muted=false;
@@ -5003,6 +5658,9 @@ document.getElementById('vozRequestBtn').addEventListener('click', async () => {
           if(g){
             dc.send(JSON.stringify({ type:'conversation.item.create', item:{ type:'message', role:'user', content:[{ type:'input_text', text:'Inicia la llamada saludando exactamente con: "'+g+'"' }] } }));
             dc.send(JSON.stringify({ type:'response.create' }));
+            responseActive=true;
+            responseActiveStartedAt=Date.now();
+            armSilenceWatchdog('greeting');
           }
         }catch(_){}
       };
@@ -5267,7 +5925,6 @@ function mountVanteliaWidget() {
   script.async = true;
   document.body.appendChild(script);
 }
-function reloadBotDrawer() { mountVanteliaWidget(); }
 
 // ── CITAS ─────────────────────────────────────────────────────────────
 const citasState = { view: 'day', calYear: null, calMonth: null, calData: [], calClosedDays: [], calBlocks: [], dayDate: null, dayRange: 1, employees: null, locations: null, daySchedule: null, dayItems: [], selectedDayBookingId: '' };
@@ -6346,16 +7003,39 @@ function renderCalendar() {
       const reason = ((matchingBlock.reason || matchingBlock.motivo) || '').trim() || 'Bloqueado';
       html += `<span class="gcal-day-tag blocked" title="${escapeHtml(reason)}">${escapeHtml(reason)}</span>`;
     }
+    cell.innerHTML = html;
     visible.forEach(b => {
       const dt = b.start_at ? new Date(b.start_at) : null;
       const hora = b.hora || (dt ? dt.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'}) : '');
-      const label = [hora, escapeHtml(b.nombre || '')].filter(Boolean).join(' ');
+      const label = [hora, b.nombre || b.client_name || b.servicio || 'Cita'].filter(Boolean).join(' ');
       const view = cdView(b);
-      html += `<span class="gcal-event-pill" style="background:${view.color}" title="${escapeHtml(b.nombre||'')} — ${escapeHtml(b.servicio||'')} ${hora} · ${escapeHtml(view.label)}">${label}</span>`;
+      const pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = 'gcal-event-pill';
+      pill.style.background = view.color;
+      pill.textContent = label;
+      pill.title = `${b.nombre || b.client_name || 'Cita'} - ${b.servicio || 'Consulta'} ${hora} - ${view.label}`;
+      pill.addEventListener('click', (event) => {
+        event.stopPropagation();
+        openManageBookingModal(b);
+      });
+      cell.appendChild(pill);
     });
-    if (extra > 0) html += `<span class="gcal-more">+${extra} más</span>`;
-
-    cell.innerHTML = html;
+    if (extra > 0) {
+      const more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'gcal-more';
+      more.textContent = `+${extra} mas`;
+      more.addEventListener('click', (event) => {
+        event.stopPropagation();
+        citasState.dayDate = new Date(`${dateStr}T00:00:00`);
+        citasState.dayRange = 1;
+        cdSyncRangeChips();
+        _switchToDayView();
+        loadCitasDay();
+      });
+      cell.appendChild(more);
+    }
     cell.addEventListener('click', () => {
       citasState.dayDate = new Date(`${dateStr}T00:00:00`);
       citasState.dayRange = 1;
@@ -6455,7 +7135,14 @@ function cdColDayInfo(emp, dateKey){
   const matchDate = (bl) => ((bl.fecha || bl.start_date || '') || '').slice(0,10) === dateKey;
   (citasState.daySchedule?.blocks || []).forEach(bl => { if (matchDate(bl)) blocks.push(bl); });
   if (emp) (emp.blocks || []).forEach(bl => { if (matchDate(bl)) blocks.push(bl); });
-  normalizeDailyBreaks(emp || citasState.daySchedule || {}).forEach(br => {
+  // Descansos: los del profesional + los GENERALES del negocio (cierre de mediodia),
+  // que aplican a todo el equipo. Dedupe por tramo (la agenda general ya lleva el
+  // descanso general sincronizado y no debe pintarse doble).
+  const breaks = normalizeDailyBreaks(emp || citasState.daySchedule || {});
+  if (emp) normalizeDailyBreaks(citasState.daySchedule || {}).forEach(g => {
+    if (!breaks.some(b => b.start === g.start && b.end === g.end)) breaks.push(g);
+  });
+  breaks.forEach(br => {
     blocks.push({ fecha: dateKey, hora_inicio: br.start, hora_fin: br.end, motivo: br.reason || 'Descanso' });
   });
   return {
@@ -6653,7 +7340,7 @@ function renderCitasDay(){
       const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '');
       const sub = c.type === 'day' ? (b.employee_name || b.servicio || 'Consulta') : (b.servicio || 'Consulta');
       btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(hora)} · ${escapeHtml(b.nombre || b.client_name || b.name || b.servicio || 'Cita')}</span><span class="cd-ev-tag" style="color:${base}" title="${escapeHtml(view.label)}">${escapeHtml(view.tag)}${cdPayMark(b)}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
-      btn.addEventListener('click', () => cdSelect(b));
+      btn.addEventListener('click', () => openManageBookingModal(b));
       body.appendChild(btn);
     });
 
@@ -6680,6 +7367,126 @@ function cdSnapMins(body, clientY, startMin, slotMin){
 }
 function cdMinsToHora(mins){
   return `${String(Math.floor(mins/60)).padStart(2,'0')}:${String(Math.floor(mins%60)).padStart(2,'0')}`;
+}
+
+// ── Canje de bono/tarjeta sobre una cita (diálogos compartidos: vista Día y modal Gestionar) ──
+function cdRedeemPkgDialog(b, purchases, onDone) {
+  const bid = b.booking_id || b.id || '';
+  const done = typeof onDone === 'function' ? onDone : loadCitasDay;
+  const svcSlug = b.service_id || '';
+  const rows = purchases.map((p, i) => {
+    const covers = !svcSlug || Number((p.remaining || {})[svcSlug] || 0) > 0;
+    const bits = [`${p.remaining_total} sesion${p.remaining_total === 1 ? '' : 'es'} en total`];
+    if (svcSlug) bits.push(covers ? `${Number((p.remaining || {})[svcSlug] || 0)} de este servicio` : 'no incluye este servicio');
+    if (p.expires_at) bits.push(`caduca ${String(p.expires_at).slice(0, 10)}`);
+    return `<button class="btn btn-ghost" type="button" data-rp="${i}" ${covers ? '' : 'disabled'} style="display:flex; flex-direction:column; align-items:flex-start; gap:3px; width:100%; text-align:left; padding:10px 12px;${covers ? '' : ' opacity:.55;'}">
+      <b>🎟 ${escapeHtml(p.package_name || 'Bono')}</b>
+      <span class="panel-sub" style="margin:0;">${escapeHtml(bits.join(' · '))}</span>
+    </button>`;
+  }).join('');
+  const wrap = vModal(`<p class="panel-sub" style="margin:0 0 12px;">Elige el bono: se descuenta una sesión y la cita queda pagada.</p><div style="display:grid; gap:8px;">${rows}</div>`, { title: '🎟 Redimir bono', maxw: 440 });
+  wrap.querySelectorAll('[data-rp]').forEach(el => el.addEventListener('click', async () => {
+    const p = purchases[Number(el.dataset.rp)];
+    el.disabled = true;
+    try {
+      const r = await api(`/auth/package-purchases/${encodeURIComponent(p.purchase_id)}/redeem`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ booking_id: bid }) });
+      wrap.remove();
+      window.__cdAssets = null; // invalida el aviso de saldo cacheado
+      toast(`Sesión descontada. Quedan ${Object.values(r.remaining || {}).reduce((a, v) => a + Number(v || 0), 0)} en el bono.`, 'success');
+      await done();
+    } catch(e){ el.disabled = false; toast(e.message, 'error'); }
+  }));
+}
+
+function cdRedeemGiftDialog(b, presetCode, onDone) {
+  const bid = b.booking_id || b.id || '';
+  const done = typeof onDone === 'function' ? onDone : loadCitasDay;
+  const dueTxt = b.service_price_cents ? eur(b.service_price_cents) : '';
+  const wrap = vModal(`
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Código de la tarjeta</label>
+      <input class="field-input" id="cdRgCode" placeholder="GC-XXXX-XXXX" value="${escapeHtml(presetCode || '')}" autocomplete="off" style="text-transform:uppercase; font-family:'Courier New',monospace; letter-spacing:.08em;"></div>
+    <p class="panel-sub" id="cdRgInfo" style="margin:0 0 14px;">${dueTxt ? `Importe de la cita: <b>${dueTxt}</b>. ` : ''}Se descuenta del saldo; si no lo cubre todo, la cita queda con pago parcial.</p>
+    <button class="btn btn-primary" id="cdRgGo" type="button" style="width:100%;">Canjear en esta cita</button>
+  `, { title: '🎁 Redimir tarjeta regalo', maxw: 420 });
+  const input = wrap.querySelector('#cdRgCode');
+  const info = wrap.querySelector('#cdRgInfo');
+  input.addEventListener('input', () => {
+    clearTimeout(window.__cdRgT);
+    const code = input.value.trim().toUpperCase();
+    if (code.length < 10) return;
+    window.__cdRgT = setTimeout(async () => {
+      try {
+        const d = await api(`/auth/gift-cards?status=active&q=${encodeURIComponent(code)}`);
+        const g = (d.items || []).find(x => x.code === code);
+        if (g && wrap.isConnected) info.innerHTML = `Saldo disponible: <b>${eur(g.balance_cents)}</b>${dueTxt ? ` · importe de la cita: <b>${dueTxt}</b>` : ''}.`;
+      } catch { /* solo informativo */ }
+    }, 250);
+  });
+  wrap.querySelector('#cdRgGo').addEventListener('click', async () => {
+    const code = input.value.trim().toUpperCase();
+    if (!code) { input.focus(); return; }
+    const goBtn = wrap.querySelector('#cdRgGo');
+    goBtn.disabled = true;
+    try {
+      const r = await api('/auth/gift-cards/redeem', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code, booking_id: bid }) });
+      wrap.remove();
+      window.__cdAssets = null;
+      if (r.covered) toast(`Cobrado con tarjeta. Saldo restante: ${eur(r.balance_after_cents)}.`, 'success');
+      else toast(`Pago parcial: quedan ${eur(r.remaining_due_cents)} por cobrar.`, 'success');
+      await done();
+    } catch(e){ goBtn.disabled = false; toast(e.message, 'error'); }
+  });
+  if (presetCode) input.dispatchEvent(new Event('input'));
+  input.focus();
+}
+
+// Aviso proactivo en el detalle de cita: si está sin pagar y el cliente tiene un
+// bono que cubre el servicio o una tarjeta con saldo, se ofrece el canje directo.
+async function cdLoadAssetsHint(b, container) {
+  if (typeof hasPerm === 'function' && !hasPerm('commerce.sell')) return;
+  const est = cdEstado(b);
+  const payPaid = b.payment_status === 'paid' || b.payment_status === 'partially_refunded' || b.pay_state === 'paid';
+  if (payPaid || est === 'cancelled') return;
+  const q = (b.email || b.client_email || b.telefono || b.client_phone || '').trim();
+  if (!q) return;
+  const cache = window.__cdAssets = window.__cdAssets || {};
+  let data = cache[q];
+  if (!data) {
+    try {
+      const [pk, gc] = await Promise.all([
+        api(`/auth/package-purchases?status=active&q=${encodeURIComponent(q)}`),
+        api(`/auth/gift-cards?status=active&q=${encodeURIComponent(q)}`),
+      ]);
+      data = { bonos: pk.items || [], cards: gc.items || [] };
+    } catch { data = { bonos: [], cards: [] }; }
+    cache[q] = data;
+  }
+  // La selección puede haber cambiado mientras cargaba.
+  if ((citasState.selectedDayBookingId || '') !== String(b.booking_id || b.id || '')) return;
+  if (!container.isConnected || container.querySelector('.cd-assets')) return;
+  const svcSlug = b.service_id || '';
+  const bonos = data.bonos.filter(p => !svcSlug || Number((p.remaining || {})[svcSlug] || 0) > 0);
+  const cards = data.cards.filter(g => Number(g.balance_cents || 0) > 0);
+  if (!bonos.length && !cards.length) return;
+  const bits = [];
+  if (bonos.length) {
+    const p = bonos[0];
+    const ses = svcSlug ? `${Number((p.remaining || {})[svcSlug] || 0)} ses. de este servicio` : `${p.remaining_total} ses.`;
+    bits.push(`<span>🎟 <b>${escapeHtml(p.package_name || 'Bono')}</b> · ${escapeHtml(ses)}</span>`);
+    bits.push('<button class="btn btn-ghost" type="button" data-hint="pkg">Canjear bono</button>');
+  }
+  if (cards.length) {
+    const g = cards[0];
+    bits.push(`<span>🎁 <b style="font-family:'Courier New',monospace;">${escapeHtml(g.code)}</b> · ${eur(g.balance_cents)}</span>`);
+    bits.push('<button class="btn btn-ghost" type="button" data-hint="gift">Usar tarjeta</button>');
+  }
+  const div = document.createElement('div');
+  div.className = 'cd-assets';
+  div.innerHTML = `<span style="font-weight:700;">💡 Saldo a favor del cliente:</span>${bits.join('')}`;
+  const actions = container.querySelector('.cd-detail-actions');
+  if (actions) container.insertBefore(div, actions); else container.appendChild(div);
+  div.querySelector('[data-hint="pkg"]')?.addEventListener('click', () => cdRedeemPkgDialog(b, bonos));
+  div.querySelector('[data-hint="gift"]')?.addEventListener('click', () => cdRedeemGiftDialog(b, cards[0].code));
 }
 
 function cdRenderDetail(b){
@@ -6762,6 +7569,7 @@ function cdRenderDetail(b){
       if (!e.target.closest('.cd-menu')) document.querySelectorAll('.cd-menu-pop.open').forEach(p => p.classList.remove('open'));
     });
   }
+  cdLoadAssetsHint(b, d); // aviso async de bonos/tarjetas del cliente (no bloquea)
   d.querySelectorAll('button[data-cd]').forEach(btn => {
     btn.addEventListener('click', async () => {
       document.querySelectorAll('.cd-menu-pop.open').forEach(p => p.classList.remove('open'));
@@ -6849,32 +7657,10 @@ function cdRenderDetail(b){
           try { purchases = ((await api(`/auth/package-purchases?status=active&q=${encodeURIComponent(q)}`)).items) || []; }
           catch(e){ toast(e.message, 'error'); return; }
           if (!purchases.length){ toast('Este cliente no tiene bonos activos.', 'error'); return; }
-          let chosen = purchases[0];
-          if (purchases.length > 1){
-            const menu = purchases.map((p, i) => `${i + 1}. ${p.package_name} (${p.remaining_total} sesiones)`).join('\n');
-            const ans = window.prompt(`Elige bono (número):\n${menu}`, '1');
-            if (ans === null) return;
-            chosen = purchases[parseInt(ans, 10) - 1];
-            if (!chosen){ toast('Selección inválida.', 'error'); return; }
-          }
-          try {
-            const r = await api(`/auth/package-purchases/${encodeURIComponent(chosen.purchase_id)}/redeem`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ booking_id: bid }) });
-            toast(`Sesión del bono descontada. Quedan ${Object.values(r.remaining).reduce((a, v) => a + v, 0)}.`, 'success');
-            loadCitasDay();
-          } catch(e){ toast(e.message, 'error'); }
+          cdRedeemPkgDialog(b, purchases);
           return;
         }
-        if (action === 'redeemgift'){
-          const code = window.prompt('Código de la tarjeta regalo (GC-XXXX-XXXX):', '');
-          if (!code) return;
-          try {
-            const r = await api('/auth/gift-cards/redeem', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: code.trim(), booking_id: bid }) });
-            if (r.covered) toast(`Cobrado con tarjeta. Saldo restante: ${(r.balance_after_cents/100).toFixed(2)} €`, 'success');
-            else toast(`Pago parcial: quedan ${(r.remaining_due_cents/100).toFixed(2)} € por cobrar.`, 'success');
-            loadCitasDay();
-          } catch(e){ toast(e.message, 'error'); }
-          return;
-        }
+        if (action === 'redeemgift'){ cdRedeemGiftDialog(b); return; }
         if (action === 'capture'){
           const maxEur = b.payment_amount_cents ? (b.payment_amount_cents/100) : null;
           const cents = await promptAmount({ title: 'Cobrar retención', label: 'Importe a cobrar (€)', defaultEur: maxEur != null ? maxEur.toFixed(2) : '', maxEur });
@@ -6943,7 +7729,375 @@ function cdRenderDetail(b){
 // Modal centrado de gestión de cita (sustituye al enlace cliente como interfaz del personal).
 // Reúne datos básicos de cita + cliente y las acciones permitidas. El enlace público del
 // cliente sigue disponible (botón "Copiar enlace"), pero no se usa como panel interno.
+function mgMoney(cents) {
+  const n = Number(cents || 0);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  return (n / 100).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+}
+
+function mgDateTime(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function mgPaymentBadge(b) {
+  const badge = (label, style) => `<span class="badge" style="${style}">${escapeHtml(label)}</span>`;
+  const status = b.payment_status || (!b.payment_status ? b.pay_state : '');
+  if (status === 'paid') return '<span class="badge badge-confirmed">Pagado</span>';
+  if (status === 'pending') return badge('Por pagar', 'background:rgba(239,68,68,0.14); color:#ef4444;');
+  if (status === 'preauthorized') return badge('Retencion activa', 'background:rgba(244,180,0,0.15); color:#f4b400;');
+  if (status === 'released') return badge('Retencion liberada', 'background:rgba(255,255,255,0.06); color:var(--soft-2);');
+  if (status === 'refunded') return badge('Reembolsado', 'background:rgba(255,255,255,0.06); color:var(--soft-2);');
+  if (status === 'partially_refunded') return badge('Reembolso parcial', 'background:rgba(255,255,255,0.06); color:var(--soft-2);');
+  return '';
+}
+
+function mgActionButton(action, label, { danger = false, primary = false, disabled = false } = {}) {
+  const cls = primary ? 'btn btn-primary' : 'btn btn-ghost';
+  const style = danger ? ' style="color:var(--danger); border-color:var(--danger);"' : '';
+  return `<button class="${cls}" type="button" data-mg="${escapeHtml(action)}"${style}${disabled ? ' disabled' : ''}>${escapeHtml(label)}</button>`;
+}
+
+function mgSwitchTab(wrap, tab) {
+  wrap.querySelectorAll('[data-mg-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.mgTab === tab));
+  wrap.querySelectorAll('[data-mg-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.mgPanel === tab));
+}
+
+async function mgLoadTimeline(wrap, bid, force = false) {
+  const box = wrap.querySelector('#mgTimeline');
+  if (!box || (!force && box.dataset.loaded === '1')) return;
+  box.innerHTML = '<div class="panel-sub" style="margin:0;">Cargando actividad...</div>';
+  try {
+    const data = await api(`/auth/bookings/${encodeURIComponent(bid)}/timeline`);
+    const items = data.items || [];
+    box.dataset.loaded = '1';
+    box.innerHTML = items.length ? items.map(item => `
+      <div class="mg-timeline-item">
+        <div class="mg-timeline-dot"></div>
+        <div>
+          <div class="mg-timeline-title">${escapeHtml(item.title || item.event_type || 'Movimiento')}</div>
+          <div class="mg-timeline-meta">${escapeHtml(mgDateTime(item.created_at))}${item.actor ? ' - ' + escapeHtml(item.actor) : ''}</div>
+          ${item.detail ? `<div class="mg-timeline-detail">${escapeHtml(item.detail)}</div>` : ''}
+        </div>
+      </div>`).join('') : '<div class="panel-sub" style="margin:0;">Aun no hay actividad registrada.</div>';
+  } catch (e) {
+    box.innerHTML = `<div class="panel-sub" style="margin:0;">${escapeHtml(e.message)}</div>`;
+  }
+}
+
 function openManageBookingModal(b){
+  const bid = b.booking_id || b.id || '';
+  if (!bid) { toast('No se pudo abrir esta cita.', 'error'); return; }
+  const est = cdEstado(b);
+  const view = cdView(b);
+  const hora = b.hora || (b.start_at ? new Date(b.start_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '--:--');
+  const clientName = b.nombre || b.client_name || b.name || 'Cliente sin nombre';
+  const email = b.email || b.client_email || '';
+  const phone = b.telefono || b.client_phone || '';
+  const serviceText = (b.servicio || 'Consulta') + cdServiceMeta(b);
+  const dateText = [b.fecha || cdBookingDateKey(b), hora].filter(Boolean).join(' - ');
+  const canReschedule = b.can_reschedule !== false && b.can_cancel !== false && est !== 'cancelled' && est !== 'completed' && est !== 'no_show';
+  const canCancel = b.can_cancel !== false && est !== 'cancelled' && est !== 'completed' && est !== 'no_show';
+  const canAttend = b.can_mark_attendance === true && est !== 'cancelled';
+  const notCancelled = est !== 'cancelled';
+  const canEditClient = hasPerm('clients.edit');
+  const dis = canEditClient ? '' : 'disabled';
+  const payPreauth = b.payment_status === 'preauthorized' || b.pay_state === 'preauthorized';
+  const payPaid = b.payment_status === 'paid' || b.payment_status === 'partially_refunded' || b.pay_state === 'paid';
+  const paymentBadge = mgPaymentBadge(b);
+  const priceText = mgMoney(b.service_price_cents) || mgMoney(b.payment_amount_cents) || 'Sin importe';
+  const contactSummary = [email, phone].filter(Boolean).join(' - ') || 'Sin datos de contacto';
+
+  const agendaActions = [
+    canReschedule ? mgActionButton('resched', 'Reprogramar / cambiar profesional', { primary: true }) : '',
+    canAttend && hasPerm('agenda.attendance') ? mgActionButton('attended', 'Marcar realizada') : '',
+    canAttend && hasPerm('agenda.attendance') ? mgActionButton('noshow', 'No vino', { danger: true }) : '',
+    hasPerm('agenda.cancel') ? mgActionButton('cancel', 'Cancelar cita', { danger: true, disabled: !canCancel }) : '',
+  ].filter(Boolean).join('');
+  const commActions = [
+    notCancelled && hasPerm('agenda.attendance') ? mgActionButton('sendconfirm', 'Enviar confirmacion') : '',
+    notCancelled && phone && hasPerm('agenda.attendance') ? mgActionButton('confirmcall', 'Llamar para confirmar') : '',
+    est === 'completed' && (email || phone) && hasPerm('agenda.attendance') ? mgActionButton('reviewreq', 'Pedir resena') : '',
+  ].filter(Boolean).join('');
+  const payActions = [
+    notCancelled && !payPreauth ? mgActionButton('pay', 'Crear enlace de pago') : '',
+    notCancelled && hasPerm('commerce.sell') ? mgActionButton('poscharge', 'Cobrar con QR') : '',
+    notCancelled && !payPaid && hasPerm('commerce.sell') ? mgActionButton('redeempkg', 'Redimir bono') : '',
+    notCancelled && !payPaid && hasPerm('commerce.sell') ? mgActionButton('redeemgift', 'Redimir tarjeta regalo') : '',
+    payPreauth && hasPerm('payments.capture') ? mgActionButton('capture', 'Cobrar retencion') : '',
+    payPreauth && hasPerm('payments.capture') ? mgActionButton('release', 'Liberar retencion') : '',
+    payPaid && hasPerm('payments.refund') ? mgActionButton('refund', 'Reembolsar') : '',
+  ].filter(Boolean).join('');
+  const clientActions = [
+    mgActionButton('vercliente', 'Ver ficha del cliente'),
+    notCancelled && hasPerm('agenda.create') ? mgActionButton('rebook', 'Reservar siguiente') : '',
+    b.manage_url ? mgActionButton('copylink', 'Copiar enlace para el cliente') : '',
+  ].filter(Boolean).join('');
+
+  const wrap = vModal(`
+    <div class="mg-panel-body">
+      <div class="mg-hero">
+        <div>
+          <div class="mg-eyebrow">Gestion interna</div>
+          <h3 class="mg-title">${escapeHtml(clientName)} Cita</h3>
+          <div class="mg-subtitle">${escapeHtml(serviceText)} - ${escapeHtml(dateText)}</div>
+        </div>
+        <div class="mg-badges">
+          <span class="badge ${view.badge}" title="${escapeHtml(view.label)}">${escapeHtml(view.label)}</span>
+          ${b.booking_code ? `<span class="badge" style="background:var(--accent-soft); color:var(--accent); font-family:'Courier New',monospace;">N.&ordm; ${escapeHtml(b.booking_code)}</span>` : ''}
+          ${paymentBadge}
+        </div>
+      </div>
+      <div class="mg-tabs" role="tablist" aria-label="Gestion de cita">
+        <button class="mg-tab active" type="button" data-mg-tab="summary">Resumen</button>
+        <button class="mg-tab" type="button" data-mg-tab="edit">Editar</button>
+        <button class="mg-tab" type="button" data-mg-tab="payments">Cobros</button>
+        <button class="mg-tab" type="button" data-mg-tab="actions">Acciones</button>
+        <button class="mg-tab" type="button" data-mg-tab="timeline">Actividad</button>
+      </div>
+      <section class="mg-tab-panel active" data-mg-panel="summary">
+        <div class="mg-summary-grid">
+          <div>
+            <div class="inf-kpis mg-kpis">
+              <div class="inf-kpi"><div class="k-label">Fecha y hora</div><div class="k-value">${escapeHtml(dateText || '-')}</div></div>
+              <div class="inf-kpi"><div class="k-label">Profesional</div><div class="k-value">${escapeHtml(b.employee_name || 'Agenda')}</div></div>
+              <div class="inf-kpi"><div class="k-label">Servicio</div><div class="k-value">${escapeHtml(serviceText)}</div></div>
+              <div class="inf-kpi"><div class="k-label">Centro</div><div class="k-value">${escapeHtml(b.location_name || '-')}</div></div>
+            </div>
+            <div class="mg-info-list">
+              <div class="mg-info-row"><span>Reserva</span><span>${escapeHtml(b.booking_code || bid)}</span></div>
+              <div class="mg-info-row"><span>Precio</span><span>${escapeHtml(priceText)}</span></div>
+              <div class="mg-info-row"><span>Pago</span><span>${paymentBadge || '<span style="color:var(--soft);">Sin pago registrado</span>'}</span></div>
+              <div class="mg-info-row"><span>Creada</span><span>${escapeHtml(mgDateTime(b.created_at) || '-')}</span></div>
+              <div class="mg-info-row"><span>Proveedor</span><span>${escapeHtml(b.provider_name || 'Interno')}${b.provider_status ? ' - ' + escapeHtml(b.provider_status) : ''}</span></div>
+            </div>
+          </div>
+          <aside class="mg-side">
+            <div>
+              <div class="mg-section-title">Cliente</div>
+              <div class="mg-contact-name">${escapeHtml(clientName)}</div>
+              <div class="mg-contact-line">${escapeHtml(contactSummary)}</div>
+            </div>
+            <div>
+              <div class="mg-section-title">Notas internas</div>
+              <div class="mg-notes">${escapeHtml(b.notas || 'Sin notas internas.')}</div>
+            </div>
+          </aside>
+        </div>
+      </section>
+      <section class="mg-tab-panel" data-mg-panel="edit">
+        <div class="field">
+          <label class="field-label">Datos del cliente</label>
+          <div class="form-row" style="margin-top:0;">
+            <div class="field"><label class="field-label">Nombre</label><input class="field-input" id="mgNombre" maxlength="80" value="${escapeHtml(clientName)}" ${dis}></div>
+          </div>
+          <div class="form-row">
+            <div class="field"><label class="field-label">Email</label><input class="field-input" id="mgEmail" type="email" maxlength="200" value="${escapeHtml(email)}" ${dis}></div>
+            <div class="field"><label class="field-label">Telefono</label><input class="field-input" id="mgTelefono" maxlength="30" value="${escapeHtml(phone)}" ${dis}></div>
+          </div>
+          <div class="field" style="margin-top:14px;"><label class="field-label">Notas internas</label><textarea class="field-input" id="mgNotas" rows="5" maxlength="500" ${dis}>${escapeHtml(b.notas || '')}</textarea></div>
+        </div>
+        ${canEditClient ? `<div class="mg-form-actions"><button class="btn btn-primary" id="mgSave" type="button">Guardar datos</button></div>` : '<p class="panel-sub" style="margin:12px 0 0;">Solo lectura: no tienes permiso para editar datos del cliente.</p>'}
+      </section>
+      <section class="mg-tab-panel" data-mg-panel="payments">
+        <div class="mg-summary-grid">
+          <div>
+            <div class="inf-kpis mg-kpis">
+              <div class="inf-kpi"><div class="k-label">Importe</div><div class="k-value">${escapeHtml(priceText)}</div></div>
+              <div class="inf-kpi"><div class="k-label">Estado</div><div class="k-value">${paymentBadge || '<span style="color:var(--soft);">Sin pago</span>'}</div></div>
+            </div>
+            <div class="mg-action-group">
+              <div class="mg-section-title">Operaciones de cobro</div>
+              <div class="mg-action-grid">${payActions || '<span class="panel-sub" style="margin:0;">Sin acciones de cobro disponibles.</span>'}</div>
+            </div>
+          </div>
+          <aside class="mg-side">
+            <div>
+              <div class="mg-section-title">Referencia</div>
+              <div class="mg-info-list" style="margin-top:0;">
+                <div class="mg-info-row"><span>Reserva</span><span>${escapeHtml(b.booking_code || bid)}</span></div>
+                <div class="mg-info-row"><span>Servicio</span><span>${escapeHtml(serviceText)}</span></div>
+                <div class="mg-info-row"><span>Cliente</span><span>${escapeHtml(clientName)}</span></div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+      <section class="mg-tab-panel" data-mg-panel="actions">
+        <div class="mg-action-group"><div class="mg-section-title">Agenda</div><div class="mg-action-grid">${agendaActions || '<span class="panel-sub" style="margin:0;">No hay acciones de agenda disponibles.</span>'}</div></div>
+        <div class="mg-action-group"><div class="mg-section-title">Comunicacion</div><div class="mg-action-grid">${commActions || '<span class="panel-sub" style="margin:0;">Sin acciones de comunicacion para esta cita.</span>'}</div></div>
+        <div class="mg-action-group"><div class="mg-section-title">Cliente</div><div class="mg-action-grid">${clientActions}</div></div>
+      </section>
+      <section class="mg-tab-panel" data-mg-panel="timeline">
+        <div class="mg-timeline" id="mgTimeline"><div class="panel-sub" style="margin:0;">Abre esta pestana para cargar la actividad.</div></div>
+      </section>
+    </div>
+  `, { title: 'Gestionar cita', maxw: 900, className: 'booking-manage-modal' });
+
+  const close = () => wrap.remove();
+  const refresh = async () => { try { await refreshCitasIfVisible(); } catch {} };
+
+  wrap.querySelectorAll('[data-mg-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      mgSwitchTab(wrap, btn.dataset.mgTab);
+      if (btn.dataset.mgTab === 'timeline') mgLoadTimeline(wrap, bid);
+    });
+  });
+
+  const saveBtn = wrap.querySelector('#mgSave');
+  if (saveBtn) saveBtn.addEventListener('click', async () => {
+    const nombre = wrap.querySelector('#mgNombre').value.trim();
+    if (nombre.length < 2) { toast('El nombre es obligatorio.', 'error'); return; }
+    const payload = {
+      nombre,
+      email: wrap.querySelector('#mgEmail').value.trim(),
+      telefono: wrap.querySelector('#mgTelefono').value.trim(),
+      servicio: b.servicio || '',
+      employee_id: b.employee_id || '',
+      fecha: b.fecha || cdBookingDateKey(b),
+      hora: b.hora || hora,
+      notas: wrap.querySelector('#mgNotas').value,
+    };
+    if (!payload.fecha || !payload.hora) { toast('Faltan fecha/hora de la cita.', 'error'); return; }
+    saveBtn.disabled = true; const old = saveBtn.textContent; saveBtn.textContent = 'Guardando...';
+    try {
+      await api(`/auth/bookings/${encodeURIComponent(bid)}/update`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      toast('Datos guardados.', 'success');
+      Object.assign(b, { nombre: payload.nombre, email: payload.email, telefono: payload.telefono, notas: payload.notas });
+      wrap.remove();
+      openManageBookingModal(b);
+      await refresh();
+    } catch (e) { toast(e.message, 'error'); }
+    finally { saveBtn.disabled = false; saveBtn.textContent = old; }
+  });
+
+  wrap.querySelectorAll('[data-mg]').forEach(btn => btn.addEventListener('click', async () => {
+    const action = btn.dataset.mg;
+    try {
+      if (action === 'resched'){ close(); openReschedDrawer(b, refresh); return; }
+      if (action === 'vercliente'){ close(); await openClienteFromBooking(b); return; }
+      if (action === 'copylink'){
+        try { await navigator.clipboard.writeText(b.manage_url); toast('Enlace copiado.', 'success'); }
+        catch { toast('No se pudo copiar. Enlace: ' + b.manage_url, 'error'); }
+        return;
+      }
+      if (action === 'sendconfirm'){
+        btn.disabled = true;
+        try { const r = await api(`/auth/bookings/${bid}/send-confirmation`, { method:'POST' }); toast(r.mensaje || 'Confirmacion enviada.', 'success'); }
+        catch(e){ toast(e.message, 'error'); } finally { btn.disabled = false; }
+        return;
+      }
+      if (action === 'confirmcall'){
+        const ok = await confirmDialog({ title: 'Llamar para confirmar', bodyHtml: `<p>La IA llamara a <b>${escapeHtml(clientName)}</b> para confirmar la cita. Tiene coste por llamada.</p>`, confirmLabel: 'Llamar ahora' });
+        if (!ok) return;
+        btn.disabled = true;
+        try { await api(`/auth/bookings/${bid}/confirm-call`, { method:'POST' }); toast('Llamada de confirmacion en curso.', 'success'); }
+        catch(e){ toast(e.message, 'error'); } finally { btn.disabled = false; }
+        return;
+      }
+      if (action === 'reviewreq'){
+        const ok = await confirmDialog({ title: 'Pedir resena', bodyHtml: `<p>Se enviara a <b>${escapeHtml(clientName)}</b> una invitacion a dejar una resena por los canales activos.</p>`, confirmLabel: 'Enviar ahora' });
+        if (!ok) return;
+        await api(`/auth/bookings/${bid}/review-request`, { method:'POST' });
+        toast('Peticion de resena enviada.', 'success');
+        await mgLoadTimeline(wrap, bid, true);
+        return;
+      }
+      if (action === 'pay'){
+        const def = b.service_price_cents ? (b.service_price_cents/100).toFixed(2) : '';
+        const cents = await promptAmount({ title: 'Cobrar cita', label: 'Importe a cobrar (EUR)', defaultEur: def });
+        if (cents === null) return;
+        btn.disabled = true; const old = btn.textContent; btn.textContent = 'Generando...';
+        try {
+          const data = await api(`/auth/app/bookings/${encodeURIComponent(bid)}/payment-link`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount_cents: cents }) });
+          if (data.checkout_url) showPaymentQrDialog({ qrSvg: data.qr_svg || '', url: data.checkout_url, amountCents: cents, title: 'Cobrar cita' });
+        } catch(e){ toast(e.message, 'error'); }
+        finally { btn.disabled = false; btn.textContent = old; }
+        return;
+      }
+      if (action === 'poscharge'){
+        openPosCharge({
+          bookingId: bid,
+          serviceLabel: b.servicio || 'Cita',
+          serviceCents: b.service_price_cents || 0,
+          servicePaid: b.payment_status === 'paid' || b.pay_state === 'paid',
+          customerName: clientName,
+          customerEmail: email,
+          onPaid: refresh,
+        });
+        return;
+      }
+      if (action === 'rebook'){
+        const base = b.start_at ? new Date(b.start_at) : new Date();
+        base.setDate(base.getDate() + 28);
+        close();
+        openNewBookingDrawer({
+          date: cdDateKey(base), time: b.hora || '', employeeId: b.employee_id || '',
+          servicio: b.servicio || '', nombre: clientName, email, telefono: phone,
+        }).catch(err => toast(err.message, 'error'));
+        return;
+      }
+      if (action === 'redeempkg'){
+        const q = (email || phone).trim();
+        if (!q){ toast('La cita no tiene email ni telefono para buscar bonos.', 'error'); return; }
+        let purchases = [];
+        try { purchases = ((await api(`/auth/package-purchases?status=active&q=${encodeURIComponent(q)}`)).items) || []; }
+        catch(e){ toast(e.message, 'error'); return; }
+        if (!purchases.length){ toast('Este cliente no tiene bonos activos.', 'error'); return; }
+        cdRedeemPkgDialog(b, purchases, refresh);
+        return;
+      }
+      if (action === 'redeemgift'){ cdRedeemGiftDialog(b, '', refresh); return; }
+      if (action === 'capture'){
+        const maxEur = b.payment_amount_cents ? (b.payment_amount_cents/100) : null;
+        const cents = await promptAmount({ title: 'Cobrar retencion', label: 'Importe a cobrar (EUR)', defaultEur: maxEur != null ? maxEur.toFixed(2) : '', maxEur });
+        if (cents === null) return;
+        await api(`/auth/bookings/${bid}/payment/capture`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount_cents: cents }) });
+        toast('Retencion cobrada', 'success'); close(); await refresh();
+        return;
+      }
+      if (action === 'release'){
+        if (!window.confirm('Liberar la retencion sin cobrar? La tarjeta del cliente quedara sin cargo.')) return;
+        await api(`/auth/bookings/${bid}/payment/release`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({}) });
+        toast('Retencion liberada', 'success'); close(); await refresh();
+        return;
+      }
+      if (action === 'refund'){
+        const maxEur = b.payment_amount_cents ? (b.payment_amount_cents/100) : null;
+        const cents = await promptAmount({ title: 'Reembolsar', label: 'Importe a reembolsar (EUR)', defaultEur: maxEur != null ? maxEur.toFixed(2) : '', maxEur });
+        if (cents === null) return;
+        await api(`/auth/bookings/${bid}/payment/refund`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount_cents: cents }) });
+        toast('Reembolso creado', 'success'); close(); await refresh();
+        return;
+      }
+      if (action === 'attended'){
+        await api(`/auth/bookings/${bid}/attendance`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ attended: true }) });
+        toast('Cita marcada como realizada', 'success'); loadCitasAttendanceStats(); close(); await refresh();
+        return;
+      }
+      if (action === 'noshow'){
+        const prev = await fetchCancellationPreview(bid);
+        const ok = await confirmDialog({ title: 'Marcar como no asistida', bodyHtml: `<p>El cliente no se presento a la cita de <b>${escapeHtml(clientName)}</b>.</p>${cancellationPolicyHtml(prev && prev.no_show)}`, confirmLabel: 'Marcar no-show', danger: true });
+        if (!ok) return;
+        await api(`/auth/bookings/${bid}/attendance`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ attended: false }) });
+        toast('Cita marcada como no asistida', 'success'); loadCitasAttendanceStats(); close(); await refresh();
+        return;
+      }
+      if (action === 'cancel'){
+        const prev = await fetchCancellationPreview(bid);
+        const ok = await confirmDialog({ title: 'Cancelar esta cita?', bodyHtml: `<p>Se cancelara la cita de <b>${escapeHtml(clientName)}</b>${b.fecha ? ' (' + escapeHtml(b.fecha + ' ' + (b.hora || '')) + ')' : ''}.</p>${cancellationPolicyHtml(prev && prev.cancel)}`, confirmLabel: 'Cancelar cita', danger: true });
+        if (!ok) return;
+        await api(`/auth/bookings/${bid}/cancel`, { method:'POST' });
+        toast('Cita cancelada', 'success'); close(); await refresh();
+        return;
+      }
+    } catch(e){ toast(e.message, 'error'); }
+  }));
+}
+
+function openManageBookingModalLegacy(b){
   const bid = b.booking_id || b.id || '';
   const est = cdEstado(b);
   const view = cdView(b);
@@ -7418,28 +8572,59 @@ document.getElementById('centroDeleteBtn').addEventListener('click', async () =>
 });
 
 // ── VENTAS (productos, bonos, tarjetas regalo) ───────────────────────
-const ventasState = { tab: 'productos', products: [], packages: [], services: [] };
+const ventasState = {
+  tab: 'central',
+  opened: false,
+  products: [],
+  packages: [],
+  services: [],
+  centralTab: 'servicios',
+  centralCart: [],
+  centralContact: null,   // contacto CRM elegido en el autocomplete del mostrador
+  giftCards: null,        // tarjetas activas (lazy, para el tab Tarjetas de la central)
+};
 
 function eur(cents) { return (Number(cents || 0) / 100).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }); }
 
-document.querySelectorAll('.ventas-subtab').forEach(b => b.addEventListener('click', () => {
-  ventasState.tab = b.getAttribute('data-vtab');
-  document.querySelectorAll('.ventas-subtab').forEach(x => x.classList.toggle('active', x === b));
-  document.getElementById('ventasPanelProductos').style.display = ventasState.tab === 'productos' ? '' : 'none';
-  document.getElementById('ventasPanelBonos').style.display = ventasState.tab === 'bonos' ? '' : 'none';
-  document.getElementById('ventasPanelGift').style.display = ventasState.tab === 'gift' ? '' : 'none';
+function activateVentasTab(tab) {
+  ventasState.tab = tab;
+  document.querySelectorAll('.ventas-subtab').forEach(x => x.classList.toggle('active', x.getAttribute('data-vtab') === tab));
+  document.getElementById('ventasPanelCentral').style.display = tab === 'central' ? '' : 'none';
+  document.getElementById('ventasPanelProductos').style.display = tab === 'productos' ? '' : 'none';
+  document.getElementById('ventasPanelBonos').style.display = tab === 'bonos' ? '' : 'none';
+  document.getElementById('ventasPanelGift').style.display = tab === 'gift' ? '' : 'none';
+  document.getElementById('ventasPanelOnline').style.display = tab === 'online' ? '' : 'none';
   document.getElementById('ventasSubText').textContent = ({
+    central: 'Reserva citas, cobra productos y vende bonos o tarjetas desde una sola central de mostrador.',
     productos: 'Vende productos complementarios y registra cada venta en caja.',
     bonos: 'Bonos de sesiones con descuento. Se rediman cita a cita desde la agenda.',
     gift: 'Tarjetas regalo con saldo. Se usan como método de pago de cualquier cita.',
-  })[ventasState.tab];
+    online: 'Configura tu central online: reservas, pagos, bonos, productos y tarjetas con enlaces públicos.',
+  })[tab];
   loadVentas();
-}));
+}
+
+// Al abrir Ventas: la primera vez muestra la central de mostrador. Despues respeta la ultima.
+function openVentas() {
+  if (!ventasState.opened) {
+    ventasState.opened = true;
+    activateVentasTab('central');
+  } else {
+    loadVentas();
+  }
+}
+
+document.querySelectorAll('.ventas-subtab').forEach(b => b.addEventListener('click', () => activateVentasTab(b.getAttribute('data-vtab'))));
 
 async function loadVentas() {
+  if (ventasState.tab === 'central') return loadVentasCentral();
   if (ventasState.tab === 'productos') return loadVentasProductos();
   if (ventasState.tab === 'bonos') return loadVentasBonos();
-  return loadVentasGift();
+  if (ventasState.tab === 'gift') return loadVentasGift();
+  // Central online: reservas + paginas publicas de venta (guards evitan recargas)
+  renderBookingPublicStatus();
+  loadShopPublicConfig();
+  loadGiftPublicConfig();
 }
 
 // ── Helpers de Ventas (rediseño) ──
@@ -7456,6 +8641,334 @@ function vMethodLabel(m) {
 function vStatusLabel(s) {
   return ({ active: 'Activo', used: 'Agotado', expired: 'Caducado', redeemed: 'Canjeado', disabled: 'Anulado' })[s] || s;
 }
+
+async function loadVentasCentral() {
+  const grid = document.getElementById('centralCatalogGrid');
+  if (!grid) return;
+  grid.innerHTML = '<div class="panel-sub">Cargando...</div>';
+  loadCentralKpis(); // en paralelo, no bloquea el catálogo
+  try {
+    const [svcs, prods, pkgs] = await Promise.all([
+      api('/auth/services?include_inactive=true').catch(() => ({ items: [] })),
+      api('/auth/products').catch(() => ({ items: [] })),
+      api('/auth/packages').catch(() => ({ items: [] })),
+    ]);
+    ventasState.services = svcs.items || [];
+    ventasState.products = prods.items || [];
+    ventasState.packages = pkgs.items || [];
+    ventasState.giftCards = null; // fuerza recarga lazy del tab Tarjetas
+    renderCentralCatalog();
+    renderCentralTicket();
+  } catch (e) {
+    grid.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// KPIs de HOY del mostrador (citas, caja, valor vivo). Endpoint ligero commerce.sell.
+async function loadCentralKpis() {
+  const box = document.getElementById('centralKpis');
+  if (!box) return;
+  try {
+    const s = await api('/auth/app/central/summary');
+    const allPaid = s.bookings_today > 0 && s.bookings_today_paid >= s.bookings_today;
+    const pendientes = Math.max(0, s.bookings_today - s.bookings_today_paid);
+    box.innerHTML =
+      vKpi('📅', String(s.bookings_today), 'Citas hoy', s.bookings_today ? `${s.bookings_today_paid} cobradas · ${pendientes} pendientes` : 'sin citas hoy', allPaid ? 'ok' : '') +
+      vKpi('💶', eur(s.revenue_today_cents), 'Ingresos hoy', 'citas + productos + bonos + tarjetas', s.revenue_today_cents > 0 ? 'ok' : '') +
+      vKpi('🎟', String(s.packages_active), 'Bonos activos', s.packages_active ? `${s.packages_sessions_left} sesiones por canjear` : 'ninguno en circulación') +
+      vKpi('🎁', eur(s.gift_balance_cents), 'Saldo en tarjetas', s.gift_active ? `${s.gift_active} tarjeta${s.gift_active === 1 ? '' : 's'} activa${s.gift_active === 1 ? '' : 's'}` : 'ninguna activa');
+  } catch { box.innerHTML = ''; }
+}
+
+function centralCustomer() {
+  return {
+    name: document.getElementById('centralCustomerName')?.value.trim() || '',
+    email: document.getElementById('centralCustomerEmail')?.value.trim() || '',
+    phone: document.getElementById('centralCustomerPhone')?.value.trim() || '',
+  };
+}
+
+function centralServiceName(s) { return s.nombre || s.name || s.id || ''; }
+function centralServiceMeta(s) {
+  const bits = [];
+  if (s.duration_minutes) bits.push(`${s.duration_minutes} min`);
+  if (s.price_label) bits.push(s.price_label);
+  return bits;
+}
+
+function renderCentralCatalog() {
+  const grid = document.getElementById('centralCatalogGrid');
+  if (!grid) return;
+  const tab = ventasState.centralTab || 'servicios';
+  const q = (document.getElementById('centralSearch')?.value || '').trim().toLowerCase();
+  document.querySelectorAll('#centralCatalogTabs .central-tab').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.centralTab === tab)
+  );
+  const match = (txt) => !q || String(txt || '').toLowerCase().includes(q);
+  const action = (kind, id, label, primary = false) =>
+    `<button class="btn ${primary ? 'btn-primary' : 'btn-ghost'}" type="button" data-central-action="${kind}" data-central-id="${escapeHtml(id)}">${escapeHtml(label)}</button>`;
+
+  if (tab === 'servicios') {
+    const items = (ventasState.services || []).filter(s => match(`${centralServiceName(s)} ${s.descripcion || ''}`));
+    grid.innerHTML = items.length ? items.map(s => {
+      const id = s.id || s.slug || centralServiceName(s);
+      const off = s.is_active === false || s.activo === false;
+      const meta = centralServiceMeta(s).map(x => `<span>${escapeHtml(x)}</span>`).join('');
+      return `<article class="central-card ${off ? 'is-off' : ''}" data-central-card="service" data-central-id="${escapeHtml(id)}">
+        <div class="central-card-name">${escapeHtml(centralServiceName(s) || 'Servicio')}</div>
+        <div class="central-card-meta">${meta || '<span>Servicio</span>'}</div>
+        <div class="central-card-price">${escapeHtml(s.price_label || 'Precio a consultar')}</div>
+        <div class="central-card-actions">${action('book-service', id, 'Reservar', true)}</div>
+      </article>`;
+    }).join('') : vEmpty('S', 'Sin servicios', 'Crea servicios en la pestaña Servicios para poder reservar.');
+  } else if (tab === 'productos') {
+    const items = (ventasState.products || []).filter(p => match(`${p.name} ${p.description || ''}`));
+    grid.innerHTML = items.length ? items.map(p => {
+      const stock = p.stock === null || p.stock === undefined ? 'sin control de stock' : `${p.stock} en stock`;
+      const out = p.stock !== null && p.stock !== undefined && Number(p.stock) <= 0;
+      return `<article class="central-card ${p.is_active === false || out ? 'is-off' : ''}" data-central-card="product" data-central-id="${escapeHtml(p.id)}">
+        <div class="central-card-name">${escapeHtml(p.name || 'Producto')}</div>
+        <div class="central-card-meta"><span>${escapeHtml(stock)}</span>${p.is_active === false ? '<span>inactivo</span>' : ''}</div>
+        <div class="central-card-price">${eur(p.price_cents)}</div>
+        <div class="central-card-actions">${action('add-product', p.id, out ? 'Sin stock' : 'Añadir', true)}</div>
+      </article>`;
+    }).join('') : vEmpty('P', 'Sin productos', 'Crea productos para venderlos en mostrador o online.');
+  } else if (tab === 'bonos') {
+    const items = (ventasState.packages || []).filter(p => match(`${p.name} ${p.description || ''}`));
+    grid.innerHTML = items.length ? items.map(p => {
+      const sessions = (p.items || []).reduce((a, it) => a + (Number(it.qty) || 0), 0);
+      return `<article class="central-card ${p.is_active === false ? 'is-off' : ''}" data-central-card="package" data-central-id="${escapeHtml(p.id)}">
+        <div class="central-card-name">${escapeHtml(p.name || 'Bono')}</div>
+        <div class="central-card-meta"><span>${sessions || (p.items || []).length} sesion(es)</span><span>${p.validity_days || 365} dias</span></div>
+        <div class="central-card-price">${eur(p.price_cents)}</div>
+        <div class="central-card-actions">${action('sell-package', p.id, 'Vender bono', true)}</div>
+      </article>`;
+    }).join('') : vEmpty('B', 'Sin bonos', 'Crea bonos para vender sesiones por adelantado.');
+  } else {
+    // Tab Tarjetas: emitir + consulta rápida de saldo de las activas (lazy).
+    const issueCard = `<article class="central-card" data-central-card="gift">
+      <div class="central-card-name">Tarjeta regalo personalizada</div>
+      <div class="central-card-meta"><span>Saldo canjeable</span><span>Mostrador</span></div>
+      <div class="central-card-price">Importe libre</div>
+      <div class="central-card-actions">${action('issue-gift', 'gift', 'Emitir tarjeta', true)}</div>
+    </article>`;
+    if (ventasState.giftCards === null) {
+      ventasState.giftCards = 'loading';
+      api('/auth/gift-cards?status=active')
+        .then(r => { ventasState.giftCards = r.items || []; })
+        .catch(() => { ventasState.giftCards = []; })
+        .then(() => { if ((ventasState.centralTab || 'servicios') === 'tarjetas') renderCentralCatalog(); });
+    }
+    const cards = ventasState.giftCards === 'loading'
+      ? null
+      : ventasState.giftCards.filter(g => match(`${g.code} ${g.buyer_name || ''} ${g.recipient_name || ''} ${g.buyer_email || ''}`));
+    grid.innerHTML = issueCard + (cards === null
+      ? '<div class="panel-sub" style="align-self:center;">Cargando tarjetas activas…</div>'
+      : cards.length ? cards.slice(0, 18).map(g => {
+      const pct = g.initial_cents > 0 ? Math.max(0, Math.min(100, Math.round((g.balance_cents / g.initial_cents) * 100))) : 0;
+      const who = g.recipient_name || g.buyer_name || '';
+      return `<div class="vgift" style="min-height:132px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; position:relative; z-index:1;">
+          <span class="vgift-brand">🎁 Tarjeta regalo</span>
+          <span class="vgift-pill">${eur(g.balance_cents)}</span>
+        </div>
+        <div class="vgift-code" style="font-size:1.02rem; margin:12px 0 6px;">${escapeHtml(g.code)}</div>
+        <div class="vsell-bar"><i style="width:${pct}%"></i></div>
+        <div class="vgift-foot"><span>${escapeHtml(who || 'Sin asignar')}</span><span>${g.expires_at ? `caduca ${escapeHtml(String(g.expires_at).slice(0, 10))}` : ''}</span></div>
+      </div>`;
+    }).join('') : (q ? vEmpty('🎁', 'Sin resultados', 'Ninguna tarjeta activa coincide con la búsqueda.') : vEmpty('🎁', 'Sin tarjetas activas', 'Emite la primera: cobro hoy, visita asegurada mañana.')));
+  }
+
+  grid.querySelectorAll('[data-central-action]').forEach(btn => btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handleCentralAction(btn.dataset.centralAction, btn.dataset.centralId);
+  }));
+  grid.querySelectorAll('[data-central-card]').forEach(card => card.addEventListener('click', () => {
+    const kind = card.dataset.centralCard;
+    const id = card.dataset.centralId || '';
+    if (kind === 'service') handleCentralAction('book-service', id);
+    else if (kind === 'product') handleCentralAction('add-product', id);
+    else if (kind === 'package') handleCentralAction('sell-package', id);
+    else handleCentralAction('issue-gift', 'gift');
+  }));
+}
+
+function handleCentralAction(action, id) {
+  if (action === 'book-service') {
+    const svc = (ventasState.services || []).find(s => (s.id || s.slug || centralServiceName(s)) === id);
+    return centralOpenBooking(svc || null);
+  }
+  if (action === 'add-product') return centralAddProduct(id);
+  if (action === 'sell-package') {
+    const p = (ventasState.packages || []).find(x => x.id === id);
+    if (!p) return;
+    openPackagePanel(p);
+    const c = centralCustomer();
+    if (c.name) document.getElementById('packageBuyerName').value = c.name;
+    if (c.email) document.getElementById('packageBuyerEmail').value = c.email;
+    if (c.phone) document.getElementById('packageBuyerPhone').value = c.phone;
+    return;
+  }
+  if (action === 'issue-gift') return centralOpenGift();
+}
+
+function centralOpenBooking(service) {
+  const c = centralCustomer();
+  const opts = { nombre: c.name, email: c.email, telefono: c.phone };
+  if (service) opts.servicio = centralServiceName(service);
+  setTab('citas');
+  openNewBookingDrawer(opts).catch(e => toast(e.message, 'error'));
+}
+
+function centralAddProduct(productId) {
+  const p = (ventasState.products || []).find(x => x.id === productId);
+  if (!p || p.is_active === false) return;
+  if (p.stock !== null && p.stock !== undefined && Number(p.stock) <= 0) {
+    toast('Producto sin stock.', 'error');
+    return;
+  }
+  const row = ventasState.centralCart.find(x => x.product_id === productId);
+  const maxStock = p.stock === null || p.stock === undefined ? Infinity : Number(p.stock);
+  if (row && row.qty >= maxStock) {
+    toast('No hay más stock disponible para este producto.', 'error');
+    return;
+  }
+  if (row) row.qty += 1;
+  else ventasState.centralCart.push({ product_id: productId, qty: 1 });
+  renderCentralTicket();
+}
+
+function renderCentralTicket() {
+  const lines = document.getElementById('centralCartLines');
+  if (!lines) return;
+  const cart = ventasState.centralCart || [];
+  lines.innerHTML = cart.length ? cart.map((item, idx) => {
+    const p = (ventasState.products || []).find(x => x.id === item.product_id) || {};
+    return `<div class="central-line">
+      <div>
+        <div class="central-line-name">${escapeHtml(p.name || 'Producto')}</div>
+        <div class="central-line-sub">${item.qty} unidad${item.qty === 1 ? '' : 'es'} · ${eur(p.price_cents || 0)}</div>
+      </div>
+      <b>${eur((p.price_cents || 0) * item.qty)}</b>
+      <button type="button" data-central-rm="${idx}" title="Quitar">×</button>
+    </div>`;
+  }).join('') : '<div class="central-muted">Todavia no hay productos en el ticket.</div>';
+  lines.querySelectorAll('[data-central-rm]').forEach(btn => btn.addEventListener('click', () => {
+    ventasState.centralCart.splice(Number(btn.dataset.centralRm), 1);
+    renderCentralTicket();
+  }));
+  const total = cart.reduce((a, item) => {
+    const p = (ventasState.products || []).find(x => x.id === item.product_id);
+    return a + ((p?.price_cents || 0) * item.qty);
+  }, 0);
+  document.getElementById('centralCartTotal').textContent = eur(total);
+  document.getElementById('centralCartCharge').disabled = !cart.length;
+  document.getElementById('centralClearCart').disabled = !cart.length;
+}
+
+function centralChargeCart() {
+  if (!ventasState.centralCart.length) return;
+  const c = centralCustomer();
+  openPosCharge({
+    presetProducts: ventasState.centralCart.map(x => ({ product_id: x.product_id, qty: x.qty })),
+    customerName: c.name,
+    customerEmail: c.email,
+    onPaid: () => {
+      ventasState.centralCart = [];
+      loadVentasCentral();
+    },
+  });
+}
+
+function centralOpenGift() {
+  const c = centralCustomer();
+  document.getElementById('giftIssued').style.display = 'none';
+  document.getElementById('giftImporte').value = '';
+  document.getElementById('giftBuyer').value = c.name || '';
+  document.getElementById('giftRecipient').value = '';
+  document.getElementById('giftPanel').classList.add('open');
+  document.getElementById('giftOverlay').classList.add('open');
+}
+
+// ── Central: autocomplete de cliente (CRM) + activos (bonos/tarjetas) ──
+function centralSelectContact(c) {
+  ventasState.centralContact = c;
+  document.getElementById('centralCustomerName').value = c.name || '';
+  document.getElementById('centralCustomerEmail').value = c.email || '';
+  document.getElementById('centralCustomerPhone').value = c.phone || '';
+  document.getElementById('centralCustomerSug')?.classList.remove('open');
+  loadCentralAssets();
+}
+
+// Bonos activos y tarjetas con saldo del cliente identificado en el ticket.
+async function loadCentralAssets() {
+  const box = document.getElementById('centralAssets');
+  if (!box) return;
+  const c = centralCustomer();
+  const q = (c.email || c.phone || '').trim();
+  if (!q) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = '';
+  box.innerHTML = '<div class="central-assets-head"><span>Buscando bonos y tarjetas del cliente…</span></div>';
+  const ct = ventasState.centralContact;
+  try {
+    const [pk, gc] = await Promise.all([
+      api(`/auth/package-purchases?status=active&q=${encodeURIComponent(q)}`).catch(() => ({ items: [] })),
+      api(`/auth/gift-cards?status=active&q=${encodeURIComponent(q)}`).catch(() => ({ items: [] })),
+    ]);
+    if ((centralCustomer().email || centralCustomer().phone || '').trim() !== q) return; // el usuario cambió de cliente
+    const rows = [];
+    (pk.items || []).slice(0, 4).forEach(p => rows.push(
+      `<div class="central-asset">🎟 <b>${escapeHtml(p.package_name || 'Bono')}</b><span class="panel-sub" style="margin:0;">${p.remaining_total} sesion${p.remaining_total === 1 ? '' : 'es'}${p.expires_at ? ` · caduca ${escapeHtml(String(p.expires_at).slice(0, 10))}` : ''}</span></div>`
+    ));
+    (gc.items || []).slice(0, 4).forEach(g => rows.push(
+      `<div class="central-asset">🎁 <b style="font-family:'Courier New',monospace;">${escapeHtml(g.code)}</b><span class="panel-sub" style="margin:0;">${eur(g.balance_cents)} de saldo</span></div>`
+    ));
+    const fichaBtn = ct && ct.id
+      ? '<button class="btn btn-ghost" type="button" id="centralVerFicha" style="padding:3px 10px; font-size:.74rem;">Ver ficha</button>' : '';
+    box.innerHTML = `<div class="central-assets-head"><span>${rows.length ? 'Este cliente tiene saldo a favor:' : 'Sin bonos ni tarjetas activas.'}</span>${fichaBtn}</div>${rows.join('')}`;
+    if (ct && ct.id) document.getElementById('centralVerFicha')?.addEventListener('click', () => openClientePanel(ct.id));
+  } catch { box.style.display = 'none'; }
+}
+
+document.getElementById('centralCustomerName')?.addEventListener('input', () => {
+  ventasState.centralContact = null;
+  const pop = document.getElementById('centralCustomerSug');
+  const q = document.getElementById('centralCustomerName').value.trim();
+  clearTimeout(window.__centralAcT);
+  if (q.length < 2) { pop.classList.remove('open'); return; }
+  window.__centralAcT = setTimeout(async () => {
+    try {
+      const d = await api(`/auth/app/contacts?q=${encodeURIComponent(q)}&page_size=6`);
+      const items = d.items || [];
+      if (!items.length || document.getElementById('centralCustomerName').value.trim() !== q) { pop.classList.remove('open'); return; }
+      pop.innerHTML = items.map((c, i) =>
+        `<div class="central-ac-item" data-ac="${i}">
+          <span class="central-ac-name">${escapeHtml(c.name || c.email || c.phone || 'Cliente')}</span>
+          <span class="central-ac-sub">${escapeHtml([c.email, c.phone].filter(Boolean).join(' · ') || 'sin datos de contacto')}${c.bookings_count ? ` · ${c.bookings_count} cita${c.bookings_count === 1 ? '' : 's'}` : ''}</span>
+        </div>`).join('');
+      pop.classList.add('open');
+      pop.querySelectorAll('[data-ac]').forEach(el => el.addEventListener('click', () => centralSelectContact(items[Number(el.dataset.ac)])));
+    } catch { pop.classList.remove('open'); }
+  }, 220);
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.central-ac')) document.getElementById('centralCustomerSug')?.classList.remove('open');
+});
+['centralCustomerEmail', 'centralCustomerPhone'].forEach(id =>
+  document.getElementById(id)?.addEventListener('change', loadCentralAssets));
+
+document.querySelectorAll('#centralCatalogTabs .central-tab').forEach(btn => btn.addEventListener('click', () => {
+  ventasState.centralTab = btn.dataset.centralTab || 'servicios';
+  renderCentralCatalog();
+}));
+document.getElementById('centralSearch')?.addEventListener('input', () => {
+  clearTimeout(window.__centralSearchT);
+  window.__centralSearchT = setTimeout(renderCentralCatalog, 120);
+});
+document.getElementById('centralCartCharge')?.addEventListener('click', centralChargeCart);
+document.getElementById('centralClearCart')?.addEventListener('click', () => { ventasState.centralCart = []; renderCentralTicket(); });
+document.getElementById('centralNewBookingBtn')?.addEventListener('click', () => centralOpenBooking(null));
+document.getElementById('centralGiftBtn')?.addEventListener('click', centralOpenGift);
 
 async function loadVentasProductos() {
   const grid = document.getElementById('productosGrid');
@@ -7508,6 +9021,7 @@ async function loadVentasProductos() {
       }).join('')
       : vEmpty('🧾', 'Sin ventas todavía', 'Las ventas de productos aparecerán aquí.');
   } catch (e) { grid.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+  loadShopPublicConfig();
 }
 
 function openProductPanel(p) {
@@ -7595,7 +9109,10 @@ async function openPosCharge(opts = {}) {
   sel.innerHTML = '<option value="">Añadir producto…</option>' + posState.products
     .map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} · ${eur(p.price_cents)}</option>`).join('');
   document.getElementById('posProductQty').value = '1';
-  // Preset de producto (#1 desde la ficha de producto).
+  // Presets desde la central de mostrador (varios productos) o desde una ficha (uno).
+  (Array.isArray(opts.presetProducts) ? opts.presetProducts : []).forEach(item => {
+    if (item && item.product_id) posAddProduct(item.product_id, item.qty || 1);
+  });
   if (opts.presetProductId) posAddProduct(opts.presetProductId, opts.presetQty || 1);
   posRenderLines();
   document.getElementById('posBackdrop').classList.add('open');
@@ -7758,6 +9275,7 @@ async function loadVentasBonos() {
     }));
     await renderPurchases();
   } catch (e) { grid.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+  loadShopPublicConfig();
 }
 
 async function renderPurchases() {
@@ -7904,7 +9422,204 @@ async function renderGiftList() {
       catch (e) { toast(e.message, 'error'); }
     }));
   } catch (e) { list.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
+  loadGiftPublicConfig();
 }
+
+// --- Venta ONLINE de tarjetas regalo (config de la pagina publica /gift/{cliente}) ---
+async function loadGiftPublicConfig() {
+  const card = document.getElementById('giftPublicCard');
+  if (!card || card.dataset.loaded === '1') return;
+  try {
+    const cfg = await api('/auth/app/gift-cards-public');
+    card.dataset.loaded = '1';
+    document.getElementById('giftPubEnabled').checked = !!cfg.enabled;
+    document.getElementById('giftPubBody').style.display = cfg.enabled ? '' : 'none';
+    document.getElementById('giftPubAmounts').value = (cfg.suggested_amounts || []).map(c => Math.round(c / 100)).join(', ');
+    document.getElementById('giftPubMin').value = Math.round((cfg.min_cents || 0) / 100);
+    document.getElementById('giftPubMax').value = Math.round((cfg.max_cents || 0) / 100);
+    document.getElementById('giftPubValidity').value = cfg.validity_days || 0;
+    document.getElementById('giftPubIntro').value = cfg.intro_text || '';
+    document.getElementById('giftPubKnowledge').value = cfg.assistant_knowledge || '';
+    renderGiftPublicStatus(cfg);
+    const soG = document.getElementById('soLinkGift');
+    if (soG && cfg.public_url) {
+      soG.href = cfg.public_url;
+      soG.classList.toggle('is-off', !cfg.available);
+    }
+  } catch (e) { /* sin permiso u error: la tarjeta queda sin cargar */ }
+}
+function renderGiftPublicStatus(cfg) {
+  paintOnlineChannel('giftPub', {
+    available: cfg.available, enabled: cfg.enabled, stripeReady: cfg.stripe_ready,
+    publicUrl: cfg.public_url, emptyMsg: 'Activada, pero aún no se puede emitir.',
+  });
+}
+document.getElementById('giftPubEnabled').addEventListener('change', function () {
+  document.getElementById('giftPubBody').style.display = this.checked ? '' : 'none';
+});
+document.getElementById('giftPubSave').addEventListener('click', async () => {
+  try {
+    const amounts = document.getElementById('giftPubAmounts').value
+      .split(',').map(s => Math.round(parseFloat(s.trim()) * 100)).filter(n => n > 0);
+    const cfg = await api('/auth/app/gift-cards-public', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enabled: document.getElementById('giftPubEnabled').checked,
+        suggested_amounts: amounts,
+        min_cents: Math.round((parseFloat(document.getElementById('giftPubMin').value) || 0) * 100),
+        max_cents: Math.round((parseFloat(document.getElementById('giftPubMax').value) || 0) * 100),
+        validity_days: parseInt(document.getElementById('giftPubValidity').value, 10) || 0,
+        intro_text: document.getElementById('giftPubIntro').value.trim(),
+        assistant_knowledge: document.getElementById('giftPubKnowledge').value.trim(),
+      }),
+    });
+    renderGiftPublicStatus(cfg);
+    toast('Guardado', 'ok');
+  } catch (e) { toast(e.message, 'error'); }
+});
+
+// --- Reservas online: enlace publico del widget/demo como central de reservas ---
+function renderBookingPublicStatus() {
+  const pill = document.getElementById('bookingPubPill');
+  if (!pill) return;
+  const link = document.getElementById('bookingPubLink');
+  const urlEl = document.getElementById('bookingPubUrl');
+  const note = document.getElementById('bookingPubNote');
+  const copyBtn = document.getElementById('bookingPubCopy');
+  const openBtn = document.getElementById('bookingPubOpen');
+  const topLink = document.getElementById('soLinkReservas');
+  const base = (state.api_base_url || window.location.origin || '').replace(/\/$/, '');
+  const publicUrl = state.central_url || (state.cliente_id ? `${base}/central/${encodeURIComponent(state.cliente_id)}` : '');
+  const enabled = state.bookingEnabled !== false && !!publicUrl;
+  if (link) link.style.display = 'none';
+  if (note) note.style.display = 'none';
+  if (enabled) {
+    pill.className = 'so-pill live';
+    pill.textContent = '● En vivo';
+    if (urlEl) { urlEl.textContent = publicUrl; urlEl.title = publicUrl; }
+    if (openBtn) openBtn.href = publicUrl;
+    if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(publicUrl).then(() => toast('Enlace copiado', 'ok'));
+    if (link) link.style.display = 'flex';
+    if (topLink) { topLink.href = publicUrl; topLink.classList.remove('is-off'); }
+  } else {
+    pill.className = 'so-pill warn';
+    pill.textContent = '● Agenda desactivada';
+    if (note) { note.textContent = 'Activa las citas para publicar la central pública.'; note.style.display = ''; }
+    if (topLink) topLink.classList.add('is-off');
+  }
+}
+document.getElementById('bookingPubGoCitas')?.addEventListener('click', () => setTab('citas'));
+
+// --- Central online (bonos + productos): config compartida /auth/app/shop-public ---
+async function loadShopPublicConfig() {
+  const pkgCard = document.getElementById('shopPkgCard');
+  const prodCard = document.getElementById('shopProdCard');
+  if (!pkgCard && !prodCard) return;
+  if ((pkgCard || prodCard).dataset.shopLoaded === '1') return;
+  try {
+    const cfg = await api('/auth/app/shop-public');
+    (pkgCard || prodCard).dataset.shopLoaded = '1';
+    if (pkgCard) {
+      document.getElementById('shopPkgEnabled').checked = !!cfg.enabled_packages;
+      document.getElementById('shopPkgBody').style.display = cfg.enabled_packages ? '' : 'none';
+      document.getElementById('shopIntro').value = cfg.intro_text || '';
+      const ac = cfg.accent_color || '';
+      document.getElementById('shopAccent').value = ac;
+      if (ac) document.getElementById('shopAccentPick').value = ac;
+    }
+    if (prodCard) {
+      document.getElementById('shopProdEnabled').checked = !!cfg.enabled_products;
+      document.getElementById('shopProdBody').style.display = cfg.enabled_products ? '' : 'none';
+      document.getElementById('shopPickupNote').value = cfg.pickup_note || '';
+    }
+    renderShopPublicStatus(cfg);
+    const soT = document.getElementById('soLinkTienda');
+    if (soT && cfg.public_url) {
+      soT.href = cfg.public_url;
+      soT.classList.toggle('is-off', !(cfg.available_packages || cfg.available_products));
+    }
+  } catch (e) { /* sin permiso u error: las tarjetas quedan sin cargar */ }
+}
+// Pinta el estado de un canal online: pill (cabecera) + linkbox copiable + nota de aviso.
+function paintOnlineChannel(prefix, opts) {
+  const pill = document.getElementById(prefix + 'Pill');
+  const link = document.getElementById(prefix + 'Link');
+  const url = document.getElementById(prefix + 'Url');
+  const note = document.getElementById(prefix + 'Note');
+  const copyBtn = document.getElementById(prefix + 'Copy');
+  const openBtn = document.getElementById(prefix + 'Open');
+  if (!pill) return;
+  const setPill = (cls, txt) => { pill.className = 'so-pill ' + cls; pill.textContent = txt; };
+  if (link) link.style.display = 'none';
+  if (note) note.style.display = 'none';
+  if (opts.available) {
+    setPill('live', '● En vivo');
+    if (link && url && opts.publicUrl) {
+      url.textContent = opts.publicUrl; url.title = opts.publicUrl;
+      openBtn.href = opts.publicUrl;
+      copyBtn.onclick = () => navigator.clipboard.writeText(opts.publicUrl).then(() => toast('Enlace copiado', 'ok'));
+      link.style.display = 'flex';
+    }
+  } else if (opts.enabled && !opts.stripeReady) {
+    setPill('warn', '● Falta Stripe');
+    if (note) { note.innerHTML = '⚠ Conecta Stripe en la pestaña <b>Pagos</b> para poder cobrar.'; note.style.display = ''; }
+  } else if (opts.enabled) {
+    setPill('warn', '● Sin catálogo');
+    if (note) { note.textContent = '⚠ ' + (opts.emptyMsg || 'Activada, pero aún no hay nada que vender.'); note.style.display = ''; }
+  } else {
+    setPill('off', '○ Desactivada');
+  }
+}
+function renderShopPublicStatus(cfg) {
+  // Bonos y productos apuntan a paginas dedicadas (?solo=), cada una con lo suyo.
+  const base = cfg.public_url || '';
+  paintOnlineChannel('shopPkg', {
+    available: cfg.available_packages, enabled: cfg.enabled_packages, stripeReady: cfg.stripe_ready,
+    publicUrl: base ? base + '?solo=bonos' : '', emptyMsg: 'No hay bonos activos en el catálogo todavía.',
+  });
+  paintOnlineChannel('shopProd', {
+    available: cfg.available_products, enabled: cfg.enabled_products, stripeReady: cfg.stripe_ready,
+    publicUrl: base ? base + '?solo=productos' : '', emptyMsg: 'No hay productos activos con stock todavía.',
+  });
+}
+async function saveShopPublic(fields) {
+  const cfg = await api('/auth/app/shop-public', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fields),
+  });
+  renderShopPublicStatus(cfg);
+  toast('Guardado', 'ok');
+}
+document.getElementById('shopPkgEnabled').addEventListener('change', function () {
+  document.getElementById('shopPkgBody').style.display = this.checked ? '' : 'none';
+});
+document.getElementById('shopProdEnabled').addEventListener('change', function () {
+  document.getElementById('shopProdBody').style.display = this.checked ? '' : 'none';
+});
+(function () {
+  const pick = document.getElementById('shopAccentPick');
+  const txt = document.getElementById('shopAccent');
+  if (pick && txt) {
+    pick.addEventListener('input', () => { txt.value = pick.value; });
+    txt.addEventListener('input', () => { const v = txt.value.trim(); if (/^#[0-9a-fA-F]{6}$/.test(v)) pick.value = v; });
+  }
+})();
+document.getElementById('shopPkgSave').addEventListener('click', () => {
+  saveShopPublic({
+    enabled_packages: document.getElementById('shopPkgEnabled').checked,
+    intro_text: document.getElementById('shopIntro').value.trim(),
+  }).catch(e => toast(e.message, 'error'));
+});
+document.getElementById('shopAccentSave').addEventListener('click', () => {
+  saveShopPublic({ accent_color: document.getElementById('shopAccent').value.trim() })
+    .catch(e => toast(e.message, 'error'));
+});
+document.getElementById('shopProdSave').addEventListener('click', () => {
+  saveShopPublic({
+    enabled_products: document.getElementById('shopProdEnabled').checked,
+    pickup_note: document.getElementById('shopPickupNote').value.trim(),
+  }).catch(e => toast(e.message, 'error'));
+});
+
 document.getElementById('giftSearch').addEventListener('input', () => { clearTimeout(window.__gqT); window.__gqT = setTimeout(renderGiftList, 300); });
 document.getElementById('giftNewBtn').addEventListener('click', () => {
   document.getElementById('giftIssued').style.display = 'none';
@@ -8804,10 +10519,11 @@ async function openClienteFromBooking(b) {
 }
 
 // Modal genérico reutilizable: devuelve el wrapper (con [data-vm-close] ya enganchado).
-function vModal(innerHtml, { title = '', maxw = 420 } = {}) {
+function vModal(innerHtml, { title = '', maxw = 420, className = '' } = {}) {
   const wrap = document.createElement('div');
   wrap.style.cssText = 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(2,8,20,.7);backdrop-filter:blur(4px);';
-  wrap.innerHTML = `<div class="panel-card" style="max-width:${maxw}px;width:100%;max-height:88vh;overflow:auto;">
+  const panelClass = className ? `panel-card ${escapeHtml(className)}` : 'panel-card';
+  wrap.innerHTML = `<div class="${panelClass}" style="max-width:${maxw}px;width:100%;max-height:88vh;overflow:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;">
       <h3 style="margin:0;font-family:var(--font-title);font-size:1.05rem;">${escapeHtml(title)}</h3>
       <button class="btn btn-ghost" data-vm-close type="button">Cerrar</button>
@@ -8997,6 +10713,14 @@ function setHorarioBreaks(data){
   renderHorarioBreaks();
 }
 
+function updateHorarioBreaksHint(profId) {
+  const hint = document.getElementById('horBreaksHint');
+  if (!hint) return;
+  hint.textContent = profId
+    ? 'Descansos propios de este profesional. Se suman a los descansos del horario general del negocio.'
+    : 'Los descansos del horario general (p. ej. parada de comida) cierran la agenda de todo el equipo. Para descansos escalonados, configúralos por profesional.';
+}
+
 async function loadHorarios(selectedProfId) {
   const profId = selectedProfId ?? (document.getElementById('horProf')?.value || '');
   try {
@@ -9007,6 +10731,7 @@ async function loadHorarios(selectedProfId) {
     if (profId && emps.some(emp => emp.id === profId)) document.getElementById('horProf').value = profId;
     fillHorarioForm(data);
     renderBloqueos(data.blocks || []);
+    updateHorarioBreaksHint(profId);
   } catch(e) { toast(e.message, 'error'); }
 }
 
@@ -9040,7 +10765,9 @@ function renderBloqueos(blocks) {
     const horaTxt = (hIni && hFin) ? ` (${escapeHtml(hIni)}–${escapeHtml(hFin)})` : '';
     const row = document.createElement('div'); row.className = 'chat-row';
     row.style.cssText = 'padding:10px 14px; display:flex; align-items:center; gap:10px;';
-    row.innerHTML = `<div style="flex:1;"><b>${escapeHtml(start)} – ${escapeHtml(end)}${horaTxt}</b> <span class="panel-sub" style="margin:0;">${escapeHtml(reason)}</span></div><button class="btn btn-ghost" data-block-id="${escapeHtml(id)}" style="padding:4px 10px; font-size:0.78rem;">Eliminar</button>`;
+    const profSel = document.getElementById('horProf')?.value || '';
+    const generalTag = (profSel && !employeeId) ? ' <span class="badge" style="font-size:0.7rem;">Todo el negocio</span>' : '';
+    row.innerHTML = `<div style="flex:1;"><b>${escapeHtml(start)} – ${escapeHtml(end)}${horaTxt}</b>${generalTag} <span class="panel-sub" style="margin:0;">${escapeHtml(reason)}</span></div><button class="btn btn-ghost" data-block-id="${escapeHtml(id)}" style="padding:4px 10px; font-size:0.78rem;">Eliminar</button>`;
     row.querySelector('[data-block-id]').addEventListener('click', async () => {
       const url = employeeId
         ? `/auth/employees/${encodeURIComponent(employeeId)}/blocks/${encodeURIComponent(id)}`
@@ -9078,9 +10805,6 @@ function closeHorarioConflictModal(){
   document.getElementById('horConflictDrawer')?.classList.remove('open');
   document.getElementById('horConflictOverlay')?.classList.remove('open');
 }
-// El flujo de guardado antiguo llamaba a esta funcion; la mantenemos como alias.
-function clearHorarioConflictNotice(){ closeHorarioConflictModal(); }
-
 async function cancelConflictBooking(booking){
   const bid = booking.booking_id || booking.id;
   if (!bid) return;
@@ -9178,7 +10902,7 @@ document.getElementById('horConflictRetry')?.addEventListener('click', () => sav
 document.getElementById('horProf').addEventListener('change', async () => {
   const profId = document.getElementById('horProf').value;
   const url = profId ? `/auth/schedule/employee/${encodeURIComponent(profId)}` : '/auth/schedule';
-  try { const data = await api(url); fillHorarioForm(data); renderBloqueos(data.blocks||[]); }
+  try { const data = await api(url); fillHorarioForm(data); renderBloqueos(data.blocks||[]); updateHorarioBreaksHint(profId); }
   catch(e) { toast(e.message, 'error'); }
 });
 
@@ -9207,17 +10931,17 @@ document.getElementById('horBlockAddBtn').addEventListener('click', async () => 
 });
 
 // ── MENSAJES ──────────────────────────────────────────────────────────
+// `inFlow`: el on/off de este aviso se gestiona en el recorrido (Seguimiento), no aquí.
+// Para esos, la tarjeta de texto solo edita el contenido (sin checkbox de activación).
 const MSG_TEMPLATES = [
-  { key:'confirmacion', label:'Confirmación de cita', channels:true },
-  { key:'reminder_24h', label:'Recordatorio 24 horas antes', channels:true },
-  { key:'reminder_2h', label:'Recordatorio 2 horas antes', channels:true },
-  { key:'cancelled', label:'Cita cancelada', channels:true },
-  { key:'rescheduled', label:'Cita reprogramada', channels:true },
+  { key:'confirmacion', label:'Confirmación de cita', inFlow:true },
+  { key:'reminder_24h', label:'Recordatorio 24 horas antes', inFlow:true },
+  { key:'reminder_2h', label:'Recordatorio 2 horas antes', inFlow:true },
+  { key:'cancelled', label:'Cita cancelada' },
+  { key:'rescheduled', label:'Cita reprogramada' },
 ];
 let mensajesData = {};
 let mensajesEnabled = {};
-let mensajesChannels = {};
-let mensajesChannelAvailability = {};
 let mensajesSchedule = {};
 
 async function loadMensajes() {
@@ -9225,16 +10949,17 @@ async function loadMensajes() {
     const data = await api('/auth/schedule');
     mensajesData = data.message_templates || {};
     mensajesEnabled = data.message_template_enabled || {};
-    mensajesChannels = data.message_template_channels || {};
-    mensajesChannelAvailability = data.reminder_channel_availability || {};
     mensajesSchedule = data || {};
     renderMensajesAccordions();
   } catch(e) { toast(e.message, 'error'); }
 }
 
-// ── SEGUIMIENTO (escalera de confirmación) ──────────────────────────────
+// ── SEGUIMIENTO (recorrido del cliente) ──────────────────────────────
+// Modelo: una sola tira de canales globales (email/whatsapp/sms) para TODOS los avisos +
+// un on/off por paso. Sin selección de canal por aviso.
 let followUpState = null;        // último GET /auth/app/follow-up
-let fuChannelEdits = {};         // kind -> {email,whatsapp,sms} ediciones locales
+let fuGlobalChannels = null;     // {email,whatsapp,sms} edición local de canales globales
+let fuStepEnabled = {};          // key -> bool: on/off por paso editado localmente
 const FU_CH_ICON = { email:'✉', whatsapp:'🟢', sms:'💬', call:'📞' };
 
 async function loadFollowUp() {
@@ -9242,18 +10967,21 @@ async function loadFollowUp() {
   try {
     const data = await api('/auth/app/follow-up');
     followUpState = data;
-    fuChannelEdits = {};
+    fuGlobalChannels = null;
+    fuStepEnabled = {};
     renderFollowUp(data);
   } catch (e) {}
 }
 
-function fuEffectiveChannels(kind) {
-  if (fuChannelEdits[kind]) return fuChannelEdits[kind];
-  const step = (followUpState && followUpState.steps || []).find(s => s.key === kind);
-  const out = {};
-  ((step && step.channels) || []).forEach(c => { out[c.channel] = c.active; });
+// Canales globales efectivos (edición local si la hay, si no el estado del backend).
+function fuChannels() {
+  if (fuGlobalChannels) return fuGlobalChannels;
+  const out = { email:false, whatsapp:false, sms:false };
+  ((followUpState && followUpState.channels) || []).forEach(c => { out[c.channel] = c.active; });
   return out;
 }
+function fuAnyChannel() { const c = fuChannels(); return !!(c.email || c.whatsapp || c.sms); }
+function fuStepOn(key, fallback) { return (key in fuStepEnabled) ? fuStepEnabled[key] : fallback; }
 
 function fuNormalizePriority(order) {
   const allowed = ['email', 'whatsapp', 'sms'];
@@ -9296,6 +11024,40 @@ function fuToggleCallBlock() {
   const cb = document.getElementById('fuCallEnabled');
   const on = cb.checked && !cb.disabled;
   document.getElementById('fuCallBlock').classList.toggle('fu-disabled', !on);
+  const badge = document.getElementById('fuCallStateBadge');
+  if (badge) {
+    badge.textContent = cb.disabled ? 'No disponible' : (on ? 'Activada' : 'Desactivada');
+    badge.className = 'fu-state ' + (cb.disabled ? 'fu-state-plan' : (on ? 'fu-state-on' : 'fu-state-off'));
+  }
+}
+
+// Tira de canales globales (email/whatsapp/sms) que vale para todos los avisos.
+function fuRenderGlobalChannels() {
+  const wrap = document.getElementById('fuGlobalChannels'); if (!wrap) return;
+  const chans = (followUpState && followUpState.channels) || [];
+  const cur = fuChannels();
+  wrap.innerHTML = chans.map(c => {
+    const on = !!cur[c.channel];
+    const cls = 'fu-gchip' + (on ? ' fu-on' : '') + (c.locked ? ' fu-locked' : '');
+    const lock = (c.locked && c.plan_needed) ? `<span class="fu-lock-badge">${escapeHtml(c.plan_needed)}</span>` : '';
+    const rec = (c.recommended && !c.locked && !on) ? `<span class="fu-rec-badge">Recomendado</span>` : '';
+    const title = c.locked ? escapeHtml(c.reason || '') : '';
+    return `<button type="button" class="${cls}" data-gchannel="${c.channel}" title="${title}">
+      <span class="fu-ico">${FU_CH_ICON[c.channel]||''}</span>${escapeHtml(c.label)} ${lock}${rec}</button>`;
+  }).join('');
+  wrap.querySelectorAll('[data-gchannel]').forEach(btn => btn.addEventListener('click', () => {
+    if (btn.classList.contains('fu-locked')) { toast('Disponible en un plan superior.', 'error'); return; }
+    const ch = btn.dataset.gchannel, c = fuChannels();
+    fuGlobalChannels = Object.assign({ email:false, whatsapp:false, sms:false }, c, { [ch]: !c[ch] });
+    fuRenderGlobalChannels(); fuUpdateGlobalNote(); renderFuTimeline();
+  }));
+}
+
+function fuUpdateGlobalNote() {
+  const el = document.getElementById('fuGlobalNote'); if (!el) return;
+  const any = fuAnyChannel();
+  el.textContent = any ? '' : '⚠ Sin ningún canal activo no se enviará ningún recordatorio ni confirmación.';
+  el.style.color = any ? '' : '#f59e0b';
 }
 
 function renderFollowUp(data) {
@@ -9306,70 +11068,78 @@ function renderFollowUp(data) {
   const callOn = document.getElementById('fuCallEnabled');
   callOn.checked = !!data.call_enabled;
   callOn.disabled = !data.voice_available;
-  document.getElementById('fuCallLock').style.display = data.voice_available ? 'none' : 'inline-block';
   document.getElementById('fuCallHours').value = data.call_hours_before != null ? data.call_hours_before : 5;
   document.getElementById('fuQuietStart').value = data.quiet_start || '21:00';
   document.getElementById('fuQuietEnd').value = data.quiet_end || '09:00';
   document.getElementById('fuDailyCap').value = data.daily_call_cap != null ? data.daily_call_cap : 30;
   fuToggleCallBlock();
+  fuRenderGlobalChannels();
+  fuUpdateGlobalNote();
+  renderFuTimeline();
+}
 
-  const tl = document.getElementById('fuTimeline');
+// Pinta el recorrido (pasos con su on/off). Se re-pinta al tocar un canal global o un toggle
+// para reflejar al vuelo qué pasos se enviarán de verdad.
+function renderFuTimeline() {
+  const data = followUpState || {};
+  const tl = document.getElementById('fuTimeline'); if (!tl) return;
+  const anyCh = fuAnyChannel();
   tl.innerHTML = (data.steps || []).map(step => {
-    const isReview = step.key === 'review';
-    const anyActive = (step.channels || []).some(c => c.active);
-    const chips = (step.channels || []).map(c => {
-      const cls = 'fu-chip' + (c.active ? ' fu-on' : '') + (c.locked ? ' fu-locked' : '') + (c.recommended ? ' fu-rec' : '');
-      const lockBadge = c.locked && c.plan_needed ? `<span class="fu-lock-badge">${escapeHtml(c.plan_needed)}</span>` : '';
-      const recBadge = (c.recommended && !c.locked) ? `<span class="fu-rec-badge">Recomendado</span>` : '';
-      const title = c.locked ? escapeHtml(c.reason || ('Disponible en ' + c.plan_needed)) : (c.recommended ? 'Recomendado para reducir ausencias' : '');
-      return `<label class="${cls}" title="${title}" data-kind="${step.key}" data-channel="${c.channel}">
-        <span class="fu-ico">${FU_CH_ICON[c.channel]||''}</span>${escapeHtml(c.label)} ${lockBadge}${recBadge}</label>`;
-    }).join('');
-    const isOtp = step.key === 'voice_otp';
-    const muted = isReview ? !step.enabled : !anyActive;
-    const dot = isReview ? '★' : (isOtp ? '🔒' : (step.when.replace(/[^0-9]/g,'') || '✓'));
-    const otpBadge = !data.voice_available ? 'Requiere voz' : (anyActive ? 'Automático' : 'Desactivado');
-    let tagBadge;
+    const kind = step.kind || 'message';
+    const isReview = kind === 'review', isCall = kind === 'call', isOtp = kind === 'otp';
+    const locked = !!step.locked && (isCall || isOtp);
+    const on = fuStepOn(step.key, !!step.enabled) && !locked;
+    let effective;
+    if (isCall) effective = on && step.available;
+    else if (isReview) effective = on && !step.needs_setup && anyCh;
+    else effective = on && anyCh;
+    const dot = isReview ? '★' : (isOtp ? '🔒' : (isCall ? '📞' : (String(step.when).replace(/[^0-9]/g,'') || '✓')));
+    let badge;
+    if (locked) badge = `<span class="fu-state fu-state-plan">${escapeHtml(step.plan_needed || 'Plan superior')}</span>`;
+    else if (isReview && step.needs_setup) badge = `<span class="fu-state fu-state-setup">Falta el enlace</span>`;
+    else if (effective) badge = `<span class="fu-state fu-state-on">Activo</span>`;
+    else badge = `<span class="fu-state fu-state-off">Desactivado</span>`;
+
+    let control;
     if (isReview) {
-      tagBadge = step.needs_setup
-        ? `<span class="fu-state fu-state-setup">Falta el enlace</span>`
-        : (step.enabled ? `<span class="fu-state fu-state-on">Activo</span>` : `<span class="fu-state fu-state-off">Desactivado</span>`);
-    } else if (isOtp) {
-      const ocls = !data.voice_available ? 'fu-state-plan' : (anyActive ? 'fu-state-on' : 'fu-state-off');
-      tagBadge = `<span class="fu-state ${ocls}">${otpBadge}</span>`;
+      control = `<button type="button" class="fu-review-cta" data-fu-review-cta>${step.needs_setup ? 'Configurar reseñas' : 'Editar reseñas'} ⌄</button>`;
     } else {
-      tagBadge = anyActive
-        ? `<span class="fu-state fu-state-on">Activo</span>`
-        : `<span class="fu-state fu-state-off">Desactivado</span>`;
+      control = `<label class="fu-toggle ${locked ? 'fu-toggle-locked' : ''}" title="${locked ? escapeHtml(step.reason || '') : ''}">
+        <input type="checkbox" class="fu-step-toggle" data-fu-step="${step.key}" ${on ? 'checked' : ''} ${locked ? 'disabled' : ''} />
+        <span class="fu-toggle-track"><span class="fu-toggle-thumb"></span></span>
+        <span class="fu-toggle-label">${on ? 'Activado' : 'Desactivado'}</span>
+      </label>`;
     }
-    const cta = isReview ? `<button type="button" class="fu-review-cta" data-fu-review-cta>${step.needs_setup ? 'Configurar reseñas' : 'Editar reseñas'} ⌄</button>` : '';
-    return `<div class="fu-step ${muted?'fu-muted':''} ${isReview?'fu-step-review':''}">
+    const warn = (!isCall && !isReview && on && !anyCh)
+      ? `<div class="fu-step-warn">Enciende un canal arriba para que este aviso se envíe.</div>` : '';
+    const callWarn = (isCall && on && !step.available) ? `<div class="fu-step-warn">${escapeHtml(step.reason || '')}</div>` : '';
+    const callCfg = isCall ? `<button type="button" class="btn btn-ghost" data-fu-call-settings>Ajustes ⌄</button>` : '';
+    return `<div class="fu-step ${effective ? '' : 'fu-muted'} ${isReview ? 'fu-step-review' : ''}">
       <div class="fu-step-rail"><div class="fu-dot">${dot}</div><div class="fu-line"></div></div>
       <div class="fu-step-body">
-        <div class="fu-step-head"><span class="fu-step-when">${escapeHtml(step.when)}</span>${tagBadge}</div>
+        <div class="fu-step-head"><span class="fu-step-when">${escapeHtml(step.when)}</span>${badge}</div>
         <div class="fu-step-title">${escapeHtml(step.label)}</div>
         <div class="fu-step-note">${escapeHtml(step.note||'')}</div>
-        <div class="fu-chips">${chips}</div>
-        <div style="margin-top:8px;"><button type="button" class="btn btn-ghost fu-test-btn" data-fu-test="${step.key}" style="padding:5px 12px; font-size:0.8rem;">▶ Probar esta fase</button></div>
-        ${cta}
+        ${warn}${callWarn}
+        <div class="fu-step-actions">
+          ${control}
+          <button type="button" class="btn btn-ghost fu-test-btn" data-fu-test="${step.key}">▶ Probar</button>
+          ${callCfg}
+        </div>
       </div>
     </div>`;
   }).join('');
 
-  tl.querySelectorAll('.fu-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const kind = chip.dataset.kind, channel = chip.dataset.channel;
-      if (kind === 'review') { fuJumpToReviewCard(); return; }
-      if (channel === 'call') { document.getElementById('fuCallEnabled').focus(); return; }
-      if (chip.classList.contains('fu-locked')) { toast('Disponible en un plan superior.', 'error'); return; }
-      const cur = fuEffectiveChannels(kind);
-      fuChannelEdits[kind] = Object.assign({}, cur, { [channel]: !cur[channel] });
-      chip.classList.toggle('fu-on');
-      const stepEl = chip.closest('.fu-step');
-      if (stepEl) stepEl.classList.toggle('fu-muted', !stepEl.querySelector('.fu-chip.fu-on'));
-    });
-  });
+  tl.querySelectorAll('.fu-step-toggle').forEach(cb => cb.addEventListener('change', () => {
+    const key = cb.dataset.fuStep;
+    fuStepEnabled[key] = cb.checked;
+    if (key === 'call') { document.getElementById('fuCallEnabled').checked = cb.checked; fuToggleCallBlock(); }
+    renderFuTimeline();
+  }));
   tl.querySelectorAll('[data-fu-review-cta]').forEach(b => b.addEventListener('click', fuJumpToReviewCard));
+  tl.querySelectorAll('[data-fu-call-settings]').forEach(b => b.addEventListener('click', () => {
+    document.getElementById('fuCallBlock')?.scrollIntoView({ behavior:'smooth', block:'center' });
+  }));
   tl.querySelectorAll('[data-fu-test]').forEach(b => b.addEventListener('click', () => {
     const st = ((followUpState && followUpState.steps) || []).find(s => s.key === b.dataset.fuTest);
     if (st) openFollowUpTest(st);
@@ -9404,8 +11174,8 @@ function openFollowUpTest(step) {
     const o = btn.textContent; btn.disabled = true; btn.textContent = 'Probando…';
     out.innerHTML = '<div class="panel-sub">Ejecutando…</div>';
     try {
+      // Los canales los resuelve el backend (canales globales). Solo enviamos a quién probar.
       const payload = { step: step.key, email, phone };
-      if (!isCall && step.key !== 'review') payload.channels = fuEffectiveChannels(step.key);
       const r = await api('/auth/app/follow-up/test', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
       const results = r.results || [];
       const rows = results.map(res => {
@@ -9421,7 +11191,7 @@ function openFollowUpTest(step) {
       if (!results.length) {
         banner = '';
       } else if (activeN === 0) {
-        banner = `<div class="panel-sub" style="color:#f59e0b; margin:0 0 8px;">⚠ Ningún canal activo en esta fase. Enciende los canales que quieras en la escalera y pulsa “Guardar”.</div>`;
+        banner = `<div class="panel-sub" style="color:#f59e0b; margin:0 0 8px;">⚠ Ningún canal activo. Enciende un canal en “Canales de aviso” y pulsa “Guardar”.</div>`;
       } else if (sentN === 0) {
         banner = `<div class="panel-sub" style="color:var(--danger); margin:0 0 8px;">✗ No se entregó por ningún canal activo. Revisa el motivo de cada canal abajo.</div>`;
       } else {
@@ -9452,25 +11222,30 @@ document.getElementById('fuCallEnabled')?.addEventListener('change', fuToggleCal
 });
 
 document.getElementById('fuSaveBtn')?.addEventListener('click', async () => {
-  const channels = {};
-  (followUpState && followUpState.steps || []).forEach(step => {
-    if (step.key === 'call' || step.key === 'review' || step.key === 'voice_otp') return;  // call/review/otp se guardan aparte
-    channels[step.key] = fuEffectiveChannels(step.key);
+  const steps = (followUpState && followUpState.steps) || [];
+  // On/off de los avisos temporizados (la reseña se gestiona en su propia tarjeta).
+  const steps_enabled = {};
+  ['confirmed', 'reminder_24h', 'reminder_2h'].forEach(k => {
+    const st = steps.find(s => s.key === k);
+    if (st) steps_enabled[k] = fuStepOn(k, !!st.enabled);
   });
-  const hasOtp = (followUpState && followUpState.steps || []).some(s => s.key === 'voice_otp');
   const callCb = document.getElementById('fuCallEnabled');
+  const callStep = steps.find(s => s.key === 'call');
+  const callOn = callStep ? fuStepOn('call', !!callStep.enabled) : (callCb.checked && !callCb.disabled);
+  const otpStep = steps.find(s => s.key === 'voice_otp');
   const body = {
+    channels: fuChannels(),
+    steps_enabled,
     email_confirm_button: document.getElementById('fuEmailConfirm').checked,
     suppress_2h_if_confirmed: document.getElementById('fuSuppress2h').checked,
-    call_enabled: callCb.checked && !callCb.disabled,
+    call_enabled: callOn && !callCb.disabled,
     call_hours_before: parseInt(document.getElementById('fuCallHours').value, 10) || 5,
     quiet_start: document.getElementById('fuQuietStart').value || '21:00',
     quiet_end: document.getElementById('fuQuietEnd').value || '09:00',
     daily_call_cap: parseInt(document.getElementById('fuDailyCap').value, 10) || 0,
     delivery_priority: fuDeliveryPriority(),
-    message_template_channels: channels,
   };
-  if (hasOtp) body.voice_otp_channels = fuEffectiveChannels('voice_otp');
+  if (otpStep) body.voice_otp_enabled = fuStepOn('voice_otp', !!otpStep.enabled);
   try {
     await api('/auth/app/follow-up', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
     toast('Seguimiento guardado.', 'success');
@@ -9504,7 +11279,6 @@ function fuShowPreview(r) {
 
 /* ===== Seguimiento post-cita: petición de reseña ===== */
 let reviewState = null;
-let rvChannelEdits = null;
 const RV_CH_ICON = { email:'✉', whatsapp:'🟢', sms:'💬' };
 
 async function loadReviews() {
@@ -9512,13 +11286,12 @@ async function loadReviews() {
   try {
     const data = await api('/auth/app/reviews');
     reviewState = data;
-    rvChannelEdits = null;
     renderReviews(data);
   } catch (e) {}
 }
 
 function rvActiveChannels() {
-  if (rvChannelEdits) return rvChannelEdits;
+  // Solo lectura: la reseña usa los canales GLOBALES del Seguimiento (no tiene selección propia).
   const out = {};
   ((reviewState && reviewState.channels) || []).forEach(c => { out[c.channel] = c.active; });
   return out;
@@ -9542,24 +11315,18 @@ function renderReviews(data) {
 }
 
 function renderRvChips() {
+  // Vista de solo lectura de los canales globales activos (se editan en "Canales de aviso").
   const cont = document.getElementById('rvChips');
   const active = rvActiveChannels();
-  cont.innerHTML = ((reviewState && reviewState.channels) || []).map(c => {
-    const on = !!active[c.channel] && !c.locked;
-    const cls = 'fu-chip' + (on ? ' fu-on' : '') + (c.locked ? ' fu-locked' : '');
-    const lock = c.locked && c.plan_needed ? `<span class="fu-lock-badge">${escapeHtml(c.plan_needed)}</span>` : '';
-    const title = c.locked ? escapeHtml(c.reason || ('Disponible en ' + c.plan_needed)) : escapeHtml(c.reason || '');
-    return `<label class="${cls}" title="${title}" data-channel="${c.channel}"><span class="fu-ico">${RV_CH_ICON[c.channel]||''}</span>${escapeHtml(c.label)} ${lock}</label>`;
-  }).join('');
-  cont.querySelectorAll('.fu-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      if (chip.classList.contains('fu-locked')) { toast('Disponible en un plan superior.', 'error'); return; }
-      const ch = chip.dataset.channel;
-      const cur = rvActiveChannels();
-      rvChannelEdits = Object.assign({}, cur, { [ch]: !cur[ch] });
-      chip.classList.toggle('fu-on');
-    });
-  });
+  const chans = (reviewState && reviewState.channels) || [];
+  const on = chans.filter(c => !!active[c.channel] && !c.locked);
+  if (!on.length) {
+    cont.innerHTML = `<span class="panel-sub" style="margin:0; color:#f59e0b;">Sin canales activos: no se enviará la reseña.</span>`;
+    return;
+  }
+  cont.innerHTML = on.map(c =>
+    `<span class="fu-gchip fu-on" style="cursor:default;"><span class="fu-ico">${RV_CH_ICON[c.channel]||''}</span>${escapeHtml(c.label)}</span>`
+  ).join('');
 }
 
 function rvPlatformLabel() {
@@ -9634,7 +11401,6 @@ function rvRenderPreview() {
       document.getElementById('rvLink').focus();
       return;
     }
-    const active = rvActiveChannels();
     const body = {
       enabled: enabledOn,
       link: link,
@@ -9642,7 +11408,7 @@ function rvRenderPreview() {
       delay_hours: parseInt(document.getElementById('rvDelay').value, 10) || 3,
       only_manual_attendance: document.getElementById('rvOnlyManual').checked,
       message: document.getElementById('rvMessage').value || '',
-      channels: { email: !!active.email, whatsapp: !!active.whatsapp, sms: !!active.sms },
+      // Los canales son globales (Seguimiento → Canales de aviso); la reseña no los selecciona.
     };
     try {
       await api('/auth/app/reviews', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
@@ -9669,10 +11435,13 @@ function buildMensajesPayload() {
   MSG_TEMPLATES.forEach(tpl => {
     const key = msgBackendKey(tpl.key);
     message_templates[key] = document.querySelector(`.msg-content[data-key="${tpl.key}"]`)?.value || mensajesData[key] || '';
-    message_template_enabled[key] = !!(document.querySelector(`.msg-enabled[data-key="${tpl.key}"]`)?.checked);
+    const cb = document.querySelector(`.msg-enabled[data-key="${tpl.key}"]`);
+    // Los avisos del recorrido (inFlow) no llevan checkbox aquí: su on/off lo gestiona
+    // Seguimiento. Conservamos su último valor para no pisarlo al guardar textos.
+    message_template_enabled[key] = cb ? !!cb.checked : (mensajesEnabled[key] !== false);
   });
-  // Los canales por aviso los gestiona la sección Seguimiento (timeline). Aquí
-  // solo se guardan textos + activación, sin pisar message_template_channels.
+  // Los canales y el on/off de los avisos del recorrido los gestiona la sección
+  // Seguimiento (canales globales + toggles). Aquí solo textos + activación de cancelada/reprogramada.
   return {
     enabled: mensajesSchedule.enabled !== false,
     timezone: mensajesSchedule.timezone || 'Europe/Madrid',
@@ -9688,45 +11457,6 @@ function buildMensajesPayload() {
   };
 }
 
-function msgChannelMeta(channel) {
-  return mensajesChannelAvailability[channel] || { available: channel === 'email', reason: '' };
-}
-
-function renderMsgChannels(tpl, key) {
-  // Los canales se gestionan en la sección Seguimiento (timeline). Aquí solo texto.
-  return '';
-  /* eslint-disable no-unreachable */
-  if (!tpl.channels) return '';
-  const saved = mensajesChannels[key] || {};
-  const parts = [
-    { key:'email', label:'Email' },
-    { key:'whatsapp', label:'WhatsApp' },
-    { key:'sms', label:'SMS' },
-  ];
-  const controls = parts.map(part => {
-    const meta = msgChannelMeta(part.key);
-    const available = meta.available !== false;
-    const checked = part.key === 'email'
-      ? saved.email !== false
-      : !!saved[part.key] && available;
-    const title = available ? '' : escapeHtml(meta.reason || 'No disponible');
-    return `
-      <label title="${title}" style="display:inline-flex; align-items:center; gap:7px; padding:7px 10px; border:1px solid var(--line); border-radius:8px; color:${available?'var(--soft)':'var(--soft-2)'}; background:${available?'rgba(255,255,255,0.03)':'rgba(255,255,255,0.02)'};">
-        <input type="checkbox" class="msg-channel" data-key="${tpl.key}" data-channel="${part.key}" ${checked?'checked':''} ${available?'':'disabled'} />
-        ${part.label}
-      </label>`;
-  }).join('');
-  const notices = parts
-    .filter(part => part.key !== 'email' && msgChannelMeta(part.key).available === false)
-    .map(part => `${part.label}: ${msgChannelMeta(part.key).reason || 'No disponible.'}`);
-  return `
-    <div style="margin:12px 0;">
-      <label class="field-label">Canales del aviso</label>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">${controls}</div>
-      ${notices.length ? `<div style="font-size:0.74rem; color:var(--soft-2); margin-top:6px;">${escapeHtml(notices.join(' · '))}</div>` : ''}
-    </div>`;
-}
-
 function renderMensajesAccordions() {
   const cont = document.getElementById('mensajesAccordions');
   cont.innerHTML = '';
@@ -9734,18 +11464,24 @@ function renderMensajesAccordions() {
     const key = msgBackendKey(tpl.key);
     const content = mensajesData[key] || '';
     const enabled = mensajesEnabled[key] !== false;
+    // Los avisos del recorrido se activan/desactivan en Seguimiento; aquí solo el texto.
+    const statusHtml = tpl.inFlow
+      ? `<span class="msg-status" data-key="${tpl.key}" style="font-size:0.78rem; color:var(--soft-2);">Activación en el recorrido</span>`
+      : `<span class="msg-status" data-key="${tpl.key}" style="font-size:0.78rem; color:${enabled?'var(--success)':'var(--soft-2)'};">${enabled?'Activo':'Inactivo'}</span>`;
+    const enableHtml = tpl.inFlow
+      ? `<p class="panel-sub" style="margin:0 0 12px; font-size:0.8rem;">Este aviso se activa o desactiva arriba, en <b>el recorrido</b> del seguimiento.</p>`
+      : `<label style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:0.88rem; color:var(--soft);">
+          <input type="checkbox" class="msg-enabled" data-key="${tpl.key}" ${enabled?'checked':''} /> Habilitar este mensaje
+        </label>`;
     const acc = document.createElement('div'); acc.className = 'accordion';
     acc.innerHTML = `
       <div class="accordion-head">
         <b>${escapeHtml(tpl.label)}</b>
-        <span class="msg-status" data-key="${tpl.key}" style="font-size:0.78rem; color:${enabled?'var(--success)':'var(--soft-2)'};">${enabled?'Activo':'Inactivo'}</span>
+        ${statusHtml}
         <svg class="accordion-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
       <div class="accordion-body">
-        <label style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:0.88rem; color:var(--soft);">
-          <input type="checkbox" class="msg-enabled" data-key="${tpl.key}" ${enabled?'checked':''} /> Habilitar este mensaje
-        </label>
-        ${renderMsgChannels(tpl, key)}
+        ${enableHtml}
         <label class="field-label">Contenido</label>
         <textarea class="field-textarea msg-content" data-key="${tpl.key}" maxlength="500" style="min-height:80px;">${escapeHtml(content)}</textarea>
         <div style="font-size:0.74rem; color:var(--soft-2); margin-top:4px; text-align:right;" class="msg-counter" data-key="${tpl.key}">${content.length}/500</div>
@@ -9760,7 +11496,7 @@ function renderMensajesAccordions() {
     acc.querySelector('.msg-content').addEventListener('input', e => {
       acc.querySelector(`.msg-counter[data-key="${tpl.key}"]`).textContent = e.target.value.length + '/500';
     });
-    acc.querySelector('.msg-enabled').addEventListener('change', e => {
+    acc.querySelector('.msg-enabled')?.addEventListener('change', e => {
       const status = acc.querySelector(`.msg-status[data-key="${tpl.key}"]`);
       status.textContent = e.target.checked ? 'Activo' : 'Inactivo';
       status.style.color = e.target.checked ? 'var(--success)' : 'var(--soft-2)';

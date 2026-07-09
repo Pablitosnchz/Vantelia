@@ -21,7 +21,7 @@ import sys
 import time
 import unicodedata
 import urllib.robotparser as robotparser
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional
 from urllib.parse import urljoin, urlparse
@@ -780,106 +780,6 @@ def _companies_from_places(
             break
         if len(companies) >= max(max_results * 3, max_results):
             break
-    return companies
-
-
-def _discover_companies_legacy(
-    sector: str,
-    ciudad: str,
-    max_results: int = 50,
-    extract_emails: bool = True,
-    api_key: str | None = None,
-    source: str = "auto",
-) -> list[DiscoveredCompany]:
-    api_key = (api_key or GOOGLE_PLACES_API_KEY).strip()
-    src = (source or "auto").lower().strip()
-    if src not in {"auto", "places", "osm"}:
-        raise RuntimeError(f"source invalido: {source}. Usa auto|places|osm.")
-    if src == "places" and not api_key:
-        raise RuntimeError("source=places pero falta GOOGLE_PLACES_API_KEY en .env")
-    use_places = (src == "places") or (src == "auto" and bool(api_key))
-
-    if not use_places:
-        raw_osm = overpass_search(sector, ciudad, max_results=max_results)
-        companies: list[DiscoveredCompany] = []
-        for entry in raw_osm:
-            company = DiscoveredCompany(
-                business_name=entry["name"],
-                website=entry.get("website", ""),
-                phone=entry.get("phone", ""),
-                niche=sector,
-                service_hint=sector,
-                city=entry.get("city") or ciudad,
-                tags="discovery,osm",
-                source="discovery:osm",
-            )
-            tag_email = entry.get("email_tag", "")
-            if tag_email and "@" in tag_email:
-                company.email = tag_email.lower()
-            elif extract_emails and company.website:
-                emails = extract_emails_from_website(company.website)
-                if emails:
-                    company.email = emails[0]
-            companies.append(company)
-        return companies
-
-    query = f"{sector} en {ciudad}".strip()
-    try:
-        raw = google_places_search(query, api_key, max_results=max_results)
-    except Exception as exc:
-        # En modo auto, si Places falla (API legacy desactivada, cuota, etc.) → fallback a OSM.
-        if src == "auto":
-            raw_osm = overpass_search(sector, ciudad, max_results=max_results)
-            companies: list[DiscoveredCompany] = []
-            for entry in raw_osm:
-                company = DiscoveredCompany(
-                    business_name=entry["name"],
-                    website=entry.get("website", ""),
-                    phone=entry.get("phone", ""),
-                    niche=sector,
-                    service_hint=sector,
-                    city=entry.get("city") or ciudad,
-                    tags="discovery,osm,fallback",
-                    source="discovery:osm",
-                )
-                tag_email = entry.get("email_tag", "")
-                if tag_email and "@" in tag_email:
-                    company.email = tag_email.lower()
-                elif extract_emails and company.website:
-                    emails = extract_emails_from_website(company.website)
-                    if emails:
-                        company.email = emails[0]
-                companies.append(company)
-            return companies
-        raise
-
-    companies: list[DiscoveredCompany] = []
-    for entry in raw:
-        details = entry.get("_details", {})
-        name = details.get("name") or entry.get("name") or ""
-        website = details.get("website") or ""
-        phone = details.get("international_phone_number") or ""
-        types = entry.get("types", []) or details.get("types", []) or []
-        address = details.get("formatted_address") or entry.get("formatted_address", "")
-        city = _city_from_formatted_address(address, ciudad)
-
-        company = DiscoveredCompany(
-            business_name=name.strip(),
-            website=website.strip(),
-            phone=phone.strip(),
-            niche=_niche_from_types(types),
-            service_hint=sector,
-            city=city,
-            tags="discovery",
-            source="discovery:places",
-            place_id=entry.get("place_id", ""),
-        )
-
-        if extract_emails and company.website:
-            emails = extract_emails_from_website(company.website)
-            if emails:
-                company.email = emails[0]
-        companies.append(company)
     return companies
 
 

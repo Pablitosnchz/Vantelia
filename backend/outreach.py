@@ -1,37 +1,25 @@
 """Captacion email outbound multi-touch (panel + autopilot) (refactor F3)."""
 from __future__ import annotations
 
-import asyncio
-import base64
-import csv
-import hashlib
-import hmac
 import json
 import os
 import random
 import re
-import secrets
 import sqlite3
 import threading
 import time
 import unicodedata
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from html import escape
-from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from typing import Any, Dict, List, Optional, Set
+from urllib.parse import quote, unquote, urlparse
 
-import httpx
-from fastapi import BackgroundTasks, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import HTTPException
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python 3.8 compatibility
-    from backports.zoneinfo import ZoneInfo
 
-from backend import appstate, clients, db, emailing, security, settings, textnorm, timeutils
+from backend import appstate, emailing, settings, timeutils
 
 OUTREACH_DEFAULT_FOLLOWUP_DAYS: Dict[str, int] = {"fu1": 4, "fu2": 5, "breakup": 6}
 
@@ -1567,7 +1555,6 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                        {"auto_followups": auto_followups, "discovery_enabled": discovery_enabled,
                         "daily_new_target": daily_new_target})
 
-        settings_row = outreach_smtp_settings()
         smtp_ok = emailing._email_delivery_configured()
         if not smtp_ok:
             _autopilot_log("warning", "smtp_not_configured", "No hay canal de email conectado")
@@ -1651,6 +1638,7 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
         # Early-exit: si pool de cold elegibles ya cubre el objetivo, SKIP discovery
         # y pasa directo a cold. Asi el dia siguiente que se reactiva, continua donde
         # se quedo en vez de seguir descubriendo de mas.
+        run_discovery = discovery_enabled
         pool_target = daily_new_target
         with _outreach_db() as conn:
             pool_size = conn.execute(
@@ -1720,7 +1708,6 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                     found_count = len(companies)
                     with _outreach_db() as conn:
                         companies = _outreach_filter_new_discoveries(conn, companies)
-                    skipped = found_count - len(companies)
 
                     now_iso = _outreach_now()
                     added = 0
@@ -1786,11 +1773,11 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                             f"{sector} · {city}: {chain_count} descartadas por cadena conocida",
                             {"sector": sector, "city": city, "chains": chain_count},
                         )
-                    log(f"discovery {sector}/{city}: {discovered_count} encontrados, {len(companies)} nuevos tras dedupe, {added} importados (sin_email={no_email_count}, dup={duplicate_count}, chain={chain_count})")
+                    log(f"discovery {sector}/{city}: {found_count} encontrados, {len(companies)} nuevos tras dedupe, {added} importados (sin_email={no_email_count}, dup={duplicate_count}, chain={chain_count})")
                     _outreach_tick_state_update(
                         "discovery_target_done",
                         f"{sector} · {city}: {len(companies)} encontrados, {added} importados",
-                        detail={"sector": sector, "city": city, "found": discovered_count, "new_after_dedupe": len(companies), "imported": added,
+                        detail={"sector": sector, "city": city, "found": found_count, "new_after_dedupe": len(companies), "imported": added,
                                 "no_email": no_email_count, "duplicates": duplicate_count, "chains": chain_count},
                         current_target={"sector": sector, "city": city},
                         imported_total=imported_total + added,
@@ -1799,7 +1786,7 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                         "success" if added > 0 else "info",
                         "discovery_target_done",
                         f"{sector} · {city}: {len(companies)} encontrados, {added} importados",
-                        {"sector": sector, "city": city, "found": discovered_count, "new_after_dedupe": len(companies), "imported": added,
+                        {"sector": sector, "city": city, "found": found_count, "new_after_dedupe": len(companies), "imported": added,
                          "no_email": no_email_count, "duplicates": duplicate_count, "chains": chain_count},
                     )
 

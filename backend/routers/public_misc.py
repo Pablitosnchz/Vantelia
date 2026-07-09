@@ -5,83 +5,28 @@ registro de rutas identico al monolito original.
 """
 from __future__ import annotations
 
-import asyncio
-import copy
-import base64
-import csv
-import hashlib
-import hmac
-import json
-import os
-import random
-import re
-import secrets
-import shutil
-import sqlite3
-import threading
-import time
-import unicodedata
-import uuid
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from email.message import EmailMessage
-from email.utils import formataddr, parseaddr
 from html import escape
-from io import StringIO
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from typing import Any, Dict
 
-import httpx
 from fastapi import (
-    BackgroundTasks,
-    Cookie,
-    Depends,
-    Header,
     HTTPException,
     Request,
-    Response,
-    WebSocket,
-    WebSocketDisconnect,
-    status,
 )
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
-from pydantic import BaseModel, EmailStr, Field
+from fastapi.responses import HTMLResponse
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python 3.8 compatibility
-    from backports.zoneinfo import ZoneInfo
 
-import onboarding_utils
 from api_models import *  # noqa: F401,F403
 from backend import (
-    agenda,
     appstate,
-    billing,
-    booking,
-    chat,
     clients,
-    crm,
+    commerce,
     db,
-    demo_agenda,
     emailing,
-    growth,
-    instagram,
-    messaging,
-    onboarding,
-    outreach,
     portal,
-    rag,
     security,
     settings,
-    stripe_gateway,
     textnorm,
-    tiktok,
     timeutils,
-    voice,
-    wa_capture,
-    whatsapp,
 )
 from backend.main import app
 
@@ -237,3 +182,135 @@ async def healthcheck() -> Dict[str, Any]:
     }
 
 
+
+
+# --- Compra publica de tarjetas regalo (opt-in por tenant) -------------------------
+
+@app.get("/reservas/{cliente_id}", include_in_schema=False)
+@app.get("/central/{cliente_id}", include_in_schema=False)
+async def central_public_page(cliente_id: str, request: Request) -> HTMLResponse:
+    """Central publica del negocio: reservas como flujo principal y ventas anexas.
+
+    Es una fachada de bajo riesgo: reutiliza /servicios, /disponibilidad, /agendar,
+    /tienda y /gift en lugar de duplicar logica de reserva o checkout.
+    """
+    textnorm._assert_valid_client_id(cliente_id)
+    cfg = clients._get_client_config(cliente_id)
+    try:
+        booking_enabled = bool((cfg.get("booking") or {}).get("enabled")) and clients._client_booking_plan_enabled(cliente_id)
+    except Exception:  # noqa: BLE001
+        booking_enabled = bool((cfg.get("booking") or {}).get("enabled"))
+    shop_available = commerce.shop_public_available(cliente_id)
+    gift_available = commerce.gift_public_available(cliente_id)
+    if not (booking_enabled or shop_available.get("any") or gift_available):
+        raise HTTPException(status_code=404, detail="La central publica no esta disponible.")
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"central_page:{cliente_id}:{client_ip}", 30)
+    return HTMLResponse(commerce.central_public_page_html(cliente_id))
+
+
+@app.get("/gift/{cliente_id}", include_in_schema=False)
+async def gift_public_page(cliente_id: str, request: Request) -> HTMLResponse:
+    """Pagina publica de compra de tarjeta regalo del negocio. 404 si el tenant no
+    tiene la funcion activa o no puede cobrar (sin Stripe Connect operativo)."""
+    textnorm._assert_valid_client_id(cliente_id)
+    clients._get_client_config(cliente_id)  # 404 si el cliente no existe
+    if not commerce.gift_public_available(cliente_id):
+        raise HTTPException(status_code=404, detail="La compra de tarjetas regalo no esta disponible.")
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"gift_page:{cliente_id}:{client_ip}", 30)
+    return HTMLResponse(commerce.gift_public_page_html(cliente_id))
+
+
+@app.post("/gift/{cliente_id}/checkout", include_in_schema=False)
+async def gift_public_checkout(cliente_id: str, data: GiftCardPublicCheckoutPayload, request: Request) -> Dict[str, Any]:
+    """Crea el Stripe Checkout de la tarjeta. La tarjeta se emite en el webhook al
+    confirmarse el pago (nunca aqui)."""
+    textnorm._assert_valid_client_id(cliente_id)
+    clients._get_client_config(cliente_id)
+    if not commerce.gift_public_available(cliente_id):
+        raise HTTPException(status_code=404, detail="La compra de tarjetas regalo no esta disponible.")
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"gift_checkout:{cliente_id}:{client_ip}", 5)
+    return commerce.create_gift_card_payment_link(
+        cliente_id,
+        amount_cents=data.amount_cents,
+        buyer_name=data.buyer_name,
+        buyer_email=data.buyer_email,
+        recipient_name=data.recipient_name,
+        recipient_email=data.recipient_email,
+        message=data.message,
+        scheduled_send_at=data.scheduled_send_at,
+        base_url=textnorm._preferred_public_base_url(),
+        service_slug=data.service_slug,
+        accent_color=data.accent_color,
+        hide_value=data.hide_value,
+        hide_expiry=data.hide_expiry,
+    )
+
+
+# --- Tienda publica: bonos y productos (opt-in por tenant) --------------------------
+
+@app.get("/tienda/{cliente_id}", include_in_schema=False)
+async def shop_public_page(cliente_id: str, request: Request) -> HTMLResponse:
+    """Pagina publica de la tienda del negocio (bonos y/o productos). 404 si el tenant
+    no tiene ninguna seccion activa o no puede cobrar (sin Stripe Connect operativo)."""
+    textnorm._assert_valid_client_id(cliente_id)
+    clients._get_client_config(cliente_id)  # 404 si el cliente no existe
+    availability = commerce.shop_public_available(cliente_id)
+    if not availability["any"]:
+        raise HTTPException(status_code=404, detail="La tienda online no esta disponible.")
+    # ?solo=bonos | ?solo=productos: pagina dedicada a una sola seccion (enlace separado).
+    solo = (request.query_params.get("solo") or "").strip().lower()
+    if solo not in ("bonos", "productos"):
+        solo = ""
+    if solo == "bonos" and not availability["packages"]:
+        raise HTTPException(status_code=404, detail="La venta online de bonos no esta disponible.")
+    if solo == "productos" and not availability["products"]:
+        raise HTTPException(status_code=404, detail="La venta online de productos no esta disponible.")
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"shop_page:{cliente_id}:{client_ip}", 30)
+    return HTMLResponse(commerce.shop_public_page_html(cliente_id, section=solo))
+
+
+@app.post("/tienda/{cliente_id}/checkout/bono", include_in_schema=False)
+async def shop_public_checkout_package(
+    cliente_id: str, data: ShopPackageCheckoutPayload, request: Request
+) -> Dict[str, Any]:
+    """Checkout Stripe de un bono. El bono se crea en el webhook al confirmarse el pago."""
+    textnorm._assert_valid_client_id(cliente_id)
+    clients._get_client_config(cliente_id)
+    if not commerce.shop_public_available(cliente_id)["packages"]:
+        raise HTTPException(status_code=404, detail="La compra online de bonos no esta disponible.")
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"shop_checkout:{cliente_id}:{client_ip}", 5)
+    return commerce.create_shop_package_payment_link(
+        cliente_id,
+        package_id=data.package_id,
+        buyer_name=data.buyer_name,
+        buyer_email=data.buyer_email,
+        buyer_phone=data.buyer_phone,
+        base_url=textnorm._preferred_public_base_url(),
+    )
+
+
+@app.post("/tienda/{cliente_id}/checkout/productos", include_in_schema=False)
+async def shop_public_checkout_products(
+    cliente_id: str, data: ShopProductsCheckoutPayload, request: Request
+) -> Dict[str, Any]:
+    """Checkout Stripe de productos (recogida en el centro). Las ventas se registran
+    en el webhook al confirmarse el pago."""
+    textnorm._assert_valid_client_id(cliente_id)
+    clients._get_client_config(cliente_id)
+    if not commerce.shop_public_available(cliente_id)["products"]:
+        raise HTTPException(status_code=404, detail="La compra online de productos no esta disponible.")
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"shop_checkout:{cliente_id}:{client_ip}", 5)
+    return commerce.create_shop_products_payment_link(
+        cliente_id,
+        items=data.items,
+        buyer_name=data.buyer_name,
+        buyer_email=data.buyer_email,
+        buyer_phone=data.buyer_phone,
+        base_url=textnorm._preferred_public_base_url(),
+    )

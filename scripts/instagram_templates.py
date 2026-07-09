@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import os
 from dataclasses import dataclass
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 
 MAX_DM_CHARS = 500

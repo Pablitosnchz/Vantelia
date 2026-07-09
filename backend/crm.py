@@ -5,7 +5,6 @@ prioridad de estados y auditoria. Detalle en docs/CRM_Y_PAGOS_MVP.md.
 """
 from __future__ import annotations
 
-import copy
 import json
 import re
 import secrets
@@ -16,7 +15,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from fastapi import HTTPException
 
 from api_models import AppLeadPublic, CRMContactActivity, CRMContactListItem, CRMContactPublic
-from backend import appstate, clients, db, settings, textnorm, timeutils
+from backend import appstate, db, textnorm, timeutils
 
 CRM_BACKFILLED_CLIENTS: Set[str] = set()
 

@@ -486,7 +486,7 @@ class OnboardingLearnPayload(BaseModel):
     just_this_page: bool = False
     tono: str = "Profesional y cercano"
     idioma: str = "Espanol"
-    max_paginas: int = Field(default=12, ge=1, le=30)
+    max_paginas: int = Field(default=12, ge=1, le=80)
 
 
 class OnboardingLearnResponse(BaseModel):
@@ -582,6 +582,7 @@ class AppDeployResponse(BaseModel):
     widget_script_url: str
     api_base_url: str
     demo_url: str
+    central_url: str = ""
     share_link: str
     qr_data_url: str = ""
 
@@ -957,6 +958,7 @@ class AppVoicePayload(BaseModel):
     twilio_phone_number: Optional[str] = Field(default=None, max_length=32)
     openai_voice: Optional[str] = Field(default=None, max_length=40)
     widget_enabled: Optional[bool] = None
+    transfer_number: Optional[str] = Field(default=None, max_length=32)
 
 
 class AppVoiceResponse(BaseModel):
@@ -968,6 +970,7 @@ class AppVoiceResponse(BaseModel):
     webhook_url: str = ""
     plan_allows_voice: bool = False
     widget_enabled: bool = False
+    transfer_number: str = ""
     status: str = "disabled"
     status_label: str = "Desactivado"
 
@@ -997,11 +1000,17 @@ class FollowUpPayload(BaseModel):
     daily_call_cap: Optional[int] = Field(default=None, ge=0, le=500)
     email_confirm_button: Optional[bool] = None
     suppress_2h_if_confirmed: Optional[bool] = None
-    # Override explicito de canales por aviso: {kind: {email,whatsapp,sms}}
-    message_template_channels: Optional[Dict[str, Dict[str, bool]]] = None
+    # Canales GLOBALES del Seguimiento: una sola tira {email,whatsapp,sms} para todos los
+    # avisos, confirmaciones y la resena. Todos a false = no se envia ningun recordatorio.
+    channels: Optional[Dict[str, bool]] = None
+    # On/off por aviso temporizado: {confirmed|reminder_24h|reminder_2h: bool}.
+    steps_enabled: Optional[Dict[str, bool]] = None
     # Orden real de entrega: se intenta un solo canal por aviso y se cae al siguiente si falta dato/falla.
     delivery_priority: Optional[List[str]] = None
-    # Canales permitidos para el codigo de verificacion por voz (OTP). Todos a false = desactivado.
+    # On/off de la verificacion por codigo (voz). El codigo se entrega por los canales globales.
+    voice_otp_enabled: Optional[bool] = None
+    # --- Compat retro (ignorados por el front nuevo; aceptados si llegan) ---
+    message_template_channels: Optional[Dict[str, Dict[str, bool]]] = None
     voice_otp_channels: Optional[Dict[str, bool]] = None
 
 
@@ -1027,13 +1036,19 @@ class FollowUpStepChannel(BaseModel):
 
 
 class FollowUpStep(BaseModel):
-    key: str                # confirmed | reminder_24h | call | reminder_2h | review
+    key: str                # confirmed | reminder_24h | call | reminder_2h | review | voice_otp
+    kind: str = "message"   # message | call | review | otp
     label: str
     when: str               # "Al reservar", "24 h antes", ...
     offset_hours: int = 0
-    channels: List[FollowUpStepChannel] = []
+    channels: List[FollowUpStepChannel] = []  # solo la llamada IA expone su canal (voz)
     note: str = ""
-    enabled: bool = True     # paso activo (para pasos opt-in como la reseña post-cita)
+    enabled: bool = True     # on/off del paso (lo que el negocio activa/desactiva)
+    active: bool = False     # se enviara de verdad (enabled + hay canal global / disponible en plan)
+    available: bool = True   # disponible en el plan (para call/otp)
+    locked: bool = False     # bloqueado por plan
+    plan_needed: str = ""    # "Pro" | "Business" cuando locked
+    reason: str = ""
     needs_setup: bool = False  # requiere configuracion extra (p.ej. enlace de resena)
 
 
@@ -1043,6 +1058,8 @@ class FollowUpResponse(BaseModel):
     whatsapp_available: bool = False
     voice_available: bool = False
     channel_availability: FollowUpChannelAvailability = FollowUpChannelAvailability()
+    # Canales GLOBALES (una sola tira para todos los avisos).
+    channels: List[FollowUpStepChannel] = []
     call_enabled: bool = False
     call_hours_before: int = 5
     quiet_start: str = "21:00"
@@ -1050,6 +1067,7 @@ class FollowUpResponse(BaseModel):
     daily_call_cap: int = 30
     email_confirm_button: bool = True
     suppress_2h_if_confirmed: bool = True
+    voice_otp_enabled: bool = True
     delivery_priority: List[str] = Field(default_factory=lambda: ["email", "whatsapp", "sms"])
     steps: List[FollowUpStep] = []
     default_test_email: str = ""
@@ -1077,37 +1095,6 @@ class FollowUpTestResponse(BaseModel):
     to_email: str = ""
     to_phone: str = ""
     results: List[FollowUpTestChannelResult] = []
-
-
-class ReviewRequestPayload(BaseModel):
-    """Config del seguimiento post-cita (peticion de resena al cliente final)."""
-    enabled: Optional[bool] = None
-    link: Optional[str] = Field(default=None, max_length=600)
-    platform: Optional[str] = Field(default=None, max_length=60)
-    delay_hours: Optional[int] = Field(default=None, ge=1, le=168)
-    only_manual_attendance: Optional[bool] = None
-    message: Optional[str] = Field(default=None, max_length=800)
-    channels: Optional[Dict[str, bool]] = None
-
-
-class ReviewRequestResponse(BaseModel):
-    plan: str = "free"
-    plan_label: str = "Free"
-    enabled: bool = False
-    link: str = ""
-    platform: str = ""           # etiqueta de plataforma (Google, Trustpilot, ...)
-    platform_label: str = ""     # texto del boton ("Dejar resena en Google")
-    delay_hours: int = 3
-    only_manual_attendance: bool = False
-    message: str = ""
-    default_message: str = ""
-    channels: List[FollowUpStepChannel] = []
-    channel_availability: FollowUpChannelAvailability = FollowUpChannelAvailability()
-    sent_30d: int = 0
-    link_valid: bool = False
-    preview_subject: str = ""
-    preview_html: str = ""
-    preview_text: str = ""
 
 
 class ReviewRequestPayload(BaseModel):
@@ -1782,6 +1769,8 @@ class AdminClienteResumen(BaseModel):
     whatsapp_phone_number_id: str = ""
     voice_enabled: bool = False
     voice_phone_number: str = ""
+    voice_realtime_model: str = ""           # override por cliente ("" = usa el default global)
+    voice_realtime_model_effective: str = ""  # modelo que se usara de verdad
     has_info_file: bool
     info_file_size: int = 0
     bookings_total: int = 0
@@ -1848,7 +1837,7 @@ class AdminAltaExpressPayload(BaseModel):
     nombre_bot: str = Field(default="Clara", min_length=2, max_length=40)
     tono: str = Field(default="Profesional y cercano", min_length=4, max_length=80)
     idioma: str = Field(default="Español", min_length=4, max_length=40)
-    max_paginas: int = Field(default=12, ge=1, le=30)
+    max_paginas: int = Field(default=12, ge=1, le=80)
     color: str = Field(default="#00b1d9", min_length=7, max_length=7)
     booking_enabled: bool = True
     booking_timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=80)
@@ -2170,3 +2159,36 @@ class PortalUserPermissionsResponse(BaseModel):
 class PortalPermissionUpdatePayload(BaseModel):
     # Mapa permiso -> "default" | "allow" | "deny"
     overrides: Dict[str, str] = Field(default_factory=dict)
+
+
+class ShopPackageCheckoutPayload(BaseModel):
+    # Compra publica de un bono (pagina /tienda/{cliente_id}). El precio SIEMPRE
+    # sale del catalogo del servidor.
+    package_id: str = Field(..., min_length=1, max_length=80)
+    buyer_name: str = Field(..., min_length=2, max_length=120)
+    buyer_email: str = Field(..., min_length=5, max_length=160)
+    buyer_phone: str = Field(default="", max_length=40)
+
+
+class ShopProductsCheckoutPayload(BaseModel):
+    # Compra publica de productos (pagina /tienda/{cliente_id}); recogida en el centro.
+    items: List[PosItemPayload] = Field(default_factory=list)
+    buyer_name: str = Field(..., min_length=2, max_length=120)
+    buyer_email: str = Field(..., min_length=5, max_length=160)
+    buyer_phone: str = Field(default="", max_length=40)
+
+
+class GiftCardPublicCheckoutPayload(BaseModel):
+    # Compra publica de tarjeta regalo (pagina /gift/{cliente_id}).
+    # amount_cents=0 permitido cuando se compra POR SERVICIO (el precio lo pone el servidor).
+    amount_cents: int = Field(default=0, ge=0, le=100000)
+    service_slug: str = Field(default="", max_length=120)
+    buyer_name: str = Field(..., min_length=2, max_length=120)
+    buyer_email: str = Field(..., min_length=5, max_length=160)
+    recipient_name: str = Field(..., min_length=2, max_length=120)
+    recipient_email: str = Field(..., min_length=5, max_length=160)
+    message: str = Field(default="", max_length=300)
+    scheduled_send_at: str = Field(default="", max_length=10)
+    accent_color: str = Field(default="", max_length=7)
+    hide_value: bool = False
+    hide_expiry: bool = False

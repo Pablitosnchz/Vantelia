@@ -5,83 +5,36 @@ registro de rutas identico al monolito original.
 """
 from __future__ import annotations
 
-import asyncio
-import copy
-import base64
 import csv
-import hashlib
-import hmac
 import json
 import os
-import random
-import re
-import secrets
-import shutil
-import sqlite3
 import threading
-import time
-import unicodedata
-import uuid
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from email.message import EmailMessage
-from email.utils import formataddr, parseaddr
-from html import escape
+from datetime import timedelta
 from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import (
     BackgroundTasks,
-    Cookie,
     Depends,
-    Header,
     HTTPException,
     Request,
     Response,
-    WebSocket,
-    WebSocketDisconnect,
-    status,
 )
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python 3.8 compatibility
-    from backports.zoneinfo import ZoneInfo
 
-import onboarding_utils
 from api_models import *  # noqa: F401,F403
 from backend import (
-    agenda,
-    appstate,
-    billing,
-    booking,
-    chat,
-    clients,
-    crm,
-    db,
-    demo_agenda,
-    emailing,
-    growth,
     instagram,
     messaging,
-    onboarding,
     outreach,
-    portal,
-    rag,
     security,
     settings,
-    stripe_gateway,
-    textnorm,
     tiktok,
     timeutils,
-    voice,
     wa_capture,
-    whatsapp,
 )
 from backend.instagram import (  # noqa: F401
     IGProfile, ig_create_draft, ig_deep_link, ig_discover_usernames,
@@ -1197,8 +1150,6 @@ def instagram_autopilot_tick():
 # === CAMPAIGN v2: discovery real + DMs naturales + 1 boton Empezar  ==
 # =====================================================================
 
-_IG_CAMPAIGN_STATUSES = {"idle", "discovering", "sending", "paused", "completed"}
-
 
 class InstagramCampaignStart(BaseModel):
     target_count: int = Field(30, ge=1, le=200)
@@ -2038,7 +1989,7 @@ def tiktok_prospects(limit: int = 100, status: str = ""):
 
 
 try:  # validador oficial Twilio si esta instalado; si no, fallback nativo HMAC-SHA1
-    from twilio.request_validator import RequestValidator as _TwilioRequestValidator
+    pass
 except Exception:  # noqa: BLE001
     messaging._TwilioRequestValidator = None
 

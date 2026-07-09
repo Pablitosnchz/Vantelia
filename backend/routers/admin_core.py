@@ -5,84 +5,43 @@ registro de rutas identico al monolito original.
 """
 from __future__ import annotations
 
-import asyncio
 import copy
-import base64
-import csv
-import hashlib
-import hmac
-import json
-import os
-import random
 import re
 import secrets
-import shutil
-import sqlite3
-import threading
 import time
-import unicodedata
-import uuid
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from email.message import EmailMessage
-from email.utils import formataddr, parseaddr
-from html import escape
-from io import StringIO
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
-import httpx
 from fastapi import (
-    BackgroundTasks,
     Cookie,
     Depends,
-    Header,
     HTTPException,
     Request,
     Response,
-    WebSocket,
-    WebSocketDisconnect,
     status,
 )
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python 3.8 compatibility
-    from backports.zoneinfo import ZoneInfo
 
 import onboarding_utils
 from api_models import *  # noqa: F401,F403
 from backend import (
-    agenda,
     appstate,
-    billing,
     booking,
     channel_requests,
-    chat,
     clients,
-    crm,
     db,
     demo_agenda,
     emailing,
-    growth,
-    instagram,
     messaging,
-    onboarding,
-    outreach,
     portal,
     rag,
     security,
     settings,
-    stripe_gateway,
     textnorm,
-    tiktok,
     timeutils,
     voice,
-    wa_capture,
-    whatsapp,
 )
 from backend.main import app
 
@@ -288,6 +247,8 @@ async def admin_clientes() -> List[AdminClienteResumen]:
                 whatsapp_phone_number_id=str(whatsapp_cfg.get("phone_number_id", "")),
                 voice_enabled=bool(voice_cfg.get("enabled", False)),
                 voice_phone_number=str(voice_cfg.get("twilio_phone_number", "")),
+                voice_realtime_model=str(voice_cfg.get("realtime_model", "")),
+                voice_realtime_model_effective=str(voice_cfg.get("realtime_model") or settings.VOICE_REALTIME_MODEL),
                 has_info_file=info_path.exists(),
                 info_file_size=(info_path.stat().st_size if info_path.exists() else 0),
                 bookings_total=int(client_counts.get("total", 0)),
@@ -496,6 +457,7 @@ class AdminVoicePayload(BaseModel):
     enabled: Optional[bool] = None
     twilio_phone_number: Optional[str] = Field(default=None, max_length=32)
     openai_voice: Optional[str] = Field(default=None, max_length=40)
+    realtime_model: Optional[str] = Field(default=None, max_length=40)
     greeting: Optional[str] = Field(default=None, max_length=600)
     request_id: Optional[str] = Field(default=None, max_length=80)
 
@@ -527,6 +489,15 @@ async def admin_set_voice(cliente_id: str, data: AdminVoicePayload) -> Dict[str,
         if data.openai_voice is not None:
             v = textnorm._sanitize_text(data.openai_voice).lower()
             voice_row["openai_voice"] = v if v in textnorm.VOICE_ALLOWED_OPENAI_VOICES else (voice_row.get("openai_voice") or "alloy")
+        if data.realtime_model is not None:
+            m = textnorm._sanitize_text(data.realtime_model)
+            # Vacio = usar el default global; valor valido = override por cliente.
+            if not m:
+                voice_row.pop("realtime_model", None)
+            elif m in settings.VOICE_REALTIME_MODELS:
+                voice_row["realtime_model"] = m
+            else:
+                raise HTTPException(status_code=400, detail="Modelo de voz no permitido.")
         if data.greeting is not None:
             voice_row["greeting"] = textnorm._sanitize_text(data.greeting, allow_multiline=True)[:600]
         cfg["voice"] = voice_row
@@ -544,6 +515,10 @@ async def admin_set_voice(cliente_id: str, data: AdminVoicePayload) -> Dict[str,
         "cliente_id": cliente_id,
         "voice_enabled": bool(voice_row.get("enabled")),
         "twilio_phone_number": voice_row.get("twilio_phone_number", ""),
+        "realtime_model": voice_row.get("realtime_model", ""),
+        "realtime_model_effective": voice_row.get("realtime_model") or settings.VOICE_REALTIME_MODEL,
+        "realtime_models": list(settings.VOICE_REALTIME_MODELS),
+        "realtime_model_default": settings.VOICE_REALTIME_MODEL,
         "plan_allows_voice": voice._client_voice_plan_enabled(cliente_id),
         "twilio_backend_configured": messaging._voice_twilio_configured(),
         "openai_configured": bool(settings.OPENAI_API_KEY),

@@ -1,37 +1,24 @@
 """Captacion Instagram (drafts 1-clic, autopilot, replies) (refactor F3)."""
 from __future__ import annotations
 
-import asyncio
-import base64
-import csv
-import hashlib
-import hmac
 import json
 import os
 import random
 import re
-import secrets
 import sqlite3
 import threading
-import time
-import unicodedata
-import uuid
-from datetime import date, datetime, timedelta, timezone
-from html import escape
-from io import StringIO
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from typing import Any, Dict, List, Optional
 
-import httpx
-from fastapi import BackgroundTasks, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import HTTPException
 
 try:
     from zoneinfo import ZoneInfo
 except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
-from backend import appstate, clients, db, outreach, security, settings, textnorm, timeutils
+from backend import settings, timeutils
 
 try:
     from instagram_campaign import (  # type: ignore
@@ -441,17 +428,11 @@ def _ig_campaign_update(**fields: Any) -> None:
         conn.commit()
 
 
-def _ig_campaign_should_run() -> bool:
-    with _instagram_db() as conn:
-        row = conn.execute("SELECT status FROM ig_campaign WHERE id=1").fetchone()
-    return bool(row and row["status"] in ("discovering", "sending"))
-
-
 def _ig_campaign_render_dm(prospect: Dict[str, Any]) -> str:
     try:
         from instagram_templates_v2 import render_natural  # type: ignore
     except ImportError:
-        return f"Hola, te escribo desde Vantelia. Hacemos asistentes IA para negocios como el vuestro. ¿Hablamos?"
+        return "Hola, te escribo desde Vantelia. Hacemos asistentes IA para negocios como el vuestro. ¿Hablamos?"
     return render_natural(
         username=prospect.get("username", ""),
         business_name=prospect.get("business_name", "") or prospect.get("full_name", "") or "",
@@ -503,7 +484,7 @@ def _ig_campaign_create_draft(prospect_row: Dict[str, Any]) -> Optional[int]:
         ).fetchone()
         if existing:
             return None
-        cur = conn.execute(
+        conn.execute(
             """INSERT INTO ig_sends (username, stage, variant, message_text, mode, ready, drafted_at)
                VALUES (?,?,?,?,?,?,?)""",
             (prospect_row["username"], "cold", variant, text, "draft", 1, now),

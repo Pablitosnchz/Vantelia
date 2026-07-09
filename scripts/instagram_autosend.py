@@ -375,25 +375,6 @@ def _count_message_bubbles(page) -> int:
     return best
 
 
-def _already_contacted(page) -> bool:
-    """Detecta si ya hay historial de mensajes con este usuario.
-
-    Senyales acumulativas:
-    - URL contiene /direct/t/ Y hay >=2 divs dir=auto visibles
-    - O directamente hay >=3 burbujas detectadas
-    """
-    try:
-        url = page.url or ""
-    except Exception:
-        url = ""
-    bubbles = _count_message_bubbles(page)
-    if "/direct/t/" in url and bubbles >= 2:
-        return True
-    if bubbles >= 3:
-        return True
-    return False
-
-
 def _verify_sent(page, message: str, baseline: int, composer, timeout_sec: int = 12) -> bool:
     """Verifica envio. Estrategia laxa para no marcar como fallo cuando IG si mando.
 

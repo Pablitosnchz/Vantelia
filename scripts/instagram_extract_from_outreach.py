@@ -22,7 +22,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Iterable, Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 try:
     import httpx

@@ -34,14 +34,12 @@ import smtplib
 import sqlite3
 import sys
 import time
-import uuid
 from collections import defaultdict
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 from pathlib import Path
-from typing import Iterable
 try:
     from zoneinfo import ZoneInfo
 except ImportError:  # Python 3.8 fallback

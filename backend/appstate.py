@@ -29,6 +29,8 @@ class WAFlowState:
     cliente_id: str
     from_number: str
     flow: str = ""
+    # Centro elegido en el flujo (negocios multi-centro con numero generico).
+    location_id: str = ""
     servicio: str = ""
     employee_id: str = ""
     employee_name: str = ""
@@ -68,6 +70,10 @@ rate_limit_buckets: Dict[str, List[float]] = {}
 # "cliente_id:booking_id" -> {code, expires_at, attempts, verified, channel}.
 # En memoria a proposito: efimero (TTL corto), no necesita persistencia.
 voice_otp: Dict[str, Dict[str, Any]] = {}
+# Memoria conversacional de GESTION de citas del chat (cancelar/reprogramar por pasos
+# sin repetir datos). Clave session_id -> {intent, code, telefono, email, ts}. Efimera
+# (TTL corto en booking._process_booking_management_message); no se persiste.
+chat_manage_state: Dict[str, Dict[str, Any]] = {}
 last_cleanup_run = 0.0
 state_lock = threading.RLock()
 booking_reminder_stop = threading.Event()

@@ -10,18 +10,16 @@ import base64
 import copy
 import hashlib
 import hmac
-import json
 import secrets
-import os
 import smtplib
 import sqlite3
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from email.message import EmailMessage
 from email.utils import formataddr, parseaddr
 from html import escape
 from urllib.parse import urlparse
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import httpx
 from cryptography.fernet import InvalidToken
@@ -715,22 +713,6 @@ def _send_email_message(
         message.add_alternative(html_body, subtype="html")
 
     _send_email_object(message, cliente_id)
-
-
-def send_client_email(
-    cliente_id: str,
-    to_email: str,
-    subject: str,
-    text_body: str,
-    html_body: str = "",
-    reply_to: Optional[str] = None,
-) -> Dict[str, Any]:
-    try:
-        _send_email_message(to_email, subject, text_body, html_body, reply_to, cliente_id)
-        return {"ok": True, "provider": "gmail" if _gmail_connected(cliente_id) else "smtp"}
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.error("Email cliente fallo cliente=%s: %s", cliente_id, exc)
-        return {"ok": False, "provider": "none", "error": str(exc)[:500]}
 
 
 def _client_gmail_connection(cliente_id: str) -> Optional[sqlite3.Row]:

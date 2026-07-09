@@ -107,3 +107,19 @@ DATOS COMPLEMENTARIOS PARA LA DEMO VANTELIA:
 - Email de reservas/contacto: reservas@thenookmadrid.com
 - Telefonos detectados: 622 36 09 22 / 911 481 474
 - La demo debe orientar al usuario sobre masajes, precios publicados, reservas y contacto, sin inventar disponibilidad.
+
+TARJETAS REGALO, BONOS Y PRODUCTOS:
+- Tarjetas regalo: The Nook ofrece tarjetas regalo de masaje en Madrid.
+- Compra: se pueden comprar online en https://thenook.simplespa.com/buygiftcards.php.
+- Caducidad: las Tarjetas Regalo de The Nook no tienen fecha de caducidad.
+- Centros: se pueden usar indistintamente en cualquiera de sus centros: Zurbaran, Retiro y Concha Espina.
+- Transferencia: pueden transferirse a familiares o amigos; tambien puede usarlas otra persona.
+- Cambios: pueden cambiarse por tratamientos de igual valor o superior abonando la diferencia.
+- Tratamientos para dos personas: pueden usarse para tratamientos para dos personas abonando la diferencia si corresponde.
+- Tipos: hay tarjetas regalo dedicadas para cada tratamiento y otras de valor monetario para canjear por el tratamiento deseado.
+- Personalizacion: durante la compra se puede quitar el precio, elegir colores de la tarjeta y anadir un mensaje personalizado.
+- Email: se puede enviar la tarjeta por email; hay que marcar la casilla "enviar e-mail" durante la compra para recibir borradores y la tarjeta.
+- Reenvio: el comprador puede enviarse la tarjeta cuantas veces quiera hasta quedar conforme con el resultado.
+- Descuentos: las Tarjetas Regalo no se benefician de descuentos ni promociones del centro.
+- Condiciones completas: https://www.thenookmadrid.com/condiciones-de-reserva-compra-y-cancelacion/
+- Si el cliente pregunta que incluye una tarjeta regalo, explicar que puede ser por tratamiento concreto o por importe, que no caduca, que es transferible, que vale en los tres centros y que se puede cambiar por tratamientos de igual o mayor valor abonando la diferencia.

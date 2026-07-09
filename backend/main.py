@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import threading
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
@@ -213,6 +214,14 @@ app.mount("/widget", StaticFiles(directory=str(settings.WIDGET_DIR)), name="widg
 
 if settings.BRAND_DIR.exists():
     app.mount("/brand-assets", StaticFiles(directory=str(settings.BRAND_DIR)), name="brand-assets")
+
+
+# Webs de escaparate por cliente (client_sites/<carpeta>/index.html), servidas en
+# /site/<carpeta>/. Estaticas puras: para ensenyar al cliente su web nueva conectada
+# a Vantelia antes de moverla a su dominio definitivo.
+_CLIENT_SITES_DIR = Path(__file__).resolve().parents[1] / "client_sites"
+if _CLIENT_SITES_DIR.exists():
+    app.mount("/site", StaticFiles(directory=str(_CLIENT_SITES_DIR), html=True), name="client-sites")
 
 
 def _build_cors_headers(origin: str) -> Dict[str, str]:

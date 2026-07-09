@@ -1,40 +1,19 @@
 """Suscripciones self-serve: planes, checkout, sync Stripe (refactor F3)."""
 from __future__ import annotations
 
-import asyncio
-import base64
-import csv
-import hashlib
-import hmac
-import json
-import os
-import random
-import re
 import secrets
 import sqlite3
-import threading
-import time
-import unicodedata
-import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 from html import escape
-from io import StringIO
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from typing import Any, Dict, List, Tuple
 
 import copy
-import httpx
-from fastapi import BackgroundTasks, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import HTTPException, Request
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python 3.8 compatibility
-    from backports.zoneinfo import ZoneInfo
 
 import onboarding_utils
 from api_models import BillingPlanTier, BillingSubscriptionPublic, SubscriptionFeatures, SubscriptionPublic, SubscriptionUsage
-from backend import agenda, booking, portal, rag, appstate, clients, db, emailing, onboarding, security, settings, stripe_gateway, textnorm, timeutils
+from backend import agenda, booking, portal, rag, appstate, clients, commerce, db, emailing, onboarding, security, settings, stripe_gateway, textnorm, timeutils
 
 def _send_checkout_admin_notification(
     *,
@@ -356,6 +335,8 @@ def _create_client_from_public_checkout(
     payload.contacto_telefono = customer.get("phone", "")
     save_result = portal._save_admin_client_payload(cliente_id, payload, request)
     rag._seed_qa_from_onboarding(cliente_id, result)
+    agenda._sync_services_from_info(cliente_id, result.info_txt, deactivate_missing=True)
+    commerce._seed_commerce_from_info(cliente_id, result.info_txt)
     agenda._ensure_default_employees_for_all_clients()
     _set_client_subscription(
         cliente_id,

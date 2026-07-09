@@ -11,7 +11,7 @@ import json
 import shutil
 import re
 import sqlite3
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from fastapi import HTTPException, Request
 
@@ -33,6 +33,24 @@ def _load_client_configs() -> Dict[str, Dict[str, Any]]:
         normalized[cliente_id] = _normalize_client_config(cliente_id, payload)
 
     return normalized
+
+
+# Secciones de config que NO gestiona el normalizador pero que pertenecen al tenant y
+# DEBEN sobrevivir a la carga y al guardado (antes la whitelist las descartaba en cada
+# arranque: identidad "empresa", Seguimiento "reminders", resenas "reviews" y la compra
+# publica de tarjetas "gift_cards_public" volvian a sus defaults en runtime).
+CONFIG_EXTRA_SECTIONS = ("empresa", "reminders", "reviews", "gift_cards_public", "shop_public")
+
+
+def _copy_extra_sections(source: Dict[str, Any], target: Dict[str, Any]) -> Dict[str, Any]:
+    for key in CONFIG_EXTRA_SECTIONS:
+        if key in source and source.get(key) is not None:
+            value = source[key]
+            if isinstance(value, dict):
+                target[key] = json.loads(json.dumps(value))
+            elif isinstance(value, str):
+                target[key] = textnorm._sanitize_text(value)[:300]
+    return target
 
 
 def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -73,7 +91,7 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
         temperature_value = 0.2
     temperature_value = max(0.0, min(2.0, temperature_value))
 
-    return {
+    normalized = {
         "nombre": textnorm._sanitize_text(payload.get("nombre", cliente_id)),
         "plan": plan,
         "subscription": subscription,
@@ -154,6 +172,7 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
             ),
         },
     }
+    return _copy_extra_sections(payload, normalized)
 
 
 def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -166,7 +185,7 @@ def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
         booking_cfg.get("break_end", ""),
     )
     break_start, break_end = textnorm._first_break_pair(break_windows)
-    return {
+    serialized = {
         "nombre": config["nombre"],
         "plan": config.get("plan", settings.PLAN_DEFAULT),
         "subscription": dict(config.get("subscription") or {"plan": config.get("plan", settings.PLAN_DEFAULT)}),
@@ -231,6 +250,7 @@ def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
             ),
         },
     }
+    return _copy_extra_sections(config, serialized)
 
 
 appstate.CONFIG_CLIENTES = _load_client_configs()
@@ -512,7 +532,15 @@ def _delete_client_everywhere(cliente_id: str) -> None:
     next_configs.pop(cliente_id, None)
     _persist_configs_to_disk(next_configs)
     _update_runtime_configs(next_configs)
+    _purge_client_data(cliente_id)
 
+
+def _purge_client_data(cliente_id: str) -> None:
+    """Limpieza de BD, sesiones e indices/ficheros de UN tenant, SIN exigir que siga en
+    config: tambien vale para huerfanos (demo expirada cuyo config ya no existe pero cuyos
+    usuarios podian seguir entrando). Borra usuarios del tenant y sus sesiones: nadie
+    puede volver a entrar."""
+    textnorm._assert_valid_client_id(cliente_id)
     with db._get_db_connection() as connection:
         user_rows = connection.execute(
             "SELECT id FROM users WHERE role = 'client' AND cliente_id = ?",
@@ -527,6 +555,7 @@ def _delete_client_everywhere(cliente_id: str) -> None:
             connection.execute(f"DELETE FROM subscriptions WHERE user_id IN ({placeholders})", params)
             connection.execute(f"DELETE FROM message_usage_events WHERE user_id IN ({placeholders})", params)
             connection.execute(f"DELETE FROM admin_impersonations WHERE target_user_id IN ({placeholders})", params)
+            connection.execute(f"DELETE FROM user_permission_overrides WHERE user_id IN ({placeholders})", params)
         connection.execute("DELETE FROM users WHERE role = 'client' AND cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM subscriptions WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM message_usage_events WHERE cliente_id = ?", (cliente_id,))
@@ -554,6 +583,18 @@ def _delete_client_everywhere(cliente_id: str) -> None:
         connection.execute("DELETE FROM client_channel_oauth_states WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM client_oauth_connections WHERE cliente_id = ?", (cliente_id,))
         connection.execute("DELETE FROM client_channel_settings WHERE cliente_id = ?", (cliente_id,))
+        # Catalogo, comercio, centros y voz (tablas posteriores al borrado original):
+        for extra_table in (
+            "service_location_overrides", "services", "resources", "locations",
+            "cancellation_policies", "voice_calls",
+            "product_sales", "products",
+            "package_purchases", "packages",
+            "gift_card_transactions", "gift_cards",
+        ):
+            try:
+                connection.execute(f"DELETE FROM {extra_table} WHERE cliente_id = ?", (cliente_id,))
+            except Exception as exc:  # noqa: BLE001 - tabla opcional segun version de schema
+                settings.logger.warning("Borrado de %s para %s fallo: %s", extra_table, cliente_id, exc)
         connection.execute("DELETE FROM clientes WHERE cliente_id = ?", (cliente_id,))
         connection.commit()
 
@@ -587,6 +628,7 @@ def _build_install_snippet(cliente_id: str, request: Request) -> Dict[str, str]:
 
     widget_script_url = f"{api_base}/widget/widget.min.js{widget_version}"
     demo_url = f"{api_base}/demo/{cliente_id}"
+    central_url = f"{api_base}/reservas/{cliente_id}"
     snippet = (
         '<script\n'
         f'  src="{widget_script_url}"\n'
@@ -599,6 +641,7 @@ def _build_install_snippet(cliente_id: str, request: Request) -> Dict[str, str]:
         "widget_script_url": widget_script_url,
         "api_base_url": api_base,
         "demo_url": demo_url,
+        "central_url": central_url,
     }
 
 

@@ -5,83 +5,33 @@ registro de rutas identico al monolito original.
 """
 from __future__ import annotations
 
-import asyncio
-import copy
-import base64
-import csv
-import hashlib
-import hmac
 import json
-import os
-import random
-import re
-import secrets
-import shutil
-import sqlite3
-import threading
-import time
-import unicodedata
-import uuid
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from email.message import EmailMessage
-from email.utils import formataddr, parseaddr
-from html import escape
-from io import StringIO
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
-import httpx
 from fastapi import (
-    BackgroundTasks,
-    Cookie,
     Depends,
-    Header,
     HTTPException,
-    Request,
-    Response,
-    WebSocket,
-    WebSocketDisconnect,
     status,
 )
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python 3.8 compatibility
-    from backports.zoneinfo import ZoneInfo
 
 import onboarding_utils
 from api_models import *  # noqa: F401,F403
 from backend import (
-    agenda,
     appstate,
-    billing,
+    agenda,
     booking,
-    chat,
     clients,
-    crm,
+    commerce,
     db,
     demo_agenda,
-    emailing,
-    growth,
-    instagram,
-    messaging,
-    onboarding,
-    outreach,
-    portal,
     rag,
     security,
     settings,
-    stripe_gateway,
     textnorm,
-    tiktok,
     timeutils,
-    voice,
-    wa_capture,
-    whatsapp,
 )
 from backend.main import app
 
@@ -143,8 +93,6 @@ async def admin_gen_qa(cliente_id: str, max_pairs: int = 5) -> Dict[str, Any]:
             "SELECT COUNT(*) FROM kb_qa WHERE cliente_id=?", (cliente_id,)
         ).fetchone()[0]
 
-    payment_row = booking._booking_payment_row(booking_id)
-    stored_booking = booking._get_booking_row_by_id(booking_id)
     return {
         "ok": True,
         "cliente_id": cliente_id,
@@ -160,7 +108,7 @@ class AdminRebrainPayload(BaseModel):
     nombre_bot: str = Field(default="", max_length=40)
     tono: str = Field(default="Profesional y cercano", min_length=4, max_length=80)
     idioma: str = Field(default="Español", min_length=4, max_length=40)
-    max_paginas: int = Field(default=12, ge=1, le=30)
+    max_paginas: int = Field(default=12, ge=1, le=80)
 
 
 class AdminRebrainResponse(BaseModel):
@@ -218,6 +166,8 @@ async def regenerar_cerebro(cliente_id: str, data: Optional[AdminRebrainPayload]
     rag._write_info_txt(cliente_id, result.info_txt)
     # Sembrar Q&A del panel desde las FAQ scrapeadas (run_onboarding las saca del info.txt).
     rag._seed_qa_from_onboarding(cliente_id, result)
+    agenda._sync_services_from_info(cliente_id, result.info_txt, deactivate_missing=True)
+    commerce._seed_commerce_from_info(cliente_id, result.info_txt)
 
     reindexed = False
     reindex_error = ""

@@ -19,13 +19,17 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
+
+try:  # Python 3.9+
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover - Python 3.8
+    from backports.zoneinfo import ZoneInfo  # type: ignore
 
 from fastapi import HTTPException
 
 from backend import agenda, db, textnorm, timeutils
 
-ACTIVE_BOOKING_STATUSES = ("confirmed", "pending_review", "completed", "no_show", "pending_payment")
 REVENUE_BOOKING_FILTER = "payment_status = 'paid'"
 
 
@@ -306,6 +310,69 @@ def _kpis_for_range(
         "avg_ticket_cents": int(agg["revenue_cents"] / agg["paid_count"]) if agg["paid_count"] else 0,
         "extras_revenue_cents": extras,
         "new_customers": _new_customers(connection, cliente_id, start, end, location_id, service_id),
+    }
+
+
+def _central_summary(cliente_id: str) -> Dict[str, Any]:
+    """KPIs de mostrador para HOY (zona horaria del negocio) + valor vivo en
+    circulacion (bonos activos, saldo de tarjetas regalo). Ligero a proposito:
+    lo consume la Central de Ventas del portal en cada apertura, con permiso
+    commerce.sell (staff), a diferencia del overview (reports.view)."""
+    from backend import appstate  # tardio: evita ciclo en el arranque
+
+    config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
+    tz_name = str((config.get("booking") or {}).get("timezone") or "Europe/Madrid")
+    try:
+        today = datetime.now(ZoneInfo(tz_name)).date()
+    except Exception:  # noqa: BLE001 - tz invalida en config
+        today = timeutils._utc_now().date()
+    now_iso = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        agg = _bookings_aggregates(connection, cliente_id, today, today, "", "")
+        by_status = agg["by_status"]
+        bookings_today = sum(n for status, n in by_status.items() if status != "cancelled")
+        products_cents = _sales_revenue(connection, "product_sales", "total_cents", cliente_id, today, today, "")
+        packages_cents = _sales_revenue(connection, "package_purchases", "price_cents", cliente_id, today, today, "")
+        gifts_cents = _sales_revenue(connection, "gift_cards", "initial_cents", cliente_id, today, today, "")
+        product_sales_today = int(connection.execute(
+            "SELECT COUNT(*) FROM product_sales WHERE cliente_id = ? AND created_at >= ? AND created_at < ?",
+            (cliente_id, today.isoformat(), (today + timedelta(days=1)).isoformat()),
+        ).fetchone()[0])
+        # Valor vivo: sin refresco lazy (solo lectura) — se excluye lo ya caducado.
+        not_expired = "(expires_at IS NULL OR expires_at = '' OR expires_at >= ?)"
+        sessions_left = 0
+        packages_active = 0
+        for row in connection.execute(
+            f"SELECT remaining_json FROM package_purchases WHERE cliente_id = ? AND status = 'active' AND {not_expired}",
+            (cliente_id, now_iso),
+        ):
+            packages_active += 1
+            try:
+                remaining = json.loads(row["remaining_json"] or "{}")
+            except (ValueError, TypeError):
+                remaining = {}
+            sessions_left += sum(int(v or 0) for v in remaining.values())
+        gift_row = connection.execute(
+            f"SELECT COUNT(*) AS n, COALESCE(SUM(balance_cents), 0) AS cents FROM gift_cards "
+            f"WHERE cliente_id = ? AND status = 'active' AND {not_expired}",
+            (cliente_id, now_iso),
+        ).fetchone()
+    return {
+        "date": today.isoformat(),
+        "bookings_today": bookings_today,
+        "bookings_today_paid": agg["paid_count"],
+        "revenue_today_cents": agg["revenue_cents"] + products_cents + packages_cents + gifts_cents,
+        "revenue_breakdown": {
+            "bookings_cents": agg["revenue_cents"],
+            "products_cents": products_cents,
+            "packages_cents": packages_cents,
+            "gift_cards_cents": gifts_cents,
+        },
+        "product_sales_today": product_sales_today,
+        "packages_active": packages_active,
+        "packages_sessions_left": sessions_left,
+        "gift_active": int(gift_row["n"] or 0),
+        "gift_balance_cents": int(gift_row["cents"] or 0),
     }
 
 

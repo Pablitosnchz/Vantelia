@@ -5,53 +5,29 @@ registro de rutas identico al monolito original.
 """
 from __future__ import annotations
 
-import asyncio
 import copy
 import base64
 import csv
 import hashlib
-import hmac
 import json
-import os
-import random
 import re
 import secrets
-import shutil
 import sqlite3
-import threading
-import time
-import unicodedata
-import uuid
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from email.message import EmailMessage
-from email.utils import formataddr, parseaddr
-from html import escape
+from datetime import timedelta
 from io import StringIO
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from typing import Any, Dict, List, Optional
+from urllib.parse import quote, urlencode
 
 import httpx
 from fastapi import (
-    BackgroundTasks,
-    Cookie,
     Depends,
-    Header,
     HTTPException,
     Request,
     Response,
-    WebSocket,
-    WebSocketDisconnect,
     status,
 )
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
-from pydantic import BaseModel, EmailStr, Field
+from fastapi.responses import JSONResponse, RedirectResponse
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python 3.8 compatibility
-    from backports.zoneinfo import ZoneInfo
 
 import onboarding_utils
 from api_models import *  # noqa: F401,F403
@@ -61,28 +37,21 @@ from backend import (
     billing,
     booking,
     channel_requests,
-    chat,
     clients,
     commerce,
     crm,
     db,
-    demo_agenda,
     emailing,
-    growth,
-    instagram,
     messaging,
     onboarding,
-    outreach,
     portal,
     rag,
     security,
     settings,
     stripe_gateway,
     textnorm,
-    tiktok,
     timeutils,
     voice,
-    wa_capture,
     whatsapp,
 )
 from backend.main import app
@@ -493,6 +462,7 @@ async def app_deploy(
         widget_script_url=assets["widget_script_url"],
         api_base_url=api_base,
         demo_url=assets["demo_url"],
+        central_url=assets.get("central_url", f"{api_base}/central/{cliente_id}"),
         share_link=share_link,
         qr_data_url="",
     )
@@ -855,7 +825,6 @@ async def app_contact_detail(
 # --- Pagos de clientes finales / Stripe Connect ----------------------------
 
 PAYMENT_POLICY_MODES = {"none", "full", "deposit_fixed", "deposit_percent"}
-PAYMENT_STATUSES = {"pending", "paid", "failed", "refunded", "partially_refunded"}
 
 
 
@@ -1433,18 +1402,45 @@ async def app_follow_up_put(
             rem["suppress_2h_if_confirmed"] = bool(data.suppress_2h_if_confirmed)
         if data.delivery_priority is not None:
             rem["delivery_priority"] = booking._normalize_followup_delivery_priority(data.delivery_priority)
-        if data.voice_otp_channels is not None:
-            rem["voice_otp_channels"] = {
-                "email": bool(data.voice_otp_channels.get("email")),
-                "whatsapp": bool(data.voice_otp_channels.get("whatsapp")),
-                "sms": bool(data.voice_otp_channels.get("sms")),
-            }
+        # On/off de la verificacion por codigo (voz). Acepta el flag nuevo o, por compat, infiere
+        # de los canales OTP antiguos (algun canal activo = encendido).
+        if data.voice_otp_enabled is not None:
+            rem["voice_otp_enabled"] = bool(data.voice_otp_enabled)
+        elif data.voice_otp_channels is not None:
+            rem["voice_otp_enabled"] = bool(any(data.voice_otp_channels.values()))
+        rem.pop("voice_otp_channels", None)  # ya no hay seleccion de canales propia del OTP
         cfg["reminders"] = rem
-        if data.message_template_channels is not None:
-            booking_cfg = dict(cfg.get("booking", {}) or {})
+
+        booking_cfg = dict(cfg.get("booking", {}) or {})
+        booking_dirty = False
+        # Canales GLOBALES (una sola tira). Se escriben en abanico (mismo valor a cada aviso)
+        # sobre message_template_channels, asi el motor de envio no cambia.
+        if data.channels is not None:
+            g = {k: bool(data.channels.get(k)) for k in ("email", "whatsapp", "sms")}
+            mtc = textnorm._normalize_message_template_channels(
+                booking_cfg.get("message_template_channels") or {}
+            )
+            for kind in mtc:
+                mtc[kind] = dict(g)
+            booking_cfg["message_template_channels"] = mtc
+            booking_dirty = True
+        elif data.message_template_channels is not None:
+            # Compat: payload viejo {kind:{email,...}} -> se respeta tal cual.
             booking_cfg["message_template_channels"] = textnorm._normalize_message_template_channels(
                 data.message_template_channels
             )
+            booking_dirty = True
+        # On/off por aviso temporizado (confirmed / reminder_24h / reminder_2h).
+        if data.steps_enabled is not None:
+            mte = textnorm._normalize_message_template_enabled(
+                booking_cfg.get("message_template_enabled", {}), booking_cfg.get("message_templates", {})
+            )
+            for key, val in data.steps_enabled.items():
+                if key in mte:
+                    mte[key] = bool(val)
+            booking_cfg["message_template_enabled"] = mte
+            booking_dirty = True
+        if booking_dirty:
             cfg["booking"] = booking_cfg
         next_configs[target] = cfg
         clients._update_runtime_configs(next_configs)
@@ -1840,6 +1836,13 @@ async def app_services_post(
         }
     info_txt = portal._replace_services_section(rag._read_info(cliente_id), list(unique.values()))
     rag._write_info(cliente_id, info_txt)
+    with db._get_db_connection() as connection:
+        connection.execute(
+            "UPDATE services SET is_active = 0, updated_at = ? WHERE cliente_id = ?",
+            (timeutils._utc_now_iso(), cliente_id),
+        )
+        connection.commit()
+    agenda._sync_services_from_info(cliente_id, info_txt)
     return await app_services_get(user)
 
 
@@ -1916,6 +1919,8 @@ async def app_voice_post(
             voice_row["enabled"] = bool(data.enabled)
         if data.twilio_phone_number is not None:
             voice_row["twilio_phone_number"] = textnorm._sanitize_text(data.twilio_phone_number)[:32]
+        if data.transfer_number is not None:
+            voice_row["transfer_number"] = textnorm._sanitize_text(data.transfer_number)[:32]
         if data.openai_voice is not None:
             v = textnorm._sanitize_text(data.openai_voice).lower()
             voice_row["openai_voice"] = v if v in textnorm.VOICE_ALLOWED_OPENAI_VOICES else (voice_row.get("openai_voice") or "alloy")
@@ -2018,6 +2023,10 @@ async def app_voice_log(
         duration = max(0, min(7200, int((body or {}).get("duration_seconds") or 0)))
     except (TypeError, ValueError):
         duration = 0
+    # Etiqueta de resultado acumulada por el front (paridad con el motor de telefono).
+    outcome = str((body or {}).get("outcome") or "").strip().lower()
+    if outcome not in ("reservada", "cancelada", "reprogramada", "transferida"):
+        outcome = ""
     text_all = "\n".join(f"{i['role']}: {i['text']}" for i in transcript)
     summary = await timeutils._to_thread(voice._voice_summarize, text_all)
     booking_created = 1 if voice._voice_detect_booking_intent(text_all) else 0
@@ -2029,11 +2038,11 @@ async def app_voice_log(
                 """
                 INSERT INTO voice_calls (call_sid, cliente_id, from_number, to_number, started_at, ended_at,
                                          duration_seconds, status, transcript_json, summary, booking_created,
-                                         direction, purpose)
-                VALUES (?, ?, '', '', ?, ?, ?, 'completed', ?, ?, ?, 'inbound', 'app_test')
+                                         direction, purpose, outcome)
+                VALUES (?, ?, '', '', ?, ?, ?, 'completed', ?, ?, ?, 'inbound', 'app_test', ?)
                 """,
                 (call_sid, cliente_id, now, now, duration,
-                 json.dumps(transcript, ensure_ascii=False), summary, booking_created),
+                 json.dumps(transcript, ensure_ascii=False), summary, booking_created, outcome),
             )
             conn.commit()
     except Exception as exc:  # noqa: BLE001
@@ -3184,3 +3193,138 @@ async def auth_subscription_checkout(
 
     return SubscriptionCheckoutResponse(url=session.url, session_id=session.id)
 
+
+
+# --- Compra publica de tarjetas regalo: config del portal --------------------------
+
+@app.get("/auth/app/gift-cards-public")
+async def app_gift_public_get(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """Config de la compra publica de tarjetas + estado real (Stripe operativo) + URL."""
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    cfg = commerce._gift_public_config(target)
+    try:
+        account = booking._connect_account_status(target)
+        stripe_ready = bool(account.connected and account.charges_enabled)
+    except Exception:  # noqa: BLE001
+        stripe_ready = False
+    base = textnorm._preferred_public_base_url().rstrip("/")
+    return {
+        **cfg,
+        "stripe_ready": stripe_ready,
+        "available": cfg["enabled"] and stripe_ready,
+        "public_url": f"{base}/gift/{target}",
+    }
+
+
+@app.get("/auth/app/shop-public")
+async def app_shop_public_get(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """Config de la tienda online (bonos + productos) + estado real (Stripe, catalogo)."""
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    cfg = commerce._shop_public_config(target)
+    availability = commerce.shop_public_available(target)
+    try:
+        account = booking._connect_account_status(target)
+        stripe_ready = bool(account.connected and account.charges_enabled)
+    except Exception:  # noqa: BLE001
+        stripe_ready = False
+    active_packages = len(commerce._list_packages(target, include_inactive=False))
+    active_products = len(commerce._list_products(target, include_inactive=False))
+    base = textnorm._preferred_public_base_url().rstrip("/")
+    return {
+        **cfg,
+        "stripe_ready": stripe_ready,
+        "available_packages": availability["packages"],
+        "available_products": availability["products"],
+        "active_packages": active_packages,
+        "active_products": active_products,
+        "public_url": f"{base}/tienda/{target}",
+    }
+
+
+@app.put("/auth/app/shop-public")
+async def app_shop_public_put(
+    data: Dict[str, Any],
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """Guarda la config de la tienda online. manager+ (catalogo)."""
+    security._require_portal_min_role(user, "manager")
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    data = data or {}
+    with appstate.state_lock:
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+        cfg = next_configs.get(target, {})
+        sp = dict(cfg.get("shop_public", {}) or {})
+        for key in ("enabled_packages", "enabled_products"):
+            if key in data:
+                sp[key] = bool(data.get(key))
+        if "intro_text" in data:
+            sp["intro_text"] = textnorm._sanitize_text(str(data.get("intro_text") or ""))[:300]
+        if "pickup_note" in data:
+            sp["pickup_note"] = textnorm._sanitize_text(str(data.get("pickup_note") or ""))[:200]
+        if "accent_color" in data:
+            ac = textnorm._sanitize_text(str(data.get("accent_color") or "")).strip()
+            sp["accent_color"] = ac if commerce._GIFT_ACCENT_RE.match(ac) else ""
+        cfg["shop_public"] = sp
+        next_configs[target] = cfg
+        clients._update_runtime_configs(next_configs)
+    clients._persist_configs_to_disk(next_configs)
+    return await app_shop_public_get(cliente_id=cliente_id, user=user)
+
+
+@app.put("/auth/app/gift-cards-public")
+async def app_gift_public_put(
+    data: Dict[str, Any],
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """Guarda la config de compra publica de tarjetas. manager+ (catalogo)."""
+    security._require_portal_min_role(user, "manager")
+    target = portal._portal_client_id_or_403(user, cliente_id)
+    data = data or {}
+    with appstate.state_lock:
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+        cfg = next_configs.get(target, {})
+        gp = dict(cfg.get("gift_cards_public", {}) or {})
+        if "enabled" in data:
+            gp["enabled"] = bool(data.get("enabled"))
+        if "suggested_amounts" in data:
+            amounts = []
+            for item in (data.get("suggested_amounts") or [])[:6]:
+                try:
+                    cents = int(item)
+                except (TypeError, ValueError):
+                    continue
+                if 100 <= cents <= 100000 and cents not in amounts:
+                    amounts.append(cents)
+            gp["suggested_amounts"] = amounts
+        for key in ("min_cents", "max_cents"):
+            if key in data:
+                try:
+                    gp[key] = max(100, min(100000, int(data.get(key))))
+                except (TypeError, ValueError):
+                    pass
+        if "validity_days" in data:
+            try:
+                gp["validity_days"] = max(0, min(3650, int(data.get("validity_days"))))
+            except (TypeError, ValueError):
+                pass
+        if "intro_text" in data:
+            gp["intro_text"] = textnorm._sanitize_text(str(data.get("intro_text") or ""))[:300]
+        if "assistant_knowledge" in data:
+            gp["assistant_knowledge"] = textnorm._sanitize_text(
+                str(data.get("assistant_knowledge") or ""),
+                allow_multiline=True,
+            )[:commerce.GIFT_PUBLIC_ASSISTANT_KNOWLEDGE_MAX_CHARS]
+        cfg["gift_cards_public"] = gp
+        next_configs[target] = cfg
+        clients._update_runtime_configs(next_configs)
+    clients._persist_configs_to_disk(next_configs)
+    rag._invalidate_client_runtime(target)
+    return await app_gift_public_get(cliente_id=cliente_id, user=user)

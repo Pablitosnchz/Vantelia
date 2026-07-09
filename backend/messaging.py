@@ -8,10 +8,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
-import json
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 try:
     from twilio.request_validator import RequestValidator as _TwilioRequestValidator
@@ -19,9 +18,8 @@ except ImportError:  # twilio es opcional en dev
     _TwilioRequestValidator = None
 
 import httpx
-from fastapi import HTTPException, Request
 
-from backend import appstate, clients, db, security, settings, textnorm, timeutils
+from backend import appstate, clients, security, settings, textnorm
 
 
 def _normalize_sms_recipient(to_number: str, *, default_country_code: str = "34") -> str:

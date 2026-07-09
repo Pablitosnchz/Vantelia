@@ -27,12 +27,11 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import os
 import re
 import sys
 import time
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Iterable, Optional
 

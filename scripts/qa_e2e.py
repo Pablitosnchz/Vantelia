@@ -399,7 +399,8 @@ if fu.status_code == 200:
 chk("seguimiento: PUT", client.put("/auth/app/follow-up", params=P, cookies=COOK,
     json={"email_confirm_button": True, "suppress_2h_if_confirmed": True, "call_enabled": False,
           "call_hours_before": 5, "quiet_start": "21:00", "quiet_end": "09:00", "daily_call_cap": 20,
-          "message_template_channels": {"reminder_24h": {"email": True, "whatsapp": True, "sms": False}}}), soft=(422,))
+          "channels": {"email": True, "whatsapp": True, "sms": False},
+          "steps_enabled": {"reminder_2h": False}, "voice_otp_enabled": True}), soft=(422,))
 # Confirmacion 1-clic por email: token invalido -> 404
 chk("seguimiento: confirm token invalido -> 404", client.get("/booking/confirm/zzz-no-existe"), ok=(404,))
 if mb2.status_code == 200 and cbid:

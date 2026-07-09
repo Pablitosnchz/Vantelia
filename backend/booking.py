@@ -8,21 +8,18 @@ cita (Stripe Connect) y enlaces de pago enviados por la IA.
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import hmac
 import json
 import os
 import re
 import secrets
 import sqlite3
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from html import escape
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import quote, urlencode
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
-from fastapi import BackgroundTasks, HTTPException, Request, status
+from fastapi import HTTPException, Request, status
 
 try:
     from zoneinfo import ZoneInfo
@@ -44,7 +41,7 @@ from api_models import (
     PortalMessagePreviewResponse,
     PortalScheduleUpdatePayload,
 )
-from backend import agenda, appstate, clients, crm, db, emailing, messaging, rag, security, settings, stripe_gateway, textnorm, timeutils
+from backend import agenda, appstate, clients, crm, db, emailing, messaging, security, settings, stripe_gateway, textnorm, timeutils
 
 _FOLLOWUP_DELIVERY_CHANNELS = ("email", "whatsapp", "sms")
 _BOOKING_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
@@ -120,6 +117,15 @@ def _booking_reminder_worker() -> None:
                     settings.logger.info("Peticiones de resena enviadas: %s", review_sent)
             except Exception as exc:  # noqa: BLE001
                 settings.logger.error("Error en el envio de peticiones de resena: %s", exc)
+            # Tarjetas regalo compradas online pendientes de enviar (inmediatas cuyo
+            # email fallo en el webhook + programadas cuya fecha llego).
+            try:
+                from backend import commerce as _commerce  # tardio: evita ciclo
+                gift_sent = _commerce._send_pending_gift_card_emails()
+                if gift_sent:
+                    settings.logger.info("Tarjetas regalo enviadas: %s", gift_sent)
+            except Exception as exc:  # noqa: BLE001
+                settings.logger.error("Error enviando tarjetas regalo pendientes: %s", exc)
             # Rebooking proactivo por IA (opt-in por negocio, como mucho 1 pasada/dia).
             try:
                 if _ai_rebooking_due():
@@ -769,9 +775,6 @@ def _booking_blank_tracking_fields() -> Dict[str, str]:
     }
 
 
-_BOOKING_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
-
-
 def _generate_booking_code() -> str:
     # Solo digitos: mucho mas facil de dictar y oir por telefono ("R, uno, dos, tres...").
     # 6 digitos mantienen un espacio amplio (1M) por cliente. Los codigos antiguos
@@ -808,13 +811,21 @@ def _booking_contact_matches(row: sqlite3.Row, *, telefono: str = "", email: str
 
 
 def _get_booking_row_by_code(cliente_id: str, code: str) -> Optional[sqlite3.Row]:
-    normalized = textnorm._sanitize_text(code).strip().upper().replace(" ", "")
-    if not normalized:
+    raw = textnorm._sanitize_text(code)
+    normalized = raw.strip().upper().replace(" ", "")
+    candidates = set()
+    if normalized:
+        candidates.add(normalized)
+        # Tolera que dicten el codigo sin el prefijo "R-".
+        if not normalized.startswith("R-"):
+            candidates.add(f"R-{normalized.lstrip('R-')}")
+    # Tolera formas dictadas raras (digitos deletreados, guiones entre cifras, 'erre',
+    # solo el numero...): reutiliza el extractor robusto para reconstruir el codigo.
+    extracted = _extract_booking_code_from_text(raw)
+    if extracted:
+        candidates.add(extracted)
+    if not candidates:
         return None
-    # Tolera que dicten el codigo sin el prefijo "R-".
-    candidates = {normalized}
-    if not normalized.startswith("R-"):
-        candidates.add(f"R-{normalized.lstrip('R-')}")
     with db._get_db_connection() as connection:
         for candidate in candidates:
             row = connection.execute(
@@ -830,12 +841,44 @@ def _get_booking_row_by_code(cliente_id: str, code: str) -> Optional[sqlite3.Row
 # romper enlaces/citas existentes.
 BOOKING_CODE_RE = re.compile(r"\bR[\s-]?([0-9]{6}|[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4})\b", re.IGNORECASE)
 
+# Numeros dictados por voz digito a digito ("dos dos ocho uno nueve seis" -> "228196").
+_SPOKEN_DIGIT_WORDS = {
+    "cero": "0", "uno": "1", "una": "1", "dos": "2", "tres": "3", "cuatro": "4",
+    "cinco": "5", "seis": "6", "siete": "7", "ocho": "8", "nueve": "9",
+}
+
+
+def _booking_code_normalize_spoken(text: str) -> str:
+    """Pasa las formas habladas del numero de reserva a algo que el regex entienda:
+    'erre' -> 'r', 'guion' -> ' ', y cada palabra-digito ('dos','ocho'...) -> su cifra.
+    Despues une las cifras pegadas separadas por espacios ('2 2 8 1 9 6' -> '228196')."""
+    t = textnorm._sanitize_text(text or "").lower()
+    t = re.sub(r"\berre\b", "r", t)
+    t = re.sub(r"\bgui[oó]n\b", " ", t)
+    tokens = re.split(r"(\W+)", t)
+    t = "".join(_SPOKEN_DIGIT_WORDS.get(tok, tok) for tok in tokens)
+    # une cifras sueltas separadas por espacios/puntos para reconstruir el numero completo.
+    t = re.sub(r"(?<=\d)[\s.\-]+(?=\d)", "", t)
+    return t
+
 
 def _extract_booking_code_from_text(text: str) -> str:
-    match = BOOKING_CODE_RE.search(str(text or "").upper())
-    if not match:
-        return ""
-    return f"R-{match.group(1).upper()}"
+    raw = str(text or "")
+    # 1) Forma escrita con R explicita (R-228196 / R228196 / R 228196 / antiguo R-AB12).
+    match = BOOKING_CODE_RE.search(raw.upper())
+    if match:
+        return f"R-{match.group(1).upper()}"
+    # 2) Formas habladas: 'erre guion ...', digitos deletreados, etc.
+    norm = _booking_code_normalize_spoken(raw)
+    match = BOOKING_CODE_RE.search(norm.upper())
+    if match:
+        return f"R-{match.group(1).upper()}"
+    # 3) Solo el numero (6 digitos sueltos): el cliente dice '228196' o 'mi codigo es 228196'.
+    #    Un telefono (9 cifras) NO casa porque exigimos exactamente 6 entre limites de palabra.
+    match = re.search(r"\b(\d{6})\b", norm)
+    if match:
+        return f"R-{match.group(1)}"
+    return ""
 
 
 async def _lookup_and_verify_booking_by_code(
@@ -866,14 +909,6 @@ async def _lookup_and_verify_booking_by_code(
             ),
         }
     return row, None
-
-
-def _booking_action_summary(row: sqlite3.Row) -> str:
-    try:
-        fecha = textnorm._format_date_es(textnorm._parse_date(row["booking_date"]).date())
-    except Exception:
-        fecha = row["booking_date"] or ""
-    return f"{fecha} a las {row['booking_time']}"
 
 
 async def _cancel_booking_by_code(
@@ -945,7 +980,14 @@ async def _reschedule_booking_by_code(
             audit_payload={"channel": source, "trusted_phone": trusted_phone},
         )
     except HTTPException as exc:
-        return {"ok": False, "error": str(exc.detail)}
+        return {
+            "ok": False,
+            "error": str(exc.detail),
+            # Contexto para que el texto de fallo ofrezca alternativas REALES del
+            # profesional de la cita (descontando sus citas y bloqueos).
+            "booking_id": row["id"],
+            "employee_id": row["employee_id"] or "",
+        }
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("[%s] reprogramacion por codigo fallo (%s): %s", source, cliente_id, exc)
         return {"ok": False, "error": "No se pudo reprogramar la cita."}
@@ -960,12 +1002,24 @@ async def _reschedule_booking_by_code(
 
 def _message_requests_cancel_booking(message: str) -> bool:
     text = textnorm._strip_accents(str(message or "").lower())
-    return any(word in text for word in ("cancelar", "anular", "cancelacion", "cancela", "borrar cita"))
+    if any(phrase in text for phrase in ("condiciones de cancelacion", "politica de cancelacion", "politicas de cancelacion")):
+        return any(phrase in text for phrase in ("quiero cancelar", "necesito cancelar", "cancelar mi cita", "anular mi cita", "borrar cita"))
+    return any(word in text for word in ("cancelar", "anular", "cancela", "borrar cita"))
+
+
+RESCHEDULE_INTENT_RE = re.compile(
+    # verbo de cambio ... (cerca) ... objeto de cita/fecha/hora. Cubre variantes con
+    # articulos ("cambiar LA fecha de UNA cita") que una lista de literales se pierde.
+    r"\b(reprogramar|reprograma|cambiar|cambia|mover|mueve|modificar|modifica)\b"
+    r".{0,40}?\b(cita|reserva|fecha|hora|dia)\b"
+)
 
 
 def _message_requests_reschedule_booking(message: str) -> bool:
     text = textnorm._strip_accents(str(message or "").lower())
-    return any(word in text for word in ("reprogramar", "cambiar cita", "cambiar la cita", "mover cita", "modificar cita", "cambiar hora", "cambiar fecha"))
+    if any(word in text for word in ("reprogramala", "cambiarla", "cambiala", "muevela")):
+        return True
+    return bool(RESCHEDULE_INTENT_RE.search(text))
 
 
 def _message_requests_payment(message: str) -> bool:
@@ -979,6 +1033,40 @@ def _message_requests_payment(message: str) -> bool:
     )
 
 
+CHAT_MANAGE_STATE_TTL_SECONDS = 15 * 60
+
+
+def _chat_manage_state_get(session_id: str) -> Dict[str, Any]:
+    """Memoria conversacional de gestion de citas: lo ya dicho en la sesion (intencion,
+    codigo, contacto) para no volver a pedirlo. Efimera con TTL corto."""
+    if not session_id:
+        return {}
+    with appstate.state_lock:
+        state = appstate.chat_manage_state.get(session_id)
+        if not state:
+            return {}
+        if time.time() - float(state.get("ts") or 0) > CHAT_MANAGE_STATE_TTL_SECONDS:
+            appstate.chat_manage_state.pop(session_id, None)
+            return {}
+        return dict(state)
+
+
+def _chat_manage_state_update(session_id: str, **values: Any) -> None:
+    if not session_id:
+        return
+    with appstate.state_lock:
+        state = appstate.chat_manage_state.setdefault(session_id, {})
+        state.update({k: v for k, v in values.items() if v})
+        state["ts"] = time.time()
+
+
+def _chat_manage_state_clear(session_id: str) -> None:
+    if not session_id:
+        return
+    with appstate.state_lock:
+        appstate.chat_manage_state.pop(session_id, None)
+
+
 async def _process_booking_management_message(
     *,
     cliente_id: str,
@@ -986,10 +1074,29 @@ async def _process_booking_management_message(
     request: Optional[Request],
     source: str,
     trusted_phone: str = "",
+    session_id: str = "",
 ) -> Optional[Tuple[str, str]]:
     wants_cancel = _message_requests_cancel_booking(message)
     wants_reschedule = _message_requests_reschedule_booking(message)
-    if not (wants_cancel or wants_reschedule or _extract_booking_code_from_text(message)):
+    code_in_msg = _extract_booking_code_from_text(message)
+    email_in_msg = textnorm._extract_email_from_text(message)
+    phone_in_msg = textnorm._extract_phone_from_text(message)
+
+    remembered = _chat_manage_state_get(session_id)
+    remembered_intent = str(remembered.get("intent") or "")
+
+    engaged_now = bool(wants_cancel or wants_reschedule or code_in_msg)
+    # Con una gestion pendiente en la sesion, un mensaje que solo aporta el dato que
+    # faltaba (codigo, telefono/email, o fecha/hora para el cambio) continua el flujo
+    # sin exigir repetir la frase "quiero cancelar/cambiar".
+    contributes_data = bool(code_in_msg or email_in_msg or phone_in_msg)
+    if not contributes_data and remembered_intent == "reschedule":
+        config_tmp = clients._get_client_config(cliente_id)
+        tz_tmp = config_tmp.get("booking", {}).get("timezone") or settings.DEFAULT_TIMEZONE
+        contributes_data = bool(
+            textnorm._extract_date_from_text(message, tz_tmp) or textnorm._extract_time_from_text(message)
+        )
+    if not engaged_now and not (remembered_intent and contributes_data):
         return None
 
     config = clients._get_client_config(cliente_id)
@@ -999,9 +1106,40 @@ async def _process_booking_management_message(
             "La gestion de citas online no esta activa para este negocio. Contacta directamente con el equipo.",
         )
 
-    code = _extract_booking_code_from_text(message)
-    email = textnorm._extract_email_from_text(message)
-    phone = textnorm._extract_phone_from_text(message)
+    # Mezcla: lo del mensaje manda; lo recordado completa lo que falte.
+    code = code_in_msg or str(remembered.get("code") or "")
+    email = email_in_msg or str(remembered.get("email") or "")
+    phone = phone_in_msg or str(remembered.get("telefono") or "")
+    if wants_cancel and wants_reschedule:
+        # "Cancelar o cambiar": ambiguo. Guarda lo aportado y pregunta cual de las dos.
+        _chat_manage_state_update(session_id, code=code_in_msg, email=email_in_msg, telefono=phone_in_msg)
+        return (
+            "booking_manage",
+            "Puedo cancelarla o cambiarla de fecha. Dime cual de las dos quieres"
+            + ("" if code else " y el numero de reserva (R-XXXXXX)")
+            + ".",
+        )
+    if not (wants_cancel or wants_reschedule):
+        if remembered_intent == "cancel":
+            wants_cancel = True
+        elif remembered_intent == "reschedule":
+            wants_reschedule = True
+        elif remembered.get("code"):
+            # Habia una gestion pendiente sin intencion clara ("cancelar o cambiar"):
+            # un "cambiar" / "mover" suelto ya la resuelve.
+            bare = textnorm._strip_accents(str(message or "").lower())
+            if re.search(r"\b(cambiar|cambia|mover|mueve|reprogramar|reprograma)\b", bare):
+                wants_reschedule = True
+
+    # Persistir lo aprendido en este mensaje para los siguientes pasos.
+    _chat_manage_state_update(
+        session_id,
+        intent=("cancel" if wants_cancel else ("reschedule" if wants_reschedule else "")),
+        code=code_in_msg,
+        email=email_in_msg,
+        telefono=phone_in_msg,
+    )
+
     if not (wants_cancel or wants_reschedule):
         return (
             "booking_manage",
@@ -1031,13 +1169,15 @@ async def _process_booking_management_message(
             request=request,
         )
         if result.get("ok"):
+            _chat_manage_state_clear(session_id)
             suffix = " Ya estaba cancelada." if result.get("ya_cancelada") else ""
             return ("booking_cancel", f"Listo, la cita {code} queda cancelada.{suffix}")
         return ("booking_cancel", result.get("error") or "No se pudo cancelar la cita.")
 
     tz = config.get("booking", {}).get("timezone") or settings.DEFAULT_TIMEZONE
-    new_date = textnorm._extract_date_from_text(message, tz)
-    new_time = textnorm._extract_time_from_text(message)
+    new_date = textnorm._extract_date_from_text(message, tz) or str(remembered.get("fecha") or "")
+    new_time = textnorm._extract_time_from_text(message) or str(remembered.get("hora") or "")
+    _chat_manage_state_update(session_id, fecha=new_date, hora=new_time)
     missing = []
     if not new_date:
         missing.append("la nueva fecha")
@@ -1060,6 +1200,7 @@ async def _process_booking_management_message(
         request=request,
     )
     if result.get("ok"):
+        _chat_manage_state_clear(session_id)
         try:
             fecha_humana = textnorm._format_date_es(textnorm._parse_date(new_date).date())
         except Exception:
@@ -1068,7 +1209,46 @@ async def _process_booking_management_message(
             "booking_reschedule",
             f"Listo, he cambiado la cita {code} al {fecha_humana} a las {new_time}. El numero de reserva sigue siendo el mismo.",
         )
-    return ("booking_reschedule", result.get("error") or "No se pudo reprogramar la cita.")
+    # Hueco ocupado/cerrado: ofrece alternativas REALES del dia en vez de un error seco.
+    # La hora fallida se olvida para que el siguiente mensaje ("pues a las cinco")
+    # reintente esa nueva hora sin arrastrar la anterior.
+    if session_id:
+        with appstate.state_lock:
+            _st = appstate.chat_manage_state.get(session_id)
+            if _st:
+                _st.pop("hora", None)
+    error_text = await _reschedule_failure_text(cliente_id, result, new_date, new_time)
+    return ("booking_reschedule", error_text)
+
+
+async def _reschedule_failure_text(
+    cliente_id: str, result: Dict[str, Any], new_date: str, new_time: str
+) -> str:
+    """Texto de fallo de reprogramacion COMPARTIDO por chat y WhatsApp: el error real +
+    hasta 3 huecos libres reales del mismo dia como alternativa (nunca un error seco).
+    Los huecos descuentan citas y bloqueos: si el resultado trae employee_id se usan los
+    del profesional de la cita (excluyendo la propia cita); si no, los del negocio."""
+    error_text = str(result.get("error") or "No se pudo reprogramar la cita.")
+    if result.get("needs_verification"):
+        return error_text
+    employee_id = str(result.get("employee_id") or "")
+    try:
+        if employee_id:
+            _all, available = await agenda._employee_slot_sets_for_day(
+                cliente_id,
+                new_date,
+                employee_id=employee_id,
+                exclude_booking_id=str(result.get("booking_id") or ""),
+            )
+        else:
+            _all, available = await agenda._public_slot_sets_for_day(cliente_id, new_date)
+        free_slots = sorted(available)
+    except Exception:  # noqa: BLE001
+        free_slots = []
+    alternatives = [s for s in free_slots if s != new_time][:3]
+    if alternatives:
+        error_text += f" Ese dia tengo libres: {', '.join(alternatives)}. ¿Te encaja alguna?"
+    return error_text
 
 
 async def _process_payment_request_message(
@@ -1261,6 +1441,8 @@ def _mark_booking_confirmed_by_customer(booking_id: str, cliente_id: str, *, cha
         return False
     if row["status"] == "pending_review":
         _update_booking_record(booking_id, status="confirmed", confirmed_at=timeutils._utc_now_iso())
+    elif not (row["confirmed_at"] or "").strip():
+        _update_booking_record(booking_id, confirmed_at=timeutils._utc_now_iso())
     _record_booking_audit(
         booking_id, cliente_id, "attendance_confirmed_by_customer", {"channel": channel}
     )
@@ -1496,20 +1678,6 @@ def _serialize_booking_row(
         "contact_email": config.get("contacto", {}).get("email", ""),
         "contact_phone": config.get("contacto", {}).get("telefono", ""),
     }
-
-
-def _booking_conflicts_for_break_window(
-    cliente_id: str,
-    break_start: str,
-    break_end: str,
-    *,
-    employee_id: str = "",
-) -> List[sqlite3.Row]:
-    return agenda._booking_conflicts_for_break_windows(
-        cliente_id,
-        [{"start": break_start, "end": break_end, "reason": "Descanso"}],
-        employee_id=employee_id,
-    )
 
 
 async def _cancel_provider_booking(booking_row: sqlite3.Row) -> None:
@@ -3022,6 +3190,26 @@ def _auto_confirm_pending_bookings() -> int:
     return confirmed
 
 
+def _followup_global_channels(cliente_id: str) -> Dict[str, bool]:
+    """Canales GLOBALES del Seguimiento (email/whatsapp/sms) aplicados por igual a TODOS
+    los avisos, confirmaciones y la peticion de resena. Es la fuente unica que el negocio
+    edita en una sola tira de canales (no por aviso).
+
+    Por compatibilidad se sigue persistiendo en ``booking.message_template_channels`` (un
+    valor identico por cada kind, escrito en abanico desde el PUT del Seguimiento), asi el
+    motor de envio (``agenda._effective_followup_channels``) no cambia. Aqui leemos la union
+    de los avisos de la escalera: si algun canal esta activo en alguno, lo damos por global.
+    Todos a false = no se envia ningun recordatorio ni confirmacion (comportamiento querido)."""
+    eff = agenda._effective_followup_channels(cliente_id)
+    out = {"email": False, "whatsapp": False, "sms": False}
+    for kind in ("confirmed", "reminder_24h", "reminder_2h"):
+        chs = eff.get(kind, {}) or {}
+        for name in out:
+            if chs.get(name):
+                out[name] = True
+    return out
+
+
 def _follow_up_config(cliente_id: str) -> Dict[str, Any]:
     """Config canonica del flujo de Seguimiento del tenant. Lee de config['reminders']
     (clave historica) y resuelve los campos nuevos con defaults conservadores.
@@ -3045,6 +3233,18 @@ def _follow_up_config(cliente_id: str) -> Dict[str, Any]:
             (appstate.CONFIG_CLIENTES.get(cliente_id) or {}).get("voice", {}).get("twilio_phone_number")
         )
         call_enabled = voice_ready
+    # Canales globales del Seguimiento (una sola tira para todos los avisos).
+    channels = _followup_global_channels(cliente_id)
+    # Verificacion por codigo (OTP de voz): on/off propio. Compat: si el tenant nunca guardo
+    # el flag pero tenia canales OTP, lo inferimos de "habia algun canal activo".
+    if "voice_otp_enabled" in cfg:
+        voice_otp_enabled = bool(cfg.get("voice_otp_enabled"))
+    else:
+        legacy_otp = cfg.get("voice_otp_channels")
+        voice_otp_enabled = bool(any((legacy_otp or {}).values())) if isinstance(legacy_otp, dict) else True
+    # El codigo se entrega por los canales globales (no hay seleccion propia). Apagar el OTP
+    # equivale a no tener canales: cae a verificacion por telefono/email en su lugar.
+    voice_otp_channels = dict(channels) if voice_otp_enabled else {"email": False, "whatsapp": False, "sms": False}
     return {
         "call_enabled": call_enabled,
         "call_fallback": call_enabled,  # alias de compat (lectura)
@@ -3055,11 +3255,10 @@ def _follow_up_config(cliente_id: str) -> Dict[str, Any]:
         "email_confirm_button": bool(cfg.get("email_confirm_button", True)),
         "suppress_2h_if_confirmed": bool(cfg.get("suppress_2h_if_confirmed", True)),
         "delivery_priority": _normalize_followup_delivery_priority(cfg.get("delivery_priority")),
-        # Canales permitidos para el OTP de voz. Default historico: todos ON (comportamiento
-        # previo). Todos en false = verificacion por codigo desactivada (cae a telefono/email).
-        "voice_otp_channels": (
-            {k: bool((cfg.get("voice_otp_channels") or {}).get(k, True)) for k in ("email", "whatsapp", "sms")}
-        ),
+        "channels": channels,
+        "voice_otp_enabled": voice_otp_enabled,
+        # Compat para voice.py: derivado de los canales globales + el on/off del OTP.
+        "voice_otp_channels": voice_otp_channels,
     }
 
 
@@ -3074,21 +3273,27 @@ def _reminders_config(cliente_id: str) -> Dict[str, Any]:
     }
 
 
+# Pasos temporizados de la escalera de avisos. Los canales son GLOBALES (una sola tira),
+# asi que cada paso solo expone su on/off; la llamada IA es un canal propio (voz).
 _FOLLOW_UP_STEP_DEFS = [
-    ("confirmed", "Confirmacion de la cita", "Al reservar", 0,
+    ("confirmed", "message", "Confirmacion de la cita", "Al reservar", 0,
      "Se envia al instante cuando el cliente reserva."),
-    ("reminder_24h", "Recordatorio 24 h", "24 h antes", 24,
+    ("reminder_24h", "message", "Recordatorio 24 h", "24 h antes", 24,
      "Recordatorio con opcion de confirmar o cancelar."),
-    ("call", "Llamada de confirmacion IA", "", 0,
+    ("call", "call", "Llamada de confirmacion IA", "", 0,
      "Solo si el cliente aun no ha confirmado por otros canales."),
-    ("reminder_2h", "Recordatorio 2 h", "2 h antes", 2,
+    ("reminder_2h", "message", "Recordatorio 2 h", "2 h antes", 2,
      "Ultimo aviso antes de la cita."),
 ]
 
 
 def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
     """Estado completo del Seguimiento para el portal: config + capacidades por plan +
-    flujo efectivo (pasos con canales activos/bloqueados). Fuente de verdad backend."""
+    canales GLOBALES + pasos (cada uno con su on/off). Fuente de verdad backend.
+
+    Modelo: una sola tira de canales (email/whatsapp/sms) que vale para todos los avisos,
+    confirmaciones y la resena. Cada paso solo se puede encender/apagar; si no hay ningun
+    canal global activo no se envia nada. La llamada IA es un paso aparte (canal de voz)."""
     fu = _follow_up_config(cliente_id)
     contacto = (appstate.CONFIG_CLIENTES.get(cliente_id) or {}).get("contacto", {}) or {}
     plan = clients._client_plan(cliente_id)
@@ -3102,58 +3307,55 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
     voice_number = bool((appstate.CONFIG_CLIENTES.get(cliente_id) or {}).get("voice", {}).get("twilio_phone_number"))
     voice_available = voice_plan and voice_number
     voice_reason = "Disponible." if voice_available else ("Requiere plan Business." if not voice_plan else "Conecta un numero en Asistente de voz.")
-    eff = agenda._effective_followup_channels(cliente_id)
 
-    def _msg_channels(kind: str) -> List[Dict[str, Any]]:
-        chs = eff.get(kind, {"email": True, "whatsapp": False, "sms": False})
-        wa_active = bool(chs.get("whatsapp")) and wa_available
-        return [
-            {"channel": "email", "label": "Email", "active": bool(chs.get("email")),
-             "available": True, "locked": False, "recommended": False, "plan_needed": "", "reason": "Disponible."},
-            {"channel": "whatsapp", "label": "WhatsApp", "active": wa_active,
-             "available": wa_available, "locked": not wa_plan, "plan_needed": "" if wa_plan else "Pro",
-             "recommended": wa_available and not wa_active and kind in ("confirmed", "reminder_24h"),
-             "reason": avail["whatsapp"]["reason"]},
-            {"channel": "sms", "label": "SMS", "active": bool(chs.get("sms")) and sms_available,
-             "available": sms_available, "locked": not sms_plan, "plan_needed": "" if sms_plan else "Business",
-             "recommended": False,
-             "reason": "Requiere plan Business." if not sms_plan else avail["sms"]["reason"]},
-        ]
+    booking_cfg = clients._get_client_config(cliente_id).get("booking", {}) or {}
+    msg_enabled = textnorm._normalize_message_template_enabled(
+        booking_cfg.get("message_template_enabled", {}), booking_cfg.get("message_templates", {})
+    )
 
-    steps: List[Dict[str, Any]] = []
-    for key, label, when, offset, note in _FOLLOW_UP_STEP_DEFS:
-        if key == "call":
-            when = f"{fu['call_hours_before']} h antes"
-            offset = int(fu["call_hours_before"])
-            channels = [{
-                "channel": "call", "label": "Llamada IA",
-                "active": bool(fu["call_enabled"]) and voice_available,
-                "available": voice_available, "locked": not voice_plan,
-                "plan_needed": "" if voice_plan else "Business", "reason": voice_reason,
-            }]
-        else:
-            channels = _msg_channels(key)
-        steps.append({"key": key, "label": label, "when": when, "offset_hours": offset,
-                      "channels": channels, "note": note})
-
-    # Paso final post-cita: peticion de resena (opt-in, detalle en su tarjeta).
-    rev = _reviews_config(cliente_id)
-    rev_link_ok = _review_link_valid(rev["link"])
-    rev_on = bool(rev["enabled"]) and rev_link_ok
-    rev_ch = rev["channels"]
-    review_channels = [
-        {"channel": "email", "label": "Email",
-         "active": bool(rev_ch.get("email")) and rev_on,
+    # Canales GLOBALES: una sola tira para todos los avisos. ``active`` = encendido por el
+    # negocio y disponible en su plan. ``recommended`` sugiere WhatsApp si lo tiene listo.
+    g = fu["channels"]
+    global_channels = [
+        {"channel": "email", "label": "Email", "active": bool(g.get("email")),
          "available": True, "locked": False, "recommended": False, "plan_needed": "", "reason": "Disponible."},
-        {"channel": "whatsapp", "label": "WhatsApp",
-         "active": bool(rev_ch.get("whatsapp")) and wa_available and rev_on,
+        {"channel": "whatsapp", "label": "WhatsApp", "active": bool(g.get("whatsapp")) and wa_available,
          "available": wa_available, "locked": not wa_plan, "plan_needed": "" if wa_plan else "Pro",
-         "recommended": False, "reason": avail["whatsapp"]["reason"]},
-        {"channel": "sms", "label": "SMS",
-         "active": bool(rev_ch.get("sms")) and sms_available and rev_on,
+         "recommended": wa_available and not bool(g.get("whatsapp")), "reason": avail["whatsapp"]["reason"]},
+        {"channel": "sms", "label": "SMS", "active": bool(g.get("sms")) and sms_available,
          "available": sms_available, "locked": not sms_plan, "plan_needed": "" if sms_plan else "Business",
          "recommended": False, "reason": "Requiere plan Business." if not sms_plan else avail["sms"]["reason"]},
     ]
+    any_global_active = any(c["active"] for c in global_channels)
+
+    steps: List[Dict[str, Any]] = []
+    for key, kind, label, when, offset, note in _FOLLOW_UP_STEP_DEFS:
+        if kind == "call":
+            when = f"{fu['call_hours_before']} h antes"
+            offset = int(fu["call_hours_before"])
+            enabled = bool(fu["call_enabled"])
+            steps.append({
+                "key": key, "kind": "call", "label": label, "when": when, "offset_hours": offset,
+                "note": note, "enabled": enabled, "active": enabled and voice_available,
+                "available": voice_available, "locked": not voice_plan,
+                "plan_needed": "" if voice_plan else "Business", "reason": voice_reason,
+                "channels": [{
+                    "channel": "call", "label": "Llamada IA", "active": enabled and voice_available,
+                    "available": voice_available, "locked": not voice_plan,
+                    "plan_needed": "" if voice_plan else "Business", "recommended": False, "reason": voice_reason,
+                }],
+            })
+        else:
+            enabled = bool(msg_enabled.get(key, True))
+            steps.append({
+                "key": key, "kind": "message", "label": label, "when": when, "offset_hours": offset,
+                "note": note, "enabled": enabled, "active": enabled and any_global_active, "channels": [],
+            })
+
+    # Paso final post-cita: peticion de resena (opt-in; usa los canales globales).
+    rev = _reviews_config(cliente_id)
+    rev_link_ok = _review_link_valid(rev["link"])
+    rev_on = bool(rev["enabled"]) and rev_link_ok
     rev_delay = int(rev["delay_hours"])
     if rev_delay < 24:
         rev_when = f"{rev_delay} h después"
@@ -3161,39 +3363,30 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
         rev_days = rev_delay // 24
         rev_when = f"{rev_days} día{'s' if rev_days > 1 else ''} después"
     steps.append({
-        "key": "review", "label": "Pide una reseña", "when": rev_when, "offset_hours": 0,
-        "channels": review_channels,
+        "key": "review", "kind": "review", "label": "Pide una reseña", "when": rev_when, "offset_hours": 0,
+        "channels": [], "active": rev_on and any_global_active,
         "note": "Cuando la cita se completa, invita al cliente a dejarte una reseña en Google o donde elijas.",
-        "enabled": rev_on, "needs_setup": not rev_link_ok,
+        "enabled": bool(rev["enabled"]), "needs_setup": not rev_link_ok,
     })
 
-    # Verificacion de identidad por codigo (OTP) al cambiar/cancelar por voz. No es un aviso
-    # temporizado: lo dispara el asistente de voz. Solo se muestra si el plan incluye voz.
-    # Los "canales" indican como se entrega el codigo al cliente (primer disponible).
+    # Verificacion de identidad por codigo (OTP) al cambiar/cancelar por voz. Solo con plan
+    # de voz. Usa los canales globales para entregar el codigo; su on/off es propio.
     if voice_plan:
-        otp_cfg = fu["voice_otp_channels"]
-        otp_channels = [
-            {"channel": "email", "label": "Email", "active": bool(otp_cfg.get("email")),
-             "available": True, "locked": False, "recommended": False, "plan_needed": "", "reason": "Disponible."},
-            {"channel": "whatsapp", "label": "WhatsApp", "active": bool(otp_cfg.get("whatsapp")) and wa_available,
-             "available": wa_available, "locked": not wa_plan, "plan_needed": "" if wa_plan else "Pro",
-             "recommended": False, "reason": avail["whatsapp"]["reason"]},
-            {"channel": "sms", "label": "SMS", "active": bool(otp_cfg.get("sms")) and sms_available,
-             "available": sms_available, "locked": not sms_plan, "plan_needed": "" if sms_plan else "Business",
-             "recommended": False, "reason": avail["sms"]["reason"]},
-        ]
+        otp_enabled = bool(fu["voice_otp_enabled"])
         steps.append({
-            "key": "voice_otp", "label": "Verificación por código (voz)",
-            "when": "Al cambiar o cancelar", "offset_hours": 0, "channels": otp_channels,
+            "key": "voice_otp", "kind": "otp", "label": "Verificación por código (voz)",
+            "when": "Al cambiar o cancelar", "offset_hours": 0, "channels": [],
             "note": ("Antes de cambiar o cancelar una cita por voz, el asistente envía al cliente un código "
-                     "de 4 dígitos por los canales que actives aquí y le pide que lo lea. Apaga todos para "
-                     "desactivar la verificación por código (se pedirá teléfono o email en su lugar)."),
-            "enabled": voice_available and any(c["active"] for c in otp_channels),
+                     "de 4 dígitos por los canales activos y le pide que lo lea. Apágalo para verificar por "
+                     "teléfono o email en su lugar."),
+            "enabled": otp_enabled, "active": otp_enabled and voice_available and any_global_active,
+            "available": voice_available, "locked": not voice_plan,
         })
 
     return {
         "plan": plan, "plan_label": plan_label,
         "whatsapp_available": wa_available, "voice_available": voice_available,
+        "channels": global_channels,
         "channel_availability": {
             "email": True, "whatsapp": wa_available, "sms": sms_available, "voice": voice_available,
             "whatsapp_reason": avail["whatsapp"]["reason"], "sms_reason": avail["sms"]["reason"],
@@ -3204,6 +3397,7 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
         "daily_call_cap": fu["daily_call_cap"],
         "email_confirm_button": fu["email_confirm_button"],
         "suppress_2h_if_confirmed": fu["suppress_2h_if_confirmed"],
+        "voice_otp_enabled": fu["voice_otp_enabled"],
         "delivery_priority": fu["delivery_priority"],
         "steps": steps,
         "default_test_email": str(contacto.get("email", "") or ""),
@@ -3461,7 +3655,7 @@ def _reviews_config(cliente_id: str) -> Dict[str, Any]:
         delay = int(cfg.get("delay_hours", 3))
     except (TypeError, ValueError):
         delay = 3
-    channels = cfg.get("channels") or {}
+    # La peticion de resena usa los canales GLOBALES del Seguimiento (sin seleccion propia).
     return {
         "enabled": bool(cfg.get("enabled", False)),
         "link": str(cfg.get("link", "") or "").strip(),
@@ -3469,11 +3663,7 @@ def _reviews_config(cliente_id: str) -> Dict[str, Any]:
         "delay_hours": max(1, min(168, delay)),
         "only_manual_attendance": bool(cfg.get("only_manual_attendance", False)),
         "message": str(cfg.get("message", "") or ""),
-        "channels": {
-            "email": bool(channels.get("email", True)),
-            "whatsapp": bool(channels.get("whatsapp", False)),
-            "sms": bool(channels.get("sms", False)),
-        },
+        "channels": _followup_global_channels(cliente_id),
     }
 
 
@@ -4885,3 +5075,37 @@ def _set_ai_send_enabled(cliente_id: str, enabled: bool) -> None:
         connection.commit()
 
 
+
+
+def _service_catalog_lines(cliente_id: str, location_id: str = "") -> List[str]:
+    """Lineas "- Nombre · N min · precio" del catalogo REAL (tabla services), para los
+    prompts de chat y voz: enumerar y presupuestar sin inventar precios ni duraciones.
+    Fuente unica compartida (voice._voice_service_catalog delega aqui)."""
+    services = _public_services_for_booking(cliente_id, location_id=location_id)
+    lines: List[str] = []
+    seen: set = set()
+    for service in services:
+        if not isinstance(service, dict):
+            continue
+        name = textnorm._sanitize_text(str(service.get("nombre") or service.get("name") or ""))
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        parts = [name]
+        try:
+            dur = int(service.get("duration_minutes") or 0)
+        except (TypeError, ValueError):
+            dur = 0
+        if dur > 0:
+            parts.append(f"{dur} min")
+        try:
+            price_cents = int(service.get("price_cents") or 0)
+        except (TypeError, ValueError):
+            price_cents = 0
+        price_label = textnorm._sanitize_text(str(service.get("price_label") or ""))
+        if price_cents > 0 and price_label:
+            parts.append(price_label)
+        elif price_cents <= 0:
+            parts.append("a consultar")
+        lines.append("- " + " · ".join(parts))
+    return lines

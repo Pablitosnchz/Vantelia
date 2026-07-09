@@ -5,84 +5,37 @@ registro de rutas identico al monolito original.
 """
 from __future__ import annotations
 
-import asyncio
-import copy
-import base64
-import csv
-import hashlib
-import hmac
 import json
-import os
-import random
-import re
-import secrets
-import shutil
 import sqlite3
-import threading
-import time
-import unicodedata
-import uuid
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from email.message import EmailMessage
-from email.utils import formataddr, parseaddr
-from html import escape
-from io import StringIO
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from datetime import datetime, timezone
+from typing import Any, Dict
+from urllib.parse import quote
 
-import httpx
 from fastapi import (
     BackgroundTasks,
-    Cookie,
     Depends,
-    Header,
     HTTPException,
     Request,
     Response,
-    WebSocket,
-    WebSocketDisconnect,
-    status,
 )
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
-from pydantic import BaseModel, EmailStr, Field
+from fastapi.responses import RedirectResponse
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python 3.8 compatibility
-    from backports.zoneinfo import ZoneInfo
 
-import onboarding_utils
 from api_models import *  # noqa: F401,F403
 from backend import (
-    agenda,
     appstate,
     billing,
     booking,
-    chat,
     clients,
     commerce,
-    crm,
     db,
-    demo_agenda,
     emailing,
-    growth,
-    instagram,
-    messaging,
-    onboarding,
-    outreach,
     portal,
-    rag,
     security,
     settings,
     stripe_gateway,
     textnorm,
-    tiktok,
     timeutils,
-    voice,
-    wa_capture,
-    whatsapp,
 )
 from backend.main import app
 
@@ -296,7 +249,30 @@ async def stripe_connect_webhook(request: Request) -> Dict[str, Any]:
             payment_kind = payment["kind"] if "kind" in payment.keys() else "booking"
             if new_status == "paid" and payment_kind == "pos":
                 commerce._finalize_pos_payment(connection, payment, now)
+            # Tarjeta regalo comprada online: emite la tarjeta (idempotente); el email
+            # al destinatario sale fuera de la transaccion (best-effort).
+            gift_paid = new_status == "paid" and payment_kind == "gift_card"
+            if gift_paid:
+                commerce._finalize_gift_card_payment(connection, payment, now)
+            # Tienda publica: bono comprado online / pedido de productos. La compra se
+            # materializa aqui (idempotente) y el email de confirmacion sale tras el
+            # commit SOLO si la compra se creo en esta llamada.
+            shop_created = False
+            if new_status == "paid" and payment_kind == "shop_package":
+                shop_created = commerce._finalize_shop_package_payment(connection, payment, now)
+            elif new_status == "paid" and payment_kind == "shop_products":
+                shop_created = commerce._finalize_shop_products_payment(connection, payment, now)
             connection.commit()
+            if gift_paid:
+                try:
+                    commerce._send_pending_gift_card_emails()
+                except Exception as exc:  # noqa: BLE001
+                    settings.logger.warning("Envio de tarjeta regalo tras webhook fallo: %s", exc)
+            if shop_created:
+                try:
+                    commerce._send_shop_confirmation_email(cliente_id, payment["id"])
+                except Exception as exc:  # noqa: BLE001
+                    settings.logger.warning("Email de confirmacion de tienda tras webhook fallo: %s", exc)
         else:
             connection.commit()
     return {"received": True}

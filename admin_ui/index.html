@@ -4930,41 +4930,12 @@ tbody tr:last-child td { border-bottom: none; }
       await loadBookings();
     }
 
-    function getVisibleClients() {
-      const search = elements.clientSearch.value.trim().toLowerCase();
-      const filter = state.clientFilter || "all";
-      return state.clients.filter((client) => {
-        const haystack = [
-          client.nombre,
-          client.cliente_id,
-          client.contacto_email,
-          client.contacto_telefono,
-          client.booking_provider,
-          client.booking_timezone,
-          client.subscription_plan,
-          client.subscription_status,
-        ].join(" ").toLowerCase();
-        if (search && !haystack.includes(search)) return false;
-        const isDemo = !!client.is_demo;
-        const subStatus = (client.subscription_status || "").toLowerCase();
-        const hasActiveSub = !isDemo && (subStatus === "active" || subStatus === "trialing");
-        if (filter === "demo") return isDemo;
-        if (filter === "subscribed") return hasActiveSub;
-        if (filter === "other") return !isDemo && !hasActiveSub;
-        return true;
-      });
-    }
 
     async function openClientAiSection(clienteId) {
       setView("ai");
       await loadClientDetail(clienteId);
     }
 
-    function openClientPortal(clienteId) {
-      const target = `/portal?cliente_id=${encodeURIComponent(clienteId)}`;
-      window.open(target, "_blank", "noopener,noreferrer");
-      showStatus(`Abriendo el portal de ${clienteId} en otra pestana.`, "info");
-    }
 
     async function impersonateClient(clienteId, clientName) {
       const label = clientName ? `${clientName} (${clienteId})` : clienteId;
@@ -4978,12 +4949,6 @@ tbody tr:last-child td { border-bottom: none; }
       window.location.href = redirect;
     }
 
-    function openClientBookings(clienteId) {
-      if (elements.bookingClientFilter) {
-        elements.bookingClientFilter.value = clienteId;
-      }
-      setView("bookings");
-    }
 
     async function deleteClient(clienteId, clientName) {
       const label = clientName ? `${clientName} (${clienteId})` : clienteId;
@@ -5008,30 +4973,6 @@ tbody tr:last-child td { border-bottom: none; }
       showStatus(result.message || "Cliente eliminado correctamente.", "success");
     }
 
-    function renderSelectedClientSummary() {
-      const client = currentClientSummaryRecord();
-      if (!client) {
-        elements.selectedClientSummary.innerHTML = `
-          <div class="client-summary-block"><span>Cliente seleccionado</span><strong>Selecciona un cliente para ver y editar su informacion.</strong></div>
-          <div class="client-summary-block"><span>Reservas</span><strong>-</strong></div>
-          <div class="client-summary-block"><span>Agenda</span><strong>-</strong></div>
-          <div class="client-summary-block"><span>Dominios</span><strong>-</strong></div>
-          <div class="client-summary-block"><span>Info.txt</span><strong>-</strong></div>
-        `;
-        return;
-      }
-
-      const bookingStatus = client.booking_enabled ? "Activa" : "Inactiva";
-      const bookingProvider = client.booking_provider || "internal";
-      const originsCount = Array.isArray(client.allowed_origins) ? client.allowed_origins.length : 0;
-      elements.selectedClientSummary.innerHTML = `
-        <div class="client-summary-block"><span>Cliente seleccionado</span><strong>${escapeHtml(clientDisplayLabel(client))}</strong></div>
-        <div class="client-summary-block"><span>Reservas</span><strong>${Number(client.bookings_total || 0)} total / ${Number(client.bookings_pending || 0)} activas</strong></div>
-        <div class="client-summary-block"><span>Agenda</span><strong>${escapeHtml(bookingStatus)} · ${escapeHtml(bookingProvider)}</strong></div>
-        <div class="client-summary-block"><span>Dominios</span><strong>${originsCount} permitidos</strong></div>
-        <div class="client-summary-block"><span>Info.txt</span><strong>${client.has_info_file ? formatFileSize(client.info_file_size) : "Pendiente"}</strong></div>
-      `;
-    }
 
     function renderAiClientSummary() {
       const client = currentClientSummaryRecord();
@@ -5063,118 +5004,6 @@ tbody tr:last-child td { border-bottom: none; }
       `;
     }
 
-    function renderClientDirectory(selectedId, visibleClients) {
-      const totals = state.clients.reduce((acc, c) => {
-        if (c.is_demo) acc.demo += 1;
-        else if ((c.subscription_status || "").toLowerCase() === "active" || (c.subscription_status || "").toLowerCase() === "trialing") acc.subscribed += 1;
-        else acc.other += 1;
-        return acc;
-      }, { demo: 0, subscribed: 0, other: 0 });
-      elements.clientCountLabel.textContent =
-        `${visibleClients.length} de ${state.clients.length} visibles · ${totals.subscribed} suscritos · ${totals.demo} demos · ${totals.other} sin suscripción`;
-      elements.clientDirectory.innerHTML = "";
-      if (!visibleClients.length) {
-        elements.clientDirectory.innerHTML = '<div class="empty">No hay clientes que coincidan con la busqueda.</div>';
-        return;
-      }
-
-      visibleClients.forEach((client) => {
-        const row = document.createElement("article");
-        row.className = `client-list-row${client.cliente_id === selectedId ? " active" : ""}`;
-        const clientName = escapeHtml(client.nombre || "-");
-        const isDemo = !!client.is_demo;
-        const clientIdHtml = isDemo
-          ? ""
-          : `<span class="client-list-meta">${escapeHtml(client.cliente_id || "-")}</span>`;
-        const subStatus = (client.subscription_status || "").toLowerCase();
-        const subPlan = (client.subscription_plan || "").toString();
-        const subPlanLabel = subPlan ? subPlan.charAt(0).toUpperCase() + subPlan.slice(1) : "";
-        const pills = [];
-        pills.push(client.booking_enabled
-          ? '<span class="client-pill booking-on">Reservas ON</span>'
-          : '<span class="client-pill booking-off">Reservas OFF</span>');
-        if (isDemo) {
-          let demoText = "Demo";
-          const remaining = Number(client.demo_expires_in_seconds || 0);
-          if (remaining > 0) {
-            const mins = Math.max(1, Math.round(remaining / 60));
-            demoText = `Demo · ${mins} min`;
-          }
-          pills.push(`<span class="client-pill demo" title="${escapeHtml(client.demo_expires_at || "")}">${demoText}</span>`);
-        } else if (subStatus === "active") {
-          pills.push(`<span class="client-pill sub-active">Suscrito${subPlanLabel ? " · " + escapeHtml(subPlanLabel) : ""}</span>`);
-        } else if (subStatus === "trialing") {
-          pills.push(`<span class="client-pill sub-trial">Trial${subPlanLabel ? " · " + escapeHtml(subPlanLabel) : ""}</span>`);
-        } else if (subStatus === "canceled" || subStatus === "past_due" || subStatus === "unpaid" || subStatus === "incomplete_expired") {
-          pills.push(`<span class="client-pill sub-${escapeHtml(subStatus)}">${escapeHtml(subStatus)}</span>`);
-        } else {
-          pills.push('<span class="client-pill sub-none">Sin suscripción</span>');
-        }
-        const pillsHtml = `<span class="client-pill-row">${pills.join("")}</span>`;
-        const ownerEmail = escapeHtml(client.owner_email || "—");
-        const ownerCreatedShort = client.owner_created_at ? new Date(client.owner_created_at).toLocaleDateString() : "—";
-        const lastLoginShort = client.owner_last_login_at ? new Date(client.owner_last_login_at).toLocaleString() : "Nunca";
-        const planTxt = escapeHtml(client.plan || "—");
-        const msgsTxt = client.messages_quota
-          ? `${Number(client.messages_used || 0).toLocaleString()} / ${Number(client.messages_quota).toLocaleString()}`
-          : "—";
-        const ownerInfo = `
-          <div class="client-list-owner" style="display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;font-size:0.78rem;color:var(--soft);">
-            <span title="Email del owner"><b style="color:var(--text);font-weight:500;">${ownerEmail}</b></span>
-            <span>Plan: <b style="color:var(--text);font-weight:500;">${planTxt}</b></span>
-            <span>Mensajes: ${escapeHtml(msgsTxt)}</span>
-            <span title="Alta del usuario">Alta: ${escapeHtml(ownerCreatedShort)}</span>
-            <span title="Último login">Último login: ${escapeHtml(lastLoginShort)}</span>
-          </div>
-        `;
-        const impersonateBtn = client.owner_user_id
-          ? `<button class="client-list-side ghost small" type="button" data-client-action="impersonate" title="Abrir el portal como este cliente">Acceder</button>`
-          : "";
-        row.innerHTML = `
-          <div class="client-list-actions">
-            <button class="client-list-main" type="button" data-client-action="profile">
-              <span class="client-list-name">
-                <strong>${clientName}</strong>
-              </span>
-              ${clientIdHtml}
-              ${pillsHtml}
-              ${ownerInfo}
-            </button>
-            ${impersonateBtn}
-            <button class="client-list-side ghost small" type="button" data-client-action="ai">IA</button>
-            <button class="client-list-side ghost small" type="button" data-client-action="portal">Portal</button>
-            <button class="client-list-side danger small" type="button" data-client-action="delete">Eliminar</button>
-          </div>
-        `;
-        row.querySelectorAll("button[data-client-action]").forEach((button) => {
-          button.addEventListener("click", () => {
-            const action = button.dataset.clientAction;
-            if (action === "delete") {
-              deleteClient(client.cliente_id, client.nombre).catch((error) => showStatus(error.message, "error"));
-              return;
-            }
-            if (action === "portal") {
-              openClientPortal(client.cliente_id);
-              return;
-            }
-            if (action === "impersonate") {
-              impersonateClient(client.cliente_id, client.nombre).catch((error) => showStatus(error.message, "error"));
-              return;
-            }
-            if (action === "ai") {
-              openClientAiSection(client.cliente_id).catch((error) => showStatus(error.message, "error"));
-              return;
-            }
-            if (action === "bookings-view") {
-              openClientBookings(client.cliente_id);
-              return;
-            }
-            openClientSection(client.cliente_id, action).catch((error) => showStatus(error.message, "error"));
-          });
-        });
-        elements.clientDirectory.appendChild(row);
-      });
-    }
 
     function clientPlanValue(client) {
       return String(client?.plan || client?.subscription_plan || "").trim().toLowerCase();
@@ -5339,10 +5168,6 @@ tbody tr:last-child td { border-bottom: none; }
       renderAiClientSummary();
     }
 
-    async function openClientSection(clienteId, tab = "resumen") {
-      const drawerTab = tab === "profile" ? "config" : tab;
-      await openClientDrawer(clienteId, drawerTab);
-    }
 
     function closeClientDrawer() {
       state.drawerOpen = false;
@@ -5951,74 +5776,9 @@ tbody tr:last-child td { border-bottom: none; }
       renderBookings(bookings || []);
     }
 
-    function renderMetricList(container, items, emptyText, labelKey) {
-      if (!container) return;
-      if (!items || !items.length) {
-        container.innerHTML = `<div class="empty">${emptyText}</div>`;
-        return;
-      }
-      container.innerHTML = items.slice(0, 12).map((item) => {
-        const label = escapeHtml(item[labelKey] || "-");
-        const total = Number(item.total || 0);
-        return `
-          <div class="meta-box">
-            <span class="meta-label">${label}</span>
-            <strong>${total}</strong>
-          </div>
-        `;
-      }).join("");
-    }
 
-    function renderAnalyticsRecent(events) {
-      if (!events || !events.length) {
-        elements.analyticsRecentBody.innerHTML = '<tr><td colspan="5" class="muted">Sin eventos todavia.</td></tr>';
-        return;
-      }
-      elements.analyticsRecentBody.innerHTML = "";
-      events.forEach((event) => {
-        const metadata = event.metadata || {};
-        const detail = [
-          metadata.plan ? `Plan: ${metadata.plan}` : "",
-          metadata.service ? `Servicio: ${metadata.service}` : "",
-          metadata.cta_label ? `CTA: ${metadata.cta_label}` : "",
-          metadata.error_message ? `Error: ${metadata.error_message}` : "",
-        ].filter(Boolean).join(" · ");
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${escapeHtml(event.created_at || "-")}</td>
-          <td><span class="pill">${escapeHtml(event.event_name || "-")}</span></td>
-          <td>${escapeHtml(event.cliente_id || "-")}</td>
-          <td>${escapeHtml(event.page_path || "-")}</td>
-          <td>${escapeHtml(detail || JSON.stringify(metadata).slice(0, 160) || "-")}</td>
-        `;
-        elements.analyticsRecentBody.appendChild(row);
-      });
-    }
 
-    async function loadAnalytics() {
-      // DEPRECATED: la sección "Estadísticas" usa ahora loadStatsOverview().
-      // Esta función queda como no-op para no romper callers legacy.
-      if (!elements.analyticsRecentBody) return;
-      const days = Number(elements.analyticsDays?.value || 30);
-      elements.analyticsRecentBody.innerHTML = '<tr><td colspan="5"><span class="loading-inline"><span class="loading-dot"></span>Cargando estadisticas...</span></td></tr>';
-      const data = await api(`/admin/analytics?days=${encodeURIComponent(days)}&limit=80`);
-      const kpis = data.kpis || {};
-      elements.analyticsTotal.textContent = String(data.total_events ?? 0);
-      elements.analyticsDemo.textContent = `${Number(kpis.lead_created || 0)} / ${Number(kpis.demo_generated || 0)}`;
-      elements.analyticsCheckout.textContent = `${Number(kpis.checkout_redirect || 0)} / ${Number(kpis.checkout_completed || 0)}`;
-      elements.analyticsMessages.textContent = String(kpis.widget_messages || 0);
-      elements.analyticsBookings.textContent = String(kpis.booking_confirmed || 0);
-      renderMetricList(elements.analyticsEventList, data.events_by_name || [], "Sin eventos todavia.", "event_name");
-      renderMetricList(elements.analyticsClientList, data.events_by_client || [], "Sin clientes todavia.", "cliente_id");
-      renderAnalyticsRecent(data.recent || []);
-    }
 
-    async function runBookingReminders() {
-      showStatus("Ejecutando recordatorios pendientes...", "info");
-      const result = await api("/admin/bookings/reminders/run", { method: "POST" });
-      await loadBookings();
-      showStatus(`Recordatorios procesados: ${result.processed || 0}. Enviados 24h: ${result.sent_24h || 0}. Enviados 2h: ${result.sent_2h || 0}. Fallidos: ${result.failed || 0}.`, "success");
-    }
 
     async function connect() {
       showStatus("Conectando con el panel admin...", "info");
@@ -6279,12 +6039,6 @@ tbody tr:last-child td { border-bottom: none; }
     }
 
     let bookingFilterTimer = null;
-    function scheduleBookingsReload() {
-      window.clearTimeout(bookingFilterTimer);
-      bookingFilterTimer = window.setTimeout(() => {
-        loadBookings().catch((error) => showStatus(error.message, "error"));
-      }, 250);
-    }
 
     document.getElementById("refreshSessionBtn").addEventListener("click", async () => {
       try {
@@ -6805,9 +6559,6 @@ a {
         logoUrl: "/brand-assets/Logo_Letra.png",
       };
 
-      function authHeaders(extra) {
-        return Object.assign({}, extra || {});
-      }
 
       async function orFetch(url, opts) {
         const res = await fetch(url, Object.assign({ credentials: "include" }, opts || {}));
@@ -6985,19 +6736,6 @@ a {
         const n = (name || "").toLowerCase();
         return CW_CHAIN_KEYWORDS.some((k) => n.includes(k));
       }
-      async function refreshCwDedupCache() {
-        try {
-          const [pp, sp] = await Promise.all([
-            orFetch("/admin/outreach/prospects?page_size=200"),
-            orFetch("/admin/outreach/suppressions"),
-          ]);
-          cwKnownEmails = new Set((pp.items || []).map((p) => (p.email || "").toLowerCase()));
-          cwSuppressedEmails = new Set((sp.items || []).map((s) => (s.email || "").toLowerCase()));
-        } catch (err) {
-          cwKnownEmails = new Set();
-          cwSuppressedEmails = new Set();
-        }
-      }
       let cwState = loadWizardState();
       let cwSaveTimer = null;
       let cwJobTimer = null;
@@ -7072,30 +6810,6 @@ a {
         saveWizardState();
       }
 
-      function hydrateWizardForm() {
-        const pairs = [
-          ["#cwLeadCount", "leadCount"],
-          ["#cwTestEmail", "testEmail"], ["#cwCampaignName", "campaignName"],
-          ["#cwSendDelay", "delay"], ["#cwSendJitter", "jitter"],
-        ];
-        pairs.forEach(([sel, key]) => { const el = ORQ(sel); if (el) el.value = cwState[key] || ""; });
-        const respect = ORQ("#cwRespectWindow");
-        if (respect) respect.checked = !!cwState.respectWindow;
-        // Migración legacy: si hay city/sector singular y no cities/sectors, popúlalo
-        if (!cwState.cities || !cwState.cities.length) {
-          cwState.cities = cwState.city ? [cwState.city] : [];
-        }
-        if (!cwState.sectors || !cwState.sectors.length) {
-          cwState.sectors = cwState.sector ? [cwState.sector] : [];
-        }
-        rerenderCwChips("city");
-        rerenderCwChips("sector");
-        renderCwResultFilters();
-        renderWizardResults();
-        renderWizardTemplates();
-        updateWizardCounts();
-        setWizardStep(cwState.step || "search");
-      }
 
       const CW_FILTERS = [
         { key: "email",     label: "Con email" },
@@ -7154,15 +6868,6 @@ a {
           });
         });
       }
-      function cwAddChip(kind, value) {
-        const v = (value || "").trim();
-        if (!v) return;
-        const list = cwListFor(kind);
-        if (list.includes(v)) return;
-        list.push(v);
-        rerenderCwChips(kind);
-        saveWizardState();
-      }
 
       function readWizardForm() {
         cwState.leadCount = parseInt(ORQ("#cwLeadCount")?.value, 10) || 30;
@@ -7177,20 +6882,6 @@ a {
         renderWizardSummary();
       }
 
-      function cwResultKey(item) {
-        const email = (item.email || "").toLowerCase().trim();
-        if (email) return "email:" + email;
-        const domain = (item.website || "")
-          .toLowerCase()
-          .replace(/^https?:\/\//, "")
-          .replace(/^www\./, "")
-          .split("/")[0]
-          .split(":")[0];
-        if (domain) return "domain:" + domain;
-        const phone = (item.phone || "").replace(/\D+/g, "").replace(/^34(?=\d{9,})/, "").slice(-9);
-        if (phone) return "phone:" + phone;
-        return "namecity:" + `${item.business_name || ""}|${item.city || ""}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
-      }
 
       function updateWizardCounts() {
         const selectedCount = selectedWizardItems().length;
@@ -7201,86 +6892,7 @@ a {
         if (ORQ("#cwMetricReady")) ORQ("#cwMetricReady").textContent = ready;
       }
 
-      async function runWizardDiscovery() {
-        // Si hay texto en los inputs sin commit, lo añadimos como chip
-        const cityInputVal = ORQ("#cwCityInput")?.value.trim();
-        if (cityInputVal) { cwAddChip("city", cityInputVal); ORQ("#cwCityInput").value = ""; }
-        const sectorInputVal = ORQ("#cwSectorInput")?.value.trim();
-        if (sectorInputVal) { cwAddChip("sector", sectorInputVal); ORQ("#cwSectorInput").value = ""; }
-        readWizardForm();
-        const cities = (cwState.cities || []).filter(Boolean);
-        const sectors = (cwState.sectors || []).filter(Boolean);
-        if (!cities.length || !sectors.length) { cwToast("Añade al menos una ciudad y un sector.", "error"); return; }
-        const combos = [];
-        cities.forEach((c) => sectors.forEach((s) => combos.push({ city: c, sector: s })));
-        ORQ("#cwDiscoveryStatus").textContent = `Buscando 0/${combos.length}`;
-        ORQ("#cwSearchProgress").style.width = "5%";
-        ORQ("#cwSearchLog").style.display = "block";
-        ORQ("#cwSearchLog").textContent = `Lanzando ${combos.length} combo(s)...`;
-        await refreshCwDedupCache();
-        const allResults = [];
-        const seenKeys = new Set();
-        let i = 0;
-        for (const combo of combos) {
-          i += 1;
-          ORQ("#cwDiscoveryStatus").textContent = `Buscando ${i}/${combos.length} (${combo.sector} en ${combo.city})`;
-          ORQ("#cwSearchProgress").style.width = `${Math.min(95, Math.floor((i / combos.length) * 90))}%`;
-          try {
-            const data = await orFetch("/admin/outreach/discover", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                sector: combo.sector,
-                ciudad: combo.city,
-                max: cwState.leadCount,
-                extract_emails: true,
-                import_direct: false,
-                source: "auto",
-              }),
-            });
-            const items = await waitDiscoveryJob(data.job_id, combo);
-            items.forEach((it) => {
-              it.city = it.city || combo.city;
-              it.niche = it.niche || combo.sector;
-              const key = cwResultKey(it);
-              if (key && seenKeys.has(key)) return;
-              if (key) seenKeys.add(key);
-              allResults.push(it);
-            });
-          } catch (err) {
-            ORQ("#cwSearchLog").textContent += `\nError en ${combo.sector}/${combo.city}: ${err.message}`;
-          }
-        }
-        cwState.results = allResults.map((item) => Object.assign({ selected: cwProspectStatus(item.email) === "new" && !!item.email }, item));
-        cwState.selected = cwState.results.map((it, idx) => cwProspectStatus(it.email) === "new" && it.email ? String(idx) : null).filter(Boolean);
-        ORQ("#cwSearchProgress").style.width = "100%";
-        ORQ("#cwDiscoveryStatus").textContent = "Completado";
-        renderWizardResults();
-        updateWizardCounts();
-        saveWizardState();
-        cwToast(`${allResults.length} empresas únicas tras ${combos.length} combo(s).`, "success");
-        setWizardStep("review");
-      }
 
-      async function waitDiscoveryJob(jobId, combo) {
-        return new Promise((resolve, reject) => {
-          const poll = async () => {
-            try {
-              const j = await orFetch("/admin/outreach/jobs/" + jobId);
-              const log = j.log || "";
-              const match = log.match(/RESULT_JSON: (\[.*\])/);
-              ORQ("#cwSearchLog").textContent = log.slice(-1800) || "Buscando...";
-              if (j.status === "done" && match) {
-                resolve(JSON.parse(match[1]));
-                return;
-              }
-              if (j.status === "error") { reject(new Error("Discovery fallo en " + (combo ? combo.city : ""))); return; }
-              setTimeout(poll, 2500);
-            } catch (err) { reject(err); }
-          };
-          poll();
-        });
-      }
 
       async function watchWizardDiscovery(jobId) {
         clearTimeout(cwJobTimer);
@@ -7375,41 +6987,7 @@ a {
         updateWizardCounts();
       }
 
-      function wizardItemsForImport(all = false) {
-        const source = all ? (cwState.results || []) : selectedWizardItems();
-        return source.filter((i) => orDiscEmailRe.test(i.email || "")).map((i) => ({
-          email: (i.email || "").trim(),
-          business_name: i.business_name || "",
-          contact_name: "",
-          niche: i.niche || cwState.sector || "",
-          website: i.website || "",
-          service_hint: cwState.sector || i.service_hint || "",
-          city: i.city || cwState.city || "",
-          phone: i.phone || "",
-          tags: "wizard",
-          source: "campaign-wizard",
-          score: cwScore(i),
-        }));
-      }
 
-      async function importWizardProspects(all = false) {
-        readWizardForm();
-        const items = wizardItemsForImport(all);
-        if (!items.length) { cwToast("No hay emails validos para importar.", "error"); return; }
-        try {
-          const data = await orFetch("/admin/outreach/prospects/bulk", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ items, upsert: false }),
-          });
-          cwState.importedEmails = Array.from(new Set([...(cwState.importedEmails || []), ...items.map((i) => i.email)]));
-          saveWizardState();
-          updateWizardCounts();
-          await refreshCwDedupCache();
-          renderWizardResults();
-          cwToast(`Importados ${data.added}; omitidos ${data.skipped}.`, "success");
-        } catch (err) { cwToast(err.message, "error"); }
-      }
 
       function renderWizardTemplates() {
         const grid = ORQ("#cwTemplateGrid");
@@ -7467,32 +7045,6 @@ a {
         } catch (err) { cwToast(err.message, "error"); }
       }
 
-      async function sendWizardTest() {
-        readWizardForm();
-        if (!orDiscEmailRe.test(cwState.testEmail || "")) { cwToast("Introduce un email de prueba valido.", "error"); return; }
-        ORQ("#cwTestStatus").textContent = "Enviando";
-        try {
-          const data = await orFetch("/admin/outreach/send", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              stage: cwState.templateStage,
-              max: 1,
-              test_to: cwState.testEmail,
-              dry_run: false,
-              force_window: true,
-              emails: selectedWizardItems().map((i) => i.email),
-              campaign_name: cwState.campaignName,
-            }),
-          });
-          ORQ("#cwTestStatus").textContent = "Enviado";
-          cwToast("Email de prueba en cola.", "success");
-          watchWizardSend(data.job_id, true);
-        } catch (err) {
-          ORQ("#cwTestStatus").textContent = "Error";
-          cwToast(err.message, "error");
-        }
-      }
 
       function renderWizardSummary() {
         const count = campaignWizardEmails().length;
@@ -7553,73 +7105,9 @@ a {
         }
       }
 
-      async function showWizardCampaignDetail(id) {
-        const target = ORQ("#cwCampaignDetail");
-        if (!target) return;
-        target.style.display = "grid";
-        target.innerHTML = '<div class="status">Cargando detalle...</div>';
-        try {
-          const data = await orFetch("/admin/outreach/campaigns/" + encodeURIComponent(id));
-          const c = data.campaign || {};
-          const members = (data.members || []).slice(0, 80);
-          target.innerHTML = `
-            <div class="cw-card-header">
-              <div><h4>${escapeHtml(c.name || "Campana")}</h4><p>${escapeHtml(campaignStatusLabel(c.status))} &middot; etapa ${escapeHtml(c.stage || "-")} &middot; remitente ${escapeHtml(c.sender || "-")}</p></div>
-              <button class="ghost small" type="button" id="cwCloseCampaignDetail">Cerrar</button>
-            </div>
-            <div class="cw-table-wrap" style="max-height:300px;">
-              <table class="cw-member-table">
-                <thead><tr><th>Empresa</th><th>Email</th><th>Estado</th><th>Etapa</th><th>Ultimo envio</th><th>Motivo</th></tr></thead>
-                <tbody>
-                  ${members.map((m) => `<tr><td>${escapeHtml(m.business_name || "-")}</td><td>${escapeHtml(m.email || "")}</td><td>${escapeHtml(m.status || "")}</td><td>${escapeHtml(m.stage || "")}</td><td>${escapeHtml(m.last_sent_at || "-")}</td><td>${escapeHtml(m.skip_reason || "")}</td></tr>`).join("") || '<tr><td colspan="6" class="empty">Sin miembros.</td></tr>'}
-                </tbody>
-              </table>
-            </div>`;
-          ORQ("#cwCloseCampaignDetail")?.addEventListener("click", () => { target.style.display = "none"; });
-        } catch (err) {
-          target.innerHTML = `<div class="status error">${escapeHtml(err.message)}</div>`;
-        }
-      }
 
-      async function patchWizardCampaign(id, status) {
-        try {
-          if (status === "running") {
-            await orFetch("/admin/outreach/campaigns/" + encodeURIComponent(id) + "/resume", { method: "POST" });
-          } else {
-            await orFetch("/admin/outreach/campaigns/" + encodeURIComponent(id), {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ status }),
-            });
-          }
-          cwToast("Campana actualizada.", "success");
-          loadWizardCampaigns();
-        } catch (err) { cwToast(err.message, "error"); }
-      }
 
-      async function duplicateWizardCampaign(id) {
-        try {
-          await orFetch("/admin/outreach/campaigns/" + encodeURIComponent(id) + "/duplicate", { method: "POST" });
-          cwToast("Campana duplicada como borrador.", "success");
-          loadWizardCampaigns();
-        } catch (err) { cwToast(err.message, "error"); }
-      }
 
-      async function prepareWizardFollowup(id) {
-        try {
-          const data = await orFetch("/admin/outreach/campaigns/" + encodeURIComponent(id) + "/prepare-followup", { method: "POST" });
-          cwState.templateStage = data.next_stage;
-          cwState.campaignName = `${data.campaign_name || "Campana"} - ${data.next_stage}`;
-          cwState.importedEmails = data.eligible_emails || [];
-          cwState.results = [];
-          cwState.selected = [];
-          hydrateWizardForm();
-          renderWizardSummary();
-          renderWizardResults();
-          setWizardStep("launch");
-          cwToast(`${(data.eligible_emails || []).length} candidatos preparados para ${data.next_stage}.`, "success");
-        } catch (err) { cwToast(err.message, "error"); }
-      }
 
       function preflightPayload() {
         return {
@@ -7720,43 +7208,6 @@ a {
         }
       }
 
-      async function launchWizardCampaign() {
-        readWizardForm();
-        const emails = campaignWizardEmails();
-        if (!emails.length) { cwToast("Selecciona prospects con email valido.", "error"); return; }
-        const preflight = await runWizardPreflight(false);
-        if (preflightHasBlockingIssues(preflight)) {
-          cwToast("Preflight con avisos. Revisa el bloque antes de enviar.", "error");
-          return;
-        }
-        if (!confirm(`Vas a lanzar una campana real a ${emails.length} prospects. Confirmar?`)) return;
-        ORQ("#cwLaunchStatus").textContent = "Lanzando";
-        try {
-          const data = await orFetch("/admin/outreach/send", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              stage: cwState.templateStage,
-              max: emails.length,
-              dry_run: false,
-              delay: cwState.delay,
-              jitter: cwState.jitter,
-              force_window: !cwState.respectWindow,
-              emails,
-              campaign_name: cwState.campaignName,
-            }),
-          });
-          cwState.sendJobId = data.job_id;
-          saveWizardState();
-          ORQ("#cwLaunchStatus").textContent = "En cola";
-          cwToast("Campana lanzada.", "success");
-          loadWizardCampaigns();
-          watchWizardSend(data.job_id, false);
-        } catch (err) {
-          ORQ("#cwLaunchStatus").textContent = "Error";
-          cwToast(err.message, "error");
-        }
-      }
 
       async function watchWizardSend(jobId, isTest) {
         try {
@@ -7772,60 +7223,6 @@ a {
         } catch (err) { cwToast(err.message, "error"); }
       }
 
-      function wireWizard() {
-        hydrateWizardForm();
-        loadTemplates().then(renderWizardTemplates).catch(() => {});
-        loadWizardCampaigns();
-        ["#cwLeadCount", "#cwTestEmail", "#cwCampaignName", "#cwSendDelay", "#cwSendJitter", "#cwRespectWindow"].forEach((sel) => {
-          const el = ORQ(sel);
-          if (el) el.addEventListener("input", readWizardForm);
-          if (el && el.type === "checkbox") el.addEventListener("change", readWizardForm);
-        });
-        const wireChipInput = (inputSel, kind) => {
-          const el = ORQ(inputSel);
-          if (!el) return;
-          const commit = () => { const v = el.value.trim(); if (v) { cwAddChip(kind, v); el.value = ""; } };
-          el.addEventListener("keydown", (ev) => {
-            if (ev.key === "Enter" || ev.key === ",") { ev.preventDefault(); commit(); }
-          });
-          el.addEventListener("blur", commit);
-        };
-        wireChipInput("#cwCityInput", "city");
-        wireChipInput("#cwSectorInput", "sector");
-        refreshCwDedupCache();
-        ORALL("[data-cw-step-btn]").forEach((btn) => btn.addEventListener("click", () => setWizardStep(btn.dataset.cwStepBtn)));
-        ORALL("[data-cw-next]").forEach((btn) => btn.addEventListener("click", () => setWizardStep(btn.dataset.cwNext)));
-        ORALL("[data-cw-prev]").forEach((btn) => btn.addEventListener("click", () => setWizardStep(btn.dataset.cwPrev)));
-        ORQ("#cwSearchBtn")?.addEventListener("click", runWizardDiscovery);
-        ORQ("#cwSelectAllBtn")?.addEventListener("click", () => { cwState.selected = (cwState.results || []).map((it, idx) => cwProspectStatus(it.email) === "new" && it.email ? String(idx) : null).filter(Boolean); renderWizardResults(); saveWizardState(); });
-        ORQ("#cwSelectWithEmailBtn")?.addEventListener("click", () => { cwState.selected = (cwState.results || []).map((i, idx) => orDiscEmailRe.test(i.email || "") && cwProspectStatus(i.email) === "new" ? String(idx) : null).filter(Boolean); renderWizardResults(); saveWizardState(); });
-        ORQ("#cwSelectIncludeDupesBtn")?.addEventListener("click", () => { cwState.selected = (cwState.results || []).map((i, idx) => orDiscEmailRe.test(i.email || "") && cwProspectStatus(i.email) !== "baja" ? String(idx) : null).filter(Boolean); renderWizardResults(); saveWizardState(); });
-        ORQ("#cwImportSelectedBtn")?.addEventListener("click", () => importWizardProspects(false));
-        ORQ("#cwImportAllBtn")?.addEventListener("click", () => importWizardProspects(true));
-        ORQ("#cwEditTemplateBtn")?.addEventListener("click", () => { ORQ("#orAdvancedTabs").classList.add("active"); setOutreachTab("templates"); ORQ("#orTplStage").value = cwState.templateStage || "cold"; fillTemplateForm(); });
-        ORQ("#cwDuplicateTemplateBtn")?.addEventListener("click", () => { cwToast("Borrador duplicado en memoria. Abre avanzado para guardarlo como override.", "info"); });
-        ORQ("#cwRefreshFinalPreviewBtn")?.addEventListener("click", () => refreshWizardPreview("cwFinalPreview"));
-        ORQ("#cwSendTestBtn")?.addEventListener("click", sendWizardTest);
-        ORQ("#cwPreflightBtn")?.addEventListener("click", () => runWizardPreflight(true));
-        ORQ("#cwLaunchBtn")?.addEventListener("click", launchWizardCampaign);
-        ORQ("#cwRefreshCampaignsBtn")?.addEventListener("click", loadWizardCampaigns);
-        ORQ("#cwAdvancedToggle")?.addEventListener("click", () => ORQ("#orAdvancedTabs").classList.toggle("active"));
-        ORQ("#cwCampaignList")?.addEventListener("click", (ev) => {
-          const btn = ev.target.closest("button");
-          if (!btn) return;
-          if (btn.dataset.campaignView) showWizardCampaignDetail(btn.dataset.campaignView);
-          if (btn.dataset.campaignStatus) patchWizardCampaign(btn.dataset.campaignStatus, btn.dataset.status);
-          if (btn.dataset.campaignDuplicate) duplicateWizardCampaign(btn.dataset.campaignDuplicate);
-          if (btn.dataset.campaignFollowup) prepareWizardFollowup(btn.dataset.campaignFollowup);
-        });
-        ORQ("#cwResetBtn")?.addEventListener("click", () => {
-          if (!confirm("Borrar el borrador del wizard y empezar de cero?")) return;
-          localStorage.removeItem(CW_KEY);
-          cwState = Object.assign({}, cwDefault);
-          hydrateWizardForm();
-          cwToast("Wizard reiniciado.", "success");
-        });
-      }
 
       function updateTabBadge(tab, count, variant) {
         ORALL(`.or-tab-badge[data-badge="${tab}"]`).forEach((el) => {
@@ -8670,16 +8067,6 @@ a {
         }
       }
 
-      function followupSignalText(signals) {
-        const s = signals || {};
-        const parts = [];
-        if (s.demos) parts.push(`demo ${s.demos}`);
-        if (s.clicks) parts.push(`click ${s.clicks}`);
-        if (s.opens) parts.push(`open ${s.opens}`);
-        if (s.reply_intents) parts.push(`reply-intent ${s.reply_intents}`);
-        if (s.replies) parts.push(`reply ${s.replies}`);
-        return parts.join(" · ") || "sin senales";
-      }
 
       async function loadFollowupQueue() {
         const box = ORQ("#orFollowupQueue");
@@ -10673,37 +10060,6 @@ a {
       }
 
       // ----- Templates -----
-      async function loadIgTemplates() {
-        try {
-          const data = await igFetch("/admin/instagram/templates");
-          const stages = data.stages || ["cold","fu1","fu2","breakup"];
-          const map = {};
-          (data.overrides || []).forEach(o => map[o.stage] = o);
-          IGQ("#igTemplatesEditor").innerHTML = stages.map(s => {
-            const o = map[s] || {};
-            return `<div class="card panel" style="padding:10px;margin-bottom:10px;">
-              <strong>${s}</strong>
-              <label>Opener override<input data-tpl-opener="${s}" value="${escapeHtml(o.opener || "")}" placeholder="vacio = usar default"></label>
-              <label>Body override<textarea data-tpl-body="${s}" rows="3">${escapeHtml(o.body || "")}</textarea></label>
-              <button class="ghost small" type="button" data-tpl-save="${s}">Guardar ${s}</button>
-            </div>`;
-          }).join("");
-          IGQ("#igTemplatesEditor").querySelectorAll("[data-tpl-save]").forEach(btn => {
-            btn.addEventListener("click", async () => {
-              const s = btn.dataset.tplSave;
-              const opener = IGQ(`[data-tpl-opener="${s}"]`).value;
-              const body = IGQ(`[data-tpl-body="${s}"]`).value;
-              try {
-                await igFetch("/admin/instagram/templates", {
-                  method:"PUT", headers:{"Content-Type":"application/json"},
-                  body: JSON.stringify({ stage: s, opener, body }),
-                });
-                igStatus("Override " + s + " guardado", "success");
-              } catch(e) { igStatus(e.message, "error"); }
-            });
-          });
-        } catch (e) { igStatus(e.message, "error"); }
-      }
 
       // ----- Autopilot -----
       async function loadAutopilot() {
@@ -11673,6 +11029,15 @@ a {
         if (!client) { card.innerHTML = `<div class="muted">Cliente no encontrado.</div>`; return; }
         const enabled = !!client.voice_enabled;
         const number = client.voice_phone_number || "";
+        const model = client.voice_realtime_model || "";          // "" = default global
+        const modelEff = client.voice_realtime_model_effective || "gpt-realtime";
+        const MODEL_LABELS = {
+          "gpt-realtime": "gpt-realtime (full) — mas fiable, recomendado",
+          "gpt-realtime-mini": "gpt-realtime-mini — mas barato, menos fiable",
+        };
+        const opts = [`<option value="">Por defecto global (${vEsc(modelEff)})</option>`]
+          .concat(Object.keys(MODEL_LABELS).map(m =>
+            `<option value="${m}" ${model === m ? "selected" : ""}>${vEsc(MODEL_LABELS[m])}</option>`)).join("");
         card.innerHTML = `
           <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
             <div>
@@ -11688,7 +11053,30 @@ a {
             <div><span class="muted">Webhook de voz:</span> <code>https://app.vantelia.es/voice/${vEsc(cid)}</code></div>
             <div><span class="muted">Status callback:</span> <code>https://app.vantelia.es/voice/status/${vEsc(cid)}</code></div>
           </div>
-          <p class="muted" style="font-size:12px;margin-top:10px;">Las solicitudes de voz y SMS se gestionan desde la bandeja superior; el backend persiste la voz en la configuracion del cliente.</p>`;
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line,#e2e8f0);">
+            <label class="muted" style="font-size:12px;display:block;margin-bottom:4px;">Modelo Realtime (IA de voz)</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <select id="voiceModelSelect" style="flex:1 1 320px;padding:8px;border-radius:8px;">${opts}</select>
+              <button class="primary" type="button" id="voiceModelSaveBtn">Guardar modelo</button>
+            </div>
+            <p class="muted" style="font-size:12px;margin-top:6px;">El navegador ("Probar en el navegador") depende del modelo: el full entiende mucho mejor codigos/fechas. El mini es mas barato pero menos fiable.</p>
+            <div id="voiceModelMsg" class="muted" style="font-size:12px;margin-top:6px;"></div>
+          </div>`;
+        VQ("#voiceModelSaveBtn")?.addEventListener("click", async () => {
+          const msg = VQ("#voiceModelMsg");
+          const val = VQ("#voiceModelSelect")?.value ?? "";
+          try {
+            const r = await vFetch(`/admin/clientes/${encodeURIComponent(cid)}/voice`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ realtime_model: val }),
+            });
+            if (msg) { msg.textContent = `Guardado. Modelo efectivo: ${r.realtime_model_effective || "?"}.`; msg.style.color = "#16a34a"; }
+            client.voice_realtime_model = r.realtime_model || "";
+            client.voice_realtime_model_effective = r.realtime_model_effective || "";
+          } catch (e) {
+            if (msg) { msg.textContent = "Error: " + (e.message || e); msg.style.color = "#dc2626"; }
+          }
+        });
       }
 
       VQ("#voiceRefreshBtn")?.addEventListener("click", () => { loadVoiceClients().then(() => loadVoiceCalls(true)); });

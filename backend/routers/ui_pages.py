@@ -5,83 +5,41 @@ registro de rutas identico al monolito original.
 """
 from __future__ import annotations
 
-import asyncio
-import copy
-import base64
-import csv
-import hashlib
-import hmac
 import json
-import os
-import random
 import re
 import secrets
-import shutil
-import sqlite3
-import threading
 import time
-import unicodedata
-import uuid
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from email.message import EmailMessage
-from email.utils import formataddr, parseaddr
+from datetime import datetime, timedelta, timezone
 from html import escape
-from io import StringIO
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
-import httpx
 from fastapi import (
-    BackgroundTasks,
     Cookie,
-    Depends,
-    Header,
     HTTPException,
     Request,
     Response,
-    WebSocket,
-    WebSocketDisconnect,
     status,
 )
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
-from pydantic import BaseModel, EmailStr, Field
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python 3.8 compatibility
-    from backports.zoneinfo import ZoneInfo
 
 import onboarding_utils
 from api_models import *  # noqa: F401,F403
 from backend import (
-    agenda,
     appstate,
-    billing,
-    booking,
-    chat,
     clients,
-    crm,
     db,
     demo_agenda,
     emailing,
-    growth,
-    instagram,
-    messaging,
-    onboarding,
     outreach,
     portal,
     rag,
     security,
     settings,
-    stripe_gateway,
     textnorm,
-    tiktok,
     timeutils,
     voice,
-    wa_capture,
-    whatsapp,
 )
 from backend.main import app
 
@@ -336,6 +294,11 @@ async def widget_voice_log(cliente_id: str, request: Request) -> Dict[str, Any]:
         duration = max(0, min(7200, int((body or {}).get("duration_seconds") or 0)))
     except (TypeError, ValueError):
         duration = 0
+    # Etiqueta de resultado acumulada por el front segun las tools ejecutadas (paridad con
+    # el motor de telefono); solo valores del catalogo, lo demas se ignora.
+    outcome = str((body or {}).get("outcome") or "").strip().lower()
+    if outcome not in ("reservada", "cancelada", "reprogramada", "transferida"):
+        outcome = ""
     text_all = "\n".join(f"{i['role']}: {i['text']}" for i in transcript)
     summary = await timeutils._to_thread(voice._voice_summarize, text_all)
     booking_created = 1 if voice._voice_detect_booking_intent(text_all) else 0
@@ -347,11 +310,11 @@ async def widget_voice_log(cliente_id: str, request: Request) -> Dict[str, Any]:
                 """
                 INSERT INTO voice_calls (call_sid, cliente_id, from_number, to_number, started_at, ended_at,
                                          duration_seconds, status, transcript_json, summary, booking_created,
-                                         direction, purpose)
-                VALUES (?, ?, '', '', ?, ?, ?, 'completed', ?, ?, ?, 'inbound', 'widget')
+                                         direction, purpose, outcome)
+                VALUES (?, ?, '', '', ?, ?, ?, 'completed', ?, ?, ?, 'inbound', 'widget', ?)
                 """,
                 (call_sid, cliente_id, now, now, duration,
-                 json.dumps(transcript, ensure_ascii=False), summary, booking_created),
+                 json.dumps(transcript, ensure_ascii=False), summary, booking_created, outcome),
             )
             conn.commit()
     except Exception as exc:  # noqa: BLE001

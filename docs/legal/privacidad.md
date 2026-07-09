@@ -84,11 +84,26 @@ Vantelia comparte datos solo con proveedores estrictamente necesarios:
 - **OpenAI Ireland Ltd.** — modelo de IA (UE/EE.UU. bajo Data Privacy Framework).
 - **Hostinger International Ltd.** — hosting y email transaccional (UE).
 - **Meta Platforms Ireland Ltd.** — WhatsApp Cloud API (UE/EE.UU. bajo DPF).
+- **Google Ireland Ltd.** — envio de correos via Gmail API, solo cuando el cliente conecta voluntariamente su cuenta de Google (UE/EE.UU. con clausulas contractuales tipo).
 - **Stripe Payments Europe Ltd.** — pasarela de pago (UE).
 
 La lista completa y actualizada se mantiene en el DPA firmado con cada cliente B2B.
 
 No realizamos transferencias internacionales fuera de las cubiertas por el Data Privacy Framework o por clausulas contractuales tipo aprobadas por la Comision Europea.
+
+---
+
+## 7 bis. Datos obtenidos a traves de las APIs de Google (Gmail API)
+
+Vantelia ofrece, de forma opcional, que un cliente conecte su propia cuenta de Google para que el asistente envie en su nombre correos operativos (confirmaciones de reserva, recordatorios, notificaciones). Para ello solicitamos exclusivamente el permiso `https://www.googleapis.com/auth/gmail.send`, que solo permite **enviar** mensajes; no da acceso a leer, modificar ni eliminar el contenido del buzon.
+
+**Que datos de Google tratamos:** la direccion de correo de la cuenta conectada, los tokens de acceso/actualizacion de OAuth (almacenados **cifrados**, Fernet/AES-256) y los datos minimos necesarios para entregar el correo saliente (destinatario, asunto y cuerpo que el propio negocio genera). Puedes desconectar la cuenta en cualquier momento; al hacerlo, Vantelia revoca el token en Google y elimina la copia local.
+
+**Con quien compartimos los datos de Google:** Vantelia **no comparte, transfiere ni divulga** a terceros los datos de usuario de Google obtenidos via Gmail API, salvo lo estrictamente necesario para prestar la propia funcion de envio (transmision del correo a traves de la infraestructura de Google), cuando la ley lo exija o con tu consentimiento explicito. **No** vendemos estos datos, **no** los usamos con fines publicitarios, **no** los empleamos para entrenar modelos de IA y **no** permitimos que personas los lean, salvo en los supuestos que la propia politica de Google autoriza.
+
+**Compromiso de Uso Limitado (Limited Use):** el uso y la transferencia por parte de Vantelia de la informacion recibida de las APIs de Google se ajustaran a la [Politica de Datos de Usuario de los Servicios de la API de Google](https://developers.google.com/terms/api-services-user-data-policy), incluidos sus requisitos de Uso Limitado.
+
+> Vantelia's use and transfer to any other app of information received from Google APIs will adhere to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements.
 
 ---
 

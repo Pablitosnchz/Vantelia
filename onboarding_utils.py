@@ -5,6 +5,7 @@ import os
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -22,7 +23,11 @@ MAX_AUTO_FAQ_PAIRS = 5
 PRIORITY_SLUGS = (
     "faq", "faqs", "preguntas", "preguntas-frecuentes", "ayuda", "help", "soporte", "support",
     "precios", "tarifas", "planes", "pricing", "plans", "tarifa",
+    "tarjeta-regalo", "tarjetas-regalo", "gift-card", "gift-cards", "giftcard", "giftcards",
+    "bono-regalo", "cheque-regalo",
     "servicios", "service", "services", "productos", "producto", "product", "products",
+    "condiciones", "condiciones-reserva", "condiciones-compra", "reserva", "reservas",
+    "compra", "comprar", "cancelacion", "cancelaciones",
     "contacto", "contact", "contactanos", "contactenos",
     "nosotros", "sobre", "sobre-nosotros", "about", "about-us", "quienes-somos", "equipo", "team",
     "resultados", "casos", "casos-de-exito", "clientes", "testimonios", "reviews",
@@ -34,13 +39,21 @@ NEG_SLUGS = {
     "tag", "tags", "categoria", "category", "categorias",
     "author", "autor", "page",
     "cookie", "cookies", "privacidad", "politica", "politicas",
-    "terminos", "aviso-legal", "legal", "rgpd", "gdpr",
+    "rgpd", "gdpr",
 }
 
 SKIP_EXTENSIONS = (
     ".pdf", ".jpg", ".jpeg", ".png", ".svg", ".gif", ".webp", ".zip",
     ".mp4", ".mov", ".avi", ".mp3", ".wav", ".css", ".js", ".ico",
     ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+)
+
+COMMON_PRIORITY_PATHS = (
+    "condiciones-de-reserva-compra-y-cancelacion",
+    "condiciones-de-reserva",
+    "condiciones",
+    "politica-de-cancelacion",
+    "politica-cancelacion",
 )
 
 SESSION = requests.Session()
@@ -246,6 +259,27 @@ def _discover_via_sitemap(base_url: str, base_domain: str) -> set[str]:
     return found
 
 
+def _discover_common_priority_paths(base_url: str, base_domain: str) -> set[str]:
+    found: set[str] = set()
+    for path in COMMON_PRIORITY_PATHS:
+        candidate = urljoin(base_url.rstrip("/") + "/", path.strip("/") + "/")
+        if not _is_useful_url(candidate, base_domain):
+            continue
+        try:
+            response = SESSION.get(candidate, timeout=min(5, REQUEST_TIMEOUT), allow_redirects=True)
+        except Exception:  # noqa: BLE001
+            continue
+        if response.status_code != 200:
+            continue
+        content_type = response.headers.get("content-type", "").lower()
+        if "text/html" not in content_type and "application/xhtml+xml" not in content_type:
+            continue
+        final_url = _clean_url(response.url or candidate)
+        if _is_useful_url(final_url, base_domain):
+            found.add(final_url)
+    return found
+
+
 def _slug_priority(url: str) -> int:
     path_parts = [p for p in urlparse(url).path.lower().split("/") if p]
     if any(part in NEG_SLUGS for part in path_parts):
@@ -265,6 +299,7 @@ def get_all_links(base_url: str, max_paginas: int) -> list[str]:
     discovered: set[str] = {base_clean}
 
     discovered |= _discover_via_sitemap(base_url, base_domain)
+    discovered |= _discover_common_priority_paths(base_url, base_domain)
 
     try:
         root_html = fetch_html(base_url)
@@ -496,6 +531,150 @@ CHROME_SELECTORS = [
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 PHONE_RE = re.compile(r"(?:\+?\d[\d\s().\-]{7,}\d)")
 
+SERVICE_PAGE_NEG_RE = re.compile(
+    r"(tarjeta|gift|regalo|reserva|booking|contacto|contact|oferta|bono|promo|"
+    r"condicion|cancelacion|politica|cookie|privacidad|legal|faq|pregunta)",
+    re.I,
+)
+SERVICE_PAGE_SIGNAL_RE = re.compile(
+    r"(servicio|service|tratamiento|masaje|ritual|terapia|sesion|sesi[oó]n|"
+    r"consulta|plan|programa|curso|producto|paquete|drenaje|shiatsu|kobido)",
+    re.I,
+)
+SERVICE_BAD_NAME_RE = re.compile(
+    r"^(masajes?|servicios?|tratamientos?|rituales?|masajes\s*&\s*rituales|otros(?:\s+.+)?)$|"
+    r"^(descubre|variedad|otros)\b|"
+    r"\b\d+\s*(?:personas?|pax)\b|"
+    r"\b\d+\s*['’]",
+    re.I,
+)
+PRICE_TEXT_RE = re.compile(r"(?:desde\s*)?\d{1,4}(?:[,.]\d{1,2})?\s*(?:€|eur|euros)\b", re.I)
+DURATION_TEXT_RE = re.compile(
+    r"(?:(\d{1,2})\s*h(?:ora)?s?\s*)?(?:(\d{1,3})\s*(?:min|minutos))",
+    re.I,
+)
+
+
+def _clean_service_candidate_name(value: str, detected_business_name: str = "") -> str:
+    raw = unicodedata.normalize("NFKC", value or "")
+    raw = re.sub(r"[▷✔️✅★☆]+", " ", raw)
+    raw = re.sub(r"【[^】]*】", " ", raw)
+    raw = re.split(r"\s+[-|]\s+", raw, 1)[0]
+    if detected_business_name:
+        raw = re.sub(re.escape(detected_business_name), " ", raw, flags=re.I)
+    raw = re.sub(r"\b(the\s*nook|madrid)\b", " ", raw, flags=re.I)
+    raw = re.sub(r"\s+", " ", raw).strip(" -:.,")
+    return raw[:120]
+
+
+def _service_candidate_duration(body: str) -> str:
+    for line in (body or "").splitlines():
+        m = DURATION_TEXT_RE.search(line)
+        if not m:
+            continue
+        hours = int(m.group(1) or 0)
+        minutes = int(m.group(2) or 0)
+        total = hours * 60 + minutes
+        if total > 0:
+            return f"{total} min"
+    return ""
+
+
+def _service_candidate_price(body: str) -> str:
+    for line in (body or "").splitlines():
+        if re.search(r"\b(bono|bonos|descuento|dto|promocion|promoción)\b", line, re.I):
+            continue
+        m = PRICE_TEXT_RE.search(line)
+        if m:
+            return re.sub(r"\s+", " ", m.group(0)).strip()
+    return ""
+
+
+def _service_candidate_description(page: dict) -> str:
+    meta = re.sub(r"\s+", " ", page.get("meta_description") or "").strip()
+    if meta:
+        return meta[:260]
+    headings = set(page.get("headings") or [])
+    for line in (page.get("body") or "").splitlines():
+        clean = re.sub(r"\s+", " ", line).strip()
+        if len(clean) < 60 or clean in headings:
+            continue
+        if PRICE_TEXT_RE.search(clean):
+            continue
+        return clean[:260]
+    return ""
+
+
+def _service_name_tokens(value: str) -> set[str]:
+    text = _brand_norm(value)
+    words = re.findall(r"[a-z0-9]+", unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode("ascii").lower())
+    stop = {
+        "masaje", "masajes", "ritual", "rituales", "servicio", "servicios", "tratamiento",
+        "tratamientos", "para", "con", "de", "del", "la", "el", "en", "the", "nook",
+        "madrid", "persona", "personas", "sesion", "sesiones",
+    }
+    return {w for w in words if len(w) >= 3 and w not in stop and not w.isdigit()} or ({text} if text else set())
+
+
+def _service_candidate_matches_existing(name: str, existing_names: set[str]) -> bool:
+    key = _brand_norm(name)
+    if not key:
+        return True
+    candidate_tokens = _service_name_tokens(name)
+    for existing in existing_names:
+        if not existing:
+            continue
+        if key == existing or SequenceMatcher(None, key, existing).ratio() >= 0.84:
+            return True
+        existing_tokens = _service_name_tokens(existing)
+        if candidate_tokens and existing_tokens:
+            overlap = len(candidate_tokens & existing_tokens)
+            if candidate_tokens <= existing_tokens or overlap / max(1, len(candidate_tokens)) >= 0.8:
+                return True
+    return False
+
+
+def _service_candidates_from_pages(pages: list[dict], detected_business_name: str) -> list[dict]:
+    candidates: list[dict] = []
+    seen: set[str] = set()
+    for page in pages:
+        url = str(page.get("url") or "")
+        parsed = urlparse(url)
+        path = parsed.path.strip("/").lower()
+        if not path or SERVICE_PAGE_NEG_RE.search(path):
+            continue
+        title = str(page.get("title") or "")
+        headings = [str(h or "").strip() for h in (page.get("headings") or []) if str(h or "").strip()]
+        body = str(page.get("body") or "")
+        signal_text = " ".join([path, title, " ".join(headings[:6]), body[:1200]])
+        if not SERVICE_PAGE_SIGNAL_RE.search(signal_text):
+            continue
+        name_options = [_clean_service_candidate_name(h, detected_business_name) for h in headings[:4]]
+        name_options.append(_clean_service_candidate_name(title, detected_business_name))
+        name_options = [
+            n for n in name_options
+            if 3 <= len(n) <= 90 and not SERVICE_PAGE_NEG_RE.search(n)
+            and not SERVICE_BAD_NAME_RE.search(n)
+            and n.lower() not in {"bonos", "reservas", "the nook", "otros"}
+        ]
+        if not name_options:
+            continue
+        name = sorted(name_options, key=lambda n: (len(n.split()) > 7, len(n)))[0]
+        key = _brand_norm(name)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        candidates.append(
+            {
+                "name": name,
+                "price": _service_candidate_price(body) or "A consultar",
+                "duration": _service_candidate_duration(body),
+                "detail": _service_candidate_description(page),
+                "url": url,
+            }
+        )
+    return candidates[:80]
+
 
 def scrape_page(target_url: str) -> dict:
     try:
@@ -612,6 +791,7 @@ def collect_site_content(base_url: str, max_paginas: int) -> tuple[list[str], st
         "emails": sorted(all_emails)[:10],
         "phones": sorted(all_phones)[:10],
         "faq_pairs": all_faq[:MAX_AUTO_FAQ_PAIRS],
+        "service_candidates": _service_candidates_from_pages(pages, detected_business_name),
     }
 
     return links, all_text, detected_business_name, aggregate
@@ -692,6 +872,12 @@ SERVICIOS Y PRECIOS:
   - Precio: <precio tal cual aparece en la web, p.ej. "45 €" o "Desde 30 €". Si no hay precio visible escribe "A consultar">
   - Duracion: <duracion si aparece, p.ej. "45 min" o "1 h". Si no aparece, OMITE esta linea>
   - Detalle: <descripcion breve del servicio>
+
+TARJETAS REGALO, BONOS Y PRODUCTOS:
+- Tarjetas regalo: <si existen, explica compra, uso, caducidad, transferencia, cambios, centros validos, descuentos y enlace de condiciones. Si no existen, escribe "No especificado en la web">
+- Producto: <nombre> / <precio con moneda> / Stock: <numero si aparece, si no omite stock> / <detalle breve>
+- Bono: <nombre> / <precio con moneda> / <N sesiones/usos si aparece> / Servicio: <servicio asociado si aparece>
+- Condiciones de compra, reserva, uso, caducidad, transferencia, cambios, descuentos y cancelacion:
 
 PROCESO COMERCIAL Y OPERATIVO:
 - Como funciona la atencion:
@@ -849,6 +1035,58 @@ def _strip_faq_section(info_txt: str) -> str:
     )
 
 
+def _merge_detected_service_candidates(info_txt: str, candidates: list[dict]) -> str:
+    if not info_txt or not candidates:
+        return info_txt
+    existing_display_names = {
+        match.group(1).strip()
+        for match in re.finditer(r"^\s*-\s*Servicio:\s*(.+?)\s*$", info_txt, re.I | re.M)
+    }
+    existing_names = {_brand_norm(name) for name in existing_display_names}
+    additions: list[str] = []
+    for item in candidates:
+        name = re.sub(r"\s+", " ", str(item.get("name") or "")).strip()
+        key = _brand_norm(name)
+        if (
+            not name
+            or not key
+            or SERVICE_BAD_NAME_RE.search(name)
+            or key in existing_names
+            or _service_candidate_matches_existing(name, existing_display_names)
+        ):
+            continue
+        existing_names.add(key)
+        existing_display_names.add(name)
+        price = re.sub(r"\s+", " ", str(item.get("price") or "A consultar")).strip() or "A consultar"
+        duration = re.sub(r"\s+", " ", str(item.get("duration") or "")).strip()
+        detail = re.sub(r"\s+", " ", str(item.get("detail") or "")).strip()
+        url = re.sub(r"\s+", " ", str(item.get("url") or "")).strip()
+        additions.append(f"- Servicio: {name}")
+        additions.append(f"  - Precio: {price}")
+        if duration:
+            additions.append(f"  - Duracion: {duration}")
+        if detail:
+            additions.append(f"  - Detalle: {detail}")
+        if url:
+            additions.append(f"  - Fuente: {url}")
+    if not additions:
+        return info_txt
+
+    insert_text = "\n" + "\n".join(additions) + "\n"
+    section = re.search(r"(^SERVICIOS\s+Y\s+PRECIOS:\s*$)", info_txt, re.I | re.M)
+    if not section:
+        return info_txt.rstrip() + "\n\nSERVICIOS Y PRECIOS:\n" + "\n".join(additions) + "\n"
+    next_section = re.search(
+        r"^\s*[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9\s/(),-]{3,}:\s*$",
+        info_txt[section.end():],
+        re.M,
+    )
+    if not next_section:
+        return info_txt.rstrip() + insert_text
+    pos = section.end() + next_section.start()
+    return info_txt[:pos].rstrip() + insert_text + "\n" + info_txt[pos:].lstrip()
+
+
 def run_onboarding(
     *,
     website_url: str,
@@ -871,6 +1109,7 @@ def run_onboarding(
         aggregate=aggregate,
         model=model,
     )
+    info_txt = _merge_detected_service_candidates(info_txt, aggregate.get("service_candidates") or [])
 
     literal_pairs = aggregate.get("faq_pairs") or []
     if literal_pairs:

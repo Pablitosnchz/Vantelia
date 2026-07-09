@@ -12,11 +12,10 @@ import secrets
 import shutil
 import sqlite3
 import time
-import unicodedata
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, Request, status
 
@@ -37,7 +36,7 @@ from llama_index.llms.openai import OpenAI
 
 from api_models import AppKnowledgeItem, AppQAItem, ChatMessagePublic, ChatSessionSummary, PortalBrainPayload, PortalBrainPublic
 import onboarding_utils
-from backend import agenda, appstate, clients, db, emailing, messaging, security, settings, textnorm, timeutils
+from backend import agenda, appstate, booking, clients, commerce, db, settings, textnorm, timeutils
 
 def _setup_llama_index() -> None:
     if not settings.OPENAI_API_KEY:
@@ -45,52 +44,6 @@ def _setup_llama_index() -> None:
 
     Settings.llm = OpenAI(model=settings.DEFAULT_CHAT_MODEL, temperature=0.1)
     Settings.embed_model = OpenAIEmbedding(model=settings.DEFAULT_EMBEDDING_MODEL)
-
-
-def _generate_starter_questions(info_excerpt: str, nombre: str) -> List[str]:
-    """Use OpenAI to draft 4 starter questions from the info dump.
-    Falls back to generic ones if OpenAI is unavailable or fails."""
-    fallback = [
-        f"Que servicios ofrece {nombre}?",
-        "Como puedo pedir una cita?",
-        "Cuales son los horarios de atencion?",
-        "Como puedo contactar con vosotros?",
-    ]
-    if not settings.OPENAI_API_KEY or not info_excerpt:
-        return fallback
-    try:
-        from openai import OpenAI as OpenAISdkClient  # local import to avoid name clash
-        client = OpenAISdkClient(api_key=settings.OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model=settings.DEFAULT_CHAT_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Genera 4 preguntas frecuentes que un visitante haria a un asistente "
-                        "virtual de la web. Tono natural, primera persona del usuario, sin numerar. "
-                        "Devuelve solo las 4 preguntas separadas por salto de linea, sin nada mas."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": f"Negocio: {nombre}\n\nResumen:\n{info_excerpt[:3000]}",
-                },
-            ],
-            temperature=0.4,
-            max_tokens=300,
-        )
-        text = (response.choices[0].message.content or "").strip()
-        lines = [
-            re.sub(r"^[\-\*\d\.\)\s]+", "", line).strip()
-            for line in text.splitlines()
-            if line.strip()
-        ]
-        cleaned = [l for l in lines if 6 <= len(l) <= 140][:4]
-        return cleaned or fallback
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.warning("OpenAI starter questions fallback: %s", exc)
-        return fallback
 
 
 def _client_data_dir(cliente_id: str) -> Path:
@@ -298,6 +251,71 @@ def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
             f"Solo confirma horarios reales del bloque DATOS_EN_TIEMPO_REAL_DISPONIBILIDAD."
         )
 
+    # HORARIO SEMANAL REAL (misma fuente que la voz y la disponibilidad: la agenda de los
+    # profesionales publicos, con fallback a config['booking']). El asistente sabe que dias
+    # se cierra y no ofrece cita en dia cerrado; cambios de Horarios aplican en la
+    # siguiente conversacion sin tocar codigo.
+    schedule_prompt_block = ""
+    try:
+        matrix = agenda._weekly_schedule_matrix(cliente_id, config)
+    except Exception:  # noqa: BLE001
+        matrix = []
+    if matrix:
+        day_lines = []
+        for item in matrix:
+            label = textnorm.DAY_LABELS_ES[item["weekday"]]
+            if item["closed"]:
+                day_lines.append(f"- {label}: cerrado")
+            else:
+                day_lines.append(f"- {label}: {item['start']} a {item['end']}")
+        # Descanso general del negocio (cierre de mediodia): el asistente lo conoce y no
+        # ofrece horas dentro de ese tramo (la disponibilidad real ya lo excluye).
+        try:
+            general_breaks = agenda._client_break_windows(config)
+        except Exception:  # noqa: BLE001
+            general_breaks = []
+        for window in general_breaks:
+            start_v, end_v, reason_v = textnorm._break_window_values(window)
+            if start_v and end_v:
+                label = reason_v or "descanso"
+                day_lines.append(f"- Cierre diario ({label}): de {start_v} a {end_v} no se atiende ni se dan citas.")
+        schedule_prompt_block = (
+            "\nHORARIO SEMANAL REAL DEL NEGOCIO (derivado de la agenda; lo conoces de memoria):\n"
+            + "\n".join(day_lines)
+            + "\n- NUNCA ofrezcas cita ni digas que hay hueco en un dia marcado 'cerrado'; si el "
+            "usuario pide un dia cerrado, dilo con tacto y sugiere el dia abierto mas cercano.\n"
+            "- Este horario es la apertura general; los huecos concretos (festivos, vacaciones, "
+            "bloqueos, aforo) los da el sistema en los bloques de disponibilidad. No inventes huecos.\n"
+        )
+
+    # CATALOGO REAL de servicios (tabla services): fuente de verdad para nombres, duraciones
+    # y precios, por delante de la base documental (que puede quedar desactualizada).
+    services_prompt_block = ""
+    if booking_enabled:
+        try:
+            catalog_lines = booking._service_catalog_lines(cliente_id)
+        except Exception:  # noqa: BLE001
+            catalog_lines = []
+        if catalog_lines:
+            services_prompt_block = (
+                "\nCATALOGO REAL DE SERVICIOS (nombre · duracion · precio) PARA ENUMERAR, "
+                "PRESUPUESTAR Y RESERVAR:\n"
+                + "\n".join(catalog_lines[:40])
+                + "\n- Para servicios, precios y duraciones esta lista MANDA sobre la base documental: "
+                "si se contradicen, usa esta lista.\n"
+                "- Si piden un servicio que no esta en la lista, no lo aceptes como reservable: dilo y "
+                "ofrece 2 o 3 servicios reales de la lista.\n"
+                "- Si un servicio aparece 'a consultar', no inventes una cifra: dilo y ofrece contacto o cita.\n"
+            )
+
+    gift_cards_prompt_block = ""
+    try:
+        block = commerce.commerce_prompt_block(cliente_id)
+        if block:
+            gift_cards_prompt_block = f"\n{block}\n"
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("No se pudo construir contexto de tarjetas regalo para %s: %s", cliente_id, exc)
+
     return f"""
 Eres el asistente virtual oficial de {nombre_empresa}. Atiendes a clientes y visitantes en nombre del negocio, no de Vantelia ni de ninguna otra marca.
 
@@ -309,7 +327,7 @@ Identidad y marca:
 Datos de contacto verificados:
 {contact_block}
 {booking_window_line}
-
+{schedule_prompt_block}{services_prompt_block}{gift_cards_prompt_block}
 {starter_block}
 ALCANCE DE TUS RESPUESTAS
 Puedes y debes responder con detalle a cualquier consulta razonable sobre el negocio, incluyendo (no exhaustivo):
@@ -340,7 +358,7 @@ REGLAS DE FORMATO Y TONO
 7. Respuestas breves por defecto (1-4 frases). Si la pregunta es compleja, usa listas o pasos numerados. Tablas comparativas cuando comparas opciones.
 8. Cuando enumeres servicios, precios, pasos, FAQs u opciones, usa una linea por elemento con este formato: "· **Titulo:** explicacion breve". No uses guiones ("-") salvo que el usuario lo pida expresamente. Usa negrita con dobles asteriscos solo en el titulo o pregunta de cada elemento.
 9. Si das telefono o email, ponlos tal cual aparecen en los datos verificados, sin alterar formato.
-10. Cierra con un siguiente paso util cuando aporte valor (reservar, llamar, escribir email, ver web).
+10. Si das un enlace, escribe siempre la URL completa empezando por https:// para que el usuario pueda abrirla desde el chat. Cierra con un siguiente paso util cuando aporte valor (reservar, llamar, escribir email, ver web).
 
 REGLAS COMERCIALES Y DE EXPERIENCIA
 11. Modos disponibles: diagnostico, recomendador, estimador y comparador. Activalos cuando el usuario lo necesite y haz 1-3 preguntas si faltan datos clave.
@@ -522,7 +540,9 @@ AVAILABILITY_INTENT_PATTERNS = [
         r"\b(huecos?|horas?\s+libres?|tramos?\s+libres?|huecos?\s+libres?)\b",
         r"\b(que|cuales?|cual)\s+horas?\b.*\b(libres?|disponibles?)\b",
         r"\bcita\s+(libre|disponible)\b",
-        r"\b(citas?|horas?|huecos?|turnos?)\b.*\b(disponibles?|libres?|para)\b",
+        # OJO: sin "para" como marcador — "quiero cita para un masaje" es intencion de
+        # RESERVA (formulario), no una consulta de disponibilidad.
+        r"\b(citas?|horas?|huecos?|turnos?)\b.*\b(disponibles?|libres?)\b",
         r"\b(reservar|reserva|agendar|agenda)\b.*\b(hoy|manana|pasado|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|finde|dia|\d{1,2})\b",
         r"\b(abierto|abierta|abiertos|abiertas|cerrado|cerrada|cerrados|cerradas|abris|abren|horario|festivo|vacaciones)\b",
         r"\bcuando\s+podeis\b",
@@ -1472,7 +1492,6 @@ def _seed_qa_from_onboarding(cliente_id: str, result: Any, user_id: Any = "") ->
     o las preguntas frecuentes quedarian vacias en el panel."""
     try:
         pairs = list(getattr(result, "faq_pairs", []) or [])
-        src = str(getattr(result, "faq_source", "") or "").lower()
         return _autocreate_qa_from_info(
             cliente_id,
             getattr(result, "info_txt", "") or "",
@@ -1541,11 +1560,6 @@ def _gen_qa_from_info_heuristic(info_txt: str, max_pairs: int = 5) -> List[Tuple
         ))
 
     # 3. Horario
-    horario_pattern = re.compile(
-        r"(?:horario|abierto|atenci[oó]n)[^\n]*?(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|lun|mar|mi[eé]|jue|vie|s[aá]b|dom)[^\n]+",
-        re.IGNORECASE,
-    )
-    horarios = horario_pattern.findall(info_txt, )
     horario_lines = [m for m in re.findall(
         r"(?:horario[s]?|abierto|atenci[oó]n)[^\n]*\n?[^\n]*\d{1,2}:\d{2}",
         info_txt, re.IGNORECASE

@@ -300,6 +300,18 @@ async def auth_redeem_gift_card(
 # ---------------------------------------------------------------------------
 
 
+@app.get("/auth/app/central/summary")
+async def auth_central_summary(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """KPIs de HOY para la Central de Ventas (mostrador): citas y cobros del dia,
+    ventas de productos/bonos/tarjetas y valor vivo en circulacion. Permiso de
+    mostrador (commerce.sell), no de informes."""
+    security._require_portal_permission(user, "commerce.sell")
+    return analytics._central_summary(portal._portal_client_id_or_403(user, cliente_id))
+
+
 @app.get("/auth/analytics/overview")
 async def auth_analytics_overview(
     cliente_id: str = "",

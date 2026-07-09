@@ -1,37 +1,16 @@
 """Captacion TikTok (espejo de Instagram) (refactor F3)."""
 from __future__ import annotations
 
-import asyncio
-import base64
-import csv
-import hashlib
-import hmac
-import json
 import os
 import random
-import re
-import secrets
 import sqlite3
 import threading
-import time
-import unicodedata
-import uuid
-from datetime import date, datetime, timedelta, timezone
-from html import escape
-from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from typing import Any, Dict, List, Optional
 
-import httpx
-from fastapi import BackgroundTasks, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python 3.8 compatibility
-    from backports.zoneinfo import ZoneInfo
 
-from backend import appstate, clients, db, outreach, security, settings, textnorm, timeutils
+from backend import settings, timeutils
 
 tk_campaign_thread: Optional[threading.Thread] = None
 
@@ -239,7 +218,7 @@ def _tk_create_draft(prospect_row: Dict[str, Any]) -> Optional[int]:
         ).fetchone()
         if existing:
             return None
-        cur = conn.execute(
+        conn.execute(
             """INSERT INTO tk_sends (username, stage, variant, message_text, mode, ready, drafted_at)
                VALUES (?,?,?,?,?,?,?)""",
             (prospect_row["username"], "cold", variant, text, "draft", 1, now),

@@ -11,13 +11,11 @@ import hashlib
 import hmac
 import secrets
 import json
-import re
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
-import httpx
 from fastapi import HTTPException, Request, Response
 
 try:
@@ -26,8 +24,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AppWhatsAppResponse, WhatsAppWebhookStatus
-from backend import agenda, appstate, booking, chat, clients, crm, db, messaging, rag, security, settings, textnorm, timeutils
-from backend.appstate import WAFlowState
+from backend import agenda, appstate, booking, chat, clients, crm, db, messaging, rag, settings, textnorm, timeutils
 
 def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResponse:
     cfg = clients._get_client_config(cliente_id)
@@ -132,15 +129,6 @@ def _whatsapp_session_id(cliente_id: str, from_number: str) -> str:
     return f"wa_{digest[:40]}"
 
 
-def _whatsapp_public_booking_text(cliente_id: str, request: Request) -> str:
-    config = clients._get_client_config(cliente_id)
-    first_origin = next((origin for origin in config.get("allowed_origins", []) if origin), "")
-    base_url = first_origin or textnorm._preferred_public_base_url(request)
-    if not base_url:
-        return "Para completar la cita, dime el servicio, dia y hora que prefieres y el equipo humano lo revisara."
-    return f"Para completar la cita con formulario, entra aqui: {base_url.rstrip('/')}"
-
-
 def _mark_whatsapp_message_if_new(
     *,
     message_id: str,
@@ -205,9 +193,9 @@ def _verify_whatsapp_signature(raw_body: bytes, signature_header: str) -> None:
 
 
 async def _wa_send_service_picker(
-    *, cliente_id: str, phone_number_id: str, to_number: str,
+    *, cliente_id: str, phone_number_id: str, to_number: str, location_id: str = "",
 ) -> bool:
-    services = booking._public_services_for_booking(cliente_id)
+    services = booking._public_services_for_booking(cliente_id, location_id=location_id)
     if not services:
         return False
     rows: List[Dict[str, Any]] = []
@@ -228,6 +216,30 @@ async def _wa_send_service_picker(
     return True
 
 
+async def _wa_send_location_picker(
+    *, cliente_id: str, phone_number_id: str, to_number: str,
+) -> bool:
+    """Selector de CENTRO para negocios multi-centro con numero de WhatsApp generico
+    (sin centro atado): el cliente elige sede antes del servicio, igual que en voz."""
+    rows_db = agenda._list_location_rows(cliente_id, include_inactive=False)
+    if len(rows_db) <= 1:
+        return False
+    rows: List[Dict[str, Any]] = []
+    for loc in rows_db[:10]:
+        rows.append({
+            "id": f"loc_{loc['id']}",
+            "title": str(loc["name"] or "Centro")[:24],
+            "description": str(loc["address"] or "")[:72] or "Selecciona esta sede",
+        })
+    sections = [{"title": "Nuestros centros", "rows": rows}]
+    await messaging._send_whatsapp_list(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+        body="🏢 ¿En que centro quieres la cita?",
+        button_text="Ver centros", sections=sections, header="Agendar cita",
+    )
+    return True
+
+
 def _wa_location_id(cliente_id: str, phone_number_id: str) -> str:
     """Centro asociado al numero de WhatsApp entrante (un numero por centro).
     '' si el numero no esta mapeado: el flujo se comporta como mono-centro."""
@@ -237,9 +249,9 @@ def _wa_location_id(cliente_id: str, phone_number_id: str) -> str:
 
 
 def _wa_employees_for_service(
-    cliente_id: str, servicio: str, phone_number_id: str = ""
+    cliente_id: str, servicio: str, phone_number_id: str = "", location_id: str = ""
 ) -> List[sqlite3.Row]:
-    location_id = _wa_location_id(cliente_id, phone_number_id)
+    location_id = location_id or _wa_location_id(cliente_id, phone_number_id)
     rows = agenda._list_public_employee_rows(
         cliente_id, include_inactive=False, location_id=location_id
     )
@@ -252,9 +264,9 @@ def _wa_employees_for_service(
 
 
 async def _wa_send_employee_picker(
-    *, cliente_id: str, phone_number_id: str, to_number: str, servicio: str,
+    *, cliente_id: str, phone_number_id: str, to_number: str, servicio: str, location_id: str = "",
 ) -> List[sqlite3.Row]:
-    employees = _wa_employees_for_service(cliente_id, servicio, phone_number_id)
+    employees = _wa_employees_for_service(cliente_id, servicio, phone_number_id, location_id=location_id)
     if len(employees) <= 1:
         return employees
     rows: List[Dict[str, Any]] = []
@@ -271,6 +283,14 @@ async def _wa_send_employee_picker(
         button_text="Ver profesionales", sections=sections, header="Agendar cita",
     )
     return employees
+
+
+def _wa_fecha_humana(fecha_iso: str) -> str:
+    """Fecha hablada para confirmaciones ("lunes 6 de julio"), no ISO crudo."""
+    try:
+        return textnorm._format_date_es(textnorm._parse_date(fecha_iso).date())
+    except Exception:  # noqa: BLE001
+        return fecha_iso
 
 
 def _wa_flow_key(cliente_id: str, from_number: str) -> str:
@@ -292,6 +312,7 @@ def _wa_clear_flow(cliente_id: str, from_number: str) -> None:
 
 
 def _wa_reset_booking_fields(flow: appstate.WAFlowState) -> None:
+    flow.location_id = ""
     flow.servicio = ""
     flow.employee_id = ""
     flow.employee_name = ""
@@ -337,13 +358,27 @@ async def _wa_send_main_menu(
     )
 
 
+def _wa_closed_weekdays(cliente_id: str, config: Dict[str, Any]) -> set:
+    """Dias cerrados REALES desde la matriz semanal compartida (empleados publicos, con
+    fallback a config['booking']). Antes se leia config crudo y un dia reabierto solo en
+    los horarios de empleados quedaba oculto en los pickers."""
+    try:
+        matrix = agenda._weekly_schedule_matrix(cliente_id, config)
+    except Exception:  # noqa: BLE001
+        matrix = []
+    if len(matrix) == 7:
+        return {item["weekday"] for item in matrix if item["closed"]}
+    booking_cfg = config.get("booking", {}) or {}
+    return set(int(x) for x in (booking_cfg.get("closed_weekdays") or []) if isinstance(x, (int, str)) and str(x).isdigit())
+
+
 async def _wa_send_date_picker(
     *, cliente_id: str, phone_number_id: str, to_number: str, config: Dict[str, Any], header: str, body: str,
-    employee_id: str = "", servicio: str = "",
+    employee_id: str = "", servicio: str = "", location_id: str = "",
 ) -> None:
     booking_cfg = config.get("booking", {}) or {}
     tz_name = booking_cfg.get("timezone") or settings.DEFAULT_TIMEZONE
-    closed = set(int(x) for x in (booking_cfg.get("closed_weekdays") or []) if isinstance(x, (int, str)) and str(x).isdigit())
+    closed = _wa_closed_weekdays(cliente_id, config)
     try:
         today = datetime.now(ZoneInfo(tz_name)).date()
     except Exception:
@@ -370,7 +405,7 @@ async def _wa_send_date_picker(
                     cliente_id,
                     candidate.isoformat(),
                     servicio=servicio,
-                    location_id=_wa_location_id(cliente_id, phone_number_id),
+                    location_id=location_id or _wa_location_id(cliente_id, phone_number_id),
                 )
         except Exception:
             available = set()
@@ -413,7 +448,7 @@ async def _wa_send_date_picker(
 
 async def _wa_send_time_picker(
     *, cliente_id: str, phone_number_id: str, to_number: str, fecha_iso: str, fecha_humana: str,
-    employee_id: str = "", servicio: str = "",
+    employee_id: str = "", servicio: str = "", location_id: str = "",
 ) -> bool:
     try:
         if employee_id:
@@ -428,7 +463,7 @@ async def _wa_send_time_picker(
                 cliente_id,
                 fecha_iso,
                 servicio=servicio,
-                location_id=_wa_location_id(cliente_id, phone_number_id),
+                location_id=location_id or _wa_location_id(cliente_id, phone_number_id),
             )
     except HTTPException as exc:
         await messaging._send_whatsapp_text(
@@ -497,7 +532,7 @@ async def _wa_send_availability_overview(
 ) -> None:
     booking_cfg = config.get("booking", {}) or {}
     tz_name = booking_cfg.get("timezone") or settings.DEFAULT_TIMEZONE
-    closed = set(int(x) for x in (booking_cfg.get("closed_weekdays") or []) if isinstance(x, (int, str)) and str(x).isdigit())
+    closed = _wa_closed_weekdays(cliente_id, config)
     try:
         today = datetime.now(ZoneInfo(tz_name)).date()
     except Exception:
@@ -542,7 +577,7 @@ async def _wa_create_booking(
         booking_dt = textnorm._parse_date(flow.fecha)
         agenda._validate_booking_window(cliente_id, booking_dt)
 
-        wa_location_id = _wa_location_id(cliente_id, phone_number_id)
+        wa_location_id = flow.location_id or _wa_location_id(cliente_id, phone_number_id)
         if flow.employee_id:
             employee_row = agenda._resolve_employee_for_booking(cliente_id, flow.employee_id)
         else:
@@ -712,14 +747,56 @@ async def _wa_create_booking(
         payment_label = "Para confirmar, completa el pago" if stored_booking and stored_booking["status"] == "pending_payment" else "Pago opcional"
         confirmacion += f"\n💳 *{payment_label}:* {payment_row['checkout_url']}\n"
     confirmacion += (
-        f"\nRecibiras email de confirmacion y un recordatorio antes. "
-        f"Si necesitas cancelar o cambiarla, responde *cancelar*.\n\n"
-        f"Escribe *menu* para volver al menu principal."
+        "\nRecibiras email de confirmacion y un recordatorio antes. "
+        "Si necesitas cancelar o cambiarla, responde *cancelar*.\n\n"
+        "Escribe *menu* para volver al menu principal."
     )
     await messaging._send_whatsapp_text(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number, text=confirmacion,
     )
     return True
+
+
+async def _wa_start_booking_flow(
+    *, cliente_id: str, phone_number_id: str, from_number: str,
+    flow: appstate.WAFlowState, config: Dict[str, Any],
+) -> None:
+    """Arranque COMUN del flujo de reserva (opcion de menu, texto libre e intencion IA):
+    centro (solo si el negocio tiene varios y el numero no esta atado a uno) -> servicio
+    -> profesional -> dia. Una sola definicion del orden de pasos."""
+    effective_location = flow.location_id or _wa_location_id(cliente_id, phone_number_id)
+    if not effective_location:
+        flow.flow = "booking_location"
+        if await _wa_send_location_picker(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+        ):
+            return
+        flow.flow = ""  # mono-centro: no hay nada que elegir
+    services = booking._public_services_for_booking(cliente_id, location_id=effective_location)
+    if services:
+        flow.flow = "booking_service"
+        await _wa_send_service_picker(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            location_id=effective_location,
+        )
+        return
+    employees = _wa_employees_for_service(cliente_id, "", phone_number_id, location_id=effective_location)
+    if len(employees) > 1:
+        flow.flow = "booking_employee"
+        await _wa_send_employee_picker(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            servicio="", location_id=effective_location,
+        )
+        return
+    if employees:
+        flow.employee_id = employees[0]["id"]
+        flow.employee_name = employees[0]["name"]
+    flow.flow = "booking_date"
+    await _wa_send_date_picker(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+        config=config, header="Agendar cita", body="📅 Elige el dia para tu cita:",
+        employee_id=flow.employee_id, location_id=effective_location,
+    )
 
 
 async def _wa_handle_reminder_reply(
@@ -794,7 +871,9 @@ async def _handle_whatsapp_message(
 ) -> None:
     config = clients._get_client_config(cliente_id)
     booking_enabled = bool(config["booking"]["enabled"])
-    nombre_empresa = config.get("nombre", "")
+    # Igual que chat/voz: el menu se presenta en nombre del NEGOCIO (Apariencia "empresa"),
+    # con fallback al nombre del bot si el campo esta vacio.
+    nombre_empresa = str(config.get("empresa") or "").strip() or config.get("nombre", "")
     flow = _wa_get_flow(cliente_id, from_number)
 
     iid = (interactive_id or "").strip()
@@ -820,9 +899,10 @@ async def _handle_whatsapp_message(
         )
         return
 
-    # Saludo: cada vez que el usuario salude, responder con menu.
+    # Saludo PURO: responder con menu. Si el saludo trae una intencion ("Hola, quiero
+    # cancelar mi cita R-1234"), la intencion manda (misma regla que el chat web).
     # Solo si NO hay flujo activo (para no romper paso a paso de agendar).
-    if not flow.flow and chat._message_is_greeting(incoming_text):
+    if not flow.flow and chat._message_is_pure_greeting(incoming_text):
         await _wa_send_main_menu(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             nombre_empresa=nombre_empresa, booking_enabled=booking_enabled, greeting=True,
@@ -918,7 +998,7 @@ async def _handle_whatsapp_message(
             _wa_clear_flow(cliente_id, from_number)
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {flow.fecha} a las {flow.hora}.",
+                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {_wa_fecha_humana(flow.fecha)} a las {flow.hora}. El numero de reserva sigue siendo el mismo.",
             )
             return
         await messaging._send_whatsapp_text(
@@ -926,7 +1006,7 @@ async def _handle_whatsapp_message(
             text=(
                 "Por seguridad necesito verificar la reserva. Enviame el telefono o el email con el que hiciste la cita."
                 if result.get("needs_verification")
-                else f"⚠️ {result.get('error') or 'No se pudo cambiar la cita.'}"
+                else f"⚠️ {await booking._reschedule_failure_text(cliente_id, result, flow.fecha, flow.hora)}"
             ),
         )
         if not result.get("needs_verification"):
@@ -934,34 +1014,12 @@ async def _handle_whatsapp_message(
         return
 
     if trigger_agendar and booking_enabled:
-        # Resetear flow y arrancar por servicio
         flow.flow = ""
         _wa_reset_booking_fields(flow)
-
-        services = booking._public_services_for_booking(cliente_id)
-        if services:
-            flow.flow = "booking_service"
-            await _wa_send_service_picker(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            )
-            return
-        # Sin servicios: saltar a profesional
-        employees = _wa_employees_for_service(cliente_id, "", phone_number_id)
-        if len(employees) > 1:
-            flow.flow = "booking_employee"
-            await _wa_send_employee_picker(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number, servicio="",
-            )
-        else:
-            if employees:
-                flow.employee_id = employees[0]["id"]
-                flow.employee_name = employees[0]["name"]
-            flow.flow = "booking_date"
-            await _wa_send_date_picker(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                config=config, header="Agendar cita", body="📅 Elige el dia para tu cita:",
-                employee_id=flow.employee_id,
-            )
+        await _wa_start_booking_flow(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+            flow=flow, config=config,
+        )
         return
 
     if trigger_disp and booking_enabled:
@@ -1095,7 +1153,7 @@ async def _handle_whatsapp_message(
             _wa_clear_flow(cliente_id, from_number)
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {flow.fecha} a las {flow.hora}.",
+                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {_wa_fecha_humana(flow.fecha)} a las {flow.hora}. El numero de reserva sigue siendo el mismo.",
             )
             return
         if result.get("needs_verification"):
@@ -1108,7 +1166,7 @@ async def _handle_whatsapp_message(
         _wa_clear_flow(cliente_id, from_number)
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            text=f"⚠️ {result.get('error') or 'No se pudo cambiar la cita.'}",
+            text=f"⚠️ {await booking._reschedule_failure_text(cliente_id, result, flow.fecha, flow.hora)}",
         )
         return
 
@@ -1136,20 +1194,44 @@ async def _handle_whatsapp_message(
             _wa_clear_flow(cliente_id, from_number)
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {flow.fecha} a las {flow.hora}.",
+                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {_wa_fecha_humana(flow.fecha)} a las {flow.hora}. El numero de reserva sigue siendo el mismo.",
             )
             return
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            text=f"⚠️ {result.get('error') or 'No se pudo cambiar la cita.'}",
+            text=f"⚠️ {await booking._reschedule_failure_text(cliente_id, result, flow.fecha, flow.hora)}",
         )
         if not result.get("needs_verification"):
             _wa_clear_flow(cliente_id, from_number)
         return
 
+    # FLUJO BOOKING - Centro (solo multi-centro con numero generico)
+    if flow.flow == "booking_location":
+        chosen = ""
+        if iid.startswith("loc_"):
+            chosen = iid[len("loc_"):]
+        elif incoming_text.strip():
+            for loc in agenda._list_location_rows(cliente_id, include_inactive=False):
+                if textnorm._strip_accents(str(loc["name"] or "").lower()) == textnorm._strip_accents(incoming_text.lower().strip()):
+                    chosen = loc["id"]
+                    break
+        row_loc = agenda._get_location_row(chosen, cliente_id=cliente_id) if chosen else None
+        if not row_loc:
+            await messaging._send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text="No he reconocido el centro. Pulsa una opcion del listado o escribe *menu*.",
+            )
+            return
+        flow.location_id = row_loc["id"]
+        await _wa_start_booking_flow(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+            flow=flow, config=config,
+        )
+        return
+
     # FLUJO BOOKING - Servicio
     if flow.flow == "booking_service":
-        services = booking._public_services_for_booking(cliente_id)
+        services = booking._public_services_for_booking(cliente_id, location_id=flow.location_id)
         chosen = ""
         if iid.startswith("svc_"):
             try:
@@ -1172,7 +1254,7 @@ async def _handle_whatsapp_message(
             return
         flow.servicio = chosen
 
-        employees = _wa_employees_for_service(cliente_id, flow.servicio, phone_number_id)
+        employees = _wa_employees_for_service(cliente_id, flow.servicio, phone_number_id, location_id=flow.location_id)
         if not employees:
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
@@ -1180,6 +1262,7 @@ async def _handle_whatsapp_message(
             )
             await _wa_send_service_picker(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                location_id=flow.location_id,
             )
             return
         if len(employees) == 1:
@@ -1189,12 +1272,13 @@ async def _handle_whatsapp_message(
             await _wa_send_date_picker(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
                 config=config, header="Agendar cita", body=f"📅 Elige el dia para *{flow.servicio}* con *{flow.employee_name}*:",
-                employee_id=flow.employee_id, servicio=flow.servicio,
+                employee_id=flow.employee_id, servicio=flow.servicio, location_id=flow.location_id,
             )
         else:
             flow.flow = "booking_employee"
             await _wa_send_employee_picker(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number, servicio=flow.servicio,
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                servicio=flow.servicio, location_id=flow.location_id,
             )
         return
 
@@ -1203,7 +1287,7 @@ async def _handle_whatsapp_message(
         if iid.startswith("emp_"):
             emp_id = iid[len("emp_"):]
         else:
-            for emp in _wa_employees_for_service(cliente_id, flow.servicio, phone_number_id):
+            for emp in _wa_employees_for_service(cliente_id, flow.servicio, phone_number_id, location_id=flow.location_id):
                 if textnorm._strip_accents(str(emp["name"]).lower()) == textnorm._strip_accents(incoming_text.lower().strip()):
                     emp_id = emp["id"]
                     break
@@ -1228,7 +1312,7 @@ async def _handle_whatsapp_message(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             config=config, header="Agendar cita",
             body=f"📅 Elige el dia con *{flow.employee_name}*:",
-            employee_id=flow.employee_id, servicio=flow.servicio,
+            employee_id=flow.employee_id, servicio=flow.servicio, location_id=flow.location_id,
         )
         return
 
@@ -1261,7 +1345,7 @@ async def _handle_whatsapp_message(
         ok = await _wa_send_time_picker(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             fecha_iso=fecha_iso, fecha_humana=fecha_humana,
-            employee_id=flow.employee_id, servicio=flow.servicio,
+            employee_id=flow.employee_id, servicio=flow.servicio, location_id=flow.location_id,
         )
         if not ok:
             flow.flow = "booking_date"
@@ -1269,7 +1353,7 @@ async def _handle_whatsapp_message(
             await _wa_send_date_picker(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
                 config=config, header="Elegir otra fecha", body="📅 Elige otra fecha disponible:",
-                employee_id=flow.employee_id, servicio=flow.servicio,
+                employee_id=flow.employee_id, servicio=flow.servicio, location_id=flow.location_id,
             )
         return
 
@@ -1289,7 +1373,7 @@ async def _handle_whatsapp_message(
         flow.flow = "booking_name"
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            text=f"👤 Perfecto. ¿Cual es tu *nombre completo*?",
+            text="👤 Perfecto. ¿Cual es tu *nombre completo*?",
         )
         return
 
@@ -1419,18 +1503,16 @@ async def _handle_whatsapp_message(
     )
 
     if chat_response.mostrar_formulario and booking_enabled:
-        # IA detecto intencion de agendar → arrancar flujo interactivo en vez de mandar link
-        flow.flow = "booking_date"
-        flow.fecha = ""
-        flow.hora = ""
-        flow.nombre = ""
+        # IA detecto intencion de agendar -> mismo arranque comun que el menu
+        # (centro si hace falta -> servicio -> profesional -> dia).
+        _wa_reset_booking_fields(flow)
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             text=chat_response.respuesta,
         )
-        await _wa_send_date_picker(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            config=config, header="Agendar cita", body="📅 Elige el dia para tu cita:",
+        await _wa_start_booking_flow(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+            flow=flow, config=config,
         )
         return
 

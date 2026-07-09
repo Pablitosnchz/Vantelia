@@ -1,39 +1,17 @@
 """Onboarding y provisioning self-serve de clientes (refactor F3)."""
 from __future__ import annotations
 
-import asyncio
-import base64
-import csv
-import hashlib
-import hmac
 import json
-import os
-import random
 import re
 import secrets
-import sqlite3
-import threading
-import time
-import unicodedata
-import uuid
-from datetime import date, datetime, timedelta, timezone
-from html import escape
-from io import StringIO
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+from typing import Any, Dict
 
 import copy
-import httpx
-from fastapi import BackgroundTasks, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import HTTPException
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python 3.8 compatibility
-    from backports.zoneinfo import ZoneInfo
 
 import onboarding_utils
-from backend import agenda, appstate, clients, db, demo_agenda, outreach, rag, security, settings, textnorm, timeutils
+from backend import agenda, appstate, clients, db, demo_agenda, outreach, security, settings, textnorm, timeutils
 
 def _read_onboarding_state(cliente_id: str) -> Dict[str, Any]:
     row = db.db_get_client_row(cliente_id)

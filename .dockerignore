@@ -8,3 +8,4 @@ service_account
 storage/*
 !storage/.gitkeep
 .env
+.gh_token

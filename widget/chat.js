@@ -22,7 +22,13 @@ const DEFAULT_QUICK_ACTIONS = [
 ];
 
 function formatInline(text) {
-  return text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  const linked = text.replace(/\bhttps?:\/\/[^\s<]+/g, (match) => {
+    const trailing = match.match(/[.,;:!?)]*$/)?.[0] || "";
+    const url = trailing ? match.slice(0, -trailing.length) : match;
+    if (!url) return match;
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${trailing}`;
+  });
+  return linked.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
 }
 
 function formatListInline(text) {

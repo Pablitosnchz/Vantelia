@@ -48,7 +48,9 @@
       "slot_minutes": 30,
       "day_start": "09:00",
       "day_end": "18:00",
-      "closed_weekdays": [6],
+      "closed_weekdays": [
+        6
+      ],
       "provider": "internal",
       "webhook_env": "",
       "webhook_url": "",
@@ -246,6 +248,13 @@
     "branding": {
       "powered_by": "Powered by Vantelia"
     },
+    "shop_public": {
+      "enabled_packages": true,
+      "enabled_products": false,
+      "intro_text": "Compra tus sesiones por adelantado y ahorra en cada visita. Los bonos se canjean al reservar en cualquiera de nuestros tres centros de Madrid.",
+      "pickup_note": "Recibes tu bono por email al instante. Cancelalo o consultanos por WhatsApp cuando quieras.",
+      "accent_color": "#9a7b4f"
+    },
     "whatsapp": {
       "enabled": false,
       "phone_number_id": "",
@@ -295,7 +304,16 @@
         "reminder_2h": true,
         "cancelled": true,
         "rescheduled": true
-      }
+      },
+      "break_start": "14:30",
+      "break_end": "16:00",
+      "break_windows": [
+        {
+          "start": "14:30",
+          "end": "16:00",
+          "reason": "Comida"
+        }
+      ]
     }
   },
   "demo_auto_vibes_studio_8b12ca": {
@@ -336,7 +354,10 @@
       "slot_minutes": 30,
       "day_start": "10:00",
       "day_end": "20:00",
-      "closed_weekdays": [0, 6],
+      "closed_weekdays": [
+        0,
+        6
+      ],
       "provider": "internal",
       "webhook_env": "WEBHOOK_DEFAULT",
       "webhook_url": "",

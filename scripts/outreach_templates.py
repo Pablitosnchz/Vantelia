@@ -109,27 +109,6 @@ def stable_pick(seed: str, options: list[str]) -> str:
     return options[int(digest, 16) % len(options)]
 
 
-def _personal_context(p: Prospect) -> str:
-    parts = [p.city, p.niche, p.service_hint]
-    clean_parts = [part.strip() for part in parts if part and part.strip()]
-    return ", ".join(clean_parts)
-
-
-def _personal_line_text(p: Prospect) -> str:
-    if not p.business_name:
-        return ""
-    context = _personal_context(p)
-    if context:
-        return f"Sobre {p.business_name} ({context})."
-    return f"Sobre {p.business_name}."
-
-
-def _personal_line_html(p: Prospect) -> str:
-    line = _personal_line_text(p)
-    if not line:
-        return ""
-    return f'<p style="margin:0 0 12px 0;color:#4b5563;">{html_lib.escape(line)}</p>'
-
 # Subjects en dos pools (A/B). Asignacion estable por hash(email).
 # Tono: lowercase, breve, curiosidad. Evitar gatillos spam ("oferta", "gratis",
 # "consulta rapida", signos de admiracion, mayusculas).

@@ -199,11 +199,6 @@ def looks_like_page(url: str, host: str) -> bool:
     return filename.lower().endswith((".html", ".htm"))
 
 
-def is_downloadable_asset(url: str) -> bool:
-    parsed = urlparse(url)
-    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
-
-
 def log_warning(message: str) -> None:
     safe_message = message.encode("ascii", "backslashreplace").decode("ascii")
     print(safe_message)

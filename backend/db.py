@@ -10,11 +10,11 @@ from __future__ import annotations
 import os
 import secrets
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 from fastapi import HTTPException
 
-from backend import appstate, settings, textnorm, timeutils
+from backend import settings, timeutils
 
 def _ensure_runtime_directories() -> None:
     settings.STORAGE_DIR.mkdir(exist_ok=True)
@@ -517,6 +517,15 @@ def _init_database() -> None:
             ON package_purchases(cliente_id, status, buyer_email, buyer_phone)
             """
         )
+        package_purchase_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(package_purchases)").fetchall()
+        }
+        # Compra ONLINE de bonos (tienda publica): enlaza la compra con su pago Stripe
+        # para que el webhook sea idempotente (mismo patron que gift_cards/product_sales).
+        if "customer_payment_id" not in package_purchase_columns:
+            connection.execute(
+                "ALTER TABLE package_purchases ADD COLUMN customer_payment_id TEXT NOT NULL DEFAULT ''"
+            )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS gift_cards (
@@ -545,6 +554,24 @@ def _init_database() -> None:
             ON gift_cards(cliente_id, code)
             """
         )
+        # Compra publica de tarjetas regalo (jul 2026): mensaje del comprador, envio
+        # programado y trazabilidad del pago. Migracion idempotente.
+        gift_cards_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(gift_cards)").fetchall()
+        }
+        for column_name, definition in (
+            ("message", "TEXT NOT NULL DEFAULT ''"),
+            ("scheduled_send_at", "TEXT NOT NULL DEFAULT ''"),
+            ("sent_at", "TEXT NOT NULL DEFAULT ''"),
+            ("customer_payment_id", "TEXT NOT NULL DEFAULT ''"),
+            # F2: personalizacion de la compra publica.
+            ("accent_color", "TEXT NOT NULL DEFAULT ''"),
+            ("hide_value", "INTEGER NOT NULL DEFAULT 0"),
+            ("hide_expiry", "INTEGER NOT NULL DEFAULT 0"),
+            ("service_name", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            if column_name not in gift_cards_columns:
+                connection.execute(f"ALTER TABLE gift_cards ADD COLUMN {column_name} {definition}")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS gift_card_transactions (
@@ -585,6 +612,20 @@ def _init_database() -> None:
             """
             CREATE INDEX IF NOT EXISTS idx_bookings_time_scope
             ON bookings(cliente_id, status, start_at)
+            """
+        )
+        # Busquedas calientes de la gestion de citas: por numero de reserva (chat/voz/WA)
+        # y por manage_token (enlace publico del email; antes era un SCAN completo).
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_bookings_code
+            ON bookings(cliente_id, booking_code)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_bookings_manage_token
+            ON bookings(manage_token)
             """
         )
         connection.execute(
@@ -1399,6 +1440,9 @@ def _init_database() -> None:
             "direction": "TEXT NOT NULL DEFAULT 'inbound'",
             "purpose": "TEXT NOT NULL DEFAULT ''",
             "booking_id": "TEXT NOT NULL DEFAULT ''",
+            # Etiqueta del resultado de la llamada para informes (reservada/confirmada/
+            # cancelada/reprogramada/transferida/sin_accion).
+            "outcome": "TEXT NOT NULL DEFAULT ''",
         }.items():
             if column_name not in voice_calls_columns:
                 connection.execute(f"ALTER TABLE voice_calls ADD COLUMN {column_name} {definition}")
@@ -1533,18 +1577,6 @@ def db_set_client_owner(cliente_id: str, owner_user_id: str, *, source: str = "s
             (owner_user_id, source, now_iso, cliente_id),
         )
         connection.commit()
-
-
-def db_list_clientes_for_owner(owner_user_id: str) -> List[sqlite3.Row]:
-    if not owner_user_id:
-        return []
-    with _get_db_connection() as connection:
-        return list(
-            connection.execute(
-                "SELECT * FROM clientes WHERE owner_user_id = ? ORDER BY created_at DESC",
-                (owner_user_id,),
-            ).fetchall()
-        )
 
 
 def db_get_subscription_for_user(user_id: str) -> Optional[sqlite3.Row]:

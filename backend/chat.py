@@ -6,14 +6,12 @@ plan. Lo consumen el endpoint /chat (widget/portal) y el webhook WhatsApp.
 """
 from __future__ import annotations
 
-import json
 import re
-import sqlite3
 import time
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Any, Dict, List
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 
 try:
     from zoneinfo import ZoneInfo
@@ -21,7 +19,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import RespuestaChat
-from backend import agenda, appstate, booking, clients, crm, db, emailing, messaging, rag, security, settings, textnorm, timeutils
+from backend import agenda, appstate, booking, clients, commerce, rag, settings, textnorm, timeutils
 
 GREETING_PATTERNS = [
     re.compile(p, re.IGNORECASE)
@@ -97,9 +95,75 @@ def _message_is_greeting(message: str) -> bool:
     return any(p.search(norm) for p in GREETING_PATTERNS)
 
 
+GIFT_CARD_INTENT_RE = re.compile(r"tarjeta[s]?\s+(de\s+)?regalo|gift\s*card|bono\s+regalo|cheque\s+regalo", re.IGNORECASE)
+GIFT_CARD_PURCHASE_RE = re.compile(
+    r"\b(comprar|compra|pagar|regalar|regalo|enlace|link|url|web|donde|d[oó]nde|"
+    r"como\s+compro|c[oó]mo\s+compro|quiero|me\s+gustaria|me\s+gustar[ií]a)\b",
+    re.IGNORECASE,
+)
+GIFT_CARD_INFO_RE = re.compile(
+    r"\b(que|cual|tipos?|teneis|tienen|hay|incluye|condiciones|caduca|caducidad|validez|vale\s+para|sirve\s+para|"
+    r"usar|uso|canjear|canje|transferir|transferible|cambiar|cambio|devolver|"
+    r"devolucion|devoluci[oó]n|descuento|promocion|promoci[oó]n|familiar|amigo|"
+    r"persona|centro|centros|tratamiento|tratamientos|masaje|precio|importe|"
+    r"ocultar|mensaje|personalizar|email|correo|reservar|reserva)\b|\?",
+    re.IGNORECASE,
+)
+
+
+def _message_requests_gift_card(message: str) -> bool:
+    return bool(GIFT_CARD_INTENT_RE.search(textnorm._strip_accents(str(message or "").lower())))
+
+
+def _message_requests_gift_card_purchase(message: str) -> bool:
+    norm = textnorm._strip_accents(str(message or "").lower())
+    if not GIFT_CARD_INTENT_RE.search(norm):
+        return False
+    if GIFT_CARD_INFO_RE.search(norm):
+        return False
+    return bool(GIFT_CARD_PURCHASE_RE.search(norm))
+
+
+BOOKING_POLICY_INFO_RE = re.compile(
+    r"\b(condiciones?|politicas?|politica|cancelacion|caducidad|devolucion|reembolso|"
+    r"plazo|penalizacion|cambiar\s+la\s+reserva|cambio\s+de\s+reserva)\b",
+    re.IGNORECASE,
+)
+
+
+def _message_requests_booking_policy_info(message: str) -> bool:
+    norm = textnorm._strip_accents(str(message or "").lower())
+    if not BOOKING_POLICY_INFO_RE.search(norm):
+        return False
+    return any(word in norm for word in ("reserva", "reservar", "cita", "cancelacion", "cancelar", "cambio", "cambiar"))
+
+
 def _message_requests_menu(message: str) -> bool:
     norm = textnorm._strip_accents(str(message or "").lower())
     return any(p.search(norm) for p in MENU_RETURN_PATTERNS)
+
+
+def _message_is_pure_greeting(message: str) -> bool:
+    """Saludo 'puro' (solo saluda): responde con el menu. Si ADEMAS trae una intencion
+    ("Hola, quiero cancelar mi cita R-123456"), la intencion manda: el menu no puede
+    secuestrarla. Compartido con WhatsApp (misma regla en ambos canales)."""
+    if not _message_is_greeting(message):
+        return False
+    if booking._extract_booking_code_from_text(message):
+        return False
+    if booking._message_requests_cancel_booking(message) or booking._message_requests_reschedule_booking(message):
+        return False
+    if booking._message_requests_booking_form(message):
+        return False
+    if booking._message_requests_payment(message):
+        return False
+    if rag._message_requests_availability(message):
+        return False
+    if _detect_menu_option(message):
+        return False
+    if _detect_commercial_intent(message):
+        return False
+    return True
 
 
 def _detect_menu_option(message: str) -> str:
@@ -116,7 +180,7 @@ def _build_main_menu_text(nombre_empresa: str, booking_enabled: bool, *, greetin
         if greeting else
         f"**Menu principal de {nombre_empresa}**\n\n"
     )
-    booking_line = "· Agendar cita\n" if booking_enabled else ""
+    booking_line = "· Agendar cita\n· Cancelar o cambiar mi cita\n" if booking_enabled else ""
     return (
         f"{saludo}"
         f"{booking_line}"
@@ -126,10 +190,13 @@ def _build_main_menu_text(nombre_empresa: str, booking_enabled: bool, *, greetin
     )
 
 
-def _main_menu_quick_actions(booking_enabled: bool) -> List[Dict[str, str]]:
+def _main_menu_quick_actions(booking_enabled: bool, gift_available: bool = False) -> List[Dict[str, str]]:
     actions: List[Dict[str, str]] = []
     if booking_enabled:
         actions.append({"label": "Agendar cita", "message": "Quiero agendar una cita"})
+        actions.append({"label": "Cancelar o cambiar mi cita", "message": "Quiero cancelar o cambiar mi cita"})
+    if gift_available:
+        actions.append({"label": "🎁 Tarjeta regalo", "message": "Quiero comprar una tarjeta regalo"})
     actions.extend(
         [
             {"label": "Informacion servicios", "message": "Quiero informacion sobre servicios disponibles"},
@@ -214,15 +281,28 @@ def _build_live_context_block(cliente_id: str, config: Dict[str, Any]) -> str:
     ]
 
     if booking_cfg.get("enabled"):
-        open_now = agenda._is_open_now(booking_cfg, now_local)
-        if open_now is True:
-            lines.append(
-                f"- Estado: ABIERTO ahora. Horario hoy {booking_cfg.get('day_start','09:00')}-{booking_cfg.get('day_end','18:00')}."
-            )
-        elif open_now is False:
-            lines.append(
-                f"- Estado: CERRADO ahora. Horario habitual {booking_cfg.get('day_start','09:00')}-{booking_cfg.get('day_end','18:00')}."
-            )
+        # Estado y horas de HOY desde la MISMA matriz semanal que el bloque HORARIO del
+        # prompt (agenda._weekly_schedule_matrix, derivada de los profesionales publicos).
+        # Antes salian de config['booking'] y podian contradecir al horario real en el
+        # MISMO prompt (p.ej. horario por empleado distinto del base).
+        try:
+            matrix = agenda._weekly_schedule_matrix(cliente_id, config)
+        except Exception:  # noqa: BLE001
+            matrix = []
+        today_row = matrix[now_local.weekday()] if len(matrix) == 7 else None
+        if today_row is not None:
+            if today_row["closed"]:
+                lines.append("- Estado: CERRADO hoy (dia sin agenda).")
+            else:
+                now_hhmm = now_local.strftime("%H:%M")
+                open_now = today_row["start"] <= now_hhmm <= today_row["end"]
+                estado = "ABIERTO ahora" if open_now else "CERRADO ahora"
+                lines.append(f"- Estado: {estado}. Horario hoy {today_row['start']}-{today_row['end']}.")
+            closed_labels = [
+                textnorm.DAY_LABELS_ES[item["weekday"]] for item in matrix if item["closed"]
+            ]
+            if closed_labels:
+                lines.append(f"- Dias cerrados: {', '.join(closed_labels)}.")
         break_windows = textnorm._normalize_break_windows(
             booking_cfg.get("day_start", "09:00"),
             booking_cfg.get("day_end", "18:00"),
@@ -235,17 +315,21 @@ def _build_live_context_block(cliente_id: str, config: Dict[str, Any]) -> str:
             lines.append(
                 f"- Descansos diarios: {descanso_txt}."
             )
-        closed = booking_cfg.get("closed_weekdays") or []
-        if closed:
-            dias_cerrados = ", ".join(textnorm.DAY_LABELS_ES[i] for i in closed if 0 <= int(i) <= 6)
-            if dias_cerrados:
-                lines.append(f"- Dias cerrados: {dias_cerrados}.")
 
     contacto = config.get("contacto", {}) or {}
     if contacto.get("telefono"):
         lines.append(f"- Telefono publicado: {contacto['telefono']}.")
     if contacto.get("email"):
         lines.append(f"- Email publicado: {contacto['email']}.")
+
+    # El estado ABIERTO/CERRADO describe el local FISICO, no al asistente: el asistente
+    # atiende 24/7 y las citas son para fechas futuras. Sin esta regla el modelo llegaba
+    # a negarse a gestionar citas "porque ahora estamos cerrados".
+    lines.append(
+        "- TU (el asistente) atiendes 24/7: aunque el negocio este cerrado AHORA, reservas, "
+        "cambias y cancelas citas para fechas futuras con total normalidad. NUNCA pidas al "
+        "usuario que vuelva a contactar en horario de atencion para gestionar su cita."
+    )
 
     return "DATOS_EN_VIVO_DEL_NEGOCIO:\n" + "\n".join(lines)
 
@@ -348,9 +432,11 @@ async def _process_chat_message(
     )
     client_config = clients._get_client_config(cliente_id)
     booking_enabled = bool(client_config["booking"]["enabled"]) and clients._client_booking_plan_enabled(cliente_id)
-    nombre_empresa = client_config.get("nombre", "")
+    # Identidad de Apariencia: "empresa" = negocio (el menu se presenta en su nombre);
+    # si esta vacio cae a "nombre" (compat con clientes con un solo campo).
+    nombre_empresa = str(client_config.get("empresa") or "").strip() or client_config.get("nombre", "")
 
-    if _message_is_greeting(message) or _message_requests_menu(message):
+    if _message_is_pure_greeting(message) or _message_requests_menu(message):
         menu_text = _build_main_menu_text(
             nombre_empresa,
             booking_enabled,
@@ -361,7 +447,9 @@ async def _process_chat_message(
             mostrar_formulario=False,
             session_id=session_id,
             intent="menu",
-            quick_actions=_main_menu_quick_actions(booking_enabled),
+            quick_actions=_main_menu_quick_actions(
+                booking_enabled, gift_available=commerce.gift_public_available(cliente_id)
+            ),
         )
         rag._record_chat_message(
             session_id=session_id,
@@ -390,7 +478,11 @@ async def _process_chat_message(
             intent="availability",
         )
         return availability_response
-    if menu_option == "agendar" and booking_enabled:
+    # "mi reserva" en una frase de GESTION ("mover el dia de mi reserva") no es querer
+    # agendar: cancelar/reprogramar mandan sobre el atajo del menu.
+    wants_manage = booking._message_requests_cancel_booking(message) or booking._message_requests_reschedule_booking(message)
+    policy_info = _message_requests_booking_policy_info(message)
+    if menu_option == "agendar" and booking_enabled and not wants_manage and not policy_info:
         booking_response = RespuestaChat(
             respuesta="📅 Te muestro el formulario para agendar tu cita. Elige servicio, fecha y hora.",
             mostrar_formulario=True,
@@ -421,6 +513,28 @@ async def _process_chat_message(
             intent="faq",
         )
         return faq_response
+
+    if _message_requests_gift_card_purchase(message) and commerce.gift_public_available(cliente_id):
+        gift_url = f"{textnorm._preferred_public_base_url().rstrip('/')}/gift/{cliente_id}"
+        gift_text = (
+            "🎁 ¡Claro! Puedes comprar una tarjeta regalo online y llega por email al instante "
+            f"(o el dia que elijas): {gift_url}"
+            "\n\nSe canjea al reservar o directamente en recepcion."
+        )
+        gift_response = RespuestaChat(
+            respuesta=gift_text,
+            mostrar_formulario=False,
+            session_id=session_id,
+            intent="gift_card",
+        )
+        rag._record_chat_message(
+            session_id=session_id,
+            cliente_id=cliente_id,
+            role="assistant",
+            content=gift_text,
+            intent="gift_card",
+        )
+        return gift_response
 
     qa_exact_answer = rag._match_qa_answer(cliente_id, message)
     if qa_exact_answer:
@@ -470,6 +584,8 @@ async def _process_chat_message(
         message=message,
         request=request,
         source="chat",
+        trusted_phone=trusted_phone,
+        session_id=session_id,
     )
     if management:
         management_intent, management_text = management
@@ -488,7 +604,7 @@ async def _process_chat_message(
         )
         return management_response
 
-    if booking_enabled and booking._message_requests_booking_form(message):
+    if booking_enabled and booking._message_requests_booking_form(message) and not policy_info:
         booking_response = RespuestaChat(
             respuesta="📅 Te muestro el formulario de solicitud de cita para que puedas elegir servicio, fecha y hora.",
             mostrar_formulario=True,
@@ -537,6 +653,13 @@ async def _process_chat_message(
             "Cierra siempre con una linea separada: Escribe **menú** para volver al menú principal."
         )
 
+    if policy_info:
+        context_blocks.append(
+            "CONSULTA_INFORMATIVA_DE_RESERVAS_Y_CANCELACION: responde con las condiciones publicadas "
+            "sobre como reservar, cambios y cancelaciones. No abras el formulario ni pidas numero de "
+            "reserva salvo que el usuario diga claramente que quiere cancelar o cambiar una cita concreta."
+        )
+
     if booking_enabled and rag._message_requests_availability(message):
         target_date = textnorm._resolve_relative_date_es(message, client_config["booking"]["timezone"])
         if target_date is None:
@@ -559,10 +682,12 @@ async def _process_chat_message(
     response = session.engine.chat(enhanced_message)
     raw_text = response.response.strip()
     mostrar_formulario = settings.BOOKING_SENTINEL in raw_text
+    if policy_info:
+        mostrar_formulario = False
     clean_text = raw_text.replace(settings.BOOKING_SENTINEL, "").strip()
     clean_text = textnorm._normalize_chat_response_text(clean_text)
     clean_text = _emphasize_structured_headings(clean_text)
-    if booking_enabled and not mostrar_formulario and booking._message_requests_booking_form(message):
+    if booking_enabled and not mostrar_formulario and booking._message_requests_booking_form(message) and not policy_info:
         mostrar_formulario = True
         if not clean_text:
             clean_text = "Te muestro el formulario de solicitud de cita para continuar."

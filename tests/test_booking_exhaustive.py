@@ -422,6 +422,126 @@ def test_booking_during_break_rejected(client: TestClient, api_module, admin_coo
         _delete_employee(client, admin_cookies, employee_id)
 
 
+def _general_schedule_payload(client: TestClient, cookies: dict, **overrides) -> dict:
+    """Payload de POST /auth/schedule partiendo del horario general actual de demo."""
+    r = client.get("/auth/schedule", params={"cliente_id": "demo"}, cookies=cookies)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    payload = {
+        "enabled": data.get("enabled", True),
+        "timezone": data.get("timezone") or "Europe/Madrid",
+        "slot_minutes": data.get("slot_minutes") or 30,
+        "day_start": data.get("day_start") or "09:00",
+        "day_end": data.get("day_end") or "18:00",
+        "break_start": data.get("break_start") or "",
+        "break_end": data.get("break_end") or "",
+        "break_windows": data.get("break_windows") or [],
+        "closed_weekdays": data.get("closed_weekdays") or [],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_general_break_window_applies_to_all_staff(client: TestClient, api_module, admin_cookies: dict):
+    """El descanso del horario GENERAL (parada de comida del negocio) cierra la agenda de
+    TODO el equipo: el profesional sin descansos propios tampoco ofrece esos huecos, la
+    reserva dentro del tramo devuelve 409 y el prompt del chat conoce el cierre diario."""
+    fecha = _next_weekday(4)
+    employee_id = _make_employee(client, admin_cookies, day_start="09:00", day_end="18:00", break_windows=[])
+    original = _general_schedule_payload(client, admin_cookies)
+    try:
+        r = client.post(
+            "/auth/schedule",
+            params={"cliente_id": "demo"},
+            cookies=admin_cookies,
+            json=_general_schedule_payload(
+                client, admin_cookies,
+                break_start="14:30", break_end="16:00",
+                break_windows=[{"start": "14:30", "end": "16:00", "reason": "Comida"}],
+            ),
+        )
+        assert r.status_code == 200, r.text
+
+        slots = _slots_map(client, fecha, employee_id)
+        assert "14:30" not in slots, "El descanso general debe excluir 14:30 tambien para el profesional"
+        assert "15:00" not in slots
+        assert "15:30" not in slots
+        assert slots.get("14:00") is True, "El slot que termina justo al empezar el descanso sigue libre"
+        assert slots.get("16:00") is True, "El primer slot tras el descanso sigue libre"
+
+        r_book = _book(client, admin_cookies, fecha, "15:00", employee_id=employee_id)
+        assert r_book.status_code == 409, "Reservar dentro del descanso general debe rechazarse"
+
+        prompt = api_module._build_system_prompt("demo", api_module.CONFIG_CLIENTES["demo"])
+        assert "Cierre diario" in prompt, "El prompt del chat debe mencionar el cierre diario general"
+    finally:
+        client.post("/auth/schedule", params={"cliente_id": "demo"}, cookies=admin_cookies, json=original)
+        _delete_employee(client, admin_cookies, employee_id)
+
+
+def test_general_break_save_conflicts_with_staff_bookings(client: TestClient, api_module, admin_cookies: dict):
+    """Guardar un descanso general que pisa una cita activa de CUALQUIER profesional
+    devuelve 409 con las citas en conflicto (no solo mira la agenda general)."""
+    fecha = _next_weekday(5)
+    employee_id = _make_employee(client, admin_cookies, day_start="09:00", day_end="18:00", break_windows=[])
+    original = _general_schedule_payload(client, admin_cookies)
+    booking_id = ""
+    try:
+        r_book = _book(client, admin_cookies, fecha, "15:00", employee_id=employee_id)
+        assert r_book.status_code == 200, r_book.text
+        booking_id = r_book.json()["booking_id"]
+
+        r = client.post(
+            "/auth/schedule",
+            params={"cliente_id": "demo"},
+            cookies=admin_cookies,
+            json=_general_schedule_payload(
+                client, admin_cookies,
+                break_start="14:30", break_end="16:00",
+                break_windows=[{"start": "14:30", "end": "16:00", "reason": "Comida"}],
+            ),
+        )
+        assert r.status_code == 409, f"Esperaba 409 por cita del profesional dentro del descanso, obtuvo {r.status_code}"
+    finally:
+        client.post("/auth/schedule", params={"cliente_id": "demo"}, cookies=admin_cookies, json=original)
+        if booking_id:
+            _cleanup_booking(api_module, booking_id)
+        _delete_employee(client, admin_cookies, employee_id)
+
+
+def test_employee_schedule_endpoint_lists_general_blocks(client: TestClient, api_module, admin_cookies: dict):
+    """GET /auth/schedule/employee/{id} incluye los bloqueos GENERALES del negocio
+    (vacaciones/festivos) ademas de los propios, para que el calendario filtrado por
+    profesional no los pierda."""
+    fecha = _next_weekday(7)
+    employee_id = _make_employee(client, admin_cookies)
+    block_id = ""
+    try:
+        r = client.post(
+            "/auth/schedule/blocks",
+            params={"cliente_id": "demo"},
+            cookies=admin_cookies,
+            json={"fecha": fecha, "fecha_fin": fecha, "hora_inicio": "00:00", "hora_fin": "23:59",
+                  "motivo": "Festivo test"},
+        )
+        assert r.status_code == 200, r.text
+        block_id = r.json()["items"][0]["block_id"]
+
+        r_emp = client.get(
+            f"/auth/schedule/employee/{employee_id}",
+            params={"cliente_id": "demo"},
+            cookies=admin_cookies,
+        )
+        assert r_emp.status_code == 200, r_emp.text
+        blocks = r_emp.json().get("blocks") or []
+        assert any(b.get("block_id") == block_id for b in blocks), \
+            "El bloqueo general debe aparecer en el horario del profesional"
+    finally:
+        if block_id:
+            client.delete(f"/auth/schedule/blocks/{block_id}", params={"cliente_id": "demo"}, cookies=admin_cookies)
+        _delete_employee(client, admin_cookies, employee_id)
+
+
 def test_long_service_blocked_before_break_starts(client: TestClient, api_module, admin_cookies: dict):
     """Un servicio de 60 min no debe poder empezar 30 min antes del descanso (solaparía)."""
     fecha = _next_weekday(5)
@@ -917,6 +1037,50 @@ def test_voice_availability_empty_on_closed_day(api_module):
     result = _run_async(api_module._voice_check_availability("demo", fecha))
     assert result["ok"] is True, result
     assert result["hay_huecos"] is False, f"Domingo cerrado debe tener hay_huecos=False: {result}"
+    assert "cerrados" in result["mensaje_voz"].lower()
+
+
+def test_voice_specific_time_outside_hours_answers_directly(api_module):
+    """Si piden una hora concreta fuera de horario, voz responde sin preambulo."""
+    fecha = _next_weekday(3)
+    result = _run_async(api_module._voice_check_availability("demo", fecha, hora="22:00"))
+
+    assert result["ok"] is True, result
+    assert result["hora_disponible"] is False
+    text = result["mensaje_voz"].lower()
+    assert text.startswith("a esa hora estamos cerrados")
+    assert "voy a" not in text
+    assert "un momento" not in text
+
+
+def test_voice_specific_time_blocked_mentions_block_reason(api_module):
+    """Si la agenda esta bloqueada por vacaciones, voz lo dice directamente."""
+    fecha = _next_weekday(4)
+    block_id = f"blk_voice_{uuid.uuid4().hex}"
+    try:
+        with api_module._get_db_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO agenda_blocks
+                (id, cliente_id, employee_id, block_date, start_time, end_time, reason, created_at)
+                VALUES (?, 'demo', '', ?, '09:00', '18:00', 'Vacaciones', ?)
+                """,
+                (block_id, fecha, api_module._utc_now_iso()),
+            )
+            conn.commit()
+
+        result = _run_async(api_module._voice_check_availability("demo", fecha, hora="10:00"))
+        assert result["ok"] is True, result
+        assert result["hora_disponible"] is False
+        text = result["mensaje_voz"].lower()
+        assert text.startswith("a esa hora la agenda esta bloqueada")
+        assert "vacaciones" in text
+        assert "voy a" not in text
+        assert "un momento" not in text
+    finally:
+        with api_module._get_db_connection() as conn:
+            conn.execute("DELETE FROM agenda_blocks WHERE id = ?", (block_id,))
+            conn.commit()
 
 
 def test_voice_booking_outside_hours_fails(api_module):

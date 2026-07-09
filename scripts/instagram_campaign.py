@@ -32,7 +32,6 @@ from contextlib import closing
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable
 
 from dotenv import load_dotenv
 
