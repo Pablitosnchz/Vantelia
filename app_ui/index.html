@@ -4855,7 +4855,7 @@ async function loadKnowledge() {
           </div>
         </div>`;
       row.querySelector('button[data-kb-id]').addEventListener('click', async () => {
-        if (!confirm('¿Quitar esta fuente? (El texto ya mezclado en info.txt no se elimina automáticamente — usa "Forzar reindex" si necesitas limpiar.)')) return;
+        if (!(await confirmDialog({ title: 'Quitar fuente', bodyHtml: 'El texto ya mezclado en info.txt no se elimina automáticamente — usa "Forzar reindex" si necesitas limpiar.', confirmLabel: 'Quitar', danger: true }))) return;
         try { await api('/auth/app/knowledge/' + encodeURIComponent(item.id), { method: 'DELETE' }); toast('Fuente eliminada', 'success'); loadKnowledge(); }
         catch (err) { toast(err.message, 'error'); }
       });
@@ -4971,7 +4971,7 @@ async function loadQA() {
         openQAPanel();
       });
       row.querySelector('[data-delete]').addEventListener('click', async () => {
-        if (!confirm('¿Eliminar esta Q&A?')) return;
+        if (!(await confirmDialog({ title: 'Eliminar Q&A', bodyHtml: '¿Eliminar esta Q&A?', confirmLabel: 'Eliminar', danger: true }))) return;
         try { await api('/auth/app/qa/' + encodeURIComponent(qa.id), { method: 'DELETE' }); toast('Q&A eliminada', 'success'); loadQA(); }
         catch (err) { toast(err.message, 'error'); }
       });
@@ -6150,7 +6150,7 @@ async function loadPayments(refresh = false) {
         ${['paid','partially_refunded'].includes(p.status) ? `<button class="btn btn-ghost" data-refund-payment="${escapeHtml(p.id)}" style="margin-top:8px;">Reembolsar</button>` : ''}
       </div>`).join('') : '<div class="empty">Todavia no hay pagos.</div>';
     list.querySelectorAll('[data-refund-payment]').forEach(btn => btn.addEventListener('click', async () => {
-      if (!window.confirm('¿Solicitar el reembolso completo de este pago?')) return;
+      if (!(await confirmDialog({ title: 'Reembolsar pago', bodyHtml: '¿Solicitar el reembolso completo de este pago?', confirmLabel: 'Reembolsar', danger: true }))) return;
       try {
         await api(`/auth/app/payments/${encodeURIComponent(btn.dataset.refundPayment)}/refund`, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
         toast('Reembolso solicitado', 'success'); loadPayments(true);
@@ -6315,7 +6315,7 @@ document.getElementById('channelGoogleConnect').addEventListener('click', async 
   } catch(e) { toast(e.message, 'error'); }
 });
 document.getElementById('channelGoogleDisconnect').addEventListener('click', async () => {
-  if (!window.confirm('Desconectar Google y volver a enviar mediante Vantelia?')) return;
+  if (!(await confirmDialog({ title: 'Desconectar Google', bodyHtml: 'Se volverá a enviar mediante Vantelia.', confirmLabel: 'Desconectar', danger: true }))) return;
   try {
     await api('/auth/app/channels/email/google/disconnect', { method:'POST' });
     toast('Google desconectado', 'success'); loadChannels();
@@ -6325,7 +6325,11 @@ document.getElementById('channelEmailProvider').addEventListener('change', async
   const provider = e.target.value;
   if (provider !== channelLastEmailProvider) {
     const labels = { vantelia_smtp:'Vantelia', gmail_oauth:'Google', client_smtp:'SMTP propio' };
-    const ok = window.confirm(`Vas a cambiar el canal activo de email de ${labels[channelLastEmailProvider] || channelLastEmailProvider} a ${labels[provider] || provider}. Los siguientes emails saldran por el nuevo canal; el anterior dejara de usarse como canal principal. Continuar?`);
+    const ok = await confirmDialog({
+      title: 'Cambiar canal de email',
+      bodyHtml: `Vas a cambiar el canal activo de email de <b>${escapeHtml(labels[channelLastEmailProvider] || channelLastEmailProvider)}</b> a <b>${escapeHtml(labels[provider] || provider)}</b>.<br><br>Los siguientes emails saldrán por el nuevo canal; el anterior dejará de usarse como canal principal.`,
+      confirmLabel: 'Cambiar canal',
+    });
     if (!ok) {
       e.target.value = channelLastEmailProvider;
       renderEmailProviderControls();
@@ -6385,7 +6389,7 @@ document.getElementById('channelEmailTest').addEventListener('click', async () =
     toast(data.message, 'success');
   } catch(e) { toast(e.message, 'error'); }
 });
-document.getElementById('channelSmsMode').addEventListener('change', e => {
+document.getElementById('channelSmsMode').addEventListener('change', async e => {
   const next = e.target.value;
   if (next !== channelLastSmsMode) {
     const labels = {
@@ -6394,7 +6398,11 @@ document.getElementById('channelSmsMode').addEventListener('change', e => {
       twilio_own_account:'Twilio propio',
       twilio_alphanumeric_sender:'nombre comercial',
     };
-    const ok = window.confirm(`Vas a cambiar el modo SMS de ${labels[channelLastSmsMode] || channelLastSmsMode} a ${labels[next] || next}. Hasta que se guarde o se active el nuevo canal, los SMS pueden dejar de salir por el remitente anterior. Continuar?`);
+    const ok = await confirmDialog({
+      title: 'Cambiar modo SMS',
+      bodyHtml: `Vas a cambiar el modo SMS de <b>${escapeHtml(labels[channelLastSmsMode] || channelLastSmsMode)}</b> a <b>${escapeHtml(labels[next] || next)}</b>.<br><br>Hasta que se guarde o se active el nuevo canal, los SMS pueden dejar de salir por el remitente anterior.`,
+      confirmLabel: 'Cambiar modo',
+    });
     if (!ok) {
       e.target.value = channelLastSmsMode;
       renderSmsModeControls();
@@ -6784,7 +6792,11 @@ document.getElementById('nbConfirmBtn').addEventListener('click', async () => {
   };
   if (!payload.nombre || !payload.fecha || !payload.hora) { toast('Completa nombre, fecha y hora.', 'error'); return; }
   if (!payload.email && !payload.telefono) {
-    const ok = window.confirm('Esta cita no tiene email ni telefono. Se creara igualmente, pero no recibira confirmaciones ni recordatorios automaticos. ¿Quieres continuar?');
+    const ok = await confirmDialog({
+      title: 'Cita sin contacto',
+      bodyHtml: 'Esta cita no tiene email ni teléfono. Se creará igualmente, pero no recibirá confirmaciones ni recordatorios automáticos.',
+      confirmLabel: 'Crear igualmente',
+    });
     if (!ok) return;
   }
   const old = btn.textContent; btn.disabled = true; btn.textContent = 'Creando…';
@@ -6954,7 +6966,7 @@ async function saveService() {
   finally { btn.disabled = false; btn.textContent = old; }
 }
 async function deleteService(svc) {
-  if (!window.confirm(`¿Eliminar el servicio “${svc.nombre}”?`)) return;
+  if (!(await confirmDialog({ title: 'Eliminar servicio', bodyHtml: `¿Eliminar el servicio “<b>${escapeHtml(svc.nombre)}</b>”?`, confirmLabel: 'Eliminar', danger: true }))) return;
   try { await api(`/auth/services/${encodeURIComponent(svc.id)}`, { method:'DELETE' }); toast('Servicio eliminado', 'success'); loadServicios(); afterServiceCatalogChange(); }
   catch(e) { toast(e.message, 'error'); }
 }
@@ -7710,7 +7722,7 @@ function cdRenderDetail(b){
           return;
         }
         if (action === 'release'){
-          if (!window.confirm('¿Liberar la retención sin cobrar? La tarjeta del cliente quedará sin cargo.')) return;
+          if (!(await confirmDialog({ title: 'Liberar retención', bodyHtml: '¿Liberar la retención sin cobrar? La tarjeta del cliente quedará sin cargo.', confirmLabel: 'Liberar' }))) return;
           await api(`/auth/bookings/${bid}/payment/release`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({}) });
           toast('Retención liberada', 'success');
           await loadCitasDay();
@@ -8097,7 +8109,7 @@ function openManageBookingModal(b){
         return;
       }
       if (action === 'release'){
-        if (!window.confirm('Liberar la retencion sin cobrar? La tarjeta del cliente quedara sin cargo.')) return;
+        if (!(await confirmDialog({ title: 'Liberar retención', bodyHtml: '¿Liberar la retención sin cobrar? La tarjeta del cliente quedará sin cargo.', confirmLabel: 'Liberar' }))) return;
         await api(`/auth/bookings/${bid}/payment/release`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({}) });
         toast('Retencion liberada', 'success'); close(); await refresh();
         return;

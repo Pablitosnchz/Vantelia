@@ -1911,6 +1911,48 @@ tbody tr:last-child td { border-bottom: none; }
   .card { padding: 16px; }
   .stat strong { font-size: 1.3rem; }
 }
+
+/* ===== Toast + diálogo de confirmación reutilizables (sync con app_ui) ===== */
+.vtoast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--panel-2); border: 1px solid var(--line-strong); color: var(--text);
+  padding: 12px 20px; border-radius: 12px; font-size: 0.88rem;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+  opacity: 0; transition: opacity .2s ease, transform .2s ease;
+  z-index: 400; pointer-events: none; backdrop-filter: blur(6px); border-left-width: 3px;
+}
+.vtoast.visible { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+.vtoast.success { border-color: var(--accent-2); color: var(--accent-2); }
+.vtoast.warning { border-color: var(--warning); color: var(--warning); }
+.vtoast.error { border-color: var(--danger); color: var(--danger); }
+.vdialog-backdrop {
+  display: none; position: fixed; inset: 0; z-index: 300;
+  background: rgba(4,8,16,0.62); backdrop-filter: blur(4px);
+  align-items: center; justify-content: center; padding: 24px;
+}
+.vdialog-backdrop.open { display: flex; }
+.vdialog {
+  width: 100%; max-width: 440px;
+  background: var(--panel-2); border: 1px solid var(--line-strong);
+  border-radius: 18px; padding: 22px 22px 18px;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+}
+.vdialog-title { font-family: var(--font-title); font-size: 1.1rem; font-weight: 600; margin-bottom: 10px; }
+.vdialog-body { font-size: 0.9rem; color: var(--soft); line-height: 1.55; }
+.vdialog-body b { color: var(--text); }
+.vdialog-body .vdlg-label { display: block; font-size: 0.78rem; color: var(--soft-2); margin: 12px 0 4px; }
+.vdialog-body .vdlg-input {
+  width: 100%; padding: 9px 12px; border-radius: 10px; font-size: 0.92rem;
+  background: var(--bg-2); border: 1px solid var(--line-strong); color: var(--text);
+}
+.vdialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.vdialog-actions button {
+  padding: 9px 18px; border-radius: 10px; font-size: 0.88rem; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--line-strong);
+}
+.vdialog-actions .vdlg-cancel { background: transparent; color: var(--soft); }
+.vdialog-actions .vdlg-ok { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #0B132B; border: 0; }
+.vdialog-actions .vdlg-ok.danger { background: var(--danger); }
   </style>
 </head>
 <body>
@@ -4440,6 +4482,70 @@ tbody tr:last-child td { border-bottom: none; }
         .replace(/'/g, "&#39;");
     }
 
+    function toast(msg, type) {
+      const el = document.getElementById("vtoast");
+      if (!el) return;
+      el.textContent = msg;
+      el.className = `vtoast visible ${type || ""}`;
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => { el.classList.remove("visible"); }, 2600);
+    }
+
+    // Diálogo de confirmación con contexto. Devuelve Promise<boolean>.
+    function confirmDialog({ title = "Confirmar", bodyHtml = "", confirmLabel = "Confirmar", danger = false } = {}) {
+      return new Promise((resolve) => {
+        const back = document.getElementById("vdialogBackdrop");
+        document.getElementById("vdialogTitle").textContent = title;
+        document.getElementById("vdialogBody").innerHTML = bodyHtml;
+        const ok = document.getElementById("vdialogOk");
+        const cancel = document.getElementById("vdialogCancel");
+        ok.textContent = confirmLabel;
+        ok.classList.toggle("danger", !!danger);
+        let done = false;
+        const close = (val) => {
+          if (done) return; done = true;
+          back.classList.remove("open");
+          ok.removeEventListener("click", onOk);
+          cancel.removeEventListener("click", onCancel);
+          back.removeEventListener("click", onBack);
+          document.removeEventListener("keydown", onKey);
+          resolve(val);
+        };
+        const onOk = () => close(true);
+        const onCancel = () => close(false);
+        const onBack = (e) => { if (e.target === back) close(false); };
+        const onKey = (e) => {
+          if (e.key === "Escape") close(false);
+          if (e.key === "Enter" && !(e.target instanceof HTMLTextAreaElement)) close(true);
+        };
+        ok.addEventListener("click", onOk);
+        cancel.addEventListener("click", onCancel);
+        back.addEventListener("click", onBack);
+        document.addEventListener("keydown", onKey);
+        back.classList.add("open");
+        ok.focus();
+      });
+    }
+
+    // Modal de entrada de datos (sustituye a window.prompt). fields: [{key,label,value,placeholder,type}].
+    // Devuelve objeto {key: valor} o null si se cancela. Con un solo field, foco directo al input.
+    async function promptDialog({ title = "Datos", fields = [], confirmLabel = "Continuar", intro = "" } = {}) {
+      const bodyHtml = (intro ? `<p>${intro}</p>` : "") + fields.map((f, i) => `
+        <label class="vdlg-label" for="vdlgField${i}">${escapeHtml(f.label || f.key)}</label>
+        <input class="vdlg-input" id="vdlgField${i}" type="${escapeHtml(f.type || "text")}"
+          value="${escapeHtml(String(f.value ?? ""))}" placeholder="${escapeHtml(f.placeholder || "")}" />`).join("");
+      const opened = confirmDialog({ title, bodyHtml, confirmLabel });
+      const first = document.getElementById("vdlgField0");
+      if (first) first.focus();
+      if (!(await opened)) return null;
+      const out = {};
+      fields.forEach((f, i) => {
+        const el = document.getElementById(`vdlgField${i}`);
+        out[f.key] = (el && el.value || "").trim();
+      });
+      return out;
+    }
+
     function clientDisplayLabel(client) {
       const name = String(client?.nombre || "-").trim() || "-";
       const id = String(client?.cliente_id || "").trim();
@@ -4939,9 +5045,11 @@ tbody tr:last-child td { border-bottom: none; }
 
     async function impersonateClient(clienteId, clientName) {
       const label = clientName ? `${clientName} (${clienteId})` : clienteId;
-      const ok = window.confirm(
-        `Vas a acceder al portal del cliente ${label} como administrador.\n\nLa acción queda registrada en la auditoría. El cliente NO verá ninguna señal de tu presencia (modo sigiloso). Pulsa el botón discreto inferior izquierdo para salir.`
-      );
+      const ok = await confirmDialog({
+        title: "Acceder como administrador",
+        bodyHtml: `Vas a acceder al portal del cliente <b>${escapeHtml(label)}</b>.<br><br>La acción queda registrada en la auditoría. El cliente NO verá ninguna señal de tu presencia (modo sigiloso). Pulsa el botón discreto inferior izquierdo para salir.`,
+        confirmLabel: "Entrar al portal",
+      });
       if (!ok) return;
       const res = await api(`/admin/clientes/${encodeURIComponent(clienteId)}/impersonate`, { method: "POST" });
       try { localStorage.setItem("vantelia_admin_impersonating", "1"); } catch {}
@@ -4952,9 +5060,12 @@ tbody tr:last-child td { border-bottom: none; }
 
     async function deleteClient(clienteId, clientName) {
       const label = clientName ? `${clientName} (${clienteId})` : clienteId;
-      const confirmed = window.confirm(
-        `Vas a eliminar ${label}.\n\nSe borraran su configuracion, usuarios cliente, reservas, chats, agenda y ficheros de IA. Esta accion no se puede deshacer.`
-      );
+      const confirmed = await confirmDialog({
+        title: "Eliminar cliente",
+        bodyHtml: `Vas a eliminar <b>${escapeHtml(label)}</b>.<br><br>Se borrarán su configuración, usuarios cliente, reservas, chats, agenda y ficheros de IA. Esta acción no se puede deshacer.`,
+        confirmLabel: "Eliminar definitivamente",
+        danger: true,
+      });
       if (!confirmed) return;
 
       showStatus(`Eliminando cliente ${clienteId}...`, "info");
@@ -5315,9 +5426,11 @@ tbody tr:last-child td { border-bottom: none; }
 
     async function runGenerateDemoAgenda(clienteId = state.drawerClientId || state.currentClientId) {
       if (!clienteId) throw new Error("Selecciona un cliente antes de generar la agenda demo.");
-      const ok = window.confirm(
-        `Vas a generar datos de demostracion en la agenda de ${clienteId}.\n\nSe crearan profesionales y ~1 mes de citas de ejemplo. Si ya habia datos demo, se regeneran. No afecta a las citas reales del cliente.`
-      );
+      const ok = await confirmDialog({
+        title: "Generar agenda demo",
+        bodyHtml: `Vas a generar datos de demostración en la agenda de <b>${escapeHtml(clienteId)}</b>.<br><br>Se crearán profesionales y ~1 mes de citas de ejemplo. Si ya había datos demo, se regeneran. No afecta a las citas reales del cliente.`,
+        confirmLabel: "Generar demo",
+      });
       if (!ok) return;
       showStatus("Generando agenda demo...", "info");
       const result = await api(`/admin/clientes/${encodeURIComponent(clienteId)}/demo-agenda`, { method: "POST" });
@@ -5327,9 +5440,12 @@ tbody tr:last-child td { border-bottom: none; }
 
     async function runClearDemoAgenda(clienteId = state.drawerClientId || state.currentClientId) {
       if (!clienteId) throw new Error("Selecciona un cliente antes de borrar la agenda demo.");
-      const ok = window.confirm(
-        `Vas a borrar TODOS los datos de demostracion de la agenda de ${clienteId} (citas y profesionales demo).\n\nLas citas reales del cliente no se tocan.`
-      );
+      const ok = await confirmDialog({
+        title: "Borrar agenda demo",
+        bodyHtml: `Vas a borrar TODOS los datos de demostración de la agenda de <b>${escapeHtml(clienteId)}</b> (citas y profesionales demo).<br><br>Las citas reales del cliente no se tocan.`,
+        confirmLabel: "Borrar demo",
+        danger: true,
+      });
       if (!ok) return;
       showStatus("Borrando agenda demo...", "info");
       const result = await api(`/admin/clientes/${encodeURIComponent(clienteId)}/demo-agenda`, { method: "DELETE" });
@@ -5594,10 +5710,10 @@ tbody tr:last-child td { border-bottom: none; }
           }
           try {
             let successMessage = "";
-            if (action === "delete" && !window.confirm("Seguro que quieres eliminar este usuario?")) {
+            if (action === "delete" && !(await confirmDialog({ title: "Eliminar usuario", bodyHtml: "¿Seguro que quieres eliminar este usuario?", confirmLabel: "Eliminar", danger: true }))) {
               return;
             }
-            if (action === "deactivate" && !window.confirm("Seguro que quieres desactivar este usuario?")) {
+            if (action === "deactivate" && !(await confirmDialog({ title: "Desactivar usuario", bodyHtml: "¿Seguro que quieres desactivar este usuario?", confirmLabel: "Desactivar" }))) {
               return;
             }
             if (action === "activate") {
@@ -5740,7 +5856,7 @@ tbody tr:last-child td { border-bottom: none; }
               return;
             }
             if (action === "cancel") {
-              if (!window.confirm("¿Seguro que quieres cancelar esta cita?")) return;
+              if (!(await confirmDialog({ title: "Cancelar cita", bodyHtml: "¿Seguro que quieres cancelar esta cita?", confirmLabel: "Cancelar cita", danger: true }))) return;
               await api(`/admin/bookings/${encodeURIComponent(bookingId)}/cancel`, { method: "POST" });
               showStatus("Cita cancelada correctamente.", "success");
               await loadBookings();
@@ -5846,7 +5962,11 @@ tbody tr:last-child td { border-bottom: none; }
     }
 
     async function altaExpress() {
-      const clienteId = elements.clienteId.value.trim() || prompt("Cliente ID para el alta express");
+      let clienteId = elements.clienteId.value.trim();
+      if (!clienteId) {
+        const answer = await promptDialog({ title: "Alta express", fields: [{ key: "id", label: "Cliente ID", placeholder: "clinica_saga" }] });
+        clienteId = answer && answer.id;
+      }
       if (!clienteId) {
         throw new Error("Indica un cliente ID antes de lanzar el alta express.");
       }
@@ -5908,9 +6028,9 @@ tbody tr:last-child td { border-bottom: none; }
     }
 
     async function createClient() {
-      const rawId = prompt("Nuevo cliente ID (ejemplo: clinica_saga)");
-      if (!rawId) return;
-      const clienteId = rawId.trim();
+      const answer = await promptDialog({ title: "Nuevo cliente", fields: [{ key: "id", label: "Cliente ID", placeholder: "clinica_saga" }], confirmLabel: "Crear" });
+      const clienteId = answer && answer.id;
+      if (!clienteId) return;
       const detail = await api(`/admin/template/${encodeURIComponent(clienteId)}`);
       fillForm(detail);
       state.drawerClientId = detail.cliente_id;
@@ -5974,18 +6094,18 @@ tbody tr:last-child td { border-bottom: none; }
         .filter((o) => o.startsWith("http"));
       let websiteUrl = origins[0] || "";
       if (!websiteUrl) {
-        websiteUrl = (window.prompt(
-          "URL del sitio web del cliente para regenerar el cerebro:",
-          "https://"
-        ) || "").trim();
+        const answer = await promptDialog({ title: "Regenerar cerebro", fields: [{ key: "url", label: "URL del sitio web del cliente", value: "https://" }] });
+        websiteUrl = (answer && answer.url || "").trim();
       }
       if (!websiteUrl || !websiteUrl.startsWith("http")) {
         throw new Error("URL invalida. Configura allowed_origins o introduce una URL valida.");
       }
 
-      const confirmed = window.confirm(
-        `Vamos a raspar ${websiteUrl} y regenerar el cerebro de ${clienteId}.\n\nEsto puede tardar unos minutos y sobrescribira info.txt. ¿Continuar?`
-      );
+      const confirmed = await confirmDialog({
+        title: "Regenerar cerebro",
+        bodyHtml: `Vamos a raspar <b>${escapeHtml(websiteUrl)}</b> y regenerar el cerebro de <b>${escapeHtml(clienteId)}</b>.<br><br>Esto puede tardar unos minutos y sobrescribirá info.txt.`,
+        confirmLabel: "Regenerar",
+      });
       if (!confirmed) return;
 
       showStatus("Raspando web y regenerando cerebro... (puede tardar 1-2 min)", "info");
@@ -6481,7 +6601,7 @@ tbody tr:last-child td { border-bottom: none; }
       function opportunityPayload() {return {company:val("#scaleOppCompany"),campaign:val("#scaleOppCampaign"),offer:val("#scaleOppOffer"),stage:val("#scaleOppStage"),value_eur:num("#scaleOppValue"),decision_maker:val("#scaleOppDecisionMaker"),contact:val("#scaleOppContact"),problem:val("#scaleOppProblem"),next_action:val("#scaleOppNextAction"),next_action_date:val("#scaleOppNextDate"),decision_date:val("#scaleOppDecisionDate"),notes:val("#scaleOppNotes"),lost_reason:val("#scaleOppLostReason")};}
       function clearOpportunity(){["#scaleOppId","#scaleOppCompany","#scaleOppCampaign","#scaleOppOffer","#scaleOppValue","#scaleOppDecisionMaker","#scaleOppContact","#scaleOppProblem","#scaleOppNextAction","#scaleOppNextDate","#scaleOppDecisionDate","#scaleOppNotes","#scaleOppLostReason"].forEach(id=>setInput(id,""));setInput("#scaleOppStage","identificada");q("#scaleOppFormTitle").textContent="Nueva oportunidad";}
       function editOpportunity(id){const x=(S.data?.opportunities||[]).find(o=>o.id===id);if(!x)return;Object.entries({scaleOppId:x.id,scaleOppCompany:x.company,scaleOppCampaign:x.campaign,scaleOppOffer:x.offer,scaleOppStage:x.stage,scaleOppValue:x.value_eur,scaleOppDecisionMaker:x.decision_maker,scaleOppContact:x.contact,scaleOppProblem:x.problem,scaleOppNextAction:x.next_action,scaleOppNextDate:x.next_action_date,scaleOppDecisionDate:x.decision_date,scaleOppNotes:x.notes,scaleOppLostReason:x.lost_reason}).forEach(([id,v])=>setInput("#"+id,v));q("#scaleOppFormTitle").textContent="Editar oportunidad";q("#scaleOpportunityForm").scrollIntoView({behavior:"smooth"});}
-      async function deleteOpportunity(id){if(!confirm("¿Borrar esta oportunidad? El historial se conserva."))return;await scaleApi("/opportunities/"+encodeURIComponent(id),{method:"DELETE"});await load();}
+      async function deleteOpportunity(id){if(!(await confirmDialog({ title:"Borrar oportunidad", bodyHtml:"¿Borrar esta oportunidad? El historial se conserva.", confirmLabel:"Borrar", danger:true })))return;await scaleApi("/opportunities/"+encodeURIComponent(id),{method:"DELETE"});await load();}
       q("#scaleDailyForm").addEventListener("submit",async e=>{e.preventDefault();const payload={researched:num("#scaleResearched"),contacts:num("#scaleContacts"),followups:num("#scaleFollowups"),calls:num("#scaleCalls"),positive_replies:num("#scalePositiveReplies"),conversations:num("#scaleConversations"),meetings:num("#scaleMeetings"),proposals:num("#scaleProposals"),won:num("#scaleWon"),eur_sold:num("#scaleEurSold"),new_recurring:num("#scaleRecurring"),delivery_hours:num("#scaleDeliveryHours"),learning:val("#scaleLearning"),blocker:val("#scaleBlocker"),next_action:val("#scaleDailyNext")};await scaleApi("/daily/"+S.data.today.activity_date,{method:"PUT",body:JSON.stringify(payload)});showStatus("Día guardado.","success");await load();});
       q("#scaleOpportunityForm").addEventListener("submit",async e=>{e.preventDefault();const id=val("#scaleOppId");await scaleApi("/opportunities"+(id?"/"+encodeURIComponent(id):""),{method:id?"PATCH":"POST",body:JSON.stringify(opportunityPayload())});clearOpportunity();showStatus("Oportunidad guardada.","success");await load();});
       q("#scaleOppCancelBtn").addEventListener("click",clearOpportunity);
@@ -6635,7 +6755,7 @@ a {
         loadEmailChannels().catch(error => showStatus(error.message, "error"));
       });
       ORQ("#emailChannelDisconnectBtn")?.addEventListener("click", async () => {
-        if (!window.confirm("Desconectar Gmail? SMTP seguira disponible si esta configurado.")) return;
+        if (!(await confirmDialog({ title: "Desconectar Gmail", bodyHtml: "SMTP seguirá disponible si está configurado.", confirmLabel: "Desconectar", danger: true }))) return;
         try {
           await orFetch("/admin/email-channels/gmail", { method: "DELETE" });
           await loadEmailChannels();
@@ -7421,7 +7541,11 @@ a {
           const turningOn = !_autonomousState.enabled;
           if (turningOn) {
             const target = ORQ("#orAutonomousTargetCompaniesInput")?.value || _autonomousState.target_companies || 20;
-            const ok = window.confirm(`Activar autopiloto?\n\nCada hora ejecutará una ronda automática según los checkboxes activos:\n• Follow-ups: cold pendientes + FU1 + FU2 + breakup (sin límite)\n• Descubrir: busca ${target} empresas nuevas y les envía el cold\n\nPuedes pausarlo en cualquier momento con el mismo botón.`);
+            const ok = await confirmDialog({
+              title: "Activar autopiloto",
+              bodyHtml: `Cada hora ejecutará una ronda automática según los checkboxes activos:<br>• Follow-ups: cold pendientes + FU1 + FU2 + breakup (sin límite)<br>• Descubrir: busca <b>${escapeHtml(String(target))}</b> empresas nuevas y les envía el cold<br><br>Puedes pausarlo en cualquier momento con el mismo botón.`,
+              confirmLabel: "Activar",
+            });
             if (!ok) return;
           }
           await saveAutonomousConfig({ enabled: turningOn });
@@ -7894,7 +8018,8 @@ a {
       }
 
       async function runAutopilot() {
-        const maxSend = parseInt(prompt("¿Cuántos follow-ups enviar ahora? (max 20)", "10") || "10", 10);
+        const answer = await promptDialog({ title: "Lanzar autopiloto", fields: [{ key: "max", label: "¿Cuántos follow-ups enviar ahora? (máx. 20)", value: "10", type: "number" }], confirmLabel: "Enviar" });
+        const maxSend = parseInt(answer && answer.max || "", 10);
         if (isNaN(maxSend) || maxSend <= 0) return;
         try {
           const data = await orFetch("/admin/outreach/autopilot/run", {
@@ -7945,7 +8070,7 @@ a {
           await openSendPreviewWithConfirm(stage, emails[0], () => _doApproveStage(stage, emails));
           return;
         }
-        if (!confirm(`Vas a enviar ${stage} a ${emails.length} prospects priorizados. Confirmar?`)) return;
+        if (!(await confirmDialog({ title: "Enviar campaña", bodyHtml: `Vas a enviar <b>${escapeHtml(stage)}</b> a <b>${emails.length}</b> prospects priorizados.`, confirmLabel: "Enviar" }))) return;
         await _doApproveStage(stage, emails);
       }
 
@@ -8018,7 +8143,7 @@ a {
             const email = ev.currentTarget.dataset.email;
             const stage = ev.currentTarget.dataset.stage;
             const label = OR_STAGE_LABEL[stage] || stage;
-            if (!confirm(`Enviar "${label}" a ${email}. ¿Confirmar?`)) return;
+            if (!(await confirmDialog({ title: "Enviar email", bodyHtml: `Enviar "<b>${escapeHtml(label)}</b>" a <b>${escapeHtml(email)}</b>.`, confirmLabel: "Enviar" }))) return;
             try {
               const res = await orFetch("/admin/outreach/send", {
                 method: "POST", headers: { "Content-Type": "application/json" },
@@ -8151,7 +8276,7 @@ a {
           (byStage[s] = byStage[s] || []).push(it.email);
         });
         const summary = Object.entries(byStage).map(([s, emails]) => `${emails.length} ${OR_STAGE_LABEL[s] || s}`).join(", ");
-        if (!confirm(`Vas a enviar follow-ups a ${items.length} prospects: ${summary}.\n¿Confirmar?`)) return;
+        if (!(await confirmDialog({ title: "Enviar follow-ups", bodyHtml: `Vas a enviar follow-ups a <b>${items.length}</b> prospects: ${escapeHtml(summary)}.`, confirmLabel: "Enviar" }))) return;
         let errors = 0;
         for (const [stage, emails] of Object.entries(byStage)) {
           try {
@@ -8474,7 +8599,7 @@ a {
             showStatus("Suprimido", "ok"); openDrawer(email); loadProspects();
           });
           ORQ("#orDrawerDeleteBtn").addEventListener("click", async () => {
-            if (!confirm("¿Borrar prospect " + email + "?")) return;
+            if (!(await confirmDialog({ title: "Borrar prospect", bodyHtml: `¿Borrar prospect <b>${escapeHtml(email)}</b>?`, confirmLabel: "Borrar", danger: true }))) return;
             await orFetch("/admin/outreach/prospects/" + encodeURIComponent(email), { method:"DELETE" });
             ORQ("#orDrawer").style.display = "none"; loadProspects();
           });
@@ -8580,9 +8705,9 @@ a {
         };
         if (!dryRun) {
           const msg = body.test_to
-            ? `Vas a enviar correo de PRUEBA a ${body.test_to} (stage ${body.stage}). ¿Confirmar?`
-            : `Vas a enviar correo REAL a ${body.max} prospects (stage ${body.stage}). ¿Confirmar?`;
-          if (!confirm(msg)) return;
+            ? `Vas a enviar correo de PRUEBA a <b>${escapeHtml(body.test_to)}</b> (stage ${escapeHtml(body.stage)}).`
+            : `Vas a enviar correo REAL a <b>${escapeHtml(String(body.max))}</b> prospects (stage ${escapeHtml(body.stage)}).`;
+          if (!(await confirmDialog({ title: "Lanzar campaña", bodyHtml: msg, confirmLabel: "Enviar" }))) return;
         }
         try {
           const data = await orFetch("/admin/outreach/send", {
@@ -9008,7 +9133,7 @@ a {
       async function resetTemplate() {
         const stage = ORQ("#orTplStage").value;
         if (!_tplHasOverride(stage)) { showStatus("No hay plantilla personalizada para este stage.", "info"); return; }
-        if (!window.confirm("Borrar la plantilla personalizada de este stage? Los envios usaran la plantilla base del sistema.")) return;
+        if (!(await confirmDialog({ title: "Borrar plantilla personalizada", bodyHtml: "Los envíos usarán la plantilla base del sistema.", confirmLabel: "Borrar", danger: true }))) return;
         try {
           await orFetch("/admin/outreach/templates/" + stage, { method:"DELETE" });
           showStatus("Personalizacion eliminada. Usando plantilla base.", "ok");
@@ -9089,6 +9214,14 @@ a {
           clickedVantelia: !!ORQ("#orFilterVanteliaClicks").checked,
         };
         orState.page = 1; loadProspects();
+      });
+      let _orSearchTimer = null;
+      ORQ("#orSearch")?.addEventListener("input", () => {
+        window.clearTimeout(_orSearchTimer);
+        _orSearchTimer = window.setTimeout(() => {
+          orState.filters = { ...(orState.filters || {}), q: ORQ("#orSearch").value.trim() };
+          orState.page = 1; loadProspects();
+        }, 350);
       });
       ORQ("#orPrevPage").addEventListener("click", () => { if (orState.page>1) { orState.page--; loadProspects(); } });
       ORQ("#orNextPage").addEventListener("click", () => { if (orState.page*orState.pageSize<orState.total) { orState.page++; loadProspects(); } });
@@ -9346,7 +9479,7 @@ a {
           IGQ("#igCampMsg").innerHTML = '<span style="color:#b91c1c;">Objetivo debe ser 1-200.</span>';
           return;
         }
-        if (!confirm(`Empezar captacion automatica para ${target} clientes? Se enviaran DMs reales desde tu cuenta IG.`)) return;
+        if (!(await confirmDialog({ title: "Empezar captación IG", bodyHtml: `Empezar captación automática para <b>${escapeHtml(String(target))}</b> clientes. Se enviarán DMs reales desde tu cuenta IG.`, confirmLabel: "Empezar" }))) return;
         const btn = IGQ("#igCampStartBtn");
         btn.disabled = true;
         IGQ("#igCampMsg").textContent = "Arrancando...";
@@ -9454,8 +9587,8 @@ a {
         }
       }
 
-      function igTplReset(variant) {
-        if (!confirm(`Restaurar variante ${variant} al default?`)) return;
+      async function igTplReset(variant) {
+        if (!(await confirmDialog({ title: "Restaurar plantilla", bodyHtml: `¿Restaurar variante <b>${escapeHtml(variant)}</b> al default?`, confirmLabel: "Restaurar" }))) return;
         IGQ("#igTpl" + variant).value = "";
         igTplSave();
       }
@@ -9528,7 +9661,7 @@ a {
           IGQ("#igMasterMsg").innerHTML = '<span style="color:#b91c1c;">Conecta sesion IG primero (pega cookies abajo).</span>';
           return;
         }
-        if (turningOn && !confirm(`Activar envio automatico? Se enviaran hasta ${newCap} DMs/dia reales. Riesgo bloqueo IG si usas cuenta principal.`)) return;
+        if (turningOn && !(await confirmDialog({ title: "Activar envío automático", bodyHtml: `Se enviarán hasta <b>${escapeHtml(String(newCap))}</b> DMs/día reales. Riesgo de bloqueo IG si usas cuenta principal.`, confirmLabel: "Activar", danger: true }))) return;
         const btn = IGQ("#igMasterToggleBtn");
         btn.disabled = true;
         IGQ("#igMasterMsg").textContent = "Guardando...";
@@ -9619,7 +9752,7 @@ a {
       }
 
       async function igAutosendDisconnect() {
-        if (!confirm("Borrar sesion IG guardada? Tendras que pegar cookies de nuevo.")) return;
+        if (!(await confirmDialog({ title: "Borrar sesión IG", bodyHtml: "Tendrás que pegar cookies de nuevo.", confirmLabel: "Borrar sesión", danger: true }))) return;
         const msg = IGQ("#igAutosendMsg");
         try {
           await igFetch("/admin/instagram/autosend/disconnect", { method: "POST" });
@@ -9743,7 +9876,7 @@ a {
             if (document.visibilityState !== "visible") return;
             document.removeEventListener("visibilitychange", handler);
             _draftFocusCheckActive = false;
-            if (!confirm("¿Marcar el DM a @" + username + " como enviado?")) return;
+            if (!(await confirmDialog({ title: "Confirmar envío", bodyHtml: `¿Marcar el DM a <b>@${escapeHtml(username)}</b> como enviado?`, confirmLabel: "Marcar enviado" }))) return;
             try {
               await igFetch("/admin/instagram/drafts/" + id + "/mark-sent", { method: "POST" });
               loadDrafts(); loadStats();
@@ -9764,7 +9897,7 @@ a {
       }
 
       async function skipDraft(id) {
-        if (!confirm("¿Saltar este draft?")) return;
+        if (!(await confirmDialog({ title: "Saltar draft", bodyHtml: "¿Saltar este draft?", confirmLabel: "Saltar" }))) return;
         try {
           await igFetch("/admin/instagram/drafts/" + id + "/skip", { method: "POST" });
           loadDrafts();
@@ -9854,7 +9987,7 @@ a {
         const handler = async () => {
           if (document.visibilityState !== "visible") return;
           document.removeEventListener("visibilitychange", handler);
-          if (!confirm("Marcar follow-up a @" + cleanUser + " como enviado?")) return;
+          if (!(await confirmDialog({ title: "Confirmar follow-up", bodyHtml: `¿Marcar follow-up a <b>@${escapeHtml(cleanUser)}</b> como enviado?`, confirmLabel: "Marcar enviado" }))) return;
           try {
             await igFetch("/admin/instagram/manual-contact", {
               method: "POST",
@@ -9910,7 +10043,7 @@ a {
           });
           IGQ("#igProspectsTable").querySelectorAll("[data-prospect-del]").forEach(btn => {
             btn.addEventListener("click", async () => {
-              if (!confirm("Borrar @" + btn.dataset.prospectDel + "?")) return;
+              if (!(await confirmDialog({ title: "Borrar prospect", bodyHtml: `¿Borrar <b>@${escapeHtml(btn.dataset.prospectDel)}</b>?`, confirmLabel: "Borrar", danger: true }))) return;
               try { await igFetch("/admin/instagram/prospects/" + encodeURIComponent(btn.dataset.prospectDel), { method:"DELETE" }); loadProspects(); }
               catch(e) { igStatus(e.message, "error"); }
             });
@@ -9963,11 +10096,18 @@ a {
       }
 
       async function addProspect() {
-        const username = prompt("Username (sin @):");
-        if (!username) return;
-        const full_name = prompt("Nombre completo (opcional):") || "";
-        const niche = prompt("Niche/sector (opcional):") || "";
-        const city = prompt("Ciudad (opcional):") || "";
+        const answer = await promptDialog({
+          title: "Añadir prospect",
+          fields: [
+            { key: "username", label: "Username (sin @)" },
+            { key: "full_name", label: "Nombre completo (opcional)" },
+            { key: "niche", label: "Niche/sector (opcional)" },
+            { key: "city", label: "Ciudad (opcional)" },
+          ],
+          confirmLabel: "Añadir",
+        });
+        if (!answer || !answer.username) return;
+        const { username, full_name, niche, city } = answer;
         try {
           await igFetch("/admin/instagram/prospects", {
             method:"POST", headers:{"Content-Type":"application/json"},
@@ -9979,7 +10119,9 @@ a {
 
       async function recordReply(username) {
         if (!username) return;
-        const note = prompt("Nota interna de respuesta (opcional):") || "";
+        const answer = await promptDialog({ title: "Marcar como respondido", fields: [{ key: "note", label: "Nota interna de respuesta (opcional)" }], confirmLabel: "Marcar" });
+        if (!answer) return;
+        const note = answer.note || "";
         try {
           await igFetch("/admin/instagram/replies", {
             method: "POST",
@@ -10165,6 +10307,11 @@ a {
       IGQ("#igGenerateFu1Btn")?.addEventListener("click", () => generateDrafts("fu1"));
       IGQ("#igGenerateFu2Btn")?.addEventListener("click", () => generateDrafts("fu2"));
       IGQ("#igProspectsRefreshBtn")?.addEventListener("click", () => { igState.prospectsPage = 1; loadProspects(); });
+      let _igSearchTimer = null;
+      IGQ("#igProspectsQ")?.addEventListener("input", () => {
+        window.clearTimeout(_igSearchTimer);
+        _igSearchTimer = window.setTimeout(() => { igState.prospectsPage = 1; loadProspects(); }, 350);
+      });
       IGQ("#igProspectsAddBtn")?.addEventListener("click", addProspect);
       IGQ("#igDiscRunBtn")?.addEventListener("click", runDiscovery);
       IGQ("#igJobsRefreshBtn")?.addEventListener("click", loadJobs);
@@ -10303,7 +10450,7 @@ a {
       async function tkCampStart() {
         const target = parseInt(TKQ("#tkCampTargetInput").value || "30", 10);
         if (!target || target < 1 || target > 200) { TKQ("#tkCampMsg").innerHTML = '<span style="color:#b91c1c;">Objetivo 1-200.</span>'; return; }
-        if (!confirm(`Empezar captacion TikTok para ${target} clientes? Se enviaran DMs reales.`)) return;
+        if (!(await confirmDialog({ title: "Empezar captación TikTok", bodyHtml: `Empezar captación para <b>${escapeHtml(String(target))}</b> clientes. Se enviarán DMs reales.`, confirmLabel: "Empezar" }))) return;
         const btn = TKQ("#tkCampStartBtn"); btn.disabled = true;
         TKQ("#tkCampMsg").textContent = "Arrancando...";
         try {
@@ -10377,7 +10524,7 @@ a {
       }
 
       async function tkAutosendDisconnect() {
-        if (!confirm("Borrar sesion TikTok guardada?")) return;
+        if (!(await confirmDialog({ title: "Borrar sesión TikTok", bodyHtml: "¿Borrar la sesión TikTok guardada?", confirmLabel: "Borrar", danger: true }))) return;
         const msg = TKQ("#tkAutosendMsg");
         try { await tkFetch("/admin/tiktok/autosend/disconnect", { method: "POST" }); msg.textContent = "Sesion borrada."; msg.style.color = "#64748b"; }
         catch (err) { msg.textContent = `Error: ${err.message}`; msg.style.color = "#b91c1c"; }
@@ -10414,7 +10561,7 @@ a {
           out.textContent = res.text || "(vacio)";
         } catch (err) { out.textContent = "Error: " + err.message; }
       }
-      function tkTplReset(v) { if (!confirm(`Restaurar variante ${v} al default?`)) return; TKQ("#tkTpl" + v).value = ""; tkTplSave(); }
+      async function tkTplReset(v) { if (!(await confirmDialog({ title: "Restaurar plantilla", bodyHtml: `¿Restaurar variante <b>${escapeHtml(v)}</b> al default?`, confirmLabel: "Restaurar" }))) return; TKQ("#tkTpl" + v).value = ""; tkTplSave(); }
 
       async function loadTkSuppressions() {
         try {
@@ -10423,7 +10570,7 @@ a {
           const body = TKQ("#tkSupBody");
           if (!items.length) body.innerHTML = '<tr><td colspan="4" class="muted">Sin bajas.</td></tr>';
           else body.innerHTML = items.map(x => `<tr><td>@${x.username}</td><td>${x.reason || ""}</td><td>${(x.added_at||"").slice(0,10)}</td><td><button class="ghost small" data-tk-sup-del="${x.username}">Quitar</button></td></tr>`).join("");
-          body.querySelectorAll("[data-tk-sup-del]").forEach(b => b.addEventListener("click", async () => { try { await tkFetch(`/admin/tiktok/suppress/${b.dataset.tkSupDel}`, { method: "DELETE" }); loadTkSuppressions(); } catch (e) { alert(e.message); } }));
+          body.querySelectorAll("[data-tk-sup-del]").forEach(b => b.addEventListener("click", async () => { try { await tkFetch(`/admin/tiktok/suppress/${b.dataset.tkSupDel}`, { method: "DELETE" }); loadTkSuppressions(); } catch (e) { toast(e.message, "error"); } }));
         } catch (err) { TKQ("#tkSupBody").innerHTML = `<tr><td colspan="4" style="color:#b91c1c;">${err.message}</td></tr>`; }
       }
       async function tkSupAdd() {
@@ -10431,7 +10578,7 @@ a {
         const reason = TKQ("#tkSupReason").value.trim() || "manual";
         if (!username) return;
         try { await tkFetch("/admin/tiktok/suppress", { method: "POST", body: JSON.stringify({ username, reason }) }); TKQ("#tkSupUsername").value = ""; TKQ("#tkSupReason").value = ""; loadTkSuppressions(); }
-        catch (err) { alert(err.message); }
+        catch (err) { toast(err.message, "error"); }
       }
 
       TKALL("[data-tk-tab]").forEach(b => b.addEventListener("click", () => setTkTab(b.dataset.tkTab)));
@@ -10582,7 +10729,7 @@ a {
         if (!count || count < 1 || count > 200) {
           WQ("#waSendMsg").innerHTML = '<span style="color:#b91c1c;">Numero debe ser 1-200.</span>'; return;
         }
-        if (!dryRun && !confirm(`Enviar WhatsApp a ${count} negocios desde tu numero? Se envian de verdad.`)) return;
+        if (!dryRun && !(await confirmDialog({ title: "Enviar WhatsApp", bodyHtml: `Enviar WhatsApp a <b>${escapeHtml(String(count))}</b> negocios desde tu número. Se envían de verdad.`, confirmLabel: "Enviar" }))) return;
         const btn = WQ("#waSendBtn");
         btn.disabled = true;
         WQ("#waSendMsg").textContent = "Encolando...";
@@ -10692,7 +10839,7 @@ a {
       }
 
       async function waDisconnect() {
-        if (!confirm("Desvincular WhatsApp? Tendras que volver a escanear el QR.")) return;
+        if (!(await confirmDialog({ title: "Desvincular WhatsApp", bodyHtml: "Tendrás que volver a escanear el QR.", confirmLabel: "Desvincular", danger: true }))) return;
         stopWaQrPoll();
         try {
           await waFetch("/admin/whatsapp/disconnect", { method: "POST" });
@@ -11101,5 +11248,19 @@ a {
     })();
     // === END VOICE PANEL ========================================
   </script>
+
+  <div class="vtoast" id="vtoast" role="status" aria-live="polite"></div>
+
+  <!-- Diálogo de confirmación reutilizable (sustituye a window.confirm/prompt) -->
+  <div class="vdialog-backdrop" id="vdialogBackdrop">
+    <div class="vdialog" role="dialog" aria-modal="true" aria-labelledby="vdialogTitle">
+      <div class="vdialog-title" id="vdialogTitle"></div>
+      <div class="vdialog-body" id="vdialogBody"></div>
+      <div class="vdialog-actions">
+        <button class="vdlg-cancel" id="vdialogCancel" type="button">Volver</button>
+        <button class="vdlg-ok" id="vdialogOk" type="button">Confirmar</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
