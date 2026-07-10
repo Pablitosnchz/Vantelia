@@ -10,6 +10,7 @@ llama-index-embeddings-openai==0.1.11
 llama-index-llms-openai==0.1.31
 openai==1.52.2
 pydantic==2.9.2
+python-multipart==0.0.12
 twilio>=9.0.0
 websockets>=12.0
 python-dotenv==1.0.1

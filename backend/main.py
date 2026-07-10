@@ -201,7 +201,16 @@ async def _no_cache_widget_bundle(request: Request, call_next):
 async def security_headers_middleware(request: Request, call_next: Any) -> Response:
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
-    response.headers.setdefault("X-Frame-Options", "DENY")
+    # La central publica de reservas esta disenyada para incrustarse via iframe
+    # (modo embed) en la web del negocio o en su sitio Vantelia. Es publica y sin
+    # sesion, asi que permitimos enmarcarla (frame-ancestors) en vez de DENY.
+    # El resto del sitio mantiene X-Frame-Options: DENY (anti-clickjacking).
+    if request.url.path.startswith("/central/"):
+        response.headers["Content-Security-Policy"] = "frame-ancestors 'self' https:"
+        if "X-Frame-Options" in response.headers:
+            del response.headers["X-Frame-Options"]
+    else:
+        response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     if textnorm._configured_public_base_url().startswith("https://"):
@@ -214,6 +223,14 @@ app.mount("/widget", StaticFiles(directory=str(settings.WIDGET_DIR)), name="widg
 
 if settings.BRAND_DIR.exists():
     app.mount("/brand-assets", StaticFiles(directory=str(settings.BRAND_DIR)), name="brand-assets")
+
+
+# Imagenes subidas por el tenant desde el portal (catalogo: servicios/productos/
+# bonos + hero). Viven en storage/uploads/<cliente_id>/ (por entorno, incluido en
+# el backup). Se sirven publicamente porque el catalogo publico las referencia.
+_UPLOADS_DIR = settings.STORAGE_DIR / "uploads"
+_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_UPLOADS_DIR)), name="uploads")
 
 
 # Webs de escaparate por cliente (client_sites/<carpeta>/index.html), servidas en

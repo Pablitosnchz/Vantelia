@@ -3612,7 +3612,7 @@
     <div class="field" style="margin-bottom:12px;"><label class="field-label">Stock (vacío = sin control)</label><input type="number" class="field-input" id="productStock" min="0" step="1" /></div>
     <div class="field" style="margin-bottom:12px;"><label class="field-label">Descripción</label><textarea class="field-input" id="productDesc" rows="2" maxlength="600"></textarea></div>
     <div class="field" style="margin-bottom:12px;">
-      <label class="field-label">Imagen (URL)</label>
+      <label class="field-label">Imagen (sube un archivo o pega una URL)</label>
       <input type="url" class="field-input" id="productImagen" maxlength="500" placeholder="https://… (tienda online y mostrador)" />
       <div class="imgprev" id="productImagenPrev"></div>
     </div>
@@ -3649,7 +3649,7 @@
     <div class="field" style="margin-bottom:12px;"><label class="field-label">Precio del bono (€)</label><input type="number" class="field-input" id="packagePrecio" min="0" step="0.01" /></div>
     <div class="field" style="margin-bottom:12px;"><label class="field-label">Validez (días)</label><input type="number" class="field-input" id="packageValidez" min="1" step="1" value="365" /></div>
     <div class="field" style="margin-bottom:12px;">
-      <label class="field-label">Imagen (URL)</label>
+      <label class="field-label">Imagen (sube un archivo o pega una URL)</label>
       <input type="url" class="field-input" id="packageImagen" maxlength="500" placeholder="https://… (tienda online y mostrador)" />
       <div class="imgprev" id="packageImagenPrev"></div>
     </div>
@@ -3801,7 +3801,7 @@
     </div>
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Descripción</label><textarea class="field-input" id="svcDesc" rows="2" placeholder="opcional"></textarea></div>
     <div class="field" style="margin-bottom:10px;">
-      <label class="field-label">Imagen (URL)</label>
+      <label class="field-label">Imagen (sube un archivo o pega una URL)</label>
       <input type="url" class="field-input" id="svcImagen" maxlength="500" placeholder="https://… (se muestra en tu central de reservas)" />
       <div class="imgprev" id="svcImagenPrev"></div>
     </div>
@@ -9690,11 +9690,55 @@ function refreshImagePreview(inputId, prevId) {
     prev.innerHTML = '';
   }
 }
+// Sube una imagen desde el dispositivo -> self-host -> rellena la URL + preview.
+async function uploadCatalogImage(file, inputId, prevId, btn) {
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { toast('La imagen supera el límite de 5 MB.', 'error'); return; }
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const prevLabel = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Subiendo…'; }
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const data = await api('/auth/app/uploads/image', { method: 'POST', body: fd });
+    input.value = data.url;
+    refreshImagePreview(inputId, prevId);
+    toast('Imagen subida.', 'success');
+  } catch (e) {
+    toast(e.message || 'No se pudo subir la imagen.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = prevLabel; }
+  }
+}
+
+// Cada campo de imagen del catálogo: preview en vivo + botón "Subir imagen".
 [['svcImagen','svcImagenPrev'],['productImagen','productImagenPrev'],['packageImagen','packageImagenPrev'],['shopHeroImg','shopHeroImgPrev']].forEach(([i, p]) => {
-  document.getElementById(i)?.addEventListener('input', () => {
+  const input = document.getElementById(i);
+  if (!input) return;
+  input.addEventListener('input', () => {
     clearTimeout(window['__imgprev_' + i]);
     window['__imgprev_' + i] = setTimeout(() => refreshImagePreview(i, p), 300);
   });
+  if (document.getElementById(i + 'UpBtn')) return;
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/png,image/jpeg,image/webp,image/gif';
+  fileInput.id = i + 'File';
+  fileInput.style.display = 'none';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.id = i + 'UpBtn';
+  btn.className = 'btn btn-ghost';
+  btn.textContent = '📤 Subir imagen';
+  btn.style.cssText = 'margin-top:6px; padding:6px 12px; font-size:.82rem;';
+  btn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    uploadCatalogImage(fileInput.files[0], i, p, btn);
+    fileInput.value = '';
+  });
+  input.insertAdjacentElement('afterend', btn);
+  btn.insertAdjacentElement('afterend', fileInput);
 });
 document.getElementById('shopProdSave').addEventListener('click', () => {
   saveShopPublic({

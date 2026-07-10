@@ -12,13 +12,20 @@ import json
 import re
 import secrets
 import sqlite3
+import uuid
 from typing import Dict
 
 from fastapi import (
     Depends,
+    File,
+    Form,
     HTTPException,
+    Request,
     Response,
+    UploadFile,
 )
+
+from backend import portal
 
 
 import onboarding_utils
@@ -542,3 +549,66 @@ async def app_tune_post(
     except NameError:
         pass
     return await app_tune_get(user)
+
+
+# --- Subida de imagenes del catalogo (servicios/productos/bonos/hero) ---------
+
+_IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+_IMAGE_MAGIC = (
+    (b"\xff\xd8\xff", "jpg"),
+    (b"\x89PNG\r\n\x1a\n", "png"),
+    (b"GIF87a", "gif"),
+    (b"GIF89a", "gif"),
+)
+
+
+def _sniff_image_ext(data: bytes) -> str:
+    """Detecta el tipo real por magic bytes (no confiar en el nombre/mime).
+
+    Devuelve la extension canonica o '' si no es una imagen soportada.
+    """
+    for magic, ext in _IMAGE_MAGIC:
+        if data.startswith(magic):
+            return ext
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return ""
+
+
+@app.post("/auth/app/uploads/image")
+async def app_upload_image(
+    request: Request,
+    file: UploadFile = File(...),
+    cliente_id: str = Form(""),
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, str]:
+    """Sube una imagen del catalogo y devuelve su URL publica self-host.
+
+    Se guarda en storage/uploads/<cliente_id>/<uuid>.<ext> y se sirve en
+    /uploads/... La URL devuelta es absoluta (APP_BASE_URL) porque el saneador
+    de imagenes del catalogo (`textnorm._public_image_url`) exige http(s).
+    Permiso: catalog.manage (igual que editar el catalogo).
+    """
+    security._require_portal_permission(user, "catalog.manage")
+    target_client_id = portal._portal_client_id_or_403(user, cliente_id)
+
+    data = await file.read(_IMAGE_UPLOAD_MAX_BYTES + 1)
+    if len(data) > _IMAGE_UPLOAD_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="La imagen supera el limite de 5 MB.")
+    if not data:
+        raise HTTPException(status_code=400, detail="Archivo vacio.")
+    ext = _sniff_image_ext(data)
+    if not ext:
+        raise HTTPException(status_code=415, detail="Formato no soportado. Usa JPG, PNG, WEBP o GIF.")
+
+    safe_client = re.sub(r"[^a-zA-Z0-9_-]+", "_", target_client_id) or "cliente"
+    dest_dir = settings.STORAGE_DIR / "uploads" / safe_client
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    (dest_dir / filename).write_bytes(data)
+
+    rel_url = f"/uploads/{safe_client}/{filename}"
+    base = textnorm._configured_public_base_url()
+    if not base:
+        base = str(request.base_url).rstrip("/")
+    return {"url": f"{base}{rel_url}", "path": rel_url}
