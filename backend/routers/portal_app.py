@@ -2820,12 +2820,7 @@ async def auth_create_booking(
     )
 
     employee_row = agenda._resolve_employee_for_booking(target_client_id, data.employee_id, require_active=False)
-    service_row = agenda._find_service_by_name(target_client_id, servicio)
     service_duration = agenda._service_duration_minutes(target_client_id, servicio, employee_row)
-    service_id = service_row["slug"] if service_row else ""
-    service_price = agenda._service_price_cents_resolved(
-        target_client_id, service_row, employee_row["location_id"] or ""
-    )
 
     # Limites de plan (salvo override admin del portal).
     if not portal._is_admin_client_portal_override(user, cliente_id):
@@ -2846,64 +2841,21 @@ async def auth_create_booking(
             detail="Ese horario no esta disponible para el profesional seleccionado.",
         )
 
-    booking_id = f"bk_{secrets.token_urlsafe(10)}"
-    manage_token = booking._generate_manage_token()
-    created_at = timeutils._utc_now_iso()
-    start_local, end_local = agenda._booking_start_end(
-        target_client_id, booking_date, booking_time,
-        employee_id=employee_row["id"], duration_minutes=service_duration,
-    )
-    booking_timezone = employee_row["timezone"] or config["booking"]["timezone"]
-
-    record = {
-        "id": booking_id,
-        "cliente_id": target_client_id,
-        "employee_id": employee_row["id"],
-        "employee_name": employee_row["name"],
-        "nombre": nombre,
-        "email": email,
-        "telefono": telefono,
-        "servicio": servicio,
-        "booking_date": booking_date,
-        "booking_time": booking_time,
-        "notas": notas,
-        "status": "confirmed",
-        "provider_name": "internal",
-        "provider_status": "internal",
-        "provider_booking_id": "",
-        "provider_booking_url": "",
-        "manage_token": manage_token,
-        "timezone": booking_timezone,
-        "start_at": timeutils._to_utc_iso(start_local),
-        "end_at": timeutils._to_utc_iso(end_local),
-        "confirmed_at": created_at,
-        "cancelled_at": "",
-        **booking._booking_blank_tracking_fields(),
-        "service_id": service_id,
-        "service_price_cents": service_price,
-        "source": "portal_manual",
-        "created_at": created_at,
-    }
-    try:
-        booking._store_booking(record)
-    except sqlite3.IntegrityError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Ese horario acaba de ocuparse. Elige otro tramo.",
-        ) from exc
-    booking._record_booking_audit(
-        booking_id,
+    booking_row = await booking._create_booking_core(
         target_client_id,
-        "booking_created",
-        {
-            "status": "confirmed",
-            "source": "portal_manual",
-            "role": user["role"],
-            "user_id": user["id"],
-            "employee_id": employee_row["id"],
-            "employee_name": employee_row["name"],
-        },
+        employee_row=employee_row,
+        nombre=nombre,
+        email=email,
+        telefono=telefono,
+        servicio=servicio,
+        booking_date=booking_date,
+        booking_time=booking_time,
+        notas=notas,
+        source="portal_manual",
+        request=request,
+        audit_extra={"role": user["role"], "user_id": user["id"]},
     )
+    booking_id = booking_row["id"]
     if missing_reminder_contact:
         booking._record_booking_audit(
             booking_id,
@@ -2912,30 +2864,17 @@ async def auth_create_booking(
             {"source": "portal_manual", "warning": contact_warning},
         )
 
-    booking_row = booking._get_booking_row_by_id(booking_id)
-    if booking_row and not missing_reminder_contact:
-        try:
-            await booking._send_booking_reminder_by_kind(
-                booking_row,
-                "confirmed",
-                request,
-                sent_column="confirmation_email_sent_at",
-            )
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.error("No se ha podido enviar el aviso de la cita manual %s: %s", booking_id, exc)
-            booking._mark_booking_email_result(booking_id, status="failed", error=str(exc))
-
     payment_row = booking._booking_payment_row(booking_id)
     return BookingActionResponse(
         ok=True,
         booking_id=booking_id,
-        estado=booking_row["status"] if booking_row else "confirmed",
+        estado=booking_row["status"],
         mensaje=contact_warning or "Cita creada correctamente.",
         warning=contact_warning,
         employee_id=employee_row["id"],
         employee_name=employee_row["name"],
-        manage_url=booking._build_booking_manage_url(manage_token, request),
-        payment_status=booking_row["payment_status"] if booking_row else "not_required",
+        manage_url=booking._build_booking_manage_url(booking_row["manage_token"], request),
+        payment_status=booking_row["payment_status"],
         payment_url=payment_row["checkout_url"] if payment_row else "",
     )
 
@@ -2962,41 +2901,13 @@ async def auth_cancel_booking(
             provider_booking_url=booking_row["provider_booking_url"] or "",
         )
 
-    cancel_reason = textnorm._sanitize_text((data.motivo if data else ""), allow_multiline=True)
-    await booking._cancel_provider_booking(booking_row)
-    booking._update_booking_record(
-        booking_id,
-        status="cancelled",
-        cancelled_at=timeutils._utc_now_iso(),
-        provider_status="cancelled",
+    refreshed = await booking._cancel_booking_core(
+        booking_row,
+        source="portal",
+        reason=(data.motivo if data else ""),
+        request=request,
+        audit_extra={"role": user["role"], "user_id": user["id"]},
     )
-    booking._record_booking_audit(
-        booking_id,
-        booking_row["cliente_id"],
-        "booking_cancelled",
-        {
-            "source": "portal",
-            "role": user["role"],
-            "user_id": user["id"],
-            "reason": cancel_reason,
-            "reason_sent_to_customer": bool(cancel_reason),
-        },
-    )
-    # Aplica la politica de cancelacion (penalizacion/reembolso) automaticamente.
-    try:
-        booking.apply_cancellation_policy(booking_row, kind="cancel", actor_source="portal")
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.error("Politica de cancelacion fallo %s: %s", booking_id, exc)
-    refreshed = booking._load_booking_or_404(booking_id)
-    try:
-        await booking._send_booking_reminder_by_kind(
-            refreshed,
-            "cancelled",
-            request,
-            extra_message=cancel_reason,
-        )
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.error("No se ha podido enviar el aviso de cancelacion %s: %s", refreshed["id"], exc)
     return BookingActionResponse(
         ok=True,
         booking_id=booking_id,

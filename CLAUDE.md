@@ -290,6 +290,15 @@ Modulos `backend/commerce.py` y `backend/analytics.py` + router `backend/routers
 
 ## Booking, emails y recordatorios
 
+**Nucleos unicos por mutacion (refactor jul 2026 — NO duplicar por canal):** toda mutacion de cita pasa por UNA funcion en `backend/booking.py`; los canales solo resuelven su politica de entrada (que empleado, que textos) y traducen los HTTPException a su medio:
+
+- **Crear**: `booking._create_booking_core(cliente_id, employee_row=, ..., source=)` — resuelve servicio/duracion/precio, valida hueco (409), proveedor + webhook, `_store_booking` (sella centro/codigo/politica de pago), audit `booking_created` y confirmacion (`send_confirmation=False` en voz, que envia la suya en background). Usado por `/agendar` (widget), WhatsApp, voz y `POST /auth/bookings` (portal manual). El canal resuelve ANTES el empleado (portal permite inactivos, publico auto-asigna).
+- **Cancelar**: `booking._cancel_booking_core(booking_row, source=, reason=)` — idempotente, 409 si completed/no_show, proveedor + politica de cancelacion + CRM + aviso. Usado por portal, admin, chat (`_cancel_booking_by_code`), voz, WhatsApp y manage-link.
+- **Reprogramar/editar**: `booking._update_booking_details` (+ `_booking_update_payload_from_reschedule`). Todos los canales.
+- **Confirmacion del cliente**: `booking._mark_booking_confirmed_by_customer(..., channel=, via=)` — boton WhatsApp, email 1-clic y llamada saliente.
+
+Canal nuevo = llamar a estos cores; no reimplementar el pipeline.
+
 El sistema soporta agenda interna por cliente. Antes de tocar booking, revisar:
 
 - Validacion de disponibilidad.

@@ -1447,7 +1447,9 @@ def _record_booking_audit(
         connection.commit()
 
 
-def _mark_booking_confirmed_by_customer(booking_id: str, cliente_id: str, *, channel: str = "voice") -> bool:
+def _mark_booking_confirmed_by_customer(
+    booking_id: str, cliente_id: str, *, channel: str = "voice", via: str = ""
+) -> bool:
     """El cliente confirma su asistencia (boton WhatsApp, llamada saliente, etc.).
     Registra auditoria y pasa pending_review -> confirmed. Idempotente."""
     row = _get_booking_row_by_id(booking_id)
@@ -1457,9 +1459,10 @@ def _mark_booking_confirmed_by_customer(booking_id: str, cliente_id: str, *, cha
         _update_booking_record(booking_id, status="confirmed", confirmed_at=timeutils._utc_now_iso())
     elif not (row["confirmed_at"] or "").strip():
         _update_booking_record(booking_id, confirmed_at=timeutils._utc_now_iso())
-    _record_booking_audit(
-        booking_id, cliente_id, "attendance_confirmed_by_customer", {"channel": channel}
-    )
+    payload: Dict[str, Any] = {"channel": channel}
+    if via:
+        payload["via"] = via
+    _record_booking_audit(booking_id, cliente_id, "attendance_confirmed_by_customer", payload)
     return True
 
 
@@ -2374,6 +2377,169 @@ async def _update_booking_details(
         manage_url=_booking_row_manage_url(refreshed, request),
         provider_booking_url=refreshed["provider_booking_url"] or "",
     )
+
+
+async def _create_booking_core(
+    cliente_id: str,
+    *,
+    employee_row: sqlite3.Row,
+    nombre: str,
+    email: str,
+    telefono: str,
+    servicio: str,
+    booking_date: str,
+    booking_time: str,
+    notas: str = "",
+    source: str,
+    webhook_source: str = "",
+    send_confirmation: bool = True,
+    request: Optional[Request] = None,
+    audit_extra: Optional[Dict[str, Any]] = None,
+) -> sqlite3.Row:
+    """Crea una cita: fuente UNICA para todos los canales (widget, WhatsApp, voz,
+    portal manual). Resuelve servicio/duracion/precio, valida hueco, llama al
+    proveedor + webhook, guarda via _store_booking (que sella centro, codigo y
+    politica de pago), audita y envia la confirmacion.
+
+    El canal resuelve ANTES el empleado (cada canal tiene su politica de
+    resolucion) y traduce DESPUES los HTTPException a su medio (texto WhatsApp,
+    respuesta de tool de voz, JSON del portal...). 409 = hueco ocupado.
+
+    Devuelve la fila guardada (el estado final puede ser pending_payment si el
+    servicio exige pago por adelantado)."""
+    config = clients._get_client_config(cliente_id)
+    service_row = agenda._find_service_by_name(cliente_id, servicio)
+    service_duration = agenda._service_duration_minutes(cliente_id, servicio, employee_row)
+    service_id = service_row["slug"] if service_row else ""
+    service_price = agenda._service_price_cents_resolved(
+        cliente_id, service_row, employee_row["location_id"] or ""
+    )
+
+    if not await agenda._booking_slot_available(
+        cliente_id, booking_date, booking_time,
+        employee_id=employee_row["id"], duration_minutes=service_duration,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ese horario ya no esta disponible. Elige otro tramo.",
+        )
+
+    booking_id = f"bk_{secrets.token_urlsafe(10)}"
+    manage_token = _generate_manage_token()
+    created_at = timeutils._utc_now_iso()
+    provider = _get_booking_provider(config)
+    start_local, end_local = agenda._booking_start_end(
+        cliente_id, booking_date, booking_time,
+        employee_id=employee_row["id"], duration_minutes=service_duration,
+    )
+    booking_timezone = employee_row["timezone"] or config["booking"]["timezone"]
+
+    payload_source = webhook_source or source
+    provider_payload = {
+        "booking_id": booking_id,
+        "cliente_id": cliente_id,
+        "empresa": config["nombre"],
+        "employee_id": employee_row["id"],
+        "employee_name": employee_row["name"],
+        "nombre": nombre,
+        "email": email,
+        "telefono": telefono,
+        "servicio": servicio,
+        "fecha": booking_date,
+        "hora": booking_time,
+        "notas": notas,
+        "source": payload_source,
+        "created_at": created_at,
+    }
+    try:
+        provider_result = await _create_provider_booking(cliente_id, provider_payload)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except httpx.HTTPError as exc:
+        settings.logger.error("Error creando cita externa para %s: %s", cliente_id, exc)
+        raise HTTPException(
+            status_code=502,
+            detail="No se ha podido crear la cita en el proveedor de calendario.",
+        ) from exc
+
+    webhook_payload = dict(provider_payload)
+    webhook_payload.update({
+        "provider_name": provider_result.provider_name,
+        "provider_booking_id": provider_result.provider_booking_id,
+        "provider_booking_url": provider_result.provider_booking_url,
+    })
+    _, webhook_status = await _send_booking_to_webhook(cliente_id, webhook_payload)
+    provider_status = webhook_status if provider == "internal" else provider_result.status
+
+    record = {
+        "id": booking_id,
+        "cliente_id": cliente_id,
+        "employee_id": employee_row["id"],
+        "employee_name": employee_row["name"],
+        "nombre": nombre,
+        "email": email,
+        "telefono": telefono,
+        "servicio": servicio,
+        "booking_date": booking_date,
+        "booking_time": booking_time,
+        "notas": notas,
+        "status": "confirmed",
+        "provider_name": provider_result.provider_name,
+        "provider_status": provider_status,
+        "provider_booking_id": provider_result.provider_booking_id,
+        "provider_booking_url": provider_result.provider_booking_url,
+        "manage_token": manage_token,
+        "timezone": booking_timezone,
+        "start_at": timeutils._to_utc_iso(start_local),
+        "end_at": timeutils._to_utc_iso(end_local),
+        "confirmed_at": created_at,
+        "cancelled_at": "",
+        **_booking_blank_tracking_fields(),
+        "service_id": service_id,
+        "service_price_cents": service_price,
+        "source": source,
+        "created_at": created_at,
+    }
+    try:
+        _store_booking(record)
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ese horario acaba de ser reservado por otra persona. Elige otro tramo.",
+        ) from exc
+
+    _record_booking_audit(
+        booking_id,
+        cliente_id,
+        "booking_created",
+        {
+            "status": "confirmed",
+            "source": source,
+            "provider_name": provider_result.provider_name,
+            "provider_status": provider_status,
+            "employee_id": employee_row["id"],
+            "employee_name": employee_row["name"],
+            **(audit_extra or {}),
+        },
+    )
+
+    stored = _get_booking_row_by_id(booking_id)
+    if stored is None:  # defensa: _store_booking acaba de insertar
+        raise HTTPException(status_code=500, detail="No se pudo guardar la cita.")
+    if send_confirmation and _booking_has_reminder_contact(email, telefono):
+        try:
+            await _send_booking_reminder_by_kind(
+                stored, "confirmed", request, sent_column="confirmation_email_sent_at",
+            )
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.error("No se ha podido enviar el aviso de booking %s: %s", booking_id, exc)
+            _mark_booking_email_result(booking_id, status="failed", error=str(exc))
+            _record_booking_audit(
+                booking_id, cliente_id, "booking_email_failed",
+                {"kind": "confirmed", "error": str(exc)},
+            )
+        stored = _get_booking_row_by_id(booking_id) or stored
+    return stored
 
 
 async def _cancel_booking_core(

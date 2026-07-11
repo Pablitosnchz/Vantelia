@@ -2214,112 +2214,40 @@ async def _voice_perform_booking(
             return response
         return {"ok": False, "error": str(exc.detail)}
 
-    service_duration = agenda._service_duration_minutes(cliente_id, servicio, employee_row)
-    service_id = service_row["slug"] if service_row else ""
-    service_price = agenda._service_price_cents_resolved(
-        cliente_id, service_row, employee_row["location_id"] or ""
-    )
-
-    if not await agenda._booking_slot_available(
-        cliente_id,
-        booking_date,
-        booking_time,
-        employee_id=employee_row["id"],
-        duration_minutes=service_duration,
-    ):
-        # Devolvemos alternativas reales del mismo dia para que el asistente las ofrezca
-        # tal cual (sin inventarse horas) en vez de un "ofrece otra hora" a ciegas.
-        response = await _voice_booking_unavailable_response(
-            cliente_id, booking_date, servicio=servicio, location_id=location_id
-        )
-        response.update(date_meta)
-        return response
-
-    booking_id = f"bk_{secrets.token_urlsafe(10)}"
-    manage_token = booking._generate_manage_token()
-    created_at = timeutils._utc_now_iso()
-    booking_timezone = employee_row["timezone"] or config["booking"]["timezone"]
     try:
-        start_local, end_local = agenda._booking_start_end(
+        stored_booking = await booking._create_booking_core(
             cliente_id,
-            booking_date,
-            booking_time,
-            employee_id=employee_row["id"],
-            duration_minutes=service_duration,
+            employee_row=employee_row,
+            nombre=nombre,
+            email=email,
+            telefono=telefono,
+            servicio=servicio,
+            booking_date=booking_date,
+            booking_time=booking_time,
+            notas="Cita creada por el asistente de voz.",
+            source="voice",
+            send_confirmation=False,  # la voz confirma con su propio envio en segundo plano
         )
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.error("[voice] booking start/end fallo (%s): %s", cliente_id, exc)
-        return {"ok": False, "error": "No se pudo calcular el horario de la cita."}
-
-    booking_payload = {
-        "booking_id": booking_id,
-        "cliente_id": cliente_id,
-        "empresa": config["nombre"],
-        "employee_id": employee_row["id"],
-        "employee_name": employee_row["name"],
-        "nombre": nombre,
-        "email": email,
-        "telefono": telefono,
-        "servicio": servicio,
-        "fecha": booking_date,
-        "hora": booking_time,
-        "notas": "Cita creada por el asistente de voz.",
-        "source": "voice",
-        "created_at": created_at,
-    }
-    try:
-        provider_result = await booking._create_provider_booking(cliente_id, booking_payload)
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.error("[voice] provider booking fallo (%s): %s", cliente_id, exc)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_409_CONFLICT:
+            # Devolvemos alternativas reales del mismo dia para que el asistente las ofrezca
+            # tal cual (sin inventarse horas) en vez de un "ofrece otra hora" a ciegas.
+            response = await _voice_booking_unavailable_response(
+                cliente_id, booking_date, servicio=servicio, location_id=location_id
+            )
+            response.update(date_meta)
+            return response
+        settings.logger.error("[voice] crear cita fallo (%s): %s", cliente_id, exc.detail)
         return {"ok": False, "error": "No se pudo registrar la cita."}
-
-    record = {
-        "id": booking_id,
-        "cliente_id": cliente_id,
-        "employee_id": employee_row["id"],
-        "employee_name": employee_row["name"],
-        "nombre": nombre,
-        "email": email,
-        "telefono": telefono,
-        "servicio": servicio,
-        "booking_date": booking_date,
-        "booking_time": booking_time,
-        "notas": "Cita creada por el asistente de voz.",
-        "status": "confirmed",
-        "provider_name": provider_result.provider_name,
-        "provider_status": provider_result.status,
-        "provider_booking_id": provider_result.provider_booking_id,
-        "provider_booking_url": provider_result.provider_booking_url,
-        "manage_token": manage_token,
-        "timezone": booking_timezone,
-        "start_at": timeutils._to_utc_iso(start_local),
-        "end_at": timeutils._to_utc_iso(end_local),
-        "confirmed_at": created_at,
-        "cancelled_at": "",
-        **booking._booking_blank_tracking_fields(),
-        "service_id": service_id,
-        "service_price_cents": service_price,
-        "source": "voice",
-        "created_at": created_at,
-    }
-    try:
-        booking._store_booking(record)
-    except sqlite3.IntegrityError:
-        return {"ok": False, "error": "Ese horario acaba de ocuparse. Ofrece otra hora."}
     except Exception as exc:  # noqa: BLE001
-        settings.logger.error("[voice] store booking fallo (%s): %s", cliente_id, exc)
+        settings.logger.error("[voice] crear cita fallo (%s): %s", cliente_id, exc)
         return {"ok": False, "error": "No se pudo guardar la cita."}
 
-    booking._record_booking_audit(
-        booking_id,
-        cliente_id,
-        "booking_created",
-        {"status": "confirmed", "source": "voice", "employee_id": employee_row["id"]},
-    )
-    stored_booking = booking._get_booking_row_by_id(booking_id)
+    booking_id = stored_booking["id"]
+    booking_timezone = stored_booking["timezone"] or config["booking"]["timezone"]
     payment_row = booking._booking_payment_row(booking_id)
-    booking_status = stored_booking["status"] if stored_booking else record.get("status", "confirmed")
-    booking_code = record.get("booking_code", "")
+    booking_status = stored_booking["status"]
+    booking_code = stored_booking["booking_code"] or ""
     service_label = servicio or "cita"
     fecha_voz = _voice_say_date(booking_date, booking_timezone)
     hora_voz = _voice_say_time(booking_time)
@@ -2387,7 +2315,7 @@ async def _voice_perform_booking(
         "hora": booking_time,
         "servicio": service_label,
         "empleado": employee_row["name"],
-        "manage_url": booking._build_booking_manage_url(manage_token),
+        "manage_url": booking._build_booking_manage_url(stored_booking["manage_token"]),
         "estado": booking_status,
         "mensaje_voz": voice_message,
         "confirmacion_canal": confirmacion_canal,

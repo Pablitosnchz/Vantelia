@@ -856,20 +856,7 @@ async def admin_cancel_booking(booking_id: str, request: Request) -> BookingActi
             provider_booking_url=booking_row["provider_booking_url"] or "",
         )
 
-    await booking._cancel_provider_booking(booking_row)
-    cancelled_at = timeutils._utc_now_iso()
-    booking._update_booking_record(
-        booking_id,
-        status="cancelled",
-        cancelled_at=cancelled_at,
-        provider_status="cancelled",
-    )
-    booking._record_booking_audit(booking_id, booking_row["cliente_id"], "booking_cancelled", {"source": "admin"})
-    refreshed = booking._load_booking_or_404(booking_id)
-    try:
-        await booking._send_booking_reminder_by_kind(refreshed, "cancelled", request)
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.error("No se ha podido enviar el aviso de cancelacion %s: %s", booking_id, exc)
+    refreshed = await booking._cancel_booking_core(booking_row, source="admin", request=request)
     return BookingActionResponse(
         ok=True,
         booking_id=booking_id,

@@ -589,15 +589,7 @@ async def _wa_create_booking(
                 servicio=flow.servicio,
                 location_id=wa_location_id,
             )
-        booking_cfg = agenda._employee_schedule_from_row(employee_row)
-        tz_name = booking_cfg.get("timezone") or settings.DEFAULT_TIMEZONE
-        service_row = agenda._find_service_by_name(cliente_id, flow.servicio)
         service_duration = agenda._service_duration_minutes(cliente_id, flow.servicio, employee_row)
-        service_id = service_row["slug"] if service_row else ""
-        service_price = agenda._service_price_cents_resolved(
-            cliente_id, service_row, employee_row["location_id"] or ""
-        )
-
         if not await agenda._booking_slot_available(
             cliente_id, flow.fecha, flow.hora, employee_id=employee_row["id"], duration_minutes=service_duration
         ):
@@ -608,111 +600,33 @@ async def _wa_create_booking(
             return False
 
         try:
-            tz = ZoneInfo(tz_name)
-        except Exception:
-            tz = timezone.utc
-        start_local = datetime.fromisoformat(f"{flow.fecha}T{flow.hora}:00").replace(tzinfo=tz)
-        end_local = start_local + timedelta(minutes=service_duration)
-
-        booking_id = secrets.token_urlsafe(16)
-        manage_token = secrets.token_urlsafe(24)
-        created_at = timeutils._utc_now_iso()
-
-        webhook_payload = {
-            "booking_id": booking_id,
-            "cliente_id": cliente_id,
-            "empresa": config["nombre"],
-            "employee_id": employee_row["id"],
-            "employee_name": employee_row["name"],
-            "nombre": flow.nombre,
-            "email": flow.email,
-            "telefono": flow.from_number,
-            "servicio": flow.servicio,
-            "fecha": flow.fecha,
-            "hora": flow.hora,
-            "notas": flow.notas or "",
-            "source": "whatsapp",
-            "created_at": created_at,
-        }
-
-        try:
-            provider_result = await booking._create_provider_booking(cliente_id, webhook_payload)
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.error("Error provider booking WhatsApp %s: %s", cliente_id, exc)
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
-                text="No he podido confirmar la cita en el calendario. Intentalo en unos minutos.",
+            stored_booking = await booking._create_booking_core(
+                cliente_id,
+                employee_row=employee_row,
+                nombre=flow.nombre,
+                email=flow.email,
+                telefono=flow.from_number,
+                servicio=flow.servicio,
+                booking_date=flow.fecha,
+                booking_time=flow.hora,
+                notas=flow.notas or "",
+                source="whatsapp",
+                request=request,
+                audit_extra={"channel": "whatsapp"},
             )
-            return False
-
-        webhook_payload.update({
-            "provider_name": provider_result.provider_name,
-            "provider_booking_id": provider_result.provider_booking_id,
-            "provider_booking_url": provider_result.provider_booking_url,
-        })
-
-        delivered, webhook_status = await booking._send_booking_to_webhook(cliente_id, webhook_payload)
-        booking_status = "confirmed"
-        provider_status = provider_result.status if provider_result.provider_name != "internal" else webhook_status
-
-        record = {
-            "id": booking_id,
-            "cliente_id": cliente_id,
-            "employee_id": employee_row["id"],
-            "employee_name": employee_row["name"],
-            "nombre": flow.nombre,
-            "email": flow.email,
-            "telefono": flow.from_number,
-            "servicio": flow.servicio,
-            "booking_date": flow.fecha,
-            "booking_time": flow.hora,
-            "notas": flow.notas or "",
-            "status": booking_status,
-            "provider_name": provider_result.provider_name,
-            "provider_status": provider_status,
-            "provider_booking_id": provider_result.provider_booking_id,
-            "provider_booking_url": provider_result.provider_booking_url,
-            "manage_token": manage_token,
-            "timezone": tz_name,
-            "start_at": timeutils._to_utc_iso(start_local),
-            "end_at": timeutils._to_utc_iso(end_local),
-            "confirmed_at": created_at,
-            "cancelled_at": "",
-            **booking._booking_blank_tracking_fields(),
-            "service_id": service_id,
-            "service_price_cents": service_price,
-            "source": "whatsapp",
-            "created_at": created_at,
-        }
-        try:
-            booking._store_booking(record)
-        except sqlite3.IntegrityError:
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
-                text="⚠️ Ese horario acaba de ser reservado por otra persona. Escribe *agendar* para elegir otro tramo.",
-            )
-            return False
-
-        booking._record_booking_audit(
-            booking_id, cliente_id, "booking_created",
-            {
-                "status": booking_status,
-                "provider_name": provider_result.provider_name,
-                "provider_status": provider_status,
-                "employee_id": employee_row["id"],
-                "employee_name": employee_row["name"],
-                "channel": "whatsapp",
-            },
-        )
-
-        booking_row = booking._get_booking_row_by_id(booking_id)
-        if booking_row:
-            try:
-                await booking._send_booking_reminder_by_kind(
-                    booking_row, "confirmed", request, sent_column="confirmation_email_sent_at",
+        except HTTPException as exc:
+            if exc.status_code == 409:
+                await messaging._send_whatsapp_text(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+                    text="⚠️ Ese horario acaba de ser reservado por otra persona. Escribe *agendar* para elegir otro tramo.",
                 )
-            except Exception as exc:  # noqa: BLE001
-                settings.logger.error("Error enviando aviso confirmacion WA %s: %s", booking_id, exc)
+            else:
+                await messaging._send_whatsapp_text(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+                    text="No he podido confirmar la cita en el calendario. Intentalo en unos minutos.",
+                )
+            return False
+        booking_id = stored_booking["id"]
 
     except HTTPException as exc:
         await messaging._send_whatsapp_text(
@@ -729,7 +643,6 @@ async def _wa_create_booking(
         return False
 
     fecha_humana = textnorm._format_date_es(textnorm._parse_date(flow.fecha).date())
-    stored_booking = booking._get_booking_row_by_id(booking_id)
     is_pending_payment = bool(stored_booking and stored_booking["status"] == "pending_payment")
     title = "🟡 *Reserva pendiente de pago*" if is_pending_payment else "✅ *Cita confirmada*"
     confirmacion = (
@@ -852,9 +765,8 @@ async def _wa_handle_reminder_reply(
         )
         return
     if confirming:
-        booking._record_booking_audit(
-            booking_row["id"], cliente_id, "attendance_confirmed_by_customer",
-            {"channel": "whatsapp", "via": "reminder_button"},
+        booking._mark_booking_confirmed_by_customer(
+            booking_row["id"], cliente_id, channel="whatsapp", via="reminder_button",
         )
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,

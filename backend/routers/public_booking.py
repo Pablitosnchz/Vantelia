@@ -394,183 +394,33 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
         location_id=location_filter,
     )
 
-    service_row = agenda._find_service_by_name(data.cliente_id, servicio)
-    service_duration = agenda._service_duration_minutes(data.cliente_id, servicio, employee_row)
-    service_id = service_row["slug"] if service_row else ""
-    service_price = agenda._service_price_cents_resolved(
-        data.cliente_id, service_row, employee_row["location_id"] or ""
-    )
-
-    if not await agenda._booking_slot_available(
-        data.cliente_id, booking_date, booking_time,
-        employee_id=employee_row["id"], duration_minutes=service_duration,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Ese horario ya no esta disponible. Elige otro tramo.",
-        )
-
-    booking_id = f"bk_{secrets.token_urlsafe(10)}"
-    manage_token = booking._generate_manage_token()
-    created_at = timeutils._utc_now_iso()
-    provider = booking._get_booking_provider(config)
-    start_local, end_local = agenda._booking_start_end(
+    stored_booking = await booking._create_booking_core(
         data.cliente_id,
-        booking_date,
-        booking_time,
-        employee_id=employee_row["id"],
-        duration_minutes=service_duration,
+        employee_row=employee_row,
+        nombre=nombre,
+        email=email,
+        telefono=telefono,
+        servicio=servicio,
+        booking_date=booking_date,
+        booking_time=booking_time,
+        notas=notas,
+        source="widget",
+        webhook_source="vantelia_widget",
+        request=request,
     )
-    booking_timezone = employee_row["timezone"] or config["booking"]["timezone"]
-
-    booking_payload = {
-        "booking_id": booking_id,
-        "cliente_id": data.cliente_id,
-        "empresa": config["nombre"],
-        "employee_id": employee_row["id"],
-        "employee_name": employee_row["name"],
-        "nombre": nombre,
-        "email": email,
-        "telefono": telefono,
-        "servicio": servicio,
-        "fecha": booking_date,
-        "hora": booking_time,
-        "notas": notas,
-        "source": "vantelia_widget",
-        "created_at": created_at,
-    }
-
-    webhook_payload = {
-        "booking_id": booking_id,
-        "cliente_id": data.cliente_id,
-        "empresa": config["nombre"],
-        "employee_id": employee_row["id"],
-        "employee_name": employee_row["name"],
-        "nombre": nombre,
-        "email": email,
-        "telefono": telefono,
-        "servicio": servicio,
-        "fecha": booking_date,
-        "hora": booking_time,
-        "notas": notas,
-        "source": "vantelia_widget",
-        "created_at": created_at,
-    }
-
-    try:
-        provider_result = await booking._create_provider_booking(data.cliente_id, booking_payload)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except httpx.HTTPError as exc:
-        settings.logger.error("Error creando cita externa para %s: %s", data.cliente_id, exc)
-        raise HTTPException(
-            status_code=502,
-            detail="No se ha podido crear la cita en el proveedor de calendario.",
-        ) from exc
-
-    webhook_payload.update(
-        {
-            "provider_name": provider_result.provider_name,
-            "provider_booking_id": provider_result.provider_booking_id,
-            "provider_booking_url": provider_result.provider_booking_url,
-        }
-    )
-
-    delivered, webhook_status = await booking._send_booking_to_webhook(data.cliente_id, webhook_payload)
-    booking_status = "confirmed"
-    provider_status = provider_result.status
-
-    if provider == "internal":
-        booking_status = "confirmed"
-        provider_status = webhook_status
-
-    record = {
-        "id": booking_id,
-        "cliente_id": data.cliente_id,
-        "employee_id": employee_row["id"],
-        "employee_name": employee_row["name"],
-        "nombre": nombre,
-        "email": email,
-        "telefono": telefono,
-        "servicio": servicio,
-        "booking_date": booking_date,
-        "booking_time": booking_time,
-        "notas": notas,
-        "status": booking_status,
-        "provider_name": provider_result.provider_name,
-        "provider_status": provider_status,
-        "provider_booking_id": provider_result.provider_booking_id,
-        "provider_booking_url": provider_result.provider_booking_url,
-        "manage_token": manage_token,
-        "timezone": booking_timezone,
-        "start_at": timeutils._to_utc_iso(start_local),
-        "end_at": timeutils._to_utc_iso(end_local),
-        "confirmed_at": created_at if booking_status == "confirmed" else "",
-        "cancelled_at": "",
-        **booking._booking_blank_tracking_fields(),
-        "service_id": service_id,
-        "service_price_cents": service_price,
-        "source": "widget",
-        "created_at": created_at,
-    }
-    try:
-        booking._store_booking(record)
-    except sqlite3.IntegrityError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Ese horario acaba de ser reservado por otra persona. Elige otro tramo.",
-        ) from exc
-    booking._record_booking_audit(
-        booking_id,
-        data.cliente_id,
-        "booking_created",
-        {
-            "status": booking_status,
-            "provider_name": provider_result.provider_name,
-            "provider_status": provider_status,
-            "employee_id": employee_row["id"],
-            "employee_name": employee_row["name"],
-        },
-    )
-
-    booking_row = booking._get_booking_row_by_id(booking_id)
-    if booking_row:
-        email_status_key = "confirmed"
-        try:
-            await booking._send_booking_reminder_by_kind(
-                booking_row,
-                email_status_key,
-                request,
-                sent_column="confirmation_email_sent_at",
-            )
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.error("No se ha podido enviar el aviso de booking %s: %s", booking_id, exc)
-            booking._mark_booking_email_result(
-                booking_id,
-                status="failed",
-                error=str(exc),
-            )
-            booking._record_booking_audit(
-                booking_id,
-                data.cliente_id,
-                "booking_email_failed",
-                {"kind": email_status_key, "error": str(exc)},
-            )
-
-    stored_booking = booking._get_booking_row_by_id(booking_id)
-    payment_row = booking._booking_payment_row(booking_id)
+    payment_row = booking._booking_payment_row(stored_booking["id"])
     return RespuestaAgendado(
         ok=True,
-        booking_id=booking_id,
-        estado=stored_booking["status"] if stored_booking else booking_status,
+        booking_id=stored_booking["id"],
+        estado=stored_booking["status"],
         mensaje=config["booking"]["success_message"],
         employee_id=employee_row["id"],
         employee_name=employee_row["name"],
-        provider_name=provider_result.provider_name,
-        provider_booking_id=provider_result.provider_booking_id,
-        provider_booking_url=provider_result.provider_booking_url,
-        manage_url=booking._build_booking_manage_url(manage_token, request),
-        payment_status=stored_booking["payment_status"] if stored_booking else "not_required",
+        provider_name=stored_booking["provider_name"] or "",
+        provider_booking_id=stored_booking["provider_booking_id"] or "",
+        provider_booking_url=stored_booking["provider_booking_url"] or "",
+        manage_url=booking._build_booking_manage_url(stored_booking["manage_token"], request),
+        payment_status=stored_booking["payment_status"],
         payment_url=payment_row["checkout_url"] if payment_row else "",
     )
 
