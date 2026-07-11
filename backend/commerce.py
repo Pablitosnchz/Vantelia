@@ -4311,7 +4311,7 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
             return;
           }
           if (d.kind === "shop_package") {
-            showBanner("ok", "✓ Tu bono esta activo. Te hemos enviado el enlace por email para ver sesiones restantes. <a href=\"" + esc(d.wallet_url) + "\" target=\"_blank\" rel=\"noopener\">Ver mi bono</a>");
+            showBanner("ok", '✓ Tu bono esta activo. Te hemos enviado el enlace por email para ver sesiones restantes. <a href="' + esc(d.wallet_url) + '" target="_blank" rel="noopener">Ver mi bono</a>');
           } else if (d.kind === "shop_products") {
             showBanner("ok", "✓ Pedido confirmado. Te hemos enviado la confirmacion por email con las instrucciones de recogida.");
           }
