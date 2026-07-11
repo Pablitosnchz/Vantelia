@@ -4642,7 +4642,9 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
   #bookingDone .summary b { color: var(--ink); }
   .done-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 
-  /* Canje de bono / tarjeta regalo tras reservar */
+  /* Canje de bono / tarjeta regalo */
+  .pre-redeem { display: grid; gap: 9px; }
+  .pre-redeem #preGiftMsg:empty { display: none; }
   #redeemBlock { display: none; width: 100%; max-width: 440px; text-align: left; }
   #redeemBlock.on { display: grid; gap: 10px; animation: fadeSlide .35s ease; }
   .redeem-pkg { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 15px; border: 1.5px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 13px; background: color-mix(in srgb, var(--accent) 6%, #fff); }
@@ -4781,6 +4783,14 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
               <label for="notas">Notas <span style="color:var(--muted); font-weight:600;">(opcional)</span></label>
               <textarea id="notas" maxlength="500" placeholder="Preferencias, dudas o detalles utiles"></textarea>
             </div>
+            <div class="pre-redeem" id="preRedeemBlock">
+              <button type="button" class="redeem-gift-toggle" id="redeemGiftToggle">🎁 &iquest;Tienes una tarjeta regalo? Canjeala ahora</button>
+              <div class="redeem-gift-row" id="redeemGiftRow">
+                <input id="redeemGiftCode" maxlength="14" placeholder="GC-XXXX-XXXX" autocomplete="off" spellcheck="false">
+                <button type="button" id="redeemGiftApply">Usar tarjeta</button>
+              </div>
+              <div id="preGiftMsg"></div>
+            </div>
           </section>
           <div class="wizard-nav">
             <button class="secondary" id="prevStep" type="button">&larr; Atras</button>
@@ -4796,11 +4806,6 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
         <div class="summary" id="doneSummary"></div>
         <div id="redeemBlock">
           <div id="redeemPkgs"></div>
-          <button type="button" class="redeem-gift-toggle" id="redeemGiftToggle">🎁 &iquest;Tienes una tarjeta regalo? Canjeala ahora</button>
-          <div class="redeem-gift-row" id="redeemGiftRow">
-            <input id="redeemGiftCode" maxlength="14" placeholder="GC-XXXX-XXXX" autocomplete="off" spellcheck="false">
-            <button type="button" id="redeemGiftApply">Aplicar</button>
-          </div>
           <div id="redeemMsg"></div>
         </div>
         <div class="done-actions">
@@ -4835,7 +4840,7 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
 const CFG = __CFG__;
 const $ = (id) => document.getElementById(id);
 const STEPS = ["service", "staff", "time", "client"];
-const st = { step: 0, services: [], service: null, locations: [], locId: "", employees: [], empId: "", date: "", hour: "", staffLoaded: false };
+const st = { step: 0, services: [], service: null, locations: [], locId: "", employees: [], empId: "", date: "", hour: "", staffLoaded: false, pendingGiftCode: "" };
 
 function todayIso() {
   const d = new Date();
@@ -5161,9 +5166,17 @@ async function submitBooking(ev) {
   const name = $("nombre").value.trim();
   const email = $("email").value.trim();
   const phone = $("telefono").value.trim();
+  const giftCode = $("redeemGiftCode").value.trim();
   if (!name) { status("err", "Indica tu nombre."); return; }
   if (!email && !phone) { status("err", "Indica al menos un email o telefono para recibir la confirmacion."); return; }
   if (!$("fecha").value || !st.hour) { status("err", "Vuelve al paso de fecha y elige una hora."); showStep(2); return; }
+  if (giftCode && giftCode.replace(/[^A-Za-z0-9]/g, "").length < 6) {
+    giftPreNote("err", "Escribe el codigo completo de la tarjeta.");
+    $("redeemGiftRow").classList.add("on");
+    $("redeemGiftCode").focus();
+    return;
+  }
+  st.pendingGiftCode = giftCode;
   btn.disabled = true;
   btn.textContent = "Confirmando…";
   try {
@@ -5209,7 +5222,7 @@ function showDone(data) {
   if (data.manage_url) { manage.href = data.manage_url; manage.style.display = "inline-flex"; } else manage.style.display = "none";
   $("redeemBlock").classList.remove("on");
   $("redeemMsg").innerHTML = "";
-  loadRedeemOptions(data.manage_url);
+  loadRedeemOptions(data.manage_url, st.pendingGiftCode);
   document.querySelector(".wiz-track").style.display = "none";
   document.querySelector(".wizard-steps").style.display = "none";
   $("bookingForm").querySelector(".form").style.display = "none";
@@ -5223,18 +5236,27 @@ function showDone(data) {
 const redeem = { token: "", applied: false };
 function eurFmt(c) { return ((c || 0) / 100).toLocaleString("es-ES", { minimumFractionDigits: (c || 0) % 100 ? 2 : 0 }) + " €"; }
 function redeemUrl(suffix) { return "/central/" + encodeURIComponent(CFG.clienteId) + suffix; }
+function giftCodeValue() { return $("redeemGiftCode").value.trim().toUpperCase(); }
+function giftPreNote(kind, msg) {
+  $("preGiftMsg").innerHTML = '<div class="redeem-note ' + kind + '">' + esc(msg) + "</div>";
+}
 function redeemNote(kind, html) { $("redeemMsg").innerHTML = '<div class="redeem-note ' + kind + '">' + html + "</div>"; }
 function redeemSuccess(html) {
   redeem.applied = true;
   $("redeemPkgs").innerHTML = "";
-  $("redeemGiftToggle").style.display = "none";
-  $("redeemGiftRow").classList.remove("on");
   $("donePay").style.display = "none";
   redeemNote("ok", html);
 }
-async function loadRedeemOptions(manageUrl) {
+async function loadRedeemOptions(manageUrl, pendingGiftCode) {
+  const code = String(pendingGiftCode || "").trim();
   const m = String(manageUrl || "").match(/\\/booking\\/manage\\/([^\\/?#]+)/);
-  if (!m) return;
+  if (!m) {
+    if (code) {
+      $("redeemBlock").classList.add("on");
+      redeemNote("err", "Reserva confirmada, pero no hemos podido aplicar la tarjeta automaticamente.");
+    }
+    return;
+  }
   redeem.token = m[1];
   redeem.applied = false;
   let opts = null;
@@ -5243,8 +5265,20 @@ async function loadRedeemOptions(manageUrl) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ manage_token: redeem.token })
     });
-  } catch (e) { return; }
-  if (!opts || !opts.can_redeem) return;
+  } catch (e) {
+    if (code) {
+      $("redeemBlock").classList.add("on");
+      redeemNote("err", "Reserva confirmada, pero no hemos podido comprobar la tarjeta.");
+    }
+    return;
+  }
+  if (!opts || !opts.can_redeem) {
+    if (code) {
+      $("redeemBlock").classList.add("on");
+      redeemNote("err", "La cita no tiene importe pendiente para canjear la tarjeta.");
+    }
+    return;
+  }
   const pkgs = opts.packages || [];
   $("redeemPkgs").innerHTML = pkgs.map(function (p) {
     const plural = p.sessions_left === 1 ? "" : "s";
@@ -5256,14 +5290,22 @@ async function loadRedeemOptions(manageUrl) {
   $("redeemPkgs").querySelectorAll("[data-purchase]").forEach(function (btn) {
     btn.addEventListener("click", function () { applyRedeem({ kind: "package", purchase_id: btn.dataset.purchase }, btn); });
   });
-  $("redeemGiftToggle").style.display = "";
-  $("redeemGiftRow").classList.remove("on");
-  $("redeemGiftCode").value = "";
-  $("redeemBlock").classList.add("on");
+  if (code) {
+    $("redeemBlock").classList.add("on");
+    redeemNote("ok", "Aplicando tu tarjeta regalo...");
+    await applyRedeem({ kind: "gift", code: code }, null);
+    st.pendingGiftCode = "";
+    return;
+  }
+  if (pkgs.length) $("redeemBlock").classList.add("on");
 }
 async function applyRedeem(payload, btn) {
   if (redeem.applied) return;
-  if (btn) btn.disabled = true;
+  const previousText = btn ? btn.textContent : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Aplicando...";
+  }
   try {
     const body = Object.assign({ manage_token: redeem.token }, payload);
     const res = await api(redeemUrl("/redeem"), {
@@ -5281,32 +5323,49 @@ async function applyRedeem(payload, btn) {
     }
   } catch (e) {
     redeemNote("err", esc(e.message));
-    if (btn) btn.disabled = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = previousText;
+    }
   }
 }
 $("redeemGiftToggle").addEventListener("click", function () {
   $("redeemGiftRow").classList.toggle("on");
   if ($("redeemGiftRow").classList.contains("on")) $("redeemGiftCode").focus();
+  else $("preGiftMsg").innerHTML = "";
 });
-$("redeemGiftCode").addEventListener("input", function () { this.value = this.value.toUpperCase(); });
+$("redeemGiftCode").addEventListener("input", function () {
+  this.value = this.value.toUpperCase();
+  st.pendingGiftCode = this.value.trim();
+  $("preGiftMsg").innerHTML = "";
+});
 $("redeemGiftCode").addEventListener("keydown", function (ev) {
   if (ev.key === "Enter") { ev.preventDefault(); $("redeemGiftApply").click(); }
 });
 $("redeemGiftApply").addEventListener("click", function () {
-  const code = $("redeemGiftCode").value.trim();
-  if (code.replace(/[^A-Za-z0-9]/g, "").length < 6) { redeemNote("err", "Escribe el codigo completo de la tarjeta."); return; }
-  applyRedeem({ kind: "gift", code: code }, $("redeemGiftApply"));
+  const code = giftCodeValue();
+  if (code.replace(/[^A-Za-z0-9]/g, "").length < 6) { giftPreNote("err", "Escribe el codigo completo de la tarjeta."); return; }
+  $("redeemGiftCode").value = code;
+  st.pendingGiftCode = code;
+  giftPreNote("ok", "Perfecto. La aplicaremos al confirmar la reserva.");
 });
 
 $("doneAgain").addEventListener("click", function () {
   $("bookingDone").classList.remove("on");
   $("redeemBlock").classList.remove("on");
   $("redeemMsg").innerHTML = "";
+  $("redeemPkgs").innerHTML = "";
+  $("preGiftMsg").innerHTML = "";
+  $("redeemGiftRow").classList.remove("on");
+  $("redeemGiftApply").disabled = false;
+  $("redeemGiftApply").textContent = "Usar tarjeta";
+  redeem.token = "";
+  redeem.applied = false;
   document.querySelector(".wiz-track").style.display = "";
   document.querySelector(".wizard-steps").style.display = "";
   $("bookingForm").querySelector(".form").style.display = "";
   $("bookingForm").reset();
-  st.service = null; st.empId = ""; st.hour = ""; st.staffLoaded = false;
+  st.service = null; st.empId = ""; st.hour = ""; st.staffLoaded = false; st.pendingGiftCode = "";
   document.querySelectorAll("#serviceCards .choice-card").forEach(function (c) { c.classList.remove("on"); });
   $("fecha").value = todayIso(); st.date = $("fecha").value;
   markDay(st.date);

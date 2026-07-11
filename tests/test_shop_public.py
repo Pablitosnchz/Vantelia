@@ -79,12 +79,20 @@ def test_central_public_page_renders_booking_first(client, api_module):
         "function buildDateStrip",
         "function renderRail",                  # resumen en vivo de la reserva
         "function slotPeriod",                  # huecos agrupados manana/tarde/noche
-        'id="redeemBlock"',                     # canje de bono/tarjeta tras reservar
+        'id="preRedeemBlock"',                  # tarjeta regalo antes de confirmar
+        'id="redeemBlock"',                     # bonos/resultado de canje tras reservar
+        "st.pendingGiftCode",                   # el codigo se prepara antes y se aplica al crear cita
+        "giftPreNote",
         "function loadRedeemOptions",           # opciones de canje via manage_token
         "function applyRedeem",                 # aplica bono o codigo de tarjeta
         "/redeem-options",
     ):
         assert token in html, token
+    gift_idx = html.index('id="redeemGiftToggle"')
+    submit_idx = html.index('id="submitBooking"')
+    done_idx = html.index('id="bookingDone"')
+    assert html.count('id="redeemGiftToggle"') == 1
+    assert gift_idx < submit_idx < done_idx
     # Version embed (?embed=1): sin hero/laterales, para iframe en la web del negocio.
     r_embed = client.get("/central/demo?embed=1")
     assert r_embed.status_code == 200
