@@ -540,6 +540,74 @@ class OnboardingStateResponse(BaseModel):
     has_kb: bool = False
 
 
+class OnboardingBusinessPayload(BaseModel):
+    contact_email: str = Field(default="", max_length=200)
+    contact_phone: str = Field(default="", max_length=40)
+    sector: str = Field(default="", max_length=80)
+    ciudad: str = Field(default="", max_length=80)
+    timezone: str = Field(default="", max_length=80)
+
+
+class OnboardingServiceItem(BaseModel):
+    slug: str
+    name: str
+    duration_minutes: int = 30
+    price_label: str = ""
+
+
+class OnboardingSetupResponse(BaseModel):
+    ok: bool = True
+    cliente_id: str
+    contact_email: str = ""
+    contact_phone: str = ""
+    sector: str = ""
+    ciudad: str = ""
+    booking_enabled: bool = True
+    timezone: str = DEFAULT_TIMEZONE
+    slot_minutes: int = 30
+    day_start: str = "09:00"
+    day_end: str = "18:00"
+    closed_weekdays: List[int] = Field(default_factory=list)
+    employee_name: str = ""
+    location_name: str = ""
+    services: List[OnboardingServiceItem] = Field(default_factory=list)
+    shop_enabled_packages: bool = False
+    shop_enabled_products: bool = False
+    gift_enabled: bool = False
+    stripe_ready: bool = False
+    links: Dict[str, str] = Field(default_factory=dict)
+
+
+class OnboardingBookingSetupPayload(BaseModel):
+    enabled: bool = True
+    day_start: str = Field(default="09:00", min_length=5, max_length=5)
+    day_end: str = Field(default="18:00", min_length=5, max_length=5)
+    slot_minutes: int = Field(default=30, ge=5, le=240)
+    closed_weekdays: List[int] = Field(default_factory=list)
+    employee_name: str = Field(default="", max_length=120)
+    location_name: str = Field(default="", max_length=120)
+
+
+class OnboardingShopPayload(BaseModel):
+    enabled_packages: Optional[bool] = None
+    enabled_products: Optional[bool] = None
+    gift_enabled: Optional[bool] = None
+
+
+class OnboardingReadinessBlock(BaseModel):
+    key: str
+    title: str
+    status: str = "pending"  # ready | action | pending | off | not_in_plan
+    detail: str = ""
+
+
+class OnboardingReadinessResponse(BaseModel):
+    ok: bool = True
+    cliente_id: str
+    blocks: List[OnboardingReadinessBlock] = Field(default_factory=list)
+    links: Dict[str, str] = Field(default_factory=dict)
+
+
 # --- Vantelia 2.0 dashboard nuevo (Sem 3) ---
 
 class AppOverviewSubscription(BaseModel):

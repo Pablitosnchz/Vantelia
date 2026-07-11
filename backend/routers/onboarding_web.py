@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import copy
 import sqlite3
-from typing import List
+from typing import Any, Dict, List
 from urllib.parse import urlparse
 
 from fastapi import (
@@ -167,7 +167,7 @@ async def onboarding_learn(
     )
     state = onboarding._read_onboarding_state(cliente_id)
     state.update({
-        "step": "personality",
+        "step": "business",
         "website_url": data.website_url,
         "tono": data.tono,
         "idioma": data.idioma,
@@ -186,6 +186,76 @@ async def onboarding_learn(
         suggested_starters=starters,
         pages_indexed=len(result.links),
     )
+
+
+def _wizard_cliente_id_or_400(user: sqlite3.Row) -> str:
+    cliente_id = (user["cliente_id"] or "").strip()
+    if not cliente_id:
+        raise HTTPException(status_code=400, detail="Inicia el wizard primero (paso name).")
+    if cliente_id not in appstate.CONFIG_CLIENTES:
+        raise HTTPException(status_code=404, detail="Bot no encontrado.")
+    return cliente_id
+
+
+@app.get("/onboarding/setup", response_model=OnboardingSetupResponse)
+async def onboarding_setup(
+    request: Request,
+    user: sqlite3.Row = Depends(security._require_self_serve_user),
+) -> OnboardingSetupResponse:
+    """Datos agregados para los pasos Negocio/Reservas/Venta del wizard."""
+    cliente_id = _wizard_cliente_id_or_400(user)
+    base = textnorm._preferred_public_base_url(request)
+    return OnboardingSetupResponse(**onboarding._setup_overview(cliente_id, base))
+
+
+@app.post("/onboarding/business")
+async def onboarding_business(
+    data: OnboardingBusinessPayload,
+    user: sqlite3.Row = Depends(security._require_self_serve_user),
+) -> Dict[str, Any]:
+    """Paso Negocio: contacto, sector, ciudad y zona horaria."""
+    cliente_id = _wizard_cliente_id_or_400(user)
+    onboarding._save_business_profile(cliente_id, data)
+    state = onboarding._read_onboarding_state(cliente_id)
+    state.update({"step": "booking", "business_at": timeutils._utc_now_iso()})
+    onboarding._write_onboarding_state(cliente_id, state)
+    return {"ok": True, "cliente_id": cliente_id, "step": "booking"}
+
+
+@app.post("/onboarding/booking-setup")
+async def onboarding_booking_setup(
+    data: OnboardingBookingSetupPayload,
+    user: sqlite3.Row = Depends(security._require_self_serve_user),
+) -> Dict[str, Any]:
+    """Paso Reservas: horario general + profesional inicial + centro principal."""
+    cliente_id = _wizard_cliente_id_or_400(user)
+    onboarding._save_booking_setup(cliente_id, data)
+    state = onboarding._read_onboarding_state(cliente_id)
+    state.update({"step": "personality", "booking_setup_at": timeutils._utc_now_iso()})
+    onboarding._write_onboarding_state(cliente_id, state)
+    return {"ok": True, "cliente_id": cliente_id, "step": "personality"}
+
+
+@app.post("/onboarding/shop")
+async def onboarding_shop(
+    data: OnboardingShopPayload,
+    user: sqlite3.Row = Depends(security._require_self_serve_user),
+) -> Dict[str, Any]:
+    """Paso Venta (en Lanzamiento): opt-in de tienda publica y tarjetas regalo."""
+    cliente_id = _wizard_cliente_id_or_400(user)
+    onboarding._save_shop_setup(cliente_id, data)
+    return {"ok": True, "cliente_id": cliente_id}
+
+
+@app.get("/onboarding/readiness", response_model=OnboardingReadinessResponse)
+async def onboarding_readiness(
+    request: Request,
+    user: sqlite3.Row = Depends(security._require_self_serve_user),
+) -> OnboardingReadinessResponse:
+    """Checklist de activacion por bloques (semaforos) + enlaces publicos."""
+    cliente_id = _wizard_cliente_id_or_400(user)
+    base = textnorm._preferred_public_base_url(request)
+    return OnboardingReadinessResponse(**onboarding._readiness_overview(cliente_id, base))
 
 
 @app.post("/onboarding/personality", response_model=OnboardingPersonalityResponse)

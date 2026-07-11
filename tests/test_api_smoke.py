@@ -6651,6 +6651,135 @@ def test_onboarding_endpoints_require_authentication(client: TestClient):
     # POST /onboarding/start without session → 401
     resp = client.post("/onboarding/start", json={"nombre": "X"})
     assert resp.status_code == 401
+    # Pasos operativos y readiness tambien requieren sesion
+    assert client.get("/onboarding/setup").status_code == 401
+    assert client.get("/onboarding/readiness").status_code == 401
+    assert client.post("/onboarding/business", json={}).status_code == 401
+    assert client.post("/onboarding/booking-setup", json={}).status_code == 401
+    assert client.post("/onboarding/shop", json={}).status_code == 401
+
+
+def test_onboarding_business_booking_shop_readiness_flow(client: TestClient, api_module, monkeypatch):
+    """Pasos operativos del wizard: Negocio → Reservas → Venta → checklist readiness."""
+    monkeypatch.setattr(api_module, "OPENAI_API_KEY", "sk-test-wizard")
+    monkeypatch.setattr(api_module, "run_onboarding", lambda **kwargs: _FakeOnboardingResult())
+    email = f"wiz_ops_{uuid.uuid4().hex[:8]}@example.com"
+    cookies = _signup_and_get_cookie(client, email)
+    start = client.post("/onboarding/start", json={"nombre": "Estetica Luz"}, cookies=cookies)
+    assert start.status_code == 200
+    cliente_id = start.json()["cliente_id"]
+    learn = client.post(
+        "/onboarding/learn",
+        json={"website_url": "https://cliente-auto.example", "just_this_page": True},
+        cookies=cookies,
+    )
+    assert learn.status_code == 200, learn.text
+
+    # learn ahora encamina al paso Negocio
+    state = client.get("/onboarding/state", cookies=cookies).json()
+    assert state["step"] == "business"
+
+    # Paso Negocio
+    biz = client.post(
+        "/onboarding/business",
+        json={
+            "contact_email": "hola@estetica.example",
+            "contact_phone": "+34 600 111 222",
+            "sector": "Centro de estetica",
+            "ciudad": "Madrid",
+            "timezone": "Atlantic/Canary",
+        },
+        cookies=cookies,
+    )
+    assert biz.status_code == 200, biz.text
+    assert biz.json()["step"] == "booking"
+    cfg = api_module.CONFIG_CLIENTES[cliente_id]
+    assert cfg["contacto"]["email"] == "hola@estetica.example"
+    assert cfg["negocio"]["sector"] == "Centro de estetica"
+    assert cfg["negocio"]["ciudad"] == "Madrid"
+    assert cfg["booking"]["timezone"] == "Atlantic/Canary"
+
+    # Zona horaria invalida → 400
+    bad = client.post(
+        "/onboarding/business", json={"timezone": "Marte/Colonia1"}, cookies=cookies
+    )
+    assert bad.status_code == 400
+
+    # GET setup agregado para los pasos nuevos
+    setup = client.get("/onboarding/setup", cookies=cookies)
+    assert setup.status_code == 200, setup.text
+    setup_data = setup.json()
+    assert setup_data["cliente_id"] == cliente_id
+    assert setup_data["timezone"] == "Atlantic/Canary"
+    assert setup_data["contact_email"] == "hola@estetica.example"
+    assert setup_data["employee_name"]
+    assert setup_data["location_name"]
+    assert isinstance(setup_data["services"], list)
+    assert setup_data["links"]["central"].endswith(f"/central/{cliente_id}")
+    assert setup_data["links"]["reservas"].endswith(f"/reservas/{cliente_id}")
+
+    # Paso Reservas: horario general + nombres de profesional y centro
+    bk = client.post(
+        "/onboarding/booking-setup",
+        json={
+            "enabled": True,
+            "day_start": "10:00",
+            "day_end": "19:00",
+            "slot_minutes": 15,
+            "closed_weekdays": [5, 6],
+            "employee_name": "Laura",
+            "location_name": "Centro Madrid",
+        },
+        cookies=cookies,
+    )
+    assert bk.status_code == 200, bk.text
+    assert bk.json()["step"] == "personality"
+    cfg = api_module.CONFIG_CLIENTES[cliente_id]
+    assert cfg["booking"]["day_start"] == "10:00"
+    assert cfg["booking"]["day_end"] == "19:00"
+    assert cfg["booking"]["slot_minutes"] == 15
+    assert cfg["booking"]["closed_weekdays"] == [5, 6]
+    with api_module._get_db_connection() as connection:
+        emp = connection.execute(
+            "SELECT name, day_start FROM employees WHERE cliente_id = ? AND is_default = 1",
+            (cliente_id,),
+        ).fetchone()
+        loc = connection.execute(
+            "SELECT name FROM locations WHERE cliente_id = ? AND is_default = 1",
+            (cliente_id,),
+        ).fetchone()
+    assert emp is not None and emp["name"] == "Laura"
+    assert emp["day_start"] == "10:00"  # horario sincronizado al profesional por defecto
+    assert loc is not None and loc["name"] == "Centro Madrid"
+
+    # Paso Venta: opt-in tienda + tarjetas regalo
+    shop = client.post(
+        "/onboarding/shop",
+        json={"enabled_packages": True, "gift_enabled": True},
+        cookies=cookies,
+    )
+    assert shop.status_code == 200, shop.text
+    cfg = api_module.CONFIG_CLIENTES[cliente_id]
+    assert cfg["shop_public"]["enabled_packages"] is True
+    assert cfg["gift_cards_public"]["enabled"] is True
+
+    # Readiness: semaforos por bloque
+    ready = client.get("/onboarding/readiness", cookies=cookies)
+    assert ready.status_code == 200, ready.text
+    data = ready.json()
+    blocks = {b["key"]: b for b in data["blocks"]}
+    assert set(blocks) == {
+        "knowledge", "services", "booking", "payments", "email",
+        "shop", "whatsapp", "voice", "public_links",
+    }
+    assert blocks["public_links"]["status"] == "ready"
+    assert blocks["booking"]["status"] == "ready"
+    assert blocks["payments"]["status"] == "pending"  # sin Stripe Connect
+    assert blocks["shop"]["status"] == "action"  # opt-in activado pero sin Stripe
+    assert blocks["whatsapp"]["status"] == "not_in_plan"  # plan free
+    assert blocks["voice"]["status"] == "not_in_plan"
+    assert data["links"]["tienda"].endswith(f"/tienda/{cliente_id}")
+    assert data["links"]["gift"].endswith(f"/gift/{cliente_id}")
 
 
 # ── Sem 3: dashboard nuevo /auth/app/* ─────────────────────────────────

@@ -39,7 +39,7 @@ def _load_client_configs() -> Dict[str, Dict[str, Any]]:
 # DEBEN sobrevivir a la carga y al guardado (antes la whitelist las descartaba en cada
 # arranque: identidad "empresa", Seguimiento "reminders", resenas "reviews" y la compra
 # publica de tarjetas "gift_cards_public" volvian a sus defaults en runtime).
-CONFIG_EXTRA_SECTIONS = ("empresa", "reminders", "reviews", "gift_cards_public", "shop_public")
+CONFIG_EXTRA_SECTIONS = ("empresa", "reminders", "reviews", "gift_cards_public", "shop_public", "negocio")
 
 
 def _copy_extra_sections(source: Dict[str, Any], target: Dict[str, Any]) -> Dict[str, Any]:

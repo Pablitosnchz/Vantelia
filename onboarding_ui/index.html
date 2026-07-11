@@ -333,6 +333,64 @@
 
     .final-cta { text-align: center; margin-top: 28px; }
     .final-cta .btn-primary { padding: 14px 32px; font-size: 1rem; }
+
+    /* ── Pasos Negocio / Reservas ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+    @media (max-width: 620px) { .grid-2 { grid-template-columns: 1fr; } }
+    .wk-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+    .wk-chip {
+      width: 42px; height: 38px; border-radius: 10px; border: 1.5px solid var(--line-strong);
+      background: rgba(7,16,31,0.5); color: var(--text); font-weight: 600; cursor: pointer;
+      font-family: var(--font); font-size: 0.9rem; transition: all .15s ease;
+    }
+    .wk-chip:hover { border-color: var(--accent); }
+    .wk-chip.closed { opacity: .35; text-decoration: line-through; }
+    .switch-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      background: rgba(7,16,31,0.5); border: 1px solid var(--line);
+      border-radius: 12px; padding: 12px 14px; margin-top: 12px;
+    }
+    .switch-row .sw-label { font-size: 0.92rem; font-weight: 600; }
+    .switch-row .sw-help { color: var(--soft-2); font-size: 0.78rem; margin-top: 2px; }
+    .switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; display: inline-block; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch .track {
+      position: absolute; inset: 0; border-radius: 99px;
+      background: rgba(255,255,255,0.14); transition: .2s; cursor: pointer;
+    }
+    .switch .track::after {
+      content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+      border-radius: 50%; background: #fff; transition: .2s;
+    }
+    .switch input:checked + .track { background: var(--accent); }
+    .switch input:checked + .track::after { transform: translateX(20px); }
+    .svc-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; max-height: 190px; overflow: auto; }
+    .svc-row {
+      display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 0.85rem;
+      background: rgba(7,16,31,0.4); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px;
+    }
+    .svc-row .meta { color: var(--soft); white-space: nowrap; flex-shrink: 0; }
+
+    /* ── Checklist de lanzamiento ── */
+    .check-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    .check-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: rgba(7,16,31,0.45); border: 1px solid var(--line);
+      border-radius: 12px; padding: 10px 14px; text-align: left;
+    }
+    .check-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; background: var(--soft-2); }
+    .check-row.ready .check-dot { background: var(--success); box-shadow: 0 0 8px rgba(0,245,212,0.5); }
+    .check-row.action .check-dot { background: var(--warning); }
+    .check-row h4 { font-size: 0.88rem; }
+    .check-row p { color: var(--soft); font-size: 0.78rem; margin-top: 2px; line-height: 1.4; }
+    .check-tag {
+      margin-left: auto; flex-shrink: 0; align-self: center;
+      font-size: 0.68rem; text-transform: uppercase; letter-spacing: .06em;
+      padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line-strong); color: var(--soft);
+      white-space: nowrap;
+    }
+    .check-row.ready .check-tag { color: var(--success); border-color: rgba(0,245,212,0.4); }
+    .check-row.action .check-tag { color: var(--warning); border-color: rgba(255,200,87,0.4); }
   </style>
 </head>
 <body>
@@ -363,19 +421,29 @@
     <div class="step-label">Aprender</div>
     <div class="step-line"></div>
   </div>
-  <div class="step-item" data-step="personality">
+  <div class="step-item" data-step="business">
     <div class="step-circle"><span class="num">3</span></div>
+    <div class="step-label">Negocio</div>
+    <div class="step-line"></div>
+  </div>
+  <div class="step-item" data-step="booking">
+    <div class="step-circle"><span class="num">4</span></div>
+    <div class="step-label">Reservas</div>
+    <div class="step-line"></div>
+  </div>
+  <div class="step-item" data-step="personality">
+    <div class="step-circle"><span class="num">5</span></div>
     <div class="step-label">Personalidad</div>
     <div class="step-line"></div>
   </div>
   <div class="step-item" data-step="try">
-    <div class="step-circle"><span class="num">4</span></div>
+    <div class="step-circle"><span class="num">6</span></div>
     <div class="step-label">Probar</div>
     <div class="step-line"></div>
   </div>
   <div class="step-item" data-step="use">
-    <div class="step-circle"><span class="num">5</span></div>
-    <div class="step-label">Usar</div>
+    <div class="step-circle"><span class="num">7</span></div>
+    <div class="step-label">Lanzar</div>
   </div>
 </div>
 
@@ -429,7 +497,128 @@
   <div class="status-msg" id="learnStatus" aria-live="polite"></div>
 </div>
 
-<!-- ─── STEP 3: PERSONALITY ─── -->
+<!-- ─── STEP 3: BUSINESS ─── -->
+<div class="wiz-card" id="cardBusiness" style="display:none;">
+  <h1 class="wiz-title">Datos del negocio</h1>
+  <p class="wiz-subtitle">Se usan en tu agenda, emails y páginas públicas. Todo editable después en el panel.</p>
+
+  <div class="grid-2">
+    <div class="field">
+      <label class="field-label" for="bizEmail">Email de contacto</label>
+      <input class="field-input" type="email" id="bizEmail" placeholder="hola@tunegocio.com" maxlength="200" />
+    </div>
+    <div class="field">
+      <label class="field-label" for="bizPhone">Teléfono</label>
+      <input class="field-input" type="tel" id="bizPhone" placeholder="+34 600 000 000" maxlength="40" />
+    </div>
+    <div class="field">
+      <label class="field-label" for="bizSector">Sector</label>
+      <input class="field-input" type="text" id="bizSector" list="sectorList" placeholder="Ej: Clínica dental" maxlength="80" />
+      <datalist id="sectorList">
+        <option value="Clínica dental"></option>
+        <option value="Centro de estética"></option>
+        <option value="Peluquería"></option>
+        <option value="Fisioterapia"></option>
+        <option value="Spa / masajes"></option>
+        <option value="Gimnasio / entrenamiento"></option>
+        <option value="Psicología"></option>
+        <option value="Veterinaria"></option>
+        <option value="Restaurante"></option>
+        <option value="Otro"></option>
+      </datalist>
+    </div>
+    <div class="field">
+      <label class="field-label" for="bizCiudad">Ciudad / zona</label>
+      <input class="field-input" type="text" id="bizCiudad" placeholder="Ej: Madrid" maxlength="80" />
+    </div>
+  </div>
+  <div class="field">
+    <label class="field-label" for="bizTimezone">Zona horaria</label>
+    <select class="field-input" id="bizTimezone">
+      <option value="Europe/Madrid">España (península y Baleares)</option>
+      <option value="Atlantic/Canary">Canarias</option>
+    </select>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-ghost" id="businessBackBtn" type="button">← Atrás</button>
+    <button class="btn btn-primary" id="businessNextBtn" type="button">
+      <span class="btn-text">Continuar →</span>
+      <span class="btn-spinner"></span>
+    </button>
+  </div>
+  <div class="status-msg" id="businessStatus" aria-live="polite"></div>
+</div>
+
+<!-- ─── STEP 4: BOOKING ─── -->
+<div class="wiz-card" id="cardBooking" style="display:none;">
+  <h1 class="wiz-title">Tu agenda de reservas</h1>
+  <p class="wiz-subtitle">Horario general, profesional inicial y servicios detectados en tu web.</p>
+
+  <div class="switch-row">
+    <div>
+      <div class="sw-label">Aceptar reservas online</div>
+      <div class="sw-help">El widget, la página de reservas y WhatsApp podrán agendar citas.</div>
+    </div>
+    <label class="switch"><input type="checkbox" id="bkEnabled" checked /><span class="track"></span></label>
+  </div>
+
+  <div class="grid-2">
+    <div class="field">
+      <label class="field-label" for="bkStart">Apertura</label>
+      <input class="field-input" type="time" id="bkStart" value="09:00" />
+    </div>
+    <div class="field">
+      <label class="field-label" for="bkEnd">Cierre</label>
+      <input class="field-input" type="time" id="bkEnd" value="18:00" />
+    </div>
+  </div>
+
+  <div class="field">
+    <label class="field-label">Días de apertura</label>
+    <div class="wk-chips" id="bkWeekdays"></div>
+    <p class="field-help">Pulsa un día para abrirlo o cerrarlo.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="field">
+      <label class="field-label" for="bkSlot">Paso de agenda</label>
+      <select class="field-input" id="bkSlot">
+        <option value="15">15 minutos</option>
+        <option value="30" selected>30 minutos</option>
+        <option value="45">45 minutos</option>
+        <option value="60">60 minutos</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="field-label" for="bkEmployee">Profesional inicial</label>
+      <input class="field-input" type="text" id="bkEmployee" maxlength="120" placeholder="Ej: Laura" />
+    </div>
+  </div>
+
+  <div class="field">
+    <label class="field-label" for="bkLocation">Centro principal</label>
+    <input class="field-input" type="text" id="bkLocation" maxlength="120" placeholder="Ej: Centro Madrid" />
+    <p class="field-help">¿Tienes varios centros? Podrás añadirlos en el panel (pestaña Equipo).</p>
+  </div>
+
+  <div class="field">
+    <label class="field-label">Servicios detectados</label>
+    <div class="svc-list" id="bkServices"></div>
+    <p class="field-help">Podrás editar nombre, duración y precio en el panel (pestaña Servicios).</p>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-ghost" id="bookingBackBtn" type="button">← Atrás</button>
+    <button class="btn btn-primary" id="bookingNextBtn" type="button">
+      <span class="btn-text">Guardar agenda →</span>
+      <span class="btn-spinner"></span>
+    </button>
+  </div>
+  <div class="status-msg" id="bookingStatus" aria-live="polite"></div>
+</div>
+
+<!-- ─── STEP 5: PERSONALITY ─── -->
 <div class="wiz-card" id="cardPersonality" style="display:none;">
   <h1 class="wiz-title">Tu asistente está listo</h1>
   <p class="wiz-subtitle">Leímos tu web y preparamos esto. Ajusta lo que quieras o sigue al siguiente paso.</p>
@@ -509,9 +698,48 @@
     </svg>
   </div>
   <h1 class="wiz-title">¡Listo! Tu asistente está activo</h1>
-  <p class="wiz-subtitle">Elige cómo lo quieres usar.</p>
+  <p class="wiz-subtitle">Esto es lo que ya tienes y lo que falta para estar 100% operativo.</p>
+
+  <div class="sub-panel" style="margin-top:22px;">
+    <h3>Checklist de activación</h3>
+    <div class="check-list" id="readinessList"><p class="demo-tip">Cargando estado...</p></div>
+  </div>
+
+  <div class="sub-panel" style="margin-top:14px;">
+    <h3>Venta online</h3>
+    <div class="switch-row" style="margin-top:8px;">
+      <div>
+        <div class="sw-label">Bonos de sesiones</div>
+        <div class="sw-help">Tus bonos a la venta en tu tienda pública.</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="shopPk" /><span class="track"></span></label>
+    </div>
+    <div class="switch-row">
+      <div>
+        <div class="sw-label">Productos</div>
+        <div class="sw-help">Venta de productos con recogida en el centro.</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="shopPr" /><span class="track"></span></label>
+    </div>
+    <div class="switch-row">
+      <div>
+        <div class="sw-label">Tarjetas regalo</div>
+        <div class="sw-help">Compra online de tarjetas regalo con tu marca.</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="shopGift" /><span class="track"></span></label>
+    </div>
+    <p class="field-help" id="shopStripeNote" style="display:none; margin-top:10px;">
+      Quedará <strong>preparada, pendiente de cobros</strong>: las páginas se publican al conectar Stripe en el panel (pestaña Pagos).
+    </p>
+    <button class="copy-btn" id="saveShopBtn" type="button" style="margin-top:12px;">Guardar venta online</button>
+  </div>
 
   <div class="deploy-row">
+    <div class="deploy-card">
+      <h3>Tus páginas públicas</h3>
+      <p>Reservas online, tienda y tarjetas regalo con tu marca. Compártelas o enlázalas desde tu web.</p>
+      <div id="publicLinksWrap"></div>
+    </div>
     <div class="deploy-card">
       <h3>Insertar en tu web</h3>
       <p>Pega este código justo antes de <code style="color:var(--accent-2);">&lt;/body&gt;</code> en tu web. Aparecerá una burbuja de chat.</p>
@@ -552,7 +780,7 @@ const state = {
   share_link: '',
 };
 
-const STEP_ORDER = ['name', 'learn', 'personality', 'try', 'use'];
+const STEP_ORDER = ['name', 'learn', 'business', 'booking', 'personality', 'try', 'use'];
 
 function formatDetail(d) {
   if (!d) return 'No se pudo completar la solicitud.';
@@ -599,11 +827,11 @@ function setLoading(btnId, on) {
 
 function showStep(step) {
   state.step = step;
-  ['Name', 'Learn', 'Personality', 'Try', 'Use'].forEach(cap => {
+  ['Name', 'Learn', 'Business', 'Booking', 'Personality', 'Try', 'Use'].forEach(cap => {
     const card = document.getElementById('card' + cap);
     if (card) card.style.display = 'none';
   });
-  const map = { name: 'Name', learn: 'Learn', personality: 'Personality', try: 'Try', use: 'Use' };
+  const map = { name: 'Name', learn: 'Learn', business: 'Business', booking: 'Booking', personality: 'Personality', try: 'Try', use: 'Use' };
   const target = document.getElementById('card' + (map[step] || 'Name'));
   if (target) target.style.display = 'block';
 
@@ -617,8 +845,151 @@ function showStep(step) {
     else if (itemIdx === idx) item.classList.add('active');
   });
 
+  if (step === 'business') enterBusinessStep();
+  if (step === 'booking') enterBookingStep();
   if (step === 'try') renderTryStep();
   if (step === 'use') renderUseStep();
+}
+
+// ── Pasos Negocio / Reservas ────────────────────────────────────────
+const SETUP = { loaded: false, data: null };
+async function loadSetup(force) {
+  if (SETUP.loaded && !force) return SETUP.data;
+  const data = await api('/onboarding/setup');
+  SETUP.loaded = true;
+  SETUP.data = data;
+  return data;
+}
+
+const WEEKDAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+let closedWeekdays = new Set([6]);
+function renderWeekdays() {
+  const wrap = document.getElementById('bkWeekdays');
+  wrap.innerHTML = '';
+  WEEKDAY_LABELS.forEach((lbl, idx) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'wk-chip' + (closedWeekdays.has(idx) ? ' closed' : '');
+    b.textContent = lbl;
+    b.title = closedWeekdays.has(idx) ? 'Cerrado' : 'Abierto';
+    b.addEventListener('click', () => {
+      if (closedWeekdays.has(idx)) closedWeekdays.delete(idx); else closedWeekdays.add(idx);
+      renderWeekdays();
+    });
+    wrap.appendChild(b);
+  });
+}
+
+async function enterBusinessStep() {
+  try {
+    const d = await loadSetup();
+    document.getElementById('bizEmail').value = d.contact_email || '';
+    document.getElementById('bizPhone').value = d.contact_phone || '';
+    document.getElementById('bizSector').value = d.sector || '';
+    document.getElementById('bizCiudad').value = d.ciudad || '';
+    const sel = document.getElementById('bizTimezone');
+    if (d.timezone && [...sel.options].some(o => o.value === d.timezone)) sel.value = d.timezone;
+  } catch (err) {
+    setStatus('businessStatus', err.message, 'error');
+  }
+}
+
+async function enterBookingStep() {
+  try {
+    const d = await loadSetup();
+    document.getElementById('bkEnabled').checked = !!d.booking_enabled;
+    document.getElementById('bkStart').value = d.day_start || '09:00';
+    document.getElementById('bkEnd').value = d.day_end || '18:00';
+    const slotSel = document.getElementById('bkSlot');
+    if ([...slotSel.options].some(o => Number(o.value) === Number(d.slot_minutes))) {
+      slotSel.value = String(d.slot_minutes);
+    }
+    closedWeekdays = new Set((d.closed_weekdays || []).map(Number));
+    renderWeekdays();
+    document.getElementById('bkEmployee').value = d.employee_name || '';
+    document.getElementById('bkLocation').value = d.location_name || '';
+    const list = document.getElementById('bkServices');
+    list.innerHTML = '';
+    if (!(d.services || []).length) {
+      const row = document.createElement('div');
+      row.className = 'svc-row';
+      row.innerHTML = '<span>No se detectaron servicios en tu web.</span><span class="meta">Añádelos en el panel</span>';
+      list.appendChild(row);
+    } else {
+      d.services.forEach(s => {
+        const row = document.createElement('div');
+        row.className = 'svc-row';
+        const name = document.createElement('span');
+        name.textContent = s.name;
+        const meta = document.createElement('span');
+        meta.className = 'meta';
+        meta.textContent = `${s.duration_minutes} min · ${s.price_label}`;
+        row.append(name, meta);
+        list.appendChild(row);
+      });
+    }
+  } catch (err) {
+    setStatus('bookingStatus', err.message, 'error');
+  }
+}
+
+async function submitBusiness() {
+  setLoading('businessNextBtn', true);
+  try {
+    await api('/onboarding/business', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contact_email: document.getElementById('bizEmail').value.trim(),
+        contact_phone: document.getElementById('bizPhone').value.trim(),
+        sector: document.getElementById('bizSector').value.trim(),
+        ciudad: document.getElementById('bizCiudad').value.trim(),
+        timezone: document.getElementById('bizTimezone').value,
+      }),
+    });
+    setStatus('businessStatus', '', null);
+    showStep('booking');
+  } catch (err) {
+    setStatus('businessStatus', err.message, 'error');
+  } finally {
+    setLoading('businessNextBtn', false);
+  }
+}
+
+async function submitBooking() {
+  const start = document.getElementById('bkStart').value;
+  const end = document.getElementById('bkEnd').value;
+  if (!start || !end || start >= end) {
+    setStatus('bookingStatus', 'La hora de cierre debe ser posterior a la apertura.', 'error');
+    return;
+  }
+  if (closedWeekdays.size >= 7) {
+    setStatus('bookingStatus', 'Deja al menos un día abierto.', 'error');
+    return;
+  }
+  setLoading('bookingNextBtn', true);
+  try {
+    await api('/onboarding/booking-setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enabled: document.getElementById('bkEnabled').checked,
+        day_start: start,
+        day_end: end,
+        slot_minutes: Number(document.getElementById('bkSlot').value),
+        closed_weekdays: [...closedWeekdays].sort((a, b) => a - b),
+        employee_name: document.getElementById('bkEmployee').value.trim(),
+        location_name: document.getElementById('bkLocation').value.trim(),
+      }),
+    });
+    SETUP.loaded = false;
+    setStatus('bookingStatus', '', null);
+    showStep('personality');
+  } catch (err) {
+    setStatus('bookingStatus', err.message, 'error');
+  } finally {
+    setLoading('bookingNextBtn', false);
+  }
 }
 
 function renderStarters() {
@@ -677,6 +1048,126 @@ function renderUseStep() {
   const sl = document.getElementById('shareLink');
   sl.href = state.share_link || '#';
   sl.textContent = state.share_link || '';
+  // resume: si venimos de una sesión anterior sin snippet, lo regeneramos
+  if (!state.install_snippet && state.cliente_id) {
+    api('/onboarding/finalize', { method: 'POST' }).then(data => {
+      state.install_snippet = data.install_snippet;
+      state.share_link = data.share_link;
+      document.getElementById('snippetBlock').textContent = data.install_snippet || '';
+      sl.href = data.share_link || '#';
+      sl.textContent = data.share_link || '';
+    }).catch(() => {});
+  }
+  refreshReadiness();
+  loadShopToggles();
+}
+
+// ── Lanzamiento: checklist + venta online + enlaces públicos ────────
+const READINESS_TAGS = {
+  ready: 'Listo',
+  action: 'Requiere acción',
+  pending: 'Pendiente',
+  off: 'Desactivado',
+  not_in_plan: 'Mejora de plan',
+};
+
+async function refreshReadiness() {
+  const list = document.getElementById('readinessList');
+  try {
+    const d = await api('/onboarding/readiness');
+    state.public_links = d.links || {};
+    list.innerHTML = '';
+    (d.blocks || []).forEach(b => {
+      const row = document.createElement('div');
+      row.className = 'check-row ' + (b.status || 'pending');
+      const dot = document.createElement('span');
+      dot.className = 'check-dot';
+      const body = document.createElement('div');
+      const h = document.createElement('h4');
+      h.textContent = b.title;
+      const p = document.createElement('p');
+      p.textContent = b.detail;
+      body.append(h, p);
+      const tag = document.createElement('span');
+      tag.className = 'check-tag';
+      tag.textContent = READINESS_TAGS[b.status] || b.status;
+      row.append(dot, body, tag);
+      list.appendChild(row);
+    });
+    renderPublicLinks();
+    const payments = (d.blocks || []).find(b => b.key === 'payments');
+    const note = document.getElementById('shopStripeNote');
+    if (note) note.style.display = payments && payments.status === 'ready' ? 'none' : 'block';
+  } catch (err) {
+    list.innerHTML = '';
+    const p = document.createElement('p');
+    p.className = 'demo-tip';
+    p.textContent = err.message;
+    list.appendChild(p);
+  }
+}
+
+function renderPublicLinks() {
+  const wrap = document.getElementById('publicLinksWrap');
+  if (!wrap) return;
+  const links = state.public_links || {};
+  const items = [
+    ['reservas', 'Reservas online'],
+    ['tienda', 'Tienda (bonos y productos)'],
+    ['gift', 'Tarjetas regalo'],
+  ];
+  wrap.innerHTML = '';
+  items.forEach(([key, label]) => {
+    if (!links[key]) return;
+    const row = document.createElement('div');
+    row.className = 'link-row';
+    row.style.marginTop = '8px';
+    const a = document.createElement('a');
+    a.href = links[key];
+    a.target = '_blank';
+    a.rel = 'noreferrer';
+    a.textContent = links[key];
+    a.title = label;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'copy-btn';
+    btn.textContent = 'Copiar';
+    btn.addEventListener('click', () => copy(links[key], btn));
+    row.append(a, btn);
+    wrap.appendChild(row);
+  });
+}
+
+async function loadShopToggles() {
+  try {
+    const d = await loadSetup(true);
+    document.getElementById('shopPk').checked = !!d.shop_enabled_packages;
+    document.getElementById('shopPr').checked = !!d.shop_enabled_products;
+    document.getElementById('shopGift').checked = !!d.gift_enabled;
+  } catch {}
+}
+
+async function saveShop() {
+  const btn = document.getElementById('saveShopBtn');
+  btn.disabled = true;
+  try {
+    await api('/onboarding/shop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enabled_packages: document.getElementById('shopPk').checked,
+        enabled_products: document.getElementById('shopPr').checked,
+        gift_enabled: document.getElementById('shopGift').checked,
+      }),
+    });
+    btn.textContent = 'Guardado ✓';
+    refreshReadiness();
+  } catch (err) {
+    btn.textContent = 'Error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = 'Guardar venta online'; }, 2000);
+  }
 }
 
 // ── Step handlers ────────────────────────────────────────────────────
@@ -727,7 +1218,8 @@ async function submitLearn() {
     document.getElementById('promptExtra').value = state.prompt_extra;
     renderStarters();
     setStatus('learnStatus', '', null);
-    showStep('personality');
+    SETUP.loaded = false;
+    showStep('business');
   } catch (err) {
     setStatus('learnStatus', err.message, 'error');
   } finally {
@@ -823,7 +1315,12 @@ async function copy(text, btn) {
 document.getElementById('nameNextBtn').addEventListener('click', submitName);
 document.getElementById('learnBackBtn').addEventListener('click', () => showStep('name'));
 document.getElementById('learnNextBtn').addEventListener('click', submitLearn);
-document.getElementById('personalityBackBtn').addEventListener('click', () => showStep('learn'));
+document.getElementById('businessBackBtn').addEventListener('click', () => showStep('learn'));
+document.getElementById('businessNextBtn').addEventListener('click', submitBusiness);
+document.getElementById('bookingBackBtn').addEventListener('click', () => showStep('business'));
+document.getElementById('bookingNextBtn').addEventListener('click', submitBooking);
+document.getElementById('saveShopBtn').addEventListener('click', saveShop);
+document.getElementById('personalityBackBtn').addEventListener('click', () => showStep('booking'));
 document.getElementById('personalityNextBtn').addEventListener('click', submitPersonality);
 document.getElementById('tryBackBtn').addEventListener('click', () => showStep('personality'));
 document.getElementById('tryNextBtn').addEventListener('click', finalizeWizard);
