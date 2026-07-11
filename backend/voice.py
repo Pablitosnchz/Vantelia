@@ -23,7 +23,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AppVoiceResponse, BookingReschedulePayload
-from backend import agenda, appstate, booking, clients, crm, db, emailing, messaging, rag, security, settings, textnorm, timeutils
+from backend import agenda, appstate, booking, clients, commerce, crm, db, emailing, messaging, rag, security, settings, textnorm, timeutils
 
 # Tareas en segundo plano (envios best-effort que no deben bloquear la respuesta de voz).
 # Guardamos referencia para que asyncio no las recolecte antes de completarse.
@@ -1308,6 +1308,16 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
                 "enviar_enlace_pago. Le llegara un SMS con un enlace seguro. No leas la URL en voz alta: solo di "
                 "que le envias el enlace por mensaje. Si devuelve error, explicalo con tacto.\n"
             )
+        try:
+            if commerce._list_packages(cliente_id, include_inactive=False):
+                booking_block += (
+                    "- BONOS: si el cliente pregunta cuantas sesiones le quedan o si tiene bono, usa "
+                    "consultar_bono (busca por el numero que llama). Al crear una cita, si tiene un bono con "
+                    "sesiones de ese servicio se descuenta UNA automaticamente y la cita queda pagada: dilo tal "
+                    "cual te lo devuelva crear_cita y no ofrezcas cobrar esa cita.\n"
+                )
+        except Exception:  # noqa: BLE001
+            pass
         booking_block += _voice_schedule_block(cliente_id, config)
         try:
             location_lines = _voice_location_catalog(cliente_id)
@@ -1524,6 +1534,36 @@ def _voice_booking_tools(
             },
         },
     ]
+    # Bonos: consulta de sesiones restantes por el numero verificado de la llamada.
+    # Solo se expone si el negocio tiene bonos activos (sin camino muerto).
+    try:
+        has_packages = bool(commerce._list_packages(cliente_id, include_inactive=False))
+    except Exception:  # noqa: BLE001
+        has_packages = False
+    if has_packages:
+        tools.append(
+            {
+                "type": "function",
+                "name": "consultar_bono",
+                "description": (
+                    "Consulta los bonos activos del cliente (sesiones restantes por servicio y caducidad). "
+                    "Usala cuando pregunte cuantas sesiones le quedan o si tiene bono. Por defecto busca "
+                    "por el numero desde el que llama; pasa 'telefono' solo si el cliente dice que lo "
+                    "compro con otro numero. Si al reservar tiene bono con sesiones del servicio, se "
+                    "descuenta automaticamente y la cita queda pagada: no cobres de mas."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "telefono": {
+                            "type": "string",
+                            "description": "Telefono con el que compro el bono, solo si no es el numero que llama.",
+                        },
+                    },
+                    "required": [],
+                },
+            }
+        )
     if booking._ai_payment_sending_available(cliente_id):
         tools.append(
             {
@@ -2283,6 +2323,13 @@ async def _voice_perform_booking(
     service_label = servicio or "cita"
     fecha_voz = _voice_say_date(booking_date, booking_timezone)
     hora_voz = _voice_say_time(booking_time)
+    # Auto-canje de bono (contacto verificado): si el cliente tiene un bono activo que
+    # cubre el servicio, se descuenta 1 sesion y la cita queda pagada. Best-effort.
+    bono_redeemed = None
+    if booking_status != "pending_payment":
+        bono_redeemed = commerce.auto_redeem_package_for_booking(
+            cliente_id, booking_id, extra_phone=telefono
+        )
     if booking_status == "pending_payment":
         voice_message = (
             f"Perfecto, la cita queda reservada para {fecha_voz} a {hora_voz}, pendiente de pago. "
@@ -2291,6 +2338,12 @@ async def _voice_perform_booking(
     else:
         voice_message = (
             f"Perfecto, la cita queda confirmada para {fecha_voz} a {hora_voz}. Codigo {booking_code}."
+        )
+    if bono_redeemed:
+        left = int(bono_redeemed.get("sessions_left") or 0)
+        voice_message += (
+            f" He descontado una sesion de tu bono {bono_redeemed['package_name']}: la cita queda pagada"
+            + (f" y te quedan {left} sesiones." if left > 0 else " y era tu ultima sesion.")
         )
 
     # Confirmacion transaccional (email/SMS/WhatsApp) con nº de reserva + enlace de gestion,
@@ -2338,7 +2391,10 @@ async def _voice_perform_booking(
         "estado": booking_status,
         "mensaje_voz": voice_message,
         "confirmacion_canal": confirmacion_canal,
-        "payment_status": stored_booking["payment_status"] if stored_booking else "not_required",
+        "bono": bono_redeemed or None,
+        "payment_status": "paid" if bono_redeemed else (
+            stored_booking["payment_status"] if stored_booking else "not_required"
+        ),
         "payment_url": payment_row["checkout_url"] if payment_row else "",
         "mensaje_pago": (
             "Envia este enlace seguro por SMS, WhatsApp o email; nunca pidas datos bancarios por telefono."
@@ -2803,6 +2859,10 @@ async def _voice_dispatch_tool(
             email=str(args.get("email", "")),
             fecha_texto=str(args.get("fecha_texto", "")),
         )
+    if name == "consultar_bono":
+        return _voice_lookup_packages(
+            cliente_id, from_number=from_number, telefono=str(args.get("telefono", "")),
+        )
     if name == "enviar_enlace_pago":
         return await _voice_send_payment_link(
             cliente_id,
@@ -2826,6 +2886,21 @@ async def _voice_dispatch_tool(
             "mensaje_voz": f"Para hablar con una persona del equipo, llama al {pretty}.",
         }
     return {"ok": False, "error": "Funcion desconocida."}
+
+
+def _voice_lookup_packages(cliente_id: str, *, from_number: str = "", telefono: str = "") -> Dict[str, Any]:
+    """Bonos activos del cliente que llama (o del telefono que facilite)."""
+    phone = textnorm._sanitize_text(telefono or "").strip() or (from_number or "").strip()
+    if not phone:
+        msg = "Dime el telefono con el que compraste el bono y lo miro, por favor."
+        return {"ok": False, "needs_phone": True, "error": msg, "mensaje_voz": msg}
+    summary = commerce.packages_summary_for_contact(cliente_id, phone=phone)
+    return {
+        "ok": True,
+        "count": summary["count"],
+        "bonos": summary["bonos"],
+        "mensaje_voz": summary["mensaje"],
+    }
 
 
 def _voice_tool_followup_prompt(tool_name: str, result: Dict[str, Any]) -> str:
@@ -2870,7 +2945,7 @@ def _voice_tool_followup_prompt(tool_name: str, result: Dict[str, Any]) -> str:
         )
     if tool_name in {
         "consultar_disponibilidad", "consultar_cita", "enviar_codigo_verificacion",
-        "cancelar_cita", "reprogramar_cita", "enviar_enlace_pago",
+        "cancelar_cita", "reprogramar_cita", "enviar_enlace_pago", "consultar_bono",
     } and result.get("ok"):
         return (
             "[sistema] Di esta idea en una sola frase natural, sin anadir pasos ni explicaciones: "
@@ -2915,6 +2990,13 @@ async def _voice_dispatch_tool_demo(cliente_id: str, name: str, arguments_json: 
             "demo": True,
             "error": "Esto es una demostracion: la cita no se guarda. En la version real "
             "quedaria agendada al instante y el cliente recibiria la confirmacion.",
+        }
+    if name == "consultar_bono":
+        return {
+            "ok": False,
+            "demo": True,
+            "mensaje_voz": "En esta demostracion no puedo consultar bonos reales, pero en la "
+            "version real te diria las sesiones que te quedan al momento.",
         }
     if name == "finalizar_llamada":
         # La demo no cuelga sola (el visitante cierra), pero el asistente si debe despedirse.

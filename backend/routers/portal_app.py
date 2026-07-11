@@ -1783,6 +1783,9 @@ async def app_payment_refund(
         raise HTTPException(status_code=404, detail="Pago no encontrado.")
     if payment["status"] not in {"paid", "partially_refunded"} or not payment["stripe_payment_intent_id"]:
         raise HTTPException(status_code=409, detail="Este pago no se puede reembolsar.")
+    # Si el pago emitio una tarjeta regalo o un bono ya usados, exige 'forzar'
+    # (el revert del activo lo aplica el webhook charge.refunded).
+    commerce._guard_refundable_asset(payment, data.amount_cents, bool(data.force))
     kwargs: Dict[str, Any] = {
         "payment_intent": payment["stripe_payment_intent_id"],
         "stripe_account": payment["stripe_account_id"],
@@ -3216,6 +3219,8 @@ async def app_gift_public_get(
         "stripe_ready": stripe_ready,
         "available": cfg["enabled"] and stripe_ready,
         "public_url": f"{base}/gift/{target}",
+        # Consulta publica de saldo: disponible tambien para tarjetas de mostrador.
+        "balance_url": f"{base}/gift/{target}/saldo",
     }
 
 

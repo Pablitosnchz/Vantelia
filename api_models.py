@@ -362,6 +362,8 @@ class PaymentLinkResponse(BaseModel):
 
 class PaymentRefundPayload(BaseModel):
     amount_cents: Optional[int] = Field(default=None, ge=1, le=10_000_000)
+    # Reembolsar aunque el activo emitido (tarjeta regalo / bono) ya tenga consumo.
+    force: bool = False
 
 
 class StaffBookingCreatePayload(BaseModel):
@@ -2197,3 +2199,20 @@ class GiftCardPublicCheckoutPayload(BaseModel):
     accent_color: str = Field(default="", max_length=7)
     hide_value: bool = False
     hide_expiry: bool = False
+
+
+class GiftBalancePayload(BaseModel):
+    # Consulta publica de saldo (pagina /gift/{cliente_id}/saldo).
+    code: str = Field(..., min_length=4, max_length=20)
+
+
+class CentralRedeemOptionsPayload(BaseModel):
+    # Canje online tras reservar en la central: el manage_token autoriza la cita.
+    manage_token: str = Field(..., min_length=6, max_length=80)
+
+
+class CentralRedeemPayload(BaseModel):
+    manage_token: str = Field(..., min_length=6, max_length=80)
+    kind: str = Field(..., min_length=3, max_length=10)  # 'package' | 'gift'
+    code: str = Field(default="", max_length=20)
+    purchase_id: str = Field(default="", max_length=60)

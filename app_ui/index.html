@@ -3074,6 +3074,7 @@
               <a class="so-iconbtn" id="giftPubOpen" target="_blank" rel="noopener" title="Abrir página">↗</a>
             </div>
             <div class="so-note" id="giftPubNote" style="display:none;"></div>
+            <div class="so-note" id="giftBalanceNote" style="display:none;"></div>
             <div class="so-actions">
               <button class="btn btn-primary" id="giftPubSave" type="button">Guardar cambios</button>
             </div>
@@ -6150,11 +6151,21 @@ async function loadPayments(refresh = false) {
         ${['paid','partially_refunded'].includes(p.status) ? `<button class="btn btn-ghost" data-refund-payment="${escapeHtml(p.id)}" style="margin-top:8px;">Reembolsar</button>` : ''}
       </div>`).join('') : '<div class="empty">Todavia no hay pagos.</div>';
     list.querySelectorAll('[data-refund-payment]').forEach(btn => btn.addEventListener('click', async () => {
-      if (!(await confirmDialog({ title: 'Reembolsar pago', bodyHtml: '¿Solicitar el reembolso completo de este pago?', confirmLabel: 'Reembolsar', danger: true }))) return;
+      if (!(await confirmDialog({ title: 'Reembolsar pago', bodyHtml: '¿Solicitar el reembolso completo de este pago?<br><span class="panel-sub">Si el pago emitió una tarjeta regalo o un bono, se anulará su saldo restante.</span>', confirmLabel: 'Reembolsar', danger: true }))) return;
+      const pid = btn.dataset.refundPayment;
+      const doRefund = (force) => api(`/auth/app/payments/${encodeURIComponent(pid)}/refund`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(force ? { force: true } : {}) });
       try {
-        await api(`/auth/app/payments/${encodeURIComponent(btn.dataset.refundPayment)}/refund`, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+        await doRefund(false);
         toast('Reembolso solicitado', 'success'); loadPayments(true);
-      } catch(e) { toast(e.message, 'error'); }
+      } catch(e) {
+        // 409 con activo ya consumido: el backend explica el consumo y pide 'forzar'.
+        if (/forzar/i.test(e.message || '')) {
+          if (await confirmDialog({ title: 'El activo ya tiene consumo', bodyHtml: `${escapeHtml(e.message)}<br><br>¿Reembolsar igualmente y anular lo que quede?`, confirmLabel: 'Forzar reembolso', danger: true })) {
+            try { await doRefund(true); toast('Reembolso solicitado', 'success'); loadPayments(true); }
+            catch(e2) { toast(e2.message, 'error'); }
+          }
+        } else { toast(e.message, 'error'); }
+      }
     }));
   } catch(e) { toast(e.message, 'error'); }
 }
@@ -9342,15 +9353,21 @@ async function renderPurchases() {
     const items = r.items || [];
     list.innerHTML = items.length ? items.slice(0, 40).map(p => {
       const who = p.buyer_name || p.buyer_email || p.buyer_phone || '—';
+      const sesiones = p.initial_total ? `quedan ${p.remaining_total} de ${p.initial_total} sesión(es)` : `quedan ${p.remaining_total} sesión(es)`;
       return `<div class="vsell-row">
         <div class="vsell-row-ic">🎟</div>
         <div class="vsell-row-main">
           <div class="vsell-row-title">${escapeHtml(p.package_name)} <span class="pill pill-${escapeHtml(p.status)}">${escapeHtml(vStatusLabel(p.status))}</span></div>
-          <div class="vsell-row-sub">${escapeHtml(who)} · quedan ${p.remaining_total} sesión(es)${p.expires_at ? ` · caduca ${String(p.expires_at).slice(0, 10)}` : ''}</div>
+          <div class="vsell-row-sub">${escapeHtml(who)} · ${sesiones}${p.expires_at ? ` · caduca ${String(p.expires_at).slice(0, 10)}` : ''}</div>
         </div>
+        ${p.wallet_url ? `<button class="btn btn-ghost" data-wallet-link="${escapeHtml(p.wallet_url)}" title="Copiar el enlace del bono para el cliente (sesiones restantes, caducidad)">🔗 Wallet</button>` : ''}
         <div class="vsell-row-amt">${eur(p.price_cents)}</div>
       </div>`;
     }).join('') : vEmpty('🎟', q ? 'Sin resultados' : 'Sin bonos vendidos', q ? 'Prueba otra búsqueda.' : 'Vende un bono desde la ficha de un cliente o desde el catálogo.');
+    list.querySelectorAll('[data-wallet-link]').forEach(btn => btn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(btn.dataset.walletLink); toast('Enlace del bono copiado', 'success'); }
+      catch (_) { window.prompt('Enlace del bono', btn.dataset.walletLink); }
+    }));
   } catch (e) { list.innerHTML = `<div class="panel-sub">${escapeHtml(e.message)}</div>`; }
 }
 document.getElementById('purchasesSearch').addEventListener('input', () => { clearTimeout(window.__pqT); window.__pqT = setTimeout(renderPurchases, 300); });
@@ -9504,6 +9521,11 @@ async function loadGiftPublicConfig() {
     if (soG && cfg.public_url) {
       soG.href = cfg.public_url;
       soG.classList.toggle('is-off', !cfg.available);
+    }
+    const balNote = document.getElementById('giftBalanceNote');
+    if (balNote && cfg.balance_url) {
+      balNote.style.display = '';
+      balNote.innerHTML = `Los clientes pueden consultar el saldo de cualquier tarjeta (también las de mostrador) en <a href="${escapeHtml(cfg.balance_url)}" target="_blank" rel="noopener">${escapeHtml(cfg.balance_url)}</a>. El email de la tarjeta ya incluye el enlace.`;
     }
   } catch (e) { /* sin permiso u error: la tarjeta queda sin cargar */ }
 }

@@ -79,6 +79,10 @@ def test_central_public_page_renders_booking_first(client, api_module):
         "function buildDateStrip",
         "function renderRail",                  # resumen en vivo de la reserva
         "function slotPeriod",                  # huecos agrupados manana/tarde/noche
+        'id="redeemBlock"',                     # canje de bono/tarjeta tras reservar
+        "function loadRedeemOptions",           # opciones de canje via manage_token
+        "function applyRedeem",                 # aplica bono o codigo de tarjeta
+        "/redeem-options",
     ):
         assert token in html, token
     # Version embed (?embed=1): sin hero/laterales, para iframe en la web del negocio.

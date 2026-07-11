@@ -18,6 +18,7 @@ from backend import settings, timeutils
 
 def _ensure_runtime_directories() -> None:
     settings.STORAGE_DIR.mkdir(exist_ok=True)
+    settings.UPLOADS_DIR.mkdir(exist_ok=True)
     settings.WIDGET_DIR.mkdir(exist_ok=True)
     settings.ADMIN_UI_DIR.mkdir(exist_ok=True)
     settings.ACCESS_UI_DIR.mkdir(exist_ok=True)
@@ -534,6 +535,42 @@ def _init_database() -> None:
             connection.execute(
                 "ALTER TABLE package_purchases ADD COLUMN customer_payment_id TEXT NOT NULL DEFAULT ''"
             )
+        # Wallet publica del bono (jul 2026): token secreto para la pagina
+        # /bono/{cliente_id}/{wallet_token} + snapshot inicial de sesiones para
+        # mostrar progreso (usadas/total) y detectar consumo al reembolsar.
+        if "wallet_token" not in package_purchase_columns:
+            connection.execute(
+                "ALTER TABLE package_purchases ADD COLUMN wallet_token TEXT NOT NULL DEFAULT ''"
+            )
+        # Avisos de ciclo de vida (jul 2026): sellado de "caducidad proxima" y de
+        # "bono agotado -> recompra" para que el worker no repita emails.
+        for lifecycle_column in ("expiry_notice_sent_at", "rebuy_notice_sent_at"):
+            if lifecycle_column not in package_purchase_columns:
+                connection.execute(
+                    f"ALTER TABLE package_purchases ADD COLUMN {lifecycle_column} TEXT NOT NULL DEFAULT ''"
+                )
+        if "initial_json" not in package_purchase_columns:
+            connection.execute(
+                "ALTER TABLE package_purchases ADD COLUMN initial_json TEXT NOT NULL DEFAULT ''"
+            )
+            # Backfill best-effort: para compras previas el snapshot inicial se
+            # aproxima con lo que quede (no hay historico mejor).
+            connection.execute(
+                "UPDATE package_purchases SET initial_json = remaining_json WHERE initial_json = ''"
+            )
+        for row in connection.execute(
+            "SELECT id FROM package_purchases WHERE wallet_token = ''"
+        ).fetchall():
+            connection.execute(
+                "UPDATE package_purchases SET wallet_token = ? WHERE id = ?",
+                (f"pw_{secrets.token_urlsafe(18)}", row[0]),
+            )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_package_purchases_wallet
+            ON package_purchases(wallet_token)
+            """
+        )
         # Imagen de bono (URL configurable; tienda online + mostrador).
         package_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(packages)").fetchall()
@@ -578,6 +615,8 @@ def _init_database() -> None:
             ("scheduled_send_at", "TEXT NOT NULL DEFAULT ''"),
             ("sent_at", "TEXT NOT NULL DEFAULT ''"),
             ("customer_payment_id", "TEXT NOT NULL DEFAULT ''"),
+            # Aviso de caducidad proxima (worker de ciclo de vida, jul 2026).
+            ("expiry_notice_sent_at", "TEXT NOT NULL DEFAULT ''"),
             # F2: personalizacion de la compra publica.
             ("accent_color", "TEXT NOT NULL DEFAULT ''"),
             ("hide_value", "INTEGER NOT NULL DEFAULT 0"),
@@ -1836,5 +1875,4 @@ def db_ensure_free_subscription(user_id: str, cliente_id: str = "") -> sqlite3.R
         return connection.execute(
             "SELECT * FROM subscriptions WHERE id = ?", (sub_id,)
         ).fetchone()
-
 

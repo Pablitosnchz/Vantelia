@@ -14,6 +14,7 @@ siempre sale del catálogo/snapshot del backend, nunca del request.
 from __future__ import annotations
 
 import json
+import os
 import re
 import secrets
 import sqlite3
@@ -1039,11 +1040,34 @@ def _delete_package(cliente_id: str, package_id: str) -> None:
         connection.commit()
 
 
+def _purchase_initial_sessions(row: sqlite3.Row) -> Dict[str, int]:
+    """Snapshot inicial de sesiones del bono (fallback: lo que quede)."""
+    raw = ""
+    if "initial_json" in row.keys():
+        raw = row["initial_json"] or ""
+    try:
+        initial = json.loads(raw or row["remaining_json"] or "{}")
+    except (ValueError, TypeError):
+        initial = {}
+    return {str(k): int(v or 0) for k, v in initial.items()}
+
+
+def _package_wallet_url(cliente_id: str, wallet_token: str) -> str:
+    if not wallet_token:
+        return ""
+    base = textnorm._preferred_public_base_url().rstrip("/")
+    return f"{base}/bono/{cliente_id}/{wallet_token}"
+
+
 def _purchase_to_public(row: sqlite3.Row) -> Dict[str, Any]:
     try:
         remaining = json.loads(row["remaining_json"] or "{}")
     except (ValueError, TypeError):
         remaining = {}
+    initial = _purchase_initial_sessions(row)
+    wallet_token = row["wallet_token"] if "wallet_token" in row.keys() else ""
+    remaining_total = sum(int(v) for v in remaining.values())
+    initial_total = max(sum(initial.values()), remaining_total)
     return {
         "purchase_id": row["id"],
         "package_id": row["package_id"],
@@ -1053,10 +1077,13 @@ def _purchase_to_public(row: sqlite3.Row) -> Dict[str, Any]:
         "buyer_phone": row["buyer_phone"] or "",
         "price_cents": int(row["price_cents"] or 0),
         "remaining": remaining,
-        "remaining_total": sum(int(v) for v in remaining.values()),
+        "remaining_total": remaining_total,
+        "initial_total": initial_total,
+        "used_total": max(0, initial_total - remaining_total),
         "expires_at": row["expires_at"] or "",
         "status": row["status"] or "active",
         "created_at": row["created_at"],
+        "wallet_url": _package_wallet_url(row["cliente_id"], wallet_token or ""),
     }
 
 
@@ -1101,14 +1128,15 @@ def _sell_package(cliente_id: str, package_id: str, data: Any) -> Dict[str, Any]
     now = timeutils._utc_now()
     expires_at = (now + timedelta(days=int(row["validity_days"] or 365))).isoformat()
     location_id = agenda._resolve_location_id(cliente_id, getattr(data, "location_id", "") or "", require_active=False)
+    remaining_json = json.dumps(remaining, ensure_ascii=False)
     with db._get_db_connection() as connection:
         connection.execute(
             """
             INSERT INTO package_purchases (id, cliente_id, package_id, package_name, buyer_name,
                                            buyer_email, buyer_phone, price_cents, remaining_json,
-                                           expires_at, status, payment_method, location_id,
-                                           created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+                                           initial_json, wallet_token, expires_at, status,
+                                           payment_method, location_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
             """,
             (
                 purchase_id,
@@ -1119,7 +1147,9 @@ def _sell_package(cliente_id: str, package_id: str, data: Any) -> Dict[str, Any]
                 buyer_email,
                 buyer_phone,
                 int(row["price_cents"] or 0),
-                json.dumps(remaining, ensure_ascii=False),
+                remaining_json,
+                remaining_json,
+                f"pw_{secrets.token_urlsafe(18)}",
                 expires_at,
                 _normalize_payment_method(getattr(data, "payment_method", "") or ""),
                 location_id,
@@ -1131,6 +1161,13 @@ def _sell_package(cliente_id: str, package_id: str, data: Any) -> Dict[str, Any]
         purchase = connection.execute(
             "SELECT * FROM package_purchases WHERE id = ?", (purchase_id,)
         ).fetchone()
+    # Venta de mostrador con email: el comprador recibe su bono digital (wallet)
+    # igual que en la compra online. Best-effort, nunca rompe la venta.
+    if buyer_email:
+        try:
+            _send_package_purchase_email(cliente_id, purchase_id)
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.warning("Email de bono %s fallo: %s", purchase_id, exc)
     return _purchase_to_public(purchase)
 
 
@@ -1185,12 +1222,25 @@ def _redeem_package_for_booking(cliente_id: str, purchase_id: str, booking_id: s
                 status_code=409,
                 detail="El bono no tiene sesiones restantes para este servicio.",
             )
+        snapshot_json = purchase["remaining_json"] or "{}"
         remaining[service_slug] = left - 1
         new_status = "used" if all(int(v) <= 0 for v in remaining.values()) else "active"
-        connection.execute(
-            "UPDATE package_purchases SET remaining_json = ?, status = ?, updated_at = ? WHERE id = ?",
-            (json.dumps(remaining, ensure_ascii=False), new_status, timeutils._utc_now_iso(), purchase_id),
+        # CAS sobre el JSON leido: dos canjes concurrentes no pueden descontar
+        # la misma sesion (el segundo no matchea y recibe 409).
+        cursor = connection.execute(
+            "UPDATE package_purchases SET remaining_json = ?, status = ?, updated_at = ? "
+            "WHERE id = ? AND status = 'active' AND remaining_json = ?",
+            (
+                json.dumps(remaining, ensure_ascii=False), new_status,
+                timeutils._utc_now_iso(), purchase_id, snapshot_json,
+            ),
         )
+        if cursor.rowcount != 1:
+            connection.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="El bono se ha actualizado a la vez desde otro sitio. Vuelve a intentarlo.",
+            )
         connection.commit()
     booking._update_booking_record(booking_id, payment_status="paid")
     booking._record_booking_audit(
@@ -1332,8 +1382,19 @@ def _list_gift_cards(cliente_id: str, *, q: str = "", status: str = "", limit: i
     return [_gift_card_to_public(row) for row in rows]
 
 
+def _normalize_gift_code(code: str) -> str:
+    """Entrada tolerante del codigo GC-XXXX-XXXX: acepta minusculas, sin guiones o
+    sin prefijo, y lo reconstruye al formato canonico."""
+    raw = re.sub(r"[^A-Z0-9]", "", (code or "").upper())
+    if raw.startswith("GC") and len(raw) > 8:
+        raw = raw[2:]
+    if len(raw) == 8:
+        return f"GC-{raw[:4]}-{raw[4:]}"
+    return (code or "").strip().upper()
+
+
 def _get_gift_card_by_code(cliente_id: str, code: str) -> Optional[sqlite3.Row]:
-    normalized = (code or "").strip().upper()
+    normalized = _normalize_gift_code(code)
     if not normalized:
         return None
     with db._get_db_connection() as connection:
@@ -1487,27 +1548,41 @@ def _redeem_gift_card_for_booking(
         raise HTTPException(status_code=404, detail="Cita no encontrada.")
     if booking_row["payment_status"] == "paid":
         raise HTTPException(status_code=409, detail="Esta cita ya esta pagada.")
-    card = _get_gift_card_by_code(cliente_id, code)
-    if not card:
-        raise HTTPException(status_code=404, detail="Tarjeta regalo no encontrada. Revisa el codigo.")
-    if card["status"] != "active":
-        raise HTTPException(status_code=409, detail=f"La tarjeta no esta activa (estado: {card['status']}).")
     due = int(amount_cents) if amount_cents else int(booking_row["service_price_cents"] or 0)
     if due < 1:
         raise HTTPException(
             status_code=409,
             detail="La cita no tiene importe asociado. Indica el importe a cobrar.",
         )
-    balance = int(card["balance_cents"] or 0)
-    charge = min(balance, due)
-    new_balance = balance - charge
-    covered = charge >= due
+    normalized_code = _normalize_gift_code(code)
     now_iso = timeutils._utc_now_iso()
     with db._get_db_connection() as connection:
-        connection.execute(
-            "UPDATE gift_cards SET balance_cents = ?, status = ?, updated_at = ? WHERE id = ?",
-            (new_balance, "redeemed" if new_balance <= 0 else "active", now_iso, card["id"]),
+        card = connection.execute(
+            "SELECT * FROM gift_cards WHERE cliente_id = ? AND code = ? LIMIT 1",
+            (cliente_id, normalized_code),
+        ).fetchone()
+        if not card:
+            raise HTTPException(status_code=404, detail="Tarjeta regalo no encontrada. Revisa el codigo.")
+        card = _refresh_gift_card_expiry(connection, card)
+        if card["status"] != "active":
+            raise HTTPException(status_code=409, detail=f"La tarjeta no esta activa (estado: {card['status']}).")
+        balance = int(card["balance_cents"] or 0)
+        charge = min(balance, due)
+        new_balance = balance - charge
+        covered = charge >= due
+        # CAS sobre el saldo leido: dos canjes concurrentes del mismo codigo no
+        # pueden gastar el mismo saldo (el segundo no matchea y recibe 409).
+        cursor = connection.execute(
+            "UPDATE gift_cards SET balance_cents = ?, status = ?, updated_at = ? "
+            "WHERE id = ? AND status = 'active' AND balance_cents = ?",
+            (new_balance, "redeemed" if new_balance <= 0 else "active", now_iso, card["id"], balance),
         )
+        if cursor.rowcount != 1:
+            connection.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="La tarjeta se ha usado a la vez desde otro sitio. Vuelve a intentarlo.",
+            )
         connection.execute(
             """
             INSERT INTO gift_card_transactions (cliente_id, gift_card_id, kind, amount_cents,
@@ -1942,11 +2017,15 @@ def _gift_card_email_bodies(cliente_id: str, row: sqlite3.Row) -> Dict[str, str]
         f"un/a {service_name}" if service_name
         else ("una tarjeta regalo" if hide_value else f"una tarjeta de {amount_label}")
     )
+    saldo_url = (
+        f"{textnorm._preferred_public_base_url().rstrip('/')}/gift/{cliente_id}/saldo?code={row['code']}"
+    )
     text_body = (
         f"{row['buyer_name'] or 'Alguien'} te ha regalado {regalo_txt} de {business}.\n\n"
         + (f"Mensaje: {row['message']}\n\n" if row["message"] else "")
         + f"Tu codigo: {row['code']}\n"
         f"Canjeala al reservar online, por telefono o directamente en recepcion. {expires_line}\n"
+        f"Consulta tu saldo cuando quieras: {saldo_url}\n"
     )
     html_body = f"""
     <div style="max-width:520px;margin:0 auto;font-family:Arial,sans-serif;color:#1f2937">
@@ -1960,6 +2039,9 @@ def _gift_card_email_bodies(cliente_id: str, row: sqlite3.Row) -> Dict[str, str]
       <p><b>{row['buyer_name'] or 'Alguien'}</b> te ha regalado una tarjeta de <b>{business}</b>.</p>
       {message_block}
       <p>Canjeala al reservar online, por telefono o directamente en recepcion, diciendo tu codigo.</p>
+      <div style="text-align:center;margin:20px 0">
+        <a href="{saldo_url}" style="display:inline-block;background:{color};color:#fff;text-decoration:none;font-weight:bold;border-radius:12px;padding:12px 24px">Consultar mi saldo</a>
+      </div>
       <p style="color:#6b7280;font-size:13px">{expires_line}</p>
     </div>
     """
@@ -2029,6 +2111,989 @@ def _send_pending_gift_card_emails() -> int:
         if _send_gift_card_email(row["cliente_id"], row["id"]):
             sent += 1
     return sent
+
+
+# --- Wallet publica del bono + consulta de saldo de tarjeta (jul 2026) -------------
+# Cierra el viaje del cliente final: tras comprar (mostrador u online) puede VER su
+# bono (sesiones restantes, caducidad, historial) en /bono/{cliente}/{wallet_token}
+# y consultar el saldo de una tarjeta regalo en /gift/{cliente}/saldo. Sin login:
+# el token/codigo es el secreto, con rate limit por IP en las rutas.
+
+
+def _tenant_brand(cliente_id: str) -> Dict[str, str]:
+    """Nombre comercial + color de acento del tenant (mismo criterio que /central)."""
+    from backend import appstate  # tardio
+
+    config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
+    business = str(config.get("empresa") or config.get("nombre") or "Nuestro negocio")
+    raw_color = str((config.get("branding") or {}).get("color") or config.get("color") or "#0f766e")
+    color = raw_color if _GIFT_ACCENT_RE.match(raw_color) else "#0f766e"
+    shop_cfg = _shop_public_config(cliente_id)
+    if shop_cfg.get("accent_color"):
+        color = shop_cfg["accent_color"]
+    contacto = config.get("contacto") or {}
+    contact_bits = " · ".join(
+        x for x in (
+            textnorm._sanitize_text(str(contacto.get("telefono") or "")),
+            textnorm._sanitize_text(str(contacto.get("direccion") or "")),
+        ) if x
+    )
+    return {"business": business, "color": color, "contact": contact_bits}
+
+
+def _booking_page_url(cliente_id: str) -> str:
+    """URL de la central de reservas si la reserva online esta activa; '' si no."""
+    from backend import appstate, clients  # tardio
+
+    config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
+    try:
+        enabled = bool((config.get("booking") or {}).get("enabled")) and clients._client_booking_plan_enabled(cliente_id)
+    except Exception:  # noqa: BLE001
+        enabled = bool((config.get("booking") or {}).get("enabled"))
+    if not enabled:
+        return ""
+    base = textnorm._preferred_public_base_url().rstrip("/")
+    return f"{base}/central/{cliente_id}"
+
+
+def _purchase_sessions_detail(cliente_id: str, row: sqlite3.Row) -> List[Dict[str, Any]]:
+    """Sesiones del bono por servicio con nombre legible: restantes vs iniciales."""
+    try:
+        remaining = json.loads(row["remaining_json"] or "{}")
+    except (ValueError, TypeError):
+        remaining = {}
+    initial = _purchase_initial_sessions(row)
+    out: List[Dict[str, Any]] = []
+    for slug in sorted(set(list(initial.keys()) + list(remaining.keys()))):
+        service_row = agenda._get_service_row(cliente_id, slug)
+        name = (service_row["name"] if service_row else slug) or slug
+        left = int(remaining.get(slug, 0) or 0)
+        total = max(int(initial.get(slug, 0) or 0), left)
+        out.append({"slug": slug, "name": name, "left": left, "total": total})
+    return out
+
+
+def _get_purchase_by_wallet_token(cliente_id: str, wallet_token: str) -> Optional[sqlite3.Row]:
+    token = textnorm._sanitize_text(wallet_token or "").strip()
+    if not token:
+        return None
+    with db._get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM package_purchases WHERE cliente_id = ? AND wallet_token = ? LIMIT 1",
+            (cliente_id, token),
+        ).fetchone()
+        if row:
+            row = _refresh_purchase_expiry(connection, row)
+    return row
+
+
+def _purchase_redemption_history(cliente_id: str, purchase_id: str, *, limit: int = 12) -> List[Dict[str, str]]:
+    """Ultimos canjes del bono (fecha + servicio) desde booking_audit."""
+    with db._get_db_connection() as connection:
+        rows = connection.execute(
+            "SELECT payload_json, created_at FROM booking_audit "
+            "WHERE cliente_id = ? AND event_type = 'package_redeemed' AND payload_json LIKE ? "
+            "ORDER BY created_at DESC LIMIT ?",
+            (cliente_id, f"%{purchase_id}%", max(1, min(50, limit))),
+        ).fetchall()
+    out: List[Dict[str, str]] = []
+    for row in rows:
+        try:
+            payload = json.loads(row["payload_json"] or "{}")
+        except (ValueError, TypeError):
+            continue
+        if str(payload.get("purchase_id") or "") != purchase_id:
+            continue
+        slug = str(payload.get("service_slug") or "")
+        service_row = agenda._get_service_row(cliente_id, slug)
+        out.append({
+            "date": str(row["created_at"] or "")[:10],
+            "service": (service_row["name"] if service_row else slug) or slug,
+        })
+    return out
+
+
+_PURCHASE_STATUS_LABELS = {
+    "active": ("Activo", "#059669"),
+    "used": ("Agotado", "#64748b"),
+    "expired": ("Caducado", "#b45309"),
+    "cancelled": ("Anulado", "#b91c1c"),
+}
+
+
+def _package_purchase_email_bodies(cliente_id: str, row: sqlite3.Row) -> Dict[str, str]:
+    """Email del bono al comprador (mostrador y compra online): tarjeta con gradiente,
+    contenido, caducidad y boton a la wallet publica."""
+    brand = _tenant_brand(cliente_id)
+    business, color = brand["business"], brand["color"]
+    info = _purchase_to_public(row)
+    wallet_url = info["wallet_url"]
+    sessions = _purchase_sessions_detail(cliente_id, row)
+    amount_label = f"{info['price_cents'] / 100:.2f} EUR".replace(".", ",") if info["price_cents"] else ""
+    expires_line = f"Caduca el {info['expires_at'][:10]}." if info["expires_at"] else "Sin caducidad."
+    lines_txt = "\n".join(f"- {s['left']} de {s['total']} sesiones: {s['name']}" for s in sessions)
+    text = (
+        f"Hola {info['buyer_name'] or ''},\n\n"
+        f"Tu bono \"{info['package_name']}\" de {business} ya esta activo"
+        + (f" ({amount_label})" if amount_label else "") + ".\n\n"
+        f"Incluye:\n{lines_txt}\n\n{expires_line}\n\n"
+        f"Consulta tus sesiones restantes cuando quieras:\n{wallet_url}\n\n"
+        "Para usarlo, reserva tu cita (online, por telefono o en recepcion) y di tu "
+        "nombre, email o telefono: descontaremos la sesion del bono.\n"
+        + (f"\n{brand['contact']}\n" if brand["contact"] else "")
+    )
+    html_rows = "".join(
+        f'<li>{s["left"]} de {s["total"]} sesiones &middot; <b>{s["name"]}</b></li>' for s in sessions
+    )
+    html = f"""
+    <div style="max-width:520px;margin:0 auto;font-family:Arial,sans-serif;color:#1f2937">
+      <div style="background:linear-gradient(135deg,{color},#111827);border-radius:16px;padding:26px;color:#fff;text-align:center">
+        <div style="font-size:13px;letter-spacing:2px;text-transform:uppercase;opacity:.85">Bono</div>
+        <div style="font-size:24px;font-weight:bold;margin:6px 0">{business}</div>
+        <div style="font-size:20px;font-weight:bold;margin:10px 0">{info['package_name']}</div>
+        <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px;font-size:16px;font-weight:bold">{info['remaining_total']} sesiones disponibles</div>
+      </div>
+      <p style="margin:18px 0 6px">Hola {info['buyer_name'] or ''},</p>
+      <p>Tu bono de <b>{business}</b> ya esta activo{f" ({amount_label})" if amount_label else ""}. Incluye:</p>
+      <ul>{html_rows}</ul>
+      <p style="color:#6b7280;font-size:13px">{expires_line}</p>
+      <div style="text-align:center;margin:22px 0">
+        <a href="{wallet_url}" style="display:inline-block;background:{color};color:#fff;text-decoration:none;font-weight:bold;border-radius:12px;padding:13px 26px">Ver mi bono</a>
+      </div>
+      <p>Para usarlo, reserva tu cita (online, por telefono o en recepcion) y di tu nombre,
+      email o telefono: descontaremos la sesion del bono.</p>
+      {f'<p style="color:#6b7280;font-size:13px">{brand["contact"]}</p>' if brand["contact"] else ""}
+    </div>
+    """
+    return {"subject": f"Tu bono {info['package_name']} - {business}", "text": text, "html": html}
+
+
+def _send_package_purchase_email(cliente_id: str, purchase_id: str) -> bool:
+    """Envia al comprador su bono digital con el enlace a la wallet. Best-effort."""
+    from backend import emailing  # tardio
+
+    with db._get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM package_purchases WHERE id = ? AND cliente_id = ?",
+            (purchase_id, cliente_id),
+        ).fetchone()
+    if not row or not (row["buyer_email"] or "").strip():
+        return False
+    bodies = _package_purchase_email_bodies(cliente_id, row)
+    try:
+        emailing._send_client_email(cliente_id, row["buyer_email"], bodies["subject"], bodies["text"], bodies["html"])
+        return True
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("Email de bono %s fallo: %s", purchase_id, exc)
+        return False
+
+
+_WALLET_BASE_CSS = """
+  * { box-sizing: border-box; margin: 0; }
+  :root { color-scheme: light; --accent: __COLOR__; --ink: #0f172a; --muted: #64748b; --line: #e2e8f0; --bg: #f6f8fb; --ok: #059669; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .hero { position: relative; overflow: hidden; padding: 34px 18px 92px; color: #fff; background: linear-gradient(130deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #0b1526)); background-size: 200% 200%; animation: heroShift 16s ease-in-out infinite; }
+  @keyframes heroShift { 0%,100% { background-position: 0% 30%; } 50% { background-position: 100% 70%; } }
+  .hero-inner { width: min(660px, 100%); margin: 0 auto; display: flex; align-items: center; gap: 13px; }
+  .monogram { width: 46px; height: 46px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 21px; font-weight: 900; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28); }
+  .hero-k { font-size: 11.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .85; }
+  .hero h1 { font-size: clamp(22px, 4.5vw, 30px); font-weight: 900; letter-spacing: -.01em; line-height: 1.1; }
+  .wrap { width: min(660px, 100%); margin: -64px auto 44px; padding: 0 16px; display: grid; gap: 16px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 24px 70px -26px color-mix(in srgb, var(--accent) 30%, rgba(15,23,42,.35)); padding: 24px 24px 22px; animation: riseIn .5s cubic-bezier(.22,.9,.3,1) both; }
+  @keyframes riseIn { from { opacity: 0; transform: translateY(16px); } }
+  .chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 800; color: #fff; }
+  .k { font-size: 11px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+  .cta { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 13px; background: var(--accent); color: #fff; min-height: 48px; padding: 0 22px; font: inherit; font-weight: 850; font-size: 15px; cursor: pointer; text-decoration: none; box-shadow: 0 12px 26px -10px color-mix(in srgb, var(--accent) 60%, transparent); transition: transform .15s, filter .15s; }
+  .cta:hover { filter: brightness(1.06); transform: translateY(-1px); }
+  .ghost { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1.5px solid var(--line); border-radius: 13px; background: #fff; color: var(--ink); min-height: 48px; padding: 0 18px; font: inherit; font-weight: 800; cursor: pointer; text-decoration: none; }
+  .ghost:hover { border-color: var(--accent); color: var(--accent); }
+  footer { text-align: center; font-size: 12.5px; color: #94a3b8; padding: 0 16px 32px; line-height: 1.7; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+"""
+
+
+_PACKAGE_WALLET_TEMPLATE = """<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="__COLOR__">
+<title>Mi bono &middot; __BUSINESS__</title>
+<style>
+__BASE_CSS__
+  .pkg-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .pkg-name { font-size: 21px; font-weight: 900; letter-spacing: -.01em; line-height: 1.2; }
+  .big { display: flex; align-items: baseline; gap: 10px; margin: 18px 0 4px; }
+  .big b { font-size: 52px; font-weight: 900; line-height: 1; color: var(--accent); letter-spacing: -.02em; }
+  .big span { font-size: 15px; font-weight: 700; color: var(--muted); }
+  .svc { margin-top: 16px; display: grid; gap: 12px; }
+  .svc-row { display: grid; gap: 7px; }
+  .svc-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .svc-name { font-weight: 800; font-size: 14.5px; }
+  .svc-count { font-size: 13px; font-weight: 800; color: var(--muted); white-space: nowrap; }
+  .bar { height: 9px; border-radius: 99px; background: color-mix(in srgb, var(--accent) 10%, #eef2f7); overflow: hidden; }
+  .bar > i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 62%, #fff)); transition: width .5s cubic-bezier(.22,.9,.3,1); }
+  .meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+  .meta span { border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; background: #f8fafc; color: var(--muted); font-size: 12.5px; font-weight: 700; }
+  .hist { display: grid; gap: 0; }
+  .hist-row { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+  .hist-row:last-child { border-bottom: 0; }
+  .hist-row b { font-weight: 800; }
+  .hist-row time { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .how { color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+</style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="monogram">__MONOGRAM__</div>
+      <div>
+        <div class="hero-k">Tu bono</div>
+        <h1>__BUSINESS__</h1>
+      </div>
+    </div>
+  </header>
+  <main class="wrap">
+    <section class="card">
+      <div class="pkg-head">
+        <div>
+          <div class="k">Bono</div>
+          <div class="pkg-name">__PACKAGE_NAME__</div>
+        </div>
+        <span class="chip" style="background:__STATUS_COLOR__">__STATUS_LABEL__</span>
+      </div>
+      <div class="big"><b>__REMAINING__</b><span>__REMAINING_WORD__</span></div>
+      <div class="svc">__SERVICE_ROWS__</div>
+      <div class="meta">__META_CHIPS__</div>
+    </section>
+    __HISTORY_CARD__
+    <section class="card" style="display:grid;gap:14px;">
+      <div class="actions">__ACTIONS__</div>
+      <p class="how">Para usar una sesion, reserva tu cita y di tu nombre, email o telefono
+      en recepcion: la descontaremos de este bono. Tambien puedes ensenar esta pantalla.</p>
+    </section>
+  </main>
+  <footer>__BUSINESS____CONTACT__<br>Este enlace es personal: no lo compartas.</footer>
+</body>
+</html>"""
+
+
+def package_wallet_page_html(cliente_id: str, wallet_token: str) -> str:
+    """Wallet publica del bono: sesiones restantes, caducidad e historial de usos."""
+    import html as html_mod
+
+    row = _get_purchase_by_wallet_token(cliente_id, wallet_token)
+    if not row:
+        raise HTTPException(status_code=404, detail="Bono no encontrado.")
+    brand = _tenant_brand(cliente_id)
+    info = _purchase_to_public(row)
+    sessions = _purchase_sessions_detail(cliente_id, row)
+    status_label, status_color = _PURCHASE_STATUS_LABELS.get(
+        info["status"], (info["status"], "#64748b")
+    )
+
+    service_rows = []
+    for s in sessions:
+        pct = int(round(100 * s["left"] / s["total"])) if s["total"] else 0
+        service_rows.append(
+            '<div class="svc-row"><div class="svc-top">'
+            f'<span class="svc-name">{html_mod.escape(s["name"])}</span>'
+            f'<span class="svc-count">quedan {s["left"]} de {s["total"]}</span></div>'
+            f'<div class="bar"><i style="width:{pct}%"></i></div></div>'
+        )
+
+    meta_chips = []
+    if info["created_at"]:
+        meta_chips.append(f"<span>Comprado el {html_mod.escape(str(info['created_at'])[:10])}</span>")
+    if info["expires_at"]:
+        expires_iso = str(info["expires_at"])[:10]
+        chip = f"Caduca el {expires_iso}"
+        try:
+            days_left = (textnorm._parse_date(expires_iso).date() - timeutils._utc_now().date()).days
+            if info["status"] == "active" and 0 <= days_left <= 45:
+                chip += f" &middot; quedan {days_left} dias"
+        except Exception:  # noqa: BLE001
+            pass
+        meta_chips.append(f"<span>{chip}</span>")
+    else:
+        meta_chips.append("<span>Sin caducidad</span>")
+    if info["price_cents"]:
+        meta_chips.append(f"<span>{textnorm._format_price_cents(info['price_cents'])}</span>")
+
+    history = _purchase_redemption_history(cliente_id, row["id"])
+    history_card = ""
+    if history:
+        hist_rows = "".join(
+            f'<div class="hist-row"><b>{html_mod.escape(h["service"])}</b><time>{html_mod.escape(h["date"])}</time></div>'
+            for h in history
+        )
+        history_card = (
+            '<section class="card"><div class="k" style="margin-bottom:10px;">Usos recientes</div>'
+            f'<div class="hist">{hist_rows}</div></section>'
+        )
+
+    actions = []
+    booking_url = _booking_page_url(cliente_id)
+    if booking_url and info["status"] == "active" and info["remaining_total"] > 0:
+        actions.append(f'<a class="cta" href="{html_mod.escape(booking_url)}">Reservar cita</a>')
+
+    page = _PACKAGE_WALLET_TEMPLATE
+    page = page.replace("__BASE_CSS__", _WALLET_BASE_CSS)
+    replacements = {
+        "__COLOR__": brand["color"],
+        "__BUSINESS__": html_mod.escape(brand["business"]),
+        "__MONOGRAM__": html_mod.escape((brand["business"][:1] or "V").upper()),
+        "__PACKAGE_NAME__": html_mod.escape(info["package_name"] or "Bono"),
+        "__STATUS_LABEL__": status_label,
+        "__STATUS_COLOR__": status_color,
+        "__REMAINING__": str(info["remaining_total"]),
+        "__REMAINING_WORD__": "sesion disponible" if info["remaining_total"] == 1 else "sesiones disponibles",
+        "__SERVICE_ROWS__": "".join(service_rows) or '<p class="how">Este bono no tiene sesiones configuradas.</p>',
+        "__META_CHIPS__": "".join(meta_chips),
+        "__HISTORY_CARD__": history_card,
+        "__ACTIONS__": "".join(actions) or "",
+        "__CONTACT__": f" &middot; {html_mod.escape(brand['contact'])}" if brand["contact"] else "",
+    }
+    for key, value in replacements.items():
+        page = page.replace(key, value)
+    return page
+
+
+def gift_balance_available(cliente_id: str) -> bool:
+    """La consulta de saldo aplica si el negocio ha emitido alguna tarjeta (mostrador
+    u online) o tiene la venta publica activa."""
+    if gift_public_available(cliente_id):
+        return True
+    with db._get_db_connection() as connection:
+        return bool(
+            connection.execute(
+                "SELECT 1 FROM gift_cards WHERE cliente_id = ? LIMIT 1", (cliente_id,)
+            ).fetchone()
+        )
+
+
+def gift_card_balance_public(cliente_id: str, code: str) -> Dict[str, Any]:
+    """Saldo de una tarjeta para su portador (el codigo es el secreto)."""
+    normalized = _normalize_gift_code(textnorm._sanitize_text(code or ""))
+    if len(normalized) < 6:
+        raise HTTPException(status_code=400, detail="Escribe el codigo completo de la tarjeta.")
+    with db._get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM gift_cards WHERE cliente_id = ? AND code = ? LIMIT 1",
+            (cliente_id, normalized),
+        ).fetchone()
+        if row:
+            row = _refresh_gift_card_expiry(connection, row)
+    if not row:
+        raise HTTPException(status_code=404, detail="No encontramos esa tarjeta. Revisa el codigo.")
+    return {
+        "code": row["code"],
+        "status": row["status"] or "active",
+        "balance_cents": int(row["balance_cents"] or 0),
+        "initial_cents": int(row["initial_cents"] or 0),
+        "expires_at": (row["expires_at"] or "")[:10],
+        "recipient_name": row["recipient_name"] or "",
+        "service_name": (row["service_name"] or "") if "service_name" in row.keys() else "",
+    }
+
+
+_GIFT_BALANCE_TEMPLATE = """<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="__COLOR__">
+<title>Saldo de tu tarjeta &middot; __BUSINESS__</title>
+<style>
+__BASE_CSS__
+  .lookup { display: grid; gap: 12px; }
+  .lookup label { font-size: 12px; font-weight: 800; color: #334155; }
+  .code-row { display: flex; gap: 10px; }
+  .code-row input { flex: 1; border: 1.5px solid var(--line); border-radius: 13px; padding: 13px 15px; font: inherit; font-size: 17px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--ink); }
+  .code-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent); }
+  .err { display: none; border-radius: 12px; padding: 12px 15px; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; font-size: 14px; }
+  .gcard { display: none; border-radius: 18px; padding: 26px 24px; color: #fff; background: linear-gradient(135deg, var(--accent), #111827); position: relative; overflow: hidden; }
+  .gcard.on { display: grid; gap: 16px; animation: riseIn .4s cubic-bezier(.22,.9,.3,1); }
+  .gcard::after { content: ""; position: absolute; right: -46px; top: -46px; width: 150px; height: 150px; border-radius: 50%; background: rgba(255,255,255,.10); }
+  .gcard .brand { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; opacity: .85; }
+  .gcard .biz { font-size: 19px; font-weight: 800; margin-top: 2px; }
+  .gcard .bal { font-size: 42px; font-weight: 900; letter-spacing: -.02em; line-height: 1; }
+  .gcard .bal small { display: block; font-size: 12.5px; font-weight: 700; opacity: .8; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 7px; }
+  .gcard .codebox { background: rgba(255,255,255,.16); border-radius: 10px; padding: 10px; text-align: center; font-size: 16px; letter-spacing: 3px; font-weight: 800; }
+  .gbar { height: 9px; border-radius: 99px; background: rgba(255,255,255,.22); overflow: hidden; }
+  .gbar > i { display: block; height: 100%; border-radius: 99px; background: #fff; transition: width .6s cubic-bezier(.22,.9,.3,1); }
+  .gfoot { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; opacity: .9; flex-wrap: wrap; }
+  .after { display: none; }
+  .after.on { display: grid; gap: 12px; }
+  .how { color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+</style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="monogram">__MONOGRAM__</div>
+      <div>
+        <div class="hero-k">Tarjeta regalo</div>
+        <h1>__BUSINESS__</h1>
+      </div>
+    </div>
+  </header>
+  <main class="wrap">
+    <section class="card lookup">
+      <div>
+        <div class="k" style="margin-bottom:4px;">Consulta tu saldo</div>
+        <p class="how">Escribe el codigo que aparece en tu tarjeta o en el email que recibiste.</p>
+      </div>
+      <div class="err" id="err"></div>
+      <label for="code">Codigo de la tarjeta</label>
+      <div class="code-row">
+        <input id="code" maxlength="14" placeholder="GC-XXXX-XXXX" autocomplete="off" spellcheck="false">
+        <button class="cta" id="go" type="button">Consultar</button>
+      </div>
+    </section>
+    <div class="gcard" id="gcard">
+      <div>
+        <div class="brand">Tarjeta regalo</div>
+        <div class="biz">__BUSINESS__</div>
+      </div>
+      <div class="bal"><small>Saldo disponible</small><span id="bal"></span></div>
+      <div class="gbar"><i id="gbarFill"></i></div>
+      <div class="codebox" id="codebox"></div>
+      <div class="gfoot"><span id="gstate"></span><span id="gexp"></span></div>
+    </div>
+    <section class="card after" id="after">
+      <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap;">__ACTIONS__</div>
+      <p class="how">Para canjearla, di tu codigo al reservar o en recepcion. Si cubre solo
+      una parte, el resto se abona en el centro.</p>
+    </section>
+  </main>
+  <footer>__BUSINESS____CONTACT__</footer>
+<script>
+(function () {
+  var input = document.getElementById("code");
+  var err = document.getElementById("err");
+  var eur = function (c) { return (c / 100).toLocaleString("es-ES", { minimumFractionDigits: c % 100 ? 2 : 0 }) + " \\u20AC"; };
+  var STATES = { active: "Activa", redeemed: "Agotada", disabled: "Anulada", expired: "Caducada" };
+  // El servidor normaliza (acepta sin guiones o sin prefijo GC); aqui solo mayusculas.
+  input.addEventListener("input", function () { this.value = this.value.toUpperCase(); });
+  function lookup() {
+    err.style.display = "none";
+    var code = input.value.trim();
+    if (code.length < 6) { err.textContent = "Escribe el codigo completo."; err.style.display = "block"; return; }
+    var btn = document.getElementById("go");
+    btn.disabled = true;
+    fetch(location.pathname, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code })
+    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        btn.disabled = false;
+        if (!res.ok) throw new Error((res.d && res.d.detail) || "No se pudo consultar el saldo.");
+        var d = res.d;
+        document.getElementById("bal").textContent = eur(d.balance_cents);
+        document.getElementById("codebox").textContent = d.code;
+        var pct = d.initial_cents > 0 ? Math.max(0, Math.min(100, Math.round(100 * d.balance_cents / d.initial_cents))) : 0;
+        document.getElementById("gbarFill").style.width = pct + "%";
+        document.getElementById("gstate").textContent = "Estado: " + (STATES[d.status] || d.status);
+        document.getElementById("gexp").textContent = d.expires_at ? "Caduca el " + d.expires_at : "Sin caducidad";
+        document.getElementById("gcard").classList.add("on");
+        document.getElementById("after").classList.add("on");
+        document.getElementById("gcard").scrollIntoView({ block: "nearest", behavior: "smooth" });
+      })
+      .catch(function (e) {
+        btn.disabled = false;
+        err.textContent = e.message;
+        err.style.display = "block";
+      });
+  }
+  document.getElementById("go").addEventListener("click", lookup);
+  input.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); lookup(); } });
+  var qs = new URLSearchParams(location.search);
+  var pre = (qs.get("code") || "").trim();
+  if (pre) { input.value = pre; lookup(); }
+})();
+</script>
+</body>
+</html>"""
+
+
+def gift_balance_page_html(cliente_id: str) -> str:
+    """Pagina publica de consulta de saldo de tarjeta regalo (branding del tenant)."""
+    import html as html_mod
+
+    if not gift_balance_available(cliente_id):
+        raise HTTPException(status_code=404, detail="La consulta de saldo no esta disponible.")
+    brand = _tenant_brand(cliente_id)
+    base = textnorm._preferred_public_base_url().rstrip("/")
+    actions = []
+    booking_url = _booking_page_url(cliente_id)
+    if booking_url:
+        actions.append(f'<a class="cta" href="{html_mod.escape(booking_url)}">Reservar cita</a>')
+    if gift_public_available(cliente_id):
+        actions.append(f'<a class="ghost" href="{base}/gift/{cliente_id}">Regalar otra tarjeta</a>')
+
+    page = _GIFT_BALANCE_TEMPLATE
+    page = page.replace("__BASE_CSS__", _WALLET_BASE_CSS)
+    replacements = {
+        "__COLOR__": brand["color"],
+        "__BUSINESS__": html_mod.escape(brand["business"]),
+        "__MONOGRAM__": html_mod.escape((brand["business"][:1] or "V").upper()),
+        "__ACTIONS__": "".join(actions),
+        "__CONTACT__": f" &middot; {html_mod.escape(brand['contact'])}" if brand["contact"] else "",
+    }
+    for key, value in replacements.items():
+        page = page.replace(key, value)
+    return page
+
+
+# --- Canje online tras reservar (central publica) ----------------------------------
+# El manage_token de la cita (secreto que solo tiene quien reservo) autoriza a
+# consultar y aplicar bonos/tarjetas sobre ESA cita. Los bonos se detectan por el
+# email/telefono de la reserva; la tarjeta exige poseer el codigo (igual que en
+# mostrador). Reusa _redeem_package_for_booking/_redeem_gift_card_for_booking.
+
+
+def _booking_for_manage_token_or_404(cliente_id: str, manage_token: str) -> sqlite3.Row:
+    booking_row = booking._load_booking_by_token_or_404(textnorm._sanitize_text(manage_token or ""))
+    if booking_row["cliente_id"] != cliente_id:
+        raise HTTPException(status_code=404, detail="No se ha encontrado la reserva.")
+    return booking_row
+
+
+def _packages_for_contact(cliente_id: str, *, email: str = "", phone: str = "") -> List[sqlite3.Row]:
+    """Bonos activos cuyo comprador coincide con el email o el telefono dados
+    (telefono normalizado a los ultimos 9 digitos, criterio CRM)."""
+    from backend import crm  # tardio
+
+    email = (email or "").strip().lower()
+    phone_norm = crm._normalize_phone_for_match(phone or "")
+    if not email and not phone_norm:
+        return []
+    with db._get_db_connection() as connection:
+        rows = connection.execute(
+            "SELECT * FROM package_purchases WHERE cliente_id = ? AND status = 'active' "
+            "ORDER BY created_at DESC LIMIT 100",
+            (cliente_id,),
+        ).fetchall()
+        rows = [_refresh_purchase_expiry(connection, row) for row in rows]
+    out = []
+    for row in rows:
+        if row["status"] != "active":
+            continue
+        row_email = (row["buyer_email"] or "").strip().lower()
+        row_phone = crm._normalize_phone_for_match(row["buyer_phone"] or "")
+        if (email and row_email == email) or (phone_norm and row_phone and row_phone == phone_norm):
+            out.append(row)
+    return out
+
+
+def _packages_for_booking_contact(cliente_id: str, booking_row: sqlite3.Row) -> List[sqlite3.Row]:
+    """Bonos activos cuyo comprador coincide con el contacto de la cita."""
+    return _packages_for_contact(
+        cliente_id, email=booking_row["email"] or "", phone=booking_row["telefono"] or ""
+    )
+
+
+def packages_summary_for_contact(cliente_id: str, *, email: str = "", phone: str = "") -> Dict[str, Any]:
+    """Resumen de los bonos activos de un contacto para los asistentes (voz/WhatsApp).
+
+    El emisor debe garantizar que el contacto esta VERIFICADO por el canal (numero
+    del que llama / escribe). Devuelve un `mensaje` hablable y la lista `bonos`."""
+    rows = _packages_for_contact(cliente_id, email=email, phone=phone)
+    bonos: List[Dict[str, Any]] = []
+    for row in rows:
+        detail = _purchase_sessions_detail(cliente_id, row)
+        parts = [f"{s['left']} de {s['total']} sesiones de {s['name']}" for s in detail if s["total"]]
+        bonos.append({
+            "purchase_id": row["id"],
+            "package_name": row["package_name"] or "Bono",
+            "detalle": parts,
+            "expires_at": (row["expires_at"] or "")[:10],
+        })
+    if not bonos:
+        return {
+            "ok": True,
+            "count": 0,
+            "bonos": [],
+            "mensaje": (
+                "No encuentro ningun bono activo asociado a este contacto. Si lo compraste con "
+                "otro telefono o email, dimelo y vuelvo a mirar."
+            ),
+        }
+    frases = []
+    for b in bonos:
+        frase = f"el bono {b['package_name']}, con " + (", ".join(b["detalle"]) or "sin sesiones")
+        if b["expires_at"]:
+            frase += f", que caduca el {b['expires_at']}"
+        frases.append(frase)
+    mensaje = ("Tienes " if len(bonos) == 1 else f"Tienes {len(bonos)} bonos activos: ") + "; ".join(frases) + "."
+    return {"ok": True, "count": len(bonos), "bonos": bonos, "mensaje": mensaje}
+
+
+def auto_redeem_package_for_booking(
+    cliente_id: str, booking_id: str, *, extra_phone: str = ""
+) -> Optional[Dict[str, Any]]:
+    """Auto-canje al crear una cita por el asistente (voz/WhatsApp, contacto verificado).
+
+    Si el contacto de la cita (o `extra_phone`, el numero verificado del canal) tiene
+    un bono activo que cubre el servicio, descuenta 1 sesion (gasta primero el que
+    antes caduque) y deja la cita pagada. Best-effort: NUNCA rompe la reserva; si la
+    cita esta pendiente de pago obligatorio (pending_payment) no toca nada."""
+    try:
+        booking_row = booking._get_booking_row_by_id(booking_id)
+        if not booking_row or booking_row["cliente_id"] != cliente_id:
+            return None
+        if booking_row["payment_status"] == "paid" or booking_row["status"] in ("cancelled", "pending_payment"):
+            return None
+        service_slug = booking_row["service_id"] or ""
+        if not service_slug or int(booking_row["service_price_cents"] or 0) < 1:
+            return None
+        candidates = {row["id"]: row for row in _packages_for_booking_contact(cliente_id, booking_row)}
+        if extra_phone:
+            for row in _packages_for_contact(cliente_id, phone=extra_phone):
+                candidates.setdefault(row["id"], row)
+        eligible = []
+        for row in candidates.values():
+            try:
+                remaining = json.loads(row["remaining_json"] or "{}")
+            except (ValueError, TypeError):
+                continue
+            if int(remaining.get(service_slug, 0) or 0) >= 1:
+                eligible.append(row)
+        if not eligible:
+            return None
+        eligible.sort(key=lambda r: (r["expires_at"] or "9999", r["created_at"]))
+        chosen = eligible[0]
+        result = _redeem_package_for_booking(cliente_id, chosen["id"], booking_id)
+        return {
+            "purchase_id": chosen["id"],
+            "package_name": chosen["package_name"] or "Bono",
+            "sessions_left": int((result.get("remaining") or {}).get(service_slug, 0) or 0),
+        }
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("Auto-canje de bono fallo (%s, %s): %s", cliente_id, booking_id, exc)
+        return None
+
+
+_PACKAGE_BALANCE_INTENT_RE = re.compile(
+    r"(mi[s]?\s+bono|bono[s]?\b[^\n]{0,40}\b(quedan?|restan?|sesione?s|saldo)|"
+    r"(cuant[ao]s|que)\s+sesione?s|sesione?s\s+(me\s+)?(quedan?|restan?)|"
+    r"saldo\s+(de[l]?\s+)?(mi\s+)?bono)",
+    re.IGNORECASE,
+)
+
+
+def _message_requests_package_balance(message: str) -> bool:
+    """Intencion 'cuantas sesiones me quedan de mi bono' (no confundir con comprar
+    un bono ni con tarjeta regalo: 'bono regalo' es intent de gift)."""
+    norm = textnorm._strip_accents(str(message or "").lower())
+    if "regalo" in norm or "comprar" in norm:
+        return False
+    return bool(_PACKAGE_BALANCE_INTENT_RE.search(norm))
+
+
+# --- Ciclo de vida: caducidad proxima + recompra (jul 2026) --------------------------
+# Corre en el worker de recordatorios. Emails transaccionales sobre algo que el
+# cliente PAGO (a punto de caducar / agotado): default ON por tenant, apagable con
+# config['reminders']['lifecycle_emails'] = false. Sellado por fila (idempotente).
+
+LIFECYCLE_EXPIRY_WINDOW_DAYS = int(os.getenv("COMMERCE_EXPIRY_NOTICE_DAYS", "14") or "14")
+LIFECYCLE_MIN_AGE_DAYS = 7        # no avisar de caducidad recien comprado
+LIFECYCLE_REBUY_WINDOW_DAYS = 14  # recompra solo si se agoto hace poco (no historico)
+
+
+def _lifecycle_emails_enabled(cliente_id: str) -> bool:
+    from backend import appstate  # tardio
+
+    raw = (appstate.CONFIG_CLIENTES.get(cliente_id) or {}).get("reminders") or {}
+    value = raw.get("lifecycle_emails")
+    return True if value is None else bool(value)
+
+
+def _lifecycle_cta_urls(cliente_id: str) -> Dict[str, str]:
+    """CTAs disponibles para los emails de ciclo de vida: reservar y recomprar."""
+    base = textnorm._preferred_public_base_url().rstrip("/")
+    urls = {"book": _booking_page_url(cliente_id), "shop": ""}
+    try:
+        if shop_public_available(cliente_id)["packages"]:
+            urls["shop"] = f"{base}/tienda/{cliente_id}?solo=bonos"
+    except Exception:  # noqa: BLE001
+        pass
+    return urls
+
+
+def _lifecycle_email_shell(color: str, title: str, body_html: str, cta_url: str, cta_label: str) -> str:
+    cta = (
+        f'<div style="text-align:center;margin:22px 0">'
+        f'<a href="{cta_url}" style="display:inline-block;background:{color};color:#fff;'
+        f'text-decoration:none;font-weight:bold;border-radius:12px;padding:13px 26px">{cta_label}</a></div>'
+        if cta_url else ""
+    )
+    return (
+        '<div style="max-width:520px;margin:0 auto;font-family:Arial,sans-serif;color:#1f2937">'
+        f'<h2 style="margin:0 0 14px">{title}</h2>{body_html}{cta}</div>'
+    )
+
+
+def _send_package_expiry_email(cliente_id: str, row: sqlite3.Row) -> bool:
+    from backend import emailing  # tardio
+
+    brand = _tenant_brand(cliente_id)
+    info = _purchase_to_public(row)
+    sessions = _purchase_sessions_detail(cliente_id, row)
+    expires = info["expires_at"][:10]
+    wallet_url = info["wallet_url"]
+    lines = "; ".join(f"{s['left']} de {s['total']} de {s['name']}" for s in sessions if s["total"])
+    urls = _lifecycle_cta_urls(cliente_id)
+    subject = f"Tu bono {info['package_name']} caduca el {expires} - {brand['business']}"
+    text = (
+        f"Hola {info['buyer_name'] or ''},\n\n"
+        f"Tu bono \"{info['package_name']}\" de {brand['business']} caduca el {expires} y todavia "
+        f"te quedan {info['remaining_total']} sesiones ({lines}).\n\n"
+        f"Reserva tu cita para aprovecharlas antes de esa fecha"
+        + (f": {urls['book']}" if urls["book"] else " (online, por telefono o en recepcion).") + "\n\n"
+        f"Consulta tu bono: {wallet_url}\n"
+    )
+    html_sessions = "".join(
+        f"<li>{s['left']} de {s['total']} sesiones &middot; <b>{s['name']}</b></li>" for s in sessions if s["total"]
+    )
+    html = _lifecycle_email_shell(
+        brand["color"],
+        f"Tu bono caduca el {expires}",
+        (
+            f"<p>Hola {info['buyer_name'] or ''}, tu bono <b>{info['package_name']}</b> de "
+            f"<b>{brand['business']}</b> caduca el <b>{expires}</b> y todavia te quedan "
+            f"<b>{info['remaining_total']} sesiones</b>:</p><ul>{html_sessions}</ul>"
+            f'<p style="color:#6b7280;font-size:13px"><a href="{wallet_url}">Ver mi bono</a></p>'
+        ),
+        urls["book"] or wallet_url,
+        "Reservar cita" if urls["book"] else "Ver mi bono",
+    )
+    try:
+        emailing._send_client_email(cliente_id, row["buyer_email"], subject, text, html)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("Aviso de caducidad de bono %s fallo: %s", row["id"], exc)
+        return False
+
+
+def _send_gift_expiry_email(cliente_id: str, row: sqlite3.Row) -> bool:
+    from backend import emailing  # tardio
+
+    to_email = (row["recipient_email"] or "").strip() or (row["buyer_email"] or "").strip()
+    if not to_email:
+        return False
+    brand = _tenant_brand(cliente_id)
+    expires = (row["expires_at"] or "")[:10]
+    balance = textnorm._format_price_cents(int(row["balance_cents"] or 0))
+    base = textnorm._preferred_public_base_url().rstrip("/")
+    saldo_url = f"{base}/gift/{cliente_id}/saldo?code={row['code']}"
+    urls = _lifecycle_cta_urls(cliente_id)
+    subject = f"Tu tarjeta regalo caduca el {expires} - {brand['business']}"
+    text = (
+        f"Tu tarjeta regalo de {brand['business']} (codigo {row['code']}) caduca el {expires} "
+        f"y todavia tiene {balance} de saldo.\n\n"
+        f"Canjeala al reservar online, por telefono o en recepcion"
+        + (f": {urls['book']}" if urls["book"] else ".") + "\n\n"
+        f"Consulta tu saldo: {saldo_url}\n"
+    )
+    html = _lifecycle_email_shell(
+        brand["color"],
+        f"Tu tarjeta regalo caduca el {expires}",
+        (
+            f"<p>Tu tarjeta de <b>{brand['business']}</b> (codigo <b>{row['code']}</b>) caduca el "
+            f"<b>{expires}</b> y todavia tiene <b>{balance}</b> de saldo. Canjeala al reservar "
+            f"o directamente en recepcion.</p>"
+            f'<p style="color:#6b7280;font-size:13px"><a href="{saldo_url}">Consultar mi saldo</a></p>'
+        ),
+        urls["book"] or saldo_url,
+        "Reservar cita" if urls["book"] else "Consultar saldo",
+    )
+    try:
+        emailing._send_client_email(cliente_id, to_email, subject, text, html)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("Aviso de caducidad de tarjeta %s fallo: %s", row["id"], exc)
+        return False
+
+
+def _send_package_rebuy_email(cliente_id: str, row: sqlite3.Row) -> bool:
+    from backend import emailing  # tardio
+
+    brand = _tenant_brand(cliente_id)
+    info = _purchase_to_public(row)
+    urls = _lifecycle_cta_urls(cliente_id)
+    subject = f"Has completado tu bono {info['package_name']} - {brand['business']}"
+    renew_line = (
+        f"Renuevalo online en un minuto: {urls['shop']}" if urls["shop"]
+        else "Puedes renovarlo en recepcion o por telefono cuando quieras."
+    )
+    text = (
+        f"Hola {info['buyer_name'] or ''},\n\n"
+        f"Has usado la ultima sesion de tu bono \"{info['package_name']}\" de {brand['business']}. "
+        f"Esperamos que lo hayas disfrutado.\n\n{renew_line}\n"
+        + (f"\nO reserva tu proxima cita: {urls['book']}\n" if urls["book"] else "")
+    )
+    html = _lifecycle_email_shell(
+        brand["color"],
+        "Has completado tu bono 🎉",
+        (
+            f"<p>Hola {info['buyer_name'] or ''}, has usado la ultima sesion de tu bono "
+            f"<b>{info['package_name']}</b> de <b>{brand['business']}</b>. Esperamos que lo hayas disfrutado.</p>"
+            + ("" if urls["shop"] else "<p>Puedes renovarlo en recepcion o por telefono cuando quieras.</p>")
+        ),
+        urls["shop"] or urls["book"],
+        "Renovar mi bono" if urls["shop"] else "Reservar cita",
+    )
+    try:
+        emailing._send_client_email(cliente_id, row["buyer_email"], subject, text, html)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("Aviso de recompra de bono %s fallo: %s", row["id"], exc)
+        return False
+
+
+def _run_commerce_lifecycle_notices() -> Dict[str, int]:
+    """Pasada del worker: avisos de caducidad (bono + tarjeta) y de recompra.
+
+    Idempotente via columnas de sellado (se sella SOLO si el email salio; un fallo
+    se reintenta en la siguiente pasada). Limita el lote por pasada."""
+    now = timeutils._utc_now()
+    now_iso = now.isoformat()
+    horizon = (now + timedelta(days=LIFECYCLE_EXPIRY_WINDOW_DAYS)).isoformat()
+    min_age = (now - timedelta(days=LIFECYCLE_MIN_AGE_DAYS)).isoformat()
+    rebuy_since = (now - timedelta(days=LIFECYCLE_REBUY_WINDOW_DAYS)).isoformat()
+    sent = {"package_expiry": 0, "gift_expiry": 0, "package_rebuy": 0}
+
+    with db._get_db_connection() as connection:
+        expiring_packages = connection.execute(
+            "SELECT * FROM package_purchases WHERE status = 'active' AND buyer_email != '' "
+            "AND expiry_notice_sent_at = '' AND expires_at != '' AND expires_at > ? "
+            "AND expires_at <= ? AND created_at <= ? ORDER BY expires_at ASC LIMIT 50",
+            (now_iso, horizon, min_age),
+        ).fetchall()
+        expiring_gifts = connection.execute(
+            "SELECT * FROM gift_cards WHERE status = 'active' AND balance_cents > 0 "
+            "AND expiry_notice_sent_at = '' AND expires_at != '' AND expires_at > ? "
+            "AND expires_at <= ? AND created_at <= ? ORDER BY expires_at ASC LIMIT 50",
+            (now_iso, horizon, min_age),
+        ).fetchall()
+        used_packages = connection.execute(
+            "SELECT * FROM package_purchases WHERE status = 'used' AND buyer_email != '' "
+            "AND rebuy_notice_sent_at = '' AND updated_at >= ? ORDER BY updated_at DESC LIMIT 50",
+            (rebuy_since,),
+        ).fetchall()
+
+    for row in expiring_packages:
+        if not _lifecycle_emails_enabled(row["cliente_id"]):
+            continue
+        try:
+            remaining = json.loads(row["remaining_json"] or "{}")
+        except (ValueError, TypeError):
+            remaining = {}
+        if sum(int(v) for v in remaining.values()) < 1:
+            continue
+        if _send_package_expiry_email(row["cliente_id"], row):
+            with db._get_db_connection() as connection:
+                connection.execute(
+                    "UPDATE package_purchases SET expiry_notice_sent_at = ? WHERE id = ? AND expiry_notice_sent_at = ''",
+                    (now_iso, row["id"]),
+                )
+                connection.commit()
+            sent["package_expiry"] += 1
+
+    for row in expiring_gifts:
+        if not _lifecycle_emails_enabled(row["cliente_id"]):
+            continue
+        if _send_gift_expiry_email(row["cliente_id"], row):
+            with db._get_db_connection() as connection:
+                connection.execute(
+                    "UPDATE gift_cards SET expiry_notice_sent_at = ? WHERE id = ? AND expiry_notice_sent_at = ''",
+                    (now_iso, row["id"]),
+                )
+                connection.commit()
+            sent["gift_expiry"] += 1
+
+    for row in used_packages:
+        if not _lifecycle_emails_enabled(row["cliente_id"]):
+            continue
+        if _send_package_rebuy_email(row["cliente_id"], row):
+            with db._get_db_connection() as connection:
+                connection.execute(
+                    "UPDATE package_purchases SET rebuy_notice_sent_at = ? WHERE id = ? AND rebuy_notice_sent_at = ''",
+                    (now_iso, row["id"]),
+                )
+                connection.commit()
+            sent["package_rebuy"] += 1
+
+    return sent
+
+
+def booking_redeem_options(cliente_id: str, manage_token: str) -> Dict[str, Any]:
+    """Opciones de canje para una cita recien creada (central publica)."""
+    booking_row = _booking_for_manage_token_or_404(cliente_id, manage_token)
+    price_cents = int(booking_row["service_price_cents"] or 0)
+    can_redeem = (
+        booking_row["status"] not in ("cancelled",)
+        and booking_row["payment_status"] != "paid"
+        and price_cents > 0
+    )
+    service_slug = booking_row["service_id"] or ""
+    packages: List[Dict[str, Any]] = []
+    if can_redeem and service_slug:
+        for row in _packages_for_booking_contact(cliente_id, booking_row):
+            try:
+                remaining = json.loads(row["remaining_json"] or "{}")
+            except (ValueError, TypeError):
+                remaining = {}
+            left = int(remaining.get(service_slug, 0) or 0)
+            if left < 1:
+                continue
+            packages.append({
+                "purchase_id": row["id"],
+                "package_name": row["package_name"] or "Bono",
+                "sessions_left": left,
+                "expires_at": (row["expires_at"] or "")[:10],
+            })
+    return {
+        "booking_id": booking_row["id"],
+        "can_redeem": can_redeem,
+        "payment_status": booking_row["payment_status"] or "",
+        "price_cents": price_cents,
+        "packages": packages,
+        "gift_enabled": can_redeem,
+    }
+
+
+def booking_redeem_apply(
+    cliente_id: str, manage_token: str, *, kind: str, code: str = "", purchase_id: str = ""
+) -> Dict[str, Any]:
+    """Aplica un bono o una tarjeta regalo a la cita del manage_token."""
+    booking_row = _booking_for_manage_token_or_404(cliente_id, manage_token)
+    if kind == "package":
+        purchase_id = textnorm._sanitize_text(purchase_id or "")
+        allowed = {row["id"] for row in _packages_for_booking_contact(cliente_id, booking_row)}
+        if purchase_id not in allowed:
+            raise HTTPException(status_code=404, detail="Ese bono no esta disponible para esta reserva.")
+        result = _redeem_package_for_booking(cliente_id, purchase_id, booking_row["id"])
+        return {
+            "ok": True, "kind": "package", "covered": True,
+            "remaining_due_cents": 0,
+            "sessions_left": int((result.get("remaining") or {}).get(booking_row["service_id"] or "", 0) or 0),
+        }
+    if kind == "gift":
+        result = _redeem_gift_card_for_booking(cliente_id, code, booking_row["id"])
+        return {
+            "ok": True, "kind": "gift", "covered": bool(result.get("covered")),
+            "charged_cents": int(result.get("charged_cents") or 0),
+            "balance_after_cents": int(result.get("balance_after_cents") or 0),
+            "remaining_due_cents": int(result.get("remaining_due_cents") or 0),
+        }
+    raise HTTPException(status_code=400, detail="Tipo de canje no valido.")
 
 
 def gift_public_page_html(cliente_id: str) -> str:
@@ -2248,7 +3313,7 @@ def gift_public_page_html(cliente_id: str) -> str:
     <div class="pv-note">El codigo se genera al completar el pago.<br>Llega por email con este mismo diseno.</div>
   </div>
 </div>
-<footer>{business}{(" &middot; " + contact_bits) if contact_bits else ""}<br>Compra segura &middot; Sin gastos adicionales</footer>
+<footer>{business}{(" &middot; " + contact_bits) if contact_bits else ""}<br>Compra segura &middot; Sin gastos adicionales<br><a href="/gift/{cliente_id}/saldo" style="color:inherit">&iquest;Ya tienes una tarjeta? Consulta tu saldo</a></footer>
 <script>
 (function () {{
   var qs = new URLSearchParams(location.search);
@@ -2647,13 +3712,15 @@ def _finalize_shop_package_payment(connection: sqlite3.Connection, payment: sqli
     validity_days = int(meta.get("validity_days") or 365)
     expires_at = (timeutils._utc_now() + timedelta(days=validity_days)).isoformat()
     purchase_id = f"pkp_{secrets.token_urlsafe(8)}"
+    remaining_json = json.dumps(remaining, ensure_ascii=False)
     connection.execute(
         """
         INSERT INTO package_purchases (id, cliente_id, package_id, package_name, buyer_name,
                                        buyer_email, buyer_phone, price_cents, remaining_json,
-                                       expires_at, status, payment_method, location_id,
-                                       customer_payment_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'stripe', '', ?, ?, ?)
+                                       initial_json, wallet_token, expires_at, status,
+                                       payment_method, location_id, customer_payment_id,
+                                       created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'stripe', '', ?, ?, ?)
         """,
         (
             purchase_id, cliente_id,
@@ -2661,7 +3728,8 @@ def _finalize_shop_package_payment(connection: sqlite3.Connection, payment: sqli
             str(meta.get("buyer_name") or ""), str(meta.get("buyer_email") or ""),
             str(meta.get("buyer_phone") or ""),
             int(payment["amount_cents"] or 0),
-            json.dumps(remaining, ensure_ascii=False),
+            remaining_json, remaining_json,
+            f"pw_{secrets.token_urlsafe(18)}",
             expires_at, pay_id, now, now,
         ),
     )
@@ -2714,6 +3782,103 @@ def _finalize_shop_products_payment(connection: sqlite3.Connection, payment: sql
     return created
 
 
+def _guard_refundable_asset(payment: sqlite3.Row, amount_cents: Optional[int], force: bool) -> None:
+    """Pre-check antes de pedir un reembolso a Stripe sobre un pago que emitio un
+    activo (tarjeta regalo o bono online): si el activo ya tiene consumo, exige
+    ``force`` para no devolver dinero cuyo valor ya se ha gastado. El revert real
+    del activo lo aplica el webhook charge.refunded (_revert_assets_after_refund)."""
+    kind = payment["kind"] if "kind" in payment.keys() else ""
+    if kind not in ("gift_card", "shop_package"):
+        return
+    refund = int(amount_cents) if amount_cents else int(payment["amount_cents"] or 0)
+    with db._get_db_connection() as connection:
+        if kind == "gift_card":
+            card = connection.execute(
+                "SELECT * FROM gift_cards WHERE customer_payment_id = ? LIMIT 1", (payment["id"],)
+            ).fetchone()
+            if not card:
+                return
+            balance = int(card["balance_cents"] or 0)
+            if refund > balance and not force:
+                spent = max(0, int(card["initial_cents"] or 0) - balance)
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"La tarjeta {card['code']} ya tiene {textnorm._format_price_cents(spent)} consumidos "
+                        f"(saldo restante {textnorm._format_price_cents(balance)}). Reembolsa como maximo el saldo "
+                        "o marca 'forzar' para anular la tarjeta igualmente."
+                    ),
+                )
+        else:
+            purchase = connection.execute(
+                "SELECT * FROM package_purchases WHERE customer_payment_id = ? LIMIT 1", (payment["id"],)
+            ).fetchone()
+            if not purchase:
+                return
+            info = _purchase_to_public(purchase)
+            if info["used_total"] > 0 and not force:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"El bono ya tiene {info['used_total']} sesion(es) usadas. "
+                        "Marca 'forzar' para reembolsar y anular el bono igualmente."
+                    ),
+                )
+
+
+def _revert_assets_after_refund(
+    connection: sqlite3.Connection, payment: sqlite3.Row, refunded_total_cents: int, now: str
+) -> None:
+    """Retira el activo emitido por un pago reembolsado (tarjeta regalo o bono online).
+
+    Orientado a objetivo e idempotente: recibe el TOTAL acumulado reembolsado (el
+    ``amount_refunded`` de Stripe) y deja el activo en el estado que corresponde,
+    de forma que reintentos del webhook no dupliquen la retirada. Usa la conexion
+    del webhook (sin commit)."""
+    kind = payment["kind"] if "kind" in payment.keys() else ""
+    refunded = max(0, int(refunded_total_cents or 0))
+    if not refunded:
+        return
+    if kind == "gift_card":
+        card = connection.execute(
+            "SELECT * FROM gift_cards WHERE customer_payment_id = ? LIMIT 1", (payment["id"],)
+        ).fetchone()
+        if not card:
+            return
+        initial = int(card["initial_cents"] or 0)
+        balance = int(card["balance_cents"] or 0)
+        target_balance = max(0, initial - refunded)
+        if balance <= target_balance:
+            return
+        deduct = balance - target_balance
+        new_status = "disabled" if target_balance <= 0 else card["status"]
+        connection.execute(
+            "UPDATE gift_cards SET balance_cents = ?, status = ?, updated_at = ? WHERE id = ?",
+            (target_balance, new_status, now, card["id"]),
+        )
+        connection.execute(
+            """
+            INSERT INTO gift_card_transactions (cliente_id, gift_card_id, kind, amount_cents,
+                                                balance_after_cents, notes, created_at)
+            VALUES (?, ?, 'refund', ?, ?, 'reembolso del pago', ?)
+            """,
+            (payment["cliente_id"], card["id"], deduct, target_balance, now),
+        )
+    elif kind == "shop_package":
+        purchase = connection.execute(
+            "SELECT * FROM package_purchases WHERE customer_payment_id = ? LIMIT 1", (payment["id"],)
+        ).fetchone()
+        # Solo el reembolso TOTAL anula el bono; uno parcial es decision del negocio
+        # (p.ej. compensar una sesion) y deja el bono vivo.
+        if not purchase or purchase["status"] == "cancelled":
+            return
+        if refunded >= int(payment["amount_cents"] or 0):
+            connection.execute(
+                "UPDATE package_purchases SET status = 'cancelled', updated_at = ? WHERE id = ?",
+                (now, purchase["id"]),
+            )
+
+
 def _send_shop_confirmation_email(cliente_id: str, payment_id: str) -> bool:
     """Email de confirmacion al comprador tras materializarse una compra de la tienda
     (bono o productos). Best-effort: nunca rompe el webhook."""
@@ -2745,32 +3910,17 @@ def _send_shop_confirmation_email(cliente_id: str, payment_id: str) -> bool:
     amount_label = f"{int(payment['amount_cents'] or 0) / 100:.2f} EUR".replace(".", ",")
     kind = payment["kind"] if "kind" in payment.keys() else ""
     if kind == "shop_package":
-        summary = meta.get("items_summary") or []
-        validity = int(meta.get("validity_days") or 365)
-        subject = f"Tu bono {meta.get('package_name') or ''} - {business}"
-        lines_txt = "\n".join(f"- {s}" for s in summary)
-        text = (
-            f"Hola {buyer_name},\n\n"
-            f"Tu bono \"{meta.get('package_name') or ''}\" de {business} ya esta activo ({amount_label}).\n\n"
-            f"Incluye:\n{lines_txt}\n\n"
-            f"Validez: {validity} dias.\n"
-            f"Para usarlo, reserva tu cita (online, por telefono o en recepcion) y di tu nombre, "
-            f"email o telefono: descontaremos la sesion del bono.\n"
-            + (f"\n{contact_line}\n" if contact_line else "")
-        )
-        html_lines = "".join(f"<li>{s}</li>" for s in summary)
-        html = (
-            f'<div style="max-width:520px;margin:0 auto;font-family:Arial,sans-serif;color:#1f2937">'
-            f"<h2>Tu bono ya esta activo</h2>"
-            f"<p>Hola {buyer_name}, gracias por tu compra en <b>{business}</b> ({amount_label}).</p>"
-            f"<p><b>{meta.get('package_name') or ''}</b> incluye:</p><ul>{html_lines}</ul>"
-            f"<p>Validez: {validity} dias.</p>"
-            f"<p>Para usarlo, reserva tu cita (online, por telefono o en recepcion) y di tu nombre, "
-            f"email o telefono: descontaremos la sesion del bono.</p>"
-            + (f'<p style="color:#6b7280;font-size:13px">{contact_line}</p>' if contact_line else "")
-            + "</div>"
-        )
-    elif kind == "shop_products":
+        # El bono ya se materializo en el webhook: el email sale de la compra real
+        # (incluye el enlace a la wallet publica), igual que la venta de mostrador.
+        with db._get_db_connection() as connection:
+            purchase = connection.execute(
+                "SELECT id FROM package_purchases WHERE customer_payment_id = ? AND cliente_id = ? LIMIT 1",
+                (payment_id, cliente_id),
+            ).fetchone()
+        if not purchase:
+            return False
+        return _send_package_purchase_email(cliente_id, purchase["id"])
+    if kind == "shop_products":
         pickup = _shop_public_config(cliente_id)["pickup_note"] or "Puedes recoger tu pedido en el centro."
         subject = f"Hemos recibido tu pedido - {business}"
         prod_lines = [
@@ -3492,6 +4642,28 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
   #bookingDone .summary b { color: var(--ink); }
   .done-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 
+  /* Canje de bono / tarjeta regalo tras reservar */
+  #redeemBlock { display: none; width: 100%; max-width: 440px; text-align: left; }
+  #redeemBlock.on { display: grid; gap: 10px; animation: fadeSlide .35s ease; }
+  .redeem-pkg { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 15px; border: 1.5px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 13px; background: color-mix(in srgb, var(--accent) 6%, #fff); }
+  .redeem-pkg .t { display: grid; gap: 2px; min-width: 0; }
+  .redeem-pkg .t b { font-size: 14px; }
+  .redeem-pkg .t span { color: var(--muted); font-size: 12.5px; }
+  .redeem-pkg button { flex: none; border: 0; border-radius: 11px; background: var(--accent); color: var(--accent-ink); font-weight: 800; font-size: 13px; padding: 10px 14px; cursor: pointer; transition: filter .15s; }
+  .redeem-pkg button:hover { filter: brightness(1.06); }
+  .redeem-pkg button[disabled] { opacity: .6; cursor: wait; }
+  .redeem-gift-toggle { border: 1.5px dashed var(--line); background: #fff; color: var(--muted); border-radius: 13px; padding: 12px 15px; font-size: 13.5px; font-weight: 700; cursor: pointer; text-align: left; width: 100%; }
+  .redeem-gift-toggle:hover { border-color: var(--accent); color: var(--accent); }
+  .redeem-gift-row { display: none; gap: 9px; }
+  .redeem-gift-row.on { display: flex; animation: fadeSlide .3s ease; }
+  .redeem-gift-row input { flex: 1; min-width: 0; border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 13px; font: inherit; font-size: 15px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; }
+  .redeem-gift-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent); }
+  .redeem-gift-row button { flex: none; border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-ink); font-weight: 800; padding: 0 18px; cursor: pointer; }
+  .redeem-gift-row button[disabled] { opacity: .6; cursor: wait; }
+  .redeem-note { border-radius: 12px; padding: 12px 15px; font-size: 13.5px; line-height: 1.45; }
+  .redeem-note.ok { background: var(--ok-soft); color: #065f46; border: 1px solid var(--ok-line); }
+  .redeem-note.err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
   .contact { color: var(--muted); text-align: center; font-size: 13px; padding: 0 18px 34px; }
   .contact a { color: inherit; }
 
@@ -3622,6 +4794,15 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
         <h3>&iexcl;Reserva confirmada!</h3>
         <p class="msg" id="doneMsg"></p>
         <div class="summary" id="doneSummary"></div>
+        <div id="redeemBlock">
+          <div id="redeemPkgs"></div>
+          <button type="button" class="redeem-gift-toggle" id="redeemGiftToggle">🎁 &iquest;Tienes una tarjeta regalo? Canjeala ahora</button>
+          <div class="redeem-gift-row" id="redeemGiftRow">
+            <input id="redeemGiftCode" maxlength="14" placeholder="GC-XXXX-XXXX" autocomplete="off" spellcheck="false">
+            <button type="button" id="redeemGiftApply">Aplicar</button>
+          </div>
+          <div id="redeemMsg"></div>
+        </div>
         <div class="done-actions">
           <a class="primary" id="donePay" style="display:none;">Completar pago</a>
           <a class="secondary" id="doneManage" style="display:none;">Gestionar mi cita</a>
@@ -4026,14 +5207,101 @@ function showDone(data) {
   const pay = $("donePay"), manage = $("doneManage");
   if (data.payment_url) { pay.href = data.payment_url; pay.style.display = "inline-flex"; } else pay.style.display = "none";
   if (data.manage_url) { manage.href = data.manage_url; manage.style.display = "inline-flex"; } else manage.style.display = "none";
+  $("redeemBlock").classList.remove("on");
+  $("redeemMsg").innerHTML = "";
+  loadRedeemOptions(data.manage_url);
   document.querySelector(".wiz-track").style.display = "none";
   document.querySelector(".wizard-steps").style.display = "none";
   $("bookingForm").querySelector(".form").style.display = "none";
   $("bookingDone").classList.add("on");
   $("bookingDone").scrollIntoView({ block: "nearest" });
 }
+
+// --- Canje de bono / tarjeta regalo sobre la cita recien creada -----------------
+// El manage_token (secreto del enlace de gestion) autoriza el canje; los bonos se
+// detectan por el email/telefono de la reserva, la tarjeta exige poseer el codigo.
+const redeem = { token: "", applied: false };
+function eurFmt(c) { return ((c || 0) / 100).toLocaleString("es-ES", { minimumFractionDigits: (c || 0) % 100 ? 2 : 0 }) + " €"; }
+function redeemUrl(suffix) { return "/central/" + encodeURIComponent(CFG.clienteId) + suffix; }
+function redeemNote(kind, html) { $("redeemMsg").innerHTML = '<div class="redeem-note ' + kind + '">' + html + "</div>"; }
+function redeemSuccess(html) {
+  redeem.applied = true;
+  $("redeemPkgs").innerHTML = "";
+  $("redeemGiftToggle").style.display = "none";
+  $("redeemGiftRow").classList.remove("on");
+  $("donePay").style.display = "none";
+  redeemNote("ok", html);
+}
+async function loadRedeemOptions(manageUrl) {
+  const m = String(manageUrl || "").match(/\\/booking\\/manage\\/([^\\/?#]+)/);
+  if (!m) return;
+  redeem.token = m[1];
+  redeem.applied = false;
+  let opts = null;
+  try {
+    opts = await api(redeemUrl("/redeem-options"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ manage_token: redeem.token })
+    });
+  } catch (e) { return; }
+  if (!opts || !opts.can_redeem) return;
+  const pkgs = opts.packages || [];
+  $("redeemPkgs").innerHTML = pkgs.map(function (p) {
+    const plural = p.sessions_left === 1 ? "" : "s";
+    return '<div class="redeem-pkg"><div class="t"><b>🎟 ' + esc(p.package_name) + "</b>"
+      + "<span>Tienes " + p.sessions_left + " sesion" + (plural ? "es" : "") + " de este servicio"
+      + (p.expires_at ? " · caduca el " + esc(p.expires_at) : "") + "</span></div>"
+      + '<button type="button" data-purchase="' + esc(p.purchase_id) + '">Usar 1 sesion</button></div>';
+  }).join("");
+  $("redeemPkgs").querySelectorAll("[data-purchase]").forEach(function (btn) {
+    btn.addEventListener("click", function () { applyRedeem({ kind: "package", purchase_id: btn.dataset.purchase }, btn); });
+  });
+  $("redeemGiftToggle").style.display = "";
+  $("redeemGiftRow").classList.remove("on");
+  $("redeemGiftCode").value = "";
+  $("redeemBlock").classList.add("on");
+}
+async function applyRedeem(payload, btn) {
+  if (redeem.applied) return;
+  if (btn) btn.disabled = true;
+  try {
+    const body = Object.assign({ manage_token: redeem.token }, payload);
+    const res = await api(redeemUrl("/redeem"), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+    });
+    if (res.kind === "package") {
+      redeemSuccess("✓ Sesion descontada de tu bono. <b>La cita queda pagada.</b>"
+        + (res.sessions_left > 0 ? " Te quedan " + res.sessions_left + " sesiones." : ""));
+    } else if (res.covered) {
+      redeemSuccess("✓ Tarjeta aplicada (" + eurFmt(res.charged_cents) + "). <b>La cita queda pagada.</b>"
+        + (res.balance_after_cents > 0 ? " Saldo restante: " + eurFmt(res.balance_after_cents) + "." : ""));
+    } else {
+      redeemSuccess("✓ Tarjeta aplicada (" + eurFmt(res.charged_cents) + "). Quedan <b>"
+        + eurFmt(res.remaining_due_cents) + "</b> que se abonan en el centro.");
+    }
+  } catch (e) {
+    redeemNote("err", esc(e.message));
+    if (btn) btn.disabled = false;
+  }
+}
+$("redeemGiftToggle").addEventListener("click", function () {
+  $("redeemGiftRow").classList.toggle("on");
+  if ($("redeemGiftRow").classList.contains("on")) $("redeemGiftCode").focus();
+});
+$("redeemGiftCode").addEventListener("input", function () { this.value = this.value.toUpperCase(); });
+$("redeemGiftCode").addEventListener("keydown", function (ev) {
+  if (ev.key === "Enter") { ev.preventDefault(); $("redeemGiftApply").click(); }
+});
+$("redeemGiftApply").addEventListener("click", function () {
+  const code = $("redeemGiftCode").value.trim();
+  if (code.replace(/[^A-Za-z0-9]/g, "").length < 6) { redeemNote("err", "Escribe el codigo completo de la tarjeta."); return; }
+  applyRedeem({ kind: "gift", code: code }, $("redeemGiftApply"));
+});
+
 $("doneAgain").addEventListener("click", function () {
   $("bookingDone").classList.remove("on");
+  $("redeemBlock").classList.remove("on");
+  $("redeemMsg").innerHTML = "";
   document.querySelector(".wiz-track").style.display = "";
   document.querySelector(".wizard-steps").style.display = "";
   $("bookingForm").querySelector(".form").style.display = "";

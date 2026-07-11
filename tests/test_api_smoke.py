@@ -247,6 +247,19 @@ def test_security_headers_are_sent(client: TestClient):
     assert "max-age=31536000" in response.headers["strict-transport-security"]
 
 
+def test_public_uploads_static_mount_serves_catalog_images(client: TestClient, api_module):
+    image_path = api_module.UPLOADS_DIR / "demo" / "probe.png"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\n")
+    try:
+        response = client.get("/uploads/demo/probe.png")
+        assert response.status_code == 200
+        assert response.content == b"\x89PNG\r\n\x1a\n"
+        assert response.headers["content-type"].startswith("image/png")
+    finally:
+        image_path.unlink(missing_ok=True)
+
+
 def test_new_booking_config_defaults_to_sunday_closed(api_module):
     normalized = api_module._normalize_client_config(
         "nuevo_cliente",

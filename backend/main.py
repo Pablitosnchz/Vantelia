@@ -212,6 +212,9 @@ async def security_headers_middleware(request: Request, call_next: Any) -> Respo
 app.mount("/widget", StaticFiles(directory=str(settings.WIDGET_DIR)), name="widget")
 
 
+app.mount("/uploads", StaticFiles(directory=str(settings.UPLOADS_DIR)), name="uploads")
+
+
 if settings.BRAND_DIR.exists():
     app.mount("/brand-assets", StaticFiles(directory=str(settings.BRAND_DIR)), name="brand-assets")
 

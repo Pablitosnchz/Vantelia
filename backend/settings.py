@@ -22,6 +22,7 @@ load_dotenv(BASE_DIR / ".env")
 
 DATA_DIR = Path(os.getenv("VANTELIA_DATA_DIR", str(BASE_DIR / "data"))).resolve()
 STORAGE_DIR = Path(os.getenv("VANTELIA_STORAGE_DIR", str(BASE_DIR / "storage"))).resolve()
+UPLOADS_DIR = STORAGE_DIR / "uploads"
 WIDGET_DIR = BASE_DIR / "widget"
 ADMIN_UI_DIR = BASE_DIR / "admin_ui"
 ACCESS_UI_DIR = BASE_DIR / "access_ui"

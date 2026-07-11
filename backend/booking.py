@@ -126,6 +126,16 @@ def _booking_reminder_worker() -> None:
                     settings.logger.info("Tarjetas regalo enviadas: %s", gift_sent)
             except Exception as exc:  # noqa: BLE001
                 settings.logger.error("Error enviando tarjetas regalo pendientes: %s", exc)
+            # Ciclo de vida de comercio: caducidad proxima (bono/tarjeta) y recompra
+            # tras agotar el bono. Default ON; apagable por tenant en config
+            # reminders.lifecycle_emails.
+            try:
+                from backend import commerce as _commerce  # tardio: evita ciclo
+                lifecycle = _commerce._run_commerce_lifecycle_notices()
+                if any(lifecycle.values()):
+                    settings.logger.info("Avisos de ciclo de vida de comercio: %s", lifecycle)
+            except Exception as exc:  # noqa: BLE001
+                settings.logger.error("Error en avisos de ciclo de vida de comercio: %s", exc)
             # Rebooking proactivo por IA (opt-in por negocio, como mucho 1 pasada/dia).
             try:
                 if _ai_rebooking_due():

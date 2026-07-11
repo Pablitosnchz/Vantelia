@@ -24,7 +24,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AppWhatsAppResponse, WhatsAppWebhookStatus
-from backend import agenda, appstate, booking, chat, clients, crm, db, messaging, rag, settings, textnorm, timeutils
+from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, messaging, rag, settings, textnorm, timeutils
 
 def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResponse:
     cfg = clients._get_client_config(cliente_id)
@@ -741,9 +741,20 @@ async def _wa_create_booking(
     )
     if flow.notas:
         confirmacion += f"📝 Notas: {flow.notas}\n"
+    # Auto-canje de bono (numero verificado del canal): descuenta 1 sesion y deja la
+    # cita pagada. Best-effort; si la cita exige pago previo, el helper no toca nada.
+    bono_redeemed = commerce.auto_redeem_package_for_booking(
+        cliente_id, booking_id, extra_phone=flow.from_number
+    )
+    if bono_redeemed:
+        left = int(bono_redeemed.get("sessions_left") or 0)
+        confirmacion += (
+            f"\n🎟 He descontado 1 sesion de tu bono *{bono_redeemed['package_name']}*: la cita queda pagada"
+            + (f" (te quedan {left} sesiones).\n" if left > 0 else " (era tu ultima sesion).\n")
+        )
     payment_row = booking._booking_payment_row(booking_id)
     stored_booking = booking._get_booking_row_by_id(booking_id)
-    if payment_row and payment_row["checkout_url"]:
+    if not bono_redeemed and payment_row and payment_row["checkout_url"]:
         payment_label = "Para confirmar, completa el pago" if stored_booking and stored_booking["status"] == "pending_payment" else "Pago opcional"
         confirmacion += f"\n💳 *{payment_label}:* {payment_row['checkout_url']}\n"
     confirmacion += (
@@ -906,6 +917,19 @@ async def _handle_whatsapp_message(
         await _wa_send_main_menu(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             nombre_empresa=nombre_empresa, booking_enabled=booking_enabled, greeting=True,
+        )
+        return
+
+    # Consulta de bono ("cuantas sesiones me quedan"): respuesta determinista con los
+    # bonos del NUMERO VERIFICADO del canal (el remitente). Solo sin flujo activo.
+    if not flow.flow and commerce._message_requests_package_balance(incoming_text):
+        summary = commerce.packages_summary_for_contact(cliente_id, phone=from_number)
+        texto = summary["mensaje"]
+        if summary["count"]:
+            texto += "\n\nAl reservar una cita del servicio incluido, la sesion se descuenta sola del bono."
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text=texto,
         )
         return
 

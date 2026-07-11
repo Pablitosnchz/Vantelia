@@ -228,6 +228,9 @@ async def stripe_connect_webhook(request: Request) -> Dict[str, Any]:
                 refunded = int(textnorm._object_get(data, "amount_refunded", 0) or 0)
                 total = int(textnorm._object_get(data, "amount", 0) or payment["amount_cents"])
                 new_status = "refunded" if refunded >= total else "partially_refunded"
+                # Si el pago emitio un activo (tarjeta regalo / bono online), retira su
+                # valor para que el negocio no pierda dos veces (idempotente).
+                commerce._revert_assets_after_refund(connection, payment, refunded, now)
             connection.execute(
                 "UPDATE customer_payments SET status=?, paid_at=?, stripe_payment_intent_id=?, updated_at=? WHERE id=?",
                 (new_status, paid_at, payment_intent, now, payment["id"]),

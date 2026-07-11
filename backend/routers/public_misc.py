@@ -224,6 +224,69 @@ async def gift_public_page(cliente_id: str, request: Request) -> HTMLResponse:
     return HTMLResponse(commerce.gift_public_page_html(cliente_id))
 
 
+@app.get("/gift/{cliente_id}/saldo", include_in_schema=False)
+async def gift_balance_page(cliente_id: str, request: Request) -> HTMLResponse:
+    """Consulta publica de saldo de tarjeta regalo. Disponible si el negocio ha
+    emitido alguna tarjeta (mostrador u online) o tiene la venta publica activa."""
+    textnorm._assert_valid_client_id(cliente_id)
+    clients._get_client_config(cliente_id)
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"gift_balance_page:{cliente_id}:{client_ip}", 30)
+    return HTMLResponse(commerce.gift_balance_page_html(cliente_id))
+
+
+@app.post("/gift/{cliente_id}/saldo", include_in_schema=False)
+async def gift_balance_lookup(cliente_id: str, data: GiftBalancePayload, request: Request) -> Dict[str, Any]:
+    """Saldo de una tarjeta por su codigo (el codigo es el secreto; rate limit
+    estricto por IP contra fuerza bruta)."""
+    textnorm._assert_valid_client_id(cliente_id)
+    clients._get_client_config(cliente_id)
+    if not commerce.gift_balance_available(cliente_id):
+        raise HTTPException(status_code=404, detail="La consulta de saldo no esta disponible.")
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"gift_balance:{cliente_id}:{client_ip}", 10)
+    return commerce.gift_card_balance_public(cliente_id, data.code)
+
+
+@app.get("/bono/{cliente_id}/{wallet_token}", include_in_schema=False)
+async def package_wallet_page(cliente_id: str, wallet_token: str, request: Request) -> HTMLResponse:
+    """Wallet publica del bono: sesiones restantes, caducidad e historial. El
+    wallet_token (secreto del email de compra) es la autorizacion."""
+    textnorm._assert_valid_client_id(cliente_id)
+    clients._get_client_config(cliente_id)
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"bono_wallet:{cliente_id}:{client_ip}", 30)
+    return HTMLResponse(commerce.package_wallet_page_html(cliente_id, wallet_token))
+
+
+@app.post("/central/{cliente_id}/redeem-options", include_in_schema=False)
+async def central_redeem_options(
+    cliente_id: str, data: CentralRedeemOptionsPayload, request: Request
+) -> Dict[str, Any]:
+    """Opciones de canje (bonos del contacto + tarjeta) para una cita recien creada
+    en la central publica. El manage_token de la reserva es la autorizacion."""
+    textnorm._assert_valid_client_id(cliente_id)
+    clients._get_client_config(cliente_id)
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"central_redeem_opts:{cliente_id}:{client_ip}", 20)
+    return commerce.booking_redeem_options(cliente_id, data.manage_token)
+
+
+@app.post("/central/{cliente_id}/redeem", include_in_schema=False)
+async def central_redeem_apply(
+    cliente_id: str, data: CentralRedeemPayload, request: Request
+) -> Dict[str, Any]:
+    """Aplica un bono o tarjeta regalo a la cita del manage_token (canje online)."""
+    textnorm._assert_valid_client_id(cliente_id)
+    clients._get_client_config(cliente_id)
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"central_redeem:{cliente_id}:{client_ip}", 10)
+    return commerce.booking_redeem_apply(
+        cliente_id, data.manage_token,
+        kind=data.kind, code=data.code, purchase_id=data.purchase_id,
+    )
+
+
 @app.post("/gift/{cliente_id}/checkout", include_in_schema=False)
 async def gift_public_checkout(cliente_id: str, data: GiftCardPublicCheckoutPayload, request: Request) -> Dict[str, Any]:
     """Crea el Stripe Checkout de la tarjeta. La tarjeta se emite en el webhook al
