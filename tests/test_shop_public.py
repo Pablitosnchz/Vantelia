@@ -74,6 +74,9 @@ def test_central_public_page_renders_booking_first(client, api_module):
         "location_id: st.locId",                # el POST /agendar acota por centro
         "employee_id: st.empId",                # ...y por profesional
         'id="bookingDone"',                     # panel de exito tras reservar
+        'id="doneTitle"',                       # titulo dinamico segun estado real de la cita
+        "Reserva pendiente de pago",            # no etiqueta pending_payment como confirmada
+        "Completar pago para confirmar",
         "function showDone",
         'id="dateStrip"',                       # selector de dias tipo Fresha/Doctolib
         "function buildDateStrip",

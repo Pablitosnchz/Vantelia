@@ -87,24 +87,12 @@ async def booking_manage_cancel(manage_token: str, request: Request) -> BookingA
             manage_url=booking._booking_row_manage_url(booking_row, request),
             provider_booking_url=booking_row["provider_booking_url"] or "",
         )
-    await booking._cancel_provider_booking(booking_row)
-    booking._update_booking_record(
-        booking_row["id"],
-        status="cancelled",
-        cancelled_at=timeutils._utc_now_iso(),
-        provider_status="cancelled",
+    refreshed = await booking._cancel_booking_core(
+        booking_row,
+        source="customer",
+        request=request,
+        audit_extra={"channel": "public_manage"},
     )
-    booking._record_booking_audit(
-        booking_row["id"],
-        booking_row["cliente_id"],
-        "booking_cancelled",
-        {"source": "customer"},
-    )
-    refreshed = booking._load_booking_by_token_or_404(manage_token)
-    try:
-        await booking._send_booking_reminder_by_kind(refreshed, "cancelled", request)
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.error("No se ha podido enviar el aviso de cancelacion %s: %s", refreshed["id"], exc)
     return BookingActionResponse(
         ok=True,
         booking_id=refreshed["id"],
@@ -728,7 +716,6 @@ async def auth_delete_service(
         )
         connection.commit()
     return AuthSimpleResponse(ok=True, message="Servicio eliminado.")
-
 
 
 

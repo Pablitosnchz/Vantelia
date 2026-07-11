@@ -8893,6 +8893,13 @@ def test_required_booking_payment_is_idempotent_and_confirmed_by_webhook(api_mod
         assert payment["amount_cents"] == 1200
         assert payment["checkout_url"] == "https://checkout.stripe.test/booking"
         assert created_sessions[0]["stripe_account"] == "acct_booking_test"
+        assert created_sessions[0]["success_url"].endswith(
+            f"/booking/manage/{record['manage_token']}?payment=success"
+        )
+        assert created_sessions[0]["cancel_url"].endswith(
+            f"/booking/manage/{record['manage_token']}?payment=cancel"
+        )
+        assert f"/reservas/{record['manage_token']}" not in created_sessions[0]["success_url"]
 
         assert api_module.create_booking_payment_checkout("demo", record["id"]) == payment["checkout_url"]
         assert len(created_sessions) == 1

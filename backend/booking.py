@@ -941,6 +941,8 @@ async def _cancel_booking_by_code(
         return {"ok": True, "ya_cancelada": True, "mensaje": "Esa cita ya estaba cancelada."}
     if row["status"] == "completed":
         return {"ok": False, "error": "Esa cita ya se ha realizado y no se puede cancelar."}
+    if row["status"] == "no_show":
+        return {"ok": False, "error": "Esa cita esta marcada como no asistida y no se puede cancelar."}
     try:
         refreshed = await _cancel_booking_core(
             row,
@@ -949,6 +951,8 @@ async def _cancel_booking_by_code(
             request=request,
             audit_extra={"channel": source, "trusted_phone": trusted_phone},
         )
+    except HTTPException as exc:
+        return {"ok": False, "error": str(exc.detail)}
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("[%s] cancelacion por codigo fallo (%s): %s", source, cliente_id, exc)
         return {"ok": False, "error": "No se pudo cancelar la cita."}
@@ -2380,13 +2384,17 @@ async def _cancel_booking_core(
     request: Optional[Request] = None,
     audit_extra: Optional[Dict[str, Any]] = None,
 ) -> sqlite3.Row:
-    """Cancela una cita (idempotente). Reutilizable por portal, voz y chat.
+    """Cancela una cita (idempotente). Reutilizable por portal, voz, web publica y chat.
 
     Devuelve la fila actualizada. No lanza si ya estaba cancelada.
     """
     booking_id = booking_row["id"]
     if booking_row["status"] == "cancelled":
         return booking_row
+    if booking_row["status"] == "completed":
+        raise HTTPException(status_code=409, detail="Esa cita ya se ha realizado y no se puede cancelar.")
+    if booking_row["status"] == "no_show":
+        raise HTTPException(status_code=409, detail="Esa cita esta marcada como no asistida y no se puede cancelar.")
     cancel_reason = textnorm._sanitize_text(reason, allow_multiline=True)
     await _cancel_provider_booking(booking_row)
     _update_booking_record(
@@ -4191,6 +4199,15 @@ def _ai_payment_delivery_available(cliente_id: str, method: str) -> bool:
     return emailing._email_delivery_configured()
 
 
+def _booking_payment_return_urls(base_url: str, manage_token: str) -> Tuple[str, str]:
+    base = (base_url or textnorm._preferred_public_base_url()).rstrip("/")
+    if not base:
+        raise HTTPException(status_code=503, detail="APP_BASE_URL no configurada para generar enlaces de pago.")
+    token = textnorm._sanitize_text(manage_token or "")
+    manage_url = f"{base}/booking/manage/{token}"
+    return f"{manage_url}?payment=success", f"{manage_url}?payment=cancel"
+
+
 def _create_customer_payment_link(
     cliente_id: str,
     booking: sqlite3.Row,
@@ -4228,15 +4245,15 @@ def _create_customer_payment_link(
     contact_id = _payment_contact_for_booking(booking)
     payment_id, now = "pay_" + secrets.token_hex(10), timeutils._utc_now_iso()
     metadata = {"source": "customer_payment", "payment_id": payment_id, "cliente_id": cliente_id, "booking_id": booking_id}
-    base = (base_url or "").rstrip("/")
+    success_url, cancel_url = _booking_payment_return_urls(base_url, booking["manage_token"])
     stripe_gateway._stripe_init()
     try:
         checkout_kwargs: Dict[str, Any] = dict(
             mode="payment",
             line_items=[{"price_data": {"currency": "eur", "unit_amount": amount, "product_data": {"name": booking["servicio"] or "Reserva"}}, "quantity": 1}],
             metadata=metadata,
-            success_url=f"{base}/booking/manage/{booking['manage_token']}?payment=success",
-            cancel_url=f"{base}/booking/manage/{booking['manage_token']}?payment=cancel",
+            success_url=success_url,
+            cancel_url=cancel_url,
             stripe_account=account.stripe_account_id,
         )
         if booking["email"]:
@@ -4444,8 +4461,7 @@ def create_booking_payment_checkout(cliente_id: str, booking_id: str, request: O
         return existing["checkout_url"]
     stripe_gateway._stripe_init()
     base_url = textnorm._preferred_public_base_url(request).rstrip("/")
-    if not base_url:
-        raise HTTPException(status_code=503, detail="APP_BASE_URL no configurada para generar enlaces de pago.")
+    success_url, cancel_url = _booking_payment_return_urls(base_url, booking["manage_token"])
     # preauth: retencion sin cobro inmediato (capture manual desde el panel).
     capture_method = "manual" if decision.get("payment_type") == "preauth" else "automatic"
     payment_intent_data: Dict[str, Any] = {
@@ -4470,8 +4486,8 @@ def create_booking_payment_checkout(cliente_id: str, booking_id: str, request: O
                 "quantity": 1,
             }],
             customer_email=booking["email"] or None,
-            success_url=f"{base_url}/reservas/{booking['manage_token']}?payment=success",
-            cancel_url=f"{base_url}/reservas/{booking['manage_token']}?payment=cancel",
+            success_url=success_url,
+            cancel_url=cancel_url,
             expires_at=int(time.time()) + settings.BOOKING_PAYMENT_EXPIRY_MINUTES * 60,
             metadata={
                 "source": "booking_payment",

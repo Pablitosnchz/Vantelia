@@ -4941,7 +4941,7 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
       </form>
       <div class="done" id="bookingDone">
         <svg class="ck" viewBox="0 0 56 56"><circle cx="28" cy="28" r="26.4"/><path d="M16 29.5l8.2 8L40 21"/></svg>
-        <h3>&iexcl;Reserva confirmada!</h3>
+        <h3 id="doneTitle">&iexcl;Reserva confirmada!</h3>
         <p class="msg" id="doneMsg"></p>
         <div class="summary" id="doneSummary"></div>
         <div id="redeemBlock">
@@ -5355,10 +5355,18 @@ function showDone(data) {
     ["Hora", st.hour || ""]
   ].filter(Boolean);
   if (st.service && st.service.price) rows.push(["Precio", st.service.price]);
-  $("doneMsg").textContent = data.mensaje || "Te esperamos. Recibiras la confirmacion con los datos de tu reserva.";
+  const pendingPayment = data.estado === "pending_payment" || data.payment_status === "pending";
+  $("doneTitle").textContent = pendingPayment ? "Reserva pendiente de pago" : "¡Reserva confirmada!";
+  $("doneMsg").textContent = pendingPayment
+    ? "Hemos guardado el hueco de forma provisional. Completa el pago para confirmar la cita."
+    : (data.mensaje || "Te esperamos. Recibiras la confirmacion con los datos de tu reserva.");
   $("doneSummary").innerHTML = rows.map(function (r) { return "<span>" + esc(r[0]) + ": <b>" + esc(r[1]) + "</b></span>"; }).join("");
   const pay = $("donePay"), manage = $("doneManage");
-  if (data.payment_url) { pay.href = data.payment_url; pay.style.display = "inline-flex"; } else pay.style.display = "none";
+  if (data.payment_url) {
+    pay.href = data.payment_url;
+    pay.textContent = pendingPayment ? "Completar pago para confirmar" : "Completar pago";
+    pay.style.display = "inline-flex";
+  } else pay.style.display = "none";
   if (data.manage_url) { manage.href = data.manage_url; manage.style.display = "inline-flex"; } else manage.style.display = "none";
   $("redeemBlock").classList.remove("on");
   $("redeemMsg").innerHTML = "";

@@ -2682,12 +2682,16 @@ async def _voice_cancel_booking(
         }
     if row["status"] == "completed":
         return {"ok": False, "error": "Esa cita ya se ha realizado y no se puede cancelar."}
+    if row["status"] == "no_show":
+        return {"ok": False, "error": "Esa cita esta marcada como no asistida y no se puede cancelar."}
     verified_by_code = _voice_booking_otp_verified(cliente_id, row["id"])
     try:
         await booking._cancel_booking_core(
             row, source="voice", reason=textnorm._sanitize_text(motivo, allow_multiline=True),
             audit_extra={"channel": "voice", "from_number": from_number},
         )
+    except HTTPException as exc:
+        return {"ok": False, "error": str(exc.detail)}
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("[voice] cancelacion fallo (%s): %s", cliente_id, exc)
         return {"ok": False, "error": "No se pudo cancelar la cita."}

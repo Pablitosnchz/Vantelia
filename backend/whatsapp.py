@@ -729,8 +729,11 @@ async def _wa_create_booking(
         return False
 
     fecha_humana = textnorm._format_date_es(textnorm._parse_date(flow.fecha).date())
+    stored_booking = booking._get_booking_row_by_id(booking_id)
+    is_pending_payment = bool(stored_booking and stored_booking["status"] == "pending_payment")
+    title = "🟡 *Reserva pendiente de pago*" if is_pending_payment else "✅ *Cita confirmada*"
     confirmacion = (
-        f"✅ *Cita confirmada*\n\n"
+        f"{title}\n\n"
         f"👤 {flow.nombre}\n"
         f"📧 {flow.email}\n"
         f"📞 {flow.from_number}\n"
@@ -753,15 +756,21 @@ async def _wa_create_booking(
             + (f" (te quedan {left} sesiones).\n" if left > 0 else " (era tu ultima sesion).\n")
         )
     payment_row = booking._booking_payment_row(booking_id)
-    stored_booking = booking._get_booking_row_by_id(booking_id)
     if not bono_redeemed and payment_row and payment_row["checkout_url"]:
-        payment_label = "Para confirmar, completa el pago" if stored_booking and stored_booking["status"] == "pending_payment" else "Pago opcional"
+        payment_label = "Completa el pago para confirmar la cita" if is_pending_payment else "Pago opcional"
         confirmacion += f"\n💳 *{payment_label}:* {payment_row['checkout_url']}\n"
-    confirmacion += (
-        "\nRecibiras email de confirmacion y un recordatorio antes. "
-        "Si necesitas cancelar o cambiarla, responde *cancelar*.\n\n"
-        "Escribe *menu* para volver al menu principal."
-    )
+    if is_pending_payment:
+        confirmacion += (
+            "\nEl hueco queda reservado de forma provisional hasta completar el pago. "
+            "Si necesitas ayuda, responde a este WhatsApp.\n\n"
+            "Escribe *menu* para volver al menu principal."
+        )
+    else:
+        confirmacion += (
+            "\nGuarda este mensaje con los datos de tu cita. "
+            "Si necesitas cancelar o cambiarla, responde *cancelar*.\n\n"
+            "Escribe *menu* para volver al menu principal."
+        )
     await messaging._send_whatsapp_text(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number, text=confirmacion,
     )

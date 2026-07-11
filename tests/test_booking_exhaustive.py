@@ -718,7 +718,7 @@ def test_employee_closed_weekday_independent_of_global(client: TestClient, api_m
 # 8. CANCELAR Y REPROGRAMAR VÍA manage_token (enlace público)
 # ===========================================================================
 
-def test_public_manage_token_cancel(client: TestClient, api_module, admin_cookies: dict):
+def test_public_manage_token_cancel(client: TestClient, api_module, admin_cookies: dict, monkeypatch):
     """Cancelar una cita a través del manage_token público cambia el estado a cancelled."""
     fecha = _next_weekday(5)
     r = _book(client, admin_cookies, fecha, "09:00")
@@ -726,12 +726,27 @@ def test_public_manage_token_cancel(client: TestClient, api_module, admin_cookie
     booking_id = r.json()["booking_id"]
     manage_url = r.json()["manage_url"]
     token = manage_url.rsplit("/", 1)[-1].split("?")[0]
+    policy_calls = []
+
+    def _fake_policy(row, *, kind, actor_source):
+        policy_calls.append((row["id"], kind, actor_source))
+        return {"action": "none"}
+
+    monkeypatch.setattr(api_module, "apply_cancellation_policy", _fake_policy)
     try:
         cancel_r = client.post(f"/booking/manage/{token}/cancel")
         assert cancel_r.status_code == 200, cancel_r.text
         with api_module._get_db_connection() as conn:
             row = conn.execute("SELECT status FROM bookings WHERE id = ?", (booking_id,)).fetchone()
+            audit = conn.execute(
+                "SELECT payload_json FROM booking_audit WHERE booking_id = ? AND event_type = 'booking_cancelled' ORDER BY id DESC LIMIT 1",
+                (booking_id,),
+            ).fetchone()
         assert row[0] == "cancelled"
+        assert policy_calls == [(booking_id, "cancel", "customer")]
+        payload = json.loads(audit[0])
+        assert payload["source"] == "customer"
+        assert payload["channel"] == "public_manage"
     finally:
         _cleanup_booking(api_module, booking_id)
 
