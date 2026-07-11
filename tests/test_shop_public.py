@@ -118,6 +118,8 @@ def test_shop_page_renders_with_opt_in(client, api_module, monkeypatch, portal_c
         assert "Demo Booking" in html
         assert pkg in html and pid in html  # catalogos inyectados en el JS
         assert "Compra online de prueba" in html
+        for token in ("checkout-status", "Ya tienes un bono", "Reservar cita", "Canje online"):
+            assert token in html, token
     finally:
         _cleanup(api_module, client, portal_cookies)
         with api_module._get_db_connection() as conn:
@@ -156,11 +158,16 @@ def test_shop_package_checkout_and_finalize_idempotent(client, api_module, monke
             assert conn.execute(
                 "SELECT COUNT(*) FROM package_purchases WHERE customer_payment_id=?", (payment_id,)
             ).fetchone()[0] == 0
+        pending_status = client.get(f"/tienda/demo/checkout-status?session_id=cs_{suffix}")
+        assert pending_status.status_code == 200
+        assert pending_status.json()["status"] == "pending"
+        assert pending_status.json()["ready"] is False
 
         # Webhook -> finaliza: crea el bono activo con las sesiones del snapshot.
         now = api_module._utc_now_iso()
         with api_module._get_db_connection() as conn:
             pay = conn.execute("SELECT * FROM customer_payments WHERE id=?", (payment_id,)).fetchone()
+            conn.execute("UPDATE customer_payments SET status='paid' WHERE id=?", (payment_id,))
             created = api_module._finalize_shop_package_payment(conn, pay, now)
             conn.commit()
         assert created is True
@@ -174,6 +181,11 @@ def test_shop_package_checkout_and_finalize_idempotent(client, api_module, monke
             assert p["buyer_email"] == "bono@example.com" and p["price_cents"] == 15000
             assert json.loads(p["remaining_json"]) == {"consulta": 5}
             assert p["expires_at"]
+        ready_status = client.get(f"/tienda/demo/checkout-status?session_id=cs_{suffix}")
+        assert ready_status.status_code == 200
+        ready = ready_status.json()
+        assert ready["status"] == "paid" and ready["ready"] is True
+        assert ready["wallet_url"] and "/bono/demo/" in ready["wallet_url"]
 
         # Email de confirmacion al comprador (best-effort, una sola vez).
         assert api_module._send_shop_confirmation_email("demo", payment_id) is True

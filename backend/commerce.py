@@ -1901,7 +1901,7 @@ def create_gift_card_payment_link(
             }],
             metadata=metadata,
             customer_email=buyer_email,
-            success_url=f"{base}/gift/{cliente_id}?ok=1",
+            success_url=f"{base}/gift/{cliente_id}?ok=1&session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{base}/gift/{cliente_id}?cancel=1",
             stripe_account=account.stripe_account_id,
         )
@@ -3173,7 +3173,7 @@ def gift_public_page_html(cliente_id: str) -> str:
   .top h1 {{ font-size: 26px; font-weight: 800; margin-top: 6px; }}
   .top p {{ max-width: 560px; margin: 10px auto 0; font-size: 15px; opacity: .92; line-height: 1.5; }}
   .wrap {{ max-width: 980px; margin: -56px auto 40px; padding: 0 16px; display: grid; grid-template-columns: 1fr 380px; gap: 22px; align-items: start; }}
-  @media (max-width: 860px) {{ .wrap {{ grid-template-columns: 1fr; }} .preview-col {{ order: -1; }} }}
+  @media (max-width: 860px) {{ .wrap {{ grid-template-columns: 1fr; }} .preview-col {{ order: -1; position: static; top: auto; }} }}
   .panel {{ background: #fff; border-radius: 16px; padding: 26px; box-shadow: 0 10px 40px rgba(17,24,39,.10); }}
   .step {{ display: flex; align-items: center; gap: 10px; margin: 26px 0 12px; }}
   .step:first-child {{ margin-top: 0; }}
@@ -3215,7 +3215,7 @@ def gift_public_page_html(cliente_id: str) -> str:
   button.cta:disabled {{ opacity: .65; cursor: wait; }}
   .spin {{ width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: r 0.7s linear infinite; display: none; }}
   @keyframes r {{ to {{ transform: rotate(360deg); }} }}
-  .secure {{ text-align: center; font-size: 12px; color: #6b7280; margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; }}
+  .secure {{ text-align: center; font-size: 12px; color: #6b7280; margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; line-height: 1.45; }}
   .banner {{ border-radius: 10px; padding: 13px 15px; font-size: 14px; margin-bottom: 16px; display: none; line-height: 1.45; }}
   .banner.ok {{ background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }}
   .banner.err {{ background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }}
@@ -3237,6 +3237,7 @@ def gift_public_page_html(cliente_id: str) -> str:
   .gcard .to {{ font-size: 13px; opacity: .9; min-height: 17px; }}
   .gcard .msg {{ font-size: 13px; font-style: italic; opacity: .85; min-height: 17px; word-break: break-word; }}
   .pv-note {{ font-size: 12px; color: #9ca3af; text-align: center; margin-top: 12px; line-height: 1.5; }}
+  @media (max-width: 860px) {{ .preview-col {{ position: static; top: auto; margin-top: -30px; }} .gcard {{ min-height: 170px; }} }}
   footer {{ text-align: center; font-size: 12.5px; color: #9ca3af; padding: 0 16px 34px; line-height: 1.7; }}
 </style>
 </head>
@@ -3292,7 +3293,7 @@ def gift_public_page_html(cliente_id: str) -> str:
       <div class="hint">Dejalo vacio para enviarlo nada mas pagar. Recibiras una copia para imprimir.</div>
 
       <button class="cta" id="pay" type="submit"><span class="spin" id="spin"></span><span id="payTxt">Pagar y enviar la tarjeta</span></button>
-      <div class="secure">&#128274; Pago seguro con tarjeta (Stripe). Se canjea al reservar o en recepcion.</div>
+      <div class="secure">&#128274; Pago seguro con tarjeta (Stripe). Recibiras una copia, el destinatario podra consultar saldo y se canjea al reservar o en recepcion.</div>
     </form>
   </div>
 
@@ -3317,9 +3318,39 @@ def gift_public_page_html(cliente_id: str) -> str:
 <script>
 (function () {{
   var qs = new URLSearchParams(location.search);
-  if (qs.get("ok")) {{
-    document.getElementById("bok").style.display = "block";
+  var safe = function (s) {{ var d = document.createElement("div"); d.textContent = String(s == null ? "" : s); return d.innerHTML; }};
+  function showGiftSuccess(html) {{
+    var box = document.getElementById("bok");
+    box.innerHTML = html;
+    box.style.display = "block";
     window.scrollTo(0, 0);
+  }}
+  function pollCheckoutStatus(sessionId) {{
+    var attempts = 0;
+    function check() {{
+      fetch(location.pathname + "/checkout-status?session_id=" + encodeURIComponent(sessionId))
+        .then(function (r) {{ return r.json().then(function (d) {{ return {{ ok: r.ok, d: d }}; }}); }})
+        .then(function (res) {{
+          if (!res.ok) throw new Error((res.d && res.d.detail) || "No se pudo comprobar el pago.");
+          var d = res.d;
+          if (d.status !== "paid" || !d.ready) {{
+            showGiftSuccess("&#127873; <b>Pago completado.</b> Estamos activando tu tarjeta y enviando los emails. En unos segundos deberia aparecer el codigo aqui.");
+            if (attempts++ < 8) setTimeout(check, 1500);
+            return;
+          }}
+          if (d.kind === "gift_card") {{
+            showGiftSuccess("&#127873; <b>Tarjeta creada.</b> Codigo: <b>" + safe(d.code) + "</b>. El destinatario recibira el email y tu recibiras una copia. <a href=\\"" + safe(d.balance_url) + "\\" target=\\"_blank\\" rel=\\"noopener\\">Consultar saldo</a>");
+          }}
+        }})
+        .catch(function () {{
+          showGiftSuccess("&#127873; <b>Pago completado.</b> La tarjeta llegara por email al destinatario y te hemos enviado una copia a ti. Si tarda unos minutos, revisa el correo.");
+        }});
+    }}
+    check();
+  }}
+  if (qs.get("ok")) {{
+    showGiftSuccess("&#127873; <b>&iexcl;Pago completado!</b> Estamos activando la tarjeta y enviando los emails.");
+    if (qs.get("session_id")) pollCheckoutStatus(qs.get("session_id"));
   }}
   var amount = 0;
   var serviceSlug = "";
@@ -3585,7 +3616,7 @@ def create_shop_package_payment_link(
             }],
             metadata=metadata,
             customer_email=buyer["buyer_email"],
-            success_url=f"{base}/tienda/{cliente_id}?ok=1",
+            success_url=f"{base}/tienda/{cliente_id}?solo=bonos&ok=1&session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{base}/tienda/{cliente_id}?cancel=1",
             stripe_account=account.stripe_account_id,
         )
@@ -3660,7 +3691,7 @@ def create_shop_products_payment_link(
         session = stripe_gateway.stripe.checkout.Session.create(
             mode="payment", line_items=stripe_lines, metadata=metadata,
             customer_email=buyer["buyer_email"],
-            success_url=f"{base}/tienda/{cliente_id}?ok=1",
+            success_url=f"{base}/tienda/{cliente_id}?solo=productos&ok=1&session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{base}/tienda/{cliente_id}?cancel=1",
             stripe_account=account.stripe_account_id,
         )
@@ -3686,6 +3717,65 @@ def create_shop_products_payment_link(
         )
         connection.commit()
     return {"payment_id": payment_id, "url": checkout_url, "amount_cents": amount}
+
+
+def public_checkout_status(cliente_id: str, session_id: str) -> Dict[str, Any]:
+    """Estado publico tras volver de Stripe. El session_id de Checkout es el secreto
+    de la redireccion; no lista compras ni acepta busqueda por email/telefono."""
+    sid = textnorm._sanitize_text(session_id or "").strip()[:220]
+    if not sid:
+        raise HTTPException(status_code=400, detail="Falta la sesion de pago.")
+    with db._get_db_connection() as connection:
+        payment = connection.execute(
+            "SELECT * FROM customer_payments WHERE cliente_id = ? AND stripe_checkout_session_id = ? "
+            "AND kind IN ('gift_card', 'shop_package', 'shop_products') LIMIT 1",
+            (cliente_id, sid),
+        ).fetchone()
+        if not payment:
+            raise HTTPException(status_code=404, detail="No encontramos ese pago.")
+        result: Dict[str, Any] = {
+            "ok": True,
+            "kind": payment["kind"] or "",
+            "status": payment["status"] or "pending",
+            "amount_cents": int(payment["amount_cents"] or 0),
+            "ready": False,
+        }
+        if result["status"] != "paid":
+            return result
+        if result["kind"] == "shop_package":
+            purchase = connection.execute(
+                "SELECT * FROM package_purchases WHERE cliente_id = ? AND customer_payment_id = ? LIMIT 1",
+                (cliente_id, payment["id"]),
+            ).fetchone()
+            if purchase:
+                info = _purchase_to_public(purchase)
+                result.update({
+                    "ready": True,
+                    "package_name": info["package_name"],
+                    "wallet_url": info["wallet_url"],
+                    "remaining_total": info["remaining_total"],
+                    "expires_at": (info["expires_at"] or "")[:10],
+                })
+            return result
+        if result["kind"] == "gift_card":
+            card = connection.execute(
+                "SELECT * FROM gift_cards WHERE cliente_id = ? AND customer_payment_id = ? LIMIT 1",
+                (cliente_id, payment["id"]),
+            ).fetchone()
+            if card:
+                balance_url = (
+                    f"{textnorm._preferred_public_base_url().rstrip('/')}/gift/{cliente_id}/saldo?code={card['code']}"
+                )
+                result.update({
+                    "ready": True,
+                    "code": card["code"],
+                    "balance_cents": int(card["balance_cents"] or 0),
+                    "balance_url": balance_url,
+                    "recipient_email": card["recipient_email"] or "",
+                })
+            return result
+        result["ready"] = True
+        return result
 
 
 def _finalize_shop_package_payment(connection: sqlite3.Connection, payment: sqlite3.Row, now: str) -> bool:
@@ -4000,6 +4090,10 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
   .trust { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: center; margin-top: 20px; position: relative; z-index: 1; }
   .trust span { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; opacity: .92; }
   .trust svg { width: 15px; height: 15px; }
+  .owned-cta { margin: 0 0 18px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: var(--shadow); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .owned-cta b { display: block; font-size: .92rem; }
+  .owned-cta span { color: var(--muted); font-size: .82rem; }
+  .owned-cta a { flex: none; text-decoration: none; border-radius: 10px; padding: 10px 14px; background: var(--acc); color: #fff; font-size: .86rem; font-weight: 700; }
 
   /* Banner (ok / cancel) */
   .banner { border-radius: 12px; padding: 13px 16px; margin: 0 0 18px; font-size: .92rem; display: none; align-items: center; gap: 10px; }
@@ -4100,6 +4194,7 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
   .field input:focus { outline: 0; border-color: var(--acc); box-shadow: 0 0 0 3px rgba(var(--acc-rgb),.14); }
   .err { color: #b23b3b; font-size: .86rem; margin: 4px 0 12px; display: none; }
   .pickup { color: var(--muted); font-size: .82rem; margin-top: 12px; text-align: center; }
+  .use-copy { color: var(--muted); font-size: .82rem; text-align: center; margin: -2px 0 12px; line-height: 1.45; }
   .secure { display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--muted); font-size: .78rem; margin-top: 12px; }
   .secure svg { width: 14px; height: 14px; }
 
@@ -4113,6 +4208,8 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
     .hero { padding: 32px 18px 28px; border-radius: 18px; }
     .grid { grid-template-columns: 1fr; }
     .modal { max-width: 100%; }
+    .owned-cta { align-items: stretch; flex-direction: column; }
+    .owned-cta a { text-align: center; }
   }
 </style>
 </head>
@@ -4126,6 +4223,7 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
     <div class="trust">
       <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg> Pago seguro con tarjeta</span>
       <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg> Confirmación por email</span>
+      <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-5"/><circle cx="12" cy="12" r="9"/></svg> Canje online o en recepción</span>
     </div>
   </div>
 
@@ -4140,6 +4238,7 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
 
   <section id="secBonos" style="display:none">
     <div class="sec-head"><h2 class="serif">Bonos de sesiones</h2><span class="count" id="bonosCount"></span></div>
+    __BONUS_BOOK_CTA__
     <div class="grid" id="gridBonos"></div>
   </section>
 
@@ -4166,6 +4265,7 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
       <button type="button" class="modal-close" id="coClose" aria-label="Cerrar">&times;</button>
     </div>
     <div class="summary" id="coSummary"></div>
+    <div class="use-copy" id="coUseCopy"></div>
     <div class="field"><label>Tu nombre</label><input id="bn" maxlength="120" autocomplete="name" placeholder="Nombre y apellidos"></div>
     <div class="field"><label>Tu email</label><input id="be" type="email" maxlength="160" autocomplete="email" placeholder="tucorreo@email.com"></div>
     <div class="field"><label>Teléfono (opcional)</label><input id="bp" maxlength="40" autocomplete="tel" placeholder="Para avisarte si hace falta"></div>
@@ -4195,11 +4295,40 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
   var qs = new URLSearchParams(location.search);
   var banner = document.getElementById("banner");
   var bannerTxt = document.getElementById("bannerTxt");
-  if (qs.get("ok")) { banner.className = "banner ok"; bannerTxt.textContent = "✓ Pago completado. Revisa tu email: te hemos enviado la confirmación."; }
-  if (qs.get("cancel")) { banner.className = "banner ko"; bannerTxt.textContent = "Pago cancelado. Puedes intentarlo de nuevo cuando quieras."; }
+  var esc = function (s) { var d = document.createElement("div"); d.textContent = String(s == null ? "" : s); return d.innerHTML; };
+  function showBanner(kind, html) { banner.className = "banner " + kind; bannerTxt.innerHTML = html; }
+  function pollCheckoutStatus(sessionId) {
+    var attempts = 0;
+    function check() {
+      fetch(location.pathname + "/checkout-status?session_id=" + encodeURIComponent(sessionId))
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (!res.ok) throw new Error((res.d && res.d.detail) || "No se pudo comprobar el pago.");
+          var d = res.d;
+          if (d.status !== "paid" || !d.ready) {
+            showBanner("ok", "✓ Pago completado. Estamos activando tu compra; la confirmacion llegara por email.");
+            if (attempts++ < 8) setTimeout(check, 1500);
+            return;
+          }
+          if (d.kind === "shop_package") {
+            showBanner("ok", "✓ Tu bono esta activo. Te hemos enviado el enlace por email para ver sesiones restantes. <a href=\"" + esc(d.wallet_url) + "\" target=\"_blank\" rel=\"noopener\">Ver mi bono</a>");
+          } else if (d.kind === "shop_products") {
+            showBanner("ok", "✓ Pedido confirmado. Te hemos enviado la confirmacion por email con las instrucciones de recogida.");
+          }
+        })
+        .catch(function () {
+          showBanner("ok", "✓ Pago completado. Revisa tu email: te hemos enviado la confirmacion.");
+        });
+    }
+    check();
+  }
+  if (qs.get("ok")) {
+    showBanner("ok", "✓ Pago completado. Revisa tu email: te hemos enviado la confirmacion.");
+    if (qs.get("session_id")) pollCheckoutStatus(qs.get("session_id"));
+  }
+  if (qs.get("cancel")) { showBanner("ko", "Pago cancelado. Puedes intentarlo de nuevo cuando quieras."); }
 
   var eur = function (c) { return (c / 100).toFixed(2).replace(".", ",") + " €"; };
-  var esc = function (s) { var d = document.createElement("div"); d.textContent = String(s == null ? "" : s); return d.innerHTML; };
   var sessionsOf = function (items) {
     var t = 0; (items || []).forEach(function (s) { var n = parseInt(String(s), 10); if (!isNaN(n)) t += n; });
     return t;
@@ -4314,7 +4443,8 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
       + '<div class="line tot"><span>Total</span><span>' + eur(state.pkg.price_cents) + "</span></div>";
     document.getElementById("coTitle").textContent = "Comprar bono";
     document.getElementById("coSummary").innerHTML = rows;
-    document.getElementById("coPickup").textContent = "Recibirás el bono activado por email para usarlo cuando quieras.";
+    document.getElementById("coUseCopy").textContent = "Recibiras un email con tu bono y un enlace privado para consultar sesiones restantes.";
+    document.getElementById("coPickup").textContent = "Al reservar con este email o telefono, descontaremos la sesion automaticamente si el servicio esta incluido.";
     openModal();
   }
   function openCart() {
@@ -4326,6 +4456,7 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
     }).join("") + '<div class="line tot"><span>Total</span><span>' + eur(cartTotal()) + "</span></div>";
     document.getElementById("coTitle").textContent = "Finalizar pedido";
     document.getElementById("coSummary").innerHTML = rows;
+    document.getElementById("coUseCopy").textContent = "Recibiras la confirmacion por email nada mas completarse el pago.";
     document.getElementById("coPickup").textContent = PICKUP || "Recogida en el centro.";
     openModal();
   }
@@ -4430,6 +4561,14 @@ def shop_public_page_html(cliente_id: str, section: str = "") -> str:
     gift_link = ""
     if gift_public_available(cliente_id):
         gift_link = f'<div style="margin-top:6px"><a href="/gift/{cliente_id}">&iexcl;Tambien puedes regalar una tarjeta!</a></div>'
+    booking_url = _booking_page_url(cliente_id)
+    bonus_book_cta = ""
+    if booking_url:
+        bonus_book_cta = (
+            '<div class="owned-cta"><div><b>&iquest;Ya tienes un bono?</b>'
+            '<span>Reserva con el mismo email o telefono y descontaremos una sesion si el servicio esta incluido.</span>'
+            f'</div><a href="{html_mod.escape(booking_url)}">Reservar cita</a></div>'
+        )
 
     page = _SHOP_PAGE_TEMPLATE
     for token, value in (
@@ -4438,6 +4577,7 @@ def shop_public_page_html(cliente_id: str, section: str = "") -> str:
         ("__INTRO__", intro),
         ("__CONTACT__", contact_bits),
         ("__GIFT_LINK__", gift_link),
+        ("__BONUS_BOOK_CTA__", bonus_book_cta),
         ("__SHOW_BONOS__", "" if packages else 'style="display:none"'),
         ("__SHOW_PRODUCTOS__", "" if products else 'style="display:none"'),
         ("__TABS_WRAP_STYLE__", ' style="display:none"' if section else ""),

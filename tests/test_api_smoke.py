@@ -4345,12 +4345,27 @@ def test_gift_public_checkout_creates_pending_payment(client: TestClient, api_mo
         assert data["url"] == "https://checkout.stripe.test/gift"
         assert created_sessions[0]["stripe_account"] == "acct_gift_test"
         assert created_sessions[0]["metadata"]["kind"] == "gift_card"
+        assert "session_id={CHECKOUT_SESSION_ID}" in created_sessions[0]["success_url"]
         with api_module._get_db_connection() as conn:
             row = conn.execute("SELECT * FROM customer_payments WHERE id=?", (payment_id,)).fetchone()
         assert row["kind"] == "gift_card" and row["status"] == "pending"
         meta = json.loads(row["line_items_json"])
         assert meta["recipient_email"] == "luis@example.com"
         assert meta["message"] == "Felicidades!"
+        pending = client.get("/gift/demo/checkout-status?session_id=cs_gift_test")
+        assert pending.status_code == 200
+        assert pending.json()["status"] == "pending" and pending.json()["ready"] is False
+        with api_module._get_db_connection() as conn:
+            conn.execute("UPDATE customer_payments SET status='paid' WHERE id=?", (payment_id,))
+            row = conn.execute("SELECT * FROM customer_payments WHERE id=?", (payment_id,)).fetchone()
+            api_module._finalize_gift_card_payment(conn, row, api_module._utc_now_iso())
+            conn.commit()
+        ready = client.get("/gift/demo/checkout-status?session_id=cs_gift_test")
+        assert ready.status_code == 200
+        ready_body = ready.json()
+        assert ready_body["status"] == "paid" and ready_body["ready"] is True
+        assert ready_body["code"].startswith("GC-")
+        assert "/gift/demo/saldo?code=" in ready_body["balance_url"]
         # Importe fuera de rango -> 400.
         bad = client.post(
             "/gift/demo/checkout",
@@ -4361,6 +4376,9 @@ def test_gift_public_checkout_creates_pending_payment(client: TestClient, api_mo
     finally:
         if payment_id:
             with api_module._get_db_connection() as conn:
+                for card in conn.execute("SELECT id FROM gift_cards WHERE customer_payment_id=?", (payment_id,)).fetchall():
+                    conn.execute("DELETE FROM gift_card_transactions WHERE gift_card_id=?", (card["id"],))
+                conn.execute("DELETE FROM gift_cards WHERE customer_payment_id=?", (payment_id,))
                 conn.execute("DELETE FROM customer_payments WHERE id=?", (payment_id,))
                 conn.commit()
 

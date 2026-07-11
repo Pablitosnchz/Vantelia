@@ -314,6 +314,16 @@ async def gift_public_checkout(cliente_id: str, data: GiftCardPublicCheckoutPayl
     )
 
 
+@app.get("/gift/{cliente_id}/checkout-status", include_in_schema=False)
+async def gift_public_checkout_status(cliente_id: str, session_id: str, request: Request) -> Dict[str, Any]:
+    """Estado post-Stripe para pintar codigo/saldo cuando el webhook ya materializo la tarjeta."""
+    textnorm._assert_valid_client_id(cliente_id)
+    clients._get_client_config(cliente_id)
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"gift_checkout_status:{cliente_id}:{client_ip}", 20)
+    return commerce.public_checkout_status(cliente_id, session_id)
+
+
 # --- Tienda publica: bonos y productos (opt-in por tenant) --------------------------
 
 @app.get("/tienda/{cliente_id}", include_in_schema=False)
@@ -379,3 +389,13 @@ async def shop_public_checkout_products(
         buyer_phone=data.buyer_phone,
         base_url=textnorm._preferred_public_base_url(),
     )
+
+
+@app.get("/tienda/{cliente_id}/checkout-status", include_in_schema=False)
+async def shop_public_checkout_status(cliente_id: str, session_id: str, request: Request) -> Dict[str, Any]:
+    """Estado post-Stripe para mostrar wallet del bono o confirmacion de pedido."""
+    textnorm._assert_valid_client_id(cliente_id)
+    clients._get_client_config(cliente_id)
+    client_ip = request.client.host if request.client else "unknown"
+    security._check_rate_limit(f"shop_checkout_status:{cliente_id}:{client_ip}", 20)
+    return commerce.public_checkout_status(cliente_id, session_id)
