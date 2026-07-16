@@ -82,4 +82,41 @@ find "$BACKUP_ROOT" -maxdepth 1 -name 'vantelia-*.tar.gz' -type f -mtime +$RETEN
 COUNT=$(find "$BACKUP_ROOT" -maxdepth 1 -name 'vantelia-*.tar.gz' -type f | wc -l)
 log "Retenidos $COUNT backups (rotacion $RETENTION_DAYS dias)"
 
+# 7. Copia OFFSITE cifrada (FTP de Hostinger, otra maquina).
+#    - Clave AES en /root/.vantelia-backup.key (fuera del proyecto: sobrevive deploys).
+#    - Credenciales FTP en /root/.vantelia-ftp.env (chmod 600).
+#    - Rotacion: 7 huecos por dia de la semana (sobrescribe el del mismo dia).
+#    - Un fallo offsite NO invalida el backup local: WARN + email y exit 0.
+offsite() {
+  local key_file="/root/.vantelia-backup.key"
+  local ftp_env="/root/.vantelia-ftp.env"
+  if [ ! -f "$ftp_env" ]; then
+    log "WARN offsite: falta $ftp_env; solo backup local"
+    return 0
+  fi
+  # shellcheck disable=SC1090
+  . "$ftp_env"   # define FTP_HOST, FTP_USER, FTP_PASSWORD
+  if [ ! -f "$key_file" ]; then
+    openssl rand -hex 32 > "$key_file"
+    chmod 600 "$key_file"
+    log "WARN offsite: clave nueva generada en $key_file — guardala tambien fuera del VPS"
+    email_admin "Backup Vantelia: clave de cifrado nueva" "Se genero una clave nueva en $key_file. Copiala a un gestor de contrasenas: sin ella los backups offsite no se pueden restaurar."
+  fi
+  local dow
+  dow=$(date +%u)   # 1=lunes ... 7=domingo
+  local remote_name="vantelia-dia${dow}.tar.gz.enc"
+  local enc_file="$BACKUP_ROOT/$remote_name"
+  openssl enc -aes-256-cbc -pbkdf2 -salt -in "$ARCHIVE" -out "$enc_file" -pass "file:$key_file"
+  if curl -sS --fail --connect-timeout 20 --max-time 900 --ftp-create-dirs \
+      -T "$enc_file" "ftp://$FTP_HOST/domains/vantelia.es/backups_privados/$remote_name" \
+      --user "$FTP_USER:$FTP_PASSWORD" >> "$LOG_FILE" 2>&1; then
+    log "OK offsite $remote_name ($(du -h "$enc_file" | cut -f1))"
+  else
+    log "WARN offsite: fallo la subida FTP"
+    email_admin "Backup Vantelia: fallo la copia offsite" "El backup local se creo bien pero la subida FTP fallo a las $(date). Revisa $LOG_FILE."
+  fi
+  rm -f "$enc_file"
+}
+offsite || log "WARN offsite: error inesperado (backup local intacto)"
+
 exit 0

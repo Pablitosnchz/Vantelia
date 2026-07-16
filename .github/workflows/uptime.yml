@@ -1,0 +1,49 @@
+name: Uptime Vantelia
+
+# Vigila produccion cada ~15 min. Si la API o la web caen, el workflow falla
+# y GitHub envia email al dueño del repo (ajustes por defecto de notificaciones).
+# No sustituye a un monitor comercial, pero avisa sin depender de mas cuentas.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: API /health (app.vantelia.es)
+        run: |
+          for i in 1 2 3; do
+            body=$(curl -sS --max-time 15 https://app.vantelia.es/health || true)
+            status=$(echo "$body" | jq -r '.status' 2>/dev/null || echo "")
+            if [ "$status" = "ok" ]; then
+              echo "API OK"; exit 0
+            fi
+            echo "intento $i fallido: $body"; sleep 20
+          done
+          echo "::error::API /health no responde ok tras 3 intentos"
+          exit 1
+
+      - name: Web publica (www.vantelia.es)
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 https://www.vantelia.es/ || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "Web OK"; exit 0
+            fi
+            echo "intento $i: HTTP $code"; sleep 20
+          done
+          echo "::error::Web publica no devuelve 200 tras 3 intentos"
+          exit 1
+
+      - name: Central embebida (iframe de la home)
+        run: |
+          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 "https://app.vantelia.es/central/van?embed=1" || echo 000)
+          if [ "$code" != "200" ]; then
+            echo "::error::La central de demo devuelve HTTP $code"
+            exit 1
+          fi
+          echo "Central OK"
