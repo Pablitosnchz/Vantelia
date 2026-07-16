@@ -14,11 +14,14 @@ RewriteCond %{HTTP_HOST} !^www\. [NC]
 RewriteRule ^ https://www.%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 
 # ── Redirecciones legacy (URLs antiguas eliminadas) ──────
+# /servicios/ se fusiono con /plataforma/ (jul 2026)
+RewriteRule ^servicios(?:/index\.html)?/?$ https://www.vantelia.es/plataforma/ [R=301,L]
+
 RewriteRule ^testimonios(?:/index\.html)?/?$       https://www.vantelia.es/             [R=301,L]
 RewriteRule ^noticias(?:/index\.html)?/?$          https://www.vantelia.es/             [R=301,L]
-RewriteRule ^seo-para-empresas-b2b(?:/index\.html)?/?$              https://www.vantelia.es/servicios/ [R=301,L]
-RewriteRule ^consultoria-ia-para-empresas(?:/index\.html)?/?$       https://www.vantelia.es/servicios/ [R=301,L]
-RewriteRule ^automatizacion-con-ia-para-empresas(?:/index\.html)?/?$ https://www.vantelia.es/servicios/ [R=301,L]
+RewriteRule ^seo-para-empresas-b2b(?:/index\.html)?/?$              https://www.vantelia.es/plataforma/ [R=301,L]
+RewriteRule ^consultoria-ia-para-empresas(?:/index\.html)?/?$       https://www.vantelia.es/plataforma/ [R=301,L]
+RewriteRule ^automatizacion-con-ia-para-empresas(?:/index\.html)?/?$ https://www.vantelia.es/plataforma/ [R=301,L]
 RewriteRule ^innovaciones-en-ia-para-transformar-tu-marketing-digital(?:/index\.html)?/?$ https://www.vantelia.es/ [R=301,L]
 RewriteRule ^tendencias-en-ia-y-marketing-digital-para-2024(?:/index\.html)?/?$           https://www.vantelia.es/ [R=301,L]
 
@@ -39,7 +42,7 @@ RewriteCond %{REQUEST_URI} !/$
 RewriteRule ^ %{REQUEST_URI}/ [R=301,L]
 
 # ── Páginas obsoletas redirigidas (limpieza 2026-05-22) ──
-RewriteRule ^plataforma(?:/index\.html)?/?$ https://www.vantelia.es/planes/   [R=301,L]
+# (jul 2026) /plataforma/ vuelve a ser una página real: regla legacy retirada.
 RewriteRule ^resultados(?:/index\.html)?/?$ https://www.vantelia.es/          [R=301,L]
 RewriteRule ^nosotros(?:/index\.html)?/?$   https://www.vantelia.es/          [R=301,L]
 

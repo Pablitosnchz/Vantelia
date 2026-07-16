@@ -28,7 +28,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/home.css?v=20260522-rebuild">
+  <link rel="stylesheet" href="/assets/css/home.css?v=20260716-v2">
 
   <style>
     /* ============================================================
@@ -415,6 +415,7 @@
     <nav aria-label="Navegación principal">
       <ul class="nav-links">
           <li><a href="/">Inicio</a></li>
+          <li><a href="/plataforma/">Plataforma</a></li>
           <li><a href="/planes/">Planes</a></li>
           <li><a href="/demo/">Demo</a></li>
           <li><a href="/faq/">Preguntas frecuentes</a></li>
@@ -422,7 +423,7 @@
     </nav>
     <div style="display:flex;gap:10px;align-items:center" class="nav-cta">
       <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener">
-        <span class="dot-live" aria-hidden="true"></span>Acceso plataforma
+        <span class="dot-live" aria-hidden="true"></span>Acceso
       </a>
       <a href="mailto:soporte@vantelia.es" class="btn btn-primary">Soporte</a>
     </div>
@@ -435,11 +436,12 @@
 <div class="mobile-menu" id="mobile-menu" role="dialog" aria-label="Menú de navegación">
   <button class="mobile-close" id="mobile-close" aria-label="Cerrar menú">✕</button>
   <a href="/" class="mm-link">Inicio</a>
+  <a href="/plataforma/" class="mm-link">Plataforma</a>
     <a href="/planes/" class="mm-link">Planes</a>
     <a href="/demo/" class="mm-link">Demo</a>
     <a href="/faq/" class="mm-link">Preguntas frecuentes</a>
   <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener" style="margin-top:8px;font-size:1rem;height:48px;padding:0 28px">
-    <span class="dot-live"></span>Acceso plataforma
+    <span class="dot-live"></span>Acceso
   </a>
   <a href="mailto:soporte@vantelia.es" class="btn btn-primary btn-lg" style="margin-top:8px">Soporte</a>
 </div>
@@ -492,7 +494,7 @@
 
     <div class="timeline">
       <article class="timeline-card done">
-        <div class="step-icon">?</div>
+        <div class="step-icon">✓</div>
         <div>
           <h4>Alta confirmada</h4>
           <p>Hemos recibido tu alta. Tu suscripción queda activa desde hoy y puedes cancelarla cuando quieras desde el portal.</p>
@@ -588,24 +590,24 @@
 
     <div class="resources-grid">
       <article class="resource-card">
-        <div class="ico" aria-hidden="true">?</div>
+        <div class="ico" aria-hidden="true">🧩</div>
         <h4>Instala el widget en tu web</h4>
         <p>Copia el snippet desde el portal y pégalo antes del cierre <code>&lt;/body&gt;</code> de tu web. Funciona con WordPress, Webflow, Shopify y cualquier HTML.</p>
-        <a class="resource-link" href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Abrir portal ?</a>
+        <a class="resource-link" href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Abrir portal →</a>
       </article>
 
       <article class="resource-card">
-        <div class="ico" aria-hidden="true">??</div>
+        <div class="ico" aria-hidden="true">📅</div>
         <h4>Configura tu agenda</h4>
         <p>Define horario, días de cierre y duración de las citas. El asistente consulta tu disponibilidad real y reserva por ti, con recordatorios automáticos.</p>
-        <a class="resource-link" href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Configurar agenda ?</a>
+        <a class="resource-link" href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Configurar agenda →</a>
       </article>
 
       <article class="resource-card">
-        <div class="ico" aria-hidden="true">??</div>
+        <div class="ico" aria-hidden="true">🧠</div>
         <h4>Entrena el cerebro de tu IA</h4>
         <p>Revisa el contenido extraído de tu web y refínalo. Desde Starter puedes subir documentos extra (catálogo, tarifas, FAQ interna).</p>
-        <a class="resource-link" href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Editar cerebro ?</a>
+        <a class="resource-link" href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Editar cerebro →</a>
       </article>
     </div>
   </div>
@@ -677,11 +679,22 @@
           <div class="col-title">Plataforma</div>
           <div class="col-links">
             <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso plataforma</a>
-            <a href="https://app.vantelia.es/acceso?signup=1" target="_blank" rel="noopener">Crea tu bot gratis</a>
+            <a href="https://app.vantelia.es/acceso?signup=1" target="_blank" rel="noopener">Empieza gratis</a>
           </div>
         </div>
 
         <div class="footer-col">
+        <div class="col-title">Soluciones</div>
+        <div class="col-links">
+          <a href="/chatbot-para-clinicas/">IA para clínicas</a>
+          <a href="/chatbot-para-centros-de-estetica/">IA para estética y spas</a>
+          <a href="/chatbot-para-peluquerias/">IA para peluquerías</a>
+          <a href="/chatbot-whatsapp-negocios/">IA en WhatsApp</a>
+          <a href="/como-instalar-chatbot-en-mi-web/">Cómo instalarlo</a>
+        </div>
+      </div>
+
+      <div class="footer-col">
           <div class="col-title">Legal</div>
           <div class="col-links">
             <a href="/legal/privacidad/">Política de privacidad</a>
@@ -823,7 +836,7 @@
 })();
 </script>
 
-<script src="/assets/js/home.js?v=20260525-cookies2" defer></script>
+<script src="/assets/js/home.js?v=20260716-v2" defer></script>
   <script
     src="https://app.vantelia.es/widget/widget.min.js?v=20260605-sitewide"
     data-api="https://app.vantelia.es"

@@ -1,51 +1,57 @@
 # Vantelia
 
-> Plataforma SaaS de asistentes IA embebibles para webs de empresas B2B del mercado español. El asistente responde dudas, agenda citas automáticamente y gestiona conversaciones por WhatsApp, sin que el equipo tenga que intervenir.
+> Plataforma de gestión con IA para negocios con cita en España. Un asistente atiende la web, el WhatsApp y el teléfono del negocio: responde dudas, reserva en la agenda real, envía recordatorios y cobra con tarjeta. Incluye agenda multi-profesional y multi-centro, cobros con Stripe, tienda online de bonos y tarjetas regalo, central de reservas pública, informes y CRM.
 
-Vantelia permite a cualquier empresa instalar un asistente de inteligencia artificial en su web en menos de 2 minutos, sin conocimientos técnicos. El asistente aprende del contenido de la propia web del negocio, responde preguntas frecuentes, recoge solicitudes de cita y puede atender por WhatsApp Business. Orientado a clínicas, centros de estética, fisioterapia, academias, asesorías y cualquier negocio con consultas repetidas o agenda de citas. Datos alojados en Europa. Sin permanencia.
+Vantelia permite a cualquier negocio con cita (clínicas, estética, peluquerías, fisioterapia, academias…) crear su asistente IA gratis en menos de 2 minutos: aprende del contenido de la web del negocio y empieza a responder y reservar. A partir de ahí escala a plataforma completa de gestión: pagos y señales, política de no-show, bonos de sesiones, tarjetas regalo con envío por email, mostrador con cobro QR, recepcionista de voz por teléfono e informes de ingresos y ocupación. Hecho en España, datos en Europa. Sin permanencia.
 
 ## Planes y precios
 
-- [Free — 0 €/mes](https://www.vantelia.es/planes/): 50 mensajes/mes, 10 reservas/mes, widget IA, panel de conversaciones. Sin tarjeta.
-- [Starter — 19 €/mes](https://www.vantelia.es/planes/): 1.000 mensajes/mes, 100 reservas/mes, captura de leads, subida de documentos, personalización de marca.
-- [Pro — 49 €/mes](https://www.vantelia.es/planes/): 5.000 mensajes/mes, 500 reservas/mes, asistente en WhatsApp Business, recordatorios de cita por email, Q&A y Tune AI avanzado.
-- [Business — 149 €/mes](https://www.vantelia.es/planes/): 25.000 mensajes/mes, reservas ilimitadas, WhatsApp Business con IA, asistente de voz por teléfono (300 min/mes), onboarding asistido.
+- [Free — 0 €/mes](https://www.vantelia.es/planes/): 50 mensajes/mes y 10 citas/mes. Asistente entrenado con tu web, widget instalable, panel con conversaciones. Sin tarjeta.
+- [Starter — 29 €/mes](https://www.vantelia.es/planes/): 1.500 mensajes/mes, 150 citas/mes, 1 profesional. Pagos online (señal/depósito y cobro con tarjeta), productos, bonos y tarjetas regalo, reseñas automáticas por email, sin marca Vantelia.
+- [Pro — 79 €/mes](https://www.vantelia.es/planes/): 5.000 mensajes/mes, 500 citas/mes. Asistente en WhatsApp Business con IA, tienda online (bonos, productos y tarjetas regalo), la IA envía enlaces de pago, hasta 5 profesionales y 3 usuarios, recordatorios y reseñas por WhatsApp, informes.
+- [Business — 299 €/mes](https://www.vantelia.es/planes/): recepcionista de voz IA por teléfono (500 min/mes), llamadas de confirmación por IA, voz en el widget web, multi-centro ilimitado con salas/aforo, profesionales y usuarios ilimitados con permisos por empleado, SMS, informes avanzados, políticas de cancelación/no-show, onboarding asistido.
 
 Todos los planes: sin permanencia, cancelación desde el portal, IVA no incluido en planes de pago.
 
 ## Funcionalidades principales
 
-- **Asistente RAG**: aprende leyendo la URL de la web del negocio y documentos subidos por el cliente.
-- **Agenda de citas**: reserva, confirmación, recordatorios (24h y 2h antes) y cancelación gestionados por el asistente.
-- **WhatsApp Business con IA**: mismo asistente en WhatsApp, disponible desde el plan Pro.
-- **Asistente de voz por teléfono**: atiende llamadas con IA y agenda citas, disponible en el plan Business (300 min/mes).
-- **Widget embebible**: snippet de una línea compatible con cualquier web (WordPress, Webflow, HTML, etc.).
-- **Panel de administración**: conversaciones, reservas, leads, configuración del bot y métricas.
-- **Portal cliente**: gestión de suscripción, configuración del asistente y agenda propia.
+- **Asistente IA multi-canal**: el mismo asistente en el widget web, WhatsApp Business y el teléfono (voz). Aprende de la web del negocio, documentos y Q&A manuales; responde solo con información validada.
+- **Agenda inteligente**: reserva, reprogramación y cancelación por cualquier canal sobre la misma agenda; multi-profesional, multi-centro y salas con aforo; recordatorios 24 h y 2 h antes por email, WhatsApp o SMS con confirmación en un clic.
+- **Cobros con Stripe**: señal, pago completo o retención de tarjeta al reservar; penalización automática por no-show según la política del negocio; cobro con QR en el mostrador; la IA puede enviar enlaces de pago. El dinero va directo a la cuenta Stripe del negocio.
+- **Tienda online**: venta pública de bonos de sesiones, tarjetas regalo (con envío por email inmediato o programado y consulta de saldo online) y productos con recogida; wallet online del cliente y canje en un clic sobre la cita.
+- **Central de reservas pública**: enlace propio con la marca del negocio donde el cliente reserva en 4 pasos; embebible en cualquier web con un iframe de una línea.
+- **Recepcionista de voz por teléfono**: contesta llamadas con IA, reserva/cambia/cancela citas reales, transfiere a un humano si hace falta; cada llamada queda transcrita, resumida y etiquetada. Llamadas salientes de confirmación de cita.
+- **Informes y CRM**: KPIs de ingresos, citas, ocupación y asistencia con comparativa; desgloses por servicio, profesional, centro y canal; ficha 360º del cliente con historial, bonos y saldo; exportación CSV.
+- **Equipo y permisos**: roles owner/manager/staff con permisos afinables acción a acción por usuario.
+- **Panel de administración**: agenda, conversaciones unificadas (web + WhatsApp + voz), ventas/mostrador, catálogo de servicios con precios y duración, horarios, recordatorios y reseñas post-cita.
 
 ## Instalación y setup
 
 - Registro gratuito en [app.vantelia.es/acceso](https://app.vantelia.es/acceso). Sin tarjeta.
-- Wizard de 5 pasos: nombre del negocio, URL de la web, tono, branding y canal.
-- El asistente indexa la web automáticamente en segundos.
-- Instalación: pegar un snippet `<script>` en el HTML de la web del cliente.
-- El bot aprende de la web, documentos adicionales (PDF, texto, URLs) y preguntas/respuestas manuales.
+- Wizard guiado: nombre del negocio, URL de la web, tono, branding y canal. El asistente indexa la web automáticamente en segundos.
+- Widget: pegar un snippet `<script>` de una línea en la web (WordPress, Wix, Webflow, Shopify, HTML…).
+- Central de reservas: enlace listo para compartir en Instagram o Google, o embebible por iframe.
 
 ## Recursos
 
+- [La plataforma (capturas reales del panel)](https://www.vantelia.es/plataforma/)
 - [Demo en vivo](https://www.vantelia.es/demo/): genera un asistente con los datos de cualquier negocio en menos de 1 minuto, sin tarjeta.
-- [Preguntas frecuentes](https://www.vantelia.es/faq/)
 - [Planes y precios](https://www.vantelia.es/planes/)
-- [Servicios](https://www.vantelia.es/servicios/)
+- [Preguntas frecuentes](https://www.vantelia.es/faq/)
+- [IA para clínicas](https://www.vantelia.es/chatbot-para-clinicas/)
+- [IA para centros de estética y spas](https://www.vantelia.es/chatbot-para-centros-de-estetica/)
+- [IA para peluquerías y barberías](https://www.vantelia.es/chatbot-para-peluquerias/)
+- [Chatbot para WhatsApp Business](https://www.vantelia.es/chatbot-whatsapp-negocios/)
+- [Cómo instalar el chatbot en tu web](https://www.vantelia.es/como-instalar-chatbot-en-mi-web/)
 - [Consulta gratuita](https://www.vantelia.es/consultas/)
-- [Plataforma](https://app.vantelia.es)
 
 ## Contexto técnico
 
 - Backend: FastAPI (Python), alojado en VPS Hostinger (Europa).
-- IA: OpenAI GPT-4o-mini con RAG sobre índices vectoriales por cliente (llama-index).
+- IA: OpenAI (GPT-4o-mini para chat, gpt-realtime para voz) con RAG sobre índices vectoriales por cliente (llama-index).
 - Aislamiento multi-tenant: cada cliente tiene su propio índice, base de datos y credenciales.
-- Canales: widget web, WhatsApp Cloud API, portal cliente, email transaccional.
+- Canales: widget web, WhatsApp Cloud API, telefonía (Twilio), portal cliente, email transaccional y SMS.
+- Pagos: Stripe Connect — los cobros van directos a la cuenta del negocio.
 - Cumplimiento RGPD: datos en Europa, sin uso de conversaciones para entrenar modelos públicos.
 - [Política de privacidad](https://www.vantelia.es/legal/privacidad/)
 - [IA responsable](https://www.vantelia.es/legal/ia-responsable/)

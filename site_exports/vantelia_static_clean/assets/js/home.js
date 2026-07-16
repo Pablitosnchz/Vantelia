@@ -151,12 +151,15 @@
   });
 })();
 
-/* Particle canvas (only when canvas exists) */
+/* Particle canvas (only when canvas exists; skip on mobile/reduced-motion,
+   pause when hero is off-screen) */
 (function () {
   const canvas = document.getElementById('particles');
   if (!canvas) return;
+  if (window.innerWidth <= 768) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const ctx = canvas.getContext('2d');
-  let pts = [], raf;
+  let pts = [], raf, running = false;
 
   function resize() {
     canvas.width = canvas.offsetWidth;
@@ -201,13 +204,23 @@
     }
   }
   function draw() {
+    if (!running) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     pts.forEach(p => p.tick());
     lines();
     raf = requestAnimationFrame(draw);
   }
+  function start() { if (running) return; running = true; draw(); }
+  function stop() { running = false; if (raf) cancelAnimationFrame(raf); }
   window.addEventListener('resize', () => { resize(); init(); }, { passive: true });
-  resize(); init(); draw();
+  resize(); init();
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (ents) {
+      ents.forEach(function (e) { if (e.isIntersecting) start(); else stop(); });
+    }, { threshold: 0.05 }).observe(canvas);
+  } else {
+    start();
+  }
 })();
 
 /* Header on scroll */
@@ -536,13 +549,20 @@
 })();
 
 /* ════════════════════════════════════════════════
-   Hero mockup widget — chat loop (3 flujos)
+   Hero mock — 3 canales: chat / reservas / voz
    ════════════════════════════════════════════════ */
 (function () {
   var chat = document.getElementById('mwChat');
-  if (!chat) return;
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var tabsWrap = document.getElementById('mockTabs');
+  if (!chat || !tabsWrap) return;
 
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var tabs = Array.prototype.slice.call(tabsWrap.querySelectorAll('.mock-tab'));
+  var panes = Array.prototype.slice.call(document.querySelectorAll('.mock-pane'));
+  var barLabel = document.getElementById('mockBarLabel');
+  var BAR_LABELS = { chat: 'tunegocio.es', book: 'tunegocio.es/reservas', voice: 'Tu línea · IA' };
+
+  /* ---------- helpers chat ---------- */
   function scrollChat() { chat.scrollTop = chat.scrollHeight; }
   function addBubble(who, text) {
     var b = document.createElement('div');
@@ -563,8 +583,8 @@
     card.innerHTML = '<p class="mw-card-title">¿En qué te ayudo?</p><div class="mw-opts"></div>';
     var box = card.querySelector('.mw-opts');
     [
-      { icon: '📅', label: 'Agendar cita' },
-      { icon: '📦', label: 'Información de productos' },
+      { icon: '📅', label: 'Reservar cita' },
+      { icon: '💳', label: 'Pagar mi reserva' },
       { icon: '❓', label: 'Preguntas frecuentes' }
     ].forEach(function (it) {
       var btn = document.createElement('button');
@@ -604,32 +624,13 @@
     card.className = 'mw-card';
     card.innerHTML = '<p class="mw-card-title">🕐 Huecos disponibles</p><p class="mw-card-sub">' + dayLabel + '</p><div class="mw-slots"></div>';
     var box = card.querySelector('.mw-slots');
-    ['10:00','11:30','12:30','17:00','18:30'].forEach(function (h) {
-      var s = document.createElement('span');
-      s.className = 'mw-slot'; s.textContent = h;
-      box.appendChild(s);
+    ['10:00', '11:30', '12:30', '17:00', '18:30'].forEach(function (h) {
+      var sp = document.createElement('span');
+      sp.className = 'mw-slot'; sp.textContent = h;
+      box.appendChild(sp);
     });
     chat.appendChild(card); scrollChat();
     return card.querySelectorAll('.mw-slot');
-  }
-  function buildPlans() {
-    var card = document.createElement('div');
-    card.className = 'mw-card';
-    card.innerHTML = '<p class="mw-card-title">💎 Planes Vantelia</p><p class="mw-card-sub">Sin permanencia. Cancelas cuando quieras.</p><div class="mw-plans"></div>';
-    var box = card.querySelector('.mw-plans');
-    [
-      { name:'Free', price:'0€', feat:'50 msg · 10 citas/mes' },
-      { name:'Starter', price:'19€', feat:'1.000 msg · 100 citas/mes' },
-      { name:'Pro', price:'49€', feat:'5.000 msg · WhatsApp · agenda', tag:'Popular' },
-      { name:'Business', price:'149€', feat:'WhatsApp + voz por teléfono' }
-    ].forEach(function (p) {
-      var row = document.createElement('div');
-      row.className = 'mw-plan';
-      var tag = p.tag ? '<span class="mw-plan-tag">' + p.tag + '</span>' : '';
-      row.innerHTML = tag + '<div><span class="mw-plan-name">' + p.name + '</span><br><span class="mw-plan-feat">' + p.feat + '</span></div><span class="mw-plan-price">' + p.price + '/mes</span>';
-      box.appendChild(row);
-    });
-    chat.appendChild(card); scrollChat();
   }
   function buildFaqList(items) {
     var card = document.createElement('div');
@@ -651,13 +652,14 @@
     }, ms);
   }
 
+  /* ---------- flujos chat ---------- */
   function flowAgenda(done) {
     chat.innerHTML = '';
-    addBubble('bot', 'Hola 👋 Soy el asistente de Vantelia. ¿En qué te ayudo?');
+    addBubble('bot', 'Hola 👋 Soy el asistente de tu negocio. ¿En qué te ayudo?');
     setTimeout(function () {
       var opts = buildOptions();
       clickWithDelay(opts[0], 1400, function () {
-        addBubble('user', 'Agendar cita');
+        addBubble('user', 'Reservar cita');
         showTyping(900, function () {
           var cal = buildCalendar();
           clickWithDelay(cal[2], 1300, function () {
@@ -669,7 +671,7 @@
                 var hour = sl[2].textContent;
                 addBubble('user', hour);
                 showTyping(900, function () {
-                  addBubble('confirm', '✅ <b>Cita confirmada</b><br>' + picked + ' · ' + hour + '<br><small>Te enviamos un email con los detalles.</small>');
+                  addBubble('confirm', '✅ <b>Cita confirmada</b><br>' + picked + ' · ' + hour + '<br><small>Recordatorios 24 h y 2 h antes.</small>');
                   setTimeout(done, 3200);
                 });
               });
@@ -679,16 +681,19 @@
       });
     }, 1200);
   }
-  function flowProductos(done) {
+  function flowPago(done) {
     chat.innerHTML = '';
-    addBubble('bot', '¡Hola! ¿Te ayudo con algo más?');
+    addBubble('bot', '¡Hola de nuevo! ¿Te ayudo con algo más?');
     setTimeout(function () {
       var opts = buildOptions();
       clickWithDelay(opts[1], 1400, function () {
-        addBubble('user', 'Información de productos');
+        addBubble('user', 'Pagar mi reserva');
         showTyping(1000, function () {
-          addBubble('bot', 'Estos son nuestros planes. El más elegido es Pro:');
-          setTimeout(function () { buildPlans(); setTimeout(done, 4200); }, 600);
+          addBubble('bot', 'Tu cita del miércoles 21 a las 12:30 tiene pendiente la señal de 15 €. Te acabo de enviar el enlace de pago seguro 💳');
+          setTimeout(function () {
+            addBubble('confirm', '✅ <b>Pago recibido</b><br>Señal de 15 € · Stripe<br><small>Recibirás el justificante por email.</small>');
+            setTimeout(done, 3400);
+          }, 1600);
         });
       });
     }, 1100);
@@ -702,15 +707,15 @@
         addBubble('user', 'Preguntas frecuentes');
         showTyping(800, function () {
           var faqs = buildFaqList([
-            '¿Cuánto tarda en montarse?',
-            '¿Necesito saber programar?',
-            '¿Cómo se activa WhatsApp?',
-            '¿Puedo cancelar cuando quiera?'
+            '¿Cuánto dura la primera sesión?',
+            '¿Puedo pagar con tarjeta?',
+            '¿Cómo cancelo mi cita?',
+            '¿Tenéis aparcamiento?'
           ]);
           clickWithDelay(faqs[2], 1400, function () {
-            addBubble('user', '¿Cómo se activa WhatsApp?');
+            addBubble('user', '¿Cómo cancelo mi cita?');
             showTyping(1000, function () {
-              addBubble('bot', 'Lo activamos nosotros gratis 🎁 Nos das tu número de WhatsApp Business y en menos de 24h tu asistente ya responde por WhatsApp.');
+              addBubble('bot', 'En el email de confirmación tienes un enlace para cancelar o cambiar tu cita en un clic, sin llamar. Hasta 24 h antes no tiene coste.');
               setTimeout(done, 3400);
             });
           });
@@ -718,23 +723,218 @@
       });
     }, 1100);
   }
-  function loopAll() {
+  function chatLoop() {
     flowAgenda(function () {
-      flowProductos(function () {
-        flowFaq(function () { loopAll(); });
+      flowPago(function () {
+        flowFaq(function () { chatLoop(); });
       });
     });
   }
 
+  /* ---------- pane reservas ---------- */
+  var mbBody = document.getElementById('mbBody');
+  var mbBar = document.getElementById('mbBar');
+  var mbStepLabel = document.getElementById('mbStepLabel');
+
+  function mbSetStep(n, label) {
+    if (mbBar) mbBar.style.width = (n * 25) + '%';
+    if (mbStepLabel) mbStepLabel.textContent = 'Paso ' + n + ' de 4 · ' + label;
+  }
+  function mbTitle(text) {
+    var t = document.createElement('p');
+    t.className = 'mb-title'; t.textContent = text;
+    mbBody.appendChild(t);
+  }
+  function mbService(name, mins, price) {
+    var el = document.createElement('div');
+    el.className = 'mb-svc';
+    el.innerHTML = '<div><b>' + name + '</b><span>' + mins + ' min</span></div><em>' + price + '</em>';
+    mbBody.appendChild(el); return el;
+  }
+  function bookLoop() {
+    if (!mbBody) return;
+    mbBody.innerHTML = '';
+    mbSetStep(1, 'Servicio');
+    mbTitle('Elige tu servicio');
+    var s1 = mbService('Masaje descontracturante', 45, '40 €');
+    mbService('Fisioterapia', 50, '55 €');
+    mbService('Sesión premium', 60, '75 €');
+    clickWithDelay(s1, 1500, function () {
+      mbBody.innerHTML = '';
+      mbSetStep(2, 'Fecha');
+      mbTitle('¿Qué día te viene bien?');
+      var cal = document.createElement('div');
+      cal.className = 'mw-cal';
+      [
+        { dow: 'Mar', n: 20, dis: false },
+        { dow: 'Mié', n: 21, dis: false },
+        { dow: 'Jue', n: 22, dis: false },
+        { dow: 'Vie', n: 23, dis: false },
+        { dow: 'Sáb', n: 24, dis: true },
+        { dow: 'Dom', n: 25, dis: true },
+        { dow: 'Lun', n: 26, dis: false },
+        { dow: 'Mar', n: 27, dis: false }
+      ].forEach(function (d) {
+        var el = document.createElement('div');
+        el.className = 'mw-cal-day' + (d.dis ? ' is-disabled' : '');
+        el.innerHTML = d.dow + '<b>' + d.n + '</b>';
+        cal.appendChild(el);
+      });
+      mbBody.appendChild(cal);
+      var days = cal.querySelectorAll('.mw-cal-day:not(.is-disabled)');
+      clickWithDelay(days[3], 1400, function () {
+        mbBody.innerHTML = '';
+        mbSetStep(3, 'Hora');
+        mbTitle('Huecos libres · Vie 23');
+        var box = document.createElement('div');
+        box.className = 'mw-slots';
+        ['09:30', '10:30', '12:00', '16:30', '18:00'].forEach(function (h) {
+          var sp = document.createElement('span');
+          sp.className = 'mw-slot'; sp.textContent = h;
+          box.appendChild(sp);
+        });
+        mbBody.appendChild(box);
+        var slots = box.querySelectorAll('.mw-slot');
+        clickWithDelay(slots[1], 1300, function () {
+          mbBody.innerHTML = '';
+          mbSetStep(4, 'Confirmación');
+          var done = document.createElement('div');
+          done.className = 'mb-done';
+          done.innerHTML = '✅ <b>Reserva confirmada</b><br>Masaje descontracturante · Vie 23 · 10:30<br>Señal de 15 € pagada con tarjeta 💳<br><small>Email y recordatorios en camino.</small>';
+          mbBody.appendChild(done);
+          setTimeout(bookLoop, 4200);
+        });
+      });
+    });
+  }
+
+  /* ---------- pane voz ---------- */
+  var mvTranscript = document.getElementById('mvTranscript');
+  var mvTimer = document.getElementById('mvTimer');
+  var mvSeconds = 0;
+
+  function mvLine(kind, text) {
+    var el = document.createElement('div');
+    el.className = 'mv-line ' + kind;
+    el.textContent = text;
+    mvTranscript.appendChild(el);
+    while (mvTranscript.children.length > 5) mvTranscript.removeChild(mvTranscript.firstChild);
+  }
+  function voiceLoop() {
+    if (!mvTranscript) return;
+    mvTranscript.innerHTML = '';
+    mvSeconds = 0;
+    var script = [
+      [900,  'caller', '«Hola, ¿puedo cambiar mi cita del jueves?»'],
+      [2600, 'ia',     '«¡Claro! La tienes el jueves a las 17:00. ¿Qué día te viene mejor?»'],
+      [5200, 'caller', '«El viernes por la mañana, si puede ser.»'],
+      [7600, 'ia',     '«Tengo un hueco el viernes a las 10:30 con Marta. ¿Te lo confirmo?»'],
+      [10200, 'caller', '«Perfecto, gracias.»'],
+      [12000, 'result', '🔁 Cita reprogramada · SMS de confirmación enviado']
+    ];
+    script.forEach(function (step) {
+      setTimeout(function () { mvLine(step[1], step[2]); }, step[0]);
+    });
+    setTimeout(voiceLoop, 16500);
+  }
+  if (mvTimer) {
+    setInterval(function () {
+      mvSeconds += 1;
+      var m = Math.floor(mvSeconds / 60), sec = mvSeconds % 60;
+      mvTimer.textContent = (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+    }, 1000);
+  }
+
+  /* ---------- controlador de paneles ---------- */
+  var ORDER = ['chat', 'book', 'voice'];
+  var DUR = { chat: 21000, book: 12500, voice: 17000 };
+  var idx = 0, rotTimer = null;
+
+  function setPane(name) {
+    tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.pane === name); });
+    panes.forEach(function (p) { p.classList.toggle('active', p.dataset.pane === name); });
+    if (barLabel) barLabel.textContent = BAR_LABELS[name] || 'tunegocio.es';
+    idx = ORDER.indexOf(name);
+  }
+  function scheduleNext() {
+    clearTimeout(rotTimer);
+    rotTimer = setTimeout(function () {
+      var next = ORDER[(idx + 1) % ORDER.length];
+      setPane(next);
+      scheduleNext();
+    }, DUR[ORDER[idx]] || 15000);
+  }
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () {
+      setPane(t.dataset.pane);
+      if (!reduced) scheduleNext();
+    });
+  });
+
+  /* ---------- estático si reduce-motion ---------- */
+  if (reduced) {
+    addBubble('bot', 'Hola 👋 Soy el asistente de tu negocio. ¿En qué te ayudo?');
+    addBubble('user', 'Quiero reservar una cita');
+    addBubble('confirm', '✅ <b>Cita confirmada</b><br>Mié 21 · 12:30<br><small>Recordatorios 24 h y 2 h antes.</small>');
+    if (mbBody) {
+      mbSetStep(1, 'Servicio');
+      mbTitle('Elige tu servicio');
+      mbService('Masaje descontracturante', 45, '40 €');
+      mbService('Fisioterapia', 50, '55 €');
+    }
+    if (mvTranscript) {
+      mvLine('caller', '«¿Puedo cambiar mi cita del jueves?»');
+      mvLine('ia', '«Tengo un hueco el viernes a las 10:30. ¿Te lo confirmo?»');
+      mvLine('result', '🔁 Cita reprogramada · SMS enviado');
+    }
+    return;
+  }
+
+  /* ---------- arranque al entrar en viewport ---------- */
+  function startAll() {
+    chatLoop();
+    bookLoop();
+    voiceLoop();
+    scheduleNext();
+  }
   if ('IntersectionObserver' in window) {
     var started = false;
     var io2 = new IntersectionObserver(function (ents) {
       ents.forEach(function (e) {
-        if (e.isIntersecting && !started) { started = true; loopAll(); io2.disconnect(); }
+        if (e.isIntersecting && !started) { started = true; startAll(); io2.disconnect(); }
       });
     }, { threshold: 0.2 });
     io2.observe(chat);
   } else {
-    loopAll();
+    startAll();
+  }
+})();
+
+/* ════════════════════════════════════════════════
+   Central de reservas embebida — carga perezosa
+   ════════════════════════════════════════════════ */
+(function () {
+  var frame = document.getElementById('centralIframe');
+  var skeleton = document.getElementById('centralSkeleton');
+  if (!frame || !frame.dataset.src) return;
+
+  function load() {
+    if (frame.src) return;
+    frame.addEventListener('load', function () {
+      if (skeleton) skeleton.style.display = 'none';
+      if (window.vanteliaTrack) window.vanteliaTrack('central_demo_loaded', { source: 'home_embed' });
+    });
+    frame.src = frame.dataset.src;
+  }
+
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (ents) {
+      ents.forEach(function (e) {
+        if (e.isIntersecting) { load(); io.disconnect(); }
+      });
+    }, { rootMargin: '600px 0px' });
+    io.observe(frame);
+  } else {
+    load();
   }
 })();

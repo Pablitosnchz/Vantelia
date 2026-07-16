@@ -19,11 +19,11 @@
 </script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Crea tu asistente IA en 2 minutos | Vantelia</title>
+  <title>Asistente IA que atiende, agenda y cobra por tu negocio | Vantelia</title>
   <meta name="description"
-    content="Crea un asistente IA para tu web en 2 minutos. Lee tu web, aprende tus servicios y atiende a tus clientes 24/7. Gratis para empezar, sin tarjeta. Hecho en España.">
+    content="Chat web, WhatsApp y teléfono atendidos por IA: agenda con recordatorios, cobros con Stripe, bonos y tarjetas regalo, central de reservas online. Hecho en España. Empieza gratis, sin tarjeta.">
   <meta name="keywords"
-    content="asistente IA para web, chatbot IA empresas España, crear chatbot sin programar, widget chat IA, asistente virtual IA negocio, chatbot WhatsApp Business España, agenda automática IA">
+    content="asistente IA para web, software gestión citas, recepcionista virtual IA, chatbot IA empresas España, reservas online negocio, chatbot WhatsApp Business España, agenda automática IA, cobrar citas online">
   <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
   <meta name="theme-color" content="#0B132B">
   <meta name="author" content="Vantelia">
@@ -32,19 +32,19 @@
   <link rel="apple-touch-icon" href="/assets/img/favicon.png">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Vantelia">
-  <meta property="og:title" content="Crea tu asistente IA en 2 minutos | Vantelia">
+  <meta property="og:title" content="Asistente IA que atiende, agenda y cobra por tu negocio | Vantelia">
   <meta property="og:description"
-    content="Asistente IA embebible que aprende de tu web y atiende a tus clientes 24/7. 50 mensajes y 10 citas/mes gratis, sin tarjeta. Setup en 2 minutos.">
+    content="Chat web, WhatsApp y teléfono atendidos por IA: agenda, recordatorios, cobros con Stripe y central de reservas online. Empieza gratis, sin tarjeta.">
   <meta property="og:url" content="https://www.vantelia.es/">
   <meta property="og:image" content="https://www.vantelia.es/assets/img/og-image.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Vantelia · Plataforma de asistentes IA self-serve para empresas">
+  <meta property="og:image:alt" content="Vantelia · Plataforma de gestión con IA para negocios con cita">
   <meta property="og:locale" content="es_ES">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Crea tu asistente IA en 2 minutos | Vantelia">
+  <meta name="twitter:title" content="Asistente IA que atiende, agenda y cobra por tu negocio | Vantelia">
   <meta name="twitter:description"
-    content="Asistente IA embebible que aprende de tu web. 50 mensajes y 10 citas/mes gratis, sin tarjeta. Setup en 2 minutos.">
+    content="Chat web, WhatsApp y teléfono atendidos por IA: agenda, cobros y central de reservas online. Empieza gratis, sin tarjeta.">
   <meta name="twitter:image" content="https://www.vantelia.es/assets/img/og-image.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -53,7 +53,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/home.css?v=20260522-rebuild">
+  <link rel="stylesheet" href="/assets/css/home.css?v=20260716-v2">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -143,12 +143,6 @@
             "url": "https://www.vantelia.es/planes/"
           }
         ]
-      },
-            { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Agenda automatica con IA", "url": "https://www.vantelia.es/servicios/" } },
-            { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Asistente IA en WhatsApp Business", "url": "https://www.vantelia.es/servicios/" } },
-            { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Onboarding personalizado (consulta)", "url": "https://www.vantelia.es/consultas/" } }
-          ]
-        }
       }
     ]
   }
@@ -169,6 +163,7 @@
       <nav aria-label="Navegación principal">
         <ul class="nav-links">
           <li><a href="/">Inicio</a></li>
+          <li><a href="/plataforma/">Plataforma</a></li>
           <li><a href="/planes/">Planes</a></li>
           <li><a href="/demo/">Demo</a></li>
           <li><a href="/faq/">Preguntas frecuentes</a></li>
@@ -176,9 +171,9 @@
       </nav>
       <div style="display:flex;gap:10px;align-items:center" class="nav-cta">
         <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener">
-          <span class="dot-live" aria-hidden="true"></span>Acceso plataforma
+          <span class="dot-live" aria-hidden="true"></span>Acceso
         </a>
-        <a href="https://app.vantelia.es/acceso" class="btn btn-primary" target="_blank" rel="noopener">Crea tu bot gratis</a>
+        <a href="https://app.vantelia.es/acceso?signup=1" class="btn btn-primary" target="_blank" rel="noopener">Empieza gratis</a>
       </div>
       <button class="nav-toggle" id="nav-toggle" aria-label="Abrir menú" aria-expanded="false">
         <span></span><span></span><span></span>
@@ -189,14 +184,15 @@
   <div class="mobile-menu" id="mobile-menu" role="dialog" aria-label="Menú de navegación">
     <button class="mobile-close" id="mobile-close" aria-label="Cerrar menú">✕</button>
     <a href="/" class="mm-link">Inicio</a>
+  <a href="/plataforma/" class="mm-link">Plataforma</a>
     <a href="/planes/" class="mm-link">Planes</a>
     <a href="/demo/" class="mm-link">Demo</a>
     <a href="/faq/" class="mm-link">Preguntas frecuentes</a>
     <a href="https://app.vantelia.es/acceso" class="btn-access" target="_blank" rel="noopener"
       style="margin-top:8px;font-size:1rem;height:48px;padding:0 28px">
-      <span class="dot-live"></span>Acceso plataforma
+      <span class="dot-live"></span>Acceso
     </a>
-    <a href="https://app.vantelia.es/acceso" class="btn btn-primary btn-lg" target="_blank" rel="noopener" style="margin-top:8px">Crea tu bot gratis</a>
+    <a href="https://app.vantelia.es/acceso?signup=1" class="btn btn-primary btn-lg" target="_blank" rel="noopener" style="margin-top:8px">Empieza gratis</a>
     <a href="/consultas/" class="btn btn-ghost btn-lg" style="margin-top:8px">Consulta gratuita</a>
   </div>
 
@@ -210,23 +206,23 @@
       <div class="hero-copy">
         <div class="hero-badge">
           <span class="badge-dot" aria-hidden="true"></span>
-          Asistente IA self-serve · Hecho en España
+          Plataforma de gestión con IA · Hecho en España
         </div>
 
         <h1>
-          Crea tu<br>
-          <span class="gradient-text">asistente IA</span><br>
-          en 2 minutos
+          El asistente IA que<br>
+          <span class="gradient-text">atiende, agenda y cobra</span><br>
+          por tu negocio
         </h1>
 
         <p class="hero-lead">
-          Aprende de tu web, <b>agenda citas solo</b> y atiende <b>WhatsApp 24/7</b>.
-          Pegas un código y empieza a trabajar para ti. Gratis, sin tarjeta.
+          En tu web, en <b>WhatsApp</b> y contestando <b>tu teléfono</b>. Reserva en tu agenda real,
+          envía recordatorios y cobra con tarjeta. Tú trabajas; él atiende.
         </p>
 
         <div class="hero-actions">
           <a href="https://app.vantelia.es/acceso?signup=1" class="btn btn-primary btn-lg" target="_blank" rel="noopener">Crea gratis tu asistente IA</a>
-          <a href="#features" class="btn btn-ghost btn-lg">Ver cómo funciona</a>
+          <a href="#plataforma" class="btn btn-ghost btn-lg">Ver la plataforma</a>
         </div>
         <p style="margin-top:10px; font-size:0.86rem; color:rgba(255,255,255,0.6);">
           50 mensajes y 10 citas/mes gratis · sin tarjeta · sin permanencia
@@ -234,39 +230,76 @@
 
         <div class="hero-trust">
           <div class="avatars" aria-hidden="true">
-            <div class="av" style="background:linear-gradient(135deg,#00D1FF,#00F5D4)">?</div>
-            <div class="av" style="background:linear-gradient(135deg,#8a63ff,#00D1FF)">????</div>
-            <div class="av" style="background:linear-gradient(135deg,#00F5D4,#48d596)">??</div>
+            <div class="av" style="background:linear-gradient(135deg,#00D1FF,#00F5D4)">💬</div>
+            <div class="av" style="background:linear-gradient(135deg,#48d596,#25D366)">📱</div>
+            <div class="av" style="background:linear-gradient(135deg,#8a63ff,#00D1FF)">📞</div>
           </div>
-          <span>Setup 2 min · datos en Europa · cancela cuando quieras</span>
+          <span>Un solo asistente en todos tus canales · datos en Europa</span>
         </div>
       </div>
 
-      <!-- Visual: mockup widget animado -->
+      <!-- Visual: mockup animado con 3 canales -->
       <div class="hero-visual hero-mockup" aria-hidden="true">
         <img class="hero-mark" src="/assets/img/logo-vantelia.webp" alt="" aria-hidden="true">
         <div class="mockup-glow"></div>
+        <div class="mock-tabs" id="mockTabs">
+          <button type="button" class="mock-tab active" data-pane="chat" tabindex="-1">💬 Chat web</button>
+          <button type="button" class="mock-tab" data-pane="book" tabindex="-1">📅 Reservas</button>
+          <button type="button" class="mock-tab" data-pane="voice" tabindex="-1">📞 Teléfono</button>
+        </div>
         <div class="mockup-frame">
           <div class="mockup-bar">
             <span></span><span></span><span></span>
-            <em>tunegocio.es</em>
+            <em id="mockBarLabel">tunegocio.es</em>
           </div>
-          <div class="mockup-widget">
-            <div class="mw-head">
-              <div class="mw-avatar">
-                <img src="/assets/img/logo-vantelia.webp" alt="Vantelia" width="28" height="28" loading="lazy">
+
+          <div class="mock-pane active" data-pane="chat">
+            <div class="mockup-widget">
+              <div class="mw-head">
+                <div class="mw-avatar">
+                  <img src="/assets/img/logo-vantelia.webp" alt="Vantelia" width="28" height="28" loading="lazy">
+                </div>
+                <div>
+                  <b>Asistente Vantelia</b>
+                  <span>En línea</span>
+                </div>
               </div>
-              <div>
-                <b>Asistente Vantelia</b>
-                <span>En línea</span>
+              <div class="mw-chat" id="mwChat" aria-live="polite"></div>
+              <div class="mw-input">
+                <span class="mw-placeholder">Escribe tu mensaje…</span>
+                <button class="mw-send" aria-label="Enviar" tabindex="-1" type="button">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 10l14-7-5 17-3-7-6-3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" fill="none"/></svg>
+                </button>
               </div>
             </div>
-            <div class="mw-chat" id="mwChat" aria-live="polite"></div>
-            <div class="mw-input">
-              <span class="mw-placeholder">Escribe tu mensaje…</span>
-              <button class="mw-send" aria-label="Enviar" tabindex="-1" type="button">
-                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 10l14-7-5 17-3-7-6-3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" fill="none"/></svg>
-              </button>
+          </div>
+
+          <div class="mock-pane" data-pane="book">
+            <div class="mockup-book">
+              <div class="mb-head">
+                <b>Reserva tu cita</b>
+                <span id="mbStepLabel">Paso 1 de 4 · Servicio</span>
+              </div>
+              <div class="mb-progress"><i id="mbBar" style="width:25%"></i></div>
+              <div class="mb-body" id="mbBody"></div>
+            </div>
+          </div>
+
+          <div class="mock-pane" data-pane="voice">
+            <div class="mockup-voice">
+              <div class="mv-status"><span class="mv-live"></span>Llamada entrante · 612 345 678</div>
+              <div class="mv-agent">
+                <div class="mv-avatar">📞</div>
+                <div>
+                  <b>Recepcionista IA</b>
+                  <span>Atendiendo tu línea</span>
+                </div>
+                <em class="mv-timer" id="mvTimer">00:04</em>
+              </div>
+              <div class="mv-wave" id="mvWave">
+                <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+              </div>
+              <div class="mv-transcript" id="mvTranscript"></div>
             </div>
           </div>
         </div>
@@ -282,175 +315,203 @@
 
   <div class="glow-line" aria-hidden="true"></div>
 
-<!-- -------------- FEATURES (3 funciones clave) -------------- -->
-  <section class="section" id="features" aria-label="Funciones clave">
+<!-- -------------- PLATAFORMA (recorrido de producto) -------------- -->
+  <section class="section" id="plataforma" aria-label="La plataforma">
     <div class="shell">
       <div class="section-head centered reveal">
-        <span class="eyebrow">Funciones</span>
-        <h2>Todo lo que necesita tu negocio<br><span class="gradient-text">en un solo asistente</span></h2>
-        <p class="section-lead">Tres funciones que sustituyen a tres herramientas distintas.</p>
+        <span class="eyebrow">La plataforma</span>
+        <h2>Todo tu negocio,<br><span class="gradient-text">en un solo sistema</span></h2>
+        <p class="section-lead">Chat, agenda, cobros, tienda y teléfono trabajando juntos. Lo que antes eran cinco herramientas, ahora es una — y la lleva tu asistente.</p>
       </div>
-      <div class="feat3-grid">
-        <article class="feat3-card reveal d1">
-          <div class="feat3-icon">
-            <svg viewBox="0 0 64 64" aria-hidden="true">
-              <rect x="8" y="14" width="48" height="42" rx="6" stroke="url(#fg1)" stroke-width="2.5" fill="none"/>
-              <path d="M8 26h48" stroke="url(#fg1)" stroke-width="2.5"/>
-              <path d="M20 8v12M44 8v12" stroke="url(#fg1)" stroke-width="2.5" stroke-linecap="round"/>
-              <rect class="cal-day" x="16" y="32" width="8" height="8" rx="2" fill="#00F5D4"/>
-              <rect class="cal-day d2" x="28" y="32" width="8" height="8" rx="2" fill="#00D1FF" opacity=".55"/>
-              <rect class="cal-day d3" x="40" y="32" width="8" height="8" rx="2" fill="#00D1FF" opacity=".35"/>
-              <rect class="cal-day d4" x="16" y="44" width="8" height="8" rx="2" fill="#00D1FF" opacity=".25"/>
-              <defs><linearGradient id="fg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#00D1FF"/><stop offset="1" stop-color="#00F5D4"/></linearGradient></defs>
-            </svg>
-          </div>
-          <h3>Agenda citas sola</h3>
-          <p>El asistente conoce tu horario, propone huecos libres y reserva la cita. Envía recordatorios automáticos. Tú solo apareces el día de la cita.</p>
-          <ul class="feat3-bullets">
-            <li>Recordatorios 24h y 2h antes</li>
-            <li>Reprograma y cancela con un clic</li>
-            <li>Bloqueos por vacaciones</li>
+
+      <!-- 01 · Agenda -->
+      <div class="tour-row reveal">
+        <div class="tour-copy">
+          <span class="eyebrow">01 · Agenda inteligente</span>
+          <h3>Una agenda que se llena sola, por todos los canales</h3>
+          <p>Web, WhatsApp, teléfono o mostrador: cada cita entra en la misma agenda, sin dobles reservas. Recordatorios automáticos 24&nbsp;h y 2&nbsp;h antes, con confirmación en un clic.</p>
+          <ul class="tour-feats">
+            <li>Multi-profesional, multi-centro y salas con aforo</li>
+            <li>Recordatorios por email, WhatsApp y SMS</li>
+            <li>El cliente cancela o cambia solo, sin llamarte</li>
           </ul>
-        </article>
-        <article class="feat3-card reveal d2">
-          <div class="feat3-icon">
-            <svg viewBox="0 0 64 64" aria-hidden="true">
-              <circle cx="32" cy="32" r="22" stroke="url(#fg2)" stroke-width="2.5" fill="none"/>
-              <circle class="n n1" cx="32" cy="14" r="3.5" fill="#00F5D4"/>
-              <circle class="n n2" cx="50" cy="32" r="3.5" fill="#00D1FF"/>
-              <circle class="n n3" cx="32" cy="50" r="3.5" fill="#00F5D4"/>
-              <circle class="n n4" cx="14" cy="32" r="3.5" fill="#00D1FF"/>
-              <circle cx="32" cy="32" r="5" fill="url(#fg2)"/>
-              <path d="M32 17v10M47 32H37M32 47V37M17 32h10" stroke="url(#fg2)" stroke-width="2" stroke-linecap="round"/>
-              <defs><linearGradient id="fg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#00D1FF"/><stop offset="1" stop-color="#00F5D4"/></linearGradient></defs>
-            </svg>
+        </div>
+        <div class="tour-visual" aria-hidden="true">
+          <div class="tv-card tv-agenda">
+            <div class="tva-head">Hoy · Vista día</div>
+            <div class="tva-slot">
+              <em>10:00</em>
+              <div class="tva-cita c1"><b>Laura P. · Fisioterapia</b><span class="tva-chip web">🌐 Web</span><i class="tva-ok">✓ Confirmada</i></div>
+            </div>
+            <div class="tva-slot">
+              <em>11:30</em>
+              <div class="tva-cita c2"><b>Marcos G. · Masaje descontracturante</b><span class="tva-chip wa">📱 WhatsApp</span></div>
+            </div>
+            <div class="tva-slot">
+              <em>17:00</em>
+              <div class="tva-cita c3"><b>Ana R. · Primera consulta</b><span class="tva-chip tel">📞 Teléfono</span><i class="tva-pay">💳 Señal cobrada</i></div>
+            </div>
+            <div class="tva-foot">⏰ Recordatorio 24 h enviado · WhatsApp con botón «Confirmo»</div>
           </div>
-          <h3>Aprende de tu web</h3>
-          <p>Lee tu sitio, tus servicios, tus precios y tus FAQs. Responde como si fuese parte del equipo. Tú actualizas la info cuando quieras desde el panel.</p>
-          <ul class="feat3-bullets">
-            <li>Importación automática por URL</li>
-            <li>Q&amp;A personalizadas</li>
-            <li>Sube PDFs y textos</li>
+        </div>
+      </div>
+
+      <!-- 02 · Voz -->
+      <div class="tour-row rev reveal">
+        <div class="tour-copy">
+          <span class="eyebrow">02 · Recepcionista de voz</span>
+          <h3>Tu teléfono, atendido por una IA que reserva de verdad</h3>
+          <p>Contesta cada llamada, consulta tu disponibilidad real y cierra la cita hablando. Si hace falta una persona, transfiere. Cada llamada queda transcrita y etiquetada en tu panel.</p>
+          <ul class="tour-feats">
+            <li>Reserva, cambia y cancela citas durante la llamada</li>
+            <li>Llamadas salientes de confirmación de cita</li>
+            <li>Transcripción, resumen y resultado de cada llamada</li>
           </ul>
-        </article>
-        <article class="feat3-card reveal d3">
-          <div class="feat3-icon">
-            <svg viewBox="0 0 64 64" aria-hidden="true">
-              <circle cx="32" cy="32" r="26" fill="#25D366"/>
-              <path d="M44 38c-.5-.3-3.1-1.6-3.6-1.8s-.8-.3-1.1.3c-.4.6-1.3 1.7-1.6 2-.3.3-.6.3-1.1.1-.5-.3-2.1-.8-4.1-2.5-1.5-1.4-2.6-3.1-2.9-3.6-.3-.6 0-.8.3-1.1.3-.3.6-.7.8-1 .3-.3.3-.6.5-1 .2-.3.1-.6 0-.9-.1-.3-1.1-2.8-1.6-3.8-.4-1-.9-.8-1.2-.9-.3 0-.7 0-1 0-.3 0-.9.1-1.4.7-.5.5-1.8 1.8-1.8 4.3 0 2.5 1.9 5 2.1 5.3.3.4 3.7 5.6 8.9 7.9 5.2 2.3 5.2 1.5 6.1 1.4.9-.1 3.1-1.3 3.5-2.5.4-1.3.4-2.3.3-2.5-.1-.2-.4-.3-.9-.6z" fill="#fff"/>
-              <circle class="wa-ping" cx="32" cy="32" r="26" stroke="#25D366" stroke-width="2" fill="none"/>
-            </svg>
+          <p class="tour-note">Disponible en el plan Business · <a href="/planes/">ver planes</a></p>
+        </div>
+        <div class="tour-visual" aria-hidden="true">
+          <div class="tv-card tv-voice">
+            <div class="tvv-row"><span class="tvv-dot"></span>Llamada atendida · 0:47</div>
+            <div class="tvv-line caller">«¿Puedo cambiar mi cita del jueves?»</div>
+            <div class="tvv-line ia">«Claro. Tengo el viernes a las 10:30 con Marta, ¿te lo confirmo?»</div>
+            <div class="tvv-line caller">«Perfecto, gracias.»</div>
+            <div class="tvv-tags"><span>🔁 Reprogramada</span><span>📩 SMS enviado</span><span>📝 Transcrita</span></div>
           </div>
-          <h3>Habla por WhatsApp</h3>
-          <p>El mismo asistente, en el WhatsApp Business de tu empresa. <b>Te lo activamos nosotros gratis</b>: solo dinos tu número y en 24h responde.</p>
-          <ul class="feat3-bullets">
-            <li>Sin tocar Meta ni código</li>
-            <li>Mismas respuestas, misma agenda</li>
-            <li>Configuración gestionada por Vantelia</li>
+        </div>
+      </div>
+
+      <!-- 03 · Cobros -->
+      <div class="tour-row reveal">
+        <div class="tour-copy">
+          <span class="eyebrow">03 · Cobros y señales</span>
+          <h3>Cobra la cita antes de que empiece</h3>
+          <p>Señal o retención de tarjeta al reservar, con Stripe y directo a tu cuenta. Penalización automática por no presentarse según tu política, y cobro con QR en el mostrador.</p>
+          <ul class="tour-feats">
+            <li>Señal, pago completo o retención sin cobro</li>
+            <li>Política de cancelación y no-show automática</li>
+            <li>QR de cobro en recepción y enlaces de pago que envía la IA</li>
           </ul>
-        </article>
+        </div>
+        <div class="tour-visual" aria-hidden="true">
+          <div class="tv-card tv-pay">
+            <div class="tvp-row"><b>Sesión premium · 60 min</b><em>75 €</em></div>
+            <div class="tvp-hold"><span class="tvp-badge">Tarjeta retenida</span>Señal · 15 € <i>preautorizada al reservar</i></div>
+            <div class="tvp-actions"><span class="tvp-btn solid">Capturar</span><span class="tvp-btn">Liberar</span></div>
+            <div class="tvp-foot">Si no se presenta → se aplica tu política automáticamente</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 04 · Tienda -->
+      <div class="tour-row rev reveal">
+        <div class="tour-copy">
+          <span class="eyebrow">04 · Tienda online</span>
+          <h3>Vende bonos y tarjetas regalo mientras duermes</h3>
+          <p>Tu página de venta pública con tu marca: bonos de sesiones, tarjetas regalo con envío por email — inmediato o programado — y productos con recogida en el centro.</p>
+          <ul class="tour-feats">
+            <li>Tarjeta regalo con email de regalo y saldo consultable online</li>
+            <li>Bonos con wallet online para el cliente</li>
+            <li>Canje en un clic sobre la cita, también al reservar</li>
+          </ul>
+        </div>
+        <div class="tour-visual" aria-hidden="true">
+          <div class="tv-card tv-shop">
+            <div class="tvs-gift">
+              <span class="tvs-gift-label">Tarjeta regalo</span>
+              <b>50 €</b>
+              <em>GC-7K4M-2QRX</em>
+              <div class="tvs-bar"><i style="width:72%"></i></div>
+              <span class="tvs-left">Saldo: 36 €</span>
+            </div>
+            <div class="tvs-bono">
+              <b>🎟 Bono 10 sesiones · Masaje</b>
+              <div class="tvs-bar dark"><i style="width:70%"></i></div>
+              <span>Quedan 7 de 10 · caduca en 6 meses</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 05 · Central de reservas (demo real embebida) -->
+      <div class="tour-full reveal">
+        <div class="tour-full-head">
+          <span class="eyebrow">05 · Central de reservas</span>
+          <h3>Tu central de reservas pública, lista para compartir</h3>
+          <p>Un enlace propio donde tus clientes reservan solos en 4 pasos — desde tu Instagram, tu ficha de Google o tu web, incrustada con una línea de código. <b>Esta de abajo es real: pruébala.</b></p>
+        </div>
+        <div class="central-embed" id="centralEmbed">
+          <div class="central-skeleton" id="centralSkeleton"><span></span>Cargando central de demostración…</div>
+          <iframe id="centralIframe" title="Central de reservas de demostración de Vantelia"
+            data-src="https://app.vantelia.es/central/van?embed=1"
+            loading="lazy" referrerpolicy="strict-origin"></iframe>
+        </div>
+        <p class="central-note">Demo interactiva con datos de prueba — puedes completar una reserva de ejemplo.
+          <a href="https://app.vantelia.es/central/van" target="_blank" rel="noopener">Abrir en una pestaña nueva ↗</a>
+        </p>
+      </div>
+
+      <!-- 06 · Informes y CRM -->
+      <div class="tour-row reveal">
+        <div class="tour-copy">
+          <span class="eyebrow">06 · Panel e informes</span>
+          <h3>Decisiones con datos: ingresos, ocupación y clientes</h3>
+          <p>KPIs de ingresos, asistencia y ocupación real por profesional y centro. Ficha de cliente con su historial, bonos y saldo. Y todas las conversaciones — web, WhatsApp y voz — en un solo sitio.</p>
+          <ul class="tour-feats">
+            <li>Informes con comparativa frente al periodo anterior</li>
+            <li>Ficha 360º del cliente con sus bonos y tarjetas</li>
+            <li>Equipo con roles y permisos por acción</li>
+          </ul>
+        </div>
+        <div class="tour-visual" aria-hidden="true">
+          <div class="tv-card tv-kpi">
+            <div class="tvk-grid">
+              <div class="tvk-tile"><span>Ingresos · mes</span><b>4.280 €</b><i class="up">▲ 12%</i></div>
+              <div class="tvk-tile"><span>Ocupación</span><b>78%</b><i class="up">▲ 5%</i></div>
+              <div class="tvk-tile"><span>Asistencia</span><b>96%</b><i>—</i></div>
+            </div>
+            <svg class="tvk-spark" viewBox="0 0 220 48" preserveAspectRatio="none">
+              <polyline points="0,38 20,34 40,36 60,28 80,30 100,22 120,26 140,18 160,20 180,12 200,16 220,8" fill="none" stroke="url(#tvkGrad)" stroke-width="2.5" stroke-linecap="round"/>
+              <defs><linearGradient id="tvkGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#00D1FF"/><stop offset="1" stop-color="#00F5D4"/></linearGradient></defs>
+            </svg>
+            <div class="tvk-client"><span class="tvk-av">LP</span><div><b>Laura P.</b><em>12 citas · bono activo · 36 € en tarjeta</em></div></div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- -------------- RESEÑAS -------------- -->
-  <section class="section testi-bg" id="resenas" aria-label="Reseñas de clientes">
+  <!-- -------------- PRUEBA REAL -------------- -->
+  <section class="section proof-bg" id="prueba" aria-label="Pruébalo con tu negocio">
     <div class="shell">
       <div class="section-head centered reveal">
-        <span class="eyebrow">Reseñas verificadas</span>
-        <h2>Lo que dicen <span class="gradient-text">quienes ya lo usan</span></h2>
-        <p class="section-lead">Negocios reales que llevan meses con Vantelia funcionando 24/7.</p>
-        <p class="testi-note">Reseñas publicadas con permiso; las métricas se revisan con datos de leads, reservas o tareas antes y después de activar Vantelia.</p>
+        <span class="eyebrow">Pruébalo tú</span>
+        <h2>No te pedimos que nos creas:<br><span class="gradient-text">pruébalo con tu negocio</span></h2>
+        <p class="section-lead">Pega la URL de tu web y en menos de un minuto tienes un asistente entrenado con tus servicios, tus precios y tu tono. Sin tarjeta y sin registro.</p>
       </div>
-      <div class="testi-grid">
-        <article class="testi-card reveal d1">
-          <div class="testi-stars" aria-label="5 de 5 estrellas">?????</div>
-          <p class="testi-text">"Lo monté un domingo por la tarde y el lunes ya tenía 3 citas reservadas sin tocar el teléfono. En dos meses pasamos de 12 a más de 30 consultas semanales agendadas solas."</p>
-          <div class="testi-author">
-            <div class="t-av t-av-a" aria-hidden="true">MR</div>
-            <div>
-              <div class="t-name-row">
-                <span class="t-name">Marta Rivero</span>
-                <svg class="t-verified" width="14" height="14" viewBox="0 0 24 24" aria-label="Reseña verificada"><path fill="#1DA1F2" d="M22.5 12.5c0-1.58-.88-2.95-2.15-3.7.05-.22.08-.45.08-.7 0-1.93-1.55-3.5-3.45-3.5-.25 0-.5.03-.7.08C15.5 3.28 14.1 2.5 12.5 2.5c-1.58 0-2.95.78-3.7 2.18-.22-.05-.45-.08-.7-.08-1.93 0-3.5 1.57-3.5 3.5 0 .25.03.48.08.7C3.28 9.55 2.5 10.92 2.5 12.5c0 1.58.78 2.95 2.18 3.7-.05.22-.08.45-.08.7 0 1.93 1.57 3.5 3.5 3.5.25 0 .48-.03.7-.08.75 1.4 2.12 2.18 3.7 2.18 1.6 0 2.97-.78 3.7-2.18.22.05.45.08.7.08 1.9 0 3.45-1.57 3.45-3.5 0-.25-.03-.48-.08-.7 1.28-.75 2.15-2.12 2.15-3.7zm-11.7 4.2-4-3.9 1.4-1.4 2.6 2.5 6.6-6.6 1.4 1.4-8 8z"/></svg>
-              </div>
-              <div class="t-role">Directora · Clínica Dental Soler, Valencia</div>
-            </div>
-          </div>
+      <div class="proof-cta reveal">
+        <a href="/demo/" class="btn btn-primary btn-lg">Genera tu demo gratis</a>
+        <a href="/consultas/" class="btn btn-ghost btn-lg">Hablar con nosotros</a>
+      </div>
+      <div class="proof-grid">
+        <article class="proof-card reveal d1">
+          <div class="proof-ico">🇪🇸</div>
+          <h4>Hecho en España</h4>
+          <p>Producto y soporte cercanos, en tu idioma y en tu horario.</p>
         </article>
-
-        <article class="testi-card reveal d2">
-          <div class="testi-stars" aria-label="5 de 5 estrellas">?????</div>
-          <p class="testi-text">"Pusimos el asistente en la web y en 30 días teníamos datos reales de qué preguntaban nuestros clientes. Eso solo ya valió el proyecto. Las llamadas perdidas bajaron un 40%."</p>
-          <div class="testi-author">
-            <div class="t-av t-av-b" aria-hidden="true">CR</div>
-            <div>
-              <div class="t-name-row">
-                <span class="t-name">Carlos Ruiz</span>
-                <svg class="t-verified" width="14" height="14" viewBox="0 0 24 24" aria-label="Reseña verificada"><path fill="#1DA1F2" d="M22.5 12.5c0-1.58-.88-2.95-2.15-3.7.05-.22.08-.45.08-.7 0-1.93-1.55-3.5-3.45-3.5-.25 0-.5.03-.7.08C15.5 3.28 14.1 2.5 12.5 2.5c-1.58 0-2.95.78-3.7 2.18-.22-.05-.45-.08-.7-.08-1.93 0-3.5 1.57-3.5 3.5 0 .25.03.48.08.7C3.28 9.55 2.5 10.92 2.5 12.5c0 1.58.78 2.95 2.18 3.7-.05.22-.08.45-.08.7 0 1.93 1.57 3.5 3.5 3.5.25 0 .48-.03.7-.08.75 1.4 2.12 2.18 3.7 2.18 1.6 0 2.97-.78 3.7-2.18.22.05.45.08.7.08 1.9 0 3.45-1.57 3.45-3.5 0-.25-.03-.48-.08-.7 1.28-.75 2.15-2.12 2.15-3.7zm-11.7 4.2-4-3.9 1.4-1.4 2.6 2.5 6.6-6.6 1.4 1.4-8 8z"/></svg>
-              </div>
-              <div class="t-role">CEO · Industrias Técnicas Iberia, Bilbao</div>
-            </div>
-          </div>
+        <article class="proof-card reveal d2">
+          <div class="proof-ico">🇪🇺</div>
+          <h4>Datos en Europa</h4>
+          <p>Cumplimiento RGPD desde el diseño. Tus datos y los de tus clientes, en la UE.</p>
         </article>
-
-        <article class="testi-card reveal d3">
-          <div class="testi-stars" aria-label="5 de 5 estrellas">?????</div>
-          <p class="testi-text">"El alta express fue increíble. En media jornada teníamos el cerebro IA configurado con toda la info de la academia. Llevamos 3 meses y las consultas por email cayeron un 60%."</p>
-          <div class="testi-author">
-            <div class="t-av t-av-c" aria-hidden="true">LG</div>
-            <div>
-              <div class="t-name-row">
-                <span class="t-name">Laura García</span>
-                <svg class="t-verified" width="14" height="14" viewBox="0 0 24 24" aria-label="Reseña verificada"><path fill="#1DA1F2" d="M22.5 12.5c0-1.58-.88-2.95-2.15-3.7.05-.22.08-.45.08-.7 0-1.93-1.55-3.5-3.45-3.5-.25 0-.5.03-.7.08C15.5 3.28 14.1 2.5 12.5 2.5c-1.58 0-2.95.78-3.7 2.18-.22-.05-.45-.08-.7-.08-1.93 0-3.5 1.57-3.5 3.5 0 .25.03.48.08.7C3.28 9.55 2.5 10.92 2.5 12.5c0 1.58.78 2.95 2.18 3.7-.05.22-.08.45-.08.7 0 1.93 1.57 3.5 3.5 3.5.25 0 .48-.03.7-.08.75 1.4 2.12 2.18 3.7 2.18 1.6 0 2.97-.78 3.7-2.18.22.05.45.08.7.08 1.9 0 3.45-1.57 3.45-3.5 0-.25-.03-.48-.08-.7 1.28-.75 2.15-2.12 2.15-3.7zm-11.7 4.2-4-3.9 1.4-1.4 2.6 2.5 6.6-6.6 1.4 1.4-8 8z"/></svg>
-              </div>
-              <div class="t-role">Directora · Academia Formación Digital, Sevilla</div>
-            </div>
-          </div>
+        <article class="proof-card reveal d3">
+          <div class="proof-ico">💳</div>
+          <h4>Pagos con Stripe</h4>
+          <p>Los cobros van directos a tu cuenta de Stripe. Vantelia no toca tu dinero.</p>
         </article>
-
-        <article class="testi-card reveal d1">
-          <div class="testi-stars" aria-label="5 de 5 estrellas">?????</div>
-          <p class="testi-text">"Recibíamos reservas a las 3 de la mañana, los fines de semana, en festivos. La IA responde con el tono de la clínica y los pacientes ni se dan cuenta. Brutal."</p>
-          <div class="testi-author">
-            <div class="t-av t-av-d" aria-hidden="true">AM</div>
-            <div>
-              <div class="t-name-row">
-                <span class="t-name">Ana Martínez</span>
-                <svg class="t-verified" width="14" height="14" viewBox="0 0 24 24" aria-label="Reseña verificada"><path fill="#1DA1F2" d="M22.5 12.5c0-1.58-.88-2.95-2.15-3.7.05-.22.08-.45.08-.7 0-1.93-1.55-3.5-3.45-3.5-.25 0-.5.03-.7.08C15.5 3.28 14.1 2.5 12.5 2.5c-1.58 0-2.95.78-3.7 2.18-.22-.05-.45-.08-.7-.08-1.93 0-3.5 1.57-3.5 3.5 0 .25.03.48.08.7C3.28 9.55 2.5 10.92 2.5 12.5c0 1.58.78 2.95 2.18 3.7-.05.22-.08.45-.08.7 0 1.93 1.57 3.5 3.5 3.5.25 0 .48-.03.7-.08.75 1.4 2.12 2.18 3.7 2.18 1.6 0 2.97-.78 3.7-2.18.22.05.45.08.7.08 1.9 0 3.45-1.57 3.45-3.5 0-.25-.03-.48-.08-.7 1.28-.75 2.15-2.12 2.15-3.7zm-11.7 4.2-4-3.9 1.4-1.4 2.6 2.5 6.6-6.6 1.4 1.4-8 8z"/></svg>
-              </div>
-              <div class="t-role">Directora · Clínica Estética Plus, Madrid</div>
-            </div>
-          </div>
-        </article>
-
-        <article class="testi-card reveal d2">
-          <div class="testi-stars" aria-label="5 de 5 estrellas">?????</div>
-          <p class="testi-text">"Le conectamos el WhatsApp del restaurante y la IA gestiona reservas, alergias y dudas de la carta sola. Mi mujer es la primera que no se lo creía. Bestial."</p>
-          <div class="testi-author">
-            <div class="t-av t-av-e" aria-hidden="true">JS</div>
-            <div>
-              <div class="t-name-row">
-                <span class="t-name">Javier Soler</span>
-                <svg class="t-verified" width="14" height="14" viewBox="0 0 24 24" aria-label="Reseña verificada"><path fill="#1DA1F2" d="M22.5 12.5c0-1.58-.88-2.95-2.15-3.7.05-.22.08-.45.08-.7 0-1.93-1.55-3.5-3.45-3.5-.25 0-.5.03-.7.08C15.5 3.28 14.1 2.5 12.5 2.5c-1.58 0-2.95.78-3.7 2.18-.22-.05-.45-.08-.7-.08-1.93 0-3.5 1.57-3.5 3.5 0 .25.03.48.08.7C3.28 9.55 2.5 10.92 2.5 12.5c0 1.58.78 2.95 2.18 3.7-.05.22-.08.45-.08.7 0 1.93 1.57 3.5 3.5 3.5.25 0 .48-.03.7-.08.75 1.4 2.12 2.18 3.7 2.18 1.6 0 2.97-.78 3.7-2.18.22.05.45.08.7.08 1.9 0 3.45-1.57 3.45-3.5 0-.25-.03-.48-.08-.7 1.28-.75 2.15-2.12 2.15-3.7zm-11.7 4.2-4-3.9 1.4-1.4 2.6 2.5 6.6-6.6 1.4 1.4-8 8z"/></svg>
-              </div>
-              <div class="t-role">Dueño · Restaurante La Lonja, Valencia</div>
-            </div>
-          </div>
-        </article>
-
-        <article class="testi-card reveal d3">
-          <div class="testi-stars" aria-label="5 de 5 estrellas">?????</div>
-          <p class="testi-text">"Probé tres chatbots antes. Vantelia ha sido el único que entendía nuestros packs y planes sin que nos pasáramos una semana configurando. En 20 minutos estaba listo."</p>
-          <div class="testi-author">
-            <div class="t-av t-av-f" aria-hidden="true">PV</div>
-            <div>
-              <div class="t-name-row">
-                <span class="t-name">Patricia Vega</span>
-                <svg class="t-verified" width="14" height="14" viewBox="0 0 24 24" aria-label="Reseña verificada"><path fill="#1DA1F2" d="M22.5 12.5c0-1.58-.88-2.95-2.15-3.7.05-.22.08-.45.08-.7 0-1.93-1.55-3.5-3.45-3.5-.25 0-.5.03-.7.08C15.5 3.28 14.1 2.5 12.5 2.5c-1.58 0-2.95.78-3.7 2.18-.22-.05-.45-.08-.7-.08-1.93 0-3.5 1.57-3.5 3.5 0 .25.03.48.08.7C3.28 9.55 2.5 10.92 2.5 12.5c0 1.58.78 2.95 2.18 3.7-.05.22-.08.45-.08.7 0 1.93 1.57 3.5 3.5 3.5.25 0 .48-.03.7-.08.75 1.4 2.12 2.18 3.7 2.18 1.6 0 2.97-.78 3.7-2.18.22.05.45.08.7.08 1.9 0 3.45-1.57 3.45-3.5 0-.25-.03-.48-.08-.7 1.28-.75 2.15-2.12 2.15-3.7zm-11.7 4.2-4-3.9 1.4-1.4 2.6 2.5 6.6-6.6 1.4 1.4-8 8z"/></svg>
-              </div>
-              <div class="t-role">Manager · Gimnasio FitZone, Málaga</div>
-            </div>
-          </div>
+        <article class="proof-card reveal d4">
+          <div class="proof-ico">🔓</div>
+          <h4>Sin permanencia</h4>
+          <p>Exporta tus datos y cancela cuando quieras desde tu panel.</p>
         </article>
       </div>
     </div>
@@ -509,11 +570,22 @@
           <div class="col-title">Plataforma</div>
           <div class="col-links">
             <a href="https://app.vantelia.es/acceso" target="_blank" rel="noopener">Acceso plataforma</a>
-            <a href="https://app.vantelia.es/acceso?signup=1" target="_blank" rel="noopener">Crea tu bot gratis</a>
+            <a href="https://app.vantelia.es/acceso?signup=1" target="_blank" rel="noopener">Empieza gratis</a>
           </div>
         </div>
 
         <div class="footer-col">
+        <div class="col-title">Soluciones</div>
+        <div class="col-links">
+          <a href="/chatbot-para-clinicas/">IA para clínicas</a>
+          <a href="/chatbot-para-centros-de-estetica/">IA para estética y spas</a>
+          <a href="/chatbot-para-peluquerias/">IA para peluquerías</a>
+          <a href="/chatbot-whatsapp-negocios/">IA en WhatsApp</a>
+          <a href="/como-instalar-chatbot-en-mi-web/">Cómo instalarlo</a>
+        </div>
+      </div>
+
+      <div class="footer-col">
           <div class="col-title">Legal</div>
           <div class="col-links">
             <a href="/legal/privacidad/">Política de privacidad</a>
@@ -532,7 +604,7 @@
     </div>
   </footer>
 
-  <script src="/assets/js/home.js?v=20260525-cookies2" defer></script>
+  <script src="/assets/js/home.js?v=20260716-v2" defer></script>
   <script
     src="https://app.vantelia.es/widget/widget.min.js?v=20260605-sitewide"
     data-api="https://app.vantelia.es"
