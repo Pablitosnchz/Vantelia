@@ -21,5 +21,6 @@ storage/*/
 backups/
 outreach/*.csv
 !outreach/*.example.csv
+outreach/kit_*.md
 .tools/
 *.~tmp
