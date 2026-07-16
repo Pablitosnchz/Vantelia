@@ -393,6 +393,7 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
     cliente_safe = escape(cliente_id)
     script_url = escape(assets["widget_script_url"])
     favicon_url = escape(textnorm._brand_asset_public_path("favicon.png"))
+    og_image_url = escape((settings.APP_BASE_URL or "https://app.vantelia.es") + "/uploads/og-demo.png")
     fondo_url = escape(textnorm._brand_asset_public_path("fondo-desktop.png") or textnorm._brand_asset_public_path("Fondo_Web.png"))
     fondo_movil_url = escape(textnorm._brand_asset_public_path("fondo-movil.png") or fondo_url)
 
@@ -460,6 +461,16 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Prueba la IA de {nombre} | Vantelia</title>
   <meta name="robots" content="noindex, nofollow" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Vantelia" />
+  <meta property="og:title" content="Prueba la IA de {nombre}" />
+  <meta property="og:description" content="Asistente con los servicios reales de {nombre}: responde consultas y agenda citas 24/7. Demo de Vantelia." />
+  <meta property="og:image" content="{og_image_url}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Prueba la IA de {nombre}" />
+  <meta name="twitter:image" content="{og_image_url}" />
   <link rel="icon" type="image/png" href="{favicon_url}" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

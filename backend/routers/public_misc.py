@@ -208,7 +208,14 @@ async def central_public_page(cliente_id: str, request: Request) -> HTMLResponse
     security._check_rate_limit(f"central_page:{cliente_id}:{client_ip}", 30)
     # ?embed=1: version sin hero/laterales para incrustar via iframe en la web del negocio.
     embed = (request.query_params.get("embed") or "").strip().lower() in ("1", "true", "si")
-    return HTMLResponse(commerce.central_public_page_html(cliente_id, embed=embed))
+    response = HTMLResponse(commerce.central_public_page_html(cliente_id, embed=embed))
+    if embed:
+        # La pagina embebida debe poder cargarse en iframes de webs de terceros
+        # (boton "Codigo para tu web"). CSP frame-ancestors prevalece sobre el
+        # X-Frame-Options: DENY que aplica el middleware global via setdefault.
+        response.headers["Content-Security-Policy"] = "frame-ancestors *"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    return response
 
 
 @app.get("/gift/{cliente_id}", include_in_schema=False)
