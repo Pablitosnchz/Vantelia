@@ -366,8 +366,11 @@ def smtp_settings() -> dict[str, object]:
     # dejando SMTP_FROM_* para transaccionales (reset, recordatorios, etc.).
     # Personal sender (Pablo Sanchez <pablo@...>) entra mejor en Primary que
     # marca corporativa (Vantelia <info@...>).
-    # Con SMTP dedicado de captacion (OUTREACH_SMTP_*), el From se alinea a ese
-    # buzon; si no, al SMTP global de siempre.
+    # Con SMTP dedicado de captacion (OUTREACH_SMTP_*), el From es el que diga
+    # OUTREACH_FROM_EMAIL tal cual: los relays (Brevo, SMTP2GO...) autentican
+    # con un usuario que no es del dominio y autorizan el From via DKIM del
+    # dominio verificado — alinear al usuario del relay seria un error.
+    dedicated_host = os.getenv("OUTREACH_SMTP_HOST", "").strip()
     smtp_user = (
         os.getenv("OUTREACH_SMTP_USERNAME", "").strip()
         or os.getenv("SMTP_USERNAME", "").strip()
@@ -377,7 +380,10 @@ def smtp_settings() -> dict[str, object]:
         or os.getenv("SMTP_FROM_EMAIL", "").strip()
         or smtp_user
     )
-    from_email = _align_from_email(from_email_raw, smtp_user)
+    if dedicated_host and os.getenv("OUTREACH_FROM_EMAIL", "").strip():
+        from_email = from_email_raw
+    else:
+        from_email = _align_from_email(from_email_raw, smtp_user)
     from_name = (
         os.getenv("OUTREACH_FROM_NAME", "").strip()
         or os.getenv("SMTP_FROM_NAME", "Vantelia").strip()
