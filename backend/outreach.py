@@ -2098,6 +2098,9 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
             cold_sent_today = conn.execute(
                 "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND stage='cold' AND date(sent_at)=date('now')"
             ).fetchone()["c"]
+            sent_today_all = conn.execute(
+                "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND date(sent_at)=date('now')"
+            ).fetchone()["c"]
             already_cold = conn.execute(
                 "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND stage='cold'"
             ).fetchone()["c"]
@@ -2113,6 +2116,16 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
         remaining_today = max(0, effective_cap - int(cold_sent_today or 0))
         # Reparto: no quemar todo el cap en la primera ronda de la manana.
         per_tick_share = min(remaining_today, max(3, (effective_cap + 2) // 3))
+        # Tope diario TOTAL (cold + follow-ups): en un dominio de envio nuevo el
+        # warm-up debe limitar el VOLUMEN total, no solo el cold. Multiplo del cap
+        # de cold (env OUTREACH_TOTAL_DAILY_MULTIPLIER, default 4): dia 1 ~40 con
+        # cap 10, hasta ~120 a warm-up pleno (cap 30).
+        try:
+            total_multiplier = max(1.0, float(os.getenv("OUTREACH_TOTAL_DAILY_MULTIPLIER", "4") or 4))
+        except Exception:
+            total_multiplier = 4.0
+        total_daily_cap = int(effective_cap * total_multiplier)
+        followup_budget_today = max(0, total_daily_cap - int(sent_today_all or 0))
         # Pipeline bajo: discovery primero, el cold sale despues con lo importado (RF-2.4).
         cold_deferred_for_discovery = bool(discovery_enabled and pool_size < 30)
         _autopilot_log(
@@ -2164,23 +2177,33 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                 _autopilot_log("info", "cold_cap_reached",
                                f"Cold: cap diario alcanzado ({cold_sent_today}/{effective_cap})")
 
-            # FU1, FU2, Breakup (mismo espaciado global de envio)
-            params_fu = {
-                "max": 99999, "send": True,
-                "autopilot": True, "followup_days": followup_days,
-            }
-            with _outreach_db() as conn:
-                cur = conn.execute(
-                    "INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES (?,?,?,?,?)",
-                    ("autopilot", "queued", json.dumps(params_fu), "", _outreach_now()),
+            # FU1, FU2, Breakup: acotados al presupuesto TOTAL diario (warm-up del
+            # dominio). El cold ya lanzado en esta ronda cuenta contra el total.
+            fu_max = max(0, followup_budget_today - len(launch_emails))
+            if fu_max <= 0:
+                _autopilot_log(
+                    "info", "followups_cap_reached",
+                    f"Follow-ups pausados: tope diario total alcanzado "
+                    f"({sent_today_all}/{total_daily_cap} enviados hoy)",
+                    {"sent_today_all": int(sent_today_all or 0), "total_daily_cap": total_daily_cap},
                 )
-                fu_job_id = int(cur.lastrowid)
-                conn.commit()
-            threading.Thread(target=_outreach_run_autopilot_job, args=(fu_job_id, params_fu), daemon=True).start()
-            _autopilot_log("info", "followups_launched",
-                           "FU1 / FU2 / Breakup: job lanzado en segundo plano",
-                           {"job_id": fu_job_id})
-            _outreach_tick_state_update("followups_launched", "Follow-ups lanzados en segundo plano")
+            if fu_max > 0:
+                params_fu = {
+                    "max": fu_max, "send": True,
+                    "autopilot": True, "followup_days": followup_days,
+                }
+                with _outreach_db() as conn:
+                    cur = conn.execute(
+                        "INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES (?,?,?,?,?)",
+                        ("autopilot", "queued", json.dumps(params_fu), "", _outreach_now()),
+                    )
+                    fu_job_id = int(cur.lastrowid)
+                    conn.commit()
+                threading.Thread(target=_outreach_run_autopilot_job, args=(fu_job_id, params_fu), daemon=True).start()
+                _autopilot_log("info", "followups_launched",
+                               f"FU1 / FU2 / Breakup: job lanzado (hasta {fu_max}, tope diario {total_daily_cap})",
+                               {"job_id": fu_job_id, "fu_max": fu_max, "total_daily_cap": total_daily_cap})
+                _outreach_tick_state_update("followups_launched", "Follow-ups lanzados en segundo plano")
 
         # ---- PASO 2: DISCOVERY + COLD A NUEVAS EMPRESAS ----
         if discovery_enabled:

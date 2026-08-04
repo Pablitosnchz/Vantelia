@@ -370,6 +370,49 @@ def test_tick_completo_lanza_cold_con_warmup_y_sin_discovery(outreach_mod, monke
     assert "cold_budget" in events and "tick_end" in events
 
 
+def test_tope_diario_total_limita_followups(outreach_mod, monkeypatch):
+    """En dominio nuevo el warm-up limita el VOLUMEN total (cold + follow-ups),
+    no solo el cold. Con el tope ya alcanzado hoy, el job de follow-ups no sale."""
+    outreach = outreach_mod
+    from backend import emailing
+
+    monkeypatch.setenv("OUTREACH_AUTONOMOUS_ENABLED", "true")
+    monkeypatch.setenv("OUTREACH_RESPECT_WINDOW", "false")
+    monkeypatch.setenv("OUTREACH_TOTAL_DAILY_MULTIPLIER", "4")
+    monkeypatch.setattr(emailing, "_email_delivery_configured", lambda cliente_id="": True)
+    monkeypatch.setattr(
+        emailing, "_smtp_health_check",
+        lambda force=False: {"ok": True, "error": "", "checked_at": "2026-08-04T00:00:00+00:00"},
+    )
+    monkeypatch.setattr(outreach, "_outreach_smtp_health",
+                        lambda: {"ok": True, "error": "", "checked_at": "x", "dedicated": True})
+    launched = []
+    monkeypatch.setattr(outreach, "_outreach_run_send_job", lambda j, p: launched.append(("cold", p)))
+    monkeypatch.setattr(outreach, "_outreach_run_autopilot_job", lambda j, p: launched.append(("fu", p)))
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with outreach._outreach_db() as conn:
+        conn.execute(
+            "UPDATE autopilot_config SET enabled=1, auto_followups=1, discovery_enabled=0, "
+            "daily_cold_cap=10, paused_until='', paused_reason='' WHERE id=1"
+        )
+        # Warm-up sin historial de racha => cap 10; tope total = 10*4 = 40.
+        # Ya enviados hoy 40 (mezcla) => followup_budget_today = 0.
+        for i in range(40):
+            _insert_send(conn, f"sent{i}@x.es", days_ago=0, stage="fu1")
+        conn.commit()
+
+    outreach._outreach_autonomous_tick_inner()
+    time.sleep(0.2)
+
+    assert not any(kind == "fu" for kind, _ in launched), "follow-ups no deben salir con tope total alcanzado"
+    with outreach._outreach_db() as conn:
+        events = [r["event"] for r in conn.execute(
+            "SELECT event FROM autopilot_activity_log ORDER BY id DESC LIMIT 20"
+        ).fetchall()]
+    assert "followups_cap_reached" in events
+
+
 def test_tick_auto_reanuda_pausa_vencida(outreach_mod, monkeypatch):
     outreach = outreach_mod
     from backend import emailing
