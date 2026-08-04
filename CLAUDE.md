@@ -442,6 +442,20 @@ Salvaguardas:
 
 Panel admin: tab "Modo automático". Switch ON/OFF, editor de targets, configuración de cap/target, toggle auto-followups, stats en vivo, botón "Ejecutar ronda ahora".
 
+### Captación autónoma 24/7 (remodelación ago-2026)
+
+Contrato de producto en `docs/REQUISITOS_CAPTACION.md`. Tests en `tests/test_captacion_autonoma.py`.
+
+- **Pausa automática con vencimiento (no permanente)**: el rate limit SMTP ya NO pone `enabled=0`; escribe `autopilot_config.paused_until`/`paused_reason` (pausa hasta el siguiente día laborable 9h Madrid; 3 días seguidos de rate limit → 72h + email de aviso; `ratelimit_days_json` lleva la racha). El tick auto-reanuda al vencer (`auto_resumed`). `enabled=0` queda SOLO para pausa manual del panel (indefinida). Helpers: `_outreach_pause_state`, `_outreach_set_auto_pause`, `_outreach_clear_auto_pause`. El PUT de autopilot-config acepta `clear_auto_pause` y `clear_exhausted`.
+- **Espaciado GLOBAL de envío**: `_outreach_wait_send_slot()` (lock compartido entre jobs; cold y follow-ups corren en hilos paralelos y antes se intercalaban → ráfagas). Env `OUTREACH_SEND_SPACING_MIN/MAX_SEC` (defaults 120/300). Los antiguos delay/jitter por-job se eliminaron.
+- **Warm-up**: `_outreach_warmup_effective_cap` — tras >7 días sin enviar arranca en 10/día, +5/semana de racha, tope min(daily_cold_cap, 30). El tick reparte: máx `cap/3` por ronda (evento `cold_budget`).
+- **Bounces**: el poller IMAP detecta NDRs (`_is_bounce`/`_bounce_original_recipient` en `scripts/outreach_imap.py`), marca `status='bounced'` + supresión + evento `bounce`. Bounce rate >8% en últimos 100 envíos → pausa 48h + aviso (`_outreach_check_bounce_rate`). `fetch_candidates` excluye `bounced`/`baja`.
+- **Replies → notificación al dueño**: cada reply detectada por IMAP dispara email a `CONSULTA_NOTIFICATION_EMAIL` con la respuesta + ficha (`_outreach_notify_reply`); si el SMTP está caído se encola en `notify_queue` (outreach.db) y se reintenta (`_outreach_flush_notify_queue`). `GET /admin/outreach/replies-unattended` lista prospects `replied` sin gestionar (banner del panel).
+- **Salud email real**: `emailing._smtp_health_check(force=)` (login+NOOP, cache 10 min) — usado por el tick (skip + evento `smtp_down` si el buzón está caído), por `smtp_ok`/blockers del autopilot-config, por `GET /admin/email-health` (admin token; `?fresh=1`) y por `/health` (check `smtp` no bloqueante, solo cache). `uptime.yml` tiene paso que llama a email-health con el secret `ADMIN_API_TOKEN` de GitHub (si falta el secret, se omite).
+- **Leads /consulta persistidos**: tabla `consulta_leads` (DB principal) se escribe ANTES de intentar el email (incidente real: SMTP muerto ~3 semanas = leads perdidos). `GET /admin/consulta-leads` + `PATCH /admin/consulta-leads/{id}` (pending/attended). Card en el dashboard de Captación.
+- **Discovery**: combos sector|city con 2 rondas seguidas sin importables se marcan agotados (`exhausted_targets_json`, se saltan en rotación; reactivables con `clear_exhausted`). Pipeline `new` < 30 → discovery ANTES que cold (el cold sale después con lo importado + pool). Coste estimado Places en el evento `discovery_done`. Fix: `imported_total` no se incrementaba (el presupuesto de discovery nunca cortaba).
+- **Panel Captación**: banner rojo (`orHealthBanner`: SMTP caído / tick >2h / pausa automática con botón "Reanudar ya"), banner replies sin atender (usa replies-unattended), card consultas web pendientes, hot leads con `tel:` y mailto con plantilla precargada.
+
 ### Comandos CLI utiles (alternativa al panel)
 
 ```powershell

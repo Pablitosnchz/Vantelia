@@ -21,7 +21,7 @@ from fastapi import HTTPException
 
 from backend import appstate, emailing, settings, timeutils
 
-OUTREACH_DEFAULT_FOLLOWUP_DAYS: Dict[str, int] = {"fu1": 4, "fu2": 5, "breakup": 6}
+OUTREACH_DEFAULT_FOLLOWUP_DAYS: Dict[str, int] = {"fu1": 4, "fu2": 6, "breakup": 8}
 
 
 
@@ -91,9 +91,126 @@ def _outreach_imap_worker() -> None:
                 )
             elif stats.get("matched"):
                 settings.logger.debug("IMAP poll stats: %s", stats)
+            _outreach_after_imap_poll(stats)
         except Exception as exc:  # noqa: BLE001
             settings.logger.error("Error en poller IMAP outreach: %s", exc)
         appstate.outreach_imap_stop.wait(interval_seconds)
+
+
+def _outreach_after_imap_poll(stats: Dict[str, Any]) -> None:
+    """Post-proceso de cada pasada IMAP: notificar replies al dueño, registrar
+    bounces en el log de actividad, vigilar bounce rate y reintentar avisos."""
+    try:
+        for reply in stats.get("replies_detail") or []:
+            _outreach_notify_reply(reply)
+        for bounce in stats.get("bounces_detail") or []:
+            _autopilot_log(
+                "warning", "bounce_detected",
+                f"Bounce: {bounce.get('email', '')} marcado como bounced y suprimido",
+                {"email": bounce.get("email", "")},
+            )
+        if stats.get("bounces_new"):
+            _outreach_check_bounce_rate()
+        with _outreach_db() as conn:
+            _outreach_flush_notify_queue(conn)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("Post-proceso IMAP outreach fallo: %s", exc)
+
+
+def _outreach_notify_reply(reply: Dict[str, Any]) -> None:
+    """Email al dueño con la respuesta del prospect y su ficha. Esto es el
+    producto final de la captacion: una empresa interesada ha contestado."""
+    email_addr = str(reply.get("email") or "")
+    if not email_addr:
+        return
+    prospect: Dict[str, Any] = {}
+    try:
+        with _outreach_db() as conn:
+            row = conn.execute("SELECT * FROM prospects WHERE email=?", (email_addr,)).fetchone()
+            if row:
+                prospect = dict(row)
+    except Exception:
+        pass
+    business = str(prospect.get("business_name") or "") or email_addr
+    subject = f"📬 Respuesta de {business} (captacion Vantelia)"
+    body_excerpt = str(reply.get("body_excerpt") or "").strip() or "(sin texto extraible)"
+    text = (
+        f"Ha respondido un prospect de la captacion:\n\n"
+        f"Negocio:  {business}\n"
+        f"Email:    {email_addr}\n"
+        f"Telefono: {prospect.get('phone') or '-'}\n"
+        f"Sector:   {prospect.get('niche') or '-'}\n"
+        f"Ciudad:   {prospect.get('city') or '-'}\n"
+        f"Web:      {prospect.get('website') or '-'}\n"
+        f"Etapa:    {reply.get('stage') or '-'}\n\n"
+        f"Asunto: {reply.get('subject') or '-'}\n"
+        f"--- Mensaje ---\n{body_excerpt}\n\n"
+        f"Responde directamente a {email_addr}. La secuencia de emails se ha detenido sola.\n"
+        f"Panel: {settings.APP_BASE_URL}/dashboard\n"
+    )
+    html = (
+        f"<div style='font-family:sans-serif;max-width:560px;margin:0 auto;color:#1a1a2e'>"
+        f"<h2 style='color:#00b1d9'>📬 Respuesta de {escape(business)}</h2>"
+        f"<table style='width:100%;border-collapse:collapse'>"
+        f"<tr><td style='padding:4px 0;color:#666;width:100px'>Email</td><td><a href='mailto:{escape(email_addr)}'>{escape(email_addr)}</a></td></tr>"
+        f"<tr><td style='padding:4px 0;color:#666'>Telefono</td><td>{escape(str(prospect.get('phone') or '-'))}</td></tr>"
+        f"<tr><td style='padding:4px 0;color:#666'>Sector</td><td>{escape(str(prospect.get('niche') or '-'))}</td></tr>"
+        f"<tr><td style='padding:4px 0;color:#666'>Ciudad</td><td>{escape(str(prospect.get('city') or '-'))}</td></tr>"
+        f"<tr><td style='padding:4px 0;color:#666'>Etapa</td><td>{escape(str(reply.get('stage') or '-'))}</td></tr>"
+        f"</table>"
+        f"<p style='margin-top:14px;color:#333'><strong>Asunto:</strong> {escape(str(reply.get('subject') or '-'))}</p>"
+        f"<blockquote style='border-left:3px solid #00b1d9;margin:8px 0;padding:8px 12px;background:#f6fbfd;color:#333;white-space:pre-wrap'>{escape(body_excerpt)}</blockquote>"
+        f"<p style='color:#333'>Responde directamente a este prospect. La secuencia se ha detenido sola.</p>"
+        f"</div>"
+    )
+    sent = _outreach_notify_admin(subject, text, html)
+    _autopilot_log(
+        "success", "reply_notified" if sent else "reply_notify_queued",
+        f"Respuesta de {business} ({email_addr})" + ("" if sent else " — aviso encolado, SMTP caido"),
+        {"email": email_addr, "stage": reply.get("stage", ""), "notified": sent},
+    )
+
+
+def _outreach_check_bounce_rate(threshold_pct: float = 8.0, window: int = 100) -> bool:
+    """Si el bounce rate de los ultimos `window` envios supera el umbral, pausa
+    automatica 48h + aviso. Devuelve True si ha pausado."""
+    try:
+        with _outreach_db() as conn:
+            rows = conn.execute(
+                "SELECT email FROM sends WHERE mode='send' ORDER BY id DESC LIMIT ?", (window,)
+            ).fetchall()
+            if len(rows) < 20:
+                return False
+            recent_emails = {r["email"] for r in rows}
+            placeholders = ",".join("?" for _ in recent_emails)
+            bounced = conn.execute(
+                f"SELECT COUNT(DISTINCT email) AS c FROM events WHERE type='bounce' AND email IN ({placeholders})",
+                list(recent_emails),
+            ).fetchone()["c"]
+            rate = 100.0 * float(bounced or 0) / float(len(rows))
+            if rate <= threshold_pct:
+                return False
+            pause = _outreach_pause_state(conn)
+            if pause["auto"]:
+                return False
+            until = datetime.now(timezone.utc) + timedelta(hours=48)
+            _outreach_set_auto_pause(conn, until, f"Bounce rate {rate:.1f}% (pausa 48h)")
+        _autopilot_log(
+            "error", "bounce_rate_autopause",
+            f"Bounce rate {rate:.1f}% en los ultimos {len(rows)} envios: pausa 48h",
+            {"rate_pct": round(rate, 1), "window": len(rows), "bounced": int(bounced or 0)},
+        )
+        _outreach_notify_admin(
+            "Captacion Vantelia pausada 48h (bounce rate alto)",
+            f"El bounce rate es {rate:.1f}% en los ultimos {len(rows)} envios (umbral {threshold_pct}%).\n"
+            f"La captacion queda pausada 48h y se reanudara sola.\n"
+            "Los emails rebotados quedan suprimidos automaticamente. Si persiste, "
+            "revisa la calidad del discovery (emails scrapeados invalidos).",
+        )
+        return True
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("Check de bounce rate fallo: %s", exc)
+        return False
 
 
 def _mark_outreach_prospect_as_client_for_cliente(cliente_id: str, user_email: str) -> None:
@@ -377,6 +494,14 @@ def _outreach_ensure_autopilot_config_columns(conn: sqlite3.Connection) -> None:
             conn.execute(
                 "ALTER TABLE autopilot_config ADD COLUMN discovery_enabled INTEGER DEFAULT 1"
             )
+        if "paused_until" not in existing:
+            conn.execute("ALTER TABLE autopilot_config ADD COLUMN paused_until TEXT DEFAULT ''")
+        if "paused_reason" not in existing:
+            conn.execute("ALTER TABLE autopilot_config ADD COLUMN paused_reason TEXT DEFAULT ''")
+        if "ratelimit_days_json" not in existing:
+            conn.execute("ALTER TABLE autopilot_config ADD COLUMN ratelimit_days_json TEXT DEFAULT '[]'")
+        if "exhausted_targets_json" not in existing:
+            conn.execute("ALTER TABLE autopilot_config ADD COLUMN exhausted_targets_json TEXT DEFAULT '{}'")
             conn.commit()
     except sqlite3.OperationalError:
         pass
@@ -673,7 +798,9 @@ def _autopilot_config_row(conn) -> Dict[str, Any]:
     clicks_30d = conn.execute(
         "SELECT COUNT(*) AS c FROM events WHERE type='click' AND ts >= datetime('now','-30 day')"
     ).fetchone()["c"]
-    smtp_ok = emailing._email_delivery_configured()
+    smtp_configured = emailing._email_delivery_configured()
+    smtp_health = emailing._smtp_health_check()
+    smtp_ok = smtp_configured and smtp_health.get("ok") is not False
     env_enabled = os.getenv("OUTREACH_AUTONOMOUS_ENABLED", "").lower() == "true"
     google_ok = bool(os.getenv("GOOGLE_PLACES_API_KEY", "").strip())
     targets_count = len(targets)
@@ -681,6 +808,9 @@ def _autopilot_config_row(conn) -> Dict[str, Any]:
     generated_targets = _autopilot_generated_targets(target_companies)
     active_targets = _autopilot_targets_for_run(targets, target_companies)
     enabled_db = bool(row["enabled"])
+    pause = _outreach_pause_state(conn)
+    exhausted_targets = _outreach_exhausted_targets(conn)
+    effective_cap = _outreach_warmup_effective_cap(conn, int(row["daily_cold_cap"] or 20))
     try:
         discovery_enabled = bool(row["discovery_enabled"]) if "discovery_enabled" in row.keys() else True
     except Exception:
@@ -690,13 +820,23 @@ def _autopilot_config_row(conn) -> Dict[str, Any]:
         blockers.append("OUTREACH_AUTONOMOUS_ENABLED no está 'true' en el VPS")
     if not enabled_db:
         blockers.append("Modo automático pausado en el panel")
-    if not smtp_ok:
+    if pause["auto"]:
+        blockers.append(f"Pausa automática hasta {pause['until']} ({pause['reason']}) — se reanuda sola")
+    if not smtp_configured:
         blockers.append("No hay canal de email conectado (Gmail o SMTP)")
-    if False and not google_ok:
+    elif smtp_health.get("ok") is False:
+        blockers.append(f"SMTP caído: {smtp_health.get('error', '')[:120]}")
+    if not google_ok:
         blockers.append("GOOGLE_PLACES_API_KEY vacía (no hay discovery)")
     tick_state = _outreach_tick_state_snapshot()
     return {
         "enabled": enabled_db,
+        "paused_until": pause["until"] if pause["auto"] else "",
+        "paused_reason": pause["reason"] if pause["auto"] else "",
+        "auto_paused": pause["auto"],
+        "smtp_health": smtp_health,
+        "effective_daily_cap": effective_cap,
+        "exhausted_targets": sorted(exhausted_targets.keys()),
         "targets": targets,
         "generated_targets": generated_targets,
         "active_targets": active_targets,
@@ -1001,6 +1141,70 @@ def _job_finish(conn: sqlite3.Connection, job_id: int, status: str) -> None:
     conn.commit()
 
 
+# --- Ritmo de envio seguro -------------------------------------------------
+# Espaciado GLOBAL entre emails, compartido por todos los jobs (cold + follow-ups
+# corren en hilos paralelos; sin esto el espaciado por-job se divide entre hilos:
+# el 15-jul salieron 11 emails en 6 min y Hostinger devolvio rate limit).
+
+_outreach_send_slot_lock = threading.Lock()
+_outreach_last_send_monotonic: List[float] = [0.0]
+
+
+def _outreach_send_spacing_seconds() -> float:
+    try:
+        lo = float(os.getenv("OUTREACH_SEND_SPACING_MIN_SEC", "120") or 120)
+        hi = float(os.getenv("OUTREACH_SEND_SPACING_MAX_SEC", "300") or 300)
+    except Exception:
+        lo, hi = 120.0, 300.0
+    if hi < lo:
+        hi = lo
+    return random.uniform(lo, hi)
+
+
+def _outreach_wait_send_slot(sleep_fn=time.sleep) -> float:
+    """Bloquea hasta que toque el siguiente hueco de envio global. Devuelve lo esperado."""
+    spacing = _outreach_send_spacing_seconds()
+    with _outreach_send_slot_lock:
+        now = time.monotonic()
+        earliest = _outreach_last_send_monotonic[0] + spacing
+        wait_for = max(0.0, earliest - now)
+        _outreach_last_send_monotonic[0] = max(now, earliest)
+    if wait_for > 0:
+        sleep_fn(wait_for)
+    return wait_for
+
+
+def _outreach_warmup_effective_cap(conn: sqlite3.Connection, configured_cap: int, today: Optional[datetime] = None) -> int:
+    """Cap diario efectivo con warm-up: tras >7 dias sin enviar, arranca en 10/dia
+    y sube +5 por semana de envio continuado, hasta min(configured_cap, 30)."""
+    hard_top = min(max(1, int(configured_cap or 20)), 30)
+    now_date = (today or datetime.now(timezone.utc)).date()
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT date(sent_at) AS d FROM sends WHERE mode='send' "
+            "AND sent_at >= datetime('now','-90 days') ORDER BY d DESC"
+        ).fetchall()
+    except Exception:
+        return 10
+    send_days = [r["d"] for r in rows if r["d"]]
+    if not send_days:
+        return min(10, hard_top)
+    last_send = datetime.strptime(send_days[0], "%Y-%m-%d").date()
+    if (now_date - last_send).days > 7:
+        return min(10, hard_top)
+    # Buscar el arranque de la racha actual: primer dia sin hueco de >7 dias
+    streak_start = last_send
+    prev = last_send
+    for d in send_days[1:]:
+        day = datetime.strptime(d, "%Y-%m-%d").date()
+        if (prev - day).days > 7:
+            break
+        streak_start = day
+        prev = day
+    weeks = max(0, (now_date - streak_start).days // 7)
+    return min(10 + 5 * weeks, hard_top)
+
+
 def _outreach_smtp_ratelimit_reason(exc: BaseException) -> str:
     raw = str(exc)
     msg = raw.lower()
@@ -1017,12 +1221,173 @@ def _outreach_smtp_ratelimit_reason(exc: BaseException) -> str:
     return ""
 
 
-def _outreach_autocapture_is_paused(conn: sqlite3.Connection) -> bool:
+def _outreach_madrid_now() -> datetime:
     try:
-        row = conn.execute("SELECT enabled FROM autopilot_config WHERE id=1").fetchone()
-        return bool(row and not bool(row["enabled"]))
+        from zoneinfo import ZoneInfo  # type: ignore
+
+        return datetime.now(ZoneInfo("Europe/Madrid"))
+    except Exception:  # noqa: BLE001 — Python 3.8 local sin zoneinfo: UTC+2 aprox
+        return datetime.now(timezone.utc) + timedelta(hours=2)
+
+
+def _outreach_next_business_day_9h_utc() -> datetime:
+    """Siguiente dia laborable a las 9:00 Europe/Madrid, devuelto en UTC."""
+    local = _outreach_madrid_now()
+    candidate = local.replace(hour=9, minute=0, second=0, microsecond=0)
+    if local.hour >= 9:
+        candidate = candidate + timedelta(days=1)
+    while candidate.weekday() >= 5:
+        candidate = candidate + timedelta(days=1)
+    return candidate.astimezone(timezone.utc)
+
+
+def _outreach_pause_state(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """Estado de pausa: {'manual': bool, 'auto': bool, 'until': str, 'reason': str, 'expired': bool}."""
+    state = {"manual": False, "auto": False, "until": "", "reason": "", "expired": False}
+    try:
+        _outreach_ensure_autopilot_config_columns(conn)
+        row = conn.execute(
+            "SELECT enabled, paused_until, paused_reason FROM autopilot_config WHERE id=1"
+        ).fetchone()
+        if not row:
+            return state
+        state["manual"] = not bool(row["enabled"])
+        until_raw = str(row["paused_until"] or "")
+        state["until"] = until_raw
+        state["reason"] = str(row["paused_reason"] or "")
+        if until_raw:
+            until_dt = _outreach_parse_dt(until_raw)
+            if until_dt and until_dt > datetime.now(timezone.utc):
+                state["auto"] = True
+            elif until_dt:
+                state["expired"] = True
     except Exception:
+        pass
+    return state
+
+
+def _outreach_autocapture_is_paused(conn: sqlite3.Connection) -> bool:
+    state = _outreach_pause_state(conn)
+    return bool(state["manual"] or state["auto"])
+
+
+def _outreach_set_auto_pause(conn: sqlite3.Connection, until_utc: datetime, reason: str) -> None:
+    now = _outreach_now()
+    try:
+        conn.execute(
+            "UPDATE autopilot_config SET paused_until=?, paused_reason=?, updated_at=? WHERE id=1",
+            (until_utc.isoformat(timespec="seconds"), reason[:200], now),
+        )
+        conn.commit()
+    except Exception:
+        pass
+
+
+def _outreach_clear_auto_pause(conn: sqlite3.Connection) -> None:
+    now = _outreach_now()
+    try:
+        conn.execute(
+            "UPDATE autopilot_config SET paused_until='', paused_reason='', updated_at=? WHERE id=1",
+            (now,),
+        )
+        conn.commit()
+    except Exception:
+        pass
+
+
+def _outreach_ratelimit_streak_days(conn: sqlite3.Connection, register_today: bool = False) -> int:
+    """Dias distintos (consecutivos hacia atras) con rate limit. Opcionalmente registra hoy."""
+    try:
+        row = conn.execute("SELECT ratelimit_days_json FROM autopilot_config WHERE id=1").fetchone()
+        days = json.loads((row["ratelimit_days_json"] if row else "[]") or "[]")
+    except Exception:
+        days = []
+    today = datetime.now(timezone.utc).date()
+    if register_today and today.isoformat() not in days:
+        days.append(today.isoformat())
+        days = sorted(days)[-10:]
+        try:
+            conn.execute(
+                "UPDATE autopilot_config SET ratelimit_days_json=? WHERE id=1",
+                (json.dumps(days),),
+            )
+            conn.commit()
+        except Exception:
+            pass
+    streak = 0
+    cursor = today
+    day_set = set(days)
+    while cursor.isoformat() in day_set:
+        streak += 1
+        cursor = cursor - timedelta(days=1)
+    return streak
+
+
+def _outreach_notify_admin(subject: str, text_body: str, html_body: str = "") -> bool:
+    """Email de aviso al dueño. Best-effort; si falla, se encola para reintento."""
+    to_email = settings.CONSULTA_NOTIFICATION_EMAIL
+    if not to_email:
         return False
+    try:
+        emailing._send_email_message(to_email, subject, text_body, html_body or "")
+        return True
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("Aviso de captacion no enviado (%s); encolado", exc)
+        try:
+            with _outreach_db() as conn:
+                _outreach_ensure_notify_queue(conn)
+                conn.execute(
+                    "INSERT INTO notify_queue (kind, subject, body_text, body_html, created_at) VALUES (?,?,?,?,?)",
+                    ("admin_alert", subject[:300], text_body, html_body or "", _outreach_now()),
+                )
+                conn.commit()
+        except Exception:
+            pass
+        return False
+
+
+def _outreach_ensure_notify_queue(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS notify_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind TEXT NOT NULL DEFAULT 'admin_alert',
+            subject TEXT NOT NULL DEFAULT '',
+            body_text TEXT NOT NULL DEFAULT '',
+            body_html TEXT NOT NULL DEFAULT '',
+            attempts INTEGER NOT NULL DEFAULT 0,
+            sent_at TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        )"""
+    )
+
+
+def _outreach_flush_notify_queue(conn: sqlite3.Connection, max_items: int = 10) -> int:
+    """Reintenta avisos encolados. Devuelve cuantos salieron."""
+    _outreach_ensure_notify_queue(conn)
+    rows = conn.execute(
+        "SELECT * FROM notify_queue WHERE sent_at='' AND attempts < 20 ORDER BY id ASC LIMIT ?",
+        (max_items,),
+    ).fetchall()
+    sent = 0
+    for row in rows:
+        try:
+            emailing._send_email_message(
+                settings.CONSULTA_NOTIFICATION_EMAIL,
+                row["subject"],
+                row["body_text"],
+                row["body_html"] or "",
+            )
+            conn.execute(
+                "UPDATE notify_queue SET sent_at=? WHERE id=?", (_outreach_now(), row["id"])
+            )
+            sent += 1
+        except Exception:  # noqa: BLE001
+            conn.execute(
+                "UPDATE notify_queue SET attempts=attempts+1 WHERE id=?", (row["id"],)
+            )
+            break  # SMTP sigue caido: no insistir con el resto en esta pasada
+    conn.commit()
+    return sent
 
 
 def _outreach_pause_autocapture_for_smtp_limit(
@@ -1034,39 +1399,55 @@ def _outreach_pause_autocapture_for_smtp_limit(
     email: str = "",
     stage: str = "",
 ) -> None:
+    """Rate limit SMTP → pausa CON VENCIMIENTO (no permanente) + auto-reanudacion.
+
+    - Normal: pausa hasta el siguiente dia laborable a las 9h (Madrid).
+    - 3+ dias seguidos con rate limit: pausa 72h + aviso al dueño.
+    La pausa manual del panel (enabled=0) es otra cosa y no se toca aqui.
+    """
     now = _outreach_now()
+    streak = _outreach_ratelimit_streak_days(conn, register_today=True)
+    if streak >= 3:
+        until = datetime.now(timezone.utc) + timedelta(hours=72)
+        reason_label = f"Rate limit SMTP {streak} dias seguidos (pausa 72h)"
+        _outreach_notify_admin(
+            "Captacion Vantelia pausada 72h (rate limit SMTP persistente)",
+            f"El SMTP ha devuelto rate limit {streak} dias seguidos.\n"
+            f"La captacion queda pausada hasta {until.isoformat(timespec='seconds')} y se reanudara sola.\n"
+            f"Ultimo error: {reason[:300]}\n\n"
+            "Si persiste, revisa el limite de envio del buzon en Hostinger o configura un SMTP dedicado de captacion.",
+        )
+    else:
+        until = _outreach_next_business_day_9h_utc()
+        reason_label = "Rate limit SMTP (reanudacion automatica)"
+    _outreach_set_auto_pause(conn, until, reason_label)
     detail = {
         "reason": reason[:300],
         "job_id": job_id,
         "campaign_id": campaign_id,
         "email": email,
         "stage": stage,
+        "paused_until": until.isoformat(timespec="seconds"),
+        "streak_days": streak,
     }
-    try:
-        conn.execute("UPDATE autopilot_config SET enabled=0, updated_at=? WHERE id=1", (now,))
-    except Exception:
-        pass
     try:
         conn.execute(
             "UPDATE campaigns SET status='paused', updated_at=? WHERE status='running'",
             (now,),
         )
-    except Exception:
-        pass
-    try:
         conn.commit()
     except Exception:
         pass
     _outreach_tick_state_update(
         "smtp_ratelimit_paused",
-        "Autocaptacion pausada: el SMTP ha devuelto rate limit",
+        f"Rate limit SMTP: pausado hasta {until.isoformat(timespec='seconds')} (se reanuda solo)",
         detail=detail,
         status="error",
     )
     _autopilot_log(
         "error",
         "smtp_ratelimit_autopause",
-        "Autocaptacion pausada automaticamente por rate limit SMTP",
+        f"Rate limit SMTP: captacion pausada hasta {until.strftime('%d/%m %H:%M')} UTC, se reanuda sola",
         detail,
     )
 
@@ -1171,6 +1552,7 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
                     sent_total += 1
                     continue
 
+                _outreach_wait_send_slot()
                 msg = outreach_build_message(p.email, subject, text, html_body, settings_row, in_reply_to=in_reply_to)
                 try:
                     emailing._send_email_object(msg)
@@ -1219,11 +1601,7 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
                                    {"email": p.email, "stage": stage, "business": p.business_name or "",
                                     "subject": subject})
 
-                import random as _r
-                _delay = max(0.0, float(params.get("delay", 70.0)) + _r.uniform(
-                    -float(params.get("jitter", 25.0)), float(params.get("jitter", 25.0))
-                ))
-                time.sleep(_delay)
+                # Espaciado global gestionado por _outreach_wait_send_slot antes del envio.
 
         _job_log(conn, job_id, f"Autopiloto completo. Enviados: {sent_total}/{max_total}")
         if is_autopilot:
@@ -1378,6 +1756,56 @@ def _autopilot_generated_targets(target_count: int, max_targets: int = 18) -> Li
     return combos
 
 
+def _outreach_exhausted_targets(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """Combos sector|city marcados agotados: {key: {'misses': n, 'exhausted_at': ts}}."""
+    try:
+        _outreach_ensure_autopilot_config_columns(conn)
+        row = conn.execute("SELECT exhausted_targets_json FROM autopilot_config WHERE id=1").fetchone()
+        data = json.loads((row["exhausted_targets_json"] if row else "{}") or "{}")
+        return {k: v for k, v in data.items() if isinstance(v, dict) and v.get("exhausted_at")}
+    except Exception:
+        return {}
+
+
+def _outreach_register_target_result(conn: sqlite3.Connection, combo_key: str, imported: int) -> bool:
+    """Registra el resultado de un combo. 2 rondas seguidas sin importables → agotado.
+    Devuelve True si el combo acaba de marcarse agotado."""
+    try:
+        _outreach_ensure_autopilot_config_columns(conn)
+        row = conn.execute("SELECT exhausted_targets_json FROM autopilot_config WHERE id=1").fetchone()
+        data = json.loads((row["exhausted_targets_json"] if row else "{}") or "{}")
+    except Exception:
+        data = {}
+    entry = data.get(combo_key) if isinstance(data.get(combo_key), dict) else {}
+    newly_exhausted = False
+    if imported > 0:
+        data.pop(combo_key, None)
+    else:
+        misses = int(entry.get("misses", 0)) + 1
+        entry["misses"] = misses
+        if misses >= 2 and not entry.get("exhausted_at"):
+            entry["exhausted_at"] = _outreach_now()
+            newly_exhausted = True
+        data[combo_key] = entry
+    try:
+        conn.execute(
+            "UPDATE autopilot_config SET exhausted_targets_json=? WHERE id=1",
+            (json.dumps(data),),
+        )
+        conn.commit()
+    except Exception:
+        pass
+    return newly_exhausted
+
+
+def _outreach_clear_exhausted_targets(conn: sqlite3.Connection) -> None:
+    try:
+        conn.execute("UPDATE autopilot_config SET exhausted_targets_json='{}' WHERE id=1")
+        conn.commit()
+    except Exception:
+        pass
+
+
 def _autopilot_targets_for_run(configured_targets: List[Dict[str, str]], target_count: int) -> List[Dict[str, str]]:
     clean = []
     for target in configured_targets or []:
@@ -1525,6 +1953,7 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
             except Exception:
                 targets = []
             daily_new_target = _autopilot_target_companies(row["daily_new_target"] or 50)
+            daily_cold_cap = int(row["daily_cold_cap"] or 20)
             try:
                 discovery_enabled = bool(row["discovery_enabled"]) if "discovery_enabled" in row.keys() else True
             except Exception:
@@ -1533,8 +1962,27 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
             followup_days = _outreach_config_followup_days(conn)
 
         if not enabled:
-            _autopilot_log("info", "skip_disabled_db", "Autopiloto pausado en panel")
+            _autopilot_log("info", "skip_disabled_db", "Autopiloto pausado manualmente en el panel")
             return
+
+        # Pausa automatica (rate limit / bounces): con vencimiento y auto-reanudacion.
+        with _outreach_db() as conn:
+            pause = _outreach_pause_state(conn)
+            if pause["expired"]:
+                _outreach_clear_auto_pause(conn)
+                _autopilot_log(
+                    "success", "auto_resumed",
+                    f"Pausa automatica vencida ({pause['reason'] or 'sin motivo'}): captacion reanudada",
+                    {"reason": pause["reason"], "until": pause["until"]},
+                )
+            elif pause["auto"]:
+                _autopilot_log(
+                    "info", "skip_auto_paused",
+                    f"Pausado automaticamente hasta {pause['until']} ({pause['reason']})",
+                    {"until": pause["until"], "reason": pause["reason"]},
+                )
+                return
+
         if not _autonomous_within_window():
             h_start = os.getenv("OUTREACH_START_HOUR", "9")
             h_end = os.getenv("OUTREACH_END_HOUR", "19")
@@ -1561,32 +2009,71 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
             _outreach_tick_state_update("smtp_not_configured", "No hay canal de email conectado")
             return
 
+        # Check REAL de SMTP (login+NOOP): si el buzon esta caido (p.ej. "Disabled
+        # by user from hPanel") no lanzamos jobs y avisamos. Mantiene ademas el
+        # cache de /health fresco cada tick.
+        smtp_health = emailing._smtp_health_check()
+        if smtp_health.get("ok") is False:
+            _autopilot_log(
+                "error", "smtp_down",
+                f"SMTP caido: {smtp_health.get('error', '')[:160]}",
+                {"error": smtp_health.get("error", "")},
+            )
+            _outreach_tick_state_update("smtp_down", "SMTP caido: ronda omitida", status="error")
+            return
+
+        # Reintentar avisos pendientes ahora que el SMTP responde.
+        try:
+            with _outreach_db() as conn:
+                _outreach_flush_notify_queue(conn)
+        except Exception:
+            pass
+
+        # ---- PRESUPUESTO DE COLD DEL DIA (warm-up + reparto entre ticks) ----
+        with _outreach_db() as conn:
+            effective_cap = _outreach_warmup_effective_cap(conn, daily_cold_cap)
+            cold_sent_today = conn.execute(
+                "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND stage='cold' AND date(sent_at)=date('now')"
+            ).fetchone()["c"]
+            already_cold = conn.execute(
+                "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND stage='cold'"
+            ).fetchone()["c"]
+            cold_rows = conn.execute(
+                """SELECT email FROM prospects
+                   WHERE COALESCE(status,'new')='new'
+                     AND email NOT IN (SELECT email FROM suppressions)
+                     AND email NOT IN (SELECT email FROM sends WHERE mode='send' AND stage='cold')
+                   ORDER BY score DESC, created_at ASC"""
+            ).fetchall()
+        cold_emails = [r["email"] for r in cold_rows]
+        pool_size = len(cold_emails)
+        remaining_today = max(0, effective_cap - int(cold_sent_today or 0))
+        # Reparto: no quemar todo el cap en la primera ronda de la manana.
+        per_tick_share = min(remaining_today, max(3, (effective_cap + 2) // 3))
+        # Pipeline bajo: discovery primero, el cold sale despues con lo importado (RF-2.4).
+        cold_deferred_for_discovery = bool(discovery_enabled and pool_size < 30)
+        _autopilot_log(
+            "info", "cold_budget",
+            f"Cold hoy: {cold_sent_today}/{effective_cap} enviados (cap config {daily_cold_cap}, "
+            f"warm-up aplicado) · esta ronda: hasta {per_tick_share} · pool: {pool_size}",
+            {"effective_cap": effective_cap, "configured_cap": daily_cold_cap,
+             "sent_today": int(cold_sent_today or 0), "per_tick": per_tick_share,
+             "pool": pool_size, "deferred_for_discovery": cold_deferred_for_discovery},
+        )
+
         # ---- PASO 1: FOLLOW-UPS (cold pendientes + fu1 + fu2 + breakup) ----
         if auto_followups:
             _outreach_tick_state_update("followups_start", "Enviando cold pendientes y follow-ups...")
 
-            # Cold pendientes: todos los prospects sin cold enviado, sin límite de cap
-            with _outreach_db() as conn:
-                already_cold = conn.execute(
-                    "SELECT COUNT(*) AS c FROM sends WHERE mode='send' AND stage='cold'"
-                ).fetchone()["c"]
-                cold_rows = conn.execute(
-                    """SELECT email FROM prospects
-                       WHERE COALESCE(status,'new')='new'
-                         AND email NOT IN (SELECT email FROM suppressions)
-                         AND email NOT IN (SELECT email FROM sends WHERE mode='send' AND stage='cold')
-                       ORDER BY score DESC, created_at ASC"""
-                ).fetchall()
-            cold_emails = [r["email"] for r in cold_rows]
-
-            if cold_emails:
+            launch_emails = [] if cold_deferred_for_discovery else cold_emails[:per_tick_share]
+            if launch_emails:
                 _autopilot_log("info", "cold_pending",
-                               f"Cold: {len(cold_emails)} prospects pendientes "
+                               f"Cold: {len(launch_emails)} de {pool_size} pendientes en esta ronda "
                                f"({already_cold} ya contactados anteriormente, saltados)",
-                               {"pending": len(cold_emails), "already_cold": already_cold})
+                               {"launch": len(launch_emails), "pending": pool_size, "already_cold": already_cold})
                 params_cold = {
-                    "stage": "cold", "emails": cold_emails, "max": len(cold_emails),
-                    "send": True, "dry_run": False, "delay": 70.0, "jitter": 25.0,
+                    "stage": "cold", "emails": launch_emails, "max": len(launch_emails),
+                    "send": True, "dry_run": False,
                     "force_window": False, "campaign_name": "Autopilot", "autopilot": True,
                 }
                 with _outreach_db() as conn:
@@ -1600,16 +2087,23 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                     conn.commit()
                 threading.Thread(target=_outreach_run_send_job, args=(cold_job_id, params_cold), daemon=True).start()
                 _autopilot_log("success", "cold_launched",
-                               f"Cold: {len(cold_emails)} emails encolados",
-                               {"job_id": cold_job_id, "count": len(cold_emails)})
-            else:
+                               f"Cold: {len(launch_emails)} emails encolados",
+                               {"job_id": cold_job_id, "count": len(launch_emails)})
+                remaining_today = max(0, remaining_today - len(launch_emails))
+            elif cold_deferred_for_discovery and pool_size:
+                _autopilot_log("info", "cold_deferred",
+                               f"Cold aplazado: pipeline bajo ({pool_size} < 30), discovery primero")
+            elif not pool_size:
                 _autopilot_log("info", "cold_skip",
                                f"Cold: sin prospects pendientes "
                                f"({already_cold} ya contactados anteriormente)")
+            elif not remaining_today:
+                _autopilot_log("info", "cold_cap_reached",
+                               f"Cold: cap diario alcanzado ({cold_sent_today}/{effective_cap})")
 
-            # FU1, FU2, Breakup (sin límite)
+            # FU1, FU2, Breakup (mismo espaciado global de envio)
             params_fu = {
-                "max": 99999, "send": True, "delay": 70.0, "jitter": 25.0,
+                "max": 99999, "send": True,
                 "autopilot": True, "followup_days": followup_days,
             }
             with _outreach_db() as conn:
@@ -1640,14 +2134,7 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
         # se quedo en vez de seguir descubriendo de mas.
         run_discovery = discovery_enabled
         pool_target = daily_new_target
-        with _outreach_db() as conn:
-            pool_size = conn.execute(
-                """SELECT COUNT(*) AS c FROM prospects
-                   WHERE COALESCE(status,'new')='new'
-                     AND email NOT IN (SELECT email FROM suppressions)
-                     AND email NOT IN (SELECT email FROM sends WHERE mode='send' AND stage='cold')"""
-            ).fetchone()["c"]
-        if run_discovery and pool_size >= pool_target:
+        if run_discovery and pool_size >= pool_target and not cold_deferred_for_discovery:
             log(f"discovery skip: pool {pool_size} >= objetivo {pool_target}, pasando a cold")
             _outreach_tick_state_update(
                 "discovery_pool_full",
@@ -1670,10 +2157,12 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
 
             if discover_companies is not None:
                 imported_total = 0
+                targets_attempted = 0
                 new_emails: List[str] = []
                 with _outreach_db() as conn:
                     known: set = {r["email"] for r in conn.execute("SELECT email FROM prospects").fetchall()}
                     suppressed: set = {r["email"] for r in conn.execute("SELECT email FROM suppressions").fetchall()}
+                    exhausted = _outreach_exhausted_targets(conn)
 
                 for t in targets_for_run:
                     if imported_total >= daily_new_target:
@@ -1684,6 +2173,10 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                     city = (t.get("city") or "").strip()
                     if not sector or not city:
                         continue
+                    combo_key = f"{sector}|{city}".lower()
+                    if combo_key in exhausted:
+                        continue
+                    targets_attempted += 1
                     remaining = max(0, daily_new_target - imported_total)
                     _outreach_tick_state_update("discovery_run", f"Buscando: {sector} · {city}",
                                                current_target={"sector": sector, "city": city})
@@ -1789,27 +2282,45 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                         {"sector": sector, "city": city, "found": found_count, "new_after_dedupe": len(companies), "imported": added,
                          "no_email": no_email_count, "duplicates": duplicate_count, "chains": chain_count},
                     )
+                    with _outreach_db() as conn:
+                        if _outreach_register_target_result(conn, combo_key, added):
+                            _autopilot_log(
+                                "warning", "discovery_target_exhausted",
+                                f"{sector} · {city}: agotado (2 rondas sin importables); se excluye de la rotación",
+                                {"sector": sector, "city": city},
+                            )
+                    imported_total += added
 
                 with _outreach_db() as conn:
                     conn.execute("UPDATE autopilot_config SET last_discovery_at=?, updated_at=? WHERE id=1",
                                  (_outreach_now(), _outreach_now()))
                     conn.commit()
 
+                # Coste estimado Google Places: ~1 Text Search (0.032 USD) por combo
+                # + hasta N Place Details (0.017 USD) por resultados con web.
+                est_cost = round(targets_attempted * 0.032 + imported_total * 0.017, 3)
                 _autopilot_log(
                     "success" if imported_total > 0 else "info",
                     "discovery_done",
-                    f"Discovery: {imported_total} empresas nuevas importadas"
-                    + (f", cold encolado para {len(new_emails)}" if new_emails else ""),
-                    {"imported_total": imported_total},
+                    f"Discovery: {imported_total} empresas nuevas importadas "
+                    f"({targets_attempted} combos, ~{est_cost} USD Places)",
+                    {"imported_total": imported_total, "targets_attempted": targets_attempted,
+                     "estimated_places_cost_usd": est_cost},
                 )
                 _outreach_tick_state_update("discovery_done",
                                             f"Discovery: {imported_total} empresas importadas")
 
-                # Cold solo a las recién descubiertas
-                if new_emails:
+                # Cold post-discovery: recién descubiertas + (si el cold se aplazó
+                # por pipeline bajo) el pool que quedó pendiente. Siempre dentro
+                # del presupuesto diario restante.
+                launch_after_discovery = list(new_emails)
+                if cold_deferred_for_discovery:
+                    launch_after_discovery += [e for e in cold_emails if e not in set(new_emails)]
+                launch_after_discovery = launch_after_discovery[: max(0, remaining_today)]
+                if launch_after_discovery:
                     params_disc = {
-                        "stage": "cold", "emails": new_emails, "max": len(new_emails),
-                        "send": True, "dry_run": False, "delay": 70.0, "jitter": 25.0,
+                        "stage": "cold", "emails": launch_after_discovery, "max": len(launch_after_discovery),
+                        "send": True, "dry_run": False,
                         "force_window": False, "campaign_name": "Autopilot discovery", "autopilot": True,
                     }
                     with _outreach_db() as conn:
@@ -1823,8 +2334,10 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                         conn.commit()
                     threading.Thread(target=_outreach_run_send_job, args=(disc_job_id, params_disc), daemon=True).start()
                     _autopilot_log("success", "discovery_cold_launched",
-                                   f"Cold a empresas descubiertas: {len(new_emails)} emails encolados",
-                                   {"job_id": disc_job_id, "count": len(new_emails)})
+                                   f"Cold post-discovery: {len(launch_after_discovery)} emails encolados "
+                                   f"({len(new_emails)} nuevas + pool pendiente)",
+                                   {"job_id": disc_job_id, "count": len(launch_after_discovery),
+                                    "new_discovered": len(new_emails)})
                 else:
                     _autopilot_log("info", "discovery_cold_skip",
                                    "Cold discovery: ninguna empresa nueva con email válido")
@@ -2111,6 +2624,7 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                 if row and row["message_id"]:
                     in_reply_to = row["message_id"]
 
+            _outreach_wait_send_slot()
             msg = outreach_build_message(recipient, subject, text, html_body, settings_row, in_reply_to=in_reply_to)
             try:
                 emailing._send_email_object(msg)
@@ -2176,10 +2690,7 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                                {"email": recipient, "stage": stage, "business": p.business_name or "",
                                 "subject": subject, "idx": f"{idx}/{len(candidates)}"})
 
-            if idx < len(candidates):
-                import random as _r
-                delay = max(0.0, float(params.get("delay", 70.0)) + _r.uniform(-float(params.get("jitter", 25.0)), float(params.get("jitter", 25.0))))
-                time.sleep(delay)
+            # Espaciado global gestionado por _outreach_wait_send_slot antes del envio.
 
         _job_log(conn, job_id, f"Enviados: {sent_count}")
         if is_autopilot:

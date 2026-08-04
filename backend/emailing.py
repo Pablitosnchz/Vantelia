@@ -13,6 +13,7 @@ import hmac
 import secrets
 import smtplib
 import sqlite3
+import threading
 import time
 from datetime import timedelta
 from email.message import EmailMessage
@@ -658,6 +659,60 @@ def _smtp_send_message(message: EmailMessage) -> None:
         if username:
             smtp.login(username, _smtp_password())
         smtp.send_message(message)
+
+
+# --- Salud SMTP real (login + NOOP, sin enviar) ---------------------------
+# Cache en memoria: /health y el autopilot leen el cache; /admin/email-health
+# puede forzar un check fresco. TTL corto para no machacar al proveedor.
+
+SMTP_HEALTH_CACHE_TTL_SECONDS = 600
+_smtp_health_cache: Dict[str, Any] = {"ok": None, "error": "", "checked_at": ""}
+_smtp_health_lock = threading.Lock()
+
+
+def _smtp_health_check(force: bool = False) -> Dict[str, Any]:
+    """Comprueba que el SMTP acepta login+NOOP sin enviar nada.
+
+    Devuelve {"ok": bool|None, "error": str, "checked_at": iso}. ok=None si
+    nunca se ha podido comprobar (sin config). Resultado cacheado
+    SMTP_HEALTH_CACHE_TTL_SECONDS; force=True fuerza check fresco.
+    """
+    with _smtp_health_lock:
+        cached_at = timeutils._from_utc_iso(_smtp_health_cache.get("checked_at") or "")
+        fresh = bool(
+            cached_at
+            and (timeutils._utc_now() - cached_at).total_seconds() < SMTP_HEALTH_CACHE_TTL_SECONDS
+        )
+        if fresh and not force:
+            return dict(_smtp_health_cache)
+        if not _smtp_configured():
+            _smtp_health_cache.update(
+                {"ok": None, "error": "SMTP no configurado", "checked_at": timeutils._utc_now_iso()}
+            )
+            return dict(_smtp_health_cache)
+        try:
+            with smtplib.SMTP(_smtp_host(), _smtp_port(), timeout=15) as smtp:
+                smtp.ehlo()
+                if _smtp_starttls():
+                    smtp.starttls()
+                    smtp.ehlo()
+                username = _smtp_username()
+                if username:
+                    smtp.login(username, _smtp_password())
+                smtp.noop()
+            _smtp_health_cache.update({"ok": True, "error": "", "checked_at": timeutils._utc_now_iso()})
+        except Exception as exc:  # noqa: BLE001
+            _smtp_health_cache.update(
+                {"ok": False, "error": str(exc)[:300], "checked_at": timeutils._utc_now_iso()}
+            )
+            settings.logger.warning("Check de salud SMTP fallido: %s", exc)
+        return dict(_smtp_health_cache)
+
+
+def _smtp_health_cached() -> Dict[str, Any]:
+    """Ultimo resultado conocido sin disparar conexiones (para /health publico)."""
+    with _smtp_health_lock:
+        return dict(_smtp_health_cache)
 
 
 def _send_email_object(message: EmailMessage, cliente_id: str = "") -> None:

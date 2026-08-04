@@ -28,6 +28,7 @@ from pydantic import BaseModel
 
 from api_models import *  # noqa: F401,F403
 from backend import (
+    db,
     emailing,
     outreach,
     security,
@@ -524,6 +525,8 @@ class AutopilotConfigPayload(BaseModel):
     auto_followups: Optional[bool] = None
     followup_days: Optional[Dict[str, int]] = None
     discovery_enabled: Optional[bool] = None
+    clear_exhausted: Optional[bool] = None
+    clear_auto_pause: Optional[bool] = None
 
 
 
@@ -572,6 +575,14 @@ def outreach_autopilot_config_put(payload: AutopilotConfigPayload):
         outreach._outreach_ensure_autopilot_config_columns(conn)
         conn.execute(f"UPDATE autopilot_config SET {', '.join(fields)} WHERE id=1", params)
         conn.commit()
+        if payload.clear_exhausted:
+            outreach._outreach_clear_exhausted_targets(conn)
+            outreach._autopilot_log("info", "exhausted_cleared",
+                                    "Combos agotados reactivados desde el panel")
+        if payload.clear_auto_pause:
+            outreach._outreach_clear_auto_pause(conn)
+            outreach._autopilot_log("info", "auto_pause_cleared",
+                                    "Pausa automática levantada manualmente desde el panel")
         result = outreach._autopilot_config_row(conn)
 
     # Loggear cambios significativos.
@@ -602,6 +613,82 @@ def outreach_autopilot_config_put(payload: AutopilotConfigPayload):
                        f"Discovery {'activado' if payload.discovery_enabled else 'desactivado'} desde el panel",
                        {"discovery_enabled": bool(payload.discovery_enabled)})
     return result
+
+
+@app.get("/admin/email-health", dependencies=[Depends(security._require_admin_token)])
+def admin_email_health(fresh: int = 0):
+    """Salud REAL del canal de email (login+NOOP SMTP, sin enviar).
+
+    fresh=1 fuerza un check nuevo saltandose el cache. Lo vigila el workflow
+    de uptime en GitHub Actions: smtp.ok=false → el workflow falla → email al dueño.
+    """
+    health = emailing._smtp_health_check(force=bool(fresh))
+    return {
+        "ok": health.get("ok") is True,
+        "smtp": health,
+        "configured": emailing._email_delivery_configured(),
+        "imap_configured": bool(os.getenv("IMAP_HOST", "").strip()),
+    }
+
+
+@app.get("/admin/consulta-leads", dependencies=[Depends(security._require_admin_token)])
+def admin_consulta_leads(status: str = "", limit: int = 100):
+    """Leads del formulario /consultas/ de la web comercial (siempre persistidos)."""
+    limit = max(1, min(500, int(limit or 100)))
+    where = ""
+    params: List[Any] = []
+    st = (status or "").strip().lower()
+    if st in {"pending", "attended"}:
+        where = "WHERE status = ?"
+        params.append(st)
+    params.append(limit)
+    with db._get_db_connection() as connection:
+        rows = connection.execute(
+            f"SELECT * FROM consulta_leads {where} ORDER BY id DESC LIMIT ?", params
+        ).fetchall()
+        pending = connection.execute(
+            "SELECT COUNT(*) AS c FROM consulta_leads WHERE status='pending'"
+        ).fetchone()["c"]
+    return {"pending": int(pending or 0), "items": [dict(r) for r in rows]}
+
+
+class ConsultaLeadPatchPayload(BaseModel):
+    status: str
+
+
+@app.patch("/admin/consulta-leads/{lead_id}", dependencies=[Depends(security._require_admin_token)])
+def admin_consulta_lead_patch(lead_id: int, payload: ConsultaLeadPatchPayload):
+    st = (payload.status or "").strip().lower()
+    if st not in {"pending", "attended"}:
+        raise HTTPException(status_code=400, detail="status debe ser pending o attended")
+    with db._get_db_connection() as connection:
+        cur = connection.execute(
+            "UPDATE consulta_leads SET status=?, attended_at=? WHERE id=?",
+            (st, timeutils._utc_now_iso() if st == "attended" else "", lead_id),
+        )
+        connection.commit()
+        if not cur.rowcount:
+            raise HTTPException(status_code=404, detail="Lead no encontrado")
+    return {"ok": True, "id": lead_id, "status": st}
+
+
+@app.get("/admin/outreach/replies-unattended", dependencies=[Depends(security._require_admin_token)])
+def outreach_replies_unattended(limit: int = 20):
+    """Prospects que han respondido y siguen en status='replied' (sin gestionar)."""
+    limit = max(1, min(100, int(limit or 20)))
+    with outreach._outreach_db() as conn:
+        rows = conn.execute(
+            """SELECT p.email, p.business_name, p.niche, p.city, p.phone, p.website,
+                      p.updated_at,
+                      (SELECT MAX(ts) FROM events e WHERE e.email = p.email AND e.type='reply') AS last_reply_at,
+                      (SELECT stage FROM events e WHERE e.email = p.email AND e.type='reply' ORDER BY ts DESC LIMIT 1) AS last_reply_stage
+               FROM prospects p
+               WHERE p.status = 'replied'
+               ORDER BY last_reply_at DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return {"count": len(rows), "items": [dict(r) for r in rows]}
 
 
 @app.post("/admin/outreach/autopilot-tick", dependencies=[Depends(security._require_admin_token)])

@@ -51,6 +51,30 @@ async def solicitar_consulta(data: ConsultaLeadPayload, request: Request) -> Dic
     telefono_texto = data.telefono or "No proporcionado"
     mensaje_texto  = data.mensaje  or "(sin mensaje)"
 
+    # Persistir SIEMPRE antes de intentar el email: un fallo SMTP no pierde el lead.
+    lead_id = 0
+    try:
+        with db._get_db_connection() as connection:
+            cur = connection.execute(
+                """INSERT INTO consulta_leads
+                   (nombre, email, telefono, empresa, servicio, mensaje, ip, created_at)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (
+                    textnorm._sanitize_text(data.nombre)[:200],
+                    textnorm._normalize_email(str(data.email)),
+                    textnorm._sanitize_text(data.telefono or "")[:60],
+                    textnorm._sanitize_text(data.empresa or "")[:200],
+                    textnorm._sanitize_text(data.servicio or "")[:200],
+                    (data.mensaje or "").strip()[:4000],
+                    client_ip,
+                    timeutils._utc_now_iso(),
+                ),
+            )
+            lead_id = int(cur.lastrowid or 0)
+            connection.commit()
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("No se pudo persistir consulta_lead de %s: %s", data.email, exc)
+
     fecha_utc = timeutils._utc_now().strftime('%Y-%m-%d %H:%M UTC')
 
     asunto_admin = "Nueva consulta recibida"
@@ -141,9 +165,20 @@ async def solicitar_consulta(data: ConsultaLeadPayload, request: Request) -> Dic
     else:
         settings.logger.warning("Canal de email no configurado: no se han enviado emails de la consulta de %s", data.email)
 
+    if lead_id:
+        try:
+            with db._get_db_connection() as connection:
+                connection.execute(
+                    "UPDATE consulta_leads SET notif_sent=?, confirm_sent=? WHERE id=?",
+                    (1 if notif_sent else 0, 1 if confirm_sent else 0, lead_id),
+                )
+                connection.commit()
+        except Exception:  # noqa: BLE001
+            pass
+
     settings.logger.info(
-        "Consulta recibida de %s <%s> (IP: %s) notif=%s confirm=%s",
-        data.nombre, data.email, client_ip, notif_sent, confirm_sent,
+        "Consulta recibida de %s <%s> (IP: %s) lead_id=%s notif=%s confirm=%s",
+        data.nombre, data.email, client_ip, lead_id, notif_sent, confirm_sent,
     )
     return {"ok": True, "message": "Solicitud recibida. Te respondemos en menos de 24h."}
 
@@ -164,6 +199,16 @@ async def healthcheck() -> Dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         settings.logger.error("Healthcheck database failed: %s", exc)
         checks["database"] = "error"
+
+    # SMTP: solo el ultimo resultado cacheado (no bloqueante; el check real lo
+    # dispara /admin/email-health o el worker de captacion).
+    smtp_cached = emailing._smtp_health_cached()
+    if smtp_cached.get("ok") is True:
+        checks["smtp"] = "ok"
+    elif smtp_cached.get("ok") is False:
+        checks["smtp"] = "fail"
+    else:
+        checks["smtp"] = "unknown"
 
     critical_checks = ["config", "data_dir", "storage_dir", "database"]
     overall_status = "ok" if all(checks.get(name) == "ok" for name in critical_checks) else "degraded"

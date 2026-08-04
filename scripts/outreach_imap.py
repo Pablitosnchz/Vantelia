@@ -59,6 +59,13 @@ AUTOREPLY_HEADERS = (
 )
 AUTOREPLY_VALUES_BAD = ("auto-replied", "auto-generated", "yes")
 
+BOUNCE_FROM_MARKERS = ("mailer-daemon", "postmaster@", "mail delivery subsystem")
+BOUNCE_SUBJECT_MARKERS = (
+    "undelivered", "undeliverable", "delivery status notification",
+    "failure notice", "returned mail", "mail delivery failed",
+    "no se pudo entregar", "delivery has failed",
+)
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -80,6 +87,123 @@ def _is_autoreply(msg: Message) -> bool:
     if subject.startswith(("out of office", "fuera de la oficina", "ausencia automatic")):
         return True
     return False
+
+
+def _is_bounce(msg: Message) -> bool:
+    """NDR/bounce: remitente mailer-daemon, subject tipico o multipart/report."""
+    sender = (msg.get("From", "") or "").lower()
+    if any(m in sender for m in BOUNCE_FROM_MARKERS):
+        return True
+    subject = (msg.get("Subject", "") or "").lower()
+    if any(m in subject for m in BOUNCE_SUBJECT_MARKERS):
+        return True
+    ctype = (msg.get_content_type() or "").lower()
+    if ctype == "multipart/report" and "delivery-status" in (msg.get("Content-Type", "") or "").lower():
+        return True
+    return False
+
+
+def _bounce_original_recipient(msg: Message) -> str:
+    """Extrae el destinatario original de un NDR (Final-Recipient, X-Failed-Recipients
+    o el To del mensaje original adjunto)."""
+    failed = (msg.get("X-Failed-Recipients", "") or "").strip()
+    if failed and "@" in failed:
+        return failed.split(",")[0].strip().lower()
+    for part in msg.walk():
+        ptype = (part.get_content_type() or "").lower()
+        if ptype == "message/delivery-status":
+            try:
+                payload = part.get_payload()
+                blobs = payload if isinstance(payload, list) else [payload]
+                for blob in blobs:
+                    text = blob.as_string() if isinstance(blob, Message) else str(blob)
+                    m = re.search(r"Final-Recipient:\s*rfc822;\s*([^\s;]+@[^\s;]+)", text, re.I)
+                    if m:
+                        return m.group(1).strip().lower().strip("<>")
+                    m = re.search(r"Original-Recipient:\s*rfc822;\s*([^\s;]+@[^\s;]+)", text, re.I)
+                    if m:
+                        return m.group(1).strip().lower().strip("<>")
+            except Exception:
+                continue
+        elif ptype in ("message/rfc822", "text/rfc822-headers"):
+            try:
+                payload = part.get_payload()
+                inner = payload[0] if isinstance(payload, list) and payload else payload
+                if isinstance(inner, Message):
+                    addrs = getaddresses([inner.get("To", "") or ""])
+                    if addrs and addrs[0][1]:
+                        return addrs[0][1].strip().lower()
+            except Exception:
+                continue
+    # Fallback: buscar Final-Recipient/Original-Recipient (o cualquier direccion)
+    # en las partes de texto del NDR. Muchos MTA no usan message/delivery-status.
+    texts: list[str] = []
+    try:
+        if msg.is_multipart():
+            for part in msg.walk():
+                if (part.get_content_type() or "").lower().startswith("text/"):
+                    raw = part.get_payload(decode=True) or b""
+                    texts.append(raw.decode(part.get_content_charset() or "utf-8", "ignore"))
+        else:
+            raw = msg.get_payload(decode=True) or b""
+            texts.append(raw.decode(msg.get_content_charset() or "utf-8", "ignore"))
+    except Exception:
+        pass
+    for text in texts:
+        m = re.search(r"(?:Final|Original)-Recipient:\s*rfc822;\s*([^\s;]+@[^\s;]+)", text, re.I)
+        if m:
+            return m.group(1).strip().lower().strip("<>")
+    for text in texts:
+        m = re.search(r"[\w.+-]+@[\w.-]+\.\w{2,}", text)
+        if m:
+            return m.group(0).lower()
+    return ""
+
+
+def _message_text_excerpt(msg: Message, limit: int = 2000) -> str:
+    """Primer part text/plain del mensaje, recortado (para notificar la respuesta)."""
+    try:
+        if msg.is_multipart():
+            for part in msg.walk():
+                if (part.get_content_type() or "").lower() == "text/plain":
+                    raw = part.get_payload(decode=True) or b""
+                    charset = part.get_content_charset() or "utf-8"
+                    return raw.decode(charset, "replace").strip()[:limit]
+            return ""
+        raw = msg.get_payload(decode=True) or b""
+        charset = msg.get_content_charset() or "utf-8"
+        return raw.decode(charset, "replace").strip()[:limit]
+    except Exception:
+        return ""
+
+
+def _record_bounce(conn: sqlite3.Connection, recipient: str, msg_id: str) -> bool:
+    """Marca prospect como bounced + supresion. Devuelve True si era nuevo."""
+    row = conn.execute("SELECT 1 FROM prospects WHERE email = ?", (recipient,)).fetchone()
+    if not row:
+        return False
+    already = conn.execute(
+        "SELECT 1 FROM events WHERE email = ? AND type = 'bounce' LIMIT 1", (recipient,)
+    ).fetchone()
+    conn.execute(
+        "INSERT INTO events (email, type, stage, url, ts, ua, ip) VALUES (?, 'bounce', '', ?, ?, '', '')",
+        (recipient, msg_id, _now_iso()),
+    )
+    try:
+        conn.execute(
+            "UPDATE prospects SET status = 'bounced', updated_at = ? WHERE email = ?",
+            (_now_iso(), recipient),
+        )
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO suppressions (email, reason, added_at) VALUES (?, 'bounce', ?)",
+            (recipient, _now_iso()),
+        )
+    except sqlite3.OperationalError:
+        pass
+    return not already
 
 
 def _extract_msgid_refs(msg: Message) -> list[str]:
@@ -244,7 +368,10 @@ def poll_once(db_path: Path) -> dict:
 
     Devuelve dict con metricas. No lanza excepciones por error de red/IMAP.
     """
-    stats = {"checked": 0, "matched": 0, "replies_new": 0, "skipped": 0, "errors": 0}
+    stats = {
+        "checked": 0, "matched": 0, "replies_new": 0, "skipped": 0, "errors": 0,
+        "bounces_new": 0, "replies_detail": [], "bounces_detail": [],
+    }
 
     if not os.getenv("IMAP_HOST", "").strip():
         return stats
@@ -280,6 +407,22 @@ def poll_once(db_path: Path) -> dict:
                         stats["skipped"] += 1
                         continue
 
+                if _is_bounce(msg):
+                    recipient = _bounce_original_recipient(msg)
+                    if recipient:
+                        created = _record_bounce(conn, recipient, msg_id or "")
+                        if created:
+                            stats["bounces_new"] += 1
+                            stats["bounces_detail"].append({"email": recipient})
+                            logger.info("IMAP poller: bounce de %s registrado", recipient)
+                    if msg_id:
+                        conn.execute(
+                            "INSERT OR IGNORE INTO imap_seen (message_id, email, stage, seen_at) VALUES (?, ?, 'bounce', ?)",
+                            (msg_id, recipient or "", _now_iso()),
+                        )
+                    stats["skipped"] += 1
+                    continue
+
                 if _is_autoreply(msg):
                     if msg_id:
                         conn.execute(
@@ -306,6 +449,13 @@ def poll_once(db_path: Path) -> dict:
                 stats["matched"] += 1
                 if created:
                     stats["replies_new"] += 1
+                    stats["replies_detail"].append({
+                        "email": prospect_email,
+                        "stage": stage,
+                        "subject": (msg.get("Subject", "") or "").strip()[:300],
+                        "body_excerpt": _message_text_excerpt(msg),
+                        "received_at": received,
+                    })
 
                 if msg_id:
                     conn.execute(

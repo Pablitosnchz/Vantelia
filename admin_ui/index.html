@@ -3453,6 +3453,29 @@ tbody tr:last-child td { border-bottom: none; }
 
             <div class="ss-dashboard-stack">
 
+            <!-- Banner rojo de salud (SMTP caido / tick parado / pausa automatica) -->
+            <div id="orHealthBanner" style="display:none;margin-bottom:14px;padding:14px 18px;border-radius:10px;background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:22px;">🚨</span>
+                <div>
+                  <strong id="orHealthBannerText" style="font-size:15px;">Problema de salud</strong>
+                  <p id="orHealthBannerDetail" style="margin:2px 0 0;font-size:12px;opacity:.92;"></p>
+                </div>
+              </div>
+              <button class="ghost small" type="button" id="orHealthBannerBtn" style="display:none;background:rgba(255,255,255,0.2);color:#fff;border-color:rgba(255,255,255,0.4);">Reanudar ya</button>
+            </div>
+
+            <!-- Leads del formulario /consultas/ pendientes -->
+            <div id="orConsultaLeadsCard" class="card" style="display:none;padding:14px 18px;margin-bottom:14px;border:1px solid #f59e0b55;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                <div>
+                  <strong>📥 Consultas de la web sin atender</strong>
+                  <p class="muted" style="margin:2px 0 0;font-size:12px;">Formulario de vantelia.es/consultas/. Se guardan siempre, aunque el email falle.</p>
+                </div>
+              </div>
+              <div id="orConsultaLeadsList"></div>
+            </div>
+
             <!-- Banner respuestas nuevas -->
             <div id="orRepliesBanner" style="display:none;margin-bottom:14px;padding:14px 18px;border-radius:10px;background:linear-gradient(135deg,#a855f7,#6366f1);color:#fff;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
               <div style="display:flex;align-items:center;gap:10px;">
@@ -7363,7 +7386,7 @@ a {
         ORALL("[data-outreach-panel]").forEach((p) => {
           p.classList.toggle("active", p.dataset.outreachPanel === tab);
         });
-        if (tab === "autopilot") { loadSelfServiceFunnel(); loadStats(); loadAutopilot(); loadAutonomousConfig(); loadRecentAutopilotErrors(); loadHotLeads(); loadFollowupQueue(); loadAbStats(); loadGA4Stats(); loadNextAction(); }
+        if (tab === "autopilot") { loadSelfServiceFunnel(); loadStats(); loadAutopilot(); loadAutonomousConfig(); loadRecentAutopilotErrors(); loadHotLeads(); loadFollowupQueue(); loadAbStats(); loadGA4Stats(); loadNextAction(); loadHealthBanner(); loadConsultaLeads(); }
         if (tab === "prospects") loadProspects();
         if (tab === "email-test") { loadTemplates().then(renderTemplateTestPreview).catch(() => renderTemplateTestPreview()); loadJobs(); startJobsPolling(); } else { stopJobsPolling(); }
         if (tab === "manual-email") renderManualEmailPreview();
@@ -7980,10 +8003,10 @@ a {
         const banner = ORQ("#orRepliesBanner");
         if (!banner) return;
         try {
-          const data = await orFetch("/admin/outreach/prospects?status=replied&days=7&page_size=200");
-          const count = (data.items || []).length;
+          const data = await orFetch("/admin/outreach/replies-unattended?limit=50");
+          const count = data.count || 0;
           if (count > 0) {
-            ORQ("#orRepliesBannerText").textContent = `${count} ${count === 1 ? "prospect ha respondido" : "prospects han respondido"} esta semana`;
+            ORQ("#orRepliesBannerText").textContent = `${count} ${count === 1 ? "respuesta sin atender" : "respuestas sin atender"}`;
             banner.style.display = "flex";
             updateTabBadge("prospects", count, "success");
           } else {
@@ -7992,6 +8015,92 @@ a {
           }
         } catch (err) {
           banner.style.display = "none";
+        }
+      }
+
+      async function loadHealthBanner() {
+        const banner = ORQ("#orHealthBanner");
+        if (!banner) return;
+        try {
+          const cfg = await orFetch("/admin/outreach/autopilot-config");
+          const problems = [];
+          let resumable = false;
+          const smtp = cfg.smtp_health || {};
+          if (smtp.ok === false) {
+            problems.push(`SMTP caído: ${smtp.error || "sin detalle"} — ningún email del SaaS está saliendo.`);
+          }
+          if (cfg.auto_paused) {
+            const until = cfg.paused_until ? fmtMadrid(cfg.paused_until) : "?";
+            problems.push(`Pausa automática hasta ${until} (${cfg.paused_reason || "sin motivo"}). Se reanuda sola.`);
+            resumable = true;
+          }
+          const lastTick = cfg.last_tick && cfg.last_tick.updated_at;
+          if (cfg.enabled && cfg.env_enabled && lastTick) {
+            const ageMs = Date.now() - new Date(lastTick).getTime();
+            if (ageMs > 2 * 3600 * 1000) {
+              problems.push(`El worker lleva ${Math.round(ageMs / 3600000)}h sin hacer ronda (esperado: cada hora).`);
+            }
+          }
+          if (problems.length) {
+            ORQ("#orHealthBannerText").textContent = problems[0];
+            ORQ("#orHealthBannerDetail").textContent = problems.slice(1).join(" · ");
+            ORQ("#orHealthBannerBtn").style.display = resumable ? "" : "none";
+            banner.style.display = "flex";
+          } else {
+            banner.style.display = "none";
+          }
+        } catch (err) {
+          banner.style.display = "none";
+        }
+      }
+
+      ORQ("#orHealthBannerBtn")?.addEventListener("click", async () => {
+        try {
+          await orFetch("/admin/outreach/autopilot-config", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ clear_auto_pause: true }),
+          });
+          cwToast("Pausa automática levantada.", "success");
+          loadHealthBanner(); loadAutopilot();
+        } catch (err) { cwToast(err.message, "error"); }
+      });
+
+      async function loadConsultaLeads() {
+        const card = ORQ("#orConsultaLeadsCard");
+        const list = ORQ("#orConsultaLeadsList");
+        if (!card || !list) return;
+        try {
+          const data = await orFetch("/admin/consulta-leads?status=pending&limit=10");
+          const items = data.items || [];
+          if (!items.length) { card.style.display = "none"; return; }
+          card.style.display = "";
+          list.innerHTML = items.map((it) => {
+            const when = it.created_at ? fmtMadrid(it.created_at) : "-";
+            const tel = it.telefono ? ` · <a href="tel:${escapeHtml(it.telefono)}">${escapeHtml(it.telefono)}</a>` : "";
+            return `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);flex-wrap:wrap;">
+              <div style="min-width:0;">
+                <div style="font-weight:600;font-size:13px;">${escapeHtml(it.nombre || it.email)}${it.empresa ? " · " + escapeHtml(it.empresa) : ""}</div>
+                <div class="muted" style="font-size:11px;margin-top:1px;"><a href="mailto:${escapeHtml(it.email)}">${escapeHtml(it.email)}</a>${tel} · ${escapeHtml(when)}</div>
+                ${it.mensaje ? `<div style="font-size:12px;margin-top:3px;">${escapeHtml((it.mensaje || "").slice(0, 180))}</div>` : ""}
+              </div>
+              <button class="ghost small" type="button" data-lead-attend="${it.id}">Atendido</button>
+            </div>`;
+          }).join("");
+          ORALL("#orConsultaLeadsList [data-lead-attend]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              try {
+                await orFetch(`/admin/consulta-leads/${btn.dataset.leadAttend}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ status: "attended" }),
+                });
+                loadConsultaLeads();
+              } catch (err) { cwToast(err.message, "error"); }
+            });
+          });
+        } catch (err) {
+          card.style.display = "none";
         }
       }
 
@@ -8314,7 +8423,8 @@ a {
             if (it.demos_recent > 0)  signals.push(`<span class="pill success" style="font-size:11px;">Demo</span>`);
             if (it.clicks_recent > 0) signals.push(`<span class="pill info" style="font-size:11px;">${it.clicks_recent} click${it.clicks_recent > 1 ? "s" : ""}</span>`);
             if (it.opens_recent > 0)  signals.push(`<span class="pill" style="font-size:11px;">${it.opens_recent} apertura${it.opens_recent > 1 ? "s" : ""}</span>`);
-            const mailHref = `mailto:${encodeURIComponent(it.email)}?subject=Re%3A%20${encodeURIComponent(it.business_name || "")}`;
+            const mailBody = `Hola,\n\nVi que echasteis un vistazo a lo que os envié sobre el asistente para ${it.business_name || "vuestro negocio"}. ¿Os encaja una llamada rápida esta semana para enseñároslo con vuestros propios datos?\n\nUn saludo,\nPablo · Vantelia\nhttps://www.vantelia.es`;
+            const mailHref = `mailto:${encodeURIComponent(it.email)}?subject=Re%3A%20${encodeURIComponent(it.business_name || "")}&body=${encodeURIComponent(mailBody)}`;
             return `<div class="or-hot-row" data-email="${escapeHtml(it.email)}" style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer;">
               <div>
                 <div style="font-weight:600;font-size:13px;">${escapeHtml(it.business_name || it.email)}</div>
@@ -8327,6 +8437,7 @@ a {
               </div>
               <div class="actions" style="flex-direction:column;gap:4px;align-items:flex-end;">
                 <a class="secondary small" href="${escapeHtml(mailHref)}">Email</a>
+                ${it.phone ? `<a class="ghost small" href="tel:${escapeHtml(String(it.phone).replace(/[^+\d]/g, ""))}">📞 ${escapeHtml(it.phone)}</a>` : ""}
                 <button class="ghost small" type="button" data-followup-copy="${escapeHtml(it.email)}">Copiar FU</button>
               </div>
             </div>`;

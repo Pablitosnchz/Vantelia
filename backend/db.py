@@ -1061,6 +1061,31 @@ def _init_database() -> None:
             "CREATE INDEX IF NOT EXISTS idx_bot_leads_cliente ON bot_leads(cliente_id, created_at)"
         )
 
+        # Leads del formulario publico /consulta (web comercial). Se persisten
+        # SIEMPRE antes de intentar el email: un fallo SMTP nunca pierde un lead.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS consulta_leads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT NOT NULL DEFAULT '',
+                email TEXT NOT NULL DEFAULT '',
+                telefono TEXT NOT NULL DEFAULT '',
+                empresa TEXT NOT NULL DEFAULT '',
+                servicio TEXT NOT NULL DEFAULT '',
+                mensaje TEXT NOT NULL DEFAULT '',
+                ip TEXT NOT NULL DEFAULT '',
+                notif_sent INTEGER NOT NULL DEFAULT 0,
+                confirm_sent INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                attended_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_consulta_leads_status ON consulta_leads(status, created_at)"
+        )
+
         # CRM ligero: identidad consolidada y enlaces a registros operativos.
         connection.execute(
             """

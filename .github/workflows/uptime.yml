@@ -47,3 +47,26 @@ jobs:
             exit 1
           fi
           echo "Central OK"
+
+      # Salud REAL del email (login SMTP sin enviar). Detecta el caso "Disabled
+      # by user from hPanel" que dejo el SaaS semanas sin emails sin que nadie
+      # lo supiera. Requiere el secret ADMIN_API_TOKEN; si no existe, se omite.
+      - name: Email SMTP (login real, sin enviar)
+        env:
+          ADMIN_API_TOKEN: ${{ secrets.ADMIN_API_TOKEN }}
+        run: |
+          if [ -z "$ADMIN_API_TOKEN" ]; then
+            echo "Secret ADMIN_API_TOKEN no configurado; check de email omitido."
+            exit 0
+          fi
+          for i in 1 2 3; do
+            body=$(curl -sS --max-time 25 -H "Authorization: Bearer $ADMIN_API_TOKEN" "https://app.vantelia.es/admin/email-health?fresh=1" || true)
+            ok=$(echo "$body" | jq -r '.ok' 2>/dev/null || echo "")
+            if [ "$ok" = "true" ]; then
+              echo "SMTP OK"; exit 0
+            fi
+            err=$(echo "$body" | jq -r '.smtp.error // empty' 2>/dev/null || echo "")
+            echo "intento $i: smtp ok=$ok error=$err"; sleep 20
+          done
+          echo "::error::El SMTP de produccion no acepta login (los emails del SaaS no salen): $err"
+          exit 1

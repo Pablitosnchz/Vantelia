@@ -510,7 +510,7 @@ def fetch_candidates(
         WHERE NOT EXISTS (SELECT 1 FROM sends s WHERE s.email = p.email)
           AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email = p.email)
           AND NOT EXISTS (SELECT 1 FROM events ev WHERE ev.email = p.email AND ev.type = 'reply')
-          AND COALESCE(p.status, '') NOT IN ('replied', 'client', 'lost')
+          AND COALESCE(p.status, '') NOT IN ('replied', 'client', 'lost', 'bounced', 'baja')
         ORDER BY
           CASE
             WHEN lower(COALESCE(p.niche,'') || ' ' || COALESCE(p.service_hint,'') || ' ' || COALESCE(p.tags,'')) LIKE '%dental%'
@@ -543,7 +543,7 @@ def fetch_candidates(
         )
         AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email = p.email)
         AND NOT EXISTS (SELECT 1 FROM events ev WHERE ev.email = p.email AND ev.type = 'reply')
-        AND COALESCE(p.status, '') NOT IN ('replied', 'client', 'lost')
+        AND COALESCE(p.status, '') NOT IN ('replied', 'client', 'lost', 'bounced', 'baja')
         ORDER BY
           CASE
             WHEN EXISTS (SELECT 1 FROM events ev2 WHERE ev2.email=p.email AND ev2.type IN ('demo_generated','click','reply_intent')) THEN 0
