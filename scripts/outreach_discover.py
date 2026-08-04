@@ -39,6 +39,13 @@ load_dotenv(BASE_DIR / ".env")
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "").strip()
 
 OVERPASS_URL = os.getenv("OVERPASS_URL", "https://overpass-api.de/api/interpreter").strip()
+# Mirrors publicos de Overpass: el principal devuelve 504/429 con frecuencia.
+OVERPASS_MIRRORS = [
+    OVERPASS_URL,
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.osm.ch/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+]
 NOMINATIM_URL = os.getenv("NOMINATIM_URL", "https://nominatim.openstreetmap.org/search").strip()
 
 # Mapping sector hispano -> tags OSM (lista de pares clave/valor; multiples = OR).
@@ -633,11 +640,21 @@ def overpass_search(sector: str, ciudad: str, max_results: int = 50) -> list[dic
     query = f"[out:json][timeout:60];({selectors});out tags center {overshoot};"
 
     headers = {"User-Agent": SCRAPE_HEADERS["User-Agent"], "Accept": "application/json"}
+    data = None
+    last_err = ""
     with httpx.Client(headers=headers, timeout=90.0) as client:
-        resp = client.post(OVERPASS_URL, data={"data": query})
-        if resp.status_code != 200:
-            raise RuntimeError(f"Overpass error {resp.status_code}: {resp.text[:200]}")
-        data = resp.json()
+        for endpoint in OVERPASS_MIRRORS:
+            try:
+                resp = client.post(endpoint, data={"data": query})
+                if resp.status_code == 200:
+                    data = resp.json()
+                    break
+                last_err = f"{endpoint} -> {resp.status_code}: {resp.text[:120]}"
+            except Exception as exc:  # noqa: BLE001
+                last_err = f"{endpoint} -> {exc}"
+            time.sleep(2)
+    if data is None:
+        raise RuntimeError(f"Overpass sin respuesta en ningun mirror. Ultimo error: {last_err}")
 
     out: list[dict] = []
     seen_names: set[str] = set()

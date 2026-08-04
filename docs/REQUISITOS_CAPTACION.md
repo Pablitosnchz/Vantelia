@@ -19,9 +19,12 @@ Métricas reales conseguidas: 36% open, 4.2% click, 1.7% reply, 2 clientes marca
 
 ## 2. Descubrimiento de prospects (discovery)
 
-- **RF-2.1** Discovery vía Google Places por combos sector×ciudad. Targets manuales del
-  panel tienen prioridad; sin targets manuales, rotación automática de combos
-  generados (España completa, ~18 por ronda).
+- **RF-2.1** Discovery GRATIS vía OpenStreetMap/Overpass (con mirrors y retry) por
+  combos sector×ciudad + scraping de emails de las webs corporativas. Google Places
+  queda RETIRADO por coste (decisión 04-ago-2026): `GOOGLE_PLACES_API_KEY` debe
+  permanecer vacía y su ausencia NO es un blocker. Targets manuales del panel tienen
+  prioridad; sin targets manuales, rotación automática de combos generados
+  (España completa, ~18 por ronda).
 - **RF-2.2** Un combo que devuelve 0 empresas importables en 2 rondas consecutivas se
   marca agotado y se excluye de la rotación (reactivable desde panel).
 - **RF-2.3** Filtros de importación obligatorios: sin email → fuera; cadenas/franquicias

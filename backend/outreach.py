@@ -826,8 +826,7 @@ def _autopilot_config_row(conn) -> Dict[str, Any]:
         blockers.append("No hay canal de email conectado (Gmail o SMTP)")
     elif smtp_health.get("ok") is False:
         blockers.append(f"SMTP caído: {smtp_health.get('error', '')[:120]}")
-    if not google_ok:
-        blockers.append("GOOGLE_PLACES_API_KEY vacía (no hay discovery)")
+    # Sin GOOGLE_PLACES_API_KEY el discovery usa OpenStreetMap (gratis): no es blocker.
     tick_state = _outreach_tick_state_snapshot()
     return {
         "enabled": enabled_db,
@@ -2360,14 +2359,19 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                                  (_outreach_now(), _outreach_now()))
                     conn.commit()
 
-                # Coste estimado Google Places: ~1 Text Search (0.032 USD) por combo
-                # + hasta N Place Details (0.017 USD) por resultados con web.
-                est_cost = round(targets_attempted * 0.032 + imported_total * 0.017, 3)
+                # Coste: con Places, ~1 Text Search (0.032 USD)/combo + Details
+                # (0.017 USD)/importada. Sin key, OSM/Overpass = 0 USD.
+                if os.getenv("GOOGLE_PLACES_API_KEY", "").strip():
+                    est_cost = round(targets_attempted * 0.032 + imported_total * 0.017, 3)
+                    cost_label = f"~{est_cost} USD Places"
+                else:
+                    est_cost = 0.0
+                    cost_label = "0 USD (OpenStreetMap gratis)"
                 _autopilot_log(
                     "success" if imported_total > 0 else "info",
                     "discovery_done",
                     f"Discovery: {imported_total} empresas nuevas importadas "
-                    f"({targets_attempted} combos, ~{est_cost} USD Places)",
+                    f"({targets_attempted} combos, {cost_label})",
                     {"imported_total": imported_total, "targets_attempted": targets_attempted,
                      "estimated_places_cost_usd": est_cost},
                 )
