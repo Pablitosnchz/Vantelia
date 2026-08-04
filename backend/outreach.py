@@ -2137,8 +2137,22 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
              "pool": pool_size, "deferred_for_discovery": cold_deferred_for_discovery},
         )
 
+        # Guard de concurrencia: los jobs de envio duran horas (espaciado 2-5min ×
+        # decenas de emails) y pueden solapar el siguiente tick. Lanzar otro job
+        # mientras hay uno activo dispara envios DUPLICADOS (dos jobs drenando el
+        # mismo pool). Si hay uno vivo, este tick solo hace discovery.
+        with _outreach_db() as conn:
+            active_job = _outreach_active_send_job(conn)
+        skip_sending = active_job is not None
+        if skip_sending:
+            _autopilot_log(
+                "info", "sending_job_active",
+                f"Envio omitido: el job #{active_job} sigue activo (evita duplicados). Solo discovery esta ronda.",
+                {"active_job": active_job},
+            )
+
         # ---- PASO 1: FOLLOW-UPS (cold pendientes + fu1 + fu2 + breakup) ----
-        if auto_followups:
+        if auto_followups and not skip_sending:
             _outreach_tick_state_update("followups_start", "Enviando cold pendientes y follow-ups...")
 
             launch_emails = [] if cold_deferred_for_discovery else cold_emails[:per_tick_share]
@@ -2408,6 +2422,8 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
                 if cold_deferred_for_discovery:
                     launch_after_discovery += [e for e in cold_emails if e not in set(new_emails)]
                 launch_after_discovery = launch_after_discovery[: max(0, remaining_today)]
+                if skip_sending:
+                    launch_after_discovery = []  # ya hay un job de envio activo
                 if launch_after_discovery:
                     params_disc = {
                         "stage": "cold", "emails": launch_after_discovery, "max": len(launch_after_discovery),
@@ -2444,12 +2460,46 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
 outreach_autonomous_stop = threading.Event()
 
 
+def _outreach_reset_stale_jobs() -> None:
+    """Marca como interrumpidos los jobs 'running'/'queued' huerfanos: sus hilos
+    murieron con el proceso anterior (reinicio del contenedor). Sin esto quedan
+    zombies eternos que confunden el guard de concurrencia."""
+    if not OUTREACH_AVAILABLE:
+        return
+    try:
+        with _outreach_db() as conn:
+            cur = conn.execute(
+                "UPDATE jobs SET status='interrupted', finished_at=? "
+                "WHERE status IN ('running','queued')",
+                (_outreach_now(),),
+            )
+            conn.commit()
+            if cur.rowcount:
+                settings.logger.info("[autopilot] %s jobs zombie marcados como interrumpidos al arrancar", cur.rowcount)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("[autopilot] no se pudieron limpiar jobs zombie: %s", exc)
+
+
+def _outreach_active_send_job(conn: sqlite3.Connection) -> Optional[int]:
+    """Id de un job de envio (send/autopilot) todavia activo, o None. Solo cuenta
+    los iniciados en las ultimas 6h para ignorar zombies que escaparan a la limpieza."""
+    try:
+        row = conn.execute(
+            "SELECT id FROM jobs WHERE kind IN ('send','autopilot') AND status IN ('running','queued') "
+            "AND started_at >= datetime('now','-6 hours') ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        return int(row["id"]) if row else None
+    except Exception:
+        return None
+
+
 def _outreach_autonomous_worker() -> None:
     interval_minutes = max(10, int(os.getenv("OUTREACH_AUTONOMOUS_TICK_MINUTES", "60") or 60))
     if os.getenv("OUTREACH_AUTONOMOUS_ENABLED", "").lower() != "true":
         settings.logger.info("[autopilot] worker autónomo desactivado por env")
         return
     settings.logger.info("[autopilot] worker autónomo iniciado. Tick cada %s min.", interval_minutes)
+    _outreach_reset_stale_jobs()
     # Primera pasada tras 60s para no bloquear startup
     outreach_autonomous_stop.wait(60)
     while not outreach_autonomous_stop.is_set():

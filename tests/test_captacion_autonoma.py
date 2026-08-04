@@ -413,6 +413,57 @@ def test_tope_diario_total_limita_followups(outreach_mod, monkeypatch):
     assert "followups_cap_reached" in events
 
 
+def test_guard_no_lanza_job_si_hay_uno_activo(outreach_mod, monkeypatch):
+    """Con un job de envio ya activo, el tick no lanza otro (evita duplicados)."""
+    outreach = outreach_mod
+    from backend import emailing
+
+    monkeypatch.setenv("OUTREACH_AUTONOMOUS_ENABLED", "true")
+    monkeypatch.setenv("OUTREACH_RESPECT_WINDOW", "false")
+    monkeypatch.setattr(emailing, "_email_delivery_configured", lambda cliente_id="": True)
+    monkeypatch.setattr(emailing, "_smtp_health_check",
+                        lambda force=False: {"ok": True, "error": "", "checked_at": "x"})
+    monkeypatch.setattr(outreach, "_outreach_smtp_health",
+                        lambda: {"ok": True, "error": "", "checked_at": "x", "dedicated": True})
+    launched = []
+    monkeypatch.setattr(outreach, "_outreach_run_send_job", lambda j, p: launched.append("cold"))
+    monkeypatch.setattr(outreach, "_outreach_run_autopilot_job", lambda j, p: launched.append("fu"))
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with outreach._outreach_db() as conn:
+        conn.execute("UPDATE autopilot_config SET enabled=1, auto_followups=1, discovery_enabled=0 WHERE id=1")
+        # Job de envio ya activo (started hace poco)
+        conn.execute(
+            "INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES ('autopilot','running','{}','',?)",
+            (now,),
+        )
+        conn.commit()
+        assert outreach._outreach_active_send_job(conn) is not None
+
+    outreach._outreach_autonomous_tick_inner()
+    time.sleep(0.2)
+    assert not launched, "no debe lanzarse ningun job de envio con otro activo"
+    with outreach._outreach_db() as conn:
+        events = [r["event"] for r in conn.execute(
+            "SELECT event FROM autopilot_activity_log ORDER BY id DESC LIMIT 12"
+        ).fetchall()]
+    assert "sending_job_active" in events
+
+
+def test_reset_stale_jobs_limpia_zombies(outreach_mod):
+    outreach = outreach_mod
+    old = "2026-06-03T09:00:00+00:00"
+    with outreach._outreach_db() as conn:
+        conn.execute("INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES ('send','running','{}','',?)", (old,))
+        conn.execute("INSERT INTO jobs (kind, status, params_json, log, started_at) VALUES ('autopilot','queued','{}','',?)", (old,))
+        conn.commit()
+    outreach._outreach_reset_stale_jobs()
+    with outreach._outreach_db() as conn:
+        stuck = conn.execute("SELECT COUNT(*) c FROM jobs WHERE status IN ('running','queued')").fetchone()["c"]
+        interrupted = conn.execute("SELECT COUNT(*) c FROM jobs WHERE status='interrupted'").fetchone()["c"]
+    assert stuck == 0 and interrupted >= 2
+
+
 def test_tick_auto_reanuda_pausa_vencida(outreach_mod, monkeypatch):
     outreach = outreach_mod
     from backend import emailing
