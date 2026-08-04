@@ -366,7 +366,12 @@ def smtp_settings() -> dict[str, object]:
     # dejando SMTP_FROM_* para transaccionales (reset, recordatorios, etc.).
     # Personal sender (Pablo Sanchez <pablo@...>) entra mejor en Primary que
     # marca corporativa (Vantelia <info@...>).
-    smtp_user = os.getenv("SMTP_USERNAME", "").strip()
+    # Con SMTP dedicado de captacion (OUTREACH_SMTP_*), el From se alinea a ese
+    # buzon; si no, al SMTP global de siempre.
+    smtp_user = (
+        os.getenv("OUTREACH_SMTP_USERNAME", "").strip()
+        or os.getenv("SMTP_USERNAME", "").strip()
+    )
     from_email_raw = (
         os.getenv("OUTREACH_FROM_EMAIL", "").strip()
         or os.getenv("SMTP_FROM_EMAIL", "").strip()

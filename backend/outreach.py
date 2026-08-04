@@ -798,8 +798,8 @@ def _autopilot_config_row(conn) -> Dict[str, Any]:
     clicks_30d = conn.execute(
         "SELECT COUNT(*) AS c FROM events WHERE type='click' AND ts >= datetime('now','-30 day')"
     ).fetchone()["c"]
-    smtp_configured = emailing._email_delivery_configured()
-    smtp_health = emailing._smtp_health_check()
+    smtp_configured = bool(_outreach_dedicated_smtp_config()) or emailing._email_delivery_configured()
+    smtp_health = _outreach_smtp_health()
     smtp_ok = smtp_configured and smtp_health.get("ok") is not False
     env_enabled = os.getenv("OUTREACH_AUTONOMOUS_ENABLED", "").lower() == "true"
     google_ok = bool(os.getenv("GOOGLE_PLACES_API_KEY", "").strip())
@@ -1139,6 +1139,70 @@ def _job_finish(conn: sqlite3.Connection, job_id: int, status: str) -> None:
         (status, _outreach_now(), job_id),
     )
     conn.commit()
+
+
+# --- SMTP dedicado de captacion (RF-4.7) -----------------------------------
+# El cold NUNCA deberia salir por el mismo canal que el email transaccional del
+# SaaS (incidente ago-2026: MailChannels/Hostinger bloquea el contenido de cold
+# con "550 [SDC] Blocked" aunque el transaccional pase). Con OUTREACH_SMTP_HOST
+# configurado, la captacion usa su propio buzon/proveedor sin tocar codigo.
+
+
+def _outreach_dedicated_smtp_config() -> Optional[Dict[str, Any]]:
+    host = os.getenv("OUTREACH_SMTP_HOST", "").strip()
+    if not host:
+        return None
+    try:
+        port = int(os.getenv("OUTREACH_SMTP_PORT", "587") or 587)
+    except Exception:
+        port = 587
+    return {
+        "host": host,
+        "port": port,
+        "username": os.getenv("OUTREACH_SMTP_USERNAME", "").strip(),
+        "password": os.getenv("OUTREACH_SMTP_PASSWORD", "").strip(),
+        "starttls": os.getenv("OUTREACH_SMTP_STARTTLS", "true").strip().lower()
+        in {"1", "true", "yes", "on"},
+    }
+
+
+def _outreach_send_email_object(msg) -> None:
+    """Envia un email de captacion: SMTP dedicado si esta configurado, si no el canal global."""
+    cfg = _outreach_dedicated_smtp_config()
+    if not cfg:
+        emailing._send_email_object(msg)
+        return
+    import smtplib
+
+    with smtplib.SMTP(cfg["host"], cfg["port"], timeout=20) as smtp:
+        smtp.ehlo()
+        if cfg["starttls"]:
+            smtp.starttls()
+            smtp.ehlo()
+        if cfg["username"]:
+            smtp.login(cfg["username"], cfg["password"])
+        smtp.send_message(msg)
+
+
+def _outreach_smtp_health() -> Dict[str, Any]:
+    """Salud del canal de envio de CAPTACION: el dedicado si existe, si no el global."""
+    cfg = _outreach_dedicated_smtp_config()
+    if not cfg:
+        return emailing._smtp_health_check()
+    import smtplib
+
+    try:
+        with smtplib.SMTP(cfg["host"], cfg["port"], timeout=15) as smtp:
+            smtp.ehlo()
+            if cfg["starttls"]:
+                smtp.starttls()
+                smtp.ehlo()
+            if cfg["username"]:
+                smtp.login(cfg["username"], cfg["password"])
+            smtp.noop()
+        return {"ok": True, "error": "", "checked_at": _outreach_now(), "dedicated": True}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)[:300], "checked_at": _outreach_now(), "dedicated": True}
 
 
 # --- Ritmo de envio seguro -------------------------------------------------
@@ -1555,7 +1619,7 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
                 _outreach_wait_send_slot()
                 msg = outreach_build_message(p.email, subject, text, html_body, settings_row, in_reply_to=in_reply_to)
                 try:
-                    emailing._send_email_object(msg)
+                    _outreach_send_email_object(msg)
                 except Exception as send_err:  # noqa: BLE001
                     _job_log(conn, job_id, f"ERROR {p.email}: {send_err}")
                     limit_reason = _outreach_smtp_ratelimit_reason(send_err)
@@ -2010,9 +2074,9 @@ def _outreach_autonomous_tick_inner() -> None:  # noqa: C901
             return
 
         # Check REAL de SMTP (login+NOOP): si el buzon esta caido (p.ej. "Disabled
-        # by user from hPanel") no lanzamos jobs y avisamos. Mantiene ademas el
-        # cache de /health fresco cada tick.
-        smtp_health = emailing._smtp_health_check()
+        # by user from hPanel") no lanzamos jobs y avisamos. Usa el SMTP dedicado
+        # de captacion si esta configurado. Mantiene el cache de /health fresco.
+        smtp_health = _outreach_smtp_health()
         if smtp_health.get("ok") is False:
             _autopilot_log(
                 "error", "smtp_down",
@@ -2627,7 +2691,7 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
             _outreach_wait_send_slot()
             msg = outreach_build_message(recipient, subject, text, html_body, settings_row, in_reply_to=in_reply_to)
             try:
-                emailing._send_email_object(msg)
+                _outreach_send_email_object(msg)
             except Exception as err:  # noqa: BLE001
                 limit_reason = _outreach_smtp_ratelimit_reason(err)
                 if campaign_id and mode == "send":
