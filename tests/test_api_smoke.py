@@ -5456,8 +5456,9 @@ def test_outreach_preflight_renders_html_even_when_wizard_email_not_imported(cli
     assert data["counts"]["real_candidates"] == 0
     assert data["counts"]["skipped"]["missing_email"] == 1
     assert data["html_active"] is True
-    assert "Generar demo gratis" in data["html"]
-    assert "www.vantelia.es/demo/" in data["html"]
+    # El CTA ahora es "ya montado, miralo" y apunta al enlace instantaneo /demo/go.
+    assert "Ver el asistente" in data["html"]
+    assert "/demo/go/" in data["html"]
 
 
 def test_outreach_email_uses_prefilled_demo_link(client: TestClient, api_module):
@@ -5470,6 +5471,7 @@ def test_outreach_email_uses_prefilled_demo_link(client: TestClient, api_module)
         website="https://clinicademo.test",
         city="Madrid",
     )
+    # demo_url_with_utm sigue construyendo el formulario prefilled (fallback sin web).
     url = demo_url_with_utm("cold", prospect)
     assert url.startswith("https://www.vantelia.es/demo/?")
     assert "signup=1" not in url
@@ -5478,10 +5480,12 @@ def test_outreach_email_uses_prefilled_demo_link(client: TestClient, api_module)
     assert "email=prefill.demo%40example.com" in url
     assert "web=https%3A%2F%2Fclinicademo.test" in url
 
+    # El email real usa el enlace instantaneo /demo/go/{token} (demo pre-generada),
+    # no el formulario. El servidor resuelve los datos del prospect por el token.
     _subject, text, html = render("cold", prospect, "baja@vantelia.es")
-    assert "crear gratis su asistente IA en menos de 2 minutos" in text
     assert "demo preparada" in text
-    assert "empresa=Clinica+Demo+Norte" in html
+    assert "/demo/go/" in html
+    assert "/demo/go/" in text
 
 
 def test_outreach_campaigns_backfill_orphan_cold_sends(client: TestClient, api_module):
