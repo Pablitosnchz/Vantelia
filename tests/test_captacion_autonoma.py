@@ -522,6 +522,66 @@ def test_tick_respeta_pausa_automatica_activa(outreach_mod, monkeypatch):
 
 # ---------------------------------------------------- discovery agotados
 
+def test_brevo_webhook_bounce_suprime(outreach_mod):
+    outreach = outreach_mod
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with outreach._outreach_db() as conn:
+        conn.execute("INSERT INTO prospects (email, business_name, created_at, updated_at) VALUES (?,?,?,?)",
+                     ("rebote@x.es", "Rebote SL", now, now))
+        conn.commit()
+    r = outreach._outreach_process_brevo_event({"event": "hard_bounce", "email": "rebote@x.es", "reason": "550"})
+    assert r["action"] == "bounce"
+    with outreach._outreach_db() as conn:
+        st = conn.execute("SELECT status FROM prospects WHERE email='rebote@x.es'").fetchone()["status"]
+        supp = conn.execute("SELECT 1 FROM suppressions WHERE email='rebote@x.es'").fetchone()
+    assert st == "bounced" and supp
+
+
+def test_brevo_webhook_spam_da_de_baja(outreach_mod):
+    outreach = outreach_mod
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with outreach._outreach_db() as conn:
+        conn.execute("INSERT INTO prospects (email, business_name, created_at, updated_at) VALUES (?,?,?,?)",
+                     ("queja@x.es", "Queja SL", now, now))
+        conn.commit()
+    r = outreach._outreach_process_brevo_event({"event": "spam", "email": "queja@x.es"})
+    assert r["action"] == "unsubscribe"
+    with outreach._outreach_db() as conn:
+        st = conn.execute("SELECT status FROM prospects WHERE email='queja@x.es'").fetchone()["status"]
+    assert st == "baja"
+
+
+def test_brevo_webhook_ignora_eventos_no_relevantes(outreach_mod):
+    outreach = outreach_mod
+    r = outreach._outreach_process_brevo_event({"event": "opened", "email": "x@y.es"})
+    assert r["handled"] is False
+
+
+def test_cta_apunta_a_demo_go_y_no_se_duplica(monkeypatch):
+    monkeypatch.setenv("OUTREACH_TRACKING_SECRET", "sek")
+    monkeypatch.setenv("OUTREACH_TRACKING_BASE_URL", "https://app.vantelia.es")
+    import importlib, sys
+    sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1] / "scripts"))
+    ot = importlib.import_module("outreach_templates")
+    p = ot.Prospect(email="a@b.es", business_name="Bar Pepe", niche="restaurante", website="https://b.es")
+    url = ot.demo_go_url("cold", p)
+    assert url.startswith("https://app.vantelia.es/demo/go/")
+    # apply_tracking NO debe envolver el /demo/go
+    html = f'<a href="{url}">demo</a>'
+    wrapped = ot.apply_tracking(html, "a@b.es", "cold", "https://app.vantelia.es", "sek")
+    assert "/track/click/" not in wrapped.split("</a>")[0]  # el href del CTA queda intacto
+    assert "track/open" in wrapped  # pixel de apertura si
+
+
+def test_demo_go_sin_secret_cae_al_formulario(monkeypatch):
+    monkeypatch.delenv("OUTREACH_TRACKING_SECRET", raising=False)
+    import importlib
+    ot = importlib.import_module("outreach_templates")
+    p = ot.Prospect(email="a@b.es", business_name="X", website="https://b.es")
+    url = ot.demo_go_url("cold", p)
+    assert "/demo/go/" not in url and "vantelia.es/demo" in url
+
+
 def test_combo_agotado_tras_dos_rondas_sin_importables(outreach_mod):
     outreach = outreach_mod
     with outreach._outreach_db() as conn:

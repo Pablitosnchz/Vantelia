@@ -55,7 +55,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 from outreach_templates import (  # noqa: E402
     Prospect, STAGE_ORDER, render, niche_copy, stable_pick,
     html_shell, signature_html, cta_button_html, footer_html, footer_text,
-    assign_variant, demo_url_with_utm,
+    assign_variant, demo_url_with_utm, demo_go_url,
 )
 
 BASE_DIR = SCRIPTS_DIR.parent
@@ -609,8 +609,8 @@ def _template_vars(p: Prospect, unsub: str, stage: str) -> dict[str, str]:
         "signature_html": signature_html(stage),
         "footer_html": footer_html(unsub),
         "footer_text": footer_text(unsub),
-        "cta_url": demo_url_with_utm(stage, p),
-        "cta_html": cta_button_html("Crear bot gratis en 2 min", demo_url_with_utm(stage, p)),
+        "cta_url": demo_go_url(stage, p),
+        "cta_html": cta_button_html("Crear bot gratis en 2 min", demo_go_url(stage, p)),
     }
 
 

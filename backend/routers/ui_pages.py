@@ -356,130 +356,42 @@ async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGene
             detail="El servicio de demos no esta disponible en este momento.",
         )
 
-    base_slug = onboarding_utils.slugify_company(data.nombre_empresa).lower()[:30] or "empresa"
-    token = secrets.token_hex(3)
-    cliente_id = f"{demo_agenda.DEMO_TENANT_PREFIX}{base_slug}_{token}"
-    textnorm._assert_valid_client_id(cliente_id)
-
     sector_clean = data.sector.strip()
+    empresa_clean = data.nombre_empresa.strip()
     _sector_defaults = demo_agenda._DEMO_SECTOR_DEFAULTS.get(sector_clean, (
         f"Negocio del sector {sector_clean}.",
         "Servicios disponibles. Consultar para más información.",
     ))
     descripcion_clean = (data.descripcion or "").strip() or _sector_defaults[0]
     servicios_clean = (data.servicios or "").strip() or _sector_defaults[1]
-    horario_clean = (data.horario or "").strip()
-    empresa_clean = data.nombre_empresa.strip()
 
-    manual_info = (
-        f"Empresa: {empresa_clean}\n"
-        f"Sector: {sector_clean}\n\n"
-        f"Descripcion del negocio:\n{descripcion_clean}\n\n"
-        f"Servicios principales:\n{servicios_clean}\n"
-    )
-    if horario_clean:
-        manual_info += f"\nHorario:\n{horario_clean}\n"
-    manual_info += f"\nContacto comercial: {data.email}\n"
-
-    detected_business_name = empresa_clean
-    info_txt = manual_info
-    allowed_origins: List[str] = []
-    scrape_result = None
-
-    base_app = (settings.APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
-    allowed_origins.append(base_app)
-    for origin in ("https://www.vantelia.es", "https://vantelia.es"):
-        if origin not in allowed_origins:
-            allowed_origins.append(origin)
-
-    if data.website_url:
-        try:
-            scrape_result = await timeutils._to_thread(
-                run_onboarding,
-                website_url=data.website_url,
-                api_key=settings.OPENAI_API_KEY,
-                nombre_bot="Asistente",
-                tono="profesional",
-                idioma="es",
-                max_paginas=4,
-            )
-            if scrape_result.detected_business_name:
-                detected_business_name = scrape_result.detected_business_name
-            if scrape_result.info_txt:
-                info_txt = (
-                    manual_info
-                    + "\n--- Informacion extraida de la web ---\n"
-                    + scrape_result.info_txt
-                )
-            parsed = urlparse(scrape_result.normalized_url)
-            if parsed.netloc:
-                origin_url = f"{parsed.scheme}://{parsed.netloc}"
-                if origin_url not in allowed_origins:
-                    allowed_origins.append(origin_url)
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.warning("Demo scraping fallo para %s: %s", data.website_url, exc)
-
-    color_val = (data.color or "#0EA5E9").strip()
-    if not re.match(r"^#[0-9A-Fa-f]{6}$", color_val):
-        color_val = "#0EA5E9"
-
-    icono = "".join(ch for ch in detected_business_name if ch.isalnum())[:2].upper() or "AI"
-
-    payload = AdminClientePayload(
-        nombre=detected_business_name[:120] or empresa_clean[:120] or "Empresa",
-        icono=icono,
-        color=color_val,
-        bienvenida=(
-            f"Hola, soy el asistente virtual de {detected_business_name}. "
-            "Cuentame en que puedo ayudarte."
-        )[:400],
-        prompt_extra=(
-            "Habla con tono profesional y cercano, mantente dentro del contexto del negocio, "
-            "responde solo con informacion apoyada en la base documental y deriva al equipo "
-            "humano cuando falten datos. Si te preguntan precios concretos, indica que estos "
-            "son orientativos y deben confirmarse con el equipo."
-        ),
-        allowed_origins=allowed_origins,
-        contacto_email=str(data.email),
-        contacto_telefono="",
-        branding_text="Powered by Vantelia",
-        booking_enabled=False,
-        booking_timezone=settings.DEFAULT_TIMEZONE,
-        booking_slot_minutes=30,
-        booking_day_start="09:00",
-        booking_day_end="18:00",
-        booking_closed_weekdays=[6],
-        booking_provider="internal",
-        booking_webhook_env="WEBHOOK_DEFAULT",
-        booking_webhook_url="",
-        booking_calendly_user_env="",
-        booking_calendly_event_type_env="",
-        booking_calendly_location_kind="",
-        booking_calendly_location_value="",
-        booking_google_calendar_id_env="",
-        booking_google_service_account_env="",
-        booking_success_message="Tu solicitud de cita ha quedado registrada correctamente.",
-        info_txt=info_txt[:120000],
-        reindex_after_save=True,
-    )
-
+    # Fuente UNICA de generacion (comparte logica con la pre-generacion al abrir
+    # el email). Sincrona -> a un hilo para no bloquear el event loop.
     try:
-        await timeutils._to_thread(portal._save_admin_client_payload, cliente_id, payload, request)
-        if scrape_result is not None:
-            rag._seed_qa_from_onboarding(cliente_id, scrape_result)
+        result = await timeutils._to_thread(
+            demo_agenda.build_demo_tenant,
+            nombre_empresa=empresa_clean,
+            sector=sector_clean,
+            email=str(data.email),
+            website_url=data.website_url or "",
+            descripcion=data.descripcion or "",
+            servicios=data.servicios or "",
+            horario=data.horario or "",
+            color=data.color or "",
+            request=request,
+        )
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
-        settings.logger.error("Error guardando demo %s: %s", cliente_id, exc)
+        settings.logger.error("Error generando demo para %s: %s", data.email, exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="No se ha podido generar la demo. Intentalo de nuevo en unos minutos.",
         ) from exc
 
-    demo_agenda._register_demo_tenant(cliente_id)
-
+    cliente_id = result["cliente_id"]
+    demo_url = result["demo_url"]
     expires_dt = timeutils._utc_now() + timedelta(seconds=demo_agenda.DEMO_TTL_SECONDS)
-    demo_url = f"{textnorm._public_base_url(request)}/demo/{cliente_id}"
 
     try:
         if globals().get("OUTREACH_AVAILABLE"):

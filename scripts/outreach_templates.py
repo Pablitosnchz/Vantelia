@@ -319,6 +319,18 @@ def demo_url_with_utm(stage: str, p: Prospect | None = None) -> str:
     return f"{DEMO_PAGE_URL}{separator}{urlencode({k: v for k, v in params.items() if v})}"
 
 
+def demo_go_url(stage: str, p: "Prospect | None" = None) -> str:
+    """CTA del email: enlace /demo/go/{token} que sirve la demo YA generada al
+    instante (pre-generada al abrir). Sin tracking configurado o sin prospect,
+    cae al formulario clasico. app.vantelia.es lo resuelve por el token."""
+    secret = os.getenv("OUTREACH_TRACKING_SECRET", "").strip()
+    base = os.getenv("OUTREACH_TRACKING_BASE_URL", "").strip().rstrip("/") or "https://app.vantelia.es"
+    if not secret or not p or not getattr(p, "email", ""):
+        return demo_url_with_utm(stage, p)
+    token = make_tracking_token(p.email, stage, secret)
+    return f"{base}/demo/go/{token}"
+
+
 def calendar_url() -> str:
     return os.getenv("OUTREACH_CALENDAR_URL", "").strip()
 
@@ -439,7 +451,7 @@ def _cta_block(primary_text: str, stage: str = "cold", p: Prospect | None = None
     """Devuelve (text_cta, html_cta). CTA con UTM por stage para analytics."""
     if p and p.business_name:
         primary_text = f"Generar demo gratis para {p.business_name}"
-    utm_url = demo_url_with_utm(stage, p)
+    utm_url = demo_go_url(stage, p)
     book = calendar_url()
     minutes = _booking_minutes()
     text_lines: list[str] = [f"{primary_text}: {utm_url}"]
@@ -661,8 +673,9 @@ def apply_tracking(html_body: str, email: str, stage: str, base_url: str, secret
 
     def _rewrite(match: re.Match[str]) -> str:
         quote_char, url, end_quote = match.group(1), match.group(2), match.group(3)
-        # No reescribir enlaces que ya son del propio tracker.
-        if url.startswith(f"{base}/track/"):
+        # No reescribir enlaces que ya son del propio tracker ni el /demo/go
+        # (registra su propio clic; envolverlo duplicaria el evento).
+        if url.startswith(f"{base}/track/") or "/demo/go/" in url:
             return match.group(0)
         wrapped = f"{base}/track/click/{token}?u={quote(html_lib.unescape(url), safe='')}"
         return f"href={quote_char}{wrapped}{end_quote}"

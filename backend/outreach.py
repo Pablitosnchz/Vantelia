@@ -324,6 +324,195 @@ def _autopilot_log(level: str, event: str, message: str, detail: Any = None) -> 
         pass
 
 
+# --- Pre-generacion de demo al ABRIR el email -----------------------------
+# Al abrir (pixel), se lanza la generacion de la demo personalizada en segundo
+# plano. Cuando el prospecto hace clic (segundos/minutos despues) la demo YA
+# esta lista -> carga instantanea -> parece legitimo, no un loader eterno.
+
+_demo_pregen_lock = threading.Lock()
+_demo_pregen_inflight: Set[str] = set()
+
+
+def _outreach_prospect_row_for_email(email: str) -> Optional[Dict[str, Any]]:
+    email = (email or "").strip().lower()
+    if not email:
+        return None
+    try:
+        with _outreach_db() as conn:
+            row = conn.execute("SELECT * FROM prospects WHERE email=?", (email,)).fetchone()
+            return dict(row) if row else None
+    except Exception:
+        return None
+
+
+def _outreach_demo_sector_for_row(row: Dict[str, Any]) -> str:
+    try:
+        from outreach_templates import Prospect as _P, _demo_sector_for_prospect  # type: ignore
+
+        p = _P(email=row.get("email", ""), business_name=row.get("business_name", ""),
+               niche=row.get("niche", ""), service_hint=row.get("service_hint", ""))
+        return _demo_sector_for_prospect(p)
+    except Exception:
+        return "Otro"
+
+
+def _outreach_demo_pregen_enabled() -> bool:
+    return os.getenv("OUTREACH_DEMO_PREGEN", "true").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _outreach_maybe_pregenerate_demo(email: str) -> None:
+    """Si el prospecto tiene web y aun no tiene demo viva, la genera en background.
+    Idempotente y con guard de in-flight para no duplicar ni gastar de mas."""
+    if not _outreach_demo_pregen_enabled() or not OUTREACH_AVAILABLE:
+        return
+    email = (email or "").strip().lower()
+    if not email:
+        return
+    row = _outreach_prospect_row_for_email(email)
+    if not row or not (row.get("website") or "").strip():
+        return  # sin web no hay nada que rastrear; se genera al hacer clic
+    try:
+        from backend import demo_agenda
+        existing, _ = demo_agenda._existing_demo_for_email(email)
+        if existing:
+            return
+    except Exception:
+        return
+    with _demo_pregen_lock:
+        if email in _demo_pregen_inflight:
+            return
+        _demo_pregen_inflight.add(email)
+
+    def _worker():
+        try:
+            from backend import demo_agenda
+            if not settings.OPENAI_API_KEY:
+                return
+            res = demo_agenda.build_demo_tenant(
+                nombre_empresa=row.get("business_name") or "Empresa",
+                sector=_outreach_demo_sector_for_row(row),
+                email=email,
+                website_url=(row.get("website") or "").strip(),
+            )
+            _autopilot_log(
+                "success", "demo_pregenerated",
+                f"Demo pre-generada al abrir: {row.get('business_name') or email}",
+                {"email": email, "cliente_id": res.get("cliente_id"), "reused": res.get("reused")},
+            )
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.warning("Pre-generacion de demo fallo para %s: %s", email, exc)
+        finally:
+            with _demo_pregen_lock:
+                _demo_pregen_inflight.discard(email)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+def _outreach_demo_target_for_email(email: str) -> Dict[str, Any]:
+    """Resuelve a donde mandar el clic del email. Devuelve
+    {status: 'ready'|'generating'|'form', demo_url?, business?, form_url?}."""
+    email = (email or "").strip().lower()
+    row = _outreach_prospect_row_for_email(email)
+    business = (row or {}).get("business_name") or ""
+    base_app = (settings.APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
+    try:
+        from backend import demo_agenda
+        existing, _ = demo_agenda._existing_demo_for_email(email)
+        if existing:
+            return {"status": "ready", "demo_url": f"{base_app}/demo/{existing}", "business": business}
+    except Exception:
+        pass
+    # No lista: si tiene web, dispara/continua generacion y muestra pagina de espera.
+    if row and (row.get("website") or "").strip():
+        with _demo_pregen_lock:
+            generating = email in _demo_pregen_inflight
+        if not generating:
+            _outreach_maybe_pregenerate_demo(email)
+        return {"status": "generating", "business": business}
+    # Sin web: al formulario clasico (con datos precargados).
+    return {"status": "form", "business": business, "form_url": _outreach_demo_form_url(row or {})}
+
+
+def _outreach_demo_form_url(row: Dict[str, Any]) -> str:
+    from urllib.parse import urlencode
+    params = {
+        "utm_source": "outreach", "utm_medium": "email", "utm_campaign": "cold",
+        "empresa": row.get("business_name") or "",
+        "email": row.get("email") or "",
+        "web": row.get("website") or "",
+        "sector": _outreach_demo_sector_for_row(row) if row else "",
+    }
+    q = urlencode({k: v for k, v in params.items() if v})
+    return f"https://www.vantelia.es/demo/?{q}"
+
+
+def _outreach_record_external_bounce(email: str, reason: str = "", kind: str = "bounce") -> bool:
+    """Registra un rebote/queja notificado por un proveedor externo (webhook Brevo).
+
+    Marca el prospect (bounced/baja), lo suprime y registra el evento. Idempotente.
+    Devuelve True si el evento era nuevo. Espeja _record_bounce del poller IMAP,
+    necesario porque con SMTP dedicado (Brevo) los NDR NO llegan al buzon IMAP.
+    """
+    email = (email or "").strip().lower()
+    if not email or "@" not in email:
+        return False
+    status = "baja" if kind in ("spam", "unsubscribe", "complaint") else "bounced"
+    ev_type = "bounce" if status == "bounced" else "unsubscribe"
+    try:
+        with _outreach_db() as conn:
+            if not conn.execute("SELECT 1 FROM prospects WHERE email=?", (email,)).fetchone():
+                return False
+            already = conn.execute(
+                "SELECT 1 FROM events WHERE email=? AND type=? LIMIT 1", (email, ev_type)
+            ).fetchone()
+            conn.execute(
+                "INSERT INTO events (email, type, stage, url, ts, ua, ip) VALUES (?,?,?,?,?,'','')",
+                (email, ev_type, "", reason[:200], _outreach_now()),
+            )
+            conn.execute(
+                "UPDATE prospects SET status=?, updated_at=? WHERE email=?",
+                (status, _outreach_now(), email),
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO suppressions (email, reason, added_at) VALUES (?,?,?)",
+                (email, kind or "bounce", _outreach_now()),
+            )
+            conn.commit()
+        _autopilot_log(
+            "warning", "external_bounce" if status == "bounced" else "external_unsubscribe",
+            f"{'Rebote' if status=='bounced' else 'Baja'} (Brevo): {email} → {status} + suprimido",
+            {"email": email, "kind": kind, "reason": reason[:160]},
+        )
+        return not already
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error("No se pudo registrar rebote externo de %s: %s", email, exc)
+        return False
+
+
+# Eventos de Brevo que tratamos como rebote duro / baja.
+BREVO_BOUNCE_EVENTS = {"hard_bounce", "blocked", "invalid_email", "error", "deferred"}
+BREVO_UNSUB_EVENTS = {"spam", "complaint", "unsubscribed", "unsubscribe", "list_addition"}
+
+
+def _outreach_process_brevo_event(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Procesa un evento del webhook de Brevo. Devuelve {handled, action, email}."""
+    event = str(payload.get("event") or payload.get("type") or "").strip().lower()
+    email = str(payload.get("email") or "").strip().lower()
+    reason = str(payload.get("reason") or payload.get("subject") or "")[:200]
+    if not email:
+        return {"handled": False, "action": "no_email"}
+    if event in BREVO_BOUNCE_EVENTS:
+        created = _outreach_record_external_bounce(email, reason, kind="bounce")
+        if created:
+            _outreach_check_bounce_rate()
+        return {"handled": True, "action": "bounce", "email": email, "new": created}
+    if event in BREVO_UNSUB_EVENTS:
+        _outreach_record_external_bounce(email, reason, kind="unsubscribe")
+        return {"handled": True, "action": "unsubscribe", "email": email}
+    # opened/click/delivered los ignoramos (ya tenemos tracking propio).
+    return {"handled": False, "action": "ignored", "event": event}
+
+
 outreach_autonomous_tick_lock = threading.Lock()
 
 

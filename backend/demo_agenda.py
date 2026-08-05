@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import re as _re
 import secrets
 import sqlite3
 import time
@@ -15,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+from urllib.parse import urlparse as _urlparse
 
 from fastapi import Request
 
@@ -57,6 +59,191 @@ def _register_demo_tenant(cliente_id: str) -> None:
     registry = _load_demo_registry()
     registry[cliente_id] = time.time()
     _save_demo_registry(registry)
+
+
+def _synthetic_request():
+    """Request minimo para reutilizar helpers que exigen Request en generacion
+    en segundo plano (pre-generacion al abrir el email). _public_base_url usa
+    APP_BASE_URL configurado, asi que no lee cabeceras reales."""
+    from starlette.requests import Request
+
+    base = (settings.APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
+    parsed = _urlparse(base)
+    scheme = parsed.scheme or "https"
+    host = parsed.hostname or "app.vantelia.es"
+    port = parsed.port or (443 if scheme == "https" else 80)
+    scope = {
+        "type": "http", "method": "POST", "path": "/demo/generate",
+        "headers": [(b"host", host.encode())], "scheme": scheme,
+        "server": (host, port), "query_string": b"", "client": ("127.0.0.1", 0),
+    }
+    return Request(scope)
+
+
+def _existing_demo_for_email(email: str):
+    """(cliente_id, created_ts) de una demo viva para ese email, o (None, None)."""
+    email_lower = (email or "").strip().lower()
+    if not email_lower:
+        return None, None
+    _purge_expired_demos()
+    registry = _load_demo_registry()
+    now_ts = time.time()
+    for cid, created_ts in registry.items():
+        cfg = appstate.CONFIG_CLIENTES.get(cid, {})
+        if (
+            str(cfg.get("contacto", {}).get("email", "")).lower() == email_lower
+            and now_ts - created_ts < DEMO_TTL_SECONDS
+        ):
+            return cid, created_ts
+    return None, None
+
+
+def build_demo_tenant(
+    *,
+    nombre_empresa: str,
+    sector: str,
+    email: str,
+    website_url: str = "",
+    descripcion: str = "",
+    servicios: str = "",
+    horario: str = "",
+    color: str = "",
+    request=None,
+) -> Dict[str, Any]:
+    """Crea (o reutiliza) un tenant demo personalizado. SINCRONO: pensado para
+    correr en un hilo. Rastrea la web del prospecto (run_onboarding) y siembra
+    RAG. Fuente UNICA usada por POST /demo/generate y por la pre-generacion al
+    abrir el email. Devuelve {cliente_id, demo_url, expires_at, reused, ...}."""
+    import onboarding_utils
+    from api_models import AdminClientePayload
+    from backend import portal, rag
+
+    empresa_clean = (nombre_empresa or "").strip()[:120] or "Empresa"
+    sector_clean = (sector or "").strip() or "Otro"
+    email_clean = (email or "").strip()
+    req = request or _synthetic_request()
+
+    reused_id, _ = _existing_demo_for_email(email_clean)
+    if reused_id:
+        return {
+            "cliente_id": reused_id,
+            "demo_url": f"{textnorm._public_base_url(req)}/demo/{reused_id}",
+            "reused": True,
+        }
+
+    base_slug = onboarding_utils.slugify_company(empresa_clean).lower()[:30] or "empresa"
+    cliente_id = f"{DEMO_TENANT_PREFIX}{base_slug}_{secrets.token_hex(3)}"
+    textnorm._assert_valid_client_id(cliente_id)
+
+    defaults = _DEMO_SECTOR_DEFAULTS.get(sector_clean, (
+        f"Negocio del sector {sector_clean}.",
+        "Servicios disponibles. Consultar para mas informacion.",
+    ))
+    descripcion_clean = (descripcion or "").strip() or defaults[0]
+    servicios_clean = (servicios or "").strip() or defaults[1]
+    horario_clean = (horario or "").strip()
+
+    manual_info = (
+        f"Empresa: {empresa_clean}\n"
+        f"Sector: {sector_clean}\n\n"
+        f"Descripcion del negocio:\n{descripcion_clean}\n\n"
+        f"Servicios principales:\n{servicios_clean}\n"
+    )
+    if horario_clean:
+        manual_info += f"\nHorario:\n{horario_clean}\n"
+    manual_info += f"\nContacto comercial: {email_clean}\n"
+
+    detected_business_name = empresa_clean
+    info_txt = manual_info
+    base_app = (settings.APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
+    allowed_origins = [base_app]
+    for origin in ("https://www.vantelia.es", "https://vantelia.es"):
+        if origin not in allowed_origins:
+            allowed_origins.append(origin)
+
+    scrape_result = None
+    if website_url:
+        try:
+            scrape_result = onboarding_utils.run_onboarding(
+                website_url=website_url,
+                api_key=settings.OPENAI_API_KEY,
+                nombre_bot="Asistente",
+                tono="profesional",
+                idioma="es",
+                max_paginas=4,
+            )
+            if scrape_result.detected_business_name:
+                detected_business_name = scrape_result.detected_business_name
+            if scrape_result.info_txt:
+                info_txt = manual_info + "\n--- Informacion extraida de la web ---\n" + scrape_result.info_txt
+            parsed = _urlparse(scrape_result.normalized_url)
+            if parsed.netloc:
+                origin_url = f"{parsed.scheme}://{parsed.netloc}"
+                if origin_url not in allowed_origins:
+                    allowed_origins.append(origin_url)
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.warning("Demo scraping fallo para %s: %s", website_url, exc)
+
+    color_val = (color or "#0EA5E9").strip()
+    if not _re.match(r"^#[0-9A-Fa-f]{6}$", color_val):
+        color_val = "#0EA5E9"
+    icono = "".join(ch for ch in detected_business_name if ch.isalnum())[:2].upper() or "AI"
+
+    payload = AdminClientePayload(
+        nombre=detected_business_name[:120] or empresa_clean[:120] or "Empresa",
+        icono=icono,
+        color=color_val,
+        bienvenida=(
+            f"Hola, soy el asistente virtual de {detected_business_name}. "
+            "Cuentame en que puedo ayudarte."
+        )[:400],
+        prompt_extra=(
+            "Habla con tono profesional y cercano, mantente dentro del contexto del negocio, "
+            "responde solo con informacion apoyada en la base documental y deriva al equipo "
+            "humano cuando falten datos. Si te preguntan precios concretos, indica que estos "
+            "son orientativos y deben confirmarse con el equipo."
+        ),
+        allowed_origins=allowed_origins,
+        contacto_email=email_clean,
+        contacto_telefono="",
+        branding_text="Powered by Vantelia",
+        booking_enabled=False,
+        booking_timezone=settings.DEFAULT_TIMEZONE,
+        booking_slot_minutes=30,
+        booking_day_start="09:00",
+        booking_day_end="18:00",
+        booking_closed_weekdays=[6],
+        booking_provider="internal",
+        booking_webhook_env="WEBHOOK_DEFAULT",
+        booking_webhook_url="",
+        booking_calendly_user_env="",
+        booking_calendly_event_type_env="",
+        booking_calendly_location_kind="",
+        booking_calendly_location_value="",
+        booking_google_calendar_id_env="",
+        booking_google_service_account_env="",
+        booking_success_message="Tu solicitud de cita ha quedado registrada correctamente.",
+        info_txt=info_txt[:120000],
+        reindex_after_save=True,
+    )
+
+    portal._save_admin_client_payload(cliente_id, payload, req)
+    if scrape_result is not None:
+        try:
+            rag._seed_qa_from_onboarding(cliente_id, scrape_result)
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.debug("No se pudo sembrar Q&A demo %s: %s", cliente_id, exc)
+    _register_demo_tenant(cliente_id)
+
+    expires_dt = timeutils._utc_now() + timedelta(seconds=DEMO_TTL_SECONDS)
+    return {
+        "cliente_id": cliente_id,
+        "demo_url": f"{textnorm._public_base_url(req)}/demo/{cliente_id}",
+        "expires_at": expires_dt.isoformat(),
+        "expires_in_seconds": DEMO_TTL_SECONDS,
+        "detected_business_name": detected_business_name,
+        "reused": False,
+    }
 
 
 def _purge_expired_demos() -> int:
