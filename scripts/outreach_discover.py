@@ -212,7 +212,10 @@ def _robots_allows(url: str) -> bool:
 
 def _normalize_email(email: str) -> str:
     from urllib.parse import unquote
-    return unquote(email).strip().lower()
+    value = unquote(email or "").strip().lower()
+    if value.startswith("mailto:"):
+        value = value[len("mailto:"):]
+    return value.split("?")[0].strip()
 
 
 def _normalize_text(value: str) -> str:

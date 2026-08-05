@@ -264,7 +264,10 @@ def clean(value: str) -> str:
 
 
 def normalize_email(value: str) -> str:
-    return clean(value).lower()
+    v = clean(value).lower()
+    if v.startswith("mailto:"):
+        v = v[len("mailto:"):]
+    return v.split("?")[0].strip()
 
 
 def domain_of(email: str) -> str:
