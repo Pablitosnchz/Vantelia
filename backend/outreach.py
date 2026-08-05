@@ -490,7 +490,11 @@ def _outreach_record_external_bounce(email: str, reason: str = "", kind: str = "
 
 
 # Eventos de Brevo que tratamos como rebote duro / baja.
-BREVO_BOUNCE_EVENTS = {"hard_bounce", "blocked", "invalid_email", "error", "deferred"}
+# OJO: "deferred"/"soft_bounce" son retrasos temporales; solo el hard bounce
+# repetido es muerte real. Brevo ya suprime el hard tras varios soft, asi que
+# actuamos sobre hard_bounce/blocked/invalid/error, NO sobre soft/deferred
+# (marcar bounced por un retraso temporal quemaria prospects validos).
+BREVO_BOUNCE_EVENTS = {"hard_bounce", "blocked", "invalid_email", "error"}
 BREVO_UNSUB_EVENTS = {"spam", "complaint", "unsubscribed", "unsubscribe", "list_addition"}
 
 
