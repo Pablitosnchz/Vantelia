@@ -450,7 +450,9 @@ def _booking_minutes() -> int:
 def _cta_block(primary_text: str, stage: str = "cold", p: Prospect | None = None) -> tuple[str, str]:
     """Devuelve (text_cta, html_cta). CTA con UTM por stage para analytics."""
     if p and p.business_name:
-        primary_text = f"Generar demo gratis para {p.business_name}"
+        # La demo ya esta montada y se sirve al instante -> CTA de "ya listo,
+        # solo miralo" (mas clic que "generar", que suena a trabajo/espera).
+        primary_text = f"Ver el asistente de {p.business_name} funcionando"
     utm_url = demo_go_url(stage, p)
     book = calendar_url()
     minutes = _booking_minutes()
