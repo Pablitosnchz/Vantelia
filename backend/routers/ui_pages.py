@@ -328,27 +328,25 @@ async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGene
     client_ip = request.client.host if request.client else "unknown"
     security._check_rate_limit(f"demo:{client_ip}", 3)
 
-    demo_agenda._purge_expired_demos()
-    registry = demo_agenda._load_demo_registry()
+    await timeutils._to_thread(demo_agenda._purge_expired_demos)
     email_lower = str(data.email).lower()
     now_ts = time.time()
-    for existing_id, created_ts in registry.items():
-        cfg = appstate.CONFIG_CLIENTES.get(existing_id, {})
-        contacto_existing = cfg.get("contacto", {})
-        if (
-            str(contacto_existing.get("email", "")).lower() == email_lower
-            and now_ts - created_ts < demo_agenda.DEMO_TTL_SECONDS
-        ):
-            existing_url = f"{textnorm._public_base_url(request)}/demo/{existing_id}"
-            expires_dt = datetime.fromtimestamp(created_ts + demo_agenda.DEMO_TTL_SECONDS, tz=timezone.utc)
-            remaining = max(0, int(created_ts + demo_agenda.DEMO_TTL_SECONDS - now_ts))
-            return DemoGenerateResponse(
-                ok=True,
-                cliente_id=existing_id,
-                demo_url=existing_url,
-                expires_at=expires_dt.isoformat(),
-                expires_in_seconds=remaining,
-            )
+    existing_id, created_ts = demo_agenda._existing_demo_for_email(email_lower)
+    if existing_id and created_ts is not None:
+        existing_url = demo_agenda._canonical_demo_url(existing_id)
+        expires_dt = datetime.fromtimestamp(
+            created_ts + demo_agenda.DEMO_TTL_SECONDS, tz=timezone.utc
+        )
+        remaining = max(
+            0, int(created_ts + demo_agenda.DEMO_TTL_SECONDS - now_ts)
+        )
+        return DemoGenerateResponse(
+            ok=True,
+            cliente_id=existing_id,
+            demo_url=existing_url,
+            expires_at=expires_dt.isoformat(),
+            expires_in_seconds=remaining,
+        )
 
     if not settings.OPENAI_API_KEY:
         raise HTTPException(
@@ -390,27 +388,90 @@ async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGene
         ) from exc
 
     cliente_id = result["cliente_id"]
-    demo_url = result["demo_url"]
-    expires_dt = timeutils._utc_now() + timedelta(seconds=demo_agenda.DEMO_TTL_SECONDS)
+    demo_url = demo_agenda._canonical_demo_url(cliente_id)
+    reused = bool(result.get("reused"))
+    created_ts = demo_agenda._load_demo_registry().get(cliente_id, time.time())
+    expires_dt = datetime.fromtimestamp(
+        created_ts + demo_agenda.DEMO_TTL_SECONDS, tz=timezone.utc
+    )
+    remaining = max(0, int(created_ts + demo_agenda.DEMO_TTL_SECONDS - time.time()))
+
+    # La fuente unica puede haber encontrado la demo mientras esta request
+    # esperaba el lock de ese email. En ese caso no duplicamos senales ni correo.
+    if reused:
+        return DemoGenerateResponse(
+            ok=True,
+            cliente_id=cliente_id,
+            demo_url=demo_url,
+            expires_at=expires_dt.isoformat(),
+            expires_in_seconds=remaining,
+        )
 
     try:
-        if globals().get("OUTREACH_AVAILABLE"):
+        if outreach.OUTREACH_AVAILABLE:
+            outreach_stage = outreach._outreach_latest_stage_for_email(email_lower)
             with outreach._outreach_db() as outreach_conn:
                 outreach_conn.execute(
                     "INSERT INTO events (email, type, stage, url, ts, ua, ip) VALUES (?,?,?,?,?,?,?)",
                     (
                         email_lower,
                         "demo_generated",
-                        "cold",
+                        outreach_stage,
                         demo_url,
                         timeutils._utc_now().isoformat(timespec="seconds"),
-                        request.headers.get("user-agent", "")[:200],
-                        client_ip[:64],
+                        "",
+                        "",
                     ),
                 )
                 outreach_conn.commit()
     except Exception as exc:  # noqa: BLE001
         settings.logger.debug("No se pudo registrar demo_generated en outreach: %s", exc)
+
+    # Se envia solo al crear una demo nueva. La rama de reutilizacion retorna
+    # antes, evitando duplicar esta confirmacion si el usuario repite el formulario.
+    if emailing._email_delivery_configured():
+        try:
+            reply_to_vantelia = settings.PORTAL_SUPPORT_EMAIL or settings.SMTP_REPLY_TO
+            lead_subject = f"Tu demo de {empresa_clean} ya esta lista"
+            lead_text = (
+                f"Hola,\n\n"
+                f"Tu demo personalizada de {empresa_clean} ya esta lista:\n{demo_url}\n\n"
+                "Puedes probarla como si fueras uno de tus clientes. "
+                "Para saber que te resultaria mas util, responde a este correo solo con 1, 2 o 3:\n\n"
+                "1. Responder dudas frecuentes automaticamente\n"
+                "2. Convertir mas consultas en citas o contactos\n"
+                "3. Continuar las conversaciones por WhatsApp\n\n"
+                "Si prefieres, tambien puedes responder con cualquier duda concreta.\n\n"
+                "Un saludo,\nVantelia"
+            )
+            lead_html = (
+                '<div style="font-family:Arial,sans-serif;max-width:620px;color:#172033;line-height:1.6">'
+                f'<h2 style="color:#00a6c7">Tu demo de {escape(empresa_clean)} ya esta lista</h2>'
+                '<p>Puedes probarla como si fueras uno de tus clientes.</p>'
+                f'<p><a href="{escape(demo_url)}" style="display:inline-block;padding:12px 18px;'
+                'background:#00b1d9;color:#07101f;border-radius:10px;text-decoration:none;font-weight:700">'
+                'Abrir mi demo</a></p>'
+                '<p>Para saber que te resultaria mas util, responde a este correo solo con '
+                '<strong>1, 2 o 3</strong>:</p>'
+                '<ol>'
+                '<li>Responder dudas frecuentes automaticamente</li>'
+                '<li>Convertir mas consultas en citas o contactos</li>'
+                '<li>Continuar las conversaciones por WhatsApp</li>'
+                '</ol>'
+                '<p>Si prefieres, tambien puedes responder con cualquier duda concreta.</p>'
+                '<p>Un saludo,<br>Vantelia</p>'
+                '</div>'
+            )
+            await timeutils._to_thread(
+                emailing._send_email_message,
+                str(data.email),
+                lead_subject,
+                lead_text,
+                lead_html,
+                reply_to=reply_to_vantelia,
+            )
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.warning("No se pudo enviar la confirmacion de demo al lead: %s", exc)
 
     if emailing._email_delivery_configured() and settings.CONSULTA_NOTIFICATION_EMAIL:
         try:
@@ -446,7 +507,8 @@ async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGene
                 f'<p style="font-size:12px;color:#999">IP: {escape(client_ip)} - lead automatico desde /demo/</p>'
                 '</div>'
             )
-            emailing._send_email_message(
+            await timeutils._to_thread(
+                emailing._send_email_message,
                 settings.CONSULTA_NOTIFICATION_EMAIL,
                 asunto,
                 cuerpo_text,
@@ -466,7 +528,7 @@ async def demo_generate(data: DemoGeneratePayload, request: Request) -> DemoGene
         cliente_id=cliente_id,
         demo_url=demo_url,
         expires_at=expires_dt.isoformat(),
-        expires_in_seconds=demo_agenda.DEMO_TTL_SECONDS,
+        expires_in_seconds=remaining,
     )
 
 

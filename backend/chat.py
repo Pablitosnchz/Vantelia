@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 import time
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import Request
 
@@ -414,6 +414,7 @@ async def _process_chat_message(
     origin_override: str = "",
     user_agent_override: str = "",
     trusted_phone: str = "",
+    on_user_message_persisted: Optional[Callable[[str], None]] = None,
 ) -> RespuestaChat:
     commercial_intent = _detect_commercial_intent(message)
     rag._ensure_chat_session_record(
@@ -430,6 +431,15 @@ async def _process_chat_message(
         content=message,
         intent=commercial_intent,
     )
+    if on_user_message_persisted is not None:
+        try:
+            on_user_message_persisted(session_id)
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.debug(
+                "Callback posterior a persistencia de chat fallo para %s: %s",
+                cliente_id,
+                exc,
+            )
     client_config = clients._get_client_config(cliente_id)
     booking_enabled = bool(client_config["booking"]["enabled"]) and clients._client_booking_plan_enabled(cliente_id)
     # Identidad de Apariencia: "empresa" = negocio (el menu se presenta en su nombre);

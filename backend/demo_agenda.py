@@ -6,19 +6,22 @@ empdemo_*) y purga; registro de demos con TTL.
 from __future__ import annotations
 
 import json
+import math
 import os
 import random
 import re as _re
 import secrets
 import sqlite3
+import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
-from urllib.parse import urlparse as _urlparse
+from typing import Any, Dict, Iterator, List, Optional, Tuple
+from urllib.parse import quote as _urlquote, urlparse as _urlparse
 
-from fastapi import Request
+from fastapi import HTTPException, Request, status
 
 try:
     from zoneinfo import ZoneInfo
@@ -28,37 +31,641 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
 from backend import agenda, appstate, booking, clients, db, settings, textnorm, timeutils
 
 DEMO_TENANT_PREFIX = "demo_auto_"
+_DEMO_REGISTRY_MIGRATION_KEY = "json_migrated_v2"
 
 
 DEMO_TTL_SECONDS = int(os.getenv("DEMO_TENANT_TTL_SECONDS", "3600"))
+
+
+# El registro y las reservas viven en SQLite: es la fuente compartida entre
+# workers. El lock de fichero protege ademas las escrituras de config.json,
+# que siguen siendo un recurso de filesystem compartido.
+_DEMO_GENERATION_LOCKS = tuple(threading.Lock() for _ in range(64))
+_DEMO_REGISTRY_LOCK = threading.RLock()
+_DEMO_LIFECYCLE_LOCAL = threading.local()
+_DEMO_GENERATION_LEASE_SECONDS = max(
+    300, int(os.getenv("DEMO_GENERATION_LEASE_SECONDS", "900"))
+)
+_DEMO_GENERATION_WAIT_SECONDS = max(
+    10, int(os.getenv("DEMO_GENERATION_WAIT_SECONDS", "180"))
+)
+
+
+def _demo_generation_lock_for_email(email: str) -> threading.Lock:
+    email_key = (email or "").strip().lower()
+    return _DEMO_GENERATION_LOCKS[hash(email_key) % len(_DEMO_GENERATION_LOCKS)]
+
+
+def _acquire_demo_filesystem_lock():
+    lock_path = settings.STORAGE_DIR / "locks" / "demo_lifecycle.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = lock_path.open("a+b")
+    if os.name == "nt":
+        import msvcrt
+
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() == 0:
+            handle.write(b"0")
+            handle.flush()
+        while True:
+            try:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                break
+            except OSError:
+                time.sleep(0.05)
+    else:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+    return handle
+
+
+def _release_demo_filesystem_lock(handle) -> None:
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        handle.close()
+
+
+@contextmanager
+def _demo_lifecycle_guard() -> Iterator[None]:
+    """Lock reentrante local + advisory lock compartido por el bind mount."""
+    with _DEMO_REGISTRY_LOCK:
+        depth = int(getattr(_DEMO_LIFECYCLE_LOCAL, "depth", 0))
+        if depth == 0:
+            _DEMO_LIFECYCLE_LOCAL.handle = _acquire_demo_filesystem_lock()
+        _DEMO_LIFECYCLE_LOCAL.depth = depth + 1
+        try:
+            yield
+        finally:
+            next_depth = int(getattr(_DEMO_LIFECYCLE_LOCAL, "depth", 1)) - 1
+            _DEMO_LIFECYCLE_LOCAL.depth = next_depth
+            if next_depth == 0:
+                handle = getattr(_DEMO_LIFECYCLE_LOCAL, "handle", None)
+                _DEMO_LIFECYCLE_LOCAL.handle = None
+                if handle is not None:
+                    _release_demo_filesystem_lock(handle)
+
+
+def _canonical_demo_url(cliente_id: str) -> str:
+    """URL publica controlada por configuracion, nunca por Host de la request."""
+    textnorm._assert_valid_client_id(cliente_id)
+    base_url = (settings.APP_BASE_URL or "https://app.vantelia.es").rstrip("/")
+    return f"{base_url}/demo/{cliente_id}"
 
 
 def _demo_registry_path() -> Path:
     return settings.DATA_DIR / "demo_tenants.json"
 
 
-def _load_demo_registry() -> Dict[str, float]:
-    path = _demo_registry_path()
-    if not path.exists():
-        return {}
+def _ensure_demo_registry_schema(connection) -> None:
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS demo_tenants_registry (
+               email TEXT PRIMARY KEY,
+               cliente_id TEXT NOT NULL DEFAULT '',
+               created_ts REAL NOT NULL DEFAULT 0,
+               state TEXT NOT NULL DEFAULT 'generating',
+               lease_owner TEXT NOT NULL DEFAULT '',
+               lease_expires_ts REAL NOT NULL DEFAULT 0,
+               updated_ts REAL NOT NULL DEFAULT 0
+           )"""
+    )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_demo_registry_cliente "
+        "ON demo_tenants_registry(cliente_id) WHERE cliente_id <> ''"
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS demo_registry_meta (
+               key TEXT PRIMARY KEY,
+               value TEXT NOT NULL DEFAULT ''
+           )"""
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS demo_tenant_cleanup_queue (
+               cliente_id TEXT PRIMARY KEY,
+               email TEXT NOT NULL DEFAULT '',
+               created_ts REAL NOT NULL DEFAULT 0,
+               reason TEXT NOT NULL DEFAULT '',
+               state TEXT NOT NULL DEFAULT 'queued',
+               lease_owner TEXT NOT NULL DEFAULT '',
+               lease_expires_ts REAL NOT NULL DEFAULT 0,
+               updated_ts REAL NOT NULL DEFAULT 0
+           )"""
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_demo_cleanup_state "
+        "ON demo_tenant_cleanup_queue(state, lease_expires_ts)"
+    )
+    connection.commit()
+
+
+def _queue_demo_cleanup_row(
+    connection,
+    *,
+    cliente_id: str,
+    email: str,
+    created_ts: float,
+    reason: str,
+) -> None:
+    if not cliente_id or not settings.CLIENT_ID_PATTERN.match(cliente_id):
+        raise ValueError(f"cliente_id de demo invalido para cleanup: {cliente_id!r}")
+    connection.execute(
+        """INSERT INTO demo_tenant_cleanup_queue
+           (cliente_id, email, created_ts, reason, state, lease_owner,
+            lease_expires_ts, updated_ts)
+           VALUES (?,?,?,?,'queued','',0,?)
+           ON CONFLICT(cliente_id) DO UPDATE SET
+               email=excluded.email,
+               created_ts=excluded.created_ts,
+               reason=excluded.reason,
+               state=CASE
+                   WHEN demo_tenant_cleanup_queue.state='purging' THEN 'purging'
+                   ELSE 'queued'
+               END,
+               updated_ts=excluded.updated_ts""",
+        (
+            cliente_id,
+            (email or "").strip().lower(),
+            float(created_ts),
+            (reason or "cleanup")[:80],
+            time.time(),
+        ),
+    )
+
+
+def _validated_legacy_demo_registry(path: Path) -> Dict[str, float]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-        return {str(k): float(v) for k, v in raw.items()}
-    except Exception:  # noqa: BLE001
-        settings.logger.warning("Registro de demos corrupto; se reinicia.")
-        return {}
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            "Registro JSON de demos corrupto; corrige el archivo para reintentar la migracion."
+        ) from exc
+    if not isinstance(raw, dict):
+        raise RuntimeError("Registro JSON de demos invalido: se esperaba un objeto.")
+    legacy: Dict[str, float] = {}
+    for raw_cliente_id, raw_created_ts in raw.items():
+        cliente_id = str(raw_cliente_id or "").strip()
+        if not settings.CLIENT_ID_PATTERN.match(cliente_id):
+            raise RuntimeError(
+                f"Registro JSON de demos invalido: cliente_id {cliente_id!r}."
+            )
+        try:
+            created_ts = float(raw_created_ts)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"Registro JSON de demos invalido para {cliente_id}: timestamp."
+            ) from exc
+        if not math.isfinite(created_ts) or created_ts < 0:
+            raise RuntimeError(
+                f"Registro JSON de demos invalido para {cliente_id}: timestamp."
+            )
+        legacy[cliente_id] = created_ts
+    return legacy
+
+
+def _ensure_demo_registry_migrated(connection) -> None:
+    _ensure_demo_registry_schema(connection)
+    migrated = connection.execute(
+        "SELECT 1 FROM demo_registry_meta WHERE key=?",
+        (_DEMO_REGISTRY_MIGRATION_KEY,),
+    ).fetchone()
+    if migrated:
+        return
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        migrated = connection.execute(
+            "SELECT 1 FROM demo_registry_meta WHERE key=?",
+            (_DEMO_REGISTRY_MIGRATION_KEY,),
+        ).fetchone()
+        if not migrated:
+            path = _demo_registry_path()
+            legacy = _validated_legacy_demo_registry(path) if path.exists() else {}
+            now_ts = time.time()
+            grouped: Dict[str, List[Tuple[str, float]]] = {}
+            for cliente_id, created_ts in legacy.items():
+                config = appstate.CONFIG_CLIENTES.get(cliente_id, {})
+                email = str(
+                    (config.get("contacto") or {}).get("email") or ""
+                ).strip().lower()
+                email_key = email or f"legacy:{cliente_id}"
+                grouped.setdefault(email_key, []).append((cliente_id, created_ts))
+
+            for email_key, candidates in grouped.items():
+                candidates.sort(key=lambda item: (item[1], item[0]), reverse=True)
+                existing = connection.execute(
+                    """SELECT cliente_id, created_ts, state
+                       FROM demo_tenants_registry WHERE email=?""",
+                    (email_key,),
+                ).fetchone()
+                existing_id = str(existing["cliente_id"] or "") if existing else ""
+                choices = list(candidates)
+                if existing_id:
+                    choices.append((existing_id, float(existing["created_ts"] or 0)))
+                canonical_id, canonical_ts = max(
+                    choices, key=lambda item: (item[1], item[0])
+                )
+                if (
+                    existing
+                    and existing_id
+                    and str(existing["state"] or "") in {"generating", "purging"}
+                ):
+                    canonical_id = existing_id
+                    canonical_ts = float(existing["created_ts"] or canonical_ts)
+                elif not existing:
+                    connection.execute(
+                        """INSERT INTO demo_tenants_registry
+                           (email, cliente_id, created_ts, state, lease_owner,
+                            lease_expires_ts, updated_ts)
+                           VALUES (?,?,?,'active','',0,?)""",
+                        (email_key, canonical_id, canonical_ts, now_ts),
+                    )
+                elif canonical_id != existing_id:
+                    if existing_id:
+                        _queue_demo_cleanup_row(
+                            connection,
+                            cliente_id=existing_id,
+                            email=email_key,
+                            created_ts=float(existing["created_ts"] or 0),
+                            reason="migration_duplicate_email",
+                        )
+                    connection.execute(
+                        """UPDATE demo_tenants_registry
+                           SET cliente_id=?, created_ts=?, state='active',
+                               lease_owner='', lease_expires_ts=0, updated_ts=?
+                           WHERE email=?""",
+                        (canonical_id, canonical_ts, now_ts, email_key),
+                    )
+                for discarded_id, discarded_ts in candidates:
+                    if discarded_id == canonical_id:
+                        continue
+                    _queue_demo_cleanup_row(
+                        connection,
+                        cliente_id=discarded_id,
+                        email=email_key,
+                        created_ts=discarded_ts,
+                        reason="migration_duplicate_email",
+                    )
+                    settings.logger.warning(
+                        "Demo legacy duplicada para %s: se conserva %s y se encola %s para cleanup.",
+                        email_key,
+                        canonical_id,
+                        discarded_id,
+                    )
+            connection.execute(
+                "INSERT OR REPLACE INTO demo_registry_meta (key, value) VALUES (?, '1')",
+                (_DEMO_REGISTRY_MIGRATION_KEY,),
+            )
+        connection.commit()
+    except Exception as exc:
+        connection.rollback()
+        settings.logger.error("Migracion del registro JSON de demos fallida: %s", exc)
+        raise
+
+
+def _demo_registry_email(cliente_id: str, email: str = "") -> str:
+    email_clean = (email or "").strip().lower()
+    if email_clean:
+        return email_clean
+    config = appstate.CONFIG_CLIENTES.get(cliente_id, {})
+    configured = str((config.get("contacto") or {}).get("email") or "").strip().lower()
+    return configured or f"legacy:{cliente_id}"
+
+
+def _load_demo_registry() -> Dict[str, float]:
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        rows = connection.execute(
+            """SELECT cliente_id, created_ts FROM demo_tenants_registry
+               WHERE state='active' AND cliente_id<>''"""
+        ).fetchall()
+    return {str(row["cliente_id"]): float(row["created_ts"]) for row in rows}
 
 
 def _save_demo_registry(registry: Dict[str, float]) -> None:
-    path = _demo_registry_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(registry, indent=2), encoding="utf-8")
+    """Compatibilidad para reemplazos administrativos/tests; runtime usa UPSERT/DELETE."""
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            connection.execute("DELETE FROM demo_tenants_registry WHERE state='active'")
+            now_ts = time.time()
+            for cliente_id, created_ts in registry.items():
+                connection.execute(
+                    """INSERT INTO demo_tenants_registry
+                       (email, cliente_id, created_ts, state, lease_owner,
+                        lease_expires_ts, updated_ts)
+                       VALUES (?,?,?,'active','',0,?)""",
+                    (
+                        _demo_registry_email(cliente_id),
+                        cliente_id,
+                        float(created_ts),
+                        now_ts,
+                    ),
+                )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
 
 
-def _register_demo_tenant(cliente_id: str) -> None:
-    registry = _load_demo_registry()
-    registry[cliente_id] = time.time()
-    _save_demo_registry(registry)
+def _register_demo_tenant(
+    cliente_id: str,
+    email: str = "",
+    *,
+    created_ts: Optional[float] = None,
+    lease_owner: str = "",
+) -> bool:
+    email_key = _demo_registry_email(cliente_id, email)
+    timestamp = float(created_ts if created_ts is not None else time.time())
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        if lease_owner:
+            cursor = connection.execute(
+                """UPDATE demo_tenants_registry
+                   SET created_ts=?, state='active', lease_owner='',
+                       lease_expires_ts=0, updated_ts=?
+                   WHERE email=? AND cliente_id=? AND state='generating'
+                     AND lease_owner=? AND lease_expires_ts>?""",
+                (
+                    timestamp,
+                    time.time(),
+                    email_key,
+                    cliente_id,
+                    lease_owner,
+                    time.time(),
+                ),
+            )
+        else:
+            cursor = connection.execute(
+                """INSERT INTO demo_tenants_registry
+                   (email, cliente_id, created_ts, state, lease_owner,
+                    lease_expires_ts, updated_ts)
+                   VALUES (?,?,?,'active','',0,?)
+                   ON CONFLICT(email) DO UPDATE SET
+                       cliente_id=excluded.cliente_id,
+                       created_ts=excluded.created_ts,
+                       state='active', lease_owner='', lease_expires_ts=0,
+                       updated_ts=excluded.updated_ts""",
+                (email_key, cliente_id, timestamp, time.time()),
+            )
+        connection.commit()
+        return cursor.rowcount == 1
+
+
+def _unregister_demo_tenant(
+    cliente_id: str, *, expected_created_ts: Optional[float] = None
+) -> bool:
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        if expected_created_ts is None:
+            cursor = connection.execute(
+                "DELETE FROM demo_tenants_registry WHERE cliente_id=?", (cliente_id,)
+            )
+        else:
+            cursor = connection.execute(
+                """DELETE FROM demo_tenants_registry
+                   WHERE cliente_id=? AND created_ts=?""",
+                (cliente_id, float(expected_created_ts)),
+            )
+        cleanup_cursor = connection.execute(
+            "DELETE FROM demo_tenant_cleanup_queue WHERE cliente_id=?",
+            (cliente_id,),
+        )
+        connection.commit()
+        return cursor.rowcount == 1 or cleanup_cursor.rowcount == 1
+
+
+def _demo_registry_row_for_cliente(cliente_id: str):
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        return connection.execute(
+            "SELECT * FROM demo_tenants_registry WHERE cliente_id=?", (cliente_id,)
+        ).fetchone()
+
+
+def _demo_is_active_unclaimed(cliente_id: str) -> bool:
+    if not cliente_id.startswith(DEMO_TENANT_PREFIX):
+        return False
+    row = _demo_registry_row_for_cliente(cliente_id)
+    if not row or row["state"] != "active":
+        return False
+    if time.time() - float(row["created_ts"] or 0) > DEMO_TTL_SECONDS:
+        return False
+    return not bool(db.db_get_client_owner(cliente_id))
+
+
+def _reserve_demo_generation(
+    email: str, lease_owner: str, proposed_cliente_id: str
+) -> Tuple[str, str, float]:
+    """Reserva email+cliente antes del build.
+
+    Devuelve acquired|takeover|wait|reused, cliente_id reservado, created_ts.
+    """
+    email_key = (email or "").strip().lower()
+    if not email_key:
+        raise ValueError("email requerido para generar demo")
+    textnorm._assert_valid_client_id(proposed_cliente_id)
+    if not proposed_cliente_id.startswith(DEMO_TENANT_PREFIX):
+        raise ValueError("cliente_id reservado invalido para auto-demo")
+    now_ts = time.time()
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = connection.execute(
+                "SELECT * FROM demo_tenants_registry WHERE email=?", (email_key,)
+            ).fetchone()
+            if row:
+                state_value = str(row["state"] or "")
+                created_ts = float(row["created_ts"] or 0)
+                if (
+                    state_value == "active"
+                    and row["cliente_id"]
+                    and now_ts - created_ts < DEMO_TTL_SECONDS
+                ):
+                    connection.commit()
+                    return "reused", str(row["cliente_id"]), created_ts
+                if (
+                    state_value == "generating"
+                    and float(row["lease_expires_ts"] or 0) > now_ts
+                ) or state_value == "purging":
+                    connection.commit()
+                    return "wait", str(row["cliente_id"] or ""), created_ts
+                if state_value == "generating":
+                    reserved_id = str(row["cliente_id"] or proposed_cliente_id)
+                    connection.execute(
+                        """UPDATE demo_tenants_registry
+                           SET cliente_id=?, created_ts=?, state='generating',
+                               lease_owner=?, lease_expires_ts=?, updated_ts=?
+                           WHERE email=?""",
+                        (
+                            reserved_id,
+                            now_ts,
+                            lease_owner,
+                            now_ts + _DEMO_GENERATION_LEASE_SECONDS,
+                            now_ts,
+                            email_key,
+                        ),
+                    )
+                    connection.commit()
+                    return "takeover", reserved_id, now_ts
+
+                old_cliente_id = str(row["cliente_id"] or "")
+                if old_cliente_id:
+                    owner_row = connection.execute(
+                        "SELECT owner_user_id FROM clientes WHERE cliente_id=?",
+                        (old_cliente_id,),
+                    ).fetchone()
+                    if not owner_row or not str(owner_row["owner_user_id"] or ""):
+                        _queue_demo_cleanup_row(
+                            connection,
+                            cliente_id=old_cliente_id,
+                            email=email_key,
+                            created_ts=created_ts,
+                            reason="expired_replaced",
+                        )
+                connection.execute(
+                    """UPDATE demo_tenants_registry
+                       SET cliente_id=?, created_ts=?, state='generating',
+                           lease_owner=?, lease_expires_ts=?, updated_ts=?
+                       WHERE email=?""",
+                    (
+                        proposed_cliente_id,
+                        now_ts,
+                        lease_owner,
+                        now_ts + _DEMO_GENERATION_LEASE_SECONDS,
+                        now_ts,
+                        email_key,
+                    ),
+                )
+                connection.commit()
+                return "acquired", proposed_cliente_id, now_ts
+            connection.execute(
+                """INSERT INTO demo_tenants_registry
+                   (email, cliente_id, created_ts, state, lease_owner,
+                    lease_expires_ts, updated_ts)
+                   VALUES (?,?,?,'generating',?,?,?)""",
+                (
+                    email_key,
+                    proposed_cliente_id,
+                    now_ts,
+                    lease_owner,
+                    now_ts + _DEMO_GENERATION_LEASE_SECONDS,
+                    now_ts,
+                ),
+            )
+            connection.commit()
+            return "acquired", proposed_cliente_id, now_ts
+        except Exception:
+            connection.rollback()
+            raise
+
+
+def _release_demo_generation(email: str, lease_owner: str) -> None:
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        connection.execute(
+            """DELETE FROM demo_tenants_registry
+               WHERE email=? AND state='generating' AND lease_owner=?""",
+            ((email or "").strip().lower(), lease_owner),
+        )
+        connection.commit()
+
+
+def _expire_demo_generation(email: str, lease_owner: str) -> None:
+    """Deja una reserva fallida visible para takeover/purga inmediata."""
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        connection.execute(
+            """UPDATE demo_tenants_registry
+               SET lease_expires_ts=0, updated_ts=?
+               WHERE email=? AND state='generating' AND lease_owner=?""",
+            (time.time(), (email or "").strip().lower(), lease_owner),
+        )
+        connection.commit()
+
+
+def _renew_demo_generation(email: str, lease_owner: str) -> bool:
+    now_ts = time.time()
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        cursor = connection.execute(
+            """UPDATE demo_tenants_registry
+               SET lease_expires_ts=?, updated_ts=?
+               WHERE email=? AND state='generating' AND lease_owner=?""",
+            (
+                now_ts + _DEMO_GENERATION_LEASE_SECONDS,
+                now_ts,
+                (email or "").strip().lower(),
+                lease_owner,
+            ),
+        )
+        connection.commit()
+        return cursor.rowcount == 1
+
+
+@contextmanager
+def _demo_generation_heartbeat(email: str, lease_owner: str) -> Iterator[None]:
+    """Renueva el lease mientras scraping/indexado mantienen vivo el build."""
+    if not _renew_demo_generation(email, lease_owner):
+        raise RuntimeError("La reserva de generacion de demo ya no pertenece al worker.")
+    stop_event = threading.Event()
+    interval = max(0.1, min(30.0, _DEMO_GENERATION_LEASE_SECONDS / 3.0))
+
+    def _heartbeat_worker() -> None:
+        while not stop_event.wait(interval):
+            try:
+                if not _renew_demo_generation(email, lease_owner):
+                    return
+            except Exception as exc:  # noqa: BLE001
+                settings.logger.warning(
+                    "No se pudo renovar lease de demo para %s: %s", email, exc
+                )
+
+    heartbeat_thread = threading.Thread(
+        target=_heartbeat_worker,
+        name="vantelia-demo-generation-heartbeat",
+        daemon=True,
+    )
+    heartbeat_thread.start()
+    try:
+        yield
+    finally:
+        stop_event.set()
+        heartbeat_thread.join(timeout=max(1.0, interval + 0.5))
+
+
+def _demo_generation_reservation_owned(
+    email: str, lease_owner: str, cliente_id: str = ""
+) -> bool:
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        params: List[Any] = [
+            (email or "").strip().lower(),
+            lease_owner,
+            time.time(),
+        ]
+        cliente_clause = ""
+        if cliente_id:
+            cliente_clause = " AND cliente_id=?"
+            params.append(cliente_id)
+        row = connection.execute(
+            """SELECT 1 FROM demo_tenants_registry
+               WHERE email=? AND state='generating' AND lease_owner=?
+                 AND lease_expires_ts>?"""
+            + cliente_clause,
+            tuple(params),
+        ).fetchone()
+    return bool(row)
 
 
 def _synthetic_request():
@@ -85,21 +692,155 @@ def _existing_demo_for_email(email: str):
     email_lower = (email or "").strip().lower()
     if not email_lower:
         return None, None
-    _purge_expired_demos()
-    registry = _load_demo_registry()
-    now_ts = time.time()
-    for cid, created_ts in registry.items():
-        cfg = appstate.CONFIG_CLIENTES.get(cid, {})
-        if (
-            str(cfg.get("contacto", {}).get("email", "")).lower() == email_lower
-            and now_ts - created_ts < DEMO_TTL_SECONDS
-        ):
-            return cid, created_ts
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        row = connection.execute(
+            """SELECT cliente_id, created_ts FROM demo_tenants_registry
+               WHERE email=? AND state='active' AND cliente_id<>''""",
+            (email_lower,),
+        ).fetchone()
+    if row and time.time() - float(row["created_ts"] or 0) < DEMO_TTL_SECONDS:
+        return str(row["cliente_id"]), float(row["created_ts"])
     return None, None
+
+
+def _new_demo_cliente_id(nombre_empresa: str) -> str:
+    import onboarding_utils
+
+    base_slug = (
+        onboarding_utils.slugify_company((nombre_empresa or "Empresa").strip()).lower()[:30]
+        or "empresa"
+    )
+    cliente_id = f"{DEMO_TENANT_PREFIX}{base_slug}_{secrets.token_hex(3)}"
+    textnorm._assert_valid_client_id(cliente_id)
+    return cliente_id
+
+
+def _cleanup_reserved_demo_tenant(cliente_id: str) -> bool:
+    """Compensa efectos parciales conservando la fila registry hasta terminar."""
+    if not cliente_id or db.db_get_client_owner(cliente_id):
+        return False
+    registry_row = _demo_registry_row_for_cliente(cliente_id)
+    if registry_row and str(registry_row["state"] or "") == "active":
+        # Un sucesor pudo completar la misma reserva entre la perdida del lease
+        # y esta compensacion; nunca borrar un tenant ya activado.
+        return True
+    try:
+        clients._reload_runtime_configs_from_disk()
+        if cliente_id in appstate.CONFIG_CLIENTES:
+            clients._delete_client_everywhere(
+                cliente_id, skip_demo_registry_cleanup=True
+            )
+        else:
+            clients._purge_client_data(
+                cliente_id, skip_demo_registry_cleanup=True
+            )
+        return True
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.error(
+            "No se pudo compensar tenant parcial %s: %s", cliente_id, exc
+        )
+        return False
 
 
 def build_demo_tenant(
     *,
+    nombre_empresa: str,
+    sector: str,
+    email: str,
+    website_url: str = "",
+    descripcion: str = "",
+    servicios: str = "",
+    horario: str = "",
+    color: str = "",
+    request=None,
+) -> Dict[str, Any]:
+    """Fuente unica idempotente entre threads y workers para un mismo email."""
+    email_clean = (email or "").strip().lower()
+    lease_owner = secrets.token_urlsafe(24)
+    proposed_cliente_id = _new_demo_cliente_id(nombre_empresa)
+    reserved_cliente_id = proposed_cliente_id
+    takeover = False
+    with _demo_generation_lock_for_email(email):
+        deadline = time.time() + _DEMO_GENERATION_WAIT_SECONDS
+        while True:
+            reservation, reused_id, reused_ts = _reserve_demo_generation(
+                email_clean, lease_owner, proposed_cliente_id
+            )
+            if reservation == "reused":
+                # Otro worker pudo crearla: sincroniza el snapshot local una vez
+                # liberado el write lock antes de devolver la URL reutilizada.
+                with _demo_lifecycle_guard():
+                    clients._reload_runtime_configs_from_disk()
+                return {
+                    "cliente_id": reused_id,
+                    "demo_url": _canonical_demo_url(reused_id),
+                    "expires_in_seconds": max(
+                        0, int(reused_ts + DEMO_TTL_SECONDS - time.time())
+                    ),
+                    "reused": True,
+                }
+            if reservation in {"acquired", "takeover"}:
+                reserved_cliente_id = reused_id or proposed_cliente_id
+                takeover = reservation == "takeover"
+                break
+            if time.time() >= deadline:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="La demo ya se esta generando. Intentalo de nuevo en unos instantes.",
+                )
+            time.sleep(0.15)
+
+        try:
+            # El heartbeat empieza antes de esperar el lock global: otro build
+            # largo no puede hacer caducar esta reserva mientras espera turno.
+            with _demo_generation_heartbeat(email_clean, lease_owner):
+                # Serializa la mutacion de config.json entre workers del mismo bind mount.
+                with _demo_lifecycle_guard():
+                    # Nunca construir desde un snapshot anterior al ultimo write de
+                    # otro worker: _save_admin_client_payload persiste el mapa completo.
+                    clients._reload_runtime_configs_from_disk()
+                    if not _demo_generation_reservation_owned(
+                        email_clean, lease_owner, reserved_cliente_id
+                    ):
+                        raise RuntimeError("La reserva de generacion de demo ha expirado.")
+                    if takeover and not _cleanup_reserved_demo_tenant(reserved_cliente_id):
+                        raise RuntimeError("No se pudo limpiar la demo parcial anterior.")
+                    result = _build_demo_tenant_unlocked(
+                        cliente_id=reserved_cliente_id,
+                        nombre_empresa=nombre_empresa,
+                        sector=sector,
+                        email=email_clean,
+                        website_url=website_url,
+                        descripcion=descripcion,
+                        servicios=servicios,
+                        horario=horario,
+                        color=color,
+                        request=request,
+                    )
+                    cliente_id = str(result["cliente_id"])
+                    if cliente_id != reserved_cliente_id:
+                        raise RuntimeError("El builder no respeto el cliente reservado.")
+                    if not _register_demo_tenant(
+                        cliente_id,
+                        email_clean,
+                        lease_owner=lease_owner,
+                    ):
+                        raise RuntimeError("No se pudo activar la reserva de la demo.")
+                    return result
+        except Exception:
+            with _demo_lifecycle_guard():
+                cleanup_ok = _cleanup_reserved_demo_tenant(reserved_cliente_id)
+            if cleanup_ok:
+                _release_demo_generation(email_clean, lease_owner)
+            else:
+                _expire_demo_generation(email_clean, lease_owner)
+            raise
+
+
+def _build_demo_tenant_unlocked(
+    *,
+    cliente_id: str = "",
     nombre_empresa: str,
     sector: str,
     email: str,
@@ -123,17 +864,10 @@ def build_demo_tenant(
     email_clean = (email or "").strip()
     req = request or _synthetic_request()
 
-    reused_id, _ = _existing_demo_for_email(email_clean)
-    if reused_id:
-        return {
-            "cliente_id": reused_id,
-            "demo_url": f"{textnorm._public_base_url(req)}/demo/{reused_id}",
-            "reused": True,
-        }
-
-    base_slug = onboarding_utils.slugify_company(empresa_clean).lower()[:30] or "empresa"
-    cliente_id = f"{DEMO_TENANT_PREFIX}{base_slug}_{secrets.token_hex(3)}"
+    cliente_id = cliente_id or _new_demo_cliente_id(empresa_clean)
     textnorm._assert_valid_client_id(cliente_id)
+    if not cliente_id.startswith(DEMO_TENANT_PREFIX):
+        raise ValueError("cliente_id invalido para auto-demo")
 
     defaults = _DEMO_SECTOR_DEFAULTS.get(sector_clean, (
         f"Negocio del sector {sector_clean}.",
@@ -233,12 +967,10 @@ def build_demo_tenant(
             rag._seed_qa_from_onboarding(cliente_id, scrape_result)
         except Exception as exc:  # noqa: BLE001
             settings.logger.debug("No se pudo sembrar Q&A demo %s: %s", cliente_id, exc)
-    _register_demo_tenant(cliente_id)
-
     expires_dt = timeutils._utc_now() + timedelta(seconds=DEMO_TTL_SECONDS)
     return {
         "cliente_id": cliente_id,
-        "demo_url": f"{textnorm._public_base_url(req)}/demo/{cliente_id}",
+        "demo_url": _canonical_demo_url(cliente_id),
         "expires_at": expires_dt.isoformat(),
         "expires_in_seconds": DEMO_TTL_SECONDS,
         "detected_business_name": detected_business_name,
@@ -246,29 +978,267 @@ def build_demo_tenant(
     }
 
 
-def _purge_expired_demos() -> int:
-    registry = _load_demo_registry()
-    if not registry:
-        return 0
-    now = time.time()
-    expired = [cid for cid, ts in registry.items() if now - ts > DEMO_TTL_SECONDS]
-    if not expired:
-        return 0
-    for cliente_id in expired:
+def _demo_purge_candidates() -> List[Tuple[str, float]]:
+    cutoff = time.time() - DEMO_TTL_SECONDS
+    now_ts = time.time()
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        rows = connection.execute(
+            """SELECT cliente_id, created_ts FROM demo_tenants_registry
+               WHERE cliente_id<>'' AND (
+                   (state='active' AND created_ts<?)
+                   OR (state='generating' AND lease_expires_ts<=?)
+                   OR state='purging'
+               )""",
+            (cutoff, now_ts),
+        ).fetchall()
+    return [(str(row["cliente_id"]), float(row["created_ts"])) for row in rows]
+
+
+def _reserve_demo_purge(
+    cliente_id: str, created_ts: float, purge_owner: str
+) -> bool:
+    now_ts = time.time()
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        connection.execute("BEGIN IMMEDIATE")
         try:
-            if cliente_id in appstate.CONFIG_CLIENTES:
-                clients._delete_client_everywhere(cliente_id)
+            row = connection.execute(
+                "SELECT * FROM demo_tenants_registry WHERE cliente_id=?",
+                (cliente_id,),
+            ).fetchone()
+            if not row or float(row["created_ts"]) != float(created_ts):
+                connection.commit()
+                return False
+            owner_row = connection.execute(
+                "SELECT owner_user_id FROM clientes WHERE cliente_id=?",
+                (cliente_id,),
+            ).fetchone()
+            if owner_row and str(owner_row["owner_user_id"] or ""):
+                connection.execute(
+                    "DELETE FROM demo_tenants_registry WHERE cliente_id=? AND created_ts=?",
+                    (cliente_id, created_ts),
+                )
+                connection.commit()
+                return False
+            state_value = str(row["state"] or "")
+            if state_value == "active":
+                if now_ts - float(row["created_ts"] or 0) <= DEMO_TTL_SECONDS:
+                    connection.commit()
+                    return False
+            elif state_value == "generating":
+                if float(row["lease_expires_ts"] or 0) > now_ts:
+                    connection.commit()
+                    return False
+            elif state_value == "purging":
+                if (
+                    row["lease_owner"] != purge_owner
+                    and float(row["lease_expires_ts"] or 0) > now_ts
+                ):
+                    connection.commit()
+                    return False
             else:
-                # Huerfana (config ya no existe pero quedan datos/usuarios): limpiar
-                # igualmente para que nadie pueda seguir entrando con esa cuenta.
-                clients._purge_client_data(cliente_id)
-            registry.pop(cliente_id, None)
+                connection.commit()
+                return False
+            cursor = connection.execute(
+                """UPDATE demo_tenants_registry
+                   SET state='purging', lease_owner=?, lease_expires_ts=?, updated_ts=?
+                   WHERE cliente_id=? AND created_ts=?""",
+                (
+                    purge_owner,
+                    now_ts + 300,
+                    now_ts,
+                    cliente_id,
+                    created_ts,
+                ),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+        except Exception:
+            connection.rollback()
+            raise
+
+
+def _finish_demo_purge(
+    cliente_id: str, created_ts: float, purge_owner: str, *, success: bool
+) -> None:
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        if success:
+            connection.execute(
+                """DELETE FROM demo_tenants_registry
+                   WHERE cliente_id=? AND created_ts=? AND state='purging'
+                     AND lease_owner=?""",
+                (cliente_id, created_ts, purge_owner),
+            )
+        else:
+            connection.execute(
+                """UPDATE demo_tenants_registry
+                   SET state='purging', lease_owner='', lease_expires_ts=0,
+                       updated_ts=?
+                   WHERE cliente_id=? AND created_ts=? AND state='purging'
+                     AND lease_owner=?""",
+                (time.time(), cliente_id, created_ts, purge_owner),
+            )
+        connection.commit()
+
+
+def _demo_cleanup_candidates() -> List[Tuple[str, float]]:
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        rows = connection.execute(
+            """SELECT cliente_id, created_ts
+               FROM demo_tenant_cleanup_queue
+               WHERE state IN ('queued','purging')"""
+        ).fetchall()
+    return [(str(row["cliente_id"]), float(row["created_ts"])) for row in rows]
+
+
+def _reserve_demo_cleanup(
+    cliente_id: str, created_ts: float, purge_owner: str
+) -> bool:
+    now_ts = time.time()
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = connection.execute(
+                "SELECT * FROM demo_tenant_cleanup_queue WHERE cliente_id=?",
+                (cliente_id,),
+            ).fetchone()
+            if not row or float(row["created_ts"]) != float(created_ts):
+                connection.commit()
+                return False
+            live_registry = connection.execute(
+                """SELECT 1 FROM demo_tenants_registry
+                   WHERE cliente_id=? AND state IN ('active','generating')""",
+                (cliente_id,),
+            ).fetchone()
+            owner_row = connection.execute(
+                "SELECT owner_user_id FROM clientes WHERE cliente_id=?",
+                (cliente_id,),
+            ).fetchone()
+            if live_registry or (owner_row and str(owner_row["owner_user_id"] or "")):
+                connection.execute(
+                    "DELETE FROM demo_tenant_cleanup_queue WHERE cliente_id=?",
+                    (cliente_id,),
+                )
+                connection.commit()
+                return False
+            if (
+                str(row["state"] or "") == "purging"
+                and str(row["lease_owner"] or "") != purge_owner
+                and float(row["lease_expires_ts"] or 0) > now_ts
+            ):
+                connection.commit()
+                return False
+            cursor = connection.execute(
+                """UPDATE demo_tenant_cleanup_queue
+                   SET state='purging', lease_owner=?, lease_expires_ts=?,
+                       updated_ts=?
+                   WHERE cliente_id=? AND created_ts=?""",
+                (purge_owner, now_ts + 300, now_ts, cliente_id, created_ts),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+        except Exception:
+            connection.rollback()
+            raise
+
+
+def _finish_demo_cleanup(
+    cliente_id: str, created_ts: float, purge_owner: str, *, success: bool
+) -> None:
+    with db._get_db_connection() as connection:
+        _ensure_demo_registry_migrated(connection)
+        if success:
+            connection.execute(
+                """DELETE FROM demo_tenant_cleanup_queue
+                   WHERE cliente_id=? AND created_ts=? AND state='purging'
+                     AND lease_owner=?""",
+                (cliente_id, created_ts, purge_owner),
+            )
+        else:
+            connection.execute(
+                """UPDATE demo_tenant_cleanup_queue
+                   SET state='purging', lease_owner='', lease_expires_ts=0,
+                       updated_ts=?
+                   WHERE cliente_id=? AND created_ts=? AND state='purging'
+                     AND lease_owner=?""",
+                (time.time(), cliente_id, created_ts, purge_owner),
+            )
+        connection.commit()
+
+
+def _purge_expired_demos() -> int:
+    purged = 0
+    for cliente_id, created_ts in _demo_purge_candidates():
+        purge_owner = secrets.token_urlsafe(18)
+        try:
+            if not _reserve_demo_purge(cliente_id, created_ts, purge_owner):
+                continue
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.error("No se pudo reservar purga de demo %s: %s", cliente_id, exc)
+            continue
+
+        success = False
+        try:
+            with _demo_lifecycle_guard():
+                # El delete tambien persiste el mapa completo; partir siempre del
+                # ultimo snapshot evita borrar tenants creados por otro worker.
+                clients._reload_runtime_configs_from_disk()
+                if cliente_id in appstate.CONFIG_CLIENTES:
+                    clients._delete_client_everywhere(
+                        cliente_id, skip_demo_registry_cleanup=True
+                    )
+                else:
+                    clients._purge_client_data(
+                        cliente_id, skip_demo_registry_cleanup=True
+                    )
+            success = True
+            purged += 1
             settings.logger.info("Demo expirada eliminada: %s", cliente_id)
         except Exception as exc:  # noqa: BLE001
             settings.logger.error("No se pudo eliminar demo expirada %s: %s", cliente_id, exc)
-            registry.pop(cliente_id, None)
-    _save_demo_registry(registry)
-    return len(expired)
+        finally:
+            _finish_demo_purge(
+                cliente_id, created_ts, purge_owner, success=success
+            )
+    for cliente_id, created_ts in _demo_cleanup_candidates():
+        purge_owner = secrets.token_urlsafe(18)
+        try:
+            if not _reserve_demo_cleanup(cliente_id, created_ts, purge_owner):
+                continue
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.error(
+                "No se pudo reservar cleanup de demo %s: %s", cliente_id, exc
+            )
+            continue
+
+        success = False
+        try:
+            with _demo_lifecycle_guard():
+                clients._reload_runtime_configs_from_disk()
+                if cliente_id in appstate.CONFIG_CLIENTES:
+                    clients._delete_client_everywhere(
+                        cliente_id, skip_demo_registry_cleanup=True
+                    )
+                else:
+                    clients._purge_client_data(
+                        cliente_id, skip_demo_registry_cleanup=True
+                    )
+            success = True
+            purged += 1
+            settings.logger.info("Cleanup de demo completado: %s", cliente_id)
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.error(
+                "No se pudo completar cleanup de demo %s: %s", cliente_id, exc
+            )
+        finally:
+            _finish_demo_cleanup(
+                cliente_id, created_ts, purge_owner, success=success
+            )
+    return purged
 
 
 VOICE_DEMO_TEMPLATE = """
@@ -571,6 +1541,8 @@ VOICE_DEMO_TEMPLATE = """
 
 
 def _build_demo_page(cliente_id: str, request: Request) -> str:
+    from backend import outreach
+
     config = clients._get_client_config(cliente_id)
     assets = clients._build_install_snippet(cliente_id, request)
     nombre = escape(config["nombre"])
@@ -583,11 +1555,78 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
     og_image_url = escape((settings.APP_BASE_URL or "https://app.vantelia.es") + "/uploads/og-demo.png")
     fondo_url = escape(textnorm._brand_asset_public_path("fondo-desktop.png") or textnorm._brand_asset_public_path("Fondo_Web.png"))
     fondo_movil_url = escape(textnorm._brand_asset_public_path("fondo-movil.png") or fondo_url)
+    is_auto_demo = cliente_id.startswith(DEMO_TENANT_PREFIX)
+    demo_session_id = f"demo_{secrets.token_hex(16)}"
+    demo_signal_tokens: Dict[str, str] = {}
+    if is_auto_demo and _demo_is_active_unclaimed(cliente_id):
+        for event_name in (
+            "demo_chat_started",
+            "demo_contact_clicked",
+            "demo_whatsapp_clicked",
+            "demo_claim_clicked",
+        ):
+            signal_token = outreach._outreach_demo_signal_token(
+                cliente_id, event_name, demo_session_id
+            )
+            if signal_token:
+                demo_signal_tokens[event_name] = signal_token
+    demo_signal_tokens_json = json.dumps(
+        demo_signal_tokens, ensure_ascii=True, separators=(",", ":")
+    ).replace("</", "<\\/")
+
+    contact_subject = _urlquote(f"Duda sobre la demo de {config['nombre']}")
+    contact_body = _urlquote(
+        f"Hola, he probado la demo de {config['nombre']} y tengo una duda."
+    )
+    whatsapp_text = _urlquote(
+        f"Hola, he probado la demo de {config['nombre']} y prefiero seguir por WhatsApp."
+    )
+    demo_contact_actions = (
+        '<section class="demo-contact-bar" aria-label="Contactar con Vantelia">'
+        '<div class="demo-contact-copy"><strong>¿Quieres comentarlo?</strong>'
+        '<span>Escríbenos por el canal que te resulte más cómodo.</span></div>'
+        f'<a class="demo-contact-link" data-demo-contact-cta="1" '
+        f'href="mailto:info@vantelia.es?subject={contact_subject}&amp;body={contact_body}">Tengo una duda</a>'
+        f'<a class="demo-contact-link demo-contact-whatsapp" data-demo-whatsapp-cta="1" '
+        f'href="https://wa.me/34675802001?text={whatsapp_text}" target="_blank" rel="noopener noreferrer">'
+        'Prefiero seguir por WhatsApp</a>'
+        '</section>'
+        if is_auto_demo else ""
+    )
+
+    hero_lead = (
+        "Habla con el asistente como lo harían tus clientes y descubre cómo gestiona consultas y citas automáticamente."
+        if booking_enabled
+        else "Habla con el asistente como lo harían tus clientes y comprueba cómo responde sus dudas automáticamente."
+    )
+    og_description = (
+        f"Asistente con los servicios reales de {nombre}: responde consultas y gestiona citas 24/7. Demo de Vantelia."
+        if booking_enabled
+        else f"Asistente con los servicios reales de {nombre}: responde consultas 24/7. Demo de Vantelia."
+    )
 
     booking_example = (
         '<button type="button" class="ex-chip" data-msg="¿Tenéis disponibilidad mañana?">'
         '<span class="ex-icon">📅</span><span>¿Tenéis disponibilidad mañana?</span></button>'
         if booking_enabled else ""
+    )
+    booking_request_example = (
+        '<button type="button" class="ex-chip" data-msg="Quiero reservar una cita">'
+        '<span class="ex-icon">✅</span><span>Quiero reservar una cita</span></button>'
+        if booking_enabled else ""
+    )
+    booking_value_card = (
+        '<article class="value-card">'
+        '<div class="v-icon">📅</div>'
+        '<h3>Gestiona citas</h3>'
+        '<p>Comprueba disponibilidad, agenda y confirma reservas sin intervención humana.</p>'
+        '</article>'
+        if booking_enabled else
+        '<article class="value-card">'
+        '<div class="v-icon">💬</div>'
+        '<h3>Convierte consultas</h3>'
+        '<p>Resuelve dudas frecuentes y facilita que cada visitante dé el siguiente paso.</p>'
+        '</article>'
     )
 
     # Self-serve bridge: only auto demos (demo_auto_*) without an owner can be claimed.
@@ -651,7 +1690,7 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Vantelia" />
   <meta property="og:title" content="Prueba la IA de {nombre}" />
-  <meta property="og:description" content="Asistente con los servicios reales de {nombre}: responde consultas y agenda citas 24/7. Demo de Vantelia." />
+  <meta property="og:description" content="{og_description}" />
   <meta property="og:image" content="{og_image_url}" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -767,6 +1806,51 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
       white-space: nowrap;
     }}
     .claim-cta:hover {{ transform: translateY(-1px); box-shadow: 0 10px 24px rgba(0,245,212,0.35); }}
+
+    .demo-contact-bar {{
+      position: sticky;
+      top: 12px;
+      z-index: 30;
+      max-width: 940px;
+      margin: 0 auto 10px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      border: 1px solid rgba(143,181,214,0.25);
+      border-radius: 16px;
+      background: rgba(9,18,40,0.9);
+      box-shadow: 0 14px 36px rgba(0,0,0,0.24);
+      backdrop-filter: blur(16px);
+    }}
+    .demo-contact-copy {{ margin-right: auto; min-width: 190px; }}
+    .demo-contact-copy strong {{ display: block; color: var(--ink); font-size: 14px; }}
+    .demo-contact-copy span {{ display: block; color: var(--soft); font-size: 12px; margin-top: 2px; }}
+    .demo-contact-link {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      padding: 9px 14px;
+      border: 1px solid rgba(0,245,212,0.34);
+      border-radius: 11px;
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+      transition: border-color .15s ease, background .15s ease, transform .15s ease;
+    }}
+    .demo-contact-link:hover {{
+      transform: translateY(-1px);
+      border-color: var(--accent);
+      background: rgba(0,245,212,0.09);
+    }}
+    .demo-contact-whatsapp {{
+      border-color: rgba(37,211,102,0.5);
+      background: rgba(37,211,102,0.1);
+    }}
 
     .badge-live .dot {{
       width: 8px; height: 8px; border-radius: 999px;
@@ -1068,6 +2152,9 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
 
     @media (max-width: 540px) {{
       .page {{ padding: 36px 18px 120px; }}
+      .demo-contact-bar {{ top: 8px; padding: 10px; flex-wrap: wrap; }}
+      .demo-contact-copy {{ flex: 1 0 100%; }}
+      .demo-contact-link {{ flex: 1 1 140px; white-space: normal; text-align: center; }}
       .steps {{ grid-template-columns: 1fr; }}
       .widget-pointer .tooltip {{ display: none; }}
       .hero {{ padding: 28px 4px 18px; }}
@@ -1087,11 +2174,12 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
 </head>
 <body>
   <main class="page">
+    {demo_contact_actions}
     <section class="hero">
       {claim_banner}
       <span class="badge-live"><span class="dot"></span>Demo en vivo · {nombre}</span>
       <h1>Prueba la IA de Vantelia en directo</h1>
-      <p class="lead">Habla con el asistente como lo harían tus clientes y descubre cómo agenda citas automáticamente.</p>
+      <p class="lead">{hero_lead}</p>
       <div class="hero-ctas">
         <button type="button" id="ctaProbar" class="cta">
           Probar ahora
@@ -1135,7 +2223,7 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
         {booking_example}
         <button type="button" class="ex-chip" data-msg="¿Qué servicios ofrecéis?"><span class="ex-icon">💼</span><span>¿Qué servicios ofrecéis?</span></button>
         <button type="button" class="ex-chip" data-msg="¿Cuánto cuesta?"><span class="ex-icon">💶</span><span>¿Cuánto cuesta?</span></button>
-        <button type="button" class="ex-chip" data-msg="Quiero reservar una cita"><span class="ex-icon">✅</span><span>Quiero reservar una cita</span></button>
+        {booking_request_example}
         <button type="button" class="ex-chip" data-msg="¿Cómo funciona vuestro servicio?"><span class="ex-icon">🤔</span><span>¿Cómo funciona?</span></button>
       </div>
     </section>
@@ -1151,11 +2239,7 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
           <h3>Responde automáticamente</h3>
           <p>Sin esperas. La IA atiende cualquier consulta en segundos con información actualizada del negocio.</p>
         </article>
-        <article class="value-card">
-          <div class="v-icon">📅</div>
-          <h3>Gestiona citas</h3>
-          <p>Comprueba disponibilidad, agenda y confirma reservas sin intervención humana.</p>
-        </article>
+        {booking_value_card}
         <article class="value-card">
           <div class="v-icon">🌙</div>
           <h3>Atiende 24/7</h3>
@@ -1185,6 +2269,9 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
     data-position="right"></script>
   <script>
     (function () {{
+      const demoSessionId = "{demo_session_id}";
+      const demoSignalTokens = {demo_signal_tokens_json};
+
       function widgetReady() {{
         return !!document.getElementById("ia-w-btn");
       }}
@@ -1206,19 +2293,32 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
 
       function trackDemoEvent(event, payload) {{
         try {{
+          const body = Object.assign({{
+            event: event,
+            event_source: "demo_page",
+            page_path: window.location.pathname,
+            page_url: window.location.href,
+            cliente_id: "{cliente_safe}",
+            session_id: demoSessionId
+          }}, payload || {{}});
+          const signalToken = demoSignalTokens[event] || "";
+          if (signalToken) body.demo_signal_token = signalToken;
           fetch("/analytics/event", {{
             method: "POST",
             headers: {{ "Content-Type": "application/json" }},
             keepalive: true,
-            body: JSON.stringify(Object.assign({{
-              event: event,
-              event_source: "demo_page",
-              page_path: window.location.pathname,
-              page_url: window.location.href,
-              cliente_id: "{cliente_safe}"
-            }}, payload || {{}}))
+            body: JSON.stringify(body)
           }}).catch(function () {{}});
         }} catch (_) {{}}
+      }}
+
+      trackDemoEvent("demo_viewed", {{ booking_enabled: {str(booking_enabled).lower()} }});
+
+      let demoChatStarted = false;
+      function trackDemoChatStarted(source) {{
+        if (demoChatStarted) return;
+        demoChatStarted = true;
+        trackDemoEvent("demo_chat_started", {{ source: source || "demo_chat" }});
       }}
 
       function sendToWidget(message) {{
@@ -1249,6 +2349,7 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
       }}
 
       document.getElementById("ctaProbar")?.addEventListener("click", function () {{
+        trackDemoChatStarted("primary_cta");
         whenWidgetReady(function () {{
           openWidget();
           flashWidget();
@@ -1263,6 +2364,14 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
         }});
       }});
 
+      document.querySelector("[data-demo-contact-cta]")?.addEventListener("click", function () {{
+        trackDemoEvent("demo_contact_clicked", {{ cta_label: "Tengo una duda" }});
+      }});
+
+      document.querySelector("[data-demo-whatsapp-cta]")?.addEventListener("click", function () {{
+        trackDemoEvent("demo_whatsapp_clicked", {{ cta_label: "Prefiero seguir por WhatsApp" }});
+      }});
+
       document.querySelectorAll(".ex-chip").forEach(function (chip) {{
         chip.addEventListener("click", function () {{
           const msg = chip.getAttribute("data-msg") || "";
@@ -1274,7 +2383,10 @@ def _build_demo_page(cliente_id: str, request: Request) -> str:
 
       whenWidgetReady(function () {{
         const btn = document.getElementById("ia-w-btn");
-        btn?.addEventListener("click", hidePointer, {{ once: true }});
+        btn?.addEventListener("click", function () {{
+          hidePointer();
+          trackDemoChatStarted("widget_button");
+        }});
       }});
 
       const io = new IntersectionObserver(function (entries) {{

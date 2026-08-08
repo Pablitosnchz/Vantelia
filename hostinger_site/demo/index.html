@@ -877,7 +877,7 @@
           }
           var url = result.body.demo_url;
           var claimId = result.body && result.body.cliente_id ? String(result.body.cliente_id) : '';
-          var claimUrl = claimId ? '/acceso?mode=signup&claim=' + encodeURIComponent(claimId) : '/acceso?mode=signup';
+          var claimUrl = API + (claimId ? '/acceso?mode=signup&claim=' + encodeURIComponent(claimId) : '/acceso?mode=signup');
           var minutes = Math.max(1, Math.round((result.body.expires_in_seconds || 3600) / 60));
           var durationLabel = formatDuration(result.body.expires_in_seconds || 3600);
           window.vanteliaTrack && window.vanteliaTrack('demo_generated', {

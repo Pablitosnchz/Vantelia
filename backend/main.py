@@ -172,7 +172,7 @@ def _stop_background_workers() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    _start_background_workers()
+    await timeutils._to_thread(_start_background_workers)
     try:
         yield
     finally:

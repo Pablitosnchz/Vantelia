@@ -22,6 +22,7 @@ from backend import (
     commerce,
     db,
     emailing,
+    outreach,
     portal,
     security,
     settings,
@@ -38,7 +39,21 @@ async def analytics_event(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="Payload JSON invalido.") from exc
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Payload de analitica invalido.")
-    return portal._record_analytics_event(payload, request)
+    raw_signal_token = payload.pop("demo_signal_token", "")
+    signal_token = raw_signal_token if isinstance(raw_signal_token, str) else ""
+    if signal_token:
+        client_ip = request.client.host if request.client else "unknown"
+        cliente_hint = str(
+            payload.get("widget_client_id") or payload.get("cliente_id") or ""
+        ).strip()[:80]
+        if not settings.CLIENT_ID_PATTERN.match(cliente_hint):
+            cliente_hint = "unknown"
+        security._check_rate_limit(f"demo-signal:{cliente_hint}:{client_ip}", 60)
+    result = portal._record_analytics_event(payload, request)
+    outreach._outreach_mirror_demo_analytics_event(
+        payload, signal_token=signal_token
+    )
+    return result
 
 
 @app.post("/consulta")

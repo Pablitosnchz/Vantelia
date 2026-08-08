@@ -270,6 +270,13 @@ def _update_runtime_configs(next_configs: Dict[str, Dict[str, Any]]) -> None:
         appstate.CONFIG_CLIENTES.update(next_configs)
 
 
+def _reload_runtime_configs_from_disk() -> Dict[str, Dict[str, Any]]:
+    """Recarga el snapshot compartido; usar bajo el lock de escritura cross-worker."""
+    latest_configs = _load_client_configs()
+    _update_runtime_configs(latest_configs)
+    return latest_configs
+
+
 def _sync_clientes_table_from_config() -> None:
     """Mirror in-memory CONFIG_CLIENTES into the clientes table.
 
@@ -480,6 +487,43 @@ def _plan_limits(plan: str) -> Dict[str, Any]:
 
 
 def _get_client_config(cliente_id: str) -> Dict[str, Any]:
+    # Las auto-demos se crean y purgan en caliente. En multiproceso, el snapshot
+    # Python de otro worker puede estar obsoleto aunque SQLite/config.json ya
+    # contengan el estado correcto, asi que para ellas SQLite es autoritativo.
+    if cliente_id.startswith("demo_auto_"):
+        row = None
+        lookup_failed = False
+        try:
+            with db._get_db_connection() as connection:
+                row = connection.execute(
+                    "SELECT config_json FROM clientes WHERE cliente_id=?",
+                    (cliente_id,),
+                ).fetchone()
+        except sqlite3.Error as exc:
+            lookup_failed = True
+            settings.logger.warning(
+                "No se pudo refrescar config de auto-demo %s: %s", cliente_id, exc
+            )
+        if lookup_failed:
+            config = appstate.CONFIG_CLIENTES.get(cliente_id)
+            if config:
+                return config
+        fresh_config = None
+        if row:
+            try:
+                raw_config = json.loads(str(row["config_json"] or "{}"))
+                fresh_config = _normalize_client_config(cliente_id, raw_config)
+            except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                settings.logger.error(
+                    "Config SQLite invalida para auto-demo %s: %s", cliente_id, exc
+                )
+        with appstate.state_lock:
+            if fresh_config:
+                appstate.CONFIG_CLIENTES[cliente_id] = fresh_config
+            else:
+                appstate.CONFIG_CLIENTES.pop(cliente_id, None)
+        if fresh_config:
+            return fresh_config
     config = appstate.CONFIG_CLIENTES.get(cliente_id)
     if not config:
         raise HTTPException(status_code=404, detail="Cliente no configurado")
@@ -523,7 +567,9 @@ def _current_billing_period() -> Tuple[str, str]:
     return start.isoformat(), end.isoformat()
 
 
-def _delete_client_everywhere(cliente_id: str) -> None:
+def _delete_client_everywhere(
+    cliente_id: str, *, skip_demo_registry_cleanup: bool = False
+) -> None:
     textnorm._assert_valid_client_id(cliente_id)
     if cliente_id not in appstate.CONFIG_CLIENTES:
         raise HTTPException(status_code=404, detail="Cliente no configurado")
@@ -532,10 +578,14 @@ def _delete_client_everywhere(cliente_id: str) -> None:
     next_configs.pop(cliente_id, None)
     _persist_configs_to_disk(next_configs)
     _update_runtime_configs(next_configs)
-    _purge_client_data(cliente_id)
+    _purge_client_data(
+        cliente_id, skip_demo_registry_cleanup=skip_demo_registry_cleanup
+    )
 
 
-def _purge_client_data(cliente_id: str) -> None:
+def _purge_client_data(
+    cliente_id: str, *, skip_demo_registry_cleanup: bool = False
+) -> None:
     """Limpieza de BD, sesiones e indices/ficheros de UN tenant, SIN exigir que siga en
     config: tambien vale para huerfanos (demo expirada cuyo config ya no existe pero cuyos
     usuarios podian seguir entrando). Borra usuarios del tenant y sus sesiones: nadie
@@ -609,14 +659,12 @@ def _purge_client_data(cliente_id: str) -> None:
         if target_dir.exists():
             shutil.rmtree(target_dir)
 
-    try:
-        from backend import demo_agenda  # lazy: evita ciclo clients<->demo
-        registry = demo_agenda._load_demo_registry()
-        if cliente_id in registry:
-            registry.pop(cliente_id, None)
-            demo_agenda._save_demo_registry(registry)
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.warning("No se pudo limpiar demo registry para %s: %s", cliente_id, exc)
+    if not skip_demo_registry_cleanup:
+        try:
+            from backend import demo_agenda  # lazy: evita ciclo clients<->demo
+            demo_agenda._unregister_demo_tenant(cliente_id)
+        except Exception as exc:  # noqa: BLE001
+            settings.logger.warning("No se pudo limpiar demo registry para %s: %s", cliente_id, exc)
 
 
 def _build_install_snippet(cliente_id: str, request: Request) -> Dict[str, str]:

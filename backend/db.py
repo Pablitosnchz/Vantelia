@@ -973,6 +973,45 @@ def _init_database() -> None:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_clientes_plan ON clientes(plan)"
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS demo_tenants_registry (
+                email TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL DEFAULT '',
+                created_ts REAL NOT NULL DEFAULT 0,
+                state TEXT NOT NULL DEFAULT 'generating',
+                lease_owner TEXT NOT NULL DEFAULT '',
+                lease_expires_ts REAL NOT NULL DEFAULT 0,
+                updated_ts REAL NOT NULL DEFAULT 0
+            )
+            """
+        )
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_demo_registry_cliente "
+            "ON demo_tenants_registry(cliente_id) WHERE cliente_id <> ''"
+        )
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS demo_registry_meta (
+                   key TEXT PRIMARY KEY,
+                   value TEXT NOT NULL DEFAULT ''
+               )"""
+        )
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS demo_tenant_cleanup_queue (
+                   cliente_id TEXT PRIMARY KEY,
+                   email TEXT NOT NULL DEFAULT '',
+                   created_ts REAL NOT NULL DEFAULT 0,
+                   reason TEXT NOT NULL DEFAULT '',
+                   state TEXT NOT NULL DEFAULT 'queued',
+                   lease_owner TEXT NOT NULL DEFAULT '',
+                   lease_expires_ts REAL NOT NULL DEFAULT 0,
+                   updated_ts REAL NOT NULL DEFAULT 0
+               )"""
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_demo_cleanup_state "
+            "ON demo_tenant_cleanup_queue(state, lease_expires_ts)"
+        )
 
         connection.execute(
             """
@@ -1900,4 +1939,3 @@ def db_ensure_free_subscription(user_id: str, cliente_id: str = "") -> sqlite3.R
         return connection.execute(
             "SELECT * FROM subscriptions WHERE id = ?", (sub_id,)
         ).fetchone()
-

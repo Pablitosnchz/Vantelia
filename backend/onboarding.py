@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import secrets
+import time
 from typing import Any, Dict
 
 import copy
@@ -146,53 +147,83 @@ def _claim_cliente_id(claim_token: str, user_id: str, *, source: str = "claim_de
     cliente_id = (claim_token or "").strip()
     if not cliente_id or not settings.CLIENT_ID_PATTERN.match(cliente_id):
         raise HTTPException(status_code=400, detail="Claim token invalido.")
-    if cliente_id not in appstate.CONFIG_CLIENTES:
-        raise HTTPException(status_code=404, detail="Bot no encontrado.")
 
-    existing_owner = db.db_get_client_owner(cliente_id)
-    if existing_owner and existing_owner != user_id:
-        raise HTTPException(status_code=409, detail="Este bot ya esta reclamado por otra cuenta.")
+    # El guard protege config/filesystem entre workers del mismo bind mount; la
+    # decision claim-vs-purge se serializa ademas con BEGIN IMMEDIATE en SQLite.
+    with demo_agenda._demo_lifecycle_guard():
+        clients._get_client_config(cliente_id)
 
-    # Check the user doesn't already own a different bot (one-bot-per-account model).
-    user_row = security._get_user_by_id(user_id)
-    if not user_row:
-        raise HTTPException(status_code=400, detail="Usuario invalido.")
-    existing_cid = (user_row["cliente_id"] or "").strip()
-    if existing_cid and existing_cid != cliente_id:
-        raise HTTPException(
-            status_code=409,
-            detail="Ya tienes un bot creado. Solo se permite un bot por cuenta en planes free.",
+        user_row = security._get_user_by_id(user_id)
+        if not user_row:
+            raise HTTPException(status_code=400, detail="Usuario invalido.")
+        existing_cid = (user_row["cliente_id"] or "").strip()
+        if existing_cid and existing_cid != cliente_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Ya tienes un bot creado. Solo se permite un bot por cuenta en planes free.",
+            )
+
+        is_demo_tenant = (
+            cliente_id.startswith(demo_agenda.DEMO_TENANT_PREFIX)
+            or bool(appstate.CONFIG_CLIENTES.get(cliente_id, {}).get("demo_claimable"))
         )
+        with db._get_db_connection() as connection:
+            demo_agenda._ensure_demo_registry_migrated(connection)
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                client_row = connection.execute(
+                    "SELECT owner_user_id FROM clientes WHERE cliente_id=?",
+                    (cliente_id,),
+                ).fetchone()
+                if not client_row:
+                    raise HTTPException(status_code=404, detail="Bot no encontrado.")
+                existing_owner = str(client_row["owner_user_id"] or "")
+                if existing_owner and existing_owner != user_id:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Este bot ya esta reclamado por otra cuenta.",
+                    )
+                registry_row = connection.execute(
+                    "SELECT * FROM demo_tenants_registry WHERE cliente_id=?",
+                    (cliente_id,),
+                ).fetchone()
+                if cliente_id.startswith(demo_agenda.DEMO_TENANT_PREFIX) and not existing_owner:
+                    if (
+                        not registry_row
+                        or registry_row["state"] != "active"
+                        or time.time() - float(registry_row["created_ts"] or 0)
+                        > demo_agenda.DEMO_TTL_SECONDS
+                    ):
+                        raise HTTPException(
+                            status_code=409,
+                            detail="Esta demo ya no esta disponible para reclamar.",
+                        )
+                if not is_demo_tenant and not existing_owner:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Este bot no se puede reclamar publicamente. Contacta con soporte.",
+                    )
+                now_iso = timeutils._utc_now().isoformat()
+                connection.execute(
+                    """UPDATE clientes
+                       SET owner_user_id=?, source=?, updated_at=?
+                       WHERE cliente_id=?""",
+                    (user_id, source, now_iso, cliente_id),
+                )
+                connection.execute(
+                    "UPDATE users SET cliente_id=? WHERE id=?",
+                    (cliente_id, user_id),
+                )
+                connection.execute(
+                    "DELETE FROM demo_tenants_registry WHERE cliente_id=?",
+                    (cliente_id,),
+                )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
 
-    is_demo_tenant = (
-        cliente_id.startswith(demo_agenda.DEMO_TENANT_PREFIX)
-        or bool(appstate.CONFIG_CLIENTES.get(cliente_id, {}).get("demo_claimable"))
-    )
-    if not is_demo_tenant and not existing_owner:
-        # Allow claiming legacy unowned clients only via admin path; reject here to
-        # avoid letting any signed-in user grab a production cliente_id.
-        raise HTTPException(
-            status_code=403,
-            detail="Este bot no se puede reclamar publicamente. Contacta con soporte.",
-        )
-
-    db.db_set_client_owner(cliente_id, user_id, source=source)
-    db.db_ensure_free_subscription(user_id, cliente_id=cliente_id)
-    with db._get_db_connection() as connection:
-        connection.execute(
-            "UPDATE users SET cliente_id = ? WHERE id = ?",
-            (cliente_id, user_id),
-        )
-        connection.commit()
-
-    # Remove TTL so _purge_expired_demos no longer kills it.
-    try:
-        registry = demo_agenda._load_demo_registry()
-        if cliente_id in registry:
-            registry.pop(cliente_id)
-            demo_agenda._save_demo_registry(registry)
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.warning("No se pudo limpiar TTL para demo reclamada %s: %s", cliente_id, exc)
+        db.db_ensure_free_subscription(user_id, cliente_id=cliente_id)
 
     # Best-effort: mark the outreach prospect linked to this demo as client.
     try:

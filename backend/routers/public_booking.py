@@ -27,6 +27,7 @@ from backend import (
     clients,
     db,
     demo_agenda,
+    outreach,
     portal,
     rag,
     security,
@@ -251,12 +252,19 @@ async def chat(data: MensajeChat, request: Request) -> RespuestaChat:
             )
 
     session_id = rag._normalize_session_id(data.session_id)
+
+    def _record_persisted_demo_message(persisted_session_id: str) -> None:
+        outreach._outreach_record_demo_chat_message(
+            data.cliente_id, persisted_session_id
+        )
+
     try:
         response = await chat_mod._process_chat_message(
             cliente_id=data.cliente_id,
             message=message,
             session_id=session_id,
             request=request,
+            on_user_message_persisted=_record_persisted_demo_message,
         )
     except HTTPException:
         raise
@@ -566,8 +574,6 @@ async def auth_delete_service(
         )
         connection.commit()
     return AuthSimpleResponse(ok=True, message="Servicio eliminado.")
-
-
 
 
 

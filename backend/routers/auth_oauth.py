@@ -113,7 +113,12 @@ async def auth_signup(data: AuthSignupPayload, request: Request) -> Response:
     redirect_to = "/onboarding"
     if data.claim:
         try:
-            onboarding._claim_cliente_id(data.claim, new_user["id"], source="claim_demo")
+            await timeutils._to_thread(
+                onboarding._claim_cliente_id,
+                data.claim,
+                new_user["id"],
+                source="claim_demo",
+            )
             redirect_to = "/app"
             new_user = security._get_user_by_id(new_user["id"])
         except HTTPException as claim_exc:
@@ -255,7 +260,12 @@ async def auth_google_callback(
     claim_token = (state_payload.get("claim") or "").strip() if state_payload else ""
     if claim_token:
         try:
-            onboarding._claim_cliente_id(claim_token, user["id"], source="claim_demo")
+            await timeutils._to_thread(
+                onboarding._claim_cliente_id,
+                claim_token,
+                user["id"],
+                source="claim_demo",
+            )
         except HTTPException as claim_exc:
             settings.logger.info("Google OAuth claim %s rechazado: %s", claim_token, claim_exc.detail)
 
