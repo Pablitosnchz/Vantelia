@@ -11,7 +11,7 @@ import sqlite3
 import sys
 import unicodedata
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -5362,6 +5362,65 @@ def test_outreach_stats_with_token(client: TestClient):
     assert "totals" in data and "funnel" in data and "daily" in data
 
 
+def test_outreach_prospect_detail_exposes_reply_content(client: TestClient, api_module):
+    email = "reply.detail@example.com"
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    try:
+        with api_module._outreach_db() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO prospects (email, business_name, created_at, updated_at) VALUES (?,?,?,?)",
+                (email, "Reply Detail", now, now),
+            )
+            conn.execute(
+                """INSERT INTO events
+                   (email, type, stage, url, subject, body_excerpt, ts, ua, ip)
+                   VALUES (?, 'reply', 'fu1', ?, ?, ?, ?, '', '')""",
+                (email, "<reply-detail-1@mx>", "Re: propuesta", "Quiero más información.", now),
+            )
+            conn.commit()
+
+        response = client.get(f"/admin/outreach/prospects/{email}", headers=_admin_headers())
+        assert response.status_code == 200, response.text
+        reply = next(item for item in response.json()["events"] if item["type"] == "reply")
+        assert reply["subject"] == "Re: propuesta"
+        assert reply["body_excerpt"] == "Quiero más información."
+    finally:
+        with api_module._outreach_db() as conn:
+            conn.execute("DELETE FROM events WHERE email=?", (email,))
+            conn.execute("DELETE FROM prospects WHERE email=?", (email,))
+            conn.commit()
+
+
+def test_outreach_manual_reply_note_is_visible_in_detail(client: TestClient, api_module):
+    email = "reply.manual@example.com"
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    try:
+        with api_module._outreach_db() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO prospects (email, business_name, created_at, updated_at) VALUES (?,?,?,?)",
+                (email, "Reply Manual", now, now),
+            )
+            conn.commit()
+
+        recorded = client.post(
+            "/admin/outreach/replies",
+            headers=_admin_headers(),
+            json={"email": email, "stage": "whatsapp", "note": "Me interesa; llámame mañana."},
+        )
+        assert recorded.status_code == 200, recorded.text
+
+        detail = client.get(f"/admin/outreach/prospects/{email}", headers=_admin_headers())
+        assert detail.status_code == 200, detail.text
+        reply = next(item for item in detail.json()["events"] if item["type"] == "reply")
+        assert reply["stage"] == "whatsapp"
+        assert reply["body_excerpt"] == "Me interesa; llámame mañana."
+    finally:
+        with api_module._outreach_db() as conn:
+            conn.execute("DELETE FROM events WHERE email=?", (email,))
+            conn.execute("DELETE FROM prospects WHERE email=?", (email,))
+            conn.commit()
+
+
 def test_outreach_import_and_list_csv(client: TestClient):
     csv_payload = (
         "business_name,email,contact_name,niche,website,service_hint,city,phone,tags,source\n"
@@ -5456,9 +5515,10 @@ def test_outreach_preflight_renders_html_even_when_wizard_email_not_imported(cli
     assert data["counts"]["real_candidates"] == 0
     assert data["counts"]["skipped"]["missing_email"] == 1
     assert data["html_active"] is True
-    # El CTA ahora es "ya montado, miralo" y apunta al enlace instantaneo /demo/go.
-    assert "Ver el asistente" in data["html"]
-    assert "/demo/go/" in data["html"]
+    # Copy v2: el cold NO lleva enlace (mejor entregabilidad); pide respuesta si/no.
+    # El enlace instantaneo /demo/go aparece a partir de fu1.
+    assert "Responde" in data["html"]
+    assert "/demo/go/" not in data["html"]
 
 
 def test_outreach_email_uses_prefilled_demo_link(client: TestClient, api_module):
@@ -5480,10 +5540,15 @@ def test_outreach_email_uses_prefilled_demo_link(client: TestClient, api_module)
     assert "email=prefill.demo%40example.com" in url
     assert "web=https%3A%2F%2Fclinicademo.test" in url
 
-    # El email real usa el enlace instantaneo /demo/go/{token} (demo pre-generada),
-    # no el formulario. El servidor resuelve los datos del prospect por el token.
-    _subject, text, html = render("cold", prospect, "baja@vantelia.es")
-    assert "demo preparada" in text
+    # Copy v2: el cold va SIN enlace (solo pide respuesta si/no) para no quemar
+    # entregabilidad; el enlace instantaneo /demo/go/{token} (demo pre-generada)
+    # entra a partir de fu1. El servidor resuelve el prospect por el token.
+    _subject, cold_text, cold_html = render("cold", prospect, "baja@vantelia.es")
+    assert "Responde" in cold_text
+    assert "/demo/go/" not in cold_text
+    assert "/demo/go/" not in cold_html
+
+    _subject, text, html = render("fu1", prospect, "baja@vantelia.es")
     assert "/demo/go/" in html
     assert "/demo/go/" in text
 

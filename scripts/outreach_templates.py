@@ -26,7 +26,7 @@ class Prospect:
     niche: str = ""
     website: str = ""
     service_hint: str = ""
-    city: str = "Torrejon de Ardoz"
+    city: str = ""
     phone: str = ""
     tags: str = ""
     source: str = ""
@@ -109,58 +109,47 @@ def stable_pick(seed: str, options: list[str]) -> str:
     return options[int(digest, 16) % len(options)]
 
 
-# Subjects en dos pools (A/B). Asignacion estable por hash(email).
-# Tono: lowercase, breve, curiosidad. Evitar gatillos spam ("oferta", "gratis",
-# "consulta rapida", signos de admiracion, mayusculas).
+# Subjects en dos pools realmente distintos. La variante se asigna una sola vez
+# por email y se conserva durante toda la secuencia.
 
 SUBJECTS_COLD_A = [
-    "{first_or_team}, cuantas llamadas con las mismas preguntas?",
-    "cuantas veces repite tu equipo lo mismo?",
-    "{business}: os llegan preguntas fuera de horario?",
-    "{first_or_team}, esto encaja?",
+    "¿te paso una idea para {business}?",
+    "una idea sencilla para {business}",
 ]
 
 SUBJECTS_COLD_B = [
-    "antes de cerrar la semana, {first_or_team}",
-    "{first_or_team}, una idea para {business}",
-    "{business}: 30 segundos",
-    "esto puede ahorrar tiempo a {business}",
+    "{business}: una duda sobre la web",
+    "una pregunta sobre {business}",
 ]
 
 SUBJECTS_FU1_A = [
-    "por si no llegaste",
-    "re: {business}",
-    "un minuto, {first_or_team}",
+    "el ejemplo para {business}",
+    "re: idea para {business}",
 ]
 
 SUBJECTS_FU1_B = [
-    "por si no llegaste",
-    "re: {business}",
-    "un minuto, {first_or_team}",
+    "una pregunta real en {business}",
+    "cómo valorar la idea",
 ]
 
 SUBJECTS_FU2_A = [
-    "{business}: lo que se pierden sin esto",
-    "esto lo monta cualquiera en 2 min",
-    "para {business}: consultas respondidas solas",
+    "¿es prioridad ahora en {business}?",
+    "solo una confirmación",
 ]
 
 SUBJECTS_FU2_B = [
-    "{business}: lo que se pierden sin esto",
-    "esto lo monta cualquiera en 2 min",
-    "para {business}: consultas respondidas solas",
+    "¿quién lleva esto en {business}?",
+    "la persona adecuada en {business}",
 ]
 
 SUBJECTS_BREAKUP_A = [
-    "ultimo mensaje, {first_or_team}",
-    "cierro el hilo",
-    "te dejo tranquilo",
+    "cierro por aquí",
+    "lo dejamos aquí",
 ]
 
 SUBJECTS_BREAKUP_B = [
-    "ultimo mensaje, {first_or_team}",
-    "cierro el hilo",
-    "te dejo tranquilo",
+    "no te escribo más sobre esto",
+    "gracias por leerme",
 ]
 
 # Compatibilidad hacia atras: codigo antiguo importa SUBJECTS_*.
@@ -177,15 +166,172 @@ SUBJECT_POOLS_AB = {
 }
 
 
+OUTREACH_COPY_BUNDLE_VERSION = "2026-08-human-replies-v1"
+
+# Estas plantillas son tambien la fuente del bundle que migra los overrides de
+# produccion. Solo usan variables que el renderer de overrides ya conoce.
+OUTREACH_COPY_VARIANTS = {
+    "cold": {
+        "A": {
+            "body_text": (
+                "{greeting}\n\n"
+                "Soy Pablo, de Vantelia. Te escribo por {business}. Ayudamos a responder "
+                "las consultas que llegan desde la web cuando el equipo está ocupado.\n\n"
+                "¿Quieres que te prepare y pase un enlace para verlo con vuestro caso? "
+                "Responde sí o no.\n\n"
+                "Pablo\nVantelia\n{footer_text}"
+            ),
+            "body_html": (
+                "<p>{greeting}</p>"
+                "<p>Soy Pablo, de Vantelia. Te escribo por {business}. Ayudamos a responder "
+                "las consultas que llegan desde la web cuando el equipo está ocupado.</p>"
+                "<p>¿Quieres que te prepare y pase un enlace para verlo con vuestro caso? "
+                "Responde <strong>sí</strong> o <strong>no</strong>.</p>"
+                "{signature_html}{footer_html}"
+            ),
+        },
+        "B": {
+            "body_text": (
+                "{greeting}\n\n"
+                "Al ver {business}, me surgió una duda: ¿las consultas que llegan por la web "
+                "se quedan esperando cuando no podéis atender?\n\n"
+                "Estoy probando una forma sencilla de cubrir ese hueco. ¿Te paso un enlace "
+                "adaptado a {business}? Responde 1 = sí / 2 = no.\n\n"
+                "Pablo\nVantelia\n{footer_text}"
+            ),
+            "body_html": (
+                "<p>{greeting}</p>"
+                "<p>Al ver {business}, me surgió una duda: ¿las consultas que llegan por la web "
+                "se quedan esperando cuando no podéis atender?</p>"
+                "<p>Estoy probando una forma sencilla de cubrir ese hueco. ¿Te paso un enlace "
+                "adaptado a {business}? Responde <strong>1 = sí</strong> / <strong>2 = no</strong>.</p>"
+                "{signature_html}{footer_html}"
+            ),
+        },
+    },
+    "fu1": {
+        "A": {
+            "body_text": (
+                "{greeting}\n\n"
+                "Retomo esto una vez. Aquí puedes probar cómo podría responder un asistente "
+                "con la información disponible de {business}:\n{cta_url}\n\n"
+                "La idea es resolver una consulta sencilla aunque estéis ocupados. "
+                "¿Te encaja? Responde sí o no.\n\n"
+                "Pablo\nVantelia\n{footer_text}"
+            ),
+            "body_html": (
+                "<p>{greeting}</p>"
+                "<p>Retomo esto una vez. Aquí puedes probar cómo podría responder un asistente "
+                "con la información disponible de {business}:</p>"
+                "<p><a href=\"{cta_url}\">Probar una demo para {business}</a></p>"
+                "<p>La idea es resolver una consulta sencilla aunque estéis ocupados. "
+                "¿Te encaja? Responde <strong>sí</strong> o <strong>no</strong>.</p>"
+                "{signature_html}{footer_html}"
+            ),
+        },
+        "B": {
+            "body_text": (
+                "{greeting}\n\n"
+                "Para valorar la idea sin una reunión, prueba en este enlace una pregunta real "
+                "que os haga un cliente:\n{cta_url}\n\n"
+                "Así puedes ver si evita una respuesta repetitiva en {business}. "
+                "¿Lo revisamos? Responde 1 = sí / 2 = no.\n\n"
+                "Pablo\nVantelia\n{footer_text}"
+            ),
+            "body_html": (
+                "<p>{greeting}</p>"
+                "<p>Para valorar la idea sin una reunión, prueba en este enlace una pregunta real "
+                "que os haga un cliente:</p>"
+                "<p><a href=\"{cta_url}\">Probar una pregunta</a></p>"
+                "<p>Así puedes ver si evita una respuesta repetitiva en {business}. "
+                "¿Lo revisamos? Responde <strong>1 = sí</strong> / <strong>2 = no</strong>.</p>"
+                "{signature_html}{footer_html}"
+            ),
+        },
+    },
+    "fu2": {
+        "A": {
+            "body_text": (
+                "{greeting}\n\n"
+                "Solo necesito saber si mejorar la respuesta de las consultas web es una "
+                "prioridad ahora en {business}.\n\n"
+                "Responde 1 y te indico el siguiente paso; responde 2 y cierro el tema.\n\n"
+                "Pablo\nVantelia\n{footer_text}"
+            ),
+            "body_html": (
+                "<p>{greeting}</p>"
+                "<p>Solo necesito saber si mejorar la respuesta de las consultas web es una "
+                "prioridad ahora en {business}.</p>"
+                "<p>Responde <strong>1</strong> y te indico el siguiente paso; responde "
+                "<strong>2</strong> y cierro el tema.</p>"
+                "{signature_html}{footer_html}"
+            ),
+        },
+        "B": {
+            "body_text": (
+                "{greeting}\n\n"
+                "¿Eres tú quien decide cómo se atienden las consultas digitales en {business}?\n\n"
+                "Responde 1 si lo vemos contigo / 2 si debo escribir a otra persona. "
+                "Si es otra persona, puedes indicarme quién.\n\n"
+                "Pablo\nVantelia\n{footer_text}"
+            ),
+            "body_html": (
+                "<p>{greeting}</p>"
+                "<p>¿Eres tú quien decide cómo se atienden las consultas digitales en {business}?</p>"
+                "<p>Responde <strong>1</strong> si lo vemos contigo / <strong>2</strong> si debo "
+                "escribir a otra persona. Si es otra persona, puedes indicarme quién.</p>"
+                "{signature_html}{footer_html}"
+            ),
+        },
+    },
+    "breakup": {
+        "A": {
+            "body_text": (
+                "{greeting}\n\n"
+                "Cierro el hilo por aquí. Gracias por leerme.\n\n"
+                "Si más adelante quieres retomarlo, responde a este correo y te paso el enlace.\n\n"
+                "Pablo\nVantelia\n{footer_text}"
+            ),
+            "body_html": (
+                "<p>{greeting}</p>"
+                "<p>Cierro el hilo por aquí. Gracias por leerme.</p>"
+                "<p>Si más adelante quieres retomarlo, responde a este correo y te paso el enlace.</p>"
+                "{signature_html}{footer_html}"
+            ),
+        },
+        "B": {
+            "body_text": (
+                "{greeting}\n\n"
+                "No te escribo más sobre esto.\n\n"
+                "Si en otro momento encaja para {business}, responde sí y lo retomamos; "
+                "si no, no hace falta hacer nada.\n\n"
+                "Pablo\nVantelia\n{footer_text}"
+            ),
+            "body_html": (
+                "<p>{greeting}</p>"
+                "<p>No te escribo más sobre esto.</p>"
+                "<p>Si en otro momento encaja para {business}, responde <strong>sí</strong> y lo "
+                "retomamos; si no, no hace falta hacer nada.</p>"
+                "{signature_html}{footer_html}"
+            ),
+        },
+    },
+}
+
+
 def fmt_subject(template: str, p: Prospect) -> str:
     first_or_team = p.first_name or "equipo"
     return template.format(business=p.business_name, first_or_team=first_or_team)
 
 
-def assign_variant(email: str, stage: str) -> str:
-    """Asignacion A/B estable por hash(email|stage). Mismo prospect siempre
-    recibe misma variante en ese stage (evita sesgar tests con re-envios)."""
-    digest = hashlib.sha256(f"{email}|{stage}".encode("utf-8")).hexdigest()
+def assign_variant(email: str, stage: str = "") -> str:
+    """Asigna A/B de forma estable por prospecto durante toda la secuencia.
+
+    ``stage`` se conserva en la firma por compatibilidad con llamadas antiguas,
+    pero no participa en el hash.
+    """
+    normalized_email = (email or "").strip().lower()
+    digest = hashlib.sha256(normalized_email.encode("utf-8")).hexdigest()
     return "A" if int(digest, 16) % 2 == 0 else "B"
 
 
@@ -469,7 +615,35 @@ def _cta_block(primary_text: str, stage: str = "cold", p: Prospect | None = None
     return ("\n".join(text_lines), "".join(html_parts))
 
 
+def _render_human_stage(stage: str, p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
+    """Renderer canonico del bundle de conversacion A/B."""
+    variant = assign_variant(p.email, stage)
+    copy = OUTREACH_COPY_VARIANTS[stage][variant]
+    subject, _ = pick_subject_with_variant(stage, p)
+    plain_vars = {
+        "greeting": p.greeting,
+        "business": p.business_name or "vuestro negocio",
+        "cta_url": demo_go_url(stage, p),
+        "footer_text": footer_text(unsubscribe_mailto),
+        "signature_html": signature_html(stage),
+        "footer_html": footer_html(unsubscribe_mailto),
+    }
+    html_vars = {
+        **plain_vars,
+        "greeting": html_lib.escape(plain_vars["greeting"]),
+        "business": html_lib.escape(plain_vars["business"]),
+        "cta_url": html_lib.escape(plain_vars["cta_url"], quote=True),
+    }
+    text = copy["body_text"].format_map(plain_vars)
+    inner = copy["body_html"].format_map(html_vars)
+    return subject, text, html_shell(inner)
+
+
 def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
+    return _render_human_stage("cold", p, unsubscribe_mailto)
+
+    # Conservado temporalmente debajo del return para compatibilidad de diffs
+    # historicos; el renderer canonico de arriba es el unico ejecutable.
     env_proof = _proof_line()
     name = p.business_name
     subject, _variant = pick_subject_with_variant("cold", p)
@@ -519,6 +693,8 @@ def render_cold(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 
 
 def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
+    return _render_human_stage("fu1", p, unsubscribe_mailto)
+
     name = p.business_name
     cta_text, cta_html = _cta_block("Empezar gratis", "fu1", p)
     text = (
@@ -547,6 +723,8 @@ def render_fu1(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 
 
 def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
+    return _render_human_stage("fu2", p, unsubscribe_mailto)
+
     task, _outcome, _ = niche_copy(p.niche, p.service_hint)
     name = p.business_name
     cta_text, cta_html = _cta_block("Probarlo gratis ahora", "fu2", p)
@@ -582,6 +760,8 @@ def render_fu2(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
 
 
 def render_breakup(p: Prospect, unsubscribe_mailto: str) -> tuple[str, str, str]:
+    return _render_human_stage("breakup", p, unsubscribe_mailto)
+
     name = p.business_name
     cta_text, cta_html = _cta_block("Crear mi bot gratis", "breakup", p)
     text = (

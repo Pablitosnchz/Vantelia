@@ -1041,7 +1041,7 @@ def outreach_prospect_detail(email: str):
             (email_l,),
         ).fetchall()
         events = conn.execute(
-            "SELECT id, type, stage, url, ts, ua FROM events WHERE email=? ORDER BY id ASC",
+            "SELECT id, type, stage, url, subject, body_excerpt, ts, ua FROM events WHERE email=? ORDER BY id ASC",
             (email_l,),
         ).fetchall()
         suppression = conn.execute("SELECT reason, added_at FROM suppressions WHERE email=?", (email_l,)).fetchone()
@@ -1623,78 +1623,80 @@ def outreach_preflight(payload: OutreachPreflightRequest):
     if payload.stage not in outreach.OUTREACH_STAGES:
         raise HTTPException(status_code=400, detail="Stage invalido.")
 
-    selected_emails = [
+    selected_emails = list(dict.fromkeys(
         str(email).lower().strip()
         for email in payload.emails
         if str(email).strip()
-    ]
+    ))
     settings_row = outreach_smtp_settings()
     unsub = str(settings_row["unsubscribe_mailto"]) or "baja@vantelia.es"
 
     with outreach._outreach_db() as conn:
+        template_error = ""
         try:
-            from outreach_campaign import render_with_override, load_template_overrides  # type: ignore
-            overrides = load_template_overrides(conn)
-        except Exception:
-            overrides = {}
-
-        rows = []
-        if selected_emails:
-            placeholders = ",".join("?" for _ in selected_emails)
-            rows = conn.execute(
-                f"SELECT * FROM prospects WHERE email IN ({placeholders}) ORDER BY created_at ASC",
-                selected_emails,
-            ).fetchall()
-        else:
-            candidates = outreach_fetch_candidates(
-                conn,
-                payload.stage,
-                after_days=int(payload.after_days or 4),
-                limit=int(payload.max or 20),
-                only_email=None,
+            from outreach_campaign import (  # type: ignore
+                load_template_overrides,
+                render_with_override_and_variant,
             )
-            rows = []
-            for p in candidates:
-                row = conn.execute("SELECT * FROM prospects WHERE email=?", (p.email,)).fetchone()
-                if row:
-                    rows.append(row)
+            overrides = load_template_overrides(conn, fail_closed=True)
+        except Exception as exc:  # El preview informa; un worker real fallara cerrado.
+            template_error = str(exc)[:500] or exc.__class__.__name__
+            try:
+                from outreach_campaign import (  # type: ignore
+                    load_template_overrides,
+                    render_with_override_and_variant,
+                )
+                overrides = load_template_overrides(conn, fail_closed=False)
+            except Exception:
+                overrides = {}
 
-        missing_requested = max(0, len(set(selected_emails)) - len(rows)) if selected_emails else 0
-        suppressed = 0
-        missing_email = 0
-        already_contacted = 0
-        already_in_campaign = 0
-        real_rows = []
+        candidates, assessments = outreach._outreach_select_eligible_prospects(
+            conn,
+            payload.stage,
+            after_days=int(payload.after_days),
+            limit=int(payload.max or 20),
+            emails=selected_emails,
+        )
+
+        reason_labels = {
+            "invalid_email": "email no valido",
+            "prospect_missing": "prospect no encontrado",
+            "suppressed": "baja",
+            "replied": "ya respondio",
+            "status_replied": "ya respondio",
+            "status_client": "ya es cliente",
+            "status_lost": "marcado como perdido",
+            "status_bounced": "email rebotado",
+            "status_baja": "baja",
+            "already_contacted": "ya contactado",
+            "stage_already_sent": "stage ya enviado",
+            "predecessor_missing": "falta el stage anterior",
+            "predecessor_date_invalid": "fecha del stage anterior no valida",
+            "after_days_pending": "aun no cumple el plazo",
+        }
+        reason_counts: Dict[str, int] = {}
         skipped_samples = []
-        for row in rows:
-            email = (row["email"] or "").strip().lower()
-            reason = ""
-            if not email or "@" not in email:
-                missing_email += 1
-                reason = "sin email"
-            elif conn.execute("SELECT 1 FROM suppressions WHERE email=?", (email,)).fetchone():
-                suppressed += 1
-                reason = "baja"
-            elif conn.execute("SELECT 1 FROM campaign_members WHERE email=?", (email,)).fetchone():
-                already_in_campaign += 1
-                reason = "ya en otra campana"
-            elif payload.stage == "cold" and conn.execute("SELECT 1 FROM sends WHERE email=? AND mode='send'", (email,)).fetchone():
-                already_contacted += 1
-                reason = "ya contactado"
-            elif payload.stage != "cold" and conn.execute("SELECT 1 FROM sends WHERE email=? AND stage=? AND mode='send'", (email, payload.stage)).fetchone():
-                already_contacted += 1
-                reason = "stage ya enviado"
-            if reason:
-                if len(skipped_samples) < 8:
-                    skipped_samples.append({"email": email or "-", "reason": reason})
+        for assessment in assessments:
+            if assessment.get("eligible"):
                 continue
-            real_rows.append(row)
+            reason = str(assessment.get("reason") or "unknown")
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+            if len(skipped_samples) < 8:
+                skipped_samples.append({
+                    "email": assessment.get("email") or "-",
+                    "reason": reason_labels.get(reason, reason),
+                    "reason_code": reason,
+                })
 
-        real_count = len(real_rows)
-        first = real_rows[0] if real_rows else (rows[0] if rows else None)
+        first_assessment = next(
+            (item for item in assessments if item.get("eligible") and item.get("prospect")),
+            None,
+        ) or next((item for item in assessments if item.get("prospect")), None)
+        first = first_assessment.get("prospect") if first_assessment else None
         subject = ""
         text = ""
         html = ""
+        variant = "unknown"
         if first:
             preview_prospect = OutreachProspect(
                 email=first["email"] or "test@example.com",
@@ -1724,11 +1726,19 @@ def outreach_preflight(payload: OutreachPreflightRequest):
                 tags="",
                 source="preflight",
             )
-        if preview_prospect:
-            if overrides:
-                subject, text, html = render_with_override(payload.stage, preview_prospect, unsub, overrides)
-            else:
+        try:
+            subject, text, html, variant = render_with_override_and_variant(
+                payload.stage, preview_prospect, unsub, overrides
+            )
+        except Exception as exc:
+            if not template_error:
+                template_error = str(exc)[:500] or exc.__class__.__name__
+            # Un preview sigue siendo util como diagnostico, pero se marca como
+            # bloqueado y nunca se reutiliza como fuente editable.
+            try:
                 subject, text, html = outreach_render(payload.stage, preview_prospect, unsub)
+            except Exception:
+                subject = text = html = ""
 
     warnings = {
         "empty_href": bool(re.search(r'href=(["\'])\s*\1', html or "", re.IGNORECASE)),
@@ -1741,23 +1751,36 @@ def outreach_preflight(payload: OutreachPreflightRequest):
         "stage": payload.stage,
         "counts": {
             "requested": len(selected_emails) if selected_emails else int(payload.max or 20),
-            "found": len(rows),
-            "real_candidates": real_count,
+            "found": sum(1 for item in assessments if item.get("prospect")),
+            "real_candidates": len(candidates),
             "skipped": {
-                "suppressed": suppressed,
-                "missing_email": missing_email + missing_requested,
-                "already_contacted": already_contacted,
-                "already_in_campaign": already_in_campaign,
-                "total": suppressed + missing_email + missing_requested + already_contacted + already_in_campaign,
+                "suppressed": reason_counts.get("suppressed", 0) + reason_counts.get("status_baja", 0),
+                "missing_email": reason_counts.get("invalid_email", 0) + reason_counts.get("prospect_missing", 0),
+                "replied": reason_counts.get("replied", 0) + reason_counts.get("status_replied", 0),
+                "terminal_status": sum(
+                    reason_counts.get(f"status_{status}", 0)
+                    for status in ("client", "lost", "bounced")
+                ),
+                "already_contacted": reason_counts.get("already_contacted", 0) + reason_counts.get("stage_already_sent", 0),
+                "predecessor_missing": reason_counts.get("predecessor_missing", 0) + reason_counts.get("predecessor_date_invalid", 0),
+                "after_days_pending": reason_counts.get("after_days_pending", 0),
+                "already_in_campaign": 0,
+                "total": sum(reason_counts.values()),
             },
         },
         "skipped_samples": skipped_samples,
         "subject": subject,
         "text": text,
         "html": html,
+        "subject_variant": variant or "unknown",
         "html_active": html_active,
         "tracking_active": tracking_active,
         "warnings": warnings,
+        "send_blocked": bool(template_error),
+        "template_diagnostics": {
+            "ok": not bool(template_error),
+            "error": template_error,
+        },
         "auth": outreach._outreach_preflight_auth_status(settings_row),
         "sender": {
             "from_email": settings_row.get("from_email"),

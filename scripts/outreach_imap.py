@@ -26,6 +26,7 @@ Variables de entorno:
 from __future__ import annotations
 
 import email
+import html as html_lib
 import imaplib
 import logging
 import os
@@ -35,6 +36,7 @@ import sqlite3
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from email.message import Message
+from email.header import decode_header, make_header
 from email.utils import getaddresses, parsedate_to_datetime
 from pathlib import Path
 from typing import Iterable
@@ -73,6 +75,16 @@ def _now_iso() -> str:
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(IMAP_SEEN_SCHEMA)
+    existing_events = {row[1] for row in conn.execute("PRAGMA table_info(events)")}
+    for column, ddl in (
+        ("subject", "TEXT DEFAULT ''"),
+        ("body_excerpt", "TEXT DEFAULT ''"),
+    ):
+        if column not in existing_events:
+            try:
+                conn.execute(f"ALTER TABLE events ADD COLUMN {column} {ddl}")
+            except sqlite3.OperationalError:
+                pass
     conn.commit()
 
 
@@ -161,20 +173,55 @@ def _bounce_original_recipient(msg: Message) -> str:
 
 
 def _message_text_excerpt(msg: Message, limit: int = 2000) -> str:
-    """Primer part text/plain del mensaje, recortado (para notificar la respuesta)."""
+    """Texto visible de la respuesta, recortado para persistencia y notificacion."""
     try:
+        def decode_part(part: Message) -> str:
+            raw = part.get_payload(decode=True) or b""
+            charset = part.get_content_charset() or "utf-8"
+            try:
+                return raw.decode(charset, "replace")
+            except (LookupError, UnicodeError):
+                return raw.decode("utf-8", "replace")
+
+        html_parts: list[str] = []
         if msg.is_multipart():
             for part in msg.walk():
-                if (part.get_content_type() or "").lower() == "text/plain":
-                    raw = part.get_payload(decode=True) or b""
-                    charset = part.get_content_charset() or "utf-8"
-                    return raw.decode(charset, "replace").strip()[:limit]
+                if (part.get_content_disposition() or "").lower() == "attachment":
+                    continue
+                content_type = (part.get_content_type() or "").lower()
+                if content_type not in {"text/plain", "text/html"}:
+                    continue
+                decoded = decode_part(part)
+                if content_type == "text/plain":
+                    return decoded.strip()[:limit]
+                html_parts.append(decoded)
+            raw_text = "\n".join(html_parts)
+        else:
+            content_type = (msg.get_content_type() or "").lower()
+            if content_type not in {"text/plain", "text/html"}:
+                return ""
+            raw_text = decode_part(msg)
+            if content_type == "text/plain":
+                return raw_text.strip()[:limit]
+        if not raw_text:
             return ""
-        raw = msg.get_payload(decode=True) or b""
-        charset = msg.get_content_charset() or "utf-8"
-        return raw.decode(charset, "replace").strip()[:limit]
+        text = re.sub(r"(?is)<(script|style)\b[^>]*>.*?</\1>", " ", raw_text)
+        text = re.sub(r"(?i)<br\s*/?>|</p\s*>", "\n", text)
+        text = re.sub(r"(?s)<[^>]+>", " ", text)
+        text = html_lib.unescape(text)
+        text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r"\n\s*\n+", "\n\n", text)
+        return text.strip()[:limit]
     except Exception:
         return ""
+
+
+def _message_subject(msg: Message, limit: int = 300) -> str:
+    raw = (msg.get("Subject", "") or "").strip()
+    try:
+        return str(make_header(decode_header(raw))).strip()[:limit]
+    except Exception:
+        return raw[:limit]
 
 
 def _record_bounce(conn: sqlite3.Connection, recipient: str, msg_id: str) -> bool:
@@ -332,6 +379,8 @@ def _record_reply(
     stage: str,
     received_at: str,
     msg_id: str,
+    subject: str = "",
+    body_excerpt: str = "",
 ) -> bool:
     """Registra evento reply, marca prospect como replied. Devuelve True si era nuevo."""
     existing = conn.execute(
@@ -342,8 +391,10 @@ def _record_reply(
         return False
 
     conn.execute(
-        "INSERT INTO events (email, type, stage, url, ts, ua, ip) VALUES (?, 'reply', ?, ?, ?, '', '')",
-        (prospect_email, stage, msg_id, received_at),
+        """INSERT INTO events
+           (email, type, stage, url, subject, body_excerpt, ts, ua, ip)
+           VALUES (?, 'reply', ?, ?, ?, ?, ?, '', '')""",
+        (prospect_email, stage, msg_id, subject.strip()[:300], body_excerpt.strip()[:2000], received_at),
     )
     try:
         conn.execute(
@@ -370,7 +421,8 @@ def poll_once(db_path: Path) -> dict:
     """
     stats = {
         "checked": 0, "matched": 0, "replies_new": 0, "skipped": 0, "errors": 0,
-        "bounces_new": 0, "replies_detail": [], "bounces_detail": [],
+        "bounces_new": 0, "replies_backfilled": 0,
+        "replies_detail": [], "bounces_detail": [],
     }
 
     if not os.getenv("IMAP_HOST", "").strip():
@@ -401,9 +453,29 @@ def poll_once(db_path: Path) -> dict:
                 msg_id = (msg.get("Message-Id") or msg.get("Message-ID") or "").strip()
                 if msg_id:
                     seen = conn.execute(
-                        "SELECT 1 FROM imap_seen WHERE message_id = ?", (msg_id,)
+                        "SELECT email, stage FROM imap_seen WHERE message_id = ?", (msg_id,)
                     ).fetchone()
                     if seen:
+                        if seen["email"] and seen["stage"] not in {"bounce", "autoreply", "no-match"}:
+                            reply_subject = _message_subject(msg)
+                            reply_body = _message_text_excerpt(msg)
+                            stored = conn.execute(
+                                """SELECT subject, body_excerpt FROM events
+                                   WHERE type = 'reply' AND url = ? ORDER BY id DESC LIMIT 1""",
+                                (msg_id,),
+                            ).fetchone()
+                            needs_subject = bool(stored and not (stored["subject"] or "").strip() and reply_subject)
+                            needs_body = bool(stored and not (stored["body_excerpt"] or "").strip() and reply_body)
+                            if needs_subject or needs_body:
+                                updated = conn.execute(
+                                    """UPDATE events
+                                       SET subject = CASE WHEN COALESCE(subject, '') = '' THEN ? ELSE subject END,
+                                           body_excerpt = CASE WHEN COALESCE(body_excerpt, '') = '' THEN ? ELSE body_excerpt END
+                                       WHERE type = 'reply' AND url = ?""",
+                                    (reply_subject, reply_body, msg_id),
+                                ).rowcount
+                                conn.commit()
+                                stats["replies_backfilled"] += max(0, int(updated or 0))
                         stats["skipped"] += 1
                         continue
 
@@ -445,15 +517,25 @@ def poll_once(db_path: Path) -> dict:
 
                 prospect_email, stage, _send_id = match
                 received = _received_at(msg)
-                created = _record_reply(conn, prospect_email, stage, received, msg_id or "")
+                reply_subject = _message_subject(msg)
+                reply_body = _message_text_excerpt(msg)
+                created = _record_reply(
+                    conn,
+                    prospect_email,
+                    stage,
+                    received,
+                    msg_id or "",
+                    subject=reply_subject,
+                    body_excerpt=reply_body,
+                )
                 stats["matched"] += 1
                 if created:
                     stats["replies_new"] += 1
                     stats["replies_detail"].append({
                         "email": prospect_email,
                         "stage": stage,
-                        "subject": (msg.get("Subject", "") or "").strip()[:300],
-                        "body_excerpt": _message_text_excerpt(msg),
+                        "subject": reply_subject,
+                        "body_excerpt": reply_body,
                         "received_at": received,
                     })
 

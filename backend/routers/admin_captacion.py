@@ -45,10 +45,11 @@ from backend.main import app
 @app.post("/admin/outreach/replies", dependencies=[Depends(security._require_admin_token)])
 def outreach_record_reply(payload: OutreachReplyPayload):
     email = str(payload.email).lower().strip()
+    note = (payload.note or "").strip()[:2000]
     with outreach._outreach_db() as conn:
         conn.execute(
-            "INSERT INTO events (email, type, stage, ts) VALUES (?,?,?,?)",
-            (email, "reply", payload.stage, outreach._outreach_now()),
+            "INSERT INTO events (email, type, stage, body_excerpt, ts) VALUES (?,?,?,?,?)",
+            (email, "reply", payload.stage, note, outreach._outreach_now()),
         )
         conn.execute(
             "UPDATE prospects SET status='replied', updated_at=? WHERE email=?",

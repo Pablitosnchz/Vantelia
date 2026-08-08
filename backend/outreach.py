@@ -1,6 +1,8 @@
 """Captacion email outbound multi-touch (panel + autopilot) (refactor F3)."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import random
@@ -19,7 +21,7 @@ from urllib.parse import quote, unquote, urlparse
 from fastapi import HTTPException
 
 
-from backend import appstate, emailing, settings, timeutils
+from backend import appstate, clients, emailing, settings, timeutils
 
 OUTREACH_DEFAULT_FOLLOWUP_DAYS: Dict[str, int] = {"fu1": 4, "fu2": 6, "breakup": 8}
 
@@ -343,6 +345,262 @@ def _outreach_prospect_row_for_email(email: str) -> Optional[Dict[str, Any]]:
             return dict(row) if row else None
     except Exception:
         return None
+
+
+def _outreach_latest_stage_for_email(email: str, default: str = "cold") -> str:
+    """Devuelve la etapa del ultimo envio real, sin inferirla desde aperturas."""
+    email_clean = (email or "").strip().lower()
+    default_clean = (default or "cold").strip().lower() or "cold"
+    if not email_clean or not OUTREACH_AVAILABLE:
+        return default_clean
+    try:
+        with _outreach_db() as conn:
+            row = conn.execute(
+                """SELECT stage FROM sends
+                   WHERE email=? AND mode='send'
+                   ORDER BY sent_at DESC, id DESC LIMIT 1""",
+                (email_clean,),
+            ).fetchone()
+        stage = str(row["stage"] if row else "").strip().lower()
+        return stage or default_clean
+    except Exception:
+        return default_clean
+
+
+_DEMO_ORIENTATIVE_ANALYTICS_EVENTS = {
+    "demo_chat_started": "demo_chat_opened",
+    "demo_contact_clicked": "contact_intent",
+    "demo_whatsapp_clicked": "whatsapp_intent",
+    "demo_claim_clicked": "claim_intent",
+}
+_DEMO_AUTO_PREFIX = "demo_auto_"
+_DEMO_SIGNAL_TOKEN_TTL_SECONDS = max(
+    60, int(os.getenv("DEMO_TENANT_TTL_SECONDS", "3600"))
+)
+
+
+def _outreach_demo_signal_token(
+    cliente_id: str,
+    event_name: str,
+    session_id: str,
+    *,
+    expires_at: Optional[int] = None,
+) -> str:
+    """Firma cliente+expiry+evento+sesion sin revelar el secreto."""
+    cliente_clean = (cliente_id or "").strip()[:80]
+    event_clean = str(event_name or "").strip()[:80]
+    session_clean = str(session_id or "").strip()[:128]
+    if (
+        not OUTREACH_TRACKING_SECRET
+        or not cliente_clean.startswith(_DEMO_AUTO_PREFIX)
+        or not settings.CLIENT_ID_PATTERN.match(cliente_clean)
+        or event_clean not in _DEMO_ORIENTATIVE_ANALYTICS_EVENTS
+        or not settings.SESSION_ID_PATTERN.match(session_clean)
+    ):
+        return ""
+    try:
+        from backend import demo_agenda
+
+        if not demo_agenda._demo_is_active_unclaimed(cliente_clean):
+            return ""
+    except Exception:
+        return ""
+    expiry = (
+        int(expires_at)
+        if expires_at is not None
+        else int(time.time()) + _DEMO_SIGNAL_TOKEN_TTL_SECONDS
+    )
+    message = (
+        f"vantelia-demo-signal:v2:{cliente_clean}:{expiry}:{event_clean}:{session_clean}"
+    ).encode("utf-8")
+    signature = hmac.new(
+        OUTREACH_TRACKING_SECRET.encode("utf-8"), message, hashlib.sha256
+    ).hexdigest()
+    return f"v2.{expiry}.{signature}"
+
+
+def _outreach_verify_demo_signal_token(
+    cliente_id: str,
+    event_name: str,
+    session_id: str,
+    signal_token: str,
+) -> bool:
+    cliente_clean = (cliente_id or "").strip()[:80]
+    event_clean = str(event_name or "").strip()[:80]
+    session_clean = str(session_id or "").strip()[:128]
+    token_clean = str(signal_token or "").strip()[:160]
+    if (
+        not OUTREACH_TRACKING_SECRET
+        or not cliente_clean.startswith(_DEMO_AUTO_PREFIX)
+        or not settings.CLIENT_ID_PATTERN.match(cliente_clean)
+        or event_clean not in _DEMO_ORIENTATIVE_ANALYTICS_EVENTS
+        or not settings.SESSION_ID_PATTERN.match(session_clean)
+    ):
+        return False
+    try:
+        version, expiry_raw, provided_signature = token_clean.split(".", 2)
+        expiry = int(expiry_raw)
+    except (TypeError, ValueError):
+        return False
+    if version != "v2" or expiry <= int(time.time()):
+        return False
+    message = (
+        f"vantelia-demo-signal:v2:{cliente_clean}:{expiry}:{event_clean}:{session_clean}"
+    ).encode("utf-8")
+    expected_signature = hmac.new(
+        OUTREACH_TRACKING_SECRET.encode("utf-8"), message, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(provided_signature, expected_signature)
+
+
+def _outreach_mirror_demo_analytics_event(
+    payload: Dict[str, Any], *, signal_token: str = ""
+) -> bool:
+    """Replica una senal orientativa del navegador en las metricas de outreach.
+
+    Es idempotente por prospecto, tipo y sesion de analitica. No replica URLs,
+    mensajes ni otros datos del visitante y nunca cambia el estado comercial.
+    """
+    if not OUTREACH_AVAILABLE or not isinstance(payload, dict):
+        return False
+
+    event_name = str(payload.get("event") or "").strip()
+    outreach_type = _DEMO_ORIENTATIVE_ANALYTICS_EVENTS.get(event_name)
+    if not outreach_type:
+        return False
+
+    cliente_id = str(
+        payload.get("widget_client_id") or payload.get("cliente_id") or ""
+    ).strip()[:80]
+    if not cliente_id.startswith(_DEMO_AUTO_PREFIX):
+        return False
+    if not settings.CLIENT_ID_PATTERN.match(cliente_id):
+        return False
+
+    session_id = str(payload.get("session_id") or "").strip()[:128]
+    if not session_id or not settings.SESSION_ID_PATTERN.match(session_id):
+        return False
+    if not _outreach_verify_demo_signal_token(
+        cliente_id, event_name, session_id, signal_token
+    ):
+        return False
+
+    try:
+        config = clients._get_client_config(cliente_id)
+    except HTTPException:
+        return False
+    contacto = config.get("contacto") if isinstance(config, dict) else {}
+    email = str((contacto or {}).get("email") or "").strip().lower()
+    if not email:
+        return False
+    fingerprint = hashlib.sha256(
+        f"{cliente_id}\0{event_name}\0{session_id}".encode("utf-8")
+    ).hexdigest()[:32]
+    event_key = f"demo-analytics:{fingerprint}"
+
+    try:
+        with _outreach_db() as conn:
+            prospect = conn.execute(
+                "SELECT 1 FROM prospects WHERE email=?", (email,)
+            ).fetchone()
+            if not prospect:
+                return False
+            stage_row = conn.execute(
+                """SELECT stage FROM sends
+                   WHERE email=? AND mode='send'
+                   ORDER BY sent_at DESC, id DESC LIMIT 1""",
+                (email,),
+            ).fetchone()
+            stage = str(stage_row["stage"] if stage_row else "cold").strip().lower() or "cold"
+            insert_cursor = conn.execute(
+                """INSERT INTO events (email, type, stage, url, ts, ua, ip)
+                   SELECT ?,?,?,?,?,?,?
+                   WHERE NOT EXISTS (
+                       SELECT 1 FROM events
+                       WHERE email=? AND type=? AND url=?
+                   )""",
+                (
+                    email,
+                    outreach_type,
+                    stage,
+                    event_key,
+                    _outreach_now(),
+                    "",
+                    "",
+                    email,
+                    outreach_type,
+                    event_key,
+                ),
+            )
+            inserted = insert_cursor.rowcount == 1
+            conn.commit()
+        return inserted
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.debug("No se pudo reflejar interaccion de demo en outreach: %s", exc)
+        return False
+
+
+def _outreach_record_demo_chat_message(cliente_id: str, session_id: str) -> bool:
+    """Senal fuerte: /chat valido y persistio el mensaje de una auto-demo."""
+    cliente_clean = (cliente_id or "").strip()[:80]
+    session_clean = str(session_id or "").strip()[:128]
+    if (
+        not OUTREACH_AVAILABLE
+        or not cliente_clean.startswith(_DEMO_AUTO_PREFIX)
+        or not settings.CLIENT_ID_PATTERN.match(cliente_clean)
+        or not settings.SESSION_ID_PATTERN.match(session_clean)
+    ):
+        return False
+    try:
+        from backend import demo_agenda
+
+        if not demo_agenda._demo_is_active_unclaimed(cliente_clean):
+            return False
+    except Exception:
+        return False
+    try:
+        config = clients._get_client_config(cliente_clean)
+    except HTTPException:
+        return False
+    email = str(((config.get("contacto") or {}).get("email")) or "").strip().lower()
+    if not email:
+        return False
+    event_key = "demo-server:" + hashlib.sha256(
+        f"{cliente_clean}\0chat_message\0{session_clean}".encode("utf-8")
+    ).hexdigest()[:32]
+    try:
+        with _outreach_db() as conn:
+            if not conn.execute(
+                "SELECT 1 FROM prospects WHERE email=?", (email,)
+            ).fetchone():
+                return False
+            stage_row = conn.execute(
+                """SELECT stage FROM sends WHERE email=? AND mode='send'
+                   ORDER BY sent_at DESC, id DESC LIMIT 1""",
+                (email,),
+            ).fetchone()
+            stage = str(stage_row["stage"] if stage_row else "cold").strip().lower() or "cold"
+            cursor = conn.execute(
+                """INSERT INTO events (email, type, stage, url, ts, ua, ip)
+                   SELECT ?, 'demo_interacted', ?, ?, ?, '', ''
+                   WHERE NOT EXISTS (
+                       SELECT 1 FROM events
+                       WHERE email=? AND type='demo_interacted' AND url=?
+                   )""",
+                (email, stage, event_key, _outreach_now(), email, event_key),
+            )
+            inserted = cursor.rowcount == 1
+            if inserted:
+                conn.execute(
+                    """UPDATE prospects SET status='engaged', updated_at=?
+                       WHERE email=? AND status IN ('new','contacted')""",
+                    (_outreach_now(), email),
+                )
+            conn.commit()
+        return inserted
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.debug("No se pudo registrar chat real de demo en outreach: %s", exc)
+        return False
 
 
 def _outreach_demo_sector_for_row(row: Dict[str, Any]) -> str:
@@ -719,6 +977,206 @@ def _outreach_parse_dt(value: str) -> Optional[datetime]:
         return parsed.astimezone(timezone.utc)
     except Exception:
         return None
+
+
+OUTREACH_TERMINAL_STATUSES = frozenset(
+    {"replied", "client", "lost", "bounced", "baja"}
+)
+
+
+def _outreach_send_eligibility(
+    conn: sqlite3.Connection,
+    email: str,
+    stage: str,
+    after_days: int,
+    *,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Evalua todas las condiciones que permiten un envio real.
+
+    Las listas explicitas y ``only_email`` son filtros de entrada, nunca un
+    atajo a estas reglas. El mismo dictamen se usa en preflight, al seleccionar
+    candidatos y justo antes de entregar el mensaje a SMTP.
+    """
+    stage_clean = str(stage or "").strip().lower()
+    if stage_clean not in OUTREACH_STAGES:
+        raise ValueError(f"Stage invalido: {stage_clean or '-'}")
+    try:
+        wait_days = max(0, int(after_days))
+    except (TypeError, ValueError):
+        wait_days = 0
+
+    email_clean = outreach_normalize_email(str(email or ""))
+    result: Dict[str, Any] = {
+        "eligible": False,
+        "email": email_clean,
+        "stage": stage_clean,
+        "reason": "",
+        "after_days": wait_days,
+    }
+    if not email_clean or "@" not in email_clean:
+        result["reason"] = "invalid_email"
+        return result
+
+    prospect = conn.execute(
+        "SELECT * FROM prospects WHERE email=?", (email_clean,)
+    ).fetchone()
+    if not prospect:
+        result["reason"] = "prospect_missing"
+        return result
+    result["prospect"] = prospect
+
+    if conn.execute(
+        "SELECT 1 FROM suppressions WHERE email=? LIMIT 1", (email_clean,)
+    ).fetchone():
+        result["reason"] = "suppressed"
+        return result
+
+    # Solo una respuesta recibida cuenta como reply. ``reply_intent`` y clics
+    # son senales de interes, no autorizan a alterar la secuencia.
+    if conn.execute(
+        "SELECT 1 FROM events WHERE email=? AND type='reply' LIMIT 1",
+        (email_clean,),
+    ).fetchone():
+        result["reason"] = "replied"
+        return result
+
+    status = str(prospect["status"] or "").strip().lower()
+    if status in OUTREACH_TERMINAL_STATUSES:
+        result["reason"] = f"status_{status}"
+        return result
+
+    if stage_clean == "cold":
+        # Un cold nunca reinicia una secuencia que ya tuvo cualquier envio real.
+        if conn.execute(
+            "SELECT 1 FROM sends WHERE email=? AND mode='send' LIMIT 1",
+            (email_clean,),
+        ).fetchone():
+            result["reason"] = "already_contacted"
+            return result
+    else:
+        if conn.execute(
+            "SELECT 1 FROM sends WHERE email=? AND stage=? AND mode='send' LIMIT 1",
+            (email_clean, stage_clean),
+        ).fetchone():
+            result["reason"] = "stage_already_sent"
+            return result
+
+        previous_stage = OUTREACH_STAGES[OUTREACH_STAGES.index(stage_clean) - 1]
+        previous = conn.execute(
+            """SELECT sent_at FROM sends
+               WHERE email=? AND stage=? AND mode='send'
+               ORDER BY sent_at DESC, id DESC LIMIT 1""",
+            (email_clean, previous_stage),
+        ).fetchone()
+        if not previous:
+            result["reason"] = "predecessor_missing"
+            result["previous_stage"] = previous_stage
+            return result
+
+        previous_at = _outreach_parse_dt(str(previous["sent_at"] or ""))
+        if previous_at is None:
+            # Un historico sin fecha fiable no debe habilitar automaticamente
+            # el siguiente toque.
+            result["reason"] = "predecessor_date_invalid"
+            result["previous_stage"] = previous_stage
+            return result
+        current_time = now or datetime.now(timezone.utc)
+        if current_time.tzinfo is None:
+            current_time = current_time.replace(tzinfo=timezone.utc)
+        current_time = current_time.astimezone(timezone.utc)
+        eligible_at = previous_at + timedelta(days=wait_days)
+        result.update(
+            {
+                "previous_stage": previous_stage,
+                "previous_sent_at": previous_at.isoformat(timespec="seconds"),
+                "eligible_at": eligible_at.isoformat(timespec="seconds"),
+            }
+        )
+        if current_time < eligible_at:
+            result["reason"] = "after_days_pending"
+            return result
+
+    result["eligible"] = True
+    result["reason"] = "eligible"
+    return result
+
+
+def _outreach_select_eligible_prospects(
+    conn: sqlite3.Connection,
+    stage: str,
+    after_days: int,
+    limit: int,
+    *,
+    emails: Optional[List[str]] = None,
+    only_email: str = "",
+    now: Optional[datetime] = None,
+) -> tuple[List[Any], List[Dict[str, Any]]]:
+    """Selecciona y filtra prospects conservando el orden del selector actual."""
+    max_items = max(0, int(limit or 0))
+    requested = list(
+        dict.fromkeys(
+            outreach_normalize_email(str(value or ""))
+            for value in (emails or [])
+            if str(value or "").strip()
+        )
+    )
+    only_clean = outreach_normalize_email(only_email or "")
+    if not requested and only_clean:
+        requested = [only_clean]
+
+    source: List[Any] = []
+    if requested:
+        placeholders = ",".join("?" for _ in requested)
+        rows = conn.execute(
+            f"SELECT * FROM prospects WHERE email IN ({placeholders})",
+            requested,
+        ).fetchall()
+        by_email = {str(row["email"] or "").strip().lower(): row for row in rows}
+        source = [by_email[email] for email in requested if email in by_email]
+    else:
+        # El selector existente conserva su priorizacion. La evaluacion comun
+        # sigue siendo la autoridad y protege ante cualquier divergencia futura.
+        selected = outreach_fetch_candidates(
+            conn,
+            stage,
+            after_days=max(0, int(after_days or 0)),
+            limit=max_items,
+            only_email=None,
+        )
+        for candidate in selected:
+            row = conn.execute(
+                "SELECT * FROM prospects WHERE email=?", (candidate.email,)
+            ).fetchone()
+            if row:
+                source.append(row)
+
+    assessments: List[Dict[str, Any]] = []
+    eligible: List[Any] = []
+    present = {str(row["email"] or "").strip().lower() for row in source}
+    for requested_email in requested:
+        if requested_email not in present:
+            assessments.append(
+                {
+                    "eligible": False,
+                    "email": requested_email,
+                    "stage": stage,
+                    "reason": "prospect_missing",
+                    "after_days": max(0, int(after_days or 0)),
+                }
+            )
+    for row in source:
+        assessment = _outreach_send_eligibility(
+            conn,
+            str(row["email"] or ""),
+            stage,
+            after_days,
+            now=now,
+        )
+        assessments.append(assessment)
+        if assessment["eligible"] and (not max_items or len(eligible) < max_items):
+            eligible.append(outreach_row_to_prospect(row))
+    return eligible, assessments
 
 
 def _outreach_next_stage(row: sqlite3.Row) -> str:
@@ -1724,14 +2182,18 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
     is_autopilot = bool(params.get("autopilot"))
 
     try:
-        from outreach_campaign import render_with_override, load_template_overrides  # type: ignore
-        overrides = load_template_overrides(conn)
-    except Exception:
-        overrides = {}
-
-    try:
         conn.execute("UPDATE jobs SET status='running' WHERE id=?", (job_id,))
         conn.commit()
+        try:
+            from outreach_campaign import (  # type: ignore
+                load_template_overrides,
+                render_with_override_and_variant,
+            )
+            overrides = load_template_overrides(conn, fail_closed=send_real)
+        except Exception as template_err:
+            _job_log(conn, job_id, f"FATAL plantillas: {template_err}")
+            _job_finish(conn, job_id, "error")
+            return
 
         sent_total = 0
         stage_days = _outreach_followup_stage_days(
@@ -1742,7 +2204,15 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
             if sent_total >= max_total:
                 break
             remaining = max_total - sent_total
-            candidates = outreach_fetch_candidates(conn, stage, after_days=after_days, limit=remaining)
+            candidates, assessments = _outreach_select_eligible_prospects(
+                conn,
+                stage,
+                after_days=after_days,
+                limit=remaining,
+            )
+            skipped_initial = sum(1 for item in assessments if not item.get("eligible"))
+            if skipped_initial:
+                _job_log(conn, job_id, f"{stage}: {skipped_initial} descartados por elegibilidad")
             if not candidates:
                 _job_log(conn, job_id, f"{stage}: sin candidatos (after_days={after_days})")
                 continue
@@ -1755,6 +2225,16 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
                     return
                 if sent_total >= max_total:
                     break
+                eligibility = _outreach_send_eligibility(conn, p.email, stage, after_days)
+                if not eligibility["eligible"]:
+                    reason = str(eligibility["reason"])
+                    _job_log(conn, job_id, f"skip {p.email} ({reason})")
+                    if is_autopilot:
+                        _autopilot_log(
+                            "info", "email_skipped", f"Saltado {p.email}: {reason}",
+                            {"email": p.email, "reason": reason, "stage": stage},
+                        )
+                    continue
                 if conn.execute("SELECT 1 FROM suppressions WHERE email=?", (p.email,)).fetchone():
                     _job_log(conn, job_id, f"skip {p.email} (baja)")
                     if is_autopilot:
@@ -1784,10 +2264,9 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
                                        {"email": p.email, "reason": "stage_already_sent", "stage": stage})
                     continue
 
-                if overrides:
-                    subject, text, html_body = render_with_override(stage, p, unsub, overrides)
-                else:
-                    subject, text, html_body = outreach_render(stage, p, unsub)
+                subject, text, html_body, subject_variant = render_with_override_and_variant(
+                    stage, p, unsub, overrides
+                )
                 if not OUTREACH_TRACKING_DISABLED and OUTREACH_TRACKING_SECRET and OUTREACH_TRACKING_BASE_URL:
                     html_body = outreach_apply_tracking(
                         html_body, p.email, stage,
@@ -1809,6 +2288,16 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
                     continue
 
                 _outreach_wait_send_slot()
+                eligibility = _outreach_send_eligibility(conn, p.email, stage, after_days)
+                if not eligibility["eligible"]:
+                    reason = str(eligibility["reason"])
+                    _job_log(conn, job_id, f"skip {p.email} pre-SMTP ({reason})")
+                    if is_autopilot:
+                        _autopilot_log(
+                            "info", "email_skipped", f"Saltado {p.email} antes de SMTP: {reason}",
+                            {"email": p.email, "reason": reason, "stage": stage},
+                        )
+                    continue
                 msg = outreach_build_message(p.email, subject, text, html_body, settings_row, in_reply_to=in_reply_to)
                 try:
                     _outreach_send_email_object(msg)
@@ -1832,16 +2321,10 @@ def _outreach_run_autopilot_job(job_id: int, params: dict) -> None:
                                        {"email": p.email, "stage": stage, "error": str(send_err)[:240]})
                     continue
 
-                try:
-                    from outreach_templates import assign_variant as _assign_variant  # type: ignore
-                    _variant = _assign_variant(p.email, stage)
-                except Exception:
-                    _variant = ""
-
                 conn.execute(
                     "INSERT INTO sends (email, stage, subject, body_text, body_html, sent_at, mode, message_id, subject_variant)"
                     " VALUES (?,?,?,?,?,?,?,?,?)",
-                    (p.email, stage, subject, text, html_body, _outreach_now(), "send", msg["Message-ID"] or "", _variant),
+                    (p.email, stage, subject, text, html_body, _outreach_now(), "send", msg["Message-ID"] or "", subject_variant or "unknown"),
                 )
                 conn.execute(
                     "UPDATE prospects SET status=CASE WHEN COALESCE(status,'new') IN ('','new') THEN 'contacted' ELSE status END,"
@@ -2753,12 +3236,6 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
     is_autopilot = bool(params.get("autopilot"))
 
     try:
-        from outreach_campaign import render_with_override, load_template_overrides  # type: ignore
-        overrides = load_template_overrides(conn)
-    except Exception:
-        overrides = {}
-
-    try:
         conn.execute("UPDATE jobs SET status='running' WHERE id=?", (job_id,))
         if campaign_id and params.get("send"):
             conn.execute(
@@ -2766,19 +3243,38 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                 (job_id, _outreach_now(), campaign_id),
             )
         conn.commit()
+        try:
+            from outreach_campaign import (  # type: ignore
+                load_template_overrides,
+                render_with_override_and_variant,
+            )
+            overrides = load_template_overrides(conn, fail_closed=real_send)
+        except Exception as template_err:
+            _job_log(conn, job_id, f"FATAL plantillas: {template_err}")
+            _job_finish(conn, job_id, "error")
+            return
 
         selected_emails = [
             str(email).lower().strip()
             for email in (params.get("emails") or [])
             if str(email).strip()
         ]
-        if selected_emails and not params.get("test_to"):
-            placeholders = ",".join("?" for _ in selected_emails)
-            rows = conn.execute(
-                f"SELECT * FROM prospects WHERE email IN ({placeholders}) ORDER BY created_at ASC",
-                selected_emails,
-            ).fetchall()
-            candidates = [outreach_row_to_prospect(r) for r in rows]
+        if not params.get("test_to"):
+            candidates, assessments = _outreach_select_eligible_prospects(
+                conn,
+                stage,
+                after_days=int(params.get("after_days", 4)),
+                limit=int(params.get("max", 20)),
+                emails=selected_emails,
+                only_email=str(params.get("email") or ""),
+            )
+            for assessment in assessments:
+                if not assessment.get("eligible"):
+                    _job_log(
+                        conn,
+                        job_id,
+                        f"skip {assessment.get('email') or '-'} ({assessment.get('reason') or 'ineligible'})",
+                    )
         else:
             candidates = outreach_fetch_candidates(
                 conn,
@@ -2861,6 +3357,24 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                     _job_finish(conn, job_id, "done")
                     return
             if real_send and not params.get("test_to"):
+                eligibility = _outreach_send_eligibility(
+                    conn, p.email, stage, int(params.get("after_days", 4))
+                )
+                if not eligibility["eligible"]:
+                    reason = str(eligibility["reason"])
+                    if campaign_id:
+                        conn.execute(
+                            "UPDATE campaign_members SET status='skipped', skip_reason=?, updated_at=? WHERE campaign_id=? AND email=?",
+                            (reason, _outreach_now(), campaign_id, p.email),
+                        )
+                        conn.commit()
+                    _job_log(conn, job_id, f"skip {p.email} ({reason})")
+                    if is_autopilot:
+                        _autopilot_log(
+                            "info", "email_skipped", f"Saltado {p.email}: {reason}",
+                            {"email": p.email, "reason": reason, "stage": stage},
+                        )
+                    continue
                 if conn.execute("SELECT 1 FROM suppressions WHERE email=?", (p.email,)).fetchone():
                     if campaign_id:
                         conn.execute(
@@ -2931,10 +3445,9 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                                        {"email": p.email, "reason": "stage_already_sent", "stage": stage})
                     continue
 
-            if overrides:
-                subject, text, html_body = render_with_override(stage, p, unsub, overrides)
-            else:
-                subject, text, html_body = outreach_render(stage, p, unsub)
+            subject, text, html_body, subject_variant = render_with_override_and_variant(
+                stage, p, unsub, overrides
+            )
             if not OUTREACH_TRACKING_DISABLED and OUTREACH_TRACKING_SECRET and OUTREACH_TRACKING_BASE_URL:
                 html_body = outreach_apply_tracking(
                     html_body, p.email, stage,
@@ -2959,6 +3472,25 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                     in_reply_to = row["message_id"]
 
             _outreach_wait_send_slot()
+            if mode == "send":
+                eligibility = _outreach_send_eligibility(
+                    conn, p.email, stage, int(params.get("after_days", 4))
+                )
+                if not eligibility["eligible"]:
+                    reason = str(eligibility["reason"])
+                    if campaign_id:
+                        conn.execute(
+                            "UPDATE campaign_members SET status='skipped', skip_reason=?, updated_at=? WHERE campaign_id=? AND email=?",
+                            (reason, _outreach_now(), campaign_id, p.email),
+                        )
+                        conn.commit()
+                    _job_log(conn, job_id, f"skip {p.email} pre-SMTP ({reason})")
+                    if is_autopilot:
+                        _autopilot_log(
+                            "info", "email_skipped", f"Saltado {p.email} antes de SMTP: {reason}",
+                            {"email": p.email, "reason": reason, "stage": stage},
+                        )
+                    continue
             msg = outreach_build_message(recipient, subject, text, html_body, settings_row, in_reply_to=in_reply_to)
             try:
                 _outreach_send_email_object(msg)
@@ -2990,14 +3522,9 @@ def _outreach_run_send_job(job_id: int, params: dict) -> None:
                 continue
 
             if mode == "send":
-                try:
-                    from outreach_templates import assign_variant as _assign_variant  # type: ignore
-                    _variant = _assign_variant(p.email, stage)
-                except Exception:
-                    _variant = ""
                 conn.execute(
                     "INSERT INTO sends (campaign_id, email, stage, subject, body_text, body_html, sent_at, mode, message_id, subject_variant) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (campaign_id, p.email, stage, subject, text, html_body, _outreach_now(), mode, msg["Message-ID"] or "", _variant),
+                    (campaign_id, p.email, stage, subject, text, html_body, _outreach_now(), mode, msg["Message-ID"] or "", subject_variant or "unknown"),
                 )
                 send_id = int(conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"])
                 conn.execute(

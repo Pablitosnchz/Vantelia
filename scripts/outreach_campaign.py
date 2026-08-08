@@ -27,6 +27,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html as html_lib
+import json
 import os
 import random
 import re
@@ -34,12 +36,14 @@ import smtplib
 import sqlite3
 import sys
 import time
+import unicodedata
 from collections import defaultdict
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 from pathlib import Path
+from string import Formatter
 try:
     from zoneinfo import ZoneInfo
 except ImportError:  # Python 3.8 fallback
@@ -56,6 +60,7 @@ from outreach_templates import (  # noqa: E402
     Prospect, STAGE_ORDER, render, niche_copy, stable_pick,
     html_shell, signature_html, cta_button_html, footer_html, footer_text,
     assign_variant, demo_url_with_utm, demo_go_url,
+    OUTREACH_COPY_BUNDLE_VERSION, OUTREACH_COPY_VARIANTS, SUBJECT_POOLS_AB,
 )
 
 BASE_DIR = SCRIPTS_DIR.parent
@@ -141,6 +146,8 @@ CREATE TABLE IF NOT EXISTS events (
     type    TEXT NOT NULL,
     stage   TEXT DEFAULT '',
     url     TEXT DEFAULT '',
+    subject TEXT DEFAULT '',
+    body_excerpt TEXT DEFAULT '',
     ts      TEXT NOT NULL,
     ua      TEXT DEFAULT '',
     ip      TEXT DEFAULT ''
@@ -163,7 +170,19 @@ CREATE TABLE IF NOT EXISTS templates_overrides (
     subject_pool  TEXT DEFAULT '',
     body_text     TEXT DEFAULT '',
     body_html     TEXT DEFAULT '',
+    subject_pool_b TEXT DEFAULT '',
+    body_text_b    TEXT DEFAULT '',
+    body_html_b    TEXT DEFAULT '',
+    bundle_version TEXT DEFAULT '',
     updated_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS outreach_template_bundle_history (
+    version        TEXT PRIMARY KEY,
+    description    TEXT DEFAULT '',
+    applied_at     TEXT NOT NULL,
+    rollback_json  TEXT NOT NULL,
+    rolled_back_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS autopilot_config (
@@ -205,8 +224,166 @@ SEND_MIGRATIONS = [
     ("subject_variant", "TEXT DEFAULT ''"),
 ]
 
+EVENT_MIGRATIONS = [
+    ("subject", "TEXT DEFAULT ''"),
+    ("body_excerpt", "TEXT DEFAULT ''"),
+]
+
+TEMPLATE_OVERRIDE_MIGRATIONS = [
+    ("subject_pool_b", "TEXT DEFAULT ''"),
+    ("body_text_b", "TEXT DEFAULT ''"),
+    ("body_html_b", "TEXT DEFAULT ''"),
+    ("bundle_version", "TEXT DEFAULT ''"),
+]
+
 
 _SCHEMA_INITIALIZED: set[str] = set()
+
+
+def _template_bundle_row(stage: str) -> dict[str, str]:
+    variants = OUTREACH_COPY_VARIANTS[stage]
+    return {
+        "stage": stage,
+        "subject_pool": "\n".join(SUBJECT_POOLS_AB[stage]["A"]),
+        "body_text": variants["A"]["body_text"],
+        "body_html": variants["A"]["body_html"],
+        "subject_pool_b": "\n".join(SUBJECT_POOLS_AB[stage]["B"]),
+        "body_text_b": variants["B"]["body_text"],
+        "body_html_b": variants["B"]["body_html"],
+        "bundle_version": OUTREACH_COPY_BUNDLE_VERSION,
+    }
+
+
+def apply_outreach_copy_bundle(conn: sqlite3.Connection) -> bool:
+    """Aplica una sola vez el copy canonico y conserva un rollback logico.
+
+    Devuelve ``True`` solo cuando esta llamada hizo la migracion. Cualquier
+    error aborta la transaccion: no se permite enviar con una mezcla parcial de
+    plantillas antiguas y nuevas.
+    """
+    conn.commit()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        already_applied = conn.execute(
+            "SELECT 1 FROM outreach_template_bundle_history WHERE version=?",
+            (OUTREACH_COPY_BUNDLE_VERSION,),
+        ).fetchone()
+        if already_applied:
+            conn.commit()
+            return False
+
+        previous: dict[str, dict | None] = {}
+        for stage in STAGE_ORDER:
+            row = conn.execute(
+                """SELECT stage, subject_pool, body_text, body_html,
+                          subject_pool_b, body_text_b, body_html_b,
+                          bundle_version, updated_at
+                   FROM templates_overrides WHERE stage=?""",
+                (stage,),
+            ).fetchone()
+            previous[stage] = dict(row) if row else None
+
+        applied_at = now_iso()
+        for stage in STAGE_ORDER:
+            payload = _template_bundle_row(stage)
+            conn.execute(
+                """INSERT INTO templates_overrides
+                   (stage, subject_pool, body_text, body_html, subject_pool_b,
+                    body_text_b, body_html_b, bundle_version, updated_at)
+                   VALUES (:stage,:subject_pool,:body_text,:body_html,:subject_pool_b,
+                           :body_text_b,:body_html_b,:bundle_version,:updated_at)
+                   ON CONFLICT(stage) DO UPDATE SET
+                       subject_pool=excluded.subject_pool,
+                       body_text=excluded.body_text,
+                       body_html=excluded.body_html,
+                       subject_pool_b=excluded.subject_pool_b,
+                       body_text_b=excluded.body_text_b,
+                       body_html_b=excluded.body_html_b,
+                       bundle_version=excluded.bundle_version,
+                       updated_at=excluded.updated_at""",
+                {**payload, "updated_at": applied_at},
+            )
+
+        conn.execute(
+            """INSERT INTO outreach_template_bundle_history
+               (version, description, applied_at, rollback_json, rolled_back_at)
+               VALUES (?,?,?,?, '')""",
+            (
+                OUTREACH_COPY_BUNDLE_VERSION,
+                "Copy conversacional A/B estable para cold, FU1, FU2 y cierre",
+                applied_at,
+                json.dumps({"stages": previous}, ensure_ascii=False, sort_keys=True),
+            ),
+        )
+        conn.commit()
+        return True
+    except Exception as exc:
+        conn.rollback()
+        raise RuntimeError(
+            f"No se pudo aplicar el bundle de outreach {OUTREACH_COPY_BUNDLE_VERSION}"
+        ) from exc
+
+
+def rollback_outreach_copy_bundle(
+    conn: sqlite3.Connection,
+    version: str = OUTREACH_COPY_BUNDLE_VERSION,
+) -> bool:
+    """Restaura el snapshot anterior sin borrar el registro de la migracion."""
+    conn.commit()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        history = conn.execute(
+            "SELECT rollback_json, rolled_back_at FROM outreach_template_bundle_history WHERE version=?",
+            (version,),
+        ).fetchone()
+        if not history or (history["rolled_back_at"] or "").strip():
+            conn.commit()
+            return False
+        snapshot = json.loads(history["rollback_json"] or "{}")
+        previous = snapshot.get("stages") if isinstance(snapshot, dict) else {}
+        for stage in STAGE_ORDER:
+            row = previous.get(stage) if isinstance(previous, dict) else None
+            if row is None:
+                conn.execute(
+                    "DELETE FROM templates_overrides WHERE stage=? AND bundle_version=?",
+                    (stage, version),
+                )
+                continue
+            conn.execute(
+                """INSERT INTO templates_overrides
+                   (stage, subject_pool, body_text, body_html, subject_pool_b,
+                    body_text_b, body_html_b, bundle_version, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(stage) DO UPDATE SET
+                       subject_pool=excluded.subject_pool,
+                       body_text=excluded.body_text,
+                       body_html=excluded.body_html,
+                       subject_pool_b=excluded.subject_pool_b,
+                       body_text_b=excluded.body_text_b,
+                       body_html_b=excluded.body_html_b,
+                       bundle_version=excluded.bundle_version,
+                       updated_at=excluded.updated_at""",
+                (
+                    stage,
+                    row.get("subject_pool", ""),
+                    row.get("body_text", ""),
+                    row.get("body_html", ""),
+                    row.get("subject_pool_b", ""),
+                    row.get("body_text_b", ""),
+                    row.get("body_html_b", ""),
+                    row.get("bundle_version", ""),
+                    row.get("updated_at") or now_iso(),
+                ),
+            )
+        conn.execute(
+            "UPDATE outreach_template_bundle_history SET rolled_back_at=? WHERE version=?",
+            (now_iso(), version),
+        )
+        conn.commit()
+        return True
+    except Exception as exc:
+        conn.rollback()
+        raise RuntimeError(f"No se pudo revertir el bundle de outreach {version}") from exc
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -220,11 +397,13 @@ def connect(db_path: Path) -> sqlite3.Connection:
     except sqlite3.OperationalError:
         pass
     key = str(db_path.resolve())
-    if key not in _SCHEMA_INITIALIZED:
+    first_initialization = key not in _SCHEMA_INITIALIZED
+    if first_initialization:
         conn.executescript(SCHEMA)
-        _SCHEMA_INITIALIZED.add(key)
     else:
-        # Schema ya creado en este proceso. Saltar executescript (que toma write lock).
+        # El bundle se comprueba aun con el schema cacheado: otro proceso pudo
+        # haber creado una DB legacy entre conexiones.
+        apply_outreach_copy_bundle(conn)
         return conn
     # Migracion idempotente de columnas nuevas en prospects
     existing = {row["name"] for row in conn.execute("PRAGMA table_info(prospects)")}
@@ -241,6 +420,21 @@ def connect(db_path: Path) -> sqlite3.Connection:
                 conn.execute(f"ALTER TABLE sends ADD COLUMN {column} {ddl}")
             except sqlite3.OperationalError:
                 pass
+    existing_events = {row["name"] for row in conn.execute("PRAGMA table_info(events)")}
+    for column, ddl in EVENT_MIGRATIONS:
+        if column not in existing_events:
+            try:
+                conn.execute(f"ALTER TABLE events ADD COLUMN {column} {ddl}")
+            except sqlite3.OperationalError:
+                pass
+    existing_templates = {
+        row["name"] for row in conn.execute("PRAGMA table_info(templates_overrides)")
+    }
+    for column, ddl in TEMPLATE_OVERRIDE_MIGRATIONS:
+        if column not in existing_templates:
+            # Las plantillas gobiernan envios reales: una migracion incompleta
+            # debe impedir arrancar, no degradar silenciosamente a copy legacy.
+            conn.execute(f"ALTER TABLE templates_overrides ADD COLUMN {column} {ddl}")
     try:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_sends_campaign ON sends(campaign_id)")
     except sqlite3.OperationalError:
@@ -250,6 +444,8 @@ def connect(db_path: Path) -> sqlite3.Connection:
     except sqlite3.OperationalError:
         pass
     conn.commit()
+    apply_outreach_copy_bundle(conn)
+    _SCHEMA_INITIALIZED.add(key)
     return conn
 
 
@@ -493,6 +689,146 @@ def in_business_window() -> tuple[bool, str]:
 
 # -------------------- Seleccion --------------------
 
+
+_BLOCKED_MAILBOXES = {
+    "privacy", "privacidad", "legal", "dpd", "dpo", "noreply", "donotreply",
+    "noresponder", "postmaster", "abuse", "administracion", "administrator", "admin",
+}
+_GENERIC_ALLOWED_MAILBOXES = {
+    "info", "reservas", "reserva", "contacto", "contact", "hola", "recepcion",
+    "citas", "cita", "ventas", "comercial", "clientes", "atencionalcliente",
+}
+_PUBLIC_DOMAIN_MARKERS = (
+    ".gob.es", ".gov.es", ".gov", ".mil", "administracion.gob.es",
+)
+_PUBLIC_OR_INSTITUTION_MARKERS = (
+    "ayuntamiento", "diputacion", "cabildo", "ministerio", "consejeria",
+    "gobierno de", "comunidad autonoma", "policia", "guardia civil",
+    "embajada", "consulado", "universidad", "colegio oficial", "camara de comercio",
+)
+_KNOWN_CHAIN_MARKERS = (
+    "adeslas", "asisa", "basic fit", "burger king", "dentix", "dkv", "domino s",
+    "donte group", "hm hospitales", "kivet", "kids us", "mapfre", "mcdonald",
+    "quironsalud", "sanitas", "starbucks", "telepizza", "vitaldent", "vithas", "vivanta",
+)
+
+
+def _normalized_words(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value or "")
+    ascii_value = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    return re.sub(r"[^a-z0-9]+", " ", ascii_value.lower()).strip()
+
+
+def _email_local_part(email: str) -> str:
+    return normalize_email(email).split("@", 1)[0] if "@" in normalize_email(email) else ""
+
+
+def prospect_segmentation_block_reason(p: Prospect) -> str:
+    """Motivo estable de exclusion; cadena vacia significa candidato permitido."""
+    email = normalize_email(p.email)
+    if not email or "@" not in email:
+        return "invalid_email"
+    local, domain = email.rsplit("@", 1)
+    compact_local = re.sub(r"[^a-z0-9]+", "", _normalized_words(local))
+    if compact_local in _BLOCKED_MAILBOXES or compact_local.startswith(("noreply", "donotreply")):
+        return "blocked_mailbox"
+    if any(domain == marker.lstrip(".") or domain.endswith(marker) for marker in _PUBLIC_DOMAIN_MARKERS):
+        return "public_administration"
+
+    identity = _normalized_words(
+        " ".join((p.business_name, p.niche, p.service_hint, p.tags, p.source))
+    )
+    if any(marker in identity for marker in _PUBLIC_OR_INSTITUTION_MARKERS):
+        return "public_or_institution"
+    if any(marker in identity for marker in _KNOWN_CHAIN_MARKERS):
+        return "known_chain"
+    if any(token in {"cadena", "franquicia", "chain"} for token in identity.split()):
+        return "known_chain"
+    return ""
+
+
+def prospect_email_is_personal(email: str) -> bool:
+    local = _email_local_part(email)
+    compact = re.sub(r"[^a-z0-9]+", "", _normalized_words(local))
+    if not compact or compact in _GENERIC_ALLOWED_MAILBOXES or compact in _BLOCKED_MAILBOXES:
+        return False
+    return bool(re.search(r"[._-]", local)) or len(compact) >= 7
+
+
+def prospect_priority_score(p: Prospect) -> int:
+    """Prioriza persona y negocio independiente sin excluir buzones SME validos."""
+    score = 0
+    if p.contact_name.strip():
+        score += 5
+    if prospect_email_is_personal(p.email):
+        score += 4
+    email_domain = domain_of(p.email)
+    if email_domain.startswith("www."):
+        email_domain = email_domain[4:]
+    website = (p.website or "").strip().lower()
+    website_domain = re.sub(r"^https?://", "", website).split("/", 1)[0]
+    if website_domain.startswith("www."):
+        website_domain = website_domain[4:]
+    if email_domain and website_domain and (
+        email_domain == website_domain or website_domain.endswith("." + email_domain)
+    ):
+        score += 2
+    if not prospect_segmentation_block_reason(p):
+        score += 1
+    return score
+
+
+def revalidate_send_candidate(
+    conn: sqlite3.Connection,
+    email: str,
+    stage: str,
+    after_days: int,
+) -> tuple[Prospect | None, str]:
+    """Relee DB y aplica toda la elegibilidad justo antes de un envio real."""
+    if stage not in STAGE_ORDER:
+        return None, "invalid_stage"
+    normalized = normalize_email(email)
+    row = conn.execute("SELECT * FROM prospects WHERE email=?", (normalized,)).fetchone()
+    if not row:
+        return None, "missing_prospect"
+    prospect = _row_to_prospect(row)
+    blocked = prospect_segmentation_block_reason(prospect)
+    if blocked:
+        return None, blocked
+    if conn.execute("SELECT 1 FROM suppressions WHERE email=?", (normalized,)).fetchone():
+        return None, "suppressed"
+    if conn.execute(
+        "SELECT 1 FROM events WHERE email=? AND type='reply' LIMIT 1", (normalized,)
+    ).fetchone():
+        return None, "already_replied"
+    status = str(row["status"] or "").strip().lower()
+    if status in {"replied", "client", "lost", "bounced", "baja"}:
+        return None, f"status_{status}"
+
+    if stage == "cold":
+        if conn.execute(
+            "SELECT 1 FROM sends WHERE email=? AND mode='send' LIMIT 1", (normalized,)
+        ).fetchone():
+            return None, "already_contacted"
+    else:
+        previous_stage = STAGE_ORDER[STAGE_ORDER.index(stage) - 1]
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=max(0, int(after_days)))
+        ).isoformat(timespec="seconds")
+        if not conn.execute(
+            """SELECT 1 FROM sends
+               WHERE email=? AND stage=? AND mode='send' AND sent_at<=? LIMIT 1""",
+            (normalized, previous_stage, cutoff),
+        ).fetchone():
+            return None, "previous_stage_or_delay_missing"
+        if conn.execute(
+            "SELECT 1 FROM sends WHERE email=? AND stage=? AND mode='send' LIMIT 1",
+            (normalized, stage),
+        ).fetchone():
+            return None, "stage_already_sent"
+    return prospect, ""
+
+
 def fetch_candidates(
     conn: sqlite3.Connection,
     stage: str,
@@ -509,11 +845,10 @@ def fetch_candidates(
         raise ValueError(f"Stage invalido: {stage}")
 
     if only_email:
-        rows = conn.execute(
-            "SELECT * FROM prospects WHERE email = ?",
-            (normalize_email(only_email),),
-        ).fetchall()
-        return [_row_to_prospect(r) for r in rows]
+        prospect, _reason = revalidate_send_candidate(
+            conn, only_email, stage, after_days
+        )
+        return [prospect] if prospect else []
 
     cutoff = (datetime.now(timezone.utc) - timedelta(days=after_days)).isoformat(timespec="seconds")
     prev_stage = STAGE_ORDER[STAGE_ORDER.index(stage) - 1] if stage != "cold" else None
@@ -521,7 +856,7 @@ def fetch_candidates(
     if stage == "cold":
         sql = """
         SELECT p.* FROM prospects p
-        WHERE NOT EXISTS (SELECT 1 FROM sends s WHERE s.email = p.email)
+        WHERE NOT EXISTS (SELECT 1 FROM sends s WHERE s.email = p.email AND s.mode='send')
           AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email = p.email)
           AND NOT EXISTS (SELECT 1 FROM events ev WHERE ev.email = p.email AND ev.type = 'reply')
           AND COALESCE(p.status, '') NOT IN ('replied', 'client', 'lost', 'bounced', 'baja')
@@ -543,17 +878,16 @@ def fetch_candidates(
           END ASC,
           COALESCE(p.score, 0) DESC,
           p.created_at ASC
-        LIMIT ?
         """
-        rows = conn.execute(sql, (limit,)).fetchall()
+        rows = conn.execute(sql).fetchall()
     else:
         sql = """
         SELECT p.* FROM prospects p
         WHERE EXISTS (
-            SELECT 1 FROM sends s WHERE s.email = p.email AND s.stage = ? AND s.sent_at <= ?
+            SELECT 1 FROM sends s WHERE s.email = p.email AND s.stage = ? AND s.mode='send' AND s.sent_at <= ?
         )
         AND NOT EXISTS (
-            SELECT 1 FROM sends s2 WHERE s2.email = p.email AND s2.stage = ?
+            SELECT 1 FROM sends s2 WHERE s2.email = p.email AND s2.stage = ? AND s2.mode='send'
         )
         AND NOT EXISTS (SELECT 1 FROM suppressions x WHERE x.email = p.email)
         AND NOT EXISTS (SELECT 1 FROM events ev WHERE ev.email = p.email AND ev.type = 'reply')
@@ -566,32 +900,113 @@ def fetch_candidates(
           END ASC,
           COALESCE(p.score, 0) DESC,
           p.created_at ASC
-        LIMIT ?
         """
-        rows = conn.execute(sql, (prev_stage, cutoff, stage, limit)).fetchall()
-    return [_row_to_prospect(r) for r in rows]
+        rows = conn.execute(sql, (prev_stage, cutoff, stage)).fetchall()
+    prospects = [
+        prospect for prospect in (_row_to_prospect(row) for row in rows)
+        if not prospect_segmentation_block_reason(prospect)
+    ]
+    if stage == "cold":
+        # Conserva el orden SQL como desempate y antepone contactos personales
+        # o señales de dominio propio/negocio independiente.
+        prospects = [
+            item[1]
+            for item in sorted(
+                enumerate(prospects),
+                key=lambda item: (-prospect_priority_score(item[1]), item[0]),
+            )
+        ]
+    return prospects[:max(0, int(limit))]
 
 
-def load_template_overrides(conn: sqlite3.Connection) -> dict[str, dict]:
+def load_template_overrides(
+    conn: sqlite3.Connection,
+    *,
+    fail_closed: bool = True,
+) -> dict[str, dict]:
     try:
         rows = conn.execute(
-            "SELECT stage, subject_pool, body_text, body_html FROM templates_overrides"
+            """SELECT stage, subject_pool, body_text, body_html,
+                      subject_pool_b, body_text_b, body_html_b, bundle_version
+               FROM templates_overrides"""
         ).fetchall()
-    except sqlite3.OperationalError:
+    except sqlite3.OperationalError as exc:
+        if fail_closed:
+            raise RuntimeError("Schema de templates_overrides incompleto") from exc
         return {}
     out: dict[str, dict] = {}
     for r in rows:
-        out[r["stage"]] = {
+        override = {
             "subject_pool": (r["subject_pool"] or "").strip(),
             "body_text": (r["body_text"] or "").strip(),
             "body_html": (r["body_html"] or "").strip(),
+            "subject_pool_b": (r["subject_pool_b"] or "").strip(),
+            "body_text_b": (r["body_text_b"] or "").strip(),
+            "body_html_b": (r["body_html_b"] or "").strip(),
+            "bundle_version": (r["bundle_version"] or "").strip(),
         }
+        try:
+            validate_template_override(
+                subject_pool=override["subject_pool"],
+                body_text=override["body_text"],
+                body_html=override["body_html"],
+            )
+            validate_template_override(
+                subject_pool=override["subject_pool_b"],
+                body_text=override["body_text_b"],
+                body_html=override["body_html_b"],
+            )
+        except ValueError as exc:
+            if fail_closed:
+                raise RuntimeError(f"Override invalido para stage={r['stage']}") from exc
+            continue
+        out[r["stage"]] = override
     return out
 
 
-def _template_vars(p: Prospect, unsub: str, stage: str) -> dict[str, str]:
+_ALLOWED_TEMPLATE_FIELDS = {
+    "first_name", "first_or_team", "greeting", "business", "city", "niche",
+    "service_hint", "website", "phone", "task", "outcome", "proof",
+    "unsubscribe", "stage", "signature_html", "footer_html", "footer_text",
+    "cta_url", "cta_html",
+}
+
+
+def _validate_template_string(template: str, label: str) -> None:
+    if not template:
+        return
+    try:
+        parsed = list(Formatter().parse(template))
+    except ValueError as exc:
+        raise ValueError(f"{label}: llaves desbalanceadas") from exc
+    for _literal, field_name, format_spec, conversion in parsed:
+        if field_name is None:
+            continue
+        if field_name not in _ALLOWED_TEMPLATE_FIELDS:
+            raise ValueError(f"{label}: placeholder no permitido {{{field_name}}}")
+        if format_spec or conversion:
+            raise ValueError(f"{label}: formatos o conversiones no permitidos")
+
+
+def validate_template_override(
+    subject_pool: str = "",
+    body_text: str = "",
+    body_html: str = "",
+) -> None:
+    _validate_template_string(subject_pool, "subject_pool")
+    _validate_template_string(body_text, "body_text")
+    _validate_template_string(body_html, "body_html")
+
+
+def _template_vars(
+    p: Prospect,
+    unsub: str,
+    stage: str,
+    *,
+    html_context: bool = False,
+) -> dict[str, str]:
     task, outcome, proof = niche_copy(p.niche, p.service_hint)
-    return {
+    values = {
         "first_name": p.first_name or "equipo",
         "first_or_team": p.first_name or "equipo",
         "greeting": p.greeting,
@@ -610,20 +1025,23 @@ def _template_vars(p: Prospect, unsub: str, stage: str) -> dict[str, str]:
         "footer_html": footer_html(unsub),
         "footer_text": footer_text(unsub),
         "cta_url": demo_go_url(stage, p),
-        "cta_html": cta_button_html("Crear bot gratis en 2 min", demo_go_url(stage, p)),
+        "cta_html": cta_button_html("Probar una demo", demo_go_url(stage, p)),
     }
+    if not html_context:
+        return values
+    trusted_html = {"signature_html", "footer_html", "cta_html"}
+    escaped = {
+        key: (value if key in trusted_html else html_lib.escape(str(value), quote=True))
+        for key, value in values.items()
+    }
+    return escaped
 
 
 def _apply_template(template: str, vars_: dict[str, str]) -> str:
     if not template:
         return template
-    try:
-        return template.format_map(_SafeDict(vars_))
-    except Exception:
-        out = template
-        for k, v in vars_.items():
-            out = out.replace("{" + k + "}", str(v))
-        return out
+    _validate_template_string(template, "template")
+    return template.format_map(_SafeDict(vars_))
 
 
 def _html_has_vantelia_signature(html: str) -> bool:
@@ -656,39 +1074,46 @@ class _SafeDict(dict):
         return "{" + key + "}"
 
 
-def render_with_override(
+def render_with_override_and_variant(
     stage: str,
     p: Prospect,
     unsub: str,
     overrides: dict[str, dict] | None = None,
-) -> tuple[str, str, str]:
-    """Renderiza un email aplicando override de DB si existe, si no usa default."""
+) -> tuple[str, str, str, str]:
+    """Renderiza subject+body de la misma variante A/B y la devuelve."""
     overrides = overrides or {}
     ov = overrides.get(stage) or {}
-    has_subj = bool(ov.get("subject_pool"))
-    has_text = bool(ov.get("body_text"))
-    has_html = bool(ov.get("body_html"))
+    variant = assign_variant(p.email, stage)
+    suffix = "_b" if variant == "B" else ""
+    subject_key = f"subject_pool{suffix}"
+    text_key = f"body_text{suffix}"
+    html_key = f"body_html{suffix}"
+    has_subj = bool(ov.get(subject_key))
+    has_text = bool(ov.get(text_key))
+    has_html = bool(ov.get(html_key))
     if not (has_subj or has_text or has_html):
-        return render(stage, p, unsub)
+        subject, text, html = render(stage, p, unsub)
+        return subject, text, html, variant
 
     vars_ = _template_vars(p, unsub, stage)
+    html_vars = _template_vars(p, unsub, stage, html_context=True)
     default_subject, default_text, default_html = render(stage, p, unsub)
 
     if has_subj:
-        pool = [s.strip() for s in ov["subject_pool"].splitlines() if s.strip()]
+        pool = [s.strip() for s in ov[subject_key].splitlines() if s.strip()]
         if pool:
-            tmpl = stable_pick(p.email + "|" + stage, pool)
+            tmpl = stable_pick(p.email + "|" + stage + "|" + variant, pool)
             subject = _apply_template(tmpl, vars_)
         else:
             subject = default_subject
     else:
         subject = default_subject
 
-    text = _apply_template(ov["body_text"], vars_) if has_text else default_text
+    text = _apply_template(ov[text_key], vars_) if has_text else default_text
 
     if has_html:
-        raw_template = ov["body_html"]
-        raw_html = _apply_template(raw_template, vars_)
+        raw_template = ov[html_key]
+        raw_html = _apply_template(raw_template, html_vars)
         # Si el override es solo el inner (no contiene <html>), envolver en shell.
         if "<html" not in raw_html.lower():
             html = html_shell(_append_signature_to_inner_html(raw_html, stage), preheader="")
@@ -697,6 +1122,19 @@ def render_with_override(
     else:
         html = default_html
 
+    return subject, text, html, variant
+
+
+def render_with_override(
+    stage: str,
+    p: Prospect,
+    unsub: str,
+    overrides: dict[str, dict] | None = None,
+) -> tuple[str, str, str]:
+    """Wrapper compatible para consumidores que aun esperan tres valores."""
+    subject, text, html, _variant = render_with_override_and_variant(
+        stage, p, unsub, overrides
+    )
     return subject, text, html
 
 
@@ -708,7 +1146,7 @@ def _row_to_prospect(row: sqlite3.Row) -> Prospect:
         niche=row["niche"] or "",
         website=row["website"] or "",
         service_hint=row["service_hint"] or "",
-        city=row["city"] or "Torrejon de Ardoz",
+        city=row["city"] or "",
         phone=row["phone"] or "",
         tags=row["tags"] or "",
         source=row["source"] or "",
@@ -722,12 +1160,12 @@ def cmd_preview(args: argparse.Namespace) -> int:
         prospects = fetch_candidates(
             conn, args.stage, after_days=args.after_days, limit=args.limit, only_email=args.email,
         )
+        overrides = load_template_overrides(conn)
     if not prospects:
         print(f"Sin candidatos para stage={args.stage}.")
         return 0
     settings = smtp_settings()
     unsub = str(settings["unsubscribe_mailto"]) or "baja@vantelia.es"
-    overrides = load_template_overrides(conn)
     for i, p in enumerate(prospects, 1):
         subject, text, _ = render_with_override(args.stage, p, unsub, overrides)
         print(f"\n=== [{i}/{len(prospects)}] {p.email} | {p.business_name} ===")
@@ -771,11 +1209,21 @@ def _send_loop(args: argparse.Namespace, stage: str) -> int:
         sent_count = 0
         for index, p in enumerate(candidates, 1):
             if real_send and not args.test_to:
+                fresh_prospect, eligibility_reason = revalidate_send_candidate(
+                    conn, p.email, stage, args.after_days
+                )
+                if not fresh_prospect:
+                    print(f"  skip {p.email}: {eligibility_reason}")
+                    continue
+                p = fresh_prospect
+            if real_send and not args.test_to:
                 if domain_today[domain_of(p.email)] >= domain_cap:
                     print(f"  skip {p.email}: cap diario alcanzado para dominio {domain_of(p.email)}")
                     continue
 
-            subject, text, html_body = render_with_override(stage, p, unsub, overrides)
+            subject, text, html_body, variant = render_with_override_and_variant(
+                stage, p, unsub, overrides
+            )
             recipient = normalize_email(args.test_to) if args.test_to else p.email
 
             print(f"\n[{index}/{len(candidates)}] {mode.upper()} -> {recipient} | {p.business_name}")
@@ -807,13 +1255,13 @@ def _send_loop(args: argparse.Namespace, stage: str) -> int:
                     return 4
                 continue
 
-            variant = assign_variant(p.email, stage)
-            conn.execute(
-                "INSERT INTO sends (campaign_id, email, stage, subject, body_text, body_html, sent_at, mode, message_id, subject_variant) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (0, p.email, stage, subject, text, html_body, now_iso(), mode, msg["Message-ID"] or "", variant),
-            )
-            conn.commit()
+            if mode == "send":
+                conn.execute(
+                    "INSERT INTO sends (campaign_id, email, stage, subject, body_text, body_html, sent_at, mode, message_id, subject_variant) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (0, p.email, stage, subject, text, html_body, now_iso(), mode, msg["Message-ID"] or "", variant),
+                )
+                conn.commit()
             sent_count += 1
             domain_today[domain_of(p.email)] += 1
 

@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from pathlib import Path
 
 import pytest
 
@@ -233,6 +234,138 @@ def test_ndr_se_detecta_y_extrae_destinatario(api):
     normal["Subject"] = "Re: tu propuesta"
     normal.set_content("Me interesa, llamame")
     assert outreach_imap._is_bounce(normal) is False
+
+
+def test_reply_decodifica_asunto_y_extrae_html(api):
+    import outreach_imap
+
+    message = EmailMessage()
+    message["Subject"] = "=?utf-8?q?Re=3A_informaci=C3=B3n?="
+    message.set_content("<p>Me interesa.<br>¿Podemos hablar mañana?</p>", subtype="html")
+
+    assert outreach_imap._message_subject(message) == "Re: información"
+    assert outreach_imap._message_text_excerpt(message) == "Me interesa.\n¿Podemos hablar mañana?"
+
+
+def test_outreach_schema_migra_events_legacy_sin_perder_datos(api, tmp_path):
+    import outreach_campaign
+
+    db_path = tmp_path / "outreach-legacy.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """CREATE TABLE events (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   email TEXT NOT NULL,
+                   type TEXT NOT NULL,
+                   stage TEXT DEFAULT '',
+                   url TEXT DEFAULT '',
+                   ts TEXT NOT NULL,
+                   ua TEXT DEFAULT '',
+                   ip TEXT DEFAULT ''
+               )"""
+        )
+        conn.execute(
+            "INSERT INTO events (email, type, stage, url, ts) VALUES (?,?,?,?,?)",
+            ("legacy@empresa.es", "reply", "cold", "<legacy@mx>", "2026-08-01T10:00:00+00:00"),
+        )
+        conn.commit()
+
+    with outreach_campaign.connect(db_path) as conn:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(events)")}
+        legacy = conn.execute(
+            "SELECT email, type, subject, body_excerpt FROM events WHERE email='legacy@empresa.es'"
+        ).fetchone()
+
+    assert {"subject", "body_excerpt"}.issubset(columns)
+    assert legacy["type"] == "reply"
+    assert legacy["subject"] == ""
+    assert legacy["body_excerpt"] == ""
+
+
+def test_reply_persiste_asunto_y_cuerpo(outreach_mod):
+    outreach = outreach_mod
+    import outreach_imap
+
+    email = "reply-content@empresa.es"
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with outreach._outreach_db() as conn:
+        conn.execute(
+            "INSERT INTO prospects (email, business_name, created_at, updated_at) VALUES (?,?,?,?)",
+            (email, "Empresa Reply", now, now),
+        )
+        created = outreach_imap._record_reply(
+            conn,
+            email,
+            "fu1",
+            now,
+            "<reply-content-1@mx>",
+            subject="Re: propuesta Vantelia",
+            body_excerpt="Me interesa. Llámame mañana.",
+        )
+        conn.commit()
+        event = conn.execute(
+            "SELECT subject, body_excerpt FROM events WHERE email=? AND type='reply'",
+            (email,),
+        ).fetchone()
+        prospect = conn.execute("SELECT status FROM prospects WHERE email=?", (email,)).fetchone()
+
+    assert created is True
+    assert event["subject"] == "Re: propuesta Vantelia"
+    assert event["body_excerpt"] == "Me interesa. Llámame mañana."
+    assert prospect["status"] == "replied"
+
+
+def test_imap_rellena_contenido_de_respuestas_recientes_ya_vistas(outreach_mod, monkeypatch):
+    outreach = outreach_mod
+    import outreach_imap
+
+    email = "reply-backfill@empresa.es"
+    message_id = "<reply-backfill-1@mx>"
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with outreach._outreach_db() as conn:
+        outreach_imap._ensure_schema(conn)
+        conn.execute("DELETE FROM imap_seen WHERE message_id=?", (message_id,))
+        conn.execute(
+            "INSERT INTO prospects (email, business_name, created_at, updated_at) VALUES (?,?,?,?)",
+            (email, "Empresa Backfill", now, now),
+        )
+        conn.execute(
+            """INSERT INTO events (email, type, stage, url, subject, body_excerpt, ts)
+               VALUES (?, 'reply', 'fu1', ?, '', '', ?)""",
+            (email, message_id, now),
+        )
+        conn.execute(
+            "INSERT INTO imap_seen (message_id, email, stage, seen_at) VALUES (?,?,?,?)",
+            (message_id, email, "fu1", now),
+        )
+        conn.commit()
+
+    message = EmailMessage()
+    message["Message-ID"] = message_id
+    message["Subject"] = "Re: propuesta anterior"
+    message.set_content("Sí, quiero que me contéis más.")
+
+    class FakeImapClient:
+        def logout(self):
+            return "BYE", []
+
+    monkeypatch.setenv("IMAP_HOST", "imap.test.invalid")
+    monkeypatch.setattr(outreach_imap, "_connect_imap", lambda: FakeImapClient())
+    monkeypatch.setattr(outreach_imap, "_search_recent_uids", lambda client, lookback: [b"1"])
+    monkeypatch.setattr(outreach_imap, "_fetch_message", lambda client, uid: message)
+
+    stats = outreach_imap.poll_once(Path(os.environ["OUTREACH_DB_PATH"]))
+
+    with outreach._outreach_db() as conn:
+        event = conn.execute(
+            "SELECT subject, body_excerpt FROM events WHERE email=? AND type='reply'",
+            (email,),
+        ).fetchone()
+
+    assert stats["replies_backfilled"] == 1
+    assert stats["skipped"] == 1
+    assert event["subject"] == "Re: propuesta anterior"
+    assert event["body_excerpt"] == "Sí, quiero que me contéis más."
 
 
 def test_bounce_marca_prospect_y_suprime(outreach_mod):
