@@ -184,7 +184,7 @@ New-Item -ItemType Directory -Path $StageProjectPath -Force | Out-Null
 Invoke-RobocopyChecked -Source $ProjectRoot -Destination $StageProjectPath -ExtraArguments @(
     "/E",
     "/XD", ".git", ".git-inner-backup", ".venv", ".venv311", ".pytest_cache", "node_modules", "storage", "data", "backups", "__pycache__", "Identidad Visual", "service_account", "site_exports",
-    "/XF", ".env", ".env.backup-*", ".env.ftp", "env.ftp", ".gh_token", "config.json", "ssh-askpass.cmd", "vantelia_deploy", "vantelia_deploy.pub", "vantelia_deploy_runtime", "vantelia_deploy_runtime.pub", "known_hosts"
+    "/XF", ".env", ".env.backup-*", ".env.ftp", "env.ftp", ".gh_token", "config.json", "ssh-askpass.cmd", "vantelia_deploy", "vantelia_deploy.pub", "vantelia_deploy_runtime", "vantelia_deploy_runtime.pub", "known_hosts", "hoja_llamadas_calientes.md", "whatsapp_calientes.md"
 )
 
 $tarArgs = @(

@@ -24,3 +24,6 @@ outreach/*.csv
 outreach/kit_*.md
 .tools/
 *.~tmp
+
+outreach/hoja_llamadas_*.md
+outreach/whatsapp_*.md
