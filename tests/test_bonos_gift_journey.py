@@ -21,14 +21,34 @@ def _tomorrow(api_module) -> str:
     return (api_module._utc_now() + timedelta(days=1)).date().isoformat()
 
 
+def _free_slot(connection, dia: str) -> str:
+    ocupadas = {
+        str(row[0])
+        for row in connection.execute(
+            "SELECT booking_time FROM bookings "
+            "WHERE cliente_id='demo' AND employee_id='' AND booking_date=?",
+            (dia,),
+        )
+    }
+    for hora in range(8, 21):
+        for minuto in (0, 15, 30, 45):
+            candidata = "{:02d}:{:02d}".format(hora, minuto)
+            if candidata not in ocupadas:
+                return candidata
+    raise AssertionError("sin hueco libre para la cita de prueba")
+
+
 def _make_booking(api_module, suffix: str, *, email: str = "", phone: str = "",
                   price: int = 4000, service_slug: str = "consulta") -> tuple:
     booking_id = f"bk_journey_{suffix}"
     token = f"mg_journey_{suffix}"
     now = api_module._utc_now_iso()
-    # Hora derivada del suffix: evita el UNIQUE (cliente, empleado, dia, hora).
-    hora = f"{9 + int(suffix[:2], 16) % 8:02d}:{(int(suffix[2:4], 16) % 4) * 15:02d}"
+    dia = _tomorrow(api_module)
     with api_module._get_db_connection() as conn:
+        # Primer hueco libre del dia: derivar la hora del suffix colisionaba con
+        # las citas que otros tests dejan en el mismo tenant 'demo' (UNIQUE por
+        # cliente+empleado+dia+hora), asi que fallaba solo en suite completa.
+        hora = _free_slot(conn, dia)
         conn.execute(
             "INSERT INTO bookings (id, cliente_id, employee_id, employee_name, nombre, email, "
             "telefono, servicio, booking_date, booking_time, notas, status, provider_name, "
@@ -36,7 +56,7 @@ def _make_booking(api_module, suffix: str, *, email: str = "", phone: str = "",
             "payment_status, source, created_at) "
             "VALUES (?, 'demo', '', '', 'Cliente Journey', ?, ?, 'Consulta', ?, ?, '', "
             "'confirmed', 'internal', 'internal', ?, 'Europe/Madrid', ?, ?, '', 'test', ?)",
-            (booking_id, email, phone, _tomorrow(api_module), hora, token, service_slug, price, now),
+            (booking_id, email, phone, dia, hora, token, service_slug, price, now),
         )
         conn.commit()
     return booking_id, token
