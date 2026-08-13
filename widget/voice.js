@@ -63,6 +63,7 @@ function teardown() {
   try { if (v.dc) v.dc.close(); } catch (_) {}
   try { if (v.pc) v.pc.close(); } catch (_) {}
   try { if (v.micStream) v.micStream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+  try { if (v.audioCtx) v.audioCtx.close(); } catch (_) {}
 }
 
 function removeOverlay() {
@@ -175,6 +176,55 @@ function continueNudge() {
   if (!v || !v.dc || v.expectingToolResponse) return false;
   speakSystemText(CONTINUE_NUDGE_TEXT);
   return sendResponse("", "");
+}
+
+// La voz del modelo llega con bastante cuerpo en graves y en un portatil "retumba".
+// Se pasa por un filtro suave antes de sonar: corte de graves por debajo de 110 Hz
+// (ahi solo hay retumbe, nada de voz), un realce leve en la banda de la
+// inteligibilidad y un compresor que iguala el volumen. Si el navegador no deja
+// montar el grafo, se reproduce tal cual.
+function attachRemoteAudio(stream) {
+  const el = byId("ia-v-audio");
+  if (!el) return;
+  el.srcObject = stream;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) { el.play().catch(() => {}); return; }
+  try {
+    const ctx = new AC();
+    const src = ctx.createMediaStreamSource(stream);
+
+    const corteGraves = ctx.createBiquadFilter();
+    corteGraves.type = "highpass";
+    corteGraves.frequency.value = 110;
+    corteGraves.Q.value = 0.7;
+
+    const cuerpo = ctx.createBiquadFilter();   // quita el "bote" de caja
+    cuerpo.type = "peaking";
+    cuerpo.frequency.value = 300;
+    cuerpo.Q.value = 1.0;
+    cuerpo.gain.value = -3;
+
+    const presencia = ctx.createBiquadFilter();  // consonantes mas claras
+    presencia.type = "peaking";
+    presencia.frequency.value = 3000;
+    presencia.Q.value = 0.9;
+    presencia.gain.value = 3;
+
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -24;
+    comp.knee.value = 24;
+    comp.ratio.value = 3;
+    comp.attack.value = 0.004;
+    comp.release.value = 0.2;
+
+    src.connect(corteGraves).connect(cuerpo).connect(presencia).connect(comp).connect(ctx.destination);
+    el.muted = true;                 // suena por el grafo, no por el elemento
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    if (v) { v.audioCtx = ctx; }
+  } catch (_) {
+    el.muted = false;
+    el.play().catch(() => {});
+  }
 }
 
 function markActivity() {
@@ -401,7 +451,7 @@ async function postSDP(model, sdp, secret) {
 export async function startVoice(cfg) {
   if (v) return;
   buildOverlay(cfg || {});
-  v = { muted: false, pc: null, dc: null, micStream: null, timerId: null, maxId: null, speakId: null, seconds: 0, transcript: [], startedAt: Date.now(), lastAssistantText: "", lastUserText: "", lastToolName: "", lastToolResult: {}, endCallPending: false, autoNudgeUsed: false, confirmationNudgeUsed: false, contactConfirmationNudgeUsed: false, pendingToolFollowup: "", pendingBookingSlot: null, pendingBookingContact: null, responseDoneSeen: false, responseActive: false, responseActiveStartedAt: 0, responseCancelPending: false, responseCancelStartedAt: 0, turnHadAssistantOutput: false, turnHadFunctionCall: false, silenceWatchdogId: null, silenceWatchdogReason: "", silenceWatchdogUsed: false, silenceRecoveries: 0, lastActivityAt: Date.now(), idleNudges: 0, idleTickId: null };
+  v = { muted: false, pc: null, dc: null, micStream: null, timerId: null, maxId: null, speakId: null, seconds: 0, transcript: [], startedAt: Date.now(), lastAssistantText: "", lastUserText: "", lastToolName: "", lastToolResult: {}, endCallPending: false, autoNudgeUsed: false, confirmationNudgeUsed: false, contactConfirmationNudgeUsed: false, pendingToolFollowup: "", pendingBookingSlot: null, pendingBookingContact: null, responseDoneSeen: false, responseActive: false, responseActiveStartedAt: 0, responseCancelPending: false, responseCancelStartedAt: 0, turnHadAssistantOutput: false, turnHadFunctionCall: false, silenceWatchdogId: null, silenceWatchdogReason: "", silenceWatchdogUsed: false, silenceRecoveries: 0, lastActivityAt: Date.now(), idleNudges: 0, idleTickId: null, audioCtx: null };
   setStatus("Pidiendo micrófono…"); setHint("Permite el micrófono para empezar a hablar.");
   trackWidgetEvent("widget_voice_started");
   try { v.micStream = await getMic(); } catch (e) { micError(e); return; }
@@ -420,7 +470,7 @@ export async function startVoice(cfg) {
   const maxS = sess.max_duration_seconds || 120;
   try {
     v.pc = new RTCPeerConnection();
-    v.pc.ontrack = (e) => { try { const a = byId("ia-v-audio"); a.srcObject = e.streams[0]; a.play().catch(() => {}); } catch (_) {} };
+    v.pc.ontrack = (e) => { try { attachRemoteAudio(e.streams[0]); } catch (_) {} };
     v.pc.onconnectionstatechange = () => {
       if (!v || !v.pc) return;
       const s = v.pc.connectionState;
