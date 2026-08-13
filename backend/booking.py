@@ -1383,44 +1383,95 @@ def _booking_row_confirm_url(row: sqlite3.Row, request: Optional[Request] = None
     return _build_booking_confirm_url(token, request)
 
 
-def _booking_confirm_result_page(company_name: str, *, state: str, when_text: str = "", manage_url: str = "") -> str:
-    """Pagina HTML autocontenida que ve el cliente al pulsar 'Confirmar' en el email."""
-    palette = {
-        "confirmed": ("#16a34a", "✓", "Asistencia confirmada",
-                      "Gracias, hemos registrado que asistiras a tu cita."),
-        "already": ("#16a34a", "✓", "Ya estaba confirmada",
-                    "Tu asistencia ya constaba como confirmada. No tienes que hacer nada mas."),
-        "cancelled": ("#b91c1c", "!", "Esta cita esta cancelada",
-                      "No es posible confirmar una cita cancelada."),
-        "invalid": ("#b91c1c", "!", "Enlace no valido",
-                    "Este enlace de confirmacion no es valido o ha caducado."),
+def _booking_confirm_result_page(
+    company_name: str, *, state: str, when_text: str = "", manage_url: str = "", cliente_id: str = "",
+) -> str:
+    """Pagina que ve el cliente al abrir el enlace de confirmacion del email.
+
+    Con `state="pending"` muestra el boton: abrir el enlace no confirma nada, lo
+    hace el POST que dispara ese boton. Los demas estados son el resultado."""
+    try:
+        config = clients._get_client_config(cliente_id) if cliente_id else {}
+    except Exception:  # noqa: BLE001
+        config = {}
+    marca = str(config.get("color") or "").strip()
+    if not re.match(r"^#[0-9A-Fa-f]{6}$", marca):
+        marca = "#111111"
+    tinta = _brand_ink_for(marca)
+    empresa = escape(str(config.get("empresa") or company_name or "").strip())
+
+    textos = {
+        "pending": ("¿Vas a venir?", "Confírmanoslo y dejamos tu cita apuntada."),
+        "confirmed": ("Asistencia confirmada", "Gracias, hemos apuntado que vas a venir."),
+        "already": ("Ya estaba confirmada", "No tienes que hacer nada más."),
+        "cancelled": ("Esta cita está cancelada", "No es posible confirmar una cita cancelada."),
+        "invalid": ("Enlace no válido", "Este enlace de confirmación no es válido o ha caducado."),
     }
-    color, icon, title, subtitle = palette.get(state, palette["invalid"])
-    when_html = (
-        f'<p style="margin:6px 0 0;color:#475569;font-size:15px;">{escape(when_text)}</p>'
+    titulo, subtitulo = textos.get(state, textos["invalid"])
+
+    boton = ""
+    if state == "pending":
+        boton = (
+            '<button id="confirmar" type="button" style="width:100%;margin-top:1.4rem;padding:1rem;'
+            f'border:0;border-radius:12px;background:{marca};color:{tinta};font-size:1rem;font-weight:700;'
+            'cursor:pointer;min-height:52px;">Sí, confirmo que voy</button>'
+        )
+    gestionar = ""
+    if manage_url:
+        gestionar = (
+            f'<a href="{escape(manage_url)}" style="display:block;margin-top:.7rem;padding:.9rem;'
+            'border:1.5px solid #E4E6EC;border-radius:12px;color:#16181D;text-decoration:none;'
+            'font-weight:600;min-height:52px;box-sizing:border-box;">Ver o cambiar mi cita</a>'
+        )
+    cuando = (
+        f'<p style="margin:.9rem 0 0;font-size:1.05rem;font-weight:700;">{escape(when_text)}</p>'
         if when_text else ""
     )
-    manage_html = (
-        f'<a href="{escape(manage_url)}" style="display:inline-block;margin-top:22px;padding:11px 18px;'
-        f'border-radius:12px;background:#0b6b8a;color:#fff;text-decoration:none;font-weight:600;">'
-        f'Gestionar mi cita</a>'
-        if manage_url else ""
+
+    marca_ini = next((c for c in str(config.get("empresa") or company_name or "?") if c.isalnum()), "?").upper()
+    logo_url = str(config.get("logo_url") or "").strip()
+    logo = (
+        f'<img src="{escape(logo_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
+        if logo_url.startswith("http") else escape(marca_ini)
     )
+
     return (
-        f'<!doctype html><html lang="es"><head><meta charset="utf-8">'
-        f'<meta name="viewport" content="width=device-width,initial-scale=1">'
-        f'<title>{escape(title)}</title></head>'
-        f'<body style="margin:0;font-family:Arial,Helvetica,sans-serif;background:#f1f5f9;color:#0f172a;">'
-        f'<div style="max-width:460px;margin:8vh auto;padding:0 18px;">'
-        f'<div style="background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:34px 28px;text-align:center;'
-        f'box-shadow:0 18px 50px rgba(15,23,42,.08);">'
-        f'<div style="width:64px;height:64px;border-radius:50%;margin:0 auto 18px;display:flex;align-items:center;'
-        f'justify-content:center;background:{color}1a;color:{color};font-size:32px;font-weight:700;">{icon}</div>'
-        f'<h1 style="margin:0;font-size:22px;">{escape(title)}</h1>'
-        f'<p style="margin:10px 0 0;color:#475569;font-size:15px;line-height:1.5;">{escape(subtitle)}</p>'
-        f'{when_html}{manage_html}'
-        f'<p style="margin:26px 0 0;color:#94a3b8;font-size:13px;">{escape(company_name)}</p>'
-        f'</div></div></body></html>'
+        '<!doctype html><html lang="es"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
+        '<meta name="robots" content="noindex,nofollow">'
+        f'<title>{escape(titulo)} | {empresa}</title></head>'
+        '<body style="margin:0;background:#F6F7F9;color:#16181D;'
+        'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;">'
+        f'<div style="background:{marca};color:{tinta};padding:1.5rem 1rem;">'
+        '<div style="max-width:26rem;margin:0 auto;display:flex;align-items:center;gap:.8rem;">'
+        f'<div style="width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.16);'
+        f'display:flex;align-items:center;justify-content:center;font-weight:800;">{logo}</div>'
+        f'<div style="font-weight:700;">{empresa}</div></div></div>'
+        '<div style="max-width:26rem;margin:0 auto;padding:0 1rem;">'
+        '<div style="background:#fff;border-radius:16px;margin-top:-.9rem;padding:1.4rem 1.15rem 1.3rem;'
+        'box-shadow:0 8px 28px rgba(20,24,35,.09);text-align:center;">'
+        f'<h1 style="margin:0;font-size:1.35rem;">{escape(titulo)}</h1>'
+        f'<p style="margin:.5rem 0 0;color:#5E6470;">{escape(subtitulo)}</p>'
+        f'{cuando}{boton}{gestionar}'
+        '<p id="aviso" style="margin:.9rem 0 0;color:#5E6470;font-size:.92rem;min-height:1.2rem;"></p>'
+        '</div>'
+        '<p style="text-align:center;margin:1.3rem 0;color:#9AA0AC;font-size:.74rem;">Gestionado con Vantelia</p>'
+        '</div>'
+        '<script>'
+        'document.getElementById("confirmar")?.addEventListener("click", async function () {'
+        '  const b = this, aviso = document.getElementById("aviso");'
+        '  b.disabled = true; aviso.textContent = "Confirmando...";'
+        '  try {'
+        '    const r = await fetch(window.location.pathname, {method:"POST",headers:{"Accept":"application/json"}});'
+        '    const d = await r.json();'
+        '    if (!r.ok) throw new Error(d.detail || "No se pudo confirmar.");'
+        '    b.style.display = "none";'
+        '    document.querySelector("h1").textContent = "Asistencia confirmada";'
+        '    aviso.textContent = d.mensaje || "Gracias.";'
+        '  } catch (e) { b.disabled = false; aviso.textContent = e.message; }'
+        '});'
+        '</script>'
+        '</body></html>'
     )
 
 
@@ -1899,6 +1950,7 @@ def _booking_public_detail_from_row(
         service_price_label=data.get("service_price_label", ""),
         contact_email=data["contact_email"],
         contact_phone=data["contact_phone"],
+        confirmed_by_customer=_booking_confirmed_by_customer(data["booking_id"]),
         available_services=agenda._services_for_employee(
             data["cliente_id"],
             agenda._get_employee_row(data["employee_id"], cliente_id=data["cliente_id"]) if data["employee_id"] else None,
@@ -2747,6 +2799,10 @@ _BOOKING_MANAGE_TEMPLATE = r"""<!doctype html>
     <div class="action-chooser">
       <h2 class="tit">¿Qué quieres hacer?</h2>
       <div class="acciones">
+        <button class="accion" type="button" id="confirm-btn" style="display:none">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4L19 7"/></svg></span>
+          <span><b>Confirmar la cita</b><span>Dinos que vas a venir</span></span>
+        </button>
         <button class="accion" type="button" data-panel-target="schedule-section">
           <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span>
           <span><b>Cambiar día u hora</b><span>Elige otro hueco disponible</span></span>
@@ -2778,8 +2834,8 @@ _BOOKING_MANAGE_TEMPLATE = r"""<!doctype html>
         <label>Nombre<input id="booking-name" type="text" maxlength="80" /></label>
         <label>Email<input id="booking-email" type="email" maxlength="120" readonly /></label>
         <label>Teléfono<input id="booking-phone" type="tel" inputmode="tel" maxlength="30" /></label>
-        <label>Servicio<select id="booking-service"></select></label>
         <label>Notas<textarea id="booking-notes" maxlength="500" placeholder="¿Algo que debamos saber?"></textarea></label>
+        <p class="muted" style="margin:.2rem 0 0;">El servicio y el profesional no se cambian desde aquí. Si necesitas otro, escríbenos.</p>
       </div>
 
       <div class="section-card" id="cancel-section">
@@ -2806,7 +2862,6 @@ _BOOKING_MANAGE_TEMPLATE = r"""<!doctype html>
     const reschedulePanel = document.getElementById("reschedule-panel");
     const saveBtn = document.getElementById("save-btn");
     const cancelBtn = document.getElementById("cancel-btn");
-    const serviceSelect = document.getElementById("booking-service");
     const slotStatus = document.getElementById("slot-status");
     const slotGrid = document.getElementById("slot-grid");
     const sectionCards = Array.from(document.querySelectorAll(".section-card"));
@@ -2839,30 +2894,6 @@ _BOOKING_MANAGE_TEMPLATE = r"""<!doctype html>
     document.getElementById("booking-notes").value = BOOKING.notas || "";
     document.getElementById("reschedule-date").value = BOOKING.fecha;
     document.getElementById("reschedule-time").value = BOOKING.hora;
-
-    function renderServiceOptions() {
-      const services = Array.isArray(BOOKING.available_services) ? BOOKING.available_services : [];
-      const currentService = String(BOOKING.servicio || "").trim();
-      serviceSelect.innerHTML = "";
-      const seen = new Set();
-      services.forEach((service) => {
-        const value = String((service && service.nombre) || "").trim();
-        if (!value || seen.has(value)) return;
-        seen.add(value);
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = value;
-        option.selected = value === currentService;
-        serviceSelect.appendChild(option);
-      });
-      if (!seen.size || (currentService && !seen.has(currentService))) {
-        const fallback = document.createElement("option");
-        fallback.value = currentService || "Consulta";
-        fallback.textContent = currentService || "Consulta";
-        fallback.selected = true;
-        serviceSelect.appendChild(fallback);
-      }
-    }
 
     function setTimeOptions(slots, fecha) {
       const timeSelect = document.getElementById("reschedule-time");
@@ -2919,8 +2950,12 @@ _BOOKING_MANAGE_TEMPLATE = r"""<!doctype html>
       if (!fecha) { slotStatus.textContent = "Selecciona una fecha para ver los horarios."; return; }
       slotStatus.textContent = "Buscando horarios...";
       try {
+        // Con el profesional Y el servicio: los huecos son los SUYOS y con la
+        // duracion real de la cita (un servicio de tres horas no cabe en
+        // cualquier tramo libre).
         const response = await fetch("/disponibilidad?cliente_id=" + encodeURIComponent(BOOKING.cliente_id)
           + "&employee_id=" + encodeURIComponent(BOOKING.employee_id || "")
+          + "&servicio=" + encodeURIComponent(BOOKING.servicio || "")
           + "&fecha=" + encodeURIComponent(fecha), { headers: { "Accept": "application/json" } });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || "No se pudo cargar la disponibilidad.");
@@ -2962,7 +2997,7 @@ _BOOKING_MANAGE_TEMPLATE = r"""<!doctype html>
         nombre: document.getElementById("booking-name").value.trim(),
         email: BOOKING.email || "",
         telefono: document.getElementById("booking-phone").value.trim(),
-        servicio: serviceSelect.value.trim(),
+        servicio: BOOKING.servicio || "",
         employee_id: BOOKING.employee_id || "",
         fecha: isScheduleOpen ? fecha : BOOKING.fecha,
         hora: isScheduleOpen ? hora : BOOKING.hora,
@@ -2973,8 +3008,18 @@ _BOOKING_MANAGE_TEMPLATE = r"""<!doctype html>
       catch (error) { statusEl.textContent = error.message; }
     });
 
+    const confirmBtn = document.getElementById("confirm-btn");
+    const puedeConfirmar = !BOOKING.confirmed_by_customer
+      && ["confirmed", "pending_review"].indexOf(BOOKING.estado) >= 0;
+    if (confirmBtn && puedeConfirmar) {
+      confirmBtn.style.display = "";
+      confirmBtn.addEventListener("click", async () => {
+        try { await action(window.location.pathname.replace("/manage/", "/confirm/")); }
+        catch (error) { statusEl.textContent = error.message; }
+      });
+    }
+
     document.getElementById("reschedule-date")?.addEventListener("change", loadSlots);
-    renderServiceOptions();
     openPanel("schedule-section");
     loadSlots();
   </script>

@@ -51,22 +51,47 @@ async def booking_manage_page(manage_token: str, request: Request) -> HTMLRespon
 
 @app.get("/booking/confirm/{manage_token}", include_in_schema=False)
 async def booking_confirm_page(manage_token: str, request: Request) -> HTMLResponse:
-    """Confirmacion de asistencia 1-clic desde el email (reusa manage_token)."""
+    """Pagina de confirmacion de asistencia (enlace del email).
+
+    Abrirla NO confirma nada: hay que pulsar el boton, que llama al POST. Un GET
+    no debe cambiar el estado, y ademas los antivirus y previsualizadores de
+    correo abren los enlaces: antes daban por confirmadas citas que el cliente ni
+    habia llegado a ver."""
     booking_row = booking._load_booking_by_token_or_404(manage_token)
     company = clients._get_client_config(booking_row["cliente_id"])["nombre"]
     when_text = booking._booking_datetime_display(booking_row)
     manage_url = booking._booking_row_manage_url(booking_row, request)
     if booking_row["status"] == "cancelled":
-        return HTMLResponse(
-            booking._booking_confirm_result_page(company, state="cancelled", when_text=when_text, manage_url=manage_url)
-        )
-    already = booking._booking_confirmed_by_customer(booking_row["id"])
-    if not already:
-        booking._mark_booking_confirmed_by_customer(booking_row["id"], booking_row["cliente_id"], channel="email")
+        estado = "cancelled"
+    elif booking._booking_confirmed_by_customer(booking_row["id"]):
+        estado = "already"
+    else:
+        estado = "pending"
     return HTMLResponse(
         booking._booking_confirm_result_page(
-            company, state=("already" if already else "confirmed"), when_text=when_text, manage_url=manage_url
+            company, state=estado, when_text=when_text, manage_url=manage_url,
+            cliente_id=booking_row["cliente_id"],
         )
+    )
+
+
+@app.post("/booking/confirm/{manage_token}", response_model=BookingActionResponse)
+async def booking_confirm_action(manage_token: str) -> BookingActionResponse:
+    """Confirma la asistencia. Idempotente: repetirlo no rompe nada."""
+    booking_row = booking._load_booking_by_token_or_404(manage_token)
+    if booking_row["status"] == "cancelled":
+        raise HTTPException(status_code=409, detail="Esta cita esta cancelada y no se puede confirmar.")
+    ya_estaba = booking._booking_confirmed_by_customer(booking_row["id"])
+    if not ya_estaba:
+        booking._mark_booking_confirmed_by_customer(
+            booking_row["id"], booking_row["cliente_id"], channel="email"
+        )
+    fresco = booking._get_booking_row_by_id(booking_row["id"]) or booking_row
+    return BookingActionResponse(
+        ok=True,
+        booking_id=booking_row["id"],
+        estado=fresco["status"],
+        mensaje="Ya estaba confirmada, gracias." if ya_estaba else "Asistencia confirmada. Te esperamos.",
     )
 
 

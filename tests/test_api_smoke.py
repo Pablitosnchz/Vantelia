@@ -1799,15 +1799,16 @@ def _seed_confirmed_booking(
 
 
 def test_email_confirm_link_marks_attendance(client: TestClient, api_module):
-    """Boton 1-clic del email: confirma asistencia, idempotente, token invalido -> 404."""
+    """Enlace del email: ABRIRLO no confirma; confirma el boton (POST).
+
+    Un GET no debe cambiar el estado: los antivirus y los previsualizadores de
+    correo abren los enlaces y daban citas por confirmadas solas."""
     start = api_module._utc_now() + timedelta(days=2)
     bid = "conf_" + uuid.uuid4().hex
     _seed_confirmed_booking(api_module, booking_id=bid, start=start)
     token = f"mg_{bid}"
     try:
         assert client.get("/booking/confirm/nope-" + uuid.uuid4().hex).status_code == 404
-        r1 = client.get(f"/booking/confirm/{token}")
-        assert r1.status_code == 200 and "confirm" in r1.text.lower()
 
         def _audit_count():
             with sqlite3.connect(api_module.DB_PATH) as conn:
@@ -1816,8 +1817,15 @@ def test_email_confirm_link_marks_attendance(client: TestClient, api_module):
                     (bid,),
                 ).fetchone()[0]
 
+        r1 = client.get(f"/booking/confirm/{token}")
+        assert r1.status_code == 200 and "confirmo" in r1.text.lower()
+        assert _audit_count() == 0  # abrir el enlace no confirma nada
+
+        r2 = client.post(f"/booking/confirm/{token}")
+        assert r2.status_code == 200 and r2.json()["ok"] is True
         assert _audit_count() == 1
-        assert client.get(f"/booking/confirm/{token}").status_code == 200  # idempotente
+
+        assert client.post(f"/booking/confirm/{token}").status_code == 200  # idempotente
         assert _audit_count() == 1  # no duplica el audit
     finally:
         with sqlite3.connect(api_module.DB_PATH) as conn:

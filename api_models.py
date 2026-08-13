@@ -164,6 +164,7 @@ class BookingDetailPublic(BaseModel):
     service_price_label: str = ""
     contact_email: str = ""
     contact_phone: str = ""
+    confirmed_by_customer: bool = False
     available_services: List[Dict[str, Any]] = Field(default_factory=list)
 
 
