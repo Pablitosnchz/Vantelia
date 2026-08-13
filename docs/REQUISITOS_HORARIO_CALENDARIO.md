@@ -1,7 +1,7 @@
 # Requisitos: horario, descansos, bloqueos y calendario
 
 Contrato de producto del sistema de horarios de Vantelia (portal cliente + asistentes).
-Actualizado: julio 2026 (overlay de descanso general).
+Actualizado: agosto 2026 (horario por dia de la semana).
 
 ## 1. Modelo de datos
 
@@ -9,11 +9,13 @@ Actualizado: julio 2026 (overlay de descanso general).
 | --- | --- | --- | --- |
 | Horario general | `config.json` → `booking` (day_start/day_end, slot_minutes, timezone, closed_weekdays, break_windows) | Negocio; sincronizado con el empleado `is_default=1` ("Agenda general") | Semanal fija |
 | Horario por profesional | Tabla `employees` (mismas columnas) | Un profesional | Semanal fija |
+| Horario por DIA de la semana (`weekly_hours`) | `config.json` → `booking.weekly_hours` y columna `employees.weekly_hours_json` | Negocio o un profesional | Override por dia sobre la franja general |
 | Descanso diario (break) | `break_windows` (lista `{start, end, reason}`) en config y/o en el empleado | Ver semantica abajo | Todos los dias laborables |
 | Bloqueo de agenda | Tabla `agenda_blocks` (fecha o rango de fechas + horas; `employee_id=''` = general) | Negocio entero o un profesional | Puntual (vacaciones, festivos, ausencias, formacion) |
 
 - Un bloqueo sin horas (00:00–23:59) = dia completo. Un rango de fechas crea una fila por dia (max 366).
 - Los descansos NO tienen dia de la semana: aplican cada dia laborable. Para una excepcion puntual se usa un bloqueo.
+- `weekly_hours` es un dict `{"0".. "6"}` (lunes=0) con `{closed, start, end}`. Los dias que NO aparecen usan `day_start`/`day_end` + `closed_weekdays`. Vacio `{}` = comportamiento clasico de una sola franja.
 
 ## 2. Semantica (reglas de negocio)
 
@@ -23,6 +25,7 @@ Actualizado: julio 2026 (overlay de descanso general).
 4. **Bloqueo por profesional** solo a el.
 5. **El horario general (day_start/day_end/dias cerrados) NO pisa el de los profesionales**: cada profesional tiene su propio horario semanal; el general gobierna la "Agenda general" y sirve de plantilla al crear empleados nuevos (`_employee_defaults_for_client`). Excepcion: los descansos generales, que si aplican a todos (regla 1).
 6. **Dia cerrado del negocio** (matriz semanal): un dia esta cerrado solo si NINGUN profesional activo trabaja ese dia (`agenda._weekly_schedule_matrix`).
+7. **Horario distinto segun el dia** (`weekly_hours`, opt-in): resuelve los negocios que no abren la misma franja todos los dias (sabado corto, tarde larga solo dos dias). Fuente unica `textnorm._weekday_hours(schedule, weekday)`, consumida por `_build_slots_for_day` (todos los canales) y por `_weekly_schedule_matrix` (prompts de chat y voz), asi que la agenda y lo que cuenta el asistente no pueden divergir. El empleado `is_default=1` hereda el `weekly_hours` del negocio en cada arranque (`_ensure_default_employees_for_all_clients`). UI: bloque "Horario distinto segun el dia" en la pestana Horarios del portal, tanto para el horario general como por profesional.
 
 ## 3. Validacion al guardar (conflictos)
 
@@ -78,6 +81,8 @@ python -m pytest tests/test_api_smoke.py -k "schedule or reschedule"
 
 Cobertura clave en `tests/test_booking_exhaustive.py`: dias cerrados, fuera de horario, bloqueos (dia completo/parcial/reserva rechazada), descansos por profesional (simples/multiples/servicio largo), **descanso general aplica a todo el equipo + 409 al guardar si pisa citas de cualquier profesional + bloqueos generales en el endpoint del profesional**.
 
-## 9. Caso de referencia: The Nook Madrid (jul 2026)
+## 9. Caso de referencia: Alicia Rincon Estilistas (ago 2026)
 
-Parada de comida del negocio 14:30–16:00 configurada como descanso GENERAL (`config['thenook']['booking']['break_windows']` + agenda default sincronizada). Efecto: banda "Comida" en las columnas de los 8 profesionales de los 3 centros, sin huecos 14:30–15:30 en ningun canal, y chat/voz avisan del cierre de mediodia. Requiere deploy de config + codigo en el VPS para produccion.
+Peluqueria de Elche con horario distinto por dia: lunes y domingo cerrados, martes y miercoles 10:00-18:30, jueves y viernes 10:00-20:30 y sabado corto 09:00-14:00. Es el caso que motivo `weekly_hours`: con una sola franja, la agenda ofrecia huecos inexistentes (sabado por la tarde) y el asistente contaba un horario falso. Config en `config['aliciarincon']['booking']['weekly_hours']` + los 6 profesionales con el mismo override. Verificacion rapida: un servicio de 180 min no puede empezar despues de las 11:00 el sabado ni despues de las 15:30 el martes. Tests en `tests/test_weekly_hours.py`.
+
+Caso previo (jul 2026, The Nook Madrid, tenant ya eliminado): la parada de comida del negocio 14:30-16:00 como descanso GENERAL cerraba la agenda de todo el equipo en todos los canales. La regla sigue vigente aunque el tenant no exista.

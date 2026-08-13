@@ -222,6 +222,8 @@ def _init_database() -> None:
             connection.execute("ALTER TABLE employees ADD COLUMN break_windows_json TEXT NOT NULL DEFAULT '[]'")
         if "location_id" not in employee_columns:
             connection.execute("ALTER TABLE employees ADD COLUMN location_id TEXT NOT NULL DEFAULT ''")
+        if "weekly_hours_json" not in employee_columns:
+            connection.execute("ALTER TABLE employees ADD COLUMN weekly_hours_json TEXT NOT NULL DEFAULT '{}'")
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_employees_location

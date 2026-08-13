@@ -731,23 +731,25 @@ async def _availability_snapshot_for_day(
     available_sorted = sorted(available_slots)
     period_available = [slot for slot in available_sorted if _slot_matches_period(slot, period)]
     blocks = agenda._agenda_block_reasons_for_day(cliente_id, fecha_iso)
-    booking_cfg = clients._get_client_config(cliente_id).get("booking", {}) or {}
-    closed_weekdays = {
-        int(day)
-        for day in (booking_cfg.get("closed_weekdays") or [])
-        if isinstance(day, (int, str)) and str(day).isdigit()
-    }
+    client_config = clients._get_client_config(cliente_id)
+    # Dia cerrado segun el HORARIO REAL (matriz semanal): cubre tanto los dias
+    # cerrados del negocio como los cierres por horario propio de cada dia.
+    matrix = agenda._weekly_schedule_matrix(cliente_id, client_config)
+    day_is_closed = any(
+        int(item.get("weekday", -1)) == target_date.weekday() and item.get("closed")
+        for item in (matrix or [])
+    )
 
     if not all_sorted:
-        if target_date.weekday() in closed_weekdays:
+        if day_is_closed:
             status_text = "closed"
-            reason = "dia no laborable configurado"
+            reason = "ese dia no abrimos"
         elif blocks:
             status_text = "blocked"
             reason = "; ".join(blocks[:3])
         else:
             status_text = "closed"
-            reason = "agenda cerrada o sin tramos configurados"
+            reason = "ese dia no hay agenda disponible"
     elif not available_sorted:
         status_text = "full"
         reason = "; ".join(blocks[:3]) if blocks else "agenda completa"
@@ -925,7 +927,12 @@ async def _build_chat_availability_answer(
         next_snapshot = await _find_next_available_snapshot(
             cliente_id, snapshot["date"], period=period, servicio=servicio
         )
-        text = f"Para el {label} estamos cerrados: {snapshot['reason']}."
+        # El motivo solo se anade si aporta algo (un bloqueo concreto); si el dia
+        # simplemente no es laborable, repetirlo suena a muletilla de sistema.
+        reason = str(snapshot.get("reason") or "").strip()
+        text = f"Para el {label} estamos cerrados."
+        if snapshot["status"] == "blocked" and reason:
+            text = f"Para el {label} estamos cerrados: {reason}."
         if next_snapshot:
             next_slots = next_snapshot["period_available"] if period else next_snapshot["available"]
             text += (

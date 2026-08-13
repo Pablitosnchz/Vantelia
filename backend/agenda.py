@@ -144,6 +144,7 @@ def _employee_defaults_for_client(cliente_id: str) -> Dict[str, Any]:
         "break_end": break_end,
         "break_windows": break_windows,
         "closed_weekdays": _normalize_closed_weekdays_list(booking_row.get("closed_weekdays", [])),
+        "weekly_hours": textnorm._normalize_weekly_hours(booking_row.get("weekly_hours", {})),
     }
 
 
@@ -169,10 +170,10 @@ def _ensure_default_employees_for_all_clients() -> None:
                     INSERT INTO employees (
                         id, cliente_id, name, role_label, color, is_active, is_default,
                         timezone, slot_minutes, day_start, day_end, break_start, break_end,
-                        break_windows_json, closed_weekdays_json, service_ids_json,
-                        created_at, updated_at
+                        break_windows_json, closed_weekdays_json, weekly_hours_json,
+                        service_ids_json, created_at, updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         employee_id,
@@ -190,6 +191,7 @@ def _ensure_default_employees_for_all_clients() -> None:
                         defaults["break_end"],
                         json.dumps(defaults["break_windows"]),
                         json.dumps(defaults["closed_weekdays"]),
+                        json.dumps(defaults.get("weekly_hours", {})),
                         "[]",
                         now_iso,
                         now_iso,
@@ -197,6 +199,13 @@ def _ensure_default_employees_for_all_clients() -> None:
                 )
                 row = connection.execute("SELECT * FROM employees WHERE id = ?", (employee_id,)).fetchone()
             if row:
+                stored_weekly = row["weekly_hours_json"] if "weekly_hours_json" in row.keys() else "{}"
+                expected_weekly = json.dumps(defaults.get("weekly_hours", {}))
+                if (stored_weekly or "{}") != expected_weekly:
+                    connection.execute(
+                        "UPDATE employees SET weekly_hours_json = ?, updated_at = ? WHERE id = ?",
+                        (expected_weekly, now_iso, row["id"]),
+                    )
                 connection.execute(
                     """
                     UPDATE bookings
@@ -613,6 +622,14 @@ def _employee_schedule_from_row(row: sqlite3.Row) -> Dict[str, Any]:
         row["break_end"] or "",
     )
     break_start, break_end = textnorm._first_break_pair(break_windows)
+    try:
+        raw_weekly = json.loads(row["weekly_hours_json"] or "{}")
+    except (IndexError, KeyError, json.JSONDecodeError):
+        raw_weekly = {}
+    try:
+        weekly_hours = textnorm._normalize_weekly_hours(raw_weekly)
+    except Exception:  # noqa: BLE001  (dato guardado invalido: se ignora, no rompe la agenda)
+        weekly_hours = {}
     return {
         "timezone": row["timezone"] or settings.DEFAULT_TIMEZONE,
         "slot_minutes": int(row["slot_minutes"] or 30),
@@ -622,6 +639,7 @@ def _employee_schedule_from_row(row: sqlite3.Row) -> Dict[str, Any]:
         "break_end": break_end,
         "break_windows": break_windows,
         "closed_weekdays": _employee_closed_weekdays_from_row(row),
+        "weekly_hours": weekly_hours,
     }
 
 
@@ -892,6 +910,7 @@ def _portal_schedule_from_config(cliente_id: str) -> PortalSchedulePublic:
         break_end=break_end,
         break_windows=break_windows,
         closed_weekdays=list(booking_row.get("closed_weekdays", [])),
+        weekly_hours=dict(booking_row.get("weekly_hours", {}) or {}),
         message_templates=textnorm._normalize_message_templates(booking_row.get("message_templates", {})),
         message_template_enabled=textnorm._normalize_message_template_enabled(
             booking_row.get("message_template_enabled", {}),
@@ -924,6 +943,7 @@ def _portal_schedule_from_employee(cliente_id: str, employee_id: str) -> PortalS
         break_end=schedule["break_end"],
         break_windows=schedule["break_windows"],
         closed_weekdays=schedule["closed_weekdays"],
+        weekly_hours=schedule.get("weekly_hours", {}),
         message_templates=textnorm._normalize_message_templates(booking_row.get("message_templates", {})),
         message_template_enabled=textnorm._normalize_message_template_enabled(
             booking_row.get("message_template_enabled", {}),
@@ -969,6 +989,7 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
         "break_end",
         "break_windows",
         "closed_weekdays",
+        "weekly_hours",
     }
     should_update_schedule = bool(fields_set & schedule_fields) or (
         data.message_templates is None
@@ -985,6 +1006,11 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
         closed_weekdays = sorted({int(day) for day in data.closed_weekdays if 0 <= int(day) <= 6})
         if len(closed_weekdays) != len(set(data.closed_weekdays)):
             closed_weekdays = sorted(set(closed_weekdays))
+        weekly_hours = (
+            textnorm._normalize_weekly_hours(data.weekly_hours)
+            if "weekly_hours" in fields_set
+            else dict(config.get("booking", {}).get("weekly_hours", {}) or {})
+        )
         previous_closed_weekdays = {
             int(day)
             for day in config.get("booking", {}).get("closed_weekdays", [])
@@ -1056,6 +1082,7 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
                 "break_end": break_end,
                 "break_windows": break_windows,
                 "closed_weekdays": closed_weekdays,
+                "weekly_hours": weekly_hours,
             }
         )
     if data.message_templates is not None:
@@ -1083,7 +1110,7 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
                 UPDATE employees
                 SET timezone = ?, slot_minutes = ?, day_start = ?, day_end = ?,
                     break_start = ?, break_end = ?, break_windows_json = ?,
-                    closed_weekdays_json = ?, updated_at = ?
+                    closed_weekdays_json = ?, weekly_hours_json = ?, updated_at = ?
                 WHERE cliente_id = ? AND is_default = 1
                 """,
                 (
@@ -1095,6 +1122,7 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
                     booking_row.get("break_end", ""),
                     json.dumps(booking_row.get("break_windows", [])),
                     json.dumps(booking_row["closed_weekdays"]),
+                    json.dumps(booking_row.get("weekly_hours", {})),
                     timeutils._utc_now_iso(),
                     cliente_id,
                 ),
@@ -1113,6 +1141,12 @@ def _update_employee_schedule(cliente_id: str, employee_id: str, data: PortalSch
     break_windows = textnorm._normalize_break_windows(start, end, data.break_windows, data.break_start, data.break_end)
     break_start, break_end = textnorm._first_break_pair(break_windows)
     closed_weekdays = _normalize_closed_weekdays_list(data.closed_weekdays)
+    schedule_fields_set = set(getattr(data, "model_fields_set", None) or getattr(data, "__fields_set__", set()))
+    weekly_hours = (
+        textnorm._normalize_weekly_hours(data.weekly_hours)
+        if "weekly_hours" in schedule_fields_set
+        else dict(_employee_schedule_from_row(row).get("weekly_hours") or {})
+    )
     previous_closed_weekdays = set(_employee_closed_weekdays_from_row(row))
     newly_closed_weekdays = set(closed_weekdays) - previous_closed_weekdays
     if newly_closed_weekdays:
@@ -1166,7 +1200,7 @@ def _update_employee_schedule(cliente_id: str, employee_id: str, data: PortalSch
             UPDATE employees
             SET timezone = ?, slot_minutes = ?, day_start = ?, day_end = ?,
                 break_start = ?, break_end = ?, break_windows_json = ?,
-                closed_weekdays_json = ?, updated_at = ?
+                closed_weekdays_json = ?, weekly_hours_json = ?, updated_at = ?
             WHERE id = ? AND cliente_id = ?
             """,
             (
@@ -1178,6 +1212,7 @@ def _update_employee_schedule(cliente_id: str, employee_id: str, data: PortalSch
                 break_end,
                 json.dumps(break_windows),
                 json.dumps(closed_weekdays),
+                json.dumps(weekly_hours),
                 timeutils._utc_now_iso(),
                 employee_id,
                 cliente_id,
@@ -1210,6 +1245,7 @@ def _serialize_portal_employee(row: sqlite3.Row) -> PortalEmployeePublic:
         break_end=schedule["break_end"],
         break_windows=schedule["break_windows"],
         closed_weekdays=schedule["closed_weekdays"],
+        weekly_hours=schedule.get("weekly_hours", {}),
         service_ids=service_ids,
         location_id=row["location_id"] or "",
         allows_all_services=not service_ids,
@@ -1260,6 +1296,11 @@ def _validate_employee_payload(
         if "closed_weekdays" in fields_set
         else list(defaults.get("closed_weekdays", []))
     )
+    weekly_hours = (
+        textnorm._normalize_weekly_hours(data.weekly_hours)
+        if "weekly_hours" in fields_set
+        else dict(defaults.get("weekly_hours") or {})
+    )
     service_ids = (
         _normalize_service_ids_for_client(cliente_id, data.service_ids)
         if "service_ids" in fields_set or existing_row is None
@@ -1302,6 +1343,8 @@ def _validate_employee_payload(
         "break_windows_json": json.dumps(break_windows),
         "closed_weekdays_json": json.dumps(closed_weekdays),
         "closed_weekdays": closed_weekdays,
+        "weekly_hours_json": json.dumps(weekly_hours),
+        "weekly_hours": weekly_hours,
         "service_ids_json": json.dumps(service_ids),
         "service_ids": service_ids,
     }
@@ -1334,10 +1377,11 @@ def _create_portal_employee(
             INSERT INTO employees (
                 id, cliente_id, name, role_label, color, is_active, is_default,
                 timezone, slot_minutes, day_start, day_end, break_start, break_end,
-                break_windows_json, closed_weekdays_json, service_ids_json, location_id,
+                break_windows_json, closed_weekdays_json, weekly_hours_json,
+                service_ids_json, location_id,
                 created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 employee_id,
@@ -1354,6 +1398,7 @@ def _create_portal_employee(
                 payload["break_end"],
                 payload["break_windows_json"],
                 payload["closed_weekdays_json"],
+                payload["weekly_hours_json"],
                 payload["service_ids_json"],
                 payload["location_id"],
                 created_at,
@@ -1477,7 +1522,8 @@ def _update_portal_employee(
             UPDATE employees
             SET name = ?, role_label = ?, color = ?, is_active = ?, timezone = ?,
                 slot_minutes = ?, day_start = ?, day_end = ?, break_start = ?, break_end = ?,
-                break_windows_json = ?, closed_weekdays_json = ?, service_ids_json = ?,
+                break_windows_json = ?, closed_weekdays_json = ?, weekly_hours_json = ?,
+                service_ids_json = ?,
                 location_id = ?, updated_at = ?
             WHERE id = ? AND cliente_id = ?
             """,
@@ -1494,6 +1540,7 @@ def _update_portal_employee(
                 payload["break_end"],
                 payload["break_windows_json"],
                 payload["closed_weekdays_json"],
+                payload["weekly_hours_json"],
                 payload["service_ids_json"],
                 payload["location_id"],
                 timeutils._utc_now_iso(),
@@ -2258,11 +2305,15 @@ def _build_slots_for_day(
     booking_cfg = _employee_schedule_from_row(employee_row)
     selected_day = textnorm._parse_date(fecha)
     _validate_booking_window(cliente_id, selected_day)
-    if selected_day.weekday() in booking_cfg["closed_weekdays"]:
+    # Franja del dia: override por dia de la semana si el profesional lo tiene
+    # configurado (sabado corto y similares), si no la franja general.
+    day_window = textnorm._weekday_hours(booking_cfg, selected_day.weekday())
+    if day_window is None:
         return []
+    day_start_value, day_end_value = day_window
 
-    start_dt = datetime.combine(selected_day.date(), textnorm._parse_time(booking_cfg["day_start"]).time())
-    end_dt = datetime.combine(selected_day.date(), textnorm._parse_time(booking_cfg["day_end"]).time())
+    start_dt = datetime.combine(selected_day.date(), textnorm._parse_time(day_start_value).time())
+    end_dt = datetime.combine(selected_day.date(), textnorm._parse_time(day_end_value).time())
     slot_minutes = booking_cfg["slot_minutes"]
     span = int(duration_minutes or slot_minutes) or slot_minutes
 
@@ -3192,29 +3243,27 @@ def _weekly_schedule_matrix(cliente_id: str, config: Dict[str, Any]) -> List[Dic
     source = "employees" if schedules else "config"
     if schedules:
         for wd in range(7):
-            open_today = [s for s in schedules if wd not in set(s.get("closed_weekdays") or [])]
+            windows = [textnorm._weekday_hours(s, wd) for s in schedules]
+            open_today = [w for w in windows if w is not None]
             if not open_today:
                 matrix.append({"weekday": wd, "closed": True, "start": "", "end": "", "source": source})
                 continue
-            starts = [_norm_hhmm(s.get("day_start"), "09:00") for s in open_today]
-            ends = [_norm_hhmm(s.get("day_end"), "18:00") for s in open_today]
+            starts = [_norm_hhmm(w[0], "09:00") for w in open_today]
+            ends = [_norm_hhmm(w[1], "18:00") for w in open_today]
             matrix.append({"weekday": wd, "closed": False, "start": min(starts), "end": max(ends), "source": source})
     else:
-        day_start = _norm_hhmm(booking_cfg.get("day_start", "09:00"), "09:00")
-        day_end = _norm_hhmm(booking_cfg.get("day_end", "18:00"), "18:00")
-        closed: Set[int] = set()
-        for d in (booking_cfg.get("closed_weekdays") or []):
-            try:
-                di = int(d)
-                if 0 <= di <= 6:
-                    closed.add(di)
-            except (TypeError, ValueError):
-                continue
+        base_schedule = {
+            "day_start": _norm_hhmm(booking_cfg.get("day_start", "09:00"), "09:00"),
+            "day_end": _norm_hhmm(booking_cfg.get("day_end", "18:00"), "18:00"),
+            "closed_weekdays": booking_cfg.get("closed_weekdays") or [],
+            "weekly_hours": booking_cfg.get("weekly_hours") or {},
+        }
         for wd in range(7):
-            if wd in closed:
+            window = textnorm._weekday_hours(base_schedule, wd)
+            if window is None:
                 matrix.append({"weekday": wd, "closed": True, "start": "", "end": "", "source": source})
             else:
-                matrix.append({"weekday": wd, "closed": False, "start": day_start, "end": day_end, "source": source})
+                matrix.append({"weekday": wd, "closed": False, "start": window[0], "end": window[1], "source": source})
 
     if all(item["closed"] for item in matrix):
         return []

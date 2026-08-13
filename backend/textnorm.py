@@ -276,6 +276,100 @@ def _normalize_break_windows(
     return normalized
 
 
+def _normalize_weekly_hours(raw: Any) -> Dict[str, Dict[str, Any]]:
+    """Horario POR DIA DE LA SEMANA (opcional) de un profesional o del negocio.
+
+    Muchos negocios reales no abren la misma franja todos los dias (peluquerias con
+    sabado corto, clinicas con tarde larga solo dos dias...). `day_start`/`day_end` +
+    `closed_weekdays` solo describen UNA franja, asi que este override permite
+    afinar por dia sin romper nada: los dias que no aparezcan aqui siguen usando la
+    franja general.
+
+    Formato aceptado: dict {"0".."6"} o lista de 7 elementos (lunes=0 .. domingo=6).
+    Cada valor: {"closed": bool, "start": "HH:MM", "end": "HH:MM"}. Devuelve {} si no
+    hay nada configurado (el caso normal).
+    """
+    if hasattr(raw, "model_dump"):
+        raw = raw.model_dump()
+    elif hasattr(raw, "dict"):
+        raw = raw.dict()
+
+    items: List[Tuple[Any, Any]] = []
+    if isinstance(raw, dict):
+        items = list(raw.items())
+    elif isinstance(raw, (list, tuple)):
+        items = list(enumerate(raw))
+    else:
+        return {}
+
+    normalized: Dict[str, Dict[str, Any]] = {}
+    for key, value in items:
+        try:
+            weekday = int(key)
+        except (TypeError, ValueError):
+            continue
+        if not 0 <= weekday <= 6:
+            continue
+        if value is None:
+            continue
+        if hasattr(value, "model_dump"):
+            value = value.model_dump()
+        elif hasattr(value, "dict"):
+            value = value.dict()
+        if not isinstance(value, dict):
+            continue
+        closed = bool(value.get("closed", False))
+        if closed:
+            normalized[str(weekday)] = {"closed": True, "start": "", "end": ""}
+            continue
+        start_raw = _sanitize_text(str(value.get("start", "") or ""))
+        end_raw = _sanitize_text(str(value.get("end", "") or ""))
+        if not start_raw and not end_raw:
+            continue
+        start = _normalize_required_time_value(start_raw, "Hora de inicio")
+        end = _normalize_required_time_value(end_raw, "Hora de fin")
+        if start >= end:
+            raise HTTPException(
+                status_code=400,
+                detail="En el horario por dia, la hora de fin debe ser posterior a la de inicio.",
+            )
+        normalized[str(weekday)] = {"closed": False, "start": start, "end": end}
+    return normalized
+
+
+def _weekday_hours(schedule: Any, weekday: int) -> Optional[Tuple[str, str]]:
+    """Franja (inicio, fin) que aplica a `weekday` segun un schedule ya normalizado.
+
+    Devuelve None si ese dia esta cerrado. Prioridad: override `weekly_hours` del dia
+    -> `closed_weekdays` -> franja general `day_start`/`day_end`. Fuente unica usada
+    por la construccion de huecos y por la matriz semanal de los prompts.
+    """
+    if hasattr(schedule, "model_dump"):
+        schedule = schedule.model_dump()
+    if not isinstance(schedule, dict):
+        return None
+    weekly = schedule.get("weekly_hours") or {}
+    entry = weekly.get(str(weekday)) if isinstance(weekly, dict) else None
+    if isinstance(entry, dict):
+        if entry.get("closed"):
+            return None
+        start = str(entry.get("start") or "")
+        end = str(entry.get("end") or "")
+        if start and end and start < end:
+            return start, end
+    closed = schedule.get("closed_weekdays") or []
+    try:
+        if weekday in {int(d) for d in closed}:
+            return None
+    except (TypeError, ValueError):
+        pass
+    start = str(schedule.get("day_start") or "09:00")
+    end = str(schedule.get("day_end") or "18:00")
+    if start >= end:
+        return None
+    return start, end
+
+
 def _first_break_pair(windows: Any) -> Tuple[str, str]:
     if isinstance(windows, list) and windows:
         first = windows[0]

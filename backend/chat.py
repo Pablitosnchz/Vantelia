@@ -143,11 +143,37 @@ def _message_requests_menu(message: str) -> bool:
     return any(p.search(norm) for p in MENU_RETURN_PATTERNS)
 
 
+GREETING_FILLER_RE = re.compile(
+    r"\b(hola+|holi|holis|hey|ey|ola|hello|hi|hallo|buenas|buenos|dias|tardes|noches|"
+    r"saludos|que|tal|como|estas|esta|estais|muy|por|favor|gracias|una|un|el|la|los|las|"
+    r"soy|yo|me|mi|te|os|somos|y|de|a)\b",
+    re.IGNORECASE,
+)
+
+
+def _greeting_has_residual_content(message: str) -> bool:
+    """True si tras quitar el saludo y las muletillas queda contenido real.
+
+    Sin esto, cualquier pregunta abierta que empiece por "Hola" ("Hola, a que hora
+    cerrais los sabados?") caia en el menu, porque los detectores de intencion solo
+    cubren reservar/cancelar/pagar/disponibilidad. El menu solo debe ganar cuando el
+    mensaje es SOLO un saludo."""
+    norm = textnorm._strip_accents(str(message or "").lower())
+    if "?" in norm or "¿" in norm:
+        return True
+    rest = GREETING_FILLER_RE.sub(" ", norm)
+    words = [w for w in re.findall(r"[a-z0-9]{3,}", rest)]
+    return len(words) >= 1
+
+
 def _message_is_pure_greeting(message: str) -> bool:
     """Saludo 'puro' (solo saluda): responde con el menu. Si ADEMAS trae una intencion
-    ("Hola, quiero cancelar mi cita R-123456"), la intencion manda: el menu no puede
-    secuestrarla. Compartido con WhatsApp (misma regla en ambos canales)."""
+    ("Hola, quiero cancelar mi cita R-123456") o cualquier pregunta real ("Hola, abris
+    los lunes?"), eso manda: el menu no puede secuestrarla. Compartido con WhatsApp
+    (misma regla en ambos canales)."""
     if not _message_is_greeting(message):
+        return False
+    if _greeting_has_residual_content(message):
         return False
     if booking._extract_booking_code_from_text(message):
         return False

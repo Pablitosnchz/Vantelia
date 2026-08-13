@@ -1496,6 +1496,14 @@ class PortalBrainPublic(BaseModel):
     reindex_error: str = ""
 
 
+class PortalWeekdayHours(BaseModel):
+    """Horario de UN dia de la semana (override opcional de la franja general)."""
+
+    closed: bool = False
+    start: str = Field(default="", max_length=5)
+    end: str = Field(default="", max_length=5)
+
+
 class PortalScheduleBreakWindow(BaseModel):
     start: str = Field(min_length=5, max_length=5)
     end: str = Field(min_length=5, max_length=5)
@@ -1512,6 +1520,7 @@ class PortalScheduleUpdatePayload(BaseModel):
     break_end: str = Field(default="", max_length=5)
     break_windows: List[PortalScheduleBreakWindow] = Field(default_factory=list)
     closed_weekdays: List[int] = Field(default_factory=list)
+    weekly_hours: Dict[str, PortalWeekdayHours] = Field(default_factory=dict)
     message_templates: Optional[Dict[str, str]] = None
     message_template_enabled: Optional[Dict[str, bool]] = None
     message_template_channels: Optional[Dict[str, Dict[str, bool]]] = None
@@ -1545,6 +1554,7 @@ class PortalSchedulePublic(BaseModel):
     break_end: str = ""
     break_windows: List[PortalScheduleBreakWindow] = Field(default_factory=list)
     closed_weekdays: List[int]
+    weekly_hours: Dict[str, Any] = Field(default_factory=dict)
     message_templates: Dict[str, str]
     message_template_enabled: Dict[str, bool]
     message_template_channels: Dict[str, Dict[str, bool]]
@@ -1618,6 +1628,7 @@ class PortalEmployeePayload(BaseModel):
     break_end: str = Field(default="", max_length=5)
     break_windows: List[PortalScheduleBreakWindow] = Field(default_factory=list)
     closed_weekdays: List[int] = Field(default_factory=list)
+    weekly_hours: Dict[str, PortalWeekdayHours] = Field(default_factory=dict)
     service_ids: List[str] = Field(default_factory=list)
     location_id: str = Field(default="", max_length=64)
 
@@ -1638,6 +1649,7 @@ class PortalEmployeePublic(BaseModel):
     break_end: str = ""
     break_windows: List[PortalScheduleBreakWindow] = Field(default_factory=list)
     closed_weekdays: List[int] = Field(default_factory=list)
+    weekly_hours: Dict[str, Any] = Field(default_factory=dict)
     service_ids: List[str] = Field(default_factory=list)
     location_id: str = ""
     allows_all_services: bool = True

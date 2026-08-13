@@ -1,0 +1,26 @@
+{
+  "base_url": "https://aliciarinconestilistas.com/",
+  "pages": {
+    "https://aliciarinconestilistas.com/": "index.html",
+    "https://aliciarinconestilistas.com/filosofia": "filosofia\\index.html",
+    "https://aliciarinconestilistas.com/sobre-alicia": "sobre-alicia\\index.html",
+    "https://aliciarinconestilistas.com/aviso-legal": "aviso-legal\\index.html",
+    "https://aliciarinconestilistas.com/politica-privacidad": "politica-privacidad\\index.html",
+    "https://aliciarinconestilistas.com/politica-cookies": "politica-cookies\\index.html",
+    "https://aliciarinconestilistas.com/api/gallery/transformaciones": "api\\gallery\\transformaciones\\index.html"
+  },
+  "assets": {
+    "https://aliciarinconestilistas.com/favicon.ico": "_assets\\aliciarinconestilistas.com\\favicon.ico",
+    "https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js": "_assets\\cdn.jsdelivr.net\\npm\\gsap@3.12.5\\dist\\ScrollTrigger.min.js",
+    "https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js": "_assets\\cdn.jsdelivr.net\\npm\\gsap@3.12.5\\dist\\gsap.min.js",
+    "https://aliciarinconestilistas.com/assets/og-alicia.png": "_assets\\aliciarinconestilistas.com\\assets\\og-alicia.png",
+    "https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@200;300;400;500&amp;family=Playfair+Display:ital,wght@0,400;0,500;1,400&amp;display=swap": "_assets\\fonts.googleapis.com\\css2--q-c1523814.css",
+    "https://aliciarinconestilistas.com/assets/logo.png": "_assets\\aliciarinconestilistas.com\\assets\\logo.png",
+    "https://fonts.gstatic.com/s/dmmono/v16/aFTU7PB1QTsUX8KYthqQBA.woff2": "_assets\\fonts.gstatic.com\\s\\dmmono\\v16\\aFTU7PB1QTsUX8KYthqQBA.woff2",
+    "https://fonts.gstatic.com/s/dmmono/v16/aFTU7PB1QTsUX8KYthSQBLyM.woff2": "_assets\\fonts.gstatic.com\\s\\dmmono\\v16\\aFTU7PB1QTsUX8KYthSQBLyM.woff2",
+    "https://fonts.gstatic.com/s/dmmono/v16/aFTR7PB1QTsUX8KYvumzEYOtbQ.woff2": "_assets\\fonts.gstatic.com\\s\\dmmono\\v16\\aFTR7PB1QTsUX8KYvumzEYOtbQ.woff2",
+    "https://fonts.gstatic.com/s/dmmono/v16/aFTR7PB1QTsUX8KYvumzEY2tbZX9.woff2": "_assets\\fonts.gstatic.com\\s\\dmmono\\v16\\aFTR7PB1QTsUX8KYvumzEY2tbZX9.woff2"
+  },
+  "page_count": 7,
+  "asset_count": 10
+}

@@ -9,7 +9,8 @@ asumir que un tenant existe, comprobarlo contra prod (`GET /central/{id}` o el p
 | `Vantelia` | Asistente de la propia web comercial (widget de vantelia.es, `data-client="Vantelia"`). Creado por alta-express el 16-jul-2026 con RAG de la web nueva. | NO borrar. Si cambian planes/precios en la web → `POST /admin/reindex/Vantelia`. |
 | `van` | Tenant de demostración (masajes). Es la central embebida en la home (`/central/van?embed=1`) y el ejemplo enlazado desde la web. | NO borrar. Pueden entrar reservas de prueba de visitantes: son ruido esperado, limpiarlas de vez en cuando desde el panel. |
 | `demo_*` (≈20) | Demos autogeneradas por `/demo/` (7 días de vida, registro en `storage/demo_tenants.json`). | Se autolimpian al expirar; no tocar a mano. |
-| `thenook` | Prospect que no cerró (jul 2026). | ELIMINADO el 16-jul-2026 vía `DELETE /admin/clientes/thenook`. Sus datos quedan en el backup de esa noche si hiciera falta recuperar algo. |
+| `aliciarincon` | **Alicia Rincón Estilistas** (peluquería colorista, Elche). Primer cliente real en piloto (ago-2026). Portal, central de reservas, widget y copia integrada de su web en `/site/aliciarincon/`. | NO borrar. Horario por día real (`weekly_hours`); si cambian servicios o textos → `POST /admin/reindex/aliciarincon`. La copia de su web lleva `noindex` y no debe publicarse en su dominio sin permiso. |
+| `thenook` | Prospect que no cerró (jul 2026). | ELIMINADO el 16-jul-2026 vía `DELETE /admin/clientes/thenook`. Restos locales (client_sites, data, scripts) borrados del repo el 13-ago-2026. |
 
 ## Backups (arreglado 16-jul-2026)
 

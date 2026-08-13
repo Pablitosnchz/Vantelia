@@ -220,102 +220,6 @@
       }
     }
   },
-  "thenook": {
-    "nombre": "The Nook Madrid",
-    "plan": "business",
-    "subscription": {
-      "plan": "business"
-    },
-    "icono": "TN",
-    "color": "#0EA5E9",
-    "accent_color": "",
-    "logo_url": "",
-    "bienvenida": "Hola, soy el asistente virtual de The Nook Madrid. Cuentame en que puedo ayudarte.",
-    "prompt_extra": "Habla con tono profesional y cercano, mantente dentro del contexto del negocio, responde solo con informacion apoyada en la base documental y deriva al equipo humano cuando falten datos.",
-    "chat_model": "",
-    "temperature": 0.2,
-    "allowed_origins": [
-      "https://app.vantelia.es",
-      "https://www.vantelia.es",
-      "https://vantelia.es",
-      "https://www.thenookmadrid.com",
-      "https://thenookmadrid.com"
-    ],
-    "contacto": {
-      "email": "reservas@thenookmadrid.com",
-      "telefono": "622 36 09 22 / 911 481 474"
-    },
-    "branding": {
-      "powered_by": "Powered by Vantelia"
-    },
-    "shop_public": {
-      "enabled_packages": true,
-      "enabled_products": false,
-      "intro_text": "Compra tus sesiones por adelantado y ahorra en cada visita. Los bonos se canjean al reservar en cualquiera de nuestros tres centros de Madrid.",
-      "pickup_note": "Recibes tu bono por email al instante. Cancelalo o consultanos por WhatsApp cuando quieras.",
-      "accent_color": "#9a7b4f"
-    },
-    "whatsapp": {
-      "enabled": false,
-      "phone_number_id": "",
-      "access_token_env": "",
-      "verify_token_env": ""
-    },
-    "voice": {
-      "enabled": true,
-      "twilio_phone_number": "+18038849920",
-      "openai_voice": "marin",
-      "realtime_model": "",
-      "greeting": "Hola, soy el asistente virtual de The Nook Madrid. En que puedo ayudarte?",
-      "max_duration_seconds": 300,
-      "sms_confirmation": true
-    },
-    "booking": {
-      "enabled": true,
-      "timezone": "Europe/Madrid",
-      "slot_minutes": 30,
-      "day_start": "09:00",
-      "day_end": "18:00",
-      "closed_weekdays": [
-        6
-      ],
-      "provider": "internal",
-      "webhook_env": "WEBHOOK_DEFAULT",
-      "webhook_url": "",
-      "calendly_user_env": "",
-      "calendly_event_type_env": "",
-      "calendly_location_kind": "",
-      "calendly_location_value": "",
-      "google_calendar_id": "",
-      "google_calendar_id_env": "",
-      "google_service_account_path": "",
-      "google_service_account_env": "",
-      "success_message": "Tu solicitud de cita ha quedado registrada correctamente.",
-      "message_templates": {
-        "confirmed": "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.",
-        "reminder_24h": "Te recordamos que mañana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
-        "reminder_2h": "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.",
-        "cancelled": "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.",
-        "rescheduled": "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla."
-      },
-      "message_template_enabled": {
-        "confirmed": true,
-        "reminder_24h": true,
-        "reminder_2h": true,
-        "cancelled": true,
-        "rescheduled": true
-      },
-      "break_start": "14:30",
-      "break_end": "16:00",
-      "break_windows": [
-        {
-          "start": "14:30",
-          "end": "16:00",
-          "reason": "Comida"
-        }
-      ]
-    }
-  },
   "demo_auto_vibes_studio_8b12ca": {
     "nombre": "Vibes Studio",
     "plan": "completo",
@@ -458,6 +362,135 @@
         "cancelled": true,
         "rescheduled": true
       }
+    }
+  },
+  "aliciarincon": {
+    "nombre": "Alicia Rincón Estilistas",
+    "plan": "business",
+    "subscription": {
+      "plan": "business"
+    },
+    "icono": "AR",
+    "color": "#111111",
+    "accent_color": "#c9737d",
+    "logo_url": "",
+    "bienvenida": "Hola, soy el asistente de Alicia Rincón Estilistas. Puedo darte cita, contarte nuestros servicios o resolver tus dudas. ¿En qué te ayudo?",
+    "prompt_extra": "Eres el asistente de una peluqueria colorista de alta gama en Elche. Trato cercano y profesional, de tu, lenguaje cuidado y frases cortas. NUNCA inventes precios: el precio se confirma tras el diagnostico personalizado; ofrece pedir cita de valoracion o el telefono 625 120 100. Recuerda que los lunes cerramos y que no cerramos por vacaciones. Si detectas intencion de cita, guia la reserva paso a paso.",
+    "chat_model": "",
+    "temperature": 0.2,
+    "allowed_origins": [
+      "https://app.vantelia.es",
+      "https://www.vantelia.es",
+      "https://vantelia.es",
+      "https://aliciarinconestilistas.com",
+      "https://www.aliciarinconestilistas.com"
+    ],
+    "contacto": {
+      "email": "info@aliciarinconestilistas.com",
+      "telefono": "625 120 100 / 966 670 924"
+    },
+    "empresa": "Alicia Rincón Estilistas",
+    "branding": {
+      "powered_by": "Powered by Vantelia"
+    },
+    "whatsapp": {
+      "enabled": false,
+      "phone_number_id": "",
+      "access_token_env": "",
+      "verify_token_env": ""
+    },
+    "voice": {
+      "enabled": false,
+      "widget_enabled": false,
+      "twilio_phone_number": "",
+      "openai_voice": "marin",
+      "realtime_model": "",
+      "greeting": "Hola, ha llamado a Alicia Rincon Estilistas. En que puedo ayudarle?",
+      "max_duration_seconds": 300,
+      "sms_confirmation": false
+    },
+    "booking": {
+      "enabled": true,
+      "timezone": "Europe/Madrid",
+      "slot_minutes": 30,
+      "day_start": "10:00",
+      "day_end": "20:30",
+      "closed_weekdays": [
+        0,
+        6
+      ],
+      "provider": "internal",
+      "webhook_env": "WEBHOOK_DEFAULT",
+      "webhook_url": "",
+      "calendly_user_env": "",
+      "calendly_event_type_env": "",
+      "calendly_location_kind": "",
+      "calendly_location_value": "",
+      "google_calendar_id": "",
+      "google_calendar_id_env": "",
+      "google_service_account_path": "",
+      "google_service_account_env": "",
+      "success_message": "Tu cita ha quedado registrada. Te esperamos en Andreu Castillejos 9, Elche.",
+      "message_templates": {
+        "confirmed": "Tu cita en Alicia Rincon Estilistas ha quedado confirmada. Debajo tienes los detalles y tu enlace personal por si necesitas cambiarla.",
+        "reminder_24h": "Te recordamos que manana tienes tu cita en Alicia Rincon Estilistas. Si necesitas ajustarla, puedes hacerlo desde tu enlace de gestion.",
+        "reminder_2h": "Tu cita en Alicia Rincon Estilistas empieza en menos de 2 horas. Te esperamos en Andreu Castillejos 9, Elche.",
+        "cancelled": "Tu cita en Alicia Rincon Estilistas ha sido cancelada. Si quieres buscar otro hueco, escribenos al 625 120 100.",
+        "rescheduled": "Tu cita en Alicia Rincon Estilistas se ha actualizado correctamente. Revisa los nuevos datos abajo."
+      },
+      "message_template_enabled": {
+        "confirmed": true,
+        "reminder_24h": true,
+        "reminder_2h": true,
+        "cancelled": true,
+        "rescheduled": true
+      },
+      "weekly_hours": {
+        "0": {
+          "closed": true,
+          "start": "",
+          "end": ""
+        },
+        "1": {
+          "closed": false,
+          "start": "10:00",
+          "end": "18:30"
+        },
+        "2": {
+          "closed": false,
+          "start": "10:00",
+          "end": "18:30"
+        },
+        "3": {
+          "closed": false,
+          "start": "10:00",
+          "end": "20:30"
+        },
+        "4": {
+          "closed": false,
+          "start": "10:00",
+          "end": "20:30"
+        },
+        "5": {
+          "closed": false,
+          "start": "09:00",
+          "end": "14:00"
+        },
+        "6": {
+          "closed": true,
+          "start": "",
+          "end": ""
+        }
+      }
+    },
+    "shop_public": {
+      "enabled_packages": false,
+      "enabled_products": false,
+      "intro_text": "",
+      "pickup_note": "",
+      "accent_color": "#c9737d",
+      "hero_image_url": "https://aliciarinconestilistas.com/media/mslzvpu7-img-9396.jpg",
+      "hero_tagline": "Peluquería colorista en Elche · Más de 36 años creando cambios de imagen"
     }
   }
 }

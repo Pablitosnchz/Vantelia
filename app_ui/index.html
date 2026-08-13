@@ -3179,6 +3179,11 @@
         </div>
       </div>
       <div style="margin-top:18px;">
+        <label class="field-label">Horario distinto según el día</label>
+        <p class="panel-sub" style="margin:4px 0 10px;">Opcional. Marca un día para darle su propia franja (por ejemplo, sábado corto). Los días sin marcar usan el horario de arriba.</p>
+        <div id="horWeekly"></div>
+      </div>
+      <div style="margin-top:18px;">
         <button class="btn btn-primary" id="horSaveBtn">Guardar horario</button>
       </div>
       <div id="horConflictBox" style="display:none; margin-top:14px;"></div>
@@ -10865,6 +10870,57 @@ function fillHorarioForm(data) {
     cb.checked = closed.includes(v);
     cb.closest('label').classList.toggle('active', closed.includes(v));
   });
+  renderHorarioWeekly(data.weekly_hours || {});
+}
+
+const HOR_WEEKDAY_LABELS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+// Horario por dia de la semana: override opcional sobre la franja general, para
+// negocios que no abren lo mismo todos los dias (sabado corto, tarde larga...).
+function renderHorarioWeekly(weekly) {
+  const wrap = document.getElementById('horWeekly');
+  if (!wrap) return;
+  const base = {
+    start: document.getElementById('horStart').value || '09:00',
+    end: document.getElementById('horEnd').value || '18:00',
+  };
+  wrap.innerHTML = HOR_WEEKDAY_LABELS.map((label, i) => {
+    const entry = (weekly && weekly[String(i)]) || null;
+    const on = !!entry && !entry.closed;
+    return `<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 0;">
+      <label class="filter-chip${on ? ' active' : ''}" style="cursor:pointer; min-width:104px;" data-wh-chip="${i}">
+        <input type="checkbox" data-wh-on="${i}" style="display:none;"${on ? ' checked' : ''} /> ${label}
+      </label>
+      <input type="time" class="field-input" data-wh-start="${i}" style="max-width:130px;"
+             value="${escapeHtml(on ? (entry.start || base.start) : base.start)}"${on ? '' : ' disabled'} />
+      <span class="panel-sub" style="margin:0;">a</span>
+      <input type="time" class="field-input" data-wh-end="${i}" style="max-width:130px;"
+             value="${escapeHtml(on ? (entry.end || base.end) : base.end)}"${on ? '' : ' disabled'} />
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('[data-wh-on]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const i = cb.getAttribute('data-wh-on');
+      const on = cb.checked;
+      cb.closest('label').classList.toggle('active', on);
+      wrap.querySelector(`[data-wh-start="${i}"]`).disabled = !on;
+      wrap.querySelector(`[data-wh-end="${i}"]`).disabled = !on;
+    });
+  });
+}
+
+function collectHorarioWeekly() {
+  const wrap = document.getElementById('horWeekly');
+  const out = {};
+  if (!wrap) return out;
+  wrap.querySelectorAll('[data-wh-on]').forEach(cb => {
+    if (!cb.checked) return;
+    const i = cb.getAttribute('data-wh-on');
+    const start = wrap.querySelector(`[data-wh-start="${i}"]`)?.value || '';
+    const end = wrap.querySelector(`[data-wh-end="${i}"]`)?.value || '';
+    if (start && end) out[i] = { closed: false, start, end };
+  });
+  return out;
 }
 
 function renderBloqueos(blocks) {
@@ -10997,6 +11053,7 @@ async function saveHorario(){
     slot_minutes: parseInt(document.getElementById('horSlot').value) || 30,
     timezone: document.getElementById('horTz').value.trim() || 'Europe/Madrid',
     closed_weekdays: closed,
+    weekly_hours: collectHorarioWeekly(),
   };
   const url = profId ? `/auth/schedule/employee/${encodeURIComponent(profId)}` : '/auth/schedule';
   try {
