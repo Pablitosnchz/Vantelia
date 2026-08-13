@@ -718,6 +718,11 @@
     .cd-line.hour { border-top-color:var(--line-strong); }
     .cd-glabel { position:absolute; right:8px; transform:translateY(-50%); font-size:0.68rem; font-weight:600; color:var(--soft-2); white-space:nowrap; }
     .cd-glabel.hour { color:var(--soft); }
+    /* Los extremos se alinean hacia dentro: centradas se salian del cuerpo y la
+       primera se montaba sobre la cabecera "Hora". */
+    .cd-glabel.edge-first { transform:translateY(1px); }
+    .cd-glabel.edge-last { transform:translateY(-100%); }
+    .hor-day { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:5px 0; }
     .cd-unavail {
       position:absolute; left:0; right:0; pointer-events:none;
       background-color:rgba(7,16,31,0.55);
@@ -3168,7 +3173,7 @@
       </div>
       <div style="margin-top:18px;">
         <label class="field-label">Días de apertura</label>
-        <p class="panel-sub" style="margin:4px 0 10px;">Cada día usa el horario base de arriba salvo que le pongas uno propio (por ejemplo, sábado corto) o lo cierres.</p>
+        <p class="panel-sub" style="margin:4px 0 10px;">Apaga el chip de un día para cerrarlo. Si abres, puedes dejar el horario base o darle uno propio (por ejemplo, sábado corto).</p>
         <div id="horWeekly"></div>
       </div>
       <div style="margin-top:18px;">
@@ -7356,7 +7361,15 @@ function renderCitasDay(){
   const gutter = document.createElement('div'); gutter.className = 'cd-col cd-gutter';
   const gh = document.createElement('div'); gh.className = 'cd-head'; gh.textContent = 'Hora';
   const gb = document.createElement('div'); gb.className = 'cd-body'; gb.style.height = bodyH + 'px';
-  for (let t = startMin; t <= endMin; t += CD_AXIS_STEP){ const lab = document.createElement('div'); lab.className = 'cd-glabel' + (t%60===0 ? ' hour' : ''); lab.style.top = ((t-startMin)*CD_PX_PER_MIN) + 'px'; lab.textContent = cdFmtMin(t); gb.appendChild(lab); }
+  for (let t = startMin; t <= endMin; t += CD_AXIS_STEP){
+    const lab = document.createElement('div');
+    lab.className = 'cd-glabel' + (t%60===0 ? ' hour' : '')
+      + (t === startMin ? ' edge-first' : '')
+      + (t + CD_AXIS_STEP > endMin ? ' edge-last' : '');
+    lab.style.top = ((t-startMin)*CD_PX_PER_MIN) + 'px';
+    lab.textContent = cdFmtMin(t);
+    gb.appendChild(lab);
+  }
   gutter.appendChild(gh); gutter.appendChild(gb); grid.appendChild(gutter);
 
   columns.forEach(c => {
@@ -10874,60 +10887,48 @@ function fillHorarioForm(data) {
   renderHorarioWeekly(data.weekly_hours || {}, closedRaw.map(n => parseInt(n)));
 }
 
-const HOR_WEEKDAY_LABELS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const HOR_WEEKDAY_LABELS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
-// Tabla semanal: UNA sola fuente para decir que dias abre el negocio y con que
-// franja. Cada dia tiene tres estados -> horario base, horario propio
-// (`weekly_hours`) o cerrado (`closed_weekdays`). Antes esto vivia en dos sitios
-// (chips de "dias cerrados" + tabla) y se contradecian a la vista.
-function horWeeklyState(entry, closedDays, i) {
-  if (entry && entry.closed) return 'closed';
-  if (closedDays.includes(i)) return 'closed';
-  if (entry && entry.start && entry.end) return 'custom';
-  return 'base';
+// Tabla semanal: UNA sola fuente para los dias que abre el negocio y su franja.
+// El chip enciende/apaga el dia (lo apagado va a `closed_weekdays`); las horas
+// solo se guardan como `weekly_hours` cuando difieren del horario base, asi que
+// cambiar el horario base sigue arrastrando a los dias normales.
+function horBaseHours() {
+  return {
+    start: document.getElementById('horStart').value || '09:00',
+    end: document.getElementById('horEnd').value || '18:00',
+  };
 }
 
 function renderHorarioWeekly(weekly, closedDays) {
   const wrap = document.getElementById('horWeekly');
   if (!wrap) return;
   const closed = Array.isArray(closedDays) ? closedDays.map(Number) : [];
-  const base = {
-    start: document.getElementById('horStart').value || '09:00',
-    end: document.getElementById('horEnd').value || '18:00',
-  };
+  const base = horBaseHours();
   wrap.innerHTML = HOR_WEEKDAY_LABELS.map((label, i) => {
     const entry = (weekly && weekly[String(i)]) || null;
-    const state = horWeeklyState(entry, closed, i);
-    const custom = state === 'custom';
-    return `<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:5px 0;" data-wh-row="${i}">
-      <span style="min-width:96px; font-size:0.9rem;">${label}</span>
-      <select class="field-input" data-wh-state="${i}" style="max-width:190px;">
-        <option value="base"${state === 'base' ? ' selected' : ''}>Horario base</option>
-        <option value="custom"${custom ? ' selected' : ''}>Horario propio</option>
-        <option value="closed"${state === 'closed' ? ' selected' : ''}>Cerrado</option>
-      </select>
-      <span data-wh-hours="${i}" style="display:${custom ? 'flex' : 'none'}; align-items:center; gap:8px;">
-        <input type="time" class="field-input" data-wh-start="${i}" style="max-width:130px;"
-               value="${escapeHtml((entry && entry.start) || base.start)}" />
+    const isClosed = closed.includes(i) || !!(entry && entry.closed);
+    const start = (entry && entry.start) || base.start;
+    const end = (entry && entry.end) || base.end;
+    return `<div class="hor-day" data-wh-row="${i}">
+      <label class="filter-chip${isClosed ? '' : ' active'}" style="cursor:pointer; min-width:70px; justify-content:center;">
+        <input type="checkbox" data-wh-open="${i}" style="display:none;"${isClosed ? '' : ' checked'} /> ${label}
+      </label>
+      <span data-wh-hours="${i}" style="display:${isClosed ? 'none' : 'flex'}; align-items:center; gap:8px;">
+        <input type="time" class="field-input" data-wh-start="${i}" style="max-width:128px;" value="${escapeHtml(start)}" />
         <span class="panel-sub" style="margin:0;">a</span>
-        <input type="time" class="field-input" data-wh-end="${i}" style="max-width:130px;"
-               value="${escapeHtml((entry && entry.end) || base.end)}" />
+        <input type="time" class="field-input" data-wh-end="${i}" style="max-width:128px;" value="${escapeHtml(end)}" />
       </span>
-      <span class="panel-sub" data-wh-note="${i}" style="margin:0; font-size:0.82rem;">${
-        state === 'closed' ? 'No se aceptan citas'
-        : state === 'base' ? `${escapeHtml(base.start)} – ${escapeHtml(base.end)}`
-        : ''}</span>
+      <span class="panel-sub" data-wh-note="${i}" style="margin:0; font-size:0.8rem; display:${isClosed ? 'inline' : 'none'};">Cerrado</span>
     </div>`;
   }).join('');
-  wrap.querySelectorAll('[data-wh-state]').forEach(sel => {
-    sel.addEventListener('change', () => {
-      const i = sel.getAttribute('data-wh-state');
-      const isCustom = sel.value === 'custom';
-      wrap.querySelector(`[data-wh-hours="${i}"]`).style.display = isCustom ? 'flex' : 'none';
-      const note = wrap.querySelector(`[data-wh-note="${i}"]`);
-      note.textContent = sel.value === 'closed'
-        ? 'No se aceptan citas'
-        : (sel.value === 'base' ? `${document.getElementById('horStart').value} – ${document.getElementById('horEnd').value}` : '');
+  wrap.querySelectorAll('[data-wh-open]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const i = cb.getAttribute('data-wh-open');
+      const open = cb.checked;
+      cb.closest('label').classList.toggle('active', open);
+      wrap.querySelector(`[data-wh-hours="${i}"]`).style.display = open ? 'flex' : 'none';
+      wrap.querySelector(`[data-wh-note="${i}"]`).style.display = open ? 'none' : 'inline';
     });
   });
 }
@@ -10937,30 +10938,40 @@ function collectHorarioWeekly() {
   const wrap = document.getElementById('horWeekly');
   const out = { closed_weekdays: [], weekly_hours: {} };
   if (!wrap) return out;
-  wrap.querySelectorAll('[data-wh-state]').forEach(sel => {
-    const i = sel.getAttribute('data-wh-state');
-    if (sel.value === 'closed') { out.closed_weekdays.push(parseInt(i)); return; }
-    if (sel.value !== 'custom') return;
+  const base = horBaseHours();
+  wrap.querySelectorAll('[data-wh-open]').forEach(cb => {
+    const i = cb.getAttribute('data-wh-open');
+    if (!cb.checked) { out.closed_weekdays.push(parseInt(i)); return; }
     const start = wrap.querySelector(`[data-wh-start="${i}"]`)?.value || '';
     const end = wrap.querySelector(`[data-wh-end="${i}"]`)?.value || '';
-    if (start && end) out.weekly_hours[i] = { closed: false, start, end };
+    if (!start || !end) return;
+    if (start === base.start && end === base.end) return;  // usa el horario base
+    out.weekly_hours[i] = { closed: false, start, end };
   });
   return out;
 }
 
-// El horario base manda sobre los dias "Horario base": refrescamos su etiqueta
-// al tocarlo para que nadie guarde creyendo otra cosa.
+// Al cambiar el horario base arrastramos los dias que lo seguian, para que lo
+// que se ve sea lo que se va a guardar.
 ['horStart', 'horEnd'].forEach(id => {
-  document.getElementById(id)?.addEventListener('change', () => {
+  document.getElementById(id)?.addEventListener('change', ev => {
     const wrap = document.getElementById('horWeekly');
     if (!wrap) return;
-    wrap.querySelectorAll('[data-wh-state]').forEach(sel => {
-      if (sel.value !== 'base') return;
-      const i = sel.getAttribute('data-wh-state');
-      wrap.querySelector(`[data-wh-note="${i}"]`).textContent =
-        `${document.getElementById('horStart').value} – ${document.getElementById('horEnd').value}`;
+    const prop = ev.target.id === 'horStart' ? 'start' : 'end';
+    const value = ev.target.value;
+    wrap.querySelectorAll('[data-wh-open]').forEach(cb => {
+      if (!cb.checked) return;
+      const i = cb.getAttribute('data-wh-open');
+      const field = wrap.querySelector(`[data-wh-${prop}="${i}"]`);
+      if (field && !field.dataset.touched) field.value = value;
     });
   });
+});
+
+// Marcamos las horas tocadas a mano para no pisarlas al cambiar el horario base.
+document.addEventListener('input', ev => {
+  const el = ev.target;
+  if (el && (el.hasAttribute?.('data-wh-start') || el.hasAttribute?.('data-wh-end'))) el.dataset.touched = '1';
 });
 
 function renderBloqueos(blocks) {
