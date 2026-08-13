@@ -723,6 +723,24 @@
     .cd-glabel.edge-first { transform:translateY(1px); }
     .cd-glabel.edge-last { transform:translateY(-100%); }
     .hor-day { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:5px 0; }
+    /* Bloqueos: una linea por bloqueo (los dias consecutivos se agrupan). */
+    .hor-block {
+      display:flex; align-items:center; gap:8px; padding:8px 12px;
+      background:var(--panel-2); border:1px solid var(--line); border-radius:9px;
+      font-size:0.84rem;
+    }
+    .hor-block-date { font-weight:700; color:var(--text); white-space:nowrap; }
+    .hor-block-sep { color:var(--soft-2); }
+    .hor-block-when { color:var(--soft); white-space:nowrap; }
+    .hor-block-days { font-size:0.72rem; font-weight:700; color:var(--soft); background:rgba(255,255,255,0.06); border-radius:999px; padding:1px 8px; white-space:nowrap; }
+    .hor-block-tag { font-size:0.68rem; font-weight:700; color:var(--accent); background:var(--accent-soft); border-radius:999px; padding:1px 8px; white-space:nowrap; }
+    .hor-block-reason { color:var(--soft-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .hor-block-del {
+      margin-left:auto; flex:0 0 auto; width:24px; height:24px; line-height:1;
+      border:1px solid var(--line); border-radius:6px; background:transparent;
+      color:var(--soft); font-size:1rem; cursor:pointer;
+    }
+    .hor-block-del:hover { border-color:#f87171; color:#f87171; }
     .cd-unavail {
       position:absolute; left:0; right:0; pointer-events:none;
       background-color:rgba(7,16,31,0.55);
@@ -10974,35 +10992,107 @@ document.addEventListener('input', ev => {
   if (el && (el.hasAttribute?.('data-wh-start') || el.hasAttribute?.('data-wh-end'))) el.dataset.touched = '1';
 });
 
+const HOR_MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+function horFechaCorta(iso) {
+  const parts = String(iso || '').slice(0, 10).split('-');
+  if (parts.length !== 3) return iso || '';
+  return `${parseInt(parts[2])} ${HOR_MESES_CORTOS[parseInt(parts[1]) - 1] || ''}`;
+}
+function horAnyo(iso) { return String(iso || '').slice(0, 4); }
+function horDiaSiguiente(iso) {
+  // En UTC a proposito: con hora local, toISOString() se come un dia en
+  // cualquier zona con offset positivo y los rangos no llegaban a agruparse.
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  return next.toISOString().slice(0, 10);
+}
+
+// El backend guarda UNA fila por dia (un rango de vacaciones = N filas). Aqui se
+// vuelven a juntar los dias consecutivos con el mismo motivo y horario para que
+// la lista diga "13 – 15 ago" en una linea en vez de tres tarjetas repetidas.
+// Solo presentacion: al eliminar se borran las filas del grupo una a una.
+function horAgruparBloqueos(blocks) {
+  const norm = blocks.map(b => ({
+    id: b.block_id || b.id || '',
+    employeeId: b.employee_id || '',
+    fecha: String(b.fecha || b.start_date || '').slice(0, 10),
+    fechaFin: String(b.fecha_fin || b.end_date || b.fecha || b.start_date || '').slice(0, 10),
+    hIni: b.hora_inicio || '',
+    hFin: b.hora_fin || '',
+    motivo: b.motivo || b.reason || '',
+  })).filter(b => b.fecha);
+  norm.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.hIni.localeCompare(b.hIni));
+
+  const grupos = [];
+  norm.forEach(b => {
+    const prev = grupos[grupos.length - 1];
+    const encadena = prev
+      && prev.employeeId === b.employeeId
+      && prev.hIni === b.hIni && prev.hFin === b.hFin
+      && prev.motivo === b.motivo
+      && horDiaSiguiente(prev.hasta) === b.fecha;
+    if (encadena) {
+      prev.hasta = b.fechaFin || b.fecha;
+      prev.ids.push(b.id);
+      prev.dias += 1;
+    } else {
+      grupos.push({
+        employeeId: b.employeeId, hIni: b.hIni, hFin: b.hFin, motivo: b.motivo,
+        desde: b.fecha, hasta: b.fechaFin || b.fecha, ids: [b.id], dias: 1,
+      });
+    }
+  });
+  return grupos;
+}
+
 function renderBloqueos(blocks) {
   const list = document.getElementById('horBlocksList');
   list.innerHTML = '';
   if (!blocks.length) { list.innerHTML = '<div class="panel-sub">Sin bloqueos activos.</div>'; return; }
-  blocks.forEach(b => {
-    const id = b.block_id || b.id || '';
-    const employeeId = b.employee_id || '';
-    const start = b.fecha || b.start_date || '';
-    const end = b.fecha_fin || b.end_date || start;
-    const reason = b.motivo || b.reason || '';
-    const hIni = b.hora_inicio || '';
-    const hFin = b.hora_fin || '';
-    const horaTxt = (hIni && hFin) ? ` (${escapeHtml(hIni)}–${escapeHtml(hFin)})` : '';
-    const row = document.createElement('div'); row.className = 'chat-row';
-    row.style.cssText = 'padding:10px 14px; display:flex; align-items:center; gap:10px;';
-    const profSel = document.getElementById('horProf')?.value || '';
-    const generalTag = (profSel && !employeeId) ? ' <span class="badge" style="font-size:0.7rem;">Todo el negocio</span>' : '';
-    row.innerHTML = `<div style="flex:1;"><b>${escapeHtml(start)} – ${escapeHtml(end)}${horaTxt}</b>${generalTag} <span class="panel-sub" style="margin:0;">${escapeHtml(reason)}</span></div><button class="btn btn-ghost" data-block-id="${escapeHtml(id)}" style="padding:4px 10px; font-size:0.78rem;">Eliminar</button>`;
-    row.querySelector('[data-block-id]').addEventListener('click', async () => {
-      const url = employeeId
-        ? `/auth/employees/${encodeURIComponent(employeeId)}/blocks/${encodeURIComponent(id)}`
-        : `/auth/schedule/blocks/${encodeURIComponent(id)}`;
+  const profSel = document.getElementById('horProf')?.value || '';
+  horAgruparBloqueos(blocks).forEach(g => {
+    const mismoDia = g.desde === g.hasta;
+    const rango = mismoDia
+      ? `${horFechaCorta(g.desde)} ${horAnyo(g.desde)}`
+      : `${horFechaCorta(g.desde)} – ${horFechaCorta(g.hasta)} ${horAnyo(g.hasta)}`;
+    const horario = (g.hIni && g.hFin && !(g.hIni === '00:00' && g.hFin === '23:59'))
+      ? `${g.hIni}–${g.hFin}`
+      : 'Día completo';
+    const diasTxt = g.dias > 1 ? `${g.dias} días` : '';
+    const general = (profSel && !g.employeeId) ? '<span class="hor-block-tag">Todo el negocio</span>' : '';
+
+    const row = document.createElement('div');
+    row.className = 'hor-block';
+    row.innerHTML = `
+      <span class="hor-block-date">${escapeHtml(rango)}</span>
+      <span class="hor-block-sep">·</span>
+      <span class="hor-block-when">${escapeHtml(horario)}</span>
+      ${diasTxt ? `<span class="hor-block-days">${escapeHtml(diasTxt)}</span>` : ''}
+      ${general}
+      <span class="hor-block-reason">${escapeHtml(g.motivo)}</span>
+      <button class="hor-block-del" type="button" title="Eliminar bloqueo" aria-label="Eliminar bloqueo">&times;</button>`;
+
+    row.querySelector('.hor-block-del').addEventListener('click', async () => {
+      if (g.dias > 1) {
+        const ok = await confirmDialog({
+          title: 'Eliminar bloqueo',
+          bodyHtml: `<p>Se liberarán los ${g.dias} días (${escapeHtml(rango)}).</p>`,
+          confirmLabel: 'Eliminar', danger: true,
+        });
+        if (!ok) return;
+      }
       try {
-        await api(url, { method:'DELETE' });
-        toast('Bloqueo eliminado', 'success');
+        for (const id of g.ids) {
+          const url = g.employeeId
+            ? `/auth/employees/${encodeURIComponent(g.employeeId)}/blocks/${encodeURIComponent(id)}`
+            : `/auth/schedule/blocks/${encodeURIComponent(id)}`;
+          await api(url, { method: 'DELETE' });
+        }
+        toast(g.dias > 1 ? 'Bloqueo eliminado' : 'Bloqueo eliminado', 'success');
         loadHorarios(document.getElementById('horProf').value);
         refreshCitasIfVisible();
-      }
-      catch(e) { toast(e.message, 'error'); }
+      } catch (e) { toast(e.message, 'error'); }
     });
     list.appendChild(row);
   });
