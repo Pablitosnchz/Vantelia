@@ -4691,7 +4691,19 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
   .pick-sub { display: block; color: var(--muted); font-size: 12px; }
 
   /* Selector de día */
-  .date-strip { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: thin; }
+  .date-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .date-nav-label { flex: 1; text-align: center; font-weight: 800; font-size: 14px; text-transform: capitalize; }
+  .date-nav-btn {
+    flex: none; width: 34px; height: 34px; border: 1.5px solid var(--line); border-radius: 11px;
+    background: #fff; color: var(--ink); font-size: 15px; font-weight: 800; line-height: 1; cursor: pointer;
+    transition: all .14s ease;
+  }
+  .date-nav-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .date-nav-btn:disabled { opacity: .35; cursor: default; }
+  .date-nav-today { flex: none; border: 1.5px solid var(--line); border-radius: 11px; background: #fff; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 800; padding: 8px 12px; cursor: pointer; }
+  .date-nav-today:hover { border-color: var(--accent); color: var(--accent); }
+  .date-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; padding: 2px 2px 8px; }
+  @media (max-width: 560px) { .date-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   .day-chip { flex: none; min-width: 68px; display: grid; justify-items: center; gap: 1px; border: 1.5px solid var(--line); border-radius: 13px; background: #fff; padding: 9px 8px 7px; cursor: pointer; transition: all .15s ease; }
   .day-chip:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); transform: translateY(-1px); }
   .day-chip .day-dow { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
@@ -4699,6 +4711,9 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
   .day-chip .day-mon { font-size: 10.5px; color: var(--muted); }
   .day-chip.on { background: var(--accent); border-color: var(--accent); box-shadow: 0 10px 22px -8px color-mix(in srgb, var(--accent) 55%, transparent); }
   .day-chip.on .day-dow, .day-chip.on .day-num, .day-chip.on .day-mon { color: var(--accent-ink); }
+  .day-chip.off { opacity: .38; cursor: default; background: color-mix(in srgb, var(--line) 26%, #fff); }
+  .day-chip.off:hover { transform: none; border-color: var(--line); }
+  .day-chip .day-mon.closed-tag { font-size: 9.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
   .date-other { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .chip-ghost { border: 1.5px dashed var(--line); background: #fff; color: var(--muted); border-radius: 11px; padding: 9px 13px; font-size: 13px; font-weight: 700; cursor: pointer; }
   .chip-ghost:hover { border-color: var(--accent); color: var(--accent); }
@@ -4891,6 +4906,14 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
           <section class="step-panel" data-panel="time">
             <div>
               <div class="fld-label" style="margin-bottom:9px;">Elige el dia</div>
+              <div class="date-nav">
+                <button type="button" class="date-nav-btn" id="dnPrevMonth" title="Mes anterior" aria-label="Mes anterior">&laquo;</button>
+                <button type="button" class="date-nav-btn" id="dnPrevWeek" title="Semana anterior" aria-label="Semana anterior">&lsaquo;</button>
+                <span class="date-nav-label" id="dnLabel"></span>
+                <button type="button" class="date-nav-btn" id="dnNextWeek" title="Semana siguiente" aria-label="Semana siguiente">&rsaquo;</button>
+                <button type="button" class="date-nav-btn" id="dnNextMonth" title="Mes siguiente" aria-label="Mes siguiente">&raquo;</button>
+                <button type="button" class="date-nav-today" id="dnToday">Hoy</button>
+              </div>
               <div class="date-strip" id="dateStrip"></div>
               <div class="date-other">
                 <button type="button" class="chip-ghost" id="otherDayBtn">📅 Otra fecha</button>
@@ -5209,6 +5232,7 @@ async function loadEmployees() {
     card.addEventListener("click", function () {
       st.empId = card.dataset.emp || ""; st.hour = "";
       wrap.querySelectorAll(".pick-card").forEach(function (c) { c.classList.toggle("on", (c.dataset.emp || "") === st.empId); });
+      ensureSelectableDate();
       renderRail();
     });
   });
@@ -5216,23 +5240,78 @@ async function loadEmployees() {
 }
 
 // --- Paso 3: dia + hora ---------------------------------------------------------
+// Semana visible del selector de fecha. Se navega por semana o por mes en vez
+// de una tira fija de 14 dias: antes no habia forma de pedir cita mas alla y la
+// tira se cortaba a la vista. Los dias que el profesional elegido no trabaja
+// salen apagados (el servidor valida igual en /disponibilidad y /agendar).
+function startOfWeek(date) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));  // lunes
+  return d;
+}
+function addDays(date, n) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() + n);
+  return d;
+}
+function dayLimits() {
+  const today = new Date();
+  const min = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const max = addDays(min, Math.max(1, parseInt(CFG.maxAdvanceDays, 10) || 60));
+  return { min: min, max: max };
+}
+function employeeOpenDays() {
+  const map = CFG.openDays || {};
+  const own = map[st.empId || ""];
+  if (Array.isArray(own) && own.length === 7) return own;
+  const general = map[""];
+  if (Array.isArray(general) && general.length === 7) return general;
+  return [true, true, true, true, true, true, true];
+}
+function dayIsSelectable(date) {
+  const lim = dayLimits();
+  if (date < lim.min || date > lim.max) return false;
+  return employeeOpenDays()[(date.getDay() + 6) % 7] !== false;
+}
 function buildDateStrip() {
   const stripEl = $("dateStrip");
   if (!stripEl) return;
-  const base = new Date();
+  const lim = dayLimits();
+  if (!st.weekStart) st.weekStart = startOfWeek(lim.min);
+  const weekStart = st.weekStart;
+  const weekEnd = addDays(weekStart, 6);
+
+  const label = $("dnLabel");
+  if (label) {
+    const mesIni = weekStart.toLocaleDateString("es-ES", { month: "long" });
+    const mesFin = weekEnd.toLocaleDateString("es-ES", { month: "long" });
+    label.textContent = (mesIni === mesFin)
+      ? (weekStart.getDate() + " – " + weekEnd.getDate() + " " + mesIni + " " + weekEnd.getFullYear())
+      : (weekStart.getDate() + " " + mesIni + " – " + weekEnd.getDate() + " " + mesFin + " " + weekEnd.getFullYear());
+  }
+  const prevDisabled = addDays(weekStart, -1) < lim.min;
+  const nextDisabled = addDays(weekStart, 7) > lim.max;
+  ["dnPrevWeek", "dnPrevMonth"].forEach(function (id) { const b = $(id); if (b) b.disabled = prevDisabled; });
+  ["dnNextWeek", "dnNextMonth"].forEach(function (id) { const b = $(id); if (b) b.disabled = nextDisabled; });
+
+  const todayIsoVal = toLocalIso(lim.min);
   const chips = [];
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(base);
-    d.setDate(base.getDate() + i);
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(weekStart, i);
     const iso = toLocalIso(d);
-    const dow = i === 0 ? "Hoy" : i === 1 ? "Mañana" : d.toLocaleDateString("es-ES", { weekday: "short" });
-    chips.push('<button type="button" class="day-chip" data-day="' + esc(iso) + '">'
+    const usable = dayIsSelectable(d);
+    const cerrado = usable ? "" : (d >= lim.min && d <= lim.max ? "Cerrado" : "");
+    const dow = iso === todayIsoVal ? "Hoy" : d.toLocaleDateString("es-ES", { weekday: "short" });
+    chips.push('<button type="button" class="day-chip' + (usable ? "" : " off") + (iso === st.date ? " on" : "") + '"'
+      + (usable ? "" : " disabled")
+      + ' data-day="' + esc(iso) + '">'
       + '<span class="day-dow">' + esc(dow) + "</span>"
       + '<span class="day-num">' + d.getDate() + "</span>"
-      + '<span class="day-mon">' + esc(d.toLocaleDateString("es-ES", { month: "short" })) + "</span></button>");
+      + '<span class="day-mon' + (cerrado ? " closed-tag" : "") + '">'
+      + esc(cerrado || d.toLocaleDateString("es-ES", { month: "short" })) + "</span></button>");
   }
   stripEl.innerHTML = chips.join("");
-  stripEl.querySelectorAll("[data-day]").forEach(function (chip) {
+  stripEl.querySelectorAll("[data-day]:not([disabled])").forEach(function (chip) {
     chip.addEventListener("click", function () {
       $("fecha").value = chip.dataset.day;
       st.hour = "";
@@ -5241,6 +5320,40 @@ function buildDateStrip() {
       renderRail();
     });
   });
+}
+function shiftWeek(days) {
+  const lim = dayLimits();
+  let next = addDays(st.weekStart || startOfWeek(lim.min), days);
+  if (addDays(next, 6) < lim.min) next = startOfWeek(lim.min);
+  if (next > lim.max) next = startOfWeek(lim.max);
+  st.weekStart = next;
+  buildDateStrip();
+}
+function goToDate(date) {
+  st.weekStart = startOfWeek(date);
+  buildDateStrip();
+}
+// Deja seleccionado el primer dia que el profesional elegido trabaja de verdad
+// (evita abrir el paso en un lunes cerrado y una lista de huecos vacia).
+function ensureSelectableDate() {
+  const lim = dayLimits();
+  let cursor = st.date ? new Date(st.date + "T00:00:00") : lim.min;
+  if (isNaN(cursor) || cursor < lim.min) cursor = lim.min;
+  let found = null;
+  for (let i = 0; i < 400; i++) {
+    const d = addDays(cursor, i);
+    if (d > lim.max) break;
+    if (dayIsSelectable(d)) { found = d; break; }
+  }
+  if (!found) { buildDateStrip(); return; }
+  const iso = toLocalIso(found);
+  st.date = iso;
+  const input = $("fecha");
+  if (input) input.value = iso;
+  st.hour = "";
+  goToDate(found);
+  markDay(iso);
+  loadSlots();
 }
 function markDay(iso) {
   document.querySelectorAll("#dateStrip .day-chip").forEach(function (c) { c.classList.toggle("on", c.dataset.day === iso); });
@@ -5541,8 +5654,18 @@ if (CFG.bookingEnabled) {
   st.date = $("fecha").value;
   buildDateStrip();
   markDay(st.date);
+  ensureSelectableDate();
+  [["dnPrevWeek", -7], ["dnNextWeek", 7], ["dnPrevMonth", -28], ["dnNextMonth", 28]].forEach(function (pair) {
+    const btn = $(pair[0]);
+    if (btn) btn.addEventListener("click", function () { shiftWeek(pair[1]); });
+  });
+  const todayBtn = $("dnToday");
+  if (todayBtn) todayBtn.addEventListener("click", function () { goToDate(new Date()); });
   $("fecha").addEventListener("change", function () {
     st.hour = "";
+    st.date = $("fecha").value;
+    // Saltar con "Otra fecha" mueve tambien la semana visible.
+    if (st.date) goToDate(new Date(st.date + "T00:00:00"));
     markDay($("fecha").value);
     loadSlots();
     renderRail();
@@ -5647,8 +5770,28 @@ def central_public_page_html(cliente_id: str, embed: bool = False) -> str:
     else:
         monogram = next((ch for ch in str(config.get("empresa") or config.get("nombre") or "V") if ch.isalnum()), "V").upper()
 
+    # Dias que abre cada profesional (lunes=0..domingo=6) para que el selector de
+    # fecha no ofrezca dias en los que esa persona no trabaja. El servidor sigue
+    # siendo la autoridad: /disponibilidad y /agendar validan igual.
+    open_days: Dict[str, List[bool]] = {}
+    try:
+        matrix = agenda._weekly_schedule_matrix(cliente_id, config)
+        if matrix:
+            by_wd = {int(item["weekday"]): (not item.get("closed")) for item in matrix}
+            open_days[""] = [bool(by_wd.get(wd, True)) for wd in range(7)]
+        for row in agenda._list_public_employee_rows(cliente_id, include_inactive=False):
+            schedule = agenda._employee_schedule_from_row(row)
+            open_days[row["id"]] = [textnorm._weekday_hours(schedule, wd) is not None for wd in range(7)]
+    except Exception:  # noqa: BLE001  (si algo falla, el selector abre todos los dias)
+        open_days = {}
+
     cfg_json = json.dumps(
-        {"clienteId": cliente_id, "bookingEnabled": bool(booking_enabled)},
+        {
+            "clienteId": cliente_id,
+            "bookingEnabled": bool(booking_enabled),
+            "maxAdvanceDays": int(settings.MAX_BOOKING_ADVANCE_DAYS),
+            "openDays": open_days,
+        },
         ensure_ascii=False,
     ).replace("</", "<\\/")
 
