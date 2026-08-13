@@ -262,64 +262,9 @@ window.__ptGuard = setTimeout(function(){
     background:#111;color:#fff !important;
   }
   .hero-actions{display:flex;flex-wrap:wrap;gap:16px;align-items:center}
-  .vt-modal{
-    position:fixed;inset:0;z-index:9999;display:none;
-    background:rgba(10,10,10,.72);backdrop-filter:blur(6px);
-    padding:24px;overflow:auto;
-  }
-  .vt-modal.open{display:flex;align-items:flex-start;justify-content:center}
-  .vt-modal-box{
-    position:relative;width:100%;max-width:1060px;margin:auto;
-    background:#fff;border-radius:20px;overflow:hidden;
-    box-shadow:0 40px 120px rgba(0,0,0,.5);animation:vtIn .3s ease;
-  }
-  @keyframes vtIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
-  .vt-modal-close{
-    position:absolute;top:14px;right:14px;z-index:2;width:38px;height:38px;
-    border:none;border-radius:50%;background:rgba(255,255,255,.94);color:#111;
-    font-size:22px;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.18);
-  }
-  .vt-modal-close:hover{background:#111;color:#fff}
-  .vt-modal iframe{display:block;width:100%;height:min(86vh,1000px);border:0;background:#fff}
-  @media(max-width:760px){
-    .vt-modal{padding:0}
-    .vt-modal-box{border-radius:0;min-height:100vh}
-    .vt-modal iframe{height:100vh}
-  }
 </style>
 
-<div class="vt-modal" id="vtBookModal" role="dialog" aria-modal="true" aria-label="Reservar cita">
-  <div class="vt-modal-box">
-    <button class="vt-modal-close" id="vtBookClose" aria-label="Cerrar">&times;</button>
-    <iframe id="vtBookFrame" title="Reserva tu cita" loading="lazy" data-src="https://app.vantelia.es/central/alicia_rincon_estilistas?embed=1"></iframe>
-  </div>
-</div>
 
-<script>
-(function(){
-  var modal = document.getElementById('vtBookModal');
-  var frame = document.getElementById('vtBookFrame');
-  var closeBtn = document.getElementById('vtBookClose');
-  if(!modal || !frame) return;
-  function open(e){
-    if(e) e.preventDefault();
-    if(!frame.src) frame.src = frame.getAttribute('data-src');
-    modal.classList.add('open');
-    document.body.style.overflow = 'hidden';
-  }
-  function close(){
-    modal.classList.remove('open');
-    document.body.style.overflow = '';
-  }
-  document.addEventListener('click', function(ev){
-    var trigger = ev.target.closest('[data-vt-book]');
-    if(trigger) open(ev);
-  });
-  closeBtn.addEventListener('click', close);
-  modal.addEventListener('click', function(ev){ if(ev.target === modal) close(); });
-  document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') close(); });
-})();
-</script>
 
 <script src="https://app.vantelia.es/widget/widget.min.js"
         data-api="https://app.vantelia.es"

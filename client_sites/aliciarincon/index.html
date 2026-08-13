@@ -2427,7 +2427,7 @@ window.__ptGuard = setTimeout(function(){
     <a href="#equipo">Equipo</a>
     <a href="#contacto">Contacto</a>
   
-    <a href="#" class="vt-nav-book" data-vt-book>Reservar</a>
+    <a href="https://app.vantelia.es/central/alicia_rincon_estilistas" class="vt-nav-book">Reservar</a>
   </div>
 
   <!-- Botón de menú (solo móvil, oculto en escritorio por CSS) -->
@@ -2448,7 +2448,7 @@ window.__ptGuard = setTimeout(function(){
     <a href="#equipo">Equipo</a>
     <a href="#contacto">Contacto</a>
   
-    <a href="#" class="vt-nav-book" data-vt-book>Reservar</a>
+    <a href="https://app.vantelia.es/central/alicia_rincon_estilistas" class="vt-nav-book">Reservar</a>
   </nav>
 </div>
 
@@ -2465,7 +2465,7 @@ window.__ptGuard = setTimeout(function(){
     <h1>Transformamos tu cabello,<br>respetando tu esencia.<br></h1>
     <p>Peluquería colorista en Elche especializada<br>en Grey Blending, Rubios personalizados,<br>Alisados premium y extensiones de cabello.<br><br>Más de 36 años de experiencia<br>creando cambios de imagen,<br>completamente personalizados.</p>
     <div class="hero-actions">
-      <a href="#" class="vt-book-btn" data-vt-book><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>Reservar cita online</a>
+      <a href="https://app.vantelia.es/central/alicia_rincon_estilistas" class="vt-book-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>Reservar cita online</a>
       <a class="comunidad-wa" href="https://wa.me/625120100?text=Hola%20Alicia%2C%20me%20encantar%C3%ADa%20reservar%20una%20cita%20en%20Alicia%20Rinc%C3%B3n%20Estilistas.%20%C2%BFPodr%C3%ADais%20indicarme%20la%20disponibilidad%3F" target="_blank" rel="noopener" aria-label="Escríbenos por WhatsApp">
         <span class="wa-ico" aria-hidden="true">
           <svg viewBox="0 0 32 32" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M16.003 3C9.374 3 4 8.373 4 15c0 2.393.696 4.622 1.893 6.5L4 29l7.72-2.02A11.94 11.94 0 0 0 16.003 27C22.626 27 28 21.627 28 15S22.626 3 16.003 3zm0 21.6c-1.83 0-3.53-.51-4.97-1.4l-3.48.9.94-3.39A9.55 9.55 0 0 1 6.4 15c0-5.29 4.31-9.6 9.6-9.6 5.3 0 9.6 4.31 9.6 9.6 0 5.3-4.3 9.6-9.6 9.6zm5.36-7.14c-.3-.15-1.74-.86-2.01-.96-.27-.1-.47-.15-.66.15-.2.3-.76.96-.93 1.15-.17.2-.34.22-.63.08-.3-.15-1.25-.46-2.38-1.47-.88-.79-1.47-1.75-1.64-2.05-.17-.3-.02-.46.13-.6.14-.14.3-.35.44-.53.15-.18.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.66-1.6-.9-2.19-.24-.57-.48-.5-.66-.51h-.56c-.19 0-.5.07-.76.37-.26.3-1 .97-1 2.36 0 1.4 1.03 2.75 1.17 2.94.14.2 2.02 3.08 4.9 4.32.68.3 1.22.47 1.63.6.68.22 1.31.19 1.8.12.55-.08 1.7-.7 1.94-1.36.24-.68.24-1.26.17-1.38-.07-.13-.26-.2-.55-.34z"></path></svg>
@@ -4257,64 +4257,9 @@ function initStackCarousel(images){
     background:#111;color:#fff !important;
   }
   .hero-actions{display:flex;flex-wrap:wrap;gap:16px;align-items:center}
-  .vt-modal{
-    position:fixed;inset:0;z-index:9999;display:none;
-    background:rgba(10,10,10,.72);backdrop-filter:blur(6px);
-    padding:24px;overflow:auto;
-  }
-  .vt-modal.open{display:flex;align-items:flex-start;justify-content:center}
-  .vt-modal-box{
-    position:relative;width:100%;max-width:1060px;margin:auto;
-    background:#fff;border-radius:20px;overflow:hidden;
-    box-shadow:0 40px 120px rgba(0,0,0,.5);animation:vtIn .3s ease;
-  }
-  @keyframes vtIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
-  .vt-modal-close{
-    position:absolute;top:14px;right:14px;z-index:2;width:38px;height:38px;
-    border:none;border-radius:50%;background:rgba(255,255,255,.94);color:#111;
-    font-size:22px;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.18);
-  }
-  .vt-modal-close:hover{background:#111;color:#fff}
-  .vt-modal iframe{display:block;width:100%;height:min(86vh,1000px);border:0;background:#fff}
-  @media(max-width:760px){
-    .vt-modal{padding:0}
-    .vt-modal-box{border-radius:0;min-height:100vh}
-    .vt-modal iframe{height:100vh}
-  }
 </style>
 
-<div class="vt-modal" id="vtBookModal" role="dialog" aria-modal="true" aria-label="Reservar cita">
-  <div class="vt-modal-box">
-    <button class="vt-modal-close" id="vtBookClose" aria-label="Cerrar">&times;</button>
-    <iframe id="vtBookFrame" title="Reserva tu cita" loading="lazy" data-src="https://app.vantelia.es/central/alicia_rincon_estilistas?embed=1"></iframe>
-  </div>
-</div>
 
-<script>
-(function(){
-  var modal = document.getElementById('vtBookModal');
-  var frame = document.getElementById('vtBookFrame');
-  var closeBtn = document.getElementById('vtBookClose');
-  if(!modal || !frame) return;
-  function open(e){
-    if(e) e.preventDefault();
-    if(!frame.src) frame.src = frame.getAttribute('data-src');
-    modal.classList.add('open');
-    document.body.style.overflow = 'hidden';
-  }
-  function close(){
-    modal.classList.remove('open');
-    document.body.style.overflow = '';
-  }
-  document.addEventListener('click', function(ev){
-    var trigger = ev.target.closest('[data-vt-book]');
-    if(trigger) open(ev);
-  });
-  closeBtn.addEventListener('click', close);
-  modal.addEventListener('click', function(ev){ if(ev.target === modal) close(); });
-  document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') close(); });
-})();
-</script>
 
 <script src="https://app.vantelia.es/widget/widget.min.js"
         data-api="https://app.vantelia.es"
