@@ -404,3 +404,64 @@ def test_central_customization_hero_and_images(client, api_module, portal_cookie
             conn.execute("DELETE FROM products WHERE cliente_id='demo' AND name='Crema Img'")
             conn.execute("DELETE FROM packages WHERE cliente_id='demo' AND name='Bono Img'")
             conn.commit()
+
+
+def test_local_day_bounds_use_business_timezone():
+    """Un dia LOCAL del negocio se traduce a sellos UTC.
+
+    Las ventas guardan `created_at` en UTC y el filtro llega en dias locales:
+    comparar el dia local contra el sello UTC perdia las ventas de las horas en
+    que las dos fechas no coinciden (en Madrid en verano, las de 00:00 a 02:00
+    caian fuera de "hoy").
+    """
+    import datetime as dt
+
+    from backend import analytics
+
+    desde, hasta = analytics._local_day_bounds_utc("Europe/Madrid", dt.date(2026, 8, 15), dt.date(2026, 8, 15))
+    assert desde == "2026-08-14T22:00:00Z"   # 00:00 en Madrid es 22:00 UTC del dia anterior
+    assert hasta == "2026-08-15T22:00:00Z"
+
+    desde_utc, hasta_utc = analytics._local_day_bounds_utc("UTC", dt.date(2026, 8, 15), dt.date(2026, 8, 15))
+    assert desde_utc == "2026-08-15T00:00:00Z"
+    assert hasta_utc == "2026-08-16T00:00:00Z"
+
+
+def test_central_summary_counts_sale_made_early_local_morning(client, api_module, portal_cookies):
+    """Una venta de la madrugada local cuenta como de HOY.
+
+    Es el caso que se rompia: a las 00:30 en Madrid el sello UTC todavia lleva la
+    fecha de ayer, asi que la venta desaparecia del mostrador."""
+    import datetime as dt
+    import uuid as _uuid
+
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:  # pragma: no cover - Python 3.8
+        from backports.zoneinfo import ZoneInfo
+
+    sufijo = _uuid.uuid4().hex[:8]
+    tz = ZoneInfo("Europe/Madrid")
+    hoy_local = dt.datetime.now(tz).date()
+    # 00:30 de hoy en hora del negocio -> en UTC puede ser aun ayer.
+    instante = dt.datetime.combine(hoy_local, dt.time(0, 30)).replace(tzinfo=tz)
+    creado_utc = instante.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+
+    with api_module._get_db_connection() as conn:
+        conn.execute(
+            "INSERT INTO product_sales (id, cliente_id, product_id, product_name, qty, unit_price_cents,"
+            " total_cents, payment_method, created_at)"
+            " VALUES (?, 'demo', 'p_tz', 'Champu', 1, 1500, 1500, 'cash', ?)",
+            (f"saletz_{sufijo}", creado_utc),
+        )
+        conn.commit()
+    try:
+        r = client.get("/auth/app/central/summary", cookies=portal_cookies)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["product_sales_today"] >= 1
+        assert data["revenue_breakdown"]["products_cents"] >= 1500
+    finally:
+        with api_module._get_db_connection() as conn:
+            conn.execute("DELETE FROM product_sales WHERE cliente_id='demo' AND id=?", (f"saletz_{sufijo}",))
+            conn.commit()

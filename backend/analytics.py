@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Tuple
 
 try:  # Python 3.9+
@@ -33,9 +33,23 @@ from backend import agenda, db, textnorm, timeutils
 REVENUE_BOOKING_FILTER = "payment_status = 'paid'"
 
 
-def _parse_range(date_from: str, date_to: str) -> Tuple[date, date]:
+def _today_in(tz_name: str) -> date:
+    """Fecha de HOY en la zona del negocio (por defecto, UTC)."""
+    if not tz_name:
+        return timeutils._utc_now().date()
     try:
-        end = datetime.strptime(date_to, "%Y-%m-%d").date() if date_to else timeutils._utc_now().date()
+        return datetime.now(ZoneInfo(tz_name)).date()
+    except Exception:  # noqa: BLE001 - zona invalida en config
+        return timeutils._utc_now().date()
+
+
+def _parse_range(date_from: str, date_to: str, tz_name: str = "") -> Tuple[date, date]:
+    """Rango de dias LOCALES del negocio. Sin `date_to`, termina HOY en su zona
+    horaria: tomarlo del dia UTC cerraba el rango en ayer durante las horas en que
+    las dos fechas no coinciden, y las ventas del dia no salian en Informes."""
+    try:
+        hoy = _today_in(tz_name)
+        end = datetime.strptime(date_to, "%Y-%m-%d").date() if date_to else hoy
         start = (
             datetime.strptime(date_from, "%Y-%m-%d").date()
             if date_from
@@ -96,18 +110,46 @@ def _bookings_aggregates(
     }
 
 
+def _client_timezone(cliente_id: str) -> str:
+    """Zona horaria configurada del negocio (la de su agenda)."""
+    from backend import appstate  # tardio: evita ciclo en el arranque
+
+    config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
+    return str((config.get("booking") or {}).get("timezone") or "Europe/Madrid")
+
+
+def _local_day_bounds_utc(tz_name: str, start: date, end: date) -> Tuple[str, str]:
+    """Convierte un rango de dias LOCALES del negocio en sellos UTC.
+
+    `created_at` de las ventas se guarda en UTC, mientras que el rango que elige
+    el negocio (o "hoy" del mostrador) es en SU zona horaria. Comparar un dia
+    local contra un sello UTC se come las ventas de las horas en las que las dos
+    fechas no coinciden: en Madrid en verano (UTC+2), las de 00:00 a 02:00
+    contaban como del dia anterior y desaparecian del "hoy".
+    """
+    try:
+        tz = ZoneInfo(tz_name or "UTC")
+    except Exception:  # noqa: BLE001 - zona invalida en config
+        tz = ZoneInfo("UTC")
+    desde = datetime(start.year, start.month, start.day, tzinfo=tz).astimezone(timezone.utc)
+    fin = end + timedelta(days=1)
+    hasta = datetime(fin.year, fin.month, fin.day, tzinfo=tz).astimezone(timezone.utc)
+    return desde.isoformat().replace("+00:00", "Z"), hasta.isoformat().replace("+00:00", "Z")
+
+
 def _sales_revenue(
     connection: sqlite3.Connection, table: str, amount_expr: str,
-    cliente_id: str, start: date, end: date, location_id: str,
+    cliente_id: str, start: date, end: date, location_id: str, tz_name: str = "",
 ) -> int:
     loc_sql, loc_params = _loc_clause(location_id)
+    desde, hasta = _local_day_bounds_utc(tz_name, start, end)
     row = connection.execute(
         f"""
         SELECT COALESCE(SUM({amount_expr}), 0) AS cents
         FROM {table}
         WHERE cliente_id = ? AND created_at >= ? AND created_at < ?{loc_sql}
         """,
-        [cliente_id, start.isoformat(), (end + timedelta(days=1)).isoformat()] + loc_params,
+        [cliente_id, desde, hasta] + loc_params,
     ).fetchone()
     return int(row["cents"] or 0)
 
@@ -289,10 +331,11 @@ def _kpis_for_range(
     location_id: str, service_id: str,
 ) -> Dict[str, Any]:
     agg = _bookings_aggregates(connection, cliente_id, start, end, location_id, service_id)
+    tz_name = _client_timezone(cliente_id)
     extras = 0 if service_id else (
-        _sales_revenue(connection, "product_sales", "total_cents", cliente_id, start, end, location_id)
-        + _sales_revenue(connection, "package_purchases", "price_cents", cliente_id, start, end, location_id)
-        + _sales_revenue(connection, "gift_cards", "initial_cents", cliente_id, start, end, location_id)
+        _sales_revenue(connection, "product_sales", "total_cents", cliente_id, start, end, location_id, tz_name)
+        + _sales_revenue(connection, "package_purchases", "price_cents", cliente_id, start, end, location_id, tz_name)
+        + _sales_revenue(connection, "gift_cards", "initial_cents", cliente_id, start, end, location_id, tz_name)
     )
     by_status = agg["by_status"]
     completed = by_status.get("completed", 0)
@@ -322,21 +365,19 @@ def _central_summary(cliente_id: str) -> Dict[str, Any]:
 
     config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
     tz_name = str((config.get("booking") or {}).get("timezone") or "Europe/Madrid")
-    try:
-        today = datetime.now(ZoneInfo(tz_name)).date()
-    except Exception:  # noqa: BLE001 - tz invalida en config
-        today = timeutils._utc_now().date()
+    today = _today_in(tz_name)
     now_iso = timeutils._utc_now_iso()
     with db._get_db_connection() as connection:
         agg = _bookings_aggregates(connection, cliente_id, today, today, "", "")
         by_status = agg["by_status"]
         bookings_today = sum(n for status, n in by_status.items() if status != "cancelled")
-        products_cents = _sales_revenue(connection, "product_sales", "total_cents", cliente_id, today, today, "")
-        packages_cents = _sales_revenue(connection, "package_purchases", "price_cents", cliente_id, today, today, "")
-        gifts_cents = _sales_revenue(connection, "gift_cards", "initial_cents", cliente_id, today, today, "")
+        products_cents = _sales_revenue(connection, "product_sales", "total_cents", cliente_id, today, today, "", tz_name)
+        packages_cents = _sales_revenue(connection, "package_purchases", "price_cents", cliente_id, today, today, "", tz_name)
+        gifts_cents = _sales_revenue(connection, "gift_cards", "initial_cents", cliente_id, today, today, "", tz_name)
+        desde_hoy, hasta_hoy = _local_day_bounds_utc(tz_name, today, today)
         product_sales_today = int(connection.execute(
             "SELECT COUNT(*) FROM product_sales WHERE cliente_id = ? AND created_at >= ? AND created_at < ?",
-            (cliente_id, today.isoformat(), (today + timedelta(days=1)).isoformat()),
+            (cliente_id, desde_hoy, hasta_hoy),
         ).fetchone()[0])
         # Valor vivo: sin refresco lazy (solo lectura) — se excluye lo ya caducado.
         not_expired = "(expires_at IS NULL OR expires_at = '' OR expires_at >= ?)"
@@ -380,7 +421,7 @@ def _overview(
     cliente_id: str, *, location_id: str = "", service_id: str = "",
     date_from: str = "", date_to: str = "",
 ) -> Dict[str, Any]:
-    start, end = _parse_range(date_from, date_to)
+    start, end = _parse_range(date_from, date_to, _client_timezone(cliente_id))
     location_filter = (
         agenda._resolve_location_id(cliente_id, location_id, require_active=False) if location_id else ""
     )
