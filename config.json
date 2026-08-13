@@ -579,7 +579,7 @@
     "icono": "AR",
     "color": "#111111",
     "accent_color": "#c9737d",
-    "logo_url": "",
+    "logo_url": "https://app.vantelia.es/site/aliciarincon/assets/avatar-asistente.png",
     "bienvenida": "Hola, soy el asistente de Alicia Rincón Estilistas. Puedo darte cita, contarte nuestros servicios o resolver tus dudas. ¿En qué te ayudo?",
     "prompt_extra": "Eres el asistente de una peluqueria colorista de alta gama en Elche. Trato cercano y profesional, de tu, lenguaje cuidado y frases cortas. NUNCA inventes precios: el precio se confirma tras el diagnostico personalizado; ofrece pedir cita de valoracion o el telefono 625 120 100. Recuerda que los lunes cerramos y que no cerramos por vacaciones. Si detectas intencion de cita, guia la reserva paso a paso.",
     "chat_model": "",
