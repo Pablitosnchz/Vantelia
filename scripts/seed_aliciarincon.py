@@ -190,17 +190,25 @@ def seed_agenda(location_id: str) -> None:
         )
         if window is None:
             continue
-        horas = [h for h in ("10:00", "11:30", "13:00", "16:00", "17:30") if window[0] <= h < window[1]]
+        # Solo horas en las que el servicio cabe ENTERO antes del cierre de ese dia.
+        def _min(hhmm):
+            h, m = hhmm.split(":")
+            return int(h) * 60 + int(m)
+
+        cierre = _min(window[1])
+        horas_dia = [h for h in ("09:00", "10:00", "11:30", "13:00", "16:00", "17:30") if _min(window[0]) <= _min(h)]
         for emp in employees:
             if RNG.random() > 0.4:
                 continue
-            for hora in RNG.sample(horas, k=min(len(horas), RNG.randint(1, 2))):
+            for hora in RNG.sample(horas_dia, k=min(len(horas_dia), RNG.randint(1, 2))):
                 key = (emp["id"], day.isoformat(), hora)
                 if key in used:
                     continue
-                used.add(key)
                 svc = RNG.choice(services)
                 dur = int(svc.get("duration_minutes") or 60)
+                if _min(hora) + dur > cierre:
+                    continue  # el servicio no cabe antes del cierre de ese dia
+                used.add(key)
                 cliente = RNG.choice(CLIENTAS_DEMO)
                 status = ("no_show" if RNG.random() < 0.08 else "completed") if offset < 0 else "confirmed"
                 bid = f"bk_{secrets.token_urlsafe(8)}"

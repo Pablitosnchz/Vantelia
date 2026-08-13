@@ -3166,21 +3166,9 @@
         </div>
         <button class="btn btn-ghost" id="horBreakAddBtn" type="button" style="margin-top:8px;">+ Añadir descanso</button>
       </div>
-      <div style="margin-top:14px;">
-        <label class="field-label">Días cerrados</label>
-        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:8px;" id="horDays">
-          <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="0" style="display:none;" /> Lun</label>
-          <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="1" style="display:none;" /> Mar</label>
-          <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="2" style="display:none;" /> Mié</label>
-          <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="3" style="display:none;" /> Jue</label>
-          <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="4" style="display:none;" /> Vie</label>
-          <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="5" style="display:none;" /> Sáb</label>
-          <label class="filter-chip" style="cursor:pointer;"><input type="checkbox" value="6" style="display:none;" /> Dom</label>
-        </div>
-      </div>
       <div style="margin-top:18px;">
-        <label class="field-label">Horario distinto según el día</label>
-        <p class="panel-sub" style="margin:4px 0 10px;">Opcional. Marca un día para darle su propia franja (por ejemplo, sábado corto). Los días sin marcar usan el horario de arriba.</p>
+        <label class="field-label">Días de apertura</label>
+        <p class="panel-sub" style="margin:4px 0 10px;">Cada día usa el horario base de arriba salvo que le pongas uno propio (por ejemplo, sábado corto) o lo cierres.</p>
         <div id="horWeekly"></div>
       </div>
       <div style="margin-top:18px;">
@@ -6518,10 +6506,12 @@ async function fetchCitasCalData() {
   } catch { citasState.calData = []; }
   try {
     const sched = await api(profId ? `/auth/schedule/employee/${encodeURIComponent(profId)}` : '/auth/schedule');
-    const cd = sched?.closed_weekdays ?? sched?.closed_days ?? [];
-    citasState.calClosedDays = Array.isArray(cd) ? cd.map(n => parseInt(n)) : [];
+    citasState.calSchedule = sched || {};
+    // Un dia esta cerrado si no tiene franja: dia marcado como cerrado o
+    // `weekly_hours` que lo cierra. Misma regla que la vista Dia.
+    citasState.calClosedDays = [0,1,2,3,4,5,6].filter(wd => !cdWeekdayWindow(sched || {}, wd));
     citasState.calBlocks = Array.isArray(sched?.blocks) ? sched.blocks : [];
-  } catch { citasState.calClosedDays = []; citasState.calBlocks = []; }
+  } catch { citasState.calSchedule = {}; citasState.calClosedDays = []; citasState.calBlocks = []; }
 }
 
 async function refreshCitasCalendarIfVisible() {
@@ -7193,10 +7183,27 @@ function normalizeDailyBreaks(data){
   }
   return items.sort((a,b) => String(a.start).localeCompare(String(b.start)) || String(a.end).localeCompare(String(b.end)));
 }
+// Espejo en el navegador de `textnorm._weekday_hours`: franja que aplica a un
+// dia concreto (override `weekly_hours` -> dias cerrados -> horario base).
+// Sin esto el calendario pintaba la misma banda todos los dias y contradecia a
+// la agenda real (p. ej. sabado corto).
+function cdWeekdayWindow(schedule, wd) {
+  if (!schedule || wd < 0) return null;
+  const weekly = schedule.weekly_hours || {};
+  const entry = weekly[String(wd)];
+  if (entry) {
+    if (entry.closed) return null;
+    if (entry.start && entry.end) return { start: entry.start, end: entry.end };
+  }
+  const closed = (schedule.closed_weekdays || schedule.closed_days || []).map(Number);
+  if (closed.includes(wd)) return null;
+  return { start: schedule.day_start || '09:00', end: schedule.day_end || '18:00' };
+}
+
 function cdColDayInfo(emp, dateKey){
   const date = new Date(`${dateKey}T00:00:00`);
   const wd = isNaN(date) ? -1 : (date.getDay()+6)%7;
-  const closed = (emp?.closed_weekdays || citasState.daySchedule?.closed_weekdays || []).map(Number);
+  const window = cdWeekdayWindow(emp || citasState.daySchedule || {}, wd);
   const blocks = [];
   const matchDate = (bl) => ((bl.fecha || bl.start_date || '') || '').slice(0,10) === dateKey;
   (citasState.daySchedule?.blocks || []).forEach(bl => { if (matchDate(bl)) blocks.push(bl); });
@@ -7212,9 +7219,9 @@ function cdColDayInfo(emp, dateKey){
     blocks.push({ fecha: dateKey, hora_inicio: br.start, hora_fin: br.end, motivo: br.reason || 'Descanso' });
   });
   return {
-    isClosed: wd >= 0 && closed.includes(wd),
-    dayStart: cdParseMin(emp?.day_start || citasState.daySchedule?.day_start || '09:00') ?? 540,
-    dayEnd:   cdParseMin(emp?.day_end   || citasState.daySchedule?.day_end   || '18:00') ?? 1080,
+    isClosed: wd >= 0 && !window,
+    dayStart: cdParseMin(window?.start || emp?.day_start || citasState.daySchedule?.day_start || '09:00') ?? 540,
+    dayEnd:   cdParseMin(window?.end   || emp?.day_end   || citasState.daySchedule?.day_end   || '18:00') ?? 1080,
     blocks,
   };
 }
@@ -10864,64 +10871,97 @@ function fillHorarioForm(data) {
   document.getElementById('horTz').value = data.timezone || 'Europe/Madrid';
   setHorarioBreaks(data);
   const closedRaw = data.closed_weekdays || data.closed_days || [];
-  const closed = closedRaw.map(n => parseInt(n));
-  document.querySelectorAll('#horDays input[type=checkbox]').forEach(cb => {
-    const v = parseInt(cb.value);
-    cb.checked = closed.includes(v);
-    cb.closest('label').classList.toggle('active', closed.includes(v));
-  });
-  renderHorarioWeekly(data.weekly_hours || {});
+  renderHorarioWeekly(data.weekly_hours || {}, closedRaw.map(n => parseInt(n)));
 }
 
 const HOR_WEEKDAY_LABELS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
-// Horario por dia de la semana: override opcional sobre la franja general, para
-// negocios que no abren lo mismo todos los dias (sabado corto, tarde larga...).
-function renderHorarioWeekly(weekly) {
+// Tabla semanal: UNA sola fuente para decir que dias abre el negocio y con que
+// franja. Cada dia tiene tres estados -> horario base, horario propio
+// (`weekly_hours`) o cerrado (`closed_weekdays`). Antes esto vivia en dos sitios
+// (chips de "dias cerrados" + tabla) y se contradecian a la vista.
+function horWeeklyState(entry, closedDays, i) {
+  if (entry && entry.closed) return 'closed';
+  if (closedDays.includes(i)) return 'closed';
+  if (entry && entry.start && entry.end) return 'custom';
+  return 'base';
+}
+
+function renderHorarioWeekly(weekly, closedDays) {
   const wrap = document.getElementById('horWeekly');
   if (!wrap) return;
+  const closed = Array.isArray(closedDays) ? closedDays.map(Number) : [];
   const base = {
     start: document.getElementById('horStart').value || '09:00',
     end: document.getElementById('horEnd').value || '18:00',
   };
   wrap.innerHTML = HOR_WEEKDAY_LABELS.map((label, i) => {
     const entry = (weekly && weekly[String(i)]) || null;
-    const on = !!entry && !entry.closed;
-    return `<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 0;">
-      <label class="filter-chip${on ? ' active' : ''}" style="cursor:pointer; min-width:104px;" data-wh-chip="${i}">
-        <input type="checkbox" data-wh-on="${i}" style="display:none;"${on ? ' checked' : ''} /> ${label}
-      </label>
-      <input type="time" class="field-input" data-wh-start="${i}" style="max-width:130px;"
-             value="${escapeHtml(on ? (entry.start || base.start) : base.start)}"${on ? '' : ' disabled'} />
-      <span class="panel-sub" style="margin:0;">a</span>
-      <input type="time" class="field-input" data-wh-end="${i}" style="max-width:130px;"
-             value="${escapeHtml(on ? (entry.end || base.end) : base.end)}"${on ? '' : ' disabled'} />
+    const state = horWeeklyState(entry, closed, i);
+    const custom = state === 'custom';
+    return `<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:5px 0;" data-wh-row="${i}">
+      <span style="min-width:96px; font-size:0.9rem;">${label}</span>
+      <select class="field-input" data-wh-state="${i}" style="max-width:190px;">
+        <option value="base"${state === 'base' ? ' selected' : ''}>Horario base</option>
+        <option value="custom"${custom ? ' selected' : ''}>Horario propio</option>
+        <option value="closed"${state === 'closed' ? ' selected' : ''}>Cerrado</option>
+      </select>
+      <span data-wh-hours="${i}" style="display:${custom ? 'flex' : 'none'}; align-items:center; gap:8px;">
+        <input type="time" class="field-input" data-wh-start="${i}" style="max-width:130px;"
+               value="${escapeHtml((entry && entry.start) || base.start)}" />
+        <span class="panel-sub" style="margin:0;">a</span>
+        <input type="time" class="field-input" data-wh-end="${i}" style="max-width:130px;"
+               value="${escapeHtml((entry && entry.end) || base.end)}" />
+      </span>
+      <span class="panel-sub" data-wh-note="${i}" style="margin:0; font-size:0.82rem;">${
+        state === 'closed' ? 'No se aceptan citas'
+        : state === 'base' ? `${escapeHtml(base.start)} – ${escapeHtml(base.end)}`
+        : ''}</span>
     </div>`;
   }).join('');
-  wrap.querySelectorAll('[data-wh-on]').forEach(cb => {
-    cb.addEventListener('change', () => {
-      const i = cb.getAttribute('data-wh-on');
-      const on = cb.checked;
-      cb.closest('label').classList.toggle('active', on);
-      wrap.querySelector(`[data-wh-start="${i}"]`).disabled = !on;
-      wrap.querySelector(`[data-wh-end="${i}"]`).disabled = !on;
+  wrap.querySelectorAll('[data-wh-state]').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const i = sel.getAttribute('data-wh-state');
+      const isCustom = sel.value === 'custom';
+      wrap.querySelector(`[data-wh-hours="${i}"]`).style.display = isCustom ? 'flex' : 'none';
+      const note = wrap.querySelector(`[data-wh-note="${i}"]`);
+      note.textContent = sel.value === 'closed'
+        ? 'No se aceptan citas'
+        : (sel.value === 'base' ? `${document.getElementById('horStart').value} – ${document.getElementById('horEnd').value}` : '');
     });
   });
 }
 
+// Devuelve {closed_weekdays, weekly_hours} tal y como los espera el backend.
 function collectHorarioWeekly() {
   const wrap = document.getElementById('horWeekly');
-  const out = {};
+  const out = { closed_weekdays: [], weekly_hours: {} };
   if (!wrap) return out;
-  wrap.querySelectorAll('[data-wh-on]').forEach(cb => {
-    if (!cb.checked) return;
-    const i = cb.getAttribute('data-wh-on');
+  wrap.querySelectorAll('[data-wh-state]').forEach(sel => {
+    const i = sel.getAttribute('data-wh-state');
+    if (sel.value === 'closed') { out.closed_weekdays.push(parseInt(i)); return; }
+    if (sel.value !== 'custom') return;
     const start = wrap.querySelector(`[data-wh-start="${i}"]`)?.value || '';
     const end = wrap.querySelector(`[data-wh-end="${i}"]`)?.value || '';
-    if (start && end) out[i] = { closed: false, start, end };
+    if (start && end) out.weekly_hours[i] = { closed: false, start, end };
   });
   return out;
 }
+
+// El horario base manda sobre los dias "Horario base": refrescamos su etiqueta
+// al tocarlo para que nadie guarde creyendo otra cosa.
+['horStart', 'horEnd'].forEach(id => {
+  document.getElementById(id)?.addEventListener('change', () => {
+    const wrap = document.getElementById('horWeekly');
+    if (!wrap) return;
+    wrap.querySelectorAll('[data-wh-state]').forEach(sel => {
+      if (sel.value !== 'base') return;
+      const i = sel.getAttribute('data-wh-state');
+      wrap.querySelector(`[data-wh-note="${i}"]`).textContent =
+        `${document.getElementById('horStart').value} – ${document.getElementById('horEnd').value}`;
+    });
+  });
+});
 
 function renderBloqueos(blocks) {
   const list = document.getElementById('horBlocksList');
@@ -10956,10 +10996,6 @@ function renderBloqueos(blocks) {
     list.appendChild(row);
   });
 }
-
-document.querySelectorAll('#horDays label').forEach(lbl => {
-  lbl.addEventListener('click', () => setTimeout(() => lbl.classList.toggle('active', lbl.querySelector('input').checked), 0));
-});
 
 document.getElementById('horBreakAddBtn').addEventListener('click', () => {
   const start = document.getElementById('horBreakNewStart').value;
@@ -11040,7 +11076,8 @@ function openHorarioConflictModal(detail){
 }
 
 async function saveHorario(){
-  const closed = [...document.querySelectorAll('#horDays input:checked')].map(cb => parseInt(cb.value));
+  const semana = collectHorarioWeekly();
+  const closed = semana.closed_weekdays;
   const profId = document.getElementById('horProf').value;
   const enabledNow = (typeof state !== 'undefined' && state && state.bookingEnabled === false) ? false : true;
   const payload = {
@@ -11053,7 +11090,7 @@ async function saveHorario(){
     slot_minutes: parseInt(document.getElementById('horSlot').value) || 30,
     timezone: document.getElementById('horTz').value.trim() || 'Europe/Madrid',
     closed_weekdays: closed,
-    weekly_hours: collectHorarioWeekly(),
+    weekly_hours: semana.weekly_hours,
   };
   const url = profId ? `/auth/schedule/employee/${encodeURIComponent(profId)}` : '/auth/schedule';
   try {
