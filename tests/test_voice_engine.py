@@ -476,3 +476,19 @@ def test_customer_speech_resets_idle_counter():
     asyncio.run(engine.on_openai_event({"type": "input_audio_buffer.speech_started"}))
     assert engine.state["idle_nudges"] == 0
     assert engine.state["last_activity_at"] > 0
+
+
+def test_user_turn_arms_silence_guard():
+    """Contrato navegador<->telefono: al cerrar el turno del cliente queda armado el
+    vigilante. Es el momento en que el cliente acaba de dar un dato y espera
+    reaccion; sin esto el asistente puede quedarse mudo hasta que le preguntan."""
+    engine, _, _ = _build_engine({})
+    engine.state["session_configured"] = True
+    engine.disarm_silence_guard()
+    asyncio.run(engine.on_openai_event({
+        "type": "conversation.item.input_audio_transcription.completed",
+        "transcript": "Pablo, 675 802 001",
+    }))
+    assert engine.state["silence_guard_armed"] is True
+    assert engine.state["silence_guard_reason"] == "user_turn"
+    assert engine.state["turn_had_assistant_output"] is False
