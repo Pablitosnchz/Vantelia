@@ -1,7 +1,346 @@
 {
+  "Clinica_Saga": {
+    "nombre": "Clinica Saga",
+    "plan": "starter",
+    "subscription": {
+      "plan": "starter"
+    },
+    "icono": "CS",
+    "color": "#2E86AB",
+    "accent_color": "",
+    "logo_url": "",
+    "bienvenida": "Hola, soy Clara, la asistente de Clinica Saga. En que puedo ayudarte hoy?",
+    "prompt_extra": "Habla con tono cercano y profesional. Si falta informacion, deriva al equipo humano sin inventar nada.",
+    "chat_model": "",
+    "temperature": 0.2,
+    "allowed_origins": [
+      "https://clinicasaga.es",
+      "https://www.clinicasaga.es",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:5500",
+      "http://localhost:8000"
+    ],
+    "contacto": {
+      "email": "soporte@vantelia.es",
+      "telefono": "+34 916770442"
+    },
+    "branding": {
+      "powered_by": "Powered by Vantelia"
+    },
+    "whatsapp": {
+      "enabled": false,
+      "phone_number_id": "",
+      "access_token_env": "",
+      "verify_token_env": ""
+    },
+    "voice": {
+      "enabled": false,
+      "twilio_phone_number": "",
+      "openai_voice": "",
+      "realtime_model": "",
+      "greeting": "",
+      "max_duration_seconds": 0,
+      "sms_confirmation": false
+    },
+    "demo_claimable": false,
+    "booking": {
+      "enabled": true,
+      "timezone": "Europe/Madrid",
+      "slot_minutes": 30,
+      "day_start": "17:00",
+      "day_end": "21:00",
+      "break_start": "",
+      "break_end": "",
+      "break_windows": [],
+      "closed_weekdays": [
+        6
+      ],
+      "weekly_hours": {},
+      "provider": "internal",
+      "webhook_env": "WEBHOOK_DEFAULT",
+      "webhook_url": "",
+      "calendly_user_env": "",
+      "calendly_event_type_env": "",
+      "calendly_location_kind": "",
+      "calendly_location_value": "",
+      "google_calendar_id": "",
+      "google_calendar_id_env": "",
+      "google_service_account_path": "",
+      "google_service_account_env": "",
+      "success_message": "Tu cita ha quedado registrada correctamente. Nuestro equipo revisara la solicitud y te contactara si necesita ajustar algo.",
+      "message_templates": {
+        "confirmed": "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.",
+        "reminder_24h": "Te recordamos que mañana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
+        "reminder_2h": "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.",
+        "cancelled": "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.",
+        "rescheduled": "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla."
+      },
+      "message_template_enabled": {
+        "confirmed": true,
+        "reminder_24h": true,
+        "reminder_2h": true,
+        "cancelled": true,
+        "rescheduled": true
+      },
+      "message_template_channels": {
+        "confirmed": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "reminder_24h": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "reminder_2h": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "cancelled": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "rescheduled": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        }
+      }
+    }
+  },
+  "demo": {
+    "nombre": "Agencia IA Demo",
+    "plan": "free",
+    "subscription": {
+      "plan": "free"
+    },
+    "icono": "AI",
+    "color": "#00b1d9",
+    "accent_color": "",
+    "logo_url": "",
+    "bienvenida": "Hola, soy el asistente demo de la agencia. Puedo resolver dudas y recoger solicitudes de contacto.",
+    "prompt_extra": "Explica con claridad el servicio y mantente siempre dentro del contexto de la demo.",
+    "chat_model": "",
+    "temperature": 0.2,
+    "allowed_origins": [
+      "https://vantelia.es",
+      "https://www.vantelia.es",
+      "https://app.vantelia.es",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:5500",
+      "http://localhost:8000"
+    ],
+    "contacto": {
+      "email": "info@vantelia.es",
+      "telefono": ""
+    },
+    "branding": {
+      "powered_by": "Powered by Vantelia"
+    },
+    "whatsapp": {
+      "enabled": false,
+      "phone_number_id": "",
+      "access_token_env": "",
+      "verify_token_env": ""
+    },
+    "voice": {
+      "enabled": false,
+      "twilio_phone_number": "",
+      "openai_voice": "",
+      "realtime_model": "",
+      "greeting": "",
+      "max_duration_seconds": 0,
+      "sms_confirmation": false
+    },
+    "demo_claimable": false,
+    "booking": {
+      "enabled": true,
+      "timezone": "Europe/Madrid",
+      "slot_minutes": 30,
+      "day_start": "09:00",
+      "day_end": "18:00",
+      "break_start": "",
+      "break_end": "",
+      "break_windows": [],
+      "closed_weekdays": [
+        6
+      ],
+      "weekly_hours": {},
+      "provider": "internal",
+      "webhook_env": "WEBHOOK_DEFAULT",
+      "webhook_url": "",
+      "calendly_user_env": "",
+      "calendly_event_type_env": "",
+      "calendly_location_kind": "",
+      "calendly_location_value": "",
+      "google_calendar_id": "",
+      "google_calendar_id_env": "",
+      "google_service_account_path": "",
+      "google_service_account_env": "",
+      "success_message": "La solicitud demo ha quedado registrada correctamente.",
+      "message_templates": {
+        "confirmed": "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.",
+        "reminder_24h": "Te recordamos que mañana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
+        "reminder_2h": "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.",
+        "cancelled": "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.",
+        "rescheduled": "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla."
+      },
+      "message_template_enabled": {
+        "confirmed": true,
+        "reminder_24h": true,
+        "reminder_2h": true,
+        "cancelled": true,
+        "rescheduled": true
+      },
+      "message_template_channels": {
+        "confirmed": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "reminder_24h": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "reminder_2h": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "cancelled": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "rescheduled": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        }
+      }
+    }
+  },
+  "demo_auto_vibes_studio_8b12ca": {
+    "nombre": "Vibes Studio",
+    "plan": "business",
+    "subscription": {
+      "plan": "business"
+    },
+    "icono": "VS",
+    "color": "#1A1A2E",
+    "accent_color": "#C9A84C",
+    "logo_url": "",
+    "bienvenida": "Hola, soy el asistente de Vibes Studio. Puedo ayudarte con info sobre servicios, precios y reservar tu cita.",
+    "prompt_extra": "Habla con tono cercano, moderno y directo. Eres el asistente de una barberia de referencia en Pontevedra. Si te preguntan por precios exactos, indica que varian segun el servicio y que pueden preguntar directamente o reservar cita. Deriva al equipo si falta informacion.",
+    "chat_model": "",
+    "temperature": 0.2,
+    "allowed_origins": [
+      "https://app.vantelia.es",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:5500",
+      "http://localhost:8000"
+    ],
+    "contacto": {
+      "email": "",
+      "telefono": "663230732"
+    },
+    "branding": {
+      "powered_by": "Powered by Vantelia"
+    },
+    "whatsapp": {
+      "enabled": false,
+      "phone_number_id": "",
+      "access_token_env": "",
+      "verify_token_env": ""
+    },
+    "voice": {
+      "enabled": false,
+      "twilio_phone_number": "",
+      "openai_voice": "",
+      "realtime_model": "",
+      "greeting": "",
+      "max_duration_seconds": 0,
+      "sms_confirmation": false
+    },
+    "demo_claimable": false,
+    "booking": {
+      "enabled": true,
+      "timezone": "Europe/Madrid",
+      "slot_minutes": 30,
+      "day_start": "10:00",
+      "day_end": "20:00",
+      "break_start": "",
+      "break_end": "",
+      "break_windows": [],
+      "closed_weekdays": [
+        0,
+        6
+      ],
+      "weekly_hours": {},
+      "provider": "internal",
+      "webhook_env": "WEBHOOK_DEFAULT",
+      "webhook_url": "",
+      "calendly_user_env": "",
+      "calendly_event_type_env": "",
+      "calendly_location_kind": "",
+      "calendly_location_value": "",
+      "google_calendar_id": "",
+      "google_calendar_id_env": "",
+      "google_service_account_path": "",
+      "google_service_account_env": "",
+      "success_message": "Tu cita en Vibes Studio ha quedado registrada. Adri o el equipo te confirmaran el hueco en breve.",
+      "message_templates": {
+        "confirmed": "Tu cita en Vibes Studio ha quedado confirmada. Debajo tienes los detalles y tu enlace para gestionarla si necesitas cambiar algo.",
+        "reminder_24h": "Te recordamos que mañana tienes cita en Vibes Studio. Si necesitas ajustarla, usa tu enlace de gestion.",
+        "reminder_2h": "Tu cita en Vibes Studio empieza en menos de 2 horas. Te dejamos los detalles y el enlace de gestion.",
+        "cancelled": "Tu cita en Vibes Studio ha sido cancelada. Puedes reservar otra cuando quieras.",
+        "rescheduled": "Tu cita en Vibes Studio se ha actualizado. Revisa los nuevos datos en tu enlace de gestion."
+      },
+      "message_template_enabled": {
+        "confirmed": true,
+        "reminder_24h": true,
+        "reminder_2h": true,
+        "cancelled": true,
+        "rescheduled": true
+      },
+      "message_template_channels": {
+        "confirmed": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "reminder_24h": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "reminder_2h": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "cancelled": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "rescheduled": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        }
+      }
+    }
+  },
   "van": {
     "nombre": "Van",
-    "empresa": "Vantelia",
     "plan": "free",
     "subscription": {
       "plan": "free"
@@ -12,6 +351,8 @@
     "logo_url": "",
     "bienvenida": "Hola, soy Van, el asistente de Vantelia. En que puedo ayudarte hoy?",
     "prompt_extra": "Habla con tono profesional y cercano. Responde solo con informacion del negocio. Si no sabes algo, ofrece contactar con el equipo humano.",
+    "chat_model": "",
+    "temperature": 0.2,
     "allowed_origins": [
       "https://www.vantelia.es",
       "https://app.vantelia.es",
@@ -42,15 +383,20 @@
       "max_duration_seconds": 300,
       "sms_confirmation": true
     },
+    "demo_claimable": false,
     "booking": {
       "enabled": true,
       "timezone": "Europe/Madrid",
       "slot_minutes": 30,
       "day_start": "09:00",
       "day_end": "18:00",
+      "break_start": "",
+      "break_end": "",
+      "break_windows": [],
       "closed_weekdays": [
         6
       ],
+      "weekly_hours": {},
       "provider": "internal",
       "webhook_env": "",
       "webhook_url": "",
@@ -76,219 +422,36 @@
         "reminder_2h": true,
         "cancelled": true,
         "rescheduled": true
-      }
-    }
-  },
-  "Clinica_Saga": {
-    "nombre": "Clinica Saga",
-    "plan": "starter",
-    "subscription": {
-      "plan": "starter"
-    },
-    "icono": "CS",
-    "color": "#2E86AB",
-    "accent_color": "",
-    "logo_url": "",
-    "bienvenida": "Hola, soy Clara, la asistente de Clinica Saga. En que puedo ayudarte hoy?",
-    "prompt_extra": "Habla con tono cercano y profesional. Si falta informacion, deriva al equipo humano sin inventar nada.",
-    "allowed_origins": [
-      "https://clinicasaga.es",
-      "https://www.clinicasaga.es",
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-      "http://127.0.0.1:5500",
-      "http://localhost:8000"
-    ],
-    "contacto": {
-      "email": "soporte@vantelia.es",
-      "telefono": "+34 916770442"
-    },
-    "branding": {
-      "powered_by": "Powered by Vantelia"
-    },
-    "whatsapp": {
-      "enabled": false,
-      "phone_number_id": "",
-      "access_token_env": "",
-      "verify_token_env": ""
-    },
-    "booking": {
-      "enabled": true,
-      "timezone": "Europe/Madrid",
-      "slot_minutes": 30,
-      "day_start": "17:00",
-      "day_end": "21:00",
-      "closed_weekdays": [
-        6
-      ],
-      "provider": "internal",
-      "webhook_env": "WEBHOOK_DEFAULT",
-      "webhook_url": "",
-      "calendly_user_env": "",
-      "calendly_event_type_env": "",
-      "calendly_location_kind": "",
-      "calendly_location_value": "",
-      "google_calendar_id": "",
-      "google_calendar_id_env": "",
-      "google_service_account_path": "",
-      "google_service_account_env": "",
-      "success_message": "Tu cita ha quedado registrada correctamente. Nuestro equipo revisara la solicitud y te contactara si necesita ajustar algo.",
-      "message_templates": {
-        "confirmed": "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.",
-        "reminder_24h": "Te recordamos que mañana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
-        "reminder_2h": "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.",
-        "cancelled": "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.",
-        "rescheduled": "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla."
       },
-      "message_template_enabled": {
-        "confirmed": true,
-        "reminder_24h": true,
-        "reminder_2h": true,
-        "cancelled": true,
-        "rescheduled": true
+      "message_template_channels": {
+        "confirmed": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "reminder_24h": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "reminder_2h": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "cancelled": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "rescheduled": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        }
       }
-    }
-  },
-  "demo": {
-    "nombre": "Agencia IA Demo",
-    "plan": "free",
-    "subscription": {
-      "plan": "free"
     },
-    "icono": "AI",
-    "color": "#00b1d9",
-    "accent_color": "",
-    "logo_url": "",
-    "bienvenida": "Hola, soy el asistente demo de la agencia. Puedo resolver dudas y recoger solicitudes de contacto.",
-    "prompt_extra": "Explica con claridad el servicio y mantente siempre dentro del contexto de la demo.",
-    "allowed_origins": [
-      "https://vantelia.es",
-      "https://www.vantelia.es",
-      "https://app.vantelia.es",
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-      "http://127.0.0.1:5500",
-      "http://localhost:8000"
-    ],
-    "contacto": {
-      "email": "info@vantelia.es",
-      "telefono": ""
-    },
-    "branding": {
-      "powered_by": "Powered by Vantelia"
-    },
-    "whatsapp": {
-      "enabled": false,
-      "phone_number_id": "",
-      "access_token_env": "",
-      "verify_token_env": ""
-    },
-    "booking": {
-      "enabled": true,
-      "timezone": "Europe/Madrid",
-      "slot_minutes": 30,
-      "day_start": "09:00",
-      "day_end": "18:00",
-      "closed_weekdays": [
-        6
-      ],
-      "provider": "internal",
-      "webhook_env": "WEBHOOK_DEFAULT",
-      "webhook_url": "",
-      "calendly_user_env": "",
-      "calendly_event_type_env": "",
-      "calendly_location_kind": "",
-      "calendly_location_value": "",
-      "google_calendar_id": "",
-      "google_calendar_id_env": "",
-      "google_service_account_path": "",
-      "google_service_account_env": "",
-      "success_message": "La solicitud demo ha quedado registrada correctamente.",
-      "message_templates": {
-        "confirmed": "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla si necesitas hacer algun cambio.",
-        "reminder_24h": "Te recordamos que mañana tienes una cita programada. Si necesitas revisarla o ajustarla, puedes hacerlo desde tu enlace de gestion.",
-        "reminder_2h": "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla si lo necesitas.",
-        "cancelled": "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si necesitas revisarla.",
-        "rescheduled": "Tu cita se ha actualizado correctamente. Revisa los nuevos datos y utiliza tu enlace personal si necesitas volver a modificarla."
-      },
-      "message_template_enabled": {
-        "confirmed": true,
-        "reminder_24h": true,
-        "reminder_2h": true,
-        "cancelled": true,
-        "rescheduled": true
-      }
-    }
-  },
-  "demo_auto_vibes_studio_8b12ca": {
-    "nombre": "Vibes Studio",
-    "plan": "completo",
-    "subscription": {
-      "plan": "completo"
-    },
-    "icono": "VS",
-    "color": "#1A1A2E",
-    "accent_color": "#C9A84C",
-    "logo_url": "",
-    "bienvenida": "Hola, soy el asistente de Vibes Studio. Puedo ayudarte con info sobre servicios, precios y reservar tu cita.",
-    "prompt_extra": "Habla con tono cercano, moderno y directo. Eres el asistente de una barberia de referencia en Pontevedra. Si te preguntan por precios exactos, indica que varian segun el servicio y que pueden preguntar directamente o reservar cita. Deriva al equipo si falta informacion.",
-    "allowed_origins": [
-      "https://app.vantelia.es",
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-      "http://127.0.0.1:5500",
-      "http://localhost:8000"
-    ],
-    "contacto": {
-      "email": "",
-      "telefono": "663230732"
-    },
-    "branding": {
-      "powered_by": "Powered by Vantelia"
-    },
-    "whatsapp": {
-      "enabled": false,
-      "phone_number_id": "",
-      "access_token_env": "",
-      "verify_token_env": ""
-    },
-    "booking": {
-      "enabled": true,
-      "timezone": "Europe/Madrid",
-      "slot_minutes": 30,
-      "day_start": "10:00",
-      "day_end": "20:00",
-      "closed_weekdays": [
-        0,
-        6
-      ],
-      "provider": "internal",
-      "webhook_env": "WEBHOOK_DEFAULT",
-      "webhook_url": "",
-      "calendly_user_env": "",
-      "calendly_event_type_env": "",
-      "calendly_location_kind": "",
-      "calendly_location_value": "",
-      "google_calendar_id": "",
-      "google_calendar_id_env": "",
-      "google_service_account_path": "",
-      "google_service_account_env": "",
-      "success_message": "Tu cita en Vibes Studio ha quedado registrada. Adri o el equipo te confirmaran el hueco en breve.",
-      "message_templates": {
-        "confirmed": "Tu cita en Vibes Studio ha quedado confirmada. Debajo tienes los detalles y tu enlace para gestionarla si necesitas cambiar algo.",
-        "reminder_24h": "Te recordamos que mañana tienes cita en Vibes Studio. Si necesitas ajustarla, usa tu enlace de gestion.",
-        "reminder_2h": "Tu cita en Vibes Studio empieza en menos de 2 horas. Te dejamos los detalles y el enlace de gestion.",
-        "cancelled": "Tu cita en Vibes Studio ha sido cancelada. Puedes reservar otra cuando quieras.",
-        "rescheduled": "Tu cita en Vibes Studio se ha actualizado. Revisa los nuevos datos en tu enlace de gestion."
-      },
-      "message_template_enabled": {
-        "confirmed": true,
-        "reminder_24h": true,
-        "reminder_2h": true,
-        "cancelled": true,
-        "rescheduled": true
-      }
-    }
+    "empresa": "Vantelia"
   },
   "Vantelia": {
     "nombre": "Vantelia",
@@ -305,6 +468,8 @@
     "logo_url": "",
     "bienvenida": "Hola, soy el asistente de Vantelia. Puedo resolver dudas sobre nuestros planes, generar una demo y ayudarte a solicitar una consulta.",
     "prompt_extra": "Habla con tono profesional, claro y cercano. Prioriza llevar al usuario a crear su bot gratis, pedir una consulta gratuita o elegir el plan adecuado. No inventes precios ni condiciones fuera de la base documental. Si preguntan precios, tarifas o planes, responde en version corta con Free 0 EUR/mes, Starter 19 EUR/mes, Pro 49 EUR/mes y Business 149 EUR/mes; indica que Free es gratis para siempre, los planes de pago son sin permanencia e IVA no incluido. No prometas pruebas gratuitas generales salvo que el usuario pregunte por un codigo promocional concreto. No uses tabla larga salvo que el usuario la pida expresamente.",
+    "chat_model": "",
+    "temperature": 0.2,
     "allowed_origins": [
       "https://vantelia.es",
       "https://www.vantelia.es",
@@ -327,15 +492,29 @@
       "access_token_env": "",
       "verify_token_env": ""
     },
+    "voice": {
+      "enabled": false,
+      "twilio_phone_number": "",
+      "openai_voice": "",
+      "realtime_model": "",
+      "greeting": "",
+      "max_duration_seconds": 0,
+      "sms_confirmation": false
+    },
+    "demo_claimable": false,
     "booking": {
       "enabled": true,
       "timezone": "Europe/Madrid",
       "slot_minutes": 30,
       "day_start": "09:00",
       "day_end": "18:00",
+      "break_start": "",
+      "break_end": "",
+      "break_windows": [],
       "closed_weekdays": [
         6
       ],
+      "weekly_hours": {},
       "provider": "internal",
       "webhook_env": "WEBHOOK_DEFAULT",
       "webhook_url": "",
@@ -361,10 +540,37 @@
         "reminder_2h": true,
         "cancelled": true,
         "rescheduled": true
+      },
+      "message_template_channels": {
+        "confirmed": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "reminder_24h": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "reminder_2h": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "cancelled": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        },
+        "rescheduled": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
+        }
       }
     }
   },
-  "aliciarincon": {
+  "alicia_rincon_estilistas": {
     "nombre": "Alicia Rincón Estilistas",
     "plan": "business",
     "subscription": {
@@ -389,7 +595,6 @@
       "email": "info@aliciarinconestilistas.com",
       "telefono": "625 120 100 / 966 670 924"
     },
-    "empresa": "Alicia Rincón Estilistas",
     "branding": {
       "powered_by": "Powered by Vantelia"
     },
@@ -401,7 +606,6 @@
     },
     "voice": {
       "enabled": false,
-      "widget_enabled": false,
       "twilio_phone_number": "",
       "openai_voice": "marin",
       "realtime_model": "",
@@ -409,16 +613,37 @@
       "max_duration_seconds": 300,
       "sms_confirmation": false
     },
+    "demo_claimable": false,
     "booking": {
       "enabled": true,
       "timezone": "Europe/Madrid",
       "slot_minutes": 30,
       "day_start": "10:00",
       "day_end": "20:30",
+      "break_start": "",
+      "break_end": "",
+      "break_windows": [],
       "closed_weekdays": [
         0,
         6
       ],
+      "weekly_hours": {
+        "1": {
+          "closed": false,
+          "start": "10:00",
+          "end": "18:30"
+        },
+        "2": {
+          "closed": false,
+          "start": "10:00",
+          "end": "18:30"
+        },
+        "5": {
+          "closed": false,
+          "start": "09:00",
+          "end": "14:00"
+        }
+      },
       "provider": "internal",
       "webhook_env": "WEBHOOK_DEFAULT",
       "webhook_url": "",
@@ -445,44 +670,35 @@
         "cancelled": true,
         "rescheduled": true
       },
-      "weekly_hours": {
-        "0": {
-          "closed": true,
-          "start": "",
-          "end": ""
+      "message_template_channels": {
+        "confirmed": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
         },
-        "1": {
-          "closed": false,
-          "start": "10:00",
-          "end": "18:30"
+        "reminder_24h": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
         },
-        "2": {
-          "closed": false,
-          "start": "10:00",
-          "end": "18:30"
+        "reminder_2h": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
         },
-        "3": {
-          "closed": false,
-          "start": "10:00",
-          "end": "20:30"
+        "cancelled": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
         },
-        "4": {
-          "closed": false,
-          "start": "10:00",
-          "end": "20:30"
-        },
-        "5": {
-          "closed": false,
-          "start": "09:00",
-          "end": "14:00"
-        },
-        "6": {
-          "closed": true,
-          "start": "",
-          "end": ""
+        "rescheduled": {
+          "email": true,
+          "whatsapp": false,
+          "sms": false
         }
       }
     },
+    "empresa": "Alicia Rincón Estilistas",
     "shop_public": {
       "enabled_packages": false,
       "enabled_products": false,

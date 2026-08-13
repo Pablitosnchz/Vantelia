@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Provisioning del tenant `aliciarincon` (Alicia Rincon Estilistas, Elche).
+"""Provisioning del tenant `alicia_rincon_estilistas` (Alicia Rincon Estilistas, Elche).
 
 Deja el negocio listo para operar de verdad: usuario de portal (owner, plan
 business), centro con la direccion real, equipo con el HORARIO REAL por dia de la
 semana (lunes cerrado, mar-mie 10:00-18:30, jue-vie 10:00-20:30, sab 09:00-14:00)
-y catalogo de servicios sembrado desde data/aliciarincon/info.txt.
+y catalogo de servicios sembrado desde data/alicia_rincon_estilistas/info.txt.
 
 Idempotente: se puede volver a lanzar; purga lo que sembro antes y lo recrea.
 NO toca otros tenants ni borra citas que no haya creado este script.
@@ -31,13 +31,17 @@ if str(REPO_ROOT) not in sys.path:
 import api  # noqa: E402  (carga config/storage reales)
 from backend import textnorm  # noqa: E402
 from api_models import (  # noqa: E402
+    GiftCardIssuePayload,
+    PackagePayload,
+    PackageSellPayload,
     PortalEmployeePayload,
     PortalLocationPayload,
+    ProductPayload,
+    ProductSalePayload,
 )
 
-CID = "aliciarincon"
-PORTAL_EMAIL = "info@aliciarinconestilistas.com"
-PORTAL_PASSWORD = "AliciaRincon2026"
+CID = "alicia_rincon_estilistas"
+PORTAL_EMAIL = "aliciarinconweb@gmail.com"  # cuenta que la duenya se creo ella misma
 PORTAL_NAME = "Alicia Rincon Estilistas"
 
 RNG = random.Random(20260813)
@@ -71,6 +75,23 @@ EQUIPO = [
     {"name": "Estilista 6", "role_label": "Estilista", "color": "#5dade2"},
 ]
 
+# Venta en salon: productos tipicos de una peluqueria colorista.
+PRODUCTOS = [
+    {"name": "Champu sin sulfatos 300ml", "price_cents": 2200, "stock": 24},
+    {"name": "Mascarilla reconstructora 250ml", "price_cents": 2800, "stock": 18},
+    {"name": "Protector termico 200ml", "price_cents": 1900, "stock": 20},
+    {"name": "Aceite de acabado 100ml", "price_cents": 2400, "stock": 15},
+    {"name": "Champu matizador violeta 300ml", "price_cents": 2500, "stock": 12},
+]
+
+# Bonos: lo que mas encaja en color y mantenimiento.
+BONOS = [
+    {"name": "Bono 3 mantenimientos de color", "servicio": "coloracion_personalizada", "qty": 3,
+     "price_cents": 14000, "validity_days": 365},
+    {"name": "Bono 5 tratamientos capilares", "servicio": "tratamiento_capilar", "qty": 5,
+     "price_cents": 16000, "validity_days": 365},
+]
+
 CLIENTAS_DEMO = [
     ("Marta Sempere", "marta.sempere@example.com", "600110301"),
     ("Rosa Antón", "rosa.anton@example.com", "600110302"),
@@ -88,37 +109,29 @@ def purge() -> None:
         conn.execute("DELETE FROM bookings WHERE cliente_id=? AND source='seed_demo'", (CID,))
         conn.execute("DELETE FROM employees WHERE cliente_id=? AND is_default=0", (CID,))
         conn.execute("DELETE FROM locations WHERE cliente_id=? AND is_default=0", (CID,))
+        # Comercio de ejemplo (productos, bonos y tarjetas): lo siembra este script
+        # entero, asi que se limpia entero antes de volver a crearlo.
+        for tabla in ("product_sales", "products", "package_purchases", "packages",
+                      "gift_card_transactions", "gift_cards"):
+            conn.execute(f"DELETE FROM {tabla} WHERE cliente_id=?", (CID,))
         conn.commit()
     print("· Purga previa completada.")
 
 
 def ensure_portal_user() -> None:
-    existing = api._get_user_by_email(PORTAL_EMAIL)
-    if existing:
+    """La cuenta la creo la duenya (self-serve). NO se toca su contrasenya: solo se
+    confirma que es la propietaria del tenant y se le deja el plan del piloto."""
+    user = api._get_user_by_email(PORTAL_EMAIL)
+    if not user:
+        print(f"ERROR: no existe el usuario {PORTAL_EMAIL} en este entorno.", file=sys.stderr)
+        sys.exit(1)
+    if (user["cliente_id"] or "") != CID:
         with sqlite3.connect(api.DB_PATH) as conn:
-            conn.execute(
-                "UPDATE users SET password_hash=?, role='client', cliente_id=?, portal_role='owner', "
-                "is_active=1, display_name=? WHERE id=?",
-                (api._hash_secret(PORTAL_PASSWORD), CID, PORTAL_NAME, existing["id"]),
-            )
+            conn.execute("UPDATE users SET cliente_id=?, portal_role='owner', is_active=1 WHERE id=?", (CID, user["id"]))
             conn.commit()
-        user_id = existing["id"]
-        print(f"· Usuario portal actualizado: {PORTAL_EMAIL}")
-    else:
-        created = api._create_user(
-            email=PORTAL_EMAIL,
-            password=PORTAL_PASSWORD,
-            role="client",
-            display_name=PORTAL_NAME,
-            cliente_id=CID,
-            portal_role="owner",
-        )
-        user_id = created["id"] if isinstance(created, dict) else created["id"]
-        print(f"· Usuario portal creado: {PORTAL_EMAIL}")
-    # Propietario del tenant + plan business (voz, WhatsApp, informes...).
-    api.db_set_client_owner(CID, user_id, source="seed_aliciarincon")
-    api.db_set_subscription_from_stripe(user_id=user_id, plan_slug="business", status="active")
-    print("· Plan business asignado.")
+    api.db_set_client_owner(CID, user["id"], source="seed_alicia_rincon")
+    api.db_set_subscription_from_stripe(user_id=user["id"], plan_slug="business", status="active")
+    print(f"· Cuenta de la duenya lista: {PORTAL_EMAIL} (owner, plan business). Contrasenya intacta.")
 
 
 def setup_centro() -> str:
@@ -234,6 +247,33 @@ def seed_agenda(location_id: str) -> None:
     print(f"· Agenda de ejemplo: {created} citas (-14 a +11 dias).")
 
 
+def setup_comercio() -> None:
+    for p in PRODUCTOS:
+        api._create_product(CID, ProductPayload(name=p["name"], price_cents=p["price_cents"], stock=p["stock"], is_active=True))
+    prods = api._list_products(CID)
+    for prod in prods[:3]:
+        cliente = RNG.choice(CLIENTAS_DEMO)
+        api._sell_product(CID, prod["id"], ProductSalePayload(qty=RNG.randint(1, 2), payment_method="card", customer_name=cliente[0]))
+    slugs = {s["id"] for s in api._catalog_services(CID, include_inactive=False)}
+    creados = 0
+    for bono in BONOS:
+        if bono["servicio"] not in slugs:
+            continue
+        api._create_package(CID, PackagePayload(
+            name=bono["name"], items=[{"service_slug": bono["servicio"], "qty": bono["qty"]}],
+            price_cents=bono["price_cents"], validity_days=bono["validity_days"], is_active=True))
+        creados += 1
+    paquetes = api._list_packages(CID)
+    if paquetes:
+        cliente = CLIENTAS_DEMO[0]
+        api._sell_package(CID, paquetes[0]["id"], PackageSellPayload(
+            buyer_name=cliente[0], buyer_email=cliente[1], payment_method="card"))
+    api._issue_gift_card(CID, GiftCardIssuePayload(
+        amount_cents=6000, buyer_name="Rosa Antón", recipient_name="Marta Sempere", validity_days=365))
+    vendidos = len(api._list_package_purchases(CID)) if hasattr(api, "_list_package_purchases") else (1 if paquetes else 0)
+    print(f"· Comercio: {len(PRODUCTOS)} productos (3 vendidos), {creados} bonos ({vendidos} vendido/s), 1 tarjeta regalo.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--purge", action="store_true", help="Solo limpiar")
@@ -256,13 +296,13 @@ def main() -> None:
     location_id = setup_centro()
     setup_equipo(location_id)
     align_default_employee()
+    setup_comercio()
     if args.with_agenda:
         seed_agenda(location_id)
 
     print("\n== LISTO ==")
     print(f"  Portal     : /acceso")
-    print(f"  Usuario    : {PORTAL_EMAIL}")
-    print(f"  Contrasena : {PORTAL_PASSWORD}")
+    print(f"  Usuario    : {PORTAL_EMAIL} (contrasenya suya)")
     print(f"  Central    : /central/{CID}")
     print(f"  Web        : /site/aliciarincon/")
     for svc in services:
