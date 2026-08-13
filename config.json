@@ -605,13 +605,14 @@
       "verify_token_env": ""
     },
     "voice": {
-      "enabled": false,
+      "enabled": true,
       "twilio_phone_number": "",
       "openai_voice": "marin",
       "realtime_model": "",
-      "greeting": "Hola, ha llamado a Alicia Rincon Estilistas. En que puedo ayudarle?",
+      "greeting": "Hola, soy el asistente de Alicia Rincón Estilistas. ¿En qué puedo ayudarte?",
       "max_duration_seconds": 300,
-      "sms_confirmation": false
+      "sms_confirmation": false,
+      "widget_enabled": true
     },
     "demo_claimable": false,
     "booking": {

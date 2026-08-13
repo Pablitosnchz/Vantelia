@@ -29,7 +29,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import api  # noqa: E402  (carga config/storage reales)
-from backend import textnorm  # noqa: E402
+from backend import rag, textnorm  # noqa: E402
 from api_models import (  # noqa: E402
     GiftCardIssuePayload,
     PackagePayload,
@@ -90,6 +90,55 @@ BONOS = [
      "price_cents": 14000, "validity_days": 365},
     {"name": "Bono 5 tratamientos capilares", "servicio": "tratamiento_capilar", "qty": 5,
      "price_cents": 16000, "validity_days": 365},
+]
+
+# Precios ORIENTATIVOS solo para la agenda de muestra: se guardan en el snapshot
+# de cada cita (`service_price_cents`) para que Informes tenga ingresos y ticket
+# medio con los que ensenyar el panel. El catalogo publico NO se toca: sigue en
+# "precio a consultar", que es como cotiza el salon (tras diagnostico).
+PRECIOS_DEMO_CENTS = {
+    "diagnostico_y_asesoramiento_personalizado": 0,
+    "grey_blending": 9500,
+    "rubios_personalizados": 11000,
+    "coloracion_personalizada": 6500,
+    "alisado_premium": 12000,
+    "extensiones_luxury_hair": 25000,
+    "tratamiento_capilar": 3500,
+    "corte_y_peinado": 2800,
+}
+
+# Preguntas frecuentes con la respuesta del salon. El asistente ya las contesta
+# desde la base documental; cargarlas ademas como pares Q&A hace que el negocio
+# las VEA en el portal y pueda editarlas sin tocar el info.txt.
+FAQS = [
+    ("¿Cómo pido cita?",
+     "Puedes reservar online desde nuestra web eligiendo servicio, día y hora, escribirnos por WhatsApp al 625 120 100 o llamarnos al 966 670 924."),
+    ("¿Abrís los lunes?",
+     "No, los lunes cerramos. Abrimos de martes a sábado: martes y miércoles de 10:00 a 18:30, jueves y viernes de 10:00 a 20:30 y sábados de 09:00 a 14:00."),
+    ("¿Cerráis por vacaciones?",
+     "No cerramos por vacaciones. Los días 1, 15 y 29 de cada mes abrimos con normalidad."),
+    ("¿Cuánto cuesta un servicio?",
+     "El precio se confirma tras el diagnóstico personalizado, porque depende del largo, la densidad y el estado del cabello. Pide cita de valoración o llámanos al 625 120 100 y te damos un presupuesto orientativo."),
+    ("¿Qué es el Grey Blending?",
+     "Es una técnica que integra las canas con tu color natural creando una transición suave y luminosa, en lugar de taparlas por completo. Permite un mantenimiento más espaciado y un cabello más saludable. Es una de nuestras especialidades."),
+    ("¿Cuánto dura un servicio de color?",
+     "Los servicios técnicos de color como el Grey Blending o los rubios personalizados ocupan unas 3 horas, porque incluyen diagnóstico, técnica y acabado. El alisado premium unas 2 horas y media."),
+    ("¿El alisado lleva formol?",
+     "No. Trabajamos con alisado orgánico SIN formol, con tratamiento reconstructor incluido y resultado natural, sin efecto tabla."),
+    ("¿Hacéis extensiones?",
+     "Sí, extensiones Luxury Hair con cabello natural seleccionado, colocación invisible y diseño a medida para dar volumen o largo. Incluye mantenimiento y retirada seguros."),
+    ("¿Puedo ir con niños?",
+     "Sí. Tenemos una zona de juego infantil para que los niños estén entretenidos mientras disfrutas de tu servicio."),
+    ("¿Dónde estáis?",
+     "En Andreu Castillejos, 9 - 03201 Elche (Alicante). Teléfonos 625 120 100 y 966 670 924."),
+    ("¿Con qué marcas trabajáis?",
+     "Alicia es especialista en Elumen, la tecnología de coloración de Goldwell, y ha trabajado con firmas como Goldwell, Paul Mitchell y Lunel Profesional."),
+    ("¿Qué incluye la primera visita?",
+     "Un diagnóstico capilar y de asesoramiento: estudiamos tu cabello, tu tono base, tu rostro y tu estilo de vida antes de proponer ninguna técnica. Dura unos 30 minutos."),
+    ("¿Puedo cancelar o cambiar mi cita?",
+     "Sí. Desde el enlace de gestión que recibes al reservar, o avisándonos por WhatsApp al 625 120 100 con la mayor antelación posible."),
+    ("¿Tenéis algo mientras espero?",
+     "Sí. Durante los tratamientos más largos, como el color o los alisados, puedes disfrutar de nuestro minibar mientras el producto hace su trabajo."),
 ]
 
 CLIENTAS_DEMO = [
@@ -227,17 +276,25 @@ def seed_agenda(location_id: str) -> None:
     ahora_min = api._utc_now().hour * 60 + api._utc_now().minute
     created = 0
     pagadas = []
+    precios = []          # (booking_id, cents) - se sellan despues de guardar
     por_estado = {}
 
-    for offset in range(-30, 31):
+    for offset in range(-60, 31):
         day = today + timedelta(days=offset)
         window = textnorm._weekday_hours(base_schedule, day.weekday())
         if window is None:
             continue
         apertura, cierre = _hhmm_to_min(window[0]), _hhmm_to_min(window[1])
         for emp in employees:
-            # Ocupacion del dia: un salon lleno no tiene a todo el mundo a tope.
-            ocupacion = RNG.choice([0.45, 0.6, 0.75, 0.9])
+            # Ocupacion: el pasado va lleno (historial creible) y el futuro se va
+            # vaciando conforme se aleja, como una agenda real. Ademas deja huecos
+            # visibles en los proximos dias, que es donde se prueba la reserva.
+            if offset < 0:
+                ocupacion = RNG.choice([0.6, 0.75, 0.9])
+            elif offset <= 7:
+                ocupacion = RNG.choice([0.35, 0.45, 0.5])
+            else:
+                ocupacion = RNG.choice([0.15, 0.25, 0.3])
             cursor = apertura + RNG.choice([0, 0, 30])
             while cursor < cierre:
                 svc = RNG.choice(services)
@@ -275,21 +332,55 @@ def seed_agenda(location_id: str) -> None:
                     "rescheduled_at": "", "rescheduled_from_booking_id": "",
                     "confirmation_email_sent_at": "", "reminder_24h_sent_at": "", "reminder_2h_sent_at": "",
                     "customer_email_status": "", "customer_email_last_error": "",
-                    "service_id": svc["id"], "service_price_cents": 0,
+                    "service_id": svc["id"],
+                    "service_price_cents": PRECIOS_DEMO_CENTS.get(svc["id"], 0),
                     "completed_source": "manual" if status in ("completed", "no_show") else "",
                     "source": "seed_demo", "created_at": api._to_utc_iso(start_local),
                 })
+                precio = PRECIOS_DEMO_CENTS.get(svc["id"], 0)
+                if precio:
+                    precios.append((precio, bid))
                 if status == "completed" and RNG.random() < 0.75:
                     pagadas.append(bid)
                 created += 1
                 cursor += dur + RNG.choice([0, 0, 30])   # siguiente clienta
 
-    if pagadas:
-        with sqlite3.connect(api.DB_PATH) as conn:
+    # El precio se sella DESPUES de guardar: `_store_booking` resuelve el importe
+    # desde el catalogo (aqui, "a consultar" = 0) y pisaria el del record. Es lo
+    # correcto para una cita real; para la muestra queremos importes visibles.
+    with sqlite3.connect(api.DB_PATH) as conn:
+        if precios:
+            conn.executemany("UPDATE bookings SET service_price_cents=? WHERE id=?", precios)
+        if pagadas:
             conn.executemany("UPDATE bookings SET payment_status='paid' WHERE id=?", [(b,) for b in pagadas])
-            conn.commit()
+        conn.commit()
     resumen = ", ".join(f"{n} {k}" for k, n in sorted(por_estado.items(), key=lambda kv: -kv[1]))
-    print(f"· Agenda de ejemplo: {created} citas (-30 a +30 dias) -> {resumen}. Pagadas: {len(pagadas)}.")
+    print(f"· Agenda de ejemplo: {created} citas (-60 a +30 dias) -> {resumen}. Pagadas: {len(pagadas)}.")
+
+
+def _spread_sales_over_time() -> None:
+    """Reparte las ventas de mostrador por los ultimos 90 dias.
+
+    Creadas todas hoy, los ingresos de Informes salian identicos en 7, 30 y 90
+    dias y parecia que el filtro no hacia nada."""
+    hoy = api._utc_now()
+    with sqlite3.connect(api.DB_PATH) as conn:
+        for tabla in ("product_sales", "package_purchases", "gift_cards"):
+            filas = [r[0] for r in conn.execute(f"SELECT id FROM {tabla} WHERE cliente_id=?", (CID,))]
+            for fid in filas:
+                dias = RNG.randint(0, 88)
+                fecha = (hoy - timedelta(days=dias)).isoformat().replace("+00:00", "Z")
+                conn.execute(f"UPDATE {tabla} SET created_at=? WHERE id=?", (fecha, fid))
+        conn.commit()
+
+
+def setup_qa() -> None:
+    """Carga en la pestana Q&A las preguntas frecuentes de la base documental.
+
+    El asistente ya las responde desde el RAG; tenerlas ademas como pares Q&A
+    hace que el negocio las VEA y pueda editarlas sin tocar el info.txt."""
+    creadas = rag._autocreate_qa_from_info(CID, "", user_id="", explicit_pairs=FAQS)
+    print(f"· Preguntas frecuentes cargadas en Q&A: {creadas}.")
 
 
 def setup_comercio() -> None:
@@ -315,6 +406,7 @@ def setup_comercio() -> None:
             buyer_name=cliente[0], buyer_email=cliente[1], payment_method="card"))
     api._issue_gift_card(CID, GiftCardIssuePayload(
         amount_cents=6000, buyer_name="Rosa Antón", recipient_name="Marta Sempere", validity_days=365))
+    _spread_sales_over_time()
     vendidos = len(api._list_package_purchases(CID)) if hasattr(api, "_list_package_purchases") else (1 if paquetes else 0)
     print(f"· Comercio: {len(PRODUCTOS)} productos (3 vendidos), {creados} bonos ({vendidos} vendido/s), 1 tarjeta regalo.")
 
@@ -341,6 +433,7 @@ def main() -> None:
     location_id = setup_centro()
     setup_equipo(location_id)
     align_default_employee()
+    setup_qa()
     setup_comercio()
     if args.with_agenda:
         seed_agenda(location_id)

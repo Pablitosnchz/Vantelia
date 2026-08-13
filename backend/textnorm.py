@@ -182,6 +182,10 @@ def _normalize_voice_config(payload: Any) -> Dict[str, Any]:
         "greeting": _sanitize_text(str(data.get("greeting", "")), allow_multiline=True)[:600],
         "max_duration_seconds": max_duration,
         "sms_confirmation": bool(data.get("sms_confirmation", False)),
+        # Voz en el widget web (opt-in). Iba fuera de esta whitelist, asi que el
+        # flag se descartaba en cada carga y guardado: activarlo no servia de
+        # nada salvo que el proceso no se reiniciara nunca.
+        "widget_enabled": bool(data.get("widget_enabled", False)),
     }
 
 
