@@ -139,7 +139,7 @@ class VoiceCallEngine:
         self.state: Dict[str, Any] = new_call_state()
         self.transcript: list = []
         self.silence_guard_seconds = 1.7
-        self.idle_silence_seconds = 7.0   # silencio de los dos lados
+        self.idle_silence_seconds = 4.0   # silencio de los dos lados
         self.idle_max_nudges = 2
         self.active_response_grace_seconds = 8.0
         # Transporte (lo inyecta el puente con bind_transport). Defaults no-op para tests.

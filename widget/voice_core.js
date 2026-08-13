@@ -72,7 +72,7 @@ export const CONTINUE_NUDGE_TEXT =
 // El watchdog de "el modelo se quedo mudo" solo vigila el turno del asistente:
 // si el cliente interrumpe a mitad de frase y luego no dice nada, aquel se limpia
 // y la llamada se queda muerta. Esto vigila el silencio de LOS DOS lados.
-export const IDLE_SILENCE_MS = 7000;      // sin voz de nadie -> reengancha
+export const IDLE_SILENCE_MS = 4000;      // sin voz de nadie -> reengancha
 export const IDLE_MAX_NUDGES = 2;         // luego, despedida
 
 // Empujon INTERNO: como el de continuar, la frase la elige el modelo. Nunca es
