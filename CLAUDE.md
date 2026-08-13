@@ -615,6 +615,7 @@ Si cambias contratos de respuesta, auth, cookies, booking o WhatsApp, actualiza 
 - `README.md`: instalacion, endpoints y operacion general.
 - `docs/Funcionalidades.md`: resumen funcional.
 - `docs/MANUAL_ADMIN.md`: operacion del panel.
+- `docs/ALTA_CLIENTE_LLAVE_EN_MANO.md`: playbook de alta completa de un cliente nuevo (RAG desde su web, tenant, aprovisionamiento, clonado e integracion de su web, avatar, que viaja al VPS y que no, verificacion y trampas conocidas). Caso de referencia: el primer piloto.
 - `docs/PLAN_ESCALA_AGENCIA_IA.md`: sistema operativo comercial de 90 dias.
 - `docs/SEGUIMIENTO_PLAN_ESCALA.md`: rutina para registrar y revisar la ejecucion.
 - `docs/REQUISITOS_ASISTENTE_VOZ.md`: contrato de producto del asistente de voz + QA Realtime obligatorio.
