@@ -14,3 +14,7 @@ services:
       - ../../storage:/app/storage
       - ../../config.json:/app/config.json
       - ../../secrets:/app/secrets
+      # Webs de escaparate por cliente: montadas como volumen para poder
+      # retocarlas en caliente (scp) sin reconstruir la imagen. El deploy sigue
+      # subiendo el contenido del repo a /srv/vantelia/client_sites.
+      - ../../client_sites:/app/client_sites
