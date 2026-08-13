@@ -5,6 +5,7 @@
 import { WIDGET_CONFIG, trackWidgetEvent } from "./utils.js";
 import {
   isUnintelligibleText, toolResponseInstruction, extractBookingContact, CONTINUE_NUDGE_TEXT,
+  idleSilenceAction, IDLE_NUDGE_TEXT, IDLE_GOODBYE_TEXT,
 } from "./voice_core.js";
 
 const MIC_AUDIO = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
@@ -13,6 +14,7 @@ let v = null; // estado de la llamada en curso
 const SILENCE_WATCHDOG_MS = 1700;
 const ACTIVE_RESPONSE_GRACE_MS = 8000;
 const POST_CANCEL_WATCHDOG_MS = 850;
+const IDLE_TICK_MS = 1000;
 
 function byId(id) { return document.getElementById(id); }
 function fmt(s) { const m = Math.floor(s / 60), r = s % 60; return String(m).padStart(2, "0") + ":" + String(r).padStart(2, "0"); }
@@ -57,6 +59,7 @@ function teardown() {
   try { if (v.timerId) clearInterval(v.timerId); } catch (_) {}
   try { if (v.maxId) clearTimeout(v.maxId); } catch (_) {}
   try { clearSilenceWatchdog(); } catch (_) {}
+  try { stopIdleWatch(); } catch (_) {}
   try { if (v.dc) v.dc.close(); } catch (_) {}
   try { if (v.pc) v.pc.close(); } catch (_) {}
   try { if (v.micStream) v.micStream.getTracks().forEach((t) => t.stop()); } catch (_) {}
@@ -174,6 +177,37 @@ function continueNudge() {
   return sendResponse("", "");
 }
 
+function markActivity() {
+  if (v) { v.lastActivityAt = Date.now(); v.idleNudges = 0; }
+}
+
+// Vigila el silencio de LOS DOS lados. El watchdog de arriba solo cubre "el modelo
+// se quedo mudo en su turno": si el cliente interrumpe a mitad de frase y luego no
+// dice nada, aquel se limpia y la llamada se queda muerta. La decision vive en
+// voice_core.idleSilenceAction (compartida con el motor de telefono).
+function startIdleWatch() {
+  if (!v || v.idleTickId) return;
+  v.idleTickId = setInterval(() => {
+    if (!v || !v.dc) return;
+    const accion = idleSilenceAction(v, Date.now());
+    if (!accion) return;
+    v.lastActivityAt = Date.now();
+    if (accion === "goodbye") {
+      v.idleNudges += 1;
+      speakSystemText(IDLE_GOODBYE_TEXT);
+      sendResponse("", "");
+      return;
+    }
+    v.idleNudges += 1;
+    setHint("¿Sigues ahí?");
+    speakSystemText(IDLE_NUDGE_TEXT);
+    sendResponse("", "");
+  }, IDLE_TICK_MS);
+}
+function stopIdleWatch() {
+  if (v && v.idleTickId) { clearInterval(v.idleTickId); v.idleTickId = null; }
+}
+
 function runSilenceWatchdog() {
   if (!v || !v.dc || v.silenceWatchdogUsed || v.expectingToolResponse) return;
   v.silenceWatchdogId = null;
@@ -214,6 +248,7 @@ function handleEvent(ev) {
     if (v) { v.responseActive = true; v.responseActiveStartedAt = Date.now(); }
   } else if (type.indexOf("output_audio.delta") >= 0 || type.indexOf("audio.delta") >= 0) {
     if (v) { v.turnHadAssistantOutput = true; v.silenceRecoveries = 0; v.responseCancelPending = false; v.responseCancelStartedAt = 0; clearSilenceWatchdog(); }
+    markActivity();
     setStatus("Hablando…"); speaking(true);
     if (v && v.speakId) clearTimeout(v.speakId);
     if (v) v.speakId = setTimeout(() => { speaking(false); if (v) setStatus("En llamada"); }, 650);
@@ -236,13 +271,16 @@ function handleEvent(ev) {
       // Si el turno cerro sin audio y sin tool pendiente, el watchdog dara UN empujon interno.
     }
   } else if (type === "input_audio_buffer.speech_started") {
+    markActivity();
     setHint("Te escucho…");
   } else if (type === "response.output_audio_transcript.done") {
     if (v) v.lastAssistantText = String(ev.transcript || "");
+    markActivity();
     if (v && ev.transcript) { v.turnHadAssistantOutput = true; v.silenceRecoveries = 0; v.responseCancelPending = false; v.responseCancelStartedAt = 0; clearSilenceWatchdog(); }
     pushTranscript("assistant", ev.transcript);
   } else if (type === "conversation.item.input_audio_transcription.completed") {
     if (v) {
+      markActivity();
       v.autoNudgeUsed = false;  // nuevo turno del cliente: rearma la red anti-silencio
       v.confirmationNudgeUsed = false;
       v.contactConfirmationNudgeUsed = false;
@@ -363,7 +401,7 @@ async function postSDP(model, sdp, secret) {
 export async function startVoice(cfg) {
   if (v) return;
   buildOverlay(cfg || {});
-  v = { muted: false, pc: null, dc: null, micStream: null, timerId: null, maxId: null, speakId: null, seconds: 0, transcript: [], startedAt: Date.now(), lastAssistantText: "", lastUserText: "", lastToolName: "", lastToolResult: {}, endCallPending: false, autoNudgeUsed: false, confirmationNudgeUsed: false, contactConfirmationNudgeUsed: false, pendingToolFollowup: "", pendingBookingSlot: null, pendingBookingContact: null, responseDoneSeen: false, responseActive: false, responseActiveStartedAt: 0, responseCancelPending: false, responseCancelStartedAt: 0, turnHadAssistantOutput: false, turnHadFunctionCall: false, silenceWatchdogId: null, silenceWatchdogReason: "", silenceWatchdogUsed: false, silenceRecoveries: 0 };
+  v = { muted: false, pc: null, dc: null, micStream: null, timerId: null, maxId: null, speakId: null, seconds: 0, transcript: [], startedAt: Date.now(), lastAssistantText: "", lastUserText: "", lastToolName: "", lastToolResult: {}, endCallPending: false, autoNudgeUsed: false, confirmationNudgeUsed: false, contactConfirmationNudgeUsed: false, pendingToolFollowup: "", pendingBookingSlot: null, pendingBookingContact: null, responseDoneSeen: false, responseActive: false, responseActiveStartedAt: 0, responseCancelPending: false, responseCancelStartedAt: 0, turnHadAssistantOutput: false, turnHadFunctionCall: false, silenceWatchdogId: null, silenceWatchdogReason: "", silenceWatchdogUsed: false, silenceRecoveries: 0, lastActivityAt: Date.now(), idleNudges: 0, idleTickId: null };
   setStatus("Pidiendo micrófono…"); setHint("Permite el micrófono para empezar a hablar.");
   trackWidgetEvent("widget_voice_started");
   try { v.micStream = await getMic(); } catch (e) { micError(e); return; }
@@ -403,6 +441,8 @@ export async function startVoice(cfg) {
           v.responseActiveStartedAt = Date.now();
           armSilenceWatchdog("greeting");
         }
+        markActivity();
+        startIdleWatch();
       } catch (_) {}
     };
     const offer = await v.pc.createOffer();

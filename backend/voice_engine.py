@@ -73,6 +73,10 @@ def new_call_state() -> Dict[str, Any]:
         "silence_guard_reason": "",
         "silence_guard_used": False,
         "silence_guard_recoveries": 0,
+        # Silencio conversacional (nadie habla): el guard de arriba solo cubre
+        # "el modelo se quedo mudo en SU turno".
+        "last_activity_at": 0.0,
+        "idle_nudges": 0,
         "turn_had_assistant_output": False,
         "turn_had_function_call": False,
         "pending_mutation_code": "",
@@ -135,6 +139,8 @@ class VoiceCallEngine:
         self.state: Dict[str, Any] = new_call_state()
         self.transcript: list = []
         self.silence_guard_seconds = 1.7
+        self.idle_silence_seconds = 7.0   # silencio de los dos lados
+        self.idle_max_nudges = 2
         self.active_response_grace_seconds = 8.0
         # Transporte (lo inyecta el puente con bind_transport). Defaults no-op para tests.
         self._send_openai: SendEvent = self._noop_send
@@ -381,6 +387,45 @@ class VoiceCallEngine:
             return {"ok": True, "transferred": True, "mensaje_voz": "Te paso con una persona, un momento."}
         return {"ok": False, "mensaje_voz": f"No he podido pasarte ahora mismo. Puedes llamar al {pretty}."}
 
+    def mark_activity(self) -> None:
+        """Hubo voz de alguno de los dos lados: reinicia el contador de silencio."""
+        self.state["last_activity_at"] = time.monotonic()
+        self.state["idle_nudges"] = 0
+
+    async def maybe_recover_idle(self) -> None:
+        """Silencio de LOS DOS lados. El watchdog de abajo solo vigila el turno del
+        asistente: si el cliente interrumpe a mitad de frase y luego no dice nada,
+        aquel se desarma y la llamada se queda muerta. Aqui se reengancha con un
+        empujon INTERNO (la frase la elige el modelo) y, tras varios intentos sin
+        respuesta, se cierra con una despedida. Espejo de
+        `voice_core.idleSilenceAction` en el navegador."""
+        state = self.state
+        if not state.get("session_configured") or state.get("should_end_call"):
+            return
+        if state.get("response_active") or state.get("pending_tool_response"):
+            return
+        last = float(state.get("last_activity_at") or 0.0)
+        if not last or time.monotonic() - last < self.idle_silence_seconds:
+            return
+        state["last_activity_at"] = time.monotonic()
+        nudges = int(state.get("idle_nudges") or 0)
+        state["idle_nudges"] = nudges + 1
+        if nudges >= self.idle_max_nudges:
+            state["should_end_call"] = True
+            await self.force_say(
+                "Despidete brevemente porque el cliente no responde e invitale a llamar cuando pueda. "
+                "Una sola frase.",
+                system_text="[sistema] El cliente sigue sin responder: despidete en una frase y termina.",
+            )
+            return
+        settings.logger.info("[voice] silencio conversacional %s nudge=%s", self.cliente_id, nudges + 1)
+        await self._nudge_continue(
+            "[sistema] El cliente lleva unos segundos sin decir nada. Retoma tu la conversacion con "
+            "tus palabras: comprueba con naturalidad que sigue ahi y, si no te quedo claro lo ultimo, "
+            "dilo y vuelve a preguntarlo de otra forma. Si esperabas un dato, vuelve a pedirlo. "
+            "Frase corta, sin repetir la de antes."
+        )
+
     async def maybe_recover_silence(self) -> None:
         """Watchdog anti-silencio MINIMO. Si el modelo se queda mudo: cancela una respuesta que
         se quedo sin audio, dice un resultado de herramienta pendiente, o le da UN empujon
@@ -440,25 +485,23 @@ class VoiceCallEngine:
             return
         await self._nudge_continue()
 
-    async def _nudge_continue(self) -> None:
+    async def _nudge_continue(self, system_text: str = "") -> None:
         """Empujon INTERNO cuando el modelo se queda mudo: le recordamos el contexto y que siga,
         pero la frase la elige EL. tool_choice libre: puede hablar o llamar a una herramienta."""
+        texto = system_text or (
+            "[sistema] Te has quedado en silencio y el cliente espera. Continua la "
+            "conversacion de forma natural, con tus palabras y sin decir 'un momento': "
+            "si esperabas un dato, vuelve a pedirlo; si acabas de usar una herramienta, "
+            "di su resultado; si el cliente pidio reservar, cancelar o cambiar una cita, "
+            "da el siguiente paso (identificar la cita, verificar la identidad o llamar "
+            "a la herramienta que toque). No repitas la misma frase de antes."
+        )
         await self._send_openai({
             "type": "conversation.item.create",
             "item": {
                 "type": "message",
                 "role": "user",
-                "content": [{
-                    "type": "input_text",
-                    "text": (
-                        "[sistema] Te has quedado en silencio y el cliente espera. Continua la "
-                        "conversacion de forma natural, con tus palabras y sin decir 'un momento': "
-                        "si esperabas un dato, vuelve a pedirlo; si acabas de usar una herramienta, "
-                        "di su resultado; si el cliente pidio reservar, cancelar o cambiar una cita, "
-                        "da el siguiente paso (identificar la cita, verificar la identidad o llamar "
-                        "a la herramienta que toque). No repitas la misma frase de antes."
-                    ),
-                }],
+                "content": [{"type": "input_text", "text": texto}],
             },
         })
         await self._send_openai({"type": "response.create"})
@@ -558,6 +601,7 @@ class VoiceCallEngine:
         elif etype == "response.done":
             await self._handle_response_done()
         elif etype == "input_audio_buffer.speech_started":
+            self.mark_activity()
             truncated = await self._truncate_interrupted()
             if truncated:
                 state["was_interrupted"] = True

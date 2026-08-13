@@ -418,3 +418,61 @@ def test_engine_silence_giveup_says_goodbye_and_hangs_up():
     assert engine.state["should_end_call"] is True
     joined = json.dumps(tx.openai, ensure_ascii=False).lower()
     assert "despidete" in joined or "que tengas un buen dia" in joined
+
+
+# --- Silencio conversacional (nadie habla) ----------------------------------------
+# El watchdog clasico solo vigila el turno del asistente: si el cliente interrumpe a
+# mitad de frase y despues no dice nada, se desarma y la llamada se queda muerta.
+
+
+def test_idle_recovery_nudges_when_nobody_speaks():
+    """Tras el umbral de silencio, el motor reengancha con un empujon INTERNO."""
+    engine, transport, _ = _build_engine({})
+    engine.state["session_configured"] = True
+    engine.mark_activity()
+    engine.state["last_activity_at"] -= engine.idle_silence_seconds + 1
+
+    asyncio.run(engine.maybe_recover_idle())
+
+    enviados = json.dumps(transport.openai, ensure_ascii=False)
+    assert "sin decir nada" in enviados
+    assert any(e.get("type") == "response.create" for e in transport.openai)
+    assert engine.state["idle_nudges"] == 1
+
+
+def test_idle_recovery_stays_quiet_while_assistant_talks_or_tool_pending():
+    engine, transport, _ = _build_engine({})
+    engine.state["session_configured"] = True
+    engine.mark_activity()
+    engine.state["last_activity_at"] -= engine.idle_silence_seconds + 1
+
+    engine.state["response_active"] = True
+    asyncio.run(engine.maybe_recover_idle())
+    assert transport.openai == []
+
+    engine.state["response_active"] = False
+    engine.state["pending_tool_response"] = True
+    asyncio.run(engine.maybe_recover_idle())
+    assert transport.openai == []
+
+
+def test_idle_recovery_says_goodbye_after_max_nudges():
+    engine, transport, _ = _build_engine({})
+    engine.state["session_configured"] = True
+    engine.mark_activity()
+    engine.state["idle_nudges"] = engine.idle_max_nudges
+    engine.state["last_activity_at"] -= engine.idle_silence_seconds + 1
+
+    asyncio.run(engine.maybe_recover_idle())
+
+    assert engine.state["should_end_call"] is True
+    assert "despidete" in json.dumps(transport.openai, ensure_ascii=False).lower()
+
+
+def test_customer_speech_resets_idle_counter():
+    engine, _, _ = _build_engine({})
+    engine.state["session_configured"] = True
+    engine.state["idle_nudges"] = 2
+    asyncio.run(engine.on_openai_event({"type": "input_audio_buffer.speech_started"}))
+    assert engine.state["idle_nudges"] == 0
+    assert engine.state["last_activity_at"] > 0

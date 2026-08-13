@@ -194,6 +194,7 @@ async def voice_media_stream(websocket: WebSocket, cliente_id: str) -> None:
                     raw = await asyncio.wait_for(openai_ws.recv(), timeout=0.2)
                 except asyncio.TimeoutError:
                     await engine.maybe_recover_silence()
+                    await engine.maybe_recover_idle()
                     if _should_hang_up():
                         break
                     continue

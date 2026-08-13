@@ -68,6 +68,39 @@ export const CONTINUE_NUDGE_TEXT =
 
 
 
+// --- Silencio conversacional -------------------------------------------------
+// El watchdog de "el modelo se quedo mudo" solo vigila el turno del asistente:
+// si el cliente interrumpe a mitad de frase y luego no dice nada, aquel se limpia
+// y la llamada se queda muerta. Esto vigila el silencio de LOS DOS lados.
+export const IDLE_SILENCE_MS = 7000;      // sin voz de nadie -> reengancha
+export const IDLE_MAX_NUDGES = 2;         // luego, despedida
+
+// Empujon INTERNO: como el de continuar, la frase la elige el modelo. Nunca es
+// texto de cara al cliente.
+export const IDLE_NUDGE_TEXT =
+  "[sistema] El cliente lleva unos segundos sin decir nada. Retoma tu la conversacion con tus "
+  + "palabras: comprueba con naturalidad que sigue ahi y si no te ha quedado claro lo ultimo, "
+  + "dilo y vuelve a preguntarlo de otra forma. Si estabas a la espera de un dato (servicio, dia, "
+  + "hora, nombre o telefono), vuelve a pedirlo. Frase corta, sin repetir la de antes.";
+
+export const IDLE_GOODBYE_TEXT =
+  "[sistema] El cliente sigue sin responder despues de varios intentos. Despidete brevemente con "
+  + "tus palabras, invitale a llamar o escribir cuando pueda, y usa la herramienta finalizar_llamada.";
+
+/** Decide que hacer ante el silencio. Pura: se prueba sin navegador ni telefono.
+ *  Devuelve "" (nada), "nudge" (reenganchar) o "goodbye" (cerrar la llamada). */
+export function idleSilenceAction(state, now) {
+  const st = state || {};
+  if (st.closed || st.expectingToolResponse || st.responseActive) return "";
+  const last = Number(st.lastActivityAt || 0);
+  if (!last) return "";
+  const idleMs = Number(st.idleSilenceMs || IDLE_SILENCE_MS);
+  if ((Number(now) - last) < idleMs) return "";
+  const usados = Number(st.idleNudges || 0);
+  if (usados >= Number(st.idleMaxNudges || IDLE_MAX_NUDGES)) return "goodbye";
+  return "nudge";
+}
+
 export function extractBookingContact(text) {
   const raw = String(text || "");
   const match = raw.match(/(?:\+|00)?\d[\d\s().-]{7,}\d/);
