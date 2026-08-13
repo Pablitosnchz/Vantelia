@@ -101,7 +101,22 @@ CLIENTAS_DEMO = [
     ("Pilar Agulló", "pilar.agullo@example.com", "600110306"),
     ("Elena Quiles", "elena.quiles@example.com", "600110307"),
     ("Mavi Serrano", "mavi.serrano@example.com", "600110308"),
+    ("Encarni Ruiz", "encarni.ruiz@example.com", "600110309"),
+    ("Lourdes Amorós", "lourdes.amoros@example.com", "600110310"),
+    ("Sonia Berenguer", "sonia.berenguer@example.com", "600110311"),
+    ("Maite Candela", "maite.candela@example.com", "600110312"),
+    ("Vicenta Alonso", "vicenta.alonso@example.com", "600110313"),
+    ("Ana Belén Orts", "anabelen.orts@example.com", "600110314"),
+    ("Trini Maciá", "trini.macia@example.com", "600110315"),
+    ("Sandra Botella", "sandra.botella@example.com", "600110316"),
+    ("Laura Pastor", "laura.pastor@example.com", "600110317"),
+    ("Mar Gómez", "mar.gomez@example.com", "600110318"),
+    ("Puri Navarro", "puri.navarro@example.com", "600110319"),
+    ("Fina Esteve", "fina.esteve@example.com", "600110320"),
+    ("Carmen Lledó", "carmen.lledo@example.com", "600110321"),
+    ("Bea Sansano", "bea.sansano@example.com", "600110322"),
 ]
+
 
 
 def purge() -> None:
@@ -186,44 +201,63 @@ def align_default_employee() -> None:
     print("· Agenda general alineada con el horario real.")
 
 
+def _hhmm_to_min(value: str) -> int:
+    horas, minutos = str(value).split(":")
+    return int(horas) * 60 + int(minutos)
+
+
+def _min_to_hhmm(value: int) -> str:
+    return "%02d:%02d" % (value // 60, value % 60)
+
+
 def seed_agenda(location_id: str) -> None:
+    """Agenda de muestra realista: cada profesional encadena citas dentro de SU
+    horario del dia, sin solapes y sin pasarse del cierre. Los dias pasados
+    quedan como realizados (con algun no-show) y los futuros mezclan confirmadas,
+    sin confirmar y alguna cancelada, que es lo que se ve en un salon de verdad."""
     services = api._catalog_services(CID, include_inactive=False)
     if not services:
         print("AVISO: catalogo vacio, sin agenda de ejemplo.", file=sys.stderr)
         return
     employees = [r for r in api._list_employee_rows(CID, include_inactive=False) if not r["is_default"]]
+    if not employees:
+        return
+    base_schedule = {"day_start": "09:00", "day_end": "20:30", "closed_weekdays": [0, 6], "weekly_hours": WEEKLY_HOURS}
     today = api._utc_now().date()
+    ahora_min = api._utc_now().hour * 60 + api._utc_now().minute
     created = 0
-    used = set()
-    for offset in range(-14, 12):
+    pagadas = []
+    por_estado = {}
+
+    for offset in range(-30, 31):
         day = today + timedelta(days=offset)
-        window = textnorm._weekday_hours(
-            {"day_start": "09:00", "day_end": "20:30", "closed_weekdays": [0, 6], "weekly_hours": WEEKLY_HOURS},
-            day.weekday(),
-        )
+        window = textnorm._weekday_hours(base_schedule, day.weekday())
         if window is None:
             continue
-        # Solo horas en las que el servicio cabe ENTERO antes del cierre de ese dia.
-        def _min(hhmm):
-            h, m = hhmm.split(":")
-            return int(h) * 60 + int(m)
-
-        cierre = _min(window[1])
-        horas_dia = [h for h in ("09:00", "10:00", "11:30", "13:00", "16:00", "17:30") if _min(window[0]) <= _min(h)]
+        apertura, cierre = _hhmm_to_min(window[0]), _hhmm_to_min(window[1])
         for emp in employees:
-            if RNG.random() > 0.4:
-                continue
-            for hora in RNG.sample(horas_dia, k=min(len(horas_dia), RNG.randint(1, 2))):
-                key = (emp["id"], day.isoformat(), hora)
-                if key in used:
-                    continue
+            # Ocupacion del dia: un salon lleno no tiene a todo el mundo a tope.
+            ocupacion = RNG.choice([0.45, 0.6, 0.75, 0.9])
+            cursor = apertura + RNG.choice([0, 0, 30])
+            while cursor < cierre:
                 svc = RNG.choice(services)
                 dur = int(svc.get("duration_minutes") or 60)
-                if _min(hora) + dur > cierre:
-                    continue  # el servicio no cabe antes del cierre de ese dia
-                used.add(key)
+                if cursor + dur > cierre:
+                    break
+                if RNG.random() > ocupacion:      # hueco libre
+                    cursor += 30
+                    continue
+                hora = _min_to_hhmm(cursor)
                 cliente = RNG.choice(CLIENTAS_DEMO)
-                status = ("no_show" if RNG.random() < 0.08 else "completed") if offset < 0 else "confirmed"
+                if offset < 0 or (offset == 0 and cursor + dur <= ahora_min):
+                    status = "no_show" if RNG.random() < 0.10 else "completed"
+                elif RNG.random() < 0.05:
+                    status = "cancelled"
+                elif RNG.random() < 0.35:
+                    status = "pending_review"   # pedida y aun sin confirmar
+                else:
+                    status = "confirmed"
+                por_estado[status] = por_estado.get(status, 0) + 1
                 bid = f"bk_{secrets.token_urlsafe(8)}"
                 start_local, end_local = api._booking_start_end(
                     CID, day.isoformat(), hora, employee_id=emp["id"], duration_minutes=dur
@@ -235,16 +269,27 @@ def seed_agenda(location_id: str) -> None:
                     "notas": "", "status": status, "provider_name": "internal", "provider_status": "internal",
                     "provider_booking_id": "", "provider_booking_url": "", "manage_token": f"mg_{bid}",
                     "timezone": "Europe/Madrid", "start_at": api._to_utc_iso(start_local),
-                    "end_at": api._to_utc_iso(end_local), "confirmed_at": api._to_utc_iso(start_local),
-                    "cancelled_at": "", "rescheduled_at": "", "rescheduled_from_booking_id": "",
+                    "end_at": api._to_utc_iso(end_local),
+                    "confirmed_at": "" if status == "pending_review" else api._to_utc_iso(start_local),
+                    "cancelled_at": api._to_utc_iso(start_local) if status == "cancelled" else "",
+                    "rescheduled_at": "", "rescheduled_from_booking_id": "",
                     "confirmation_email_sent_at": "", "reminder_24h_sent_at": "", "reminder_2h_sent_at": "",
                     "customer_email_status": "", "customer_email_last_error": "",
                     "service_id": svc["id"], "service_price_cents": 0,
                     "completed_source": "manual" if status in ("completed", "no_show") else "",
                     "source": "seed_demo", "created_at": api._to_utc_iso(start_local),
                 })
+                if status == "completed" and RNG.random() < 0.75:
+                    pagadas.append(bid)
                 created += 1
-    print(f"· Agenda de ejemplo: {created} citas (-14 a +11 dias).")
+                cursor += dur + RNG.choice([0, 0, 30])   # siguiente clienta
+
+    if pagadas:
+        with sqlite3.connect(api.DB_PATH) as conn:
+            conn.executemany("UPDATE bookings SET payment_status='paid' WHERE id=?", [(b,) for b in pagadas])
+            conn.commit()
+    resumen = ", ".join(f"{n} {k}" for k, n in sorted(por_estado.items(), key=lambda kv: -kv[1]))
+    print(f"· Agenda de ejemplo: {created} citas (-30 a +30 dias) -> {resumen}. Pagadas: {len(pagadas)}.")
 
 
 def setup_comercio() -> None:
