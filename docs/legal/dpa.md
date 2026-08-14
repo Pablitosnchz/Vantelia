@@ -11,7 +11,7 @@ Ultima actualizacion: 2 de mayo de 2026.
 ## 1. Partes
 
 - **Responsable del Tratamiento**: el Cliente que contrata el servicio Vantelia.
-- **Encargado del Tratamiento**: Vantelia (domicilio social: Calle Garabay; razon social y CIF completos en el Contrato SaaS).
+- **Encargado del Tratamiento**: Pablo Sanchez Sanchez (nombre comercial **Vantelia**), NIF 02751906W, domicilio en Calle Garabay 7, planta 2, puerta C, 28850 Torrejon de Ardoz (Madrid), Espana. Email: info@vantelia.es
 
 ---
 

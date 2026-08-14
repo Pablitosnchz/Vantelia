@@ -8,8 +8,9 @@ Esta politica describe como Vantelia trata los datos personales en su plataforma
 
 ## 1. Responsable del tratamiento
 
-- **Vantelia** (razon social y CIF a completar antes de la version final).
-- Domicilio social: Calle Garabay.
+- **Vantelia** es el nombre comercial bajo el que presta sus servicios **Pablo Sanchez Sanchez**, NIF 02751906W.
+- Domicilio: Calle Garabay 7, planta 2, puerta C, 28850 Torrejon de Ardoz (Madrid), Espana.
+- Email de contacto: info@vantelia.es
 - Email: privacidad@vantelia.es
 - Web: https://www.vantelia.es
 - Contacto soporte: soporte@vantelia.es

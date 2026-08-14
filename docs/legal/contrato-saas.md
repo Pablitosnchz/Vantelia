@@ -11,13 +11,13 @@ Ultima actualizacion: 2 de mayo de 2026.
 ## 1. Partes
 
 **Prestador**:
-Vantelia (nombre legal y CIF a completar antes de firmar).
-Domicilio social: Calle Garabay.
+Pablo Sanchez Sanchez, que opera bajo el nombre comercial **Vantelia**. NIF 02751906W.
+Domicilio: Calle Garabay 7, planta 2, puerta C, 28850 Torrejon de Ardoz (Madrid), Espana.
 Email: contacto@vantelia.es
 Web: https://vantelia.es
 
 **Cliente**:
-Razon social, CIF, domicilio social y representante legal a indicar en la firma.
+Razon social o nombre y apellidos, CIF/NIF, domicilio y representante legal del Cliente, a indicar en la firma.
 
 ---
 
