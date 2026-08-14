@@ -84,13 +84,31 @@ def _whatsapp_env_value(env_name: str, fallback: str = "") -> str:
 
 
 def _whatsapp_access_token_for_client(cliente_id: str) -> str:
-    config = clients._get_client_config(cliente_id)
+    # 1) Token PROPIO del negocio (alta self-service por Embedded Signup): manda
+    # sobre el global, porque su numero vive en SU cuenta de Meta, no en la nuestra.
+    if cliente_id:
+        try:
+            from backend import wa_onboarding
+
+            propio = wa_onboarding.account_token(cliente_id)
+            if propio:
+                return propio
+        except Exception as exc:  # noqa: BLE001 - nunca debe impedir el envio
+            settings.logger.debug("No se pudo leer el token propio de %s: %s", cliente_id, exc)
+    # El numero de demo compartido responde antes de saber con que tenant habla el
+    # prospecto (mensaje de ayuda sin codigo): ahi se cae al token global.
+    try:
+        config = clients._get_client_config(cliente_id)
+    except Exception:  # noqa: BLE001
+        return settings.WHATSAPP_ACCESS_TOKEN.strip()
     configured_env = str(config.get("whatsapp", {}).get("access_token_env", "")).strip()
     return _whatsapp_env_value(configured_env, settings.WHATSAPP_ACCESS_TOKEN)
 
 
 def _whatsapp_chunks(text: str, *, max_length: int = 3500) -> List[str]:
-    cleaned = textnorm._sanitize_text(text, allow_multiline=True)
+    # Punto unico de salida de texto a WhatsApp: aqui se traduce el Markdown del
+    # modelo (`**negrita**`) al formato de WhatsApp (`*negrita*`).
+    cleaned = textnorm._markdown_to_whatsapp(textnorm._sanitize_text(text, allow_multiline=True))
     if not cleaned:
         return ["Ahora mismo no tengo una respuesta valida."]
     chunks: List[str] = []

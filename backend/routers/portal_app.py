@@ -15,7 +15,7 @@ import secrets
 import sqlite3
 from datetime import timedelta
 from io import StringIO
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, urlencode
 
 import httpx
@@ -42,6 +42,7 @@ from backend import (
     crm,
     db,
     emailing,
+    inbox,
     messaging,
     onboarding,
     portal,
@@ -52,6 +53,7 @@ from backend import (
     textnorm,
     timeutils,
     voice,
+    wa_onboarding,
     whatsapp,
 )
 from backend.main import app
@@ -402,6 +404,118 @@ async def auth_conversation_detail(
         ],
         summary_text="",
     )
+
+
+# --- Intervencion humana sobre una conversacion (backend/inbox.py) ----------
+#
+# OJO con el prefijo: van bajo /auth/inbox/ y no bajo /auth/conversations/ porque
+# la ruta generica `/auth/conversations/{kind}/{conv_id}` (definida arriba) casaria
+# antes y devolveria 404 tratando "takeover" como el id de la conversacion.
+#
+# El asistente responde solo hasta que alguien del negocio "toma" el chat; a
+# partir de ahi calla y contesta la persona desde el panel. Necesario desde que
+# el numero vive en Cloud API y el equipo ya no tiene la app del movil.
+
+
+class ConversationReplyPayload(BaseModel):
+    text: str = Field(min_length=1, max_length=3000)
+
+
+def _wa_conversation_or_403(conv_id: str, user: sqlite3.Row, cliente_id: str = "") -> Tuple[str, str]:
+    """Devuelve (cliente_id, telefono) validando que la conversacion es del tenant."""
+    target = portal._portal_client_id_or_403(user, cliente_id) if (user["role"] != "admin" or cliente_id) else ""
+    row = rag._load_chat_session_or_404(conv_id, cliente_id=target)
+    origin = str(row["origin"] or "")
+    if not origin.startswith("whatsapp:"):
+        raise HTTPException(status_code=400, detail="Solo se puede intervenir en conversaciones de WhatsApp.")
+    owner = str(row["cliente_id"] or "")
+    if target and owner != target:
+        raise HTTPException(status_code=404, detail="Conversacion no encontrada.")
+    return owner, origin.split("whatsapp:", 1)[1].strip()
+
+
+@app.get("/auth/inbox/{conv_id}/takeover")
+async def auth_conversation_takeover_state(
+    conv_id: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    _wa_conversation_or_403(conv_id, user, cliente_id)
+    state = inbox.takeover_state(conv_id)
+    state["window_open"] = inbox.window_open(conv_id)
+    state["window_note"] = "" if state["window_open"] else inbox.WINDOW_CLOSED_MESSAGE
+    return state
+
+
+@app.post("/auth/inbox/{conv_id}/takeover")
+async def auth_conversation_takeover(
+    conv_id: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """El equipo toma la conversacion: el asistente deja de responder en ella."""
+    target, _phone = _wa_conversation_or_403(conv_id, user, cliente_id)
+    state = inbox.claim(
+        conv_id, target,
+        agent_user_id=str(user["id"]),
+        agent_name=str(user["display_name"] or user["email"] or ""),
+    )
+    state["window_open"] = inbox.window_open(conv_id)
+    return state
+
+
+@app.delete("/auth/inbox/{conv_id}/takeover")
+async def auth_conversation_release(
+    conv_id: str,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """Devuelve la conversacion al asistente."""
+    _wa_conversation_or_403(conv_id, user, cliente_id)
+    return inbox.release(conv_id)
+
+
+@app.post("/auth/inbox/{conv_id}/reply")
+async def auth_conversation_reply(
+    conv_id: str,
+    data: ConversationReplyPayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """Envia un mensaje escrito por una persona del negocio al cliente final."""
+    target, phone = _wa_conversation_or_403(conv_id, user, cliente_id)
+    texto = textnorm._sanitize_text(data.text, allow_multiline=True)[:3000].strip()
+    if not texto:
+        raise HTTPException(status_code=400, detail="El mensaje no puede estar vacio.")
+    if not inbox.window_open(conv_id):
+        raise HTTPException(status_code=409, detail=inbox.WINDOW_CLOSED_MESSAGE)
+
+    # Se responde SIEMPRE por el numero por el que entro la conversacion: el de la
+    # config del tenant puede ser otro (numero de demo compartido, numero por centro)
+    # y el cliente recibiria la respuesta desde un numero que no conoce.
+    phone_number_id = inbox.inbound_number(conv_id)
+    if not phone_number_id:
+        wa_cfg = (clients._get_client_config(target).get("whatsapp") or {})
+        phone_number_id = str(wa_cfg.get("phone_number_id") or "").strip()
+        if not (wa_cfg.get("enabled") and phone_number_id):
+            raise HTTPException(status_code=409, detail="WhatsApp no esta configurado para este negocio.")
+
+    # Responder implica atender: si el chat no estaba tomado, se toma solo (y se
+    # renueva el plazo con cada mensaje) para que el bot no pise al humano.
+    inbox.claim(
+        conv_id, target,
+        agent_user_id=str(user["id"]),
+        agent_name=str(user["display_name"] or user["email"] or ""),
+    )
+    enviado = await messaging._send_whatsapp_text(
+        cliente_id=target, phone_number_id=phone_number_id, to_number=phone, text=texto,
+    )
+    if not enviado:
+        raise HTTPException(status_code=502, detail="WhatsApp no acepto el mensaje. Intentalo de nuevo.")
+    rag._record_chat_message(
+        session_id=conv_id, cliente_id=target, role="assistant", content=texto, intent="human_reply",
+    )
+    return {"ok": True, "takeover": inbox.takeover_state(conv_id)}
 
 
 # --- Vantelia 2.0 dashboard endpoints (Sem 3) ---
@@ -1858,6 +1972,79 @@ async def app_whatsapp_get(
 ) -> AppWhatsAppResponse:
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
     return whatsapp._app_whatsapp_response(cliente_id, request)
+
+
+class WhatsAppSignupPayload(BaseModel):
+    code: str = Field(min_length=4, max_length=1000)
+    waba_id: str = Field(default="", max_length=80)
+    phone_number_id: str = Field(default="", max_length=80)
+    event: str = Field(default="", max_length=80)
+
+
+@app.post("/auth/app/whatsapp/connect")
+async def app_whatsapp_connect(
+    data: WhatsAppSignupPayload,
+    request: Request,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, Any]:
+    """Cierra el alta self-service de WhatsApp (Embedded Signup + Coexistence).
+
+    El negocio conserva su numero en la app del movil; nosotros guardamos SU token
+    y suscribimos su cuenta a nuestro webhook. owner+ (es una conexion de canal).
+    """
+    security._require_portal_min_role(user, "owner")
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    if not wa_onboarding.embedded_signup_available():
+        raise HTTPException(status_code=503, detail="La conexion automatica de WhatsApp no esta configurada.")
+    if not clients._plan_feature(cliente_id, "whatsapp_enabled"):
+        raise HTTPException(status_code=403, detail="WhatsApp esta disponible desde el plan Pro.")
+    try:
+        cuenta = await wa_onboarding.complete_signup(
+            cliente_id,
+            code=data.code,
+            waba_id=data.waba_id,
+            phone_number_id=data.phone_number_id,
+            pin=settings.WHATSAPP_ES_PIN,
+            event=data.event,
+        )
+    except Exception as exc:  # noqa: BLE001 - el error de Meta se le muestra al usuario
+        security._channel_audit(cliente_id, "whatsapp", "connect_failed", "embedded_signup", False, str(exc)[:300])
+        raise HTTPException(status_code=502, detail=f"Meta rechazo la conexion: {exc}")
+
+    # El canal queda operativo con el numero recien conectado.
+    with appstate.state_lock:
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+        cfg = next_configs.get(cliente_id, {})
+        wa = dict(cfg.get("whatsapp", {}) or {})
+        wa["enabled"] = True
+        wa["phone_number_id"] = cuenta.get("phone_number_id", "")
+        cfg["whatsapp"] = wa
+        next_configs[cliente_id] = cfg
+        clients._update_runtime_configs(next_configs)
+    clients._persist_configs_to_disk(next_configs)
+    security._channel_audit(cliente_id, "whatsapp", "connect", "embedded_signup", True)
+    return {"ok": True, "account": cuenta}
+
+
+@app.delete("/auth/app/whatsapp/connect")
+async def app_whatsapp_disconnect(
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, bool]:
+    """Desconecta el numero: dejamos de responder por el (Meta conserva su cuenta)."""
+    security._require_portal_min_role(user, "owner")
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    borrado = wa_onboarding.disconnect(cliente_id)
+    with appstate.state_lock:
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+        cfg = next_configs.get(cliente_id, {})
+        wa = dict(cfg.get("whatsapp", {}) or {})
+        wa["enabled"] = False
+        cfg["whatsapp"] = wa
+        next_configs[cliente_id] = cfg
+        clients._update_runtime_configs(next_configs)
+    clients._persist_configs_to_disk(next_configs)
+    security._channel_audit(cliente_id, "whatsapp", "disconnect", "embedded_signup", True)
+    return {"ok": borrado}
 
 
 @app.post("/auth/app/whatsapp", response_model=AppWhatsAppResponse)

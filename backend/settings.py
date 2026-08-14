@@ -73,6 +73,15 @@ WHATSAPP_APP_SECRET = os.getenv("WHATSAPP_APP_SECRET", "").strip()
 WHATSAPP_API_VERSION = os.getenv("WHATSAPP_API_VERSION", "v22.0").strip() or "v22.0"
 WHATSAPP_DEFAULT_CLIENT_ID = os.getenv("WHATSAPP_DEFAULT_CLIENT_ID", "").strip()
 WHATSAPP_PHONE_CLIENT_MAP = os.getenv("WHATSAPP_PHONE_CLIENT_MAP", "").strip()
+# Numero(s) de demo comercial compartido: no mapean a un tenant fijo, enrutan por
+# codigo de prospecto (ver backend/wa_demo.py). Vacio = funcion apagada.
+WHATSAPP_DEMO_PHONE_NUMBER_ID = os.getenv("WHATSAPP_DEMO_PHONE_NUMBER_ID", "").strip()
+WHATSAPP_DEMO_PUBLIC_NUMBER = os.getenv("WHATSAPP_DEMO_PUBLIC_NUMBER", "").strip()
+# Embedded Signup (alta self-service + Coexistence). Sin estas tres, el portal no
+# ofrece el boton de conectar y se sigue dando de alta a mano.
+WHATSAPP_APP_ID = os.getenv("WHATSAPP_APP_ID", "").strip()
+WHATSAPP_ES_CONFIG_ID = os.getenv("WHATSAPP_ES_CONFIG_ID", "").strip()
+WHATSAPP_ES_PIN = os.getenv("WHATSAPP_ES_PIN", "").strip()
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
 TWILIO_DEFAULT_PHONE_NUMBER = os.getenv("TWILIO_DEFAULT_PHONE_NUMBER", "").strip()
@@ -297,8 +306,8 @@ SELF_SERVE_PLANS: Dict[str, Dict[str, Any]] = {
     "starter": {
         "slug": "starter",
         "label": "Starter",
-        "price_monthly_eur": int(os.getenv("PLAN_STARTER_PRICE_EUR", "19")),
-        "price_annual_eur": int(os.getenv("PLAN_STARTER_PRICE_ANNUAL_EUR", "190")),
+        "price_monthly_eur": int(os.getenv("PLAN_STARTER_PRICE_EUR", "49")),
+        "price_annual_eur": int(os.getenv("PLAN_STARTER_PRICE_ANNUAL_EUR", "490")),
         "messages_quota": int(os.getenv("PLAN_STARTER_QUOTA", "1000")),
         "features": ["chat", "uploads", "branding", "leads_export", "booking"],
         "stripe_price_monthly": STRIPE_PRICE_STARTER,
@@ -307,8 +316,8 @@ SELF_SERVE_PLANS: Dict[str, Dict[str, Any]] = {
     "pro": {
         "slug": "pro",
         "label": "Pro",
-        "price_monthly_eur": int(os.getenv("PLAN_PRO_PRICE_EUR", "49")),
-        "price_annual_eur": int(os.getenv("PLAN_PRO_PRICE_ANNUAL_EUR", "490")),
+        "price_monthly_eur": int(os.getenv("PLAN_PRO_PRICE_EUR", "129")),
+        "price_annual_eur": int(os.getenv("PLAN_PRO_PRICE_ANNUAL_EUR", "1290")),
         "messages_quota": int(os.getenv("PLAN_PRO_QUOTA", "5000")),
         "features": ["chat", "uploads", "branding", "leads_export", "booking", "qa", "tune", "whatsapp"],
         "stripe_price_monthly": STRIPE_PRICE_PRO,
@@ -317,8 +326,8 @@ SELF_SERVE_PLANS: Dict[str, Dict[str, Any]] = {
     "business": {
         "slug": "business",
         "label": "Business",
-        "price_monthly_eur": int(os.getenv("PLAN_BUSINESS_PRICE_EUR", "149")),
-        "price_annual_eur": int(os.getenv("PLAN_BUSINESS_PRICE_ANNUAL_EUR", "1490")),
+        "price_monthly_eur": int(os.getenv("PLAN_BUSINESS_PRICE_EUR", "299")),
+        "price_annual_eur": int(os.getenv("PLAN_BUSINESS_PRICE_ANNUAL_EUR", "2990")),
         "messages_quota": int(os.getenv("PLAN_BUSINESS_QUOTA", "25000")),
         "features": ["chat", "uploads", "branding", "leads_export", "booking", "qa", "tune", "whatsapp", "voice"],
         "stripe_price_monthly": STRIPE_PRICE_BUSINESS,
@@ -365,7 +374,7 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         "multi_branch": False,
         "crm_integration": False,
         "show_powered_by": False,
-        "price_eur": int(os.getenv("PLAN_STARTER_PRICE_EUR", "19")),
+        "price_eur": int(os.getenv("PLAN_STARTER_PRICE_EUR", "49")),
     },
     "pro": {
         "label": "Pro",
@@ -383,7 +392,7 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         "multi_branch": False,
         "crm_integration": False,
         "show_powered_by": False,
-        "price_eur": int(os.getenv("PLAN_PRO_PRICE_EUR", "49")),
+        "price_eur": int(os.getenv("PLAN_PRO_PRICE_EUR", "129")),
     },
     "business": {
         "label": "Business",
@@ -401,7 +410,7 @@ PLAN_LIMITS: Dict[str, Dict[str, Any]] = {
         "multi_branch": False,
         "crm_integration": False,
         "show_powered_by": False,
-        "price_eur": int(os.getenv("PLAN_BUSINESS_PRICE_EUR", "149")),
+        "price_eur": int(os.getenv("PLAN_BUSINESS_PRICE_EUR", "299")),
     },
 }
 

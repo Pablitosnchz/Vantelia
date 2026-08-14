@@ -703,6 +703,16 @@ def _init_database() -> None:
             ON chat_sessions(cliente_id, last_message_at)
             """
         )
+        # Numero de WhatsApp POR EL QUE ENTRO la conversacion. Sin esto, responder a
+        # mano desde el panel salia por el numero de la config del tenant, que no tiene
+        # por que ser el mismo (numero de demo compartido, o un numero por centro).
+        chat_session_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(chat_sessions)").fetchall()
+        }
+        if "wa_phone_number_id" not in chat_session_columns:
+            connection.execute(
+                "ALTER TABLE chat_sessions ADD COLUMN wa_phone_number_id TEXT NOT NULL DEFAULT ''"
+            )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS chat_messages (
@@ -1509,6 +1519,108 @@ def _init_database() -> None:
         )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_kb_qa_cliente ON kb_qa(cliente_id, created_at)"
+        )
+
+        # Respuestas automaticas por palabra clave (opt-in por tenant, ver backend/keywords.py).
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS keyword_rules (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                keywords_json TEXT NOT NULL DEFAULT '[]',
+                reply TEXT NOT NULL,
+                match_mode TEXT NOT NULL DEFAULT 'any',
+                active INTEGER NOT NULL DEFAULT 1,
+                position INTEGER NOT NULL DEFAULT 0,
+                hits INTEGER NOT NULL DEFAULT 0,
+                last_hit_at TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                created_by_user_id TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_keyword_rules_cliente "
+            "ON keyword_rules(cliente_id, active, position)"
+        )
+
+        # Numero de WhatsApp compartido para demos comerciales (backend/wa_demo.py):
+        # un codigo por prospecto ata su telefono al tenant que le toca.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS wa_demo_codes (
+                code TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                active INTEGER NOT NULL DEFAULT 1,
+                expires_at TEXT NOT NULL DEFAULT '',
+                uses INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                created_by TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_wa_demo_codes_cliente ON wa_demo_codes(cliente_id, created_at)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS wa_demo_routes (
+                phone TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                code TEXT NOT NULL DEFAULT '',
+                expires_at TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_wa_demo_routes_code ON wa_demo_routes(code)"
+        )
+
+        # Intervencion humana sobre una conversacion (backend/inbox.py): mientras
+        # existe la fila y no ha caducado, el asistente NO responde en ese chat.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chat_takeovers (
+                session_id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                agent_user_id TEXT NOT NULL DEFAULT '',
+                agent_name TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chat_takeovers_cliente ON chat_takeovers(cliente_id, expires_at)"
+        )
+
+        # Conexion self-service de WhatsApp por Embedded Signup (backend/wa_onboarding.py).
+        # Guarda el token PROPIO del negocio cifrado: con Coexistence su numero sigue en
+        # la app del movil y a la vez responde por la API.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS client_whatsapp_accounts (
+                cliente_id TEXT PRIMARY KEY,
+                waba_id TEXT NOT NULL DEFAULT '',
+                phone_number_id TEXT NOT NULL DEFAULT '',
+                display_phone_number TEXT NOT NULL DEFAULT '',
+                verified_name TEXT NOT NULL DEFAULT '',
+                mode TEXT NOT NULL DEFAULT 'api',
+                access_token_encrypted TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'connected',
+                last_error TEXT NOT NULL DEFAULT '',
+                connected_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_client_whatsapp_phone "
+            "ON client_whatsapp_accounts(phone_number_id, status)"
         )
 
         connection.execute(

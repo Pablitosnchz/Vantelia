@@ -136,6 +136,36 @@ def _normalize_chat_response_text(value: str) -> str:
     return text.strip()
 
 
+_WA_MD_LINK_RE = re.compile(r"\[([^\]\n]+)\]\((https?://[^\s)]+)\)")
+_WA_MD_HEADING_RE = re.compile(r"^[ \t]{0,3}#{1,6}[ \t]*(.+?)[ \t]*#*[ \t]*$", re.MULTILINE)
+_WA_MD_BULLET_RE = re.compile(r"^([ \t]*)[*+][ \t]+", re.MULTILINE)
+_WA_MD_BOLD_RE = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
+_WA_MD_BOLD_UNDERSCORE_RE = re.compile(r"__(.+?)__", re.DOTALL)
+_WA_MD_INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
+
+
+def _markdown_to_whatsapp(value: str) -> str:
+    """Traduce el Markdown del modelo al formato de WhatsApp.
+
+    WhatsApp marca la negrita con UN asterisco, no con dos: al enviarle `**Spa**`
+    pinta en negrita "*Spa*" y deja los asteriscos sobrantes a la vista (bug real
+    en las respuestas del hotel). Convierte negritas, titulos, vinetas con `*` y
+    enlaces Markdown. Es idempotente: un texto ya en formato WhatsApp no cambia.
+    """
+    text = str(value or "")
+    if not text:
+        return ""
+    text = _WA_MD_LINK_RE.sub(r"\1: \2", text)
+    text = _WA_MD_HEADING_RE.sub(r"*\1*", text)
+    # Vinetas Markdown ("* item"): sin esto el asterisco inicial se cruza con la
+    # negrita y WhatsApp pinta medio parrafo en negrita.
+    text = _WA_MD_BULLET_RE.sub(r"\1• ", text)
+    text = _WA_MD_BOLD_RE.sub(r"*\1*", text)
+    text = _WA_MD_BOLD_UNDERSCORE_RE.sub(r"*\1*", text)
+    text = _WA_MD_INLINE_CODE_RE.sub(r"\1", text)
+    return text
+
+
 def _ensure_path_within(base_dir: Path, target_dir: Path) -> None:
     base_resolved = base_dir.resolve()
     target_resolved = target_dir.resolve()

@@ -24,7 +24,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AppWhatsAppResponse, WhatsAppWebhookStatus
-from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, messaging, rag, settings, textnorm, timeutils
+from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, inbox, keywords, messaging, rag, settings, textnorm, timeutils, wa_demo, wa_onboarding
 
 def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResponse:
     cfg = clients._get_client_config(cliente_id)
@@ -50,10 +50,19 @@ def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResp
     else:
         status_value = "disabled"
         status_label = "Desactivado"
+    cuenta = wa_onboarding.get_account(cliente_id)
+    if cuenta:
+        status_value, status_label = "ready", "Conectado"
     return AppWhatsAppResponse(
         cliente_id=cliente_id,
         enabled=enabled,
         phone_number_id=phone_number_id,
+        embedded_signup_available=wa_onboarding.embedded_signup_available(),
+        meta_app_id=settings.WHATSAPP_APP_ID,
+        es_config_id=settings.WHATSAPP_ES_CONFIG_ID,
+        connected_number=cuenta.get("display_phone_number", "") if cuenta else "",
+        connected_mode=cuenta.get("mode", "") if cuenta else "",
+        connected_via_signup=bool(cuenta),
         access_token_env=str(wa.get("access_token_env", "") or ""),
         verify_token_env=str(wa.get("verify_token_env", "") or ""),
         webhook_url=webhook_url,
@@ -82,6 +91,9 @@ def _whatsapp_phone_client_map() -> Dict[str, str]:
             phone_number_id = str(whatsapp_cfg.get("phone_number_id", "")).strip()
             if whatsapp_cfg.get("enabled") and phone_number_id:
                 mapping[phone_number_id] = cliente_id
+    # Conexiones self-service (Embedded Signup): mandan sobre el config, que es
+    # donde estan las altas manuales antiguas.
+    mapping.update(wa_onboarding.phone_client_map())
     return mapping
 
 
@@ -344,6 +356,16 @@ def _wa_main_menu_sections(booking_enabled: bool) -> List[Dict[str, Any]]:
 async def _wa_send_main_menu(
     *, cliente_id: str, phone_number_id: str, to_number: str, nombre_empresa: str, booking_enabled: bool, greeting: bool = False,
 ) -> None:
+    # Menu apagado por el negocio (config `chat_menu`): saludo llano, sin lista de
+    # opciones. Se centraliza aqui para cubrir TODOS los puntos que abren el menu.
+    if not chat._menu_enabled(cliente_id):
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id,
+            phone_number_id=phone_number_id,
+            to_number=to_number,
+            text=chat._simple_greeting_text(clients._get_client_config(cliente_id), nombre_empresa),
+        )
+        return
     body = (
         f"👋 ¡Hola! Soy el asistente de *{nombre_empresa}*. ¿En que puedo ayudarte hoy?"
         if greeting else f"📋 Menu principal de *{nombre_empresa}*. Elige una opcion:"
@@ -808,6 +830,24 @@ async def _handle_whatsapp_message(
     nombre_empresa = str(config.get("empresa") or "").strip() or config.get("nombre", "")
     flow = _wa_get_flow(cliente_id, from_number)
 
+    # Conversacion tomada por una persona del negocio: el asistente se calla y solo
+    # se guarda el mensaje, para que el equipo lo lea y conteste desde el panel.
+    # Va lo PRIMERO: ni menu, ni flujos, ni reglas deben hablar por encima del humano.
+    session_id = _whatsapp_session_id(cliente_id, from_number)
+    # El numero por el que entra manda: es por el que hay que contestar.
+    inbox.remember_inbound_number(session_id, phone_number_id)
+    if inbox.bot_is_muted(session_id):
+        rag._ensure_chat_session_record(
+            session_id, cliente_id, request,
+            origin_override=f"whatsapp:{from_number}",
+            user_agent_override="WhatsApp Cloud API",
+        )
+        rag._record_chat_message(
+            session_id=session_id, cliente_id=cliente_id,
+            role="user", content=incoming_text, intent="human_takeover",
+        )
+        return
+
     iid = (interactive_id or "").strip()
     text_norm = textnorm._strip_accents((incoming_text or "").lower().strip())
 
@@ -840,6 +880,32 @@ async def _handle_whatsapp_message(
             nombre_empresa=nombre_empresa, booking_enabled=booking_enabled, greeting=True,
         )
         return
+
+    # Reglas por palabra clave del negocio (opt-in, backend/keywords.py): configuracion
+    # explicita del cliente, manda sobre las heuristicas de abajo. Solo sin flujo activo
+    # (no secuestra un paso de agendado en curso). Sin la funcion activada no consulta nada.
+    if not flow.flow:
+        keyword_rule = keywords.match_reply(cliente_id, incoming_text)
+        if keyword_rule:
+            session_id = _whatsapp_session_id(cliente_id, from_number)
+            rag._ensure_chat_session_record(
+                session_id, cliente_id, request,
+                origin_override=f"whatsapp:{from_number}",
+                user_agent_override="WhatsApp Cloud API",
+            )
+            rag._record_chat_message(
+                session_id=session_id, cliente_id=cliente_id,
+                role="user", content=incoming_text,
+            )
+            rag._record_chat_message(
+                session_id=session_id, cliente_id=cliente_id,
+                role="assistant", content=keyword_rule["reply"], intent="keyword_rule",
+            )
+            await messaging._send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text=keyword_rule["reply"],
+            )
+            return
 
     # Consulta de bono ("cuantas sesiones me quedan"): respuesta determinista con los
     # bonos del NUMERO VERIFICADO del canal (el remitente). Solo sin flujo activo.
@@ -1467,6 +1533,43 @@ async def _handle_whatsapp_message(
     )
 
 
+def _handle_whatsapp_echoes(
+    phone_number_id: str,
+    echoes: List[Dict[str, Any]],
+    forced_cliente_id: str = "",
+) -> None:
+    """Mensajes que el equipo del negocio escribio desde SU app (Coexistence).
+
+    Dos efectos: quedan en el historial del panel (para que el resto del equipo
+    vea la conversacion completa) y ponen el chat en manos humanas, de forma que
+    el asistente deja de responder ahi sin que nadie tenga que pulsar nada.
+    """
+    try:
+        cliente_id = _resolve_whatsapp_client_id(phone_number_id, forced_cliente_id)
+    except Exception as exc:  # noqa: BLE001 - un eco no resoluble no debe romper el webhook
+        settings.logger.warning("Eco de WhatsApp sin cliente (%s): %s", phone_number_id, exc)
+        return
+    for echo in echoes:
+        to_number = str(echo.get("to") or "").strip()
+        if not to_number:
+            continue
+        texto = ""
+        if str(echo.get("type") or "") == "text":
+            texto = str((echo.get("text") or {}).get("body") or "").strip()
+        if not texto:
+            texto = "[mensaje enviado desde la app del negocio]"
+        session_id = _whatsapp_session_id(cliente_id, to_number)
+        inbox.remember_inbound_number(session_id, phone_number_id)
+        rag._record_chat_message(
+            session_id=session_id, cliente_id=cliente_id,
+            role="assistant", content=texto, intent="human_reply_app",
+        )
+        inbox.claim(
+            session_id, cliente_id,
+            agent_user_id="", agent_name="Equipo (WhatsApp)",
+        )
+
+
 async def _handle_whatsapp_webhook(
     request: Request,
     *,
@@ -1486,10 +1589,28 @@ async def _handle_whatsapp_webhook(
             value = change.get("value", {}) if isinstance(change, dict) else {}
             metadata = value.get("metadata", {}) if isinstance(value, dict) else {}
             phone_number_id = str(metadata.get("phone_number_id", "")).strip()
+
+            # Coexistence: el negocio sigue usando la app del movil y Meta nos manda
+            # un ECO de lo que escribe su equipo desde ahi. Se guarda en la
+            # conversacion y el asistente se calla solo: si hay una persona
+            # respondiendo, no debe hablar por encima de ella.
+            # El campo de la app de WhatsApp Business es `smb_message_echoes`;
+            # `message_echoes` se acepta por si Meta lo manda con el nombre generico.
+            echoes = []
+            if isinstance(value, dict):
+                echoes = value.get("smb_message_echoes") or value.get("message_echoes") or []
+            if echoes:
+                _handle_whatsapp_echoes(phone_number_id, echoes, forced_cliente_id)
+                processed += len(echoes)
+                continue
+
             messages = value.get("messages", []) if isinstance(value, dict) else []
             if not messages:
                 continue
-            cliente_id = _resolve_whatsapp_client_id(phone_number_id, forced_cliente_id)
+            # Numero de demo compartido: el tenant no sale del numero, sale del
+            # codigo que trae el prospecto (se resuelve mas abajo, con el texto).
+            demo_hub = wa_demo.is_hub(phone_number_id) and not forced_cliente_id
+            cliente_id = "" if demo_hub else _resolve_whatsapp_client_id(phone_number_id, forced_cliente_id)
             for message_payload in messages:
                 from_number = str(message_payload.get("from", "")).strip()
                 message_id = str(message_payload.get("id", "")).strip()
@@ -1497,7 +1618,7 @@ async def _handle_whatsapp_webhook(
                     continue
                 if not _mark_whatsapp_message_if_new(
                     message_id=message_id,
-                    cliente_id=cliente_id,
+                    cliente_id=cliente_id or "wa_demo_hub",
                     phone_number_id=phone_number_id,
                     from_number=from_number,
                 ):
@@ -1525,6 +1646,30 @@ async def _handle_whatsapp_webhook(
                         "El usuario ha enviado un mensaje que no es texto. "
                         "Responde de forma breve indicando que puede ayudarte si escribe su consulta."
                     )
+
+                if demo_hub:
+                    routing = wa_demo.resolve_incoming(phone_number_id, from_number, incoming_text)
+                    cliente_id = routing["cliente_id"]
+                    if not cliente_id:
+                        # Sin codigo valido no se molesta a ningun asistente.
+                        await messaging._send_whatsapp_text(
+                            cliente_id="", phone_number_id=phone_number_id,
+                            to_number=from_number, text=routing["help_text"],
+                        )
+                        processed += 1
+                        continue
+                    if routing["just_bound"]:
+                        # El mensaje era el codigo, no una consulta: se abre la demo
+                        # con la bienvenida del negocio y se espera a su pregunta.
+                        demo_config = clients._get_client_config(cliente_id)
+                        empresa = str(demo_config.get("empresa") or "").strip() or demo_config.get("nombre", "")
+                        await messaging._send_whatsapp_text(
+                            cliente_id=cliente_id, phone_number_id=phone_number_id,
+                            to_number=from_number,
+                            text=chat._simple_greeting_text(demo_config, empresa),
+                        )
+                        processed += 1
+                        continue
 
                 try:
                     await _handle_whatsapp_message(

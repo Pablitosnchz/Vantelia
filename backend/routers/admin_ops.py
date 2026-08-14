@@ -22,6 +22,7 @@ from api_models import *  # noqa: F401,F403
 from backend import (
     appstate,
     agenda,
+    wa_demo,
     booking,
     clients,
     commerce,
@@ -765,3 +766,40 @@ async def admin_self_service_funnel(days: int = 30) -> Dict[str, Any]:
 
 
 
+
+
+# =====================================================================
+# Numero de WhatsApp compartido para demos comerciales (backend/wa_demo.py).
+# Un codigo por prospecto -> su telefono habla con SU asistente en el mismo numero.
+# =====================================================================
+
+
+class WaDemoCodePayload(BaseModel):
+    cliente_id: str = Field(min_length=1, max_length=120)
+    label: str = Field(default="", max_length=120)
+    days: int = Field(default=wa_demo.DEFAULT_CODE_DAYS, ge=1, le=365)
+
+
+@app.get("/admin/whatsapp-demo/codes", dependencies=[Depends(security._require_admin_token)])
+async def admin_wa_demo_codes(cliente_id: str = "") -> Dict[str, Any]:
+    return {
+        "hub_configured": bool(wa_demo.hub_phone_number_ids()),
+        "public_number": settings.WHATSAPP_DEMO_PUBLIC_NUMBER,
+        "items": wa_demo.list_codes(cliente_id),
+    }
+
+
+@app.post("/admin/whatsapp-demo/codes", dependencies=[Depends(security._require_admin_token)])
+async def admin_wa_demo_code_create(payload: WaDemoCodePayload) -> Dict[str, Any]:
+    if payload.cliente_id not in appstate.CONFIG_CLIENTES:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado.")
+    return wa_demo.create_code(
+        payload.cliente_id, label=payload.label, days=payload.days, created_by="admin",
+    )
+
+
+@app.delete("/admin/whatsapp-demo/codes/{code}", dependencies=[Depends(security._require_admin_token)])
+async def admin_wa_demo_code_revoke(code: str) -> Dict[str, bool]:
+    if not wa_demo.revoke_code(code):
+        raise HTTPException(status_code=404, detail="Codigo no encontrado.")
+    return {"ok": True}

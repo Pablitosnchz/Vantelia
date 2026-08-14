@@ -939,6 +939,51 @@ class AppQAListResponse(BaseModel):
     total: int
 
 
+class AppKeywordRuleItem(BaseModel):
+    id: str
+    label: str = ""
+    keywords: List[str] = Field(default_factory=list)
+    reply: str
+    match_mode: str = "any"
+    active: bool = True
+    position: int = 0
+    hits: int = 0
+    last_hit_at: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class AppKeywordRulePayload(BaseModel):
+    label: str = Field(default="", max_length=80)
+    keywords: List[str] = Field(default_factory=list, max_length=40)
+    reply: str = Field(min_length=1, max_length=2000)
+    match_mode: str = "any"
+    active: bool = True
+
+
+class AppKeywordRuleUpdatePayload(BaseModel):
+    label: Optional[str] = Field(default=None, max_length=80)
+    keywords: Optional[List[str]] = Field(default=None, max_length=40)
+    reply: Optional[str] = Field(default=None, max_length=2000)
+    match_mode: Optional[str] = None
+    active: Optional[bool] = None
+    position: Optional[int] = None
+
+
+class AppKeywordRulesResponse(BaseModel):
+    enabled: bool = False
+    items: List[AppKeywordRuleItem] = Field(default_factory=list)
+    total: int = 0
+
+
+class AppKeywordRulesConfigPayload(BaseModel):
+    enabled: bool
+
+
+class AppChatMenuPayload(BaseModel):
+    enabled: bool
+
+
 class AppKnowledgeItem(BaseModel):
     id: str
     source: str
@@ -1025,6 +1070,13 @@ class AppWhatsAppResponse(BaseModel):
     verify_token_configured: bool = False
     status: str = "disabled"
     status_label: str = "Desactivado"
+    # Alta self-service (Embedded Signup + Coexistence)
+    embedded_signup_available: bool = False
+    meta_app_id: str = ""
+    es_config_id: str = ""
+    connected_number: str = ""
+    connected_mode: str = ""
+    connected_via_signup: bool = False
 
 
 class AppVoicePayload(BaseModel):

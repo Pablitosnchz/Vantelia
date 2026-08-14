@@ -26,10 +26,12 @@ from api_models import *  # noqa: F401,F403
 from backend import (
     agenda,
     appstate,
+    chat,
     clients,
     commerce,
     crm,
     db,
+    keywords,
     rag,
     security,
     settings,
@@ -289,6 +291,130 @@ async def app_qa_delete(
             raise HTTPException(status_code=404, detail="Q&A no encontrada.")
     rag._maybe_regenerate_info_with_qa(cliente_id)
     return {"ok": True}
+
+
+# --- Respuestas automaticas por palabra clave (opt-in por tenant) ----------
+#
+# Capa determinista previa a la IA: el negocio define "si el mensaje contiene X,
+# responde exactamente Y". Ver backend/keywords.py. Apagada por defecto, asi que
+# los tenants que no la activen no cambian de comportamiento.
+
+
+def _keyword_rules_response(cliente_id: str) -> AppKeywordRulesResponse:
+    items = [AppKeywordRuleItem(**r) for r in keywords.list_rules(cliente_id)]
+    return AppKeywordRulesResponse(
+        enabled=keywords.rules_enabled(cliente_id),
+        items=items,
+        total=len(items),
+    )
+
+
+@app.get("/auth/app/keyword-rules", response_model=AppKeywordRulesResponse)
+async def app_keyword_rules_list(
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AppKeywordRulesResponse:
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    return _keyword_rules_response(cliente_id)
+
+
+@app.put("/auth/app/keyword-rules/config", response_model=AppKeywordRulesResponse)
+async def app_keyword_rules_config(
+    data: AppKeywordRulesConfigPayload,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AppKeywordRulesResponse:
+    """Activa/desactiva la funcion para este negocio. manager+ (configuracion)."""
+    security._require_portal_min_role(user, "manager")
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    with appstate.state_lock:
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+        cfg = next_configs.get(cliente_id, {})
+        section = dict(cfg.get(keywords.CONFIG_SECTION, {}) or {})
+        section["enabled"] = bool(data.enabled)
+        cfg[keywords.CONFIG_SECTION] = section
+        next_configs[cliente_id] = cfg
+        clients._update_runtime_configs(next_configs)
+    clients._persist_configs_to_disk(next_configs)
+    return _keyword_rules_response(cliente_id)
+
+
+@app.post("/auth/app/keyword-rules", response_model=AppKeywordRuleItem)
+async def app_keyword_rule_create(
+    data: AppKeywordRulePayload,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AppKeywordRuleItem:
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    try:
+        rule = keywords.create_rule(
+            cliente_id,
+            label=data.label,
+            keywords=data.keywords,
+            reply=data.reply,
+            match_mode=data.match_mode,
+            active=data.active,
+            created_by_user_id=user["id"],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return AppKeywordRuleItem(**rule)
+
+
+@app.patch("/auth/app/keyword-rules/{rule_id}", response_model=AppKeywordRuleItem)
+async def app_keyword_rule_update(
+    rule_id: str,
+    data: AppKeywordRuleUpdatePayload,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AppKeywordRuleItem:
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    patch = {k: v for k, v in data.model_dump(exclude_unset=True).items() if v is not None}
+    try:
+        rule = keywords.update_rule(cliente_id, rule_id, patch)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not rule:
+        raise HTTPException(status_code=404, detail="Regla no encontrada.")
+    return AppKeywordRuleItem(**rule)
+
+
+@app.delete("/auth/app/keyword-rules/{rule_id}")
+async def app_keyword_rule_delete(
+    rule_id: str,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, bool]:
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    if not keywords.delete_rule(cliente_id, rule_id):
+        raise HTTPException(status_code=404, detail="Regla no encontrada.")
+    return {"ok": True}
+
+
+# --- Menu de opciones del asistente (opt-out por tenant) -------------------
+
+
+@app.get("/auth/app/chat-menu")
+async def app_chat_menu_get(
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, bool]:
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    return {"enabled": chat._menu_enabled(cliente_id)}
+
+
+@app.put("/auth/app/chat-menu")
+async def app_chat_menu_put(
+    data: AppChatMenuPayload,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, bool]:
+    """Enciende/apaga el menu de opciones al saludar. manager+ (configuracion)."""
+    security._require_portal_min_role(user, "manager")
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    with appstate.state_lock:
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+        cfg = next_configs.get(cliente_id, {})
+        section = dict(cfg.get(chat.MENU_CONFIG_SECTION, {}) or {})
+        section["enabled"] = bool(data.enabled)
+        cfg[chat.MENU_CONFIG_SECTION] = section
+        next_configs[cliente_id] = cfg
+        clients._update_runtime_configs(next_configs)
+    clients._persist_configs_to_disk(next_configs)
+    return {"enabled": chat._menu_enabled(cliente_id)}
 
 
 # --- Sem 4: Knowledge (text snippets + URLs) -----------------------------

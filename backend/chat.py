@@ -19,7 +19,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import RespuestaChat
-from backend import agenda, appstate, booking, clients, commerce, rag, settings, textnorm, timeutils
+from backend import agenda, appstate, booking, clients, commerce, keywords, rag, settings, textnorm, timeutils
 
 GREETING_PATTERNS = [
     re.compile(p, re.IGNORECASE)
@@ -198,6 +198,33 @@ def _detect_menu_option(message: str) -> str:
         if any(p.search(norm) for p in patterns):
             return option
     return ""
+
+
+MENU_CONFIG_SECTION = "chat_menu"
+
+
+def _menu_enabled(cliente_id: str) -> bool:
+    """¿Mostrar el menu de opciones al saludar? Opt-OUT por tenant.
+
+    Negocios que solo quieren respuestas directas (p.ej. un hotel que deriva por
+    telefono) pueden apagarlo: al saludar se responde con la bienvenida y punto.
+    Sin la seccion en config el menu sigue activo, que es como funciona siempre.
+    """
+    try:
+        config = clients._get_client_config(cliente_id)
+    except Exception:  # noqa: BLE001 - cliente inexistente o config a medias
+        return True
+    section = config.get(MENU_CONFIG_SECTION) or {}
+    if not isinstance(section, dict) or "enabled" not in section:
+        return True
+    return bool(section.get("enabled"))
+
+
+def _simple_greeting_text(config: Dict[str, Any], nombre_empresa: str) -> str:
+    """Saludo sin menu: la bienvenida que el negocio ya tiene configurada (respeta
+    su tono, incluido el trato de usted), con un fallback neutro."""
+    texto = str(config.get("bienvenida") or "").strip()
+    return texto or f"Hola. Soy el asistente de {nombre_empresa}. ¿En que puedo ayudarte?"
 
 
 def _build_main_menu_text(nombre_empresa: str, booking_enabled: bool, *, greeting: bool = False) -> str:
@@ -473,18 +500,28 @@ async def _process_chat_message(
     nombre_empresa = str(client_config.get("empresa") or "").strip() or client_config.get("nombre", "")
 
     if _message_is_pure_greeting(message) or _message_requests_menu(message):
-        menu_text = _build_main_menu_text(
-            nombre_empresa,
-            booking_enabled,
-            greeting=_message_is_greeting(message),
+        menu_on = _menu_enabled(cliente_id)
+        menu_text = (
+            _build_main_menu_text(
+                nombre_empresa,
+                booking_enabled,
+                greeting=_message_is_greeting(message),
+            )
+            if menu_on
+            else _simple_greeting_text(client_config, nombre_empresa)
         )
+        menu_intent = "menu" if menu_on else "greeting"
         menu_response = RespuestaChat(
             respuesta=menu_text,
             mostrar_formulario=False,
             session_id=session_id,
-            intent="menu",
-            quick_actions=_main_menu_quick_actions(
-                booking_enabled, gift_available=commerce.gift_public_available(cliente_id)
+            intent=menu_intent,
+            quick_actions=(
+                _main_menu_quick_actions(
+                    booking_enabled, gift_available=commerce.gift_public_available(cliente_id)
+                )
+                if menu_on
+                else []
             ),
         )
         rag._record_chat_message(
@@ -492,9 +529,29 @@ async def _process_chat_message(
             cliente_id=cliente_id,
             role="assistant",
             content=menu_text,
-            intent="menu",
+            intent=menu_intent,
         )
         return menu_response
+
+    # Reglas por palabra clave del negocio (opt-in): son configuracion EXPLICITA del
+    # cliente, asi que mandan sobre las heuristicas de abajo (disponibilidad, FAQ, IA).
+    # Sin la funcion activada esto no toca la base de datos.
+    keyword_rule = keywords.match_reply(cliente_id, message)
+    if keyword_rule:
+        keyword_response = RespuestaChat(
+            respuesta=keyword_rule["reply"],
+            mostrar_formulario=False,
+            session_id=session_id,
+            intent="keyword_rule",
+        )
+        rag._record_chat_message(
+            session_id=session_id,
+            cliente_id=cliente_id,
+            role="assistant",
+            content=keyword_rule["reply"],
+            intent="keyword_rule",
+        )
+        return keyword_response
 
     menu_option = _detect_menu_option(message)
     if rag._message_requests_availability(message):

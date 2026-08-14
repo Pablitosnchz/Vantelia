@@ -499,6 +499,19 @@
     .sidebar.collapsed .nav-item { justify-content: center; padding: 10px; }
     .sidebar.collapsed .sidebar-divider { margin: 8px 0; }
 
+    /* ── Reglas por palabra clave ──
+       Chips propios: `.pro-pill` lleva `margin-left:auto` (es el badge del plan en
+       el sidebar) y aqui separaba cada palabra hasta el borde de la tarjeta. */
+    .kwr-keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .kwr-key {
+      font-size: 0.72rem; line-height: 1.5;
+      padding: 1px 8px; border-radius: 6px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: var(--soft);
+      white-space: nowrap;
+    }
+
     /* ── Bot test drawer ── */
     .bot-fab {
       position: fixed; bottom: 28px; right: 28px;
@@ -2150,6 +2163,21 @@
       <div id="qaList" style="margin-top:14px;"></div>
     </div>
 
+    <div class="panel-card" id="kwrCard" style="display:none;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+        <h2 style="margin:0;">Respuestas por palabra clave</h2>
+        <div style="margin-left:auto;">
+          <button class="btn btn-primary" id="kwrAddBtn" type="button" data-perm="catalog.manage">+ Añadir regla</button>
+        </div>
+      </div>
+      <p class="panel-sub">Reglas literales que se aplican <b>antes</b> que la IA: si el mensaje contiene una de las palabras, se envía tu texto tal cual, sin interpretación. Útil para derivar consultas concretas a un teléfono o a otro departamento. Funciona en el chat de la web y en WhatsApp.</p>
+      <label style="display:flex; gap:8px; align-items:flex-start; cursor:pointer; margin-top:10px;">
+        <input type="checkbox" id="kwrEnabled" />
+        <span><b>Activar respuestas por palabra clave</b> · si lo desactivas, todas las consultas vuelven a pasar por el asistente.</span>
+      </label>
+      <div id="kwrList" style="margin-top:14px;"></div>
+    </div>
+
   </section>
 
   <!-- TUNE AI -->
@@ -2157,6 +2185,10 @@
     <div class="panel-card">
       <h2>Tune AI</h2>
       <p class="panel-sub">Controla los botones de acceso rapido que ve el visitante en el chat. Los servicios con precio y duracion se gestionan en la pestaña <b>Servicios</b>.</p>
+      <label style="display:flex; gap:8px; align-items:flex-start; cursor:pointer; margin-top:14px;" data-perm="catalog.manage">
+        <input type="checkbox" id="tnMenuEnabled" />
+        <span><b>Mostrar el menú de opciones al saludar</b> · si lo desactivas, cuando alguien escriba "hola" el asistente responde solo con tu mensaje de bienvenida, sin lista de opciones. Aplica al chat de la web y a WhatsApp.</span>
+      </label>
       <div id="tnStarterMount" style="margin-top:16px;"></div>
 
       <div class="form-row" style="display:none;">
@@ -2319,6 +2351,25 @@
       <div id="waPlanNotice" class="panel-sub" style="display:none; margin-top:14px; padding:12px; border:1px solid rgba(245,158,11,0.35); border-radius:10px; background:rgba(245,158,11,0.08); color:#fde68a;">
         Tu plan actual no incluye WhatsApp. Puedes solicitar la activación, pero necesitarás un plan con WhatsApp para que el asistente empiece a responder.
         <button class="btn btn-ghost" id="waGoBillingBtn" type="button" style="margin-left:10px; padding:6px 10px;">Ver planes</button>
+      </div>
+
+      <!-- Conexión automática (Embedded Signup + Coexistence) -->
+      <div id="waSignupCard" style="display:none; margin-top:20px; padding:24px; border-radius:14px; background:linear-gradient(135deg, rgba(37,211,102,0.14), rgba(7,16,31,0.55)); border:1px solid rgba(37,211,102,0.4);">
+        <h3 style="margin:0 0 6px; font-family:var(--font-title); font-size:1.15rem;">Conecta tu WhatsApp en 2 minutos</h3>
+        <p style="color:var(--soft); font-size:0.92rem; line-height:1.55; margin:0 0 8px;">
+          Sigues usando tu número y tu aplicación de WhatsApp Business en el móvil, como hasta ahora.
+          El asistente responde automáticamente y, en cuanto alguien de tu equipo contesta desde el teléfono,
+          se aparta y deja la conversación en vuestras manos.
+        </p>
+        <p class="panel-sub" style="margin:0 0 14px;">Necesitas ser administrador del WhatsApp Business de tu empresa. Meta te pedirá escanear un QR desde el móvil donde tienes la app.</p>
+        <div id="waConnectedBox" style="display:none; margin-bottom:14px; padding:12px; border-radius:10px; background:rgba(16,185,129,0.10); border:1px solid rgba(16,185,129,0.35);">
+          <b id="waConnectedNumber" style="color:var(--success);"></b>
+          <div class="panel-sub" id="waConnectedMode" style="margin:4px 0 0;"></div>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-primary" id="waConnectBtn" type="button">Conectar mi WhatsApp</button>
+          <button class="btn btn-ghost" id="waDisconnectBtn" type="button" style="display:none;">Desconectar</button>
+        </div>
       </div>
 
       <!-- Hero asistido -->
@@ -3738,6 +3789,45 @@
   </div>
 </div>
 
+<!-- Keyword rule edit panel -->
+<div class="side-panel" id="kwrFormCard">
+  <div class="side-panel-head">
+    <b id="kwrFormTitle">Nueva regla</b>
+    <button id="kwrPanelClose" type="button" aria-label="Cerrar">×</button>
+  </div>
+  <div class="side-panel-body">
+    <input type="hidden" id="kwrEditingId" />
+    <div class="field" style="margin-bottom:14px;">
+      <label class="field-label">Nombre de la regla (interno, opcional)</label>
+      <input class="field-input" id="kwrLabel" maxlength="80" placeholder="Ej: Consultas de spa" />
+    </div>
+    <div class="field" style="margin-bottom:14px;">
+      <label class="field-label">Palabras clave (separadas por coma)</label>
+      <input class="field-input" id="kwrKeywords" maxlength="600" placeholder="spa, masaje, circuito de aguas" />
+      <div class="panel-sub" style="margin:6px 0 0;">Se busca la palabra completa, sin distinguir mayúsculas ni acentos. Los plurales cuentan (<i>masaje</i> reconoce <i>masajes</i>). Puedes usar frases de varias palabras.</div>
+    </div>
+    <div class="field" style="margin-bottom:14px;">
+      <label class="field-label">Condición</label>
+      <select class="field-input" id="kwrMatchMode">
+        <option value="any">Basta con que aparezca una de las palabras</option>
+        <option value="all">Deben aparecer todas las palabras</option>
+      </select>
+    </div>
+    <div class="field" style="margin-bottom:14px;">
+      <label class="field-label">Respuesta automática (se envía tal cual)</label>
+      <textarea class="field-textarea" id="kwrReply" maxlength="2000" style="min-height:150px;" placeholder="Para reservas o información sobre el Spa, por favor llame al 971 747 878."></textarea>
+    </div>
+    <label style="display:flex; gap:8px; align-items:flex-start; cursor:pointer; margin-bottom:18px;">
+      <input type="checkbox" id="kwrActive" checked />
+      <span>Regla activa</span>
+    </label>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" id="kwrSaveBtn" type="button" style="flex:1;">Guardar</button>
+      <button class="btn btn-ghost" id="kwrCancelBtn" type="button">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Booking reschedule drawer -->
 <div class="drawer-overlay" id="reschedOverlay"></div>
 <div class="booking-drawer" id="reschedDrawer">
@@ -4109,7 +4199,7 @@ function setTab(tab) {
   document.getElementById('pageTitle').textContent = titles[tab] || 'Panel';
   if (tab === 'chats')      loadChats();
   if (tab === 'knowledge')  loadKnowledge();
-  if (tab === 'qa')         loadQA();
+  if (tab === 'qa')       { loadQA(); loadKeywordRules(); }
   if (tab === 'tune')       loadTune();
   if (tab === 'voz')        loadVoz();
   if (tab === 'whatsapp')   loadWhatsApp();
@@ -4540,10 +4630,65 @@ async function loadConvDetail(row) {
       </div>
       <div class="conv-meta-grid">${pills.join('')}</div>
       ${summary}
-      <div class="conv-thread">${thread}</div>`;
+      <div class="conv-thread">${thread}</div>
+      ${c.channel === 'whatsapp' ? '<div id="convReplyBox" style="margin-top:14px;"></div>' : ''}`;
+    if (c.channel === 'whatsapp') renderConvReply(row.id);
   } catch (err) {
     cont.innerHTML = `<div class="panel-sub" style="margin:0;">${escapeHtml(err.message)}</div>`;
   }
+}
+
+// ── Intervención humana: responder yo y callar al asistente ──────────────
+async function renderConvReply(convId) {
+  const box = document.getElementById('convReplyBox');
+  if (!box) return;
+  let st;
+  try { st = await api(`/auth/inbox/${encodeURIComponent(convId)}/takeover`); }
+  catch { box.innerHTML = ''; return; }
+
+  const activo = !!st.active;
+  const aviso = st.window_open ? '' :
+    `<div class="panel-sub" style="margin:0 0 10px; color:var(--warning);">⚠ ${escapeHtml(st.window_note || '')}</div>`;
+  box.innerHTML = `
+    <div class="panel-card" style="margin:0; padding:14px;">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+        <b>${activo ? '🙋 Estás atendiendo tú esta conversación' : '🤖 Responde el asistente'}</b>
+        ${activo ? `<span class="panel-sub" style="margin:0;">El asistente no contestará aquí${st.agent_name ? ' · ' + escapeHtml(st.agent_name) : ''}</span>` : ''}
+        <button class="btn btn-ghost" id="convToggleTakeover" type="button" style="margin-left:auto; padding:5px 12px; font-size:0.8rem;">
+          ${activo ? 'Devolver al asistente' : 'Atender yo'}
+        </button>
+      </div>
+      ${aviso}
+      <textarea class="field-textarea" id="convReplyText" maxlength="3000" style="min-height:80px;"
+        placeholder="Escribe tu respuesta al cliente…" ${st.window_open ? '' : 'disabled'}></textarea>
+      <div style="display:flex; gap:10px; margin-top:10px;">
+        <button class="btn btn-primary" id="convReplySend" type="button" ${st.window_open ? '' : 'disabled'}>Enviar por WhatsApp</button>
+      </div>
+    </div>`;
+
+  document.getElementById('convToggleTakeover').addEventListener('click', async (ev) => {
+    ev.target.disabled = true;
+    try {
+      await api(`/auth/inbox/${encodeURIComponent(convId)}/takeover`, { method: activo ? 'DELETE' : 'POST' });
+      toast(activo ? 'El asistente vuelve a responder' : 'Has tomado la conversación: el asistente calla aquí', 'success');
+      renderConvReply(convId);
+    } catch (err) { toast(err.message, 'error'); ev.target.disabled = false; }
+  });
+
+  document.getElementById('convReplySend').addEventListener('click', async (ev) => {
+    const texto = document.getElementById('convReplyText').value.trim();
+    if (!texto) { toast('Escribe un mensaje.', 'error'); return; }
+    ev.target.disabled = true;
+    try {
+      await api(`/auth/inbox/${encodeURIComponent(convId)}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: texto }),
+      });
+      toast('Mensaje enviado', 'success');
+      loadConvDetail({ kind: 'chat', id: convId });
+    } catch (err) { toast(err.message, 'error'); ev.target.disabled = false; }
+  });
 }
 
 document.getElementById('convFilters')?.addEventListener('click', (e) => {
@@ -5040,12 +5185,123 @@ document.getElementById('qaSaveBtn').addEventListener('click', async () => {
   } catch (err) { toast(err.message, 'error'); }
 });
 
+// ── Respuestas por palabra clave ──────────────────────────────────────
+// Solo se muestra la tarjeta si el negocio tiene la funcion activada o ya tiene
+// reglas creadas: para el resto de clientes la pestaña queda igual que siempre.
+async function loadKeywordRules() {
+  const card = document.getElementById('kwrCard');
+  const list = document.getElementById('kwrList');
+  if (!card || !list) return;
+  let data;
+  try { data = await api('/auth/app/keyword-rules'); }
+  catch { card.style.display = 'none'; return; }
+  const items = data.items || [];
+  if (!data.enabled && !items.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  document.getElementById('kwrEnabled').checked = !!data.enabled;
+  if (!items.length) {
+    list.innerHTML = '<div class="panel-sub" style="margin:0;">Sin reglas todavía. Añade una para responder al instante a las preguntas que más se repiten.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  items.forEach(rule => {
+    const row = document.createElement('div');
+    row.className = 'chat-row';
+    const kws = (rule.keywords || []).map(k => `<span class="kwr-key">${escapeHtml(k)}</span>`).join('');
+    row.innerHTML = `
+      <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:600;">${escapeHtml(rule.label || (rule.keywords || []).join(', '))}${rule.active ? '' : ' <span class="panel-sub" style="font-weight:400;">· desactivada</span>'}</div>
+          <div class="kwr-keys">${kws}</div>
+          <div class="preview" style="margin-top:8px; color:var(--soft); white-space:normal;">${escapeHtml(rule.reply.slice(0, 220))}${rule.reply.length > 220 ? '…' : ''}</div>
+          <div class="panel-sub" style="margin:6px 0 0;">${rule.match_mode === 'all' ? 'Requiere todas las palabras' : 'Basta una palabra'} · usada ${rule.hits} ${rule.hits === 1 ? 'vez' : 'veces'}</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <button class="btn btn-ghost" data-edit="${escapeHtml(rule.id)}" style="padding:4px 10px; font-size:0.78rem;">Editar</button>
+          <button class="btn btn-ghost" data-delete="${escapeHtml(rule.id)}" style="padding:4px 10px; font-size:0.78rem;">Quitar</button>
+        </div>
+      </div>`;
+    row.querySelector('[data-edit]').addEventListener('click', () => {
+      document.getElementById('kwrFormTitle').textContent = 'Editar regla';
+      document.getElementById('kwrEditingId').value = rule.id;
+      document.getElementById('kwrLabel').value = rule.label || '';
+      document.getElementById('kwrKeywords').value = (rule.keywords || []).join(', ');
+      document.getElementById('kwrReply').value = rule.reply || '';
+      document.getElementById('kwrMatchMode').value = rule.match_mode || 'any';
+      document.getElementById('kwrActive').checked = !!rule.active;
+      document.getElementById('kwrFormCard').classList.add('open');
+    });
+    row.querySelector('[data-delete]').addEventListener('click', async () => {
+      if (!(await confirmDialog({ title: 'Eliminar regla', bodyHtml: '¿Eliminar esta respuesta automática?', confirmLabel: 'Eliminar', danger: true }))) return;
+      try { await api('/auth/app/keyword-rules/' + encodeURIComponent(rule.id), { method: 'DELETE' }); toast('Regla eliminada', 'success'); loadKeywordRules(); }
+      catch (err) { toast(err.message, 'error'); }
+    });
+    list.appendChild(row);
+  });
+}
+document.getElementById('kwrEnabled')?.addEventListener('change', async (ev) => {
+  try {
+    await api('/auth/app/keyword-rules/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: ev.target.checked }),
+    });
+    toast(ev.target.checked ? 'Respuestas por palabra clave activadas' : 'Respuestas por palabra clave desactivadas', 'success');
+    loadKeywordRules();
+  } catch (err) { toast(err.message, 'error'); ev.target.checked = !ev.target.checked; }
+});
+document.getElementById('kwrAddBtn')?.addEventListener('click', () => {
+  document.getElementById('kwrFormTitle').textContent = 'Nueva regla';
+  ['kwrEditingId','kwrLabel','kwrKeywords','kwrReply'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('kwrMatchMode').value = 'any';
+  document.getElementById('kwrActive').checked = true;
+  document.getElementById('kwrFormCard').classList.add('open');
+  setTimeout(() => { document.getElementById('kwrKeywords').focus(); }, 200);
+});
+document.getElementById('kwrPanelClose')?.addEventListener('click', () => document.getElementById('kwrFormCard').classList.remove('open'));
+document.getElementById('kwrCancelBtn')?.addEventListener('click', () => document.getElementById('kwrFormCard').classList.remove('open'));
+document.getElementById('kwrSaveBtn')?.addEventListener('click', async () => {
+  const editing = document.getElementById('kwrEditingId').value;
+  const payload = {
+    label: document.getElementById('kwrLabel').value.trim(),
+    keywords: document.getElementById('kwrKeywords').value.split(',').map(s => s.trim()).filter(Boolean),
+    reply: document.getElementById('kwrReply').value.trim(),
+    match_mode: document.getElementById('kwrMatchMode').value,
+    active: document.getElementById('kwrActive').checked,
+  };
+  if (!payload.keywords.length || !payload.reply) { toast('Indica al menos una palabra clave y la respuesta.', 'error'); return; }
+  try {
+    await api('/auth/app/keyword-rules' + (editing ? '/' + encodeURIComponent(editing) : ''), {
+      method: editing ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    toast('Regla guardada', 'success');
+    document.getElementById('kwrFormCard').classList.remove('open');
+    loadKeywordRules();
+  } catch (err) { toast(err.message, 'error'); }
+});
+
 // ── TUNE AI ───────────────────────────────────────────────────────────
 async function loadTune() {
   try {
     moveStarterPanelToTune();
   } catch (err) { toast(err.message, 'error'); }
+  try {
+    const data = await api('/auth/app/chat-menu');
+    document.getElementById('tnMenuEnabled').checked = !!data.enabled;
+  } catch { /* si falla, el interruptor se queda como esta */ }
 }
+document.getElementById('tnMenuEnabled')?.addEventListener('change', async (ev) => {
+  try {
+    await api('/auth/app/chat-menu', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: ev.target.checked }),
+    });
+    toast(ev.target.checked ? 'El asistente mostrará el menú al saludar' : 'Menú desactivado: al saludar responderá solo con la bienvenida', 'success');
+  } catch (err) { toast(err.message, 'error'); ev.target.checked = !ev.target.checked; }
+});
 
 function moveStarterPanelToTune() {
   const panel = document.getElementById('starterPanel');
@@ -5113,8 +5369,96 @@ function renderWhatsAppChecklist(data) {
   `).join('');
 }
 
+// ── Conexión automática de WhatsApp (Embedded Signup de Meta) ────────────
+// Coexistence: el número sigue en la app del móvil del negocio y a la vez
+// responde por la API. El SDK de Facebook solo se carga si Meta está configurado.
+let waSdkLoaded = false;
+function loadFacebookSdk(appId) {
+  if (waSdkLoaded) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    window.fbAsyncInit = function () {
+      FB.init({ appId: appId, cookie: true, xfbml: false, version: 'v23.0' });
+      waSdkLoaded = true;
+      resolve();
+    };
+    const s = document.createElement('script');
+    s.src = 'https://connect.facebook.net/en_US/sdk.js';
+    s.async = true; s.defer = true; s.crossOrigin = 'anonymous';
+    s.onerror = () => reject(new Error('No se pudo cargar el conector de Meta.'));
+    document.head.appendChild(s);
+  });
+}
+
+function renderWaSignup(data) {
+  const card = document.getElementById('waSignupCard');
+  if (!card) return;
+  if (!data.embedded_signup_available) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const conectado = !!data.connected_via_signup;
+  document.getElementById('waConnectedBox').style.display = conectado ? '' : 'none';
+  document.getElementById('waDisconnectBtn').style.display = conectado ? '' : 'none';
+  document.getElementById('waConnectBtn').textContent = conectado ? 'Conectar otro número' : 'Conectar mi WhatsApp';
+  if (conectado) {
+    document.getElementById('waConnectedNumber').textContent = '✓ ' + (data.connected_number || 'Número conectado');
+    document.getElementById('waConnectedMode').textContent = data.connected_mode === 'coexistence'
+      ? 'Sigues usando tu app del móvil con normalidad; el asistente responde en paralelo.'
+      : 'Número dedicado al asistente (no se usa desde la app del móvil).';
+  }
+}
+
+document.getElementById('waConnectBtn')?.addEventListener('click', async (ev) => {
+  const st = whatsappState || {};
+  if (!st.meta_app_id || !st.es_config_id) { toast('La conexión automática no está configurada.', 'error'); return; }
+  ev.target.disabled = true;
+  try {
+    await loadFacebookSdk(st.meta_app_id);
+    // Meta devuelve el waba_id y el phone_number_id por postMessage, y el code por el callback.
+    let datos = {};
+    const onMessage = (e) => {
+      if (!/facebook\.com$/.test(new URL(e.origin).hostname)) return;
+      try {
+        const d = JSON.parse(e.data);
+        // El evento distingue el alta normal de la conexión de su app del móvil
+        // (FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING = coexistence, no hay que registrar el número).
+        if (d.type === 'WA_EMBEDDED_SIGNUP' && d.data) datos = Object.assign({}, d.data, { event: d.event || d.data.event || '' });
+      } catch { /* mensajes que no son del flujo */ }
+    };
+    window.addEventListener('message', onMessage);
+    // Embedded Signup v4 (v2 se retira el 15-oct-2026): solo config_id + extras.setup.
+    const respuesta = await new Promise((resolve) => {
+      FB.login(resolve, {
+        config_id: st.es_config_id,
+        response_type: 'code',
+        override_default_response_type: true,
+        extras: { setup: {} },
+      });
+    });
+    window.removeEventListener('message', onMessage);
+    const code = respuesta && respuesta.authResponse && respuesta.authResponse.code;
+    if (!code) { toast('Conexión cancelada.', 'error'); ev.target.disabled = false; return; }
+    await api('/auth/app/whatsapp/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, waba_id: datos.waba_id || '', phone_number_id: datos.phone_number_id || '', event: datos.event || '' }),
+    });
+    toast('WhatsApp conectado', 'success');
+    loadWhatsApp();
+  } catch (err) { toast(err.message, 'error'); }
+  finally { ev.target.disabled = false; }
+});
+
+document.getElementById('waDisconnectBtn')?.addEventListener('click', async () => {
+  if (!(await confirmDialog({ title: 'Desconectar WhatsApp', bodyHtml: 'El asistente dejará de responder en tu número. Tu cuenta de Meta no se toca.', confirmLabel: 'Desconectar', danger: true }))) return;
+  try {
+    await api('/auth/app/whatsapp/connect', { method: 'DELETE' });
+    toast('WhatsApp desconectado', 'success');
+    loadWhatsApp();
+  } catch (err) { toast(err.message, 'error'); }
+});
+
 function renderWhatsApp(data) {
   whatsappState = data || {};
+  renderWaSignup(data);
   document.getElementById('waEnabled').checked = !!data.enabled;
   document.getElementById('waPhoneNumberId').value = data.phone_number_id || '';
   document.getElementById('waAccessTokenEnv').value = data.access_token_env || '';
