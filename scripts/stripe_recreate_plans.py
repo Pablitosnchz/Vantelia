@@ -1,5 +1,9 @@
 """Crea productos y precios nuevos para los planes Starter/Pro/Business.
 
+Los precios se publican con IVA INCLUIDO (`tax_behavior="inclusive"`): el importe
+que ve el cliente es el que paga. Ojo: `tax_behavior` no se puede editar en un
+precio ya creado, por eso cambiar de tarifa obliga a crear objetos Price nuevos.
+
 Lee STRIPE_SECRET_KEY desde .env, archiva precios anteriores que estén
 en STRIPE_PRICE_* del .env, y crea nuevos productos + precios mensuales y
 anuales. Imprime los nuevos Price IDs listos para pegar en .env.
@@ -38,18 +42,12 @@ def main() -> int:
     stripe.api_key = sk
 
     old_price_keys = [
-        "STRIPE_PRICE_ESENCIAL",
-        "STRIPE_PRICE_WEB",
+        "STRIPE_PRICE_STARTER",
+        "STRIPE_PRICE_STARTER_ANNUAL",
         "STRIPE_PRICE_PRO",
-        "STRIPE_PRICE_WHATSAPP",
-        "STRIPE_PRICE_EMPRESA",
-        "STRIPE_PRICE_COMPLETO",
-        "STRIPE_PRICE_ESENCIAL_ANNUAL",
-        "STRIPE_PRICE_WEB_ANNUAL",
         "STRIPE_PRICE_PRO_ANNUAL",
-        "STRIPE_PRICE_WHATSAPP_ANNUAL",
-        "STRIPE_PRICE_EMPRESA_ANNUAL",
-        "STRIPE_PRICE_COMPLETO_ANNUAL",
+        "STRIPE_PRICE_BUSINESS",
+        "STRIPE_PRICE_BUSINESS_ANNUAL",
     ]
     for k in old_price_keys:
         old_id = env.get(k, "").strip()
@@ -66,22 +64,22 @@ def main() -> int:
             "key": "starter",
             "name": "Vantelia · Starter",
             "description": "Asistente IA con leads, documentos y marca personalizada.",
-            "monthly_eur": 19,
-            "annual_eur": 190,
+            "monthly_eur": 49,
+            "annual_eur": 490,
         },
         {
             "key": "pro",
             "name": "Vantelia · Pro",
             "description": "Asistente IA con reservas, agenda integrada y Live Chat.",
-            "monthly_eur": 49,
-            "annual_eur": 490,
+            "monthly_eur": 129,
+            "annual_eur": 1290,
         },
         {
             "key": "business",
             "name": "Vantelia · Business",
             "description": "Asistente IA omnicanal con WhatsApp, integraciones y alto volumen.",
-            "monthly_eur": 149,
-            "annual_eur": 1490,
+            "monthly_eur": 299,
+            "annual_eur": 2990,
         },
     ]
 
@@ -99,6 +97,7 @@ def main() -> int:
             currency="eur",
             unit_amount=p["monthly_eur"] * 100,
             recurring={"interval": "month"},
+            tax_behavior="inclusive",
             nickname=f"{p['key']}-monthly",
             metadata={"plan": p["key"], "billing_period": "monthly"},
         )
@@ -108,6 +107,7 @@ def main() -> int:
             currency="eur",
             unit_amount=a_unit,
             recurring={"interval": "year"},
+            tax_behavior="inclusive",
             nickname=f"{p['key']}-annual",
             metadata={"plan": p["key"], "billing_period": "annual"},
         )

@@ -7,11 +7,11 @@ Vantelia permite a cualquier negocio con cita (clínicas, estética, peluquería
 ## Planes y precios
 
 - [Free — 0 €/mes](https://www.vantelia.es/planes/): 50 mensajes/mes y 10 citas/mes. Asistente entrenado con tu web, widget instalable, panel con conversaciones. Sin tarjeta.
-- [Starter — 29 €/mes](https://www.vantelia.es/planes/): 1.500 mensajes/mes, 150 citas/mes, 1 profesional. Pagos online (señal/depósito y cobro con tarjeta), productos, bonos y tarjetas regalo, reseñas automáticas por email, sin marca Vantelia.
-- [Pro — 79 €/mes](https://www.vantelia.es/planes/): 5.000 mensajes/mes, 500 citas/mes. Asistente en WhatsApp Business con IA, tienda online (bonos, productos y tarjetas regalo), la IA envía enlaces de pago, hasta 5 profesionales y 3 usuarios, recordatorios y reseñas por WhatsApp, informes.
+- [Starter — 49 €/mes](https://www.vantelia.es/planes/): 1.500 mensajes/mes, 150 citas/mes, 1 profesional. Pagos online (señal/depósito y cobro con tarjeta), productos, bonos y tarjetas regalo, reseñas automáticas por email, sin marca Vantelia.
+- [Pro — 129 €/mes](https://www.vantelia.es/planes/): 5.000 mensajes/mes, 500 citas/mes. Asistente en WhatsApp Business con IA, tienda online (bonos, productos y tarjetas regalo), la IA envía enlaces de pago, hasta 5 profesionales y 3 usuarios, recordatorios y reseñas por WhatsApp, informes.
 - [Business — 299 €/mes](https://www.vantelia.es/planes/): recepcionista de voz IA por teléfono (500 min/mes), llamadas de confirmación por IA, voz en el widget web, multi-centro ilimitado con salas/aforo, profesionales y usuarios ilimitados con permisos por empleado, SMS, informes avanzados, políticas de cancelación/no-show, onboarding asistido.
 
-Todos los planes: sin permanencia, cancelación desde el portal, IVA no incluido en planes de pago.
+Todos los planes: sin permanencia, cancelación desde el portal, IVA incluido en planes de pago.
 
 ## Funcionalidades principales
 
