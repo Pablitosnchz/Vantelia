@@ -3910,7 +3910,6 @@
       <span class="nb-num">1</span>
       <div class="nb-body">
         <label class="field-label">Servicio</label>
-        <div id="nbSvcChips" class="nb-chips"></div>
         <select class="field-input" id="nbServicio"><option value="">Sin especificar</option></select>
       </div>
     </div>
@@ -7144,10 +7143,11 @@ async function openNewBookingDrawer(opts = {}) {
   if (opts.email) document.getElementById('nbEmail').value = opts.email;
   if (opts.telefono) document.getElementById('nbTelefono').value = opts.telefono;
   if (opts.servicio) document.getElementById('nbServicio').value = opts.servicio;
-  nbRenderSvcChips();
   document.getElementById('nbSlotSelected').value = '';
   document.getElementById('nbConfirmBtn').disabled = true;
-  document.getElementById('nbFecha').value = opts.date || (citasState.dayDate ? cdDateKey(citasState.dayDate) : cdDateKey(new Date()));
+  const campoFecha = document.getElementById('nbFecha');
+  campoFecha.min = cdDateKey(new Date());   // el backend rechaza fechas pasadas
+  campoFecha.value = opts.date || (citasState.dayDate ? cdDateKey(citasState.dayDate) : cdDateKey(new Date()));
   document.getElementById('newBookingDrawer').classList.add('open');
   document.getElementById('newBookingOverlay').classList.add('open');
   await loadNbSlots(opts.time || '');
@@ -7175,31 +7175,6 @@ async function loadNbServices() {
       return `<option value="${escapeHtml(name)}">${escapeHtml(label)}</option>`;
     }).join('');
   } catch { sel.innerHTML = '<option value="">Sin especificar</option>'; }
-}
-
-// Los servicios mas usados, como botones: en el mostrador se elige uno de tres,
-// no se busca en un desplegable de veinte.
-function nbRenderSvcChips() {
-  const cont = document.getElementById('nbSvcChips');
-  const sel = document.getElementById('nbServicio');
-  if (!cont || !sel) return;
-  const opciones = Array.from(sel.options).filter(o => o.value);
-  cont.innerHTML = '';
-  opciones.slice(0, 4).forEach(op => {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'filter-chip' + (op.value === sel.value ? ' active' : '');
-    // Nombres largos ("Diagnostico y asesoramiento personalizado") reventaban la
-    // fila: se recorta en el chip y el nombre entero queda en el title.
-    chip.textContent = op.value.length > 22 ? op.value.slice(0, 21).trim() + '…' : op.value;
-    chip.title = op.value;
-    chip.addEventListener('click', () => {
-      sel.value = op.value;
-      nbRenderSvcChips();
-      loadNbSlots();
-    });
-    cont.appendChild(chip);
-  });
 }
 
 function nbCloseAc() {
@@ -7242,8 +7217,9 @@ function nbBuscarCliente() {
 // Busca el proximo dia con hueco en vez de dejar al usuario probando fechas.
 async function nbProximoHueco() {
   const cont = document.getElementById('nbSlots');
-  const base = document.getElementById('nbFecha').value;
-  if (!base) return;
+  const hoy = cdDateKey(new Date());
+  let base = document.getElementById('nbFecha').value;
+  if (!base || base < hoy) base = hoy;
   cont.innerHTML = '<span class="panel-sub" style="margin:0;">Buscando el próximo hueco…</span>';
   const empId = document.getElementById('nbProf').value || '';
   const servicio = document.getElementById('nbServicio').value || '';
@@ -7280,6 +7256,18 @@ function nbSyncConfirm() {
   }
 }
 
+// Aviso del dia con salida: sin el atajo, el usuario se queda probando fechas.
+function nbAvisoDia(cont, texto, conAtajo) {
+  cont.innerHTML = `<span class="panel-sub" style="margin:0;">${escapeHtml(texto)}</span>`;
+  if (!conAtajo) return;
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'btn btn-ghost';
+  btn.style.cssText = 'padding:6px 12px; font-size:0.8rem;';
+  btn.textContent = 'Buscar el próximo hueco';
+  btn.addEventListener('click', () => nbProximoHueco());
+  cont.appendChild(btn);
+}
+
 async function loadNbSlots(preselect = '') {
   const cont = document.getElementById('nbSlots');
   const fecha = document.getElementById('nbFecha').value;
@@ -7287,6 +7275,20 @@ async function loadNbSlots(preselect = '') {
   document.getElementById('nbSlotSelected').value = '';
   nbSyncConfirm();
   if (!fecha) { cont.innerHTML = '<span class="panel-sub" style="margin:0;">Selecciona una fecha.</span>'; return; }
+
+  // Antes de preguntar al servidor: si el dia ya paso o el negocio no abre, se
+  // dice por que. "Sin huecos" a secas parece que la herramienta falla.
+  const hoyKey = cdDateKey(new Date());
+  if (fecha < hoyKey) { nbAvisoDia(cont, 'Ese día ya ha pasado. Elige una fecha desde hoy.', true); return; }
+  const empSel = (citasState.employees || []).find(e => e.id === empId);
+  const diaSemana = (new Date(fecha + 'T00:00:00').getDay() + 6) % 7;
+  if (!cdWeekdayWindow(empSel || citasState.daySchedule || {}, diaSemana)) {
+    const nombreDia = ['lunes','martes','miércoles','jueves','viernes','sábados','domingos'][diaSemana];
+    const quien = empSel && !empSel.is_default ? (empSel.name || 'ese profesional') : 'el negocio';
+    nbAvisoDia(cont, `Los ${nombreDia} ${quien} no trabaja.`, true);
+    return;
+  }
+
   cont.innerHTML = '<span class="panel-sub" style="margin:0;">Cargando huecos…</span>';
   try {
     const servicio = document.getElementById('nbServicio').value || '';
@@ -7298,12 +7300,10 @@ async function loadNbSlots(preselect = '') {
     const slots = all.filter(s => s.disponible !== false);
     cont.innerHTML = '';
     if (!slots.length) {
-      cont.innerHTML = '<span class="panel-sub" style="margin:0;">Sin huecos ese día.</span>';
-      const btn = document.createElement('button');
-      btn.type = 'button'; btn.className = 'btn btn-ghost'; btn.style.cssText = 'padding:6px 12px; font-size:0.8rem;';
-      btn.textContent = 'Buscar el próximo hueco';
-      btn.addEventListener('click', () => nbProximoHueco());
-      cont.appendChild(btn);
+      const cerrado = !all.length;   // el dia no tiene ni tramos: jornada terminada
+      nbAvisoDia(cont, cerrado
+        ? (fecha === cdDateKey(new Date()) ? 'La jornada de hoy ya ha terminado.' : 'Ese día no hay agenda.')
+        : 'No queda ningún hueco ese día.', true);
       return;
     }
     slots.forEach(s => {
@@ -7335,7 +7335,6 @@ document.getElementById('nbFecha').addEventListener('change', () => loadNbSlots(
 document.getElementById('nbServicio').addEventListener('change', () => loadNbSlots());
 document.getElementById('nbNombre').addEventListener('input', () => { nbSyncConfirm(); nbBuscarCliente(); });
 document.getElementById('nbNombre').addEventListener('blur', () => setTimeout(nbCloseAc, 180));
-document.getElementById('nbServicio').addEventListener('change', nbRenderSvcChips);
 document.getElementById('nbConfirmBtn').addEventListener('click', async () => {
   const btn = document.getElementById('nbConfirmBtn');
   const payload = {
