@@ -709,5 +709,66 @@
       "hero_image_url": "https://aliciarinconestilistas.com/media/mslzvpu7-img-9396.jpg",
       "hero_tagline": "Peluquería colorista en Elche · Más de 36 años creando cambios de imagen"
     }
+  },
+  "caprocat": {
+    "nombre": "Cap Rocat",
+    "empresa": "Cap Rocat",
+    "plan": "pro",
+    "subscription": {
+      "plan": "pro"
+    },
+    "icono": "CR",
+    "color": "#B58C61",
+    "accent_color": "#B58C61",
+    "bienvenida": "Bienvenido a Cap Rocat. Puedo resolver sus dudas sobre el hotel, el spa, nuestros restaurantes o como contactarnos. ¿En que puedo ayudarle?",
+    "prompt_extra": "Eres el asistente del hotel Cap Rocat (Cala Blava, Mallorca), un hotel boutique de lujo en una antigua fortaleza. Trato de USTED siempre, tono sobrio, cuidado y breve; nada de emojis efusivos ni lenguaje comercial agresivo. NUNCA inventes horarios, precios, disponibilidad ni politicas: si no consta en tu informacion, deriva al equipo del hotel en el (+34) 971 74 78 78 o info@caprocat.com. No gestionas reservas de habitacion, mesa ni tratamientos: informas y derivas. Responde en el idioma en que te escriba el huesped.",
+    "chat_model": "",
+    "temperature": 0.2,
+    "allowed_origins": [
+      "https://app.vantelia.es",
+      "https://www.vantelia.es",
+      "https://vantelia.es",
+      "https://caprocat.com",
+      "https://www.caprocat.com"
+    ],
+    "contacto": {
+      "email": "info@caprocat.com",
+      "telefono": "(+34) 971 74 78 78"
+    },
+    "branding": {
+      "powered_by": "Powered by Vantelia"
+    },
+    "keyword_rules": {
+      "enabled": true
+    },
+    "whatsapp": {
+      "enabled": true,
+      "phone_number_id": "1003598042848216",
+      "access_token_env": "",
+      "verify_token_env": ""
+    },
+    "voice": {
+      "enabled": false,
+      "twilio_phone_number": "",
+      "openai_voice": "marin",
+      "realtime_model": "",
+      "greeting": "",
+      "max_duration_seconds": 300,
+      "sms_confirmation": false,
+      "widget_enabled": false
+    },
+    "demo_claimable": false,
+    "booking": {
+      "enabled": false,
+      "timezone": "Europe/Madrid",
+      "slot_minutes": 30,
+      "day_start": "09:00",
+      "day_end": "20:00",
+      "closed_weekdays": [],
+      "provider": "internal",
+      "webhook_env": "",
+      "webhook_url": "",
+      "success_message": ""
+    }
   }
 }

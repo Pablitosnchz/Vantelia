@@ -10,7 +10,19 @@ asumir que un tenant existe, comprobarlo contra prod (`GET /central/{id}` o el p
 | `van` | Tenant de demostración (masajes). Es la central embebida en la home (`/central/van?embed=1`) y el ejemplo enlazado desde la web. | NO borrar. Pueden entrar reservas de prueba de visitantes: son ruido esperado, limpiarlas de vez en cuando desde el panel. |
 | `demo_*` (≈20) | Demos autogeneradas por `/demo/` (7 días de vida, registro en `storage/demo_tenants.json`). | Se autolimpian al expirar; no tocar a mano. |
 | `alicia_rincon_estilistas` | **Alicia Rincón Estilistas** (peluquería colorista, Elche). Primer cliente real en piloto (ago-2026). La cuenta la creó ella misma el 11-ago (`aliciarinconweb@gmail.com`, owner); el 13-ago se migró ahí todo lo preparado y se borró el tenant provisional `aliciarincon`. Portal, central de reservas, widget y copia integrada de su web en `/site/aliciarincon/`. | NO borrar. **Su contraseña es suya**: para entrar al panel, impersonar desde el panel admin (Clientes → Acceder), nunca resetearla. Horario por día real (`weekly_hours`); si cambian servicios o textos → `POST /admin/reindex/alicia_rincon_estilistas`. La copia de su web lleva `noindex` y no debe publicarse en su dominio sin permiso. Provisioning idempotente: `scripts/seed_alicia_rincon.py`. |
+| `caprocat` | **Hotel Cap Rocat** (Cala Blava, Mallorca). Lead entrante 13-ago-2026: quieren autorespuestas por palabra clave en WhatsApp, no un chatbot. Provisionado el 14-ago-2026 para que lo prueben: RAG de su web, 7 reglas por palabra clave activas (`keyword_rules.enabled=true`), 5 Q&A y cuenta de portal `reservas@caprocat.com` (owner, plan pro). Agenda y voz DESACTIVADAS a propósito. | Prueba: `/demo/caprocat`. Provisioning idempotente: `scripts/seed_caprocat.py`. WhatsApp **pendiente**: el system user de Meta no tiene ninguna WABA asignada (`me/assigned_whatsapp_business_accounts` = vacío), así que no hay número de pruebas usable; hay que asignar WABA + número al system user y poner el `phone_number_id` en `config['whatsapp']`. Si cambia su web → `POST /admin/reindex/caprocat`. |
 | `thenook` | Prospect que no cerró (jul 2026). | ELIMINADO el 16-jul-2026 vía `DELETE /admin/clientes/thenook`. Restos locales (client_sites, data, scripts) borrados del repo el 13-ago-2026. |
+
+## Trampa al fusionar `config.json` en prod (14-ago-2026)
+
+Escribir el JSON a mano en el VPS **mientras la app vieja sigue viva** puede perder secciones:
+el proceso en marcha reescribe `config.json` con SU whitelist (`clients.CONFIG_EXTRA_SECTIONS`)
+y borra cualquier sección que su versión no conozca. Paso real: se fusionó `keyword_rules`
+a las 08:54:39 y el contenedor antiguo reescribió el fichero 16 segundos después, sin esa clave.
+
+Orden correcto: **primero desplegar el código** que conoce la sección nueva, y **después**
+activarla por la API del portal (que persiste con el código nuevo y además la deja en memoria),
+no editando el JSON a mano. Comprobarlo siempre tras el deploy.
 
 ## Backups (arreglado 16-jul-2026)
 
