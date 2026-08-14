@@ -711,6 +711,40 @@
       .mg-info-row { grid-template-columns: 1fr; gap: 3px; }
     }
 
+    /* ── Nueva cita: tres pasos ── */
+    .nb-step { display:flex; gap:12px; margin-bottom:18px; }
+    .nb-num {
+      flex:0 0 26px; height:26px; border-radius:50%; background:var(--accent-soft); color:var(--accent);
+      display:grid; place-items:center; font-size:0.78rem; font-weight:800; margin-top:2px;
+    }
+    .nb-body { flex:1; min-width:0; }
+    .nb-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    @media (max-width:520px){ .nb-row { grid-template-columns:1fr; } }
+    .nb-chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+    .nb-chips:empty { display:none; }
+    .nb-chips .filter-chip { cursor:pointer; }
+    .nb-more { margin-top:10px; }
+    .nb-more summary { cursor:pointer; font-size:0.82rem; color:var(--soft); }
+    .nb-more > *:not(summary) { margin-top:8px; }
+    .nb-ac-wrap { position:relative; }
+    .nb-ac {
+      display:none; position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:40;
+      background:var(--panel-2); border:1px solid var(--line); border-radius:10px; overflow:hidden;
+      box-shadow:0 12px 30px rgba(0,0,0,.35);
+    }
+    .nb-ac.open { display:block; }
+    .nb-ac-item { padding:8px 12px; cursor:pointer; }
+    .nb-ac-item:hover { background:var(--accent-soft); }
+    .nb-ac-item b { display:block; font-size:0.88rem; }
+    .nb-ac-item span { display:block; font-size:0.76rem; color:var(--soft); }
+    /* Marca del hueco bajo el cursor en la vista Dia: deja claro que se puede pinchar. */
+    .cd-newmark {
+      position:absolute; left:3px; right:3px; pointer-events:none; border-radius:6px;
+      border:1.5px dashed var(--accent); background:var(--accent-soft);
+      display:flex; align-items:center; justify-content:center; gap:6px;
+      font-size:0.72rem; font-weight:700; color:var(--accent);
+    }
+
     /* ── Vista Día: timeline por profesional ── */
     .cd-scroll { overflow-x:auto; overflow-y:hidden; border:1px solid var(--line); border-radius:12px; background:var(--panel); }
     .cd-grid { display:flex; align-items:stretch; min-width:100%; }
@@ -3872,17 +3906,47 @@
     <button id="newBookingClose">×</button>
   </div>
   <div style="padding:18px; overflow-y:auto; flex:1;">
-    <div class="field" style="margin-bottom:10px;"><label class="field-label">Nombre del cliente *</label><input type="text" class="field-input" id="nbNombre" placeholder="Nombre y apellidos" /></div>
-    <div class="field" style="margin-bottom:10px;"><label class="field-label">Email</label><input type="email" class="field-input" id="nbEmail" placeholder="opcional · se envía confirmación si lo rellenas" /></div>
-    <div class="field" style="margin-bottom:10px;"><label class="field-label">Teléfono</label><input type="tel" class="field-input" id="nbTelefono" placeholder="opcional" /></div>
-    <div class="field" style="margin-bottom:10px;"><label class="field-label">Profesional</label><select class="field-input" id="nbProf"></select></div>
-    <div class="field" style="margin-bottom:10px;"><label class="field-label">Servicio</label><select class="field-input" id="nbServicio"><option value="">Sin especificar</option></select></div>
-    <div class="field" style="margin-bottom:10px;"><label class="field-label">Fecha</label><input type="date" class="field-input" id="nbFecha" /></div>
-    <label class="field-label">Hora</label>
-    <div id="nbSlots" style="display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px;"></div>
-    <div class="field" style="margin-bottom:14px;"><label class="field-label">Notas</label><textarea class="field-input" id="nbNotas" rows="2" placeholder="opcional"></textarea></div>
+    <div class="nb-step">
+      <span class="nb-num">1</span>
+      <div class="nb-body">
+        <label class="field-label">Servicio</label>
+        <div id="nbSvcChips" class="nb-chips"></div>
+        <select class="field-input" id="nbServicio"><option value="">Sin especificar</option></select>
+      </div>
+    </div>
+
+    <div class="nb-step">
+      <span class="nb-num">2</span>
+      <div class="nb-body">
+        <label class="field-label">Cuándo y con quién</label>
+        <div class="nb-row">
+          <select class="field-input" id="nbProf"></select>
+          <input type="date" class="field-input" id="nbFecha" />
+        </div>
+        <div id="nbSlots" class="nb-chips" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <div class="nb-step">
+      <span class="nb-num">3</span>
+      <div class="nb-body">
+        <label class="field-label">Cliente</label>
+        <div class="nb-ac-wrap">
+          <input type="text" class="field-input" id="nbNombre" placeholder="Nombre y apellidos" autocomplete="off" />
+          <div class="nb-ac" id="nbAc"></div>
+        </div>
+        <details class="nb-more">
+          <summary>Más datos (email, teléfono, notas)</summary>
+          <input type="email" class="field-input" id="nbEmail" placeholder="Email · recibe confirmación y recordatorios" />
+          <input type="tel" class="field-input" id="nbTelefono" placeholder="Teléfono" />
+          <textarea class="field-input" id="nbNotas" rows="2" placeholder="Notas"></textarea>
+        </details>
+      </div>
+    </div>
+
     <input type="hidden" id="nbSlotSelected" />
     <button class="btn btn-primary" id="nbConfirmBtn" disabled style="width:100%;">Crear cita</button>
+    <p class="panel-sub" id="nbHint" style="margin:8px 0 0; text-align:center;"></p>
   </div>
 </div>
 
@@ -7063,25 +7127,36 @@ async function openNewBookingDrawer(opts = {}) {
     catch { citasState.employees = []; }
   }
   const profSel = document.getElementById('nbProf');
-  const emps = (citasState.employees || []).filter(e => (typeof e.is_active === 'boolean' ? e.is_active : true));
+  const activos = (citasState.employees || []).filter(e => (typeof e.is_active === 'boolean' ? e.is_active : true));
+  // Con equipo real, la "agenda general" no se ofrece: una cita creada ahi no
+  // aparece en la columna de nadie y el negocio no la ve.
+  const reales = activos.filter(e => !e.is_default);
+  const emps = reales.length ? reales : activos;
   profSel.innerHTML = emps.length
     ? emps.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name || 'Profesional')}</option>`).join('')
     : '<option value="">Agenda general</option>';
-  if (opts.employeeId) profSel.value = opts.employeeId;
+  if (opts.employeeId && emps.some(e => e.id === opts.employeeId)) profSel.value = opts.employeeId;
   await loadNbServices();
   ['nbNombre','nbEmail','nbTelefono','nbNotas'].forEach(id => { document.getElementById(id).value = ''; });
-  document.getElementById('nbServicio').value = '';
+  nbCloseAc();
   // Prefill opcional (rebooking / ficha de cliente).
   if (opts.nombre) document.getElementById('nbNombre').value = opts.nombre;
   if (opts.email) document.getElementById('nbEmail').value = opts.email;
   if (opts.telefono) document.getElementById('nbTelefono').value = opts.telefono;
   if (opts.servicio) document.getElementById('nbServicio').value = opts.servicio;
+  nbRenderSvcChips();
   document.getElementById('nbSlotSelected').value = '';
   document.getElementById('nbConfirmBtn').disabled = true;
   document.getElementById('nbFecha').value = opts.date || (citasState.dayDate ? cdDateKey(citasState.dayDate) : cdDateKey(new Date()));
   document.getElementById('newBookingDrawer').classList.add('open');
   document.getElementById('newBookingOverlay').classList.add('open');
   await loadNbSlots(opts.time || '');
+  // Se pincho un hueco pero ese tramo no admite el servicio elegido (p.ej. uno
+  // de tres horas al final del dia): decirlo, no dejar el panel en silencio.
+  if (opts.time && !document.getElementById('nbSlotSelected').value) {
+    const hint = document.getElementById('nbHint');
+    if (hint) hint.textContent = `Las ${opts.time} no encajan con este servicio. Elige otra hora.`;
+  }
 }
 
 async function loadNbServices() {
@@ -7089,7 +7164,9 @@ async function loadNbServices() {
   try {
     const data = await api(`/servicios/${encodeURIComponent(state.cliente_id)}`);
     const list = data.servicios || data || [];
-    sel.innerHTML = '<option value="">Sin especificar</option>' + list.map(s => {
+    // Sin servicio no hay duracion real: la cita ocuparia el tramo minimo y se
+    // solaparia con la siguiente. Con catalogo, siempre hay uno elegido.
+    sel.innerHTML = (list.length ? '' : '<option value="">Sin especificar</option>') + list.map(s => {
       const name = s.nombre || s.name || s.id || '';
       const bits = [];
       if (s.duration_minutes) bits.push(`${s.duration_minutes} min`);
@@ -7100,9 +7177,107 @@ async function loadNbServices() {
   } catch { sel.innerHTML = '<option value="">Sin especificar</option>'; }
 }
 
+// Los servicios mas usados, como botones: en el mostrador se elige uno de tres,
+// no se busca en un desplegable de veinte.
+function nbRenderSvcChips() {
+  const cont = document.getElementById('nbSvcChips');
+  const sel = document.getElementById('nbServicio');
+  if (!cont || !sel) return;
+  const opciones = Array.from(sel.options).filter(o => o.value);
+  cont.innerHTML = '';
+  opciones.slice(0, 4).forEach(op => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'filter-chip' + (op.value === sel.value ? ' active' : '');
+    // Nombres largos ("Diagnostico y asesoramiento personalizado") reventaban la
+    // fila: se recorta en el chip y el nombre entero queda en el title.
+    chip.textContent = op.value.length > 22 ? op.value.slice(0, 21).trim() + '…' : op.value;
+    chip.title = op.value;
+    chip.addEventListener('click', () => {
+      sel.value = op.value;
+      nbRenderSvcChips();
+      loadNbSlots();
+    });
+    cont.appendChild(chip);
+  });
+}
+
+function nbCloseAc() {
+  const ac = document.getElementById('nbAc');
+  if (ac) { ac.classList.remove('open'); ac.innerHTML = ''; }
+}
+
+// Busca en la lista de clientes del negocio mientras teclea: evita volver a
+// pedir el telefono de alguien que ya viene desde hace anyos.
+let nbAcTimer = null;
+function nbBuscarCliente() {
+  const input = document.getElementById('nbNombre');
+  const ac = document.getElementById('nbAc');
+  if (!input || !ac) return;
+  const q = input.value.trim();
+  if (nbAcTimer) clearTimeout(nbAcTimer);
+  if (q.length < 2) { nbCloseAc(); return; }
+  nbAcTimer = setTimeout(async () => {
+    try {
+      const d = await api(`/auth/app/contacts?q=${encodeURIComponent(q)}&page_size=6`);
+      const items = d.items || [];
+      if (!items.length || input.value.trim() !== q) { nbCloseAc(); return; }
+      ac.innerHTML = items.map((c, i) =>
+        `<div class="nb-ac-item" data-nbac="${i}"><b>${escapeHtml(c.name || c.email || c.phone || 'Cliente')}</b>` +
+        `<span>${escapeHtml([c.email, c.phone].filter(Boolean).join(' · ') || 'sin datos de contacto')}</span></div>`
+      ).join('');
+      ac.classList.add('open');
+      ac.querySelectorAll('[data-nbac]').forEach(el => el.addEventListener('click', () => {
+        const c = items[Number(el.dataset.nbac)];
+        input.value = c.name || '';
+        document.getElementById('nbEmail').value = c.email || '';
+        document.getElementById('nbTelefono').value = c.phone || '';
+        nbCloseAc();
+        nbSyncConfirm();
+      }));
+    } catch { nbCloseAc(); }
+  }, 220);
+}
+
+// Busca el proximo dia con hueco en vez de dejar al usuario probando fechas.
+async function nbProximoHueco() {
+  const cont = document.getElementById('nbSlots');
+  const base = document.getElementById('nbFecha').value;
+  if (!base) return;
+  cont.innerHTML = '<span class="panel-sub" style="margin:0;">Buscando el próximo hueco…</span>';
+  const empId = document.getElementById('nbProf').value || '';
+  const servicio = document.getElementById('nbServicio').value || '';
+  for (let i = 1; i <= 14; i++) {
+    const d = new Date(base + 'T00:00:00');
+    d.setDate(d.getDate() + i);
+    const fecha = cdDateKey(d);
+    try {
+      const qs = `cliente_id=${encodeURIComponent(state.cliente_id)}&fecha=${encodeURIComponent(fecha)}`
+        + (empId ? `&employee_id=${encodeURIComponent(empId)}` : '')
+        + (servicio ? `&servicio=${encodeURIComponent(servicio)}` : '');
+      const data = await api(`/disponibilidad?${qs}`);
+      const libres = (data.slots || []).filter(x => x.disponible !== false);
+      if (libres.length) {
+        document.getElementById('nbFecha').value = fecha;
+        await loadNbSlots();
+        return;
+      }
+    } catch { /* seguimos probando */ }
+  }
+  cont.innerHTML = '<span class="panel-sub" style="margin:0;">No hay huecos en los próximos 14 días.</span>';
+}
+
 function nbSyncConfirm() {
-  document.getElementById('nbConfirmBtn').disabled =
-    !(document.getElementById('nbNombre').value.trim() && document.getElementById('nbSlotSelected').value);
+  const hora = document.getElementById('nbSlotSelected').value;
+  const nombre = document.getElementById('nbNombre').value.trim();
+  document.getElementById('nbConfirmBtn').disabled = !(nombre && hora);
+  // Un boton en gris sin explicacion parece que la herramienta no funciona.
+  const hint = document.getElementById('nbHint');
+  if (hint) {
+    hint.textContent = hora
+      ? (nombre ? '' : 'Falta el nombre del cliente.')
+      : 'Elige una hora libre.';
+  }
 }
 
 async function loadNbSlots(preselect = '') {
@@ -7122,7 +7297,15 @@ async function loadNbSlots(preselect = '') {
     const all = data.slots || data || [];
     const slots = all.filter(s => s.disponible !== false);
     cont.innerHTML = '';
-    if (!slots.length) { cont.innerHTML = '<span class="panel-sub" style="margin:0;">Sin huecos disponibles ese día.</span>'; return; }
+    if (!slots.length) {
+      cont.innerHTML = '<span class="panel-sub" style="margin:0;">Sin huecos ese día.</span>';
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'btn btn-ghost'; btn.style.cssText = 'padding:6px 12px; font-size:0.8rem;';
+      btn.textContent = 'Buscar el próximo hueco';
+      btn.addEventListener('click', () => nbProximoHueco());
+      cont.appendChild(btn);
+      return;
+    }
     slots.forEach(s => {
       const hora = s.hora || s.time || String(s);
       const btn = document.createElement('button');
@@ -7150,7 +7333,9 @@ document.getElementById('newBookingOverlay').addEventListener('click', closeNewB
 document.getElementById('nbProf').addEventListener('change', () => loadNbSlots());
 document.getElementById('nbFecha').addEventListener('change', () => loadNbSlots());
 document.getElementById('nbServicio').addEventListener('change', () => loadNbSlots());
-document.getElementById('nbNombre').addEventListener('input', nbSyncConfirm);
+document.getElementById('nbNombre').addEventListener('input', () => { nbSyncConfirm(); nbBuscarCliente(); });
+document.getElementById('nbNombre').addEventListener('blur', () => setTimeout(nbCloseAc, 180));
+document.getElementById('nbServicio').addEventListener('change', nbRenderSvcChips);
 document.getElementById('nbConfirmBtn').addEventListener('click', async () => {
   const btn = document.getElementById('nbConfirmBtn');
   const payload = {
@@ -7748,6 +7933,38 @@ function renderCitasDay(){
     if (!cdColDayInfo(c.emp, c.dateKey).isClosed) {
       body.style.cursor = 'copy';
       const slotMin = Number(c.emp && c.emp.slot_minutes) || Number(citasState.daySchedule && citasState.daySchedule.slot_minutes) || 30;
+      // Marca bajo el cursor: sin esto, que el hueco sea pulsable es invisible y
+      // el usuario acaba en el formulario largo rellenandolo todo a mano.
+      if (window.matchMedia('(hover:hover)').matches) {
+        const marca = document.createElement('div');
+        marca.className = 'cd-newmark';
+        marca.style.display = 'none';
+        body.appendChild(marca);
+        // Ocupado por citas o por bandas (descanso, bloqueo, fuera de horario): la
+        // marca no debe invitar a pinchar donde no se puede.
+        const ahora = new Date();
+        const esHoy = c.dateKey === cdDateKey(ahora);
+        const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
+        const ocupado = (desde, hasta) => {
+          if (desde < info.dayStart || hasta > info.dayEnd) return true;
+          if (esHoy && desde < minutosAhora) return true;   // hora ya pasada
+          return bookings.some((b) => {
+            const ini = cdBookingStartMin(b);
+            if (ini === null) return false;
+            return desde < ini + cdDur(b, c.emp) && ini < hasta;
+          });
+        };
+        body.addEventListener('mousemove', (e) => {
+          if (e.target !== body) { marca.style.display = 'none'; return; }
+          const mins = cdSnapMins(body, e.clientY, startMin, slotMin);
+          if (ocupado(mins, mins + slotMin)) { marca.style.display = 'none'; return; }
+          marca.style.top = ((mins - startMin) * CD_PX_PER_MIN) + 'px';
+          marca.style.height = (slotMin * CD_PX_PER_MIN) + 'px';
+          marca.textContent = '+ ' + cdMinsToHora(mins);
+          marca.style.display = 'flex';
+        });
+        body.addEventListener('mouseleave', () => { marca.style.display = 'none'; });
+      }
       body.addEventListener('click', (e) => {
         if (e.target !== body) return;
         const mins = cdSnapMins(body, e.clientY, startMin, slotMin);
