@@ -82,6 +82,13 @@ WHATSAPP_DEMO_PUBLIC_NUMBER = os.getenv("WHATSAPP_DEMO_PUBLIC_NUMBER", "").strip
 WHATSAPP_APP_ID = os.getenv("WHATSAPP_APP_ID", "").strip()
 WHATSAPP_ES_CONFIG_ID = os.getenv("WHATSAPP_ES_CONFIG_ID", "").strip()
 WHATSAPP_ES_PIN = os.getenv("WHATSAPP_ES_PIN", "").strip()
+# Reserva como formulario dentro de WhatsApp (WhatsApp Flows). Sin las dos, el
+# canal sigue usando el flujo por mensajes de siempre.
+WHATSAPP_BOOKING_FLOW_ID = os.getenv("WHATSAPP_BOOKING_FLOW_ID", "").strip()
+WHATSAPP_FLOW_PRIVATE_KEY_B64 = os.getenv("WHATSAPP_FLOW_PRIVATE_KEY_B64", "").strip()
+# Un Flow sin publicar solo se puede enviar en modo borrador, y solo a quien tenga
+# rol en la app de Meta. Publicar exige el negocio verificado ("Blocked by Integrity").
+WHATSAPP_FLOW_DRAFT = os.getenv("WHATSAPP_FLOW_DRAFT", "").strip().lower() in {"1", "true", "yes", "on"}
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
 TWILIO_DEFAULT_PHONE_NUMBER = os.getenv("TWILIO_DEFAULT_PHONE_NUMBER", "").strip()

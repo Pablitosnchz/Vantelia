@@ -109,6 +109,22 @@ def _crm_link(
     )
 
 
+def contact_by_phone(cliente_id: str, phone: str) -> Optional[sqlite3.Row]:
+    """Contacto del CRM cuyo telefono coincide (normalizado a E.164).
+
+    Lo usa WhatsApp para no volver a pedir nombre y email a un cliente que ya ha
+    reservado antes: el numero del remitente esta verificado por el canal.
+    """
+    phone_norm = _normalize_crm_phone(phone)
+    if not phone_norm:
+        return None
+    with db._get_db_connection() as connection:
+        return connection.execute(
+            "SELECT * FROM crm_contacts WHERE cliente_id = ? AND phone_normalized = ? LIMIT 1",
+            (cliente_id, phone_norm),
+        ).fetchone()
+
+
 def _crm_upsert_contact(
     cliente_id: str,
     *,

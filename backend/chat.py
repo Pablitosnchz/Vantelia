@@ -259,6 +259,33 @@ def _main_menu_quick_actions(booking_enabled: bool, gift_available: bool = False
     return actions
 
 
+# Opciones del menu que solo tienen sentido con agenda activa.
+MENU_OPTIONS_REQUIRING_BOOKING = {"agendar"}
+
+
+def _menu_flow_context_block(menu_option: str, booking_enabled: bool) -> str:
+    """Bloque de contexto para la opcion de menu detectada ("" si no aplica).
+
+    Los flujos que dependen de la agenda NO se inyectan si el negocio la tiene
+    apagada: el bloque manda sobre las reglas generales del prompt y el modelo
+    acababa pidiendo fecha, hora y nombre para una cita que ese negocio no puede
+    registrar (bug real en un hotel sin agenda, ago 2026).
+    """
+    if menu_option in MENU_OPTIONS_REQUIRING_BOOKING and not booking_enabled:
+        return (
+            "PETICION_DE_CITA_SIN_AGENDA: este negocio NO gestiona reservas ni citas por este canal. "
+            "NO preguntes fecha, hora ni nombre, y NO abras ningun formulario. Explica en una frase que "
+            "las reservas se gestionan directamente con el negocio y da el telefono o email del bloque "
+            "de contacto verificado."
+        )
+    if menu_option and menu_option in MENU_OPTION_INSTRUCTIONS:
+        return (
+            f"FLUJO_DE_MENU_ACTIVO ({menu_option}): {MENU_OPTION_INSTRUCTIONS[menu_option]} "
+            "Cierra siempre con una linea separada: Escribe **menú** para volver al menú principal."
+        )
+    return ""
+
+
 MENU_OPTION_INSTRUCTIONS = {
     "agendar": (
         "El usuario quiere agendar una cita. Guialo paso a paso, una pregunta por mensaje, en este orden: "
@@ -740,11 +767,9 @@ async def _process_chat_message(
     except Exception as exc:  # noqa: BLE001
         settings.logger.warning("No se pudo construir contexto en vivo para %s: %s", cliente_id, exc)
 
-    if menu_option and menu_option in MENU_OPTION_INSTRUCTIONS:
-        context_blocks.append(
-            f"FLUJO_DE_MENU_ACTIVO ({menu_option}): {MENU_OPTION_INSTRUCTIONS[menu_option]} "
-            "Cierra siempre con una linea separada: Escribe **menú** para volver al menú principal."
-        )
+    flujo_menu = _menu_flow_context_block(menu_option, booking_enabled)
+    if flujo_menu:
+        context_blocks.append(flujo_menu)
 
     if policy_info:
         context_blocks.append(

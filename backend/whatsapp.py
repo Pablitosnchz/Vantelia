@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import secrets
 import json
 import sqlite3
@@ -24,7 +25,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AppWhatsAppResponse, WhatsAppWebhookStatus
-from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, inbox, keywords, messaging, rag, settings, textnorm, timeutils, wa_demo, wa_onboarding
+from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, inbox, keywords, messaging, rag, settings, textnorm, timeutils, wa_demo, wa_flows, wa_onboarding
 
 def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResponse:
     cfg = clients._get_client_config(cliente_id)
@@ -338,18 +339,77 @@ def _wa_reset_booking_fields(flow: appstate.WAFlowState) -> None:
     flow.verify_email = ""
 
 
-def _wa_main_menu_sections(booking_enabled: bool) -> List[Dict[str, Any]]:
+# WhatsApp corta los titulos de fila a 24 caracteres y las descripciones a 72.
+_WA_ROW_TITLE_MAX = 24
+_WA_ROW_DESC_MAX = 72
+
+
+def _wa_row_key(titulo: str) -> str:
+    """Clave para comparar filas del menu ignorando emojis, acentos y mayusculas."""
+    limpio = textnorm._strip_accents(str(titulo or "").lower())
+    return re.sub(r"[^a-z0-9 ]+", "", limpio).strip()
+
+
+def _wa_starter_rows(cliente_id: str, booking_enabled: bool) -> List[Dict[str, Any]]:
+    """Filas del menu tomadas de las preguntas sugeridas que configura el negocio.
+
+    El menu de WhatsApp estaba escrito a fuego con nueve opciones genericas
+    (recomendar, comparar, estimar precio...) mientras el negocio configuraba las
+    suyas en Tune AI y solo se aplicaban al widget web. Lo que se configura en el
+    panel es lo que debe ver el cliente final, en cualquier canal.
+    """
+    try:
+        config = clients._get_client_config(cliente_id)
+        starters = settings._resolve_widget_starters(config, booking_enabled=booking_enabled)
+    except Exception as exc:  # noqa: BLE001 - el menu nunca debe romper el canal
+        settings.logger.warning("No se pudieron leer las sugerencias de %s: %s", cliente_id, exc)
+        return []
     rows: List[Dict[str, Any]] = []
+    for index, texto in enumerate(starters):
+        limpio = textnorm._sanitize_text(texto).strip()
+        if not limpio:
+            continue
+        rows.append({
+            "id": f"menu_starter_{index}",
+            "title": limpio[:_WA_ROW_TITLE_MAX],
+            "description": limpio[:_WA_ROW_DESC_MAX] if len(limpio) > _WA_ROW_TITLE_MAX else "",
+        })
+    return rows
+
+
+def _wa_starter_message(cliente_id: str, interactive_id: str, booking_enabled: bool) -> str:
+    """Texto real detras de una fila `menu_starter_N` (lo que el cliente 'escribe')."""
+    try:
+        index = int(str(interactive_id).rsplit("_", 1)[1])
+        config = clients._get_client_config(cliente_id)
+        starters = settings._resolve_widget_starters(config, booking_enabled=booking_enabled)
+        return str(starters[index])
+    except Exception:  # noqa: BLE001 - id manipulado o sugerencias cambiadas entre medias
+        return ""
+
+
+def _wa_main_menu_sections(booking_enabled: bool, cliente_id: str = "") -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    # Las acciones de agenda no son sugerencias: abren flujos guiados propios.
     if booking_enabled:
         rows.append({"id": "menu_agendar", "title": "📅 Agendar cita", "description": "Reserva tu cita en pocos pasos"})
         rows.append({"id": "menu_disponibilidad", "title": "🕐 Ver disponibilidad", "description": "Consulta huecos libres"})
         rows.append({"id": "menu_cancelar_cita", "title": "Cancelar cita", "description": "Anula una reserva con tu codigo"})
         rows.append({"id": "menu_cambiar_cita", "title": "Cambiar cita", "description": "Reprograma fecha u hora"})
-    rows.append({"id": "menu_faq", "title": "💬 Preguntas frecuentes", "description": "Dudas habituales"})
-    rows.append({"id": "menu_productos", "title": "🛍️ Productos / servicios", "description": "Catalogo del negocio"})
-    rows.append({"id": "menu_recomendar", "title": "⭐ Recomendar", "description": "Te ayudo a elegir"})
-    rows.append({"id": "menu_comparar", "title": "⚖️ Comparar", "description": "Comparativa de opciones"})
-    rows.append({"id": "menu_estimar", "title": "💶 Estimar precio", "description": "Calcula coste aproximado"})
+
+    configuradas = _wa_starter_rows(cliente_id, booking_enabled) if cliente_id else []
+    if configuradas:
+        # Las sugerencias del negocio sustituyen al bloque generico. Se descartan las
+        # que dupliquen una accion de agenda ya listada arriba: la comparacion ignora
+        # emojis y acentos, o "📅 Agendar cita" y "Agendar cita" pasarian por distintas.
+        titulos = {_wa_row_key(r["title"]) for r in rows}
+        rows.extend(r for r in configuradas if _wa_row_key(r["title"]) not in titulos)
+    else:
+        rows.append({"id": "menu_faq", "title": "💬 Preguntas frecuentes", "description": "Dudas habituales"})
+        rows.append({"id": "menu_productos", "title": "🛍️ Productos / servicios", "description": "Catalogo del negocio"})
+        rows.append({"id": "menu_recomendar", "title": "⭐ Recomendar", "description": "Te ayudo a elegir"})
+        rows.append({"id": "menu_comparar", "title": "⚖️ Comparar", "description": "Comparativa de opciones"})
+        rows.append({"id": "menu_estimar", "title": "💶 Estimar precio", "description": "Calcula coste aproximado"})
     return [{"title": "Opciones", "rows": rows[:10]}]
 
 
@@ -376,7 +436,7 @@ async def _wa_send_main_menu(
         to_number=to_number,
         body=body,
         button_text="Ver opciones",
-        sections=_wa_main_menu_sections(booking_enabled),
+        sections=_wa_main_menu_sections(booking_enabled, cliente_id),
     )
 
 
@@ -591,6 +651,50 @@ async def _wa_send_availability_overview(
     )
 
 
+async def _wa_send_booking_summary(
+    *, cliente_id: str, phone_number_id: str, to_number: str,
+    flow: appstate.WAFlowState, reconocido: bool = False,
+) -> None:
+    """Resumen final con botones de confirmar, corregir datos o anadir nota.
+
+    Punto UNICO donde termina el flujo, venga el cliente de escribir sus datos o de
+    ser reconocido por su telefono. Los pasos de nota y de email dejaron de ser
+    obligatorios: costaban una interaccion a todo el mundo para algo que casi nadie
+    usaba.
+    """
+    flow.flow = "booking_confirm"
+    fecha_humana = textnorm._format_date_es(textnorm._parse_date(flow.fecha).date())
+    nombre_corto = flow.nombre.split()[0] if flow.nombre else ""
+    lineas: List[str] = []
+    if reconocido and nombre_corto:
+        lineas.append(f"👋 Te he reconocido por tu numero, {nombre_corto}.")
+        lineas.append("")
+    lineas.append("📋 *Resumen de tu cita*")
+    lineas.append("")
+    lineas.append(f"👤 {flow.nombre}")
+    if flow.email:
+        lineas.append(f"📧 {flow.email}")
+    lineas.append(f"📞 {flow.from_number}")
+    lineas.append(f"🛍️ {flow.servicio or 'Servicio general'}")
+    lineas.append(f"👨‍⚕️ {flow.employee_name or 'Asignacion automatica'}")
+    lineas.append(f"📅 {fecha_humana}")
+    lineas.append(f"🕐 {flow.hora}")
+    if flow.notas:
+        lineas.append(f"📝 Notas: {flow.notas}")
+    lineas.append("")
+    lineas.append("¿Confirmamos la cita?")
+    botones = [("confirm_yes", "✅ Confirmar"), ("confirm_no", "❌ Cancelar")]
+    # WhatsApp solo admite 3 botones: el tercero es corregir datos si le reconocimos
+    # por el telefono, y anadir nota en el resto de casos.
+    botones.append(
+        ("data_fix", "✏️ Otros datos") if reconocido else ("notes_write", "✍️ Anadir nota")
+    )
+    await messaging._send_whatsapp_buttons(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+        header="Confirmar cita", body=chr(10).join(lineas), buttons=botones,
+    )
+
+
 async def _wa_create_booking(
     *, cliente_id: str, phone_number_id: str, to_number: str, flow: appstate.WAFlowState, config: Dict[str, Any],
     request: Request,
@@ -679,6 +783,14 @@ async def _wa_create_booking(
     )
     if flow.notas:
         confirmacion += f"📝 Notas: {flow.notas}\n"
+    # Mensaje de confirmacion que el negocio escribe en su panel (indicaciones para
+    # llegar, que traer, etc.). Se usaba solo en la reserva por web: por WhatsApp el
+    # cliente se quedaba sin ese aviso.
+    mensaje_negocio = textnorm._sanitize_text(
+        str((config.get("booking") or {}).get("success_message") or ""), allow_multiline=True
+    ).strip()
+    if mensaje_negocio:
+        confirmacion += f"\n{mensaje_negocio}\n"
     # Auto-canje de bono (numero verificado del canal): descuenta 1 sesion y deja la
     # cita pagada. Best-effort; si la cita exige pago previo, el helper no toca nada.
     bono_redeemed = commerce.auto_redeem_package_for_booking(
@@ -712,6 +824,102 @@ async def _wa_create_booking(
     return True
 
 
+async def _wa_send_booking_form(
+    *, cliente_id: str, phone_number_id: str, to_number: str, location_id: str = "",
+) -> bool:
+    """Manda la reserva como FORMULARIO dentro de WhatsApp (Flows).
+
+    Un solo mensaje: el cliente elige servicio, profesional y hora sin salir de la
+    pantalla, en lugar de encadenar cuatro listas. Devuelve False si la funcion no
+    esta configurada, y entonces el canal usa el flujo por mensajes de siempre.
+    """
+    if not wa_flows.enabled():
+        return False
+    config = clients._get_client_config(cliente_id)
+    empresa = str(config.get("empresa") or "").strip() or config.get("nombre", "")
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to_number,
+        "type": "interactive",
+        "interactive": {
+            "type": "flow",
+            "header": {"type": "text", "text": "Pedir cita"},
+            "body": {"text": f"Reserva tu cita en {empresa} en menos de un minuto."},
+            "footer": {"text": "Elige servicio, profesional y hora"},
+            "action": {
+                "name": "flow",
+                "parameters": {
+                    "flow_message_version": "3",
+                    "flow_token": wa_flows.make_flow_token(cliente_id, to_number),
+                    "flow_id": wa_flows.flow_id(),
+                    "flow_cta": "Pedir cita",
+                    "flow_action": "data_exchange",
+                    **({"mode": "draft"} if getattr(settings, "WHATSAPP_FLOW_DRAFT", False) else {}),
+                },
+            },
+        },
+    }
+    enviado = await messaging._send_whatsapp_payload(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, payload=payload,
+    )
+    if not enviado:
+        settings.logger.warning(
+            "[flow] Meta rechazo el formulario de %s; se usa el flujo por mensajes.", cliente_id
+        )
+    return enviado
+
+
+async def _wa_handle_flow_reply(
+    *, cliente_id: str, phone_number_id: str, from_number: str,
+    response_json: str, request: Request,
+) -> bool:
+    """Crea la cita con lo que devuelve el formulario.
+
+    Reutiliza el mismo `_wa_create_booking` que el flujo por mensajes: el
+    formulario solo cambia COMO se recogen los datos, no como se reserva.
+    """
+    datos = wa_flows.parse_flow_response(response_json)
+    contexto = wa_flows.read_flow_token(datos.get("flow_token", ""))
+    if not contexto or contexto.get("cliente_id") != cliente_id:
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text="Esa solicitud ha caducado. Escribe *cita* para empezar de nuevo.",
+        )
+        return False
+    if not (datos.get("fecha") and datos.get("hora")):
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text="No he podido leer la hora elegida. Escribe *cita* para intentarlo otra vez.",
+        )
+        return False
+
+    flow = _wa_get_flow(cliente_id, from_number)
+    _wa_reset_booking_fields(flow)
+    flow.servicio = datos["servicio"]
+    flow.employee_id = datos["employee_id"]
+    flow.fecha = datos["fecha"]
+    flow.hora = datos["hora"]
+    flow.nombre = datos["nombre"] or ""
+    flow.email = datos["email"] or ""
+    flow.notas = datos["notas"] or ""
+    flow.location_id = flow.location_id or _wa_location_id(cliente_id, phone_number_id)
+    if flow.employee_id:
+        empleado = agenda._resolve_employee_for_booking(cliente_id, flow.employee_id)
+        flow.employee_name = str(empleado["name"]) if empleado is not None else ""
+    if not flow.nombre:
+        conocido = crm.contact_by_phone(cliente_id, from_number)
+        flow.nombre = str(conocido["name"]).strip() if conocido else "Cliente WhatsApp"
+
+    config = clients._get_client_config(cliente_id)
+    creada = await _wa_create_booking(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+        flow=flow, config=config, request=request,
+    )
+    _wa_clear_flow(cliente_id, from_number)
+    return creada
+
+
 async def _wa_start_booking_flow(
     *, cliente_id: str, phone_number_id: str, from_number: str,
     flow: appstate.WAFlowState, config: Dict[str, Any],
@@ -720,6 +928,16 @@ async def _wa_start_booking_flow(
     centro (solo si el negocio tiene varios y el numero no esta atado a uno) -> servicio
     -> profesional -> dia. Una sola definicion del orden de pasos."""
     effective_location = flow.location_id or _wa_location_id(cliente_id, phone_number_id)
+    # Formulario dentro de WhatsApp: un solo mensaje en lugar de cuatro listas. Si no
+    # esta configurado, o Meta lo rechaza, se sigue con el flujo por mensajes de
+    # siempre sin que el cliente note nada.
+    if await _wa_send_booking_form(
+        cliente_id=cliente_id, phone_number_id=phone_number_id,
+        to_number=from_number, location_id=effective_location,
+    ):
+        flow.flow = ""
+        flow.location_id = effective_location
+        return
     if not effective_location:
         flow.flow = "booking_location"
         if await _wa_send_location_picker(
@@ -1381,6 +1599,18 @@ async def _handle_whatsapp_message(
             )
             return
         flow.hora = hora
+        # Cliente que ya ha reservado antes: su telefono viene VERIFICADO por el canal,
+        # asi que no tiene sentido volver a pedirle nombre y email. Se salta directo al
+        # resumen, donde puede corregir los datos si hace falta.
+        conocido = crm.contact_by_phone(cliente_id, from_number)
+        if conocido and str(conocido["name"] or "").strip():
+            flow.nombre = str(conocido["name"]).strip()[:80]
+            flow.email = str(conocido["email"] or "").strip()[:120]
+            await _wa_send_booking_summary(
+                cliente_id=cliente_id, phone_number_id=phone_number_id,
+                to_number=from_number, flow=flow, reconocido=True,
+            )
+            return
         flow.flow = "booking_name"
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
@@ -1398,66 +1628,64 @@ async def _handle_whatsapp_message(
             return
         flow.nombre = nombre[:80]
         flow.flow = "booking_email"
-        await messaging._send_whatsapp_text(
+        await messaging._send_whatsapp_buttons(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            text="📧 ¿Cual es tu *email*? (lo necesitamos para enviarte la confirmacion)",
+            body=(
+                "📧 Si quieres la confirmacion tambien por email, escribelo ahora. "
+                "Si no, pulsa *Sin email*: te la mando por aqui."
+            ),
+            buttons=[("email_skip", "🚫 Sin email")],
         )
         return
 
     if flow.flow == "booking_email":
-        email = (incoming_text or "").strip().lower()
-        if not textnorm.EMAIL_RE.match(email):
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="❌ El email no parece valido. Escribelo con formato nombre@dominio.com.",
-            )
-            return
-        flow.email = email[:120]
-        flow.flow = "booking_notes"
-        await messaging._send_whatsapp_buttons(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            body="📝 ¿Quieres añadir alguna *nota* sobre la cita? (opcional)",
-            buttons=[("notes_skip", "🚫 Sin notas"), ("notes_write", "✍️ Escribir nota")],
+        if iid == "email_skip" or text_norm in ("no", "sin email", "ninguno", "saltar", "omitir", "skip"):
+            flow.email = ""
+        else:
+            email = (incoming_text or "").strip().lower()
+            if not textnorm.EMAIL_RE.match(email):
+                await messaging._send_whatsapp_text(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                    text="❌ Ese email no es valido. Escribelo como nombre@dominio.com o pulsa *Sin email*.",
+                )
+                return
+            flow.email = email[:120]
+        # El paso de notas se elimino del camino obligatorio: casi nadie lo usaba y
+        # costaba una interaccion a todo el mundo. Ahora se ofrece en el resumen.
+        await _wa_send_booking_summary(
+            cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=from_number, flow=flow,
         )
         return
 
     if flow.flow == "booking_notes":
-        if iid == "notes_skip" or text_norm in ("no", "ninguna", "saltar", "omitir", "skip", "sin notas"):
-            flow.notas = ""
-            flow.flow = "booking_confirm"
-        elif iid == "notes_write":
+        # Solo se llega aqui si el cliente pulso "Anadir nota" en el resumen: el paso
+        # dejo de ser obligatorio porque casi nadie lo usaba y costaba una interaccion
+        # a todos.
+        flow.notas = (incoming_text or "").strip()[:500]
+        await _wa_send_booking_summary(
+            cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=from_number, flow=flow,
+        )
+        return
+
+    if flow.flow == "booking_confirm":
+        # Los dos botones opcionales del resumen: anadir una nota o corregir los datos
+        # que hemos rellenado nosotros al reconocer el telefono.
+        if iid == "notes_write":
+            flow.flow = "booking_notes"
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
                 text="✍️ Escribe tu nota o comentario para la cita:",
             )
             return
-        else:
-            flow.notas = (incoming_text or "").strip()[:500]
-            flow.flow = "booking_confirm"
-
-        fecha_humana = textnorm._format_date_es(textnorm._parse_date(flow.fecha).date())
-        resumen = (
-            f"📋 *Resumen de tu cita*\n\n"
-            f"👤 {flow.nombre}\n"
-            f"📧 {flow.email}\n"
-            f"📞 {flow.from_number}\n"
-            f"🛍️ {flow.servicio or 'Servicio general'}\n"
-            f"👨‍⚕️ {flow.employee_name or 'Asignacion automatica'}\n"
-            f"📅 {fecha_humana}\n"
-            f"🕐 {flow.hora}\n"
-        )
-        if flow.notas:
-            resumen += f"📝 Notas: {flow.notas}\n"
-        resumen += "\n¿Confirmamos la cita?"
-        await messaging._send_whatsapp_buttons(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            header="Confirmar cita",
-            body=resumen,
-            buttons=[("confirm_yes", "✅ Confirmar"), ("confirm_no", "❌ Cancelar")],
-        )
-        return
-
-    if flow.flow == "booking_confirm":
+        if iid == "data_fix":
+            flow.flow = "booking_name"
+            await messaging._send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text="👤 Sin problema. ¿A nombre de quien hago la cita?",
+            )
+            return
         if iid == "confirm_yes" or text_norm in ("si", "confirmar", "confirmo", "ok", "vale"):
             ok = await _wa_create_booking(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
@@ -1493,6 +1721,14 @@ async def _handle_whatsapp_message(
             "menu_estimar": "Ayudame a estimar precio aproximado.",
         }
         incoming_text = intent_msg_map.get(iid, incoming_text)
+
+    # Sugerencia configurada por el negocio: el texto real de la pregunta es lo que
+    # el cliente "escribe". El titulo de la fila viene recortado a 24 caracteres por
+    # WhatsApp, asi que no sirve como mensaje.
+    if iid.startswith("menu_starter_"):
+        texto_sugerencia = _wa_starter_message(cliente_id, iid, booking_enabled)
+        if texto_sugerencia:
+            incoming_text = texto_sugerencia
 
     # Sin texto: pedir input
     if not incoming_text.strip():
@@ -1639,6 +1875,26 @@ async def _handle_whatsapp_webhook(
                         reply = interactive_block.get("list_reply", {}) or {}
                         interactive_id = str(reply.get("id", "")).strip()
                         incoming_text = str(reply.get("title", "")).strip()
+                    elif itype == "nfm_reply":
+                        # Respuesta del formulario de reserva (Flows): trae la cita
+                        # entera, asi que se crea aqui y no pasa por el orquestador.
+                        reply = interactive_block.get("nfm_reply", {}) or {}
+                        try:
+                            await _wa_handle_flow_reply(
+                                cliente_id=cliente_id, phone_number_id=phone_number_id,
+                                from_number=from_number,
+                                response_json=str(reply.get("response_json") or ""),
+                                request=request,
+                            )
+                            processed += 1
+                        except Exception as exc:  # noqa: BLE001
+                            settings.logger.exception("[flow] error creando la cita: %s", exc)
+                            await messaging._send_whatsapp_text(
+                                cliente_id=cliente_id, phone_number_id=phone_number_id,
+                                to_number=from_number,
+                                text="No he podido registrar la cita. Escribe *cita* para intentarlo de nuevo.",
+                            )
+                        continue
                     else:
                         incoming_text = ""
                 else:
@@ -1660,13 +1916,21 @@ async def _handle_whatsapp_webhook(
                         continue
                     if routing["just_bound"]:
                         # El mensaje era el codigo, no una consulta: se abre la demo
-                        # con la bienvenida del negocio y se espera a su pregunta.
+                        # con la MISMA entrada que veria un cliente real de ese negocio.
+                        # Se delega en `_wa_send_main_menu`, que ya decide entre menu de
+                        # opciones y bienvenida a secas segun `config['chat_menu']`: si no,
+                        # un negocio con agenda perdia justo los botones de agendar cita.
                         demo_config = clients._get_client_config(cliente_id)
-                        empresa = str(demo_config.get("empresa") or "").strip() or demo_config.get("nombre", "")
-                        await messaging._send_whatsapp_text(
-                            cliente_id=cliente_id, phone_number_id=phone_number_id,
+                        await _wa_send_main_menu(
+                            cliente_id=cliente_id,
+                            phone_number_id=phone_number_id,
                             to_number=from_number,
-                            text=chat._simple_greeting_text(demo_config, empresa),
+                            nombre_empresa=(
+                                str(demo_config.get("empresa") or "").strip()
+                                or demo_config.get("nombre", "")
+                            ),
+                            booking_enabled=bool(demo_config["booking"]["enabled"]),
+                            greeting=True,
                         )
                         processed += 1
                         continue

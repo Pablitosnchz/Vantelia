@@ -1,0 +1,278 @@
+{
+  "version": "7.2",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "SERVICIO": [
+      "PROFESIONAL",
+      "HUECO"
+    ],
+    "PROFESIONAL": [
+      "HUECO"
+    ],
+    "HUECO": [
+      "DATOS"
+    ],
+    "DATOS": []
+  },
+  "screens": [
+    {
+      "id": "SERVICIO",
+      "title": "Pedir cita",
+      "data": {
+        "servicios": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          },
+          "__example__": [
+            {
+              "id": "Corte",
+              "title": "Corte",
+              "description": "30 min · 20 €"
+            }
+          ]
+        },
+        "aviso": {
+          "type": "string",
+          "__example__": ""
+        },
+        "hay_aviso": {
+          "type": "boolean",
+          "__example__": false
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "¿Qué necesitas?"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.aviso}",
+            "visible": "${data.hay_aviso}"
+          },
+          {
+            "type": "Dropdown",
+            "name": "servicio",
+            "label": "Servicio",
+            "required": true,
+            "data-source": "${data.servicios}"
+          },
+          {
+            "type": "Footer",
+            "label": "Continuar",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "servicio": "${form.servicio}"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "PROFESIONAL",
+      "title": "Profesional",
+      "data": {
+        "servicio": {
+          "type": "string",
+          "__example__": "Corte"
+        },
+        "profesionales": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          },
+          "__example__": [
+            {
+              "id": "",
+              "title": "Sin preferencia",
+              "description": "El primer hueco disponible"
+            }
+          ]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "¿Con quién?"
+          },
+          {
+            "type": "Dropdown",
+            "name": "employee_id",
+            "label": "Profesional",
+            "required": true,
+            "data-source": "${data.profesionales}"
+          },
+          {
+            "type": "Footer",
+            "label": "Ver horas libres",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "servicio": "${data.servicio}",
+                "employee_id": "${form.employee_id}"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "HUECO",
+      "title": "Elegir hora",
+      "data": {
+        "servicio": {
+          "type": "string",
+          "__example__": "Corte"
+        },
+        "employee_id": {
+          "type": "string",
+          "__example__": ""
+        },
+        "huecos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          },
+          "__example__": [
+            {
+              "id": "2026-09-01T10:00",
+              "title": "Lunes 1 de septiembre · 10:00",
+              "description": ""
+            }
+          ]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Horas disponibles"
+          },
+          {
+            "type": "Dropdown",
+            "name": "hueco",
+            "label": "Día y hora",
+            "required": true,
+            "data-source": "${data.huecos}"
+          },
+          {
+            "type": "Footer",
+            "label": "Continuar",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "servicio": "${data.servicio}",
+                "employee_id": "${data.employee_id}",
+                "hueco": "${form.hueco}"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "DATOS",
+      "title": "Tus datos",
+      "terminal": true,
+      "data": {
+        "servicio": {
+          "type": "string",
+          "__example__": "Corte"
+        },
+        "employee_id": {
+          "type": "string",
+          "__example__": ""
+        },
+        "hueco": {
+          "type": "string",
+          "__example__": "2026-09-01T10:00"
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Últimos datos"
+          },
+          {
+            "type": "TextInput",
+            "name": "nombre",
+            "label": "Nombre y apellidos",
+            "input-type": "text",
+            "required": true
+          },
+          {
+            "type": "TextInput",
+            "name": "email",
+            "label": "Email (opcional)",
+            "input-type": "email",
+            "required": false
+          },
+          {
+            "type": "TextArea",
+            "name": "notas",
+            "label": "Alguna indicación (opcional)",
+            "required": false
+          },
+          {
+            "type": "Footer",
+            "label": "Confirmar cita",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {
+                "servicio": "${data.servicio}",
+                "employee_id": "${data.employee_id}",
+                "hueco": "${data.hueco}",
+                "nombre": "${form.nombre}",
+                "email": "${form.email}",
+                "notas": "${form.notas}"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
