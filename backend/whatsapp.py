@@ -805,7 +805,11 @@ async def _wa_create_booking(
     payment_row = booking._booking_payment_row(booking_id)
     if not bono_redeemed and payment_row and payment_row["checkout_url"]:
         payment_label = "Completa el pago para confirmar la cita" if is_pending_payment else "Pago opcional"
+        # Sin esta nota, una senal de 50 EUR sobre un servicio de 120 parece el precio total.
+        nota_pago = booking.payment_prompt_note(cliente_id, stored_booking, payment_row)
         confirmacion += f"\n💳 *{payment_label}:* {payment_row['checkout_url']}\n"
+        if nota_pago:
+            confirmacion += f"_{nota_pago}_\n"
     if is_pending_payment:
         confirmacion += (
             "\nEl hueco queda reservado de forma provisional hasta completar el pago. "

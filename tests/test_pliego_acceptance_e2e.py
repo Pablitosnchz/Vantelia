@@ -476,7 +476,10 @@ def test_full_pliego_as_owner_manager_and_staff(acceptance, monkeypatch):
 def test_portal_html_exposes_pliego_controls():
     html = (Path(__file__).resolve().parents[1] / "app_ui" / "index.html").read_text(encoding="utf-8")
     for marker in (
-        'value="preauth"',
+        # La retencion se elige en castellano ("retencion"); la UI la traduce a
+        # payment_type=preauth antes de guardar.
+        'value="retencion"',
+        "type:'preauth'",
         "Disponibilidad y precio por centro",
         "loadVentasProductos",
         "loadVentasBonos",

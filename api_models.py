@@ -1651,6 +1651,12 @@ class PortalBookingSummary(BaseModel):
     payment_status: str = ""
     pay_state: str = ""
     payment_amount_cents: int = 0
+    # Estado de cobro real de la cita (backend/paystate.py): suma lo cobrado en la
+    # reserva y en el mostrador, para que una senal no se muestre como "Pagado".
+    pay_kind: str = ""
+    pay_label: str = ""
+    pay_paid_cents: int = 0
+    pay_pending_cents: int = 0
     payment_checkout_url: str = ""
     start_at: str = ""
     end_at: str = ""

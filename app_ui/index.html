@@ -3959,9 +3959,22 @@
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Nombre *</label><input type="text" class="field-input" id="svcNombre" placeholder="Ej. Primera consulta" /></div>
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Duración (minutos) *</label><input type="number" class="field-input" id="svcDuracion" min="5" max="600" step="5" value="30" /></div>
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Precio (€)</label><input type="number" class="field-input" id="svcPrecio" min="0" step="0.01" placeholder="0 = a consultar" /></div>
-    <div class="field" style="margin-bottom:10px;"><label class="field-label">Cobro Stripe</label><select class="field-input" id="svcPaymentMode"><option value="payment_disabled">Sin cobro</option><option value="payment_optional">Pago opcional</option><option value="payment_required">Pago requerido</option></select></div>
-    <div class="field" style="margin-bottom:10px;"><label class="field-label">Tipo de cobro</label><select class="field-input" id="svcPaymentType"><option value="full">Importe completo</option><option value="deposit">Depósito</option><option value="preauth">Retención (sin cobro inmediato; se cobra desde el panel si procede)</option></select></div>
-    <div class="field" style="margin-bottom:10px;"><label class="field-label">Depósito (€)</label><input type="number" class="field-input" id="svcDeposit" min="0" step="0.01" placeholder="Solo para depósitos" /></div>
+    <div class="field" style="margin-bottom:10px;">
+      <label class="field-label">¿Cómo se paga este servicio?</label>
+      <select class="field-input" id="svcCobro">
+        <option value="salon">Se paga en el salón (sin cobro online)</option>
+        <option value="senal">Señal para reservar · el resto en el salón</option>
+        <option value="completo">Pago completo al reservar</option>
+        <option value="retencion">Retener la tarjeta sin cobrar (avanzado)</option>
+      </select>
+      <p class="panel-sub" id="svcCobroAyuda" style="margin:6px 0 0; font-size:0.78rem;"></p>
+    </div>
+    <div class="field" id="svcSenalWrap" style="margin-bottom:10px; display:none;">
+      <label class="field-label">Importe de la señal (€)</label>
+      <input type="number" class="field-input" id="svcDeposit" min="0" step="0.01" placeholder="Ej. 50" />
+    </div>
+    <!-- Se conservan los campos reales que entiende el backend; la UI solo los traduce. -->
+    <input type="hidden" id="svcPaymentMode" /><input type="hidden" id="svcPaymentType" />
     <div style="margin:6px 0 10px; padding:12px 12px 4px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,0.02);">
       <div class="ap-block-title" style="margin-bottom:8px;">Política de cancelación (opcional)</div>
       <p class="panel-sub" style="margin:0 0 10px; font-size:0.78rem;">Vacío = hereda la política general del negocio. Rellena solo si este servicio tiene reglas propias.</p>
@@ -7388,9 +7401,19 @@ function renderServicios() {
     row.className = 'panel-card';
     row.style.cssText = 'padding:14px 16px; background:var(--panel-2); display:flex; align-items:center; gap:14px; flex-wrap:wrap;';
     const bits = [`${s.duration_minutes} min`, s.price_label || 'precio a consultar'];
+    // Chip de cobro: quien mira la lista sabe al momento si el servicio lleva señal
+    // sin tener que abrir el servicio y leer dos desplegables.
+    const cobro = cobroDesdeServicio(s);
+    const senal = s.deposit_amount_cents ? (s.deposit_amount_cents / 100) + ' €' : '';
+    const chip = {
+      senal:     senal ? `<span class="badge" style="background:rgba(244,180,0,0.16); color:#f4b400; margin-left:6px;">Señal ${senal}</span>` : '',
+      completo:  '<span class="badge" style="background:rgba(0,209,255,0.12); color:var(--accent); margin-left:6px;">Pago al reservar</span>',
+      retencion: senal ? `<span class="badge" style="background:rgba(244,180,0,0.16); color:#f4b400; margin-left:6px;">Retención ${senal}</span>` : '',
+      salon:     '',
+    }[cobro] || '';
     row.innerHTML = `
       <div style="flex:1; min-width:180px;">
-        <div style="font-weight:700;">${escapeHtml(s.nombre)}${s.is_active ? '' : ' <span class="badge badge-cancelled" style="margin-left:6px;">Inactivo</span>'}</div>
+        <div style="font-weight:700;">${escapeHtml(s.nombre)}${s.is_active ? '' : ' <span class="badge badge-cancelled" style="margin-left:6px;">Inactivo</span>'}${chip}</div>
         <div class="panel-sub" style="margin:2px 0 0;">${escapeHtml(bits.join(' · '))}${s.descripcion ? ' · ' + escapeHtml(s.descripcion) : ''}</div>
       </div>
       <button class="btn btn-ghost" data-edit="1" style="padding:6px 12px;">Editar</button>
@@ -7455,15 +7478,45 @@ async function saveSvcLocations(slug) {
   }
 }
 
+// ── Cobro de un servicio: una pregunta, tres campos ───────────────────
+// El negocio no piensa en "payment_mode" ni "payment_type": piensa en si el
+// servicio se paga en el salón, con señal o entero. La UI traduce; el motor de
+// cobro (ya probado) sigue recibiendo exactamente los mismos campos que antes.
+const COBRO_OPCIONES = {
+  salon:     { mode:'payment_disabled', type:'full',    ayuda:'El cliente reserva sin pagar nada online.' },
+  senal:     { mode:'payment_required', type:'deposit', ayuda:'Se cobra la señal al reservar. El resto se cobra en el salón y el panel te avisa de cuánto falta.' },
+  completo:  { mode:'payment_required', type:'full',    ayuda:'La cita no queda confirmada hasta que el cliente paga el importe completo.' },
+  retencion: { mode:'payment_required', type:'preauth', ayuda:'Se retiene el importe en la tarjeta sin cobrarlo. Decides tú desde el panel si lo cobras (no-show) o lo liberas. La retención caduca a los 7 días.' },
+};
+function cobroDesdeServicio(svc) {
+  if (!svc || (svc.payment_mode || 'payment_disabled') === 'payment_disabled') return 'salon';
+  const tipo = svc.payment_type || 'full';
+  if (tipo === 'preauth') return 'retencion';
+  if (tipo === 'deposit') return 'senal';
+  return 'completo';
+}
+function refrescarCobroServicio() {
+  const clave = document.getElementById('svcCobro').value;
+  const opcion = COBRO_OPCIONES[clave] || COBRO_OPCIONES.salon;
+  document.getElementById('svcPaymentMode').value = opcion.mode;
+  document.getElementById('svcPaymentType').value = opcion.type;
+  document.getElementById('svcCobroAyuda').textContent = opcion.ayuda;
+  // La señal solo tiene sentido cuando se cobra una parte por adelantado.
+  document.getElementById('svcSenalWrap').style.display = (clave === 'senal' || clave === 'retencion') ? '' : 'none';
+  document.getElementById('svcSenalWrap').querySelector('.field-label').textContent =
+    clave === 'retencion' ? 'Importe a retener (€)' : 'Importe de la señal (€)';
+}
+document.getElementById('svcCobro')?.addEventListener('change', refrescarCobroServicio);
+
 function openServiceDrawer(svc = null) {
   document.getElementById('serviceDrawerTitle').textContent = svc ? 'Editar servicio' : 'Nuevo servicio';
   document.getElementById('svcSlug').value = svc ? svc.id : '';
   document.getElementById('svcNombre').value = svc ? svc.nombre : '';
   document.getElementById('svcDuracion').value = svc ? svc.duration_minutes : 30;
   document.getElementById('svcPrecio').value = (svc && svc.price_cents) ? (svc.price_cents / 100) : '';
-  document.getElementById('svcPaymentMode').value = svc ? (svc.payment_mode || 'payment_disabled') : 'payment_disabled';
-  document.getElementById('svcPaymentType').value = svc ? (svc.payment_type || 'full') : 'full';
+  document.getElementById('svcCobro').value = cobroDesdeServicio(svc);
   document.getElementById('svcDeposit').value = (svc && svc.deposit_amount_cents) ? (svc.deposit_amount_cents / 100) : '';
+  refrescarCobroServicio();
   const ovSet = (id, v) => { document.getElementById(id).value = (v === null || v === undefined) ? '' : v; };
   ovSet('svcCancelFree', svc ? svc.cancel_free_hours : null);
   ovSet('svcLateFee', svc ? svc.cancel_late_fee_pct : null);
@@ -7683,15 +7736,20 @@ function cdView(b){
 // Indicador de pago (eje independiente). SOLO aparece si el servicio requiere pago o
 // depósito (pay_state pending/paid/preauthorized). Gratis / en mostrador / opcional sin
 // pagar -> nada. Pagado = ✓€ verde; por pagar = € rojo; retención = € ámbar.
+// Marca de cobro en la vista Día. El símbolo distingue de un vistazo pagado del
+// todo (€) de señal a medias (½), que antes se veían igual y hacían perder dinero.
 const CD_PAY = {
-  paid:          { sym:'€', color:'#10b981', title:'Pagado' },
-  preauthorized: { sym:'€', color:'#f59e0b', title:'Retención activa (tarjeta retenida)' },
-  pending:       { sym:'€', color:'#ef4444', title:'Por pagar' },
+  pagado:      { sym:'€',  color:'#10b981' },
+  senal:       { sym:'½',  color:'#f59e0b' },
+  retenido:    { sym:'€',  color:'#f59e0b' },
+  pendiente:   { sym:'€',  color:'#ef4444' },
+  reembolsado: { sym:'€',  color:'#94a3b8' },
 };
 function cdPayMark(b){
-  const p = CD_PAY[b.pay_state];
+  const p = CD_PAY[b && b.pay_kind];
   if (!p) return '';
-  return `<span class="cd-ev-pay" style="color:${p.color}" title="${p.title}">${p.sym}</span>`;
+  const titulo = (b.pay_label || '').replace(/"/g, '');
+  return `<span class="cd-ev-pay" style="color:${p.color}" title="${escapeHtml(titulo)}">${p.sym}</span>`;
 }
 function cdHexToRgba(hex, a){
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
@@ -7714,6 +7772,27 @@ function cdDur(b, emp){
   if (s && e && !isNaN(s) && !isNaN(e)) { const d = Math.round((e - s)/60000); if (d > 0 && d <= 1440) return d; }
   return Number(emp?.slot_minutes) || Number(citasState.daySchedule?.slot_minutes) || 30;
 }
+// ── Estado de cobro de una cita ───────────────────────────────────────
+// Una sola pieza para todo el panel: el backend (backend/paystate.py) ya suma lo
+// cobrado en la reserva y en el mostrador, asi que aqui solo se pinta. Antes una
+// senal de 50 € se mostraba como "Pagado" y nadie sabia que faltaban 70 €.
+const PAY_BADGE_STYLES = {
+  senal:       'background:rgba(244,180,0,0.16); color:#f4b400;',
+  pendiente:   'background:rgba(239,68,68,0.14); color:#ef4444;',
+  retenido:    'background:rgba(244,180,0,0.15); color:#f4b400;',
+  pagado:      'background:rgba(0,245,212,0.15); color:var(--success);',
+  reembolsado: 'background:rgba(255,255,255,0.06); color:var(--soft-2);',
+};
+function payBadge(b) {
+  if (!b || !b.pay_label) return '';
+  const estilo = PAY_BADGE_STYLES[b.pay_kind] || PAY_BADGE_STYLES.pagado;
+  const icono = b.pay_kind === 'pagado' ? '✓' : '💳';
+  return `<span class="badge" style="${estilo}">${icono} ${escapeHtml(b.pay_label)}</span>`;
+}
+function payPendingEuros(b) {
+  return b && b.pay_pending_cents ? (b.pay_pending_cents / 100) : 0;
+}
+
 function cdServiceMeta(b){
   const bits = [];
   const dur = Number(b.service_duration_minutes || b.duration_minutes || 0);
@@ -8109,7 +8188,7 @@ function cdRedeemGiftDialog(b, presetCode, onDone) {
 async function cdLoadAssetsHint(b, container) {
   if (typeof hasPerm === 'function' && !hasPerm('commerce.sell')) return;
   const est = cdEstado(b);
-  const payPaid = b.payment_status === 'paid' || b.payment_status === 'partially_refunded' || b.pay_state === 'paid';
+  const payPaid = b.pay_kind === 'pagado' || b.payment_status === 'partially_refunded';
   if (payPaid || est === 'cancelled') return;
   const q = (b.email || b.client_email || b.telefono || b.client_phone || '').trim();
   if (!q) return;
@@ -8167,10 +8246,13 @@ function cdRenderDetail(b){
   // b.payment_status) o el pago de la reserva con depósito/retención (booking_payments,
   // b.pay_state). Unificamos ambos para que captura/liberación/reembolso aparezcan siempre.
   const payPreauth = b.payment_status === 'preauthorized' || b.pay_state === 'preauthorized';
-  const payPaid = b.payment_status === 'paid' || b.payment_status === 'partially_refunded' || b.pay_state === 'paid';
+  const payPaid = b.pay_kind === 'pagado' || b.payment_status === 'partially_refunded';
   const cobrarItems = [];
   if (notCancelled && !payPreauth) cobrarItems.push(mItem('pay', '💳 Enlace de pago'));
-  if (notCancelled && hasPerm('commerce.sell')) cobrarItems.push(mItem('poscharge', '📲 QR + producto'));
+  if (notCancelled && hasPerm('commerce.sell')) {
+    const falta = payPendingEuros(b);
+    cobrarItems.push(mItem('poscharge', falta ? `📲 Cobrar ${falta} € que faltan` : '📲 QR + producto'));
+  }
   if (notCancelled && !payPaid && hasPerm('commerce.sell')) {
     cobrarItems.push(mItem('redeempkg', '🎟 Redimir bono'));
     cobrarItems.push(mItem('redeemgift', '🎁 Redimir tarjeta regalo'));
@@ -8197,10 +8279,8 @@ function cdRenderDetail(b){
         <div class="cd-detail-meta">
           <span class="badge ${badge}" title="${escapeHtml(view.key === 'confirmed' ? 'El cliente confirmó la asistencia.' : view.key === 'unconfirmed' ? 'Reservada, pendiente de que el cliente confirme.' : view.label)}">${escapeHtml(view.label)}</span>
           ${b.booking_code ? `<span class="badge" style="background:var(--accent-soft); color:var(--accent); font-family:'Courier New',monospace; letter-spacing:.06em;">N.º ${escapeHtml(b.booking_code)}</span>` : ''}
-          ${{preauthorized:'<span class="badge" style="background:rgba(244,180,0,0.15); color:#f4b400;">💳 Retención activa</span>',paid:'<span class="badge badge-confirmed">Pagado</span>',released:'<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">retención liberada</span>',refunded:'<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">reembolsado</span>',partially_refunded:'<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">reembolso parcial</span>'}[b.payment_status] || ''}
-          ${(!b.payment_status && b.pay_state === 'pending') ? '<span class="badge" style="background:rgba(239,68,68,0.14); color:#ef4444;">💳 Por pagar</span>' : ''}
-          ${(!b.payment_status && b.pay_state === 'paid') ? '<span class="badge badge-confirmed">Pagado</span>' : ''}
-          ${(!b.payment_status && b.pay_state === 'preauthorized') ? '<span class="badge" style="background:rgba(244,180,0,0.15); color:#f4b400;">💳 Retención activa</span>' : ''}
+          ${payBadge(b)}
+          ${b.payment_status === 'released' ? '<span class="badge" style="background:rgba(255,255,255,0.06); color:var(--soft-2);">retención liberada</span>' : ''}
           <span>${escapeHtml(hora)} · ${escapeHtml(b.employee_name || 'Agenda')}</span>
           <span>${escapeHtml((b.servicio || 'Consulta') + cdServiceMeta(b))}</span>
         </div>
@@ -8293,9 +8373,10 @@ function cdRenderDetail(b){
         if (action === 'poscharge'){
           openPosCharge({
             bookingId: bid,
-            serviceLabel: (b.servicio || 'Cita'),
-            serviceCents: b.service_price_cents || 0,
-            servicePaid: b.payment_status === 'paid' || b.pay_state === 'paid',
+            // Con senal pagada se cobra SOLO lo que falta, no el precio entero.
+            serviceLabel: (b.pay_kind === 'senal' ? 'Resto de ' : '') + (b.servicio || 'Cita'),
+            serviceCents: b.pay_pending_cents || b.service_price_cents || 0,
+            servicePaid: b.pay_kind === 'pagado',
             customerName: b.nombre || b.client_name || '',
             customerEmail: b.email || b.client_email || '',
             onPaid: () => loadCitasDay(),
@@ -8469,7 +8550,7 @@ function openManageBookingModal(b){
   const canEditClient = hasPerm('clients.edit');
   const dis = canEditClient ? '' : 'disabled';
   const payPreauth = b.payment_status === 'preauthorized' || b.pay_state === 'preauthorized';
-  const payPaid = b.payment_status === 'paid' || b.payment_status === 'partially_refunded' || b.pay_state === 'paid';
+  const payPaid = b.pay_kind === 'pagado' || b.payment_status === 'partially_refunded';
   const paymentBadge = mgPaymentBadge(b);
   const priceText = mgMoney(b.service_price_cents) || mgMoney(b.payment_amount_cents) || 'Sin importe';
   const contactSummary = [email, phone].filter(Boolean).join(' - ') || 'Sin datos de contacto';
@@ -8686,7 +8767,7 @@ function openManageBookingModal(b){
           bookingId: bid,
           serviceLabel: b.servicio || 'Cita',
           serviceCents: b.service_price_cents || 0,
-          servicePaid: b.payment_status === 'paid' || b.pay_state === 'paid',
+          servicePaid: b.pay_kind === 'pagado',
           customerName: clientName,
           customerEmail: email,
           onPaid: refresh,

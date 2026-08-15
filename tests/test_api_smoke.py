@@ -1217,7 +1217,12 @@ def test_portal_service_editor_exposes_multicenter_and_preauth_controls():
     html = (REPO_ROOT / "app_ui" / "index.html").read_text(encoding="utf-8")
 
     assert 'id="svcPaymentType"' in html
-    assert '<option value="preauth">' in html
+    # El editor pregunta UNA cosa ("¿como se paga?") y traduce a los campos del
+    # backend. La retencion sigue siendo alcanzable, ahora en castellano.
+    assert 'id="svcCobro"' in html
+    assert '<option value="retencion">' in html
+    assert "retencion: { mode:'payment_required', type:'preauth'" in html
+    assert "senal:     { mode:'payment_required', type:'deposit'" in html
     assert 'id="svcLocationsWrap"' in html
     assert 'id="svcLocationsList"' in html
     assert "document.getElementById('servicioNewBtn').addEventListener" in html

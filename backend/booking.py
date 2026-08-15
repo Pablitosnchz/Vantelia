@@ -41,7 +41,7 @@ from api_models import (
     PortalMessagePreviewResponse,
     PortalScheduleUpdatePayload,
 )
-from backend import agenda, appstate, clients, crm, db, emailing, messaging, security, settings, stripe_gateway, textnorm, timeutils
+from backend import agenda, appstate, clients, crm, db, emailing, messaging, paystate, security, settings, stripe_gateway, textnorm, timeutils
 
 _FOLLOWUP_DELIVERY_CHANNELS = ("email", "whatsapp", "sms")
 _BOOKING_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
@@ -510,6 +510,18 @@ def _booking_email_bodies(
     intro = intro_map.get(status_key, intro_map["confirmed"])
     extra_message_clean = textnorm._sanitize_text(extra_message, allow_multiline=True)
 
+    # Que ha pagado ya y que le queda por pagar. Sin esto, quien deja una senal
+    # de 50 EUR recibe el mismo email que quien paga el servicio entero.
+    _cobro_texto = ""
+    if status_key in ("confirmed", "received", "reminder_24h", "reminder_2h"):
+        try:
+            _cobro_texto = paystate.customer_line(
+                paystate.summary_for_booking(booking_row["cliente_id"], booking_row)
+            )
+        except Exception as exc:  # noqa: BLE001 - el email vale mas que la linea de cobro
+            settings.logger.debug("No se pudo calcular el cobro para el email: %s", exc)
+    _cobro_line = f"Pago: {_cobro_texto}\n" if _cobro_texto else ""
+
     codigo_line = f"Numero de reserva: {booking_code}\n" if booking_code else ""
     text_body = (
         f"{intro}\n\n"
@@ -518,6 +530,7 @@ def _booking_email_bodies(
         f"Servicio: {service_name}{service_suffix}\n"
         f"Fecha y hora: {when_text}\n"
         f"Zona horaria: {booking_row['timezone']}\n"
+        f"{_cobro_line}"
         f"{manage_line}"
     )
     if booking_code:
@@ -555,7 +568,14 @@ def _booking_email_bodies(
         f"<li><strong>Fecha y hora:</strong> {escape(when_text)}</li>"
         f"<li><strong>Zona horaria:</strong> {escape(booking_row['timezone'])}</li>"
         f"</ul>"
-        f"{manage_html}"
+        + (
+            f'<div style="margin:0 0 14px;padding:12px 16px;border-radius:12px;'
+            f'background:#fff8e6;border:1px solid #f0dca8;line-height:1.5;">'
+            f"<strong>Pago:</strong> {escape(_cobro_texto)}</div>"
+            if _cobro_texto
+            else ""
+        )
+        + f"{manage_html}"
     )
     if extra_message_clean and status_key == "cancelled":
         extra_message_html = escape(extra_message_clean).replace("\n", "<br>")
@@ -2059,6 +2079,9 @@ def _portal_booking_summaries(
         meta_index = agenda._booking_service_meta_index(cliente_id, rows)
         payments_index = _latest_payments_for_bookings(cliente_id, [row["id"] for row in rows])
         confirmed_index = _customer_confirmed_index(cliente_id, [row["id"] for row in rows])
+        # Cobrado real por cita (reserva + mostrador), en batch: sin esto el listado
+        # haria dos consultas por fila.
+        paid_index = paystate.paid_cents_for_bookings(cliente_id, [row["id"] for row in rows])
         return [
             _portal_booking_summary_from_row(
                 row,
@@ -2066,6 +2089,7 @@ def _portal_booking_summaries(
                 service_meta=meta_index.get(row["id"]),
                 payment=payments_index.get(row["id"]),
                 customer_confirmed=row["id"] in confirmed_index,
+                paid_cents=paid_index.get(row["id"], 0),
             )
             for row in rows
         ]
@@ -2079,6 +2103,7 @@ def _portal_booking_summary_from_row(
     service_meta: Optional[Dict[str, Any]] = None,
     payment: Any = _PAYMENT_UNSET,
     customer_confirmed: Optional[bool] = None,
+    paid_cents: Optional[int] = None,
 ) -> PortalBookingSummary:
     data = _serialize_booking_row(row, request, service_meta=service_meta)
     status_value = data["estado"]
@@ -2101,6 +2126,12 @@ def _portal_booking_summary_from_row(
                 "AND event_type='attendance_confirmed_by_customer' LIMIT 1",
                 (row["id"],),
             ).fetchone())
+    cobro = paystate.summary_for_booking(
+        row["cliente_id"], row,
+        paid_cents=paid_cents,
+        booking_payment_status=str((_booking_payment_row(row["id"]) or {}).get("status", ""))
+        if paid_cents is None else "",
+    )
     return PortalBookingSummary(
         booking_id=data["booking_id"],
         empresa=data["empresa"],
@@ -2129,6 +2160,10 @@ def _portal_booking_summary_from_row(
         payment_status=payment["status"] if payment else "",
         pay_state=(row["payment_status"] if "payment_status" in row.keys() else "") or "",
         payment_amount_cents=int(payment["amount_cents"] or 0) if payment else 0,
+        pay_kind=cobro["kind"],
+        pay_label=cobro["label"],
+        pay_paid_cents=cobro["paid_cents"],
+        pay_pending_cents=cobro["pending_cents"],
         payment_checkout_url=payment["checkout_url"] if payment else "",
         start_at=data["start_at"],
         end_at=data["end_at"],
@@ -4806,12 +4841,46 @@ def resolve_payment_requirement(
     }
 
 
+def payment_prompt_note(cliente_id: str, booking_row: sqlite3.Row, payment_row: Optional[sqlite3.Row]) -> str:
+    """Explica QUE se esta pagando (senal, retencion o total) en una frase.
+
+    Compartido por WhatsApp y chat: el enlace de pago a secas no dice si esos
+    50 EUR son el precio del servicio o solo la senal.
+    """
+    if not payment_row:
+        return ""
+    service = agenda._get_service_row(cliente_id, booking_row["service_id"]) or agenda._find_service_by_name(
+        cliente_id, booking_row["servicio"]
+    )
+    linea = paystate.checkout_line(
+        booking_row["servicio"] or "Reserva",
+        int(payment_row["amount_cents"] or 0),
+        int(booking_row["service_price_cents"] or 0),
+        str(service["payment_type"] or "full") if service else "full",
+    )
+    return linea["description"]
+
+
 def _booking_payment_row(booking_id: str) -> Optional[sqlite3.Row]:
     with db._get_db_connection() as connection:
         return connection.execute(
             "SELECT * FROM booking_payments WHERE booking_id = ?",
             (booking_id,),
         ).fetchone()
+
+
+def _checkout_product_data(booking: sqlite3.Row, decision: Dict[str, Any]) -> Dict[str, str]:
+    """Producto de Stripe con la senal explicada (Stripe rechaza description vacia)."""
+    linea = paystate.checkout_line(
+        booking["servicio"] or "Reserva",
+        int(decision.get("amount_cents") or 0),
+        int(booking["service_price_cents"] or 0),
+        str(decision.get("payment_type") or "full"),
+    )
+    datos = {"name": linea["name"]}
+    if linea["description"]:
+        datos["description"] = linea["description"]
+    return datos
 
 
 def create_booking_payment_checkout(cliente_id: str, booking_id: str, request: Optional[Request] = None) -> str:
@@ -4850,7 +4919,7 @@ def create_booking_payment_checkout(cliente_id: str, booking_id: str, request: O
             line_items=[{
                 "price_data": {
                     "currency": decision["currency"],
-                    "product_data": {"name": booking["servicio"] or "Reserva"},
+                    "product_data": _checkout_product_data(booking, decision),
                     "unit_amount": decision["amount_cents"],
                 },
                 "quantity": 1,
