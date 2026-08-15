@@ -1223,6 +1223,17 @@ def test_portal_service_editor_exposes_multicenter_and_preauth_controls():
     assert '<option value="retencion">' in html
     assert "retencion: { mode:'payment_required', type:'preauth'" in html
     assert "senal:     { mode:'payment_required', type:'deposit'" in html
+    # El editor pregunta 4 cosas y pliega el resto. Volver a volcarlo todo plano
+    # (foto, descripcion, 3 campos de politica) hace el panel ilegible.
+    assert 'id="svcMasOpciones"' in html
+    basico = html.split('id="serviceDrawer"')[1].split('id="svcMasOpciones"')[0]
+    for campo in ('svcNombre', 'svcDuracion', 'svcPrecio', 'svcCobro', 'svcActivo'):
+        assert 'id="%s"' % campo in basico
+    avanzado = html.split('id="svcMasOpciones"')[1].split("</details>")[0]
+    for campo in ('svcDesc', 'svcImagen', 'svcCancelFree', 'svcLateFee', 'svcNoShowFee'):
+        assert 'id="%s"' % campo in avanzado
+    # Lo ya configurado no se esconde detras del plegado.
+    assert "document.getElementById('svcMasOpciones').open" in html
     assert 'id="svcLocationsWrap"' in html
     assert 'id="svcLocationsList"' in html
     assert "document.getElementById('servicioNewBtn').addEventListener" in html

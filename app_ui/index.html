@@ -3956,9 +3956,12 @@
     <button id="serviceClose">×</button>
   </div>
   <div style="padding:18px; overflow-y:auto; flex:1;">
-    <div class="field" style="margin-bottom:10px;"><label class="field-label">Nombre *</label><input type="text" class="field-input" id="svcNombre" placeholder="Ej. Primera consulta" /></div>
-    <div class="field" style="margin-bottom:10px;"><label class="field-label">Duración (minutos) *</label><input type="number" class="field-input" id="svcDuracion" min="5" max="600" step="5" value="30" /></div>
-    <div class="field" style="margin-bottom:10px;"><label class="field-label">Precio (€)</label><input type="number" class="field-input" id="svcPrecio" min="0" step="0.01" placeholder="0 = a consultar" /></div>
+    <!-- Lo que se rellena SIEMPRE. Cuatro decisiones y a guardar. -->
+    <div class="field" style="margin-bottom:10px;"><label class="field-label">Nombre *</label><input type="text" class="field-input" id="svcNombre" placeholder="Ej. Corte y peinado" /></div>
+    <div class="nb-row" style="margin-bottom:10px;">
+      <div class="field"><label class="field-label">Duración (min) *</label><input type="number" class="field-input" id="svcDuracion" min="5" max="600" step="5" value="30" /></div>
+      <div class="field"><label class="field-label">Precio (€)</label><input type="number" class="field-input" id="svcPrecio" min="0" step="0.01" placeholder="0 = a consultar" /></div>
+    </div>
     <div class="field" style="margin-bottom:10px;">
       <label class="field-label">¿Cómo se paga este servicio?</label>
       <select class="field-input" id="svcCobro">
@@ -3973,22 +3976,26 @@
       <label class="field-label">Importe de la señal (€)</label>
       <input type="number" class="field-input" id="svcDeposit" min="0" step="0.01" placeholder="Ej. 50" />
     </div>
+    <label style="display:flex; align-items:center; gap:8px; margin-bottom:12px; cursor:pointer;"><input type="checkbox" id="svcActivo" checked /> <span>Activo (visible para reservar)</span></label>
     <!-- Se conservan los campos reales que entiende el backend; la UI solo los traduce. -->
     <input type="hidden" id="svcPaymentMode" /><input type="hidden" id="svcPaymentType" />
-    <div style="margin:6px 0 10px; padding:12px 12px 4px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,0.02);">
-      <div class="ap-block-title" style="margin-bottom:8px;">Política de cancelación (opcional)</div>
-      <p class="panel-sub" style="margin:0 0 10px; font-size:0.78rem;">Vacío = hereda la política general del negocio. Rellena solo si este servicio tiene reglas propias.</p>
-      <div class="field" style="margin-bottom:10px;"><label class="field-label">Cancelación gratis hasta (h antes)</label><input type="number" class="field-input" id="svcCancelFree" min="0" max="720" step="1" placeholder="heredar" /></div>
-      <div class="field" style="margin-bottom:10px;"><label class="field-label">Penalización cancelación tardía (%)</label><input type="number" class="field-input" id="svcLateFee" min="0" max="100" step="1" placeholder="heredar" /></div>
-      <div class="field" style="margin-bottom:10px;"><label class="field-label">Penalización no-show (%)</label><input type="number" class="field-input" id="svcNoShowFee" min="0" max="100" step="1" placeholder="heredar" /></div>
-    </div>
-    <div class="field" style="margin-bottom:10px;"><label class="field-label">Descripción</label><textarea class="field-input" id="svcDesc" rows="2" placeholder="opcional"></textarea></div>
-    <div class="field" style="margin-bottom:10px;">
-      <label class="field-label">Imagen (URL)</label>
-      <input type="url" class="field-input" id="svcImagen" maxlength="500" placeholder="https://… (se muestra en tu central de reservas)" />
-      <div class="imgprev" id="svcImagenPrev"></div>
-    </div>
-    <label style="display:flex; align-items:center; gap:8px; margin-bottom:14px; cursor:pointer;"><input type="checkbox" id="svcActivo" checked /> <span>Activo (visible para reservar)</span></label>
+    <!-- Todo lo demas es opcional: se abre solo si el servicio ya lo tiene puesto. -->
+    <details class="nb-more" id="svcMasOpciones" style="margin-bottom:14px;">
+      <summary>Más opciones · foto, descripción y política de cancelación</summary>
+      <div class="field" style="margin-bottom:10px;"><label class="field-label">Descripción</label><textarea class="field-input" id="svcDesc" rows="2" placeholder="opcional"></textarea></div>
+      <div class="field" style="margin-bottom:10px;">
+        <label class="field-label">Imagen (URL)</label>
+        <input type="url" class="field-input" id="svcImagen" maxlength="500" placeholder="https://… (se muestra en tu central de reservas)" />
+        <div class="imgprev" id="svcImagenPrev"></div>
+      </div>
+      <div style="margin:6px 0 10px; padding:12px 12px 4px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,0.02);">
+        <div class="ap-block-title" style="margin-bottom:8px;">Política de cancelación</div>
+        <p class="panel-sub" style="margin:0 0 10px; font-size:0.78rem;">Vacío = usa la política general del negocio. Rellena solo si este servicio tiene reglas propias.</p>
+        <div class="field" style="margin-bottom:10px;"><label class="field-label">Cancelación gratis hasta (h antes)</label><input type="number" class="field-input" id="svcCancelFree" min="0" max="720" step="1" placeholder="heredar" /></div>
+        <div class="field" style="margin-bottom:10px;"><label class="field-label">Penalización cancelación tardía (%)</label><input type="number" class="field-input" id="svcLateFee" min="0" max="100" step="1" placeholder="heredar" /></div>
+        <div class="field" style="margin-bottom:10px;"><label class="field-label">Penalización no-show (%)</label><input type="number" class="field-input" id="svcNoShowFee" min="0" max="100" step="1" placeholder="heredar" /></div>
+      </div>
+    </details>
     <div class="field" id="svcLocationsWrap" style="display:none; margin-bottom:14px;">
       <label class="field-label">Disponibilidad y precio por centro</label>
       <div class="panel-sub" style="margin:0 0 8px;">Campos vacíos = hereda el precio y duración generales del servicio.</div>
@@ -7525,6 +7532,14 @@ function openServiceDrawer(svc = null) {
   document.getElementById('svcImagen').value = svc ? (svc.image_url || '') : '';
   refreshImagePreview('svcImagen', 'svcImagenPrev');
   document.getElementById('svcActivo').checked = svc ? !!svc.is_active : true;
+  // "Más opciones" arranca plegado, pero nunca esconde algo ya configurado: si el
+  // servicio tiene foto, descripción o política propia, se abre para que se vea.
+  document.getElementById('svcMasOpciones').open = !!(svc && (
+    svc.descripcion || svc.image_url ||
+    svc.cancel_free_hours !== null && svc.cancel_free_hours !== undefined ||
+    svc.cancel_late_fee_pct !== null && svc.cancel_late_fee_pct !== undefined ||
+    svc.no_show_fee_pct !== null && svc.no_show_fee_pct !== undefined
+  ));
   document.getElementById('serviceDrawer').classList.add('open');
   document.getElementById('serviceOverlay').classList.add('open');
   loadSvcLocations(svc ? svc.id : '');
