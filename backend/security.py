@@ -691,6 +691,29 @@ def _cleanup_auth_sessions() -> None:
         connection.commit()
 
 
+def _touch_session_expiry(connection: sqlite3.Connection, session_id: str, expires_at: str) -> str:
+    """Renueva la caducidad de una sesion viva (caducidad DESLIZANTE).
+
+    Antes la sesion moria a las N horas del login aunque el negocio estuviera
+    trabajando: una peluqueria con la agenda abierta todo el dia se encontraba la
+    pantalla de login a media manana. Ahora el plazo cuenta desde la ULTIMA
+    actividad, asi que solo caduca por inactividad real.
+
+    Solo se escribe cuando queda menos de la mitad del plazo, para no hacer un
+    UPDATE por cada peticion del panel.
+    """
+    restante_ok = False
+    caduca = timeutils._from_utc_iso(expires_at)
+    if caduca:
+        margen = timedelta(hours=settings.PORTAL_SESSION_HOURS) / 2
+        restante_ok = (caduca - timeutils._utc_now()) > margen
+    if restante_ok:
+        return expires_at
+    nuevo = timeutils._session_expires_at()
+    connection.execute("UPDATE auth_sessions SET expires_at = ? WHERE id = ?", (nuevo, session_id))
+    return nuevo
+
+
 def _get_session_user(session_token: str) -> Optional[sqlite3.Row]:
     if not session_token:
         return None
@@ -713,6 +736,7 @@ def _get_session_user(session_token: str) -> Optional[sqlite3.Row]:
                     "UPDATE auth_sessions SET last_seen_at = ? WHERE id = ?",
                     (timeutils._utc_now_iso(), row["session_id"]),
                 )
+                _touch_session_expiry(connection, row["session_id"], row["expires_at"])
                 connection.commit()
                 return row
 
@@ -731,6 +755,7 @@ def _get_session_user(session_token: str) -> Optional[sqlite3.Row]:
                     "UPDATE auth_sessions SET last_seen_at = ? WHERE id = ?",
                     (timeutils._utc_now_iso(), row["session_id"]),
                 )
+                _touch_session_expiry(connection, row["session_id"], row["expires_at"])
                 connection.commit()
                 return row
     return None
@@ -743,10 +768,14 @@ def _redirect_for_role(role: str) -> str:
 
 
 def _set_portal_cookie(response: Response, raw_token: str) -> None:
+    # La cookie vive MUCHO mas que la ventana de inactividad a proposito: quien
+    # manda es el servidor, que renueva la sesion con cada peticion. Si la cookie
+    # durase lo mismo que la sesion, un negocio que usa el panel a diario se
+    # quedaria fuera al cumplirse el plazo desde el login, con la sesion viva.
     response.set_cookie(
         settings.PORTAL_COOKIE_NAME,
         raw_token,
-        max_age=max(3600, settings.PORTAL_SESSION_HOURS * 3600),
+        max_age=max(settings.PORTAL_SESSION_HOURS * 3600, 90 * 24 * 3600),
         httponly=True,
         secure=settings.APP_BASE_URL.startswith("https://"),
         samesite="lax",

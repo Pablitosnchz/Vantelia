@@ -122,6 +122,17 @@ try:
     DEMO_VOICE_RATE_LIMIT = int(os.getenv("DEMO_VOICE_RATE_LIMIT_PER_MINUTE", "3"))
 except ValueError:
     DEMO_VOICE_RATE_LIMIT = 3
+# Voz en el widget de un cliente REAL: no es la demo publica anonima. Un visitante
+# que abre y cierra el microfono un par de veces chocaba con el limite de 3/min y
+# veia "Demasiados intentos" en la web del negocio.
+try:
+    WIDGET_VOICE_RATE_LIMIT = int(os.getenv("WIDGET_VOICE_RATE_LIMIT_PER_MINUTE", "10"))
+except ValueError:
+    WIDGET_VOICE_RATE_LIMIT = 10
+try:
+    WIDGET_VOICE_MAX_SECONDS = int(os.getenv("WIDGET_VOICE_MAX_SECONDS", "300"))
+except ValueError:
+    WIDGET_VOICE_MAX_SECONDS = 300
 # El test del panel lo lanza el propio cliente autenticado sobre su bot: limite mas
 # holgado que el demo publico para no cortar al probar varias veces seguidas.
 try:
@@ -168,7 +179,10 @@ ADMIN_RETURN_COOKIE_NAME = (
     or "vantelia_admin_session"
 )
 PORTAL_COOKIE_DOMAIN = os.getenv("PORTAL_COOKIE_DOMAIN", "").strip()
-PORTAL_SESSION_HOURS = int(os.getenv("PORTAL_SESSION_HOURS", "72"))
+# Ventana de INACTIVIDAD de la sesion del portal (la caducidad es deslizante: se
+# renueva con cada peticion). Una semana cubre un fin de semana largo o un puente
+# con el negocio cerrado sin que el equipo se encuentre la pantalla de login.
+PORTAL_SESSION_HOURS = int(os.getenv("PORTAL_SESSION_HOURS", "168"))
 PORTAL_ADMIN_EMAIL = os.getenv("PORTAL_ADMIN_EMAIL", "").strip().lower()
 PORTAL_ADMIN_PASSWORD = os.getenv("PORTAL_ADMIN_PASSWORD", "").strip()
 PORTAL_ADMIN_NAME = os.getenv("PORTAL_ADMIN_NAME", "Administrador Vantelia").strip()

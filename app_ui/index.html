@@ -12407,6 +12407,17 @@ function loadInstalacion() {
 }
 document.getElementById('instCopyBtn').addEventListener('click', e => copy(document.getElementById('instSnippet').value, e.target));
 
+// ── Mantener viva la sesión ───────────────────────────────────────────
+// Un negocio deja la agenda abierta todo el día en el ordenador del mostrador.
+// La sesión caduca por INACTIVIDAD y se renueva con cada petición, así que basta
+// con un latido silencioso mientras la pestaña esté abierta. Se salta si la
+// pestaña está oculta, para no mantener viva una sesión que nadie está mirando.
+const SESSION_PING_MINUTES = 20;
+setInterval(() => {
+  if (document.hidden) return;
+  api('/auth/me').catch(() => { /* sin sesión: el propio panel redirige al login */ });
+}, SESSION_PING_MINUTES * 60 * 1000);
+
 // ── CUENTA ────────────────────────────────────────────────────────────
 async function loadCuenta() {
   try {

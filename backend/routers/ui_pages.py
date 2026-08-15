@@ -233,9 +233,9 @@ async def widget_voice_session(cliente_id: str, request: Request) -> Dict[str, A
             detail="El asistente de voz no esta disponible ahora mismo.",
         )
     client_ip = request.client.host if request.client else "unknown"
-    security._check_rate_limit(f"widget_voice:{cliente_id}:{client_ip}", settings.DEMO_VOICE_RATE_LIMIT)
+    security._check_rate_limit(f"widget_voice:{cliente_id}:{client_ip}", settings.WIDGET_VOICE_RATE_LIMIT)
     voice_cfg = config.get("voice") or {}
-    max_seconds = int(voice_cfg.get("max_duration_seconds") or 0) or settings.DEMO_VOICE_MAX_SECONDS
+    max_seconds = int(voice_cfg.get("max_duration_seconds") or 0) or settings.WIDGET_VOICE_MAX_SECONDS
     return await voice._mint_voice_session(cliente_id, config, max_seconds=max_seconds, log_tag="widget-voice")
 
 
