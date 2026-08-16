@@ -94,3 +94,25 @@ def test_stripe_recibe_el_producto_explicado(api_module):
 
     fuente = inspect.getsource(booking.create_booking_payment_checkout)
     assert "_checkout_product_data(booking, decision)" in fuente
+
+
+def test_una_senal_se_puede_reembolsar_desde_el_panel(api_module):
+    """Una cita con senal NO esta "pagada", pero tiene dinero cobrado que se puede
+    devolver. Confundir las dos cosas escondia el boton justo en las senales."""
+    import pathlib as _p
+
+    html = (_p.Path(__file__).resolve().parents[1] / "app_ui" / "index.html").read_text(encoding="utf-8")
+    assert "function payHasMoney(b)" in html
+    assert "b.pay_kind === 'senal'" in html
+    # Y es esa condicion la que gobierna el boton, en las dos vistas.
+    assert html.count("payHasMoney(b) && hasPerm('payments.refund')") == 2
+
+
+def test_el_backend_admite_reembolsar_una_senal(api_module):
+    """El cobro de la senal queda como `paid` en booking_payments: reembolsable."""
+    import inspect
+
+    from backend import booking
+
+    fuente = inspect.getsource(booking.refund_booking_payment)
+    assert '("paid", "partially_refunded")' in fuente

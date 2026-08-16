@@ -7818,6 +7818,12 @@ function payBadge(b) {
   const icono = b.pay_kind === 'pagado' ? '✓' : '💳';
   return `<span class="badge" style="${estilo}">${icono} ${escapeHtml(b.pay_label)}</span>`;
 }
+// ¿Hay dinero YA COBRADO en esta cita? No es lo mismo que "pagada del todo":
+// una señal deja la cita a medias pero con 50 € cobrados que se pueden devolver.
+// Confundir las dos cosas escondía el botón de reembolsar justo en las señales.
+function payHasMoney(b) {
+  return b.pay_kind === 'pagado' || b.pay_kind === 'senal' || b.payment_status === 'partially_refunded';
+}
 function payPendingEuros(b) {
   return b && b.pay_pending_cents ? (b.pay_pending_cents / 100) : 0;
 }
@@ -8290,7 +8296,7 @@ function cdRenderDetail(b){
     cobrarItems.push(mItem('capture', '💳 Cobrar retención'));
     cobrarItems.push(mItem('release', '🔓 Liberar retención'));
   }
-  if (payPaid && hasPerm('payments.refund')) {
+  if (payHasMoney(b) && hasPerm('payments.refund')) {
     cobrarItems.push(mItem('refund', '↩ Reembolsar'));
   }
   const moreItems = [];
@@ -8602,7 +8608,7 @@ function openManageBookingModal(b){
     notCancelled && !payPaid && hasPerm('commerce.sell') ? mgActionButton('redeemgift', 'Redimir tarjeta regalo') : '',
     payPreauth && hasPerm('payments.capture') ? mgActionButton('capture', 'Cobrar retencion') : '',
     payPreauth && hasPerm('payments.capture') ? mgActionButton('release', 'Liberar retencion') : '',
-    payPaid && hasPerm('payments.refund') ? mgActionButton('refund', 'Reembolsar') : '',
+    payHasMoney(b) && hasPerm('payments.refund') ? mgActionButton('refund', 'Reembolsar') : '',
   ].filter(Boolean).join('');
   const clientActions = [
     mgActionButton('vercliente', 'Ver ficha del cliente'),
