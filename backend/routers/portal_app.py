@@ -1363,16 +1363,15 @@ async def app_connect_status(
     return booking._connect_account_status(security._resolve_cliente_for_self_serve_user(user), refresh=refresh)
 
 
-@app.post("/auth/app/payments/ai-send", response_model=ConnectAccountStatus)
-async def app_payments_ai_send_toggle(
-    data: AiSendTogglePayload,
+@app.put("/auth/app/payments/methods", response_model=ConnectAccountStatus)
+async def app_payments_methods(
+    data: PaymentMethodsPayload,
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> ConnectAccountStatus:
+    """Que metodos de pago acepta el negocio (la tarjeta va siempre)."""
     security._require_portal_min_role(user, "owner")
-    """Opt-in del negocio: permite que la IA envie enlaces de pago en su nombre."""
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
-    booking._set_ai_send_enabled(cliente_id, data.enabled)
-    return booking._connect_account_status(cliente_id)
+    return booking.save_payment_method_prefs(cliente_id, bizum=data.bizum, wallets=data.wallets)
 
 
 @app.get("/auth/app/rebooking-ai")
@@ -1386,7 +1385,7 @@ async def app_rebooking_ai_status(
 
 @app.post("/auth/app/rebooking-ai")
 async def app_rebooking_ai_toggle(
-    data: AiSendTogglePayload,
+    data: ToggleEnabledPayload,
     cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Dict[str, bool]:

@@ -236,41 +236,56 @@ def request_bizum_capability(account_id: str) -> str:
         return ""
 
 
-def enable_bizum_display(account_id: str) -> bool:
-    """Enciende Bizum en la configuracion de metodos de pago de la cuenta.
+# Los tres unicos metodos con los que trabajamos. Stripe enciende por defecto un
+# monton (Klarna, Bancontact, EPS, BLIK, MB Way, Pix, Satispay, tres coreanos...):
+# a una peluqueria de Madrid le ensuciaban la pagina de pago, y Klarna permitia
+# fraccionar en tres plazos una senal de 50 EUR.
+_METODOS_SIEMPRE = ("card",)          # la tarjeta no se puede quitar
+_METODOS_CARTERA = ("apple_pay", "google_pay")
 
-    Tener la capability activa NO basta: la cuenta hereda una configuracion con
-    Bizum apagado, asi que el checkout sigue sin ofrecerlo. Comprobado en vivo:
-    con la capability ya `active`, la sesion devolvia
-    ['card','bancontact','eps','klarna','link'] y solo tras encender la
-    preferencia aparecio 'bizum'.
 
-    Solo toca las configuraciones por defecto (no las que el negocio se haya
-    creado a mano) y solo si estan apagadas. Devuelve True si cambio algo.
+def sync_payment_methods(account_id: str, *, bizum: bool, wallets: bool) -> Dict[str, bool]:
+    """Deja en Stripe EXACTAMENTE los metodos que el negocio ha elegido.
+
+    Reconcilia en vez de forzar: lo que manda es el panel, asi que un negocio que
+    apague Bizum se queda apagado (antes se lo volviamos a encender en cada
+    refresco). Todo lo que no sea tarjeta, carteras o Bizum se apaga, incluidos
+    los metodos que Stripe anada en el futuro.
+
+    Solo toca las configuraciones por defecto: si el negocio se ha creado una
+    propia en su Dashboard, es suya. Devuelve el estado deseado que se aplico.
     """
+    deseado = {"bizum": bool(bizum)}
     if not account_id or not _stripe_configured():
-        return False
+        return deseado
     try:
         _stripe_init()
         configs = stripe.PaymentMethodConfiguration.list(stripe_account=account_id, limit=20)
-        cambiado = False
         for pmc in textnorm._object_get(configs, "data", []) or []:
             if not textnorm._object_get(pmc, "is_default", False):
                 continue
-            bizum = textnorm._object_get(pmc, "bizum", {}) or {}
-            preferencia = (textnorm._object_get(bizum, "display_preference", {}) or {}).get("value")
-            if preferencia == "on":
-                continue
-            stripe.PaymentMethodConfiguration.modify(
-                textnorm._object_get(pmc, "id", ""),
-                stripe_account=account_id,
-                bizum={"display_preference": {"preference": "on"}},
-            )
-            cambiado = True
-        return cambiado
+            cambios: Dict[str, Any] = {}
+            for clave, valor in (pmc.items() if hasattr(pmc, "items") else []):
+                if not isinstance(valor, dict) or "display_preference" not in valor:
+                    continue  # no es un metodo de pago
+                if clave in _METODOS_SIEMPRE:
+                    quiero = True
+                elif clave in _METODOS_CARTERA:
+                    quiero = bool(wallets)
+                elif clave == "bizum":
+                    quiero = bool(bizum)
+                else:
+                    quiero = False
+                actual = (valor.get("display_preference") or {}).get("value") == "on"
+                if actual != quiero:
+                    cambios[clave] = {"display_preference": {"preference": "on" if quiero else "off"}}
+            if cambios:
+                stripe.PaymentMethodConfiguration.modify(
+                    textnorm._object_get(pmc, "id", ""), stripe_account=account_id, **cambios
+                )
     except Exception as exc:  # noqa: BLE001 - cobrar con tarjeta vale mas que fallar aqui
-        settings.logger.warning("No se pudo mostrar Bizum en %s: %s", account_id, exc)
-        return False
+        settings.logger.warning("No se pudieron ajustar los metodos de pago de %s: %s", account_id, exc)
+    return deseado
 
 
 def _stripe_connected_account_row(cliente_id: str) -> Optional[sqlite3.Row]:

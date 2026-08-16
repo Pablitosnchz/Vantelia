@@ -91,52 +91,114 @@ def test_activar_bizum_no_basta_hay_que_mostrarlo(api_module):
     from backend import booking, stripe_gateway
 
     fuente = inspect.getsource(booking._connect_account_status)
-    assert "enable_bizum_display" in fuente
+    assert "sync_payment_methods" in fuente
 
-    encender = inspect.getsource(stripe_gateway.enable_bizum_display)
-    assert "display_preference" in encender
+    sync = inspect.getsource(stripe_gateway.sync_payment_methods)
+    assert "display_preference" in sync
     # Solo las configuraciones por defecto: las que el negocio se haya creado a
     # mano son suyas.
-    assert "is_default" in encender
+    assert "is_default" in sync
 
 
-def test_mostrar_bizum_es_idempotente_y_no_rompe(api_module):
-    from backend import stripe_gateway
-
-    modificadas = []
+def _stripe_falso(metodos):
+    """Doble de Stripe que recuerda que preferencias se han escrito."""
+    escrito = {}
 
     class StripeFalso:
         class PaymentMethodConfiguration:
             @staticmethod
             def list(**_kwargs):
-                return {"data": [
-                    {"id": "pmc_ya_on", "is_default": True,
-                     "bizum": {"display_preference": {"value": "on"}}},
-                    {"id": "pmc_apagada", "is_default": True,
-                     "bizum": {"display_preference": {"value": "off"}}},
-                    {"id": "pmc_del_negocio", "is_default": False,
-                     "bizum": {"display_preference": {"value": "off"}}},
-                ]}
+                filas = {k: {"display_preference": {"value": v}} for k, v in metodos.items()}
+                filas.update({"id": "pmc_1", "is_default": True})
+                return {"data": [filas]}
 
             @staticmethod
-            def modify(pmc_id, **_kwargs):
-                modificadas.append(pmc_id)
+            def modify(_pmc_id, **kwargs):
+                for clave, valor in kwargs.items():
+                    if isinstance(valor, dict) and "display_preference" in valor:
+                        escrito[clave] = valor["display_preference"]["preference"]
                 return {}
 
-    original_stripe = stripe_gateway.stripe
-    original_init = stripe_gateway._stripe_init
-    original_conf = stripe_gateway._stripe_configured
-    stripe_gateway.stripe = StripeFalso
+    return StripeFalso, escrito
+
+
+def _con_stripe_falso(metodos, **kwargs):
+    from backend import stripe_gateway
+
+    falso, escrito = _stripe_falso(metodos)
+    originales = (stripe_gateway.stripe, stripe_gateway._stripe_init, stripe_gateway._stripe_configured)
+    stripe_gateway.stripe = falso
     stripe_gateway._stripe_init = lambda: None
     stripe_gateway._stripe_configured = lambda: True
     try:
-        assert stripe_gateway.enable_bizum_display("acct_test") is True
-        # Ni la que ya estaba encendida ni la que se creo el negocio.
-        assert modificadas == ["pmc_apagada"]
+        stripe_gateway.sync_payment_methods("acct_test", **kwargs)
     finally:
-        stripe_gateway.stripe = original_stripe
-        stripe_gateway._stripe_init = original_init
-        stripe_gateway._stripe_configured = original_conf
+        (stripe_gateway.stripe, stripe_gateway._stripe_init, stripe_gateway._stripe_configured) = originales
+    return escrito
+
+
+def test_solo_quedan_tarjeta_bizum_y_carteras(api_module):
+    """Stripe enciende por defecto Klarna, Pix, EPS y tres coreanos. Fuera."""
+    escrito = _con_stripe_falso(
+        {"card": "on", "bizum": "off", "apple_pay": "on", "google_pay": "off",
+         "klarna": "on", "pix": "on", "kakao_pay": "on", "link": "on", "eps": "on"},
+        bizum=True, wallets=True,
+    )
+    assert escrito["bizum"] == "on"
+    assert escrito["google_pay"] == "on"
+    for sobra in ("klarna", "pix", "kakao_pay", "link", "eps"):
+        assert escrito[sobra] == "off", sobra
+    # Lo que ya estaba bien no se reescribe.
+    assert "card" not in escrito and "apple_pay" not in escrito
+
+
+def test_si_el_negocio_apaga_bizum_se_queda_apagado(api_module):
+    """El bug de la primera version: lo reencendiamos en cada refresco."""
+    escrito = _con_stripe_falso({"card": "on", "bizum": "on", "apple_pay": "on"},
+                                bizum=False, wallets=True)
+    assert escrito["bizum"] == "off"
+
+
+def test_apagar_las_carteras_no_toca_la_tarjeta(api_module):
+    escrito = _con_stripe_falso({"card": "on", "apple_pay": "on", "google_pay": "on", "bizum": "on"},
+                                bizum=True, wallets=False)
+    assert escrito["apple_pay"] == "off" and escrito["google_pay"] == "off"
+    assert "card" not in escrito
+
+
+def test_la_tarjeta_nunca_se_puede_apagar(api_module):
+    escrito = _con_stripe_falso({"card": "off", "bizum": "off"}, bizum=False, wallets=False)
+    assert escrito["card"] == "on"
+
+
+def test_si_stripe_falla_no_rompe_la_pantalla(api_module):
+    from backend import stripe_gateway
+
+    class StripeRoto:
+        class PaymentMethodConfiguration:
+            @staticmethod
+            def list(**_kwargs):
+                raise RuntimeError("Stripe caido")
+
+    originales = (stripe_gateway.stripe, stripe_gateway._stripe_init, stripe_gateway._stripe_configured)
+    stripe_gateway.stripe = StripeRoto
+    stripe_gateway._stripe_init = lambda: None
+    stripe_gateway._stripe_configured = lambda: True
+    try:
+        assert stripe_gateway.sync_payment_methods("acct_test", bizum=True, wallets=True) == {"bizum": True}
+    finally:
+        (stripe_gateway.stripe, stripe_gateway._stripe_init, stripe_gateway._stripe_configured) = originales
+
+
+def test_la_ia_puede_enviar_el_enlace_sin_opt_in(api_module):
+    """El interruptor nacia apagado y nadie lo encontraba: se retiro. Basta con
+    tener Stripe operativo."""
+    from backend import booking
+
+    fuente = inspect.getsource(booking._ai_payment_sending_available)
+    assert "charges_enabled" in fuente
+    assert not hasattr(booking, "_ai_send_enabled_for_client")
+    assert not hasattr(booking, "_set_ai_send_enabled")
 
 
 def test_el_checkout_no_enumera_metodos_de_pago(api_module):

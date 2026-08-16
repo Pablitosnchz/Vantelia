@@ -2511,34 +2511,43 @@
       </div>
       <p class="panel-sub">Conecta la cuenta Stripe de tu negocio para recibir pagos de tus clientes. Esta cuenta es independiente de tu suscripcion a Vantelia.</p>
       <div id="payConnectStatus" class="panel-sub" style="margin:14px 0;">Consultando conexion...</div>
-      <div id="payBizumStatus" class="panel-sub" style="margin:-6px 0 14px; display:none;"></div>
       <div style="display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;">
         <button class="btn btn-primary" id="payConnectBtn" type="button">Conectar Stripe</button>
         <button class="btn btn-ghost" id="payRefreshBtn" type="button">Actualizar estado</button>
       </div>
     </div>
-    <div class="panel-card" style="margin-top:18px;">
-      <h2>Cobros por el asistente IA</h2>
-      <p class="panel-sub">Permite que el asistente envie el enlace de pago de una cita por email o SMS. El importe siempre sale del servicio configurado.</p>
-      <label style="display:flex;align-items:center;gap:10px;margin-top:12px;cursor:pointer;">
-        <input type="checkbox" id="payAiSendToggle" />
-        <span>Permitir que la IA envie enlaces de pago en mi nombre</span>
-      </label>
-      <div id="payAiSendStatus" class="panel-sub" style="margin-top:8px;"></div>
-    </div>
-    <div class="panel-card" style="margin-top:18px;">
-      <h2>Crear enlace de pago</h2>
-      <p class="panel-sub">Introduce el ID de una cita. Se aplicara la politica configurada en su servicio.</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <input class="field-input" id="payBookingId" placeholder="ID de cita" style="flex:1;min-width:220px;" />
-        <input class="field-input" id="payOverrideAmount" type="number" min="0.5" step="0.01" placeholder="Importe manual EUR (opcional)" style="width:220px;" />
-        <button class="btn btn-primary" id="payCreateLinkBtn" type="button">Crear enlace</button>
+    <!-- Metodos de pago. Stripe enciende por defecto una docena que aqui no pintan
+         nada (Klarna, Pix, tres coreanos...); aqui se elige con que se cobra. -->
+    <div class="panel-card" style="margin-top:18px;" id="payMethodsCard">
+      <h2>Cómo pueden pagarte</h2>
+      <p class="panel-sub">Lo que verá tu cliente en la pantalla de pago. Se aplica a las señales, a los cobros del mostrador y a los enlaces que envía el asistente.</p>
+      <div style="display:grid; gap:10px; margin-top:14px;">
+        <div class="panel-card" style="padding:12px 14px; background:var(--panel-2); display:flex; align-items:center; gap:12px;">
+          <span style="font-size:1.2rem;">💳</span>
+          <div style="flex:1;">
+            <b>Tarjeta</b>
+            <div class="panel-sub" style="margin:2px 0 0;">Visa, Mastercard, American Express.</div>
+          </div>
+          <span class="pro-pill" style="background:var(--accent-soft); color:var(--accent);">Siempre activa</span>
+        </div>
+        <label class="panel-card" style="padding:12px 14px; background:var(--panel-2); display:flex; align-items:center; gap:12px; cursor:pointer;">
+          <span style="font-size:1.2rem;">📲</span>
+          <div style="flex:1;">
+            <b>Bizum</b>
+            <div class="panel-sub" style="margin:2px 0 0;" id="payBizumStatus">Tu cliente paga desde la app de su banco.</div>
+          </div>
+          <input type="checkbox" id="payBizumToggle" />
+        </label>
+        <label class="panel-card" style="padding:12px 14px; background:var(--panel-2); display:flex; align-items:center; gap:12px; cursor:pointer;">
+          <span style="font-size:1.2rem;">📱</span>
+          <div style="flex:1;">
+            <b>Apple Pay y Google Pay</b>
+            <div class="panel-sub" style="margin:2px 0 0;">Pago en un toque desde el móvil. Sin coste extra.</div>
+          </div>
+          <input type="checkbox" id="payWalletsToggle" />
+        </label>
       </div>
-      <div id="payCreatedLink" style="margin-top:12px;"></div>
-    </div>
-    <div class="panel-card" style="margin-top:18px;">
-      <h2>Historial de pagos</h2>
-      <div id="paymentsList" style="display:grid;gap:10px;margin-top:12px;"></div>
+      <p class="panel-sub" style="margin:14px 0 0; font-size:0.78rem;">El historial de cobros y los reembolsos los tienes en tu panel de Stripe.</p>
     </div>
   </section>
 
@@ -6574,60 +6583,41 @@ async function loadPayments(refresh = false) {
     document.getElementById('payConnectStatus').textContent = status.connected
       ? `Cuenta ${status.stripe_account_id} · cobros ${status.charges_enabled ? 'activos' : 'pendientes'} · pagos ${status.payouts_enabled ? 'activos' : 'pendientes'}`
       : 'Todavia no has conectado una cuenta Stripe.';
-    // Bizum: es lo que espera un cliente español para pagar una señal. Si Stripe
-    // aún no lo tiene activo hay que decir POR QUÉ (casi siempre falta el DNI/NIE),
-    // o el negocio se queda esperando algo que nunca aparece en el checkout.
-    const bizumBox = document.getElementById('payBizumStatus');
-    if (bizumBox) {
-      const estados = {
-        active: ['✅ Bizum activo: tus clientes pueden pagar la señal con Bizum.', 'var(--ok, #35d07f)'],
-        inactive: ['⏳ Bizum solicitado. Stripe necesita tu DNI o NIE para activarlo: complétalo en tu cuenta de Stripe.', 'var(--warn, #f4b400)'],
-        pending: ['⏳ Bizum en revisión por Stripe. Suele tardar poco.', 'var(--warn, #f4b400)'],
-      };
-      const info = status.connected ? estados[status.bizum_status] : null;
-      bizumBox.textContent = info ? info[0] : (status.connected && status.bizum_status ? `Bizum: ${status.bizum_status}` : '');
-      bizumBox.style.color = info ? info[1] : '';
-      bizumBox.style.display = bizumBox.textContent ? '' : 'none';
-    }
     document.getElementById('payConnectBtn').textContent = status.connected ? 'Reconectar Stripe' : 'Conectar Stripe';
-    const aiToggle = document.getElementById('payAiSendToggle');
-    const aiStatus = document.getElementById('payAiSendStatus');
-    if (aiToggle) {
-      aiToggle.checked = !!status.ai_send_enabled;
-      const canAi = status.connected && status.charges_enabled;
-      aiToggle.disabled = !canAi;
-      aiStatus.textContent = canAi
-        ? (status.ai_send_enabled ? 'Activado: la IA puede enviar enlaces de pago.' : 'Desactivado.')
-        : 'Conecta Stripe y activa los cobros para poder habilitar esta opcion.';
-    }
-    const data = await api('/auth/app/payments?limit=100');
-    const list = document.getElementById('paymentsList');
-    list.innerHTML = (data.items || []).length ? data.items.map(p => `
-      <div class="panel-card" style="padding:12px;background:var(--panel-2);">
-        <b>${escapeHtml(p.service_name || 'Pago')}</b>
-        <span class="pro-pill" style="float:right;background:var(--accent-soft);color:var(--accent);">${escapeHtml(p.status)}</span>
-        <p class="panel-sub" style="margin:4px 0 0;">${(p.amount_cents / 100).toLocaleString('es-ES',{style:'currency',currency:(p.currency||'EUR').toUpperCase()})} · cita ${escapeHtml(p.booking_id || '-')} · ${escapeHtml(crmDate(p.paid_at || p.created_at))}</p>
-        ${['paid','partially_refunded'].includes(p.status) ? `<button class="btn btn-ghost" data-refund-payment="${escapeHtml(p.id)}" style="margin-top:8px;">Reembolsar</button>` : ''}
-      </div>`).join('') : '<div class="empty">Todavia no hay pagos.</div>';
-    list.querySelectorAll('[data-refund-payment]').forEach(btn => btn.addEventListener('click', async () => {
-      if (!(await confirmDialog({ title: 'Reembolsar pago', bodyHtml: '¿Solicitar el reembolso completo de este pago?<br><span class="panel-sub">Si el pago emitió una tarjeta regalo o un bono, se anulará su saldo restante.</span>', confirmLabel: 'Reembolsar', danger: true }))) return;
-      const pid = btn.dataset.refundPayment;
-      const doRefund = (force) => api(`/auth/app/payments/${encodeURIComponent(pid)}/refund`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(force ? { force: true } : {}) });
-      try {
-        await doRefund(false);
-        toast('Reembolso solicitado', 'success'); loadPayments(true);
-      } catch(e) {
-        // 409 con activo ya consumido: el backend explica el consumo y pide 'forzar'.
-        if (/forzar/i.test(e.message || '')) {
-          if (await confirmDialog({ title: 'El activo ya tiene consumo', bodyHtml: `${escapeHtml(e.message)}<br><br>¿Reembolsar igualmente y anular lo que quede?`, confirmLabel: 'Forzar reembolso', danger: true })) {
-            try { await doRefund(true); toast('Reembolso solicitado', 'success'); loadPayments(true); }
-            catch(e2) { toast(e2.message, 'error'); }
-          }
-        } else { toast(e.message, 'error'); }
-      }
-    }));
+
+    // Métodos de pago. Sin Stripe conectado no hay nada que elegir.
+    const cobrando = !!(status.connected && status.charges_enabled);
+    document.getElementById('payMethodsCard').style.display = cobrando ? '' : 'none';
+    const bizumToggle = document.getElementById('payBizumToggle');
+    const walletsToggle = document.getElementById('payWalletsToggle');
+    bizumToggle.checked = !!status.bizum_enabled;
+    walletsToggle.checked = !!status.wallets_enabled;
+    // Bizum lo tiene que aprobar Stripe (pide DNI/NIE). Si aún no está, hay que
+    // decir POR QUÉ o el negocio espera algo que nunca aparece en su pantalla de pago.
+    const bizumMsg = {
+      active: 'Tu cliente paga desde la app de su banco.',
+      inactive: '⏳ Stripe necesita tu DNI o NIE para activarlo. Complétalo en tu cuenta de Stripe.',
+      pending: '⏳ Stripe lo está revisando. Suele tardar poco.',
+    }[status.bizum_status] || 'Tu cliente paga desde la app de su banco.';
+    const bizumListo = status.bizum_status === 'active';
+    document.getElementById('payBizumStatus').textContent = bizumMsg;
+    bizumToggle.disabled = !bizumListo;
   } catch(e) { toast(e.message, 'error'); }
 }
+
+async function savePaymentMethods() {
+  try {
+    const body = {
+      bizum: document.getElementById('payBizumToggle').checked,
+      wallets: document.getElementById('payWalletsToggle').checked,
+    };
+    await api('/auth/app/payments/methods', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    toast('Métodos de pago actualizados', 'success');
+  } catch(e) { toast(e.message, 'error'); loadPayments(); }
+}
+document.getElementById('payBizumToggle').addEventListener('change', savePaymentMethods);
+document.getElementById('payWalletsToggle').addEventListener('change', savePaymentMethods);
+
 document.getElementById('payConnectBtn').addEventListener('click', async () => {
   const btn = document.getElementById('payConnectBtn');
   const originalText = btn.textContent;
@@ -6645,30 +6635,6 @@ document.getElementById('payConnectBtn').addEventListener('click', async () => {
   }
 });
 document.getElementById('payRefreshBtn').addEventListener('click', () => loadPayments(true));
-document.getElementById('payAiSendToggle').addEventListener('change', async (e) => {
-  const enabled = e.target.checked;
-  e.target.disabled = true;
-  try {
-    const status = await api('/auth/app/payments/ai-send', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ enabled }) });
-    toast(status.ai_send_enabled ? 'La IA ya puede enviar enlaces de pago' : 'Desactivado', 'success');
-    await loadPayments();
-  } catch(err) {
-    toast(err.message, 'error');
-    e.target.checked = !enabled;
-    e.target.disabled = false;
-  }
-});
-document.getElementById('payCreateLinkBtn').addEventListener('click', async () => {
-  const bookingId = document.getElementById('payBookingId').value.trim();
-  const eur = parseFloat(document.getElementById('payOverrideAmount').value);
-  if (!bookingId) { toast('Indica el ID de la cita.', 'error'); return; }
-  const body = Number.isFinite(eur) ? { amount_cents: Math.round(eur * 100) } : {};
-  try {
-    const data = await api(`/auth/app/bookings/${encodeURIComponent(bookingId)}/payment-link`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
-    document.getElementById('payCreatedLink').innerHTML = `<a class="btn btn-primary" href="${escapeHtml(data.checkout_url)}" target="_blank" rel="noreferrer">Abrir enlace de pago</a>`;
-    await loadPayments();
-  } catch(e) { toast(e.message, 'error'); }
-});
 
 async function loadChannels() {
   try {

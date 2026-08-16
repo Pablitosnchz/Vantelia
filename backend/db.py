@@ -1263,6 +1263,14 @@ def _init_database() -> None:
             connection.execute(
                 "ALTER TABLE client_payment_accounts ADD COLUMN ai_send_enabled INTEGER NOT NULL DEFAULT 0"
             )
+        # Que metodos de pago quiere el negocio. La tarjeta no se puede quitar; estos
+        # dos si. Nacen encendidos porque es lo que quiere un negocio espanol, y a
+        # partir de ahi manda lo que diga el panel (ver stripe_gateway.sync_payment_methods).
+        for columna in ("bizum_enabled", "wallets_enabled"):
+            if columna not in payment_account_columns:
+                connection.execute(
+                    "ALTER TABLE client_payment_accounts ADD COLUMN %s INTEGER NOT NULL DEFAULT 1" % columna
+                )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS service_payment_policies (

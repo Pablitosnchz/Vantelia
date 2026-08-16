@@ -318,16 +318,23 @@ class ConnectAccountStatus(BaseModel):
     charges_enabled: bool = False
     payouts_enabled: bool = False
     details_submitted: bool = False
-    # Opt-in: permite que la IA (web, WhatsApp, voz) envie enlaces de pago en
-    # nombre del negocio. Por defecto desactivado.
-    ai_send_enabled: bool = False
     # Estado de Bizum en la cuenta del negocio ("active", "inactive", "pending"...).
     # Solo se rellena al refrescar contra Stripe; vacio = aun no consultado.
     bizum_status: str = ""
+    # Que metodos quiere el negocio ademas de la tarjeta (que es obligatoria).
+    bizum_enabled: bool = True
+    wallets_enabled: bool = True
 
 
-class AiSendTogglePayload(BaseModel):
+class ToggleEnabledPayload(BaseModel):
+    """Interruptor generico si/no (lo usan varios opt-in del portal)."""
     enabled: bool
+
+
+class PaymentMethodsPayload(BaseModel):
+    """Que metodos acepta el negocio. La tarjeta no se puede desactivar."""
+    bizum: bool = True
+    wallets: bool = True
 
 
 class ConnectStartResponse(BaseModel):

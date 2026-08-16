@@ -81,7 +81,6 @@ def test_ai_send_uses_email_for_web_booking(api_module, monkeypatch):
     _seed_connect_account(api_module)
     _seed_service(api_module)
     _seed_full_policy(api_module)
-    api_module._set_ai_send_enabled("demo", True)
     booking_id = _seed_booking(
         api_module, suffix, source="vantelia_widget",
         email=f"web-{suffix}@example.com", telefono="+34600123456",
@@ -117,7 +116,6 @@ def test_ai_send_uses_sms_for_voice_booking(api_module, monkeypatch):
     _seed_connect_account(api_module)
     _seed_service(api_module)
     _seed_full_policy(api_module)
-    api_module._set_ai_send_enabled("demo", True)
     booking_id = _seed_booking(
         api_module, suffix, source="voice",
         email=f"voice-{suffix}@example.com", telefono="+34600999888",
@@ -153,7 +151,6 @@ def test_ai_send_amount_is_not_set_by_customer(api_module, monkeypatch):
     _seed_connect_account(api_module)
     _seed_service(api_module)
     _seed_full_policy(api_module)
-    api_module._set_ai_send_enabled("demo", True)
     booking_id = _seed_booking(
         api_module, suffix, source="whatsapp",
         email=f"wa-{suffix}@example.com", telefono="+34600123456",
@@ -189,11 +186,15 @@ def test_payment_link_blocked_when_booking_already_paid_via_deposit(api_module):
     assert exc.value.status_code == 409
 
 
-def test_ai_send_blocked_when_opt_in_disabled(api_module, monkeypatch):
+def test_ai_send_blocked_when_stripe_is_not_charging(api_module, monkeypatch):
+    """Ya no hay opt-in aparte (nadie lo encontraba y nacia apagado). Lo unico que
+    apaga el envio es no tener los cobros operativos."""
     suffix = uuid.uuid4().hex[:8]
     _seed_connect_account(api_module)
     _seed_service(api_module)
-    api_module._set_ai_send_enabled("demo", False)
+    with api_module._get_db_connection() as connection:
+        connection.execute("UPDATE client_payment_accounts SET charges_enabled=0 WHERE cliente_id='demo'")
+        connection.commit()
     booking_id = _seed_booking(
         api_module, suffix, source="whatsapp",
         email=f"off-{suffix}@example.com", telefono="+34600123456",
@@ -202,7 +203,7 @@ def test_ai_send_blocked_when_opt_in_disabled(api_module, monkeypatch):
         api_module._ai_send_payment_link("demo", _booking_row(api_module, booking_id))
     )
     assert result["ok"] is False
-    assert result["reason"] == "disabled"
+    assert result["reason"] == "stripe_unavailable"
 
 
 def test_ai_send_rejected_without_connected_stripe(api_module, monkeypatch):
@@ -211,7 +212,6 @@ def test_ai_send_rejected_without_connected_stripe(api_module, monkeypatch):
     with api_module._get_db_connection() as connection:
         connection.execute("DELETE FROM client_payment_accounts WHERE cliente_id='demo'")
         connection.commit()
-    api_module._set_ai_send_enabled("demo", True)
     _seed_service(api_module)
     booking_id = _seed_booking(
         api_module, suffix, source="whatsapp",
@@ -240,7 +240,6 @@ def test_ai_send_rejected_before_checkout_when_required_channel_is_unavailable(
     _seed_connect_account(api_module)
     _seed_service(api_module)
     _seed_full_policy(api_module)
-    api_module._set_ai_send_enabled("demo", True)
     booking_id = _seed_booking(
         api_module, suffix, source=source, email=email, telefono=telefono,
     )
@@ -263,7 +262,6 @@ def test_ai_send_dedup_when_already_paid(api_module, monkeypatch):
     _seed_connect_account(api_module)
     _seed_service(api_module)
     _seed_full_policy(api_module)
-    api_module._set_ai_send_enabled("demo", True)
     booking_id = _seed_booking(
         api_module, suffix, source="whatsapp",
         email=f"paid-{suffix}@example.com", telefono="+34600123456",
@@ -293,7 +291,6 @@ def test_ai_send_rate_limited_after_two_links(api_module, monkeypatch):
     _seed_connect_account(api_module)
     _seed_service(api_module)
     _seed_full_policy(api_module)
-    api_module._set_ai_send_enabled("demo", True)
     booking_id = _seed_booking(
         api_module, suffix, source="whatsapp",
         email=f"rl-{suffix}@example.com", telefono="+34600123456",
@@ -323,7 +320,6 @@ def test_ai_send_sms_fallback_when_no_phone(api_module, monkeypatch):
     _seed_connect_account(api_module)
     _seed_service(api_module)
     _seed_full_policy(api_module)
-    api_module._set_ai_send_enabled("demo", True)
     booking_id = _seed_booking(
         api_module, suffix, source="voice",
         email=f"nophone-{suffix}@example.com", telefono="",
@@ -336,20 +332,22 @@ def test_ai_send_sms_fallback_when_no_phone(api_module, monkeypatch):
     assert result["reason"] == "no_phone"
 
 
-def test_ai_send_toggle_endpoint(client, portal_cookies, api_module):
+def test_payment_methods_endpoint(client, portal_cookies, api_module):
+    """El negocio elige con que le pueden pagar; la tarjeta no se toca."""
     _seed_connect_account(api_module)
-    enabled = client.post(
-        "/auth/app/payments/ai-send", cookies=portal_cookies, json={"enabled": True}
+    sin_bizum = client.put(
+        "/auth/app/payments/methods", cookies=portal_cookies, json={"bizum": False, "wallets": True}
     )
-    assert enabled.status_code == 200, enabled.text
-    assert enabled.json()["ai_send_enabled"] is True
-    assert api_module._ai_send_enabled_for_client("demo") is True
+    assert sin_bizum.status_code == 200, sin_bizum.text
+    assert sin_bizum.json()["bizum_enabled"] is False
+    assert api_module.payment_method_prefs("demo") == {"bizum": False, "wallets": True}
 
-    disabled = client.post(
-        "/auth/app/payments/ai-send", cookies=portal_cookies, json={"enabled": False}
+    con_bizum = client.put(
+        "/auth/app/payments/methods", cookies=portal_cookies, json={"bizum": True, "wallets": False}
     )
-    assert disabled.status_code == 200
-    assert disabled.json()["ai_send_enabled"] is False
+    assert con_bizum.status_code == 200
+    assert con_bizum.json()["bizum_enabled"] is True
+    assert con_bizum.json()["wallets_enabled"] is False
 
 
 def test_chat_payment_intent_generates_link(api_module, monkeypatch):
@@ -357,7 +355,6 @@ def test_chat_payment_intent_generates_link(api_module, monkeypatch):
     _seed_connect_account(api_module)
     _seed_service(api_module)
     _seed_full_policy(api_module)
-    api_module._set_ai_send_enabled("demo", True)
     booking_id = _seed_booking(
         api_module, suffix, source="vantelia_widget",
         email=f"chat-{suffix}@example.com", telefono="+34600123456",
@@ -383,7 +380,6 @@ def test_chat_payment_without_code_resolves_by_trusted_phone(api_module, monkeyp
     _seed_connect_account(api_module)
     _seed_service(api_module)
     _seed_full_policy(api_module)
-    api_module._set_ai_send_enabled("demo", True)
     booking_id = _seed_booking(
         api_module, suffix, source="whatsapp",
         email=f"wa-{suffix}@example.com", telefono="+34600555444",
@@ -409,7 +405,6 @@ def test_chat_payment_without_code_resolves_by_email_in_message(api_module, monk
     _seed_connect_account(api_module)
     _seed_service(api_module)
     _seed_full_policy(api_module)
-    api_module._set_ai_send_enabled("demo", True)
     email = f"webid-{suffix}@example.com"
     booking_id = _seed_booking(
         api_module, suffix, source="vantelia_widget", email=email, telefono="+34600111000",
@@ -434,7 +429,6 @@ def test_chat_payment_without_code_or_identity_asks(api_module, monkeypatch):
     _seed_connect_account(api_module)
     _seed_service(api_module)
     _seed_full_policy(api_module)
-    api_module._set_ai_send_enabled("demo", True)
     result = asyncio.run(
         api_module._process_payment_request_message(
             cliente_id="demo", message="quiero pagar", request=None, source="chat",
@@ -447,7 +441,10 @@ def test_chat_payment_without_code_or_identity_asks(api_module, monkeypatch):
 
 
 def test_chat_payment_intent_disabled_is_declined(api_module, monkeypatch):
-    api_module._set_ai_send_enabled("demo", False)
+    """Sin cobros operativos, el chat no promete un pago que no puede hacer."""
+    with api_module._get_db_connection() as connection:
+        connection.execute("DELETE FROM client_payment_accounts WHERE cliente_id='demo'")
+        connection.commit()
     result = asyncio.run(
         api_module._process_payment_request_message(
             cliente_id="demo", message="quiero pagar mi cita R-1234", request=None, source="chat",

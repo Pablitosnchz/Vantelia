@@ -4484,7 +4484,8 @@ def _connect_account_status(cliente_id: str, *, refresh: bool = False) -> Connec
         "charges_enabled": bool(row["charges_enabled"]),
         "payouts_enabled": bool(row["payouts_enabled"]),
         "details_submitted": bool(row["details_submitted"]),
-        "ai_send_enabled": bool(row["ai_send_enabled"]) if "ai_send_enabled" in row_keys else False,
+        "bizum_enabled": bool(row["bizum_enabled"]) if "bizum_enabled" in row_keys else True,
+        "wallets_enabled": bool(row["wallets_enabled"]) if "wallets_enabled" in row_keys else True,
     }
     if refresh and values["stripe_account_id"] and stripe_gateway._stripe_configured():
         try:
@@ -4496,11 +4497,14 @@ def _connect_account_status(cliente_id: str, *, refresh: bool = False) -> Connec
             # vez (al pedirlo la clave ya aparece, aunque sea "inactive").
             if not bizum:
                 bizum = stripe_gateway.request_bizum_capability(values["stripe_account_id"])
-            # Con la capability activa, Bizum sigue APAGADO en la configuracion que
-            # hereda la cuenta. Encenderlo aqui evita que cada negocio tenga que
-            # bucear en su Dashboard para algo que ya ha pedido.
-            if bizum == "active":
-                stripe_gateway.enable_bizum_display(values["stripe_account_id"])
+            # Stripe enciende por defecto una docena de metodos que aqui no pinta
+            # nada (Klarna, Pix, tres coreanos...). Se reconcilia contra lo que el
+            # negocio ha elegido en el panel, que es quien manda.
+            stripe_gateway.sync_payment_methods(
+                values["stripe_account_id"],
+                bizum=bool(values["bizum_enabled"]) and bizum == "active",
+                wallets=bool(values["wallets_enabled"]),
+            )
             values.update({
                 "charges_enabled": bool(textnorm._object_get(account, "charges_enabled", False)),
                 "payouts_enabled": bool(textnorm._object_get(account, "payouts_enabled", False)),
@@ -4537,23 +4541,53 @@ def _payment_policy(cliente_id: str, service_id: str) -> Dict[str, Any]:
     }
 
 
-def _ai_send_enabled_for_client(cliente_id: str) -> bool:
-    """True si el negocio activo el opt-in 'la IA puede enviar enlaces de pago'."""
-    with db._get_db_connection() as connection:
-        row = connection.execute(
-            "SELECT ai_send_enabled FROM client_payment_accounts WHERE cliente_id=?",
-            (cliente_id,),
-        ).fetchone()
-    return bool(row["ai_send_enabled"]) if row else False
-
-
 def _ai_payment_sending_available(cliente_id: str) -> bool:
-    """La IA puede enviar enlaces de pago solo si: opt-in activo + Stripe conectado
-    y con cobros habilitados."""
-    if not _ai_send_enabled_for_client(cliente_id):
-        return False
+    """La IA puede enviar el enlace de pago de una cita si el negocio cobra con Stripe.
+
+    Antes habia un interruptor aparte que nacia apagado, y nadie lo encontraba: un
+    negocio conectaba Stripe, configuraba una senal y el asistente seguia sin poder
+    mandar el enlace. No aportaba seguridad (el importe sale del servicio, va al
+    contacto que ya figura en la cita, con dedup, limite y auditoria), asi que se
+    retiro: si hay Stripe operativo, la IA puede enviarlo.
+    """
     status = _connect_account_status(cliente_id)
     return bool(status.connected and status.charges_enabled)
+
+
+def payment_method_prefs(cliente_id: str) -> Dict[str, bool]:
+    """Que metodos quiere el negocio ademas de la tarjeta. Sin fila = los dos."""
+    with db._get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT bizum_enabled, wallets_enabled FROM client_payment_accounts WHERE cliente_id=?",
+            (cliente_id,),
+        ).fetchone()
+    if not row:
+        return {"bizum": True, "wallets": True}
+    claves = row.keys()
+    return {
+        "bizum": bool(row["bizum_enabled"]) if "bizum_enabled" in claves else True,
+        "wallets": bool(row["wallets_enabled"]) if "wallets_enabled" in claves else True,
+    }
+
+
+def save_payment_method_prefs(cliente_id: str, *, bizum: bool, wallets: bool) -> ConnectAccountStatus:
+    """Guarda la eleccion del negocio y la aplica en Stripe."""
+    now = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO client_payment_accounts (cliente_id, bizum_enabled, wallets_enabled, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(cliente_id) DO UPDATE SET bizum_enabled=excluded.bizum_enabled,
+                wallets_enabled=excluded.wallets_enabled, updated_at=excluded.updated_at
+            """,
+            (cliente_id, int(bool(bizum)), int(bool(wallets)), now, now),
+        )
+        connection.commit()
+    estado = _connect_account_status(cliente_id)
+    if estado.stripe_account_id:
+        stripe_gateway.sync_payment_methods(estado.stripe_account_id, bizum=bizum, wallets=wallets)
+    return _connect_account_status(cliente_id)
 
 
 def _payment_amount_for_booking(booking: sqlite3.Row, override: Optional[int] = None) -> int:
@@ -4720,10 +4754,6 @@ async def _ai_send_payment_link(
     """
     config = appstate.CONFIG_CLIENTES.get(cliente_id) or {}
     nombre_negocio = config.get("nombre", "") or "el negocio"
-
-    if not _ai_send_enabled_for_client(cliente_id):
-        return {"ok": False, "reason": "disabled",
-                "error": "El envio de enlaces de pago no esta activado para este negocio."}
 
     booking_id = booking["id"]
     source = (booking["source"] or "").strip().lower()
@@ -5536,20 +5566,6 @@ def _latest_booking_for_contact(
 
 
 
-
-def _set_ai_send_enabled(cliente_id: str, enabled: bool) -> None:
-    now = timeutils._utc_now_iso()
-    with db._get_db_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO client_payment_accounts (cliente_id, ai_send_enabled, created_at, updated_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(cliente_id) DO UPDATE SET ai_send_enabled=excluded.ai_send_enabled,
-                updated_at=excluded.updated_at
-            """,
-            (cliente_id, int(bool(enabled)), now, now),
-        )
-        connection.commit()
 
 
 
