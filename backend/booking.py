@@ -1417,6 +1417,19 @@ def _build_booking_manage_url(
     return f"{base_url}/booking/manage/{manage_token}{suffix}"
 
 
+def build_booking_payment_url(manage_token: str, request: Optional[Request] = None) -> str:
+    """Enlace corto de pago (reusa manage_token, como el de confirmar asistencia).
+
+    La URL de un checkout de Stripe son ~300 caracteres: ilegible en WhatsApp y
+    tres SMS de coste. Esta ocupa unos 60 y redirige a la de Stripe en el momento,
+    asi que tampoco caduca cuando el checkout se renueva.
+    """
+    if not manage_token:
+        return ""
+    base_url = textnorm._preferred_public_base_url(request)
+    return f"{base_url}/p/{manage_token}" if base_url else ""
+
+
 def _build_booking_confirm_url(manage_token: str, request: Optional[Request] = None) -> str:
     """Enlace 1-clic de confirmacion de asistencia por email (reusa manage_token)."""
     if not manage_token:
@@ -3317,6 +3330,7 @@ async def _send_booking_reminder_by_kind(
             kind, {"email": True, "whatsapp": False, "sms": False}
         )
     )
+    channels = _channels_reaching_customer(booking_row, channels)
     availability = agenda._reminder_channel_availability(booking_row["cliente_id"])
     sent_channels: List[str] = []
     failed_channels: Dict[str, str] = {}
@@ -5103,31 +5117,46 @@ def _booking_payment_after_store(booking_id: str, request: Optional[Request] = N
         return ""
 
 
-async def notify_booking_paid(booking_row: sqlite3.Row, request: Optional[Request] = None) -> None:
-    """Confirma la cita por el canal por el que el cliente reservo.
+def _booking_reply_channel(booking_row: sqlite3.Row) -> str:
+    """Canal por el que este cliente hablo con el negocio ("" si fue por la web)."""
+    origen = str(booking_row["source"] or "").strip().lower()
+    if "whatsapp" in origen:
+        return "whatsapp"
+    if origen == "voice":
+        return "sms"  # una llamada no tiene canal de vuelta
+    return ""
 
-    Antes salia solo por email, y en WhatsApp el email es OPCIONAL: el caso normal
-    era reservar por WhatsApp sin email, pagar la senal y no recibir absolutamente
-    nada. El cliente pagaba y se quedaba sin saber si su cita existia.
 
-    No inventa avisos nuevos: es la confirmacion de siempre, entregada donde puede
-    llegar. Si el negocio tiene las confirmaciones apagadas, se respeta.
+def _channels_reaching_customer(booking_row: sqlite3.Row, channels: Dict[str, bool]) -> Dict[str, bool]:
+    """Los canales elegidos por el negocio, corregidos para que LLEGUEN a este cliente.
+
+    Regla unica de entrega: manda lo que el negocio ha configurado en Seguimiento;
+    si con eso no se puede alcanzar al cliente, se usa el canal por el que el
+    escribio. Nace de un caso real: por WhatsApp el email es opcional, asi que un
+    cliente sin email no recibia NADA --ni confirmacion tras pagar la senal, ni
+    recordatorio-- porque los canales por defecto son solo email.
+
+    Nunca enciende un canal de pago por su cuenta si ya hay otro que sirve.
     """
-    origen = str((booking_row["source"] or "")).strip().lower()
-    tiene_email = bool((booking_row["email"] or "").strip())
-    canales = {
-        "email": tiene_email,
-        "whatsapp": "whatsapp" in origen,
-        # La voz no tiene canal de vuelta: se responde por SMS, como el enlace de pago.
-        "sms": origen == "voice",
-    }
-    if not any(canales.values()):
-        canales["email"] = True  # ultimo recurso: que al menos lo intente
+    efectivos = dict(channels)
+    llega_email = bool(channels.get("email")) and bool(str(booking_row["email"] or "").strip())
+    if llega_email or channels.get("whatsapp") or channels.get("sms"):
+        return efectivos  # con lo configurado se le alcanza: no se toca nada
+    propio = _booking_reply_channel(booking_row)
+    if propio:
+        efectivos[propio] = True
+    return efectivos
+
+
+async def notify_booking_paid(booking_row: sqlite3.Row, request: Optional[Request] = None) -> None:
+    """Confirma la cita cuando entra el pago.
+
+    Antes salia solo por email, y en WhatsApp el email es OPCIONAL: el cliente
+    pagaba la senal y no recibia nada. Ya no hace falta logica propia: la entrega
+    la resuelve `_channels_reaching_customer` para todos los avisos por igual.
+    """
     try:
-        await _send_booking_reminder_by_kind(
-            booking_row, "confirmed", request,
-            channel_override=canales, raise_on_failure=False,
-        )
+        await _send_booking_reminder_by_kind(booking_row, "confirmed", request, raise_on_failure=False)
     except Exception as exc:  # noqa: BLE001 - el pago ya esta cobrado, no se puede fallar aqui
         settings.logger.warning(
             "No se pudo confirmar tras el pago booking=%s: %s", booking_row["id"], exc

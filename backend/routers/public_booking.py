@@ -16,7 +16,7 @@ from fastapi import (
     Request,
     status,
 )
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 
 from api_models import *  # noqa: F401,F403
@@ -47,6 +47,25 @@ async def booking_manage_page(manage_token: str, request: Request) -> HTMLRespon
     if viewer not in {"customer", "client"}:
         viewer = "customer"
     return HTMLResponse(booking._booking_manage_page(booking_row, viewer=viewer))
+
+
+@app.get("/p/{manage_token}", include_in_schema=False)
+async def booking_payment_shortlink(manage_token: str, request: Request) -> RedirectResponse:
+    """Enlace corto de pago: redirige al checkout de Stripe de esa cita.
+
+    Existe para no mandar 300 caracteres de URL por WhatsApp o SMS. No expone
+    nada: el token es el mismo que ya gobierna la gestion de la cita. Si ya esta
+    pagada o no hay cobro pendiente, lleva a la pagina de la cita en vez de dar
+    un error que el cliente no sabria interpretar.
+    """
+    booking_row = booking._load_booking_by_token_or_404(manage_token)
+    pago = booking._booking_payment_row(booking_row["id"])
+    destino = ""
+    if pago and pago["status"] not in ("paid", "preauthorized"):
+        destino = pago["checkout_url"] or ""
+    return RedirectResponse(
+        destino or booking._build_booking_manage_url(manage_token, request), status_code=302
+    )
 
 
 @app.get("/booking/confirm/{manage_token}", include_in_schema=False)

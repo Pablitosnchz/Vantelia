@@ -25,7 +25,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AppWhatsAppResponse, WhatsAppWebhookStatus
-from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, inbox, keywords, messaging, rag, settings, textnorm, timeutils, wa_demo, wa_flows, wa_onboarding
+from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, inbox, keywords, messaging, paystate, rag, settings, textnorm, timeutils, wa_demo, wa_flows, wa_onboarding
 
 def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResponse:
     cfg = clients._get_client_config(cliente_id)
@@ -774,8 +774,8 @@ async def _wa_create_booking(
     confirmacion = (
         f"{title}\n\n"
         f"👤 {flow.nombre}\n"
-        f"📧 {flow.email}\n"
-        f"📞 {flow.from_number}\n"
+        + (f"📧 {flow.email}\n" if flow.email else "")
+        +         f"📞 {flow.from_number}\n"
         f"🛍️ {flow.servicio or 'Servicio general'}\n"
         f"👨‍⚕️ {flow.employee_name or 'Asignacion automatica'}\n"
         f"📅 {fecha_humana}\n"
@@ -803,20 +803,8 @@ async def _wa_create_booking(
             + (f" (te quedan {left} sesiones).\n" if left > 0 else " (era tu ultima sesion).\n")
         )
     payment_row = booking._booking_payment_row(booking_id)
-    if not bono_redeemed and payment_row and payment_row["checkout_url"]:
-        payment_label = "Completa el pago para confirmar la cita" if is_pending_payment else "Pago opcional"
-        # Sin esta nota, una senal de 50 EUR sobre un servicio de 120 parece el precio total.
-        nota_pago = booking.payment_prompt_note(cliente_id, stored_booking, payment_row)
-        confirmacion += f"\n💳 *{payment_label}:* {payment_row['checkout_url']}\n"
-        if nota_pago:
-            confirmacion += f"_{nota_pago}_\n"
-    if is_pending_payment:
-        confirmacion += (
-            "\nEl hueco queda reservado de forma provisional hasta completar el pago. "
-            "Si necesitas ayuda, responde a este WhatsApp.\n\n"
-            "Escribe *menu* para volver al menu principal."
-        )
-    else:
+    hay_que_pagar = bool(not bono_redeemed and payment_row and payment_row["checkout_url"])
+    if not hay_que_pagar:
         confirmacion += (
             "\nGuarda este mensaje con los datos de tu cita. "
             "Si necesitas cancelar o cambiarla, responde *cancelar*.\n\n"
@@ -825,7 +813,53 @@ async def _wa_create_booking(
     await messaging._send_whatsapp_text(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number, text=confirmacion,
     )
+    if hay_que_pagar:
+        await _wa_send_payment_request(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+            booking_row=stored_booking, payment_row=payment_row, obligatorio=is_pending_payment,
+        )
     return True
+
+
+async def _wa_send_payment_request(
+    *,
+    cliente_id: str,
+    phone_number_id: str,
+    to_number: str,
+    booking_row: Any,
+    payment_row: Any,
+    obligatorio: bool,
+) -> bool:
+    """Pide el pago en un mensaje aparte, con boton en vez de URL.
+
+    Antes iba pegado al resumen: 15 lineas mas 300 caracteres de URL de Stripe,
+    con el enlace enterrado entre el mensaje del salon y la coletilla del menu.
+    """
+    importe = paystate._euros(int(payment_row["amount_cents"] or 0))
+    nota = booking.payment_prompt_note(cliente_id, booking_row, payment_row)
+    cuerpo = (
+        ("Falta el pago para confirmar la cita: *%s*." % importe)
+        if obligatorio
+        else ("Puedes dejarlo pagado ahora: *%s*." % importe)
+    )
+    if nota:
+        cuerpo += " " + nota
+    if obligatorio:
+        cuerpo += "\n\nEl hueco queda guardado mientras tanto."
+    # Enlace corto propio: la URL de Stripe no cabe de forma legible y ademas
+    # cambia si se renueva el checkout.
+    enlace = booking.build_booking_payment_url(booking_row["manage_token"]) or payment_row["checkout_url"]
+    enviado = await messaging._send_whatsapp_cta_url(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+        body=cuerpo, button_label="Pagar %s" % importe, url=enlace,
+    )
+    if enviado:
+        return True
+    # Si Meta rechaza el interactivo, el enlace en texto (corto) sigue valiendo.
+    return await messaging._send_whatsapp_text(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+        text="%s\n\n💳 %s" % (cuerpo, enlace),
+    )
 
 
 async def _wa_send_booking_form(
@@ -1631,31 +1665,9 @@ async def _handle_whatsapp_message(
             )
             return
         flow.nombre = nombre[:80]
-        flow.flow = "booking_email"
-        await messaging._send_whatsapp_buttons(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            body=(
-                "📧 Si quieres la confirmacion tambien por email, escribelo ahora. "
-                "Si no, pulsa *Sin email*: te la mando por aqui."
-            ),
-            buttons=[("email_skip", "🚫 Sin email")],
-        )
-        return
-
-    if flow.flow == "booking_email":
-        if iid == "email_skip" or text_norm in ("no", "sin email", "ninguno", "saltar", "omitir", "skip"):
-            flow.email = ""
-        else:
-            email = (incoming_text or "").strip().lower()
-            if not textnorm.EMAIL_RE.match(email):
-                await messaging._send_whatsapp_text(
-                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                    text="❌ Ese email no es valido. Escribelo como nombre@dominio.com o pulsa *Sin email*.",
-                )
-                return
-            flow.email = email[:120]
-        # El paso de notas se elimino del camino obligatorio: casi nadie lo usaba y
-        # costaba una interaccion a todo el mundo. Ahora se ofrece en el resumen.
+        # El email ya no se pide: la confirmacion sale por este mismo chat y pedirlo
+        # costaba una interaccion a todo el mundo para que casi nadie lo diera. Si el
+        # cliente ya tiene email en su ficha, se usa (lo trae `crm.contact_by_phone`).
         await _wa_send_booking_summary(
             cliente_id=cliente_id, phone_number_id=phone_number_id,
             to_number=from_number, flow=flow,

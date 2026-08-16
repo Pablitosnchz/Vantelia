@@ -23,52 +23,67 @@ class _CitaFalsa(dict):
         return list(super().keys())
 
 
-def _canales_usados(api_module, monkeypatch, *, source, email):
+def _canales(api_module, *, source, email, configurados=None):
+    """Canales con los que se acabaria entregando un aviso a esta cita."""
     from backend import booking
 
-    capturado = {}
-
-    async def falso(booking_row, kind, request=None, **kwargs):
-        capturado["kind"] = kind
-        capturado["canales"] = kwargs.get("channel_override")
-        return {"sent": [], "failed": {}, "skipped": {}}
-
-    monkeypatch.setattr(booking, "_send_booking_reminder_by_kind", falso)
-    cita = _CitaFalsa(id="bk_" + uuid.uuid4().hex[:6], cliente_id="demo", source=source, email=email)
-    asyncio.run(booking.notify_booking_paid(cita))
-    return capturado
+    base = configurados or {"email": True, "whatsapp": False, "sms": False}
+    cita = _CitaFalsa(id="bk_x", cliente_id="demo", source=source, email=email)
+    return booking._channels_reaching_customer(cita, base)
 
 
-def test_una_reserva_de_whatsapp_se_confirma_por_whatsapp(api_module, monkeypatch):
-    capturado = _canales_usados(api_module, monkeypatch, source="whatsapp", email="")
-    assert capturado["kind"] == "confirmed"
-    assert capturado["canales"]["whatsapp"] is True
-    assert capturado["canales"]["email"] is False
+def test_lo_que_el_negocio_configura_manda(api_module):
+    """Con email en la ficha, se entrega por donde el negocio dijo."""
+    canales = _canales(api_module, source="whatsapp", email="cliente@example.com")
+    assert canales == {"email": True, "whatsapp": False, "sms": False}
 
 
-def test_con_email_ademas_de_whatsapp_van_los_dos(api_module, monkeypatch):
-    capturado = _canales_usados(api_module, monkeypatch, source="whatsapp", email="cliente@example.com")
-    assert capturado["canales"]["whatsapp"] is True
-    assert capturado["canales"]["email"] is True
+def test_sin_email_se_usa_el_canal_por_el_que_escribio(api_module):
+    """El agujero real: por WhatsApp el email es opcional y los canales por
+    defecto son solo email, asi que no llegaba NADA."""
+    canales = _canales(api_module, source="whatsapp", email="")
+    assert canales["whatsapp"] is True
+    # El email se deja marcado a proposito: asi el panel sigue explicando por que
+    # no se pudo entregar por ahi ("La cita no tiene email") en vez de callarselo.
+    assert canales["email"] is True
 
 
-def test_una_reserva_por_telefono_se_confirma_por_sms(api_module, monkeypatch):
-    """La voz no tiene canal de vuelta: SMS, igual que el enlace de pago."""
-    capturado = _canales_usados(api_module, monkeypatch, source="voice", email="")
-    assert capturado["canales"]["sms"] is True
-    assert capturado["canales"]["whatsapp"] is False
+def test_una_reserva_por_telefono_cae_a_sms(api_module):
+    canales = _canales(api_module, source="voice", email="")
+    assert canales["sms"] is True
 
 
-def test_una_reserva_web_sigue_yendo_por_email(api_module, monkeypatch):
-    capturado = _canales_usados(api_module, monkeypatch, source="widget", email="web@example.com")
-    assert capturado["canales"]["email"] is True
-    assert capturado["canales"]["whatsapp"] is False
-    assert capturado["canales"]["sms"] is False
+def test_una_reserva_web_sin_email_no_inventa_canal(api_module):
+    """Por la web no hay canal de vuelta: no se enciende SMS por su cuenta."""
+    canales = _canales(api_module, source="widget", email="")
+    assert canales == {"email": True, "whatsapp": False, "sms": False}
 
 
-def test_sin_ningun_canal_claro_se_intenta_el_email(api_module, monkeypatch):
-    capturado = _canales_usados(api_module, monkeypatch, source="", email="")
-    assert capturado["canales"]["email"] is True
+def test_no_se_pisa_un_canal_ya_elegido(api_module):
+    """Si el negocio ya manda por WhatsApp, la regla no toca nada."""
+    canales = _canales(api_module, source="whatsapp", email="",
+                       configurados={"email": False, "whatsapp": True, "sms": False})
+    assert canales == {"email": False, "whatsapp": True, "sms": False}
+
+
+def test_la_regla_se_aplica_a_TODOS_los_avisos(api_module):
+    """Recordatorio, cancelacion y reprogramacion pasan por el mismo sitio."""
+    import inspect
+
+    from backend import booking
+
+    fuente = inspect.getsource(booking._send_booking_reminder_by_kind)
+    assert "_channels_reaching_customer(booking_row, channels)" in fuente
+
+
+def test_confirmar_tras_pagar_no_tiene_logica_propia(api_module):
+    """Una sola regla de entrega: si hay dos, se desincronizan."""
+    import inspect
+
+    from backend import booking
+
+    fuente = inspect.getsource(booking.notify_booking_paid)
+    assert "channel_override" not in fuente
 
 
 def test_un_fallo_de_envio_no_rompe_el_cobro(api_module, monkeypatch):

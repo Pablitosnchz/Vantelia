@@ -188,6 +188,43 @@ async def _send_whatsapp_buttons(
     )
 
 
+async def _send_whatsapp_cta_url(
+    *,
+    cliente_id: str,
+    phone_number_id: str,
+    to_number: str,
+    body: str,
+    button_label: str,
+    url: str,
+    footer: str = "",
+) -> bool:
+    """Mensaje con un boton que abre un enlace, sin ensenar la URL.
+
+    Un checkout de Stripe son ~300 caracteres ilegibles en el movil. Con el boton
+    el cliente ve "Pagar 1 EUR" y ya. Requiere la ventana de 24h abierta, que es
+    justo el caso (acaba de escribir); si Meta lo rechaza, quien llama cae a texto.
+    """
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to_number,
+        "type": "interactive",
+        "interactive": {
+            "type": "cta_url",
+            "body": {"text": body[:1024]},
+            "action": {
+                "name": "cta_url",
+                "parameters": {"display_text": button_label[:20], "url": url},
+            },
+        },
+    }
+    if footer:
+        payload["interactive"]["footer"] = {"text": footer[:60]}
+    return await _send_whatsapp_payload(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, payload=payload,
+    )
+
+
 async def _send_whatsapp_list(
     *,
     cliente_id: str,
