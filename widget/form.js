@@ -465,7 +465,25 @@ async function confirmarCita() {
     const form = document.getElementById("ia-form-cita");
     if (!form) return;
 
-    const title = response.estado === "pending_review" ? "Solicitud recibida" : "Solicitud registrada";
+    // Servicio con senal o pago previo: la cita nace "pending_payment" y el hueco
+    // solo queda guardado un rato. Sin ensenar aqui el enlace, el cliente cree que
+    // ha reservado, no recibe email (se bloquea hasta que pague) y la reserva se
+    // cae sola. Mismo texto que la central publica y que WhatsApp.
+    const pendingPayment =
+      response.estado === "pending_payment" || response.payment_status === "pending";
+    const title = pendingPayment
+      ? "Reserva pendiente de pago"
+      : response.estado === "pending_review"
+      ? "Solicitud recibida"
+      : "Solicitud registrada";
+    const successText = pendingPayment
+      ? "Hemos guardado el hueco de forma provisional. Completa el pago para confirmar la cita."
+      : response.mensaje;
+    const payButton = response.payment_url
+      ? `<a class="ia-form-btn" href="${escapeHtml(response.payment_url)}" target="_blank" rel="noreferrer">${
+          pendingPayment ? "Completar pago para confirmar" : "Completar pago"
+        }</a>`
+      : "";
     const manageButton = response.manage_url
       ? `<a class="ia-form-btn secondary" href="${escapeHtml(response.manage_url)}" target="_blank" rel="noreferrer">Gestionar cita</a>`
       : "";
@@ -474,11 +492,12 @@ async function confirmarCita() {
       : "";
     form.innerHTML = `
       <div class="ia-form-success">
-        <div class="ia-check">${response.estado === "pending_review" ? "!" : "OK"}</div>
+        <div class="ia-check">${response.estado === "pending_review" || pendingPayment ? "!" : "OK"}</div>
         <h4>${escapeHtml(title)}</h4>
-        <p>${escapeHtml(response.mensaje)}</p>
+        <p>${escapeHtml(successText)}</p>
         <p><strong>ID:</strong> ${escapeHtml(response.booking_id)}</p>
         <div class="ia-form-actions">
+          ${payButton}
           ${manageButton}
           ${providerButton}
         </div>
@@ -498,7 +517,13 @@ async function confirmarCita() {
       has_manage_url: !!response.manage_url,
       has_provider_booking_url: !!response.provider_booking_url,
     });
-    agregarMensaje(response.mensaje, "bot");
+    // El enlace tambien en el hilo del chat: la tarjeta se pierde al seguir escribiendo.
+    agregarMensaje(
+      pendingPayment && response.payment_url
+        ? `${successText}\n\nPaga aqui para confirmar: ${response.payment_url}`
+        : successText,
+      "bot"
+    );
   } catch (error) {
     confirmButton.disabled = false;
     confirmButton.textContent = "Confirmar solicitud";
