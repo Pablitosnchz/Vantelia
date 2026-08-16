@@ -236,6 +236,43 @@ def request_bizum_capability(account_id: str) -> str:
         return ""
 
 
+def enable_bizum_display(account_id: str) -> bool:
+    """Enciende Bizum en la configuracion de metodos de pago de la cuenta.
+
+    Tener la capability activa NO basta: la cuenta hereda una configuracion con
+    Bizum apagado, asi que el checkout sigue sin ofrecerlo. Comprobado en vivo:
+    con la capability ya `active`, la sesion devolvia
+    ['card','bancontact','eps','klarna','link'] y solo tras encender la
+    preferencia aparecio 'bizum'.
+
+    Solo toca las configuraciones por defecto (no las que el negocio se haya
+    creado a mano) y solo si estan apagadas. Devuelve True si cambio algo.
+    """
+    if not account_id or not _stripe_configured():
+        return False
+    try:
+        _stripe_init()
+        configs = stripe.PaymentMethodConfiguration.list(stripe_account=account_id, limit=20)
+        cambiado = False
+        for pmc in textnorm._object_get(configs, "data", []) or []:
+            if not textnorm._object_get(pmc, "is_default", False):
+                continue
+            bizum = textnorm._object_get(pmc, "bizum", {}) or {}
+            preferencia = (textnorm._object_get(bizum, "display_preference", {}) or {}).get("value")
+            if preferencia == "on":
+                continue
+            stripe.PaymentMethodConfiguration.modify(
+                textnorm._object_get(pmc, "id", ""),
+                stripe_account=account_id,
+                bizum={"display_preference": {"preference": "on"}},
+            )
+            cambiado = True
+        return cambiado
+    except Exception as exc:  # noqa: BLE001 - cobrar con tarjeta vale mas que fallar aqui
+        settings.logger.warning("No se pudo mostrar Bizum en %s: %s", account_id, exc)
+        return False
+
+
 def _stripe_connected_account_row(cliente_id: str) -> Optional[sqlite3.Row]:
     with db._get_db_connection() as connection:
         return connection.execute(

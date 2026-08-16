@@ -84,6 +84,61 @@ def test_una_cuenta_antigua_se_repara_sola_al_refrescar(api_module):
     assert "bizum_status" in fuente
 
 
+def test_activar_bizum_no_basta_hay_que_mostrarlo(api_module):
+    """Comprobado en vivo: con la capability ya activa, el checkout devolvia
+    ['card','bancontact','eps','klarna','link'] y Bizum solo aparecio tras
+    encender la preferencia en la configuracion de la cuenta."""
+    from backend import booking, stripe_gateway
+
+    fuente = inspect.getsource(booking._connect_account_status)
+    assert "enable_bizum_display" in fuente
+
+    encender = inspect.getsource(stripe_gateway.enable_bizum_display)
+    assert "display_preference" in encender
+    # Solo las configuraciones por defecto: las que el negocio se haya creado a
+    # mano son suyas.
+    assert "is_default" in encender
+
+
+def test_mostrar_bizum_es_idempotente_y_no_rompe(api_module):
+    from backend import stripe_gateway
+
+    modificadas = []
+
+    class StripeFalso:
+        class PaymentMethodConfiguration:
+            @staticmethod
+            def list(**_kwargs):
+                return {"data": [
+                    {"id": "pmc_ya_on", "is_default": True,
+                     "bizum": {"display_preference": {"value": "on"}}},
+                    {"id": "pmc_apagada", "is_default": True,
+                     "bizum": {"display_preference": {"value": "off"}}},
+                    {"id": "pmc_del_negocio", "is_default": False,
+                     "bizum": {"display_preference": {"value": "off"}}},
+                ]}
+
+            @staticmethod
+            def modify(pmc_id, **_kwargs):
+                modificadas.append(pmc_id)
+                return {}
+
+    original_stripe = stripe_gateway.stripe
+    original_init = stripe_gateway._stripe_init
+    original_conf = stripe_gateway._stripe_configured
+    stripe_gateway.stripe = StripeFalso
+    stripe_gateway._stripe_init = lambda: None
+    stripe_gateway._stripe_configured = lambda: True
+    try:
+        assert stripe_gateway.enable_bizum_display("acct_test") is True
+        # Ni la que ya estaba encendida ni la que se creo el negocio.
+        assert modificadas == ["pmc_apagada"]
+    finally:
+        stripe_gateway.stripe = original_stripe
+        stripe_gateway._stripe_init = original_init
+        stripe_gateway._stripe_configured = original_conf
+
+
 def test_el_checkout_no_enumera_metodos_de_pago(api_module):
     """Enumerar payment_method_types apagaria Bizum sin que nadie se entere."""
     from backend import booking

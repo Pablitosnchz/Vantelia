@@ -4496,6 +4496,11 @@ def _connect_account_status(cliente_id: str, *, refresh: bool = False) -> Connec
             # vez (al pedirlo la clave ya aparece, aunque sea "inactive").
             if not bizum:
                 bizum = stripe_gateway.request_bizum_capability(values["stripe_account_id"])
+            # Con la capability activa, Bizum sigue APAGADO en la configuracion que
+            # hereda la cuenta. Encenderlo aqui evita que cada negocio tenga que
+            # bucear en su Dashboard para algo que ya ha pedido.
+            if bizum == "active":
+                stripe_gateway.enable_bizum_display(values["stripe_account_id"])
             values.update({
                 "charges_enabled": bool(textnorm._object_get(account, "charges_enabled", False)),
                 "payouts_enabled": bool(textnorm._object_get(account, "payouts_enabled", False)),

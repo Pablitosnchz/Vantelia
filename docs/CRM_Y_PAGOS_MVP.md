@@ -124,9 +124,15 @@ Como funciona en Vantelia:
 - Va por la **API v1** a proposito: la v2 Core con la que damos de alta la cuenta
   no lista `bizum_payments` entre sus capabilities (comprobado contra Stripe:
   45 capabilities, ninguna Bizum). Es best-effort; si falla, se cobra con tarjeta.
-- El checkout de reserva **no enumera `payment_method_types`**, asi que Bizum
-  aparece solo en cuanto la capability esta activa. No los enumeres: apagarias
-  Bizum sin que nadie se entere (test en `tests/test_bizum.py`).
+- El checkout de reserva **no enumera `payment_method_types`**. No los enumeres:
+  apagarias Bizum sin que nadie se entere (test en `tests/test_bizum.py`).
+- **La capability activa NO basta.** La cuenta hereda una configuracion de metodos
+  de pago con Bizum apagado, asi que el checkout sigue sin ofrecerlo. Comprobado
+  en vivo: con `bizum_payments` ya `active`, la sesion devolvia
+  `['card','bancontact','eps','klarna','link']`; solo aparecio `bizum` tras
+  encender la preferencia. De eso se encarga
+  `stripe_gateway.enable_bizum_display(account_id)`, que corre al refrescar el
+  estado y solo toca las configuraciones por defecto.
 
 Requisitos, y son la causa habitual de que "no aparezca":
 
