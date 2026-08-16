@@ -12,8 +12,17 @@ negocio Y responda por la Cloud API. Lo que se valida aqui:
 from __future__ import annotations
 
 import pytest
+from cryptography.fernet import Fernet
 
 from test_booking_exhaustive import api_module, client  # noqa: F401
+
+
+@pytest.fixture(autouse=True)
+def _clave_de_cifrado(api_module, monkeypatch):
+    """El cifrado de credenciales exige una clave Fernet; en CI no hay .env."""
+    from backend import settings
+
+    monkeypatch.setattr(settings, "OAUTH_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
 
 
 @pytest.fixture(autouse=True)
