@@ -3981,7 +3981,7 @@
     <input type="hidden" id="svcPaymentMode" /><input type="hidden" id="svcPaymentType" />
     <!-- Todo lo demas es opcional: se abre solo si el servicio ya lo tiene puesto. -->
     <details class="nb-more" id="svcMasOpciones" style="margin-bottom:14px;">
-      <summary>Más opciones · foto, descripción y política de cancelación</summary>
+      <summary id="svcMasResumen">Más opciones · foto, descripción y política de cancelación</summary>
       <div class="field" style="margin-bottom:10px;"><label class="field-label">Descripción</label><textarea class="field-input" id="svcDesc" rows="2" placeholder="opcional"></textarea></div>
       <div class="field" style="margin-bottom:10px;">
         <label class="field-label">Imagen (URL)</label>
@@ -7502,6 +7502,22 @@ function cobroDesdeServicio(svc) {
   if (tipo === 'deposit') return 'senal';
   return 'completo';
 }
+function resumenExtrasServicio(svc) {
+  // Título del bloque plegado. Si el servicio ya tiene algo dentro lo enumera y lo
+  // marca en color: plegar no puede convertirse en esconder.
+  const puesto = (v) => v !== null && v !== undefined && v !== '';
+  const partes = [];
+  if (svc && svc.descripcion) partes.push('descripción');
+  if (svc && svc.image_url) partes.push('foto');
+  if (svc && (puesto(svc.cancel_free_hours) || puesto(svc.cancel_late_fee_pct) || puesto(svc.no_show_fee_pct))) {
+    partes.push('política propia');
+  }
+  if (!partes.length) return 'Más opciones · foto, descripción y política de cancelación';
+  const lista = partes.length > 1
+    ? partes.slice(0, -1).join(', ') + ' y ' + partes[partes.length - 1]
+    : partes[0];
+  return 'Más opciones · <span style="color:var(--accent);">' + escapeHtml(lista) + '</span>';
+}
 function refrescarCobroServicio() {
   const clave = document.getElementById('svcCobro').value;
   const opcion = COBRO_OPCIONES[clave] || COBRO_OPCIONES.salon;
@@ -7532,14 +7548,11 @@ function openServiceDrawer(svc = null) {
   document.getElementById('svcImagen').value = svc ? (svc.image_url || '') : '';
   refreshImagePreview('svcImagen', 'svcImagenPrev');
   document.getElementById('svcActivo').checked = svc ? !!svc.is_active : true;
-  // "Más opciones" arranca plegado, pero nunca esconde algo ya configurado: si el
-  // servicio tiene foto, descripción o política propia, se abre para que se vea.
-  document.getElementById('svcMasOpciones').open = !!(svc && (
-    svc.descripcion || svc.image_url ||
-    svc.cancel_free_hours !== null && svc.cancel_free_hours !== undefined ||
-    svc.cancel_late_fee_pct !== null && svc.cancel_late_fee_pct !== undefined ||
-    svc.no_show_fee_pct !== null && svc.no_show_fee_pct !== undefined
-  ));
+  // "Más opciones" queda SIEMPRE plegado, también al editar: abrirlo solo porque el
+  // servicio tenga política propia devolvía el muro de campos. Lo que sí cambia es
+  // el título, que dice qué hay dentro; así nada configurado pasa desapercibido.
+  document.getElementById('svcMasOpciones').open = false;
+  document.getElementById('svcMasResumen').innerHTML = resumenExtrasServicio(svc);
   document.getElementById('serviceDrawer').classList.add('open');
   document.getElementById('serviceOverlay').classList.add('open');
   loadSvcLocations(svc ? svc.id : '');

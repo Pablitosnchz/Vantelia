@@ -1232,8 +1232,11 @@ def test_portal_service_editor_exposes_multicenter_and_preauth_controls():
     avanzado = html.split('id="svcMasOpciones"')[1].split("</details>")[0]
     for campo in ('svcDesc', 'svcImagen', 'svcCancelFree', 'svcLateFee', 'svcNoShowFee'):
         assert 'id="%s"' % campo in avanzado
-    # Lo ya configurado no se esconde detras del plegado.
-    assert "document.getElementById('svcMasOpciones').open" in html
+    # Plegado SIEMPRE (tambien al editar): abrirlo por tener politica propia devolvia
+    # el muro de campos. Lo configurado se anuncia en el titulo del bloque.
+    assert "document.getElementById('svcMasOpciones').open = false;" in html
+    assert "function resumenExtrasServicio(" in html
+    assert "politica propia" in html.replace("í", "i")
     assert 'id="svcLocationsWrap"' in html
     assert 'id="svcLocationsList"' in html
     assert "document.getElementById('servicioNewBtn').addEventListener" in html
