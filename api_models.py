@@ -321,6 +321,9 @@ class ConnectAccountStatus(BaseModel):
     # Opt-in: permite que la IA (web, WhatsApp, voz) envie enlaces de pago en
     # nombre del negocio. Por defecto desactivado.
     ai_send_enabled: bool = False
+    # Estado de Bizum en la cuenta del negocio ("active", "inactive", "pending"...).
+    # Solo se rellena al refrescar contra Stripe; vacio = aun no consultado.
+    bizum_status: str = ""
 
 
 class AiSendTogglePayload(BaseModel):

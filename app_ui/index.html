@@ -2511,6 +2511,7 @@
       </div>
       <p class="panel-sub">Conecta la cuenta Stripe de tu negocio para recibir pagos de tus clientes. Esta cuenta es independiente de tu suscripcion a Vantelia.</p>
       <div id="payConnectStatus" class="panel-sub" style="margin:14px 0;">Consultando conexion...</div>
+      <div id="payBizumStatus" class="panel-sub" style="margin:-6px 0 14px; display:none;"></div>
       <div style="display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;">
         <button class="btn btn-primary" id="payConnectBtn" type="button">Conectar Stripe</button>
         <button class="btn btn-ghost" id="payRefreshBtn" type="button">Actualizar estado</button>
@@ -6573,6 +6574,21 @@ async function loadPayments(refresh = false) {
     document.getElementById('payConnectStatus').textContent = status.connected
       ? `Cuenta ${status.stripe_account_id} · cobros ${status.charges_enabled ? 'activos' : 'pendientes'} · pagos ${status.payouts_enabled ? 'activos' : 'pendientes'}`
       : 'Todavia no has conectado una cuenta Stripe.';
+    // Bizum: es lo que espera un cliente español para pagar una señal. Si Stripe
+    // aún no lo tiene activo hay que decir POR QUÉ (casi siempre falta el DNI/NIE),
+    // o el negocio se queda esperando algo que nunca aparece en el checkout.
+    const bizumBox = document.getElementById('payBizumStatus');
+    if (bizumBox) {
+      const estados = {
+        active: ['✅ Bizum activo: tus clientes pueden pagar la señal con Bizum.', 'var(--ok, #35d07f)'],
+        inactive: ['⏳ Bizum solicitado. Stripe necesita tu DNI o NIE para activarlo: complétalo en tu cuenta de Stripe.', 'var(--warn, #f4b400)'],
+        pending: ['⏳ Bizum en revisión por Stripe. Suele tardar poco.', 'var(--warn, #f4b400)'],
+      };
+      const info = status.connected ? estados[status.bizum_status] : null;
+      bizumBox.textContent = info ? info[0] : (status.connected && status.bizum_status ? `Bizum: ${status.bizum_status}` : '');
+      bizumBox.style.color = info ? info[1] : '';
+      bizumBox.style.display = bizumBox.textContent ? '' : 'none';
+    }
     document.getElementById('payConnectBtn').textContent = status.connected ? 'Reconectar Stripe' : 'Conectar Stripe';
     const aiToggle = document.getElementById('payAiSendToggle');
     const aiStatus = document.getElementById('payAiSendStatus');

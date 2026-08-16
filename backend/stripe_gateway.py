@@ -212,6 +212,30 @@ def _stripe_connect_request(method: str, path: str, *, payload: Optional[Dict[st
     return body
 
 
+def request_bizum_capability(account_id: str) -> str:
+    """Pide Bizum para una cuenta conectada y devuelve su estado.
+
+    Bizum es el metodo de pago que espera un cliente espanol para una senal: mete
+    su movil y aprueba en la app del banco. Stripe lo soporta desde mayo 2026,
+    pero hay que solicitarlo por cuenta: sin esto no aparece en el checkout.
+
+    Va por la API v1 a proposito: la v2 Core que usamos para dar de alta la cuenta
+    todavia no expone `bizum_payments` entre sus capabilities. Es idempotente y
+    best-effort: si Stripe lo rechaza, el negocio sigue cobrando con tarjeta.
+    """
+    if not account_id or not _stripe_configured():
+        return ""
+    try:
+        _stripe_init()
+        account = stripe.Account.modify(
+            account_id, capabilities={"bizum_payments": {"requested": True}}
+        )
+        return str((textnorm._object_get(account, "capabilities", {}) or {}).get("bizum_payments") or "")
+    except Exception as exc:  # noqa: BLE001 - cobrar con tarjeta vale mas que fallar aqui
+        settings.logger.warning("No se pudo solicitar Bizum para %s: %s", account_id, exc)
+        return ""
+
+
 def _stripe_connected_account_row(cliente_id: str) -> Optional[sqlite3.Row]:
     with db._get_db_connection() as connection:
         return connection.execute(
@@ -320,6 +344,9 @@ def _create_stripe_connected_account(user: sqlite3.Row) -> str:
     account_id = str(account.get("id", ""))
     if not account_id:
         raise HTTPException(status_code=502, detail="Stripe no devolvio una cuenta conectada valida.")
+    # Bizum se pide aparte (la v2 Core no lo lista todavia). Best-effort: que falle
+    # no puede tumbar un alta que ya funciona con tarjeta.
+    request_bizum_capability(account_id)
     status_value, due = _stripe_connect_account_status(account)
     _save_stripe_connected_account(
         cliente_id,

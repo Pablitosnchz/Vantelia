@@ -4490,10 +4490,17 @@ def _connect_account_status(cliente_id: str, *, refresh: bool = False) -> Connec
         try:
             stripe_gateway._stripe_init()
             account = stripe_gateway.stripe.Account.retrieve(values["stripe_account_id"])
+            capabilities = textnorm._object_get(account, "capabilities", {}) or {}
+            bizum = str(capabilities.get("bizum_payments") or "")
+            # Cuentas conectadas antes de que existiera Bizum: se pide aqui, una sola
+            # vez (al pedirlo la clave ya aparece, aunque sea "inactive").
+            if not bizum:
+                bizum = stripe_gateway.request_bizum_capability(values["stripe_account_id"])
             values.update({
                 "charges_enabled": bool(textnorm._object_get(account, "charges_enabled", False)),
                 "payouts_enabled": bool(textnorm._object_get(account, "payouts_enabled", False)),
                 "details_submitted": bool(textnorm._object_get(account, "details_submitted", False)),
+                "bizum_status": bizum,
             })
             with db._get_db_connection() as connection:
                 connection.execute(
