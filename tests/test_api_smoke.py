@@ -1436,10 +1436,10 @@ def test_preauth_capture_release_refund(client: TestClient, api_module, monkeypa
         conn.execute("UPDATE booking_payments SET status='pending', payment_intent_id='' WHERE booking_id=?", (b3,))
         conn.execute("UPDATE bookings SET payment_status='pending' WHERE id=?", (b3,))
         conn.commit()
-    handled = api_module.process_booking_payment_webhook(
+    handled = asyncio.run(api_module.process_booking_payment_webhook(
         {"id": "cs_wh2", "payment_intent": "pi_wh2",
          "metadata": {"source": "booking_payment", "cliente_id": "demo", "booking_id": b3}}
-    )
+    ))
     assert handled is True
     with sqlite3.connect(api_module.DB_PATH) as conn:
         st = conn.execute("SELECT status FROM booking_payments WHERE booking_id=?", (b3,)).fetchone()[0]
@@ -9134,8 +9134,8 @@ def test_required_booking_payment_is_idempotent_and_confirmed_by_webhook(api_mod
             "payment_intent": "pi_booking_test",
             "metadata": {"source": "booking_payment", "cliente_id": "demo", "booking_id": record["id"]},
         }
-        assert api_module.process_booking_payment_webhook(event) is True
-        assert api_module.process_booking_payment_webhook(event) is True
+        assert asyncio.run(api_module.process_booking_payment_webhook(event)) is True
+        assert asyncio.run(api_module.process_booking_payment_webhook(event)) is True
         paid = api_module._get_booking_row_by_id(record["id"])
         assert paid["status"] == "confirmed"
         assert paid["payment_status"] == "paid"

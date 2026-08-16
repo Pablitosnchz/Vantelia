@@ -307,7 +307,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks) ->
 
     try:
         if event_type == "checkout.session.completed":
-            if booking.process_booking_payment_webhook(data_object):
+            if await booking.process_booking_payment_webhook(data_object):
                 return {"received": True}
             cid = (data_object.get("metadata") or {}).get("cliente_id") or data_object.get("client_reference_id")
             plan = (data_object.get("metadata") or {}).get("plan") or settings.PLAN_DEFAULT

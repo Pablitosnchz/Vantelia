@@ -41,7 +41,7 @@ from api_models import (
     PortalMessagePreviewResponse,
     PortalScheduleUpdatePayload,
 )
-from backend import agenda, appstate, clients, crm, db, emailing, messaging, paystate, security, settings, stripe_gateway, textnorm, timeutils
+from backend import agenda, appstate, clients, crm, db, emailing, inbox, messaging, paystate, security, settings, stripe_gateway, textnorm, timeutils
 
 _FOLLOWUP_DELIVERY_CHANNELS = ("email", "whatsapp", "sms")
 _BOOKING_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
@@ -726,8 +726,13 @@ async def _send_booking_whatsapp_reminder(
 ) -> bool:
     config = clients._get_client_config(booking_row["cliente_id"])
     whatsapp_cfg = config.get("whatsapp", {}) or {}
-    phone_number_id = str(whatsapp_cfg.get("phone_number_id", "") or "").strip()
     to_number = _booking_customer_phone_for_channel(booking_row, "whatsapp")
+    # Se responde por el numero al que ESCRIBIO el cliente. Un negocio puede tener
+    # varios (uno por centro, el numero de demo compartido) y salir por otro
+    # significa escribirle desde un numero que no reconoce, o no poder escribirle.
+    phone_number_id = inbox.inbound_number_for_phone(booking_row["cliente_id"], to_number) or str(
+        whatsapp_cfg.get("phone_number_id", "") or ""
+    ).strip()
     if not (phone_number_id and to_number):
         return False
     message_text = _booking_message_text_for_channel(booking_row, kind, request, extra_message=extra_message)
@@ -5070,7 +5075,38 @@ def _booking_payment_after_store(booking_id: str, request: Optional[Request] = N
         return ""
 
 
-def process_booking_payment_webhook(data_object: Dict[str, Any]) -> bool:
+async def notify_booking_paid(booking_row: sqlite3.Row, request: Optional[Request] = None) -> None:
+    """Confirma la cita por el canal por el que el cliente reservo.
+
+    Antes salia solo por email, y en WhatsApp el email es OPCIONAL: el caso normal
+    era reservar por WhatsApp sin email, pagar la senal y no recibir absolutamente
+    nada. El cliente pagaba y se quedaba sin saber si su cita existia.
+
+    No inventa avisos nuevos: es la confirmacion de siempre, entregada donde puede
+    llegar. Si el negocio tiene las confirmaciones apagadas, se respeta.
+    """
+    origen = str((booking_row["source"] or "")).strip().lower()
+    tiene_email = bool((booking_row["email"] or "").strip())
+    canales = {
+        "email": tiene_email,
+        "whatsapp": "whatsapp" in origen,
+        # La voz no tiene canal de vuelta: se responde por SMS, como el enlace de pago.
+        "sms": origen == "voice",
+    }
+    if not any(canales.values()):
+        canales["email"] = True  # ultimo recurso: que al menos lo intente
+    try:
+        await _send_booking_reminder_by_kind(
+            booking_row, "confirmed", request,
+            channel_override=canales, raise_on_failure=False,
+        )
+    except Exception as exc:  # noqa: BLE001 - el pago ya esta cobrado, no se puede fallar aqui
+        settings.logger.warning(
+            "No se pudo confirmar tras el pago booking=%s: %s", booking_row["id"], exc
+        )
+
+
+async def process_booking_payment_webhook(data_object: Dict[str, Any]) -> bool:
     metadata = data_object.get("metadata") or {}
     if metadata.get("source") != "booking_payment":
         return False
@@ -5125,10 +5161,7 @@ def process_booking_payment_webhook(data_object: Dict[str, Any]) -> bool:
     )
     refreshed = _get_booking_row_by_id(booking_id)
     if refreshed and refreshed["status"] == "confirmed" and booking and booking["status"] == "pending_payment":
-        try:
-            _send_booking_email(refreshed, "confirmed")
-        except Exception as exc:  # noqa: BLE001
-            settings.logger.warning("No se pudo enviar confirmacion tras pago booking=%s: %s", booking_id, exc)
+        await notify_booking_paid(refreshed)
     return True
 
 

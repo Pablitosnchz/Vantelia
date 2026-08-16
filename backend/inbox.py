@@ -145,6 +145,32 @@ def inbound_number(session_id: str) -> str:
     return (row["wa_phone_number_id"] if row else "") or ""
 
 
+def inbound_number_for_phone(cliente_id: str, phone: str) -> str:
+    """Numero por el que este cliente escribio por ultima vez ("" si no consta).
+
+    Hace falta para responderle desde el mismo numero al que escribio: el negocio
+    puede tener varios (numero por centro, numero de demo compartido) y la
+    confirmacion saldria desde uno que el cliente no reconoce, o no saldria.
+    """
+    cliente_id = str(cliente_id or "").strip()
+    digitos = "".join(c for c in str(phone or "") if c.isdigit())
+    if not cliente_id or not digitos:
+        return ""
+    try:
+        with db._get_db_connection() as connection:
+            fila = connection.execute(
+                """
+                SELECT wa_phone_number_id FROM chat_sessions
+                WHERE cliente_id = ? AND origin LIKE ? AND wa_phone_number_id <> ''
+                ORDER BY last_message_at DESC LIMIT 1
+                """,
+                (cliente_id, "whatsapp:%" + digitos[-9:]),
+            ).fetchone()
+    except Exception:  # noqa: BLE001 - nunca debe tumbar un envio
+        return ""
+    return (fila["wa_phone_number_id"] if fila else "") or ""
+
+
 def last_inbound_at(session_id: str) -> str:
     with db._get_db_connection() as connection:
         row = connection.execute(
