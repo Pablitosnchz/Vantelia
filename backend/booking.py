@@ -4484,6 +4484,7 @@ def _connect_account_status(cliente_id: str, *, refresh: bool = False) -> Connec
         "charges_enabled": bool(row["charges_enabled"]),
         "payouts_enabled": bool(row["payouts_enabled"]),
         "details_submitted": bool(row["details_submitted"]),
+        "bizum_status": (row["bizum_status"] if "bizum_status" in row_keys else "") or "",
         "bizum_enabled": bool(row["bizum_enabled"]) if "bizum_enabled" in row_keys else True,
         "wallets_enabled": bool(row["wallets_enabled"]) if "wallets_enabled" in row_keys else True,
     }
@@ -4515,11 +4516,12 @@ def _connect_account_status(cliente_id: str, *, refresh: bool = False) -> Connec
                 connection.execute(
                     """
                     UPDATE client_payment_accounts SET charges_enabled=?, payouts_enabled=?,
-                        details_submitted=?, updated_at=? WHERE cliente_id=?
+                        details_submitted=?, bizum_status=?, updated_at=? WHERE cliente_id=?
                     """,
                     (
                         int(values["charges_enabled"]), int(values["payouts_enabled"]),
-                        int(values["details_submitted"]), timeutils._utc_now_iso(), cliente_id,
+                        int(values["details_submitted"]), values["bizum_status"],
+                        timeutils._utc_now_iso(), cliente_id,
                     ),
                 )
                 connection.commit()
@@ -4552,6 +4554,43 @@ def _ai_payment_sending_available(cliente_id: str) -> bool:
     """
     status = _connect_account_status(cliente_id)
     return bool(status.connected and status.charges_enabled)
+
+
+def disconnect_stripe_account(cliente_id: str) -> ConnectAccountStatus:
+    """Desvincula la cuenta de Stripe del negocio.
+
+    La cuenta NO se borra en Stripe: es del negocio, con su dinero y su historial,
+    y Vantelia no puede ni debe eliminarla. Lo que se hace es olvidarla: dejamos de
+    cobrar por ella. Si hay OAuth configurado se revoca ademas el acceso.
+
+    Consecuencia que el panel avisa antes: los servicios que exigian pago pasan a
+    reservarse sin cobro hasta que se conecte otra cuenta.
+    """
+    estado = _connect_account_status(cliente_id)
+    if not estado.stripe_account_id:
+        return estado
+    if settings.STRIPE_CONNECT_CLIENT_ID and stripe_gateway._stripe_configured():
+        try:
+            stripe_gateway._stripe_init()
+            stripe_gateway.stripe.OAuth.deauthorize(
+                client_id=settings.STRIPE_CONNECT_CLIENT_ID,
+                stripe_user_id=estado.stripe_account_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - desvincular en local es lo que manda
+            settings.logger.warning("No se pudo revocar el acceso a %s: %s", estado.stripe_account_id, exc)
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            UPDATE client_payment_accounts
+            SET stripe_account_id='', charges_enabled=0, payouts_enabled=0,
+                details_submitted=0, bizum_status='', updated_at=?
+            WHERE cliente_id=?
+            """,
+            (timeutils._utc_now_iso(), cliente_id),
+        )
+        connection.commit()
+    settings.logger.info("Stripe desconectado para %s (cuenta %s)", cliente_id, estado.stripe_account_id)
+    return _connect_account_status(cliente_id)
 
 
 def payment_method_prefs(cliente_id: str) -> Dict[str, bool]:

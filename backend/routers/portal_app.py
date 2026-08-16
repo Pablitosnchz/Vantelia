@@ -1363,6 +1363,15 @@ async def app_connect_status(
     return booking._connect_account_status(security._resolve_cliente_for_self_serve_user(user), refresh=refresh)
 
 
+@app.post("/auth/app/payments/connect/disconnect", response_model=ConnectAccountStatus)
+async def app_connect_disconnect(
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> ConnectAccountStatus:
+    """Deja de cobrar por esa cuenta de Stripe. No borra nada en Stripe."""
+    security._require_portal_min_role(user, "owner")
+    return booking.disconnect_stripe_account(security._resolve_cliente_for_self_serve_user(user))
+
+
 @app.put("/auth/app/payments/methods", response_model=ConnectAccountStatus)
 async def app_payments_methods(
     data: PaymentMethodsPayload,

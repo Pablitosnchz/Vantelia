@@ -2514,6 +2514,7 @@
       <div style="display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;">
         <button class="btn btn-primary" id="payConnectBtn" type="button">Conectar Stripe</button>
         <button class="btn btn-ghost" id="payRefreshBtn" type="button">Actualizar estado</button>
+        <button class="btn btn-ghost" id="payDisconnectBtn" type="button" style="display:none; color:var(--danger); border-color:var(--danger);">Desconectar</button>
       </div>
     </div>
     <!-- Metodos de pago. Stripe enciende por defecto una docena que aqui no pintan
@@ -4296,7 +4297,7 @@ function setTab(tab) {
   if (tab === 'tune')       loadTune();
   if (tab === 'voz')        loadVoz();
   if (tab === 'whatsapp')   loadWhatsApp();
-  if (tab === 'payments')   loadPayments();
+  if (tab === 'payments')   loadPayments(true);
   if (tab === 'billing')    loadBilling();
   if (tab === 'canales')    loadChannels();
   if (tab === 'citas')      loadCitas();
@@ -6584,6 +6585,7 @@ async function loadPayments(refresh = false) {
       ? `Cuenta ${status.stripe_account_id} · cobros ${status.charges_enabled ? 'activos' : 'pendientes'} · pagos ${status.payouts_enabled ? 'activos' : 'pendientes'}`
       : 'Todavia no has conectado una cuenta Stripe.';
     document.getElementById('payConnectBtn').textContent = status.connected ? 'Reconectar Stripe' : 'Conectar Stripe';
+    document.getElementById('payDisconnectBtn').style.display = status.connected ? '' : 'none';
 
     // Métodos de pago. Sin Stripe conectado no hay nada que elegir.
     const cobrando = !!(status.connected && status.charges_enabled);
@@ -6599,9 +6601,10 @@ async function loadPayments(refresh = false) {
       inactive: '⏳ Stripe necesita tu DNI o NIE para activarlo. Complétalo en tu cuenta de Stripe.',
       pending: '⏳ Stripe lo está revisando. Suele tardar poco.',
     }[status.bizum_status] || 'Tu cliente paga desde la app de su banco.';
-    const bizumListo = status.bizum_status === 'active';
     document.getElementById('payBizumStatus').textContent = bizumMsg;
-    bizumToggle.disabled = !bizumListo;
+    // Solo se bloquea cuando SABEMOS que Stripe aun no lo ha aprobado. Si el estado
+    // viene vacio (Stripe no respondio), mejor dejar tocar que bloquear a ciegas.
+    bizumToggle.disabled = !!status.bizum_status && status.bizum_status !== 'active';
   } catch(e) { toast(e.message, 'error'); }
 }
 
@@ -6615,6 +6618,22 @@ async function savePaymentMethods() {
     toast('Métodos de pago actualizados', 'success');
   } catch(e) { toast(e.message, 'error'); loadPayments(); }
 }
+document.getElementById('payDisconnectBtn').addEventListener('click', async () => {
+  // Desconectar deja de cobrar: los servicios con señal pasan a reservarse sin pago.
+  // Hay que decirlo ANTES, no después.
+  const ok = await confirmDialog({
+    title: 'Desconectar Stripe',
+    bodyHtml: 'Dejarás de cobrar por esta cuenta.<br><br>Los servicios que piden señal o pago pasarán a reservarse <b>sin cobro</b> hasta que conectes otra cuenta.<br><span class="panel-sub">Tu cuenta de Stripe no se borra: tu dinero, tus cobros y tus reembolsos siguen ahí.</span>',
+    confirmLabel: 'Desconectar',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    await api('/auth/app/payments/connect/disconnect', { method: 'POST' });
+    toast('Stripe desconectado', 'success');
+    loadPayments();
+  } catch (e) { toast(e.message, 'error'); }
+});
 document.getElementById('payBizumToggle').addEventListener('change', savePaymentMethods);
 document.getElementById('payWalletsToggle').addEventListener('change', savePaymentMethods);
 

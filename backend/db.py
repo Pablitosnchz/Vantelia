@@ -1271,6 +1271,12 @@ def _init_database() -> None:
                 connection.execute(
                     "ALTER TABLE client_payment_accounts ADD COLUMN %s INTEGER NOT NULL DEFAULT 1" % columna
                 )
+        # Ultimo estado conocido de la capability de Bizum en Stripe. Se guarda para
+        # que al abrir la pantalla se sepa sin tener que llamar a Stripe.
+        if "bizum_status" not in payment_account_columns:
+            connection.execute(
+                "ALTER TABLE client_payment_accounts ADD COLUMN bizum_status TEXT NOT NULL DEFAULT ''"
+            )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS service_payment_policies (

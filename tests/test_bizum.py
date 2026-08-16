@@ -222,3 +222,88 @@ def test_el_estado_de_bizum_viaja_al_panel(api_module):
 
     assert ConnectAccountStatus().bizum_status == ""
     assert ConnectAccountStatus(bizum_status="active").bizum_status == "active"
+
+
+def test_el_estado_de_bizum_se_guarda(api_module):
+    """Se consultaba solo al refrescar, asi que al abrir la pantalla llegaba vacio
+    y el interruptor salia bloqueado sin motivo."""
+    import inspect
+
+    from backend import booking, db
+
+    fuente = inspect.getsource(booking._connect_account_status)
+    assert "bizum_status=?" in fuente  # se persiste al refrescar
+    assert 'row["bizum_status"]' in fuente  # y se lee al cargar
+
+    with db._get_db_connection() as connection:
+        columnas = {r[1] for r in connection.execute("PRAGMA table_info(client_payment_accounts)")}
+    assert "bizum_status" in columnas
+    assert {"bizum_enabled", "wallets_enabled"} <= columnas
+
+
+def test_no_se_bloquea_el_interruptor_a_ciegas(api_module):
+    """Si Stripe no responde, el estado llega vacio: bloquear entonces deja al
+    negocio sin poder tocar nada."""
+    import pathlib as _p
+
+    html = (_p.Path(__file__).resolve().parents[1] / "app_ui" / "index.html").read_text(encoding="utf-8")
+    assert "bizumToggle.disabled = !!status.bizum_status && status.bizum_status !== 'active';" in html
+    # Y la pestana se abre refrescando, para que el estado no dependa de un boton.
+    assert "if (tab === 'payments')   loadPayments(true);" in html
+
+
+def test_desconectar_no_borra_la_cuenta_en_stripe(api_module):
+    """La cuenta es del negocio (su dinero, su historial). Solo la olvidamos."""
+    import inspect
+
+    from backend import booking
+
+    fuente = inspect.getsource(booking.disconnect_stripe_account)
+    assert "stripe_account_id=''" in fuente
+    assert "Account.delete" not in fuente
+    # Si hay OAuth configurado, ademas se revoca el acceso.
+    assert "OAuth.deauthorize" in fuente
+
+
+def test_desconectar_deja_el_negocio_sin_cobros(api_module):
+    from backend import booking, db, timeutils
+
+    ahora = timeutils._utc_now_iso()
+    with db._get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO client_payment_accounts (cliente_id, stripe_account_id, charges_enabled,
+                payouts_enabled, details_submitted, bizum_status, created_at, updated_at)
+            VALUES ('demo', 'acct_desconectar', 1, 1, 1, 'active', ?, ?)
+            ON CONFLICT(cliente_id) DO UPDATE SET stripe_account_id='acct_desconectar',
+                charges_enabled=1, bizum_status='active', updated_at=excluded.updated_at
+            """,
+            (ahora, ahora),
+        )
+        connection.commit()
+    assert booking._connect_account_status("demo").connected is True
+
+    estado = booking.disconnect_stripe_account("demo")
+    assert estado.connected is False
+    assert estado.stripe_account_id == ""
+    assert estado.charges_enabled is False
+    assert estado.bizum_status == ""
+    # Sin cuenta, la IA no puede mandar enlaces de pago.
+    assert booking._ai_payment_sending_available("demo") is False
+
+
+def test_desconectar_sin_cuenta_no_falla(api_module):
+    from backend import booking, db
+
+    with db._get_db_connection() as connection:
+        connection.execute("DELETE FROM client_payment_accounts WHERE cliente_id='demo'")
+        connection.commit()
+    assert booking.disconnect_stripe_account("demo").connected is False
+
+
+def test_el_panel_avisa_de_lo_que_implica_desconectar(api_module):
+    import pathlib as _p
+
+    html = (_p.Path(__file__).resolve().parents[1] / "app_ui" / "index.html").read_text(encoding="utf-8")
+    assert 'id="payDisconnectBtn"' in html
+    assert "sin cobro" in html
