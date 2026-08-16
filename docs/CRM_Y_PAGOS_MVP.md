@@ -109,6 +109,38 @@ Si `STRIPE_CONNECT_CLIENT_ID` queda vacio, Vantelia usa Stripe Connect Onboardin
 con Account Links. Este es el flujo recomendado para plataformas nuevas y no
 requiere copiar un `ca_...` desde el Dashboard.
 
+## 3 ter. Bizum (ago 2026)
+
+Muchos negocios espanoles cobran la senal por Bizum: es lo que su cliente espera
+(mete su movil y aprueba en la app del banco). Stripe lo soporta desde mayo 2026,
+asi que NO hace falta una segunda pasarela.
+
+Como funciona en Vantelia:
+
+- `stripe_gateway.request_bizum_capability(account_id)` solicita la capability
+  `bizum_payments`. Se llama al crear la cuenta conectada, y las cuentas que ya
+  existian la piden solas la primera vez que se refresca su estado
+  (`booking._connect_account_status(refresh=True)`).
+- Va por la **API v1** a proposito: la v2 Core con la que damos de alta la cuenta
+  no lista `bizum_payments` entre sus capabilities (comprobado contra Stripe:
+  45 capabilities, ninguna Bizum). Es best-effort; si falla, se cobra con tarjeta.
+- El checkout de reserva **no enumera `payment_method_types`**, asi que Bizum
+  aparece solo en cuanto la capability esta activa. No los enumeres: apagarias
+  Bizum sin que nadie se entere (test en `tests/test_bizum.py`).
+
+Requisitos, y son la causa habitual de que "no aparezca":
+
+1. La cuenta **plataforma** debe tener `bizum_payments` activa. Solo se hace desde
+   el Dashboard en modo Live: la API responde 403 sobre la propia cuenta.
+2. **Cada negocio** debe aportar su identificacion antes de que se active:
+   `individual.id_number` (DNI/NIE) si es autonomo, `company.tax_id` (CIF) si es
+   empresa. El panel lo dice en la pestana Pagos (`payBizumStatus`).
+
+Limites de Bizum: solo euros, entre 0,50 y 5.000 EUR por operacion, y **no admite
+captura manual**, asi que la opcion "retener la tarjeta sin cobrar" (`preauth`)
+seguira siendo solo con tarjeta. Reembolsos totales y parciales si, hasta 395
+dias. Comision 1,5 % + 0,25 EUR, igual que una tarjeta europea estandar.
+
 ## 3 bis. Envio de enlaces de pago por la IA (web, WhatsApp y voz)
 
 La IA puede enviar al cliente final el enlace de pago de su cita, en nombre del
