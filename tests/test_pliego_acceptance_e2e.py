@@ -382,6 +382,11 @@ def test_full_pliego_as_owner_manager_and_staff(acceptance, monkeypatch):
             "sms": {"available": True},
         },
     )
+    # WhatsApp ya no se decide por tenant sino por cita (un negocio puede atender
+    # por el numero de demo compartido sin tener el suyo configurado).
+    monkeypatch.setattr(
+        booking_module, "_whatsapp_deliverable_for_booking", lambda _row: (True, "Disponible.")
+    )
     monkeypatch.setattr(booking_module, "_send_booking_email", fake_email)
     monkeypatch.setattr(booking_module, "_send_booking_whatsapp_reminder", fake_whatsapp)
     monkeypatch.setattr(booking_module, "_send_booking_sms_reminder", fake_sms)

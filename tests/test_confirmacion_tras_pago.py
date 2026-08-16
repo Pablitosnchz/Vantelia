@@ -123,3 +123,64 @@ def test_el_numero_de_entrada_se_busca_por_telefono(api_module):
     # Otro tenant no hereda el numero de este.
     assert inbox.inbound_number_for_phone("otro", "+34600111222") == ""
     assert inbox.inbound_number_for_phone("demo", "") == ""
+
+
+# ── Poder escribirle por WhatsApp no es lo mismo que "el tenant tiene WhatsApp" ──
+
+def _cita_wa(api_module, telefono="+34600111222"):
+    return _CitaFalsa(id="bk_wa", cliente_id="demo", source="whatsapp", telefono=telefono, email="")
+
+
+def test_un_negocio_sin_plan_no_puede_escribir_por_whatsapp(api_module, monkeypatch):
+    from backend import booking, clients
+
+    monkeypatch.setattr(clients, "_plan_feature", lambda cid, f: False)
+    ok, motivo = booking._whatsapp_deliverable_for_booking(_cita_wa(api_module))
+    assert ok is False and "plan" in motivo.lower()
+
+
+def test_sin_token_tampoco(api_module, monkeypatch):
+    from backend import booking, clients, messaging
+
+    monkeypatch.setattr(clients, "_plan_feature", lambda cid, f: True)
+    monkeypatch.setattr(messaging, "_whatsapp_access_token_for_client", lambda cid: "")
+    ok, motivo = booking._whatsapp_deliverable_for_booking(_cita_wa(api_module))
+    assert ok is False and "token" in motivo.lower()
+
+
+def test_con_numero_propio_configurado_si(api_module, monkeypatch):
+    from backend import booking, clients, messaging
+
+    monkeypatch.setattr(clients, "_plan_feature", lambda cid, f: True)
+    monkeypatch.setattr(messaging, "_whatsapp_access_token_for_client", lambda cid: "tok")
+    monkeypatch.setattr(clients, "_get_client_config",
+                        lambda cid: {"whatsapp": {"enabled": True, "phone_number_id": "123"}})
+    ok, _ = booking._whatsapp_deliverable_for_booking(_cita_wa(api_module))
+    assert ok is True
+
+
+def test_por_el_numero_de_demo_compartido_tambien(api_module, monkeypatch):
+    """Un negocio puede estar atendiendo por el numero de demo sin tener el suyo:
+    la conversacion existe y hay que poder contestarla."""
+    from backend import booking, clients, inbox, messaging, wa_demo
+
+    monkeypatch.setattr(clients, "_plan_feature", lambda cid, f: True)
+    monkeypatch.setattr(messaging, "_whatsapp_access_token_for_client", lambda cid: "tok")
+    monkeypatch.setattr(clients, "_get_client_config", lambda cid: {"whatsapp": {}})
+    monkeypatch.setattr(inbox, "inbound_number_for_phone", lambda cid, tel: "hub_123")
+    monkeypatch.setattr(wa_demo, "is_hub", lambda pid: pid == "hub_123")
+    ok, _ = booking._whatsapp_deliverable_for_booking(_cita_wa(api_module))
+    assert ok is True
+
+
+def test_si_el_negocio_apago_su_whatsapp_se_respeta(api_module, monkeypatch):
+    from backend import booking, clients, inbox, messaging, wa_demo
+
+    monkeypatch.setattr(clients, "_plan_feature", lambda cid, f: True)
+    monkeypatch.setattr(messaging, "_whatsapp_access_token_for_client", lambda cid: "tok")
+    monkeypatch.setattr(clients, "_get_client_config",
+                        lambda cid: {"whatsapp": {"enabled": False, "phone_number_id": "123"}})
+    monkeypatch.setattr(inbox, "inbound_number_for_phone", lambda cid, tel: "otro_numero")
+    monkeypatch.setattr(wa_demo, "is_hub", lambda pid: False)
+    ok, _ = booking._whatsapp_deliverable_for_booking(_cita_wa(api_module))
+    assert ok is False

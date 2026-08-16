@@ -41,7 +41,7 @@ from api_models import (
     PortalMessagePreviewResponse,
     PortalScheduleUpdatePayload,
 )
-from backend import agenda, appstate, clients, crm, db, emailing, inbox, messaging, paystate, security, settings, stripe_gateway, textnorm, timeutils
+from backend import agenda, appstate, clients, crm, db, emailing, inbox, messaging, paystate, security, settings, stripe_gateway, textnorm, timeutils, wa_demo
 
 _FOLLOWUP_DELIVERY_CHANNELS = ("email", "whatsapp", "sms")
 _BOOKING_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
@@ -715,6 +715,33 @@ def _booking_message_text_for_channel(
         extra_message,
     )
     return text_body
+
+
+def _whatsapp_deliverable_for_booking(booking_row: sqlite3.Row) -> Tuple[bool, str]:
+    """¿Se le puede escribir por WhatsApp a ESTE cliente?
+
+    La disponibilidad general del tenant no basta. Un negocio puede estar
+    atendiendo por el numero de demo compartido sin tener WhatsApp propio
+    configurado: ahi la conversacion existe de verdad y hay que poder contestarla.
+    Al reves tambien importa: si el negocio APAGO su WhatsApp, se respeta.
+
+    Lo que nunca se salta: el plan (WhatsApp es de pago) y el token de envio.
+    """
+    cliente_id = booking_row["cliente_id"]
+    if not clients._plan_feature(cliente_id, "whatsapp_enabled"):
+        return False, "Necesitas un plan con WhatsApp."
+    if not messaging._whatsapp_access_token_for_client(cliente_id):
+        return False, "Falta el token de envio de WhatsApp en servidor."
+
+    whatsapp_cfg = clients._get_client_config(cliente_id).get("whatsapp", {}) or {}
+    propio = str(whatsapp_cfg.get("phone_number_id", "") or "").strip()
+    if whatsapp_cfg.get("enabled") and propio:
+        return True, "Disponible."
+
+    entrada = inbox.inbound_number_for_phone(cliente_id, booking_row["telefono"] or "")
+    if entrada and wa_demo.is_hub(entrada):
+        return True, "Disponible (numero de demo compartido)."
+    return False, "Activa WhatsApp en el portal."
 
 
 async def _send_booking_whatsapp_reminder(
@@ -3327,8 +3354,9 @@ async def _send_booking_reminder_by_kind(
             return
 
         if channel_name == "whatsapp":
-            if not availability.get("whatsapp", {}).get("available"):
-                skipped_channels["whatsapp"] = str(availability.get("whatsapp", {}).get("reason", "No disponible."))
+            entregable, motivo = _whatsapp_deliverable_for_booking(booking_row)
+            if not entregable:
+                skipped_channels["whatsapp"] = motivo
                 return
             try:
                 if await _send_booking_whatsapp_reminder(
