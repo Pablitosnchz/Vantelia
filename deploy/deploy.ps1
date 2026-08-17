@@ -262,19 +262,22 @@ cd "$REMOTE_PROJECT"
 docker compose -f deploy/hostinger/docker-compose.yml up -d --build 2>&1
 docker ps
 
+# La app tarda en levantar (llama-index, nltk, indices). Con 12 intentos (36 s) el
+# deploy daba por fallido un despliegue que en realidad habia funcionado, y eso
+# invita a relanzarlo encima. 40 intentos = 2 minutos de margen.
 attempt=1
 while true; do
   if health_response="$(curl --fail --silent --max-time 5 http://127.0.0.1:8000/health 2>/dev/null)"; then
     echo "$health_response"
     break
   fi
-  if [ "$attempt" -ge 12 ]; then
+  if [ "$attempt" -ge 40 ]; then
     echo ""
     echo "Healthcheck fallido tras varios intentos. Ultimos logs de vantelia-app:" >&2
     docker logs vantelia-app --tail 120 >&2 || true
     exit 1
   fi
-  echo "Esperando a que la app responda... intento $attempt/12"
+  echo "Esperando a que la app responda... intento $attempt/40"
   attempt=$((attempt + 1))
   sleep 3
 done
