@@ -783,6 +783,11 @@ async def _wa_create_booking(
     )
     if flow.notas:
         confirmacion += f"📝 Notas: {flow.notas}\n"
+    # Numero de reserva: es lo que el asistente le pedira si luego quiere pagar,
+    # cancelar o cambiar la cita. El email lo ensena desde siempre; aqui faltaba.
+    codigo = str((stored_booking["booking_code"] if stored_booking else "") or "")
+    if codigo:
+        confirmacion += f"\n🔖 Numero de reserva: *{codigo}*\n"
     # Mensaje de confirmacion que el negocio escribe en su panel (indicaciones para
     # llegar, que traer, etc.). Se usaba solo en la reserva por web: por WhatsApp el
     # cliente se quedaba sin ese aviso.

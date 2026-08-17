@@ -1385,7 +1385,7 @@ def _backfill_booking_codes() -> int:
         with db._get_db_connection() as connection:
             rows = connection.execute(
                 "SELECT id, cliente_id FROM bookings "
-                "WHERE booking_code = '' AND status IN ('confirmed', 'pending_review')"
+                "WHERE booking_code = '' AND status IN ('confirmed', 'pending_review', 'pending_payment')"
             ).fetchall()
             for row in rows:
                 code = _unique_booking_code(connection, row["cliente_id"])
@@ -5682,7 +5682,11 @@ def _latest_booking_for_contact(
         return None
     with db._get_db_connection() as connection:
         rows = connection.execute(
-            "SELECT * FROM bookings WHERE cliente_id=? AND status IN ('confirmed','pending_review') "
+            # `pending_payment` es imprescindible: es el estado de quien tiene un pago
+            # pendiente, justo el que pide el enlace. Sin el, el asistente contestaba
+            # "necesito tu numero de reserva" a alguien cuyo telefono ya conocia.
+            "SELECT * FROM bookings WHERE cliente_id=? "
+            "AND status IN ('confirmed','pending_review','pending_payment') "
             "ORDER BY created_at DESC LIMIT 50",
             (cliente_id,),
         ).fetchall()
