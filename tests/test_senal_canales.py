@@ -32,11 +32,14 @@ def test_el_widget_no_dice_reserva_hecha_cuando_falta_pagar():
     assert "Completa el pago para confirmar la cita." in fuente
 
 
-def test_el_enlace_va_tambien_al_hilo_del_chat():
-    """La tarjeta de exito desaparece al seguir escribiendo; el mensaje se queda."""
+def test_el_enlace_no_se_repite_en_el_chat():
+    """Se mandaba dos veces por miedo a que la tarjeta desapareciera. No desaparece:
+    se inserta DENTRO del hilo de mensajes (`msgs.appendChild(form)`) y nada limpia
+    ese contenedor, asi que los mensajes nuevos se anaden debajo y la tarjeta sigue
+    ahi con sus botones. Repetirlo solo anadia 300 caracteres de URL de Stripe."""
     fuente = _widget_fuente()
-    bloque = fuente.split("agregarMensaje(")[1][:400]
-    assert "payment_url" in bloque
+    assert "msgs.appendChild(form)" in fuente          # la tarjeta vive en el hilo
+    assert "Paga aqui para confirmar" not in fuente    # y no se repite
 
 
 def test_el_bundle_publicado_lleva_el_cambio():

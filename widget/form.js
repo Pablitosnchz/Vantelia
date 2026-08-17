@@ -495,7 +495,9 @@ async function confirmarCita() {
         <div class="ia-check">${response.estado === "pending_review" || pendingPayment ? "!" : "OK"}</div>
         <h4>${escapeHtml(title)}</h4>
         <p>${escapeHtml(successText)}</p>
-        <p><strong>ID:</strong> ${escapeHtml(response.booking_id)}</p>
+        ${response.booking_code && !pendingPayment
+          ? `<p><strong>Numero de reserva:</strong> ${escapeHtml(response.booking_code)}</p>`
+          : ""}
         <div class="ia-form-actions">
           ${payButton}
           ${manageButton}
@@ -517,13 +519,10 @@ async function confirmarCita() {
       has_manage_url: !!response.manage_url,
       has_provider_booking_url: !!response.provider_booking_url,
     });
-    // El enlace tambien en el hilo del chat: la tarjeta se pierde al seguir escribiendo.
-    agregarMensaje(
-      pendingPayment && response.payment_url
-        ? `${successText}\n\nPaga aqui para confirmar: ${response.payment_url}`
-        : successText,
-      "bot"
-    );
+    // Un solo aviso: la tarjeta de arriba ya lleva el texto y los botones de pagar
+    // y gestionar. Repetirlo en el chat con la URL entera de Stripe (~300
+    // caracteres) solo estorbaba.
+    if (!pendingPayment) agregarMensaje(successText, "bot");
   } catch (error) {
     confirmButton.disabled = false;
     confirmButton.textContent = "Confirmar solicitud";
