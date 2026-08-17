@@ -784,9 +784,10 @@ async def _wa_create_booking(
     if flow.notas:
         confirmacion += f"📝 Notas: {flow.notas}\n"
     # Numero de reserva: es lo que el asistente le pedira si luego quiere pagar,
-    # cancelar o cambiar la cita. El email lo ensena desde siempre; aqui faltaba.
+    # cancelar o cambiar la cita. Con la senal sin pagar todavia no se le da: la
+    # cita puede caerse y el hueco liberarse, asi que seria un codigo para nada.
     codigo = str((stored_booking["booking_code"] if stored_booking else "") or "")
-    if codigo:
+    if codigo and not is_pending_payment:
         confirmacion += f"\n🔖 Numero de reserva: *{codigo}*\n"
     # Mensaje de confirmacion que el negocio escribe en su panel (indicaciones para
     # llegar, que traer, etc.). Se usaba solo en la reserva por web: por WhatsApp el
@@ -810,14 +811,18 @@ async def _wa_create_booking(
     payment_row = booking._booking_payment_row(booking_id)
     hay_que_pagar = bool(not bono_redeemed and payment_row and payment_row["checkout_url"])
     if not hay_que_pagar:
-        confirmacion += (
-            "\nGuarda este mensaje con los datos de tu cita. "
-            "Si necesitas cancelar o cambiarla, responde *cancelar*.\n\n"
-            "Escribe *menu* para volver al menu principal."
-        )
+        confirmacion += "\nEscribe *menu* para volver al menu principal."
     await messaging._send_whatsapp_text(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number, text=confirmacion,
     )
+    if not hay_que_pagar and stored_booking:
+        # Sin senal la cita ya es suya: se le da el enlace de gestion en un boton.
+        await messaging._send_whatsapp_cta_url(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+            body="Si necesitas cambiarla o cancelarla, puedes hacerlo tu mismo aqui:",
+            button_label="Gestionar cita",
+            url=booking._booking_row_manage_url(stored_booking, request),
+        )
     if hay_que_pagar:
         await _wa_send_payment_request(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,

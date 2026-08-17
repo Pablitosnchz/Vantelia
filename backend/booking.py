@@ -744,6 +744,35 @@ def _whatsapp_deliverable_for_booking(booking_row: sqlite3.Row) -> Tuple[bool, s
     return False, "Activa WhatsApp en el portal."
 
 
+def _whatsapp_confirmation_text(booking_row: sqlite3.Row) -> str:
+    """Confirmacion corta para WhatsApp (el correo entero aqui es un muro).
+
+    El email lleva zona horaria, contacto y el enlace de gestion en crudo; por
+    WhatsApp sobra: el enlace va en un boton y el resto ya lo ha visto al reservar.
+    """
+    config = clients._get_client_config(booking_row["cliente_id"])
+    cuando = booking_row["booking_date"] or ""
+    try:
+        cuando = textnorm._format_date_es(textnorm._parse_date(cuando).date())
+    except Exception:  # noqa: BLE001 - si la fecha viene rara, se deja como esta
+        pass
+    lineas = ["✅ *Cita confirmada*", ""]
+    lineas.append("🛍️ %s" % (booking_row["servicio"] or "Tu cita"))
+    quien = (booking_row["employee_name"] if "employee_name" in booking_row.keys() else "") or ""
+    if quien:
+        lineas.append("👨‍⚕️ %s" % quien)
+    lineas.append("📅 %s · 🕐 %s" % (cuando, booking_row["booking_time"] or ""))
+    codigo = (booking_row["booking_code"] if "booking_code" in booking_row.keys() else "") or ""
+    if codigo:
+        lineas.append("🔖 Numero de reserva: *%s*" % codigo)
+    aviso = textnorm._sanitize_text(
+        str((config.get("booking") or {}).get("success_message") or ""), allow_multiline=True
+    ).strip()
+    if aviso:
+        lineas += ["", aviso]
+    return chr(10).join(lineas)
+
+
 async def _send_booking_whatsapp_reminder(
     booking_row: sqlite3.Row,
     kind: str,
@@ -762,6 +791,17 @@ async def _send_booking_whatsapp_reminder(
     ).strip()
     if not (phone_number_id and to_number):
         return False
+    if kind == "confirmed":
+        # Confirmacion: texto corto + boton "Gestionar cita" (el enlace de gestion
+        # son ~80 caracteres que nadie lee).
+        enviado = await messaging._send_whatsapp_cta_url(
+            cliente_id=booking_row["cliente_id"], phone_number_id=phone_number_id,
+            to_number=to_number, body=_whatsapp_confirmation_text(booking_row),
+            button_label="Gestionar cita",
+            url=_booking_row_manage_url(booking_row, request),
+        )
+        if enviado:
+            return True
     message_text = _booking_message_text_for_channel(booking_row, kind, request, extra_message=extra_message)
     # Recordatorios: botones interactivos de confirmacion de asistencia.
     # La respuesta la procesa el webhook (bkok_/bkcancel_) y queda en booking_audit.
@@ -3295,6 +3335,15 @@ async def _send_booking_reminder_by_kind(
     entrega por ningun canal y ``raise_on_failure`` es True (comportamiento historico
     de los flujos automaticos) se lanza ``RuntimeError``; con False se devuelve el
     resultado con los errores en ``failed`` para que el caller los muestre."""
+    if kind == "confirmed" and booking_row["status"] == "pending_payment":
+        # Decirle "tu cita ha quedado confirmada" a quien todavia tiene que pagar la
+        # senal es mentirle. Ya recibe el resumen y el boton de pago; la confirmacion
+        # sale sola cuando el pago entra (notify_booking_paid).
+        _record_booking_audit(
+            booking_row["id"], booking_row["cliente_id"],
+            "booking_email_skipped", {"kind": kind, "reason": "pending_payment"},
+        )
+        return {"sent": [], "failed": {}, "skipped": {"all": "pending_payment"}}
     if kind not in settings.DEFAULT_MESSAGE_TEMPLATE_CHANNELS:
         await _send_booking_email_by_kind(
             booking_row,
