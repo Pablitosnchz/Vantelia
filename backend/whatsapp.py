@@ -739,6 +739,10 @@ async def _wa_create_booking(
                 source="whatsapp",
                 request=request,
                 audit_extra={"channel": "whatsapp"},
+                # Este flujo confirma en el propio chat (resumen + boton). Si ademas
+                # lo hiciera el nucleo, el cliente recibiria la misma confirmacion
+                # dos veces. Igual que hace la voz.
+                send_confirmation=False,
             )
         except HTTPException as exc:
             if exc.status_code == 409:
@@ -815,6 +819,14 @@ async def _wa_create_booking(
     await messaging._send_whatsapp_text(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number, text=confirmacion,
     )
+    if not hay_que_pagar and stored_booking and (stored_booking["email"] or "").strip():
+        # La confirmacion por WhatsApp ya la acaba de recibir; esto es solo la copia
+        # por email para quien lo tenga en su ficha (antes la mandaba el nucleo).
+        await booking._send_booking_reminder_by_kind(
+            stored_booking, "confirmed", request,
+            sent_column="confirmation_email_sent_at", raise_on_failure=False,
+            channel_override={"email": True, "whatsapp": False, "sms": False},
+        )
     if not hay_que_pagar and stored_booking:
         # Sin senal la cita ya es suya: se le da el enlace de gestion en un boton.
         await messaging._send_whatsapp_cta_url(

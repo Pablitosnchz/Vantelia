@@ -85,3 +85,27 @@ def test_el_texto_corto_lleva_lo_imprescindible(api_module):
     assert "Zona horaria" not in texto
     assert "http" not in texto  # el enlace va en el boton
     assert len(texto) < 400
+
+
+def test_el_flujo_no_pide_al_nucleo_que_confirme(api_module):
+    """Si confirman los dos, el cliente recibe la misma confirmacion dos veces."""
+    from backend import whatsapp
+
+    fuente = inspect.getsource(whatsapp._wa_create_booking)
+    assert "send_confirmation=False" in fuente
+    # Pero la copia por email de quien lo tenga en su ficha no se pierde.
+    assert 'channel_override={"email": True, "whatsapp": False, "sms": False}' in fuente
+
+
+def test_las_citas_canceladas_no_ocupan_el_calendario(api_module):
+    """No bloquean el hueco (se puede reservar encima), asi que pintarlas hacia
+    parecer ocupado un hueco libre."""
+    import pathlib as _p
+
+    html = (_p.Path(__file__).resolve().parents[1] / "app_ui" / "index.html").read_text(encoding="utf-8")
+    # Vista Dia: se ocultan salvo que se pida el filtro de canceladas.
+    assert "estado === 'cancelled' || (b.estado || b.status) !== 'cancelled'" in html
+    # Vista Mes: no cuentan.
+    assert "citasState.calData = (data.items || []).filter(b => (b.estado || b.status) !== 'cancelled');" in html
+    # Y el filtro por estado sigue existiendo para consultarlas.
+    assert '<option value="cancelled">Cancelada</option>' in html

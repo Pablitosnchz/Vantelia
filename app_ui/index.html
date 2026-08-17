@@ -6953,7 +6953,9 @@ async function fetchCitasCalData() {
     const profParam = profId ? `&employee_id=${encodeURIComponent(profId)}` : '';
     const locParam = citasCentroId() ? `&location_id=${encodeURIComponent(citasCentroId())}` : '';
     const data = await api(`/auth/bookings?date_from=${from}&date_to=${to}&limit=2000${profParam}${locParam}`);
-    citasState.calData = data.items || [];
+    // Igual que en la vista Día: una cancelada no ocupa nada, así que no cuenta
+    // en el mes ni infla el número de citas del día.
+    citasState.calData = (data.items || []).filter(b => (b.estado || b.status) !== 'cancelled');
   } catch { citasState.calData = []; }
   try {
     const sched = await api(profId ? `/auth/schedule/employee/${encodeURIComponent(profId)}` : '/auth/schedule');
@@ -7938,7 +7940,14 @@ async function loadCitasDay(){
   if (prof)   params += `&employee_id=${encodeURIComponent(prof)}`;
   if (estado) params += `&estado=${encodeURIComponent(estado)}`;
   if (citasCentroId()) params += `&location_id=${encodeURIComponent(citasCentroId())}`;
-  try { const data = await api('/auth/bookings?' + params); citasState.dayItems = data.items || []; }
+  try {
+    const data = await api('/auth/bookings?' + params);
+    // Una cita cancelada NO ocupa su hueco: el motor de disponibilidad la ignora y
+    // se puede reservar encima. Pintarla en la rejilla hacía parecer ocupado un
+    // hueco libre. Se ve poniendo el filtro de estado en "Canceladas".
+    citasState.dayItems = (data.items || []).filter(b =>
+      estado === 'cancelled' || (b.estado || b.status) !== 'cancelled');
+  }
   catch { citasState.dayItems = []; }
   cdSyncRangeChips();
   renderCitasDay();
