@@ -38,11 +38,6 @@ import time
 import unicodedata
 from typing import Any, Dict, List, Tuple
 
-try:
-    import openpyxl
-except ImportError:  # pragma: no cover - dependencia de uso puntual
-    sys.exit("Falta openpyxl: pip install openpyxl")
-
 FIANZA_PREFIJO = "FIANZA"
 
 
@@ -75,6 +70,12 @@ def _minutos(valor: Any, defecto: int = 30) -> int:
 
 def leer_excel(ruta: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Devuelve (servicios, packs, fianzas) tal y como vienen en el Excel."""
+    # Import perezoso: `aplicar` se usa desde el servidor, donde no hace falta leer
+    # ningun Excel y no tiene sentido exigir la dependencia.
+    try:
+        import openpyxl
+    except ImportError:  # pragma: no cover - dependencia de uso puntual
+        sys.exit("Falta openpyxl: pip install openpyxl")
     wb = openpyxl.load_workbook(ruta, data_only=True)
     servicios: List[Dict[str, Any]] = []
     fianzas: List[Dict[str, Any]] = []
@@ -126,9 +127,22 @@ def componer_packs(
                 sin_resolver.append("%s -> %s" % (pack["nombre"], paso))
                 continue
             usados_en_packs.add(base["nombre"].upper())
-            minutos += _minutos(exposicion, base["minutos"])
+            # Celda VACIA = no lo indican, se usa la duracion propia del servicio.
+            # Un CERO es un dato: significa que ese paso no tiene espera. Confundirlos
+            # inflaba un pack a 10 horas, porque el paso valia 0 y se le sumaban los
+            # 300 minutos del servicio completo.
+            if exposicion is None or str(exposicion).strip() == "":
+                minutos += base["minutos"]
+            else:
+                minutos += max(0, _minutos(exposicion, 0))
             precio += base["precio_cents"]
             detalle.append(_titulo(base["nombre"]))
+        # Hay packs cuyos pasos valen 0 EUR porque el precio real vive en otro
+        # servicio del catalogo (los de keratina y acido lactico). Sumar da cifras
+        # absurdas --un tratamiento de dos horas por 4 EUR-- asi que se deja "a
+        # consultar" antes que publicar un precio inventado.
+        if precio < minutos * 30:  # menos de 0,30 EUR por minuto no se sostiene
+            precio = 0
         compuestos.append({
             "nombre": pack["nombre"],
             "categoria": "PACKS",
