@@ -5,7 +5,6 @@ registro de rutas identico al monolito original.
 """
 from __future__ import annotations
 
-import secrets
 import sqlite3
 from typing import Any, Dict, List
 
@@ -14,7 +13,6 @@ from fastapi import (
     Depends,
     HTTPException,
     Request,
-    status,
 )
 from fastapi.responses import HTMLResponse, RedirectResponse
 

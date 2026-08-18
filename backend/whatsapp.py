@@ -4,17 +4,33 @@ Webhook (verificacion de challenge + firma con WHATSAPP_APP_SECRET
 obligatoria), resolucion phone_number_id -> cliente, dedup de mensajes,
 flujo interactivo de agendado (pickers de servicio/empleado/fecha/hora)
 y puente con el orquestador de chat.
+
+Como leerlo (mapa completo en docs/MAPA_DEL_CODIGO.md):
+
+* `_handle_whatsapp_message` es el despachador: menu, reglas por palabra clave,
+  toma de control humana, y los pasos del flujo guiado segun `flow.flow`
+  (booking_service -> booking_employee -> booking_date -> booking_time ->
+  booking_name -> resumen -> confirmar). El estado vive en `appstate.WAFlowState`.
+* Los `_wa_send_*` construyen lo que se ENVIA; los bloques `if flow.flow == ...`
+  procesan lo que LLEGA. Cambia siempre los dos lados a la vez.
+* La cita la crea `_wa_create_booking`, que llama al nucleo comun
+  `booking._create_booking_core` con `send_confirmation=False`: este flujo
+  confirma en el propio chat y si no el cliente lo recibiria dos veces.
+
+TECHO QUE CONDICIONA TODO: una lista de WhatsApp admite 10 filas y un titulo de
+24 caracteres. Por eso `_wa_send_service_picker` pregunta primero la categoria y
+pagina con "Ver mas" cuando el catalogo no cabe (un salon real tiene 183
+servicios). Cualquier selector nuevo tiene el mismo limite.
 """
 from __future__ import annotations
 
 import hashlib
 import hmac
 import re
-import secrets
 import json
 import sqlite3
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 from fastapi import HTTPException, Request, Response
@@ -114,7 +130,7 @@ def _resolve_whatsapp_client_id(phone_number_id: str, forced_cliente_id: str = "
     mapping = _whatsapp_phone_client_map()
     cliente_id = mapping.get(str(phone_number_id or "").strip()) or settings.WHATSAPP_DEFAULT_CLIENT_ID
     if not cliente_id:
-        raise HTTPException(status_code=404, detail="No se pudo asociar este numero de WhatsApp a un cliente.")
+        raise HTTPException(status_code=404, detail="No se pudo asociar este número de WhatsApp a un cliente.")
     textnorm._assert_valid_client_id(cliente_id)
     config = clients._get_client_config(cliente_id)
     if not config.get("whatsapp", {}).get("enabled", False):
@@ -264,7 +280,7 @@ async def _wa_send_service_picker(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
             body="🛍️ ¿Que tipo de servicio buscas?",
             button_text="Ver categorias",
-            sections=[{"title": "Categorias", "rows": filas}],
+            sections=[{"title": "Categorías", "rows": filas}],
             header="Agendar cita",
         )
         return True
@@ -288,7 +304,7 @@ async def _wa_send_service_picker(
     if hay_mas:
         filas.append({
             "id": "svcmas_%d" % (max(0, pagina) + 1),
-            "title": "Ver mas servicios",
+            "title": "Ver más servicios",
             "description": "Quedan %d por ver" % (len(services) - inicio - len(filas)),
         })
     await messaging._send_whatsapp_list(
@@ -466,7 +482,7 @@ def _wa_main_menu_sections(booking_enabled: bool, cliente_id: str = "") -> List[
     if booking_enabled:
         rows.append({"id": "menu_agendar", "title": "📅 Agendar cita", "description": "Reserva tu cita en pocos pasos"})
         rows.append({"id": "menu_disponibilidad", "title": "🕐 Ver disponibilidad", "description": "Consulta huecos libres"})
-        rows.append({"id": "menu_cancelar_cita", "title": "Cancelar cita", "description": "Anula una reserva con tu codigo"})
+        rows.append({"id": "menu_cancelar_cita", "title": "Cancelar cita", "description": "Anula una reserva con tu código"})
         rows.append({"id": "menu_cambiar_cita", "title": "Cambiar cita", "description": "Reprograma fecha u hora"})
 
     configuradas = _wa_starter_rows(cliente_id, booking_enabled) if cliente_id else []
@@ -478,7 +494,7 @@ def _wa_main_menu_sections(booking_enabled: bool, cliente_id: str = "") -> List[
         rows.extend(r for r in configuradas if _wa_row_key(r["title"]) not in titulos)
     else:
         rows.append({"id": "menu_faq", "title": "💬 Preguntas frecuentes", "description": "Dudas habituales"})
-        rows.append({"id": "menu_productos", "title": "🛍️ Productos / servicios", "description": "Catalogo del negocio"})
+        rows.append({"id": "menu_productos", "title": "🛍️ Productos / servicios", "description": "Catálogo del negocio"})
         rows.append({"id": "menu_recomendar", "title": "⭐ Recomendar", "description": "Te ayudo a elegir"})
         rows.append({"id": "menu_comparar", "title": "⚖️ Comparar", "description": "Comparativa de opciones"})
         rows.append({"id": "menu_estimar", "title": "💶 Estimar precio", "description": "Calcula coste aproximado"})
@@ -500,7 +516,7 @@ async def _wa_send_main_menu(
         return
     body = (
         f"👋 ¡Hola! Soy el asistente de *{nombre_empresa}*. ¿En que puedo ayudarte hoy?"
-        if greeting else f"📋 Menu principal de *{nombre_empresa}*. Elige una opcion:"
+        if greeting else f"📋 Menú principal de *{nombre_empresa}*. Elige una opción:"
     )
     await messaging._send_whatsapp_list(
         cliente_id=cliente_id,
@@ -579,7 +595,7 @@ async def _wa_send_date_picker(
         if candidate == today:
             title = f"Hoy · {label}"
         elif candidate == today + timedelta(days=1):
-            title = f"Manana · {label}"
+            title = f"Mañana · {label}"
         else:
             title = label
         rows.append({
@@ -692,7 +708,7 @@ async def _wa_send_availability_overview(
     except Exception:
         today = timeutils._utc_now().date()
 
-    lines = ["🕐 *Disponibilidad proximos dias:*", ""]
+    lines = ["🕐 *Disponibilidad próximos días:*", ""]
     found = 0
     offset = 0
     while found < 7 and offset < 21:
@@ -739,7 +755,7 @@ async def _wa_send_booking_summary(
     nombre_corto = flow.nombre.split()[0] if flow.nombre else ""
     lineas: List[str] = []
     if reconocido and nombre_corto:
-        lineas.append(f"👋 Te he reconocido por tu numero, {nombre_corto}.")
+        lineas.append(f"👋 Te he reconocido por tu número, {nombre_corto}.")
         lineas.append("")
     lineas.append("📋 *Resumen de tu cita*")
     lineas.append("")
@@ -859,12 +875,12 @@ async def _wa_create_booking(
     )
     if flow.notas:
         confirmacion += f"📝 Notas: {flow.notas}\n"
-    # Numero de reserva: es lo que el asistente le pedira si luego quiere pagar,
-    # cancelar o cambiar la cita. Con la senal sin pagar todavia no se le da: la
+    # Número de reserva: es lo que el asistente le pedira si luego quiere pagar,
+    # cancelar o cambiar la cita. Con la señal sin pagar todavia no se le da: la
     # cita puede caerse y el hueco liberarse, asi que seria un codigo para nada.
     codigo = str((stored_booking["booking_code"] if stored_booking else "") or "")
     if codigo and not is_pending_payment:
-        confirmacion += f"\n🔖 Numero de reserva: *{codigo}*\n"
+        confirmacion += f"\n🔖 Número de reserva: *{codigo}*\n"
     # Mensaje de confirmacion que el negocio escribe en su panel (indicaciones para
     # llegar, que traer, etc.). Se usaba solo en la reserva por web: por WhatsApp el
     # cliente se quedaba sin ese aviso.
@@ -874,11 +890,11 @@ async def _wa_create_booking(
     if mensaje_negocio:
         confirmacion += f"\n{mensaje_negocio}\n"
     # Nota propia del servicio (como venir preparado). Con senal pendiente no se
-    # manda todavia: la cita aun puede caerse y llegara con la confirmacion real.
+    # manda todavia: la cita aun puede caerse y llegara con la confirmación real.
     nota_servicio = "" if is_pending_payment else booking.service_booking_note(cliente_id, stored_booking)
     if nota_servicio:
         confirmacion += f"\n{nota_servicio}\n"
-    # Auto-canje de bono (numero verificado del canal): descuenta 1 sesion y deja la
+    # Auto-canje de bono (numero verificado del canal): descuenta 1 sesión y deja la
     # cita pagada. Best-effort; si la cita exige pago previo, el helper no toca nada.
     bono_redeemed = commerce.auto_redeem_package_for_booking(
         cliente_id, booking_id, extra_phone=flow.from_number
@@ -886,8 +902,8 @@ async def _wa_create_booking(
     if bono_redeemed:
         left = int(bono_redeemed.get("sessions_left") or 0)
         confirmacion += (
-            f"\n🎟 He descontado 1 sesion de tu bono *{bono_redeemed['package_name']}*: la cita queda pagada"
-            + (f" (te quedan {left} sesiones).\n" if left > 0 else " (era tu ultima sesion).\n")
+            f"\n🎟 He descontado 1 sesión de tu bono *{bono_redeemed['package_name']}*: la cita queda pagada"
+            + (f" (te quedan {left} sesiones).\n" if left > 0 else " (era tu última sesión).\n")
         )
     payment_row = booking._booking_payment_row(booking_id)
     hay_que_pagar = bool(not bono_redeemed and payment_row and payment_row["checkout_url"])
@@ -908,7 +924,7 @@ async def _wa_create_booking(
         # Sin senal la cita ya es suya: se le da el enlace de gestion en un boton.
         await messaging._send_whatsapp_cta_url(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
-            body="Si necesitas cambiarla o cancelarla, puedes hacerlo tu mismo aqui:",
+            body="Si necesitas cambiarla o cancelarla, puedes hacerlo tú mismo aquí:",
             button_label="Gestionar cita",
             url=booking._booking_row_manage_url(stored_booking, request),
         )
@@ -1104,7 +1120,7 @@ async def _wa_start_booking_flow(
     flow.flow = "booking_date"
     await _wa_send_date_picker(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-        config=config, header="Agendar cita", body="📅 Elige el dia para tu cita:",
+        config=config, header="Agendar cita", body="📅 Elige el día para tu cita:",
         employee_id=flow.employee_id, location_id=effective_location,
     )
 
@@ -1268,7 +1284,7 @@ async def _handle_whatsapp_message(
         summary = commerce.packages_summary_for_contact(cliente_id, phone=from_number)
         texto = summary["mensaje"]
         if summary["count"]:
-            texto += "\n\nAl reservar una cita del servicio incluido, la sesion se descuenta sola del bono."
+            texto += "\n\nAl reservar una cita del servicio incluido, la sesión se descuenta sola del bono."
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             text=texto,
@@ -1312,9 +1328,9 @@ async def _handle_whatsapp_message(
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             text=(
-                "Para cancelar tu cita necesito el numero de reserva (formato *R-XXXX*)."
+                "Para cancelar tu cita necesito el número de reserva (formato *R-XXXX*)."
                 if not flow.booking_code else
-                "Por seguridad necesito verificar la reserva. Enviame el telefono o el email con el que hiciste la cita."
+                "Por seguridad necesito verificar la reserva. Envíame el teléfono o el email con el que hiciste la cita."
             ),
         )
         return
@@ -1331,7 +1347,7 @@ async def _handle_whatsapp_message(
         if not flow.booking_code:
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="Para cambiar tu cita necesito el numero de reserva (formato *R-XXXX*).",
+                text="Para cambiar tu cita necesito el número de reserva (formato *R-XXXX*).",
             )
             return
         if not flow.fecha:
@@ -1364,13 +1380,13 @@ async def _handle_whatsapp_message(
             _wa_clear_flow(cliente_id, from_number)
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {_wa_fecha_humana(flow.fecha)} a las {flow.hora}. El numero de reserva sigue siendo el mismo.",
+                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {_wa_fecha_humana(flow.fecha)} a las {flow.hora}. El número de reserva sigue siendo el mismo.",
             )
             return
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             text=(
-                "Por seguridad necesito verificar la reserva. Enviame el telefono o el email con el que hiciste la cita."
+                "Por seguridad necesito verificar la reserva. Envíame el teléfono o el email con el que hiciste la cita."
                 if result.get("needs_verification")
                 else f"⚠️ {await booking._reschedule_failure_text(cliente_id, result, flow.fecha, flow.hora)}"
             ),
@@ -1399,7 +1415,7 @@ async def _handle_whatsapp_message(
         if not code:
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido el numero de reserva. Debe tener formato *R-XXXX*.",
+                text="No he reconocido el número de reserva. Debe tener formato *R-XXXX*.",
             )
             return
         flow.booking_code = code
@@ -1421,7 +1437,7 @@ async def _handle_whatsapp_message(
             flow.flow = "manage_cancel_verify"
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="Por seguridad necesito verificar la reserva. Enviame el telefono o el email con el que hiciste la cita.",
+                text="Por seguridad necesito verificar la reserva. Envíame el teléfono o el email con el que hiciste la cita.",
             )
             return
         _wa_clear_flow(cliente_id, from_number)
@@ -1437,7 +1453,7 @@ async def _handle_whatsapp_message(
         if not (email or phone):
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="Enviame el telefono o el email usado en la reserva para poder verificarla.",
+                text="Envíame el teléfono o el email usado en la reserva para poder verificarla.",
             )
             return
         result = await booking._cancel_booking_by_code(
@@ -1469,7 +1485,7 @@ async def _handle_whatsapp_message(
         if not code:
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido el numero de reserva. Debe tener formato *R-XXXX*.",
+                text="No he reconocido el número de reserva. Debe tener formato *R-XXXX*.",
             )
             return
         flow.booking_code = code
@@ -1519,14 +1535,14 @@ async def _handle_whatsapp_message(
             _wa_clear_flow(cliente_id, from_number)
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {_wa_fecha_humana(flow.fecha)} a las {flow.hora}. El numero de reserva sigue siendo el mismo.",
+                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {_wa_fecha_humana(flow.fecha)} a las {flow.hora}. El número de reserva sigue siendo el mismo.",
             )
             return
         if result.get("needs_verification"):
             flow.flow = "manage_reschedule_verify"
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="Por seguridad necesito verificar la reserva. Enviame el telefono o el email con el que hiciste la cita.",
+                text="Por seguridad necesito verificar la reserva. Envíame el teléfono o el email con el que hiciste la cita.",
             )
             return
         _wa_clear_flow(cliente_id, from_number)
@@ -1542,7 +1558,7 @@ async def _handle_whatsapp_message(
         if not (email or phone):
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="Enviame el telefono o el email usado en la reserva para poder verificarla.",
+                text="Envíame el teléfono o el email usado en la reserva para poder verificarla.",
             )
             return
         result = await booking._reschedule_booking_by_code(
@@ -1560,7 +1576,7 @@ async def _handle_whatsapp_message(
             _wa_clear_flow(cliente_id, from_number)
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {_wa_fecha_humana(flow.fecha)} a las {flow.hora}. El numero de reserva sigue siendo el mismo.",
+                text=f"✅ Listo, he cambiado la cita {flow.booking_code} al {_wa_fecha_humana(flow.fecha)} a las {flow.hora}. El número de reserva sigue siendo el mismo.",
             )
             return
         await messaging._send_whatsapp_text(
@@ -1585,7 +1601,7 @@ async def _handle_whatsapp_message(
         if not row_loc:
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido el centro. Pulsa una opcion del listado o escribe *menu*.",
+                text="No he reconocido el centro. Pulsa una opción del listado o escribe *menu*.",
             )
             return
         flow.location_id = row_loc["id"]
@@ -1646,7 +1662,7 @@ async def _handle_whatsapp_message(
         if not chosen:
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido el servicio. Pulsa una opcion del listado o escribe *menu*.",
+                text="No he reconocido el servicio. Pulsa una opción del listado o escribe *menu*.",
             )
             return
         flow.servicio = chosen
@@ -1668,7 +1684,7 @@ async def _handle_whatsapp_message(
             flow.flow = "booking_date"
             await _wa_send_date_picker(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                config=config, header="Agendar cita", body=f"📅 Elige el dia para *{flow.servicio}* con *{flow.employee_name}*:",
+                config=config, header="Agendar cita", body=f"📅 Elige el día para *{flow.servicio}* con *{flow.employee_name}*:",
                 employee_id=flow.employee_id, servicio=flow.servicio, location_id=flow.location_id,
             )
         else:
@@ -1691,7 +1707,7 @@ async def _handle_whatsapp_message(
         if not emp_id:
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido el profesional. Pulsa una opcion del listado o escribe *menu*.",
+                text="No he reconocido el profesional. Pulsa una opción del listado o escribe *menu*.",
             )
             return
         try:
@@ -1708,7 +1724,7 @@ async def _handle_whatsapp_message(
         await _wa_send_date_picker(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             config=config, header="Agendar cita",
-            body=f"📅 Elige el dia con *{flow.employee_name}*:",
+            body=f"📅 Elige el día con *{flow.employee_name}*:",
             employee_id=flow.employee_id, servicio=flow.servicio, location_id=flow.location_id,
         )
         return
@@ -1724,7 +1740,7 @@ async def _handle_whatsapp_message(
         if not fecha_iso:
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido la fecha. Pulsa una opcion del listado o escribe *menu* para volver.",
+                text="No he reconocido la fecha. Pulsa una opción del listado o escribe *menu* para volver.",
             )
             return
         try:
@@ -1795,7 +1811,7 @@ async def _handle_whatsapp_message(
             )
             return
         flow.nombre = nombre[:80]
-        # El email ya no se pide: la confirmacion sale por este mismo chat y pedirlo
+        # El email ya no se pide: la confirmación sale por este mismo chat y pedirlo
         # costaba una interaccion a todo el mundo para que casi nadie lo diera. Si el
         # cliente ya tiene email en su ficha, se usa (lo trae `crm.contact_by_phone`).
         await _wa_send_booking_summary(
@@ -1861,7 +1877,7 @@ async def _handle_whatsapp_message(
     if iid in ("menu_faq", "menu_productos", "menu_recomendar", "menu_comparar", "menu_estimar"):
         intent_msg_map = {
             "menu_faq": "Muestrame las preguntas frecuentes principales.",
-            "menu_productos": "Quiero informacion sobre productos o servicios disponibles.",
+            "menu_productos": "Quiero información sobre productos o servicios disponibles.",
             "menu_recomendar": "Quiero que me recomiendes el producto o servicio que mejor encaja en mi caso.",
             "menu_comparar": "Quiero comparar productos o servicios.",
             "menu_estimar": "Ayudame a estimar precio aproximado.",

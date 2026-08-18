@@ -10,6 +10,30 @@ Patrón Fresha/Mindbody simplificado:
 
 Todo scoped por cliente_id (+ location_id informativo para informes). El precio
 siempre sale del catálogo/snapshot del backend, nunca del request.
+
+Media parte del módulo son las PÁGINAS PÚBLICAS del negocio (HTML entero en una
+constante `_..._PAGE_TEMPLATE`, sin framework). Cada una tiene su interruptor:
+
+| URL | Genera | ¿Disponible? |
+| --- | --- | --- |
+| `/central/{cliente}` | `central_public_page_html` | siempre (con agenda) |
+| `/tienda/{cliente}` | `shop_public_page_html` | `shop_public_available` |
+| `/gift/{cliente}` | `gift_public_page_html` | `gift_public_available` |
+| `/gift/{cliente}/saldo` | `gift_balance_page_html` | `gift_balance_available` |
+| `/bono/{cliente}/{token}` | `package_wallet_page_html` | quien tenga el enlace |
+
+Las rutas viven en `routers/public_misc.py`; aquí solo se construye el HTML.
+
+**Nada se materializa al crear el checkout.** La compra se registra cuando el
+webhook de Stripe Connect dice que está pagada, en los `_finalize_*_payment`
+(`_finalize_pos_payment`, `_finalize_gift_card_payment`,
+`_finalize_shop_package_payment`, `_finalize_shop_products_payment`). Todos son
+idempotentes por la columna `customer_payment_id` de su tabla destino: el webhook
+de Stripe puede llegar dos veces.
+
+**Los canjes son atómicos**: se escribe con CAS sobre el saldo o el
+`remaining_json` leídos y si `rowcount != 1` se hace rollback y 409. Sin eso, dos
+canjes a la vez gastan el mismo saldo dos veces.
 """
 from __future__ import annotations
 
@@ -19,7 +43,7 @@ import re
 import secrets
 import sqlite3
 from datetime import timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException
 
@@ -707,7 +731,7 @@ def _qr_svg(url: str) -> str:
             buf, kind="png", scale=10, border=4, dark="#000000", light="#ffffff",
         )
         b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-        return f'<img class="vqr" alt="Codigo QR de pago" src="data:image/png;base64,{b64}">'
+        return f'<img class="vqr" alt="Código QR de pago" src="data:image/png;base64,{b64}">'
     except Exception:  # noqa: BLE001
         return ""
 
@@ -1112,7 +1136,7 @@ def _sell_package(cliente_id: str, package_id: str, data: Any) -> Dict[str, Any]
     buyer_email = textnorm._sanitize_text(getattr(data, "buyer_email", "") or "").lower()
     buyer_phone = textnorm._sanitize_text(getattr(data, "buyer_phone", "") or "")
     if not buyer_email and not buyer_phone:
-        raise HTTPException(status_code=400, detail="Indica el email o telefono del comprador para poder redimir el bono.")
+        raise HTTPException(status_code=400, detail="Indica el email o teléfono del comprador para poder redimir el bono.")
     try:
         items = json.loads(row["items_json"] or "[]")
     except (ValueError, TypeError):
@@ -1393,19 +1417,6 @@ def _normalize_gift_code(code: str) -> str:
     return (code or "").strip().upper()
 
 
-def _get_gift_card_by_code(cliente_id: str, code: str) -> Optional[sqlite3.Row]:
-    normalized = _normalize_gift_code(code)
-    if not normalized:
-        return None
-    with db._get_db_connection() as connection:
-        row = connection.execute(
-            "SELECT * FROM gift_cards WHERE cliente_id = ? AND code = ? LIMIT 1",
-            (cliente_id, normalized),
-        ).fetchone()
-        if row:
-            row = _refresh_gift_card_expiry(connection, row)
-    return row
-
 
 def _set_gift_card_status(cliente_id: str, gift_card_id: str, enabled: bool) -> Dict[str, Any]:
     with db._get_db_connection() as connection:
@@ -1488,7 +1499,7 @@ def _assign_gift_card_to_contact(
     email = textnorm._sanitize_text(recipient_email or "").lower()
     phone = textnorm._sanitize_text(recipient_phone or "")
     if not (name or email or phone):
-        raise HTTPException(status_code=400, detail="Indica al menos nombre, email o telefono del cliente.")
+        raise HTTPException(status_code=400, detail="Indica al menos nombre, email o teléfono del cliente.")
     with db._get_db_connection() as connection:
         if gift_card_id:
             row = connection.execute(
@@ -1501,7 +1512,7 @@ def _assign_gift_card_to_contact(
                 (cliente_id, (code or "").strip().upper()),
             ).fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail="Tarjeta regalo no encontrada. Revisa el codigo.")
+            raise HTTPException(status_code=404, detail="Tarjeta regalo no encontrada. Revisa el código.")
         row = _refresh_gift_card_expiry(connection, row)
         if row["status"] in {"disabled", "expired"}:
             raise HTTPException(
@@ -1562,10 +1573,10 @@ def _redeem_gift_card_for_booking(
             (cliente_id, normalized_code),
         ).fetchone()
         if not card:
-            raise HTTPException(status_code=404, detail="Tarjeta regalo no encontrada. Revisa el codigo.")
+            raise HTTPException(status_code=404, detail="Tarjeta regalo no encontrada. Revisa el código.")
         card = _refresh_gift_card_expiry(connection, card)
         if card["status"] != "active":
-            raise HTTPException(status_code=409, detail=f"La tarjeta no esta activa (estado: {card['status']}).")
+            raise HTTPException(status_code=409, detail=f"La tarjeta no está activa (estado: {card['status']}).")
         balance = int(card["balance_cents"] or 0)
         charge = min(balance, due)
         new_balance = balance - charge
@@ -1691,7 +1702,7 @@ def gift_public_prompt_block(cliente_id: str) -> str:
         available = False
 
     lines = [
-        "TARJETAS REGALO (configuracion operativa del negocio)",
+        "TARJETAS REGALO (configuración operativa del negocio)",
     ]
     if cfg["enabled"]:
         if available:
@@ -1704,7 +1715,7 @@ def gift_public_prompt_block(cliente_id: str) -> str:
             f"maximo {cfg['max_cents'] // 100} EUR."
         )
         if cfg["validity_days"] > 0:
-            lines.append(f"- Caducidad configurada por defecto: {cfg['validity_days']} dias desde la compra.")
+            lines.append(f"- Caducidad configurada por defecto: {cfg['validity_days']} días desde la compra.")
         else:
             lines.append("- Caducidad configurada por defecto: sin caducidad.")
         if cfg["intro_text"]:
@@ -1759,7 +1770,7 @@ def commerce_prompt_block(cliente_id: str) -> str:
             "- Para productos y bonos, esta lista manda sobre el texto scrapeado si hay contradicciones."
         )
         lines.append(
-            "- Si preguntan por compra online, solo ofrece enlace si la tienda/tarjetas estan disponibles; si no, deriva a recepcion."
+            "- Si preguntan por compra online, solo ofrece enlace si la tienda/tarjetas están disponibles; si no, deriva a recepcion."
         )
 
     gift_block = gift_public_prompt_block(cliente_id)
@@ -2023,8 +2034,8 @@ def _gift_card_email_bodies(cliente_id: str, row: sqlite3.Row) -> Dict[str, str]
     text_body = (
         f"{row['buyer_name'] or 'Alguien'} te ha regalado {regalo_txt} de {business}.\n\n"
         + (f"Mensaje: {row['message']}\n\n" if row["message"] else "")
-        + f"Tu codigo: {row['code']}\n"
-        f"Canjeala al reservar online, por telefono o directamente en recepcion. {expires_line}\n"
+        + f"Tu código: {row['code']}\n"
+        f"Canjéala al reservar online, por teléfono o directamente en recepción. {expires_line}\n"
         f"Consulta tu saldo cuando quieras: {saldo_url}\n"
     )
     html_body = f"""
@@ -2038,7 +2049,7 @@ def _gift_card_email_bodies(cliente_id: str, row: sqlite3.Row) -> Dict[str, str]
       <p style="margin:18px 0 6px">Hola {row['recipient_name'] or ''},</p>
       <p><b>{row['buyer_name'] or 'Alguien'}</b> te ha regalado una tarjeta de <b>{business}</b>.</p>
       {message_block}
-      <p>Canjeala al reservar online, por telefono o directamente en recepcion, diciendo tu codigo.</p>
+      <p>Canjéala al reservar online, por teléfono o directamente en recepción, diciendo tu código.</p>
       <div style="text-align:center;margin:20px 0">
         <a href="{saldo_url}" style="display:inline-block;background:{color};color:#fff;text-decoration:none;font-weight:bold;border-radius:12px;padding:12px 24px">Consultar mi saldo</a>
       </div>
@@ -2238,8 +2249,8 @@ def _package_purchase_email_bodies(cliente_id: str, row: sqlite3.Row) -> Dict[st
         + (f" ({amount_label})" if amount_label else "") + ".\n\n"
         f"Incluye:\n{lines_txt}\n\n{expires_line}\n\n"
         f"Consulta tus sesiones restantes cuando quieras:\n{wallet_url}\n\n"
-        "Para usarlo, reserva tu cita (online, por telefono o en recepcion) y di tu "
-        "nombre, email o telefono: descontaremos la sesion del bono.\n"
+        "Para usarlo, reserva tu cita (online, por teléfono o en recepción) y di tu "
+        "nombre, email o teléfono: descontaremos la sesion del bono.\n"
         + (f"\n{brand['contact']}\n" if brand["contact"] else "")
     )
     html_rows = "".join(
@@ -2260,8 +2271,8 @@ def _package_purchase_email_bodies(cliente_id: str, row: sqlite3.Row) -> Dict[st
       <div style="text-align:center;margin:22px 0">
         <a href="{wallet_url}" style="display:inline-block;background:{color};color:#fff;text-decoration:none;font-weight:bold;border-radius:12px;padding:13px 26px">Ver mi bono</a>
       </div>
-      <p>Para usarlo, reserva tu cita (online, por telefono o en recepcion) y di tu nombre,
-      email o telefono: descontaremos la sesion del bono.</p>
+      <p>Para usarlo, reserva tu cita (online, por teléfono o en recepción) y di tu nombre,
+      email o teléfono: descontaremos la sesion del bono.</p>
       {f'<p style="color:#6b7280;font-size:13px">{brand["contact"]}</p>' if brand["contact"] else ""}
     </div>
     """
@@ -2371,8 +2382,8 @@ __BASE_CSS__
     __HISTORY_CARD__
     <section class="card" style="display:grid;gap:14px;">
       <div class="actions">__ACTIONS__</div>
-      <p class="how">Para usar una sesion, reserva tu cita y di tu nombre, email o telefono
-      en recepcion: la descontaremos de este bono. Tambien puedes ensenar esta pantalla.</p>
+      <p class="how">Para usar una sesion, reserva tu cita y di tu nombre, email o teléfono
+      en recepción: la descontaremos de este bono. También puedes ensenar esta pantalla.</p>
     </section>
   </main>
   <footer>__BUSINESS____CONTACT__<br>Este enlace es personal: no lo compartas.</footer>
@@ -2449,7 +2460,7 @@ def package_wallet_page_html(cliente_id: str, wallet_token: str) -> str:
         "__STATUS_LABEL__": status_label,
         "__STATUS_COLOR__": status_color,
         "__REMAINING__": str(info["remaining_total"]),
-        "__REMAINING_WORD__": "sesion disponible" if info["remaining_total"] == 1 else "sesiones disponibles",
+        "__REMAINING_WORD__": "sesión disponible" if info["remaining_total"] == 1 else "sesiones disponibles",
         "__SERVICE_ROWS__": "".join(service_rows) or '<p class="how">Este bono no tiene sesiones configuradas.</p>',
         "__META_CHIPS__": "".join(meta_chips),
         "__HISTORY_CARD__": history_card,
@@ -2478,7 +2489,7 @@ def gift_card_balance_public(cliente_id: str, code: str) -> Dict[str, Any]:
     """Saldo de una tarjeta para su portador (el codigo es el secreto)."""
     normalized = _normalize_gift_code(textnorm._sanitize_text(code or ""))
     if len(normalized) < 6:
-        raise HTTPException(status_code=400, detail="Escribe el codigo completo de la tarjeta.")
+        raise HTTPException(status_code=400, detail="Escribe el código completo de la tarjeta.")
     with db._get_db_connection() as connection:
         row = connection.execute(
             "SELECT * FROM gift_cards WHERE cliente_id = ? AND code = ? LIMIT 1",
@@ -2487,7 +2498,7 @@ def gift_card_balance_public(cliente_id: str, code: str) -> Dict[str, Any]:
         if row:
             row = _refresh_gift_card_expiry(connection, row)
     if not row:
-        raise HTTPException(status_code=404, detail="No encontramos esa tarjeta. Revisa el codigo.")
+        raise HTTPException(status_code=404, detail="No encontramos esa tarjeta. Revisa el código.")
     return {
         "code": row["code"],
         "status": row["status"] or "active",
@@ -2566,7 +2577,7 @@ __BASE_CSS__
     </div>
     <section class="card after" id="after">
       <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap;">__ACTIONS__</div>
-      <p class="how">Para canjearla, di tu codigo al reservar o en recepcion. Si cubre solo
+      <p class="how">Para canjearla, di tu código al reservar o en recepción. Si cubre solo
       una parte, el resto se abona en el centro.</p>
     </section>
   </main>
@@ -2582,7 +2593,7 @@ __BASE_CSS__
   function lookup() {
     err.style.display = "none";
     var code = input.value.trim();
-    if (code.length < 6) { err.textContent = "Escribe el codigo completo."; err.style.display = "block"; return; }
+    if (code.length < 6) { err.textContent = "Escribe el código completo."; err.style.display = "block"; return; }
     var btn = document.getElementById("go");
     btn.disabled = true;
     fetch(location.pathname, {
@@ -2653,7 +2664,7 @@ def gift_balance_page_html(cliente_id: str) -> str:
 # --- Canje online tras reservar (central publica) ----------------------------------
 # El manage_token de la cita (secreto que solo tiene quien reservo) autoriza a
 # consultar y aplicar bonos/tarjetas sobre ESA cita. Los bonos se detectan por el
-# email/telefono de la reserva; la tarjeta exige poseer el codigo (igual que en
+# email/teléfono de la reserva; la tarjeta exige poseer el codigo (igual que en
 # mostrador). Reusa _redeem_package_for_booking/_redeem_gift_card_for_booking.
 
 
@@ -2720,8 +2731,8 @@ def packages_summary_for_contact(cliente_id: str, *, email: str = "", phone: str
             "count": 0,
             "bonos": [],
             "mensaje": (
-                "No encuentro ningun bono activo asociado a este contacto. Si lo compraste con "
-                "otro telefono o email, dimelo y vuelvo a mirar."
+                "No encuentro ningún bono activo asociado a este contacto. Si lo compraste con "
+                "otro teléfono o email, dimelo y vuelvo a mirar."
             ),
         }
     frases = []
@@ -2740,7 +2751,7 @@ def auto_redeem_package_for_booking(
     """Auto-canje al crear una cita por el asistente (voz/WhatsApp, contacto verificado).
 
     Si el contacto de la cita (o `extra_phone`, el numero verificado del canal) tiene
-    un bono activo que cubre el servicio, descuenta 1 sesion (gasta primero el que
+    un bono activo que cubre el servicio, descuenta 1 sesión (gasta primero el que
     antes caduque) y deja la cita pagada. Best-effort: NUNCA rompe la reserva; si la
     cita esta pendiente de pago obligatorio (pending_payment) no toca nada."""
     try:
@@ -2855,7 +2866,7 @@ def _send_package_expiry_email(cliente_id: str, row: sqlite3.Row) -> bool:
         f"Tu bono \"{info['package_name']}\" de {brand['business']} caduca el {expires} y todavia "
         f"te quedan {info['remaining_total']} sesiones ({lines}).\n\n"
         f"Reserva tu cita para aprovecharlas antes de esa fecha"
-        + (f": {urls['book']}" if urls["book"] else " (online, por telefono o en recepcion).") + "\n\n"
+        + (f": {urls['book']}" if urls["book"] else " (online, por teléfono o en recepción).") + "\n\n"
         f"Consulta tu bono: {wallet_url}\n"
     )
     html_sessions = "".join(
@@ -2895,9 +2906,9 @@ def _send_gift_expiry_email(cliente_id: str, row: sqlite3.Row) -> bool:
     urls = _lifecycle_cta_urls(cliente_id)
     subject = f"Tu tarjeta regalo caduca el {expires} - {brand['business']}"
     text = (
-        f"Tu tarjeta regalo de {brand['business']} (codigo {row['code']}) caduca el {expires} "
+        f"Tu tarjeta regalo de {brand['business']} (código {row['code']}) caduca el {expires} "
         f"y todavia tiene {balance} de saldo.\n\n"
-        f"Canjeala al reservar online, por telefono o en recepcion"
+        f"Canjéala al reservar online, por teléfono o en recepción"
         + (f": {urls['book']}" if urls["book"] else ".") + "\n\n"
         f"Consulta tu saldo: {saldo_url}\n"
     )
@@ -2905,9 +2916,9 @@ def _send_gift_expiry_email(cliente_id: str, row: sqlite3.Row) -> bool:
         brand["color"],
         f"Tu tarjeta regalo caduca el {expires}",
         (
-            f"<p>Tu tarjeta de <b>{brand['business']}</b> (codigo <b>{row['code']}</b>) caduca el "
-            f"<b>{expires}</b> y todavia tiene <b>{balance}</b> de saldo. Canjeala al reservar "
-            f"o directamente en recepcion.</p>"
+            f"<p>Tu tarjeta de <b>{brand['business']}</b> (código <b>{row['code']}</b>) caduca el "
+            f"<b>{expires}</b> y todavia tiene <b>{balance}</b> de saldo. Canjéala al reservar "
+            f"o directamente en recepción.</p>"
             f'<p style="color:#6b7280;font-size:13px"><a href="{saldo_url}">Consultar mi saldo</a></p>'
         ),
         urls["book"] or saldo_url,
@@ -2930,21 +2941,21 @@ def _send_package_rebuy_email(cliente_id: str, row: sqlite3.Row) -> bool:
     subject = f"Has completado tu bono {info['package_name']} - {brand['business']}"
     renew_line = (
         f"Renuevalo online en un minuto: {urls['shop']}" if urls["shop"]
-        else "Puedes renovarlo en recepcion o por telefono cuando quieras."
+        else "Puedes renovarlo en recepción o por teléfono cuando quieras."
     )
     text = (
         f"Hola {info['buyer_name'] or ''},\n\n"
-        f"Has usado la ultima sesion de tu bono \"{info['package_name']}\" de {brand['business']}. "
+        f"Has usado la última sesión de tu bono \"{info['package_name']}\" de {brand['business']}. "
         f"Esperamos que lo hayas disfrutado.\n\n{renew_line}\n"
-        + (f"\nO reserva tu proxima cita: {urls['book']}\n" if urls["book"] else "")
+        + (f"\nO reserva tu próxima cita: {urls['book']}\n" if urls["book"] else "")
     )
     html = _lifecycle_email_shell(
         brand["color"],
         "Has completado tu bono 🎉",
         (
-            f"<p>Hola {info['buyer_name'] or ''}, has usado la ultima sesion de tu bono "
+            f"<p>Hola {info['buyer_name'] or ''}, has usado la última sesión de tu bono "
             f"<b>{info['package_name']}</b> de <b>{brand['business']}</b>. Esperamos que lo hayas disfrutado.</p>"
-            + ("" if urls["shop"] else "<p>Puedes renovarlo en recepcion o por telefono cuando quieras.</p>")
+            + ("" if urls["shop"] else "<p>Puedes renovarlo en recepción o por teléfono cuando quieras.</p>")
         ),
         urls["shop"] or urls["book"],
         "Renovar mi bono" if urls["shop"] else "Reservar cita",
@@ -3115,7 +3126,7 @@ def gift_public_page_html(cliente_id: str) -> str:
     )
     intro = cfg["intro_text"] or (
         f"Regala una experiencia en {business}. La tarjeta llega por email, "
-        "al instante o el dia que elijas."
+        "al instante o el día que elijas."
     )
     chips = "".join(
         f'<button type="button" class="chip" data-cents="{c}">{c // 100} &euro;</button>'
@@ -3150,7 +3161,7 @@ def gift_public_page_html(cliente_id: str) -> str:
         for c in palette
     )
     validity_hint = (
-        f"Validez: {cfg['validity_days']} dias desde la compra." if cfg["validity_days"] else ""
+        f"Validez: {cfg['validity_days']} días desde la compra." if cfg["validity_days"] else ""
     )
     return f"""<!doctype html>
 <html lang="es">
@@ -3293,7 +3304,7 @@ def gift_public_page_html(cliente_id: str) -> str:
       <div class="hint">Dejalo vacio para enviarlo nada mas pagar. Recibiras una copia para imprimir.</div>
 
       <button class="cta" id="pay" type="submit"><span class="spin" id="spin"></span><span id="payTxt">Pagar y enviar la tarjeta</span></button>
-      <div class="secure">&#128274; Pago seguro con tarjeta (Stripe). Recibiras una copia, el destinatario podra consultar saldo y se canjea al reservar o en recepcion.</div>
+      <div class="secure">&#128274; Pago seguro con tarjeta (Stripe). Recibiras una copia, el destinatario podra consultar saldo y se canjea al reservar o en recepción.</div>
     </form>
   </div>
 
@@ -3339,7 +3350,7 @@ def gift_public_page_html(cliente_id: str) -> str:
             return;
           }}
           if (d.kind === "gift_card") {{
-            showGiftSuccess("&#127873; <b>Tarjeta creada.</b> Codigo: <b>" + safe(d.code) + "</b>. El destinatario recibira el email y tu recibiras una copia. <a href=\\"" + safe(d.balance_url) + "\\" target=\\"_blank\\" rel=\\"noopener\\">Consultar saldo</a>");
+            showGiftSuccess("&#127873; <b>Tarjeta creada.</b> Codigo: <b>" + safe(d.code) + "</b>. El destinatario recibira el email y tu recibirás una copia. <a href=\\"" + safe(d.balance_url) + "\\" target=\\"_blank\\" rel=\\"noopener\\">Consultar saldo</a>");
           }}
         }})
         .catch(function () {{
@@ -3721,10 +3732,10 @@ def create_shop_products_payment_link(
 
 def public_checkout_status(cliente_id: str, session_id: str) -> Dict[str, Any]:
     """Estado publico tras volver de Stripe. El session_id de Checkout es el secreto
-    de la redireccion; no lista compras ni acepta busqueda por email/telefono."""
+    de la redireccion; no lista compras ni acepta busqueda por email/teléfono."""
     sid = textnorm._sanitize_text(session_id or "").strip()[:220]
     if not sid:
-        raise HTTPException(status_code=400, detail="Falta la sesion de pago.")
+        raise HTTPException(status_code=400, detail="Falta la sesión de pago.")
     with db._get_db_connection() as connection:
         payment = connection.execute(
             "SELECT * FROM customer_payments WHERE cliente_id = ? AND stripe_checkout_session_id = ? "
@@ -4306,24 +4317,24 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
           if (!res.ok) throw new Error((res.d && res.d.detail) || "No se pudo comprobar el pago.");
           var d = res.d;
           if (d.status !== "paid" || !d.ready) {
-            showBanner("ok", "✓ Pago completado. Estamos activando tu compra; la confirmacion llegara por email.");
+            showBanner("ok", "✓ Pago completado. Estamos activando tu compra; la confirmación llegara por email.");
             if (attempts++ < 8) setTimeout(check, 1500);
             return;
           }
           if (d.kind === "shop_package") {
             showBanner("ok", '✓ Tu bono esta activo. Te hemos enviado el enlace por email para ver sesiones restantes. <a href="' + esc(d.wallet_url) + '" target="_blank" rel="noopener">Ver mi bono</a>');
           } else if (d.kind === "shop_products") {
-            showBanner("ok", "✓ Pedido confirmado. Te hemos enviado la confirmacion por email con las instrucciones de recogida.");
+            showBanner("ok", "✓ Pedido confirmado. Te hemos enviado la confirmación por email con las instrucciones de recogida.");
           }
         })
         .catch(function () {
-          showBanner("ok", "✓ Pago completado. Revisa tu email: te hemos enviado la confirmacion.");
+          showBanner("ok", "✓ Pago completado. Revisa tu email: te hemos enviado la confirmación.");
         });
     }
     check();
   }
   if (qs.get("ok")) {
-    showBanner("ok", "✓ Pago completado. Revisa tu email: te hemos enviado la confirmacion.");
+    showBanner("ok", "✓ Pago completado. Revisa tu email: te hemos enviado la confirmación.");
     if (qs.get("session_id")) pollCheckoutStatus(qs.get("session_id"));
   }
   if (qs.get("cancel")) { showBanner("ko", "Pago cancelado. Puedes intentarlo de nuevo cuando quieras."); }
@@ -4444,7 +4455,7 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
     document.getElementById("coTitle").textContent = "Comprar bono";
     document.getElementById("coSummary").innerHTML = rows;
     document.getElementById("coUseCopy").textContent = "Recibiras un email con tu bono y un enlace privado para consultar sesiones restantes.";
-    document.getElementById("coPickup").textContent = "Al reservar con este email o telefono, descontaremos la sesion automaticamente si el servicio esta incluido.";
+    document.getElementById("coPickup").textContent = "Al reservar con este email o teléfono, descontaremos la sesion automaticamente si el servicio esta incluido.";
     openModal();
   }
   function openCart() {
@@ -4456,7 +4467,7 @@ _SHOP_PAGE_TEMPLATE = """<!doctype html>
     }).join("") + '<div class="line tot"><span>Total</span><span>' + eur(cartTotal()) + "</span></div>";
     document.getElementById("coTitle").textContent = "Finalizar pedido";
     document.getElementById("coSummary").innerHTML = rows;
-    document.getElementById("coUseCopy").textContent = "Recibiras la confirmacion por email nada mas completarse el pago.";
+    document.getElementById("coUseCopy").textContent = "Recibiras la confirmación por email nada mas completarse el pago.";
     document.getElementById("coPickup").textContent = PICKUP || "Recogida en el centro.";
     openModal();
   }
@@ -4560,13 +4571,13 @@ def shop_public_page_html(cliente_id: str, section: str = "") -> str:
 
     gift_link = ""
     if gift_public_available(cliente_id):
-        gift_link = f'<div style="margin-top:6px"><a href="/gift/{cliente_id}">&iexcl;Tambien puedes regalar una tarjeta!</a></div>'
+        gift_link = f'<div style="margin-top:6px"><a href="/gift/{cliente_id}">&iexcl;También puedes regalar una tarjeta!</a></div>'
     booking_url = _booking_page_url(cliente_id)
     bonus_book_cta = ""
     if booking_url:
         bonus_book_cta = (
             '<div class="owned-cta"><div><b>&iquest;Ya tienes un bono?</b>'
-            '<span>Reserva con el mismo email o telefono y descontaremos una sesion si el servicio esta incluido.</span>'
+            '<span>Reserva con el mismo email o teléfono y descontaremos una sesion si el servicio esta incluido.</span>'
             f'</div><a href="{html_mod.escape(booking_url)}">Reservar cita</a></div>'
         )
 
@@ -4867,7 +4878,7 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
       <p class="lead">__TAGLINE__</p>
       <div class="trust">
         <span class="trust-chip">⚡ Confirmacion inmediata</span>
-        <span class="trust-chip">🔔 Recordatorios automaticos</span>
+        <span class="trust-chip">🔔 Recordatorios automáticos</span>
         <span class="trust-chip">🔒 Datos protegidos</span>
       </div>
     </div>
@@ -4877,7 +4888,7 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
     <section class="panel" id="reservar">
       <div class="panel-head">
         <h2 class="panel-title">Reserva de cita</h2>
-        <p class="panel-sub">Cuatro pasos y listo. Recibiras la confirmacion con los datos de tu reserva.</p>
+        <p class="panel-sub">Cuatro pasos y listo. Recibiras la confirmación con los datos de tu reserva.</p>
       </div>
       <form id="bookingForm" __BOOKING_DISABLED__>
         <div class="wiz-track"><i id="wizBar"></i></div>
@@ -4947,7 +4958,7 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
               <textarea id="notas" maxlength="500" placeholder="Preferencias, dudas o detalles utiles"></textarea>
             </div>
             <div class="pre-redeem" id="preRedeemBlock">
-              <button type="button" class="redeem-gift-toggle" id="redeemGiftToggle">🎁 &iquest;Tienes una tarjeta regalo? Canjeala ahora</button>
+              <button type="button" class="redeem-gift-toggle" id="redeemGiftToggle">🎁 &iquest;Tienes una tarjeta regalo? Canjéala ahora</button>
               <div class="redeem-gift-row" id="redeemGiftRow">
                 <input id="redeemGiftCode" maxlength="14" placeholder="GC-XXXX-XXXX" autocomplete="off" spellcheck="false">
                 <button type="button" id="redeemGiftApply">Usar tarjeta</button>
@@ -4978,7 +4989,7 @@ _CENTRAL_PAGE_TEMPLATE = """<!doctype html>
         </div>
       </div>
       <div class="form" id="bookingUnavailable" __BOOKING_AVAILABLE_STYLE__>
-        <div class="empty">La reserva online no esta activa en este momento.</div>
+        <div class="empty">La reserva online no está activa en este momento.</div>
       </div>
     </section>
 
@@ -5421,10 +5432,10 @@ async function submitBooking(ev) {
   const phone = $("telefono").value.trim();
   const giftCode = $("redeemGiftCode").value.trim();
   if (!name) { status("err", "Indica tu nombre."); return; }
-  if (!email && !phone) { status("err", "Indica al menos un email o telefono para recibir la confirmacion."); return; }
+  if (!email && !phone) { status("err", "Indica al menos un email o teléfono para recibir la confirmación."); return; }
   if (!$("fecha").value || !st.hour) { status("err", "Vuelve al paso de fecha y elige una hora."); showStep(2); return; }
   if (giftCode && giftCode.replace(/[^A-Za-z0-9]/g, "").length < 6) {
-    giftPreNote("err", "Escribe el codigo completo de la tarjeta.");
+    giftPreNote("err", "Escribe el código completo de la tarjeta.");
     $("redeemGiftRow").classList.add("on");
     $("redeemGiftCode").focus();
     return;
@@ -5472,7 +5483,7 @@ function showDone(data) {
   $("doneTitle").textContent = pendingPayment ? "Reserva pendiente de pago" : "¡Reserva confirmada!";
   $("doneMsg").textContent = pendingPayment
     ? "Hemos guardado el hueco de forma provisional. Completa el pago para confirmar la cita."
-    : (data.mensaje || "Te esperamos. Recibiras la confirmacion con los datos de tu reserva.");
+    : (data.mensaje || "Te esperamos. Recibiras la confirmación con los datos de tu reserva.");
   $("doneSummary").innerHTML = rows.map(function (r) { return "<span>" + esc(r[0]) + ": <b>" + esc(r[1]) + "</b></span>"; }).join("");
   const pay = $("donePay"), manage = $("doneManage");
   if (data.payment_url) {
@@ -5493,7 +5504,7 @@ function showDone(data) {
 
 // --- Canje de bono / tarjeta regalo sobre la cita recien creada -----------------
 // El manage_token (secreto del enlace de gestion) autoriza el canje; los bonos se
-// detectan por el email/telefono de la reserva, la tarjeta exige poseer el codigo.
+// detectan por el email/teléfono de la reserva, la tarjeta exige poseer el codigo.
 const redeem = { token: "", applied: false };
 function eurFmt(c) { return ((c || 0) / 100).toLocaleString("es-ES", { minimumFractionDigits: (c || 0) % 100 ? 2 : 0 }) + " €"; }
 function redeemUrl(suffix) { return "/central/" + encodeURIComponent(CFG.clienteId) + suffix; }
@@ -5546,7 +5557,7 @@ async function loadRedeemOptions(manageUrl, pendingGiftCode) {
     return '<div class="redeem-pkg"><div class="t"><b>🎟 ' + esc(p.package_name) + "</b>"
       + "<span>Tienes " + p.sessions_left + " sesion" + (plural ? "es" : "") + " de este servicio"
       + (p.expires_at ? " · caduca el " + esc(p.expires_at) : "") + "</span></div>"
-      + '<button type="button" data-purchase="' + esc(p.purchase_id) + '">Usar 1 sesion</button></div>';
+      + '<button type="button" data-purchase="' + esc(p.purchase_id) + '">Usar 1 sesión</button></div>';
   }).join("");
   $("redeemPkgs").querySelectorAll("[data-purchase]").forEach(function (btn) {
     btn.addEventListener("click", function () { applyRedeem({ kind: "package", purchase_id: btn.dataset.purchase }, btn); });
@@ -5605,7 +5616,7 @@ $("redeemGiftCode").addEventListener("keydown", function (ev) {
 });
 $("redeemGiftApply").addEventListener("click", function () {
   const code = giftCodeValue();
-  if (code.replace(/[^A-Za-z0-9]/g, "").length < 6) { giftPreNote("err", "Escribe el codigo completo de la tarjeta."); return; }
+  if (code.replace(/[^A-Za-z0-9]/g, "").length < 6) { giftPreNote("err", "Escribe el código completo de la tarjeta."); return; }
   $("redeemGiftCode").value = code;
   st.pendingGiftCode = code;
   giftPreNote("ok", "Perfecto. La aplicaremos al confirmar la reserva.");
@@ -5761,7 +5772,7 @@ def central_public_page_html(cliente_id: str, embed: bool = False) -> str:
             f"color-mix(in srgb, {color} 72%, #123049));"
         )
         hero_anim = "hero-anim"
-    tagline = shop_cfg.get("hero_tagline") or "Elige servicio, dia y hora. Confirmacion al momento, sin llamadas ni esperas."
+    tagline = shop_cfg.get("hero_tagline") or "Elige servicio, día y hora. Confirmación al momento, sin llamadas ni esperas."
 
     # Monograma: el icono/emoji configurado del negocio si existe; si no, su inicial.
     icono = textnorm._sanitize_text(str(config.get("icono") or "")).strip()

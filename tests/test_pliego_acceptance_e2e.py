@@ -1,3 +1,10 @@
+"""Aceptacion de punta a punta del multi-local y el comercio (origen: un pliego real).
+
+Recorre lo que se prometio como conjunto: varios centros con agendas aisladas,
+servicios y precios distintos por centro, salas con aforo, pre-autorizacion de
+pago y el comercio encima. Un test por escenario completo, no por funcion: si
+las piezas por separado pasan pero esto falla, el problema esta en como encajan.
+"""
 from __future__ import annotations
 
 import asyncio

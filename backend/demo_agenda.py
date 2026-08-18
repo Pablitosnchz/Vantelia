@@ -1,7 +1,24 @@
-"""Demos: tenants temporales, pagina demo y datos de agenda de ejemplo (refactor F3).
+"""Demos: crear un tenant de prueba y llenarlo de datos de ejemplo.
 
-Seed idempotente de ~1 mes de citas demo (source=demo_seed, empleados
-empdemo_*) y purga; registro de demos con TTL.
+Dos cosas distintas conviven aqui:
+
+1. **Demo de captacion** — `build_demo_tenant(...)`: a partir de la WEB de un
+   prospect monta un tenant temporal con su contenido (rastrea la web con
+   `onboarding_utils.run_onboarding`), lo registra con TTL y lo deja listo para
+   ensenarselo. Es la FUENTE UNICA: la usan tanto `POST /demo/generate` como la
+   pre-generacion al abrir el email de captacion. `_purge_expired_demos` los
+   caduca.
+2. **Demo dentro de un tenant real** — `_seed_demo_agenda` + `_seed_demo_commerce`:
+   llenan la agenda y el mostrador de un cliente que ya existe para poder
+   ensenarle el panel con algo dentro. Reversible del todo.
+
+Todo lo sembrado se reconoce por PREFIJO de id, y de ahi que la purga sea
+fiable: citas con `source='demo_seed'`, empleados `empdemo_*`, centros
+`locdemo_*`, productos `proddemo_*`, bonos `pkgdemo_*`, tarjetas `gcdemo_*`,
+ventas `saledemo_*`, compras `ppdemo_*`. Los `_seed_*` son idempotentes: vuelven
+a sembrar limpiando antes lo suyo, y NUNCA tocan datos reales del cliente.
+
+Endpoints: `POST/DELETE /admin/clientes/{id}/demo-agenda`.
 """
 from __future__ import annotations
 
@@ -349,32 +366,6 @@ def _load_demo_registry() -> Dict[str, float]:
         ).fetchall()
     return {str(row["cliente_id"]): float(row["created_ts"]) for row in rows}
 
-
-def _save_demo_registry(registry: Dict[str, float]) -> None:
-    """Compatibilidad para reemplazos administrativos/tests; runtime usa UPSERT/DELETE."""
-    with db._get_db_connection() as connection:
-        _ensure_demo_registry_migrated(connection)
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            connection.execute("DELETE FROM demo_tenants_registry WHERE state='active'")
-            now_ts = time.time()
-            for cliente_id, created_ts in registry.items():
-                connection.execute(
-                    """INSERT INTO demo_tenants_registry
-                       (email, cliente_id, created_ts, state, lease_owner,
-                        lease_expires_ts, updated_ts)
-                       VALUES (?,?,?,'active','',0,?)""",
-                    (
-                        _demo_registry_email(cliente_id),
-                        cliente_id,
-                        float(created_ts),
-                        now_ts,
-                    ),
-                )
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
 
 
 def _register_demo_tenant(
@@ -2473,15 +2464,17 @@ def _sync_demo_bookings_for_service(
             """,
             (cliente_id, DEMO_BOOKING_SOURCE, old_slug, service_slug, old_name, service_name),
         ).fetchall()
-        for booking in rows:
-            timezone_name = booking["timezone"] or clients._get_client_config(cliente_id)["booking"]["timezone"]
+        # `cita`, no `booking`: ese nombre es el del modulo importado arriba y
+        # taparlo deja el modulo inaccesible dentro del bucle.
+        for cita in rows:
+            timezone_name = cita["timezone"] or clients._get_client_config(cliente_id)["booking"]["timezone"]
             try:
                 tzinfo = ZoneInfo(timezone_name)
             except Exception:  # noqa: BLE001
                 tzinfo = ZoneInfo(settings.DEFAULT_TIMEZONE)
                 timezone_name = settings.DEFAULT_TIMEZONE
             start_local = datetime.fromisoformat(
-                f"{booking['booking_date']}T{booking['booking_time']}:00"
+                f"{cita['booking_date']}T{cita['booking_time']}:00"
             ).replace(tzinfo=tzinfo)
             end_local = start_local + timedelta(minutes=duration)
             connection.execute(
@@ -2498,7 +2491,7 @@ def _sync_demo_bookings_for_service(
                     timezone_name,
                     timeutils._to_utc_iso(start_local),
                     timeutils._to_utc_iso(end_local),
-                    booking["id"],
+                    cita["id"],
                 ),
             )
             updated += 1

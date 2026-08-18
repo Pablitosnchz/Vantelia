@@ -85,6 +85,7 @@ Tests y checks minimos:
 python -m pytest
 npm run build
 python -m py_compile api.py auto_onboarding.py onboarding_utils.py
+python -m pyflakes backend/ api.py   # imports y variables muertas (ver seccion 10 del mapa)
 ```
 
 QA E2E manual del portal (entorno AISLADO, no toca datos reales) — recorre todo
@@ -117,7 +118,9 @@ Subida web estatica a Hostinger:
 
 ## Backend API
 
-El backend vive en `backend/` (28 modulos de dominio + `backend/routers/` con 17 modulos de endpoints); `api.py` es solo el entrypoint de compatibilidad. Mapa completo, convenciones y "donde anadir cosas" en `docs/ARQUITECTURA.md`. Antes de editar, localiza el modulo del dominio con `rg`. Nota: el py_compile de CI/deploy cubre los entrypoints; `python -m pytest` importa todo backend/ (cobertura equivalente).
+El backend vive en `backend/` (28 modulos de dominio + `backend/routers/` con 17 modulos de endpoints); `api.py` es solo el entrypoint de compatibilidad. Mapa completo, convenciones y "donde anadir cosas" en `docs/ARQUITECTURA.md`. Antes de editar, localiza el modulo del dominio con `rg`.
+
+**Si lo que buscas es "quiero cambiar X, que abro": `docs/MAPA_DEL_CODIGO.md`.** Lleva, por flujo (reservar/cancelar/avisos/huecos/catalogo/cobros/asistente), el punto de entrada de cada canal, el nucleo comun al que todos llaman, donde vive cada texto que ve el cliente, y las trampas conocidas (la que borro el catalogo de un cliente real, el techo de 10 filas de las listas de WhatsApp, config.json vs memoria...). Nota: el py_compile de CI/deploy cubre los entrypoints; `python -m pytest` importa todo backend/ (cobertura equivalente).
 
 Endpoints publicos principales:
 
@@ -635,6 +638,8 @@ Si cambias contratos de respuesta, auth, cookies, booking o WhatsApp, actualiza 
 
 ## Documentacion util
 
+- `tests/README.md`: que cubre cada uno de los 48 ficheros de test, que correr segun lo que toques, y los tests que vigilan REGLAS (si uno de esos falla, leelo antes de "arreglarlo").
+- `docs/MAPA_DEL_CODIGO.md`: **empieza por aqui si no sabes que fichero abrir.** Por flujo: entrada de cada canal, nucleo comun, donde vive cada texto que lee el cliente, y las trampas que ya han costado un incidente.
 - `README.md`: instalacion, endpoints y operacion general.
 - `docs/Funcionalidades.md`: resumen funcional.
 - `docs/MANUAL_ADMIN.md`: operacion del panel.

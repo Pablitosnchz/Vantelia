@@ -1,7 +1,37 @@
-"""Endpoints: seccion portal_app (refactor F3).
+"""Endpoints del portal del cliente (`/auth/...`), unos 130 en un solo fichero.
 
-Decoran directamente la app de backend.main para preservar el orden de
-registro de rutas identico al monolito original.
+Es el router mas grande del proyecto y el que consume `app_ui/index.html`. Todo
+lo que hace una pestana del panel esta aqui. Van por bloques, en este orden:
+
+|  Linea aprox | Bloque | Pestana del portal |
+| --- | --- | --- |
+|   60 | Contrasena, perfil, `/auth/me` | (sesion) |
+|  148 | Dashboard, citas, export | Inicio / Citas |
+|  279 | Chats, conversaciones y bandeja (`/auth/inbox/...`) | Chats |
+|  529 | Overview, despliegue, apariencia | Asistente / Apariencia |
+|  781 | CRM de contactos | Clientes |
+|  972 | Canales de envio (email SMTP/Gmail, SMS) | Canales de envio |
+| 1358 | Stripe Connect, metodos de pago, cobros y reembolsos | Pagos |
+| 1414 | Politica de cancelacion, recordatorios, seguimiento, resenas | Recordatorios |
+| 1663 | Acciones sobre una cita (llamada, confirmacion, preview) | Citas (detalle) |
+| 1927 | Servicios, WhatsApp, voz, chat en vivo | Servicios / WhatsApp / Voz |
+| 2446 | Facturacion del propio SaaS | Cuenta |
+| 2573 | Horarios, bloqueos, empleados, centros, salas | Horarios / Equipo |
+| 2801 | Retenciones: capturar, liberar, reembolsar | Citas (detalle) |
+| 2984 | Alta, cancelacion, asistencia y cambios de cita | Citas |
+| 3309 | Venta online: tarjetas regalo y tienda | Ventas |
+
+Reglas al anadir uno:
+
+- Los endpoints se decoran sobre `backend.main.app` DIRECTAMENTE (no hay
+  `APIRouter`) para que el orden de registro no cambie. Una ruta generica como
+  `/auth/conversations/{kind}/{id}` secuestra a cualquier hermana declarada
+  despues: por eso la bandeja vive en `/auth/inbox/...` y no bajo ella.
+- El permiso se comprueba SIEMPRE en servidor con
+  `security._require_portal_permission(user, clave)`; que la UI esconda el boton
+  no cuenta.
+- La logica va en el modulo de dominio (`booking`, `commerce`, `agenda`...), no
+  aqui: esto resuelve sesion, permisos y forma de la respuesta.
 """
 from __future__ import annotations
 

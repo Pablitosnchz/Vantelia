@@ -1,3 +1,10 @@
+"""El panel admin ante lo que no deberia pasar: casos limite de punta a punta.
+
+Clientes con datos incompletos o raros, acciones sobre entidades que ya no
+existen, permisos insuficientes y peticiones con campos fuera de rango. Son los
+casos que en produccion salen como un 500 y aqui tienen que salir como un error
+con sentido.
+"""
 from __future__ import annotations
 
 from datetime import datetime, timedelta

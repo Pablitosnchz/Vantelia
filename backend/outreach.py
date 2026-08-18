@@ -1,4 +1,41 @@
-"""Captacion email outbound multi-touch (panel + autopilot) (refactor F3)."""
+"""Captacion por email en frio: el motor que corre solo, 24/7.
+
+Los datos NO estan en la DB principal: viven en `storage/outreach/outreach.db`
+(`_outreach_db()`), con la CLI de `scripts/outreach_campaign.py` como puerta
+alternativa al panel. El contrato de producto esta en
+`docs/REQUISITOS_CAPTACION.md`.
+
+El ciclo, y donde mirar cada paso:
+
+```
+_outreach_autonomous_worker           hilo, cada OUTREACH_AUTONOMOUS_TICK_MINUTES
+└── _outreach_autonomous_tick_inner   una ronda
+    ├── ¿podemos enviar?              _outreach_autopilot_gate + _autonomous_within_window
+    ├── buscar prospects              _outreach_run_discovery_job  (OpenStreetMap, gratis)
+    ├── filtrar                       _outreach_filter_new_discoveries (cadenas, duplicados, bajas)
+    ├── a quien le toca               _outreach_select_eligible_prospects + _outreach_next_stage
+    └── enviar                        _outreach_run_send_job -> _outreach_send_email_object
+```
+
+Frenos que hay que respetar al tocar esto (cada uno viene de un incidente real):
+
+- **Espaciado GLOBAL** entre envios: `_outreach_wait_send_slot()`, con un lock
+  compartido. Cold y follow-ups corren en hilos distintos y sin esto salian a
+  rafagas.
+- **Warm-up**: `_outreach_warmup_effective_cap` arranca en 10/dia tras un paron.
+- **Pausa con VENCIMIENTO**, nunca `enabled=0`: `_outreach_pause_autocapture_for_smtp_limit`
+  escribe `paused_until`. `enabled=0` queda solo para la pausa manual del panel.
+- **Rebotes**: `_outreach_check_bounce_rate` (>8% de los ultimos 100 = pausa 48 h).
+  Llegan por IMAP o por `_outreach_process_brevo_event` (webhook, unica via con
+  SMTP dedicado).
+- **Respuestas**: al detectarlas se avisa al dueno (`_outreach_notify_reply`, con
+  cola de reintento) y el prospect deja de recibir los siguientes stages.
+
+Aparte del envio, aqui vive la **demo instantanea**: al ABRIR el email se
+pre-genera el tenant de demo (`_outreach_maybe_pregenerate_demo`) para que al
+hacer clic ya este listo; los tokens de tracking se firman con HMAC
+(`_outreach_demo_signal_token` / `_outreach_verify_demo_signal_token`).
+"""
 from __future__ import annotations
 
 import hashlib
@@ -33,6 +70,9 @@ _OUTREACH_SCRIPTS_DIR = settings.BASE_DIR / "scripts"
 if str(_OUTREACH_SCRIPTS_DIR) not in _outreach_sys.path:
     _outreach_sys.path.insert(0, str(_OUTREACH_SCRIPTS_DIR))
 
+# Este bloque tambien RE-EXPORTA: los routers de captacion importan varios de
+# estos nombres desde aqui, asi que un import que parezca sin usar puede tener
+# consumidor fuera del modulo.
 try:
     from outreach_campaign import (  # type: ignore
         DEFAULT_DB as OUTREACH_DEFAULT_DB,

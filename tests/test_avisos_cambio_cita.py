@@ -69,12 +69,28 @@ def test_la_cancelacion_no_ofrece_gestionar_una_cita_que_no_existe(api_module):
 
 
 def test_el_motivo_de_cancelacion_no_llega_al_cliente(api_module):
-    """Lo escribe el salon para su registro; acababa leyendolo la clienta."""
+    """Lo escribe el salon para su registro; acababa leyendolo la clienta.
+
+    Ya no hace falta confiar en que nadie lo imprima: el motivo NO entra en las
+    funciones que redactan el aviso. Ni siquiera lo reciben como parametro.
+    """
+    import inspect as _inspect
+
     from backend import booking
 
     fuente = inspect.getsource(booking._booking_email_bodies)
     assert "Motivo de cancelacion" not in fuente
-    assert "acababa leyendolo" in fuente  # queda explicado por que
+
+    for funcion in (
+        booking._booking_email_bodies,
+        booking._booking_message_text_for_channel,
+        booking._send_booking_email,
+        booking._send_booking_whatsapp_reminder,
+        booking._send_booking_sms_reminder,
+        booking._send_booking_reminder_by_kind,
+    ):
+        parametros = _inspect.signature(funcion).parameters
+        assert "extra_message" not in parametros, funcion.__name__
 
 
 def test_los_tres_avisos_salen_del_mismo_sitio(api_module):

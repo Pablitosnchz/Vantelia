@@ -1,4 +1,37 @@
-"""Canal de voz: Twilio Media Streams <-> OpenAI Realtime (refactor F3)."""
+"""Canal de voz: telefono (Twilio) y navegador (WebRTC), sobre OpenAI Realtime.
+
+Este modulo es el CEREBRO y las MANOS de la llamada. Lo que NO esta aqui:
+
+- El bucle de la llamada de telefono: `routers/voice_web.py` (puente fino) +
+  `voice_engine.VoiceCallEngine` (toda la logica determinista con estado).
+- La parte de navegador: `widget/voice.js` y `widget/voice_core.js` (mismas
+  reglas que el motor, escritas una sola vez y compartidas con app_ui).
+
+Por donde entrar:
+
+| Quiero... | Funcion |
+| --- | --- |
+| Saber que puede hacer el asistente | `_voice_booking_tools` (las tools Realtime) |
+| Cambiar lo que se le pide al modelo | `_voice_build_instructions` |
+| Ejecutar una tool de verdad | `_voice_dispatch_tool` (la demo: `_voice_dispatch_tool_demo`) |
+| Reservar / cancelar / reprogramar | `_voice_perform_booking`, `_voice_cancel_booking`, `_voice_reschedule_booking` (llaman a los cores de `booking.py`) |
+| Verificar a quien llama | `_voice_send_verification_code` + `_voice_verify_code` (OTP) |
+| Arrancar una llamada saliente | `_voice_place_outbound_call` |
+| Pasar a una persona / colgar | `_voice_transfer_call`, y `finalizar_llamada` en el dispatch |
+| Cerrar y etiquetar la llamada | `_voice_finalize_call` (sella `voice_calls.outcome`) |
+| Que se ve en Conversaciones | `_list_voice_calls`, `_voice_conversation_dict`, `_voice_call_detail_dict` |
+
+Fuentes UNICAS que se comparten con chat y WhatsApp (no duplicar):
+`_voice_schedule_block` sale de `agenda._weekly_schedule_matrix` y
+`_voice_service_catalog` de `booking._service_catalog_lines`.
+
+Trampa: las cadenas largas de este modulo son INSTRUCCIONES AL MODELO, no texto
+que lea nadie. Por eso van sin tildes y no entran en la regla de la seccion 9 de
+docs/MAPA_DEL_CODIGO.md.
+
+Trampa: Twilio no reenvia el query string al WebSocket; los parametros de la
+llamada llegan en `customParameters` del evento `start`.
+"""
 from __future__ import annotations
 
 import asyncio

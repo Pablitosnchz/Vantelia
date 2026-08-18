@@ -1,3 +1,13 @@
+"""Canales de envio por cliente: por donde sale cada email y cada SMS.
+
+Un negocio puede mandar sus correos por el SMTP de Vantelia o por su propio
+Gmail (OAuth), y sus SMS por el Twilio global o por un remitente suyo. Aqui se
+comprueba la eleccion (`emailing._send_client_email`, `_send_client_sms`), el
+baile OAuth completo (PKCE, state firmado de un solo uso, tokens cifrados con
+Fernet) y que un remitente sin aprobar NO pueda enviar todavia.
+
+Ningun test manda nada de verdad: los transportes van con dobles.
+"""
 from __future__ import annotations
 
 import asyncio

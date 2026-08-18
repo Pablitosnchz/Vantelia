@@ -87,7 +87,7 @@ def test_el_mensaje_de_whatsapp_da_el_numero_de_reserva(api_module):
     from backend import whatsapp
 
     fuente = inspect.getsource(whatsapp._wa_create_booking)
-    assert "Numero de reserva" in fuente
+    assert "mero de reserva" in fuente
     assert 'stored_booking["booking_code"]' in fuente
 
 

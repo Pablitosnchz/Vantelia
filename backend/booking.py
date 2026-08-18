@@ -4,6 +4,23 @@ Alta (_store_booking), codigos y manage tokens, serializacion, emails/SMS/WA
 de confirmacion y recordatorio, cancelacion/reprogramacion (tambien por
 codigo en chat), asistencia/auto-complete, auditoria, webhooks de pago de
 cita (Stripe Connect) y enlaces de pago enviados por la IA.
+
+Es el modulo mas grande del backend. Para orientarte, los cuatro sitios que
+concentran casi todo (mapa completo en docs/MAPA_DEL_CODIGO.md):
+
+* MUTACIONES: `_create_booking_core`, `_cancel_booking_core`,
+  `_update_booking_details`, `_mark_booking_confirmed_by_customer`. TODOS los
+  canales (web, WhatsApp, voz, panel) pasan por aquí; no reimplementes el
+  pipeline en un canal nuevo.
+* AVISOS AL CLIENTE: `_send_booking_reminder_by_kind` es el unico punto de
+  salida. Decide canales con `_channels_reaching_customer` y el texto con
+  `_booking_email_bodies` (email y SMS) o `_whatsapp_notice_text` (WhatsApp:
+  todo lo de `WA_NOTICE_KINDS`, escrito para leerse en un movil).
+* COBROS: `resolve_payment_requirement` (¿hay que pagar?),
+  `create_booking_payment_checkout` (enlace) y `process_booking_payment_webhook`
+  (entra el dinero). El estado de cobro se calcula en `backend/paystate.py`,
+  que suma los DOS sistemas de pago.
+* CONSULTA: serializadores para el portal y la pagina publica de gestion.
 """
 from __future__ import annotations
 
@@ -73,7 +90,7 @@ def _booking_has_reminder_contact(email: str, telefono: str) -> bool:
 def _booking_reminder_worker() -> None:
     interval_seconds = max(300, settings.REMINDER_RUN_INTERVAL_MINUTES * 60)
     if settings.REMINDER_RUN_INTERVAL_MINUTES <= 0:
-        settings.logger.info("Recordatorios automaticos desactivados por configuracion.")
+        settings.logger.info("Recordatorios automáticos desactivados por configuración.")
         return
 
     settings.logger.info(
@@ -310,7 +327,7 @@ def _public_services_for_booking(
 def _booking_plan_unavailable_error() -> HTTPException:
     return HTTPException(
         status_code=403,
-        detail="Las reservas online no estan incluidas en el plan actual. Actualiza a un plan con agenda para activar esta funcion.",
+        detail="Las reservas online no están incluidas en el plan actual. Actualiza a un plan con agenda para activar esta funcion.",
     )
 
 
@@ -425,7 +442,6 @@ def _booking_email_bodies(
     contact_email: str,
     contact_phone: str,
     message_templates: Optional[Dict[str, str]] = None,
-    extra_message: str = "",
     confirm_url: str = "",
 ) -> Tuple[str, str]:
     service_name = booking_row["servicio"] or "Consulta"
@@ -451,7 +467,7 @@ def _booking_email_bodies(
     except (KeyError, IndexError):
         booking_code = ""
     show_confirm = bool(confirm_url) and status_key in ("confirmed", "reminder_24h")
-    manage_line = f"\nGestiona tu cita aqui: {manage_url}\n" if manage_url else ""
+    manage_line = f"\nGestiona tu cita aquí: {manage_url}\n" if manage_url else ""
     if show_confirm:
         manage_line = (
             f"\nConfirma tu asistencia: {confirm_url}\n"
@@ -485,7 +501,7 @@ def _booking_email_bodies(
     )
     contact_lines = []
     if contact_phone:
-        contact_lines.append(f"Telefono: {contact_phone}")
+        contact_lines.append(f"Teléfono: {contact_phone}")
     if contact_email:
         contact_lines.append(f"Email: {contact_email}")
     contact_text = "\n".join(contact_lines)
@@ -510,12 +526,7 @@ def _booking_email_bodies(
         }
     )
     intro = intro_map.get(status_key, intro_map["confirmed"])
-    # `extra_message` ya NO se le ensena al cliente en las cancelaciones: el motivo
-    # lo escribe el salon para su registro ("no viene nunca") y acababa leyendolo
-    # la clienta. Se conserva en la auditoria de la cita.
-    extra_message_clean = textnorm._sanitize_text(extra_message, allow_multiline=True)
-
-    # Que ha pagado ya y que le queda por pagar. Sin esto, quien deja una senal
+    # Que ha pagado ya y que le queda por pagar. Sin esto, quien deja una señal
     # de 50 EUR recibe el mismo email que quien paga el servicio entero.
     _cobro_texto = ""
     if status_key in ("confirmed", "received", "reminder_24h", "reminder_2h"):
@@ -527,11 +538,11 @@ def _booking_email_bodies(
             settings.logger.debug("No se pudo calcular el cobro para el email: %s", exc)
     _cobro_line = f"Pago: {_cobro_texto}\n" if _cobro_texto else ""
 
-    # Con la senal sin pagar, el numero de reserva todavia no se entrega: la cita
+    # Con la señal sin pagar, el número de reserva todavia no se entrega: la cita
     # puede caerse. Lo que necesita es el enlace de pago.
     if status_key == "pending_payment":
         booking_code = ""
-    codigo_line = f"Numero de reserva: {booking_code}\n" if booking_code else ""
+    codigo_line = f"Número de reserva: {booking_code}\n" if booking_code else ""
     text_body = (
         f"{intro}\n\n"
         f"{codigo_line}"
@@ -544,11 +555,11 @@ def _booking_email_bodies(
     )
     if booking_code:
         text_body += (
-            "\nGuarda tu numero de reserva: te servira para cancelar o cambiar la cita "
-            "por telefono, web o WhatsApp.\n"
+            "\nGuarda tu número de reserva: te servirá para cancelar o cambiar la cita "
+            "por teléfono, web o WhatsApp.\n"
         )
     _pago_nota = ""
-    # Nota del servicio: solo en la confirmacion, que es cuando la cita ya es suya.
+    # Nota del servicio: solo en la confirmación, que es cuando la cita ya es suya.
     _nota_servicio = (
         service_booking_note(booking_row["cliente_id"], booking_row)
         if status_key == "confirmed" else ""
@@ -565,7 +576,7 @@ def _booking_email_bodies(
         if _pago_nota:
             text_body += f"\n{_pago_nota}\n"
         if _pago_url:
-            text_body += f"\nPaga aqui para confirmar la cita: {_pago_url}\n"
+            text_body += f"\nPaga aquí para confirmar la cita: {_pago_url}\n"
     if contact_text:
         text_body += f"\nContacto:\n{contact_text}\n"
 
@@ -579,11 +590,11 @@ def _booking_email_bodies(
             f'<div style="margin:0 0 16px;padding:12px 16px;border-radius:12px;'
             f'background:#eef6fb;border:1px solid #cfe3f0;">'
             f'<span style="font-size:12px;color:#4a6173;text-transform:uppercase;'
-            f'letter-spacing:.04em;">Numero de reserva</span><br>'
+            f'letter-spacing:.04em;">Número de reserva</span><br>'
             f'<strong style="font-size:22px;letter-spacing:.08em;color:#0b6b8a;">'
             f'{escape(booking_code)}</strong>'
             f'<div style="font-size:12px;color:#4a6173;margin-top:4px;">'
-            f'Guardalo para cancelar o cambiar tu cita por telefono, web o WhatsApp.</div>'
+            f'Guárdalo para cancelar o cambiar tu cita por teléfono, web o WhatsApp.</div>'
             f"</div>"
             if booking_code
             else ""
@@ -668,8 +679,6 @@ def _send_booking_email(
     booking_row: sqlite3.Row,
     status_key: str,
     request: Optional[Request] = None,
-    *,
-    extra_message: str = "",
 ) -> str:
     config = clients._get_client_config(booking_row["cliente_id"])
     company_name = config["nombre"]
@@ -688,7 +697,6 @@ def _send_booking_email(
         contact_email,
         contact_phone,
         config.get("booking", {}).get("message_templates", {}),
-        extra_message,
         confirm_url=confirm_url,
     )
     return emailing._send_client_email(
@@ -735,8 +743,6 @@ def _booking_message_text_for_channel(
     booking_row: sqlite3.Row,
     kind: str,
     request: Optional[Request] = None,
-    *,
-    extra_message: str = "",
 ) -> str:
     config = clients._get_client_config(booking_row["cliente_id"])
     text_body, _ = _booking_email_bodies(
@@ -747,7 +753,6 @@ def _booking_message_text_for_channel(
         config.get("contacto", {}).get("email", ""),
         config.get("contacto", {}).get("telefono", ""),
         config.get("booking", {}).get("message_templates", {}),
-        extra_message,
     )
     return text_body
 
@@ -775,7 +780,7 @@ def _whatsapp_deliverable_for_booking(booking_row: sqlite3.Row) -> Tuple[bool, s
 
     entrada = inbox.inbound_number_for_phone(cliente_id, booking_row["telefono"] or "")
     if entrada and wa_demo.is_hub(entrada):
-        return True, "Disponible (numero de demo compartido)."
+        return True, "Disponible (número de demo compartido)."
     return False, "Activa WhatsApp en el portal."
 
 
@@ -785,11 +790,26 @@ _WA_TITULOS = {
     "confirmed": "✅ *Cita confirmada*",
     "rescheduled": "🔄 *Cita cambiada*",
     "cancelled": "❌ *Cita cancelada*",
+    "reminder_24h": "⏰ *Recordatorio de tu cita*",
+    "reminder_2h": "⏰ *Tu cita es dentro de poco*",
 }
+
+# Cierre de cada aviso. El recordatorio pide respuesta porque lleva debajo los
+# botones "Confirmo" / "Cancelar cita".
+_WA_CIERRES = {
+    "reminder_24h": "¿Nos confirmas que vienes?",
+    "reminder_2h": "Te esperamos. Si no puedes venir, avísanos.",
+}
+
+WA_NOTICE_KINDS = ("confirmed", "rescheduled", "cancelled", "reminder_24h", "reminder_2h")
 
 
 def _whatsapp_notice_text(booking_row: sqlite3.Row, kind: str = "confirmed") -> str:
-    """Aviso corto de cita para WhatsApp (confirmada, cambiada o cancelada)."""
+    """Aviso corto de cita para WhatsApp.
+
+    Cubre `WA_NOTICE_KINDS`. El correo lleva zona horaria, datos de contacto y el
+    enlace en crudo; en un movil todo eso sobra y parte el mensaje en dos.
+    """
     config = clients._get_client_config(booking_row["cliente_id"])
     cuando = booking_row["booking_date"] or ""
     try:
@@ -802,15 +822,15 @@ def _whatsapp_notice_text(booking_row: sqlite3.Row, kind: str = "confirmed") -> 
     codigo = (booking_row["booking_code"] if "booking_code" in booking_row.keys() else "") or ""
 
     if kind == "cancelled":
-        # Sin numero de reserva ni enlace: esa cita ya no existe y ofrecerselos
+        # Sin número de reserva ni enlace: esa cita ya no existe y ofrecerselos
         # solo despista. Lo util es decirle como conseguir otra.
         telefono = str((config.get("contacto") or {}).get("telefono") or "").strip()
         lineas = [_WA_TITULOS["cancelled"], ""]
         lineas.append("Era el %s a las %s (%s)." % (cuando, hora, servicio))
         lineas.append("")
         lineas.append(
-            "Si quieres buscar otro hueco, escribeme por aqui y te lo miro"
-            + (" o llamanos al %s." % telefono if telefono else ".")
+            "Si quieres buscar otro hueco, escríbeme por aquí y te lo miro"
+            + (" o llámanos al %s." % telefono if telefono else ".")
         )
         return chr(10).join(lineas)
 
@@ -820,15 +840,20 @@ def _whatsapp_notice_text(booking_row: sqlite3.Row, kind: str = "confirmed") -> 
         lineas.append("👨‍⚕️ %s" % quien)
     lineas.append("📅 %s · 🕐 %s" % (cuando, hora))
     if codigo:
-        lineas.append("🔖 Numero de reserva: *%s*" % codigo)
+        lineas.append("🔖 Número de reserva: *%s*" % codigo)
     aviso = textnorm._sanitize_text(
         str((config.get("booking") or {}).get("success_message") or ""), allow_multiline=True
     ).strip()
     if aviso and kind == "confirmed":
         lineas += ["", aviso]
+    # El aviso del servicio ("ven con el pelo lavado") se repite en el recordatorio
+    # de 24 h: es justo cuando al cliente le da tiempo a hacerle caso.
     nota = service_booking_note(booking_row["cliente_id"], booking_row)
-    if nota and kind == "confirmed":
+    if nota and kind in ("confirmed", "reminder_24h"):
         lineas += ["", nota]
+    cierre = _WA_CIERRES.get(kind, "")
+    if cierre:
+        lineas += ["", cierre]
     return chr(10).join(lineas)
 
 
@@ -836,8 +861,6 @@ async def _send_booking_whatsapp_reminder(
     booking_row: sqlite3.Row,
     kind: str,
     request: Optional[Request] = None,
-    *,
-    extra_message: str = "",
 ) -> bool:
     config = clients._get_client_config(booking_row["cliente_id"])
     whatsapp_cfg = config.get("whatsapp", {}) or {}
@@ -869,7 +892,12 @@ async def _send_booking_whatsapp_reminder(
         )
         if enviado:
             return True
-    message_text = _booking_message_text_for_channel(booking_row, kind, request, extra_message=extra_message)
+    # Los recordatorios tambien van en corto; lo que cambia es que llevan botones.
+    message_text = (
+        _whatsapp_notice_text(booking_row, kind)
+        if kind in WA_NOTICE_KINDS
+        else _booking_message_text_for_channel(booking_row, kind, request)
+    )
     # Recordatorios: botones interactivos de confirmacion de asistencia.
     # La respuesta la procesa el webhook (bkok_/bkcancel_) y queda en booking_audit.
     if kind in ("reminder_24h", "reminder_2h") and booking_row["status"] in ("confirmed", "pending_review"):
@@ -898,8 +926,6 @@ async def _send_booking_sms_reminder(
     booking_row: sqlite3.Row,
     kind: str,
     request: Optional[Request] = None,
-    *,
-    extra_message: str = "",
 ) -> bool:
     to_number = _booking_customer_phone_for_channel(booking_row, "sms")
     if not to_number:
@@ -907,7 +933,7 @@ async def _send_booking_sms_reminder(
     return await messaging._send_client_sms(
         booking_row["cliente_id"],
         to_number,
-        _booking_message_text_for_channel(booking_row, kind, request, extra_message=extra_message),
+        _booking_message_text_for_channel(booking_row, kind, request),
     )
 
 
@@ -945,7 +971,7 @@ def _booking_blank_tracking_fields() -> Dict[str, str]:
 
 
 def _generate_booking_code() -> str:
-    # Solo digitos: mucho mas facil de dictar y oir por telefono ("R, uno, dos, tres...").
+    # Solo digitos: mucho mas facil de dictar y oir por teléfono ("R, uno, dos, tres...").
     # 6 digitos mantienen un espacio amplio (1M) por cliente. Los codigos antiguos
     # alfanumericos siguen siendo validos (ver BOOKING_CODE_RE / _get_booking_row_by_code).
     suffix = "".join(secrets.choice("0123456789") for _ in range(6))
@@ -966,7 +992,7 @@ def _unique_booking_code(connection: sqlite3.Connection, cliente_id: str) -> str
 
 
 def _booking_contact_matches(row: sqlite3.Row, *, telefono: str = "", email: str = "") -> bool:
-    """True si el telefono o el email aportado coincide con el de la reserva.
+    """True si el teléfono o el email aportado coincide con el de la reserva.
 
     Verificacion para que la IA solo cancele/reprograme citas del propio titular.
     """
@@ -1018,7 +1044,7 @@ _SPOKEN_DIGIT_WORDS = {
 
 
 def _booking_code_normalize_spoken(text: str) -> str:
-    """Pasa las formas habladas del numero de reserva a algo que el regex entienda:
+    """Pasa las formas habladas del número de reserva a algo que el regex entienda:
     'erre' -> 'r', 'guion' -> ' ', y cada palabra-digito ('dos','ocho'...) -> su cifra.
     Despues une las cifras pegadas separadas por espacios ('2 2 8 1 9 6' -> '228196')."""
     t = textnorm._sanitize_text(text or "").lower()
@@ -1060,10 +1086,10 @@ async def _lookup_and_verify_booking_by_code(
 ) -> Tuple[Optional[sqlite3.Row], Optional[Dict[str, Any]]]:
     codigo = textnorm._sanitize_text(codigo_reserva)
     if not codigo:
-        return None, {"ok": False, "error": "Necesito el numero de reserva (formato R-XXXX)."}
+        return None, {"ok": False, "error": "Necesito el número de reserva (formato R-XXXX)."}
     row = _get_booking_row_by_code(cliente_id, codigo)
     if not row:
-        return None, {"ok": False, "error": "No encuentro ninguna cita con ese numero de reserva. Revisalo y vuelve a intentarlo."}
+        return None, {"ok": False, "error": "No encuentro ninguna cita con ese número de reserva. Revísalo y vuelve a intentarlo."}
     verified = (
         _booking_contact_matches(row, telefono=trusted_phone)
         or _booking_contact_matches(row, telefono=telefono, email=email)
@@ -1073,7 +1099,7 @@ async def _lookup_and_verify_booking_by_code(
             "ok": False,
             "needs_verification": True,
             "error": (
-                "Por seguridad necesito verificar la reserva. Indica el telefono o el email "
+                "Por seguridad necesito verificar la reserva. Indica el teléfono o el email "
                 "con el que hiciste la cita."
             ),
         }
@@ -1196,6 +1222,8 @@ def _message_requests_reschedule_booking(message: str) -> bool:
 
 
 def _message_requests_payment(message: str) -> bool:
+    # Las frases van SIN tildes a proposito: se comparan contra el mensaje ya
+    # normalizado. Con tilde no casan nunca. Lo vigila test_patrones_sin_tilde.
     text = textnorm._strip_accents(str(message or "").lower())
     return any(
         word in text
@@ -1276,7 +1304,7 @@ async def _process_booking_management_message(
     if not (bool(config.get("booking", {}).get("enabled")) and clients._client_booking_plan_enabled(cliente_id)):
         return (
             "booking_manage",
-            "La gestion de citas online no esta activa para este negocio. Contacta directamente con el equipo.",
+            "La gestión de citas online no está activa para este negocio. Contacta directamente con el equipo.",
         )
 
     # Mezcla: lo del mensaje manda; lo recordado completa lo que falte.
@@ -1289,7 +1317,7 @@ async def _process_booking_management_message(
         return (
             "booking_manage",
             "Puedo cancelarla o cambiarla de fecha. Dime cual de las dos quieres"
-            + ("" if code else " y el numero de reserva (R-XXXXXX)")
+            + ("" if code else " y el número de reserva (R-XXXXXX)")
             + ".",
         )
     if not (wants_cancel or wants_reschedule):
@@ -1316,18 +1344,18 @@ async def _process_booking_management_message(
     if not (wants_cancel or wants_reschedule):
         return (
             "booking_manage",
-            "Tengo el numero de reserva. Dime si quieres cancelar o cambiar la cita.",
+            "Tengo el número de reserva. Dime si quieres cancelar o cambiar la cita.",
         )
     if not code:
         action = "cancelar" if wants_cancel else "cambiar"
         return (
             "booking_manage",
-            f"Claro. Para {action} la cita necesito el numero de reserva, con formato R-XXXX.",
+            f"Claro. Para {action} la cita necesito el número de reserva, con formato R-XXXX.",
         )
     if not trusted_phone and not (email or phone):
         return (
             "booking_manage",
-            "Por seguridad, enviame tambien el telefono o el email con el que hiciste la reserva.",
+            "Por seguridad, envíame también el teléfono o el email con el que hiciste la reserva.",
         )
 
     if wants_cancel:
@@ -1380,7 +1408,7 @@ async def _process_booking_management_message(
             fecha_humana = new_date
         return (
             "booking_reschedule",
-            f"Listo, he cambiado la cita {code} al {fecha_humana} a las {new_time}. El numero de reserva sigue siendo el mismo.",
+            f"Listo, he cambiado la cita {code} al {fecha_humana} a las {new_time}. El número de reserva sigue siendo el mismo.",
         )
     # Hueco ocupado/cerrado: ofrece alternativas REALES del dia en vez de un error seco.
     # La hora fallida se olvida para que el siguiente mensaje ("pues a las cinco")
@@ -1420,7 +1448,7 @@ async def _reschedule_failure_text(
         free_slots = []
     alternatives = [s for s in free_slots if s != new_time][:3]
     if alternatives:
-        error_text += f" Ese dia tengo libres: {', '.join(alternatives)}. ¿Te encaja alguna?"
+        error_text += f" Ese día tengo libres: {', '.join(alternatives)}. ¿Te encaja alguna?"
     return error_text
 
 
@@ -1436,14 +1464,14 @@ async def _process_payment_request_message(
     localiza su cita y genera el enlace, enviado por el canal que toca segun el
     origen de la cita (web/WhatsApp -> email). Resuelve la cita por: numero de
     reserva en el mensaje; si no, telefono verificado del canal (WhatsApp) o
-    email/telefono que el cliente haya escrito. Devuelve (intent, texto) o None
+    email/teléfono que el cliente haya escrito. Devuelve (intent, texto) o None
     si el mensaje no es una peticion de pago."""
     if not _message_requests_payment(message):
         return None
     if not _ai_payment_sending_available(cliente_id):
         # Sin cobro online no se contesta con un portazo: se deja seguir el pipeline
         # para que respondan las Q&A del negocio o su informacion. Un salon que cobra
-        # la senal por Bizum tiene escrito como se paga, y decirle al cliente "no
+        # la señal por Bizum tiene escrito como se paga, y decirle al cliente "no
         # puedo gestionar el pago online" es tapar esa respuesta con un no.
         return None
     code = _extract_booking_code_from_text(message)
@@ -1451,18 +1479,18 @@ async def _process_payment_request_message(
     if code and not booking:
         return (
             "payment",
-            "No encuentro ninguna cita con ese numero de reserva. Revisa el codigo (formato R-XXXX).",
+            "No encuentro ninguna cita con ese número de reserva. Revisa el código (formato R-XXXX).",
         )
     if not booking:
         # Sin codigo: intenta identificar al cliente por el telefono verificado del
-        # canal (WhatsApp) o por el email/telefono que haya escrito en el mensaje.
+        # canal (WhatsApp) o por el email/teléfono que haya escrito en el mensaje.
         msg_email = textnorm._extract_email_from_text(message)
         msg_phone = trusted_phone or textnorm._extract_phone_from_text(message)
         booking = _latest_booking_for_contact(cliente_id, phone=msg_phone, email=msg_email)
     if not booking:
         return (
             "payment",
-            "Para enviarte el enlace de pago necesito el numero de reserva de tu cita (formato R-XXXX), "
+            "Para enviarte el enlace de pago necesito el número de reserva de tu cita (formato R-XXXX), "
             "o el email o telefono con el que reservaste.",
         )
     result = await _ai_send_payment_link(
@@ -1477,12 +1505,12 @@ async def _process_payment_request_message(
     if result.get("method") == "email" and result.get("sent"):
         parts.append("Te lo he enviado por email.")
     if checkout_url:
-        parts.append(f"Tambien puedes pagar aqui: {checkout_url}")
+        parts.append(f"También puedes pagar aquí: {checkout_url}")
     return ("payment", " ".join(parts))
 
 
 def _backfill_booking_codes() -> int:
-    """Asigna numero de reserva a citas activas previas sin codigo.
+    """Asigna número de reserva a citas activas previas sin codigo.
 
     One-shot idempotente: tras la primera pasada no encuentra filas y es no-op.
     Solo toca citas confirmadas o pendientes (las que un cliente podria querer
@@ -1718,9 +1746,9 @@ def _booking_audit_source_label(source: str) -> str:
 def _booking_email_kind_label(kind: str) -> str:
     labels = {
         "received": "Solicitud recibida",
-        "confirmed": "Confirmacion",
-        "cancelled": "Cancelacion",
-        "rescheduled": "Reprogramacion",
+        "confirmed": "Confirmación",
+        "cancelled": "Cancelación",
+        "rescheduled": "Reprogramación",
         "reminder_24h": "Recordatorio 24h",
         "reminder_2h": "Recordatorio 2h",
     }
@@ -1809,20 +1837,20 @@ def _booking_audit_entry_from_row(row: sqlite3.Row) -> BookingAuditEntry:
         title = "Email fallido"
         detail = f"Fallo el envio de {_booking_email_kind_label(str(payload.get('kind', '')))}."
     elif event_type == "voice_otp_sent":
-        title = "Codigo de verificacion enviado"
+        title = "Código de verificación enviado"
         ch = {"sms": "SMS", "whatsapp": "WhatsApp", "email": "email"}.get(str(payload.get("channel", "")), "")
-        detail = f"Se envio al cliente un codigo de verificacion por {ch}." if ch else "Se envio al cliente un codigo de verificacion."
+        detail = f"Se envió al cliente un código de verificación por {ch}." if ch else "Se envió al cliente un código de verificación."
     elif event_type == "voice_otp_verified":
-        title = "Identidad verificada con codigo"
-        detail = "El cliente confirmo su identidad con el codigo de verificacion antes de cambiar o cancelar."
+        title = "Identidad verificada con código"
+        detail = "El cliente confirmó su identidad con el código de verificación antes de cambiar o cancelar."
     elif event_type == "attendance_confirmed_by_customer":
         title = "Asistencia confirmada por el cliente"
         ch = {"voice": "llamada", "whatsapp": "WhatsApp", "email": "email"}.get(str(payload.get("channel", "")), "")
         detail = f"El cliente confirmo su asistencia por {ch}." if ch else "El cliente confirmo su asistencia."
     elif event_type == "review_request_sent":
-        title = "Peticion de resena enviada"
+        title = "Petición de reseña enviada"
         chs = [str(c) for c in (payload.get("channels") or [])]
-        detail = ("Se invito al cliente a dejar una resena por " + ", ".join(chs) + ".") if chs else "Se proceso la peticion de resena."
+        detail = ("Se invito al cliente a dejar una resena por " + ", ".join(chs) + ".") if chs else "Se procesó la petición de reseña."
     elif event_type == "ai_payment_link_sent":
         title = "Enlace de pago enviado por la IA"
         detail = "El asistente envio al cliente un enlace para pagar su cita."
@@ -2639,7 +2667,7 @@ async def _create_booking_core(
     """Crea una cita: fuente UNICA para todos los canales (widget, WhatsApp, voz,
     portal manual). Resuelve servicio/duracion/precio, valida hueco, llama al
     proveedor + webhook, guarda via _store_booking (que sella centro, codigo y
-    politica de pago), audita y envia la confirmacion.
+    politica de pago), audita y envia la confirmación.
 
     El canal resuelve ANTES el empleado (cada canal tiene su politica de
     resolucion) y traduce DESPUES los HTTPException a su medio (texto WhatsApp,
@@ -2768,7 +2796,7 @@ async def _create_booking_core(
         raise HTTPException(status_code=500, detail="No se pudo guardar la cita.")
     if send_confirmation and _booking_has_reminder_contact(email, telefono):
         # Con senal pendiente no se puede decir "cita confirmada": se manda el aviso
-        # de pago, que ademas lleva el enlace. Al pagar llega la confirmacion real.
+        # de pago, que ademas lleva el enlace. Al pagar llega la confirmación real.
         aviso = "pending_payment" if stored["status"] == "pending_payment" else "confirmed"
         try:
             await _send_booking_reminder_by_kind(
@@ -2818,17 +2846,17 @@ async def _cancel_booking_core(
         "booking_cancelled",
         {
             "source": source,
+            # Solo para el registro del negocio: al cliente no se le manda.
             "reason": cancel_reason,
-            "reason_sent_to_customer": bool(cancel_reason),
             **(audit_extra or {}),
         },
     )
-    # Aplica automaticamente la politica de cancelacion (penalizacion/reembolso)
-    # sobre el pago ya autorizado. No bloquea la cancelacion si algo falla.
+    # Aplica automaticamente la politica de cancelación (penalizacion/reembolso)
+    # sobre el pago ya autorizado. No bloquea la cancelación si algo falla.
     try:
         apply_cancellation_policy(booking_row, kind="cancel", actor_source=source)
     except Exception as exc:  # noqa: BLE001
-        settings.logger.error("Politica de cancelacion fallo %s: %s", booking_id, exc)
+        settings.logger.error("Politica de cancelación fallo %s: %s", booking_id, exc)
     refreshed = _load_booking_or_404(booking_id)
     crm._crm_upsert_contact(
         refreshed["cliente_id"], name=refreshed["nombre"], email=refreshed["email"],
@@ -2836,9 +2864,9 @@ async def _cancel_booking_core(
         entity_type="booking", entity_id=refreshed["id"],
     )
     try:
-        await _send_booking_reminder_by_kind(refreshed, "cancelled", request, extra_message=cancel_reason)
+        await _send_booking_reminder_by_kind(refreshed, "cancelled", request)
     except Exception as exc:  # noqa: BLE001
-        settings.logger.error("No se pudo enviar aviso de cancelacion %s: %s", booking_id, exc)
+        settings.logger.error("No se pudo enviar aviso de cancelación %s: %s", booking_id, exc)
     return refreshed
 
 
@@ -3274,10 +3302,6 @@ def _booking_manage_page(booking: BookingDetailPublic, *, viewer: str = "custome
         fecha_larga = textnorm._format_date_es(textnorm._parse_date(booking.fecha).date())
     except Exception:  # noqa: BLE001
         fecha_larga = booking.fecha
-    # Las etiquetas compartidas van sin tilde (las usan voz y WhatsApp); aqui es
-    # texto para leer, asi que se acentua.
-    for plano, con_tilde in (("miercoles", "mi\u00e9rcoles"), ("sabado", "s\u00e1bado")):
-        fecha_larga = fecha_larga.replace(plano, con_tilde)
     fecha_larga = fecha_larga[:1].upper() + fecha_larga[1:]
 
     duracion = int(booking.service_duration_minutes or 0)
@@ -3306,7 +3330,7 @@ def _booking_manage_page(booking: BookingDetailPublic, *, viewer: str = "custome
         contacto_html = '<p class="contacto">\u00bfPrefieres hablarlo? ' + " \u00b7 ".join(contacto) + "</p>"
 
     cancel_copy = (
-        "Confirma la cancelacion si finalmente no se va a atender esta cita."
+        "Confirma la cancelación si finalmente no se va a atender esta cita."
         if es_negocio
         else "Si prefieres otro d\u00eda, usa antes \u00abCambiar d\u00eda u hora\u00bb: as\u00ed no pierdes la cita."
     )
@@ -3344,7 +3368,6 @@ async def _send_booking_email_by_kind(
     request: Optional[Request] = None,
     *,
     sent_column: str = "",
-    extra_message: str = "",
     respect_enabled: bool = True,
 ) -> None:
     if kind == "confirmed" and booking_row["status"] == "pending_payment":
@@ -3372,7 +3395,7 @@ async def _send_booking_email_by_kind(
                 {"kind": kind, "reason": "disabled"},
             )
             return
-    _send_booking_email(booking_row, kind, request, extra_message=extra_message)
+    _send_booking_email(booking_row, kind, request)
     _mark_booking_email_result(
         booking_row["id"],
         status=kind,
@@ -3383,7 +3406,7 @@ async def _send_booking_email_by_kind(
         booking_row["id"],
         booking_row["cliente_id"],
         "booking_email_sent",
-        {"kind": kind, "extra_message": bool(extra_message)},
+        {"kind": kind},
     )
 
 
@@ -3393,7 +3416,6 @@ async def _send_booking_reminder_by_kind(
     request: Optional[Request] = None,
     *,
     sent_column: str = "",
-    extra_message: str = "",
     respect_enabled: bool = True,
     raise_on_failure: bool = True,
     channel_override: Optional[Dict[str, bool]] = None,
@@ -3403,12 +3425,12 @@ async def _send_booking_reminder_by_kind(
     Devuelve ``{"sent": [...], "failed": {canal: error}, "skipped": {canal: motivo}}``
     para que quien llama (p. ej. el reenvio manual de confirmacion) sepa exactamente
     que se entrego. Los callers automaticos pueden ignorar el retorno. Cuando no se
-    entrega por ningun canal y ``raise_on_failure`` es True (comportamiento historico
+    entrega por ningún canal y ``raise_on_failure`` es True (comportamiento historico
     de los flujos automaticos) se lanza ``RuntimeError``; con False se devuelve el
     resultado con los errores en ``failed`` para que el caller los muestre."""
     if kind == "confirmed" and booking_row["status"] == "pending_payment":
         # Decirle "tu cita ha quedado confirmada" a quien todavia tiene que pagar la
-        # senal es mentirle. Ya recibe el resumen y el boton de pago; la confirmacion
+        # senal es mentirle. Ya recibe el resumen y el boton de pago; la confirmación
         # sale sola cuando el pago entra (notify_booking_paid).
         _record_booking_audit(
             booking_row["id"], booking_row["cliente_id"],
@@ -3421,7 +3443,6 @@ async def _send_booking_reminder_by_kind(
             kind,
             request,
             sent_column=sent_column,
-            extra_message=extra_message,
             respect_enabled=respect_enabled,
         )
         return {"sent": ["email"], "failed": {}, "skipped": {}}
@@ -3481,7 +3502,7 @@ async def _send_booking_reminder_by_kind(
                 skipped_channels["email"] = "La cita no tiene email."
                 return
             try:
-                _send_booking_email(booking_row, kind, request, extra_message=extra_message)
+                _send_booking_email(booking_row, kind, request)
                 sent_channels.append("email")
             except Exception as exc:  # noqa: BLE001
                 failed_channels["email"] = str(exc)
@@ -3493,15 +3514,10 @@ async def _send_booking_reminder_by_kind(
                 skipped_channels["whatsapp"] = motivo
                 return
             try:
-                if await _send_booking_whatsapp_reminder(
-                    booking_row,
-                    kind,
-                    request,
-                    extra_message=extra_message,
-                ):
+                if await _send_booking_whatsapp_reminder(booking_row, kind, request):
                     sent_channels.append("whatsapp")
                 else:
-                    failed_channels["whatsapp"] = "No se pudo entregar WhatsApp o falta telefono valido."
+                    failed_channels["whatsapp"] = "No se pudo entregar WhatsApp o falta teléfono válido."
             except Exception as exc:  # noqa: BLE001
                 failed_channels["whatsapp"] = str(exc)
             return
@@ -3511,15 +3527,10 @@ async def _send_booking_reminder_by_kind(
                 skipped_channels["sms"] = str(availability.get("sms", {}).get("reason", "No disponible."))
                 return
             try:
-                if await _send_booking_sms_reminder(
-                    booking_row,
-                    kind,
-                    request,
-                    extra_message=extra_message,
-                ):
+                if await _send_booking_sms_reminder(booking_row, kind, request):
                     sent_channels.append("sms")
                 else:
-                    failed_channels["sms"] = "No se pudo entregar SMS o falta telefono valido."
+                    failed_channels["sms"] = "No se pudo entregar SMS o falta teléfono válido."
             except Exception as exc:  # noqa: BLE001
                 failed_channels["sms"] = str(exc)
 
@@ -3558,12 +3569,11 @@ async def _send_booking_reminder_by_kind(
                 "channels": sent_channels,
                 "skipped": skipped_channels,
                 "failed": failed_channels,
-                "extra_message": bool(extra_message),
             },
         )
         return {"sent": sent_channels, "failed": failed_channels, "skipped": skipped_channels}
 
-    # No se entrego por ningun canal: deja rastro y, segun el caller, lanza o devuelve.
+    # No se entrego por ningún canal: deja rastro y, segun el caller, lanza o devuelve.
     _record_booking_audit(
         booking_row["id"],
         booking_row["cliente_id"],
@@ -3572,7 +3582,7 @@ async def _send_booking_reminder_by_kind(
     )
     if raise_on_failure:
         raise RuntimeError(
-            "No se ha podido enviar el aviso por ningun canal: "
+            "No se ha podido enviar el aviso por ningún canal: "
             + "; ".join(f"{name}: {err}" for name, err in failed_channels.items())
         )
     return {"sent": [], "failed": failed_channels, "skipped": skipped_channels}
@@ -3584,7 +3594,7 @@ _REMINDER_CHANNEL_LABELS = {"email": "email", "whatsapp": "WhatsApp", "sms": "SM
 async def _resend_booking_confirmation(
     booking_row: sqlite3.Row, request: Optional[Request] = None, *, by_user: str = ""
 ) -> Dict[str, Any]:
-    """Reenvio MANUAL de la confirmacion de una cita (boton del panel).
+    """Reenvio MANUAL de la confirmación de una cita (boton del panel).
 
     A diferencia del flujo automatico, valida por adelantado que haya un canal con
     datos de contacto y devuelve/lanza un error concreto (email ausente, correo sin
@@ -3592,7 +3602,7 @@ async def _resend_booking_confirmation(
     solo cuando se entrega de verdad."""
     cliente_id = booking_row["cliente_id"]
     if booking_row["status"] == "cancelled":
-        raise HTTPException(status_code=409, detail="No se puede enviar la confirmacion de una cita cancelada.")
+        raise HTTPException(status_code=409, detail="No se puede enviar la confirmación de una cita cancelada.")
     channels = agenda._effective_followup_channels(cliente_id).get(
         "confirmed", {"email": True, "whatsapp": False, "sms": False}
     )
@@ -3607,7 +3617,7 @@ async def _resend_booking_confirmation(
     if not (wants_email or wants_wa or wants_sms):
         raise HTTPException(
             status_code=409,
-            detail="No hay ningun canal activo para la confirmacion. Activalo en Seguimiento.",
+            detail="No hay ningún canal activo para la confirmación. Actívalo en Seguimiento.",
         )
     deliverable = (wants_email and has_email) or (wants_wa and phone_wa) or (wants_sms and phone_sms)
     if not deliverable:
@@ -3618,14 +3628,14 @@ async def _resend_booking_confirmation(
             )
         raise HTTPException(
             status_code=409,
-            detail="No hay datos de contacto validos para los canales activos (email/telefono).",
+            detail="No hay datos de contacto válidos para los canales activos (email/teléfono).",
         )
     result = await _send_booking_reminder_by_kind(
         booking_row, "confirmed", request, respect_enabled=False, raise_on_failure=False
     )
     if not result["sent"]:
         detail = "; ".join(f"{name}: {err}" for name, err in result["failed"].items())
-        raise HTTPException(status_code=409, detail=detail or "No se pudo enviar la confirmacion.")
+        raise HTTPException(status_code=409, detail=detail or "No se pudo enviar la confirmación.")
     _record_booking_audit(
         booking_row["id"], cliente_id, "confirmation_resent",
         {"by": by_user, "channels": result["sent"]},
@@ -3782,7 +3792,7 @@ def _auto_confirm_pending_bookings() -> int:
 
 def _followup_global_channels(cliente_id: str) -> Dict[str, bool]:
     """Canales GLOBALES del Seguimiento (email/whatsapp/sms) aplicados por igual a TODOS
-    los avisos, confirmaciones y la peticion de resena. Es la fuente unica que el negocio
+    los avisos, confirmaciones y la petición de reseña. Es la fuente unica que el negocio
     edita en una sola tira de canales (no por aviso).
 
     Por compatibilidad se sigue persistiendo en ``booking.message_template_channels`` (un
@@ -3833,7 +3843,7 @@ def _follow_up_config(cliente_id: str) -> Dict[str, Any]:
         legacy_otp = cfg.get("voice_otp_channels")
         voice_otp_enabled = bool(any((legacy_otp or {}).values())) if isinstance(legacy_otp, dict) else True
     # El codigo se entrega por los canales globales (no hay seleccion propia). Apagar el OTP
-    # equivale a no tener canales: cae a verificacion por telefono/email en su lugar.
+    # equivale a no tener canales: cae a verificacion por teléfono/email en su lugar.
     voice_otp_channels = dict(channels) if voice_otp_enabled else {"email": False, "whatsapp": False, "sms": False}
     return {
         "call_enabled": call_enabled,
@@ -3866,14 +3876,14 @@ def _reminders_config(cliente_id: str) -> Dict[str, Any]:
 # Pasos temporizados de la escalera de avisos. Los canales son GLOBALES (una sola tira),
 # asi que cada paso solo expone su on/off; la llamada IA es un canal propio (voz).
 _FOLLOW_UP_STEP_DEFS = [
-    ("confirmed", "message", "Confirmacion de la cita", "Al reservar", 0,
+    ("confirmed", "message", "Confirmación de la cita", "Al reservar", 0,
      "Se envia al instante cuando el cliente reserva."),
     ("reminder_24h", "message", "Recordatorio 24 h", "24 h antes", 24,
-     "Recordatorio con opcion de confirmar o cancelar."),
-    ("call", "call", "Llamada de confirmacion IA", "", 0,
+     "Recordatorio con opción de confirmar o cancelar."),
+    ("call", "call", "Llamada de confirmación IA", "", 0,
      "Solo si el cliente aun no ha confirmado por otros canales."),
     ("reminder_2h", "message", "Recordatorio 2 h", "2 h antes", 2,
-     "Ultimo aviso antes de la cita."),
+     "Último aviso antes de la cita."),
 ]
 
 
@@ -3896,7 +3906,7 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
     sms_available = bool(avail["sms"]["available"])
     voice_number = bool((appstate.CONFIG_CLIENTES.get(cliente_id) or {}).get("voice", {}).get("twilio_phone_number"))
     voice_available = voice_plan and voice_number
-    voice_reason = "Disponible." if voice_available else ("Requiere plan Business." if not voice_plan else "Conecta un numero en Asistente de voz.")
+    voice_reason = "Disponible." if voice_available else ("Requiere plan Business." if not voice_plan else "Conecta un número en Asistente de voz.")
 
     booking_cfg = clients._get_client_config(cliente_id).get("booking", {}) or {}
     msg_enabled = textnorm._normalize_message_template_enabled(
@@ -3942,7 +3952,7 @@ def _follow_up_overview_dict(cliente_id: str) -> Dict[str, Any]:
                 "note": note, "enabled": enabled, "active": enabled and any_global_active, "channels": [],
             })
 
-    # Paso final post-cita: peticion de resena (opt-in; usa los canales globales).
+    # Paso final post-cita: petición de reseña (opt-in; usa los canales globales).
     rev = _reviews_config(cliente_id)
     rev_link_ok = _review_link_valid(rev["link"])
     rev_on = bool(rev["enabled"]) and rev_link_ok
@@ -4035,7 +4045,7 @@ def _format_test_channel_results(
         if not active.get(ch):
             out.append({
                 "channel": ch, "label": labels[ch], "status": "inactive",
-                "detail": "No esta activo en esta fase. Activalo en la escalera y pulsa Guardar para enviarlo.",
+                "detail": "No esta activo en esta fase. Actívalo en la escalera y pulsa Guardar para enviarlo.",
             })
         elif ch in sent:
             out.append({"channel": ch, "label": labels[ch], "status": "sent", "detail": "Enviado correctamente."})
@@ -4065,9 +4075,9 @@ async def _run_follow_up_test(
     to_email = textnorm._sanitize_text(email or contacto.get("email", "") or "")
     to_phone = textnorm._sanitize_text(phone or contacto.get("telefono", "") or "")
     if step == "call" and not to_phone:
-        raise HTTPException(status_code=400, detail="Indica un telefono de prueba para la llamada.")
+        raise HTTPException(status_code=400, detail="Indica un teléfono de prueba para la llamada.")
     if step != "call" and not (to_email or to_phone):
-        raise HTTPException(status_code=400, detail="Indica un email o telefono de prueba.")
+        raise HTTPException(status_code=400, detail="Indica un email o teléfono de prueba.")
 
     bid = f"futest_{secrets.token_hex(8)}"
     tz_name = (config.get("booking", {}) or {}).get("timezone") or settings.DEFAULT_TIMEZONE
@@ -4115,7 +4125,7 @@ async def _run_follow_up_test(
             results = _format_test_channel_results(cfg["channels"], sent, res.get("failed", {}) or {}, {})
             return {"ok": bool(sent), "step": step, "to_email": to_email, "to_phone": to_phone, "results": results}
         if step == "voice_otp":
-            # Prueba de entrega del codigo de verificacion: envia un codigo de muestra a los
+            # Prueba de entrega del código de verificación: envia un codigo de muestra a los
             # canales disponibles (no guarda OTP ni cita). Reusa los mismos senders del cliente.
             sample = f"{secrets.randbelow(10000):04d}"
             empresa = config.get("nombre", "")
@@ -4202,7 +4212,7 @@ async def _run_follow_up_test(
 
 
 # ---------------------------------------------------------------------------
-# Seguimiento post-cita: peticion de resena (Google/Trustpilot/...)
+# Seguimiento post-cita: petición de reseña (Google/Trustpilot/...)
 # ---------------------------------------------------------------------------
 
 _REVIEW_DEFAULT_MESSAGE = (
@@ -4245,7 +4255,7 @@ def _reviews_config(cliente_id: str) -> Dict[str, Any]:
         delay = int(cfg.get("delay_hours", 3))
     except (TypeError, ValueError):
         delay = 3
-    # La peticion de resena usa los canales GLOBALES del Seguimiento (sin seleccion propia).
+    # La petición de reseña usa los canales GLOBALES del Seguimiento (sin seleccion propia).
     return {
         "enabled": bool(cfg.get("enabled", False)),
         "link": str(cfg.get("link", "") or "").strip(),
@@ -4276,7 +4286,7 @@ def _render_review_message(
 def _review_email_bodies(
     cfg: Dict[str, Any], *, empresa: str, nombre: str, servicio: str,
 ) -> Tuple[str, str]:
-    """(text_body, html_body) del email de peticion de resena."""
+    """(text_body, html_body) del email de petición de reseña."""
     link = cfg["link"]
     label = _review_platform_label(link, cfg["platform"])
     text_body = _render_review_message(
@@ -4375,7 +4385,7 @@ async def _send_review_request(
     cfg: Optional[Dict[str, Any]] = None,
     manual: bool = False,
 ) -> Dict[str, Any]:
-    """Envia la peticion de resena por los canales activos. Marca la cita para no
+    """Envia la petición de reseña por los canales activos. Marca la cita para no
     repetir (idempotente) y deja auditoria. Nunca lanza por canal: agrega resultados."""
     cliente_id = booking_row["cliente_id"]
     cfg = cfg or _reviews_config(cliente_id)
@@ -4714,7 +4724,7 @@ def _ai_payment_sending_available(cliente_id: str) -> bool:
     """La IA puede enviar el enlace de pago de una cita si el negocio cobra con Stripe.
 
     Antes habia un interruptor aparte que nacia apagado, y nadie lo encontraba: un
-    negocio conectaba Stripe, configuraba una senal y el asistente seguia sin poder
+    negocio conectaba Stripe, configuraba una señal y el asistente seguia sin poder
     mandar el enlace. No aportaba seguridad (el importe sale del servicio, va al
     contacto que ya figura en la cita, con dedup, limite y auditoria), asi que se
     retiro: si hay Stripe operativo, la IA puede enviarlo.
@@ -4974,7 +4984,7 @@ async def _ai_send_payment_link(
 
     if method == "sms" and not phone:
         return {"ok": False, "reason": "no_phone", "method": method,
-                "error": "La cita no tiene un telefono al que enviar el SMS con el enlace de pago."}
+                "error": "La cita no tiene un teléfono al que enviar el SMS con el enlace de pago."}
     if method == "email" and not email:
         return {"ok": False, "reason": "no_email", "method": method,
                 "error": "La cita no tiene un email al que enviar el enlace de pago."}
@@ -4983,7 +4993,7 @@ async def _ai_send_payment_link(
         return {"ok": False, "reason": "channel_unavailable", "method": method,
                 "error": f"Configura un canal de {channel_label} antes de enviar enlaces de pago."}
 
-    # Rate limit: maximo 2 enlaces por cita en la ultima hora (anti-spam/enumeracion).
+    # Rate limit: maximo 2 enlaces por cita en la última hora (anti-spam/enumeracion).
     cutoff = (timeutils._utc_now() - timedelta(hours=1)).isoformat()
     with db._get_db_connection() as connection:
         recent = connection.execute(
@@ -4992,7 +5002,7 @@ async def _ai_send_payment_link(
         ).fetchone()
     if recent and int(recent["n"] or 0) >= 2:
         return {"ok": False, "reason": "rate_limited", "method": method,
-                "error": "Ya se han enviado varios enlaces de pago de esta cita en la ultima hora."}
+                "error": "Ya se han enviado varios enlaces de pago de esta cita en la última hora."}
 
     base = base_url or textnorm._preferred_public_base_url()
     try:
@@ -5115,7 +5125,7 @@ def payment_prompt_note(cliente_id: str, booking_row: sqlite3.Row, payment_row: 
     """Explica QUE se esta pagando (senal, retencion o total) en una frase.
 
     Compartido por WhatsApp y chat: el enlace de pago a secas no dice si esos
-    50 EUR son el precio del servicio o solo la senal.
+    50 EUR son el precio del servicio o solo la señal.
     """
     if not payment_row:
         return ""
@@ -5140,7 +5150,7 @@ def _booking_payment_row(booking_id: str) -> Optional[sqlite3.Row]:
 
 
 def _checkout_product_data(booking: sqlite3.Row, decision: Dict[str, Any]) -> Dict[str, str]:
-    """Producto de Stripe con la senal explicada (Stripe rechaza description vacia)."""
+    """Producto de Stripe con la señal explicada (Stripe rechaza description vacia)."""
     linea = paystate.checkout_line(
         booking["servicio"] or "Reserva",
         int(decision.get("amount_cents") or 0),
@@ -5275,7 +5285,7 @@ def _channels_reaching_customer(booking_row: sqlite3.Row, channels: Dict[str, bo
     Regla unica de entrega: manda lo que el negocio ha configurado en Seguimiento;
     si con eso no se puede alcanzar al cliente, se usa el canal por el que el
     escribio. Nace de un caso real: por WhatsApp el email es opcional, asi que un
-    cliente sin email no recibia NADA --ni confirmacion tras pagar la senal, ni
+    cliente sin email no recibia NADA --ni confirmacion tras pagar la señal, ni
     recordatorio-- porque los canales por defecto son solo email.
 
     Nunca enciende un canal de pago por su cuenta si ya hay otro que sirve.
@@ -5294,7 +5304,7 @@ async def notify_booking_paid(booking_row: sqlite3.Row, request: Optional[Reques
     """Confirma la cita cuando entra el pago.
 
     Antes salia solo por email, y en WhatsApp el email es OPCIONAL: el cliente
-    pagaba la senal y no recibia nada. Ya no hace falta logica propia: la entrega
+    pagaba la señal y no recibia nada. Ya no hace falta logica propia: la entrega
     la resuelve `_channels_reaching_customer` para todos los avisos por igual.
     """
     try:
@@ -5579,7 +5589,7 @@ def refund_booking_payment(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Politica de cancelacion / no-show automatica y configurable (generica por tenant)
+# Politica de cancelación / no-show automatica y configurable (generica por tenant)
 #
 # El pliego exige que el sistema aplique automaticamente la politica de
 # cancelacion (reembolsos o penalizaciones segun ventana temporal). Es opt-in:
@@ -5608,7 +5618,7 @@ def _clamp_pct(value: Any, default: int = 0) -> int:
 
 
 def get_cancellation_policy(cliente_id: str) -> Dict[str, Any]:
-    """Politica de cancelacion del tenant (con defaults si no hay fila)."""
+    """Politica de cancelación del tenant (con defaults si no hay fila)."""
     with db._get_db_connection() as connection:
         row = connection.execute(
             "SELECT * FROM cancellation_policies WHERE cliente_id=?",
@@ -5753,7 +5763,7 @@ def apply_cancellation_policy(
     """Aplica automaticamente la politica al cancelar o marcar no-show.
 
     Solo actua sobre el pago ya autorizado de la cita (retencion o cobro). Es
-    idempotente y nunca bloquea el flujo de cancelacion: si Stripe falla, deja
+    idempotente y nunca bloquea el flujo de cancelación: si Stripe falla, deja
     constancia en auditoria y devuelve el calculo para gestion manual.
     """
     outcome = compute_cancellation_outcome(booking_row, kind=kind)
@@ -5803,7 +5813,7 @@ def apply_cancellation_policy(
         )
     except HTTPException as exc:
         settings.logger.warning(
-            "No se pudo aplicar politica de cancelacion booking=%s: %s", booking_id, exc.detail
+            "No se pudo aplicar politica de cancelación booking=%s: %s", booking_id, exc.detail
         )
         _record_booking_audit(
             booking_id, cliente_id, "cancellation_policy_failed",
@@ -5815,8 +5825,8 @@ def apply_cancellation_policy(
 def _latest_booking_for_contact(
     cliente_id: str, *, phone: str = "", email: str = ""
 ) -> Optional[sqlite3.Row]:
-    """Ultima cita activa (confirmada o pendiente) que coincide con un telefono o
-    email. Permite que la IA envie el enlace de pago sin pedir el numero de reserva
+    """Ultima cita activa (confirmada o pendiente) que coincide con un teléfono o
+    email. Permite que la IA envie el enlace de pago sin pedir el número de reserva
     cuando ya conoce al cliente (telefono de la llamada/WhatsApp o contacto dado)."""
     norm_phone = crm._normalize_phone_for_match(phone)
     norm_email = textnorm._sanitize_text(email).strip().lower()
@@ -5826,7 +5836,7 @@ def _latest_booking_for_contact(
         rows = connection.execute(
             # `pending_payment` es imprescindible: es el estado de quien tiene un pago
             # pendiente, justo el que pide el enlace. Sin el, el asistente contestaba
-            # "necesito tu numero de reserva" a alguien cuyo telefono ya conocia.
+            # "necesito tu número de reserva" a alguien cuyo telefono ya conocia.
             "SELECT * FROM bookings WHERE cliente_id=? "
             "AND status IN ('confirmed','pending_review','pending_payment') "
             "ORDER BY created_at DESC LIMIT 50",

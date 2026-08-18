@@ -3,6 +3,21 @@
 _process_chat_message une RAG, NLU ligera (saludos, menu, disponibilidad,
 intenciones comerciales y de pago), gestion de citas por codigo y cuota de
 plan. Lo consumen el endpoint /chat (widget/portal) y el webhook WhatsApp.
+
+EL ORDEN DE `_process_chat_message` ES LA LOGICA. Va de lo mas literal a lo mas
+libre, y la primera capa que responde corta el turno:
+
+  1. saludo puro          -> menu de opciones (config['chat_menu'])
+  2. reglas por palabra clave (keywords.match_reply, tabla keyword_rules)
+  3. Q&A exactas          (rag._match_qa_answer, tabla kb_qa, casan tambien por etiqueta)
+  4. disponibilidad, gestion de cita, pago, tarjetas regalo
+  5. RAG / IA
+
+Regla de diseno detras del orden: lo que el negocio ha escrito a mano manda
+sobre lo que nosotros deduzcamos. Las Q&A estaban en el puesto 5 y preguntar
+"¿cual es vuestro horario?" devolvia los huecos libres de hoy en vez del horario
+que el salon habia redactado. Antes de mover una capa, piensa a quien le quitas
+la palabra. Mapa completo en docs/MAPA_DEL_CODIGO.md.
 """
 from __future__ import annotations
 
@@ -110,9 +125,6 @@ GIFT_CARD_INFO_RE = re.compile(
     re.IGNORECASE,
 )
 
-
-def _message_requests_gift_card(message: str) -> bool:
-    return bool(GIFT_CARD_INTENT_RE.search(textnorm._strip_accents(str(message or "").lower())))
 
 
 def _message_requests_gift_card_purchase(message: str) -> bool:
@@ -239,7 +251,7 @@ def _build_main_menu_text(nombre_empresa: str, booking_enabled: bool, *, greetin
         f"{booking_line}"
         f"· Informacion de servicios\n"
         f"· Preguntas frecuentes\n\n"
-        f"Pulsa una opcion o escribe directamente tu consulta."
+        f"Pulsa una opción o escribe directamente tu consulta."
     )
 
 
@@ -252,7 +264,7 @@ def _main_menu_quick_actions(booking_enabled: bool, gift_available: bool = False
         actions.append({"label": "🎁 Tarjeta regalo", "message": "Quiero comprar una tarjeta regalo"})
     actions.extend(
         [
-            {"label": "Informacion servicios", "message": "Quiero informacion sobre servicios disponibles"},
+            {"label": "Información servicios", "message": "Quiero información sobre servicios disponibles"},
             {"label": "Preguntas frecuentes", "message": "Muestrame las preguntas frecuentes principales"},
         ]
     )
@@ -330,7 +342,7 @@ def _build_faq_response_from_panel(cliente_id: str) -> str:
         return (
             "Todavia no hay preguntas frecuentes configuradas. "
             "Puedes escribirme tu duda concreta y la respondere con la informacion disponible del negocio.\n\n"
-            "Escribe **menu** para volver al menu principal."
+            "Escribe **menu** para volver al menú principal."
         )
     lines = ["Estas son las preguntas frecuentes principales:"]
     for question, answer in pairs:
@@ -340,7 +352,7 @@ def _build_faq_response_from_panel(cliente_id: str) -> str:
         lines.append(f"· **{question}:** {clean_answer}")
     lines.append("")
     lines.append("Puedes pedirme ampliar cualquiera o escribir tu duda libre.")
-    lines.append("Escribe **menu** para volver al menu principal.")
+    lines.append("Escribe **menu** para volver al menú principal.")
     return "\n".join(lines)
 
 
@@ -661,7 +673,7 @@ async def _process_chat_message(
         gift_text = (
             "🎁 ¡Claro! Puedes comprar una tarjeta regalo online y llega por email al instante "
             f"(o el dia que elijas): {gift_url}"
-            "\n\nSe canjea al reservar o directamente en recepcion."
+            "\n\nSe canjea al reservar o directamente en recepción."
         )
         gift_response = RespuestaChat(
             respuesta=gift_text,
@@ -679,7 +691,7 @@ async def _process_chat_message(
         return gift_response
 
     # El pago se evalua antes que la gestion de cita: una peticion de pago suele
-    # incluir el numero de reserva y, sin esto, la gestion la interceptaria.
+    # incluir el número de reserva y, sin esto, la gestion la interceptaria.
     payment_flow = await booking._process_payment_request_message(
         cliente_id=cliente_id,
         message=message,

@@ -1,9 +1,36 @@
-"""Capa de persistencia SQLite de Vantelia (refactor F3).
+"""Capa de persistencia SQLite: esquema completo y conexion unica.
 
-Esquema (30+ tablas via _init_database), conexion unica (_get_db_connection,
-con row_factory=Row y timeout=10) y helpers db_* de clientes/suscripciones.
-Las DBs separadas de captacion (outreach/instagram/tiktok/whatsapp) NO pasan
-por aqui: viven en sus dominios.
+`_init_database()` crea las ~65 tablas y las migra (columnas nuevas con ALTER
+idempotente). `_get_db_connection()` da la conexion, con `row_factory=Row` y
+timeout de 10 s. Las DBs de captacion (outreach / instagram / tiktok / whatsapp)
+NO pasan por aqui: cada una vive en su dominio con su propio fichero.
+
+Que tabla guarda que:
+
+| Dominio | Tablas |
+| --- | --- |
+| Clientes y acceso | `clientes`, `users`, `auth_sessions`, `password_reset_tokens`, `user_permission_overrides`, `admin_impersonations`, `system_settings` |
+| Agenda | `bookings`, `booking_audit`, `employees`, `agenda_blocks`, `locations`, `resources` |
+| Catalogo | `services`, `service_location_overrides`, `service_payment_policies` |
+| Conversaciones | `chat_sessions`, `chat_messages`, `chat_takeovers`, `live_chat_sessions`, `whatsapp_inbound_messages`, `voice_calls` |
+| Cerebro | `kb_documents`, `kb_qa`, `keyword_rules` |
+| Cobro de la cita | `booking_payments`, `cancellation_policies` |
+| Mostrador y tienda | `products`, `product_sales`, `packages`, `package_purchases`, `gift_cards`, `gift_card_transactions`, `customer_payments`, `customer_payment_events` |
+| Stripe del negocio | `client_payment_accounts`, `stripe_connected_accounts` |
+| Nuestro cobro al negocio | `subscriptions`, `message_usage_events` |
+| Canales de envio | `client_channel_settings`, `client_oauth_connections`, `client_channel_oauth_states`, `client_channel_audit`, `client_channel_requests`, `gmail_connections`, `gmail_oauth_states`, `oauth_states` |
+| WhatsApp propio | `client_whatsapp_accounts`, `wa_demo_codes`, `wa_demo_routes` |
+| CRM | `crm_contacts`, `crm_contact_links`, `crm_contact_audit` |
+| Demos y leads | `demo_tenants_registry`, `demo_registry_meta`, `demo_tenant_cleanup_queue`, `bot_leads`, `consulta_leads` |
+| Metricas | `analytics_events`, `ai_rebooking_log`, `growth_daily`, `growth_opportunities`, `growth_opportunity_audit`, `growth_plan_tasks`, `growth_weekly_reviews` |
+
+Ojo con los DOS sitios donde vive el dinero de una cita: `booking_payments` (la
+señal / el pago de la reserva) y `customer_payments` con `kind='pos'` (lo que se
+cobra en el mostrador). Consultar solo uno hace que el saldo mienta; la verdad
+unificada la da `backend/paystate.py`.
+
+Para anadir una columna: se declara en el CREATE TABLE **y** se anade su ALTER en
+la seccion de migraciones, o las instalaciones existentes no la tendran.
 """
 from __future__ import annotations
 

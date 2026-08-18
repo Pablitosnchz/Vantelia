@@ -1,3 +1,10 @@
+"""CRM: un contacto por persona, aunque llegue por tres canales distintos.
+
+La misma persona reserva por la web con su email, escribe por WhatsApp con su
+telefono y llama por telefono. Aqui se comprueba que eso es UN contacto: la
+normalizacion de telefono y email, el enlazado (`crm_contact_links`), la
+deduplicacion, la auditoria de cambios y el historial que ve el panel.
+"""
 from __future__ import annotations
 
 import uuid

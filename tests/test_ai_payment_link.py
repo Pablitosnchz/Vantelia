@@ -1,3 +1,11 @@
+"""El asistente manda el enlace de pago, con todos los frenos puestos.
+
+Opt-in por negocio, canal segun por donde reservo (voz -> SMS, resto -> email),
+importe SIEMPRE de la politica del servicio (nunca del cliente), solo al
+contacto ya registrado en la cita, Stripe conectado, dedup si ya esta pagada,
+rate limit por cita y auditoria. Cada uno de esos frenos tiene su test: son los
+que impiden que la IA cobre a quien no debe o cobre de mas.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -437,7 +445,9 @@ def test_chat_payment_without_code_or_identity_asks(api_module, monkeypatch):
     assert result is not None
     intent, text = result
     assert intent == "payment"
-    assert "numero de reserva" in text.lower()
+    from backend import textnorm
+
+    assert "numero de reserva" in textnorm._strip_accents(text.lower())
 
 
 def test_chat_payment_intent_sin_cobros_deja_seguir(api_module, monkeypatch):

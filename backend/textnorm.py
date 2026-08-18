@@ -620,7 +620,10 @@ MONTH_NAMES_ES = {
 }
 
 
-DAY_LABELS_ES = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"]
+# Etiquetas para MOSTRAR: van acentuadas. Lo que escribe el cliente se casa
+# contra WEEKDAY_NAMES_ES, que esta sin tildes y se compara con _strip_accents,
+# asi que acentuar esto no afecta al parseo de fechas.
+DAY_LABELS_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 
 
 MONTH_LABELS_ES = [

@@ -6,13 +6,11 @@ registro de rutas identico al monolito original.
 from __future__ import annotations
 
 import json
-import re
 import secrets
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from html import escape
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
 
 from fastapi import (
     Cookie,
@@ -24,17 +22,13 @@ from fastapi import (
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 
-import onboarding_utils
 from api_models import *  # noqa: F401,F403
 from backend import (
-    appstate,
     clients,
     db,
     demo_agenda,
     emailing,
     outreach,
-    portal,
-    rag,
     security,
     settings,
     textnorm,

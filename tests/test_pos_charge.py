@@ -1,3 +1,10 @@
+"""Cobro en el mostrador con Stripe: el QR que se le ensena al cliente.
+
+`commerce.create_pos_payment_link` arma el checkout y devuelve enlace + QR, pero
+NO registra la venta: eso lo hace el webhook cuando el pago esta confirmado
+(`_finalize_pos_payment`, idempotente). Aqui se comprueba justo esa separacion,
+que el precio sale del catalogo y que el stock se descuenta una sola vez.
+"""
 from __future__ import annotations
 
 import uuid

@@ -1,3 +1,15 @@
+"""La red de seguridad general: 289 tests sobre casi todo el contrato publico.
+
+Si rompes algo que no sabias que existia, se entera este fichero. Cubre health y
+CORS por cliente, el token admin, login y sesion del portal, disponibilidad sin
+OpenAI, paginas legales, el webhook de WhatsApp con su firma, el guardado de
+conversaciones, y el cerebro del chat: menu, intencion de cita, gestion de citas
+con memoria conversacional, y los bloques HORARIO / CATALOGO / DATOS_EN_VIVO del
+prompt.
+
+Al comparar respuestas del asistente usa `_sin_tildes(...)`: corregir la
+ortografia de un mensaje no debe romper un test.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -22,6 +34,12 @@ if str(REPO_ROOT) not in sys.path:
 import pytest
 import httpx
 from fastapi.testclient import TestClient
+
+
+def _sin_tildes(texto: str) -> str:
+    """Comparar textos del asistente sin depender de la ortografia exacta."""
+    plano = unicodedata.normalize("NFD", str(texto or "").lower())
+    return "".join(c for c in plano if unicodedata.category(c) != "Mn")
 
 
 @pytest.fixture(scope="session")
@@ -3752,11 +3770,11 @@ def test_chat_manage_flow_remembers_steps(client: TestClient, api_module, monkey
 
         step1 = _say("Quiero cancelar mi cita")
         assert step1["intent"] == "booking_manage"
-        assert "numero de reserva" in step1["respuesta"].lower()
+        assert "numero de reserva" in _sin_tildes(step1["respuesta"])
 
         step2 = _say(f"Es la {code}")
         assert step2["intent"] == "booking_manage"
-        assert "telefono o el email" in step2["respuesta"].lower()
+        assert "telefono o el email" in _sin_tildes(step2["respuesta"])
 
         step3 = _say("Mi email es cliente@example.com")
         assert step3["intent"] == "booking_cancel"
@@ -3839,7 +3857,7 @@ def test_chat_reschedule_intent_with_articles_is_detected(client: TestClient, ap
         assert response.status_code == 200
         data = response.json()
         assert data["intent"] == "booking_manage", msg
-        assert "numero de reserva" in data["respuesta"].lower(), msg
+        assert "numero de reserva" in _sin_tildes(data["respuesta"]), msg
     # El detector no debe dispararse sin objeto de cita/fecha/hora.
     assert api_module._message_requests_reschedule_booking("quiero cambiar de peinado") is False
 
@@ -3947,7 +3965,7 @@ def test_chat_live_context_uses_weekly_matrix(api_module, monkeypatch: pytest.Mo
         assert "CERRADO hoy" in block
     else:
         assert "10:15-20:45" in block
-    assert "sabado" in block and "domingo" in block  # dias cerrados desde la matriz
+    assert "sabado" in _sin_tildes(block) and "domingo" in block  # dias cerrados desde la matriz
 
 
 def test_chat_system_prompt_includes_schedule_and_catalog(api_module):

@@ -1,4 +1,28 @@
-"""Captacion Instagram (drafts 1-clic, autopilot, replies) (refactor F3)."""
+"""Captacion por DM de Instagram, en modo hibrido: el envio NO se automatiza.
+
+Espejo de `outreach.py` pero con una diferencia de fondo: automatizar DMs viola
+los terminos de Meta y arriesga la cuenta, asi que por defecto el sistema deja
+el mensaje ESCRITO y una persona lo manda con un clic (enlace `ig.me` con el
+texto ya puesto). El envio automatico existe (Playwright) pero esta detras de
+`IG_AUTOSEND_ENABLED`, apagado.
+
+Datos aparte de la DB principal: `storage/instagram/instagram.db`
+(`_instagram_db()`), con `scripts/instagram_campaign.py` como CLI.
+
+Por donde entrar:
+
+| Quiero... | Funcion |
+| --- | --- |
+| Ver el ciclo completo de una ronda | `_ig_campaign_run_iteration` (hilo: `_ig_campaign_worker`) |
+| Saber a quien le toca | `_ig_campaign_fetch_eligible_prospects` + `_ig_stage_from_history` |
+| Cambiar el texto del DM | `_ig_campaign_render_dm` y `scripts/instagram_templates.py` |
+| Crear la tarjeta de la cola de drafts | `_ig_campaign_create_draft` |
+| Follow-ups | `_ig_next_followup`, `_ig_followup_queue_items` |
+| Respuestas entrantes | `_ig_replies_worker` (Graph API, cuenta business propia) |
+
+Ventana de envio (`_ig_in_window`) y listas de supresion se respetan en todos los
+caminos, tambien en el manual.
+"""
 from __future__ import annotations
 
 import json
@@ -20,6 +44,9 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
 
 from backend import settings, timeutils
 
+# Este bloque ademas RE-EXPORTA: `routers/admin_captacion.py` importa varios de
+# estos nombres desde aqui (p. ej. `IGProfile`), asi que un import que parezca
+# sin usar puede tener consumidor fuera.
 try:
     from instagram_campaign import (  # type: ignore
         DEFAULT_DB as IG_DEFAULT_DB,
@@ -29,7 +56,6 @@ try:
         create_draft as ig_create_draft,
         upsert_profile as ig_upsert_profile,
         is_autosend_enabled as ig_is_autosend_enabled,
-        now_iso as ig_now_iso,
     )
     from instagram_templates import (  # type: ignore
         IGProspect,

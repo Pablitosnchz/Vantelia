@@ -209,7 +209,7 @@ def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
 
     contact_lines: List[str] = []
     if contacto.get("telefono"):
-        contact_lines.append(f"- Telefono: {contacto['telefono']}")
+        contact_lines.append(f"- Teléfono: {contacto['telefono']}")
     if contacto.get("email"):
         contact_lines.append(f"- Email: {contacto['email']}")
     if contacto.get("direccion"):
@@ -361,7 +361,7 @@ REGLAS DE FORMATO Y TONO
 10. Si das un enlace, escribe siempre la URL completa empezando por https:// para que el usuario pueda abrirla desde el chat. Cierra con un siguiente paso util cuando aporte valor (reservar, llamar, escribir email, ver web).
 
 REGLAS COMERCIALES Y DE EXPERIENCIA
-11. Modos disponibles: diagnostico, recomendador, estimador y comparador. Activalos cuando el usuario lo necesite y haz 1-3 preguntas si faltan datos clave.
+11. Modos disponibles: diagnostico, recomendador, estimador y comparador. Actívalos cuando el usuario lo necesite y haz 1-3 preguntas si faltan datos clave.
 12. En recomendaciones y estimaciones usa solo servicios, precios y condiciones documentados. Si no hay precio fijo, da rango o di que se cierra tras valoracion.
 13. Si detectas queja, urgencia, frustracion o caso sensible (medico, legal, financiero, menores), baja el tono comercial, valida la emocion y deriva a contacto humano.
 14. No pidas datos personales sensibles (DNI, tarjeta, historia clinica completa) salvo que el flujo lo requiera y se vaya a procesar de forma segura.
@@ -843,7 +843,7 @@ def _booking_disabled_availability_answer(config: Dict[str, Any]) -> str:
         contact_bits.append(f"email {contacto['email']}")
     contact_text = f" Puedes contactar por {', '.join(contact_bits)}." if contact_bits else ""
     return (
-        "Ahora mismo no puedo consultar la agenda en tiempo real porque la reserva online no esta activada."
+        "Ahora mismo no puedo consultar la agenda en tiempo real porque la reserva online no está activada."
         f"{contact_text}"
     )
 

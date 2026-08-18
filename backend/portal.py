@@ -1,4 +1,25 @@
-"""Helpers del panel admin y portal cliente (payloads, stats, analytics) (refactor F3)."""
+"""Ficha del cliente en el panel admin: leerla, guardarla y sacar sus numeros.
+
+Traduce entre las dos formas del mismo cliente: el **payload** que maneja el
+panel (`AdminClientePayload`, plano) y la **config** del tenant (anidada, la que
+usa el runtime). Ida y vuelta:
+
+- `_client_payload_from_config` — config -> lo que ve el panel.
+- `_config_from_admin_payload` — lo que envia el panel -> config.
+- `_save_admin_client_payload` — guarda de verdad (config + info.txt + servicios).
+- `_payload_from_alta_express` / `_default_admin_payload` — alta de un tenant.
+
+Y los numeros del portal: `_portal_stats_for_user`, `_portal_today_dashboard`,
+`_compute_dashboard_stats`, mas el registro de eventos (`_record_analytics_event`,
+y su version que nunca revienta, `_try_record_analytics_event`).
+
+**Trampa que costo un catalogo entero**: al guardar la ficha se sincroniza el
+catalogo desde el `info.txt` con `agenda._sync_services_from_info(...,
+deactivate_missing=False)`. Con `True` —como estaba— guardar CUALQUIER campo de
+la ficha apagaba todos los servicios que no aparecieran en el info.txt, y un
+salon real paso de 183 servicios a 8. Solo el alta de un tenant nuevo puede
+desactivar lo que falta. Lo cubre `tests/test_guardar_ficha_no_borra_catalogo.py`.
+"""
 from __future__ import annotations
 
 import hashlib

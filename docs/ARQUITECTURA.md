@@ -6,6 +6,12 @@ Resultado del refactor `refactor/estable-v1` (junio 2026): el monolito
 comportamiento observable (misma tabla de rutas, mismos contratos, mismo
 esquema SQLite, mismo snippet de widget).
 
+> **¿Este documento o el otro?** Aquí está **cómo está organizado** el proyecto
+> (capas, módulos, convenciones, dónde crear cosas nuevas). Si lo que quieres es
+> **cambiar algo concreto** —un mensaje al cliente, el flujo de reserva, un
+> cobro— abre antes [`MAPA_DEL_CODIGO.md`](MAPA_DEL_CODIGO.md), que va por
+> flujos y avisa de las trampas conocidas.
+
 ## Capas (la dependencia solo apunta hacia abajo)
 
 ```text
@@ -34,7 +40,7 @@ módulos transversales.
 | `backend/appstate.py` | Estado mutable compartido: `CONFIG_CLIENTES`, `sesiones`, `indices` RAG, `whatsapp_flows`, `rate_limit_buckets`, `state_lock`, threads/stops de workers. Módulo hoja (solo stdlib). Se llama `appstate` porque `state` colisiona con locals del flujo OAuth. |
 | `backend/timeutils.py` | `_utc_now` (punto único de "ahora": los tests lo parchean para time-travel), conversiones ISO/UTC. |
 | `backend/textnorm.py` | Normalización de textos/orígenes/URLs/horarios/fechas-ES, parsers de precio y duración, extractores de email/teléfono/fecha. |
-| `backend/db.py` | `_init_database` (30+ tablas + migraciones), `_get_db_connection` (Row + timeout), helpers `db_*` de clientes/suscripciones. Las DBs de captación (outreach/IG/TikTok/WA) viven en sus dominios. |
+| `backend/db.py` | `_init_database` (~65 tablas + migraciones; el mapa de qué guarda cada una está en su docstring), `_get_db_connection` (Row + timeout), helpers `db_*` de clientes/suscripciones. Las DBs de captación (outreach/IG/TikTok/WA) viven en sus dominios. |
 | `backend/clients.py` | Config multi-tenant: carga/normaliza/serializa `config.json`, validación runtime, sync con la tabla `clientes`, persistencia, planes (`_plan_limits`). Cargar este módulo puebla `appstate.CONFIG_CLIENTES`. |
 | `backend/security.py` | Usuarios, sesiones del portal, cookies, impersonación, tokens de reset, OAuth states, Fernet de canal, guards `Depends` (`_require_*`), rate limit. |
 | `backend/emailing.py` | SMTP Vantelia + Gmail OAuth por cliente (`_send_client_email`), emails transaccionales, estados del canal Gmail. |
@@ -97,7 +103,7 @@ nombre, renombra el local (`booking_row`, `channel_settings`...).
 ## Verificación
 
 ```powershell
-python -m pytest -q -p no:warnings   # suite completa (~1,5 min)
+python -m pytest -q                  # suite completa (~10 min, 780+ tests)
 python scripts/qa_e2e.py             # E2E aislado del portal (exit 0)
 python -m py_compile api.py auto_onboarding.py onboarding_utils.py
 npm run build                        # widget reproducible (lo exige CI)

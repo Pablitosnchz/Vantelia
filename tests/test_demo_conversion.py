@@ -1,3 +1,10 @@
+"""Demos de captacion: generar el tenant de prueba y medir si convierte.
+
+Cubre `demo_agenda.build_demo_tenant` (crear la demo desde la web del prospect),
+la pre-generacion al abrir el email, los tokens HMAC de tracking, el registro de
+lo que hace el visitante y la caducidad por TTL. Es la pieza de la que depende
+que un clic en el email lleve a un asistente vivo y no a un formulario.
+"""
 from __future__ import annotations
 
 import json
