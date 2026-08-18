@@ -118,7 +118,7 @@ Subida web estatica a Hostinger:
 
 ## Backend API
 
-El backend vive en `backend/` (28 modulos de dominio + `backend/routers/` con 17 modulos de endpoints); `api.py` es solo el entrypoint de compatibilidad. Mapa completo, convenciones y "donde anadir cosas" en `docs/ARQUITECTURA.md`. Antes de editar, localiza el modulo del dominio con `rg`.
+El backend vive en `backend/` (37 modulos de dominio + `backend/routers/` con 19 modulos de endpoints); `api.py` es solo el entrypoint de compatibilidad. Mapa completo, convenciones y "donde anadir cosas" en `docs/ARQUITECTURA.md`. Antes de editar, localiza el modulo del dominio con `rg`.
 
 **Si lo que buscas es "quiero cambiar X, que abro": `docs/MAPA_DEL_CODIGO.md`.** Lleva, por flujo (reservar/cancelar/avisos/huecos/catalogo/cobros/asistente), el punto de entrada de cada canal, el nucleo comun al que todos llaman, donde vive cada texto que ve el cliente, y las trampas conocidas (la que borro el catalogo de un cliente real, el techo de 10 filas de las listas de WhatsApp, config.json vs memoria...). Nota: el py_compile de CI/deploy cubre los entrypoints; `python -m pytest` importa todo backend/ (cobertura equivalente).
 
@@ -650,7 +650,6 @@ Si cambias contratos de respuesta, auth, cookies, booking o WhatsApp, actualiza 
 - `docs/REQUISITOS_ASISTENTE_CHAT.md`: contrato de producto del asistente de chat (widget) + QA.
 - `docs/REQUISITOS_ASISTENTE_WHATSAPP.md`: contrato de producto del asistente de WhatsApp (flujos interactivos + cerebro compartido) + QA.
 - `docs/REQUISITOS_HORARIO_CALENDARIO.md`: contrato de horarios/descansos/bloqueos y su visibilidad en calendario y asistentes. **Horario por dia de la semana (ago 2026):** `weekly_hours` (config `booking.weekly_hours` + columna `employees.weekly_hours_json`) es un override opcional por dia sobre `day_start`/`day_end`, para negocios que no abren la misma franja todos los dias (sabado corto). Fuente unica `textnorm._weekday_hours`, consumida por `agenda._build_slots_for_day` (todos los canales) y por `_weekly_schedule_matrix` (prompts de chat y voz). El empleado `is_default=1` lo hereda del negocio en cada arranque. UI en la pestana Horarios. Tests: `tests/test_weekly_hours.py`. Regla clave (jul 2026): el descanso del horario GENERAL (parada de comida) cierra la agenda de TODO el equipo (`agenda._client_break_windows` en union dentro de `_build_slots_for_day`; conflicto de guardado contra las citas de todos; banda en todas las columnas de la vista Dia; linea "Cierre diario" en los prompts de chat y voz). Los descansos por profesional se SUMAN al general. `GET /auth/schedule/employee/{id}` lista tambien los bloqueos generales.
-- `docs/MANUAL_GOOGLE_CALENDAR.md`: calendario.
 - `docs/OPERACION_PRODUCCION.md`: checklist minima para vender/operar.
 - `deploy/hostinger/DEPLOY.md`: guia VPS/Hostinger.
 - `docs/legal/*.md`: textos legales servidos por `/legal/{documento}`.

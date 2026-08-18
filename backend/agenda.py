@@ -1039,7 +1039,7 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
                     status_code=409,
                     detail=_booking_conflict_message(
                         conflicts,
-                        "Hay citas activas en los dias que quieres cerrar. Cancelalas o reprogramalas antes de guardar.",
+                        "Hay citas activas en los días que quieres cerrar. Cancélalas o reprográmalas antes de guardar.",
                     ),
                 )
         previous_break_windows = textnorm._normalize_break_windows(
@@ -1175,7 +1175,7 @@ def _update_employee_schedule(cliente_id: str, employee_id: str, data: PortalSch
                 status_code=409,
                 detail=_booking_conflict_message(
                     conflicts,
-                    "Hay citas activas en los dias que quieres cerrar. Cancelalas o reprogramalas antes de guardar.",
+                    "Hay citas activas en los días que quieres cerrar. Cancélalas o reprográmalas antes de guardar.",
                 ),
             )
     previous_schedule = _employee_schedule_from_row(row)
@@ -1495,7 +1495,7 @@ def _update_portal_employee(
                 status_code=409,
                 detail=_schedule_conflict_detail(
                     conflicts,
-                    "Hay citas activas en los dias que quieres cerrar. Cancelalas o reprogramalas antes.",
+                    "Hay citas activas en los días que quieres cerrar. Cancélalas o reprográmalas antes.",
                 ),
             )
     if (payload["day_start"], payload["day_end"]) != (
@@ -2305,7 +2305,7 @@ def _validate_booking_window(cliente_id: str, selected_day: datetime) -> None:
     if selected_day.date() > max_day:
         raise HTTPException(
             status_code=400,
-            detail=f"Solo se admiten reservas con hasta {settings.MAX_BOOKING_ADVANCE_DAYS} dias de antelacion.",
+            detail=f"Solo se admiten reservas con hasta {settings.MAX_BOOKING_ADVANCE_DAYS} días de antelación.",
         )
 
 
@@ -2990,7 +2990,7 @@ def _extract_services_from_info(cliente_id: str) -> List[Dict[str, Any]]:
         if price_part:
             compact_bits.append(f"Precio: {price_part}")
         if duration_part:
-            compact_bits.append(f"Duracion: {duration_part}")
+            compact_bits.append(f"Duración: {duration_part}")
         compact_bits.extend(details)
         if compact_bits:
             append_detail("", " / ".join(compact_bits))

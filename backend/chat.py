@@ -243,13 +243,13 @@ def _build_main_menu_text(nombre_empresa: str, booking_enabled: bool, *, greetin
     saludo = (
         f"Hola. Soy el asistente de **{nombre_empresa}**. ¿En qué puedo ayudarte?\n\n"
         if greeting else
-        f"**Menu principal de {nombre_empresa}**\n\n"
+        f"**Menú principal de {nombre_empresa}**\n\n"
     )
     booking_line = "· Agendar cita\n· Cancelar o cambiar mi cita\n" if booking_enabled else ""
     return (
         f"{saludo}"
         f"{booking_line}"
-        f"· Informacion de servicios\n"
+        f"· Información de servicios\n"
         f"· Preguntas frecuentes\n\n"
         f"Pulsa una opción o escribe directamente tu consulta."
     )
@@ -340,7 +340,7 @@ def _build_faq_response_from_panel(cliente_id: str) -> str:
     pairs = rag._client_qa_pairs_for_chat(cliente_id, limit=4)
     if not pairs:
         return (
-            "Todavia no hay preguntas frecuentes configuradas. "
+            "Todavía no hay preguntas frecuentes configuradas. "
             "Puedes escribirme tu duda concreta y la respondere con la informacion disponible del negocio.\n\n"
             "Escribe **menu** para volver al menú principal."
         )
@@ -348,7 +348,7 @@ def _build_faq_response_from_panel(cliente_id: str) -> str:
     for question, answer in pairs:
         clean_answer = answer
         if rag._answer_is_info_txt_instruction(clean_answer):
-            clean_answer = "La IA la respondera usando la informacion disponible del negocio."
+            clean_answer = "La IA la responderá usando la información disponible del negocio."
         lines.append(f"· **{question}:** {clean_answer}")
     lines.append("")
     lines.append("Puedes pedirme ampliar cualquiera o escribir tu duda libre.")
@@ -448,7 +448,9 @@ COMMERCIAL_INTENT_INSTRUCTIONS = {
 
 
 def _detect_commercial_intent(message: str) -> str:
-    normalized = f" {' '.join(str(message or '').lower().split())} "
+    # Sin quitar tildes, "recomendación" bien escrita no casaba ningun patron:
+    # solo entraba quien la escribiera sin tilde.
+    normalized = textnorm._strip_accents(f" {' '.join(str(message or '').lower().split())} ")
     if booking._message_requests_booking_form(normalized):
         return "booking"
     for intent, patterns in COMMERCIAL_INTENT_PATTERNS.items():
@@ -672,7 +674,7 @@ async def _process_chat_message(
         gift_url = f"{textnorm._preferred_public_base_url().rstrip('/')}/gift/{cliente_id}"
         gift_text = (
             "🎁 ¡Claro! Puedes comprar una tarjeta regalo online y llega por email al instante "
-            f"(o el dia que elijas): {gift_url}"
+            f"(o el día que elijas): {gift_url}"
             "\n\nSe canjea al reservar o directamente en recepción."
         )
         gift_response = RespuestaChat(
@@ -851,26 +853,29 @@ async def _process_chat_message(
 
 
 
+# Van SIN tildes: `_detect_commercial_intent` normaliza el mensaje antes de
+# buscarlas. Aqui habia ademas una variante de "recomendacion" con la tilde
+# doblemente codificada, que no casaba nada.
 COMMERCIAL_INTENT_PATTERNS: Dict[str, List[re.Pattern[str]]] = {
     "diagnostico": [
         re.compile(pattern, re.IGNORECASE)
         for pattern in [
-            r"\b(diagnostico|diagnóstico|test|orientame|oriÃ©ntame|evaluacion|evaluaciÃ³n)\b",
-            r"\b(que necesito|qu[eé] necesito|analiza mi caso|mi caso)\b",
+            r"\b(diagnostico|test|orientame|evaluacion)\b",
+            r"\b(que necesito|analiza mi caso|mi caso)\b",
         ]
     ],
     "recomendador": [
         re.compile(pattern, re.IGNORECASE)
         for pattern in [
-            r"\b(recomienda|recomiendame|recomi[eé]ndame|recomendacion|recomendaciÃ³n)\b",
-            r"\b(que servicio|qu[eé] servicio|mejor opcion|mejor opciÃ³n|cual me conviene|cu[aá]l me conviene)\b",
+            r"\b(recomienda|recomiendame|recomendacion)\b",
+            r"\b(que servicio|mejor opcion|cual me conviene)\b",
         ]
     ],
     "estimador": [
         re.compile(pattern, re.IGNORECASE)
         for pattern in [
-            r"\b(calcula|calculadora|estimacion|estimaciÃ³n|estimar|presupuesto|precio|coste|cuanto cuesta|cu[aá]nto cuesta)\b",
-            r"\b(rango de precio|desde cuanto|desde cu[aá]nto|aproximado)\b",
+            r"\b(calcula|calculadora|estimacion|estimar|presupuesto|precio|coste|cuanto cuesta)\b",
+            r"\b(rango de precio|desde cuanto|aproximado)\b",
         ]
     ],
     "comparador": [

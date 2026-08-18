@@ -9417,7 +9417,7 @@ def test_voice_is_unintelligible(api_module):
         assert api_module._voice_is_unintelligible(real) is False, real
     for artifact in [
         "Subtitulos realizados por la comunidad de Amara.org",
-        "SubtÃ­tulos realizados por la comunidad de Amara.org",
+        "Subtítulos realizados por la comunidad de Amara.org",
         "Diosos mios",
         "Y alas",
     ]:

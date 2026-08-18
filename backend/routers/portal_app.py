@@ -2226,7 +2226,7 @@ async def app_voice_log(
     """
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
     if not voice._client_voice_plan_enabled(cliente_id):
-        raise HTTPException(status_code=403, detail="El asistente de voz estÃ¡ disponible en el plan Business.")
+        raise HTTPException(status_code=403, detail="El asistente de voz está disponible en el plan Business.")
     client_ip = request.client.host if request.client else "unknown"
     security._check_rate_limit(f"app_voice_log:{cliente_id}:{client_ip}", 30)
     try:

@@ -520,7 +520,7 @@ Ejemplo conceptual:
 
 - Dominio principal de la empresa.
 - Version con `www`.
-- Landing de campaÃ±as si existe.
+- Landing de campañas si existe.
 
 ### Mensaje de bienvenida
 
@@ -563,7 +563,7 @@ La estructura ideal incluye:
 - Politicas relevantes.
 - Datos de contacto y vias de derivacion humana.
 
-SeÃ±ales de un cerebro bueno:
+Señales de un cerebro bueno:
 
 - Es concreto.
 - No repite lo mismo en exceso.
@@ -571,9 +571,9 @@ SeÃ±ales de un cerebro bueno:
 - Usa lenguaje empresarial claro.
 - Responde las dudas reales que tendria una persona interesada.
 
-SeÃ±ales de un cerebro flojo:
+Señales de un cerebro flojo:
 
-- Texto vago y genÃ©rico.
+- Texto vago y genérico.
 - Frases publicitarias sin datos utiles.
 - Servicios mal definidos.
 - Falta de precios, proceso o condiciones.
@@ -617,7 +617,7 @@ Debes reindexar cuando:
 - Cambias el cerebro.
 - Corriges informacion importante.
 - Actualizas servicios o politicas.
-- AÃ±ades mucho contenido nuevo.
+- Añades mucho contenido nuevo.
 
 No hace falta reindexar si solo haces cambios menores puramente visuales, salvo que el panel lo haga automaticamente dentro del flujo.
 
@@ -649,7 +649,7 @@ Ejemplo:
 
 Para que sirve:
 
-- EnseÃ±ar el chat al cliente antes de instalarlo.
+- Enseñar el chat al cliente antes de instalarlo.
 - Validar tono, respuestas y flujo comercial.
 - Recoger feedback rapido sin tocar la web final.
 
@@ -961,7 +961,7 @@ Proceso ideal:
 
 Preguntas de prueba recomendadas:
 
-- Que tratamientos ofrecÃ©is.
+- Que tratamientos ofrecéis.
 - Cuanto cuesta una primera valoracion.
 - Teneis urgencias.
 - Donde estais.

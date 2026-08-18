@@ -229,6 +229,15 @@ Caso aparte: `textnorm.DAY_LABELS_ES` (para mostrar) va **con** tilde;
 **Para los prompts de voz (`voice.py`) no aplica**: esas cadenas son
 instrucciones al modelo, no algo que nadie lea.
 
+### Y el mojibake
+
+Una tilde doblemente codificada (UTF-8 leído como latin-1 y vuelto a guardar) no
+casa nada y se ve rota si se muestra. Estaba en cuatro patrones de intención
+comercial, en un error del panel y en el manual de admin. Lo vigila el mismo
+fichero de tests. La única excepción permitida es el comentario de
+`voice._voice_date_phrase_key`, que ilustra lo que esa función repara en runtime
+(los mensajes de WhatsApp llegan así a veces).
+
 ---
 
 ## 10. Higiene: antes de dar algo por terminado

@@ -35,14 +35,16 @@ Existen para que no se repita un error concreto. Si uno falla, lee su docstring
 antes de "arreglarlo": suele estar diciendo algo cierto.
 
 - `test_patrones_sin_tilde.py` — el texto al cliente lleva tildes; los patrones
-  que casan lo que el cliente ESCRIBE, no (se comparan ya normalizados).
+  que casan lo que el cliente ESCRIBE, no (se comparan ya normalizados). También
+  vigila que no reaparezca texto con doble codificación UTF-8.
 - `test_modulos_documentados.py` — los módulos de más de 600 líneas llevan
   índice en su docstring.
 - `test_shim_compat.py` — `api.simbolo` sigue reenviando al módulo real.
 - `test_guardar_ficha_no_borra_catalogo.py` — guardar la ficha admin no puede
   desactivar servicios (pasó de verdad: 183 → 8).
 - `test_mapa_del_codigo_no_miente.py` — lo que citan `docs/MAPA_DEL_CODIGO.md`,
-  este README y los docstrings de módulo existe de verdad.
+  este README, `CLAUDE.md` y los docstrings de módulo existe de verdad, y
+  `docs/ARQUITECTURA.md` nombra todos los módulos de `backend/`.
 
 ## Fixtures
 

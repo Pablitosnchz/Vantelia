@@ -446,23 +446,23 @@ DEFAULT_MESSAGE_TEMPLATES = {
     # Servicios con senal: la cita queda guardada pero sin confirmar. Sin este aviso,
     # quien reserva por la web pierde el enlace de pago al cerrar la pestana.
     "pending_payment": (
-        "Hemos guardado tu hueco, pero la cita todavia NO esta confirmada: falta completar "
+        "Hemos guardado tu hueco, pero la cita todavía NO está confirmada: falta completar "
         "el pago. Tienes el enlace debajo."
     ),
     "confirmed": (
         "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla "
-        "si necesitas hacer algun cambio."
+        "si necesitas hacer algún cambio."
     ),
     "reminder_24h": (
         "Te recordamos que mañana tienes una cita programada. Si necesitas revisarla o ajustarla, "
-        "puedes hacerlo desde tu enlace de gestion."
+        "puedes hacerlo desde tu enlace de gestión."
     ),
     "reminder_2h": (
         "Tu cita empieza en menos de 2 horas. Te dejamos los detalles y el acceso directo para gestionarla "
         "si lo necesitas."
     ),
     "cancelled": (
-        "Tu cita ha sido cancelada. Debajo te dejamos la informacion y tu enlace de gestion por si "
+        "Tu cita ha sido cancelada. Debajo te dejamos la información y tu enlace de gestión por si "
         "necesitas revisarla."
     ),
     "rescheduled": (

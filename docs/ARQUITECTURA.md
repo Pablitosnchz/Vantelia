@@ -18,7 +18,7 @@ esquema SQLite, mismo snippet de widget).
 api.py                      Shim de compatibilidad (~150 líneas). uvicorn api:app.
 └─ backend/main.py          Crea la app FastAPI, middlewares, mounts, eventos
    │                        startup/shutdown e importa los routers EN ORDEN.
-   ├─ backend/routers/      17 módulos de endpoints (decoran app directamente).
+   ├─ backend/routers/      19 módulos de endpoints (decoran app directamente).
    ├─ Dominios de negocio   chat, whatsapp, booking, demo_agenda, voice,
    │                        onboarding, billing, portal, crm, growth,
    │                        outreach, instagram, tiktok, wa_capture
@@ -57,8 +57,18 @@ módulos transversales.
 | `backend/billing.py` | Suscripciones: checkout, sync Stripe, planes públicos. |
 | `backend/portal.py` | Payloads/serialización del panel admin y portal, stats, analytics. |
 | `backend/outreach.py`, `instagram.py`, `tiktok.py`, `wa_capture.py` | Captación B2B (los try/except de imports de `scripts/` viven aquí; flags `*_AVAILABLE`). `wa_capture` se llama así porque `wa_outreach` es el alias histórico del módulo de scripts. |
-| `backend/voice.py` | Twilio Media Streams ↔ OpenAI Realtime + tools de cita. |
+| `backend/voice.py` | Voz sobre OpenAI Realtime, por teléfono (Twilio) y por navegador (WebRTC): instrucciones, tools de cita y su despacho, OTP, llamadas salientes, cierre y etiquetado. |
 | `backend/growth.py` | Plan de escala (métricas growth_*). |
+| `backend/commerce.py` | Productos, bonos y tarjetas regalo + las páginas públicas del negocio (`/central`, `/tienda`, `/gift`, wallets). Nada se materializa al crear el checkout: lo hacen los `_finalize_*_payment` desde el webhook. |
+| `backend/paystate.py` | Estado de cobro de una cita. **Fuente única**: suma `booking_payments` (la reserva) y `customer_payments` con `kind='pos'` (el mostrador). Mirar solo uno hace que el saldo mienta. |
+| `backend/analytics.py` | Informes del portal: KPIs con delta, series, desgloses y el resumen de mostrador. |
+| `backend/keywords.py` | Respuestas deterministas por palabra clave, opt-in por tenant. Va ANTES que las Q&A y que la IA. |
+| `backend/inbox.py` | Intervención humana sobre una conversación de WhatsApp: mientras alguien la atiende, el asistente se calla (`bot_is_muted`) y se respeta la ventana de 24 h de Meta. |
+| `backend/voice_engine.py` | `VoiceCallEngine`: el estado y TODA la lógica determinista de una llamada. El puente (`routers/voice_web.py`) solo mueve audio y delega. |
+| `backend/wa_flows.py` | Reserva como formulario dentro de WhatsApp (WhatsApp Flows): endpoint cifrado, `flow_token` firmado. Apagado por defecto. |
+| `backend/wa_onboarding.py` | Alta self-service del WhatsApp del negocio (Embedded Signup + Coexistence), con sus credenciales cifradas. |
+| `backend/wa_demo.py` | Número de WhatsApp compartido para enseñar demos, con códigos de ruta por tenant. |
+| `backend/channel_requests.py` | Solicitudes asistidas de aprovisionamiento de canales. |
 | `backend/main.py` | App + middlewares + mounts + init de runtime + eventos. Importa los routers al final: **el orden de import = orden de registro de rutas**. |
 | `backend/routers/*` | Endpoints por sección contigua del monolito original (decoran `app` directamente, sin APIRouter, para preservar el orden first-match de FastAPI). |
 

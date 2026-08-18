@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import re
 import unicodedata
 
-RAIZ = pathlib.Path(__file__).resolve().parents[1] / "backend"
+REPO = pathlib.Path(__file__).resolve().parents[1]
+RAIZ = REPO / "backend"
 
 # Funciones que normalizan la entrada y ademas comparan contra literales. Se
 # detectan solas; esto solo excluye lo que compara contra datos, no contra frases.
@@ -77,3 +79,54 @@ def test_ningun_patron_de_intencion_lleva_tilde():
         "Patrones con tilde comparados contra texto ya normalizado sin tildes; "
         "no casaran nunca:\n  " + "\n  ".join(sorted(set(fallos)))
     )
+
+
+def test_la_intencion_comercial_entiende_las_tildes():
+    """El cliente escribe "recomendación", no "recomendacion".
+
+    `COMMERCIAL_INTENT_PATTERNS` llevaba texto con doble codificacion y la
+    entrada no se normalizaba, asi que la unica forma de activar el recomendador
+    era escribirlo SIN tilde.
+    """
+    from backend import chat
+
+    assert chat._detect_commercial_intent("quiero una recomendación") == "recomendador"
+    assert chat._detect_commercial_intent("hazme una estimación") == "estimador"
+    assert chat._detect_commercial_intent("¿cuánto cuesta?") == "estimador"
+    assert chat._detect_commercial_intent("hola buenas") == ""
+
+
+# "Ã"/"Â" seguidos de un simbolo: firma de UTF-8 leido como latin-1 y reguardado.
+MOJIBAKE = re.compile("[ÃÂ][-¿]")
+
+# Unica excepcion: el comentario que ilustra el mojibake que esa funcion REPARA.
+MOJIBAKE_PERMITIDO = {"backend/voice.py"}
+
+
+def test_no_hay_texto_con_doble_codificacion():
+    """Una tilde doblemente codificada no casa nada y se ve rota al mostrarla.
+
+    Aparecio en cuatro patrones de intencion comercial, en un error del panel
+    (el error de plan del asistente de voz) y en el manual de admin.
+    """
+    fallos = []
+    for carpeta in ("backend", "tests", "scripts", "docs", "app_ui", "admin_ui", "widget"):
+        base = REPO / carpeta
+        if not base.exists():
+            continue
+        for fichero in base.rglob("*"):
+            if fichero.suffix not in (".py", ".js", ".html", ".md", ".json"):
+                continue
+            if "__pycache__" in str(fichero):
+                continue
+            relativo = fichero.relative_to(REPO).as_posix()
+            if relativo in MOJIBAKE_PERMITIDO:
+                continue
+            try:
+                texto = fichero.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            for numero, linea in enumerate(texto.splitlines(), 1):
+                if MOJIBAKE.search(linea):
+                    fallos.append("%s:%d  %s" % (relativo, numero, linea.strip()[:80]))
+    assert not fallos, "Texto con doble codificacion UTF-8:\n  " + "\n  ".join(fallos[:20])

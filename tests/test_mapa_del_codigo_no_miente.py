@@ -105,3 +105,38 @@ def test_los_ficheros_que_cita_el_mapa_existen():
         if not (RAIZ / cita).exists() and "*" not in cita
     ]
     assert not fallos, "El mapa cita ficheros que no estan:\n  " + "\n  ".join(sorted(set(fallos)))
+
+
+def test_todos_los_modulos_estan_en_la_tabla_de_arquitectura():
+    """`docs/ARQUITECTURA.md` tiene que nombrar todo lo que hay en `backend/`.
+
+    Su tabla se quedo con la foto del refactor y para cuando se reviso faltaban
+    doce modulos, entre ellos `commerce` (el segundo mas grande) y `paystate`
+    (la fuente unica del estado de cobro). Quien llegue nuevo lee esa tabla y da
+    por hecho que lo que no sale, no existe.
+    """
+    doc = (RAIZ / "docs" / "ARQUITECTURA.md").read_text(encoding="utf-8")
+    faltan = [
+        fichero.stem
+        for fichero in sorted((RAIZ / "backend").glob("*.py"))
+        if fichero.stem != "__init__" and ("`%s.py`" % fichero.stem) not in doc
+        and ("backend/%s.py" % fichero.stem) not in doc
+    ]
+    assert not faltan, (
+        "Modulos de backend/ que no aparecen en la tabla de docs/ARQUITECTURA.md:\n  "
+        + ", ".join(faltan)
+    )
+
+
+def test_claude_md_no_cita_ficheros_que_no_estan():
+    """`CLAUDE.md` es lo primero que lee un agente: no puede mandar a un doc muerto.
+
+    Citaba `docs/MANUAL_GOOGLE_CALENDAR.md`, borrado cuando la agenda paso a ser
+    interna (de esa integracion solo quedan campos vacios en la config).
+    """
+    texto = (RAIZ / "CLAUDE.md").read_text(encoding="utf-8")
+    citas = sorted(set(re.findall(
+        r"`((?:docs|tests|scripts|deploy|backend|widget|app_ui|admin_ui)/[A-Za-z0-9_./-]+)`", texto
+    )))
+    faltan = [cita for cita in citas if not (RAIZ / cita).exists()]
+    assert not faltan, "CLAUDE.md cita ficheros que no existen:\n  " + "\n  ".join(faltan)
