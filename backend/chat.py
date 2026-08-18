@@ -580,6 +580,28 @@ async def _process_chat_message(
         )
         return keyword_response
 
+    # Respuesta que el negocio ha escrito palabra por palabra para esta pregunta.
+    # Va aqui, con las reglas por palabra clave y ANTES de nuestras heuristicas: si
+    # el salon ha redactado su horario, preguntarlo no puede devolver los huecos de
+    # hoy. El listado exige coincidencia casi literal, asi que no secuestra
+    # conversaciones normales.
+    qa_exact_answer = rag._match_qa_answer(cliente_id, message)
+    if qa_exact_answer:
+        qa_response = RespuestaChat(
+            respuesta=qa_exact_answer,
+            mostrar_formulario=False,
+            session_id=session_id,
+            intent="qa_exact",
+        )
+        rag._record_chat_message(
+            session_id=session_id,
+            cliente_id=cliente_id,
+            role="assistant",
+            content=qa_exact_answer,
+            intent="qa_exact",
+        )
+        return qa_response
+
     menu_option = _detect_menu_option(message)
     if rag._message_requests_availability(message):
         availability_text = await rag._build_chat_availability_answer(cliente_id, message, client_config)
@@ -655,23 +677,6 @@ async def _process_chat_message(
             intent="gift_card",
         )
         return gift_response
-
-    qa_exact_answer = rag._match_qa_answer(cliente_id, message)
-    if qa_exact_answer:
-        qa_response = RespuestaChat(
-            respuesta=qa_exact_answer,
-            mostrar_formulario=False,
-            session_id=session_id,
-            intent="qa_exact",
-        )
-        rag._record_chat_message(
-            session_id=session_id,
-            cliente_id=cliente_id,
-            role="assistant",
-            content=qa_exact_answer,
-            intent="qa_exact",
-        )
-        return qa_response
 
     # El pago se evalua antes que la gestion de cita: una peticion de pago suele
     # incluir el numero de reserva y, sin esto, la gestion la interceptaria.

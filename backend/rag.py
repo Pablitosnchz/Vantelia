@@ -441,6 +441,18 @@ def _normalize_for_qa_match(text: str) -> str:
     return t
 
 
+def _qa_row_tags(row) -> List[str]:
+    """Etiquetas de una fila de kb_qa, tolerando JSON corrupto."""
+    try:
+        tags = json.loads(row["tags_json"] or "[]")
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+        return []
+    if not isinstance(tags, list):
+        return []
+    # "_starter" es interno (marca las sugerencias del widget), no una etiqueta.
+    return [str(t) for t in tags if isinstance(t, (str, int, float)) and str(t) != "_starter"]
+
+
 def _match_qa_answer(cliente_id: str, message: str) -> Optional[str]:
     """Return verbatim Q&A answer if `message` matches a stored question.
 
@@ -452,7 +464,7 @@ def _match_qa_answer(cliente_id: str, message: str) -> Optional[str]:
         return None
     with db._get_db_connection() as connection:
         rows = connection.execute(
-            "SELECT question, answer FROM kb_qa WHERE cliente_id = ?",
+            "SELECT question, answer, tags_json FROM kb_qa WHERE cliente_id = ?",
             (cliente_id,),
         ).fetchall()
     if not rows:
@@ -484,6 +496,18 @@ def _match_qa_answer(cliente_id: str, message: str) -> Optional[str]:
                 overlap = len(q_tokens & msg_tokens) / max(len(q_tokens), len(msg_tokens))
                 if overlap >= 0.85:
                     score = int(60 * overlap)
+        if score < 80:
+            # Etiquetas: el negocio las escribe precisamente para que su respuesta
+            # salga aunque la pregunta no venga clavada. Se exige palabra completa y
+            # cinco caracteres: con cuatro, una etiqueta como "cita" contestaba a
+            # "quiero cancelar mi cita" con las instrucciones para pedirla.
+            for etiqueta in _qa_row_tags(row):
+                norm_tag = _normalize_for_qa_match(etiqueta)
+                if len(norm_tag) < 5:
+                    continue
+                if re.search(r"(?:^|\s)%s(?:$|\s)" % re.escape(norm_tag), norm_msg):
+                    score = max(score, 80)
+                    break
         if score >= 60 and score > best_score:
             best_score = score
             best_answer = a
