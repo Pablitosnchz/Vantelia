@@ -474,6 +474,7 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
         provider_booking_id=stored_booking["provider_booking_id"] or "",
         provider_booking_url=stored_booking["provider_booking_url"] or "",
         manage_url=booking._build_booking_manage_url(stored_booking["manage_token"], request),
+        booking_code=stored_booking["booking_code"] or "",
         payment_status=stored_booking["payment_status"],
         payment_url=payment_row["checkout_url"] if payment_row else "",
     )

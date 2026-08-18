@@ -42,3 +42,16 @@ def test_la_tarjeta_conserva_sus_botones():
     """Quitar el mensaje duplicado no puede dejar al cliente sin forma de pagar."""
     assert "Completar pago para confirmar" in FUENTE
     assert "Gestionar cita" in FUENTE
+
+
+def test_la_api_devuelve_el_numero_de_reserva():
+    """El widget lo pinta desde `response.booking_code`: si /agendar no lo manda,
+    la tarjeta se queda sin numero y el cliente sin nada que guardar."""
+    import inspect
+
+    from api_models import RespuestaAgendado
+    from backend.routers import public_booking
+
+    assert RespuestaAgendado(ok=True, booking_id="x", estado="confirmed", mensaje="").booking_code == ""
+    fuente = inspect.getsource(public_booking.agendar)
+    assert 'booking_code=stored_booking["booking_code"]' in fuente

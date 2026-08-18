@@ -136,6 +136,9 @@ class RespuestaAgendado(BaseModel):
     provider_booking_id: str = ""
     provider_booking_url: str = ""
     manage_url: str = ""
+    # Numero de reserva que se le ensena al cliente (R-XXXX). Es lo que se le pide
+    # despues para pagar, cancelar o cambiar la cita.
+    booking_code: str = ""
     payment_status: str = "not_required"
     payment_url: str = ""
 
