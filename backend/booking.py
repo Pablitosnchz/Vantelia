@@ -1400,10 +1400,11 @@ async def _process_payment_request_message(
     if not _message_requests_payment(message):
         return None
     if not _ai_payment_sending_available(cliente_id):
-        return (
-            "payment",
-            "Ahora mismo no puedo gestionar el pago online. El equipo del negocio puede ayudarte directamente.",
-        )
+        # Sin cobro online no se contesta con un portazo: se deja seguir el pipeline
+        # para que respondan las Q&A del negocio o su informacion. Un salon que cobra
+        # la senal por Bizum tiene escrito como se paga, y decirle al cliente "no
+        # puedo gestionar el pago online" es tapar esa respuesta con un no.
+        return None
     code = _extract_booking_code_from_text(message)
     booking = _get_booking_row_by_code(cliente_id, code) if code else None
     if code and not booking:

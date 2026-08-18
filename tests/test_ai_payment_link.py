@@ -440,8 +440,11 @@ def test_chat_payment_without_code_or_identity_asks(api_module, monkeypatch):
     assert "numero de reserva" in text.lower()
 
 
-def test_chat_payment_intent_disabled_is_declined(api_module, monkeypatch):
-    """Sin cobros operativos, el chat no promete un pago que no puede hacer."""
+def test_chat_payment_intent_sin_cobros_deja_seguir(api_module, monkeypatch):
+    """Sin cobros operativos no se contesta con un portazo: el pipeline sigue y
+    responde el negocio (sus Q&A o su informacion). Un salon que cobra la senal por
+    Bizum tiene escrito como se paga, y "no puedo gestionar el pago online" tapaba
+    esa respuesta."""
     with api_module._get_db_connection() as connection:
         connection.execute("DELETE FROM client_payment_accounts WHERE cliente_id='demo'")
         connection.commit()
@@ -450,7 +453,4 @@ def test_chat_payment_intent_disabled_is_declined(api_module, monkeypatch):
             cliente_id="demo", message="quiero pagar mi cita R-1234", request=None, source="chat",
         )
     )
-    assert result is not None
-    intent, text = result
-    assert intent == "payment"
-    assert "no puedo gestionar el pago" in text.lower()
+    assert result is None
