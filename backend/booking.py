@@ -391,6 +391,8 @@ def _booking_email_subject(
     booking_row: Any,
 ) -> str:
     service_name = booking_row["servicio"] or "tu cita"
+    if status_key == "pending_payment":
+        return f"Falta el pago para confirmar tu cita con {company_name}"
     if status_key == "received":
         return f"Hemos recibido tu solicitud con {company_name}"
     if status_key == "cancelled":
@@ -522,6 +524,10 @@ def _booking_email_bodies(
             settings.logger.debug("No se pudo calcular el cobro para el email: %s", exc)
     _cobro_line = f"Pago: {_cobro_texto}\n" if _cobro_texto else ""
 
+    # Con la senal sin pagar, el numero de reserva todavia no se entrega: la cita
+    # puede caerse. Lo que necesita es el enlace de pago.
+    if status_key == "pending_payment":
+        booking_code = ""
     codigo_line = f"Numero de reserva: {booking_code}\n" if booking_code else ""
     text_body = (
         f"{intro}\n\n"
@@ -538,6 +544,10 @@ def _booking_email_bodies(
             "\nGuarda tu numero de reserva: te servira para cancelar o cambiar la cita "
             "por telefono, web o WhatsApp.\n"
         )
+    if status_key == "pending_payment":
+        _pago_url = build_booking_payment_url(booking_row["manage_token"])
+        if _pago_url:
+            text_body += f"\nPaga aqui para confirmar la cita: {_pago_url}\n"
     if extra_message_clean and status_key == "cancelled":
         text_body += f"\nMotivo de cancelacion:\n{extra_message_clean}\n"
     if contact_text:
@@ -577,6 +587,12 @@ def _booking_email_bodies(
         )
         + f"{manage_html}"
     )
+    if status_key == "pending_payment" and _pago_url:
+        html_body += (
+            f'<p style="margin:18px 0;"><a href="{escape(_pago_url)}" '
+            f'style="display:inline-block;background:#0b6b8a;color:#ffffff;padding:12px 22px;'
+            f'border-radius:10px;text-decoration:none;font-weight:bold;">Pagar y confirmar la cita</a></p>'
+        )
     if extra_message_clean and status_key == "cancelled":
         extra_message_html = escape(extra_message_clean).replace("\n", "<br>")
         html_body += (
@@ -2699,9 +2715,12 @@ async def _create_booking_core(
     if stored is None:  # defensa: _store_booking acaba de insertar
         raise HTTPException(status_code=500, detail="No se pudo guardar la cita.")
     if send_confirmation and _booking_has_reminder_contact(email, telefono):
+        # Con senal pendiente no se puede decir "cita confirmada": se manda el aviso
+        # de pago, que ademas lleva el enlace. Al pagar llega la confirmacion real.
+        aviso = "pending_payment" if stored["status"] == "pending_payment" else "confirmed"
         try:
             await _send_booking_reminder_by_kind(
-                stored, "confirmed", request, sent_column="confirmation_email_sent_at",
+                stored, aviso, request, sent_column="confirmation_email_sent_at",
             )
         except Exception as exc:  # noqa: BLE001
             settings.logger.error("No se ha podido enviar el aviso de booking %s: %s", booking_id, exc)

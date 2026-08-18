@@ -298,7 +298,10 @@ STRIPE_CONNECT_WEBHOOK_SECRET = os.getenv("STRIPE_CONNECT_WEBHOOK_SECRET", "").s
 STRIPE_CONNECT_API_VERSION = os.getenv("STRIPE_CONNECT_API_VERSION", "2026-05-27.preview").strip()
 STRIPE_CONNECT_BASE_URL = "https://api.stripe.com/v2/core"
 STRIPE_CONNECT_COUNTRY = os.getenv("STRIPE_CONNECT_COUNTRY", "es").strip().lower()
-BOOKING_PAYMENT_EXPIRY_MINUTES = min(24 * 60, max(30, int(os.getenv("BOOKING_PAYMENT_EXPIRY_MINUTES", "30"))))
+# Cuanto se guarda el hueco de una cita sin pagar. Con 30 min el aviso por email
+# no llegaba a tiempo de servir para nada; 2 h es margen razonable sin bloquear
+# la agenda de mas. Maximo de Stripe: 24 h.
+BOOKING_PAYMENT_EXPIRY_MINUTES = min(24 * 60, max(30, int(os.getenv("BOOKING_PAYMENT_EXPIRY_MINUTES", "120"))))
 STRIPE_CONNECT_CLIENT_ID = os.getenv("STRIPE_CONNECT_CLIENT_ID", "").strip()
 STRIPE_CONNECT_RETURN_URL = os.getenv("STRIPE_CONNECT_RETURN_URL", "").strip()
 STRIPE_CONNECT_REFRESH_URL = os.getenv("STRIPE_CONNECT_REFRESH_URL", "").strip()
@@ -440,6 +443,12 @@ def _self_serve_plan(slug: str) -> Dict[str, Any]:
     return SELF_SERVE_PLANS.get((slug or "").lower(), SELF_SERVE_PLANS["free"])
 
 DEFAULT_MESSAGE_TEMPLATES = {
+    # Servicios con senal: la cita queda guardada pero sin confirmar. Sin este aviso,
+    # quien reserva por la web pierde el enlace de pago al cerrar la pestana.
+    "pending_payment": (
+        "Hemos guardado tu hueco, pero la cita todavia NO esta confirmada: falta el pago "
+        "de la senal. Tienes el enlace debajo."
+    ),
     "confirmed": (
         "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla "
         "si necesitas hacer algun cambio."
@@ -463,6 +472,7 @@ DEFAULT_MESSAGE_TEMPLATES = {
 }
 
 DEFAULT_MESSAGE_TEMPLATE_ENABLED = {
+    "pending_payment": True,
     "confirmed": True,
     "reminder_24h": True,
     "reminder_2h": True,
@@ -471,6 +481,7 @@ DEFAULT_MESSAGE_TEMPLATE_ENABLED = {
 }
 
 DEFAULT_MESSAGE_TEMPLATE_CHANNELS = {
+    "pending_payment": {"email": True, "whatsapp": False, "sms": False},
     "confirmed": {"email": True, "whatsapp": False, "sms": False},
     "reminder_24h": {"email": True, "whatsapp": False, "sms": False},
     "reminder_2h": {"email": True, "whatsapp": False, "sms": False},

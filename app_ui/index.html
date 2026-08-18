@@ -11931,6 +11931,7 @@ document.getElementById('horBlockAddBtn').addEventListener('click', async () => 
 // `inFlow`: el on/off de este aviso se gestiona en el recorrido (Seguimiento), no aquí.
 // Para esos, la tarjeta de texto solo edita el contenido (sin checkbox de activación).
 const MSG_TEMPLATES = [
+  { key:'pending_payment', label:'Falta el pago (servicios con señal)' },
   { key:'confirmacion', label:'Confirmación de cita', inFlow:true },
   { key:'reminder_24h', label:'Recordatorio 24 horas antes', inFlow:true },
   { key:'reminder_2h', label:'Recordatorio 2 horas antes', inFlow:true },

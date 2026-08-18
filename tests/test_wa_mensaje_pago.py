@@ -69,7 +69,8 @@ def test_el_enlace_corto_lleva_al_checkout(api_module, client=None):
     assert "status_code=302" in fuente
     # Ya pagada o sin cobro pendiente: a la pagina de la cita, no a un error.
     assert "_build_booking_manage_url" in fuente
-    assert '("paid", "preauthorized")' in fuente
+    # Pagada, retenida o caducada: en los tres casos no hay checkout al que llevarle.
+    assert '("paid", "preauthorized", "expired")' in fuente
 
 
 def test_sin_email_no_se_imprime_el_emoji_suelto(api_module):

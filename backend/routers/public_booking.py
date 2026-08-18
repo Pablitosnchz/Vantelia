@@ -61,7 +61,9 @@ async def booking_payment_shortlink(manage_token: str, request: Request) -> Redi
     booking_row = booking._load_booking_by_token_or_404(manage_token)
     pago = booking._booking_payment_row(booking_row["id"])
     destino = ""
-    if pago and pago["status"] not in ("paid", "preauthorized"):
+    # "expired": la sesion de Stripe ya no vale y la cita se cancelo con ella, asi que
+    # llevarle al checkout muerto solo le ensena un error de Stripe.
+    if pago and pago["status"] not in ("paid", "preauthorized", "expired"):
         destino = pago["checkout_url"] or ""
     return RedirectResponse(
         destino or booking._build_booking_manage_url(manage_token, request), status_code=302
