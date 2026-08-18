@@ -506,7 +506,11 @@ def _match_qa_answer(cliente_id: str, message: str) -> Optional[str]:
                 if len(norm_tag) < 5:
                     continue
                 if re.search(r"(?:^|\s)%s(?:$|\s)" % re.escape(norm_tag), norm_msg):
-                    score = max(score, 80)
+                    # Cuanto mas especifica es la etiqueta que casa, mejor es el
+                    # emparejado: si un salon tiene una respuesta etiquetada
+                    # "alisado" y otra "que alisado", a "¿que alisado me
+                    # recomiendas?" debe contestar la segunda.
+                    score = max(score, 70 + min(25, len(norm_tag)))
                     break
         if score >= 60 and score > best_score:
             best_score = score
