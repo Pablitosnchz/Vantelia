@@ -138,11 +138,11 @@ export function humanizeErrorMessage(error, fallbackMessage) {
     return "El servidor no ha podido validar el dominio desde el que se carga el widget.";
   }
 
-  if (raw.includes("limite temporal")) {
+  if (raw.includes("límite temporal")) {
     return "Has realizado demasiadas solicitudes seguidas. Espera unos segundos y vuelve a intentarlo.";
   }
 
-  if (raw.includes("ya no esta disponible") || raw.includes("acaba de ser reservado")) {
+  if (raw.includes("ya no está disponible") || raw.includes("acaba de ser reservado")) {
     return "Ese horario acaba de dejar de estar disponible. Elige otro tramo.";
   }
 

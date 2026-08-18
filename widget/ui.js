@@ -91,7 +91,7 @@ export function construirWidget(cfg) {
   container.className = WIDGET_CONFIG.position === "left" ? "ia-left" : "ia-right";
   container.dataset.launcherShape = launcherShape;
   container.innerHTML = `
-    <div id="ia-w-badge">${escapeHtml(cfg.bienvenida || "Necesitas ayuda?")}</div>
+    <div id="ia-w-badge">${escapeHtml(cfg.bienvenida || "¿Necesitas ayuda?")}</div>
     <button
       id="ia-w-btn"
       class="ia-launcher-${launcherShape}"
@@ -134,7 +134,7 @@ export function construirWidget(cfg) {
   trackWidgetEvent("widget_loaded", {
     booking_enabled: !!cfg.booking_enabled,
   });
-  agregarMensaje(cfg.bienvenida || "Hola, en que puedo ayudarte hoy?", "bot");
+  agregarMensaje(cfg.bienvenida || "Hola, ¿en qué puedo ayudarte hoy?", "bot");
   agregarAccionesIniciales(Array.isArray(cfg.starter_questions) ? cfg.starter_questions : []);
 
   document.getElementById("ia-w-btn")?.addEventListener("click", () => toggleChat());

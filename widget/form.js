@@ -71,19 +71,19 @@ const validaciones = {
     if (!valor) return "El nombre es obligatorio.";
     if (valor.length < 3) return "Escribe al menos 3 caracteres.";
     if (!/^[\p{L}\s'-]+$/u.test(valor)) {
-      return "Usa solo letras, espacios o apostrofes.";
+      return "Usa solo letras, espacios o apóstrofes.";
     }
     return "";
   },
   email(valor) {
     if (!valor) return "";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(valor)) return "El email no es valido.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(valor)) return "El email no es válido.";
     return "";
   },
   telefono(valor) {
     if (!valor) return "";
     const limpio = valor.replace(/[\s\-().]/g, "");
-    if (!/^\+?\d{9,15}$/.test(limpio)) return "Introduce un telefono valido.";
+    if (!/^\+?\d{9,15}$/.test(limpio)) return "Introduce un teléfono válido.";
     return "";
   },
   fecha(valor) {
@@ -103,7 +103,7 @@ function validateReminderContact(emailInputId, phoneInputId) {
   const phoneOk = validateField(phoneInputId, "telefono");
   if (!emailOk || !phoneOk) return false;
   if (!email && !telefono) {
-    const message = "Indica al menos email o telefono para enviarte confirmaciones y recordatorios.";
+    const message = "Indica al menos email o teléfono para enviarte confirmaciones y recordatorios.";
     setFieldError(emailInputId, message);
     setFieldError(phoneInputId, message);
     return false;
@@ -570,12 +570,12 @@ async function confirmarCita() {
 
 export async function mostrarFormulario() {
   if (!WIDGET_CONFIG.bookingEnabled) {
-    agregarMensaje("La reserva online no esta habilitada para este cliente.", "bot");
+    agregarMensaje("La reserva online no está habilitada para este cliente.", "bot");
     return;
   }
 
   if (document.getElementById("ia-form-cita")) {
-    agregarMensaje("Ya tienes un formulario de solicitud abierto en la conversacion.", "bot");
+    agregarMensaje("Ya tienes un formulario de solicitud abierto en la conversación.", "bot");
     return;
   }
 
