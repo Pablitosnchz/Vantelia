@@ -509,9 +509,10 @@ def _match_qa_answer(cliente_id: str, message: str) -> Optional[str]:
                     # Cuanto mas especifica es la etiqueta que casa, mejor es el
                     # emparejado: si un salon tiene una respuesta etiquetada
                     # "alisado" y otra "que alisado", a "¿que alisado me
-                    # recomiendas?" debe contestar la segunda.
+                    # recomiendas?" debe contestar la segunda. Se miran TODAS las
+                    # etiquetas de la fila: cortar en la primera que casa dejaba
+                    # ganar a la mas generica solo por estar antes en la lista.
                     score = max(score, 70 + min(25, len(norm_tag)))
-                    break
         if score >= 60 and score > best_score:
             best_score = score
             best_answer = a

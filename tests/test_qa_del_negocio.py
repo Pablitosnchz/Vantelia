@@ -120,3 +120,34 @@ def test_el_marcador_interno_no_cuenta_como_etiqueta(api_module):
     assert rag._qa_row_tags(_Fila(tags_json='["_starter", "precios"]')) == ["precios"]
     assert rag._qa_row_tags(_Fila(tags_json="no es json")) == []
     assert rag._qa_row_tags(_Fila(tags_json="")) == []
+
+
+def test_gana_la_etiqueta_mas_especifica(api_module):
+    """Dos respuestas del mismo tema: contesta la que se ha concretado mas."""
+    from backend import rag
+
+    generica = _guardar_qa(api_module, "¿Cuánto cuesta un cambio de color?",
+                           "Depende: hay que verlo en persona.", ["presupuesto"])
+    concreta = _guardar_qa(api_module, "¿Me pongo extensiones?",
+                           "Depende de la cantidad y del largo.",
+                           ["extensiones", "ponerme extensiones"])
+    try:
+        respuesta = rag._match_qa_answer("demo", "quiero ponerme extensiones, me das presupuesto?")
+        assert respuesta == "Depende de la cantidad y del largo."
+    finally:
+        _borrar_qa(api_module, generica)
+        _borrar_qa(api_module, concreta)
+
+
+def test_se_miran_todas_las_etiquetas_de_la_fila(api_module):
+    """Cortar en la primera que casa dejaba ganar a la generica por ir antes."""
+    from backend import rag
+
+    otra = _guardar_qa(api_module, "¿Precios?", "Consulta el catalogo.", ["presupuesto"])
+    fila = _guardar_qa(api_module, "¿Extensiones?", "Te asesoramos en persona.",
+                       ["extensiones", "ponerme extensiones"])
+    try:
+        assert rag._match_qa_answer("demo", "quiero ponerme extensiones y presupuesto") == "Te asesoramos en persona."
+    finally:
+        _borrar_qa(api_module, otra)
+        _borrar_qa(api_module, fila)
