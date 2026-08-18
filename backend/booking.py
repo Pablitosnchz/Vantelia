@@ -545,6 +545,13 @@ def _booking_email_bodies(
             "por telefono, web o WhatsApp.\n"
         )
     _pago_nota = ""
+    # Nota del servicio: solo en la confirmacion, que es cuando la cita ya es suya.
+    _nota_servicio = (
+        service_booking_note(booking_row["cliente_id"], booking_row)
+        if status_key == "confirmed" else ""
+    )
+    if _nota_servicio:
+        text_body += f"\n{_nota_servicio}\n"
     if status_key == "pending_payment":
         _pago_url = build_booking_payment_url(booking_row["manage_token"])
         # Senal, pago completo o retencion: el mismo helper que usa WhatsApp explica
@@ -595,6 +602,12 @@ def _booking_email_bodies(
         )
         + f"{manage_html}"
     )
+    if _nota_servicio:
+        html_body += (
+            f'<div style="margin:0 0 16px;padding:12px 16px;border-radius:12px;'
+            f'background:#f2f7f4;border:1px solid #cfe3d8;line-height:1.6;white-space:pre-line;">'
+            f'{escape(_nota_servicio)}</div>'
+        )
     if status_key == "pending_payment" and _pago_nota:
         html_body += f'<p style="line-height:1.6;">{escape(_pago_nota)}</p>'
     if status_key == "pending_payment" and _pago_url:
@@ -796,6 +809,9 @@ def _whatsapp_confirmation_text(booking_row: sqlite3.Row) -> str:
     ).strip()
     if aviso:
         lineas += ["", aviso]
+    nota = service_booking_note(booking_row["cliente_id"], booking_row)
+    if nota:
+        lineas += ["", nota]
     return chr(10).join(lineas)
 
 
@@ -5046,6 +5062,28 @@ def resolve_payment_requirement(
         "payment_optional": bool(available and mode == "payment_optional"),
         "payment_status": "pending" if available and mode == "payment_required" else "optional" if available else "not_required",
     }
+
+
+def service_booking_note(cliente_id: str, booking_row: sqlite3.Row) -> str:
+    """Lo que el negocio quiere contarle al cliente al confirmar ESTE servicio.
+
+    Es texto suyo (como venir preparado, que traer) y solo aplica al servicio que
+    lo tiene puesto: por eso no vale el mensaje de confirmacion general.
+    """
+    try:
+        servicio = booking_row["servicio"]
+        service_id = booking_row["service_id"] if "service_id" in booking_row.keys() else ""
+    except (KeyError, IndexError):
+        return ""
+    row = agenda._get_service_row(cliente_id, service_id) or agenda._find_service_by_name(
+        cliente_id, servicio
+    )
+    if row is None:
+        return ""
+    try:
+        return str(row["booking_note"] or "").strip()
+    except (KeyError, IndexError):  # base antigua sin la columna
+        return ""
 
 
 def payment_prompt_note(cliente_id: str, booking_row: sqlite3.Row, payment_row: Optional[sqlite3.Row]) -> str:

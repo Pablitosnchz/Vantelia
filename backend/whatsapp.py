@@ -873,6 +873,11 @@ async def _wa_create_booking(
     ).strip()
     if mensaje_negocio:
         confirmacion += f"\n{mensaje_negocio}\n"
+    # Nota propia del servicio (como venir preparado). Con senal pendiente no se
+    # manda todavia: la cita aun puede caerse y llegara con la confirmacion real.
+    nota_servicio = "" if is_pending_payment else booking.service_booking_note(cliente_id, stored_booking)
+    if nota_servicio:
+        confirmacion += f"\n{nota_servicio}\n"
     # Auto-canje de bono (numero verificado del canal): descuenta 1 sesion y deja la
     # cita pagada. Best-effort; si la cita exige pago previo, el helper no toca nada.
     bono_redeemed = commerce.auto_redeem_package_for_booking(

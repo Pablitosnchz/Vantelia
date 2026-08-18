@@ -4004,6 +4004,11 @@
       <summary id="svcMasResumen">Más opciones · foto, descripción y política de cancelación</summary>
       <div class="field" style="margin-bottom:10px;"><label class="field-label">Descripción</label><textarea class="field-input" id="svcDesc" rows="2" placeholder="opcional"></textarea></div>
       <div class="field" style="margin-bottom:10px;">
+        <label class="field-label">Qué contarle al cliente al confirmar esta cita</label>
+        <textarea class="field-input" id="svcBookingNote" rows="3" maxlength="1000" placeholder="Ej. Ven con el pelo lavado el mismo día, solo con champú y sin mascarilla."></textarea>
+        <p class="panel-sub" style="margin:6px 0 0; font-size:0.78rem;">Se envía con la confirmación, solo en las citas de este servicio. Vacío = no se manda nada.</p>
+      </div>
+      <div class="field" style="margin-bottom:10px;">
         <label class="field-label">Imagen (URL)</label>
         <input type="url" class="field-input" id="svcImagen" maxlength="500" placeholder="https://… (se muestra en tu central de reservas)" />
         <div class="imgprev" id="svcImagenPrev"></div>
@@ -7572,6 +7577,7 @@ function resumenExtrasServicio(svc) {
   const puesto = (v) => v !== null && v !== undefined && v !== '';
   const partes = [];
   if (svc && svc.descripcion) partes.push('descripción');
+  if (svc && svc.booking_note) partes.push('aviso al confirmar');
   if (svc && svc.image_url) partes.push('foto');
   if (svc && (puesto(svc.cancel_free_hours) || puesto(svc.cancel_late_fee_pct) || puesto(svc.no_show_fee_pct))) {
     partes.push('política propia');
@@ -7615,6 +7621,7 @@ function openServiceDrawer(svc = null) {
   ovSet('svcLateFee', svc ? svc.cancel_late_fee_pct : null);
   ovSet('svcNoShowFee', svc ? svc.no_show_fee_pct : null);
   document.getElementById('svcDesc').value = svc ? (svc.descripcion || '') : '';
+  document.getElementById('svcBookingNote').value = svc ? (svc.booking_note || '') : '';
   document.getElementById('svcImagen').value = svc ? (svc.image_url || '') : '';
   refreshImagePreview('svcImagen', 'svcImagenPrev');
   document.getElementById('svcActivo').checked = svc ? !!svc.is_active : true;
@@ -7660,7 +7667,8 @@ async function saveService() {
   const no_show_fee_pct = ovVal('svcNoShowFee');
   const image_url = document.getElementById('svcImagen').value.trim();
   const category = document.getElementById('svcCategoria').value.trim();
-  const body = JSON.stringify({ nombre, duration_minutes: duration, price_cents, descripcion, is_active, payment_mode, payment_type, deposit_amount_cents, currency:'eur', cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct, image_url, category });
+  const booking_note = document.getElementById('svcBookingNote').value.trim();
+  const body = JSON.stringify({ nombre, duration_minutes: duration, price_cents, descripcion, is_active, payment_mode, payment_type, deposit_amount_cents, currency:'eur', cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct, image_url, category, booking_note });
   const btn = document.getElementById('svcSaveBtn'); const old = btn.textContent; btn.disabled = true; btn.textContent = 'Guardando…';
   try {
     const saved = slug

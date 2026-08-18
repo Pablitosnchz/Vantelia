@@ -313,6 +313,10 @@ def _init_database() -> None:
             # Categoria del servicio (Peinados, Cortes, Color...). Vacia = sin agrupar.
             # Un salon con 190 servicios no cabe en una lista: se elige categoria antes.
             "category": "TEXT NOT NULL DEFAULT ''",
+            # Que contarle al cliente al confirmar una cita de ESTE servicio (como venir
+            # preparado, que traer). El mensaje de confirmacion del negocio es uno para
+            # todos; esto es lo que cambia de un servicio a otro.
+            "booking_note": "TEXT NOT NULL DEFAULT ''",
         }.items():
             if column_name not in service_columns:
                 connection.execute(f"ALTER TABLE services ADD COLUMN {column_name} {definition}")
