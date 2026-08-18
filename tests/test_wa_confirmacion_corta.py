@@ -46,7 +46,7 @@ def test_la_confirmacion_por_whatsapp_es_corta(api_module):
     from backend import booking
 
     fuente = inspect.getsource(booking._send_booking_whatsapp_reminder)
-    assert "_whatsapp_confirmation_text" in fuente
+    assert "_whatsapp_notice_text" in fuente
     assert "Gestionar cita" in fuente
     # Si el boton falla, sigue saliendo el texto largo: nadie se queda sin aviso.
     assert "_booking_message_text_for_channel" in fuente
@@ -74,7 +74,7 @@ def test_el_texto_corto_lleva_lo_imprescindible(api_module):
         def keys(self):
             return list(super().keys())
 
-    texto = booking._whatsapp_confirmation_text(_Cita(
+    texto = booking._whatsapp_notice_text(_Cita(
         cliente_id="demo", servicio="Corte y color", employee_name="Alicia",
         booking_date="2099-03-04", booking_time="10:00", booking_code="R-1234",
     ))

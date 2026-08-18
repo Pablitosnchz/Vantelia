@@ -510,6 +510,9 @@ def _booking_email_bodies(
         }
     )
     intro = intro_map.get(status_key, intro_map["confirmed"])
+    # `extra_message` ya NO se le ensena al cliente en las cancelaciones: el motivo
+    # lo escribe el salon para su registro ("no viene nunca") y acababa leyendolo
+    # la clienta. Se conserva en la auditoria de la cita.
     extra_message_clean = textnorm._sanitize_text(extra_message, allow_multiline=True)
 
     # Que ha pagado ya y que le queda por pagar. Sin esto, quien deja una senal
@@ -563,8 +566,6 @@ def _booking_email_bodies(
             text_body += f"\n{_pago_nota}\n"
         if _pago_url:
             text_body += f"\nPaga aqui para confirmar la cita: {_pago_url}\n"
-    if extra_message_clean and status_key == "cancelled":
-        text_body += f"\nMotivo de cancelacion:\n{extra_message_clean}\n"
     if contact_text:
         text_body += f"\nContacto:\n{contact_text}\n"
 
@@ -615,11 +616,6 @@ def _booking_email_bodies(
             f'<p style="margin:18px 0;"><a href="{escape(_pago_url)}" '
             f'style="display:inline-block;background:#0b6b8a;color:#ffffff;padding:12px 22px;'
             f'border-radius:10px;text-decoration:none;font-weight:bold;">Pagar y confirmar la cita</a></p>'
-        )
-    if extra_message_clean and status_key == "cancelled":
-        extra_message_html = escape(extra_message_clean).replace("\n", "<br>")
-        html_body += (
-            f'<p style="line-height:1.6;"><strong>Motivo de cancelacion:</strong><br>{extra_message_html}</p>'
         )
     if contact_html:
         html_body += (
@@ -783,34 +779,55 @@ def _whatsapp_deliverable_for_booking(booking_row: sqlite3.Row) -> Tuple[bool, s
     return False, "Activa WhatsApp en el portal."
 
 
-def _whatsapp_confirmation_text(booking_row: sqlite3.Row) -> str:
-    """Confirmacion corta para WhatsApp (el correo entero aqui es un muro).
+# Avisos de cita que se escriben para WhatsApp, no heredados del correo. El email
+# lleva zona horaria, contacto y el enlace en crudo: en un movil todo eso sobra.
+_WA_TITULOS = {
+    "confirmed": "✅ *Cita confirmada*",
+    "rescheduled": "🔄 *Cita cambiada*",
+    "cancelled": "❌ *Cita cancelada*",
+}
 
-    El email lleva zona horaria, contacto y el enlace de gestion en crudo; por
-    WhatsApp sobra: el enlace va en un boton y el resto ya lo ha visto al reservar.
-    """
+
+def _whatsapp_notice_text(booking_row: sqlite3.Row, kind: str = "confirmed") -> str:
+    """Aviso corto de cita para WhatsApp (confirmada, cambiada o cancelada)."""
     config = clients._get_client_config(booking_row["cliente_id"])
     cuando = booking_row["booking_date"] or ""
     try:
         cuando = textnorm._format_date_es(textnorm._parse_date(cuando).date())
     except Exception:  # noqa: BLE001 - si la fecha viene rara, se deja como esta
         pass
-    lineas = ["✅ *Cita confirmada*", ""]
-    lineas.append("🛍️ %s" % (booking_row["servicio"] or "Tu cita"))
+    hora = booking_row["booking_time"] or ""
+    servicio = booking_row["servicio"] or "Tu cita"
     quien = (booking_row["employee_name"] if "employee_name" in booking_row.keys() else "") or ""
+    codigo = (booking_row["booking_code"] if "booking_code" in booking_row.keys() else "") or ""
+
+    if kind == "cancelled":
+        # Sin numero de reserva ni enlace: esa cita ya no existe y ofrecerselos
+        # solo despista. Lo util es decirle como conseguir otra.
+        telefono = str((config.get("contacto") or {}).get("telefono") or "").strip()
+        lineas = [_WA_TITULOS["cancelled"], ""]
+        lineas.append("Era el %s a las %s (%s)." % (cuando, hora, servicio))
+        lineas.append("")
+        lineas.append(
+            "Si quieres buscar otro hueco, escribeme por aqui y te lo miro"
+            + (" o llamanos al %s." % telefono if telefono else ".")
+        )
+        return chr(10).join(lineas)
+
+    lineas = [_WA_TITULOS.get(kind, _WA_TITULOS["confirmed"]), ""]
+    lineas.append("🛍️ %s" % servicio)
     if quien:
         lineas.append("👨‍⚕️ %s" % quien)
-    lineas.append("📅 %s · 🕐 %s" % (cuando, booking_row["booking_time"] or ""))
-    codigo = (booking_row["booking_code"] if "booking_code" in booking_row.keys() else "") or ""
+    lineas.append("📅 %s · 🕐 %s" % (cuando, hora))
     if codigo:
         lineas.append("🔖 Numero de reserva: *%s*" % codigo)
     aviso = textnorm._sanitize_text(
         str((config.get("booking") or {}).get("success_message") or ""), allow_multiline=True
     ).strip()
-    if aviso:
+    if aviso and kind == "confirmed":
         lineas += ["", aviso]
     nota = service_booking_note(booking_row["cliente_id"], booking_row)
-    if nota:
+    if nota and kind == "confirmed":
         lineas += ["", nota]
     return chr(10).join(lineas)
 
@@ -833,14 +850,22 @@ async def _send_booking_whatsapp_reminder(
     ).strip()
     if not (phone_number_id and to_number):
         return False
-    if kind == "confirmed":
-        # Confirmacion: texto corto + boton "Gestionar cita" (el enlace de gestion
-        # son ~80 caracteres que nadie lee).
+    if kind in ("confirmed", "rescheduled"):
+        # Texto corto + boton "Gestionar cita" (el enlace son ~80 caracteres que
+        # nadie lee y que en el movil parten el mensaje en dos).
         enviado = await messaging._send_whatsapp_cta_url(
             cliente_id=booking_row["cliente_id"], phone_number_id=phone_number_id,
-            to_number=to_number, body=_whatsapp_confirmation_text(booking_row),
+            to_number=to_number, body=_whatsapp_notice_text(booking_row, kind),
             button_label="Gestionar cita",
             url=_booking_row_manage_url(booking_row, request),
+        )
+        if enviado:
+            return True
+    if kind == "cancelled":
+        # Sin boton: la cita ya no existe, no hay nada que gestionar.
+        enviado = await messaging._send_whatsapp_text(
+            cliente_id=booking_row["cliente_id"], phone_number_id=phone_number_id,
+            to_number=to_number, text=_whatsapp_notice_text(booking_row, kind),
         )
         if enviado:
             return True

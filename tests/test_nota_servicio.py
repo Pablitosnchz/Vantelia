@@ -98,7 +98,7 @@ def test_sale_por_los_tres_caminos_de_confirmacion(api_module):
     from backend import booking
 
     assert "service_booking_note" in inspect.getsource(booking._booking_email_bodies)
-    assert "service_booking_note" in inspect.getsource(booking._whatsapp_confirmation_text)
+    assert "service_booking_note" in inspect.getsource(booking._whatsapp_notice_text)
     assert "service_booking_note" in (RAIZ / "backend" / "whatsapp.py").read_text(encoding="utf-8")
 
 
