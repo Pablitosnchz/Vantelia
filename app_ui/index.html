@@ -3828,7 +3828,8 @@
     </div>
     <div class="field" style="margin-bottom:18px;">
       <label class="field-label">Etiquetas (separadas por coma, opcional)</label>
-      <input class="field-input" id="qaTags" maxlength="200" placeholder="precios, envios" />
+      <input class="field-input" id="qaTags" maxlength="200" placeholder="presupuesto, cuanto cuesta, tarifas" />
+      <p class="panel-sub" style="margin:6px 0 0; font-size:0.78rem;">Otras formas de preguntar lo mismo. Si el cliente escribe alguna, se responde esto tal cual. Cuanto más concretas, mejor: entre dos respuestas gana la etiqueta más específica.</p>
     </div>
     <div style="display:flex; gap:10px;">
       <button class="btn btn-primary" id="qaSaveBtn" type="button" style="flex:1;">Guardar</button>
@@ -5219,7 +5220,7 @@ async function loadQA() {
           <div style="flex:1; min-width:0;">
             <div style="font-weight:600;">${escapeHtml(qa.question)}</div>
             <div class="preview" style="margin-top:6px; color:var(--soft); white-space:normal;">${escapeHtml(qa.answer.slice(0, 220))}${qa.answer.length > 220 ? '…' : ''}</div>
-            ${qa.tags && qa.tags.length ? `<div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">${qa.tags.map(t => `<span class="pro-pill" style="background:rgba(0,209,255,0.1); color:var(--accent);">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+            ${qa.tags && qa.tags.length ? `<div class="kwr-keys">${qa.tags.map(t => `<span class="kwr-key">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
           </div>
           <div style="display:flex; flex-direction:column; gap:6px;">
             <button class="btn btn-ghost" data-edit="${escapeHtml(qa.id)}" style="padding:4px 10px; font-size:0.78rem;">Editar</button>
