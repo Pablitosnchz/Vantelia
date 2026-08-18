@@ -241,7 +241,11 @@ def _save_admin_client_payload(
     clients._persist_configs_to_disk(next_configs)
     rag._write_info_txt(cliente_id, data.info_txt)
     clients._update_runtime_configs(next_configs)
-    agenda._sync_services_from_info(cliente_id, data.info_txt, deactivate_missing=True)
+    # deactivate_missing=False A PROPOSITO. Con True, guardar cualquier campo de la
+    # ficha apagaba todos los servicios que no aparecieran en info.txt: un salon con
+    # 183 servicios importados de su Excel se quedo con los 8 de su descripcion.
+    # Se siguen creando/actualizando los que el texto mencione; lo demas se respeta.
+    agenda._sync_services_from_info(cliente_id, data.info_txt, deactivate_missing=False)
     commerce._seed_commerce_from_info(cliente_id, data.info_txt)
     rag._invalidate_client_runtime(cliente_id)
 
