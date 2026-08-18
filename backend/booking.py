@@ -544,8 +544,16 @@ def _booking_email_bodies(
             "\nGuarda tu numero de reserva: te servira para cancelar o cambiar la cita "
             "por telefono, web o WhatsApp.\n"
         )
+    _pago_nota = ""
     if status_key == "pending_payment":
         _pago_url = build_booking_payment_url(booking_row["manage_token"])
+        # Senal, pago completo o retencion: el mismo helper que usa WhatsApp explica
+        # cual de los tres es, para no llamar "senal" a un cobro entero.
+        _pago_nota = payment_prompt_note(
+            booking_row["cliente_id"], booking_row, _booking_payment_row(booking_row["id"])
+        )
+        if _pago_nota:
+            text_body += f"\n{_pago_nota}\n"
         if _pago_url:
             text_body += f"\nPaga aqui para confirmar la cita: {_pago_url}\n"
     if extra_message_clean and status_key == "cancelled":
@@ -587,6 +595,8 @@ def _booking_email_bodies(
         )
         + f"{manage_html}"
     )
+    if status_key == "pending_payment" and _pago_nota:
+        html_body += f'<p style="line-height:1.6;">{escape(_pago_nota)}</p>'
     if status_key == "pending_payment" and _pago_url:
         html_body += (
             f'<p style="margin:18px 0;"><a href="{escape(_pago_url)}" '

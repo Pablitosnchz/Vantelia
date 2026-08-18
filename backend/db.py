@@ -310,6 +310,9 @@ def _init_database() -> None:
             "no_show_fee_pct": "INTEGER",
             # Imagen del servicio (URL configurable; se muestra en la central publica).
             "image_url": "TEXT NOT NULL DEFAULT ''",
+            # Categoria del servicio (Peinados, Cortes, Color...). Vacia = sin agrupar.
+            # Un salon con 190 servicios no cabe en una lista: se elige categoria antes.
+            "category": "TEXT NOT NULL DEFAULT ''",
         }.items():
             if column_name not in service_columns:
                 connection.execute(f"ALTER TABLE services ADD COLUMN {column_name} {definition}")

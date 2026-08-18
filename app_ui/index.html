@@ -2914,7 +2914,10 @@
       <button class="btn btn-primary" id="servicioNewBtn" data-perm="catalog.manage" style="margin-left:auto;">+ Nuevo servicio</button>
     </div>
     <p class="panel-sub">Cada servicio tiene su propia duración y precio. La duración define cuánto bloquea en la agenda.</p>
-    <div id="serviciosList" style="display:flex; flex-direction:column; gap:10px; margin-top:14px;"></div>
+    <div class="field" id="svcBuscarWrap" style="display:none; margin-top:14px;">
+      <input type="search" class="field-input" id="svcBuscar" placeholder="Buscar servicio por nombre, categoría o descripción…" />
+    </div>
+    <div id="serviciosList" style="display:flex; flex-direction:column; margin-top:14px;"></div>
   </section>
 
   <!-- VENTAS (productos, bonos, tarjetas regalo) -->
@@ -3969,6 +3972,11 @@
   <div style="padding:18px; overflow-y:auto; flex:1;">
     <!-- Lo que se rellena SIEMPRE. Cuatro decisiones y a guardar. -->
     <div class="field" style="margin-bottom:10px;"><label class="field-label">Nombre *</label><input type="text" class="field-input" id="svcNombre" placeholder="Ej. Corte y peinado" /></div>
+    <div class="field" style="margin-bottom:10px;">
+      <label class="field-label">Categoría</label>
+      <input type="text" class="field-input" id="svcCategoria" list="svcCategoriasLista" maxlength="60" placeholder="Opcional · ej. Color, Cortes, Peinados" />
+      <datalist id="svcCategoriasLista"></datalist>
+    </div>
     <div class="nb-row" style="margin-bottom:10px;">
       <div class="field"><label class="field-label">Duración (min) *</label><input type="number" class="field-input" id="svcDuracion" min="5" max="600" step="5" value="30" /></div>
       <div class="field"><label class="field-label">Precio (€)</label><input type="number" class="field-input" id="svcPrecio" min="0" step="0.01" placeholder="0 = a consultar" /></div>
@@ -7189,14 +7197,30 @@ async function loadNbServices() {
     const list = data.servicios || data || [];
     // Sin servicio no hay duracion real: la cita ocuparia el tramo minimo y se
     // solaparia con la siguiente. Con catalogo, siempre hay uno elegido.
-    sel.innerHTML = (list.length ? '' : '<option value="">Sin especificar</option>') + list.map(s => {
+    const opcion = s => {
       const name = s.nombre || s.name || s.id || '';
       const bits = [];
       if (s.duration_minutes) bits.push(`${s.duration_minutes} min`);
       if (s.price_label) bits.push(s.price_label);
       const label = bits.length ? `${name} · ${bits.join(' · ')}` : name;
       return `<option value="${escapeHtml(name)}">${escapeHtml(label)}</option>`;
-    }).join('');
+    };
+    // Catálogos largos agrupados por categoría; sin categorías, lista de siempre.
+    const usaCategorias = list.some(s => (s.category || '').trim());
+    let cuerpo;
+    if (usaCategorias) {
+      const grupos = new Map();
+      list.forEach(s => {
+        const clave = (s.category || '').trim() || 'Otros';
+        if (!grupos.has(clave)) grupos.set(clave, []);
+        grupos.get(clave).push(s);
+      });
+      cuerpo = [...grupos.entries()].map(([clave, items]) =>
+        `<optgroup label="${escapeHtml(clave)}">${items.map(opcion).join('')}</optgroup>`).join('');
+    } else {
+      cuerpo = list.map(opcion).join('');
+    }
+    sel.innerHTML = (list.length ? '' : '<option value="">Sin especificar</option>') + cuerpo;
   } catch { sel.innerHTML = '<option value="">Sin especificar</option>'; }
 }
 
@@ -7405,34 +7429,70 @@ async function loadServicios() {
 function renderServicios() {
   const cont = document.getElementById('serviciosList');
   if (!serviciosCache.length) { cont.innerHTML = '<div class="panel-sub">Aún no tienes servicios. Crea el primero con “+ Nuevo servicio”.</div>'; return; }
+
+  const q = (document.getElementById('svcBuscar')?.value || '').trim().toLowerCase();
+  const visibles = q
+    ? serviciosCache.filter(s => `${s.nombre} ${s.category || ''} ${s.descripcion || ''}`.toLowerCase().includes(q))
+    : serviciosCache;
+  // El buscador solo aparece cuando hace falta: con ocho servicios estorba.
+  const buscador = document.getElementById('svcBuscarWrap');
+  if (buscador) buscador.style.display = serviciosCache.length > 12 ? '' : 'none';
+
   cont.innerHTML = '';
-  serviciosCache.forEach(s => {
-    const row = document.createElement('div');
-    row.className = 'panel-card';
-    row.style.cssText = 'padding:14px 16px; background:var(--panel-2); display:flex; align-items:center; gap:14px; flex-wrap:wrap;';
-    const bits = [`${s.duration_minutes} min`, s.price_label || 'precio a consultar'];
-    // Chip de cobro: quien mira la lista sabe al momento si el servicio lleva señal
-    // sin tener que abrir el servicio y leer dos desplegables.
-    const cobro = cobroDesdeServicio(s);
-    const senal = s.deposit_amount_cents ? (s.deposit_amount_cents / 100) + ' €' : '';
-    const chip = {
-      senal:     senal ? `<span class="badge" style="background:rgba(244,180,0,0.16); color:#f4b400; margin-left:6px;">Señal ${senal}</span>` : '',
-      completo:  '<span class="badge" style="background:rgba(0,209,255,0.12); color:var(--accent); margin-left:6px;">Pago al reservar</span>',
-      retencion: senal ? `<span class="badge" style="background:rgba(244,180,0,0.16); color:#f4b400; margin-left:6px;">Retención ${senal}</span>` : '',
-      salon:     '',
-    }[cobro] || '';
-    row.innerHTML = `
-      <div style="flex:1; min-width:180px;">
-        <div style="font-weight:700;">${escapeHtml(s.nombre)}${s.is_active ? '' : ' <span class="badge badge-cancelled" style="margin-left:6px;">Inactivo</span>'}${chip}</div>
-        <div class="panel-sub" style="margin:2px 0 0;">${escapeHtml(bits.join(' · '))}${s.descripcion ? ' · ' + escapeHtml(s.descripcion) : ''}</div>
-      </div>
-      <button class="btn btn-ghost" data-edit="1" style="padding:6px 12px;">Editar</button>
-      <button class="btn btn-ghost" data-del="1" style="padding:6px 12px; color:var(--danger); border-color:var(--danger);">Eliminar</button>`;
-    row.querySelector('[data-edit]').addEventListener('click', () => openServiceDrawer(s));
-    row.querySelector('[data-del]').addEventListener('click', () => deleteService(s));
-    cont.appendChild(row);
+  if (!visibles.length) {
+    cont.innerHTML = '<div class="panel-sub">Ningún servicio coincide con la búsqueda.</div>';
+    return;
+  }
+
+  // Agrupar SOLO si el negocio usa categorías. Si no las usa, la lista queda
+  // exactamente igual que antes: nada de grupos vacíos ni cabeceras inútiles.
+  const usaCategorias = serviciosCache.some(s => (s.category || '').trim());
+  const grupos = new Map();
+  visibles.forEach(s => {
+    const clave = usaCategorias ? ((s.category || '').trim() || 'Sin categoría') : '';
+    if (!grupos.has(clave)) grupos.set(clave, []);
+    grupos.get(clave).push(s);
+  });
+
+  grupos.forEach((items, clave) => {
+    if (clave) {
+      const cab = document.createElement('div');
+      cab.style.cssText = 'display:flex; align-items:baseline; gap:8px; margin:18px 0 8px;';
+      cab.innerHTML = `<b style="font-family:var(--font-title);">${escapeHtml(clave)}</b>`
+        + `<span class="panel-sub">${items.length} servicio${items.length === 1 ? '' : 's'}</span>`;
+      cont.appendChild(cab);
+    }
+    items.forEach(s => cont.appendChild(servicioFila(s)));
   });
 }
+
+function servicioFila(s) {
+  const row = document.createElement('div');
+  row.className = 'panel-card';
+  row.style.cssText = 'padding:14px 16px; background:var(--panel-2); display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:8px;';
+  const bits = [`${s.duration_minutes} min`, s.price_label || 'precio a consultar'];
+  // Chip de cobro: quien mira la lista sabe al momento si el servicio lleva señal
+  // sin tener que abrir el servicio y leer dos desplegables.
+  const cobro = cobroDesdeServicio(s);
+  const senal = s.deposit_amount_cents ? (s.deposit_amount_cents / 100) + ' €' : '';
+  const chip = {
+    senal:     senal ? `<span class="badge" style="background:rgba(244,180,0,0.16); color:#f4b400; margin-left:6px;">Señal ${senal}</span>` : '',
+    completo:  '<span class="badge" style="background:rgba(0,209,255,0.12); color:var(--accent); margin-left:6px;">Pago al reservar</span>',
+    retencion: senal ? `<span class="badge" style="background:rgba(244,180,0,0.16); color:#f4b400; margin-left:6px;">Retención ${senal}</span>` : '',
+    salon:     '',
+  }[cobro] || '';
+  row.innerHTML = `
+    <div style="flex:1; min-width:180px;">
+      <div style="font-weight:700;">${escapeHtml(s.nombre)}${s.is_active ? '' : ' <span class="badge badge-cancelled" style="margin-left:6px;">Inactivo</span>'}${chip}</div>
+      <div class="panel-sub" style="margin:2px 0 0;">${escapeHtml(bits.join(' · '))}${s.descripcion ? ' · ' + escapeHtml(s.descripcion) : ''}</div>
+    </div>
+    <button class="btn btn-ghost" data-edit="1" style="padding:6px 12px;">Editar</button>
+    <button class="btn btn-ghost" data-del="1" style="padding:6px 12px; color:var(--danger); border-color:var(--danger);">Eliminar</button>`;
+  row.querySelector('[data-edit]').addEventListener('click', () => openServiceDrawer(s));
+  row.querySelector('[data-del]').addEventListener('click', () => deleteService(s));
+  return row;
+}
+
 async function loadSvcLocations(slug) {
   const wrap = document.getElementById('svcLocationsWrap');
   const list = document.getElementById('svcLocationsList');
@@ -7538,6 +7598,12 @@ function openServiceDrawer(svc = null) {
   document.getElementById('serviceDrawerTitle').textContent = svc ? 'Editar servicio' : 'Nuevo servicio';
   document.getElementById('svcSlug').value = svc ? svc.id : '';
   document.getElementById('svcNombre').value = svc ? svc.nombre : '';
+  document.getElementById('svcCategoria').value = svc ? (svc.category || '') : '';
+  // Sugerencias: las categorías que el negocio ya usa, para no inventar variantes
+  // ("Color" y "Colores" partirían el mismo grupo en dos).
+  document.getElementById('svcCategoriasLista').innerHTML =
+    [...new Set((serviciosCache || []).map(s => (s.category || '').trim()).filter(Boolean))]
+      .sort().map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
   document.getElementById('svcDuracion').value = svc ? svc.duration_minutes : 30;
   document.getElementById('svcPrecio').value = (svc && svc.price_cents) ? (svc.price_cents / 100) : '';
   document.getElementById('svcCobro').value = cobroDesdeServicio(svc);
@@ -7592,7 +7658,8 @@ async function saveService() {
   const cancel_late_fee_pct = ovVal('svcLateFee');
   const no_show_fee_pct = ovVal('svcNoShowFee');
   const image_url = document.getElementById('svcImagen').value.trim();
-  const body = JSON.stringify({ nombre, duration_minutes: duration, price_cents, descripcion, is_active, payment_mode, payment_type, deposit_amount_cents, currency:'eur', cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct, image_url });
+  const category = document.getElementById('svcCategoria').value.trim();
+  const body = JSON.stringify({ nombre, duration_minutes: duration, price_cents, descripcion, is_active, payment_mode, payment_type, deposit_amount_cents, currency:'eur', cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct, image_url, category });
   const btn = document.getElementById('svcSaveBtn'); const old = btn.textContent; btn.disabled = true; btn.textContent = 'Guardando…';
   try {
     const saved = slug
@@ -7615,6 +7682,7 @@ document.getElementById('servicioNewBtn').addEventListener('click', () => openSe
 document.getElementById('serviceClose').addEventListener('click', closeServiceDrawer);
 document.getElementById('serviceOverlay').addEventListener('click', closeServiceDrawer);
 document.getElementById('svcSaveBtn').addEventListener('click', saveService);
+document.getElementById('svcBuscar')?.addEventListener('input', renderServicios);
 
 document.getElementById('citasViewCal').addEventListener('click', async () => {
   _switchToCalView();
@@ -11931,7 +11999,7 @@ document.getElementById('horBlockAddBtn').addEventListener('click', async () => 
 // `inFlow`: el on/off de este aviso se gestiona en el recorrido (Seguimiento), no aquí.
 // Para esos, la tarjeta de texto solo edita el contenido (sin checkbox de activación).
 const MSG_TEMPLATES = [
-  { key:'pending_payment', label:'Falta el pago (servicios con señal)' },
+  { key:'pending_payment', label:'Falta el pago para confirmar' },
   { key:'confirmacion', label:'Confirmación de cita', inFlow:true },
   { key:'reminder_24h', label:'Recordatorio 24 horas antes', inFlow:true },
   { key:'reminder_2h', label:'Recordatorio 2 horas antes', inFlow:true },

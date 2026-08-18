@@ -188,6 +188,22 @@ function fillServiceOptions(select) {
     return;
   }
 
+  // Con catalogos largos (un salon real tiene 185 servicios) una lista plana no hay
+  // quien la lea: se agrupa por categoria. Sin categorias queda igual que antes.
+  const usaCategorias = scopedServices.some((service) => (service.category || "").trim());
+  const destinos = new Map();
+  const destinoDe = (service) => {
+    if (!usaCategorias) return select;
+    const clave = (service.category || "").trim() || "Otros";
+    if (!destinos.has(clave)) {
+      const grupo = document.createElement("optgroup");
+      grupo.label = clave;
+      select.appendChild(grupo);
+      destinos.set(clave, grupo);
+    }
+    return destinos.get(clave);
+  };
+
   scopedServices.forEach((service) => {
     const option = document.createElement("option");
     option.value = service.id;
@@ -196,7 +212,7 @@ function fillServiceOptions(select) {
     if (service.duration_minutes) bits.push(`${service.duration_minutes} min`);
     if (service.price_label) bits.push(service.price_label);
     option.textContent = bits.length ? `${service.nombre} · ${bits.join(" · ")}` : service.nombre;
-    select.appendChild(option);
+    destinoDe(service).appendChild(option);
   });
 }
 

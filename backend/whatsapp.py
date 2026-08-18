@@ -205,26 +205,98 @@ def _verify_whatsapp_signature(raw_body: bytes, signature_header: str) -> None:
         raise HTTPException(status_code=403, detail="Firma de WhatsApp invalida.")
 
 
+# Una lista de WhatsApp admite 10 filas. Cuando el catalogo no cabe, se pregunta
+# primero la categoria; y dentro de una categoria larga se pagina dejando la
+# ultima fila para "Ver mas".
+_WA_MAX_FILAS = 10
+
+
+def _wa_service_categories(services: List[Dict[str, Any]]) -> List[str]:
+    """Categorias reales del catalogo, en el orden en que vienen (ya ordenado)."""
+    categorias: List[str] = []
+    for svc in services:
+        nombre = str(svc.get("category") or "").strip()
+        if nombre and nombre not in categorias:
+            categorias.append(nombre)
+    return categorias
+
+
+def _wa_service_label(svc: Dict[str, Any]) -> str:
+    """Titulo de fila: nombre + precio si lo hay (24 caracteres es todo el sitio)."""
+    return str(svc.get("nombre") or svc.get("name") or "Servicio")[:24]
+
+
+def _wa_service_detail(svc: Dict[str, Any]) -> str:
+    partes = []
+    if svc.get("duration_minutes"):
+        partes.append("%s min" % svc["duration_minutes"])
+    if svc.get("price_label"):
+        partes.append(str(svc["price_label"]))
+    descripcion = str(svc.get("descripcion") or svc.get("description") or "")
+    if descripcion:
+        partes.append(descripcion)
+    return (" · ".join(partes) or "Selecciona este servicio")[:72]
+
+
 async def _wa_send_service_picker(
-    *, cliente_id: str, phone_number_id: str, to_number: str, location_id: str = "",
+    *,
+    cliente_id: str,
+    phone_number_id: str,
+    to_number: str,
+    location_id: str = "",
+    categoria: str = "",
+    pagina: int = 0,
 ) -> bool:
     services = booking._public_services_for_booking(cliente_id, location_id=location_id)
     if not services:
         return False
-    rows: List[Dict[str, Any]] = []
-    for idx, svc in enumerate(services[:10]):
-        nombre = str(svc.get("nombre") or svc.get("name") or "Servicio")[:24]
-        descripcion = str(svc.get("descripcion") or svc.get("description") or "")[:72]
-        rows.append({
-            "id": f"svc_{idx}",
-            "title": nombre,
-            "description": descripcion or "Selecciona este servicio",
+
+    categorias = _wa_service_categories(services)
+    # Con catalogo grande y categorias, se pregunta la categoria primero.
+    if not categoria and len(services) > _WA_MAX_FILAS and len(categorias) > 1:
+        filas = [
+            {"id": "cat_%d" % i, "title": nombre[:24],
+             "description": "%d servicios" % sum(
+                 1 for s in services if str(s.get("category") or "").strip() == nombre)}
+            for i, nombre in enumerate(categorias[:_WA_MAX_FILAS])
+        ]
+        await messaging._send_whatsapp_list(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+            body="🛍️ ¿Que tipo de servicio buscas?",
+            button_text="Ver categorias",
+            sections=[{"title": "Categorias", "rows": filas}],
+            header="Agendar cita",
+        )
+        return True
+
+    if categoria:
+        services = [s for s in services if str(s.get("category") or "").strip() == categoria]
+        if not services:
+            return False
+
+    inicio = max(0, pagina) * (_WA_MAX_FILAS - 1)
+    trozo = services[inicio:inicio + _WA_MAX_FILAS]
+    hay_mas = len(services) > inicio + len(trozo)
+    if hay_mas:  # se reserva la ultima fila para seguir viendo
+        trozo = trozo[:_WA_MAX_FILAS - 1]
+    filas: List[Dict[str, Any]] = [
+        {"id": "svc_%s" % (svc.get("id") or svc.get("slug") or i),
+         "title": _wa_service_label(svc),
+         "description": _wa_service_detail(svc)}
+        for i, svc in enumerate(trozo)
+    ]
+    if hay_mas:
+        filas.append({
+            "id": "svcmas_%d" % (max(0, pagina) + 1),
+            "title": "Ver mas servicios",
+            "description": "Quedan %d por ver" % (len(services) - inicio - len(filas)),
         })
-    sections = [{"title": "Servicios disponibles", "rows": rows}]
     await messaging._send_whatsapp_list(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
         body="🛍️ Elige el servicio que necesitas:",
-        button_text="Ver servicios", sections=sections, header="Agendar cita",
+        button_text="Ver servicios",
+        sections=[{"title": (categoria or "Servicios disponibles")[:24], "rows": filas}],
+        header="Agendar cita",
     )
     return True
 
@@ -1521,14 +1593,45 @@ async def _handle_whatsapp_message(
     # FLUJO BOOKING - Servicio
     if flow.flow == "booking_service":
         services = booking._public_services_for_booking(cliente_id, location_id=flow.location_id)
+        # Eligio una categoria: se le ensenan los servicios de esa categoria.
+        if iid.startswith("cat_"):
+            categorias = _wa_service_categories(services)
+            try:
+                flow.categoria = categorias[int(iid[len("cat_"):])]
+            except (ValueError, IndexError):
+                flow.categoria = ""
+            flow.servicios_pagina = 0
+            await _wa_send_service_picker(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                location_id=flow.location_id, categoria=flow.categoria,
+            )
+            return
+        if iid.startswith("svcmas_"):
+            try:
+                flow.servicios_pagina = int(iid[len("svcmas_"):])
+            except ValueError:
+                flow.servicios_pagina += 1
+            await _wa_send_service_picker(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                location_id=flow.location_id, categoria=flow.categoria,
+                pagina=flow.servicios_pagina,
+            )
+            return
         chosen = ""
         if iid.startswith("svc_"):
-            try:
-                idx = int(iid[len("svc_"):])
-                if 0 <= idx < len(services):
-                    chosen = str(services[idx].get("nombre") or services[idx].get("name") or "")
-            except ValueError:
-                pass
+            referencia = iid[len("svc_"):]
+            for svc in services:
+                if str(svc.get("id") or svc.get("slug") or "") == referencia:
+                    chosen = str(svc.get("nombre") or svc.get("name") or "")
+                    break
+            if not chosen:
+                # Compat: listados antiguos mandaban la posicion en vez del id.
+                try:
+                    idx = int(referencia)
+                    if 0 <= idx < len(services):
+                        chosen = str(services[idx].get("nombre") or services[idx].get("name") or "")
+                except ValueError:
+                    pass
         if not chosen and incoming_text.strip():
             for svc in services:
                 nombre_svc = str(svc.get("nombre") or svc.get("name") or "")

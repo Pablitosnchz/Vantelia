@@ -324,6 +324,7 @@ def _service_row_to_public(row: sqlite3.Row) -> Dict[str, Any]:
         "cancel_late_fee_pct": _row_int_or_none(row, "cancel_late_fee_pct"),
         "no_show_fee_pct": _row_int_or_none(row, "no_show_fee_pct"),
         "image_url": _row_str_or_empty(row, "image_url"),
+        "category": _row_str_or_empty(row, "category"),
     }
 
 

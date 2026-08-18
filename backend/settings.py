@@ -446,8 +446,8 @@ DEFAULT_MESSAGE_TEMPLATES = {
     # Servicios con senal: la cita queda guardada pero sin confirmar. Sin este aviso,
     # quien reserva por la web pierde el enlace de pago al cerrar la pestana.
     "pending_payment": (
-        "Hemos guardado tu hueco, pero la cita todavia NO esta confirmada: falta el pago "
-        "de la senal. Tienes el enlace debajo."
+        "Hemos guardado tu hueco, pero la cita todavia NO esta confirmada: falta completar "
+        "el pago. Tienes el enlace debajo."
     ),
     "confirmed": (
         "Tu cita ha quedado confirmada. Debajo tienes los detalles y tu enlace personal para gestionarla "

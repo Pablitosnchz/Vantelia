@@ -240,6 +240,7 @@ class ServicePublic(BaseModel):
     nombre: str
     descripcion: str = ""
     image_url: str = ""
+    category: str = ""
     duration_minutes: int = 30
     price_cents: int = 0
     price_label: str = ""
@@ -274,10 +275,12 @@ class ServicePayload(BaseModel):
     cancel_late_fee_pct: Optional[int] = Field(default=None, ge=0, le=100)
     no_show_fee_pct: Optional[int] = Field(default=None, ge=0, le=100)
     image_url: str = Field(default="", max_length=500)
+    category: str = Field(default="", max_length=60)
 
 
 class ServiceUpdatePayload(BaseModel):
     nombre: Optional[str] = Field(default=None, max_length=120)
+    category: Optional[str] = Field(default=None, max_length=60)
     duration_minutes: Optional[int] = Field(default=None, ge=5, le=600)
     price_cents: Optional[int] = Field(default=None, ge=0, le=10_000_000)
     descripcion: Optional[str] = Field(default=None, max_length=500)

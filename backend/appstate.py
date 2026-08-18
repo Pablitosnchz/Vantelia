@@ -32,6 +32,10 @@ class WAFlowState:
     # Centro elegido en el flujo (negocios multi-centro con numero generico).
     location_id: str = ""
     servicio: str = ""
+    # Categoria elegida cuando el negocio tiene demasiados servicios para una sola
+    # lista de WhatsApp (10 filas como maximo): primero categoria, luego servicio.
+    categoria: str = ""
+    servicios_pagina: int = 0
     employee_id: str = ""
     employee_name: str = ""
     fecha: str = ""

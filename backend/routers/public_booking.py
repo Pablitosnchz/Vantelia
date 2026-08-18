@@ -510,9 +510,9 @@ async def auth_create_service(
             """
             INSERT INTO services
             (cliente_id, slug, name, duration_minutes, price_cents, description, is_active, sort_order,
-             payment_mode, payment_type, deposit_amount_cents, currency, image_url,
+             payment_mode, payment_type, deposit_amount_cents, currency, image_url, category,
              cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 target_client_id, slug, name, int(data.duration_minutes), int(data.price_cents),
@@ -520,6 +520,7 @@ async def auth_create_service(
                 1 if data.is_active else 0, int(data.sort_order),
                 data.payment_mode, data.payment_type, int(data.deposit_amount_cents),
                 data.currency.lower(), textnorm._public_image_url(data.image_url),
+                textnorm._sanitize_text(data.category)[:60],
                 None if data.cancel_free_hours is None else int(data.cancel_free_hours),
                 None if data.cancel_late_fee_pct is None else int(data.cancel_late_fee_pct),
                 None if data.no_show_fee_pct is None else int(data.no_show_fee_pct),
@@ -572,6 +573,8 @@ async def auth_update_service(
         updates["currency"] = data.currency.lower()
     if data.image_url is not None:
         updates["image_url"] = textnorm._public_image_url(data.image_url)
+    if data.category is not None:
+        updates["category"] = textnorm._sanitize_text(data.category)[:60]
     # Overrides de politica de cancelacion por servicio: -1 = reset a heredar (NULL).
     for field_name, col in (
         ("cancel_free_hours", "cancel_free_hours"),

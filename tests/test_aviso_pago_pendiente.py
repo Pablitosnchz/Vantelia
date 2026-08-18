@@ -83,4 +83,30 @@ def test_un_enlace_caducado_no_lleva_a_un_error_de_stripe(api_module):
 
 def test_el_negocio_puede_editar_el_texto(api_module):
     html = (RAIZ / "app_ui" / "index.html").read_text(encoding="utf-8")
-    assert "{ key:'pending_payment', label:'Falta el pago (servicios con señal)' }" in html
+    assert "{ key:'pending_payment', label:'Falta el pago para confirmar' }" in html
+
+
+def test_el_aviso_no_llama_senal_a_un_cobro_entero(api_module):
+    """Salta con los TRES modos que exigen pagar para confirmar (senal, pago
+    completo y retencion), asi que el texto base no puede decir "senal"."""
+    from backend import settings
+
+    base = settings.DEFAULT_MESSAGE_TEMPLATES["pending_payment"].lower()
+    assert "senal" not in base and "señal" not in base
+    assert "no esta confirmada" in base.replace("está", "esta")
+
+
+def test_el_detalle_lo_pone_el_helper_compartido(api_module):
+    """`payment_prompt_note` ya distingue senal / retencion / total: se reusa en vez
+    de escribir otra version del mismo texto."""
+    from backend import booking
+
+    fuente = inspect.getsource(booking._booking_email_bodies)
+    assert "payment_prompt_note(" in fuente
+
+    # Senal: dice cuanto queda por pagar en el centro.
+    linea = booking.paystate.checkout_line("Corte", 5000, 12000, "deposit")
+    assert "50" in linea["description"] and "70" in linea["description"]
+    # Retencion: deja claro que NO es un cobro.
+    retencion = booking.paystate.checkout_line("Corte", 5000, 12000, "preauth")
+    assert "no es un cobro" in retencion["description"].lower()
