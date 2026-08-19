@@ -2537,7 +2537,8 @@ def _interval_overlaps(start_min: int, end_min: int, intervals: List[Tuple[int, 
 
 
 def slot_pisa_otra_cita(
-    cliente_id: str, fecha: str, hora: str, *, employee_id: str, duration_minutes: int
+    cliente_id: str, fecha: str, hora: str, *, employee_id: str, duration_minutes: int,
+    exclude_booking_id: str = "",
 ) -> bool:
     """¿Este tramo se solapa AHORA MISMO con otra cita de ese profesional?
 
@@ -2551,7 +2552,10 @@ def slot_pisa_otra_cita(
     if inicio is None:
         return False
     fin = inicio + max(1, int(duration_minutes or 0))
-    return _interval_overlaps(inicio, fin, _booked_intervals(cliente_id, fecha, employee_id=employee_id))
+    ocupados = _booked_intervals(
+        cliente_id, fecha, employee_id=employee_id, exclude_booking_id=exclude_booking_id
+    )
+    return _interval_overlaps(inicio, fin, ocupados)
 
 
 def _booked_slots(

@@ -2736,7 +2736,21 @@ async def _update_booking_details(
             }
         )
 
-    _update_booking_record(booking_row["id"], **updates)
+    # Igual que al crear: entre comprobar el hueco y guardar hay una llamada al
+    # proveedor, o sea una ventana ancha en la que otra persona puede haberse
+    # quedado ese tramo. Se re-comprueba con el lock cogido (excluyendo la propia
+    # cita, que obviamente ocupa su hueco actual).
+    with appstate.booking_insert_lock:
+        if slot_changed and agenda.slot_pisa_otra_cita(
+            booking_row["cliente_id"], booking_date, booking_time,
+            employee_id=target_employee["id"], duration_minutes=service_duration,
+            exclude_booking_id=booking_row["id"],
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Ese horario acaba de ser reservado por otra persona. Elige otro tramo.",
+            )
+        _update_booking_record(booking_row["id"], **updates)
     event_type = "booking_rescheduled" if slot_changed else "booking_updated"
     _record_booking_audit(
         booking_row["id"],

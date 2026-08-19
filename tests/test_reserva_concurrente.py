@@ -120,3 +120,56 @@ def test_dos_solapes_parciales_simultaneos_solo_dejan_uno(client: TestClient, se
     creadas = [r for r in resultados if r and r[0] == 200]
     assert len(creadas) <= 1, "dos citas solapadas creadas a la vez: %r" % (resultados,)
     assert all(r[0] < 500 for r in resultados if r), "error del servidor: %r" % (resultados,)
+
+
+def test_dos_reprogramaciones_al_mismo_hueco_solo_dejan_una(client: TestClient):
+    """Reprogramar tiene la MISMA estructura de riesgo: comprobar, llamar al
+    proveedor, guardar.
+
+    HONESTIDAD SOBRE ESTE TEST: la carrera NO se ha conseguido reproducir aqui
+    (pasa con y sin la proteccion, incluso ensanchando la ventana a proposito).
+    La proteccion se ha puesto igual, por simetria con la de crear —que si se
+    reprodujo— porque es barata y el patron es identico. Este test fija el
+    comportamiento deseado; no demuestra que hubiera un fallo.
+    """
+    primera = client.post("/agendar", json={
+        "cliente_id": "demo", "nombre": "Gema", "email": "gema@ejemplo.com",
+        "telefono": "600111222", "fecha": _dia_util(), "hora": "15:00",
+        "servicio": "Consulta", "notas": "",
+    }, headers=ORIGEN)
+    segunda = client.post("/agendar", json={
+        "cliente_id": "demo", "nombre": "Hilda", "email": "hilda@ejemplo.com",
+        "telefono": "600333444", "fecha": _dia_util(), "hora": "15:30",
+        "servicio": "Consulta", "notas": "",
+    }, headers=ORIGEN)
+    assert primera.status_code == 200 and segunda.status_code == 200
+
+    from backend import booking
+
+    tokens = [r.json()["manage_url"].rstrip("/").rsplit("/", 1)[-1] for r in (primera, segunda)]
+    destino = "16:30"  # libre: las dos intentan moverse ahi a la vez
+    resultados = [None, None]
+
+    def mover(indice):
+        import asyncio
+
+        from api_models import BookingReschedulePayload
+
+        fila = booking._get_booking_row_by_token(tokens[indice])
+        datos = BookingReschedulePayload(
+            nombre=fila["nombre"], email=fila["email"], telefono=fila["telefono"],
+            servicio=fila["servicio"], fecha=_dia_util(), hora=destino, notas="",
+        )
+        try:
+            asyncio.run(booking._update_booking_details(fila, datos, None))
+            resultados[indice] = 200
+        except Exception as exc:  # noqa: BLE001
+            resultados[indice] = getattr(exc, "status_code", type(exc).__name__)
+
+    hilos = [threading.Thread(target=mover, args=(i,)) for i in (0, 1)]
+    for hilo in hilos:
+        hilo.start()
+    for hilo in hilos:
+        hilo.join(timeout=60)
+
+    assert resultados.count(200) <= 1, "dos citas movidas al mismo hueco: %r" % (resultados,)

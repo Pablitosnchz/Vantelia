@@ -168,6 +168,68 @@ rg -n 'panel-sub|<p class="panel-sub"' app_ui/index.html
 
 ---
 
+### 11. Pedir algo vs preguntar por ello
+
+Un detector que casa la palabra suelta confunde las dos cosas. "no quiero
+cancelar nada, solo preguntar" recibía el formulario de cancelación; "¿se puede
+pagar con tarjeta?" y "no quiero pagar ahora" disparaban el **enlace de cobro**.
+
+```bash
+rg -n 'def _message_requests_' backend/
+```
+
+**Pregunta:** ¿qué pasa si el cliente **niega** el verbo, o pregunta **por** la
+acción en vez de pedirla? Reglas compartidas: `booking.MANAGE_NEGATION_RE`,
+`_message_is_question_about_management`.
+
+---
+
+### 12. Datos que rellena un modelo, no un formulario
+
+Las tools de voz reciben lo que gpt-realtime deduce de una llamada con ruido.
+Puede mandar "mañana" donde se espera una fecha ISO. Eso levantaba un
+`ValidationError` que **colgaba la llamada**: el puente lo captura, marca
+`failed` y cierra el WebSocket.
+
+```bash
+rg -n 'await voice._voice_dispatch_tool|_voice_dispatch_tool\(' backend/
+```
+
+**Pregunta:** entre el modelo y el código, ¿quién es el muro? Ninguna tool puede
+escapar con una excepción — el cliente se queda escuchando silencio.
+
+---
+
+### 13. La fila que se leyó hace un rato
+
+Un worker que carga una lista y luego la recorre haciendo I/O trabaja con datos
+viejos. `_run_booking_reminders` mandaba recordatorios a quien había cancelado
+mientras el worker recorría la lista.
+
+```bash
+rg -n -B2 'for row in rows|for fila in filas' backend/
+```
+
+**Pregunta:** entre leer y actuar, ¿cuánto pasa? ¿Y si el cliente cambia algo
+justo ahí? Se relee antes de tocar.
+
+---
+
+### 14. Comprobar y luego insertar
+
+Dos peticiones simultáneas pasan las dos la comprobación. Un alisado de 90 min a
+las 14:00 y un corte a las 14:30 se creaban **los dos**: el índice único de la BD
+solo cubre el choque exacto de hora.
+
+```bash
+rg -n 'if not await .*_available|if .*_disponible' backend/
+```
+
+**Pregunta:** ¿qué pasa si dos personas hacen esto a la vez? Si la respuesta es
+"se cuelan las dos", hace falta atomicidad (`appstate.booking_insert_lock`).
+
+---
+
 ## Después de auditar
 
 - Los fallos encontrados van con test que reproduce, verificado contra el código
