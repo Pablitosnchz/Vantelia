@@ -4706,6 +4706,14 @@ async def _run_booking_reminders(request: Optional[Request] = None) -> AdminRemi
 
     for row in rows:
         processed += 1
+        # La lista se cargo al empezar y enviar cada aviso hace I/O de red: con
+        # muchas citas, el recorrido dura. Se relee la cita justo antes de tocarla
+        # para no mandarle un recordatorio a quien acaba de cancelar, ni con la
+        # hora vieja a quien acaba de reprogramar.
+        fresca = _get_booking_row_by_id(row["id"])
+        if fresca is None or fresca["status"] != "confirmed":
+            continue
+        row = fresca
         fu = _follow_up_config(row["cliente_id"])
         try:
             if not row["reminder_24h_sent_at"] and _booking_due_for_reminder(row, now_utc, settings.REMINDER_24H_HOURS):

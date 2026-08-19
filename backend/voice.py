@@ -2794,6 +2794,35 @@ async def _voice_send_payment_link(
 async def _voice_dispatch_tool(
     cliente_id: str, name: str, arguments_json: str, *, from_number: str = "", location_id: str = ""
 ) -> Dict[str, Any]:
+    """Ejecuta una tool y NUNCA deja escapar una excepcion.
+
+    Los argumentos los rellena el modelo a partir de lo que oye por telefono, y
+    puede mandar "manana" donde se espera "2026-08-25". Esa entrada levantaba un
+    ValidationError de Pydantic que subia hasta el puente, que marca la llamada
+    como fallida y CUELGA: el cliente se queda hablando solo a mitad de frase.
+
+    Devolviendo el fallo como resultado de la tool, la llamada sigue y el modelo
+    puede reformular la pregunta. El error se registra entero en el log, que es
+    donde tiene que verse.
+    """
+    try:
+        return await _voice_dispatch_tool_impl(
+            cliente_id, name, arguments_json, from_number=from_number, location_id=location_id,
+        )
+    except Exception as exc:  # noqa: BLE001 - una tool no puede tumbar la llamada
+        settings.logger.exception(
+            "[voice] la tool %s de %s ha fallado con %s: %s", name, cliente_id, arguments_json[:200], exc
+        )
+        return {
+            "ok": False,
+            "error": "No he podido completar esa accion con esos datos.",
+            "mensaje_voz": "Perdona, no he podido con eso. ¿Me lo repites?",
+        }
+
+
+async def _voice_dispatch_tool_impl(
+    cliente_id: str, name: str, arguments_json: str, *, from_number: str = "", location_id: str = ""
+) -> Dict[str, Any]:
     try:
         args = json.loads(arguments_json or "{}")
     except Exception:  # noqa: BLE001
