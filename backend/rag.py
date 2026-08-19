@@ -574,7 +574,9 @@ AVAILABILITY_INTENT_PATTERNS = [
         r"\b(citas?|horas?|huecos?|turnos?)\b.*\b(disponibles?|libres?)\b",
         r"\b(reservar|reserva|agendar|agenda)\b.*\b(hoy|manana|pasado|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|finde|dia|\d{1,2})\b",
         r"\b(abierto|abierta|abiertos|abiertas|cerrado|cerrada|cerrados|cerradas|abris|abren|horario|festivo|vacaciones)\b",
-        r"\bcuando\s+podeis\b",
+        # "cuando teneis libre" / "cuando podeis" / "cuando os viene bien": la
+        # forma mas natural de pedir hueco, y no la reconocia ningun patron.
+        r"\bcuando\s+(?:podeis|teneis|tienen|tendriais|os\s+viene|te\s+viene|hay)\b",
         r"\b(libre|disponibles?)\b.*\b(manana|hoy|pasado|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana)\b",
     ]
 ]

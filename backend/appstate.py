@@ -80,6 +80,13 @@ voice_otp: Dict[str, Dict[str, Any]] = {}
 chat_manage_state: Dict[str, Dict[str, Any]] = {}
 last_cleanup_run = 0.0
 state_lock = threading.RLock()
+
+# Serializa "comprobar el hueco" + "insertar la cita". El indice unico de la BD
+# cubre la MISMA hora exacta, pero no los SOLAPES parciales (un alisado de 90
+# minutos a las 10:00 y un corte a las 10:30), que dependen de una comprobacion
+# previa: entre comprobar e insertar cabia otra peticion y se colaban dos citas
+# pisandose. La seccion protegida no hace I/O ni espera a nadie.
+booking_insert_lock = threading.Lock()
 booking_reminder_stop = threading.Event()
 booking_reminder_thread: Optional[threading.Thread] = None
 ai_rebooking_last_run = ""  # ISO del ultimo pase de rebooking IA (guard 1/dia)

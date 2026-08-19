@@ -42,7 +42,7 @@ negocio de otro.
 
 ---
 
-## Estado a 15-ago-2026
+## Estado a 19-ago-2026
 
 Flow creado y en **borrador** (`1074131035040246`) sobre la WABA de pruebas, con el
 endpoint apuntando a `https://app.vantelia.es/whatsapp/flow` y **sin errores de
@@ -51,15 +51,20 @@ validación**. Diagnóstico de Meta:
 ```
 FLOW      AVAILABLE
 APP       AVAILABLE
-WABA      BLOCKED   141006 · falta método de pago
+WABA      AVAILABLE
 BUSINESS  LIMITED   141010 · verificación del negocio en revisión
 ```
 
-Nuestro lado está correcto. Para **publicar** el flow (hoy da *"Blocked by
-Integrity"*) hacen falta las dos cosas de Meta:
+El método de pago de la WABA **ya está puesto** (el 15-ago daba `141006`) y
+nuestro lado está correcto. Queda **una sola cosa**, y es de Meta: que pase la
+**verificación del negocio** (enviada el 14-ago). Es la misma que desbloquea
+Coexistence, así que las dos cosas caen juntas.
 
-1. **Añadir un método de pago a la WhatsApp Business Account.**
-2. **Que pase la verificación del negocio** (enviada el 14-ago).
+Para consultar el estado sin entrar al panel de Meta:
+
+```bash
+curl -s -H "Authorization: Bearer $WHATSAPP_ACCESS_TOKEN"   "https://graph.facebook.com/v21.0/$WHATSAPP_BOOKING_FLOW_ID?fields=status,health_status"
+```
 
 Mientras tanto se puede probar con `WHATSAPP_FLOW_DRAFT=true`: los flows en
 borrador se envían solo a quien tenga rol en la app de Meta.

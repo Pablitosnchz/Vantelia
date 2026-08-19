@@ -2579,8 +2579,13 @@ async def _voice_send_verification_code(
     if not sent:
         return {"ok": False, "error": "No se pudo enviar el codigo. Prueba a verificar por otro medio."}
     with appstate.state_lock:
+        ahora = time.time()
+        # Los codigos caducados solo se borraban al volver a consultarlos: el de
+        # quien nunca contesta se quedaba en memoria para siempre.
+        for clave in [k for k, v in appstate.voice_otp.items() if ahora > float(v.get("expires_at") or 0)]:
+            appstate.voice_otp.pop(clave, None)
         appstate.voice_otp[_voice_otp_key(cliente_id, row["id"])] = {
-            "code": code, "expires_at": time.time() + VOICE_OTP_TTL_SECONDS,
+            "code": code, "expires_at": ahora + VOICE_OTP_TTL_SECONDS,
             "attempts": 0, "verified": False, "channel": channel,
         }
     booking._record_booking_audit(row["id"], cliente_id, "voice_otp_sent", {"channel": channel})

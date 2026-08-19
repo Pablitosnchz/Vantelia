@@ -164,6 +164,39 @@ horario?" devolvía los huecos libres de hoy.
 
 WhatsApp comparte cerebro pero tiene su propio flujo guiado en `whatsapp.py`.
 
+**El cliente nunca puede quedarse encerrado en un paso.** Cada paso del flujo
+guiado (`whatsapp.py`, ramas `if flow.flow == ...`) respondía "no he reconocido X"
+y volvía. Una persona preguntando "¿puedo ir con niños?" en el paso de
+profesional recibía cinco veces el mismo muro, y ni "hola" la sacaba: la guarda
+`not flow.flow` protegía el flujo de todo. Las tres reglas de ahora:
+
+1. Un saludo o "menu" **siempre** salen del flujo, haya el paso que haya.
+2. Lo que no encaja en el paso pasa por `_wa_atender_duda_sin_perder_el_paso`:
+   si parece una duda, se responde con el cerebro y **se retoma el paso**; si es
+   un intento fallido de elegir (un número suelto, basura), el aviso corto.
+3. Un paso a medias **caduca** (`WHATSAPP_FLOW_TTL_MINUTES`, 120 por defecto).
+   Quien abandona y vuelve al día siguiente empieza limpio, y el diccionario de
+   flujos deja de crecer sin fin.
+
+Al añadir un paso nuevo, no escribas un `_send_whatsapp_text` con "no he
+reconocido": usa el helper. Lo vigila `tests/test_wa_usuario_erratico.py`, que
+simula usuarios que no siguen el guion.
+
+**El menú lo decide el negocio, no nosotros.** Las opciones salen de
+`chat.menu_entries` (→ "Preguntas sugeridas" del panel: 3 fijas + hasta 5
+propias), y esa función es la fuente única del chat web y de WhatsApp. Cada canal
+añadía las suyas por su cuenta: el mismo salón veía 3 opciones en su panel, 4 en
+el chat y 6 en WhatsApp. Si añades una opción "útil" en un canal, rompes eso.
+Una fila cuyo texto coincide con una acción conocida (`whatsapp._WA_MENU_ACCIONES`)
+abre su flujo guiado; el resto viaja como texto a la IA.
+
+**Trampa**: los títulos de fila de WhatsApp son **24 caracteres** y las
+descripciones 72. Recortar por el final convertía "Keratina premium corto chico"
+en "Keratina premium corto c" — igual que el recorte de "corto medio", y
+confundible con "Keratina premium corto", que existía. `_wa_recortar_titulo`
+recorta por el MEDIO (lo que distingue suele ir al final) y el nombre completo
+viaja en la descripción.
+
 **Trampa**: una lista de WhatsApp admite **10 filas**. Con catálogos grandes,
 `_wa_send_service_picker` pregunta primero la categoría y pagina con "Ver más".
 Cualquier selector nuevo tiene el mismo techo.

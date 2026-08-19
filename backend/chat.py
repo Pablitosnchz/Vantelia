@@ -239,36 +239,65 @@ def _simple_greeting_text(config: Dict[str, Any], nombre_empresa: str) -> str:
     return texto or f"Hola. Soy el asistente de {nombre_empresa}. ¿En que puedo ayudarte?"
 
 
-def _build_main_menu_text(nombre_empresa: str, booking_enabled: bool, *, greeting: bool = False) -> str:
+# Lo que el cliente escribe al pulsar una sugerencia. Sin entrada aqui, se envia
+# el propio texto del boton, que es lo que el negocio quiso poner.
+_MENU_MESSAGES = {
+    "agendar cita": "Quiero agendar una cita",
+    "informacion servicios": "Quiero información sobre servicios disponibles",
+    "preguntas frecuentes": "Muestrame las preguntas frecuentes principales",
+}
+
+
+def menu_entries(cliente_id: str, booking_enabled: bool, *, gift_available: bool = False) -> List[Dict[str, str]]:
+    """Opciones del menu: LAS QUE CONFIGURA EL NEGOCIO. Fuente unica de los canales.
+
+    Salen de "Preguntas sugeridas" del panel (`settings._resolve_widget_starters`:
+    3 fijas + hasta 5 propias). Antes cada canal anadia las suyas por su cuenta —
+    el chat web colaba "Cancelar o cambiar mi cita" y WhatsApp anteponia cuatro
+    filas de agenda— asi que el mismo negocio veia menus distintos en cada canal y
+    ninguno coincidia con su panel, que promete: "las 3 primeras son fijas;
+    Vantelia no anade mas sugerencias automaticamente".
+
+    La unica excepcion es la tarjeta regalo, y solo si el negocio ha activado su
+    venta publica: es una decision suya, no una sugerencia que pongamos nosotros.
+    """
+    try:
+        config = clients._get_client_config(cliente_id)
+        textos = settings._resolve_widget_starters(config, booking_enabled=booking_enabled)
+    except Exception as exc:  # noqa: BLE001 - el menu nunca debe romper el canal
+        settings.logger.warning("No se pudieron leer las sugerencias de %s: %s", cliente_id, exc)
+        textos = []
+
+    entradas: List[Dict[str, str]] = []
+    if gift_available:
+        entradas.append({"label": "🎁 Tarjeta regalo", "message": "Quiero comprar una tarjeta regalo"})
+    for texto in textos:
+        limpio = textnorm._sanitize_text(str(texto)).strip()
+        if not limpio:
+            continue
+        clave = textnorm._strip_accents(limpio.lower())
+        entradas.append({"label": limpio, "message": _MENU_MESSAGES.get(clave, limpio)})
+    return entradas
+
+
+def _build_main_menu_text(
+    nombre_empresa: str, booking_enabled: bool, *, greeting: bool = False, cliente_id: str = "",
+) -> str:
     saludo = (
         f"Hola. Soy el asistente de **{nombre_empresa}**. ¿En qué puedo ayudarte?\n\n"
         if greeting else
         f"**Menú principal de {nombre_empresa}**\n\n"
     )
-    booking_line = "· Agendar cita\n· Cancelar o cambiar mi cita\n" if booking_enabled else ""
-    return (
-        f"{saludo}"
-        f"{booking_line}"
-        f"· Información de servicios\n"
-        f"· Preguntas frecuentes\n\n"
-        f"Pulsa una opción o escribe directamente tu consulta."
+    opciones = "".join(
+        "· %s\n" % entrada["label"] for entrada in menu_entries(cliente_id, booking_enabled)
     )
+    return f"{saludo}{opciones}\nPulsa una opción o escribe directamente tu consulta."
 
 
-def _main_menu_quick_actions(booking_enabled: bool, gift_available: bool = False) -> List[Dict[str, str]]:
-    actions: List[Dict[str, str]] = []
-    if booking_enabled:
-        actions.append({"label": "Agendar cita", "message": "Quiero agendar una cita"})
-        actions.append({"label": "Cancelar o cambiar mi cita", "message": "Quiero cancelar o cambiar mi cita"})
-    if gift_available:
-        actions.append({"label": "🎁 Tarjeta regalo", "message": "Quiero comprar una tarjeta regalo"})
-    actions.extend(
-        [
-            {"label": "Información servicios", "message": "Quiero información sobre servicios disponibles"},
-            {"label": "Preguntas frecuentes", "message": "Muestrame las preguntas frecuentes principales"},
-        ]
-    )
-    return actions
+def _main_menu_quick_actions(
+    booking_enabled: bool, gift_available: bool = False, cliente_id: str = "",
+) -> List[Dict[str, str]]:
+    return menu_entries(cliente_id, booking_enabled, gift_available=gift_available)
 
 
 # Opciones del menu que solo tienen sentido con agenda activa.
@@ -547,6 +576,7 @@ async def _process_chat_message(
                 nombre_empresa,
                 booking_enabled,
                 greeting=_message_is_greeting(message),
+                cliente_id=cliente_id,
             )
             if menu_on
             else _simple_greeting_text(client_config, nombre_empresa)
@@ -559,7 +589,9 @@ async def _process_chat_message(
             intent=menu_intent,
             quick_actions=(
                 _main_menu_quick_actions(
-                    booking_enabled, gift_available=commerce.gift_public_available(cliente_id)
+                    booking_enabled,
+                    gift_available=commerce.gift_public_available(cliente_id),
+                    cliente_id=cliente_id,
                 )
                 if menu_on
                 else []

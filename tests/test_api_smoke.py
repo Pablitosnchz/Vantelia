@@ -3981,7 +3981,13 @@ def test_chat_system_prompt_includes_schedule_and_catalog(api_module):
         assert catalog_lines[0].lstrip("- ").split(" · ")[0] in prompt
 
 
-def test_chat_menu_quick_actions_include_manage(client: TestClient, api_module):
+def test_chat_menu_quick_actions_match_configured_starters(client: TestClient, api_module):
+    """El menu son las sugerencias del negocio, y solo esas.
+
+    Antes se colaba "Cancelar o cambiar mi cita", que el negocio no habia puesto:
+    su panel mostraba tres opciones, el chat cuatro y WhatsApp seis. Cancelar no
+    se pierde — se sigue entendiendo escrito, que es como llega de verdad.
+    """
     response = client.post(
         "/chat",
         json={
@@ -3992,9 +3998,19 @@ def test_chat_menu_quick_actions_include_manage(client: TestClient, api_module):
         headers={"Origin": "http://testserver"},
     )
     assert response.status_code == 200
-    data = response.json()
-    labels = [a.get("label", "") for a in (data.get("quick_actions") or [])]
-    assert "Cancelar o cambiar mi cita" in labels
+    labels = [a.get("label", "") for a in (response.json().get("quick_actions") or [])]
+
+    # `api_module.chat` es el endpoint, no el modulo: hay que importarlo aparte.
+    from backend import chat as chat_module
+
+    config = api_module.CONFIG_CLIENTES["demo"]
+    booking_enabled = bool(config.get("booking", {}).get("enabled"))
+    esperado = [
+        e["label"] for e in chat_module.menu_entries("demo", booking_enabled, gift_available=False)
+    ]
+    assert labels == esperado
+    assert "Cancelar o cambiar mi cita" not in labels
+    assert api_module._message_requests_cancel_booking("quiero cancelar mi cita")
 
 
 def test_whatsapp_cancel_booking_by_code_uses_sender_phone(api_module, monkeypatch: pytest.MonkeyPatch):

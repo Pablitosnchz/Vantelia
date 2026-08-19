@@ -26,12 +26,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import os
 import re
 import json
 import sqlite3
 import time
 from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, Request, Response
 
@@ -223,6 +224,10 @@ def _verify_whatsapp_signature(raw_body: bytes, signature_header: str) -> None:
 
 # Una lista de WhatsApp admite 10 filas. Cuando el catalogo no cabe, se pregunta
 # primero la categoria; y dentro de una categoria larga se pagina dejando la
+# WhatsApp corta los titulos de fila a 24 caracteres y las descripciones a 72.
+_WA_ROW_TITLE_MAX = 24
+_WA_ROW_DESC_MAX = 72
+
 # ultima fila para "Ver mas".
 _WA_MAX_FILAS = 10
 
@@ -237,13 +242,49 @@ def _wa_service_categories(services: List[Dict[str, Any]]) -> List[str]:
     return categorias
 
 
+def _wa_recortar_titulo(texto: str) -> str:
+    """Titulo de fila de WhatsApp (24 caracteres) recortando por el MEDIO.
+
+    Cortar por el final dejaba "Keratina premium corto chico" en "Keratina
+    premium corto c" — que parece otro servicio (en ese catalogo existe de
+    verdad "Keratina premium corto") y ademas es identico al recorte de "corto
+    medio". Lo que distingue dos servicios de la misma familia esta casi siempre
+    al FINAL (el largo del pelo), asi que se conserva la cola y se sacrifica el
+    medio: "Keratina…corto chico". El nombre entero viaja en la descripcion.
+    """
+    limpio = " ".join(str(texto or "").split())
+    if len(limpio) <= _WA_ROW_TITLE_MAX:
+        return limpio
+
+    palabras = limpio.split(" ")
+    cola = ""
+    for palabra in reversed(palabras[1:]):
+        candidata = (palabra + " " + cola).strip()
+        if len(candidata) > _WA_ROW_TITLE_MAX // 2:
+            break
+        cola = candidata
+
+    hueco = _WA_ROW_TITLE_MAX - len(cola) - 1  # el 1 es la elipsis
+    cabeza = limpio[:hueco]
+    if " " in cabeza:
+        cabeza = cabeza[:cabeza.rindex(" ")]
+    cabeza = cabeza.rstrip(" -·,;:")
+    if not cabeza:  # una sola palabra larguisima: corte duro y a correr
+        return limpio[:_WA_ROW_TITLE_MAX - 1] + "…"
+    return "%s…%s" % (cabeza, cola) if cola else cabeza + "…"
+
+
 def _wa_service_label(svc: Dict[str, Any]) -> str:
-    """Titulo de fila: nombre + precio si lo hay (24 caracteres es todo el sitio)."""
-    return str(svc.get("nombre") or svc.get("name") or "Servicio")[:24]
+    return _wa_recortar_titulo(svc.get("nombre") or svc.get("name") or "Servicio")
 
 
 def _wa_service_detail(svc: Dict[str, Any]) -> str:
+    nombre = " ".join(str(svc.get("nombre") or svc.get("name") or "").split())
     partes = []
+    # Si el titulo no cabia entero, el nombre completo abre la descripcion: es lo
+    # unico que permite distinguir dos servicios que empiezan igual.
+    if len(nombre) > _WA_ROW_TITLE_MAX:
+        partes.append(nombre)
     if svc.get("duration_minutes"):
         partes.append("%s min" % svc["duration_minutes"])
     if svc.get("price_label"):
@@ -251,7 +292,7 @@ def _wa_service_detail(svc: Dict[str, Any]) -> str:
     descripcion = str(svc.get("descripcion") or svc.get("description") or "")
     if descripcion:
         partes.append(descripcion)
-    return (" · ".join(partes) or "Selecciona este servicio")[:72]
+    return (" · ".join(partes) or "Selecciona este servicio")[:_WA_ROW_DESC_MAX]
 
 
 async def _wa_send_service_picker(
@@ -271,7 +312,7 @@ async def _wa_send_service_picker(
     # Con catalogo grande y categorias, se pregunta la categoria primero.
     if not categoria and len(services) > _WA_MAX_FILAS and len(categorias) > 1:
         filas = [
-            {"id": "cat_%d" % i, "title": nombre[:24],
+            {"id": "cat_%d" % i, "title": _wa_recortar_titulo(nombre),
              "description": "%d servicios" % sum(
                  1 for s in services if str(s.get("category") or "").strip() == nombre)}
             for i, nombre in enumerate(categorias[:_WA_MAX_FILAS])
@@ -311,7 +352,7 @@ async def _wa_send_service_picker(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
         body="🛍️ Elige el servicio que necesitas:",
         button_text="Ver servicios",
-        sections=[{"title": (categoria or "Servicios disponibles")[:24], "rows": filas}],
+        sections=[{"title": _wa_recortar_titulo(categoria or "Servicios disponibles"), "rows": filas}],
         header="Agendar cita",
     )
     return True
@@ -329,7 +370,7 @@ async def _wa_send_location_picker(
     for loc in rows_db[:10]:
         rows.append({
             "id": f"loc_{loc['id']}",
-            "title": str(loc["name"] or "Centro")[:24],
+            "title": _wa_recortar_titulo(loc["name"] or "Centro"),
             "description": str(loc["address"] or "")[:72] or "Selecciona esta sede",
         })
     sections = [{"title": "Nuestros centros", "rows": rows}]
@@ -374,7 +415,7 @@ async def _wa_send_employee_picker(
     for emp in employees[:10]:
         rows.append({
             "id": f"emp_{emp['id']}",
-            "title": str(emp["name"])[:24],
+            "title": _wa_recortar_titulo(emp["name"]),
             "description": str(emp["role_label"] or "Profesional")[:72],
         })
     sections = [{"title": "Profesionales", "rows": rows}]
@@ -398,18 +439,109 @@ def _wa_flow_key(cliente_id: str, from_number: str) -> str:
     return f"{cliente_id}:{from_number}"
 
 
+# Un paso a medias caduca: quien abandona la reserva y vuelve al dia siguiente
+# empieza de cero, en vez de reaparecer en "elige profesional" de una conversacion
+# que ya no recuerda. Tambien evita que el diccionario crezca sin fin.
+_WA_FLOW_TTL_SECONDS = int(os.getenv("WHATSAPP_FLOW_TTL_MINUTES", "120")) * 60
+
+
+def _wa_purge_stale_flows(now: float) -> None:
+    caducados = [
+        clave for clave, estado in appstate.whatsapp_flows.items()
+        if now - getattr(estado, "last_seen", now) > _WA_FLOW_TTL_SECONDS
+    ]
+    for clave in caducados:
+        appstate.whatsapp_flows.pop(clave, None)
+
+
 def _wa_get_flow(cliente_id: str, from_number: str) -> appstate.WAFlowState:
     key = _wa_flow_key(cliente_id, from_number)
+    ahora = time.time()
     flow = appstate.whatsapp_flows.get(key)
+    if flow and ahora - getattr(flow, "last_seen", ahora) > _WA_FLOW_TTL_SECONDS:
+        flow = None  # el paso a medias ya no vale: se empieza limpio
     if not flow:
-        flow = appstate.WAFlowState(cliente_id=cliente_id, from_number=from_number, last_seen=time.time())
+        _wa_purge_stale_flows(ahora)
+        flow = appstate.WAFlowState(cliente_id=cliente_id, from_number=from_number, last_seen=ahora)
         appstate.whatsapp_flows[key] = flow
-    flow.last_seen = time.time()
+    flow.last_seen = ahora
     return flow
 
 
 def _wa_clear_flow(cliente_id: str, from_number: str) -> None:
     appstate.whatsapp_flows.pop(_wa_flow_key(cliente_id, from_number), None)
+
+
+# Palabras que siempre merecen respuesta aunque vayan solas: quien escribe
+# "ayuda" u "operador" en mitad del flujo no esta fallando al elegir del listado,
+# esta pidiendo auxilio. Recibia "No he reconocido el servicio".
+_WA_PALABRAS_DE_AUXILIO = {
+    "ayuda", "help", "socorro", "operador", "humano", "persona", "agente",
+    "recepcion", "telefono", "llamar", "hablar", "info", "informacion", "duda",
+}
+
+
+def _wa_parece_una_duda(texto: str) -> bool:
+    """¿Esto es una pregunta y no un intento de elegir del listado?
+
+    "3" o "asdf" son intentos fallidos de elegir; "¿puedo ir con niños?" es otra
+    cosa y merece respuesta. El listón es bajo a proposito: mejor contestar de mas
+    que dejar al cliente repitiendo la pregunta contra un muro.
+    """
+    limpio = str(texto or "").strip()
+    if not limpio:
+        return False
+    if "?" in limpio or "¿" in limpio:
+        return True
+    palabras = textnorm._strip_accents(limpio.lower()).split()
+    if len(palabras) <= 2 and any(p in _WA_PALABRAS_DE_AUXILIO for p in palabras):
+        return True
+    return len(palabras) >= 3
+
+
+async def _wa_atender_duda_sin_perder_el_paso(
+    *,
+    cliente_id: str,
+    phone_number_id: str,
+    from_number: str,
+    incoming_text: str,
+    request: Optional[Request],
+    repetir_paso,
+    aviso_error: str,
+) -> None:
+    """El cliente ha escrito algo que no encaja en el paso actual del flujo.
+
+    Antes se le respondia SIEMPRE "no he reconocido X" y se le dejaba encerrado:
+    en el paso de profesional, preguntar "¿puedo ir con niños?" cinco veces
+    devolvia cinco veces el mismo error, y ni "hola" sacaba de ahi.
+
+    Ahora, si parece una duda, se le responde con el cerebro de siempre y se
+    retoma el paso donde estaba. Si es un intento fallido de elegir (un numero
+    suelto, una palabra sin sentido), el aviso corto de siempre.
+    """
+    if not _wa_parece_una_duda(incoming_text):
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text=aviso_error,
+        )
+        return
+
+    respuesta = await chat._process_chat_message(
+        cliente_id=cliente_id,
+        message=incoming_text,
+        session_id=_whatsapp_session_id(cliente_id, from_number),
+        request=request,
+        origin_override="whatsapp:%s" % from_number,
+        user_agent_override="WhatsApp Cloud API",
+        trusted_phone=from_number,
+    )
+    await messaging._send_whatsapp_text(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+        text=respuesta.respuesta,
+    )
+    # Se retoma el paso: sin esto el cliente responde la duda y ya no sabe que
+    # estaba a media reserva.
+    await repetir_paso()
 
 
 def _wa_reset_booking_fields(flow: appstate.WAFlowState) -> None:
@@ -426,10 +558,6 @@ def _wa_reset_booking_fields(flow: appstate.WAFlowState) -> None:
     flow.verify_phone = ""
     flow.verify_email = ""
 
-
-# WhatsApp corta los titulos de fila a 24 caracteres y las descripciones a 72.
-_WA_ROW_TITLE_MAX = 24
-_WA_ROW_DESC_MAX = 72
 
 
 def _wa_row_key(titulo: str) -> str:
@@ -459,54 +587,77 @@ def _wa_starter_rows(cliente_id: str, booking_enabled: bool) -> List[Dict[str, A
             continue
         rows.append({
             "id": f"menu_starter_{index}",
-            "title": limpio[:_WA_ROW_TITLE_MAX],
+            "title": _wa_recortar_titulo(limpio),
             "description": limpio[:_WA_ROW_DESC_MAX] if len(limpio) > _WA_ROW_TITLE_MAX else "",
         })
     return rows
 
 
 def _wa_starter_message(cliente_id: str, interactive_id: str, booking_enabled: bool) -> str:
-    """Texto real detras de una fila `menu_starter_N` (lo que el cliente 'escribe')."""
+    """Texto real detras de una fila `menu_starter_N` (lo que el cliente 'escribe').
+
+    Se resuelve contra la MISMA lista con la que se pinto el menu
+    (`chat.menu_entries`), no contra las sugerencias en crudo: si el negocio vende
+    tarjetas regalo, esa fila va la primera y los indices ya no coincidirian.
+    """
     try:
         index = int(str(interactive_id).rsplit("_", 1)[1])
-        config = clients._get_client_config(cliente_id)
-        starters = settings._resolve_widget_starters(config, booking_enabled=booking_enabled)
-        return str(starters[index])
+        entradas = chat.menu_entries(
+            cliente_id, booking_enabled,
+            gift_available=commerce.gift_public_available(cliente_id),
+        )
+        return str(entradas[index]["message"])
     except Exception:  # noqa: BLE001 - id manipulado o sugerencias cambiadas entre medias
         return ""
 
 
-def _wa_main_menu_sections(booking_enabled: bool, cliente_id: str = "") -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
-    # Las acciones de agenda no son sugerencias: abren flujos guiados propios.
-    if booking_enabled:
-        rows.append({"id": "menu_agendar", "title": "📅 Agendar cita", "description": "Reserva tu cita en pocos pasos"})
-        rows.append({"id": "menu_disponibilidad", "title": "🕐 Ver disponibilidad", "description": "Consulta huecos libres"})
-        rows.append({"id": "menu_cancelar_cita", "title": "Cancelar cita", "description": "Anula una reserva con tu código"})
-        rows.append({"id": "menu_cambiar_cita", "title": "Cambiar cita", "description": "Reprograma fecha u hora"})
+# Sugerencias que abren un flujo guiado propio en vez de pasar por la IA. La clave
+# va normalizada (sin emojis ni acentos) porque el negocio escribe el texto a mano.
+_WA_MENU_ACCIONES = {
+    "agendar cita": ("menu_agendar", "Reserva tu cita en pocos pasos"),
+    "ver disponibilidad": ("menu_disponibilidad", "Consulta huecos libres"),
+    "cancelar cita": ("menu_cancelar_cita", "Anula una reserva con tu código"),
+    "cambiar cita": ("menu_cambiar_cita", "Reprograma fecha u hora"),
+}
 
-    configuradas = _wa_starter_rows(cliente_id, booking_enabled) if cliente_id else []
-    if configuradas:
-        # Las sugerencias del negocio sustituyen al bloque generico. Se descartan las
-        # que dupliquen una accion de agenda ya listada arriba: la comparacion ignora
-        # emojis y acentos, o "📅 Agendar cita" y "Agendar cita" pasarian por distintas.
-        titulos = {_wa_row_key(r["title"]) for r in rows}
-        rows.extend(r for r in configuradas if _wa_row_key(r["title"]) not in titulos)
-    else:
-        rows.append({"id": "menu_faq", "title": "💬 Preguntas frecuentes", "description": "Dudas habituales"})
-        rows.append({"id": "menu_productos", "title": "🛍️ Productos / servicios", "description": "Catálogo del negocio"})
-        rows.append({"id": "menu_recomendar", "title": "⭐ Recomendar", "description": "Te ayudo a elegir"})
-        rows.append({"id": "menu_comparar", "title": "⚖️ Comparar", "description": "Comparativa de opciones"})
-        rows.append({"id": "menu_estimar", "title": "💶 Estimar precio", "description": "Calcula coste aproximado"})
-    return [{"title": "Opciones", "rows": rows[:10]}]
+
+def _wa_main_menu_sections(booking_enabled: bool, cliente_id: str = "") -> List[Dict[str, Any]]:
+    """El menu de WhatsApp = las opciones que el negocio configura, y solo esas.
+
+    Antes se anteponian cuatro filas de agenda escritas a fuego, asi que un salon
+    con tres sugerencias veia seis opciones y ninguna coincidia con su panel. La
+    lista sale ahora de `chat.menu_entries`, la misma que alimenta el chat web.
+    Una fila que coincide con una accion conocida abre su flujo guiado; el resto
+    viaja como texto a la IA.
+    """
+    rows: List[Dict[str, Any]] = []
+    entradas = chat.menu_entries(
+        cliente_id, booking_enabled, gift_available=commerce.gift_public_available(cliente_id),
+    )
+    for indice, entrada in enumerate(entradas):
+        titulo = entrada["label"]
+        accion = _WA_MENU_ACCIONES.get(_wa_row_key(titulo))
+        if accion:
+            fila_id, descripcion = accion
+        else:
+            fila_id, descripcion = "menu_starter_%d" % indice, ""
+        rows.append({
+            "id": fila_id,
+            "title": _wa_recortar_titulo(titulo),
+            "description": descripcion or (titulo[:_WA_ROW_DESC_MAX] if len(titulo) > _WA_ROW_TITLE_MAX else ""),
+        })
+    return [{"title": "Opciones", "rows": rows[:_WA_MAX_FILAS]}]
 
 
 async def _wa_send_main_menu(
     *, cliente_id: str, phone_number_id: str, to_number: str, nombre_empresa: str, booking_enabled: bool, greeting: bool = False,
 ) -> None:
-    # Menu apagado por el negocio (config `chat_menu`): saludo llano, sin lista de
-    # opciones. Se centraliza aqui para cubrir TODOS los puntos que abren el menu.
-    if not chat._menu_enabled(cliente_id):
+    # Menu apagado por el negocio (config `chat_menu`), o sin ninguna opcion que
+    # ofrecer: saludo llano. Una lista sin filas es un mensaje invalido y WhatsApp
+    # lo rechaza entero, o sea que el cliente se quedaria sin respuesta.
+    # Se centraliza aqui para cubrir TODOS los puntos que abren el menu.
+    sin_opciones = not _wa_main_menu_sections(booking_enabled, cliente_id)[0]["rows"]
+    if sin_opciones or not chat._menu_enabled(cliente_id):
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id,
             phone_number_id=phone_number_id,
@@ -514,10 +665,12 @@ async def _wa_send_main_menu(
             text=chat._simple_greeting_text(clients._get_client_config(cliente_id), nombre_empresa),
         )
         return
-    body = (
-        f"👋 ¡Hola! Soy el asistente de *{nombre_empresa}*. ¿En que puedo ayudarte hoy?"
-        if greeting else f"📋 Menú principal de *{nombre_empresa}*. Elige una opción:"
-    )
+    # Al saludar se usa la bienvenida que el negocio escribio en el panel (la misma
+    # que ve quien entra por la web); antes WhatsApp tenia su propia frase fija.
+    if greeting:
+        body = chat._simple_greeting_text(clients._get_client_config(cliente_id), nombre_empresa)
+    else:
+        body = f"📋 Menú principal de *{nombre_empresa}*. Elige una opción:"
     await messaging._send_whatsapp_list(
         cliente_id=cliente_id,
         phone_number_id=phone_number_id,
@@ -600,7 +753,7 @@ async def _wa_send_date_picker(
             title = label
         rows.append({
             "id": f"date_{candidate.isoformat()}",
-            "title": title[:24],
+            "title": _wa_recortar_titulo(title),
             "description": descripcion,
         })
 
@@ -1242,9 +1395,20 @@ async def _handle_whatsapp_message(
         )
         return
 
+    # Un saludo o un "menu" SIEMPRE sacan del flujo, aunque haya un paso a medias.
+    # Antes se protegia el flujo de todo y el cliente se quedaba encerrado: en el
+    # paso de profesional, hasta "hola" respondia "No he reconocido el profesional".
+    if flow.flow and (chat._message_is_pure_greeting(incoming_text) or chat._message_requests_menu(incoming_text)):
+        _wa_clear_flow(cliente_id, from_number)
+        await _wa_send_main_menu(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            nombre_empresa=nombre_empresa, booking_enabled=booking_enabled,
+            greeting=chat._message_is_greeting(incoming_text),
+        )
+        return
+
     # Saludo PURO: responder con menu. Si el saludo trae una intencion ("Hola, quiero
     # cancelar mi cita R-1234"), la intencion manda (misma regla que el chat web).
-    # Solo si NO hay flujo activo (para no romper paso a paso de agendar).
     if not flow.flow and chat._message_is_pure_greeting(incoming_text):
         await _wa_send_main_menu(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
@@ -1413,9 +1577,14 @@ async def _handle_whatsapp_message(
     if flow.flow == "manage_cancel_code":
         code = booking._extract_booking_code_from_text(incoming_text)
         if not code:
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido el número de reserva. Debe tener formato *R-XXXX*.",
+            await _wa_atender_duda_sin_perder_el_paso(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+                incoming_text=incoming_text, request=request,
+                aviso_error="No he reconocido el número de reserva. Debe tener formato *R-XXXX*.",
+                repetir_paso=lambda: messaging._send_whatsapp_text(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                    text="Cuando quieras, mándame tu número de reserva (*R-XXXX*) y sigo.",
+                ),
             )
             return
         flow.booking_code = code
@@ -1483,9 +1652,14 @@ async def _handle_whatsapp_message(
     if flow.flow == "manage_reschedule_code":
         code = booking._extract_booking_code_from_text(incoming_text)
         if not code:
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido el número de reserva. Debe tener formato *R-XXXX*.",
+            await _wa_atender_duda_sin_perder_el_paso(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+                incoming_text=incoming_text, request=request,
+                aviso_error="No he reconocido el número de reserva. Debe tener formato *R-XXXX*.",
+                repetir_paso=lambda: messaging._send_whatsapp_text(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                    text="Cuando quieras, mándame tu número de reserva (*R-XXXX*) y sigo.",
+                ),
             )
             return
         flow.booking_code = code
@@ -1500,9 +1674,14 @@ async def _handle_whatsapp_message(
         tz = config.get("booking", {}).get("timezone") or settings.DEFAULT_TIMEZONE
         fecha = textnorm._extract_date_from_text(incoming_text, tz)
         if not fecha:
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido la fecha. Puedes escribir, por ejemplo, *mañana* o *2026-06-15*.",
+            await _wa_atender_duda_sin_perder_el_paso(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+                incoming_text=incoming_text, request=request,
+                aviso_error="No he reconocido la fecha. Puedes escribir, por ejemplo, *mañana* o *2026-06-15*.",
+                repetir_paso=lambda: messaging._send_whatsapp_text(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                    text="¿Para qué día quieres cambiarla? Puedes escribir *mañana* o una fecha.",
+                ),
             )
             return
         flow.fecha = fecha
@@ -1516,9 +1695,14 @@ async def _handle_whatsapp_message(
     if flow.flow == "manage_reschedule_time":
         hora = textnorm._extract_time_from_text(incoming_text)
         if not hora:
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido la hora. Escribela en formato *HH:MM*, por ejemplo *10:30*.",
+            await _wa_atender_duda_sin_perder_el_paso(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+                incoming_text=incoming_text, request=request,
+                aviso_error="No he reconocido la hora. Escribela en formato *HH:MM*, por ejemplo *10:30*.",
+                repetir_paso=lambda: messaging._send_whatsapp_text(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                    text="¿A qué hora te viene bien? Escríbela como *10:30*.",
+                ),
             )
             return
         flow.hora = hora
@@ -1599,9 +1783,13 @@ async def _handle_whatsapp_message(
                     break
         row_loc = agenda._get_location_row(chosen, cliente_id=cliente_id) if chosen else None
         if not row_loc:
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido el centro. Pulsa una opción del listado o escribe *menu*.",
+            await _wa_atender_duda_sin_perder_el_paso(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+                incoming_text=incoming_text, request=request,
+                aviso_error="No he reconocido el centro. Pulsa una opción del listado o escribe *menu*.",
+                repetir_paso=lambda: _wa_send_location_picker(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                ),
             )
             return
         flow.location_id = row_loc["id"]
@@ -1660,9 +1848,14 @@ async def _handle_whatsapp_message(
                     chosen = nombre_svc
                     break
         if not chosen:
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido el servicio. Pulsa una opción del listado o escribe *menu*.",
+            await _wa_atender_duda_sin_perder_el_paso(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+                incoming_text=incoming_text, request=request,
+                aviso_error="No he reconocido el servicio. Pulsa una opción del listado o escribe *menu*.",
+                repetir_paso=lambda: _wa_send_service_picker(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                    location_id=flow.location_id,
+                ),
             )
             return
         flow.servicio = chosen
@@ -1705,9 +1898,14 @@ async def _handle_whatsapp_message(
                     emp_id = emp["id"]
                     break
         if not emp_id:
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido el profesional. Pulsa una opción del listado o escribe *menu*.",
+            await _wa_atender_duda_sin_perder_el_paso(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+                incoming_text=incoming_text, request=request,
+                aviso_error="No he reconocido el profesional. Pulsa una opción del listado o escribe *menu*.",
+                repetir_paso=lambda: _wa_send_employee_picker(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                    servicio=flow.servicio, location_id=flow.location_id,
+                ),
             )
             return
         try:
@@ -1738,9 +1936,15 @@ async def _handle_whatsapp_message(
             if target:
                 fecha_iso = target.isoformat()
         if not fecha_iso:
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido la fecha. Pulsa una opción del listado o escribe *menu* para volver.",
+            await _wa_atender_duda_sin_perder_el_paso(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+                incoming_text=incoming_text, request=request,
+                aviso_error="No he reconocido la fecha. Pulsa una opción del listado o escribe *menu* para volver.",
+                repetir_paso=lambda: _wa_send_date_picker(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                    config=config, header="Agendar cita", body="📅 Elige el día:",
+                    employee_id=flow.employee_id, servicio=flow.servicio, location_id=flow.location_id,
+                ),
             )
             return
         try:
@@ -1777,9 +1981,15 @@ async def _handle_whatsapp_message(
         elif settings.TIME_PATTERN.match(incoming_text.strip()):
             hora = incoming_text.strip()
         if not hora:
-            await messaging._send_whatsapp_text(
-                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="No he reconocido la hora. Pulsa un hueco del listado o escribe *menu*.",
+            await _wa_atender_duda_sin_perder_el_paso(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+                incoming_text=incoming_text, request=request,
+                aviso_error="No he reconocido la hora. Pulsa un hueco del listado o escribe *menu*.",
+                repetir_paso=lambda: _wa_send_time_picker(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                    config=config, fecha=flow.fecha, employee_id=flow.employee_id,
+                    servicio=flow.servicio, location_id=flow.location_id,
+                ),
             )
             return
         flow.hora = hora

@@ -2536,6 +2536,24 @@ def _interval_overlaps(start_min: int, end_min: int, intervals: List[Tuple[int, 
     return any(start_min < iv_end and end_min > iv_start for iv_start, iv_end in intervals)
 
 
+def slot_pisa_otra_cita(
+    cliente_id: str, fecha: str, hora: str, *, employee_id: str, duration_minutes: int
+) -> bool:
+    """¿Este tramo se solapa AHORA MISMO con otra cita de ese profesional?
+
+    Sincrona y sin I/O de red a proposito: se llama con el lock de insercion
+    cogido, justo antes de guardar, para cerrar la ventana entre comprobar el
+    hueco y crear la cita. `_booking_slot_available` sigue siendo la validacion
+    completa (horario, bloqueos, aforo); esto solo repite la parte que otra
+    peticion simultanea puede haber invalidado.
+    """
+    inicio = textnorm._time_to_min(hora)
+    if inicio is None:
+        return False
+    fin = inicio + max(1, int(duration_minutes or 0))
+    return _interval_overlaps(inicio, fin, _booked_intervals(cliente_id, fecha, employee_id=employee_id))
+
+
 def _booked_slots(
     cliente_id: str,
     fecha: str,

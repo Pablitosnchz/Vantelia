@@ -1199,11 +1199,83 @@ async def _reschedule_booking_by_code(
     }
 
 
+# El cliente se echa atras de la gestion que habia pedido. Va SIN tildes: se
+# compara contra el mensaje ya normalizado (ver tests/test_patrones_sin_tilde.py).
+RETRACT_MANAGEMENT_RE = re.compile(
+    r"\b(dejalo|dejarlo|olvidalo|olvidate|olvidemos|no importa|da igual|"
+    r"mejor no|ya no|nada mas|nada gracias|no hace falta|no quiero|anulado no|"
+    r"me he equivocado|era broma|perdon me confundi)\b"
+)
+
+
+def _message_retracts_management(message: str) -> bool:
+    """¿Se esta echando atras? ("no, dejalo", "olvidalo", "da igual")
+
+    Se pide ademas que el mensaje sea corto: en una frase larga estas palabras
+    suelen ser parte de otra cosa ("me da igual el profesional, pero quiero
+    cancelar la del martes").
+    """
+    # Sin puntuacion: "nada, gracias" tiene que casar igual que "nada gracias".
+    text = re.sub(r"[^\w\s]+", " ", textnorm._strip_accents(str(message or "").lower()))
+    text = " ".join(text.split())
+    if not text or len(text.split()) > 6:
+        return False
+    return bool(RETRACT_MANAGEMENT_RE.search(text))
+
+
+# ─── Pedir algo vs preguntar por ello ──────────────────────────────────────
+# Los detectores casaban la palabra suelta, asi que "no quiero cancelar nada,
+# solo preguntar" y "¿puedo cancelar si me surge algo?" recibian "necesito el
+# número de reserva" en vez de una respuesta a lo que preguntaban. Estas dos
+# reglas valen para cancelar y para cambiar, y van SIN tildes (se comparan
+# contra el mensaje ya normalizado; lo vigila test_patrones_sin_tilde).
+
+# "no quiero cancelar", "no voy a cambiarla": la negacion tiene que ir pegada al
+# verbo. Con mas de dos palabras por medio suele ser otra frase ("no puedo ir el
+# martes, quiero cancelar"), que SI es una peticion real.
+MANAGE_NEGATION_RE = re.compile(
+    r"\bno\s+(?:\w+\s+){0,2}(?:cancel|anul|borrar|cambi|mover|muev|reprogram|modific)"
+)
+
+# Preguntas SOBRE la gestion, no peticiones: "¿que pasa si cancelo?",
+# "¿hasta cuando puedo cambiarla?", "¿cobrais por cancelar?".
+MANAGE_QUESTION_RE = re.compile(
+    r"\b(?:que\s+pasa\s+si|en\s+caso\s+de|hasta\s+cuando|con\s+cuanta\s+antelacion|"
+    r"cuanto\s+antes|se\s+puede|hay\s+que\s+pagar|cobrais|cobran|penalizacion|"
+    r"puedo\s+\w+(?:la|lo)?\s+si|tengo\s+que\s+\w+)\b"
+)
+# ...y las hipoteticas: "si me surge", "si al final", "si no puedo".
+MANAGE_HYPOTHETICAL_RE = re.compile(r"\bsi\s+(?:me\s+|no\s+|al\s+final|acaso|luego|un\s+dia|tengo)")
+
+
+def _message_is_question_about_management(text: str) -> bool:
+    """¿Pregunta POR la gestion en vez de pedirla? (texto ya normalizado)"""
+    return bool(MANAGE_QUESTION_RE.search(text) or MANAGE_HYPOTHETICAL_RE.search(text))
+
+
 def _message_requests_cancel_booking(message: str) -> bool:
+    """¿Está PIDIENDO cancelar? No basta con que aparezca la palabra."""
     text = textnorm._strip_accents(str(message or "").lower())
-    if any(phrase in text for phrase in ("condiciones de cancelacion", "politica de cancelacion", "politicas de cancelacion")):
-        return any(phrase in text for phrase in ("quiero cancelar", "necesito cancelar", "cancelar mi cita", "anular mi cita", "borrar cita"))
-    return any(word in text for word in ("cancelar", "anular", "cancela", "borrar cita"))
+    if not any(word in text for word in ("cancelar", "anular", "cancela", "borrar cita")):
+        return False
+
+    # La negacion se mira ANTES que nada: "no quiero cancelar nada" contiene
+    # literalmente "quiero cancelar".
+    if MANAGE_NEGATION_RE.search(text):
+        return False
+
+    peticion_explicita = any(
+        frase in text
+        for frase in ("quiero cancelar", "necesito cancelar", "cancelar mi cita",
+                      "anular mi cita", "borrar cita", "cancela mi cita")
+    )
+    if peticion_explicita:
+        return True
+
+    if any(frase in text for frase in ("condiciones de cancelacion", "politica de cancelacion",
+                                       "politicas de cancelacion")):
+        return False
+    return not _message_is_question_about_management(text)
 
 
 RESCHEDULE_INTENT_RE = re.compile(
@@ -1215,23 +1287,54 @@ RESCHEDULE_INTENT_RE = re.compile(
 
 
 def _message_requests_reschedule_booking(message: str) -> bool:
+    """¿Está PIDIENDO cambiar la cita? Mismo criterio que cancelar."""
     text = textnorm._strip_accents(str(message or "").lower())
+    if MANAGE_NEGATION_RE.search(text):
+        return False
     if any(word in text for word in ("reprogramala", "cambiarla", "cambiala", "muevela")):
         return True
-    return bool(RESCHEDULE_INTENT_RE.search(text))
+    if not RESCHEDULE_INTENT_RE.search(text):
+        return False
+    if any(frase in text for frase in ("quiero cambiar", "necesito cambiar", "quiero mover",
+                                       "necesito mover", "quiero reprogramar", "me gustaria cambiar")):
+        return True
+    return not _message_is_question_about_management(text)
+
+
+# Preguntas SOBRE el pago, no peticiones de pagar. Mandar un enlace de cobro a
+# quien pregunta "¿se puede pagar con tarjeta?" o dice "no quiero pagar ahora" es
+# de las cosas que peor sientan.
+PAYMENT_QUESTION_RE = re.compile(
+    r"\b(?:se\s+puede|se\s+acepta|aceptais|admitis|hay\s+que\s+pagar|hace\s+falta\s+pagar|"
+    r"cuanto\s+(?:hay\s+que\s+|se\s+)?paga|que\s+metodos?|con\s+que\s+se\s+paga|"
+    r"puedo\s+pagar\s+(?:con|en|el\s+dia)|es\s+obligatorio|por\s+adelantado)\b"
+)
 
 
 def _message_requests_payment(message: str) -> bool:
-    # Las frases van SIN tildes a proposito: se comparan contra el mensaje ya
-    # normalizado. Con tilde no casan nunca. Lo vigila test_patrones_sin_tilde.
+    """¿Está PIDIENDO pagar? Preguntar por el pago no es lo mismo.
+
+    Las frases van SIN tildes a proposito: se comparan contra el mensaje ya
+    normalizado. Con tilde no casan nunca. Lo vigila test_patrones_sin_tilde.
+    """
     text = textnorm._strip_accents(str(message or "").lower())
-    return any(
+    if not any(
         word in text
         for word in (
             "pagar", "enlace de pago", "link de pago", "quiero pagar", "como pago",
             "abonar", "dejar una senal", "pagar la senal", "pagar el deposito", "metodo de pago",
         )
-    )
+    ):
+        return False
+
+    if re.search(r"\bno\s+(?:\w+\s+){0,2}(?:pagar|abonar|pago)", text):
+        return False
+    # Solo las inequivocas: "pagar la senal" tambien aparece en "¿es obligatorio
+    # pagar la senal?", que es una pregunta.
+    if any(frase in text for frase in ("quiero pagar", "enlace de pago", "link de pago",
+                                       "quiero abonar", "mandame el pago")):
+        return True
+    return not PAYMENT_QUESTION_RE.search(text)
 
 
 CHAT_MANAGE_STATE_TTL_SECONDS = 15 * 60
@@ -1256,9 +1359,19 @@ def _chat_manage_state_update(session_id: str, **values: Any) -> None:
     if not session_id:
         return
     with appstate.state_lock:
+        ahora = time.time()
+        # Purga oportunista: `_chat_manage_state_get` solo caduca la clave que se
+        # consulta, asi que las sesiones que no vuelven se quedaban para siempre en
+        # un proceso que vive semanas.
+        if session_id not in appstate.chat_manage_state:
+            for clave in [
+                k for k, v in appstate.chat_manage_state.items()
+                if ahora - float(v.get("ts") or 0) > CHAT_MANAGE_STATE_TTL_SECONDS
+            ]:
+                appstate.chat_manage_state.pop(clave, None)
         state = appstate.chat_manage_state.setdefault(session_id, {})
         state.update({k: v for k, v in values.items() if v})
-        state["ts"] = time.time()
+        state["ts"] = ahora
 
 
 def _chat_manage_state_clear(session_id: str) -> None:
@@ -1283,8 +1396,22 @@ async def _process_booking_management_message(
     email_in_msg = textnorm._extract_email_from_text(message)
     phone_in_msg = textnorm._extract_phone_from_text(message)
 
+    # El cliente se echa atras: se olvida la gestion pendiente. Sin esto, un
+    # "quiero cancelar" seguido de "no, dejalo" seguia vivo 15 minutos, y el
+    # siguiente mensaje que trajera un email o un codigo se procesaba como
+    # cancelacion — aunque el cliente estuviera pidiendo justo lo contrario.
+    if session_id and not (wants_cancel or wants_reschedule) and _message_retracts_management(message):
+        _chat_manage_state_clear(session_id)
+        return None
+
     remembered = _chat_manage_state_get(session_id)
     remembered_intent = str(remembered.get("intent") or "")
+
+    # Una intencion NUEVA y contraria manda sobre la recordada: si pide reservar,
+    # no puede seguir cancelando.
+    if remembered_intent and not (wants_cancel or wants_reschedule) and _message_requests_booking_form(message):
+        _chat_manage_state_clear(session_id)
+        return None
 
     engaged_now = bool(wants_cancel or wants_reschedule or code_in_msg)
     # Con una gestion pendiente en la sesion, un mensaje que solo aporta el dato que
@@ -2768,8 +2895,21 @@ async def _create_booking_core(
         "source": source,
         "created_at": created_at,
     }
+    # Comprobar-y-guardar, atomico. El indice unico de la BD para el choque exacto
+    # de hora; el lock + esta re-comprobacion para los SOLAPES parciales, que dos
+    # peticiones simultaneas se colaban las dos (medido en
+    # tests/test_reserva_concurrente.py).
     try:
-        _store_booking(record)
+        with appstate.booking_insert_lock:
+            if agenda.slot_pisa_otra_cita(
+                cliente_id, booking_date, booking_time,
+                employee_id=employee_row["id"], duration_minutes=service_duration,
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Ese horario acaba de ser reservado por otra persona. Elige otro tramo.",
+                )
+            _store_booking(record)
     except sqlite3.IntegrityError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
