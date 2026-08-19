@@ -769,9 +769,29 @@ async def _wa_send_date_picker(
     )
 
 
+def _wa_franja_de(hora: str) -> str:
+    """Franja horaria de un hueco. Mismo criterio que la central publica."""
+    try:
+        h = int(str(hora).split(":")[0])
+    except (ValueError, IndexError):
+        return "manana"
+    if h < 14:
+        return "manana"
+    if h < 18:
+        return "tarde"
+    return "noche"
+
+
+_WA_FRANJAS = [
+    ("manana", "🌅 Mañana", "Antes de las 14:00"),
+    ("tarde", "🌇 Tarde", "De 14:00 a 18:00"),
+    ("noche", "🌙 A partir de las 18:00", "Ultimas horas"),
+]
+
+
 async def _wa_send_time_picker(
     *, cliente_id: str, phone_number_id: str, to_number: str, fecha_iso: str, fecha_humana: str,
-    employee_id: str = "", servicio: str = "", location_id: str = "",
+    employee_id: str = "", servicio: str = "", location_id: str = "", franja: str = "",
 ) -> bool:
     try:
         if employee_id:
@@ -827,6 +847,7 @@ async def _wa_send_time_picker(
                 explicacion = (
                     f"😔 El {fecha_humana} la agenda esta completa, no quedan huecos.\n\n"
                     f"Escribe *agendar* para elegir otra fecha o *menu* para volver."
+                    f"{rag._call_us_line(cliente_id)}"
                 )
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id,
@@ -836,16 +857,47 @@ async def _wa_send_time_picker(
         )
         return False
 
-    sorted_slots = sorted(available)[:10]
-    rows = [{"id": f"time_{slot}", "title": slot, "description": f"{fecha_humana[:60]}"} for slot in sorted_slots]
-    sections = [{"title": "Huecos libres", "rows": rows}]
+    # Una lista de WhatsApp admite 10 filas. Antes se mandaban `sorted(available)[:10]`
+    # y punto: con jornada de 10:00 a 20:30 eso llegaba a las 14:30, asi que TODAS
+    # las tardes eran invisibles para quien pedia cita por WhatsApp. Se pregunta la
+    # franja primero, salvo que los huecos quepan de sobra.
+    libres = sorted(available)
+    if len(libres) > _WA_MAX_FILAS and not franja:
+        por_franja: Dict[str, List[str]] = {}
+        for hueco in libres:
+            por_franja.setdefault(_wa_franja_de(hueco), []).append(hueco)
+        filas = [
+            {
+                "id": "franja_%s" % clave,
+                "title": titulo,
+                "description": "%s · %d huecos" % (ayuda, len(por_franja[clave])),
+            }
+            for clave, titulo, ayuda in _WA_FRANJAS
+            if por_franja.get(clave)
+        ]
+        if len(filas) > 1:
+            await messaging._send_whatsapp_list(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+                body=f"🕐 Para el *{fecha_humana}* hay {len(libres)} huecos. ¿A que hora te viene mejor?",
+                button_text="Elegir franja",
+                sections=[{"title": "Franjas", "rows": filas}],
+            )
+            return True
+
+    if franja:
+        libres = [h for h in libres if _wa_franja_de(h) == franja] or libres
+    mostrados = libres[:_WA_MAX_FILAS]
+    rows = [{"id": f"time_{slot}", "title": slot, "description": f"{fecha_humana[:60]}"} for slot in mostrados]
+    cuerpo = f"🕐 Huecos disponibles para *{fecha_humana}*. Elige hora:"
+    if len(libres) > len(mostrados):
+        cuerpo += f"\n\n(te muestro los {len(mostrados)} primeros de {len(libres)})"
     await messaging._send_whatsapp_list(
         cliente_id=cliente_id,
         phone_number_id=phone_number_id,
         to_number=to_number,
-        body=f"🕐 Huecos disponibles para *{fecha_humana}*. Elige hora:",
+        body=cuerpo,
         button_text="Elegir hora",
-        sections=sections,
+        sections=[{"title": "Huecos libres", "rows": rows}],
     )
     return True
 
@@ -1975,6 +2027,16 @@ async def _handle_whatsapp_message(
         return
 
     if flow.flow == "booking_time":
+        # Eligio franja (manana/tarde/noche): se le muestran los huecos de esa franja.
+        if iid.startswith("franja_"):
+            await _wa_send_time_picker(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                fecha_iso=flow.fecha, fecha_humana=_wa_fecha_humana(flow.fecha),
+                employee_id=flow.employee_id, servicio=flow.servicio,
+                location_id=flow.location_id, franja=iid[len("franja_"):],
+            )
+            return
+
         hora = ""
         if iid.startswith("time_"):
             hora = iid[len("time_"):]
@@ -1987,8 +2049,9 @@ async def _handle_whatsapp_message(
                 aviso_error="No he reconocido la hora. Pulsa un hueco del listado o escribe *menu*.",
                 repetir_paso=lambda: _wa_send_time_picker(
                     cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                    config=config, fecha=flow.fecha, employee_id=flow.employee_id,
-                    servicio=flow.servicio, location_id=flow.location_id,
+                    fecha_iso=flow.fecha, fecha_humana=_wa_fecha_humana(flow.fecha),
+                    employee_id=flow.employee_id, servicio=flow.servicio,
+                    location_id=flow.location_id,
                 ),
             )
             return

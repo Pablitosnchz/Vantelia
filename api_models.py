@@ -1709,6 +1709,8 @@ class PortalEmployeePayload(BaseModel):
     weekly_hours: Dict[str, PortalWeekdayHours] = Field(default_factory=dict)
     service_ids: List[str] = Field(default_factory=list)
     location_id: str = Field(default="", max_length=64)
+    # Orden en que el negocio quiere ver a su equipo. 0 = alfabetico (default).
+    sort_order: int = Field(default=0, ge=0, le=999)
 
 
 class PortalEmployeePublic(BaseModel):
@@ -1730,6 +1732,7 @@ class PortalEmployeePublic(BaseModel):
     weekly_hours: Dict[str, Any] = Field(default_factory=dict)
     service_ids: List[str] = Field(default_factory=list)
     location_id: str = ""
+    sort_order: int = 0
     allows_all_services: bool = True
     bookings_today: int = 0
     bookings_upcoming: int = 0

@@ -247,7 +247,9 @@ def _list_employee_rows(
     sql = (
         "SELECT * FROM employees WHERE "
         + " AND ".join(clauses)
-        + " ORDER BY is_default DESC, is_active DESC, name COLLATE NOCASE ASC"
+        # `sort_order` lo fija el negocio; a igualdad (todos 0, que es el default)
+        # se mantiene el orden alfabetico de siempre.
+        + " ORDER BY is_default DESC, is_active DESC, sort_order ASC, name COLLATE NOCASE ASC"
     )
     with db._get_db_connection() as connection:
         return connection.execute(sql, tuple(params)).fetchall()
@@ -1263,6 +1265,7 @@ def _serialize_portal_employee(row: sqlite3.Row) -> PortalEmployeePublic:
         weekly_hours=schedule.get("weekly_hours", {}),
         service_ids=service_ids,
         location_id=row["location_id"] or "",
+        sort_order=int((row["sort_order"] if "sort_order" in row.keys() else 0) or 0),
         allows_all_services=not service_ids,
         bookings_today=counters["today"],
         bookings_upcoming=counters["upcoming"],
@@ -1330,6 +1333,11 @@ def _validate_employee_payload(
     return {
         "name": textnorm._sanitize_text(data.name),
         "location_id": location_id,
+        "sort_order": (
+            max(0, int(getattr(data, "sort_order", 0) or 0))
+            if "sort_order" in fields_set or existing_row is None
+            else int((existing_row["sort_order"] if "sort_order" in existing_row.keys() else 0) or 0)
+        ),
         "role_label": (
             textnorm._sanitize_text(data.role_label)
             if "role_label" in fields_set or existing_row is None
@@ -1393,10 +1401,10 @@ def _create_portal_employee(
                 id, cliente_id, name, role_label, color, is_active, is_default,
                 timezone, slot_minutes, day_start, day_end, break_start, break_end,
                 break_windows_json, closed_weekdays_json, weekly_hours_json,
-                service_ids_json, location_id,
+                service_ids_json, location_id, sort_order,
                 created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 employee_id,
@@ -1416,6 +1424,7 @@ def _create_portal_employee(
                 payload["weekly_hours_json"],
                 payload["service_ids_json"],
                 payload["location_id"],
+                payload["sort_order"],
                 created_at,
                 created_at,
             ),
@@ -1539,7 +1548,7 @@ def _update_portal_employee(
                 slot_minutes = ?, day_start = ?, day_end = ?, break_start = ?, break_end = ?,
                 break_windows_json = ?, closed_weekdays_json = ?, weekly_hours_json = ?,
                 service_ids_json = ?,
-                location_id = ?, updated_at = ?
+                location_id = ?, sort_order = ?, updated_at = ?
             WHERE id = ? AND cliente_id = ?
             """,
             (
@@ -1558,6 +1567,7 @@ def _update_portal_employee(
                 payload["weekly_hours_json"],
                 payload["service_ids_json"],
                 payload["location_id"],
+                payload["sort_order"],
                 timeutils._utc_now_iso(),
                 employee_id,
                 cliente_id,

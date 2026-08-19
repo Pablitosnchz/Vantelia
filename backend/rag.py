@@ -1542,8 +1542,26 @@ def _seed_qa_from_onboarding(cliente_id: str, result: Any, user_id: Any = "") ->
         return 0
 
 
+def _call_us_line(cliente_id: str) -> str:
+    """Salida humana cuando la agenda no da: que llamen y el negocio lo cuadra.
+
+    Un salon puede hacer hueco moviendo cosas que el sistema no sabe (juntar dos
+    clientas, alargar un rato, repartirse el trabajo). Sin esta linea, quien no
+    encuentra hueco simplemente se va. Si el negocio no tiene telefono publicado,
+    no se inventa nada.
+    """
+    try:
+        telefono = str((clients._get_client_config(cliente_id).get("contacto") or {}).get("telefono") or "").strip()
+    except Exception:  # noqa: BLE001 - el mensaje nunca debe romperse por esto
+        telefono = ""
+    if not telefono:
+        return ""
+    return f"\n\nSi no te encaja ningun dia, llamanos al {telefono} y te buscamos un hueco."
+
+
 def _day_unavailable_explanation(cliente_id: str, fecha: str, fecha_humana: str) -> str:
     blocks = agenda._agenda_block_reasons_for_day(cliente_id, fecha)
+    llamada = _call_us_line(cliente_id)
     if blocks:
         unique_reasons: List[str] = []
         for b in blocks:
@@ -1554,10 +1572,12 @@ def _day_unavailable_explanation(cliente_id: str, fecha: str, fecha_humana: str)
             f"🚫 El {fecha_humana} la agenda esta bloqueada.\n\n"
             f"*Motivo:*\n{listado}\n\n"
             f"Prueba con otra fecha. Escribe *agendar* para elegir otro dia o *menu* para volver."
+            f"{llamada}"
         )
     return (
         f"❌ El {fecha_humana} estamos cerrados o sin disponibilidad.\n\n"
         f"Escribe *agendar* para elegir otra fecha o *menu* para volver al menu principal."
+        f"{llamada}"
     )
 
 

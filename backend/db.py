@@ -251,6 +251,11 @@ def _init_database() -> None:
             connection.execute("ALTER TABLE employees ADD COLUMN location_id TEXT NOT NULL DEFAULT ''")
         if "weekly_hours_json" not in employee_columns:
             connection.execute("ALTER TABLE employees ADD COLUMN weekly_hours_json TEXT NOT NULL DEFAULT '{}'")
+        # Orden en el que el negocio quiere ver a su equipo (y en el que lo ve el
+        # cliente al elegir profesional). Con todos a 0 el orden sigue siendo el
+        # alfabetico de siempre, asi que ningun tenant existente cambia.
+        if "sort_order" not in employee_columns:
+            connection.execute("ALTER TABLE employees ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_employees_location
