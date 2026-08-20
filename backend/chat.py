@@ -110,6 +110,28 @@ def _message_is_greeting(message: str) -> bool:
     return any(p.search(norm) for p in GREETING_PATTERNS)
 
 
+# "gracias" pegado a la peticion: "mil gracias, ¿a que hora abris?". Va sin tildes
+# (se compara con el mensaje ya normalizado) y exige la palabra completa, para no
+# casar "gracioso" ni "agraciada".
+AGRADECIMIENTO_RE = re.compile(r"\b(gracias|graciass+|mil\s+gracias|te\s+lo\s+agradezco)\b")
+
+
+def _con_gracias_a_ti(message: str, respuesta: str) -> str:
+    """Devuelve el agradecimiento cuando el cliente da las gracias.
+
+    Las respuestas deterministas (Q&A del negocio, reglas por palabra clave) no
+    pasan por el modelo, asi que un "mil gracias, ¿a que hora abris?" recibia el
+    horario a secas: correcto pero seco. Se antepone el agradecimiento salvo que
+    la respuesta ya lo lleve.
+    """
+    texto = textnorm._strip_accents(str(message or "").lower())
+    if not AGRADECIMIENTO_RE.search(texto):
+        return respuesta
+    if "gracias a ti" in textnorm._strip_accents(respuesta.lower())[:60]:
+        return respuesta
+    return "¡Gracias a ti! 😊\n\n" + respuesta
+
+
 GIFT_CARD_INTENT_RE = re.compile(r"tarjeta[s]?\s+(de\s+)?regalo|gift\s*card|bono\s+regalo|cheque\s+regalo", re.IGNORECASE)
 GIFT_CARD_PURCHASE_RE = re.compile(
     r"\b(comprar|compra|pagar|regalar|regalo|enlace|link|url|web|donde|d[oó]nde|"
@@ -611,6 +633,8 @@ async def _process_chat_message(
     # Sin la funcion activada esto no toca la base de datos.
     keyword_rule = keywords.match_reply(cliente_id, message)
     if keyword_rule:
+        keyword_rule = dict(keyword_rule)
+        keyword_rule["reply"] = _con_gracias_a_ti(message, keyword_rule["reply"])
         keyword_response = RespuestaChat(
             respuesta=keyword_rule["reply"],
             mostrar_formulario=False,
@@ -633,6 +657,7 @@ async def _process_chat_message(
     # conversaciones normales.
     qa_exact_answer = rag._match_qa_answer(cliente_id, message)
     if qa_exact_answer:
+        qa_exact_answer = _con_gracias_a_ti(message, qa_exact_answer)
         qa_response = RespuestaChat(
             respuesta=qa_exact_answer,
             mostrar_formulario=False,
