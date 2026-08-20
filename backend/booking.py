@@ -344,18 +344,31 @@ def _count_bookings_this_month(cliente_id: str) -> int:
         return 0
 
 
+# Los clientes escriben deprisa y con erratas: "quiero agendare una cita" no abria
+# el formulario, porque \bagendar\b exige la palabra exacta, y "quiero una cita"
+# tampoco casaba al meter una palabra por medio. Ahora los verbos admiten sus
+# terminaciones habituales y la peticion admite palabras intermedias. Van SIN
+# tildes: el mensaje se normaliza antes de compararlo.
 BOOKING_INTENT_PATTERNS = [
     re.compile(pattern, re.IGNORECASE)
     for pattern in [
-        r"\b(agendar|agenda|reservar|reserva|pedir cita|solicitar cita|quiero una cita)\b",
-        r"\b(formulario|mostrar formulario|ensename el formulario|enséñame el formulario)\b",
-        r"\b(coger cita|quiero agendar|quiero reservar|quiero pedir cita)\b",
+        r"\b(agendar|agendarme|agendarla|agendarlo|agendare|agenda|agendo)\b",
+        r"\b(reservar|reservarme|reservarla|reservarlo|reservare|reserva|reservo)\b",
+        r"\b(formulario|mostrar formulario|ensename el formulario)\b",
+        r"\b(pedir|coger|solicitar|sacar|concertar|apuntarme)\s+(una\s+)?cita\b",
+        # "quiero / quisiera / necesito ... cita", con lo que metan por medio.
+        r"\b(quiero|quisiera|queria|necesito|me gustaria|podria|puedo)\b[^.?!]{0,24}\bcita\b",
     ]
 ]
 
 
 def _message_requests_booking_form(message: str) -> bool:
-    normalized = " ".join(str(message or "").lower().split())
+    """¿Pide cita NUEVA? Gestionar una que ya tiene es otra cosa."""
+    normalized = textnorm._strip_accents(" ".join(str(message or "").lower().split()))
+    # "quiero cancelar mi cita" tambien dice "quiero ... cita": sin descartarlo
+    # aqui, pedir una cancelacion abriria el formulario de reserva.
+    if _message_requests_cancel_booking(message) or _message_requests_reschedule_booking(message):
+        return False
     return any(pattern.search(normalized) for pattern in BOOKING_INTENT_PATTERNS)
 
 
