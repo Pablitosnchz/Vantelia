@@ -177,6 +177,11 @@ def _init_database() -> None:
             connection.execute("ALTER TABLE bookings ADD COLUMN location_id TEXT NOT NULL DEFAULT ''")
         if "resource_id" not in columns:
             connection.execute("ALTER TABLE bookings ADD COLUMN resource_id TEXT NOT NULL DEFAULT ''")
+        # Copia de los tramos activo/espera del servicio EN EL MOMENTO de reservar.
+        # Se guarda en la cita y no se relee del catalogo: si el negocio cambia el
+        # servicio despues, la agenda de las citas ya cogidas no se descoloca.
+        if "gap_json" not in columns:
+            connection.execute("ALTER TABLE bookings ADD COLUMN gap_json TEXT NOT NULL DEFAULT ''")
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_bookings_lookup
@@ -349,6 +354,11 @@ def _init_database() -> None:
             # preparado, que traer). El mensaje de confirmacion del negocio es uno para
             # todos; esto es lo que cambia de un servicio a otro.
             "booking_note": "TEXT NOT NULL DEFAULT ''",
+            # Tramos de trabajo y espera: [{"activo": 105, "espera": 90}, ...].
+            # Un alisado o unas mechas dejan a la profesional LIBRE mientras actua
+            # el producto, y en ese rato puede atender a otra clienta. Vacio (el
+            # default) = el servicio ocupa su duracion entera, como siempre.
+            "gap_json": "TEXT NOT NULL DEFAULT ''",
         }.items():
             if column_name not in service_columns:
                 connection.execute(f"ALTER TABLE services ADD COLUMN {column_name} {definition}")

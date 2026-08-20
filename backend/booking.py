@@ -2114,6 +2114,13 @@ def _store_booking(record: Dict[str, Any], *, skip_payment: bool = False) -> Non
             record["confirmed_at"] = ""
     else:
         record.setdefault("payment_status", "not_required")
+    # Los tramos de trabajo/espera del servicio se sellan aqui, que es por donde
+    # pasan TODOS los canales (widget, WhatsApp, voz y panel).
+    if service is not None and not record.get("gap_json"):
+        try:
+            record["gap_json"] = (service["gap_json"] if "gap_json" in service.keys() else "") or ""
+        except (IndexError, KeyError):
+            record["gap_json"] = ""
     location_id = record.get("location_id", "")
     if not location_id and record.get("employee_id"):
         employee_row = agenda._get_employee_row(record["employee_id"], cliente_id=record["cliente_id"])
@@ -2155,9 +2162,9 @@ def _store_booking(record: Dict[str, Any], *, skip_payment: bool = False) -> Non
                 confirmed_at, cancelled_at, rescheduled_at, rescheduled_from_booking_id,
                 confirmation_email_sent_at, reminder_24h_sent_at, reminder_2h_sent_at,
                 customer_email_status, customer_email_last_error, booking_code,
-                service_id, service_price_cents, payment_status, location_id, resource_id, source, created_at
+                service_id, service_price_cents, payment_status, location_id, resource_id, source, gap_json, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record["id"],
@@ -2196,6 +2203,9 @@ def _store_booking(record: Dict[str, Any], *, skip_payment: bool = False) -> Non
                 record.get("location_id", ""),
                 record.get("resource_id", ""),
                 record["source"],
+                # Tramos activo/espera copiados del servicio al reservar: si el
+                # negocio los cambia luego, esta cita conserva los suyos.
+                record.get("gap_json", ""),
                 record["created_at"],
             ),
         )

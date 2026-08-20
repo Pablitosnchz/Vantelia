@@ -4,9 +4,10 @@ El script vive en scripts/ y solo se usa en un alta, pero lo que escribe es el
 catalogo entero de un negocio: la duracion bloquea su agenda y el precio es lo
 que cobra. Dos errores reales al importar un salon (ago 2026):
 
-1. Un pack salia de 10 horas. Su primer paso tenia exposicion CERO --que es un
-   dato: "sin espera"-- y se interpretaba como "sin dato", sumando los 300
-   minutos del servicio completo.
+1. Los tiempos de un paso son DOS y se suman: lo que la profesional tarda en
+   hacerlo (hoja Servicios) y lo que despues actua el producto (hoja Packs). Se
+   tomaba el segundo EN LUGAR del primero, y el pack de mechas del salon --6,6 h
+   de reloj-- quedaba en 3,6: encima de esa cita se colaban otras.
 2. Un tratamiento de dos horas salia a 4 EUR, porque sus pasos valen 0 EUR (el
    precio real vive en otro servicio del catalogo).
 
@@ -46,23 +47,50 @@ def _servicio(nombre, precio_cents, minutos, categoria="COLOR", operario="Todos"
     }
 
 
-def test_exposicion_cero_no_es_lo_mismo_que_sin_dato():
-    """Cero = ese paso no espera. Vacio = no lo indican, vale la duracion propia."""
+def test_un_paso_dura_su_trabajo_MAS_su_espera():
+    """Los dos tiempos se suman; no son alternativos.
+
+    En la hoja de servicios esta lo que la profesional TARDA en hacer el paso; en
+    la de packs, el "tiempo de exposicion" que el producto necesita despues, y
+    durante el cual ella queda libre. Aqui se tomaba la exposicion EN LUGAR de la
+    duracion: el pack de mechas del salon quedaba en 3,6 h cuando son 6,6, y
+    encima de esa cita se colaban otras.
+    """
+    servicios = [_servicio("COLOR", 3000, 60)]
+    packs = [{"nombre": "PACK Y", "pasos": [("COLOR", 70)]}]
+    compuestos, _ = imp.componer_packs(packs, servicios)
+    assert compuestos[0]["minutos"] == 130          # 60 trabajando + 70 esperando
+    assert compuestos[0]["tramos"] == [{"activo": 60, "espera": 70}]
+
+
+def test_un_paso_sin_espera_solo_ocupa_su_trabajo():
+    """Celda vacia o cero: ese paso no tiene tiempo de exposicion."""
     servicios = [
-        _servicio("GREY BLENDING CORTO", 15000, 300),
+        _servicio("GREY BLENDING CORTO", 15000, 120),
         _servicio("BRUSING CORTO", 1300, 30),
     ]
     packs = [{"nombre": "PACK X", "pasos": [("GREY BLENDING CORTO", 0), ("BRUSING CORTO", None)]}]
     compuestos, _ = imp.componer_packs(packs, servicios)
-    # 0 (sin espera) + 30 (duracion propia del paso sin dato) = 30, no 330.
-    assert compuestos[0]["minutos"] == 30
+    assert compuestos[0]["minutos"] == 150          # 120 + 30, sin esperas
+    assert compuestos[0]["tramos"] == [
+        {"activo": 120, "espera": 0}, {"activo": 30, "espera": 0}
+    ]
 
 
-def test_la_exposicion_indicada_manda_sobre_la_duracion():
-    servicios = [_servicio("COLOR", 3000, 60)]
-    packs = [{"nombre": "PACK Y", "pasos": [("COLOR", 70)]}]
+def test_los_tramos_dejan_la_agenda_libre_mientras_actua_el_producto():
+    """El pack real del salon: 6,6 h de reloj pero solo 4 de trabajo."""
+    servicios = [
+        _servicio("MECHAS MUY LARGO", 11000, 105),
+        _servicio("MATIZ", 3000, 30),
+        _servicio("BRUSING LARGO", 1900, 60),
+    ]
+    packs = [{"nombre": "PACK MECHAS", "pasos": [
+        ("MECHAS MUY LARGO", 90), ("MATIZ", 30), ("BRUSING LARGO", None)]}]
     compuestos, _ = imp.componer_packs(packs, servicios)
-    assert compuestos[0]["minutos"] == 70
+    pack = compuestos[0]
+    trabajo = sum(t["activo"] for t in pack["tramos"])
+    espera = sum(t["espera"] for t in pack["tramos"])
+    assert (trabajo, espera, pack["minutos"]) == (195, 120, 315)
 
 
 def test_un_pack_sin_precio_real_queda_a_consultar():

@@ -1144,6 +1144,16 @@ def _update_client_schedule(cliente_id: str, data: PortalScheduleUpdatePayload) 
                     cliente_id,
                 ),
             )
+            # El paso de la agenda (cada cuanto se ofrece cita) es del NEGOCIO, no
+            # una preferencia de cada profesional: se aplica a todo el equipo. Las
+            # horas, descansos y dias cerrados si son personales y se quedan como
+            # estan. Sin esto, un salon ponia "citas de 15 minutos" en Horarios y
+            # sus clientas seguian viendo huecos de 30, porque la disponibilidad se
+            # calcula por profesional y solo cambiaba la agenda general.
+            connection.execute(
+                "UPDATE employees SET slot_minutes = ?, updated_at = ? WHERE cliente_id = ?",
+                (int(booking_row["slot_minutes"]), timeutils._utc_now_iso(), cliente_id),
+            )
             connection.commit()
     clients._update_runtime_configs(next_configs)
     return _portal_schedule_from_config(cliente_id)
@@ -2511,6 +2521,54 @@ def _booking_service_meta_index(
     return out
 
 
+def _service_gap_json(cliente_id: str, servicio_name: str) -> str:
+    """Tramos activo/espera configurados para un servicio (vacio = sin esperas)."""
+    row = _find_service_by_name(cliente_id, servicio_name) if servicio_name else None
+    if row is None:
+        return ""
+    return (row["gap_json"] if "gap_json" in row.keys() else "") or ""
+
+
+def _tramos_de_trabajo(gap_json: str, inicio_min: int, duracion_min: int) -> List[Tuple[int, int]]:
+    """Los ratos en que la profesional esta OCUPADA dentro de una cita.
+
+    Un alisado o unas mechas se hacen por pasos, y entre paso y paso el producto
+    tiene que actuar: la clienta espera pero la profesional queda libre y puede
+    atender a otra. Esos huecos no pueden bloquear la agenda.
+
+    `gap_json` son los tramos en orden: [{"activo": 105, "espera": 90}, ...].
+    Sin tramos (el caso normal) la cita ocupa su duracion entera, como siempre.
+    """
+    entero = [(inicio_min, inicio_min + duracion_min)]
+    if not gap_json:
+        return entero
+    try:
+        tramos = json.loads(gap_json)
+    except (ValueError, TypeError):
+        return entero
+    if not isinstance(tramos, list) or not tramos:
+        return entero
+
+    ocupados: List[Tuple[int, int]] = []
+    cursor = inicio_min
+    for tramo in tramos:
+        if not isinstance(tramo, dict):
+            continue
+        try:
+            activo = max(0, int(tramo.get("activo") or 0))
+            espera = max(0, int(tramo.get("espera") or 0))
+        except (TypeError, ValueError):
+            continue
+        if activo:
+            ocupados.append((cursor, cursor + activo))
+        cursor += activo + espera
+    # Si los tramos no cuadran con la duracion guardada, manda la duracion: mejor
+    # bloquear de mas que dejar entrar una cita encima de otra.
+    if not ocupados or cursor > inicio_min + duracion_min:
+        return entero
+    return ocupados
+
+
 def _booked_intervals(
     cliente_id: str, fecha: str, *, employee_id: str = "", exclude_booking_id: str = ""
 ) -> List[Tuple[int, int]]:
@@ -2521,7 +2579,10 @@ def _booked_intervals(
         start_min = textnorm._time_to_min(row["booking_time"])
         if start_min is None:
             continue
-        intervals.append((start_min, start_min + _booking_row_duration_min(row, cliente_id)))
+        gap_json = (row["gap_json"] if "gap_json" in row.keys() else "") or ""
+        intervals.extend(
+            _tramos_de_trabajo(gap_json, start_min, _booking_row_duration_min(row, cliente_id))
+        )
     return intervals
 
 
@@ -2814,7 +2875,8 @@ def _booking_conflicts_outside_schedule(
 
 
 async def _booking_slot_available(
-    cliente_id: str, fecha: str, hora: str, *, employee_id: str = "", duration_minutes: Optional[int] = None
+    cliente_id: str, fecha: str, hora: str, *, employee_id: str = "",
+    duration_minutes: Optional[int] = None, gap_json: str = "",
 ) -> bool:
     employee_row = _resolve_employee_for_booking(cliente_id, employee_id, require_active=False)
     dur = int(duration_minutes or _employee_schedule_from_row(employee_row)["slot_minutes"])
@@ -2825,9 +2887,14 @@ async def _booking_slot_available(
     if hora not in grid:
         return False
     end_min = start_min + dur
-    if _interval_overlaps(start_min, end_min, _booked_intervals(cliente_id, fecha, employee_id=employee_id)):
+    # Con esperas, solo cuentan los tramos en que la profesional trabaja: el resto
+    # del rango puede pisarse con otra cita, que es de lo que se trata.
+    tramos = _tramos_de_trabajo(gap_json, start_min, dur)
+    ocupados = _booked_intervals(cliente_id, fecha, employee_id=employee_id)
+    bloqueados = _blocked_intervals(cliente_id, fecha, employee_id=employee_id)
+    if any(_interval_overlaps(a, b, ocupados) for a, b in tramos):
         return False
-    if _interval_overlaps(start_min, end_min, _blocked_intervals(cliente_id, fecha, employee_id=employee_id)):
+    if any(_interval_overlaps(a, b, bloqueados) for a, b in tramos):
         return False
     return _location_capacity_ok(
         cliente_id, employee_row["location_id"] or "", fecha, start_min, end_min
@@ -2868,13 +2935,20 @@ async def _employee_slot_sets_for_day(
         if room_count > 0
         else []
     )
+    # Si el servicio que se quiere reservar TAMBIEN tiene esperas, solo hay que
+    # mirar sus tramos de trabajo: asi un corte de 30 min puede entrar en el rato
+    # en que la profesional espera a que actue un alisado, que es justo el sentido
+    # de todo esto.
+    gap_servicio = _service_gap_json(cliente_id, textnorm._sanitize_text(servicio)) if servicio else ""
+
     available: Set[str] = set()
     for slot in slots:
         start_min = textnorm._time_to_min(slot)
         if start_min is None:
             continue
         end_min = start_min + dur
-        if _interval_overlaps(start_min, end_min, booked) or _interval_overlaps(start_min, end_min, blocked):
+        tramos = _tramos_de_trabajo(gap_servicio, start_min, dur)
+        if any(_interval_overlaps(a, b, booked) or _interval_overlaps(a, b, blocked) for a, b in tramos):
             continue
         if room_count > 0:
             overlapping = sum(

@@ -179,3 +179,42 @@ def test_weekly_matrix_feeds_prompts_with_real_hours(salon_api):
     assert (by_weekday[3]["start"], by_weekday[3]["end"]) == ("10:00", "20:30")
     assert (by_weekday[5]["start"], by_weekday[5]["end"]) == ("09:00", "14:00")
     assert by_weekday[6]["closed"] is True
+
+
+def test_el_paso_de_agenda_se_aplica_a_todo_el_equipo(api_module, client):  # noqa: F811
+    """Cambiar "citas cada 15 minutos" en Horarios tiene que valer para todos.
+
+    Caso real: un salon lo puso a 15, la agenda general lo cogio y sus tres
+    profesionales se quedaron en 30. Como la disponibilidad se calcula POR
+    profesional, sus clientas seguian viendo huecos de media hora.
+
+    Las horas, descansos y dias cerrados SI son de cada una y no se tocan: lo que
+    se unifica es solo el paso de la rejilla, que es del negocio.
+    """
+    from backend import agenda, db, timeutils
+
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT OR REPLACE INTO employees (id, cliente_id, name, role_label, color,"
+            " is_active, is_default, timezone, slot_minutes, day_start, day_end, break_start,"
+            " break_end, break_windows_json, closed_weekdays_json, weekly_hours_json,"
+            " service_ids_json, location_id, sort_order, created_at, updated_at)"
+            " VALUES ('emp_slot_test','demo','Profesional Slot','','#000',1,0,'Europe/Madrid',"
+            "30,'09:00','18:00','','','[]','[]','{}','[]','',0,?,'')",
+            (timeutils._utc_now_iso(),),
+        )
+        conexion.commit()
+
+    from api_models import PortalScheduleUpdatePayload
+
+    agenda._update_client_schedule("demo", PortalScheduleUpdatePayload(slot_minutes=15))
+
+    fila = db._get_db_connection().execute(
+        "SELECT slot_minutes, day_start FROM employees WHERE id = 'emp_slot_test'"
+    ).fetchone()
+    assert fila["slot_minutes"] == 15, "el paso de agenda no llego a la profesional"
+    assert fila["day_start"] == "09:00", "su horario personal no se toca"
+
+    with db._get_db_connection() as conexion:
+        conexion.execute("DELETE FROM employees WHERE id = 'emp_slot_test'")
+        conexion.commit()

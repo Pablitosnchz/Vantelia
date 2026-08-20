@@ -1,88 +1,92 @@
 # Alicia Rincón Estilistas: lo pedido, lo hecho y lo que falta
 
-Estado a 19-ago-2026. Tenant `alicia_rincon_estilistas`.
+Estado a 20-ago-2026. Tenant `alicia_rincon_estilistas`.
 
-Este documento existe porque las peticiones llegan por WhatsApp a lo largo del
+Este documento existe porque sus peticiones llegan por WhatsApp a lo largo del
 día y se pierden. Cuando algo se cierra, se borra de aquí.
 
 ---
 
-## Hecho y desplegado
+## Hecho
 
-- **Franjas horarias en WhatsApp.** Antes solo se veían los 10 primeros huecos
-  del día: de 10:00 a 14:30. Ninguna clienta veía las tardes.
-- **Sin hueco → que llamen.** El mensaje incluye su teléfono para que el salón
-  cuadre lo que el sistema no puede.
+### Los tiempos de espera — confirmado por teléfono el 19-ago
+
+Ella lo aclaró en llamada: en la hoja **Servicios** está el tiempo que tarda
+**ella en hacer** el servicio; el **tiempo de exposición** de la hoja *Packs* es
+el rato que tiene **libre para atender a otra clienta**. (El "No" que había dicho
+antes por WhatsApp fue un error suyo.)
+
+Cuadra con sus números: el pack de mechas extra largo son 240 min de trabajo +
+155 de espera = 6,6 h, y ella decía "6 o 7 horas".
+
+Un servicio deja de ser un bloque y pasa a ser `activo → espera → activo`. Los
+tramos se guardan en `services.gap_json`, se copian a la cita al reservar
+(`bookings.gap_json`) y `agenda._booked_intervals` —fuente única de "qué está
+ocupado"— devuelve solo los tramos activos. **Sin tramos, todo se comporta igual
+que antes**, así que ningún otro cliente cambia.
+
+Sus packs liberan **3,1 h de media** por cita. Con dos packs al día son más de 6
+horas de agenda que antes se perdían.
+
+### Lo demás
+
+- **Franjas horarias en WhatsApp.** Antes se mandaban los 10 primeros huecos del
+  día: de 10:00 a 14:30. Ninguna clienta veía las tardes.
+- **Sin hueco → que llamen**, con su teléfono en el mensaje.
 - **Orden del equipo**: Alicia, Lorena, Conchi, Lucía, Jose.
-- Catálogo de 183 servicios en 11 categorías, 3 profesionales, horarios reales.
-- Señal de 50 € en los 53 alisados.
+- **El paso de la agenda se aplica a todo el equipo.** Puso "citas de 15 minutos"
+  en Horarios, lo cogió la agenda general y sus tres profesionales se quedaron en
+  30: como la disponibilidad se calcula por profesional, sus clientas seguían
+  viendo huecos de media hora.
 
 ---
 
-## Bloqueado esperando a Alicia
+## Listo, falta aplicarlo a su tenant
 
-### 1. Los tiempos de espera (lo de más valor)
+Probado importando su Excel en una base de datos aparte: **191 servicios** (186
+activos), 11 categorías, 37 con tramos de espera.
 
-Un pack de mechas dura 6-7 h, pero **entre pasos la profesional está libre** y
-puede atender a otra clienta. Hoy se bloquea el rango entero.
-
-**Cómo va a venir el dato** (acordado con ella el 19-ago): en la hoja
-*Servicios*, el tiempo que tarda en **hacer** el servicio; en la hoja *Packs*,
-los tiempos de exposición, entendidos como **rato libre para atender a otra**.
-
-Ella avisó de algo que su tabla aún no expresa: *"en un servicio de esos hay
-varios tiempos de espera entremedias, no uno solo"*. Pendiente de aclarar en una
-llamada.
-
-**Diseño previsto**: un servicio deja de ser un bloque y pasa a ser una secuencia
-`activo → espera → activo`. Acotado a un punto: los tramos de espera se guardan
-en la cita y `agenda._booked_intervals` —fuente única de "qué está ocupado"— los
-descuenta. Vacío = comportamiento actual, así que ningún otro cliente cambia.
-
-**OJO, problema vivo**: los packs están cargados con la duración equivocada. El
-importador tomó el "tiempo de exposición" **en lugar de** la duración del
-servicio, así que el pack de mechas extra largo figura con 3,6 h cuando ella dice
-que son 6-7. Mientras siga así, se le pueden encajar citas encima de un pack.
-
-### 2. La agenda en tramos de 15 minutos
-
-Va después de lo anterior. Es configuración (`slot_minutes`), pero solo tiene
-sentido con los huecos de espera liberados.
-
-### 3. Excel nuevo
-
-Lo va a rehacer con el criterio de arriba. Cuando llegue: **16 packs de alta**
-(ácido láctico bio premium ×4, color raíz y elumen ×4, elumen ×4, matiz ×4) y
-**7 a desactivar** (no borrar: pueden tener citas).
-
----
-
-## Listo para ejecutar en cuanto llegue el Excel
-
-- **Señal** en ~30 servicios más: todo grey blending (11, ninguno la tiene hoy),
-  el resto de mechas (9), cambios de color (6) y decoloraciones (2).
+- **Importar el catálogo** con packs, tramos, categorías y precios.
+- **Señal**: 42 de 73 salen solas de sus filas FIANZA.
 - **Precios ocultos** en mechas, balayage, grey, landing, extensiones y cambios
-  de color (91 servicios). Se hace poniendo el precio a "consultar", que el
+  de color (**82 servicios**). Se hace poniendo el precio a "consultar", que el
   sistema ya soporta en todos los canales: cero código.
-- **Cita de diagnóstico de 15 min**, gratis y sin compromiso, ofrecida cuando
-  pregunten precio de esas familias. El servicio ya existe en su catálogo.
+- **Quién puede hacer cada servicio**: su columna "Operario" (12 solo Alicia, 48
+  las tres, 72 todos). Hoy no está configurado, así que el sistema **puede
+  ofrecer a Conchi para algo que solo hace Alicia**. Se aplica con
+  `employees.service_ids_json`.
+- **Altas de Lucía y Jose** (falta su horario).
+
+---
+
+## Pendiente de código
+
 - **Alisados**: si piden cita, se coge preguntando el largo. La foto solo se pide
   si quieren **presupuesto** previo; entonces se responde que el salón contacta,
-  se calla el asistente y se avisa al equipo.
+  se calla el asistente y se avisa al equipo. Ese aviso al negocio **no existe
+  todavía** y sin él la foto se queda esperando a que alguien mire el panel.
 - **Extensiones**: nunca precio, siempre cita de diagnóstico presencial.
-- **Altas de Lucía y Jose** (falta su horario).
+- **Ofrecer la cita de diagnóstico de 15 min** al preguntar precio de las
+  familias de arriba. El servicio ya existe en su catálogo (15 min, gratis).
 
 ---
 
 ## Preguntas abiertas
 
-1. **"Jazz"** no aparece en su tabla. ¿Cómo se llama el servicio?
-2. Los packs de **Elumen** (corto, medio, largo, extra largo) están duplicados.
-3. Los packs no llevan precio: sale de sumar los pasos. En los de **ácido láctico
-   y keratina premium** algún paso va sin precio y quedan "a consultar".
-4. **"Grey blending corto" figura con 300 minutos** (5 h). ¿Correcto?
-5. **Extensiones**: ¿llevan señal? No las nombró en esa lista.
+1. **Faltan dos filas FIANZA.** Su tabla tiene extensiones (100 €) y
+   "mechas-alisados-decoloraciones-balayage-permanente" (50 €), pero por WhatsApp
+   añadió **grey blending y cambios de color**: 10 servicios se quedarían sin
+   señal. Mejor que las añada ella a su Excel que meterlo a fuego en el código.
+2. **"RECOGIDO"**, paso del pack de maquillaje, no existe en su hoja de
+   servicios. Es el único de los 41 packs que no casa.
+3. **"Pack grey blending largo" sale de 8,8 h** (5,4 trabajando + 3,4 esperando).
+   Es el más largo de todos, conviene confirmarlo.
+4. **"Jazz"** no aparece en su tabla. ¿Cómo se llama?
+5. Los packs de **Elumen** (corto, medio, largo, extra largo) están duplicados.
 6. La cita de diagnóstico, ¿la puede dar cualquiera de las tres?
+
+**Ya resuelto**: las extensiones sí llevan señal, y de **100 €** — está en su
+propio Excel, no hacía falta preguntarlo.
 
 ---
 
@@ -93,6 +97,9 @@ sola ("si no hay 90 minutos de una, pero sí 45 de dos"). Depende de cómo vaya 
 mañana y de si el trabajo se puede partir: lo sabe el equipo, no el sistema.
 Automatizarlo mal encaja citas imposibles. Ese caso lo cubre la salida por
 teléfono, que ella misma propuso.
+
+Su columna "Operario" **no** expresa eso: dice quién está capacitada para cada
+servicio, que es otra cosa (y esa sí se va a aplicar).
 
 ---
 

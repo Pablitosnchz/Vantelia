@@ -13,9 +13,13 @@ Formato esperado, hoja "Packs":
 
 Reglas que aplica, y por que:
 
-* Un PACK es UNA cita, no varias: se crea como un servicio mas, con la duracion
-  sumada de sus pasos (el tiempo de exposicion si lo indican, si no la duracion
-  propia de ese servicio) y el precio sumado de sus componentes.
+* Un PACK es UNA cita, no varias: se crea como un servicio mas, con el precio
+  sumado de sus componentes y la duracion sumada de sus pasos, donde CADA paso
+  aporta dos tiempos: lo que la profesional tarda en hacerlo (hoja Servicios) y
+  el "tiempo de exposicion" que el producto necesita despues (hoja Packs).
+* Ese tiempo de exposicion se guarda aparte (`tramos`): durante el, la
+  profesional queda LIBRE y la agenda puede dar ese hueco a otra clienta. En los
+  packs grandes del salon son 3 horas por cita.
 * Las filas "FIANZA ..." NO son servicios que se reserven: dicen cuanto pide el
   salon por adelantado y para que trabajos. Se traducen a la senal de los
   servicios afectados (payment_type='deposit').
@@ -32,6 +36,7 @@ Sin --aplicar solo enseña lo que haria. Conviene mirarlo antes de tocar nada.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -121,20 +126,23 @@ def componer_packs(
         minutos = 0
         precio = 0
         detalle: List[str] = []
+        tramos: List[Dict[str, int]] = []
         for paso, exposicion in pack["pasos"]:
             base = por_nombre.get(paso.upper())
             if base is None:
                 sin_resolver.append("%s -> %s" % (pack["nombre"], paso))
                 continue
             usados_en_packs.add(base["nombre"].upper())
-            # Celda VACIA = no lo indican, se usa la duracion propia del servicio.
-            # Un CERO es un dato: significa que ese paso no tiene espera. Confundirlos
-            # inflaba un pack a 10 horas, porque el paso valia 0 y se le sumaban los
-            # 300 minutos del servicio completo.
-            if exposicion is None or str(exposicion).strip() == "":
-                minutos += base["minutos"]
-            else:
-                minutos += max(0, _minutos(exposicion, 0))
+            # Cada paso son DOS tiempos y hay que sumar los dos:
+            #   - la duracion del servicio = lo que la profesional esta trabajando
+            #   - el "tiempo de exposicion" = lo que la clienta espera a que el
+            #     producto haga efecto, y la profesional queda LIBRE.
+            # Aqui se tomaba la exposicion EN LUGAR de la duracion, y un pack de
+            # 6,6 h quedaba en 3,6: encima de esa cita se colaban otras.
+            activo = max(0, int(base["minutos"] or 0))
+            espera = max(0, _minutos(exposicion, 0)) if str(exposicion or "").strip() else 0
+            minutos += activo + espera
+            tramos.append({"activo": activo, "espera": espera})
             precio += base["precio_cents"]
             detalle.append(_titulo(base["nombre"]))
         # Hay packs cuyos pasos valen 0 EUR porque el precio real vive en otro
@@ -150,6 +158,9 @@ def componer_packs(
             "minutos": minutos or 60,
             "operario": "Todos",
             "descripcion": ("Incluye: " + " + ".join(detalle)) if detalle else "",
+            # Tramos activo/espera en orden. Los usa la agenda para liberar los
+            # ratos en los que la profesional no esta con esta clienta.
+            "tramos": tramos,
         })
     for servicio in servicios:
         servicio["solo_en_pack"] = (
@@ -231,8 +242,8 @@ def aplicar(datos: Dict[str, Any], cliente_id: str, connection) -> Dict[str, int
             """
             INSERT INTO services (cliente_id, slug, name, duration_minutes, price_cents,
                 description, is_active, sort_order, payment_mode, payment_type,
-                deposit_amount_cents, currency, category, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'eur', ?, ?, ?)
+                deposit_amount_cents, currency, category, gap_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'eur', ?, ?, ?, ?)
             """,
             (
                 cliente_id, slug, _titulo(servicio["nombre"]),
@@ -242,7 +253,12 @@ def aplicar(datos: Dict[str, Any], cliente_id: str, connection) -> Dict[str, int
                 "payment_required" if con_senal else "payment_disabled",
                 "deposit" if con_senal else "full",
                 servicio["senal_cents"] if con_senal else 0,
-                _titulo(servicio["categoria"]), ahora, ahora,
+                _titulo(servicio["categoria"]),
+                # Tramos trabajo/espera: dejan libre la agenda mientras actua el
+                # producto. Solo los packs los traen; el resto va vacio (= ocupa
+                # su duracion entera, como siempre).
+                json.dumps(servicio["tramos"], ensure_ascii=False) if servicio.get("tramos") else "",
+                ahora, ahora,
             ),
         )
         creados += 1
