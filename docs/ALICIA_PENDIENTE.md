@@ -72,13 +72,27 @@ Meta antes de retomarlo (decisión del 20-ago).
 
 ---
 
-## Descartado, y por qué
+## Descartado (decisión cerrada, 21-ago)
 
 **Repartir un servicio entre dos profesionales** cuando no hay hueco para una
-sola ("si no hay 90 minutos de una, pero sí 45 de dos"). Depende de cómo vaya la
-mañana y de si el trabajo se puede partir: lo sabe el equipo, no el sistema.
-Automatizarlo mal encaja citas imposibles. Ese caso lo cubre la salida por
-teléfono, que ella misma propuso.
+sola: *"si no hay 90 minutos de una, pero sí 45 de dos, que la monten a medias"*.
+**No se va a hacer.** Decisión de Pablo tras valorarlo.
+
+Los motivos, por si vuelve a plantearse:
+
+1. Unas mechas de 90 minutos no son 45 + 45: hay pasos que dependen del anterior,
+   y que dos puedan trabajar a la vez depende de la técnica y del pelo de esa
+   clienta. **Su Excel no dice qué servicios son divisibles** — la columna
+   "Operario" dice quién está capacitada, que es otra cosa.
+2. Habría que buscar pares de huecos solapados entre dos profesionales dentro del
+   motor de disponibilidad, que es la pieza de la que han salido los fallos más
+   serios (solape concurrente, tiempos de espera).
+3. Una cita tiene UN profesional: meter dos toca calendario, avisos,
+   recordatorios, detalle de cita e informes.
+4. Si el sistema se equivoca, **lo paga la clienta**: se planta en el salón con
+   una cita que no se le puede atender.
+5. Ya hay solución, y la propuso ella: si no hay hueco, que llame y lo cuadran
+   ellas, que son las que saben si ese día pueden. Hecho y desplegado.
 
 Su columna "Operario" **no** expresa eso: dice quién está capacitada para cada
 servicio, que es otra cosa (y esa sí está aplicada).
