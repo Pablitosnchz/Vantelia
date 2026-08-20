@@ -5,6 +5,7 @@ registro de rutas identico al monolito original.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 from typing import Any, Dict, List
 
@@ -478,6 +479,20 @@ async def agendar(data: DatosCita, request: Request) -> RespuestaAgendado:
     )
 
 
+def _gaps_a_json(gaps: Any) -> str:
+    """Serializa los tramos trabajo/espera de un servicio (vacio = sin tramos)."""
+    if not gaps:
+        return ""
+    limpios = [
+        {"activo": max(0, int(getattr(g, "activo", 0) or 0)),
+         "espera": max(0, int(getattr(g, "espera", 0) or 0))}
+        for g in gaps
+    ]
+    return json.dumps(limpios, ensure_ascii=False) if any(
+        t["activo"] or t["espera"] for t in limpios
+    ) else ""
+
+
 @app.get("/servicios/{cliente_id}")
 async def servicios(
     cliente_id: str, request: Request, employee_id: str = "", location_id: str = ""
@@ -510,8 +525,9 @@ async def auth_create_service(
             INSERT INTO services
             (cliente_id, slug, name, duration_minutes, price_cents, description, is_active, sort_order,
              payment_mode, payment_type, deposit_amount_cents, currency, image_url, category,
-             booking_note, cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             booking_note, gap_json, cancel_free_hours, cancel_late_fee_pct, no_show_fee_pct,
+             created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 target_client_id, slug, name, int(data.duration_minutes), int(data.price_cents),
@@ -521,6 +537,8 @@ async def auth_create_service(
                 data.currency.lower(), textnorm._public_image_url(data.image_url),
                 textnorm._sanitize_text(data.category)[:60],
                 textnorm._sanitize_text(data.booking_note, allow_multiline=True)[:1000],
+                # Tramos trabajo/espera: dejan la agenda libre mientras actua el producto.
+                _gaps_a_json(data.gaps),
                 None if data.cancel_free_hours is None else int(data.cancel_free_hours),
                 None if data.cancel_late_fee_pct is None else int(data.cancel_late_fee_pct),
                 None if data.no_show_fee_pct is None else int(data.no_show_fee_pct),
@@ -577,6 +595,8 @@ async def auth_update_service(
         updates["category"] = textnorm._sanitize_text(data.category)[:60]
     if data.booking_note is not None:
         updates["booking_note"] = textnorm._sanitize_text(data.booking_note, allow_multiline=True)[:1000]
+    if data.gaps is not None:
+        updates["gap_json"] = _gaps_a_json(data.gaps)
     # Overrides de politica de cancelacion por servicio: -1 = reset a heredar (NULL).
     for field_name, col in (
         ("cancel_free_hours", "cancel_free_hours"),

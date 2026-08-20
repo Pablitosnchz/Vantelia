@@ -341,7 +341,33 @@ def _service_row_to_public(row: sqlite3.Row) -> Dict[str, Any]:
         "image_url": _row_str_or_empty(row, "image_url"),
         "category": _row_str_or_empty(row, "category"),
         "booking_note": _row_str_or_empty(row, "booking_note"),
+        "gaps": _service_gaps_from_row(row),
     }
+
+
+def _service_gaps_from_row(row: sqlite3.Row) -> List[Dict[str, int]]:
+    """Tramos trabajo/espera del servicio, saneados. Vacio = ocupa su rango entero."""
+    crudo = _row_str_or_empty(row, "gap_json")
+    if not crudo:
+        return []
+    try:
+        tramos = json.loads(crudo)
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(tramos, list):
+        return []
+    limpios: List[Dict[str, int]] = []
+    for tramo in tramos:
+        if not isinstance(tramo, dict):
+            continue
+        try:
+            limpios.append({
+                "activo": max(0, int(tramo.get("activo") or 0)),
+                "espera": max(0, int(tramo.get("espera") or 0)),
+            })
+        except (TypeError, ValueError):
+            continue
+    return limpios
 
 
 def _row_str_or_empty(row: sqlite3.Row, key: str) -> str:

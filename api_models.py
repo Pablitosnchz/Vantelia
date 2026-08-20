@@ -245,6 +245,8 @@ class ServicePublic(BaseModel):
     image_url: str = ""
     category: str = ""
     booking_note: str = ""
+    # Tramos trabajo/espera. Vacio = el servicio ocupa su duracion entera.
+    gaps: List[Dict[str, int]] = Field(default_factory=list)
     duration_minutes: int = 30
     price_cents: int = 0
     price_label: str = ""
@@ -264,6 +266,17 @@ class ServicesResponse(BaseModel):
     items: List[ServicePublic]
 
 
+class ServiceGap(BaseModel):
+    """Un paso del servicio: lo que se trabaja y lo que espera despues.
+
+    Un alisado o unas mechas se hacen por pasos y entre ellos el producto tiene
+    que actuar: la clienta espera pero la profesional queda LIBRE y puede atender
+    a otra. Sin tramos, el servicio ocupa su duracion entera (lo normal).
+    """
+    activo: int = Field(default=0, ge=0, le=600)
+    espera: int = Field(default=0, ge=0, le=600)
+
+
 class ServicePayload(BaseModel):
     nombre: str = Field(min_length=1, max_length=120)
     duration_minutes: int = Field(default=30, ge=5, le=600)
@@ -281,12 +294,14 @@ class ServicePayload(BaseModel):
     image_url: str = Field(default="", max_length=500)
     category: str = Field(default="", max_length=60)
     booking_note: str = Field(default="", max_length=1000)
+    gaps: List[ServiceGap] = Field(default_factory=list, max_length=20)
 
 
 class ServiceUpdatePayload(BaseModel):
     nombre: Optional[str] = Field(default=None, max_length=120)
     category: Optional[str] = Field(default=None, max_length=60)
     booking_note: Optional[str] = Field(default=None, max_length=1000)
+    gaps: Optional[List[ServiceGap]] = Field(default=None, max_length=20)
     duration_minutes: Optional[int] = Field(default=None, ge=5, le=600)
     price_cents: Optional[int] = Field(default=None, ge=0, le=10_000_000)
     descripcion: Optional[str] = Field(default=None, max_length=500)

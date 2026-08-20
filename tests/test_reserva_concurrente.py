@@ -26,8 +26,13 @@ from test_booking_exhaustive import api_module, client  # noqa: F401
 ORIGEN = {"Origin": "http://testserver"}
 
 
-def _dia_util() -> str:
-    dia = date.today() + timedelta(days=4)
+def _dia_util(desplazamiento: int = 4) -> str:
+    """Cada prueba usa SU dia.
+
+    Compartiendo dia, el 409 legitimo de un test parecia un fallo del otro en
+    cuanto pytest cambiaba el orden.
+    """
+    dia = date.today() + timedelta(days=desplazamiento)
     while dia.weekday() == 6:  # el tenant de pruebas cierra los domingos
         dia += timedelta(days=1)
     return dia.isoformat()
@@ -59,21 +64,21 @@ def servicio_largo(api_module):  # noqa: F811
     yield "Alisado largo"  # el canal manda el NOMBRE, como el widget
 
 
-def _reservar(client: TestClient, hora: str, servicio: str, nombre: str) -> tuple:
+def _reservar(client: TestClient, hora: str, servicio: str, nombre: str, dia: int = 4) -> tuple:
     respuesta = client.post("/agendar", json={
         "cliente_id": "demo", "nombre": nombre, "email": "%s@ejemplo.com" % nombre.lower(),
-        "telefono": "600111222", "fecha": _dia_util(), "hora": hora,
+        "telefono": "600111222", "fecha": _dia_util(dia), "hora": hora,
         "servicio": servicio, "notas": "",
     }, headers=ORIGEN)
     return respuesta.status_code, respuesta.text[:120]
 
 
-def _a_la_vez(client: TestClient, peticiones) -> list:
+def _a_la_vez(client: TestClient, peticiones, dia: int = 4) -> list:
     resultados = [None] * len(peticiones)
 
     def trabajo(indice, args):
         try:
-            resultados[indice] = _reservar(client, *args)
+            resultados[indice] = _reservar(client, *args, dia=dia)
         except Exception as exc:  # noqa: BLE001
             resultados[indice] = ("EXCEPCION", "%s: %s" % (type(exc).__name__, exc))
 
@@ -89,7 +94,7 @@ def test_dos_reservas_simultaneas_a_la_misma_hora_solo_dejan_una(client: TestCli
     resultados = _a_la_vez(client, [
         ("09:00", "Consulta", "Ana"),
         ("09:00", "Consulta", "Bea"),
-    ])
+    ], dia=4)
     creadas = [r for r in resultados if r and r[0] == 200]
     assert len(creadas) == 1, "doble reserva del mismo hueco: %r" % (resultados,)
     # Y la que pierde debe recibir un conflicto limpio, no un error del servidor.
@@ -101,8 +106,8 @@ def test_dos_reservas_simultaneas_a_la_misma_hora_solo_dejan_una(client: TestCli
 
 def test_un_solape_parcial_secuencial_se_rechaza(client: TestClient, servicio_largo):
     """Control: la comprobacion de solapes funciona cuando no hay carrera."""
-    assert _reservar(client, "11:00", servicio_largo, "Carla")[0] == 200
-    codigo, cuerpo = _reservar(client, "11:30", "Consulta", "Diana")
+    assert _reservar(client, "11:00", servicio_largo, "Carla", dia=5)[0] == 200
+    codigo, cuerpo = _reservar(client, "11:30", "Consulta", "Diana", dia=5)
     assert codigo == 409, "el alisado de 90 min ocupa las 11:30: %s" % cuerpo
 
 
@@ -116,7 +121,7 @@ def test_dos_solapes_parciales_simultaneos_solo_dejan_uno(client: TestClient, se
     resultados = _a_la_vez(client, [
         ("14:00", servicio_largo, "Eva"),
         ("14:30", "Consulta", "Fina"),
-    ])
+    ], dia=6)
     creadas = [r for r in resultados if r and r[0] == 200]
     assert len(creadas) <= 1, "dos citas solapadas creadas a la vez: %r" % (resultados,)
     assert all(r[0] < 500 for r in resultados if r), "error del servidor: %r" % (resultados,)
@@ -134,12 +139,12 @@ def test_dos_reprogramaciones_al_mismo_hueco_solo_dejan_una(client: TestClient):
     """
     primera = client.post("/agendar", json={
         "cliente_id": "demo", "nombre": "Gema", "email": "gema@ejemplo.com",
-        "telefono": "600111222", "fecha": _dia_util(), "hora": "15:00",
+        "telefono": "600111222", "fecha": _dia_util(7), "hora": "15:00",
         "servicio": "Consulta", "notas": "",
     }, headers=ORIGEN)
     segunda = client.post("/agendar", json={
         "cliente_id": "demo", "nombre": "Hilda", "email": "hilda@ejemplo.com",
-        "telefono": "600333444", "fecha": _dia_util(), "hora": "15:30",
+        "telefono": "600333444", "fecha": _dia_util(7), "hora": "15:30",
         "servicio": "Consulta", "notas": "",
     }, headers=ORIGEN)
     assert primera.status_code == 200 and segunda.status_code == 200
@@ -158,7 +163,7 @@ def test_dos_reprogramaciones_al_mismo_hueco_solo_dejan_una(client: TestClient):
         fila = booking._get_booking_row_by_token(tokens[indice])
         datos = BookingReschedulePayload(
             nombre=fila["nombre"], email=fila["email"], telefono=fila["telefono"],
-            servicio=fila["servicio"], fecha=_dia_util(), hora=destino, notas="",
+            servicio=fila["servicio"], fecha=_dia_util(7), hora=destino, notas="",
         )
         try:
             asyncio.run(booking._update_booking_details(fila, datos, None))

@@ -190,31 +190,61 @@ def test_el_paso_de_agenda_se_aplica_a_todo_el_equipo(api_module, client):  # no
 
     Las horas, descansos y dias cerrados SI son de cada una y no se tocan: lo que
     se unifica es solo el paso de la rejilla, que es del negocio.
+
+    Usa un tenant PROPIO: el de pruebas lo comparten decenas de tests y cualquiera
+    puede cambiarle el horario en medio.
     """
-    from backend import agenda, db, timeutils
-
-    with db._get_db_connection() as conexion:
-        conexion.execute(
-            "INSERT OR REPLACE INTO employees (id, cliente_id, name, role_label, color,"
-            " is_active, is_default, timezone, slot_minutes, day_start, day_end, break_start,"
-            " break_end, break_windows_json, closed_weekdays_json, weekly_hours_json,"
-            " service_ids_json, location_id, sort_order, created_at, updated_at)"
-            " VALUES ('emp_slot_test','demo','Profesional Slot','','#000',1,0,'Europe/Madrid',"
-            "30,'09:00','18:00','','','[]','[]','{}','[]','',0,?,'')",
-            (timeutils._utc_now_iso(),),
-        )
-        conexion.commit()
-
     from api_models import PortalScheduleUpdatePayload
+    from backend import agenda, appstate, db, timeutils
 
-    agenda._update_client_schedule("demo", PortalScheduleUpdatePayload(slot_minutes=15))
+    # Config MINIMA propia: clonar la del tenant de pruebas fallaba en la suite
+    # completa (`KeyError: 'demo'`), porque otro fichero recarga el modulo con la
+    # suya y para cuando llega este test ya no esta.
+    CID = "slot_propagacion_test"
+    appstate.CONFIG_CLIENTES[CID] = {
+        "nombre": "Slot Test", "icono": "ST", "color": "#000000",
+        "bienvenida": "Hola.", "prompt_extra": "",
+        "allowed_origins": ["http://testserver"],
+        "contacto": {"email": "slot@test.es", "telefono": "+34600000000"},
+        "branding": {"powered_by": "Vantelia"},
+        "plan": "business",
+        "subscription": {"plan": "business", "status": "active"},
+        "booking": {
+            "enabled": True, "timezone": "Europe/Madrid", "slot_minutes": 30,
+            "day_start": "09:00", "day_end": "18:00", "closed_weekdays": [6],
+            "provider": "internal", "success_message": "Cita confirmada.",
+        },
+    }
+    try:
+        with db._get_db_connection() as conexion:
+            for indice, minutos in enumerate((30, 45)):
+                conexion.execute(
+                    "INSERT OR REPLACE INTO employees (id, cliente_id, name, role_label, color,"
+                    " is_active, is_default, timezone, slot_minutes, day_start, day_end,"
+                    " break_start, break_end, break_windows_json, closed_weekdays_json,"
+                    " weekly_hours_json, service_ids_json, location_id, sort_order,"
+                    " created_at, updated_at)"
+                    " VALUES (?,?,?,'','#000',1,?,'Europe/Madrid',?,'09:00','18:00','','',"
+                    "'[]','[]','{}','[]','',0,?,'')",
+                    ("emp_slot_%d" % indice, CID, "Profesional %d" % indice,
+                     1 if indice == 0 else 0, minutos, timeutils._utc_now_iso()),
+                )
+            conexion.commit()
 
-    fila = db._get_db_connection().execute(
-        "SELECT slot_minutes, day_start FROM employees WHERE id = 'emp_slot_test'"
-    ).fetchone()
-    assert fila["slot_minutes"] == 15, "el paso de agenda no llego a la profesional"
-    assert fila["day_start"] == "09:00", "su horario personal no se toca"
+        agenda._update_client_schedule(CID, PortalScheduleUpdatePayload(slot_minutes=15))
 
-    with db._get_db_connection() as conexion:
-        conexion.execute("DELETE FROM employees WHERE id = 'emp_slot_test'")
-        conexion.commit()
+        with db._get_db_connection() as conexion:
+            filas = conexion.execute(
+                "SELECT name, slot_minutes, day_start FROM employees WHERE cliente_id = ?"
+                " ORDER BY id", (CID,),
+            ).fetchall()
+        assert [f["slot_minutes"] for f in filas] == [15, 15], (
+            "el paso de agenda tiene que llegar a TODO el equipo: %r"
+            % [(f["name"], f["slot_minutes"]) for f in filas]
+        )
+        assert all(f["day_start"] == "09:00" for f in filas), "el horario personal no se toca"
+    finally:
+        with db._get_db_connection() as conexion:
+            conexion.execute("DELETE FROM employees WHERE cliente_id = ?", (CID,))
+            conexion.commit()
+        appstate.CONFIG_CLIENTES.pop(CID, None)

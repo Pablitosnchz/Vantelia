@@ -139,3 +139,43 @@ def test_otra_clienta_cabe_en_el_rato_de_espera(api_module, client):  # noqa: F8
     assert ocupado.status_code == 409, (
         "mientras trabaja no puede entrar otra cita: %s" % ocupado.text[:200]
     )
+
+
+# ─── Los tramos se pueden crear y editar por API ───────────────────────────
+
+def _sesion(api_module):
+    """Cookie de portal, como el resto de tests del panel."""
+    usuario = api_module._get_user_by_email("admin@example.com")
+    return {"vantelia_portal_session": api_module._create_auth_session(usuario["id"])}
+
+
+def test_un_servicio_con_tramos_se_crea_y_se_lee_igual(api_module, client):  # noqa: F811
+    """Sin esto los tramos solo se podrian meter tocando la base de datos."""
+    galletas = _sesion(api_module)
+    parametros = {"cliente_id": "demo"}
+    alta = client.post("/auth/services", params=parametros, cookies=galletas, json={
+        "nombre": "Alisado con esperas",
+        "duration_minutes": 195,
+        "price_cents": 15000,
+        "gaps": [{"activo": 105, "espera": 90}, {"activo": 0, "espera": 0}],
+    })
+    assert alta.status_code == 200, alta.text[:200]
+    assert alta.json()["gaps"] == [{"activo": 105, "espera": 90}, {"activo": 0, "espera": 0}]
+
+    # Y se pueden cambiar sin tocar el resto del servicio.
+    slug = alta.json()["id"]
+    cambio = client.patch("/auth/services/%s" % slug, params=parametros, cookies=galletas,
+                          json={"gaps": [{"activo": 60, "espera": 30}]})
+    assert cambio.status_code == 200, cambio.text[:200]
+    assert cambio.json()["gaps"] == [{"activo": 60, "espera": 30}]
+    assert cambio.json()["duration_minutes"] == 195, "no se toca lo que no se manda"
+
+
+def test_un_servicio_normal_no_tiene_tramos(api_module, client):  # noqa: F811
+    """El caso de siempre: sin tramos, ocupa su duracion entera."""
+    alta = client.post("/auth/services", params={"cliente_id": "demo"},
+                       cookies=_sesion(api_module), json={
+        "nombre": "Corte sencillo", "duration_minutes": 30, "price_cents": 2000,
+    })
+    assert alta.status_code == 200, alta.text[:200]
+    assert alta.json()["gaps"] == []
