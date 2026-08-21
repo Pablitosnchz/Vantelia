@@ -31,8 +31,10 @@ from backend import (
     commerce,
     crm,
     db,
+    intents,
     keywords,
     rag,
+    rules,
     security,
     settings,
     textnorm,
@@ -382,6 +384,102 @@ async def app_keyword_rule_delete(
 ) -> Dict[str, bool]:
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
     if not keywords.delete_rule(cliente_id, rule_id):
+        raise HTTPException(status_code=404, detail="Regla no encontrada.")
+    return {"ok": True}
+
+
+# --- Reglas del negocio: cuando el cliente quiere X, haz Y -----------------
+# Lo que diferencia a un asistente de otro no es el motor: son las reglas de su
+# negocio. Aqui el propio salon las escribe, sin que nadie toque el prompt.
+
+
+def _business_rules_response(cliente_id: str) -> AppBusinessRulesResponse:
+    items = [AppBusinessRuleItem(**r) for r in rules.listar(cliente_id)]
+    return AppBusinessRulesResponse(
+        enabled=intents.config_enabled(cliente_id),
+        items=items,
+        intenciones=list(intents.INTENCIONES),
+        acciones=list(rules.ACCIONES),
+        familias=intents.familias_del_tenant(cliente_id),
+        total=len(items),
+    )
+
+
+@app.get("/auth/app/business-rules", response_model=AppBusinessRulesResponse)
+async def app_business_rules_list(
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AppBusinessRulesResponse:
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    return _business_rules_response(cliente_id)
+
+
+@app.put("/auth/app/business-rules/config", response_model=AppBusinessRulesResponse)
+async def app_business_rules_config(
+    data: AppBusinessRulesConfigPayload,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AppBusinessRulesResponse:
+    """Enciende la comprension por modelo para este negocio. manager+."""
+    security._require_portal_min_role(user, "manager")
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    with appstate.state_lock:
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+        cfg = next_configs.get(cliente_id, {})
+        seccion = dict(cfg.get("ai_intents", {}) or {})
+        seccion["enabled"] = bool(data.enabled)
+        cfg["ai_intents"] = seccion
+        next_configs[cliente_id] = cfg
+        clients._update_runtime_configs(next_configs)
+    clients._persist_configs_to_disk(next_configs)
+    return _business_rules_response(cliente_id)
+
+
+@app.post("/auth/app/business-rules", response_model=AppBusinessRuleItem)
+async def app_business_rule_create(
+    data: AppBusinessRulePayload,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AppBusinessRuleItem:
+    security._require_portal_min_role(user, "manager")
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    try:
+        regla = rules.guardar(
+            cliente_id, nombre=data.nombre, intenciones=data.intenciones,
+            familias=data.familias, accion=data.accion, texto=data.texto,
+            prioridad=data.prioridad, activa=data.activa,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return AppBusinessRuleItem(**regla)
+
+
+@app.put("/auth/app/business-rules/{regla_id}", response_model=AppBusinessRuleItem)
+async def app_business_rule_update(
+    regla_id: str,
+    data: AppBusinessRulePayload,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AppBusinessRuleItem:
+    security._require_portal_min_role(user, "manager")
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    if not any(r["id"] == regla_id for r in rules.listar(cliente_id)):
+        raise HTTPException(status_code=404, detail="Regla no encontrada.")
+    try:
+        regla = rules.guardar(
+            cliente_id, regla_id=regla_id, nombre=data.nombre, intenciones=data.intenciones,
+            familias=data.familias, accion=data.accion, texto=data.texto,
+            prioridad=data.prioridad, activa=data.activa,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return AppBusinessRuleItem(**regla)
+
+
+@app.delete("/auth/app/business-rules/{regla_id}")
+async def app_business_rule_delete(
+    regla_id: str,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> Dict[str, bool]:
+    security._require_portal_min_role(user, "manager")
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    if not rules.borrar(cliente_id, regla_id):
         raise HTTPException(status_code=404, detail="Regla no encontrada.")
     return {"ok": True}
 

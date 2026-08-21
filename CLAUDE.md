@@ -291,6 +291,33 @@ Modulos `backend/commerce.py` y `backend/analytics.py` + router `backend/routers
 - **Llamadas de confirmacion por IA (saliente)**: el asistente puede LLAMAR al cliente para confirmar la cita. Núcleo `voice._voice_place_outbound_call(cliente_id, booking_row, base_url=, purpose='confirm')` (Twilio Calls API, `From`=`voice.twilio_phone_number`, `Twiml` inline `<Connect><Stream url=wss://…/voice/stream/{c}?mode=confirm&booking_id=&to=>`); registra `voice_calls` (`direction='outbound'`, `purpose`, `booking_id`) → la llamada aparece en Conversaciones. El puente (`routers/voice_web.py`) lee `mode/booking_id/to` del query string (modo saliente): instrucciones `voice._voice_outbound_confirm_instructions`, saludo `_voice_outbound_greeting`, `from_number`=teléfono del cliente (verificado), y tool `confirmar_cita` (solo saliente, `include_confirm=True`) → `booking._mark_booking_confirmed_by_customer`. Gating: plan Business + número Twilio. Manual: `POST /auth/bookings/{id}/confirm-call` (perm `agenda.attendance`); reenviar confirmación por canales configurados: `POST /auth/bookings/{id}/send-confirmation`. **Fallback automático opt-in**: config `reminders` (`call_fallback`, `quiet_start`/`quiet_end`, `daily_call_cap`) vía `GET/PUT /auth/app/reminders` (manager+); en `_run_booking_reminders`, al enviar el recordatorio 24h, si `call_fallback` y la cita no está confirmada y `booking._reminder_calls_ok_now` (quiet hours hora local + cap diario + número) → coloca la llamada (import tardío de `voice` para evitar circular). UI: pestaña Recordatorios (`page-mensajes`) con tarjeta "Llamadas de confirmación por IA" + botones "📞 Llamar para confirmar" / "✉ Enviar confirmación" en el detalle de cita. Coste por llamada (Twilio+OpenAI); quiet hours + cap obligatorios.
 - **Petición de reseña post-cita (opt-in, estilo Fresha/Booksy)**: tras completar la cita, el sistema invita al cliente final a dejar una reseña en el enlace que configure el negocio (Google/Trustpilot/Tripadvisor/Yelp/Facebook/…). Config en `config['reviews']` (`enabled`, `link`, `platform`, `delay_hours`, `only_manual_attendance`, `message`, `channels`). Motor en `backend/booking.py`: `_reviews_config`, `_reviews_overview_dict`, `_review_email_bodies` (email con estrellas + botón a la URL), `_send_review_request` (email vía `emailing._send_client_email`, WhatsApp/SMS texto plano con `{enlace}` inline; idempotente: sella `bookings.review_request_sent_at` + audit `review_request_sent`), `_bookings_due_for_review` (status `completed`, `end_at <= now - delay_hours` y dentro de los últimos 14 días para no spamear histórico al activar; opcional solo `completed_source='manual'`), `_run_review_requests` (corre en `_booking_reminder_worker` tras los recordatorios). Canales gateados por plan igual que el resto (email siempre; WhatsApp Pro; SMS Business). Endpoints: `GET/PUT /auth/app/reviews` (manager+, devuelve config + canales + vista previa), `POST /auth/bookings/{id}/review-request` (envío manual, perm `agenda.attendance`). UI: aparece como **paso final de la escalera de Seguimiento** (`_follow_up_overview_dict` añade un step `key="review"`, "Pide una reseña", con `enabled`/`needs_setup` y canales por plan; el nodo muestra estado y un botón que salta a la tarjeta) + tarjeta "Pide reseñas tras la cita" debajo (interruptor maestro, enlace con validación + ayuda Google, plataforma autodetectada, retardo, canales, mensaje con `{empresa}/{nombre}/{servicio}/{enlace}` y vista previa en vivo del email) + acción "⭐ Pedir reseña" en el detalle de cita completada. El paso `review` NO se guarda en `message_template_channels` (el front lo excluye; se persiste vía `/auth/app/reviews`). Default OFF.
 
+## Comprension de intenciones + reglas del negocio (opt-in por tenant)
+
+La intencion se adivinaba con expresiones regulares: de 19 formas naturales de
+pedir cita se reconocian DOS (medido). Ahora la decide el modelo.
+
+- `backend/intents.py`: `atajo_local()` (gratis, lo evidente) -> `classify()`
+  (`gpt-4o-mini`, JSON `{intencion, familia, pregunta, confianza}`). `INTENCIONES`
+  es una lista CERRADA a proposito. Las familias salen del catalogo del tenant
+  (`familias_del_tenant`), y `pregunta` identifica cual de las Q&A del negocio le
+  estan haciendo aunque la escriba con otras palabras (`preguntas_del_tenant`).
+  Cache 10 min por mensaje identico. Por debajo de `CONFIANZA_MINIMA` se descarta.
+- `backend/rules.py` + tabla `business_rules`: CUANDO (intenciones + familias
+  opcionales) -> ENTONCES (`ACCIONES`: responder / formulario / ofrecer_cita /
+  pedir_foto / pasar_a_humano / continuar). Gana la primera activa por prioridad.
+- Enchufado en `chat._process_chat_message` DESPUES de las palabras clave y las
+  Q&A literales (lo que el negocio escribe manda) y ANTES de las heuristicas.
+  WhatsApp lo hereda: delega en el mismo cerebro y `mostrar_formulario` arranca su
+  flujo guiado.
+- Opt-in `config['ai_intents']['enabled']` (en `CONFIG_EXTRA_SECTIONS`). Sin el, el
+  chat se comporta igual que siempre. Endpoints `/auth/app/business-rules*`
+  (manager+) y tarjeta "Reglas de tu negocio" en la pestana Q&A del portal.
+- REGLA: si el modelo falla, tarda o no llega al umbral, `classify` devuelve None y
+  el chat sigue. Entender NUNCA puede dejar a un cliente sin respuesta.
+- Con una gestion de cita a medias NO se clasifica (secuestraba el flujo).
+- Tests: `tests/test_intenciones_y_reglas.py`, `tests/test_reglas_en_el_portal.py`,
+  `tests/test_comprension_en_el_chat.py`.
+
 ## Respuestas automaticas por palabra clave (opt-in por tenant)
 
 Capa DETERMINISTA previa a la IA para negocios que quieren reglas literales en vez de conversacion ("si el mensaje contiene 'spa' o 'masaje', responde exactamente este telefono"). Origen: hotel Cap Rocat (ago 2026), pero es generica y configurable por tenant.

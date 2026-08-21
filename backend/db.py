@@ -362,6 +362,31 @@ def _init_database() -> None:
         }.items():
             if column_name not in service_columns:
                 connection.execute(f"ALTER TABLE services ADD COLUMN {column_name} {definition}")
+        # Reglas del negocio: "cuando pase X, haz Y". Lo que diferencia al
+        # asistente de un negocio del de otro. Ver backend/rules.py.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS business_rules (
+                id TEXT PRIMARY KEY,
+                cliente_id TEXT NOT NULL,
+                nombre TEXT NOT NULL DEFAULT '',
+                intenciones_json TEXT NOT NULL DEFAULT '[]',
+                familias_json TEXT NOT NULL DEFAULT '[]',
+                accion TEXT NOT NULL DEFAULT 'responder',
+                texto TEXT NOT NULL DEFAULT '',
+                prioridad INTEGER NOT NULL DEFAULT 100,
+                activa INTEGER NOT NULL DEFAULT 1,
+                veces INTEGER NOT NULL DEFAULT 0,
+                last_used_at TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_business_rules_cliente"
+            " ON business_rules(cliente_id, activa, prioridad)"
+        )
         # Politica de cancelacion/no-show por tenant (generica, opt-in).
         connection.execute(
             """

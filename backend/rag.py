@@ -441,6 +441,20 @@ def _normalize_for_qa_match(text: str) -> str:
     return t
 
 
+def _list_qa_rows(cliente_id: str) -> List[sqlite3.Row]:
+    """Las preguntas y respuestas que el negocio tiene configuradas.
+
+    Las usa `backend/intents.py` para que el modelo reconozca cuando le estan
+    haciendo una de ellas, aunque el cliente lo escriba con otras palabras.
+    """
+    with db._get_db_connection() as connection:
+        return connection.execute(
+            "SELECT id, question, answer, tags_json FROM kb_qa WHERE cliente_id = ?"
+            " ORDER BY created_at",
+            (cliente_id,),
+        ).fetchall()
+
+
 def _qa_row_tags(row) -> List[str]:
     """Etiquetas de una fila de kb_qa, tolerando JSON corrupto."""
     try:

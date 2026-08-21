@@ -34,7 +34,8 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import RespuestaChat
-from backend import agenda, appstate, booking, clients, commerce, keywords, rag, settings, textnorm, timeutils
+from backend import (agenda, appstate, booking, clients, commerce, inbox, intents, keywords,
+                     rag, rules, settings, textnorm, timeutils)
 
 GREETING_PATTERNS = [
     re.compile(p, re.IGNORECASE)
@@ -672,6 +673,72 @@ async def _process_chat_message(
             intent="qa_exact",
         )
         return qa_response
+
+    # ─── Comprension: QUE quiere, y que ha dicho el negocio que hagamos ───
+    # Los patrones de aqui abajo solo entienden lo que alguien escribio a mano:
+    # de 19 formas naturales de pedir cita reconocian dos. Cuando el negocio lo
+    # activa, aqui se le pregunta al modelo que pide el cliente y se aplica la
+    # regla que el propio negocio haya configurado. Si algo falla, `classify`
+    # devuelve None y todo sigue como siempre.
+    # Si hay una gestion a medias (esta cancelando o cambiando su cita), NO se
+    # clasifica: su "el jueves a las 5" es la respuesta a lo que se le acaba de
+    # preguntar, y darla por "reservar" le abriria el formulario perdiendo el hilo.
+    gestion_en_curso = bool(booking._chat_manage_state_get(session_id))
+
+    intencion = None
+    if not gestion_en_curso and intents.enabled_for(cliente_id, client_config):
+        intencion = intents.classify(cliente_id, message, config=client_config)
+
+    if intencion:
+        # ¿Le estan haciendo una pregunta que el negocio ya tiene respondida,
+        # aunque la escriba con otras palabras?
+        respuesta_qa = str(intencion.get("qa_answer") or "").strip()
+        if respuesta_qa:
+            respuesta_qa = _con_gracias_a_ti(message, respuesta_qa)
+            rag._record_chat_message(
+                session_id=session_id, cliente_id=cliente_id, role="assistant",
+                content=respuesta_qa, intent="qa_semantica",
+            )
+            return RespuestaChat(
+                respuesta=respuesta_qa, mostrar_formulario=False,
+                session_id=session_id, intent="qa_semantica",
+            )
+
+        regla = rules.match(cliente_id, intencion)
+        if regla:
+            # Se cuenta SIEMPRE, tambien con "continuar": esa accion existe para
+            # medir cuanta gente pediria eso antes de activar una respuesta.
+            rules.contar_uso(regla["id"])
+        if regla and regla["accion"] != "continuar":
+            respuesta_regla = _con_gracias_a_ti(message, regla["texto"] or "")
+            if regla["accion"] == "pasar_a_humano":
+                inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Equipo")
+            if respuesta_regla:
+                rag._record_chat_message(
+                    session_id=session_id, cliente_id=cliente_id, role="assistant",
+                    content=respuesta_regla, intent="regla_negocio",
+                )
+                return RespuestaChat(
+                    respuesta=respuesta_regla,
+                    mostrar_formulario=regla["accion"] == "formulario",
+                    session_id=session_id, intent="regla_negocio",
+                )
+
+        # Sin regla propia, la intencion sigue valiendo para acertar con lo basico:
+        # esto es lo que arregla "me pones una cita?" o "resérvame el jueves".
+        if intencion["intencion"] == "reservar" and booking_enabled:
+            texto_form = textnorm._normalize_chat_response_text(
+                client_config.get("booking", {}).get("form_intro")
+                or "📅 Te muestro el formulario para agendar tu cita. Elige servicio, fecha y hora."
+            )
+            rag._record_chat_message(
+                session_id=session_id, cliente_id=cliente_id, role="assistant",
+                content=texto_form, intent="booking_form",
+            )
+            return RespuestaChat(
+                respuesta=texto_form, mostrar_formulario=True,
+                session_id=session_id, intent="booking_form",
+            )
 
     menu_option = _detect_menu_option(message)
     if rag._message_requests_availability(message):

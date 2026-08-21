@@ -63,6 +63,8 @@ módulos transversales.
 | `backend/paystate.py` | Estado de cobro de una cita. **Fuente única**: suma `booking_payments` (la reserva) y `customer_payments` con `kind='pos'` (el mostrador). Mirar solo uno hace que el saldo mienta. |
 | `backend/analytics.py` | Informes del portal: KPIs con delta, series, desgloses y el resumen de mostrador. |
 | `backend/keywords.py` | Respuestas deterministas por palabra clave, opt-in por tenant. Va ANTES que las Q&A y que la IA. |
+| `backend/intents.py` | Qué quiere el cliente: clasifica el mensaje con el modelo (atajo local gratis primero) y reconoce cuál de las Q&A del negocio le están haciendo, aunque lo escriba con otras palabras. Opt-in `config['ai_intents']`. |
+| `backend/rules.py` | Reglas del propio negocio (cuando quiera X, haz Y): tabla `business_rules`, gana la primera activa por prioridad. Decide QUÉ hacer con la intención que da `intents`. |
 | `backend/inbox.py` | Intervención humana sobre una conversación de WhatsApp: mientras alguien la atiende, el asistente se calla (`bot_is_muted`) y se respeta la ventana de 24 h de Meta. |
 | `backend/voice_engine.py` | `VoiceCallEngine`: el estado y TODA la lógica determinista de una llamada. El puente (`routers/voice_web.py`) solo mueve audio y delega. |
 | `backend/wa_flows.py` | Reserva como formulario dentro de WhatsApp (WhatsApp Flows): endpoint cifrado, `flow_token` firmado. Apagado por defecto. |

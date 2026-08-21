@@ -78,6 +78,11 @@ voice_otp: Dict[str, Dict[str, Any]] = {}
 # sin repetir datos). Clave session_id -> {intent, code, telefono, email, ts}. Efimera
 # (TTL corto en booking._process_booking_management_message); no se persiste.
 chat_manage_state: Dict[str, Dict[str, Any]] = {}
+
+# Que quiso decir un mensaje ya clasificado (backend/intents.py). Se guarda
+# porque en una conversacion la gente repite frases y clasificar cuesta una
+# llamada al modelo. Con TTL corto y tope de tamano: ver _CACHE_TTL alli.
+intent_cache: Dict[str, Dict[str, Any]] = {}
 last_cleanup_run = 0.0
 state_lock = threading.RLock()
 

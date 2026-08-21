@@ -19,7 +19,7 @@ python -m pytest -k senal             # por nombre
 | Señal / pago de la cita | `test_senal_visible.py`, `test_senal_canales.py`, `test_aviso_pago_pendiente.py`, `test_confirmacion_tras_pago.py`, `test_bizum.py`, `test_ai_payment_link.py` |
 | Horarios y disponibilidad | `test_booking_exhaustive.py`, `test_weekly_hours.py` |
 | Catálogo de servicios | `test_catalogo_grande.py`, `test_importar_catalogo.py`, `test_guardar_ficha_no_borra_catalogo.py` |
-| Cerebro del asistente (chat) | `test_api_smoke.py`, `test_qa_del_negocio.py`, `test_keyword_rules.py`, `test_chat_menu_y_formato_whatsapp.py`, `test_chat_sin_agenda.py`, `test_menu_y_titulos.py` |
+| Cerebro del asistente (chat) | `test_api_smoke.py`, `test_qa_del_negocio.py`, `test_keyword_rules.py`, `test_intenciones_y_reglas.py`, `test_comprension_en_el_chat.py`, `test_reglas_en_el_portal.py`, `test_chat_menu_y_formato_whatsapp.py`, `test_chat_sin_agenda.py`, `test_menu_y_titulos.py` |
 | Usuario que no sigue el guion | `test_wa_usuario_erratico.py` — nadie puede quedarse encerrado en un paso |
 | Menú de opciones (chat + WhatsApp) | `test_menu_y_titulos.py`, `test_wa_menu_starters.py` — el menú es lo que el negocio configura, igual en los dos canales |
 | WhatsApp | todos los `test_wa_*.py` + `test_inbox_takeover.py` |
@@ -47,6 +47,10 @@ antes de "arreglarlo": suele estar diciendo algo cierto.
 - `test_mapa_del_codigo_no_miente.py` — lo que citan `docs/MAPA_DEL_CODIGO.md`,
   este README, `CLAUDE.md` y los docstrings de módulo existe de verdad, y
   `docs/ARQUITECTURA.md` nombra todos los módulos de `backend/`.
+- `test_comprension_en_el_chat.py` — el ORDEN de las capas del chat es la lógica
+  del asistente: lo que el negocio escribe a mano (palabras clave, Q&A literales)
+  va antes que la comprensión por modelo, y con una gestión de cita a medias no
+  se clasifica nada. Si este falla, alguien movió una capa de sitio.
 
 ## Fixtures
 

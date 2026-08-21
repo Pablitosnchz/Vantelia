@@ -1014,6 +1014,43 @@ class AppKeywordRulesConfigPayload(BaseModel):
     enabled: bool
 
 
+class AppBusinessRuleItem(BaseModel):
+    """Una regla del negocio: cuando el cliente quiere X, haz Y."""
+
+    id: str
+    nombre: str = ""
+    intenciones: List[str] = Field(default_factory=list)
+    familias: List[str] = Field(default_factory=list)
+    accion: str = "responder"
+    texto: str = ""
+    prioridad: int = 100
+    activa: bool = True
+    veces: int = 0
+
+
+class AppBusinessRulePayload(BaseModel):
+    nombre: str = Field(default="", max_length=120)
+    intenciones: List[str] = Field(default_factory=list, max_length=12)
+    familias: List[str] = Field(default_factory=list, max_length=40)
+    accion: str = "responder"
+    texto: str = Field(default="", max_length=2000)
+    prioridad: int = 100
+    activa: bool = True
+
+
+class AppBusinessRulesResponse(BaseModel):
+    enabled: bool = False
+    items: List[AppBusinessRuleItem] = Field(default_factory=list)
+    intenciones: List[str] = Field(default_factory=list)
+    acciones: List[str] = Field(default_factory=list)
+    familias: List[str] = Field(default_factory=list)
+    total: int = 0
+
+
+class AppBusinessRulesConfigPayload(BaseModel):
+    enabled: bool
+
+
 class AppChatMenuPayload(BaseModel):
     enabled: bool
 

@@ -155,12 +155,47 @@ los enumera, desaparece Bizum.
 2. **Reglas por palabra clave** (`keywords.match_reply`, tabla `keyword_rules`).
 3. **Q&A exactas** (`rag._match_qa_answer`, tabla `kb_qa`): casan por pregunta casi
    idéntica o por **etiqueta** (palabra completa, mínimo 5 caracteres, gana la más larga).
-4. Disponibilidad, gestión de cita, pago.
-5. RAG / IA.
+4. **Comprensión + reglas del negocio** (`intents.classify` + `rules.match`,
+   opt-in `config['ai_intents']['enabled']`). Ver más abajo.
+5. Disponibilidad, gestión de cita, pago.
+6. RAG / IA.
 
 **Regla de diseño**: lo que el negocio escribe a mano manda sobre nuestras
 heurísticas. Las Q&A estaban DESPUÉS de la disponibilidad y "¿cuál es vuestro
 horario?" devolvía los huecos libres de hoy.
+
+### La capa 4: entender en vez de adivinar
+
+**El problema medido**: la intención se adivinaba con expresiones regulares. De 19
+formas naturales de pedir cita se reconocían **dos**. "me pones una cita?",
+"resérvame el jueves" o "hazme un hueco" no abrían el formulario, y cada variante
+nueva era un parche más. Con el modelo clasificando: **18 de 19**.
+
+* `backend/intents.py` — qué quiere el cliente. `atajo_local()` resuelve gratis lo
+  evidente; si no, una llamada a `gpt-4o-mini` devuelve `{intencion, familia,
+  pregunta, confianza}`. Las **familias** salen del catálogo del propio tenant
+  (`familias_del_tenant`), no de una lista fija. `pregunta` es cuál de **las Q&A
+  del negocio** le están haciendo, aunque la escriba con otras palabras: eso
+  convierte las etiquetas escritas a mano en algo que ya no hace falta mantener.
+* `backend/rules.py` — qué hacer con eso. Tabla `business_rules`, gana la primera
+  activa por `prioridad`. Una regla con `familias` solo vale para esos servicios.
+
+**Lo que nunca puede pasar**: que entender deje a alguien sin respuesta. Si el
+modelo falla, tarda o no llega al umbral (`CONFIANZA_MINIMA`), `classify` devuelve
+`None` y el chat sigue exactamente por donde iba.
+
+**Trampas ya pagadas**:
+
+* Con una gestión a medias **no se clasifica**. Quien está cancelando y responde
+  "el jueves a las 5" no está pidiendo una cita nueva; clasificarlo le abría el
+  formulario y perdía el hilo.
+* `familia` vacía no puede casar una regla que exige familia (`"" in "alisado"` es
+  `True` en Python): un "¿cuánto cuesta?" a secas pedía la foto del alisado.
+* Una regla de precios **sin familias** tapa el catálogo entero. Si el negocio ya
+  tiene precios cerrados para corte o peinado, acota la regla a los servicios que
+  de verdad necesitan valoración.
+* El interruptor del panel lee `config_enabled` (lo que el negocio guardó), no
+  `enabled_for` (que además exige clave de OpenAI): si no, se apagaba solo.
 
 WhatsApp comparte cerebro pero tiene su propio flujo guiado en `whatsapp.py`.
 

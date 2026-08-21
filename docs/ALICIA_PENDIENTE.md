@@ -44,6 +44,34 @@ tramos, todo se comporta igual que antes.**
   14:30 y ninguna clienta veía las tardes.
 - **Sin hueco → que llamen**, con su teléfono.
 
+### El asistente entiende, ya no adivina
+
+Sus normas vivían dentro del *prompt*: el modelo podía ignorarlas, no había forma
+de saber cuántas veces se aplicaban, y cambiarlas exigía tocar la configuración
+del tenant a mano.
+
+Ahora la intención la decide el modelo (`backend/intents.py`) y lo que se hace con
+ella lo decide **ella**, desde la pestaña Q&A del portal → **"Reglas de tu
+negocio"** (`business_rules`). Medido contra el modelo real:
+
+- De **19 formas naturales de pedir cita se reconocían 2**. Ahora **18**.
+  ("me pones una cita?", "resérvame el jueves", "hazme un hueco" y "quiero
+  ponerme guapa el sábado" no abrían el formulario.)
+- Sus **Q&A** ahora casan aunque la clienta pregunte con otras palabras: 10 de 10
+  en la prueba, incluida la que **no** debía casar (nadie preguntó por el parking).
+
+Sus tres normas, ya como reglas editables (`scripts/reglas_alicia.py`):
+
+| Cuando quieran | Solo en | El asistente |
+| --- | --- | --- |
+| presupuesto o precio | alisado | pide la **foto por detrás** |
+| presupuesto, precio o info | extensiones | ofrece **cita de valoración** |
+| presupuesto o precio | mechas, balayage, color… | ofrece valoración o su teléfono |
+
+**Acotadas a esas familias a propósito**: su catálogo sí tiene precio cerrado para
+corte, peinado o recogido, y una regla de "nunca doy precios" sin acotar los
+taparía todos.
+
 ---
 
 ## Preguntas abiertas
