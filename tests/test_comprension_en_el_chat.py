@@ -57,3 +57,14 @@ def test_solo_contarlo_cuenta_de_verdad(api_module):  # noqa: F811
     """
     fuente = _fuente(api_module)
     assert fuente.index("rules.contar_uso") < fuente.index('!= "continuar"')
+
+
+def test_pedir_cita_gana_a_explicar_como_se_pide(api_module):  # noqa: F811
+    """Caso real en produccion: "me pones una cita?" no abria el formulario.
+
+    El salon tenia una Q&A explicando como reservar, y la coincidencia semantica
+    la devolvia: la clienta acababa leyendo instrucciones en vez de reservando.
+    """
+    fuente = _fuente(api_module)
+    assert "INTENCIONES_QUE_SE_ACTUAN" in fuente
+    assert fuente.index("pide_algo") < fuente.index("respuesta_qa =")

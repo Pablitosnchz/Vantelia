@@ -690,9 +690,16 @@ async def _process_chat_message(
         intencion = intents.classify(cliente_id, message, config=client_config)
 
     if intencion:
+        # Quien PIDE algo no esta preguntando como se pide. Con "me pones una
+        # cita?" el salon tiene una Q&A que explica como reservar, y contestarla
+        # dejaba a la clienta leyendo instrucciones en vez de abrirle el
+        # formulario. Para las intenciones que se ACTUAN, actuar gana a explicar.
+        INTENCIONES_QUE_SE_ACTUAN = ("reservar", "cancelar", "reprogramar")
+        pide_algo = intencion["intencion"] in INTENCIONES_QUE_SE_ACTUAN
+
         # ¿Le estan haciendo una pregunta que el negocio ya tiene respondida,
         # aunque la escriba con otras palabras?
-        respuesta_qa = str(intencion.get("qa_answer") or "").strip()
+        respuesta_qa = "" if pide_algo else str(intencion.get("qa_answer") or "").strip()
         if respuesta_qa:
             respuesta_qa = _con_gracias_a_ti(message, respuesta_qa)
             rag._record_chat_message(
