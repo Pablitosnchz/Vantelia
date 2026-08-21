@@ -204,6 +204,32 @@ modelo falla, tarda o no llega al umbral (`CONFIANZA_MINIMA`), `classify` devuel
 * El interruptor del panel lee `config_enabled` (lo que el negocio guardó), no
   `enabled_for` (que además exige clave de OpenAI): si no, se apagaba solo.
 
+**Lo que el negocio configura sale de UNA funcion: `chat.decision_del_negocio`.**
+Sus Q&A escritas, la comprension de intenciones, sus Q&A reconocidas con otras
+palabras y sus reglas. La llaman el chat web y WhatsApp **en la misma posicion**:
+despues de las palabras clave y antes de cualquier heuristica nuestra. El canal
+solo traduce la decision a su medio (el widget devuelve `mostrar_formulario`,
+WhatsApp arranca su flujo guiado).
+
+**Probar en el widget NO demuestra nada sobre WhatsApp.** WhatsApp tiene su propio
+recorrido y solo delegaba en el cerebro al final; todo lo que respondia antes se
+comportaba distinto. Divergencias reales que costo encontrar:
+
+* "horarios" devolvia los huecos del dia en WhatsApp y el horario redactado por
+  el negocio en la web.
+* Una regla del negocio sobre cancelar no llegaba a aplicarse: el disparador de
+  WhatsApp iba primero.
+* "quiero pedir cita" no lo reconocia: eran cinco frases exactas.
+* El "Gracias a ti" faltaba en las ramas propias de WhatsApp.
+* Se prometia "Te muestro el formulario" donde no hay formulario.
+
+Al tocar cualquiera de esas capas, `tests/test_whatsapp_mismo_cerebro.py` compara
+los dos canales con el webhook de verdad.
+
+**Trampa**: una rama de WhatsApp que responde por su cuenta tiene que registrar la
+conversacion (`_wa_registrar`) o el negocio pierde ese chat en el panel. Paso al
+unificar el detector de reserva; lo vigila `test_whatsapp_webhook_uses_same_chat_storage`.
+
 WhatsApp comparte cerebro pero tiene su propio flujo guiado en `whatsapp.py`.
 
 **El cliente nunca puede quedarse encerrado en un paso.** Cada paso del flujo
@@ -237,7 +263,12 @@ descripciones 72. Recortar por el final convertía "Keratina premium corto chico
 en "Keratina premium corto c" — igual que el recorte de "corto medio", y
 confundible con "Keratina premium corto", que existía. `_wa_recortar_titulo`
 recorta por el MEDIO (lo que distingue suele ir al final) y el nombre completo
-viaja en la descripción.
+viaja en la descripción. El **guion separa palabras** igual que el
+espacio: sin eso, "Acido lactico bio premium-largo" y "…premium-medio" se veían
+IDÉNTICOS en la lista (260 € y 205 €), porque la cola solo se conservaba si la
+última palabra cabía en la mitad del ancho. Cuando dos nombres siguen chocando
+(«extra largo» vs «extra extra largo»), la descripción lleva nombre completo,
+duración y precio: es lo que permite distinguirlos.
 
 **Trampa**: una lista de WhatsApp admite **10 filas**. Con catálogos grandes,
 `_wa_send_service_picker` pregunta primero la categoría y pagina con "Ver más".

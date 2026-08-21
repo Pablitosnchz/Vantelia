@@ -51,6 +51,11 @@ antes de "arreglarlo": suele estar diciendo algo cierto.
   del asistente: lo que el negocio escribe a mano (palabras clave, Q&A literales)
   va antes que la comprensión por modelo, y con una gestión de cita a medias no
   se clasifica nada. Si este falla, alguien movió una capa de sitio.
+- `test_whatsapp_mismo_cerebro.py` — WhatsApp tiene recorrido PROPIO y solo
+  delegaba en el cerebro al final: que algo funcione en el widget no demuestra
+  nada allí. Compara los dos canales con el webhook de verdad. Si este falla,
+  una configuración del negocio está comportándose distinto según dónde escriba
+  el cliente.
 
 ## Fixtures
 

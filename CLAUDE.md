@@ -315,8 +315,17 @@ pedir cita se reconocian DOS (medido). Ahora la decide el modelo.
 - REGLA: si el modelo falla, tarda o no llega al umbral, `classify` devuelve None y
   el chat sigue. Entender NUNCA puede dejar a un cliente sin respuesta.
 - Con una gestion de cita a medias NO se clasifica (secuestraba el flujo).
+- **Fuente UNICA de lo que el negocio configura: `chat.decision_del_negocio()`**
+  (Q&A literales -> comprension -> Q&A reconocidas -> reglas). La llaman el chat
+  web y WhatsApp en la MISMA posicion: tras las palabras clave y antes de las
+  heuristicas. El canal solo traduce (widget: `mostrar_formulario`; WhatsApp:
+  arranca su flujo guiado). Probar en el widget NO demuestra nada sobre WhatsApp:
+  tiene recorrido propio. Comparador de canales en
+  `tests/test_whatsapp_mismo_cerebro.py`.
+- Una rama de WhatsApp que responde sola DEBE registrar la conversacion con
+  `_wa_registrar` o el negocio pierde ese chat en el panel.
 - Tests: `tests/test_intenciones_y_reglas.py`, `tests/test_reglas_en_el_portal.py`,
-  `tests/test_comprension_en_el_chat.py`.
+  `tests/test_comprension_en_el_chat.py`, `tests/test_whatsapp_mismo_cerebro.py`.
 
 ## Respuestas automaticas por palabra clave (opt-in por tenant)
 
