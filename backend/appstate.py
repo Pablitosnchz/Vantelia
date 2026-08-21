@@ -40,6 +40,10 @@ class WAFlowState:
     employee_name: str = ""
     fecha: str = ""
     hora: str = ""
+    # Pagina y franja del listado de horas: un dia con 18 huecos no cabe en las
+    # 10 filas de una lista de WhatsApp.
+    horas_pagina: int = 0
+    horas_franja: str = ""
     nombre: str = ""
     email: str = ""
     notas: str = ""

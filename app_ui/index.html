@@ -2250,6 +2250,48 @@
       </label>
       <div id="tnStarterMount" style="margin-top:16px;"></div>
 
+      <div style="margin-top:22px; padding-top:18px; border-top:1px solid rgba(255,255,255,0.09);" data-perm="catalog.manage">
+        <h3 style="margin:0 0 4px;">Cómo habla tu asistente</h3>
+        <p class="panel-sub" style="margin:0 0 14px;">Se aplica igual en el chat de tu web, en WhatsApp y en las llamadas.</p>
+        <div class="form-row">
+          <div class="field" style="flex:1 1 200px;">
+            <label class="field-label">Trato</label>
+            <select class="field-input" id="tnToneEstilo">
+              <option value="">Sin preferencia</option>
+              <option value="cercano">Muy cercano</option>
+              <option value="profesional">Profesional</option>
+              <option value="neutro">Neutro</option>
+            </select>
+          </div>
+          <div class="field" style="flex:1 1 200px;">
+            <label class="field-label">Emojis</label>
+            <select class="field-input" id="tnToneEmojis">
+              <option value="">Sin preferencia</option>
+              <option value="muchos">Sí, según la situación</option>
+              <option value="algunos">Alguno suelto</option>
+              <option value="ninguno">Ninguno</option>
+            </select>
+          </div>
+          <div class="field" style="flex:1 1 180px;">
+            <label class="field-label">Tratamiento</label>
+            <select class="field-input" id="tnToneTrato">
+              <option value="">Sin preferencia</option>
+              <option value="tu">Tutear</option>
+              <option value="usted">De usted</option>
+            </select>
+          </div>
+        </div>
+        <div class="field" style="margin-top:6px;">
+          <label class="field-label">Algo más sobre cómo quieres que hable (opcional)</label>
+          <textarea class="field-textarea" id="tnToneNotas" maxlength="600" style="min-height:70px;" placeholder="Ej: llama a las clientas por su nombre, y despídete siempre invitándolas a volver."></textarea>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; margin-top:10px;">
+          <button class="btn btn-primary" id="tnToneSave" type="button">Guardar tono</button>
+          <span class="panel-sub" id="tnToneHint" style="margin:0;"></span>
+        </div>
+        <pre id="tnTonePreview" class="preview" style="margin-top:12px; white-space:pre-wrap; display:none;"></pre>
+      </div>
+
       <div class="form-row" style="display:none;">
         <div class="field" style="flex:1 1 100%;">
           <label class="field-label">Instrucciones del sistema (system prompt)</label>
@@ -4385,7 +4427,7 @@ function setTab(tab) {
   if (tab === 'chats')      loadChats();
   if (tab === 'knowledge')  loadKnowledge();
   if (tab === 'qa')       { loadQA(); loadKeywordRules(); loadBusinessRules(); }
-  if (tab === 'tune')       loadTune();
+  if (tab === 'tune')     { loadTune(); loadTone(); }
   if (tab === 'voz')        loadVoz();
   if (tab === 'whatsapp')   loadWhatsApp();
   if (tab === 'payments')   loadPayments(true);
@@ -5598,6 +5640,43 @@ document.getElementById('brSaveBtn')?.addEventListener('click', async () => {
     toast('Regla guardada', 'success');
     document.getElementById('brFormCard').classList.remove('open');
     loadBusinessRules();
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+// == Como habla el asistente (tono por negocio) =========================
+// Estaba escrito a mano dentro del prompt de cada cliente: no se podia cambiar
+// desde el panel y no llegaba igual al chat, a WhatsApp y a la voz.
+function pintarTono(data) {
+  document.getElementById('tnToneEstilo').value = data.estilo || '';
+  document.getElementById('tnToneEmojis').value = data.emojis || '';
+  document.getElementById('tnToneTrato').value = data.tratamiento || '';
+  document.getElementById('tnToneNotas').value = data.notas || '';
+  const previa = document.getElementById('tnTonePreview');
+  if (previa) {
+    previa.textContent = data.vista_previa || '';
+    previa.style.display = data.vista_previa ? '' : 'none';
+  }
+}
+
+async function loadTone() {
+  if (!document.getElementById('tnToneEstilo')) return;
+  try { pintarTono(await api('/auth/app/tone')); }
+  catch (err) { /* sin permiso o sin bot: la tarjeta se queda como esta */ }
+}
+
+document.getElementById('tnToneSave')?.addEventListener('click', async () => {
+  const payload = {
+    estilo: document.getElementById('tnToneEstilo').value,
+    emojis: document.getElementById('tnToneEmojis').value,
+    tratamiento: document.getElementById('tnToneTrato').value,
+    notas: document.getElementById('tnToneNotas').value.trim(),
+  };
+  try {
+    pintarTono(await api('/auth/app/tone', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }));
+    toast('Tono guardado', 'success');
   } catch (err) { toast(err.message, 'error'); }
 });
 

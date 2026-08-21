@@ -41,7 +41,7 @@ def _load_client_configs() -> Dict[str, Dict[str, Any]]:
 # publica de tarjetas "gift_cards_public" volvian a sus defaults en runtime).
 CONFIG_EXTRA_SECTIONS = (
     "empresa", "reminders", "reviews", "gift_cards_public", "shop_public", "negocio",
-    "keyword_rules", "chat_menu", "ai_intents",
+    "keyword_rules", "chat_menu", "ai_intents", "tono",
 )
 
 

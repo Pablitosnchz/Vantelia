@@ -1014,6 +1014,26 @@ class AppKeywordRulesConfigPayload(BaseModel):
     enabled: bool
 
 
+class AppTonePayload(BaseModel):
+    """Como habla el asistente de este negocio."""
+
+    estilo: str = ""
+    emojis: str = ""
+    tratamiento: str = ""
+    notas: str = Field(default="", max_length=600)
+
+
+class AppToneResponse(BaseModel):
+    estilo: str = ""
+    emojis: str = ""
+    tratamiento: str = ""
+    notas: str = ""
+    estilos: List[str] = Field(default_factory=list)
+    opciones_emojis: List[str] = Field(default_factory=list)
+    tratamientos: List[str] = Field(default_factory=list)
+    vista_previa: str = ""
+
+
 class AppBusinessRuleItem(BaseModel):
     """Una regla del negocio: cuando el cliente quiere X, haz Y."""
 

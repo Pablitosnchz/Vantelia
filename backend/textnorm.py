@@ -792,4 +792,77 @@ def _extract_date_from_text(text: str, timezone_name: str) -> str:
 
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
+# ─── Tono del asistente (configurable por negocio) ─────────────────────────
+# Un salon quiere "muy cercano y con emojis"; una clinica, sobrio y de usted. Era
+# texto suelto dentro del prompt de cada cliente: no se podia cambiar desde el
+# panel y no llegaba igual al chat, a WhatsApp y a la voz.
+
+TONO_ESTILOS = ("cercano", "profesional", "neutro")
+TONO_EMOJIS = ("muchos", "algunos", "ninguno")
+TONO_TRATAMIENTOS = ("tu", "usted")
+
+_TONO_ESTILO_TEXTO = {
+    "cercano": (
+        "Habla en un tono MUY cercano y calido, como alguien del equipo que conoce "
+        "a la clienta de siempre. Frases cortas, naturales, nada corporativas."
+    ),
+    "profesional": (
+        "Habla en un tono profesional y cuidado, amable pero sobrio. Sin coloquialismos."
+    ),
+    "neutro": "Habla en un tono neutro y claro, ni distante ni coloquial.",
+}
+
+_TONO_EMOJIS_TEXTO = {
+    "muchos": (
+        "Usa emojis con naturalidad, SEGUN LA SITUACION: al saludar, al confirmar algo "
+        "bueno o al despedirte. NUNCA cuando alguien se queja, esta molesto o hay un "
+        "problema: ahi se responde sin emojis y con calma."
+    ),
+    "algunos": (
+        "Usa algun emoji suelto en saludos y confirmaciones, y ninguno cuando alguien "
+        "se queja o hay un problema."
+    ),
+    "ninguno": "No uses emojis.",
+}
+
+
+def _tono_config(config):
+    """La seccion `tono` normalizada. Devuelve None si el negocio no la ha tocado."""
+    seccion = config.get("tono") if isinstance(config, dict) else None
+    if not isinstance(seccion, dict):
+        return None
+    estilo = str(seccion.get("estilo") or "").strip().lower()
+    emojis = str(seccion.get("emojis") or "").strip().lower()
+    tratamiento = str(seccion.get("tratamiento") or "").strip().lower()
+    notas = _sanitize_text(str(seccion.get("notas") or ""), allow_multiline=True)[:600]
+    return {
+        "estilo": estilo if estilo in TONO_ESTILOS else "",
+        "emojis": emojis if emojis in TONO_EMOJIS else "",
+        "tratamiento": tratamiento if tratamiento in TONO_TRATAMIENTOS else "",
+        "notas": notas,
+    }
+
+
+def _tono_prompt_block(config) -> str:
+    """Instrucciones de tono para el modelo. Cadena vacia si no hay nada configurado.
+
+    Se usa igual en el chat, en WhatsApp (que comparte cerebro) y en la voz.
+    """
+    tono = _tono_config(config)
+    if not tono:
+        return ""
+    lineas = []
+    if tono["estilo"]:
+        lineas.append(_TONO_ESTILO_TEXTO[tono["estilo"]])
+    if tono["emojis"]:
+        lineas.append(_TONO_EMOJIS_TEXTO[tono["emojis"]])
+    if tono["tratamiento"] == "usted":
+        lineas.append("Trata de USTED a quien te escribe.")
+    elif tono["tratamiento"] == "tu":
+        lineas.append("Tutea a quien te escribe.")
+    if tono["notas"]:
+        lineas.append(tono["notas"])
+    if not lineas:
+        return ""
+    return "COMO TIENES QUE HABLAR (lo ha decidido el negocio):\n- " + "\n- ".join(lineas)
 

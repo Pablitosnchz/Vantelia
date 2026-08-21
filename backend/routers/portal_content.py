@@ -388,6 +388,54 @@ async def app_keyword_rule_delete(
     return {"ok": True}
 
 
+# --- Tono del asistente ----------------------------------------------------
+# Un salon quiere "muy cercano y con emojis"; una clinica, sobrio y de usted.
+# Estaba escrito a mano dentro del prompt de cada cliente.
+
+
+def _tone_response(cliente_id: str) -> AppToneResponse:
+    config = clients._get_client_config(cliente_id)
+    tono = textnorm._tono_config(config) or {
+        "estilo": "", "emojis": "", "tratamiento": "", "notas": "",
+    }
+    return AppToneResponse(
+        estilo=tono["estilo"], emojis=tono["emojis"],
+        tratamiento=tono["tratamiento"], notas=tono["notas"],
+        estilos=list(textnorm.TONO_ESTILOS),
+        opciones_emojis=list(textnorm.TONO_EMOJIS),
+        tratamientos=list(textnorm.TONO_TRATAMIENTOS),
+        vista_previa=textnorm._tono_prompt_block(config),
+    )
+
+
+@app.get("/auth/app/tone", response_model=AppToneResponse)
+async def app_tone_get(
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AppToneResponse:
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    return _tone_response(cliente_id)
+
+
+@app.put("/auth/app/tone", response_model=AppToneResponse)
+async def app_tone_save(
+    data: AppTonePayload,
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AppToneResponse:
+    security._require_portal_min_role(user, "manager")
+    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    with appstate.state_lock:
+        next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
+        cfg = next_configs.get(cliente_id, {})
+        cfg["tono"] = {
+            "estilo": data.estilo, "emojis": data.emojis,
+            "tratamiento": data.tratamiento, "notas": data.notas,
+        }
+        next_configs[cliente_id] = cfg
+        clients._update_runtime_configs(next_configs)
+    clients._persist_configs_to_disk(next_configs)
+    return _tone_response(cliente_id)
+
+
 # --- Reglas del negocio: cuando el cliente quiere X, haz Y -----------------
 # Lo que diferencia a un asistente de otro no es el motor: son las reglas de su
 # negocio. Aqui el propio salon las escribe, sin que nadie toque el prompt.

@@ -1259,6 +1259,10 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
     telefono = str(contacto.get("telefono") or "").strip()
     email = str(contacto.get("email") or "").strip()
     extra = textnorm._sanitize_text(str(config.get("prompt_extra") or ""), allow_multiline=True)
+    # Mismo tono que en el chat y en WhatsApp: lo decide el negocio.
+    bloque_tono = textnorm._tono_prompt_block(config)
+    if bloque_tono:
+        extra = (bloque_tono + "\n\n" + extra).strip()
 
     cabecera = [f"Eres la recepcionista de {nombre}. Atiendes por telefono en nombre del negocio."]
     if extra:

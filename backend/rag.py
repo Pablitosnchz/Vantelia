@@ -186,6 +186,10 @@ def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
             f"presentes o te pregunten como te llamas, di que te llamas {nombre_bot}.\n"
         )
     prompt_extra = config.get("prompt_extra", "")
+    # El tono lo decide el negocio desde su panel, no el prompt de cada cliente.
+    bloque_tono = textnorm._tono_prompt_block(config)
+    if bloque_tono:
+        prompt_extra = (bloque_tono + "\n\n" + prompt_extra).strip()
     booking_enabled = config["booking"]["enabled"]
     contacto = config.get("contacto", {})
     branding = config.get("branding", {})

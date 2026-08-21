@@ -414,8 +414,14 @@ async def _wa_send_employee_picker(
     employees = _wa_employees_for_service(cliente_id, servicio, phone_number_id, location_id=location_id)
     if len(employees) <= 1:
         return employees
-    rows: List[Dict[str, Any]] = []
-    for emp in employees[:10]:
+    # La mayoria no tiene preferencia, y elegir persona ADEMAS le quita huecos:
+    # solo ve la agenda de esa profesional. Va primera a proposito.
+    rows: List[Dict[str, Any]] = [{
+        "id": "emp_cualquiera",
+        "title": "Me da igual",
+        "description": "La primera que pueda atenderte (más horas libres)",
+    }]
+    for emp in employees[:_WA_MAX_FILAS - 1]:
         rows.append({
             "id": f"emp_{emp['id']}",
             "title": _wa_recortar_titulo(emp["name"]),
@@ -792,9 +798,35 @@ _WA_FRANJAS = [
 ]
 
 
+# Lo que dice quien no encuentra su hueco en la lista. Sin esto, "puede ser mas
+# tarde?" recibia una respuesta amable y los MISMOS diez huecos otra vez.
+_WA_AJUSTE_HORA = (
+    ("tarde", ("por la tarde", "a la tarde", "de tarde", "por las tardes")),
+    ("noche", ("por la noche", "de noche", "ultima hora", "lo mas tarde posible")),
+    ("manana", ("por la manana", "de manana", "por las mananas", "a primera hora",
+                "temprano", "lo mas temprano")),
+    ("+", ("mas tarde", "algo mas tarde", "un poco mas tarde", "despues", "mas alla")),
+    ("-", ("mas temprano", "mas pronto", "antes", "un poco antes")),
+)
+
+
+def _wa_ajuste_de_hora(texto: str) -> str:
+    """Franja pedida ("tarde"), o "+"/"-" para moverse por el listado. "" si nada.
+
+    Se mira sobre el texto ya normalizado (sin tildes), como el resto de patrones
+    que casan lo que ESCRIBE el cliente.
+    """
+    limpio = textnorm._strip_accents(str(texto or "").lower())
+    for clave, frases in _WA_AJUSTE_HORA:
+        if any(frase in limpio for frase in frases):
+            return clave
+    return ""
+
+
 async def _wa_send_time_picker(
     *, cliente_id: str, phone_number_id: str, to_number: str, fecha_iso: str, fecha_humana: str,
     employee_id: str = "", servicio: str = "", location_id: str = "", franja: str = "",
+    pagina: int = 0,
 ) -> bool:
     try:
         if employee_id:
@@ -889,11 +921,32 @@ async def _wa_send_time_picker(
 
     if franja:
         libres = [h for h in libres if _wa_franja_de(h) == franja] or libres
-    mostrados = libres[:_WA_MAX_FILAS]
-    rows = [{"id": f"time_{slot}", "title": slot, "description": f"{fecha_humana[:60]}"} for slot in mostrados]
+
+    # Paginacion, igual que en el catalogo: la ultima fila sirve para seguir
+    # viendo. Antes se mandaban los 10 primeros y el resto era inalcanzable.
+    inicio = max(0, pagina) * (_WA_MAX_FILAS - 1)
+    if inicio >= len(libres):
+        inicio = 0
+    trozo = libres[inicio:inicio + _WA_MAX_FILAS]
+    restantes = len(libres) - inicio - len(trozo)
+    if restantes > 0:  # se reserva la ultima fila para "ver mas"
+        trozo = trozo[:_WA_MAX_FILAS - 1]
+        restantes = len(libres) - inicio - len(trozo)
+    rows = [
+        {"id": f"time_{slot}", "title": slot, "description": f"{fecha_humana[:60]}"}
+        for slot in trozo
+    ]
+    if restantes > 0:
+        rows.append({
+            "id": "horamas_%s_%d" % (franja or "-", max(0, pagina) + 1),
+            "title": "Ver más horas",
+            "description": "Quedan %d por ver" % restantes,
+        })
     cuerpo = f"🕐 Huecos disponibles para *{fecha_humana}*. Elige hora:"
-    if len(libres) > len(mostrados):
-        cuerpo += f"\n\n(te muestro los {len(mostrados)} primeros de {len(libres)})"
+    if inicio:
+        cuerpo = f"🕐 Más huecos para *{fecha_humana}*:"
+    if restantes > 0:
+        cuerpo += "\n\n(o dime *más tarde*, *por la tarde*... y te los filtro)"
     await messaging._send_whatsapp_list(
         cliente_id=cliente_id,
         phone_number_id=phone_number_id,
@@ -2029,6 +2082,23 @@ async def _handle_whatsapp_message(
         return
 
     if flow.flow == "booking_employee":
+        # "Me da igual": sin profesional atada, la cita se asigna sola entre quien
+        # pueda y la clienta ve TODOS los huecos del equipo, no los de una agenda.
+        sin_preferencia = iid == "emp_cualquiera" or textnorm._strip_accents(
+            incoming_text.lower().strip()
+        ) in ("me da igual", "cualquiera", "la que sea", "indiferente", "me es igual")
+        if sin_preferencia:
+            flow.employee_id = ""
+            flow.employee_name = ""
+            flow.flow = "booking_date"
+            await _wa_send_date_picker(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                config=config, header="Agendar cita",
+                body="📅 Elige el día que mejor te venga:",
+                servicio=flow.servicio, location_id=flow.location_id,
+            )
+            return
+
         emp_id = ""
         if iid.startswith("emp_"):
             emp_id = iid[len("emp_"):]
@@ -2117,11 +2187,45 @@ async def _handle_whatsapp_message(
     if flow.flow == "booking_time":
         # Eligio franja (manana/tarde/noche): se le muestran los huecos de esa franja.
         if iid.startswith("franja_"):
+            flow.horas_franja = iid[len("franja_"):]
+            flow.horas_pagina = 0
             await _wa_send_time_picker(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
                 fecha_iso=flow.fecha, fecha_humana=_wa_fecha_humana(flow.fecha),
                 employee_id=flow.employee_id, servicio=flow.servicio,
-                location_id=flow.location_id, franja=iid[len("franja_"):],
+                location_id=flow.location_id, franja=flow.horas_franja,
+            )
+            return
+
+        # "Ver mas horas": el dia tiene mas huecos de los que caben en una lista.
+        if iid.startswith("horamas_"):
+            resto = iid[len("horamas_"):]
+            franja_id, _, numero = resto.rpartition("_")
+            flow.horas_franja = "" if franja_id == "-" else franja_id
+            flow.horas_pagina = int(numero) if numero.isdigit() else 0
+            await _wa_send_time_picker(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                fecha_iso=flow.fecha, fecha_humana=_wa_fecha_humana(flow.fecha),
+                employee_id=flow.employee_id, servicio=flow.servicio,
+                location_id=flow.location_id, franja=flow.horas_franja,
+                pagina=flow.horas_pagina,
+            )
+            return
+
+        # "puede ser mas tarde?", "por la tarde", "a primera hora"...
+        ajuste = _wa_ajuste_de_hora(incoming_text)
+        if ajuste and not settings.TIME_PATTERN.match(incoming_text.strip()):
+            if ajuste in ("+", "-"):
+                flow.horas_pagina = max(0, flow.horas_pagina + (1 if ajuste == "+" else -1))
+            else:
+                flow.horas_franja = ajuste
+                flow.horas_pagina = 0
+            await _wa_send_time_picker(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                fecha_iso=flow.fecha, fecha_humana=_wa_fecha_humana(flow.fecha),
+                employee_id=flow.employee_id, servicio=flow.servicio,
+                location_id=flow.location_id, franja=flow.horas_franja,
+                pagina=flow.horas_pagina,
             )
             return
 
