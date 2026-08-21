@@ -169,7 +169,8 @@ horario?" devolvía los huecos libres de hoy.
 **El problema medido**: la intención se adivinaba con expresiones regulares. De 19
 formas naturales de pedir cita se reconocían **dos**. "me pones una cita?",
 "resérvame el jueves" o "hazme un hueco" no abrían el formulario, y cada variante
-nueva era un parche más. Con el modelo clasificando: **18 de 19**.
+nueva era un parche más. Con el modelo clasificando, medido contra un asistente
+real en producción: **18 de 19** (14 abren el formulario, 4 contestan con huecos).
 
 * `backend/intents.py` — qué quiere el cliente. `atajo_local()` resuelve gratis lo
   evidente; si no, una llamada a `gpt-4o-mini` devuelve `{intencion, familia,
@@ -191,6 +192,12 @@ modelo falla, tarda o no llega al umbral (`CONFIANZA_MINIMA`), `classify` devuel
   formulario y perdía el hilo.
 * `familia` vacía no puede casar una regla que exige familia (`"" in "alisado"` es
   `True` en Python): un "¿cuánto cuesta?" a secas pedía la foto del alisado.
+* Las intenciones que se ACTÚAN (reservar, cancelar, reprogramar) se saltan la
+  Q&A parafraseada: el salón tenía una Q&A de "cómo reservar" y "me pones una
+  cita?" acababa explicándole cómo hacerlo en vez de abrirle el formulario.
+* La intención `disponibilidad` enruta a `_build_chat_availability_answer`. Sin
+  eso, "¿puedo ir mañana?" caía en la IA genérica y contestaba el horario de
+  apertura, no si quedaba hueco.
 * Una regla de precios **sin familias** tapa el catálogo entero. Si el negocio ya
   tiene precios cerrados para corte o peinado, acota la regla a los servicios que
   de verdad necesitan valoración.

@@ -54,9 +54,11 @@ Ahora la intención la decide el modelo (`backend/intents.py`) y lo que se hace 
 ella lo decide **ella**, desde la pestaña Q&A del portal → **"Reglas de tu
 negocio"** (`business_rules`). Medido contra el modelo real:
 
-- De **19 formas naturales de pedir cita se reconocían 2**. Ahora **18**.
-  ("me pones una cita?", "resérvame el jueves", "hazme un hueco" y "quiero
-  ponerme guapa el sábado" no abrían el formulario.)
+- De **19 formas naturales de pedir cita se resolvían 2**. Ahora **18**, medido
+  contra su asistente ya en producción: 14 abren el formulario y 4 contestan con
+  huecos reales. ("me pones una cita?", "resérvame el jueves", "hazme un hueco" y
+  "quiero ponerme guapa el sábado" no abrían nada.) La que falta, "necesito que
+  me atiendan", contesta igualmente ofreciéndole cita.
 - Sus **Q&A** ahora casan aunque la clienta pregunte con otras palabras: 10 de 10
   en la prueba, incluida la que **no** debía casar (nadie preguntó por el parking).
 
