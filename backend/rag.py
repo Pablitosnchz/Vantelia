@@ -293,19 +293,23 @@ def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
     services_prompt_block = ""
     if booking_enabled:
         try:
-            catalog_lines = booking._service_catalog_lines(cliente_id)
+            catalog_text, catalog_complete = booking._service_catalog_prompt_block(cliente_id)
         except Exception:  # noqa: BLE001
-            catalog_lines = []
-        if catalog_lines:
+            catalog_text, catalog_complete = "", True
+        if catalog_text:
             services_prompt_block = (
                 "\nCATALOGO REAL DE SERVICIOS (nombre · duracion · precio) PARA ENUMERAR, "
                 "PRESUPUESTAR Y RESERVAR:\n"
-                + "\n".join(catalog_lines[:40])
+                + catalog_text
                 + "\n- Para servicios, precios y duraciones esta lista MANDA sobre la base documental: "
                 "si se contradicen, usa esta lista.\n"
-                "- Si piden un servicio que no esta en la lista, no lo aceptes como reservable: dilo y "
-                "ofrece 2 o 3 servicios reales de la lista.\n"
-                "- Si un servicio aparece 'a consultar', no inventes una cifra: dilo y ofrece contacto o cita.\n"
+                + ("- Si piden un servicio que no esta en la lista, no lo aceptes como reservable: dilo y "
+                   "ofrece 2 o 3 servicios reales de la lista.\n"
+                   if catalog_complete else
+                   "- Esta lista esta RECORTADA y no estan todos los servicios: si piden uno que no "
+                   "aparece, NO digas que no existe ni te inventes su precio; di que lo confirmas y "
+                   "ofrece cita o contacto.\n")
+                + "- Si un servicio aparece 'a consultar', no inventes una cifra: dilo y ofrece contacto o cita.\n"
             )
 
     gift_cards_prompt_block = ""

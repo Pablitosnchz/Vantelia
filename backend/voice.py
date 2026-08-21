@@ -701,6 +701,22 @@ def _voice_service_options(cliente_id: str, location_id: str = "") -> List[str]:
     return names
 
 
+def _voice_service_catalog_block(
+    cliente_id: str, location_id: str = ""
+) -> Tuple[str, bool]:
+    """Catalogo para el prompt de la llamada, y si ha entrado ENTERO.
+
+    Misma fuente que el chat (`booking._service_catalog_prompt_block`): el tope de
+    40 lineas dejaba fuera 146 de los 186 servicios de un salon real, tambien por
+    telefono.
+    """
+    try:
+        return booking._service_catalog_prompt_block(cliente_id, location_id=location_id)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("[voice] no se pudo cargar el catalogo (%s): %s", cliente_id, exc)
+        return "", True
+
+
 def _voice_service_catalog(cliente_id: str, location_id: str = "") -> List[str]:
     """Lineas 'Nombre · N min · precio' del catalogo real, para que el asistente pueda
     enumerar y presupuestar por voz sin inventarse precios ni duraciones. Fuente unica
@@ -1259,17 +1275,20 @@ def _voice_build_instructions(cliente_id: str, config: Dict[str, Any]) -> str:
     )
     base = "\n".join(cabecera)
 
-    service_catalog = _voice_service_catalog(cliente_id)
-    if service_catalog:
+    catalogo_texto, catalogo_completo = _voice_service_catalog_block(cliente_id)
+    if catalogo_texto:
         services_block = (
             "\nCATALOGO REAL DE SERVICIOS (nombre, duracion y precio) para enumerar, presupuestar y reservar:\n"
-            + "\n".join(service_catalog[:40])
+            + catalogo_texto
             + "\n- Si preguntan que servicios hay, cuanto cuestan o cuanto duran, responde SOLO con los datos de esta lista.\n"
             "- Di precios y duraciones en palabras ('cuarenta euros', 'una hora'). Si pone 'a consultar', "
             "no inventes cifra: dilo y ofrece confirmarlo.\n"
-            "- Si piden un servicio que no esta, no lo aceptes como sinonimo: dilo y ofrece dos o tres "
-            "de la lista.\n"
-            "- Al reservar, el parametro servicio debe ser uno de estos nombres, exactamente.\n"
+            + ("- Si piden un servicio que no esta, no lo aceptes como sinonimo: dilo y ofrece dos o "
+               "tres de la lista.\n"
+               if catalogo_completo else
+               "- Esta lista esta RECORTADA: si piden uno que no aparece, NO digas que no existe ni "
+               "te inventes el precio; di que lo confirmas.\n")
+            + "- Al reservar, el parametro servicio debe ser uno de estos nombres, exactamente.\n"
         )
     else:
         services_block = ""

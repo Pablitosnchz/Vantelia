@@ -6040,6 +6040,43 @@ def _latest_booking_for_contact(
 
 
 
+# Cuanto catalogo cabe en el prompt. Un salon real tiene 186 servicios (~7.900
+# caracteres, unos 2.000 tokens): entran de sobra y cuestan centimos. El tope
+# existe solo para que un catalogo absurdo no reviente la ventana de contexto.
+CATALOG_PROMPT_MAX_CHARS = 12000
+
+
+def _service_catalog_prompt_block(
+    cliente_id: str, location_id: str = "", max_chars: int = CATALOG_PROMPT_MAX_CHARS
+) -> Tuple[str, bool]:
+    """El catalogo para el prompt, y si ha entrado ENTERO.
+
+    Antes se cortaba por las bravas a las 40 primeras lineas. Con 186 servicios
+    eso dejaba 146 invisibles -entre ellos "Corte señora 20 €" o "Peinado de
+    novia 90 €"- y el prompt ademas ordenaba no aceptar lo que no estuviera en la
+    lista: el asistente negaba servicios reales, y llego a decir "15 €" por un
+    corte de niño que cuesta 8. Por eso hace falta saber si la lista esta completa:
+    cuando no lo esta, NO se puede afirmar que algo no existe.
+    """
+    lineas = _service_catalog_lines(cliente_id, location_id=location_id)
+    if not lineas:
+        return "", True
+    incluidas: List[str] = []
+    usados = 0
+    for linea in lineas:
+        if usados + len(linea) + 1 > max_chars:
+            break
+        incluidas.append(linea)
+        usados += len(linea) + 1
+    completo = len(incluidas) == len(lineas)
+    texto = "\n".join(incluidas)
+    if not completo:
+        texto += "\n- (hay %d servicios mas que no caben en esta lista)" % (
+            len(lineas) - len(incluidas)
+        )
+    return texto, completo
+
+
 def _service_catalog_lines(cliente_id: str, location_id: str = "") -> List[str]:
     """Lineas "- Nombre · N min · precio" del catalogo REAL (tabla services), para los
     prompts de chat y voz: enumerar y presupuestar sin inventar precios ni duraciones.
