@@ -110,3 +110,22 @@ def test_el_nombre_completo_viaja_en_la_descripcion():
 def test_un_servicio_de_nombre_corto_no_repite_el_nombre():
     svc = {"nombre": "Corte de pelo", "duration_minutes": 30, "price_label": "20 €"}
     assert whatsapp._wa_service_detail(svc) == "30 min · 20 €"
+
+
+def test_el_guion_tambien_separa_palabras(api_module):
+    """Caso real del salon: dos alisados se veian IDENTICOS en WhatsApp.
+
+        Acido lactico bio…   <- Acido lactico bio premium-largo   260 EUR
+        Acido lactico bio…   <- Acido lactico bio premium-medio   205 EUR
+
+    La cola solo se conservaba si la ultima palabra cabia en la mitad del ancho, y
+    "premium-largo" son 13 caracteres con el limite en 12: se rendia y volvia al
+    recorte por el final, que es justo lo que esta funcion existe para evitar.
+    """
+    from backend import whatsapp
+
+    largo = whatsapp._wa_recortar_titulo("Acido lactico bio premium-largo")
+    medio = whatsapp._wa_recortar_titulo("Acido lactico bio premium-medio")
+    assert largo != medio, "dos servicios de 260 y 205 EUR se veian igual"
+    assert largo.endswith("largo") and medio.endswith("medio")
+    assert len(largo) <= whatsapp._WA_ROW_TITLE_MAX

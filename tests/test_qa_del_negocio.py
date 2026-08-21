@@ -96,10 +96,11 @@ def test_las_qa_se_evaluan_antes_que_la_disponibilidad(api_module):
     """Si el salon ha escrito su horario, preguntarlo no puede dar los huecos de hoy."""
     from backend import chat
 
-    fuente = inspect.getsource(chat._process_chat_message)
-    posicion_qa = fuente.index("_match_qa_answer")
-    posicion_disponibilidad = fuente.index("_message_requests_availability")
-    assert posicion_qa < posicion_disponibilidad
+    # La respuesta escrita por el negocio vive ahora en `decision_del_negocio`,
+    # compartida con WhatsApp, y se consulta antes que ninguna heuristica nuestra.
+    turno = inspect.getsource(chat._process_chat_message)
+    assert "_match_qa_answer" in inspect.getsource(chat.decision_del_negocio)
+    assert turno.index("decision_del_negocio(") < turno.index("_message_requests_availability")
 
 
 def test_las_reglas_por_palabra_clave_siguen_mandando(api_module):
@@ -107,7 +108,7 @@ def test_las_reglas_por_palabra_clave_siguen_mandando(api_module):
     from backend import chat
 
     fuente = inspect.getsource(chat._process_chat_message)
-    assert fuente.index("keywords.match_reply") < fuente.index("_match_qa_answer")
+    assert fuente.index("keywords.match_reply") < fuente.index("decision_del_negocio(")
 
 
 def test_el_marcador_interno_no_cuenta_como_etiqueta(api_module):

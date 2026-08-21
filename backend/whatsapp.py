@@ -256,7 +256,10 @@ def _wa_recortar_titulo(texto: str) -> str:
     if len(limpio) <= _WA_ROW_TITLE_MAX:
         return limpio
 
-    palabras = limpio.split(" ")
+    # El guion separa igual que el espacio: en "Acido lactico bio premium-largo"
+    # lo que distingue es "largo", y tratar "premium-largo" como una sola palabra
+    # (13 caracteres, con el limite en 12) hacia que la cola se perdiera entera.
+    palabras = [p for p in re.split(r"[\s\-]+", limpio) if p]
     cola = ""
     for palabra in reversed(palabras[1:]):
         candidata = (palabra + " " + cola).strip()
@@ -1390,6 +1393,34 @@ async def _wa_handle_reminder_reply(
         )
 
 
+def _wa_registrar(
+    *, cliente_id: str, from_number: str, request, entrante: str = "",
+    respuesta: str = "", intent: str = "",
+) -> str:
+    """Deja la conversacion en el panel aunque conteste una rama propia de WhatsApp.
+
+    El cerebro comun ya registra lo que pasa por el; las ramas que responden antes
+    (palabras clave, reglas del negocio, flujo guiado) tienen que hacerlo aqui o
+    el negocio pierde ese chat en Conversaciones.
+    """
+    session_id = _whatsapp_session_id(cliente_id, from_number)
+    rag._ensure_chat_session_record(
+        session_id, cliente_id, request,
+        origin_override="whatsapp:%s" % from_number,
+        user_agent_override="WhatsApp Cloud API",
+    )
+    if entrante:
+        rag._record_chat_message(
+            session_id=session_id, cliente_id=cliente_id, role="user", content=entrante,
+        )
+    if respuesta:
+        rag._record_chat_message(
+            session_id=session_id, cliente_id=cliente_id, role="assistant",
+            content=respuesta, intent=intent,
+        )
+    return session_id
+
+
 async def _handle_whatsapp_message(
     *,
     cliente_id: str,
@@ -1474,19 +1505,15 @@ async def _handle_whatsapp_message(
     if not flow.flow:
         keyword_rule = keywords.match_reply(cliente_id, incoming_text)
         if keyword_rule:
-            session_id = _whatsapp_session_id(cliente_id, from_number)
-            rag._ensure_chat_session_record(
-                session_id, cliente_id, request,
-                origin_override=f"whatsapp:{from_number}",
-                user_agent_override="WhatsApp Cloud API",
-            )
-            rag._record_chat_message(
-                session_id=session_id, cliente_id=cliente_id,
-                role="user", content=incoming_text,
-            )
-            rag._record_chat_message(
-                session_id=session_id, cliente_id=cliente_id,
-                role="assistant", content=keyword_rule["reply"], intent="keyword_rule",
+            # Mismo trato que en el chat web: si la clienta ha dado las gracias, se
+            # le responde "Gracias a ti" tambien aqui. WhatsApp tiene su propia
+            # rama de palabras clave y se quedaba sin ese detalle.
+            keyword_rule = dict(keyword_rule)
+            keyword_rule["reply"] = chat._con_gracias_a_ti(incoming_text, keyword_rule["reply"])
+            _wa_registrar(
+                cliente_id=cliente_id, from_number=from_number, request=request,
+                entrante=incoming_text, respuesta=keyword_rule["reply"],
+                intent="keyword_rule",
             )
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
@@ -1501,17 +1528,74 @@ async def _handle_whatsapp_message(
         texto = summary["mensaje"]
         if summary["count"]:
             texto += "\n\nAl reservar una cita del servicio incluido, la sesión se descuenta sola del bono."
+        texto = chat._con_gracias_a_ti(incoming_text, texto)
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             text=texto,
         )
         return
 
+    # Lo que el negocio ha CONFIGURADO manda sobre nuestros disparadores: sus Q&A
+    # escritas a mano y sus reglas ("cuando pidan X, haz Y"). Misma funcion y misma
+    # posicion que en el chat de la web, para que no diverjan. Solo sin flujo
+    # activo: a media reserva, sus respuestas son pasos del flujo, no consultas.
+    intencion_entendida = ""
+    if not flow.flow and not iid:
+        decision = chat.decision_del_negocio(cliente_id, incoming_text, config=config)
+        if decision and decision["texto"]:
+            session_id = _wa_registrar(
+                cliente_id=cliente_id, from_number=from_number, request=request,
+                entrante=incoming_text, respuesta=decision["texto"],
+                intent=decision["intent"],
+            )
+            if decision["accion"] == "pasar_a_humano":
+                inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Equipo")
+            await messaging._send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id,
+                to_number=from_number, text=decision["texto"],
+            )
+            # Su regla puede ademas llevarla a reservar.
+            if decision["accion"] == "formulario" and booking_enabled:
+                _wa_reset_booking_fields(flow)
+                await _wa_start_booking_flow(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id,
+                    from_number=from_number, flow=flow, config=config,
+                )
+            return
+        # Sin texto configurado, la intencion todavia sirve para acertar con lo
+        # basico: aqui es donde "me pones una cita?" abre el flujo guiado.
+        if decision and decision["intencion"] == "reservar" and booking_enabled:
+            _wa_registrar(
+                cliente_id=cliente_id, from_number=from_number, request=request,
+                entrante=incoming_text,
+            )
+            _wa_reset_booking_fields(flow)
+            await _wa_start_booking_flow(
+                cliente_id=cliente_id, phone_number_id=phone_number_id,
+                from_number=from_number, flow=flow, config=config,
+            )
+            return
+        # Cancelar y reprogramar los gestionan los disparadores de abajo, que ya
+        # saben pedir el numero de reserva y verificar el telefono.
+        intencion_entendida = decision["intencion"] if decision else ""
+
     # Trigger desde menu o texto
-    trigger_agendar = iid == "menu_agendar" or text_norm in ("agendar", "agendar cita", "reservar", "reservar cita", "cita")
+    # Mismo detector que el chat web (`chat.MENU_OPTION_PATTERNS`): reconoce
+    # "pedir cita", "coger cita" o "quiero reservar", no solo cinco frases exactas.
+    # Solo sin flujo activo: a media reserva, un "1" es la opcion que esta
+    # eligiendo, y reiniciarle el flujo seria peor que no entenderla.
+    trigger_agendar = (
+        iid == "menu_agendar"
+        or text_norm in ("agendar", "agendar cita", "reservar", "reservar cita", "cita")
+        or (not flow.flow and chat._detect_menu_option(incoming_text) == "agendar")
+    )
     trigger_disp = iid == "menu_disponibilidad" or text_norm in ("disponibilidad", "ver disponibilidad", "horarios", "huecos")
-    trigger_cancel = iid == "menu_cancelar_cita" or booking._message_requests_cancel_booking(incoming_text)
-    trigger_reschedule = iid == "menu_cambiar_cita" or booking._message_requests_reschedule_booking(incoming_text)
+    trigger_cancel = (iid == "menu_cancelar_cita"
+                      or booking._message_requests_cancel_booking(incoming_text)
+                      or intencion_entendida == "cancelar")
+    trigger_reschedule = (iid == "menu_cambiar_cita"
+                          or booking._message_requests_reschedule_booking(incoming_text)
+                          or intencion_entendida == "reprogramar")
 
     if trigger_cancel and booking_enabled:
         _wa_reset_booking_fields(flow)
@@ -1612,6 +1696,10 @@ async def _handle_whatsapp_message(
         return
 
     if trigger_agendar and booking_enabled:
+        _wa_registrar(
+            cliente_id=cliente_id, from_number=from_number, request=request,
+            entrante=incoming_text,
+        )
         flow.flow = ""
         _wa_reset_booking_fields(flow)
         await _wa_start_booking_flow(

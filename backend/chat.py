@@ -235,6 +235,17 @@ def _detect_menu_option(message: str) -> str:
     return ""
 
 
+# Lo que se dice al arrancar una reserva. NO puede nombrar "el formulario": este
+# texto viaja tambien a WhatsApp, donde lo siguiente que ve la clienta es una
+# lista de servicios, no un formulario. En el widget web si aparece uno debajo.
+BOOKING_START_TEXT = (
+    "📅 Vamos a agendar tu cita. Elige servicio, fecha y hora."
+)
+BOOKING_START_TEXT_LARGO = (
+    "📅 Vamos con tu cita: elige servicio, fecha y hora y te la confirmo."
+)
+
+
 MENU_CONFIG_SECTION = "chat_menu"
 
 
@@ -551,6 +562,86 @@ def _emphasize_structured_headings(text: str) -> str:
     return "\n".join(result)
 
 
+# Intenciones que se ACTUAN. Quien pide algo no esta preguntando como se pide:
+# con "me pones una cita?" el salon tiene una Q&A que explica como reservar, y
+# contestarla dejaba a la clienta leyendo instrucciones en vez de reservando.
+INTENCIONES_QUE_SE_ACTUAN = ("reservar", "cancelar", "reprogramar")
+
+
+def decision_del_negocio(
+    cliente_id: str,
+    message: str,
+    *,
+    config: Optional[Dict[str, Any]] = None,
+    gestion_en_curso: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """Que ha configurado el NEGOCIO para este mensaje. Vale para cualquier canal.
+
+    Mira, por orden: las Q&A que ha escrito palabra por palabra, y despues -si lo
+    tiene activado- que le estan pidiendo y que regla suya aplica. NO incluye
+    ninguna heuristica nuestra: eso lo decide cada canal despues.
+
+    Devuelve `None` cuando el negocio no ha configurado nada para este mensaje, o
+    un dict con:
+
+        texto      lo que hay que responder ("" si no hay texto que decir)
+        intent     etiqueta para el historial (qa_exact / qa_semantica / regla_negocio)
+        accion     la accion de la regla, si venia de una regla
+        intencion  que ha pedido el cliente, si se ha podido saber
+
+    El canal traduce eso a su medio: el widget abre su formulario, WhatsApp
+    arranca su flujo guiado.
+    """
+    mensaje = str(message or "")
+
+    # 1. Lo que el negocio escribio literalmente para esta pregunta.
+    respuesta_literal = rag._match_qa_answer(cliente_id, mensaje)
+    if respuesta_literal:
+        return {
+            "texto": _con_gracias_a_ti(mensaje, respuesta_literal),
+            "intent": "qa_exact",
+            "accion": "responder",
+            "intencion": "",
+        }
+
+    # 2. Que le estan pidiendo. Con una gestion de cita a medias NO se clasifica:
+    #    su "el jueves a las 5" es la respuesta a lo que se le acaba de preguntar.
+    if gestion_en_curso or not intents.enabled_for(cliente_id, config):
+        return None
+    intencion = intents.classify(cliente_id, mensaje, config=config)
+    if not intencion:
+        return None
+
+    pide_algo = intencion["intencion"] in INTENCIONES_QUE_SE_ACTUAN
+
+    # 3. ¿Es una de sus preguntas, dicha con otras palabras?
+    respuesta_qa = "" if pide_algo else str(intencion.get("qa_answer") or "").strip()
+    if respuesta_qa:
+        return {
+            "texto": _con_gracias_a_ti(mensaje, respuesta_qa),
+            "intent": "qa_semantica",
+            "accion": "responder",
+            "intencion": intencion["intencion"],
+        }
+
+    # 4. Sus reglas: cuando pidan X, haz Y.
+    regla = rules.match(cliente_id, intencion)
+    if regla:
+        # Se cuenta SIEMPRE, tambien con "continuar": esa accion existe para medir
+        # cuanta gente pediria eso antes de activar una respuesta.
+        rules.contar_uso(regla["id"])
+        if regla["accion"] != "continuar":
+            return {
+                "texto": _con_gracias_a_ti(mensaje, regla["texto"] or ""),
+                "intent": "regla_negocio",
+                "accion": regla["accion"],
+                "intencion": intencion["intencion"],
+            }
+
+    # 5. Sin nada configurado, la intencion sigue siendo util para el canal.
+    return {"texto": "", "intent": "", "accion": "", "intencion": intencion["intencion"]}
+
+
 async def _process_chat_message(
     *,
     cliente_id: str,
@@ -651,117 +742,58 @@ async def _process_chat_message(
         )
         return keyword_response
 
-    # Respuesta que el negocio ha escrito palabra por palabra para esta pregunta.
-    # Va aqui, con las reglas por palabra clave y ANTES de nuestras heuristicas: si
-    # el salon ha redactado su horario, preguntarlo no puede devolver los huecos de
-    # hoy. El listado exige coincidencia casi literal, asi que no secuestra
-    # conversaciones normales.
-    qa_exact_answer = rag._match_qa_answer(cliente_id, message)
-    if qa_exact_answer:
-        qa_exact_answer = _con_gracias_a_ti(message, qa_exact_answer)
-        qa_response = RespuestaChat(
-            respuesta=qa_exact_answer,
-            mostrar_formulario=False,
-            session_id=session_id,
-            intent="qa_exact",
+    # Lo que el negocio ha configurado (sus Q&A y sus reglas) va ANTES que
+    # cualquier heuristica nuestra, y sale de la MISMA funcion que usa WhatsApp:
+    # si el salon ha redactado su horario, preguntarlo no puede devolver los
+    # huecos de hoy, escriba donde escriba la clienta.
+    decision = decision_del_negocio(
+        cliente_id, message, config=client_config,
+        gestion_en_curso=bool(booking._chat_manage_state_get(session_id)),
+    )
+    if decision and decision["texto"]:
+        if decision["accion"] == "pasar_a_humano":
+            inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Equipo")
+        rag._record_chat_message(
+            session_id=session_id, cliente_id=cliente_id, role="assistant",
+            content=decision["texto"], intent=decision["intent"],
+        )
+        return RespuestaChat(
+            respuesta=decision["texto"],
+            mostrar_formulario=decision["accion"] == "formulario",
+            session_id=session_id, intent=decision["intent"],
+        )
+
+    intencion_detectada = decision["intencion"] if decision else ""
+
+    # "¿puedo ir mañana?" acababa en la IA generica, que contestaba el horario de
+    # apertura; lo que quiere saber es si hay HUECO. Misma respuesta que da la
+    # deteccion por patrones, para quien lo escribe de otra forma.
+    if intencion_detectada == "disponibilidad" and booking_enabled:
+        texto_disp = textnorm._normalize_chat_response_text(
+            await rag._build_chat_availability_answer(cliente_id, message, client_config)
         )
         rag._record_chat_message(
-            session_id=session_id,
-            cliente_id=cliente_id,
-            role="assistant",
-            content=qa_exact_answer,
-            intent="qa_exact",
+            session_id=session_id, cliente_id=cliente_id, role="assistant",
+            content=texto_disp, intent="availability",
         )
-        return qa_response
+        return RespuestaChat(
+            respuesta=texto_disp, mostrar_formulario=False,
+            session_id=session_id, intent="availability",
+        )
 
-    # ─── Comprension: QUE quiere, y que ha dicho el negocio que hagamos ───
-    # Los patrones de aqui abajo solo entienden lo que alguien escribio a mano:
-    # de 19 formas naturales de pedir cita reconocian dos. Cuando el negocio lo
-    # activa, aqui se le pregunta al modelo que pide el cliente y se aplica la
-    # regla que el propio negocio haya configurado. Si algo falla, `classify`
-    # devuelve None y todo sigue como siempre.
-    # Si hay una gestion a medias (esta cancelando o cambiando su cita), NO se
-    # clasifica: su "el jueves a las 5" es la respuesta a lo que se le acaba de
-    # preguntar, y darla por "reservar" le abriria el formulario perdiendo el hilo.
-    gestion_en_curso = bool(booking._chat_manage_state_get(session_id))
-
-    intencion = None
-    if not gestion_en_curso and intents.enabled_for(cliente_id, client_config):
-        intencion = intents.classify(cliente_id, message, config=client_config)
-
-    if intencion:
-        # Quien PIDE algo no esta preguntando como se pide. Con "me pones una
-        # cita?" el salon tiene una Q&A que explica como reservar, y contestarla
-        # dejaba a la clienta leyendo instrucciones en vez de abrirle el
-        # formulario. Para las intenciones que se ACTUAN, actuar gana a explicar.
-        INTENCIONES_QUE_SE_ACTUAN = ("reservar", "cancelar", "reprogramar")
-        pide_algo = intencion["intencion"] in INTENCIONES_QUE_SE_ACTUAN
-
-        # ¿Le estan haciendo una pregunta que el negocio ya tiene respondida,
-        # aunque la escriba con otras palabras?
-        respuesta_qa = "" if pide_algo else str(intencion.get("qa_answer") or "").strip()
-        if respuesta_qa:
-            respuesta_qa = _con_gracias_a_ti(message, respuesta_qa)
-            rag._record_chat_message(
-                session_id=session_id, cliente_id=cliente_id, role="assistant",
-                content=respuesta_qa, intent="qa_semantica",
-            )
-            return RespuestaChat(
-                respuesta=respuesta_qa, mostrar_formulario=False,
-                session_id=session_id, intent="qa_semantica",
-            )
-
-        regla = rules.match(cliente_id, intencion)
-        if regla:
-            # Se cuenta SIEMPRE, tambien con "continuar": esa accion existe para
-            # medir cuanta gente pediria eso antes de activar una respuesta.
-            rules.contar_uso(regla["id"])
-        if regla and regla["accion"] != "continuar":
-            respuesta_regla = _con_gracias_a_ti(message, regla["texto"] or "")
-            if regla["accion"] == "pasar_a_humano":
-                inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Equipo")
-            if respuesta_regla:
-                rag._record_chat_message(
-                    session_id=session_id, cliente_id=cliente_id, role="assistant",
-                    content=respuesta_regla, intent="regla_negocio",
-                )
-                return RespuestaChat(
-                    respuesta=respuesta_regla,
-                    mostrar_formulario=regla["accion"] == "formulario",
-                    session_id=session_id, intent="regla_negocio",
-                )
-
-        # Sin regla propia, la intencion sigue valiendo para acertar con lo basico.
-        # "¿puedo ir mañana?" acababa en la IA generica, que contestaba el horario
-        # de apertura; lo que quiere saber es si hay HUECO. Misma respuesta que da
-        # la deteccion por patrones, para quien lo escribe de otra forma.
-        if intencion["intencion"] == "disponibilidad" and booking_enabled:
-            texto_disp = textnorm._normalize_chat_response_text(
-                await rag._build_chat_availability_answer(cliente_id, message, client_config)
-            )
-            rag._record_chat_message(
-                session_id=session_id, cliente_id=cliente_id, role="assistant",
-                content=texto_disp, intent="availability",
-            )
-            return RespuestaChat(
-                respuesta=texto_disp, mostrar_formulario=False,
-                session_id=session_id, intent="availability",
-            )
-
-        # Esto es lo que arregla "me pones una cita?" o "resérvame el jueves".
-        if intencion["intencion"] == "reservar" and booking_enabled:
-            texto_form = textnorm._normalize_chat_response_text(
-                client_config.get("booking", {}).get("form_intro")
-                or "📅 Te muestro el formulario para agendar tu cita. Elige servicio, fecha y hora."
-            )
-            rag._record_chat_message(
-                session_id=session_id, cliente_id=cliente_id, role="assistant",
-                content=texto_form, intent="booking_form",
-            )
-            return RespuestaChat(
-                respuesta=texto_form, mostrar_formulario=True,
-                session_id=session_id, intent="booking_form",
-            )
+    # Esto es lo que arregla "me pones una cita?" o "resérvame el jueves".
+    if intencion_detectada == "reservar" and booking_enabled:
+        texto_form = textnorm._normalize_chat_response_text(
+            client_config.get("booking", {}).get("form_intro") or BOOKING_START_TEXT
+        )
+        rag._record_chat_message(
+            session_id=session_id, cliente_id=cliente_id, role="assistant",
+            content=texto_form, intent="booking_form",
+        )
+        return RespuestaChat(
+            respuesta=texto_form, mostrar_formulario=True,
+            session_id=session_id, intent="booking_form",
+        )
 
     menu_option = _detect_menu_option(message)
     if rag._message_requests_availability(message):
@@ -787,7 +819,7 @@ async def _process_chat_message(
     policy_info = _message_requests_booking_policy_info(message)
     if menu_option == "agendar" and booking_enabled and not wants_manage and not policy_info:
         booking_response = RespuestaChat(
-            respuesta="📅 Te muestro el formulario para agendar tu cita. Elige servicio, fecha y hora.",
+            respuesta=BOOKING_START_TEXT,
             mostrar_formulario=True,
             session_id=session_id,
         )
@@ -892,7 +924,7 @@ async def _process_chat_message(
 
     if booking_enabled and booking._message_requests_booking_form(message) and not policy_info:
         booking_response = RespuestaChat(
-            respuesta="📅 Te muestro el formulario de solicitud de cita para que puedas elegir servicio, fecha y hora.",
+            respuesta=BOOKING_START_TEXT_LARGO,
             mostrar_formulario=True,
             session_id=session_id,
         )
@@ -974,7 +1006,7 @@ async def _process_chat_message(
     if booking_enabled and not mostrar_formulario and booking._message_requests_booking_form(message) and not policy_info:
         mostrar_formulario = True
         if not clean_text:
-            clean_text = "Te muestro el formulario de solicitud de cita para continuar."
+            clean_text = BOOKING_START_TEXT_LARGO
 
     settings.logger.info(
         "Chat %s [%s] %s",

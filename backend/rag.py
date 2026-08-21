@@ -734,7 +734,7 @@ async def _build_availability_context(cliente_id: str, target_date: date) -> Opt
     return (
         f"DATOS_EN_TIEMPO_REAL_DISPONIBILIDAD para el {fecha_humana} ({fecha_iso}): "
         f"{len(sorted_slots)} huecos libres ({listing}{extra}). "
-        f"Usa SOLO estos horarios reales. Tras listarlos, ofrece abrir el formulario de reserva."
+        f"Usa SOLO estos horarios reales. Tras listarlos, ofrece continuar con la reserva."
     )
 
 
@@ -942,7 +942,7 @@ async def _build_chat_availability_answer(
             if shown_slots >= 8:
                 break
         if shown_slots:
-            lines.append("Dime que horario te viene mejor y te abro el formulario de reserva.")
+            lines.append("Dime que horario te viene mejor y seguimos con la reserva.")
         else:
             lines.append("No veo huecos libres en ese intervalo. Puedo revisar otra fecha si me dices cual.")
         return "\n".join(lines)
@@ -961,7 +961,7 @@ async def _build_chat_availability_answer(
         return (
             f"{availability_intro}\n\n"
             f"{_format_slot_lines(slots)}\n\n"
-            "Dime que hora te viene mejor y te abro el formulario para reservar."
+            "Dime que hora te viene mejor y seguimos con la reserva."
         )
 
     if snapshot["status"] == "no_period_slots" and snapshot["available"]:
@@ -969,7 +969,7 @@ async def _build_chat_availability_answer(
         return (
             f"Para el {label} no veo huecos libres{period_suffix}.\n\n"
             f"Ese dia si hay disponibilidad en otros horarios:\n\n{same_day_slots}\n\n"
-            "Si te encaja alguno, te abro el formulario de reserva."
+            "Si te encaja alguno, seguimos con la reserva."
         )
 
     if snapshot["status"] in {"closed", "blocked"}:
