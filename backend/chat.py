@@ -731,8 +731,24 @@ async def _process_chat_message(
                     session_id=session_id, intent="regla_negocio",
                 )
 
-        # Sin regla propia, la intencion sigue valiendo para acertar con lo basico:
-        # esto es lo que arregla "me pones una cita?" o "resérvame el jueves".
+        # Sin regla propia, la intencion sigue valiendo para acertar con lo basico.
+        # "¿puedo ir mañana?" acababa en la IA generica, que contestaba el horario
+        # de apertura; lo que quiere saber es si hay HUECO. Misma respuesta que da
+        # la deteccion por patrones, para quien lo escribe de otra forma.
+        if intencion["intencion"] == "disponibilidad" and booking_enabled:
+            texto_disp = textnorm._normalize_chat_response_text(
+                await rag._build_chat_availability_answer(cliente_id, message, client_config)
+            )
+            rag._record_chat_message(
+                session_id=session_id, cliente_id=cliente_id, role="assistant",
+                content=texto_disp, intent="availability",
+            )
+            return RespuestaChat(
+                respuesta=texto_disp, mostrar_formulario=False,
+                session_id=session_id, intent="availability",
+            )
+
+        # Esto es lo que arregla "me pones una cita?" o "resérvame el jueves".
         if intencion["intencion"] == "reservar" and booking_enabled:
             texto_form = textnorm._normalize_chat_response_text(
                 client_config.get("booking", {}).get("form_intro")

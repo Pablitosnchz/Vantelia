@@ -68,3 +68,16 @@ def test_pedir_cita_gana_a_explicar_como_se_pide(api_module):  # noqa: F811
     fuente = _fuente(api_module)
     assert "INTENCIONES_QUE_SE_ACTUAN" in fuente
     assert fuente.index("pide_algo") < fuente.index("respuesta_qa =")
+
+
+def test_preguntar_si_hay_hueco_devuelve_huecos(api_module):  # noqa: F811
+    """"¿puedo ir mañana?" acababa en la IA generica, contestando el horario.
+
+    Lo que la clienta quiere saber es si hay HUECO. Se le da la misma respuesta
+    que a quien lo escribe de la forma que los patrones si reconocian.
+    """
+    fuente = _fuente(api_module)
+    corte = fuente.index("intents.classify")
+    bloque = fuente[corte:fuente.index("menu_option = _detect_menu_option")]
+    assert '== "disponibilidad"' in bloque
+    assert "_build_chat_availability_answer" in bloque
