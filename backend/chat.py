@@ -652,6 +652,7 @@ async def _process_chat_message(
     user_agent_override: str = "",
     trusted_phone: str = "",
     on_user_message_persisted: Optional[Callable[[str], None]] = None,
+    contexto_flujo: str = "",
 ) -> RespuestaChat:
     commercial_intent = _detect_commercial_intent(message)
     rag._ensure_chat_session_record(
@@ -986,6 +987,12 @@ async def _process_chat_message(
         availability_context = await rag._build_availability_context(cliente_id, target_date)
         if availability_context:
             context_blocks.append(availability_context)
+
+    # De que se esta hablando ahora mismo. Sin esto, "¿que es ese tratamiento?" a
+    # media reserva llegaba al modelo como seis palabras sueltas y respondia
+    # "¿a cual te refieres?" habiendo dicho el nombre el mensaje anterior.
+    if contexto_flujo:
+        context_blocks.insert(0, contexto_flujo)
 
     if context_blocks:
         joined = "\n\n".join(f"[CONTEXTO DEL SISTEMA - {block}]" for block in context_blocks)

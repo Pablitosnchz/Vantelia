@@ -64,6 +64,8 @@ módulos transversales.
 | `backend/analytics.py` | Informes del portal: KPIs con delta, series, desgloses y el resumen de mostrador. |
 | `backend/keywords.py` | Respuestas deterministas por palabra clave, opt-in por tenant. Va ANTES que las Q&A y que la IA. |
 | `backend/intents.py` | Qué quiere el cliente: clasifica el mensaje con el modelo (atajo local gratis primero) y reconoce cuál de las Q&A del negocio le están haciendo, aunque lo escriba con otras palabras. Opt-in `config['ai_intents']`. |
+| `backend/catalog_pick.py` | Elegir el servicio que pide el cliente mirando el catálogo real: filtra por familia, técnica, largo, para quién y edad, y dice qué falta por preguntar. Determinista y testeable: el modelo no decide aquí. |
+| `backend/booking_agent.py` | Coger cita conversando (`booking.estilo = conversacional`): el modelo lleva el diálogo con TOOLS (`buscar_servicio`, `consultar_disponibilidad`, `crear_cita`) que le impiden inventarse un servicio, un hueco o una cita. Reusa el despachador de la voz. |
 | `backend/rules.py` | Reglas del propio negocio (cuando quiera X, haz Y): tabla `business_rules`, gana la primera activa por prioridad. Decide QUÉ hacer con la intención que da `intents`. |
 | `backend/inbox.py` | Intervención humana sobre una conversación de WhatsApp: mientras alguien la atiende, el asistente se calla (`bot_is_muted`) y se respeta la ventana de 24 h de Meta. |
 | `backend/voice_engine.py` | `VoiceCallEngine`: el estado y TODA la lógica determinista de una llamada. El puente (`routers/voice_web.py`) solo mueve audio y delega. |

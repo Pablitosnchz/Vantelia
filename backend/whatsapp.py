@@ -508,6 +508,41 @@ def _wa_parece_una_duda(texto: str) -> bool:
     return len(palabras) >= 3
 
 
+def _wa_contexto_de_la_reserva(flow: appstate.WAFlowState) -> str:
+    """De que estan hablando, para que el cerebro no responda a ciegas.
+
+    Se le pasa al modelo como contexto del turno (no se guarda en el historial):
+    "ese tratamiento" solo se entiende sabiendo cual acaba de elegir.
+    """
+    partes = []
+    paso = {
+        "booking_service": "esta eligiendo que servicio quiere",
+        "booking_employee": "esta eligiendo profesional",
+        "booking_date": "esta eligiendo el dia",
+        "booking_time": "esta eligiendo la hora",
+        "booking_name": "esta dando sus datos",
+        "booking_confirm": "esta a punto de confirmar la cita",
+    }.get(flow.flow, "")
+    if paso:
+        partes.append("La clienta %s." % paso)
+    if flow.servicio:
+        partes.append('Ya ha elegido el servicio "%s": si pregunta "eso", "ese '
+                      'tratamiento" o "cuanto dura", se refiere a ESE.' % flow.servicio)
+    if flow.servicio_texto:
+        partes.append('Lo que ha dicho que quiere hacerse: "%s".' % flow.servicio_texto)
+    if flow.employee_name:
+        partes.append("Profesional elegida: %s." % flow.employee_name)
+    if flow.fecha:
+        partes.append("Dia elegido: %s." % flow.fecha)
+    if flow.hora:
+        partes.append("Hora elegida: %s." % flow.hora)
+    if not partes:
+        return ""
+    return "RESERVA EN CURSO. " + " ".join(partes) + (
+        " Responde a su duda y despues retoma la reserva con naturalidad."
+    )
+
+
 async def _wa_atender_duda_sin_perder_el_paso(
     *,
     cliente_id: str,
@@ -517,6 +552,7 @@ async def _wa_atender_duda_sin_perder_el_paso(
     request: Optional[Request],
     repetir_paso,
     aviso_error: str,
+    repetir_texto: str = "",
 ) -> None:
     """El cliente ha escrito algo que no encaja en el paso actual del flujo.
 
@@ -551,13 +587,21 @@ async def _wa_atender_duda_sin_perder_el_paso(
         origin_override="whatsapp:%s" % from_number,
         user_agent_override="WhatsApp Cloud API",
         trusted_phone=from_number,
+        contexto_flujo=_wa_contexto_de_la_reserva(_wa_get_flow(cliente_id, from_number)),
     )
     await messaging._send_whatsapp_text(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
         text=respuesta.respuesta,
     )
     # Se retoma el paso: sin esto el cliente responde la duda y ya no sabe que
-    # estaba a media reserva.
+    # estaba a media reserva. Con listas apagadas se retoma PREGUNTANDO, que es
+    # justo lo que pidio el salon.
+    if _wa_modo_conversacional(clients._get_client_config(cliente_id)):
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text=repetir_texto or "Seguimos con tu cita. ¿Que dia te viene bien? 😊",
+        )
+        return
     await repetir_paso()
 
 
@@ -1422,6 +1466,47 @@ async def _wa_ofrecer_huecos_hablando(
     return True
 
 
+async def _wa_turno_del_agente(
+    *, cliente_id: str, phone_number_id: str, from_number: str,
+    incoming_text: str, flow: appstate.WAFlowState, config: Dict[str, Any], request,
+) -> bool:
+    """Deja que el agente lleve la conversacion de la cita. False si no ha podido.
+
+    El agente decide, recomienda y pregunta lo que falta; las tools le impiden
+    inventarse un servicio, un hueco o una cita. Si devuelve vacio, quien llama
+    sigue con el flujo de listas de siempre.
+    """
+    from backend import booking_agent
+
+    if not booking_agent.disponible(cliente_id):
+        return False
+
+    session_id = _wa_registrar(
+        cliente_id=cliente_id, from_number=from_number, request=request,
+        entrante=incoming_text,
+    )
+    texto, cita_creada = await booking_agent.responder(
+        cliente_id, incoming_text, session_id=session_id, telefono=from_number,
+        config=config, location_id=flow.location_id or _wa_location_id(cliente_id, phone_number_id),
+    )
+    if not texto:
+        return False
+
+    _wa_registrar(
+        cliente_id=cliente_id, from_number=from_number, request=request,
+        respuesta=texto, intent="agenda_agente",
+    )
+    await messaging._send_whatsapp_text(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+        text=texto,
+    )
+    if cita_creada:
+        _wa_clear_flow(cliente_id, from_number)
+    else:
+        flow.flow = "booking_agente"
+    return True
+
+
 async def _wa_start_booking_flow(
     *, cliente_id: str, phone_number_id: str, from_number: str,
     flow: appstate.WAFlowState, config: Dict[str, Any],
@@ -1449,7 +1534,14 @@ async def _wa_start_booking_flow(
         flow.flow = ""  # mono-centro: no hay nada que elegir
     services = booking._public_services_for_booking(cliente_id, location_id=effective_location)
     if services and _wa_modo_conversacional(config):
-        # Sin listas: se le pregunta como lo haria una companera del salon.
+        # Sin listas: lleva la conversacion el agente, que ademas recomienda.
+        flow.location_id = effective_location
+        if await _wa_turno_del_agente(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+            incoming_text="Quiero coger cita.", flow=flow, config=config, request=None,
+        ):
+            return
+        # Sin agente, se pregunta a mano y luego se resuelve con el catalogo.
         flow.flow = "booking_service"
         flow.servicio_texto = ""
         await _wa_preguntar_servicio(
@@ -2095,6 +2187,22 @@ async def _handle_whatsapp_message(
         return
 
     # FLUJO BOOKING - Servicio
+    # Conversacion de cita en marcha: sigue el agente.
+    if flow.flow == "booking_agente" and not iid:
+        if await _wa_turno_del_agente(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+            incoming_text=incoming_text, flow=flow, config=config, request=request,
+        ):
+            return
+        # El agente no ha podido: se retoma con el flujo de siempre.
+        flow.flow = "booking_service"
+        flow.servicio_texto = incoming_text
+        await _wa_send_service_picker(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            location_id=flow.location_id,
+        )
+        return
+
     if flow.flow == "booking_service" and _wa_modo_conversacional(config) and not iid:
         # Se acumula TODO lo que va diciendo: "mechas" y luego "por los hombros"
         # solo tienen sentido juntos.
@@ -2111,9 +2219,13 @@ async def _handle_whatsapp_message(
                 flow.employee_id = empleados[0]["id"]
                 flow.employee_name = empleados[0]["name"]
             flow.flow = "booking_date"
+            # Como se lo presenta: "te recomiendo el alisado de acido lactico,
+            # que es muy respetuoso...", no el nombre tecnico a secas.
+            presentacion = (resuelto.get("confirmacion") or "").strip()
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-                text="¡Perfecto, %s! ¿Qué día te viene bien? 😊" % flow.servicio,
+                text=("%s ¿Qué día te viene bien? 😊" % presentacion) if presentacion
+                     else ("¡Perfecto, %s! ¿Qué día te viene bien? 😊" % flow.servicio),
             )
             return
         if resuelto and resuelto["pregunta"]:

@@ -268,3 +268,66 @@ def test_se_elige_desde_el_portal(client, api_module):  # noqa: F811
         client.put("/auth/app/tone", cookies=cookies, json={
             "estilo": "", "emojis": "", "tratamiento": "", "notas": "", "reserva": "guiado",
         })
+
+
+# ─── Que no parezca tonta a media reserva ─────────────────────────────────
+
+def test_nunca_dice_que_la_cita_ya_esta_hecha(api_module):  # noqa: F811
+    """Decirle a una clienta que tiene cita cuando no la tiene es lo peor que
+    puede hacer un asistente. Pedirselo al modelo no basta: se le escapa."""
+    from backend import intents
+
+    for falsa in ("Genial, te he reservado un alisado.",
+                  "Perfecto, te he apuntado para keratina.",
+                  "Listo, tu cita queda agendada."):
+        assert intents._sin_prometer_cita(falsa) == "", (
+            "se le esta prometiendo una cita que no existe: %r" % falsa
+        )
+    buena = "Te recomiendo el corte de señora, te va a quedar genial."
+    assert intents._sin_prometer_cita(buena) == buena
+
+
+def test_el_cerebro_recibe_de_que_estaban_hablando(api_module):  # noqa: F811
+    """Caso real: "¿que es ese tratamiento?" -> "¿a cual te refieres?"...
+
+    habiendo dicho el nombre en el mensaje anterior. El cerebro recibia el mensaje
+    pelado, sin saber que habia una reserva a medias.
+    """
+    import inspect
+
+    from backend import appstate, chat, whatsapp
+
+    flujo = appstate.WAFlowState(cliente_id="demo", from_number="34600000000")
+    flujo.flow = "booking_date"
+    flujo.servicio = "Keratina premium corto"
+    contexto = whatsapp._wa_contexto_de_la_reserva(flujo)
+    assert "Keratina premium corto" in contexto
+    assert "eligiendo el dia" in contexto
+
+    # Y el cerebro tiene que aceptarlo y meterlo como contexto del turno.
+    assert "contexto_flujo" in inspect.signature(chat._process_chat_message).parameters
+    fuente = inspect.getsource(chat._process_chat_message)
+    assert "context_blocks.insert(0, contexto_flujo)" in fuente
+
+    fuente_wa = inspect.getsource(whatsapp._wa_atender_duda_sin_perder_el_paso)
+    assert "contexto_flujo=" in fuente_wa, "WhatsApp no se lo esta pasando"
+
+
+def test_sin_reserva_en_curso_no_se_inventa_contexto(api_module):  # noqa: F811
+    from backend import appstate, whatsapp
+
+    assert whatsapp._wa_contexto_de_la_reserva(
+        appstate.WAFlowState(cliente_id="demo", from_number="34600000000")
+    ) == ""
+
+
+def test_al_retomar_el_paso_no_se_manda_una_lista(salon_que_habla, api_module):  # noqa: F811
+    """Se respondia la duda y se retomaba con el calendario, que es justo lo que
+    el salon no quiere ver."""
+    import inspect
+
+    from backend import whatsapp
+
+    fuente = inspect.getsource(whatsapp._wa_atender_duda_sin_perder_el_paso)
+    assert "_wa_modo_conversacional" in fuente
+    assert fuente.index("_wa_modo_conversacional") < fuente.index("await repetir_paso()")

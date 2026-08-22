@@ -28,9 +28,13 @@ REGLAS = [
         "accion": "pedir_foto",
         "prioridad": 10,
         "texto": (
-            "¡Claro que sí! 😊 Para darte un precio afinado necesitamos ver cómo tienes el pelo. "
-            "¿Nos mandas una foto por detrás, con el pelo suelto y a la luz natural? "
-            "En cuanto la vea el equipo te decimos precio exacto por aquí 💛"
+            "¡Claro que sí, cariño! 😊 El alisado sí te lo podemos presupuestar por aquí, pero "
+            "necesitamos ver cómo tienes el pelo: ¿nos mandas una foto por detrás, con el pelo "
+            "suelto y a la luz natural?\n\n"
+            "En cuanto la veamos nos ponemos en contacto contigo para darte el presupuesto "
+            "personalmente 💛\n\n"
+            "Y si lo que quieres es cogerte la cita directamente, dime cómo lo tienes de largo "
+            "y te la busco sin más 😉"
         ),
     },
     {
@@ -40,25 +44,32 @@ REGLAS = [
         "accion": "ofrecer_cita",
         "prioridad": 20,
         "texto": (
-            "¡Sí que ponemos extensiones! ✨ El precio depende del largo, la cantidad y la técnica, "
-            "así que lo vemos en una valoración sin compromiso y te decimos exactamente qué necesitas. "
-            "¿Te busco un hueco? 😊"
+            "¡Sí que ponemos extensiones, cariño! ✨ Todo depende de la cantidad que te pongamos, "
+            "del largo y del color, así que esto es mejor verlo en persona: nosotras te aconsejamos "
+            "qué necesitas y te damos el presupuesto sin compromiso.\n\n"
+            "Te puedo coger una cita de diagnóstico para que te veamos y te digamos precio. "
+            "¿Te busco hueco? 😊"
         ),
     },
     {
-        "nombre": "Color y mechas: precio tras valoracion",
+        # Ella lo dijo asi: "para precios de mechas, balay, jazz, Grey, Landing,
+        # extensiones y cambios de color la IA no tiene que dar los precios".
+        # Acotada a esas familias a proposito: su catalogo SI tiene precio cerrado
+        # para corte, peinado o recogido, y taparlo seria un paso atras.
+        "nombre": "Color y mechas: precio tras diagnostico",
         "intenciones": ["presupuesto", "precio"],
-        # Acotada a proposito a los trabajos tecnicos: su catalogo SI tiene precio
-        # cerrado para corte, peinado o recogido, y taparlo seria un paso atras.
-        "familias": ["mechas", "balayage", "babylights", "color", "coloracion",
-                     "tinte", "decoloracion", "mecha"],
+        "familias": ["mechas", "mecha", "balayage", "balay", "babylights", "jazz",
+                     "grey", "grey blending", "landing", "color", "coloracion",
+                     "cambio de color", "tinte", "decoloracion"],
         "accion": "ofrecer_cita",
         "prioridad": 50,
         "texto": (
-            "Te lo digo con sinceridad: el precio depende mucho de tu pelo (largo, color de base y "
-            "el resultado que busques), así que no queremos darte una cifra a ciegas 😊 "
-            "Lo vemos en una valoración sin compromiso y te lo decimos cerrado. "
-            "¿Te busco hueco o prefieres llamarnos al " + TELEFONO + "?"
+            "Te lo digo con sinceridad, cariño: el precio depende mucho de tu pelo (el largo, "
+            "el color que tengas de base y el resultado que busques), así que no queremos darte "
+            "una cifra a ciegas 😊\n\n"
+            "Lo que hacemos es cogerte una cita de 15 minutos para hacerte un diagnóstico y darte "
+            "el presupuesto en persona, sin compromiso y sin ningún coste.\n\n"
+            "¿Te busco un hueco para el diagnóstico, o prefieres llamarnos al " + TELEFONO + "?"
         ),
     },
 ]
@@ -96,8 +107,18 @@ def main() -> int:
         )
 
     # El tono que pidio el salon, como configuracion y no dentro del prompt.
-    TONO = {"estilo": "cercano", "emojis": "muchos", "tratamiento": "tu",
-            "notas": "Llama a las clientas 'guapa' o 'cariño' con naturalidad, como en el salon."}
+    TONO = {
+        "estilo": "cercano",
+        "emojis": "muchos",
+        "tratamiento": "tu",
+        "notas": (
+            "Dirigete a quien te escribe como 'cariño' ('hola cariño, muy buenas'): "
+            "vale igual para mujer y para hombre. Tambien puedes usar 'guapa' o "
+            "'preciosa' cuando sepas que es una mujer. "
+            "Cuando te despidas al cerrar la conversacion, termina siempre con estos "
+            "tres emoticonos juntos: 😉🤗😘"
+        ),
+    }
 
     if args.activar and not args.dry_run:
         import copy

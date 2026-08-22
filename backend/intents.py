@@ -202,79 +202,45 @@ def atajo_local(message: str) -> str:
 
 # ─── Del lenguaje de la clienta al servicio exacto ─────────────────────────
 
-_PROMPT_SERVICIO = """Eres quien coge las citas en un negocio. La clienta describe
-lo que quiere con sus palabras; tu tarea es decidir QUE servicio del catalogo es.
+_PROMPT_EXTRAER = """Lee lo que ha dicho una clienta de peluqueria y EXTRAE los
+datos. No decidas nada, no recomiendes nada: solo apunta lo que ha dicho.
 
-CATALOGO (son los unicos nombres validos):
-{catalogo}
+Responde SOLO con este JSON:
 
-Lo que ha dicho la clienta hasta ahora:
-{dicho}
+{{"familia": "", "tecnica": "", "talla": "", "para_quien": ""}}
 
-Responde SOLO con un JSON:
+- "familia": el tipo de servicio en UNA palabra, tal y como lo diria ella:
+  alisado, mechas, balayage, color, corte, peinado, recogido, maquillaje,
+  tratamiento, permanente, extensiones, depilacion... "" si no lo dice.
+- "tecnica": la tecnica o marca CONCRETA si la nombra (keratina, acido lactico,
+  liso japones, balayage, babylights...). "" si no la nombra.
+- "talla": como tiene el pelo de largo, en una de estas: muy corto, corto,
+  corto medio, medio, medio largo, largo, extra largo. Traduce lo que diga:
+  "por los hombros"/"media melena" = medio; "por la cintura"/"muy largo" = extra
+  largo; "por la barbilla" = corto. "" si no lo dice.
+- "para_quien": mujer, hombre o nino, SOLO si se deduce de lo que dice ("soy
+  chica", "para mi hijo"). Si dice una edad de niño, pon nino. "" si no lo dice.
 
-{{"servicio": "<nombre EXACTO del catalogo>", "pregunta": "", "opciones": []}}
+Estos son los tipos de servicio que existen en este negocio, por si te ayudan a
+nombrar la familia:
+{familias}
 
-Reglas:
-- Si con lo dicho basta para elegir UNO, pon su nombre exacto y deja "pregunta" vacia.
-- Si YA te ha dado el dato que faltaba (por ejemplo el largo del pelo), ELIGE. No
-  vuelvas a preguntar por algo que ya ha dicho, ni le pidas otro detalle mas.
-- Pregunta UNA sola cosa por turno, y que sea justo lo que separa a los servicios
-  entre los que dudas. Si dudas entre "Corte hombre" y "Corte señora", lo que falta
-  es para quien es, no el largo.
-- Si los candidatos son TECNICAS distintas -sus nombres EMPIEZAN distinto, como
-  "Keratina premium largo" y "Acido lactico bio premium-largo"- NO elijas por ella
-  aunque sepas el largo: son tratamientos diferentes, con precio y proceso propios.
-  Preguntale cual prefiere, con naturalidad, y anade que si no lo tiene claro se lo
-  asesoran en la cita.
-- Si son la MISMA tecnica en tallas distintas (corto / medio / largo) y ya sabes su
-  largo, elige sin preguntar.
-- Si lo que falta es el LARGO, preguntaselo por su pelo ("¿como tienes el pelo de
-  largo?"), no por "que tipo de servicio quieres": ella no conoce vuestros nombres.
-- Escribe la pregunta como se la haria una companera del salon: una frase corta,
-  calida y natural. Nada de listas numeradas, tecnicismos ni "por favor indique".
-- Si dudas entre pocos servicios concretos, ponlos en "opciones" (nombres exactos)
-  ademas de la pregunta.
-- NUNCA propongas un servicio que no resuelve lo que te cuenta. Un alisado no
-  frena la caida del pelo ni rejuvenece: si lo que describe es un PROBLEMA del
-  cabello, mira la familia que le corresponde (tratamientos, color, corte...).
-- Si lo que dice es vago ("no se que hacerme", "quiero verme mejor", "algo para un
-  evento"), NO adivines un tratamiento concreto: si el catalogo tiene una cita de
-  diagnostico o valoracion, ofrecesela; si no, preguntale que tipo de servicio
-  busca nombrando 2 o 3 FAMILIAS del catalogo, no servicios sueltos.
-- Si ya te ha dado un dato que decide por si solo (la edad de un niño, el largo
-  del pelo, para quien es), ELIGE con ese dato en vez de volver a preguntarlo.
-- Si lo que pide NO existe en el catalogo, deja "servicio" y "opciones" vacios y en
-  "pregunta" dilo con amabilidad y ofrece lo mas parecido que si haya.
-- NUNCA te inventes un nombre que no este en el catalogo.
-- No hables de precios: no los menciones aunque los veas en la lista."""
+No inventes datos que no haya dicho. Es mejor "" que adivinar."""
 
 
-def resolver_servicio(
+def extraer_datos_servicio(
     cliente_id: str, dicho: str, *, config: Optional[Dict[str, Any]] = None
-) -> Optional[Dict[str, Any]]:
-    """Que servicio quiere, o que hay que preguntarle para saberlo.
+) -> Optional[Dict[str, str]]:
+    """Que ha dicho la clienta, en datos. El modelo NO decide que servicio es.
 
-    `dicho` es TODO lo que la clienta ha dicho sobre el servicio (se va acumulando
-    entre turnos: "mechas" + "por los hombros").
-
-    Devuelve {"servicio", "pregunta", "opciones"} o None si no se puede resolver
-    (sin clave, sin catalogo o fallo del modelo): quien llama debe tener siempre un
-    plan B, porque quedarse sin respuesta no es una opcion.
+    Entender palabras se le da bien; decidir entre 186 servicios parecidos, no.
+    Con los datos, `catalog_pick.elegir` decide mirando el catalogo real y siempre
+    igual.
     """
     texto = str(dicho or "").strip()
     if not texto or not settings.OPENAI_API_KEY:
         return None
-    try:
-        from backend import booking
-
-        catalogo, _completo = booking._service_catalog_prompt_block(cliente_id)
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.warning("[servicio] sin catalogo (%s): %s", cliente_id, exc)
-        return None
-    if not catalogo.strip():
-        return None
-
+    familias = familias_del_tenant(cliente_id)
     try:
         from openai import OpenAI as OpenAISdkClient
 
@@ -282,36 +248,129 @@ def resolver_servicio(
         respuesta = cliente.chat.completions.create(
             model=settings.DEFAULT_CHAT_MODEL,
             messages=[
-                {"role": "system", "content": _PROMPT_SERVICIO.format(
-                    catalogo=catalogo, dicho=texto[:600],
+                {"role": "system", "content": _PROMPT_EXTRAER.format(
+                    familias=", ".join(familias) or "(sin catalogo)",
                 )},
                 {"role": "user", "content": texto[:600]},
             ],
             temperature=0,
-            max_tokens=220,
+            max_tokens=120,
             response_format={"type": "json_object"},
         )
         datos = json.loads((respuesta.choices[0].message.content or "").strip())
-    except Exception as exc:  # noqa: BLE001 - nunca puede dejar a nadie sin respuesta
-        settings.logger.warning("[servicio] no se pudo resolver (%s): %s", cliente_id, exc)
+    except Exception as exc:  # noqa: BLE001 - entender nunca puede tumbar el chat
+        settings.logger.warning("[servicio] no se pudo extraer (%s): %s", cliente_id, exc)
         return None
 
-    nombres = {
-        linea.lstrip("- ").split(" · ")[0].strip()
-        for linea in catalogo.splitlines() if linea.startswith("- ")
-    }
-    elegido = str(datos.get("servicio") or "").strip()
-    if elegido and elegido not in nombres:
-        # El modelo se ha inventado un nombre: se trata como "no resuelto" en vez de
-        # intentar reservar algo que no existe.
-        settings.logger.info("[servicio] nombre fuera de catalogo (%s): %r", cliente_id, elegido)
-        elegido = ""
-    opciones = [o for o in (datos.get("opciones") or []) if isinstance(o, str) and o in nombres]
+    from backend import catalog_pick
+
+    # La talla se comprueba tambien sobre el texto: si el modelo no la ve pero ella
+    # dijo "por los hombros", el catalogo sabe que eso es "medio".
+    talla = _norm(datos.get("talla")) or catalog_pick.talla_de(texto)
     return {
-        "servicio": elegido,
-        "pregunta": str(datos.get("pregunta") or "").strip()[:300],
-        "opciones": opciones[:4],
+        "familia": _norm(datos.get("familia"))[:40],
+        "tecnica": _norm(datos.get("tecnica"))[:60],
+        "talla": talla[:20],
+        "para_quien": _norm(datos.get("para_quien"))[:20],
+        "edad": datos.get("edad"),
+        "texto": texto[:400],
     }
+
+
+# Frases con las que el modelo da por hecha una cita que aun no existe ("te he
+# reservado", "te he apuntado"). Pedirselo en el prompt no basta: se le escapa cada
+# pocas respuestas, y decirle a una clienta que tiene cita cuando no la tiene es de
+# las peores cosas que puede hacer un asistente. Se comprueba en codigo.
+_PROMESA_DE_CITA = (
+    "te he reservado", "te he apuntado", "te la he cogido", "te he cogido cita",
+    "queda agendada", "queda reservada", "ya esta reservada", "ya tienes cita",
+    "te he agendado", "cita confirmada", "te la reservo ya",
+)
+
+
+def _sin_prometer_cita(texto: str) -> str:
+    """Descarta una presentacion que afirme que la cita ya esta hecha."""
+    limpio = _norm(texto)
+    return "" if any(frase in limpio for frase in _PROMESA_DE_CITA) else texto
+
+
+def resolver_servicio(
+    cliente_id: str, dicho: str, *, config: Optional[Dict[str, Any]] = None
+) -> Optional[Dict[str, Any]]:
+    """Que servicio quiere, o que hay que preguntarle. Mismo contrato de antes.
+
+    Por dentro ya no decide el modelo: extrae lo que ha dicho
+    (`extraer_datos_servicio`) y decide el codigo con el catalogo real
+    (`catalog_pick.elegir`). Asi no puede preguntar dos veces lo mismo ni elegir
+    una tecnica que la clienta no ha escogido.
+
+    Devuelve {"servicio", "pregunta", "opciones", "confirmacion"} o None si no se
+    puede resolver: quien llama debe tener siempre un plan B.
+    """
+    datos = extraer_datos_servicio(cliente_id, dicho, config=config)
+    if datos is None:
+        return None
+
+    from backend import catalog_pick
+
+    eleccion = catalog_pick.elegir(cliente_id, datos)
+    if eleccion.servicio:
+        return {
+            "servicio": eleccion.servicio,
+            "pregunta": "",
+            "opciones": [],
+            "confirmacion": _presentar_servicio(cliente_id, eleccion.servicio, datos),
+        }
+    if eleccion.falta in ("tecnica", "talla"):
+        return {
+            "servicio": "",
+            "pregunta": catalog_pick.pregunta_para(eleccion),
+            "opciones": eleccion.candidatos[:4],
+            "confirmacion": "",
+        }
+    return {"servicio": "", "pregunta": "", "opciones": [], "confirmacion": ""}
+
+
+_PROMPT_PRESENTAR = """Eres quien atiende en un salon. La clienta ha pedido esto:
+
+"{dicho}"
+
+Y le vas a hacer este servicio del catalogo: {servicio}
+
+Escribe UNA o DOS frases, calidas y naturales, contandole que es y por que le
+encaja por lo que te ha contado. Como se lo diria una companera del salon.
+
+PROHIBIDO:
+- Decir que la cita ya esta hecha ("te he reservado", "queda agendada"): todavia
+  falta elegir dia y hora.
+- Hablar de precios.
+- Prometer resultados imposibles.
+- Escribir el nombre tecnico a secas sin explicar nada.
+
+Responde solo con esas frases, sin comillas."""
+
+
+def _presentar_servicio(cliente_id: str, servicio: str, datos: Dict[str, str]) -> str:
+    """Como contarselo. Si falla, se devuelve "" y el canal usa su texto de siempre."""
+    if not settings.OPENAI_API_KEY:
+        return ""
+    try:
+        from openai import OpenAI as OpenAISdkClient
+
+        cliente = OpenAISdkClient(api_key=settings.OPENAI_API_KEY, timeout=12.0)
+        respuesta = cliente.chat.completions.create(
+            model=settings.DEFAULT_CHAT_MODEL,
+            messages=[{"role": "system", "content": _PROMPT_PRESENTAR.format(
+                dicho=str(datos.get("texto") or "")[:300], servicio=servicio,
+            )}],
+            temperature=0.4,
+            max_tokens=140,
+        )
+        texto = (respuesta.choices[0].message.content or "").strip()
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("[servicio] no se pudo presentar (%s): %s", cliente_id, exc)
+        return ""
+    return _sin_prometer_cita(texto[:400])
 
 
 # ─── Comprension con el modelo ─────────────────────────────────────────────
