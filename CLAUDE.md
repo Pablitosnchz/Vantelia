@@ -361,6 +361,32 @@ configurable (`booking.rescate_texto` con `{telefono}`), apagable
 Los tres se eligen en el portal (Tune AI). Tests: `tests/test_reserva_hablando.py`,
 `tests/test_rescate_por_telefono.py`.
 
+## Coger cita conversando: modelo al mando, tools de guardarrail
+
+`booking.estilo = conversacional` -> la cita la lleva `backend/booking_agent.py`
+en vez de la maquina de listas. MISMA arquitectura que la voz: el modelo decide
+QUE decir y las TOOLS ponen la fiabilidad.
+
+- Tres tools: `buscar_servicio` (catalogo real), `consultar_disponibilidad`
+  (huecos reales) y `crear_cita`. Esta ultima REUSA `voice._voice_dispatch_tool`:
+  una sola forma de crear una cita en todo el producto.
+- `backend/catalog_pick.py` elige el servicio con el catalogo real (familia,
+  tecnica, talla, para quien, edad) y dice que falta por preguntar. DETERMINISTA
+  -mismos datos, misma decision- y por eso testeable sin modelo.
+- Si el agente no puede, devuelve texto vacio y WhatsApp cae a sus listas.
+
+REGLA: lo que el modelo puede hacer mal, lo impide la TOOL, no el prompt. Los tres
+fallos reales, todos arreglados en codigo:
+1. Creaba la cita con nombre inventado ("clienta") -> la tool exige nombre de
+   verdad (`_NOMBRES_QUE_NO_LO_SON`).
+2. Creaba DOS citas entre turnos -> dedup mirando la agenda (`_cita_identica`).
+3. Calculaba mal las fechas ("el jueves que viene, 29" siendo el 27) -> ya no
+   calcula: recibe los proximos 14 dias con fecha y si el negocio abre.
+
+Condiciones del tenant piloto y su test: `tests/test_condiciones_del_salon.py`
+(tono, precios por familia, foto solo para presupuesto de alisado, extensiones a
+diagnostico, ratos de espera libres, telefono solo si la cita se puede perder).
+
 ## Respuestas automaticas por palabra clave (opt-in por tenant)
 
 Capa DETERMINISTA previa a la IA para negocios que quieren reglas literales en vez de conversacion ("si el mensaje contiene 'spa' o 'masaje', responde exactamente este telefono"). Origen: hotel Cap Rocat (ago 2026), pero es generica y configurable por tenant.

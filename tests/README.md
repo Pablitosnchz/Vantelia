@@ -51,6 +51,14 @@ antes de "arreglarlo": suele estar diciendo algo cierto.
   del asistente: lo que el negocio escribe a mano (palabras clave, Q&A literales)
   va antes que la comprensión por modelo, y con una gestión de cita a medias no
   se clasifica nada. Si este falla, alguien movió una capa de sitio.
+- `test_condiciones_del_salon.py` — las condiciones que el cliente piloto fue
+  pidiendo por WhatsApp, una por una. Son el contrato con SU clienta: si una
+  deja de cumplirse hay que enterarse aquí, no en su salón.
+- `test_elegir_servicio.py` — elegir el servicio es del CÓDIGO, no del modelo:
+  con los mismos datos, la misma decisión siempre. Si este falla, alguien le ha
+  devuelto la decisión al modelo y volverá la variación entre ejecuciones.
+- `test_agente_de_citas.py` — el modelo lleva la conversación, pero las tools no
+  le dejan inventarse un servicio, un hueco ni una cita.
 - `test_whatsapp_mismo_cerebro.py` — WhatsApp tiene recorrido PROPIO y solo
   delegaba en el cerebro al final: que algo funcione en el widget no demuestra
   nada allí. Compara los dos canales con el webhook de verdad. Si este falla,

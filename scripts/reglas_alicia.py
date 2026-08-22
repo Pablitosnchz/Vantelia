@@ -149,6 +149,20 @@ def main() -> int:
         clients._persist_configs_to_disk(siguiente)
         print("comprension ACTIVADA y tono aplicado en %s (reinicia el proceso)" % args.cliente)
 
+    # Al renombrar una regla, la vieja se quedaba viva y quedaban DOS compitiendo
+    # por la misma intencion (paso con "precio tras valoracion" -> "tras
+    # diagnostico"). Se retiran las que este script ya no define.
+    if not args.dry_run:
+        nombres = {d["nombre"] for d in REGLAS}
+        for regla in rules.listar(args.cliente):
+            if regla["nombre"] in nombres:
+                continue
+            if regla["nombre"].startswith(("Presupuesto de alisado", "Extensiones",
+                                           "Color y mechas")):
+                print("[retira] %s (renombrada)" % regla["nombre"])
+                rules.borrar(args.cliente, regla["id"])
+
+
     if not args.dry_run:
         print("\nreglas del salon:")
         for regla in rules.listar(args.cliente):
