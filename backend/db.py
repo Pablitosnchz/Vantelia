@@ -387,6 +387,17 @@ def _init_database() -> None:
             "CREATE INDEX IF NOT EXISTS idx_business_rules_cliente"
             " ON business_rules(cliente_id, activa, prioridad)"
         )
+        # De que situacion tipica (backend/playbooks.py) salio la regla. Sin esto
+        # la unica forma de reconocerla era el nombre, y un negocio que la renombre
+        # la veia "sin activar" en el portal: al reactivarla se creaba una SEGUNDA
+        # regla compitiendo con la suya.
+        rule_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(business_rules)").fetchall()
+        }
+        if "playbook_id" not in rule_columns:
+            connection.execute(
+                "ALTER TABLE business_rules ADD COLUMN playbook_id TEXT NOT NULL DEFAULT ''"
+            )
         # Politica de cancelacion/no-show por tenant (generica, opt-in).
         connection.execute(
             """

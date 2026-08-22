@@ -176,21 +176,27 @@ def aplicar(
 ) -> Dict[str, Any]:
     """Convierte una plantilla en una regla de ESTE negocio.
 
-    Idempotente por nombre: aplicarla dos veces actualiza, no duplica (renombrar una
-    regla y dejar viva la vieja ya costo un incidente).
+    Idempotente por SITUACION, no por nombre: el negocio puede renombrarla ("Precio
+    de mechas: diagnostico primero") y sigue siendo la misma. Buscarla por el titulo
+    hacia que una renombrada apareciese "sin activar" en el portal y al reactivarla
+    naciera una segunda regla compitiendo con la suya.
     """
     plantilla = _POR_ID.get(playbook_id)
     if not plantilla:
         raise ValueError("no existe la situacion %r" % playbook_id)
 
-    titulo = nombre.strip() or plantilla["titulo"]
     cuerpo = _rellenar(texto.strip() or plantilla["texto"], cliente_id)
     if not cuerpo and plantilla["accion"] != "continuar":
         raise ValueError("esta situacion necesita un texto de respuesta")
 
-    existente = next(
-        (r for r in rules.listar(cliente_id) if r["nombre"] == titulo), None
-    )
+    reglas = rules.listar(cliente_id)
+    existente = next((r for r in reglas if r.get("playbook_id") == playbook_id), None)
+    if existente is None:  # reglas creadas antes de que se guardase la procedencia
+        existente = next((r for r in reglas if r["nombre"] == plantilla["titulo"]), None)
+    if existente is None and nombre.strip():
+        existente = next((r for r in reglas if r["nombre"] == nombre.strip()), None)
+    # Guardar sin tocar el nombre respeta el que le haya puesto el negocio.
+    titulo = nombre.strip() or (existente["nombre"] if existente else "") or plantilla["titulo"]
     return rules.guardar(
         cliente_id,
         regla_id=existente["id"] if existente else "",
@@ -201,16 +207,19 @@ def aplicar(
         texto=cuerpo,
         prioridad=plantilla["prioridad"] if prioridad is None else int(prioridad),
         activa=activa,
+        playbook_id=playbook_id,
     )
 
 
 def estado(cliente_id: str) -> List[Dict[str, Any]]:
     """Que situaciones tiene montadas este negocio, y con que texto."""
-    activas = rules.listar(cliente_id)
-    por_titulo = {r["nombre"]: r for r in activas}
+    reglas = rules.listar(cliente_id)
+    por_situacion = {r["playbook_id"]: r for r in reglas if r.get("playbook_id")}
+    por_titulo = {r["nombre"]: r for r in reglas}
     salida = []
     for plantilla in CATALOGO:
-        regla = por_titulo.get(plantilla["titulo"])
+        # Por procedencia; por titulo solo para las de antes de guardarla.
+        regla = por_situacion.get(plantilla["id"]) or por_titulo.get(plantilla["titulo"])
         salida.append({
             "id": plantilla["id"],
             "titulo": plantilla["titulo"],
@@ -218,6 +227,7 @@ def estado(cliente_id: str) -> List[Dict[str, Any]]:
             "ejemplo": plantilla["ejemplo"],
             "pide_familias": plantilla["pide_familias"],
             "activa": bool(regla and regla["activa"]),
+            "nombre": regla["nombre"] if regla else plantilla["titulo"],
             "familias": regla["familias"] if regla else [],
             "texto": regla["texto"] if regla else _rellenar(plantilla["texto"], cliente_id),
             "veces": regla["veces"] if regla else 0,

@@ -201,7 +201,10 @@ try {
 }
 
 Write-Step "Subiendo paquete al VPS"
-Invoke-Checked -FilePath "scp.exe" -Arguments ($scpArgsBase + @($ArchivePath, "${ServerHost}:${RemoteBase}/"))
+# El destino lleva el nombre EXPLICITO: con destino de directorio, scp saca el
+# basename buscando "/" y una ruta de Windows no tiene ninguno, asi que subia un
+# fichero llamado con la ruta entera y el VPS no lo encontraba.
+Invoke-Checked -FilePath "scp.exe" -Arguments ($scpArgsBase + @($ArchivePath, "${ServerHost}:${RemoteBase}/${ArchiveName}"))
 
 $remoteScript = @'
 set -euo pipefail

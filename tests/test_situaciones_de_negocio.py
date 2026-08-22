@@ -273,3 +273,29 @@ def test_el_negocio_no_puede_tocar_a_otro(client, limpio, api_module):  # noqa: 
 
     ajeno = client.get("/auth/app/playbooks?cliente_id=otro_negocio", cookies=cookies)
     assert ajeno.status_code == 403
+
+
+def test_renombrar_una_situacion_no_la_desactiva(client, limpio, api_module):  # noqa: F811
+    """El negocio le pone SU nombre y sigue siendo la misma situacion.
+
+    Buscarla por el titulo del catalogo hacia que una renombrada saliese "sin
+    activar" en el portal, y al reactivarla nacia una segunda regla compitiendo
+    con la suya: dos respuestas distintas para la misma pregunta.
+    """
+    from backend import playbooks, rules
+
+    playbooks.aplicar("demo", "sin_precio_sin_verlo",
+                      familias=["mechas"], texto="Lo vemos en persona.",
+                      nombre="Precio de mechas: diagnóstico primero")
+
+    situacion = next(s for s in playbooks.estado("demo") if s["id"] == "sin_precio_sin_verlo")
+    assert situacion["activa"], "renombrada, el portal la da por sin activar"
+    assert situacion["familias"] == ["mechas"]
+    assert situacion["nombre"] == "Precio de mechas: diagnóstico primero"
+
+    # Y volver a aplicarla actualiza la suya, no crea otra.
+    playbooks.aplicar("demo", "sin_precio_sin_verlo",
+                      familias=["mechas", "color"], texto="Lo vemos en persona.")
+    suyas = [r for r in rules.listar("demo") if r["playbook_id"] == "sin_precio_sin_verlo"]
+    assert len(suyas) == 1, "dos reglas para la misma situacion: %s" % [r["nombre"] for r in suyas]
+    assert suyas[0]["nombre"] == "Precio de mechas: diagnóstico primero"

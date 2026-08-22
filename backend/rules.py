@@ -71,6 +71,8 @@ def _fila_a_dict(row: sqlite3.Row) -> Dict[str, Any]:
         "prioridad": int(row["prioridad"] or 100),
         "activa": bool(row["activa"]),
         "veces": int(row["veces"] or 0),
+        # De que situacion tipica salio, si salio de una (backend/playbooks.py).
+        "playbook_id": (row["playbook_id"] if "playbook_id" in row.keys() else "") or "",
     }
 
 
@@ -86,7 +88,7 @@ def listar(cliente_id: str, *, solo_activas: bool = False) -> List[Dict[str, Any
 def guardar(
     cliente_id: str, *, nombre: str, intenciones: List[str], accion: str, texto: str = "",
     familias: Optional[List[str]] = None, prioridad: int = 100, activa: bool = True,
-    regla_id: str = "",
+    regla_id: str = "", playbook_id: str = "",
 ) -> Dict[str, Any]:
     """Crea o actualiza una regla. Devuelve la regla guardada."""
     import secrets
@@ -99,12 +101,13 @@ def guardar(
         json.dumps([_norm(i) for i in intenciones], ensure_ascii=False),
         json.dumps([_norm(f) for f in (familias or [])], ensure_ascii=False),
         accion, texto[:2000], int(prioridad), 1 if activa else 0, ahora,
+        str(playbook_id or "")[:60],
     )
     with db._get_db_connection() as conexion:
         if regla_id:
             conexion.execute(
                 "UPDATE business_rules SET nombre=?, intenciones_json=?, familias_json=?,"
-                " accion=?, texto=?, prioridad=?, activa=?, updated_at=?"
+                " accion=?, texto=?, prioridad=?, activa=?, updated_at=?, playbook_id=?"
                 " WHERE id=? AND cliente_id=?",
                 datos + (regla_id, cliente_id),
             )
@@ -112,8 +115,8 @@ def guardar(
             regla_id = "rule_%s" % secrets.token_urlsafe(8)
             conexion.execute(
                 "INSERT INTO business_rules (id, cliente_id, nombre, intenciones_json,"
-                " familias_json, accion, texto, prioridad, activa, updated_at, created_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                " familias_json, accion, texto, prioridad, activa, updated_at, playbook_id,"
+                " created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (regla_id, cliente_id) + datos + (ahora,),
             )
         conexion.commit()
