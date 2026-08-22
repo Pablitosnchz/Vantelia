@@ -313,6 +313,8 @@ def _build_system_prompt(cliente_id: str, config: Dict[str, Any]) -> str:
                    "- Esta lista esta RECORTADA y no estan todos los servicios: si piden uno que no "
                    "aparece, NO digas que no existe ni te inventes su precio; di que lo confirmas y "
                    "ofrece cita o contacto.\n")
+                + "- Antes de decir que NO haceis algo, BUSCALO en esta lista: decir que no se "
+                "hacen las cejas teniendo 'Depilacion cejas' en el catalogo es perder una clienta.\n"
                 + "- Si un servicio aparece 'a consultar', no inventes una cifra: dilo y ofrece contacto o cita.\n"
             )
 

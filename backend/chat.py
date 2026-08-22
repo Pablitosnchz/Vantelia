@@ -642,6 +642,51 @@ def decision_del_negocio(
     return {"texto": "", "intent": "", "accion": "", "intencion": intencion["intencion"]}
 
 
+# "¿haceis...?", "¿teneis...?": preguntas de si el negocio ofrece algo. Van sin
+# tildes porque se comparan sobre texto ya normalizado.
+_PREGUNTA_SI_HACEN_RE = re.compile(
+    r"\b(haceis|haces|hacen|teneis|tienes|tienen|ofreceis|ofrecen|"
+    r"trabajais|trabajan|se\s+puede|hay)\b"
+)
+
+
+def _contexto_del_catalogo(cliente_id: str, message: str) -> str:
+    """Si preguntan si hacen algo, se busca en el catalogo y se le da el dato.
+
+    Caso real: "¿me haceis las cejas?" -> "no realizamos servicios de cejas",
+    teniendo "Depilacion cejas" en el catalogo Y en el prompt. Pedirle que lo mire
+    no sirve: se lo salta. Con el resultado de la busqueda delante, ya no puede
+    negar algo que si existe (y sigue redactando el como).
+    """
+    texto = textnorm._strip_accents(str(message or "").lower())
+    if not _PREGUNTA_SI_HACEN_RE.search(texto):
+        return ""
+    try:
+        from backend import catalog_pick
+
+        # Solo letras y numeros: partir por espacios dejaba "cejas?" con el signo
+        # pegado, y no casaba con "Depilacion cejas". Ese detalle le hizo decirle a
+        # una clienta que no hacian algo que si hacen.
+        palabras = set(re.findall(r"[a-z0-9]{4,}", texto))
+        encontrados = []
+        for servicio in agenda._catalog_services(cliente_id):
+            if not isinstance(servicio, dict):
+                continue
+            nombre = str(servicio.get("nombre") or servicio.get("name") or "")
+            campos = catalog_pick._norm(nombre + " " + str(servicio.get("category") or ""))
+            if palabras & set(campos.split()):
+                encontrados.append(nombre)
+            if len(encontrados) >= 6:
+                break
+    except Exception:  # noqa: BLE001 - mirar el catalogo no puede romper el chat
+        return ""
+    if encontrados:
+        return ("BUSQUEDA EN EL CATALOGO: el negocio SI ofrece esto -> %s. No digas "
+                "que no lo haceis." % ", ".join(encontrados))
+    return ("BUSQUEDA EN EL CATALOGO: no hay ningun servicio que encaje con lo que "
+            "pregunta. Dilo con amabilidad y ofrece lo que si haceis.")
+
+
 async def _process_chat_message(
     *,
     cliente_id: str,
@@ -993,6 +1038,10 @@ async def _process_chat_message(
     # "¿a cual te refieres?" habiendo dicho el nombre el mensaje anterior.
     if contexto_flujo:
         context_blocks.insert(0, contexto_flujo)
+
+    catalogo_contexto = _contexto_del_catalogo(cliente_id, message)
+    if catalogo_contexto:
+        context_blocks.insert(0, catalogo_contexto)
 
     if context_blocks:
         joined = "\n\n".join(f"[CONTEXTO DEL SISTEMA - {block}]" for block in context_blocks)

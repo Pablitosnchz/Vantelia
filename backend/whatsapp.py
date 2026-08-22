@@ -1466,6 +1466,18 @@ async def _wa_ofrecer_huecos_hablando(
     return True
 
 
+def _wa_tiene_cita(cliente_id: str, telefono: str) -> bool:
+    """¿Este telefono tiene alguna cita viva? Verificado por el canal.
+
+    Sin esto, entender "no espera, mejor un corte" como reprogramar le pedia a una
+    clienta el numero de reserva de una cita que no existe.
+    """
+    try:
+        return bool(booking._latest_booking_for_contact(cliente_id, phone=telefono))
+    except Exception:  # noqa: BLE001 - comprobarlo no puede romper la conversacion
+        return False
+
+
 async def _wa_turno_del_agente(
     *, cliente_id: str, phone_number_id: str, from_number: str,
     incoming_text: str, flow: appstate.WAFlowState, config: Dict[str, Any], request,
@@ -1823,8 +1835,15 @@ async def _handle_whatsapp_message(
             )
             return
         # Cancelar y reprogramar los gestionan los disparadores de abajo, que ya
-        # saben pedir el numero de reserva y verificar el telefono.
+        # saben pedir el numero de reserva y verificar el telefono. PERO solo si de
+        # verdad tiene una cita: "no espera, mejor un corte" se entiende como
+        # reprogramar (esta cambiando de idea, no de cita) y le pedia su numero de
+        # reserva sin tener ninguna.
         intencion_entendida = decision["intencion"] if decision else ""
+        if intencion_entendida in ("cancelar", "reprogramar") and not _wa_tiene_cita(
+            cliente_id, from_number
+        ):
+            intencion_entendida = ""
 
     # Trigger desde menu o texto
     # Mismo detector que el chat web (`chat.MENU_OPTION_PATTERNS`): reconoce

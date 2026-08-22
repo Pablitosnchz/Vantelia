@@ -381,8 +381,11 @@ def _instrucciones(cliente_id: str, config: Dict[str, Any], hoy) -> str:
     ]
     if telefono:
         partes.append(
-            "- Si no encuentras hueco que le encaje o la cosa se complica, ofrecele "
-            "llamar al %s: en el salon pueden mirar la agenda a mano." % telefono
+            "- Si no encuentras hueco que le encaje, si te dice que NINGUNA opcion le "
+            "va bien, o si la conversacion se complica, ofrecele llamar al %s: en el "
+            "salon pueden mirar la agenda a mano y cuadrar lo que el sistema no puede. "
+            "No lo ofrezcas a la primera de cambio, solo cuando la cita se pueda "
+            "perder." % telefono
         )
     if catalogo:
         partes += ["", "SU CATALOGO%s:" % ("" if completo else " (recortado)"), catalogo]
@@ -413,6 +416,37 @@ def _historial(session_id: str, cliente_id: str) -> List[Dict[str, str]]:
 
 
 # ─── El turno ──────────────────────────────────────────────────────────────
+
+# Palabras que significan que la respuesta depende de DATOS (que servicios hay,
+# que huecos quedan): si aparecen, contestar de memoria es inventar.
+_PIDE_DATOS = (
+    "cita", "hueco", "reserv", "agenda", "dia", "hora", "lunes", "martes",
+    "miercoles", "jueves", "viernes", "sabado", "domingo", "mañana", "manana",
+    "semana", "corte", "mechas", "alisado", "color", "peinado", "recogido",
+    "tratamiento", "maquillaje", "extension", "permanente", "depilacion",
+    "cuanto dura", "cuanto tarda", "disponib",
+)
+
+
+def _necesita_consultar(mensaje: str) -> bool:
+    """¿La respuesta a esto depende de datos que hay que mirar?"""
+    limpio = catalog_pick._norm(mensaje)
+    return any(palabra in limpio for palabra in _PIDE_DATOS)
+
+
+# Lo que solo se puede decir habiendo mirado la agenda.
+_HABLA_DE_AGENDA = (
+    "cerrado", "cerramos", "no abrimos", "no tengo hueco", "no hay hueco",
+    "no tengo disponib", "no hay disponib", "tengo libre", "puedo ofrecerte",
+    "estas horas", "estos horarios",
+)
+
+
+def _afirma_sobre_la_agenda(texto: str) -> bool:
+    """¿Esta respuesta afirma algo de la agenda (que cierran, que no hay hueco)?"""
+    limpio = catalog_pick._norm(texto)
+    return any(frase in limpio for frase in _HABLA_DE_AGENDA)
+
 
 async def responder(
     cliente_id: str,
@@ -450,22 +484,43 @@ async def responder(
     mensajes.append({"role": "user", "content": str(mensaje)[:1200]})
 
     cita_creada = False
+    consultada = False  # ¿se ha mirado la agenda en este turno?
     ya_creadas: set = set()
     try:
         from openai import OpenAI as OpenAISdkClient
 
         cliente = OpenAISdkClient(api_key=settings.OPENAI_API_KEY, timeout=25.0)
-        for _vuelta in range(MAX_VUELTAS):
+        obligar = False
+        for vuelta in range(MAX_VUELTAS):
             respuesta = cliente.chat.completions.create(
                 model=settings.DEFAULT_CHAT_MODEL,
                 messages=mensajes,
                 tools=_herramientas(),
+                tool_choice="required" if obligar else "auto",
                 temperature=0.3,
                 max_tokens=400,
             )
             elegido = respuesta.choices[0].message
             if not getattr(elegido, "tool_calls", None):
-                return (elegido.content or "").strip(), cita_creada
+                texto_final = (elegido.content or "").strip()
+                # Contestar de memoria a algo que depende de datos es inventar: a
+                # esto se le debe que dijera que el jueves estaba cerrado.
+                if vuelta == 0 and not obligar and _necesita_consultar(mensaje):
+                    obligar = True
+                    continue
+                # Y si afirma algo de la agenda sin haberla mirado en este turno,
+                # que la mire: "el jueves estamos cerrados" era falso.
+                if _afirma_sobre_la_agenda(texto_final) and not consultada and vuelta + 1 < MAX_VUELTAS:
+                    obligar = True
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("Antes de decir nada sobre dias u horas, consulta "
+                                    "`consultar_disponibilidad`. No afirmes que un dia "
+                                    "esta cerrado ni que no hay hueco sin haberlo mirado."),
+                    })
+                    continue
+                return texto_final, cita_creada
+            obligar = False
 
             mensajes.append({
                 "role": "assistant",
@@ -487,6 +542,8 @@ async def responder(
                     cliente_id, llamada.function.name, argumentos,
                     telefono=telefono, location_id=location_id, ya_creadas=ya_creadas,
                 )
+                if llamada.function.name == "consultar_disponibilidad":
+                    consultada = True
                 if llamada.function.name == "crear_cita" and resultado.get("ok"):
                     cita_creada = True
                 mensajes.append({
