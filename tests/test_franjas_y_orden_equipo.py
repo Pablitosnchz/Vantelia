@@ -47,7 +47,9 @@ def test_se_ofrece_llamar_cuando_el_negocio_tiene_telefono(monkeypatch):
     )
     linea = rag._call_us_line("demo")
     assert "966 670 924" in linea
-    assert "llamanos" in linea.lower()
+    # La redaccion la puede cambiar el negocio (`booking.rescate_texto`); lo que
+    # no puede faltar es la invitacion a llamar.
+    assert "llam" in linea.lower()
 
 
 def test_sin_telefono_no_se_inventa_nada(monkeypatch):

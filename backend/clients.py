@@ -705,3 +705,28 @@ def _require_plan_feature(cliente_id: str, feature: str, error_message: str) -> 
         raise HTTPException(status_code=403, detail=error_message)
 
 
+def call_us_line(cliente_id: str) -> str:
+    """Salida humana cuando la agenda no da: que llamen y el negocio lo cuadra.
+
+    Un salon puede hacer hueco moviendo cosas que el sistema no sabe (juntar dos
+    clientas, alargar un rato, repartirse el trabajo). Sin esta linea, quien no
+    encuentra hueco simplemente se va. Si el negocio no tiene telefono publicado,
+    no se inventa nada.
+    """
+    try:
+        config = _get_client_config(cliente_id)
+    except Exception:  # noqa: BLE001 - el mensaje nunca debe romperse por esto
+        return ""
+    booking_cfg = config.get("booking") or {}
+    if booking_cfg.get("rescate_enabled") is False:  # el negocio lo ha apagado
+        return ""
+    telefono = str((config.get("contacto") or {}).get("telefono") or "").strip()
+    if not telefono:
+        return ""
+    plantilla = str(booking_cfg.get("rescate_texto") or "").strip()
+    if plantilla:
+        return "\n\n" + plantilla.replace("{telefono}", telefono)
+    return (
+        f"\n\nSi ninguna opcion te encaja, puedes llamarnos al {telefono}. A veces podemos "
+        f"revisar la agenda personalmente y encontrar una alternativa."
+    )

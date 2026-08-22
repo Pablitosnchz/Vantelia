@@ -51,6 +51,9 @@ class WAFlowState:
     verify_phone: str = ""
     verify_email: str = ""
     greeted: bool = False
+    # Intentos seguidos que no encajan en el paso actual. Al segundo se le ofrece
+    # llamar al negocio en vez de repetirle el mismo aviso.
+    intentos_fallidos: int = 0
     last_seen: float = 0.0
 
 

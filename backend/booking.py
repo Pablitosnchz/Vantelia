@@ -1572,6 +1572,9 @@ async def _reschedule_failure_text(
     error_text = str(result.get("error") or "No se pudo reprogramar la cita.")
     if result.get("needs_verification"):
         return error_text
+    # Una reprogramacion fallida es una cita a punto de perderse: aunque se ofrezcan
+    # alternativas, el negocio puede cuadrar a mano lo que el sistema no puede.
+    rescate = clients.call_us_line(cliente_id)
     employee_id = str(result.get("employee_id") or "")
     try:
         if employee_id:
@@ -1589,7 +1592,7 @@ async def _reschedule_failure_text(
     alternatives = [s for s in free_slots if s != new_time][:3]
     if alternatives:
         error_text += f" Ese día tengo libres: {', '.join(alternatives)}. ¿Te encaja alguna?"
-    return error_text
+    return error_text + rescate
 
 
 async def _process_payment_request_message(

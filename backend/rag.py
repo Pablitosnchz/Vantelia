@@ -1565,20 +1565,8 @@ def _seed_qa_from_onboarding(cliente_id: str, result: Any, user_id: Any = "") ->
 
 
 def _call_us_line(cliente_id: str) -> str:
-    """Salida humana cuando la agenda no da: que llamen y el negocio lo cuadra.
-
-    Un salon puede hacer hueco moviendo cosas que el sistema no sabe (juntar dos
-    clientas, alargar un rato, repartirse el trabajo). Sin esta linea, quien no
-    encuentra hueco simplemente se va. Si el negocio no tiene telefono publicado,
-    no se inventa nada.
-    """
-    try:
-        telefono = str((clients._get_client_config(cliente_id).get("contacto") or {}).get("telefono") or "").strip()
-    except Exception:  # noqa: BLE001 - el mensaje nunca debe romperse por esto
-        telefono = ""
-    if not telefono:
-        return ""
-    return f"\n\nSi no te encaja ningun dia, llamanos al {telefono} y te buscamos un hueco."
+    """Alias: la funcion vive en `clients` para que booking tambien pueda usarla."""
+    return clients.call_us_line(cliente_id)
 
 
 def _day_unavailable_explanation(cliente_id: str, fecha: str, fecha_humana: str) -> str:

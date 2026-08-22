@@ -95,6 +95,10 @@ def main() -> int:
             activa=True,
         )
 
+    # El tono que pidio el salon, como configuracion y no dentro del prompt.
+    TONO = {"estilo": "cercano", "emojis": "muchos", "tratamiento": "tu",
+            "notas": "Llama a las clientas 'guapa' o 'cariño' con naturalidad, como en el salon."}
+
     if args.activar and not args.dry_run:
         import copy
 
@@ -109,10 +113,11 @@ def main() -> int:
             seccion = dict(cfg.get("ai_intents", {}) or {})
             seccion["enabled"] = True
             cfg["ai_intents"] = seccion
+            cfg["tono"] = dict(TONO)
             siguiente[args.cliente] = cfg
             clients._update_runtime_configs(siguiente)
         clients._persist_configs_to_disk(siguiente)
-        print("comprension ACTIVADA en %s (reinicia el proceso para que la lea)" % args.cliente)
+        print("comprension ACTIVADA y tono aplicado en %s (reinicia el proceso)" % args.cliente)
 
     if not args.dry_run:
         print("\nreglas del salon:")

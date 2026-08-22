@@ -529,6 +529,14 @@ async def _wa_atender_duda_sin_perder_el_paso(
     suelto, una palabra sin sentido), el aviso corto de siempre.
     """
     if not _wa_parece_una_duda(incoming_text):
+        # Al segundo intento seguido que no encaja, la cita esta en riesgo: el
+        # negocio puede cuadrarla a mano. No se ofrece antes (seria pesado) ni se
+        # repite en cada intento.
+        flujo = _wa_get_flow(cliente_id, from_number)
+        flujo.intentos_fallidos += 1
+        if flujo.intentos_fallidos >= 2:
+            aviso_error += rag._call_us_line(cliente_id)
+            flujo.intentos_fallidos = 0
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             text=aviso_error,
@@ -1070,7 +1078,8 @@ async def _wa_create_booking(
         ):
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
-                text="⚠️ Ese hueco ya no esta disponible. Escribe *agendar* para empezar de nuevo.",
+                text=("⚠️ Ese hueco ya no esta disponible. Escribe *agendar* para empezar de nuevo."
+                      + rag._call_us_line(cliente_id)),
             )
             return False
 
@@ -2185,6 +2194,7 @@ async def _handle_whatsapp_message(
         return
 
     if flow.flow == "booking_time":
+        flow.intentos_fallidos = 0 if (iid or settings.TIME_PATTERN.match(incoming_text.strip())) else flow.intentos_fallidos
         # Eligio franja (manana/tarde/noche): se le muestran los huecos de esa franja.
         if iid.startswith("franja_"):
             flow.horas_franja = iid[len("franja_"):]
