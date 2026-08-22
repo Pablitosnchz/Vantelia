@@ -114,6 +114,15 @@ def main() -> int:
             seccion["enabled"] = True
             cfg["ai_intents"] = seccion
             cfg["tono"] = dict(TONO)
+            # Sin listas: la IA guia la conversacion, como pidio el salon.
+            reserva = dict(cfg.get("booking") or {})
+            reserva["estilo"] = "conversacional"
+            reserva["rescate_texto"] = (
+                "Si ninguna de estas opciones te encaja, puedes llamarnos al {telefono} 😊. "
+                "En ocasiones podemos revisar personalmente la agenda e intentar encontrar "
+                "alguna alternativa. Estaremos encantadas de ayudarte."
+            )
+            cfg["booking"] = reserva
             siguiente[args.cliente] = cfg
             clients._update_runtime_configs(siguiente)
         clients._persist_configs_to_disk(siguiente)

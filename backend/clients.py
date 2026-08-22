@@ -39,6 +39,18 @@ def _load_client_configs() -> Dict[str, Dict[str, Any]]:
 # DEBEN sobrevivir a la carga y al guardado (antes la whitelist las descartaba en cada
 # arranque: identidad "empresa", Seguimiento "reminders", resenas "reviews" y la compra
 # publica de tarjetas "gift_cards_public" volvian a sus defaults en runtime).
+# Ajustes de la seccion `booking` que se conservan tal cual al guardar. La
+# serializacion enumera las claves una a una, asi que lo que no este aqui se
+# descarta en silencio en cada guardado (paso de verdad con `estilo`). Si anades
+# un ajuste de agenda, anadelo tambien aqui.
+CONFIG_BOOKING_EXTRA_KEYS = (
+    "estilo",            # "guiado" (listas) o "conversacional"
+    "rescate_enabled",   # ofrecer llamar antes de perder una cita
+    "rescate_texto",     # con {telefono}
+    "form_intro",        # texto al abrir la reserva
+)
+
+
 CONFIG_EXTRA_SECTIONS = (
     "empresa", "reminders", "reviews", "gift_cards_public", "shop_public", "negocio",
     "keyword_rules", "chat_menu", "ai_intents", "tono",
@@ -176,6 +188,11 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
             ),
         },
     }
+    # Al CARGAR pasa lo mismo que al guardar: lo que no se enumere aqui se pierde
+    # en cada arranque, aunque este escrito en el config.json.
+    for clave in CONFIG_BOOKING_EXTRA_KEYS:
+        if clave in booking_row:
+            normalized["booking"][clave] = booking_row[clave]
     return _copy_extra_sections(payload, normalized)
 
 
@@ -255,6 +272,9 @@ def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
             ),
         },
     }
+    for clave in CONFIG_BOOKING_EXTRA_KEYS:
+        if clave in booking_cfg:
+            serialized["booking"][clave] = booking_cfg[clave]
     return _copy_extra_sections(config, serialized)
 
 
