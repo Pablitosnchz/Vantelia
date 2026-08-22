@@ -36,6 +36,9 @@ class WAFlowState:
     # lista de WhatsApp (10 filas como maximo): primero categoria, luego servicio.
     categoria: str = ""
     servicios_pagina: int = 0
+    # Modo conversacional: todo lo que ha dicho sobre lo que quiere hacerse, para
+    # resolverlo cuando junte los datos ("mechas" + "por los hombros").
+    servicio_texto: str = ""
     employee_id: str = ""
     employee_name: str = ""
     fecha: str = ""

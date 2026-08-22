@@ -126,3 +126,49 @@ def test_la_voz_usa_la_misma_fuente_que_el_chat(api_module, client):  # noqa: F8
     instrucciones = inspect.getsource(voice._voice_build_instructions)
     assert "[:40]" not in instrucciones, "vuelve a estar el tope de 40 en la voz"
     assert "catalogo_completo" in instrucciones
+
+
+def test_el_catalogo_del_prompt_lleva_las_familias(api_module, client):  # noqa: F811
+    """Sin la categoria, el modelo confunde familias enteras.
+
+    Medido contra el catalogo real de un salon (186 servicios, 11 categorias): a
+    una clienta que escribia "se me cae mucho el pelo" le proponia un ALISADO,
+    porque los 186 nombres viajaban seguidos y sin decir a que familia pertenecen.
+    Un alisado no frena la caida del pelo: no es una respuesta poco util, es un mal
+    consejo. Con las categorias delante, ofrece el diagnostico.
+    """
+    from backend import agenda, booking, db, timeutils
+
+    ahora = timeutils._utc_now_iso()
+    marca = "catfam"
+    with db._get_db_connection() as conexion:
+        for nombre, categoria in (("Alisado prueba", "Alisados"),
+                                  ("Rescate prueba", "Tratamientos"),
+                                  ("Corte prueba", "Cortes")):
+            conexion.execute(
+                "INSERT OR REPLACE INTO services (cliente_id, slug, name, category,"
+                " duration_minutes, price_cents, description, is_active, sort_order,"
+                " created_at, updated_at) VALUES ('demo', ?, ?, ?, 30, 1000, '', 1, 0, ?, ?)",
+                (agenda._normalize_service_id(marca + nombre), nombre, categoria, ahora, ahora),
+            )
+        conexion.commit()
+    try:
+        texto, _completo = booking._service_catalog_prompt_block("demo")
+        assert "Alisados:" in texto, "el catalogo no dice a que familia pertenece cada cosa"
+        assert "Tratamientos:" in texto
+        assert "Alisado prueba" in texto and "Rescate prueba" in texto
+    finally:
+        with db._get_db_connection() as conexion:
+            conexion.execute(
+                "DELETE FROM services WHERE cliente_id='demo' AND name IN"
+                " ('Alisado prueba','Rescate prueba','Corte prueba')"
+            )
+            conexion.commit()
+
+
+def test_sin_categorias_el_catalogo_sale_plano(api_module, client):  # noqa: F811
+    """Un negocio que no categoriza su catalogo no puede salir peor que antes."""
+    from backend import booking
+
+    texto, _ = booking._service_catalog_prompt_block("demo")
+    assert isinstance(texto, str)

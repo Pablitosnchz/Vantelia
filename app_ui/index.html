@@ -2281,6 +2281,16 @@
             </select>
           </div>
         </div>
+        <div class="form-row">
+          <div class="field" style="flex:1 1 100%;">
+            <label class="field-label">Cómo coge las citas</label>
+            <select class="field-input" id="tnReserva">
+              <option value="guiado">Con listas para pulsar (más rápido, no falla)</option>
+              <option value="conversacional">Hablando: la IA pregunta y entiende (sin listas)</option>
+            </select>
+            <p class="panel-sub" style="margin-top:6px;">Hablando, el asistente pregunta qué quiere hacerse y va concretando ("mechas" → "¿cómo tienes el pelo de largo?"). No enseña precios por el camino. Si algo se le atraganta, vuelve a las listas para no dejar a nadie a medias.</p>
+          </div>
+        </div>
         <div class="field" style="margin-top:6px;">
           <label class="field-label">Algo más sobre cómo quieres que hable (opcional)</label>
           <textarea class="field-textarea" id="tnToneNotas" maxlength="600" style="min-height:70px;" placeholder="Ej: llama a las clientas por su nombre, y despídete siempre invitándolas a volver."></textarea>
@@ -5651,6 +5661,8 @@ function pintarTono(data) {
   document.getElementById('tnToneEmojis').value = data.emojis || '';
   document.getElementById('tnToneTrato').value = data.tratamiento || '';
   document.getElementById('tnToneNotas').value = data.notas || '';
+  const reserva = document.getElementById('tnReserva');
+  if (reserva) reserva.value = data.reserva || 'guiado';
   const previa = document.getElementById('tnTonePreview');
   if (previa) {
     previa.textContent = data.vista_previa || '';
@@ -5670,6 +5682,7 @@ document.getElementById('tnToneSave')?.addEventListener('click', async () => {
     emojis: document.getElementById('tnToneEmojis').value,
     tratamiento: document.getElementById('tnToneTrato').value,
     notas: document.getElementById('tnToneNotas').value.trim(),
+    reserva: document.getElementById('tnReserva')?.value || '',
   };
   try {
     pintarTono(await api('/auth/app/tone', {

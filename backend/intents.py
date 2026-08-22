@@ -200,6 +200,120 @@ def atajo_local(message: str) -> str:
     return ""
 
 
+# ─── Del lenguaje de la clienta al servicio exacto ─────────────────────────
+
+_PROMPT_SERVICIO = """Eres quien coge las citas en un negocio. La clienta describe
+lo que quiere con sus palabras; tu tarea es decidir QUE servicio del catalogo es.
+
+CATALOGO (son los unicos nombres validos):
+{catalogo}
+
+Lo que ha dicho la clienta hasta ahora:
+{dicho}
+
+Responde SOLO con un JSON:
+
+{{"servicio": "<nombre EXACTO del catalogo>", "pregunta": "", "opciones": []}}
+
+Reglas:
+- Si con lo dicho basta para elegir UNO, pon su nombre exacto y deja "pregunta" vacia.
+- Si YA te ha dado el dato que faltaba (por ejemplo el largo del pelo), ELIGE. No
+  vuelvas a preguntar por algo que ya ha dicho, ni le pidas otro detalle mas.
+- Pregunta UNA sola cosa por turno, y que sea justo lo que separa a los servicios
+  entre los que dudas. Si dudas entre "Corte hombre" y "Corte señora", lo que falta
+  es para quien es, no el largo.
+- Si los candidatos son TECNICAS distintas -sus nombres EMPIEZAN distinto, como
+  "Keratina premium largo" y "Acido lactico bio premium-largo"- NO elijas por ella
+  aunque sepas el largo: son tratamientos diferentes, con precio y proceso propios.
+  Preguntale cual prefiere, con naturalidad, y anade que si no lo tiene claro se lo
+  asesoran en la cita.
+- Si son la MISMA tecnica en tallas distintas (corto / medio / largo) y ya sabes su
+  largo, elige sin preguntar.
+- Si lo que falta es el LARGO, preguntaselo por su pelo ("¿como tienes el pelo de
+  largo?"), no por "que tipo de servicio quieres": ella no conoce vuestros nombres.
+- Escribe la pregunta como se la haria una companera del salon: una frase corta,
+  calida y natural. Nada de listas numeradas, tecnicismos ni "por favor indique".
+- Si dudas entre pocos servicios concretos, ponlos en "opciones" (nombres exactos)
+  ademas de la pregunta.
+- NUNCA propongas un servicio que no resuelve lo que te cuenta. Un alisado no
+  frena la caida del pelo ni rejuvenece: si lo que describe es un PROBLEMA del
+  cabello, mira la familia que le corresponde (tratamientos, color, corte...).
+- Si lo que dice es vago ("no se que hacerme", "quiero verme mejor", "algo para un
+  evento"), NO adivines un tratamiento concreto: si el catalogo tiene una cita de
+  diagnostico o valoracion, ofrecesela; si no, preguntale que tipo de servicio
+  busca nombrando 2 o 3 FAMILIAS del catalogo, no servicios sueltos.
+- Si ya te ha dado un dato que decide por si solo (la edad de un niño, el largo
+  del pelo, para quien es), ELIGE con ese dato en vez de volver a preguntarlo.
+- Si lo que pide NO existe en el catalogo, deja "servicio" y "opciones" vacios y en
+  "pregunta" dilo con amabilidad y ofrece lo mas parecido que si haya.
+- NUNCA te inventes un nombre que no este en el catalogo.
+- No hables de precios: no los menciones aunque los veas en la lista."""
+
+
+def resolver_servicio(
+    cliente_id: str, dicho: str, *, config: Optional[Dict[str, Any]] = None
+) -> Optional[Dict[str, Any]]:
+    """Que servicio quiere, o que hay que preguntarle para saberlo.
+
+    `dicho` es TODO lo que la clienta ha dicho sobre el servicio (se va acumulando
+    entre turnos: "mechas" + "por los hombros").
+
+    Devuelve {"servicio", "pregunta", "opciones"} o None si no se puede resolver
+    (sin clave, sin catalogo o fallo del modelo): quien llama debe tener siempre un
+    plan B, porque quedarse sin respuesta no es una opcion.
+    """
+    texto = str(dicho or "").strip()
+    if not texto or not settings.OPENAI_API_KEY:
+        return None
+    try:
+        from backend import booking
+
+        catalogo, _completo = booking._service_catalog_prompt_block(cliente_id)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("[servicio] sin catalogo (%s): %s", cliente_id, exc)
+        return None
+    if not catalogo.strip():
+        return None
+
+    try:
+        from openai import OpenAI as OpenAISdkClient
+
+        cliente = OpenAISdkClient(api_key=settings.OPENAI_API_KEY, timeout=12.0)
+        respuesta = cliente.chat.completions.create(
+            model=settings.DEFAULT_CHAT_MODEL,
+            messages=[
+                {"role": "system", "content": _PROMPT_SERVICIO.format(
+                    catalogo=catalogo, dicho=texto[:600],
+                )},
+                {"role": "user", "content": texto[:600]},
+            ],
+            temperature=0,
+            max_tokens=220,
+            response_format={"type": "json_object"},
+        )
+        datos = json.loads((respuesta.choices[0].message.content or "").strip())
+    except Exception as exc:  # noqa: BLE001 - nunca puede dejar a nadie sin respuesta
+        settings.logger.warning("[servicio] no se pudo resolver (%s): %s", cliente_id, exc)
+        return None
+
+    nombres = {
+        linea.lstrip("- ").split(" · ")[0].strip()
+        for linea in catalogo.splitlines() if linea.startswith("- ")
+    }
+    elegido = str(datos.get("servicio") or "").strip()
+    if elegido and elegido not in nombres:
+        # El modelo se ha inventado un nombre: se trata como "no resuelto" en vez de
+        # intentar reservar algo que no existe.
+        settings.logger.info("[servicio] nombre fuera de catalogo (%s): %r", cliente_id, elegido)
+        elegido = ""
+    opciones = [o for o in (datos.get("opciones") or []) if isinstance(o, str) and o in nombres]
+    return {
+        "servicio": elegido,
+        "pregunta": str(datos.get("pregunta") or "").strip()[:300],
+        "opciones": opciones[:4],
+    }
+
+
 # ─── Comprension con el modelo ─────────────────────────────────────────────
 
 _PROMPT = """Eres un clasificador para el asistente de un negocio. Lee el mensaje

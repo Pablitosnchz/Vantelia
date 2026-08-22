@@ -6061,7 +6061,7 @@ def _service_catalog_prompt_block(
     corte de niño que cuesta 8. Por eso hace falta saber si la lista esta completa:
     cuando no lo esta, NO se puede afirmar que algo no existe.
     """
-    lineas = _service_catalog_lines(cliente_id, location_id=location_id)
+    lineas = _service_catalog_prompt_lines(cliente_id, location_id=location_id)
     if not lineas:
         return "", True
     incluidas: List[str] = []
@@ -6078,6 +6078,35 @@ def _service_catalog_prompt_block(
             len(lineas) - len(incluidas)
         )
     return texto, completo
+
+
+def _service_catalog_prompt_lines(cliente_id: str, location_id: str = "") -> List[str]:
+    """Las lineas del catalogo AGRUPADAS por categoria, para el prompt.
+
+    Sin la categoria, el modelo confunde familias: con 186 nombres seguidos, a una
+    clienta que decia "se me cae mucho el pelo" le proponia un alisado. La
+    categoria es el dato que separa "Tratamientos" de "Alisados".
+
+    Si el negocio no ha categorizado su catalogo, salen planas como antes.
+    """
+    try:
+        servicios = _public_services_for_booking(cliente_id, location_id=location_id)
+    except Exception:  # noqa: BLE001
+        servicios = []
+    por_categoria: Dict[str, List[str]] = {}
+    for servicio, linea in zip(servicios, _service_catalog_lines(cliente_id, location_id=location_id)):
+        categoria = ""
+        if isinstance(servicio, dict):
+            categoria = textnorm._sanitize_text(str(servicio.get("category") or "")).strip()
+        por_categoria.setdefault(categoria, []).append(linea)
+    if len(por_categoria) <= 1:
+        return _service_catalog_lines(cliente_id, location_id=location_id)
+    salida: List[str] = []
+    for categoria, lineas in por_categoria.items():
+        salida.append("")
+        salida.append("%s:" % (categoria or "Otros"))
+        salida.extend(lineas)
+    return [linea for linea in salida if linea != "" or salida.index(linea) > 0]
 
 
 def _service_catalog_lines(cliente_id: str, location_id: str = "") -> List[str]:

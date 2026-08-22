@@ -42,7 +42,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AppWhatsAppResponse, WhatsAppWebhookStatus
-from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, inbox, keywords, messaging, paystate, rag, settings, textnorm, timeutils, wa_demo, wa_flows, wa_onboarding
+from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, inbox, intents, keywords, messaging, paystate, rag, settings, textnorm, timeutils, wa_demo, wa_flows, wa_onboarding
 
 def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResponse:
     cfg = clients._get_client_config(cliente_id)
@@ -1343,6 +1343,85 @@ async def _wa_handle_flow_reply(
     return creada
 
 
+def _wa_modo_conversacional(config: Dict[str, Any]) -> bool:
+    """¿Este negocio reserva hablando o con listas?
+
+    Por defecto, listas: son mas rapidas de pulsar y no fallan. Un salon puede
+    preferir que la IA guie la conversacion como lo haria una companera.
+    """
+    booking_cfg = (config or {}).get("booking") or {}
+    return str(booking_cfg.get("estilo") or "").strip().lower() == "conversacional"
+
+
+async def _wa_preguntar_servicio(
+    *, cliente_id: str, phone_number_id: str, to_number: str, pregunta: str = "",
+) -> None:
+    """La primera pregunta del modo conversacional, o la que falte para concretar."""
+    await messaging._send_whatsapp_text(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+        text=pregunta or "¡Claro! ¿Qué te apetece hacerte? 😊",
+    )
+
+
+async def _wa_ofrecer_huecos_hablando(
+    *, cliente_id: str, phone_number_id: str, to_number: str, fecha_iso: str,
+    fecha_humana: str, employee_id: str = "", servicio: str = "", location_id: str = "",
+) -> bool:
+    """Los huecos, dichos en una frase en vez de en una lista de botones.
+
+    Se ofrecen pocos a proposito: leer veinte horas en un mensaje de WhatsApp es
+    peor que elegir entre tres. Si no le encaja ninguna, la clienta lo dice y se le
+    dan mas (o se le ofrece llamar, ver `clients.call_us_line`).
+    """
+    try:
+        if employee_id:
+            _todos, libres = await agenda._employee_slot_sets_for_day(
+                cliente_id, fecha_iso, employee_id=employee_id, servicio=servicio,
+            )
+        else:
+            _todos, libres = await agenda._public_slot_sets_for_day(
+                cliente_id, fecha_iso, servicio=servicio,
+                location_id=location_id or _wa_location_id(cliente_id, phone_number_id),
+            )
+    except HTTPException as exc:
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+            text="⚠️ %s" % exc.detail,
+        )
+        return False
+
+    libres = sorted(libres)
+    if not libres:
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+            text=("Uy, el %s lo tengo completo 😕 ¿Te viene bien otro día?%s"
+                  % (fecha_humana, clients.call_us_line(cliente_id))),
+        )
+        return False
+
+    # Repartidos a lo largo del dia: tres seguidos de las 9:00 no sirven de nada.
+    if len(libres) <= 4:
+        elegidos = libres
+    else:
+        # Repartidos de la primera a la ULTIMA: si se deja fuera la ultima hora del
+        # dia, quien solo puede por la tarde cree que no hay nada para ella.
+        ultimo = len(libres) - 1
+        indices = sorted({round(i * ultimo / 3.0) for i in range(4)})
+        elegidos = [libres[i] for i in indices]
+    if len(elegidos) == 1:
+        cuerpo = "Para el %s me queda libre a las %s. ¿Te va bien?" % (fecha_humana, elegidos[0])
+    else:
+        cuerpo = "Para el %s tengo %s y %s. ¿Cuál te viene mejor?" % (
+            fecha_humana, ", ".join(elegidos[:-1]), elegidos[-1],
+        )
+    if len(libres) > len(elegidos):
+        cuerpo += " Si no te encaja, dime a qué hora te iría bien y miro."
+    await messaging._send_whatsapp_text(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number, text=cuerpo,
+    )
+    return True
+
+
 async def _wa_start_booking_flow(
     *, cliente_id: str, phone_number_id: str, from_number: str,
     flow: appstate.WAFlowState, config: Dict[str, Any],
@@ -1369,6 +1448,14 @@ async def _wa_start_booking_flow(
             return
         flow.flow = ""  # mono-centro: no hay nada que elegir
     services = booking._public_services_for_booking(cliente_id, location_id=effective_location)
+    if services and _wa_modo_conversacional(config):
+        # Sin listas: se le pregunta como lo haria una companera del salon.
+        flow.flow = "booking_service"
+        flow.servicio_texto = ""
+        await _wa_preguntar_servicio(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+        )
+        return
     if services:
         flow.flow = "booking_service"
         await _wa_send_service_picker(
@@ -1377,7 +1464,7 @@ async def _wa_start_booking_flow(
         )
         return
     employees = _wa_employees_for_service(cliente_id, "", phone_number_id, location_id=effective_location)
-    if len(employees) > 1:
+    if len(employees) > 1 and not _wa_modo_conversacional(config):
         flow.flow = "booking_employee"
         await _wa_send_employee_picker(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
@@ -1388,6 +1475,12 @@ async def _wa_start_booking_flow(
         flow.employee_id = employees[0]["id"]
         flow.employee_name = employees[0]["name"]
     flow.flow = "booking_date"
+    if _wa_modo_conversacional(config):
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text="¡Genial! ¿Qué día te viene bien? 😊",
+        )
+        return
     await _wa_send_date_picker(
         cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
         config=config, header="Agendar cita", body="📅 Elige el día para tu cita:",
@@ -2002,6 +2095,42 @@ async def _handle_whatsapp_message(
         return
 
     # FLUJO BOOKING - Servicio
+    if flow.flow == "booking_service" and _wa_modo_conversacional(config) and not iid:
+        # Se acumula TODO lo que va diciendo: "mechas" y luego "por los hombros"
+        # solo tienen sentido juntos.
+        flow.servicio_texto = (flow.servicio_texto + " " + incoming_text).strip()[:600]
+        resuelto = intents.resolver_servicio(cliente_id, flow.servicio_texto, config=config)
+        if resuelto and resuelto["servicio"]:
+            flow.servicio = resuelto["servicio"]
+            flow.servicio_texto = ""
+            flow.intentos_fallidos = 0
+            empleados = _wa_employees_for_service(
+                cliente_id, flow.servicio, phone_number_id, location_id=flow.location_id,
+            )
+            if len(empleados) == 1:
+                flow.employee_id = empleados[0]["id"]
+                flow.employee_name = empleados[0]["name"]
+            flow.flow = "booking_date"
+            await messaging._send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text="¡Perfecto, %s! ¿Qué día te viene bien? 😊" % flow.servicio,
+            )
+            return
+        if resuelto and resuelto["pregunta"]:
+            await _wa_preguntar_servicio(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                pregunta=resuelto["pregunta"],
+            )
+            return
+        # Sin modelo o sin respuesta util: no se deja a nadie colgado, se vuelve a
+        # las listas de siempre, que siempre funcionan.
+        flow.servicio_texto = ""
+        await _wa_send_service_picker(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            location_id=flow.location_id,
+        )
+        return
+
     if flow.flow == "booking_service":
         services = booking._public_services_for_booking(cliente_id, location_id=flow.location_id)
         # Eligio una categoria: se le ensenan los servicios de esa categoria.
@@ -2177,12 +2306,26 @@ async def _handle_whatsapp_message(
             return
         flow.fecha = fecha_iso
         flow.flow = "booking_time"
+        flow.horas_pagina = 0
+        flow.horas_franja = ""
         fecha_humana = textnorm._format_date_es(target_dt.date())
-        ok = await _wa_send_time_picker(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            fecha_iso=fecha_iso, fecha_humana=fecha_humana,
-            employee_id=flow.employee_id, servicio=flow.servicio, location_id=flow.location_id,
-        )
+        if _wa_modo_conversacional(config):
+            ok = await _wa_ofrecer_huecos_hablando(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                fecha_iso=fecha_iso, fecha_humana=fecha_humana,
+                employee_id=flow.employee_id, servicio=flow.servicio,
+                location_id=flow.location_id,
+            )
+        else:
+            ok = await _wa_send_time_picker(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                fecha_iso=fecha_iso, fecha_humana=fecha_humana,
+                employee_id=flow.employee_id, servicio=flow.servicio, location_id=flow.location_id,
+            )
+        if not ok and _wa_modo_conversacional(config):
+            flow.flow = "booking_date"
+            flow.fecha = ""
+            return
         if not ok:
             flow.flow = "booking_date"
             flow.fecha = ""
@@ -2230,6 +2373,15 @@ async def _handle_whatsapp_message(
             else:
                 flow.horas_franja = ajuste
                 flow.horas_pagina = 0
+            if _wa_modo_conversacional(config):
+                # Hablando tambien: se le dan otros huecos, no una lista.
+                await _wa_ofrecer_huecos_hablando(
+                    cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                    fecha_iso=flow.fecha, fecha_humana=_wa_fecha_humana(flow.fecha),
+                    employee_id=flow.employee_id, servicio=flow.servicio,
+                    location_id=flow.location_id,
+                )
+                return
             await _wa_send_time_picker(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
                 fecha_iso=flow.fecha, fecha_humana=_wa_fecha_humana(flow.fecha),

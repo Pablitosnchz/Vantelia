@@ -327,6 +327,40 @@ pedir cita se reconocian DOS (medido). Ahora la decide el modelo.
 - Tests: `tests/test_intenciones_y_reglas.py`, `tests/test_reglas_en_el_portal.py`,
   `tests/test_comprension_en_el_chat.py`, `tests/test_whatsapp_mismo_cerebro.py`.
 
+## Reservar hablando y tono del negocio (opt-in por tenant)
+
+**`booking.estilo`** = `guiado` (listas interactivas, por defecto) o `conversacional`
+(la IA pregunta y entiende, sin listas ni formulario). Peticion del salon real:
+"que la IA le guie... el cliente dice mechas y luego le pregunta como tiene el
+pelo". El MOTOR no cambia: mismo catalogo, mismos huecos, misma
+`_create_booking_core`. Solo cambia la piel.
+
+- `intents.resolver_servicio(cliente_id, dicho)` traduce lo que dice la clienta al
+  servicio EXACTO del catalogo, o devuelve la pregunta que falta. Si el modelo
+  inventa un nombre fuera de catalogo se descarta. `flow.servicio_texto` acumula lo
+  dicho entre turnos ("mechas" + "por los hombros").
+- `whatsapp._wa_modo_conversacional(config)` decide; `_wa_preguntar_servicio` y
+  `_wa_ofrecer_huecos_hablando` sustituyen a los pickers. Si el modelo falla se
+  vuelve a las listas: nadie se queda colgado.
+- **El catalogo del prompt va AGRUPADO POR CATEGORIA**
+  (`booking._service_catalog_prompt_lines`). Sin eso, con 186 nombres planos, a
+  "se me cae mucho el pelo" respondia proponiendo un ALISADO. Lo usan tambien el
+  chat y la voz.
+
+**`config['tono']`** (estilo cercano/profesional/neutro, emojis muchos/algunos/
+ninguno, tuteo, notas): fuente unica `textnorm._tono_prompt_block`, compartida por
+chat, WhatsApp y voz. La instruccion de emojis incluye "nunca cuando alguien se
+queja". Sin la seccion, nada cambia.
+
+**Rescate por telefono** (`clients.call_us_line`): antes de perder una cita se
+ofrece llamar. Salta en dia sin huecos, agenda llena, fallo de reprogramacion,
+hueco ocupado al confirmar y al SEGUNDO intento fallido seguido en un paso. Texto
+configurable (`booking.rescate_texto` con `{telefono}`), apagable
+(`booking.rescate_enabled`), y sin telefono publicado no dice nada.
+
+Los tres se eligen en el portal (Tune AI). Tests: `tests/test_reserva_hablando.py`,
+`tests/test_rescate_por_telefono.py`.
+
 ## Respuestas automaticas por palabra clave (opt-in por tenant)
 
 Capa DETERMINISTA previa a la IA para negocios que quieren reglas literales en vez de conversacion ("si el mensaje contiene 'spa' o 'masaje', responde exactamente este telefono"). Origen: hotel Cap Rocat (ago 2026), pero es generica y configurable por tenant.

@@ -1015,12 +1015,14 @@ class AppKeywordRulesConfigPayload(BaseModel):
 
 
 class AppTonePayload(BaseModel):
-    """Como habla el asistente de este negocio."""
+    """Como habla el asistente de este negocio, y como coge las citas."""
 
     estilo: str = ""
     emojis: str = ""
     tratamiento: str = ""
     notas: str = Field(default="", max_length=600)
+    # "guiado" (listas para pulsar) o "conversacional" (la IA pregunta y entiende).
+    reserva: str = ""
 
 
 class AppToneResponse(BaseModel):
@@ -1028,6 +1030,7 @@ class AppToneResponse(BaseModel):
     emojis: str = ""
     tratamiento: str = ""
     notas: str = ""
+    reserva: str = "guiado"
     estilos: List[str] = Field(default_factory=list)
     opciones_emojis: List[str] = Field(default_factory=list)
     tratamientos: List[str] = Field(default_factory=list)

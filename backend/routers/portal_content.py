@@ -398,9 +398,11 @@ def _tone_response(cliente_id: str) -> AppToneResponse:
     tono = textnorm._tono_config(config) or {
         "estilo": "", "emojis": "", "tratamiento": "", "notas": "",
     }
+    reserva = str((config.get("booking") or {}).get("estilo") or "guiado").strip().lower()
     return AppToneResponse(
         estilo=tono["estilo"], emojis=tono["emojis"],
         tratamiento=tono["tratamiento"], notas=tono["notas"],
+        reserva=reserva if reserva in ("guiado", "conversacional") else "guiado",
         estilos=list(textnorm.TONO_ESTILOS),
         opciones_emojis=list(textnorm.TONO_EMOJIS),
         tratamientos=list(textnorm.TONO_TRATAMIENTOS),
@@ -430,6 +432,10 @@ async def app_tone_save(
             "estilo": data.estilo, "emojis": data.emojis,
             "tratamiento": data.tratamiento, "notas": data.notas,
         }
+        if data.reserva in ("guiado", "conversacional"):
+            booking_cfg = dict(cfg.get("booking") or {})
+            booking_cfg["estilo"] = data.reserva
+            cfg["booking"] = booking_cfg
         next_configs[cliente_id] = cfg
         clients._update_runtime_configs(next_configs)
     clients._persist_configs_to_disk(next_configs)
