@@ -2237,6 +2237,12 @@
       <div id="brList" style="margin-top:14px;"></div>
     </div>
 
+    <div class="panel-card" id="pbCard">
+      <h2 style="margin:0 0 6px;">Situaciones típicas</h2>
+      <p class="panel-sub">Cosas que pasan en casi todos los negocios, listas para activar. Elige la que te encaje, dime a qué servicios se aplica y cambia el texto para que suene a ti.</p>
+      <div id="pbList" style="margin-top:14px;"></div>
+    </div>
+
   </section>
 
   <!-- TUNE AI -->
@@ -3954,6 +3960,35 @@
   </div>
 </div>
 
+<div class="side-panel" id="pbFormCard">
+  <div class="side-panel-head">
+    <b id="pbFormTitle">Situación</b>
+    <button id="pbPanelClose" type="button" aria-label="Cerrar">×</button>
+  </div>
+  <div class="side-panel-body">
+    <input type="hidden" id="pbEditingId" />
+    <p class="panel-sub" id="pbExplicacion" style="margin-top:0;"></p>
+    <p class="panel-sub" id="pbEjemplo" style="margin-top:-6px;"></p>
+    <div class="field" style="margin-bottom:14px;" id="pbFamiliasCampo">
+      <label class="field-label">¿A qué servicios se aplica?</label>
+      <input class="field-input" id="pbFamilias" maxlength="400" placeholder="mechas, balayage, color" />
+      <div class="panel-sub" style="margin:6px 0 0;">Separados por coma. Si lo dejas vacío, vale para cualquier servicio. <span id="pbFamiliasHint"></span></div>
+    </div>
+    <div class="field" style="margin-bottom:14px;">
+      <label class="field-label">Qué responde tu asistente</label>
+      <textarea class="field-textarea" id="pbTexto" maxlength="2000" style="min-height:150px;"></textarea>
+    </div>
+    <label style="display:flex; gap:8px; align-items:flex-start; cursor:pointer; margin-bottom:18px;">
+      <input type="checkbox" id="pbActiva" checked />
+      <span>Activada</span>
+    </label>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" id="pbSaveBtn" type="button" style="flex:1;">Guardar</button>
+      <button class="btn btn-ghost" id="pbCancelBtn" type="button">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div class="side-panel" id="brFormCard">
   <div class="side-panel-head">
     <b id="brFormTitle">Nueva regla</b>
@@ -4436,7 +4471,7 @@ function setTab(tab) {
   document.getElementById('pageTitle').textContent = titles[tab] || 'Panel';
   if (tab === 'chats')      loadChats();
   if (tab === 'knowledge')  loadKnowledge();
-  if (tab === 'qa')       { loadQA(); loadKeywordRules(); loadBusinessRules(); }
+  if (tab === 'qa')       { loadQA(); loadKeywordRules(); loadBusinessRules(); loadPlaybooks(); }
   if (tab === 'tune')     { loadTune(); loadTone(); }
   if (tab === 'voz')        loadVoz();
   if (tab === 'whatsapp')   loadWhatsApp();
@@ -5516,6 +5551,85 @@ document.getElementById('kwrSaveBtn')?.addEventListener('click', async () => {
     toast('Regla guardada', 'success');
     document.getElementById('kwrFormCard').classList.remove('open');
     loadKeywordRules();
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+let pbFamiliasDisponibles = [];
+
+// == Situaciones tipicas del negocio ===================================
+// Plantillas listas para activar: lo que un salon pidio a mano (no dar precios
+// sin ver el pelo, pedir foto, derivar a valoracion) lo activa cualquier negocio
+// desde aqui, con sus servicios y su texto.
+async function loadPlaybooks() {
+  const card = document.getElementById('pbCard');
+  const list = document.getElementById('pbList');
+  if (!card || !list) return;
+  let data;
+  try { data = await api('/auth/app/playbooks'); }
+  catch { card.style.display = 'none'; return; }
+  card.style.display = '';
+  pbFamiliasDisponibles = data.familias || [];
+  const hint = document.getElementById('pbFamiliasHint');
+  if (hint) hint.textContent = pbFamiliasDisponibles.length
+    ? 'Los tuyos: ' + pbFamiliasDisponibles.slice(0, 8).join(', ') : '';
+
+  list.innerHTML = '';
+  (data.items || []).forEach(pb => {
+    const row = document.createElement('div');
+    row.className = 'chat-row';
+    const estado = pb.activa
+      ? '<span style="color:var(--ok,#5fd08a); font-weight:600;">Activada</span>'
+      : '<span class="panel-sub" style="margin:0;">Sin activar</span>';
+    const donde = (pb.familias || []).length
+      ? ' · solo en ' + pb.familias.join(', ') : '';
+    const usos = pb.veces ? ' · usada ' + pb.veces + (pb.veces === 1 ? ' vez' : ' veces') : '';
+    row.innerHTML = ''
+      + '<div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">'
+      +   '<div style="flex:1; min-width:0;">'
+      +     '<div style="font-weight:600;">' + escapeHtml(pb.titulo) + '</div>'
+      +     '<div class="panel-sub" style="margin:4px 0 0;">' + escapeHtml(pb.explicacion) + '</div>'
+      +     '<div class="panel-sub" style="margin:4px 0 0;"><i>' + escapeHtml(pb.ejemplo) + '</i></div>'
+      +     '<div class="panel-sub" style="margin:6px 0 0;">' + estado + escapeHtml(donde + usos) + '</div>'
+      +   '</div>'
+      +   '<button class="btn btn-ghost" data-pb="1" style="padding:4px 10px; font-size:0.78rem; white-space:nowrap;">'
+      +     (pb.activa ? 'Editar' : 'Activar') + '</button>'
+      + '</div>';
+    row.querySelector('[data-pb]').addEventListener('click', () => pbOpenForm(pb));
+    list.appendChild(row);
+  });
+}
+
+function pbOpenForm(pb) {
+  document.getElementById('pbFormTitle').textContent = pb.titulo;
+  document.getElementById('pbEditingId').value = pb.id;
+  document.getElementById('pbExplicacion').textContent = pb.explicacion || '';
+  document.getElementById('pbEjemplo').textContent = pb.ejemplo ? 'Por ejemplo: ' + pb.ejemplo : '';
+  document.getElementById('pbFamilias').value = (pb.familias || []).join(', ');
+  document.getElementById('pbTexto').value = pb.texto || '';
+  document.getElementById('pbActiva').checked = pb.activa !== false;
+  const campo = document.getElementById('pbFamiliasCampo');
+  if (campo) campo.style.display = pb.pide_familias === false ? 'none' : '';
+  document.getElementById('pbFormCard').classList.add('open');
+}
+
+document.getElementById('pbPanelClose')?.addEventListener('click', () => document.getElementById('pbFormCard').classList.remove('open'));
+document.getElementById('pbCancelBtn')?.addEventListener('click', () => document.getElementById('pbFormCard').classList.remove('open'));
+document.getElementById('pbSaveBtn')?.addEventListener('click', async () => {
+  const id = document.getElementById('pbEditingId').value;
+  const payload = {
+    familias: document.getElementById('pbFamilias').value.split(',').map(s => s.trim()).filter(Boolean),
+    texto: document.getElementById('pbTexto').value.trim(),
+    activa: document.getElementById('pbActiva').checked,
+  };
+  try {
+    await api('/auth/app/playbooks/' + encodeURIComponent(id), {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    toast('Situación guardada', 'success');
+    document.getElementById('pbFormCard').classList.remove('open');
+    loadPlaybooks();
+    if (typeof loadBusinessRules === 'function') loadBusinessRules();
   } catch (err) { toast(err.message, 'error'); }
 });
 

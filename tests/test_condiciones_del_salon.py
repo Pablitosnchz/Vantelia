@@ -9,6 +9,11 @@ clienta: si una deja de cumplirse hay que enterarse aqui, no en su salon.
 Las condiciones que dependen de como redacte el modelo (que sea calido, que
 recomiende) no se prueban aqui: se prueban conversando, en
 `scripts/qa_alicia.py`.
+
+El tenant se monta desde SU PERFIL (`perfiles/alicia_rincon_estilistas.json`), que
+es el mismo fichero con el que se configura el negocio de verdad. Asi esto prueba
+tambien que un negocio se describe con datos: si el perfil deja de cumplir lo que
+pidio, salta aqui.
 """
 from __future__ import annotations
 
@@ -21,46 +26,35 @@ TELEFONO = "625 120 100"
 
 @pytest.fixture
 def salon(api_module, client):
-    """El tenant con las reglas y el tono del salon, como los deja su script."""
-    import importlib.util
+    """El tenant montado desde SU PERFIL, igual que en produccion."""
+    import json
     import os
-    import sys
 
-    from backend import clients, db, rules
+    from backend import clients, db, playbooks
 
     with db._get_db_connection() as conexion:
         conexion.execute("DELETE FROM business_rules WHERE cliente_id='demo'")
         conexion.commit()
 
     ruta = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        "scripts", "reglas_alicia.py")
-    spec = importlib.util.spec_from_file_location("reglas_alicia", ruta)
-    modulo = importlib.util.module_from_spec(spec)
-    sys.modules["reglas_alicia"] = modulo
-    spec.loader.exec_module(modulo)
-
-    for datos in modulo.REGLAS:
-        rules.guardar(
-            "demo", nombre=datos["nombre"], intenciones=datos["intenciones"],
-            familias=datos.get("familias", []), accion=datos["accion"],
-            texto=datos["texto"], prioridad=datos["prioridad"], activa=True,
-        )
+                        "perfiles", "alicia_rincon_estilistas.json")
+    with open(ruta, encoding="utf-8") as fichero:
+        perfil = json.load(fichero)
 
     config = clients._get_client_config("demo")
     previo_tono = config.get("tono")
     previo_contacto = dict(config.get("contacto") or {})
-    config["tono"] = {
-        "estilo": "cercano", "emojis": "muchos", "tratamiento": "tu",
-        "notas": (
-            "Dirigete a quien te escribe como 'cariño' ('hola cariño, muy buenas'): "
-            "vale igual para mujer y para hombre. Tambien puedes usar 'guapa' o "
-            "'preciosa' cuando sepas que es una mujer. "
-            "Cuando te despidas al cerrar la conversacion, termina siempre con estos "
-            "tres emoticonos juntos: 😉🤗😘"
-        ),
-    }
+    config["tono"] = dict(perfil["tono"])
     config.setdefault("contacto", {})["telefono"] = TELEFONO
-    yield modulo
+
+    for situacion in perfil["situaciones"]:
+        playbooks.aplicar(
+            "demo", situacion["id"],
+            familias=situacion.get("familias") or [],
+            texto=situacion.get("texto", ""),
+            activa=True, nombre=situacion.get("nombre", ""),
+        )
+    yield perfil
     with db._get_db_connection() as conexion:
         conexion.execute("DELETE FROM business_rules WHERE cliente_id='demo'")
         conexion.commit()

@@ -568,6 +568,21 @@ def _emphasize_structured_headings(text: str) -> str:
 INTENCIONES_QUE_SE_ACTUAN = ("reservar", "cancelar", "reprogramar")
 
 
+# Preguntas cuya respuesta depende de HOY o de AHORA. Una Q&A escrita ("nuestro
+# horario es...") no las responde: a las 21:15 de un sabado, soltar el horario
+# semanal no le dice a nadie si el salon esta abierto en ese momento.
+_DEPENDE_DEL_MOMENTO_RE = re.compile(
+    r"\b(ahora|ahora\s+mismo|en\s+este\s+momento|abiertos?\s+ahora|"
+    r"estais?\s+abiertos?|hoy|esta\s+tarde|esta\s+manana|esta\s+noche)\b"
+)
+
+
+def _depende_del_momento(message: str) -> bool:
+    """¿Preguntan por HOY o por AHORA? Entonces no vale una respuesta escrita."""
+    texto = textnorm._strip_accents(str(message or "").lower())
+    return bool(_DEPENDE_DEL_MOMENTO_RE.search(texto))
+
+
 def decision_del_negocio(
     cliente_id: str,
     message: str,
@@ -594,7 +609,11 @@ def decision_del_negocio(
     """
     mensaje = str(message or "")
 
-    # 1. Lo que el negocio escribio literalmente para esta pregunta.
+    # 1. Lo que el negocio escribio literalmente para esta pregunta. Salvo que
+    # pregunte por HOY o por AHORA: eso lo contesta el bloque de datos en vivo del
+    # prompt, no una respuesta escrita hace meses.
+    if _depende_del_momento(mensaje):
+        return None
     respuesta_literal = rag._match_qa_answer(cliente_id, mensaje)
     if respuesta_literal:
         return {
@@ -646,7 +665,8 @@ def decision_del_negocio(
 # tildes porque se comparan sobre texto ya normalizado.
 _PREGUNTA_SI_HACEN_RE = re.compile(
     r"\b(haceis|haces|hacen|teneis|tienes|tienen|ofreceis|ofrecen|"
-    r"trabajais|trabajan|se\s+puede|hay)\b"
+    r"trabajais|trabajan|se\s+puede|hay|podeis|puedo|servicios?|"
+    r"cuanto\s+(?:tiempo|dura|tarda|se\s+tarda|tardais))\b"
 )
 
 
@@ -675,14 +695,34 @@ def _contexto_del_catalogo(cliente_id: str, message: str) -> str:
             nombre = str(servicio.get("nombre") or servicio.get("name") or "")
             campos = catalog_pick._norm(nombre + " " + str(servicio.get("category") or ""))
             if palabras & set(campos.split()):
-                encontrados.append(nombre)
+                # Con la DURACION: sin ella el modelo se inventa cuanto se tarda
+                # ("de 45 minutos a 2 horas" cuando el catalogo dice 75).
+                minutos = int(servicio.get("duration_minutes") or 0)
+                encontrados.append("%s (%d min)" % (nombre, minutos) if minutos else nombre)
             if len(encontrados) >= 6:
                 break
     except Exception:  # noqa: BLE001 - mirar el catalogo no puede romper el chat
         return ""
     if encontrados:
         return ("BUSQUEDA EN EL CATALOGO: el negocio SI ofrece esto -> %s. No digas "
-                "que no lo haceis." % ", ".join(encontrados))
+                "que no lo haceis, y si preguntan cuanto dura, di ESTOS minutos: no te "
+                "inventes una duracion." % ", ".join(encontrados))
+    # Sin coincidencias NO se puede decir "no hay nada": "¿que me podeis hacer en
+    # el pelo?" no nombra ningun servicio y la respuesta correcta es contarle lo
+    # que hay. Se le pasan las familias del negocio para que responda con ellas.
+    familias = []
+    try:
+        for servicio in agenda._catalog_services(cliente_id):
+            categoria = str((servicio or {}).get("category") or "").strip()
+            if categoria and categoria not in familias:
+                familias.append(categoria)
+    except Exception:  # noqa: BLE001
+        familias = []
+    if familias:
+        return ("BUSQUEDA EN EL CATALOGO: no hay ningun servicio con esas palabras. "
+                "Lo que SI ofrece el negocio, por familias: %s. Si preguntaba por algo "
+                "concreto que no esta, dilo con amabilidad y ofrecele estas."
+                % ", ".join(familias[:12]))
     return ("BUSQUEDA EN EL CATALOGO: no hay ningun servicio que encaje con lo que "
             "pregunta. Dilo con amabilidad y ofrece lo que si haceis.")
 

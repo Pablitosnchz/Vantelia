@@ -51,6 +51,11 @@ antes de "arreglarlo": suele estar diciendo algo cierto.
   del asistente: lo que el negocio escribe a mano (palabras clave, Q&A literales)
   va antes que la comprensión por modelo, y con una gestión de cita a medias no
   se clasifica nada. Si este falla, alguien movió una capa de sitio.
+- `test_situaciones_de_negocio.py` — las condiciones de un cliente son plantillas,
+  no código por cliente. Incluye una clínica dental con normas propias: si eso
+  falla, el asistente ha dejado de servir para negocios que no sean peluquerías.
+- `test_como_una_clienta_de_verdad.py` — fallos que solo salen escribiendo con
+  faltas, partiendo frases e insistiendo. El guion feliz no los ve.
 - `test_condiciones_del_salon.py` — las condiciones que el cliente piloto fue
   pidiendo por WhatsApp, una por una. Son el contrato con SU clienta: si una
   deja de cumplirse hay que enterarse aquí, no en su salón.

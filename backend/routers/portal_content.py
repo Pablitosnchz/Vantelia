@@ -33,6 +33,8 @@ from backend import (
     db,
     intents,
     keywords,
+    playbooks,
+    portal,
     rag,
     rules,
     security,
@@ -388,6 +390,60 @@ async def app_keyword_rule_delete(
     return {"ok": True}
 
 
+def _cliente_configurable(user: sqlite3.Row, cliente_id: str = "") -> str:
+    """El negocio sobre el que se esta configurando.
+
+    Sin `?cliente_id=` manda la sesion del propio negocio. El ADMINISTRADOR lo
+    indica y trabaja sobre ese tenant sin tener que impersonar a nadie: quien da
+    de alta a un cliente nuevo le deja el asistente listo desde su panel.
+    """
+    if user["role"] == "admin" or cliente_id:
+        return portal._portal_client_id_or_403(user, cliente_id)
+    return security._resolve_cliente_for_self_serve_user(user)
+
+
+# --- Situaciones tipicas del negocio ---------------------------------------
+# Las doce condiciones de un salon real se montaron con un script propio. Con
+# plantillas, el siguiente negocio activa las suyas desde aqui y el asistente se
+# comporta distinto sin tocar codigo.
+
+
+def _playbooks_response(cliente_id: str) -> AppPlaybooksResponse:
+    return AppPlaybooksResponse(
+        items=[AppPlaybookItem(**p) for p in playbooks.estado(cliente_id)],
+        familias=intents.familias_del_tenant(cliente_id),
+    )
+
+
+@app.get("/auth/app/playbooks", response_model=AppPlaybooksResponse)
+async def app_playbooks_list(
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AppPlaybooksResponse:
+    cliente_id = _cliente_configurable(user, cliente_id)
+    return _playbooks_response(cliente_id)
+
+
+@app.put("/auth/app/playbooks/{playbook_id}", response_model=AppPlaybooksResponse)
+async def app_playbook_apply(
+    playbook_id: str,
+    data: AppPlaybookPayload,
+    cliente_id: str = "",
+    user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
+) -> AppPlaybooksResponse:
+    """Activa o actualiza una situacion. manager+ (es configuracion del negocio)."""
+    security._require_portal_min_role(user, "manager")
+    cliente_id = _cliente_configurable(user, cliente_id)
+    try:
+        playbooks.aplicar(
+            cliente_id, playbook_id, familias=data.familias, texto=data.texto,
+            activa=data.activa, nombre=data.nombre,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _playbooks_response(cliente_id)
+
+
 # --- Tono del asistente ----------------------------------------------------
 # Un salon quiere "muy cercano y con emojis"; una clinica, sobrio y de usted.
 # Estaba escrito a mano dentro del prompt de cada cliente.
@@ -412,19 +468,21 @@ def _tone_response(cliente_id: str) -> AppToneResponse:
 
 @app.get("/auth/app/tone", response_model=AppToneResponse)
 async def app_tone_get(
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> AppToneResponse:
-    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    cliente_id = _cliente_configurable(user, cliente_id)
     return _tone_response(cliente_id)
 
 
 @app.put("/auth/app/tone", response_model=AppToneResponse)
 async def app_tone_save(
     data: AppTonePayload,
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> AppToneResponse:
     security._require_portal_min_role(user, "manager")
-    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    cliente_id = _cliente_configurable(user, cliente_id)
     with appstate.state_lock:
         next_configs = copy.deepcopy(appstate.CONFIG_CLIENTES)
         cfg = next_configs.get(cliente_id, {})
@@ -461,9 +519,10 @@ def _business_rules_response(cliente_id: str) -> AppBusinessRulesResponse:
 
 @app.get("/auth/app/business-rules", response_model=AppBusinessRulesResponse)
 async def app_business_rules_list(
+    cliente_id: str = "",
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> AppBusinessRulesResponse:
-    cliente_id = security._resolve_cliente_for_self_serve_user(user)
+    cliente_id = _cliente_configurable(user, cliente_id)
     return _business_rules_response(cliente_id)
 
 

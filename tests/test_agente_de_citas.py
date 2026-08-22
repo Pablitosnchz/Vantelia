@@ -51,32 +51,32 @@ def catalogo(api_module, client):  # noqa: F811
 
 def test_solo_devuelve_servicios_que_existen(catalogo, api_module, monkeypatch):  # noqa: F811
     """El modelo no puede inventarse un nombre: los saca de aqui."""
-    from backend import booking_agent, intents
+    from backend import agent, intents
 
     monkeypatch.setattr(intents, "extraer_datos_servicio", lambda *a, **k: {
         "familia": "mechas", "tecnica": "", "talla": "medio",
         "para_quien": "", "edad": None, "texto": "mechas medias",
     })
-    resultado = booking_agent._tool_buscar_servicio("demo", {"descripcion": "mechas"})
+    resultado = agent._tool_buscar_servicio("demo", {"descripcion": "mechas"})
     assert resultado["ok"] is True
     assert resultado["servicio"] == "Mechas medio"
 
 
 def test_lo_que_no_existe_se_dice_con_alternativas(catalogo, api_module, monkeypatch):  # noqa: F811
-    from backend import booking_agent, intents
+    from backend import agent, intents
 
     monkeypatch.setattr(intents, "extraer_datos_servicio", lambda *a, **k: {
         "familia": "manicura", "tecnica": "", "talla": "",
         "para_quien": "", "edad": None, "texto": "manicura",
     })
-    resultado = booking_agent._tool_buscar_servicio("demo", {"descripcion": "manicura"})
+    resultado = agent._tool_buscar_servicio("demo", {"descripcion": "manicura"})
     assert resultado["ok"] is False
     assert "servicios_parecidos" in resultado
 
 
 def test_cuando_falta_un_dato_lo_dice_en_vez_de_elegir(catalogo, api_module, monkeypatch):  # noqa: F811
     """Elegir por la clienta entre tecnicas distintas no es cosa del modelo."""
-    from backend import agenda, booking_agent, db, intents, timeutils
+    from backend import agenda, agent, db, intents, timeutils
 
     ahora = timeutils._utc_now_iso()
     with db._get_db_connection() as conexion:
@@ -93,7 +93,7 @@ def test_cuando_falta_un_dato_lo_dice_en_vez_de_elegir(catalogo, api_module, mon
         "para_quien": "", "edad": None, "texto": "un alisado",
     })
     try:
-        resultado = booking_agent._tool_buscar_servicio("demo", {"descripcion": "un alisado"})
+        resultado = agent._tool_buscar_servicio("demo", {"descripcion": "un alisado"})
         assert resultado["servicio"] == ""
         assert resultado["falta"] == "tecnica"
         assert len(resultado["opciones"]) >= 2
@@ -109,11 +109,11 @@ def test_cuando_falta_un_dato_lo_dice_en_vez_de_elegir(catalogo, api_module, mon
 # ─── El agente no puede quedarse sin plan B ────────────────────────────────
 
 def test_sin_clave_no_se_intenta(api_module, monkeypatch):  # noqa: F811
-    from backend import booking_agent
+    from backend import agent
 
-    monkeypatch.setattr(booking_agent.settings, "OPENAI_API_KEY", "")
-    assert booking_agent.disponible("demo") is False
-    texto, creada = asyncio.run(booking_agent.responder(
+    monkeypatch.setattr(agent.settings, "OPENAI_API_KEY", "")
+    assert agent.disponible("demo") is False
+    texto, creada = asyncio.run(agent.responder(
         "demo", "quiero cita", session_id="s", telefono="34600000000",
     ))
     assert texto == "" and creada is False
@@ -124,9 +124,9 @@ def test_si_el_modelo_falla_devuelve_vacio(api_module, monkeypatch):  # noqa: F8
     import sys
     import types
 
-    from backend import booking_agent
+    from backend import agent
 
-    monkeypatch.setattr(booking_agent.settings, "OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(agent.settings, "OPENAI_API_KEY", "sk-test")
 
     class ClienteRoto:
         def __init__(self, *a, **k):
@@ -136,18 +136,18 @@ def test_si_el_modelo_falla_devuelve_vacio(api_module, monkeypatch):  # noqa: F8
     modulo.OpenAI = ClienteRoto
     monkeypatch.setitem(sys.modules, "openai", modulo)
 
-    texto, creada = asyncio.run(booking_agent.responder(
+    texto, creada = asyncio.run(agent.responder(
         "demo", "quiero cita", session_id="s", telefono="34600000000",
     ))
     assert texto == "" and creada is False
 
 
 def test_las_instrucciones_le_prohiben_dar_la_cita_por_hecha(api_module):  # noqa: F811
-    from backend import booking_agent, clients
+    from backend import agent, clients
 
     import datetime
 
-    texto = booking_agent._instrucciones(
+    texto = agent._instrucciones(
         "demo", clients._get_client_config("demo"), datetime.date(2026, 9, 1),
     )
     assert "crear_cita" in texto
@@ -159,20 +159,53 @@ def test_las_instrucciones_le_prohiben_dar_la_cita_por_hecha(api_module):  # noq
     assert "martes 1 de septiembre" in texto
 
 
-def test_las_tres_herramientas_estan(api_module):  # noqa: F811
-    from backend import booking_agent
+def test_tiene_herramienta_para_todo_lo_que_afirma(api_module):  # noqa: F811
+    """Cada cosa que el asistente afirma tiene que poder consultarla.
 
-    nombres = {h["function"]["name"] for h in booking_agent._herramientas()}
-    assert nombres == {"buscar_servicio", "consultar_disponibilidad", "crear_cita"}
+    Si falta una herramienta, el modelo contesta de memoria: asi dijo que un dia
+    estaba cerrado sin mirar la agenda y nego un servicio que si hacen.
+    """
+    from backend import agent
+
+    nombres = {h["function"]["name"] for h in agent._herramientas()}
+    assert {
+        "consultar_horario",        # horarios y si esta abierto AHORA
+        "buscar_servicio",          # el catalogo real
+        "consultar_disponibilidad",  # huecos reales
+        "crear_cita",
+        "consultar_cita", "cancelar_cita", "reprogramar_cita",
+        "politica_del_negocio",     # lo que ESTE negocio tiene escrito
+    } <= nombres, "falta una herramienta: %s" % sorted(nombres)
+
+
+def test_la_politica_sale_del_negocio_no_del_modelo(api_module):  # noqa: F811
+    """Es lo que hace que el asistente sirva para cualquier negocio."""
+    from backend import agent
+
+    vacio = agent._tool_politica_del_negocio("demo", {"tema": ""})
+    assert vacio["ok"] is False
+    sin_nada = agent._tool_politica_del_negocio("demo", {"tema": "criptomonedas"})
+    assert sin_nada["hay_politica"] is False
+    assert "no te inventes" in sin_nada["aviso"].lower()
+
+
+def test_el_horario_dice_si_esta_abierto_ahora(api_module):  # noqa: F811
+    """"¿estais abiertos ahora?" no se responde con el horario semanal escrito."""
+    from backend import agent
+
+    horario = agent._tool_consultar_horario("demo", {})
+    assert horario["ok"] is True
+    assert "abierto_ahora" in horario
+    assert horario["semana"], "sin horario, el modelo se lo inventa"
 
 
 def test_la_cita_la_crea_el_mismo_despachador_que_la_voz(api_module):  # noqa: F811
     """Una sola forma de crear una cita en todo el producto."""
     import inspect
 
-    from backend import booking_agent
+    from backend import agent
 
-    fuente = inspect.getsource(booking_agent._ejecutar)
+    fuente = inspect.getsource(agent._ejecutar)
     assert "_voice_dispatch_tool" in fuente
 
 

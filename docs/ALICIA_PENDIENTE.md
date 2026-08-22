@@ -62,7 +62,7 @@ negocio"** (`business_rules`). Medido contra el modelo real:
 - Sus **Q&A** ahora casan aunque la clienta pregunte con otras palabras: 10 de 10
   en la prueba, incluida la que **no** debía casar (nadie preguntó por el parking).
 
-Sus tres normas, ya como reglas editables (`scripts/reglas_alicia.py`):
+Sus normas, ya como situaciones editables desde el portal (perfil en `perfiles/alicia_rincon_estilistas.json`, se aplica con `scripts/configurar_negocio.py`):
 
 | Cuando quieran | Solo en | El asistente |
 | --- | --- | --- |

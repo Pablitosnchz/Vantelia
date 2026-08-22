@@ -40,7 +40,7 @@ from backend import catalog_pick, clients, db, settings, textnorm
 # Cuantas vueltas de tool se le permiten en un turno. Con 4 le sobra para buscar
 # un servicio, mirar huecos y crear la cita; el tope existe para que un modelo
 # atascado no deje a la clienta esperando.
-MAX_VUELTAS = 4
+MAX_VUELTAS = 6
 
 # Cuanta conversacion se le recuerda. Suficiente para que "y el jueves?" tenga
 # sentido, sin pagar por la conversacion entera.
@@ -75,6 +75,102 @@ def _herramientas() -> List[Dict[str, Any]]:
                         },
                     },
                     "required": ["descripcion"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "consultar_horario",
+                "description": (
+                    "El horario REAL del negocio: si esta abierto ahora mismo, a que "
+                    "hora abre y cierra un dia concreto, y que dias libra. Usala "
+                    "siempre que pregunten por horarios: no te lo sepas de memoria."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "fecha": {
+                            "type": "string",
+                            "description": "AAAA-MM-DD. Vacio = hoy y la semana.",
+                        },
+                    },
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "politica_del_negocio",
+                "description": (
+                    "Lo que ESTE negocio tiene decidido sobre un tema: precios, "
+                    "señales y fianzas, cancelaciones, como venir preparada, formas de "
+                    "pago, promociones... Devuelve el texto que ha escrito el propio "
+                    "negocio. Usala antes de contestar nada que dependa de sus normas: "
+                    "no te inventes politicas y no supongas lo que hace otro salon."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "tema": {
+                            "type": "string",
+                            "description": "Sobre que pregunta, con sus palabras.",
+                        },
+                    },
+                    "required": ["tema"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "consultar_cita",
+                "description": (
+                    "Busca la cita de quien escribe. Con el numero de reserva si lo "
+                    "da; si no, por su telefono. Usala antes de cancelar o cambiar."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "codigo": {"type": "string", "description": "R-XXXX si lo dice"},
+                    },
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "cancelar_cita",
+                "description": (
+                    "Cancela una cita. Necesita el numero de reserva. La cita solo "
+                    "queda cancelada si esta tool lo confirma."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "codigo": {"type": "string"},
+                        "motivo": {"type": "string"},
+                    },
+                    "required": ["codigo"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "reprogramar_cita",
+                "description": (
+                    "Mueve una cita a otro dia u hora. Comprueba que el hueco nuevo "
+                    "este libre; si no lo esta, te lo dice y no cambia nada."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "codigo": {"type": "string"},
+                        "fecha": {"type": "string", "description": "AAAA-MM-DD"},
+                        "hora": {"type": "string", "description": "HH:MM"},
+                    },
+                    "required": ["codigo", "fecha", "hora"],
                 },
             },
         },
@@ -191,6 +287,12 @@ async def _ejecutar(
     if nombre == "buscar_servicio":
         return _tool_buscar_servicio(cliente_id, argumentos, location_id=location_id)
 
+    if nombre == "consultar_horario":
+        return _tool_consultar_horario(cliente_id, argumentos)
+
+    if nombre == "politica_del_negocio":
+        return _tool_politica_del_negocio(cliente_id, argumentos)
+
     if nombre == "crear_cita":
         # El modelo rellena "nombre" con cualquier cosa con tal de poder llamar a
         # la tool. Sin nombre de verdad, no hay cita.
@@ -231,6 +333,115 @@ async def _ejecutar(
     return resultado
 
 
+def _tool_consultar_horario(cliente_id: str, argumentos: Dict[str, Any]) -> Dict[str, Any]:
+    """El horario real, y si esta abierto AHORA.
+
+    Existe porque "¿estais abiertos ahora?" no se responde con el horario semanal
+    escrito hace meses: a las 21:15 de un sabado, "abrimos de 9 a 14" no dice si
+    puedes ir.
+    """
+    from datetime import datetime
+
+    from backend import agenda, timeutils
+
+    config = clients._get_client_config(cliente_id)
+    zona = str((config.get("booking") or {}).get("timezone") or settings.DEFAULT_TIMEZONE)
+    try:
+        from zoneinfo import ZoneInfo
+
+        ahora = datetime.now(ZoneInfo(zona))
+    except Exception:  # noqa: BLE001
+        ahora = timeutils._utc_now()
+
+    try:
+        matriz = agenda._weekly_schedule_matrix(cliente_id, config)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("[agente] sin horario (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No he podido consultar el horario."}
+
+    dias = []
+    for fila in matriz or []:
+        if not isinstance(fila, dict):
+            continue
+        dias.append({
+            "dia": _DIAS[int(fila.get("weekday", 0))],
+            "cerrado": bool(fila.get("closed")),
+            # La matriz las llama start/end, no open/close: leerlas mal dejaba el
+            # horario vacio y el modelo lo rellenaba de memoria.
+            "abre": fila.get("start") or "",
+            "cierra": fila.get("end") or "",
+        })
+
+    hoy = next((d for d in dias if d["dia"] == _DIAS[ahora.weekday()]), None)
+    abierto_ahora = False
+    if hoy and not hoy["cerrado"] and hoy["abre"] and hoy["cierra"]:
+        abierto_ahora = hoy["abre"] <= ahora.strftime("%H:%M") < hoy["cierra"]
+    return {
+        "ok": True,
+        "ahora": ahora.strftime("%H:%M"),
+        "hoy": hoy or {},
+        "abierto_ahora": abierto_ahora,
+        "semana": dias,
+    }
+
+
+def _tool_politica_del_negocio(cliente_id: str, argumentos: Dict[str, Any]) -> Dict[str, Any]:
+    """Lo que ESTE negocio ha decidido sobre un tema, con sus propias palabras.
+
+    Es la pieza que hace que el asistente sirva para cualquier negocio: las normas
+    (no dar precios sin ver el pelo, pedir foto, la fianza...) son DATOS del tenant,
+    no codigo. Otro negocio pone las suyas y el asistente se comporta distinto sin
+    tocar una linea.
+    """
+    from backend import rag, rules
+
+    tema = str(argumentos.get("tema") or "").strip()
+    if not tema:
+        return {"ok": False, "error": "Dime sobre que tema."}
+
+    respuestas = []
+    # 1. Lo que ha escrito palabra por palabra.
+    literal = rag._match_qa_answer(cliente_id, tema)
+    if literal:
+        respuestas.append({"fuente": "respuesta escrita por el negocio", "texto": literal})
+    else:
+        palabras = {p for p in catalog_pick._norm(tema).split() if len(p) > 3}
+        try:
+            for fila in rag._list_qa_rows(cliente_id)[:60]:
+                pregunta = str(fila["question"] if "question" in fila.keys() else "")
+                if palabras & set(catalog_pick._norm(pregunta).split()):
+                    respuestas.append({
+                        "fuente": "respuesta escrita por el negocio",
+                        "pregunta": pregunta,
+                        "texto": str(fila["answer"] if "answer" in fila.keys() else ""),
+                    })
+                if len(respuestas) >= 3:
+                    break
+        except Exception:  # noqa: BLE001
+            pass
+
+    # 2. Sus reglas activas ("cuando pidan X, haz Y").
+    try:
+        for regla in rules.listar(cliente_id, solo_activas=True)[:12]:
+            texto_regla = catalog_pick._norm(regla["nombre"] + " " + (regla["texto"] or ""))
+            if {p for p in catalog_pick._norm(tema).split() if len(p) > 3} & set(texto_regla.split()):
+                respuestas.append({
+                    "fuente": "regla del negocio",
+                    "cuando": regla["intenciones"],
+                    "texto": regla["texto"],
+                })
+    except Exception:  # noqa: BLE001
+        pass
+
+    if not respuestas:
+        return {
+            "ok": True, "hay_politica": False,
+            "aviso": ("El negocio no tiene nada escrito sobre eso. No te inventes una "
+                      "politica: dilo y ofrece preguntarlo o dar el telefono."),
+        }
+    return {"ok": True, "hay_politica": True, "politicas": respuestas[:4]}
+
+
 def _tool_buscar_servicio(
     cliente_id: str, argumentos: Dict[str, Any], *, location_id: str = "",
 ) -> Dict[str, Any]:
@@ -250,12 +461,23 @@ def _tool_buscar_servicio(
         detalle = _detalle_servicio(cliente_id, eleccion.servicio)
         return {"ok": True, "servicio": eleccion.servicio, **detalle}
     if eleccion.falta in ("tecnica", "talla"):
+        # Con DURACION de cada candidato: a "¿cuanto tiempo tengo que estar ahi?"
+        # se le puede contestar el abanico ("de 45 a 75 minutos segun el largo") sin
+        # obligarla a concretar. Sin este dato el agente preguntaba dos veces.
+        detalle = []
+        for nombre in eleccion.candidatos[:8]:
+            datos_servicio = _detalle_servicio(cliente_id, nombre)
+            minutos = datos_servicio.get("duracion_minutos") or 0
+            detalle.append({"servicio": nombre, "duracion_minutos": minutos})
         return {
             "ok": True,
             "servicio": "",
             "falta": eleccion.falta,
             "opciones": eleccion.opciones,
+            "candidatos": detalle,
             "sugerencia": catalog_pick.pregunta_para(eleccion),
+            "nota": ("Si solo pregunta cuanto dura o cuanto cuesta, contesta con estos "
+                     "candidatos y sus datos; no la obligues a concretar."),
         }
     return {
         "ok": False,
@@ -448,6 +670,36 @@ def _afirma_sobre_la_agenda(texto: str) -> bool:
     return any(frase in limpio for frase in _HABLA_DE_AGENDA)
 
 
+# Como dice una clienta que ninguna opcion le sirve. El salon pidio que en ese
+# momento -y solo en ese- se le ofrezca llamar, porque ellas pueden cuadrar a mano
+# lo que el sistema no puede.
+_RECHAZA_LAS_OPCIONES = (
+    "no me va bien", "no me viene bien", "ninguna", "ningun hueco", "no puedo a esa",
+    "no me encaja", "no me sirve", "imposible", "no puedo ir", "solo puedo",
+)
+
+
+def _rechaza_las_opciones(mensaje: str) -> bool:
+    limpio = catalog_pick._norm(mensaje)
+    return any(frase in limpio for frase in _RECHAZA_LAS_OPCIONES)
+
+
+def _con_el_telefono_si_hace_falta(
+    cliente_id: str, mensaje: str, respuesta: str, cita_creada: bool,
+) -> str:
+    """Añade el telefono cuando la clienta rechaza las opciones y no hay cita.
+
+    Es una condicion del salon, asi que no puede quedar a lo que decida el modelo:
+    "no me va bien ninguna" y despedirse sin ofrecer el telefono es perder la cita.
+    """
+    if cita_creada or not respuesta or not _rechaza_las_opciones(mensaje):
+        return respuesta
+    linea = clients.call_us_line(cliente_id)
+    if not linea or catalog_pick._norm(linea)[:40] in catalog_pick._norm(respuesta):
+        return respuesta
+    return respuesta.rstrip() + linea
+
+
 async def responder(
     cliente_id: str,
     mensaje: str,
@@ -519,7 +771,9 @@ async def responder(
                                     "esta cerrado ni que no hay hueco sin haberlo mirado."),
                     })
                     continue
-                return texto_final, cita_creada
+                return _con_el_telefono_si_hace_falta(
+                    cliente_id, mensaje, texto_final, cita_creada,
+                ), cita_creada
             obligar = False
 
             mensajes.append({
@@ -550,8 +804,20 @@ async def responder(
                     "role": "tool", "tool_call_id": llamada.id,
                     "content": json.dumps(resultado, ensure_ascii=False)[:2000],
                 })
-        # Se le acabaron las vueltas: mejor una respuesta honesta que el silencio.
-        return "", cita_creada
+        # Se le acabaron las vueltas. Antes se devolvia vacio y la conversacion se
+        # caia al flujo de listas a media frase. Se le pide UNA respuesta final con
+        # todo lo que ya ha averiguado, sin mas herramientas.
+        cierre = cliente.chat.completions.create(
+            model=settings.DEFAULT_CHAT_MODEL,
+            messages=mensajes + [{
+                "role": "system",
+                "content": ("Contesta ya con lo que sabes, en una o dos frases, y dile "
+                            "que te falta para seguir. No inventes datos que no tengas."),
+            }],
+            temperature=0.3,
+            max_tokens=300,
+        )
+        return (cierre.choices[0].message.content or "").strip(), cita_creada
     except Exception as exc:  # noqa: BLE001 - nunca puede dejar a nadie sin respuesta
         settings.logger.warning("[agenda-agente] fallo con %s: %s", cliente_id, exc)
         return "", cita_creada

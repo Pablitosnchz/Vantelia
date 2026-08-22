@@ -1478,6 +1478,22 @@ def _wa_tiene_cita(cliente_id: str, telefono: str) -> bool:
         return False
 
 
+# Señales de que la conversacion va de coger, cambiar o cancelar una cita. Sirve
+# para saber si hay que quedarse "dentro" del hilo o si solo era una pregunta
+# suelta que ya esta contestada.
+_HABLANDO_DE_CITA = (
+    "cita", "reserv", "hueco", "dia", "hora", "te apunto", "te la cojo",
+    "que dia", "que hora", "que te apetece", "que te gustaria hacerte",
+    "cancelar", "cambiar",
+)
+
+
+def _wa_esta_gestionando_una_cita(texto: str) -> bool:
+    """¿La respuesta deja una gestion de cita a medias?"""
+    limpio = textnorm._strip_accents(str(texto or "").lower())
+    return any(frase in limpio for frase in _HABLANDO_DE_CITA)
+
+
 async def _wa_turno_del_agente(
     *, cliente_id: str, phone_number_id: str, from_number: str,
     incoming_text: str, flow: appstate.WAFlowState, config: Dict[str, Any], request,
@@ -1488,21 +1504,26 @@ async def _wa_turno_del_agente(
     inventarse un servicio, un hueco o una cita. Si devuelve vacio, quien llama
     sigue con el flujo de listas de siempre.
     """
-    from backend import booking_agent
+    from backend import agent
 
-    if not booking_agent.disponible(cliente_id):
+    if not agent.disponible(cliente_id):
         return False
 
     session_id = _wa_registrar(
         cliente_id=cliente_id, from_number=from_number, request=request,
         entrante=incoming_text,
     )
-    texto, cita_creada = await booking_agent.responder(
+    texto, cita_creada = await agent.responder(
         cliente_id, incoming_text, session_id=session_id, telefono=from_number,
         config=config, location_id=flow.location_id or _wa_location_id(cliente_id, phone_number_id),
     )
     if not texto:
         return False
+
+    # El detalle que pidio el salon vale tambien aqui: al unificar la conversacion
+    # en el agente, el "Gracias a ti" se quedaba en las capas que ahora se salta.
+    # El helper es idempotente, asi que no se duplica si ya lo dice.
+    texto = chat._con_gracias_a_ti(incoming_text, texto)
 
     _wa_registrar(
         cliente_id=cliente_id, from_number=from_number, request=request,
@@ -1514,8 +1535,11 @@ async def _wa_turno_del_agente(
     )
     if cita_creada:
         _wa_clear_flow(cliente_id, from_number)
-    else:
-        flow.flow = "booking_agente"
+    elif _wa_esta_gestionando_una_cita(texto):
+        # Solo se queda "en conversacion de cita" si de verdad la esta cogiendo:
+        # responder "¿cual es vuestro horario?" no puede dejar a nadie dentro de un
+        # flujo de reserva del que luego hay que salir.
+        flow.flow = "agente"
     return True
 
 
@@ -2206,19 +2230,34 @@ async def _handle_whatsapp_message(
         return
 
     # FLUJO BOOKING - Servicio
-    # Conversacion de cita en marcha: sigue el agente.
-    if flow.flow == "booking_agente" and not iid:
+    # ─── El agente atiende la conversacion ────────────────────────────────
+    # En modo conversacional lleva el el hilo: tiene herramientas para el horario,
+    # el catalogo, la agenda, las citas y las politicas del negocio. Antes de esto
+    # habia seis capas de heuristicas peleandose, y los fallos eran de enrutado.
+    # Solo se le pasa el turno sin flujo de listas a medias y sin pulsacion.
+    if (flow.flow in ("", "agente") and not iid
+            and _wa_modo_conversacional(config)):
         if await _wa_turno_del_agente(
             cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
             incoming_text=incoming_text, flow=flow, config=config, request=request,
         ):
             return
-        # El agente no ha podido: se retoma con el flujo de siempre.
+        # No ha podido: sigue el recorrido de siempre, que nunca se ha quitado.
+
+    # Conversacion de cita en marcha: sigue el agente.
+    if flow.flow == "agente" and not iid:
+        if await _wa_turno_del_agente(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+            incoming_text=incoming_text, flow=flow, config=config, request=request,
+        ):
+            return
+        # El agente no ha podido: se sigue HABLANDO, que es lo que el negocio ha
+        # pedido. Mandarle una lista de golpe a media conversacion es peor.
         flow.flow = "booking_service"
         flow.servicio_texto = incoming_text
-        await _wa_send_service_picker(
+        await _wa_preguntar_servicio(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-            location_id=flow.location_id,
+            pregunta="Perdona, ¿me dices otra vez qué te quieres hacer? 😊",
         )
         return
 

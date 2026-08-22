@@ -361,31 +361,42 @@ configurable (`booking.rescate_texto` con `{telefono}`), apagable
 Los tres se eligen en el portal (Tune AI). Tests: `tests/test_reserva_hablando.py`,
 `tests/test_rescate_por_telefono.py`.
 
-## Coger cita conversando: modelo al mando, tools de guardarrail
+## El asistente: un agente con herramientas (leer docs/COMO_PIENSA_EL_ASISTENTE.md)
 
-`booking.estilo = conversacional` -> la cita la lleva `backend/booking_agent.py`
-en vez de la maquina de listas. MISMA arquitectura que la voz: el modelo decide
-QUE decir y las TOOLS ponen la fiabilidad.
+**EMPIEZA POR `docs/COMO_PIENSA_EL_ASISTENTE.md`** antes de tocar como responde el
+asistente. Resumen:
 
-- Tres tools: `buscar_servicio` (catalogo real), `consultar_disponibilidad`
-  (huecos reales) y `crear_cita`. Esta ultima REUSA `voice._voice_dispatch_tool`:
-  una sola forma de crear una cita en todo el producto.
-- `backend/catalog_pick.py` elige el servicio con el catalogo real (familia,
-  tecnica, talla, para quien, edad) y dice que falta por preguntar. DETERMINISTA
-  -mismos datos, misma decision- y por eso testeable sin modelo.
-- Si el agente no puede, devuelve texto vacio y WhatsApp cae a sus listas.
+- Eran SEIS capas de heuristicas compitiendo por contestar y casi todos los fallos
+  eran de ENRUTADO (la Q&A del horario se comia "¿estais abiertos ahora?"). Ahora
+  manda `backend/agent.py`: el modelo decide QUE consultar y las TOOLS devuelven la
+  verdad. Quedan dos interceptores a proposito -palabras clave y Q&A exactas-
+  porque lo que el negocio escribe literalmente manda.
+- Tools: `consultar_horario`, `buscar_servicio`, `consultar_disponibilidad`,
+  `crear_cita`, `consultar_cita`, `cancelar_cita`, `reprogramar_cita` y
+  `politica_del_negocio`. Las de cita reusan `voice._voice_dispatch_tool`: UNA sola
+  forma de crear una cita en todo el producto.
+- `backend/catalog_pick.py` elige el servicio: el modelo EXTRAE, el codigo DECIDE.
+  Determinista y testeable sin modelo.
+- `backend/playbooks.py`: las condiciones de un cliente son PLANTILLAS que activa
+  desde el portal, no codigo. Otro negocio pone las suyas y el asistente cambia sin
+  tocar una linea.
 
-REGLA: lo que el modelo puede hacer mal, lo impide la TOOL, no el prompt. Los tres
-fallos reales, todos arreglados en codigo:
-1. Creaba la cita con nombre inventado ("clienta") -> la tool exige nombre de
-   verdad (`_NOMBRES_QUE_NO_LO_SON`).
-2. Creaba DOS citas entre turnos -> dedup mirando la agenda (`_cita_identica`).
-3. Calculaba mal las fechas ("el jueves que viene, 29" siendo el 27) -> ya no
-   calcula: recibe los proximos 14 dias con fecha y si el negocio abre.
+REGLA: lo que el modelo puede hacer mal, lo impide el CODIGO, no el prompt. Paso de
+verdad: creo una cita con nombre "clienta" inventado, creo dos citas seguidas, dijo
+"el jueves 29" siendo el 27, afirmo que un dia estaba cerrado sin mirar la agenda y
+nego un servicio que si hacen. Los cinco estan arreglados en las tools.
 
-Condiciones del tenant piloto y su test: `tests/test_condiciones_del_salon.py`
-(tono, precios por familia, foto solo para presupuesto de alisado, extensiones a
-diagnostico, ratos de espera libres, telefono solo si la cita se puede perder).
+QA obligatorio antes de dar algo por bueno:
+
+```powershell
+python scripts/evaluar_asistente.py --db-copia /tmp/eval.db   # banco de casos
+python -m pytest
+```
+
+El banco (`evals/casos_asistente.py`) tiene severidad: si falla un CRITICO
+-inventarse un precio, dar por hecha una cita, negar un servicio que existe- la
+tirada se da por mala. Trabaja sobre una COPIA de la BD: nunca toca la agenda del
+negocio.
 
 ## Respuestas automaticas por palabra clave (opt-in por tenant)
 

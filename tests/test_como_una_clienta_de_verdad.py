@@ -80,19 +80,19 @@ def test_solo_se_mira_el_catalogo_si_preguntan_si_lo_hacen(catalogo, api_module)
 
 def test_no_afirma_nada_de_la_agenda_sin_mirarla(api_module):  # noqa: F811
     """"el jueves estamos cerrados" siendo falso: lo dijo sin consultar."""
-    from backend import booking_agent
+    from backend import agent
 
-    assert booking_agent._afirma_sobre_la_agenda("El jueves estamos cerrados") is True
-    assert booking_agent._afirma_sobre_la_agenda("no tengo hueco esa tarde") is True
-    assert booking_agent._afirma_sobre_la_agenda("¿Qué te apetece hacerte?") is False
+    assert agent._afirma_sobre_la_agenda("El jueves estamos cerrados") is True
+    assert agent._afirma_sobre_la_agenda("no tengo hueco esa tarde") is True
+    assert agent._afirma_sobre_la_agenda("¿Qué te apetece hacerte?") is False
 
 
 def test_consulta_cuando_la_respuesta_depende_de_datos(api_module):  # noqa: F811
-    from backend import booking_agent
+    from backend import agent
 
-    assert booking_agent._necesita_consultar("quiero cita el jueves") is True
-    assert booking_agent._necesita_consultar("quiero un corte") is True
-    assert booking_agent._necesita_consultar("gracias, muy amable") is False
+    assert agent._necesita_consultar("quiero cita el jueves") is True
+    assert agent._necesita_consultar("quiero un corte") is True
+    assert agent._necesita_consultar("gracias, muy amable") is False
 
 
 def test_cambiar_de_idea_no_es_cambiar_de_cita(api_module):  # noqa: F811

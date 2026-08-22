@@ -1014,6 +1014,32 @@ class AppKeywordRulesConfigPayload(BaseModel):
     enabled: bool
 
 
+class AppPlaybookItem(BaseModel):
+    """Una situacion tipica del negocio (plantilla lista para activar)."""
+
+    id: str
+    titulo: str = ""
+    explicacion: str = ""
+    ejemplo: str = ""
+    pide_familias: bool = True
+    activa: bool = False
+    familias: List[str] = Field(default_factory=list)
+    texto: str = ""
+    veces: int = 0
+
+
+class AppPlaybooksResponse(BaseModel):
+    items: List[AppPlaybookItem] = Field(default_factory=list)
+    familias: List[str] = Field(default_factory=list)
+
+
+class AppPlaybookPayload(BaseModel):
+    familias: List[str] = Field(default_factory=list, max_length=20)
+    texto: str = Field(default="", max_length=2000)
+    activa: bool = True
+    nombre: str = Field(default="", max_length=120)
+
+
 class AppTonePayload(BaseModel):
     """Como habla el asistente de este negocio, y como coge las citas."""
 
