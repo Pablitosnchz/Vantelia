@@ -18,7 +18,14 @@ COMO SE LEE UN CASO
         "mensajes": ["cuanto cuestan unas mechas?"],
         "debe": ["diagnostico"],      # alguna de estas palabras
         "no_debe": ["€", "euros"],    # ninguna de estas
+        "agenda": "crea",             # y que quede en la AGENDA: crea|no_crea|
+                                      # cancela|cambia
+        "con_cita": True,             # se le deja una cita cogida antes de empezar;
+                                      # {codigo} en los mensajes es la suya
     }
+
+Lo de `agenda` importa: un asistente puede decir "listo, te he apuntado" y no
+haber tocado la agenda. Lo que se mide es el efecto, no la frase.
 
 `critico` es lo que no puede fallar NUNCA porque le cuesta dinero o credibilidad
 al negocio: inventarse un precio, dar por hecha una cita que no existe, negar un
@@ -217,5 +224,78 @@ CASOS = [
         "debe": [],
         "no_debe": [],
         "exige_respuesta": True,
+    },
+
+    # ─── Que la cita ocurra de verdad, no solo que lo diga ─────────────────
+    {
+        "id": "reserva-completa-de-verdad",
+        "gravedad": "critico",
+        "por_que": "Es a lo que viene el negocio: que la cita acabe en la agenda.",
+        "mensajes": [
+            "hola quiero cita para un corte de señora",
+            "el primer hueco que tengas",
+            "me llamo Marta Ruiz",
+            "si, confirmo",
+        ],
+        "agenda": "crea",
+        "debe": [],
+        "no_debe": [],
+    },
+    {
+        "id": "cancelar-de-verdad",
+        "gravedad": "critico",
+        "por_que": "Si dice que la cancela y no la cancela, el hueco se pierde.",
+        "con_cita": True,
+        "mensajes": ["hola quiero anular mi cita", "{codigo}", "si, cancelala"],
+        "agenda": "cancela",
+        "debe": ["cancel", "anulad"],
+        "no_debe": [],
+    },
+    {
+        "id": "cambiar-la-hora-de-verdad",
+        "gravedad": "importante",
+        "por_que": "Reprogramar tiene que mover la cita, no crear otra.",
+        "con_cita": True,
+        # Cuatro turnos porque mover una cita SIN que elija hora seria peor:
+        # ofrecer y esperar a que diga cual es lo correcto.
+        "mensajes": [
+            "buenas, necesito cambiar mi cita de dia",
+            "{codigo}",
+            "cualquier otro hueco que tengas me vale",
+            "vale, la primera opcion que me has dicho",
+        ],
+        "agenda": "cambia",
+        "debe": [],
+        "no_debe": [],
+    },
+    {
+        "id": "no-coge-cita-sin-que-lo-pidan",
+        "gravedad": "critico",
+        "por_que": "Preguntar un precio no es pedir hora.",
+        "mensajes": ["cuanto vale un corte de señora?"],
+        "agenda": "no_crea",
+        "debe": [],
+        "no_debe": [],
+    },
+
+    # ─── Como pidio el salon que hable ─────────────────────────────────────
+    {
+        "id": "sin-formulario-se-habla",
+        "gravedad": "importante",
+        "por_que": "Pidio que la IA le guie hablando, no que le suelte un formulario.",
+        "mensajes": ["quiero hacerme mechas"],
+        "debe": [],
+        "no_debe": ["formulario", "rellena el", "completa el formulario"],
+    },
+    {
+        "id": "recomienda-ante-un-problema",
+        "gravedad": "importante",
+        "por_que": (
+            "Con 186 servicios planos proponia un ALISADO a quien se le caia el "
+            "pelo. Tiene que entender el problema, no buscar por parecido."
+        ),
+        "mensajes": ["se me esta cayendo mucho el pelo, que me recomiendas?"],
+        "debe": [],
+        "no_debe": ["alisado", "keratina"],
     },
 ]

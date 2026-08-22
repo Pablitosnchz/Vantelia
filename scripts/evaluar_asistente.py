@@ -23,7 +23,7 @@ import argparse
 import asyncio
 import io
 import os
-import shutil
+import pathlib
 import sys
 import unicodedata
 
@@ -43,9 +43,50 @@ def _cargar_casos():
 
 
 def _preparar_copia(origen: str, destino: str) -> None:
-    """Trabajar sobre una copia: las citas de prueba no tocan la agenda real."""
-    shutil.copyfile(origen, destino)
+    """Trabajar sobre una copia: las citas de prueba no tocan la agenda real.
+
+    OJO: `settings.DB_PATH` se calcula al IMPORTAR y no lee la variable de entorno,
+    asi que exportar DB_PATH no aislaba nada. Costo siete citas de prueba metidas en
+    la agenda de un salon real. Hay que reapuntar el modulo, y despues comprobarlo.
+    """
+    import sqlite3
+
+    from backend import settings
+
+    # Con `shutil.copyfile` la copia sale DESFASADA: SQLite en modo WAL guarda los
+    # ultimos cambios en un fichero aparte (-wal) que no se copia, asi que la copia
+    # traia citas ya borradas y el dedup las daba por vivas. `backup()` consolida.
+    for sufijo in ("", "-wal", "-shm"):
+        try:
+            os.remove(destino + sufijo)
+        except OSError:
+            pass
+    origen_db = sqlite3.connect(origen)
+    destino_db = sqlite3.connect(destino)
+    with destino_db:
+        origen_db.backup(destino_db)
+    origen_db.close()
+    destino_db.close()
     os.environ["DB_PATH"] = destino
+    settings.DB_PATH = pathlib.Path(destino)
+
+
+def _comprobar_aislamiento(destino: str) -> None:
+    """Se niega a seguir si las escrituras irian a la base de datos de verdad."""
+    from backend import db, settings
+
+    efectiva = str(settings.DB_PATH)
+    if os.path.abspath(efectiva) != os.path.abspath(destino):
+        raise SystemExit(
+            "NO se esta usando la copia (%s), sino %s. Se aborta para no tocar la "
+            "agenda del negocio." % (destino, efectiva)
+        )
+    with db._get_db_connection() as conexion:
+        fichero = conexion.execute("PRAGMA database_list").fetchone()[2]
+    if os.path.abspath(fichero) != os.path.abspath(destino):
+        raise SystemExit(
+            "las conexiones siguen abriendo %s. Se aborta." % fichero
+        )
 
 
 def _instalar_captura():
@@ -78,6 +119,65 @@ def _instalar_captura():
     return dichos
 
 
+def _citas_del_telefono(cliente_id: str, telefono: str):
+    """Las citas vivas de ese telefono. Sirve para mirar la AGENDA, no el texto."""
+    from backend import db
+
+    with db._get_db_connection() as conexion:
+        filas = conexion.execute(
+            "SELECT booking_code, status, booking_date, booking_time FROM bookings"
+            " WHERE cliente_id=? AND REPLACE(REPLACE(telefono,' ',''),'+','') LIKE ?"
+            " ORDER BY created_at", (cliente_id, "%" + telefono[-9:]),
+        ).fetchall()
+    return [dict(f) for f in filas]
+
+
+def _preparar_cita(cliente_id: str, telefono: str, indice: int = 0):
+    """Le deja una cita ya cogida, para poder probar cancelar y reprogramar.
+
+    Cada caso coge un dia distinto y el ULTIMO hueco: los casos comparten la copia
+    de la agenda y, cogiendo todos el primer hueco libre, se quitaban el sitio unos
+    a otros y fallaban por colision, no por el asistente.
+
+    Se crea por el nucleo de siempre (`_create_booking_core`), no a mano: si eso se
+    rompe, el caso falla al prepararlo, que tambien es informacion.
+    """
+    from backend import agenda, booking, db, timeutils
+
+    hoy = timeutils._utc_now().date()
+    with db._get_db_connection() as conexion:
+        empleados = conexion.execute(
+            "SELECT * FROM employees WHERE cliente_id=? AND is_active=1 LIMIT 1",
+            (cliente_id,),
+        ).fetchall()
+    if not empleados:
+        return None
+    servicios = booking._public_services_for_booking(cliente_id)
+    servicio = servicios[0]["nombre"] if servicios else ""
+    for salto in range(21):
+        dia = hoy + __import__("datetime").timedelta(days=2 + salto)
+        fecha = dia.isoformat()
+        huecos = asyncio.run(agenda._available_slots_for_day(cliente_id, fecha)) or []
+        if not huecos:
+            continue
+        # Empezando por el final y desplazado por caso: asi dos casos no pelean por
+        # el mismo hueco (y ninguno le quita el primero al que reserva hablando).
+        orden = list(reversed(huecos))
+        orden = orden[(indice * 2) % len(orden):] + orden[:(indice * 2) % len(orden)]
+        for hora in orden:
+            try:
+                fila = asyncio.run(booking._create_booking_core(
+                    cliente_id, employee_row=empleados[0], nombre="Prueba Eval",
+                    email="", telefono=telefono, servicio=servicio,
+                    booking_date=fecha, booking_time=hora, notas="",
+                    source="eval", send_confirmation=False,
+                ))
+                return dict(fila)
+            except Exception:  # noqa: BLE001
+                continue
+    return None
+
+
 def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
     """Devuelve (paso, respuestas, motivo)."""
     from backend import whatsapp
@@ -85,7 +185,16 @@ def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
     telefono = "34600%06d" % (990000 + indice)
     whatsapp._wa_clear_flow(cliente_id, telefono)
     marca = len(dichos)
-    for mensaje in caso["mensajes"]:
+
+    # Casos que necesitan una cita ya cogida (cancelar, cambiar de hora).
+    previa = _preparar_cita(cliente_id, telefono, indice) if caso.get("con_cita") else None
+    if caso.get("con_cita") and not previa:
+        return False, [], "no se ha podido dejar una cita para probar"
+    antes = _citas_del_telefono(cliente_id, telefono)
+
+    mensajes = [m.replace("{codigo}", (previa or {}).get("booking_code", ""))
+                for m in caso["mensajes"]]
+    for mensaje in mensajes:
         try:
             asyncio.run(whatsapp._handle_whatsapp_message(
                 cliente_id=cliente_id, phone_number_id="phone_eval",
@@ -100,6 +209,25 @@ def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
     respuestas = dichos[marca:]
     if caso.get("exige_respuesta") and not respuestas:
         return False, respuestas, "se ha quedado callada"
+
+    # Lo que cuenta de una reserva no es lo que diga, es lo que quede en la agenda.
+    exigido = caso.get("agenda")
+    if exigido:
+        despues = _citas_del_telefono(cliente_id, telefono)
+        vivas = [c for c in despues if c["status"] in ("confirmed", "pending_review")]
+        nuevas = len(despues) - len(antes)
+        if exigido == "crea" and nuevas < 1:
+            return False, respuestas, "no ha quedado ninguna cita en la agenda"
+        if exigido == "no_crea" and nuevas > 0:
+            return False, respuestas, "ha cogido una cita que nadie confirmo"
+        if exigido == "cancela" and vivas:
+            return False, respuestas, "la cita sigue viva: %s" % vivas
+        if exigido == "cambia":
+            movidas = [c for c in vivas
+                       if (c["booking_date"], c["booking_time"])
+                       != ((previa or {}).get("booking_date"), (previa or {}).get("booking_time"))]
+            if not movidas:
+                return False, respuestas, "la cita no se ha movido de sitio"
     # Se mira la ULTIMA respuesta y el conjunto: hay casos donde lo importante
     # esta en el cierre y otros donde vale que aparezca en cualquier momento.
     todo = _norm(" ".join(respuestas))
@@ -127,6 +255,11 @@ def main() -> int:
 
     if args.db_copia:
         _preparar_copia(args.db_origen, args.db_copia)
+        _comprobar_aislamiento(args.db_copia)
+    elif any(c.get("agenda") or c.get("con_cita") for c in _cargar_casos()):
+        # Hay casos que RESERVAN de verdad. Sin copia irian a la agenda del negocio.
+        print("Estos casos crean y cancelan citas: usa --db-copia /tmp/eval.db")
+        return 2
 
     casos = [c for c in _cargar_casos() if not args.caso or c["id"] == args.caso]
     if not casos:

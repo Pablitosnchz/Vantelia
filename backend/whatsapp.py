@@ -1887,6 +1887,20 @@ async def _handle_whatsapp_message(
                           or booking._message_requests_reschedule_booking(incoming_text)
                           or intencion_entendida == "reprogramar")
 
+    # Cancelar y cambiar una cita tambien los lleva el agente cuando el negocio ha
+    # pedido hablar en vez de listas: tiene `consultar_cita`, `cancelar_cita` y
+    # `reprogramar_cita`, y el telefono le llega verificado. El flujo por mensajes
+    # soltaba "Indica la nueva fecha para la cita R-1234" y, acto seguido, "Elige
+    # servicio, fecha y hora": tres textos secos que se contradicen entre si.
+    if ((trigger_cancel or trigger_reschedule) and booking_enabled and not iid
+            and _wa_modo_conversacional(config) and flow.flow in ("", "agente")):
+        if await _wa_turno_del_agente(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+            incoming_text=incoming_text, flow=flow, config=config, request=request,
+        ):
+            return
+        # Si no ha podido, sigue el recorrido de siempre: nadie se queda colgado.
+
     if trigger_cancel and booking_enabled:
         _wa_reset_booking_fields(flow)
         flow.flow = "manage_cancel_code"
@@ -2251,8 +2265,18 @@ async def _handle_whatsapp_message(
             incoming_text=incoming_text, flow=flow, config=config, request=request,
         ):
             return
-        # El agente no ha podido: se sigue HABLANDO, que es lo que el negocio ha
-        # pedido. Mandarle una lista de golpe a media conversacion es peor.
+        # El agente no ha podido. Si estaba GESTIONANDO una cita, preguntarle "¿que
+        # te quieres hacer?" es absurdo: no viene a reservar nada. Se le ofrece
+        # llamar, que es lo que el negocio pidio antes de perder a una clienta.
+        if _wa_tiene_cita(cliente_id, from_number):
+            await messaging._send_whatsapp_text(
+                cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+                text=(clients.call_us_line(cliente_id).strip()
+                      or "Perdona, ¿me lo repites? 😊"),
+            )
+            return
+        # Si venia a reservar, se sigue HABLANDO: mandarle una lista de golpe a
+        # media conversacion es peor.
         flow.flow = "booking_service"
         flow.servicio_texto = incoming_text
         await _wa_preguntar_servicio(

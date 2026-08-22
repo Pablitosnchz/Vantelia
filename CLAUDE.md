@@ -386,6 +386,15 @@ verdad: creo una cita con nombre "clienta" inventado, creo dos citas seguidas, d
 "el jueves 29" siendo el 27, afirmo que un dia estaba cerrado sin mirar la agenda y
 nego un servicio que si hacen. Los cinco estan arreglados en las tools.
 
+Un caso del banco puede exigir un EFECTO en la agenda (`agenda`: crea/no_crea/
+cancela/cambia), no solo palabras: "listo, te he apuntado" sin cita es el fallo que
+mas caro sale. `con_cita: True` le deja una cita cogida antes de empezar y `{codigo}`
+en los mensajes es la suya. El runner EXIGE `--db-copia` para esos casos y verifica
+el aislamiento: `settings.DB_PATH` se fija al importar y no lee la variable de
+entorno (exportar `DB_PATH` no aisla nada; costo siete citas de prueba en la agenda
+de un cliente real), y la copia se hace con `backup()` de SQLite porque `copyfile`
+deja fuera el WAL.
+
 QA obligatorio antes de dar algo por bueno:
 
 ```powershell

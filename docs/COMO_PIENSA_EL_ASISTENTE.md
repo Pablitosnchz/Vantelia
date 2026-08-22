@@ -114,6 +114,34 @@ que hay.
 El tono (`config['tono']`), el estilo de reserva (`booking.estilo`) y el rescate
 por teléfono (`booking.rescate_*`) son configuración por negocio igual que esto.
 
+## Los fallos que solo se ven mirando la agenda
+
+Hasta agosto de 2026 el banco de casos miraba **lo que el asistente decía**. Cuatro
+fallos graves vivían debajo, porque un asistente puede decir *"listo, te he
+apuntado"* sin haber tocado nada:
+
+| Fallo | Qué pasaba de verdad |
+| --- | --- |
+| Pedía el teléfono por WhatsApp | El canal lo trae verificado. La clienta daba servicio, día, hora y nombre, y la conversación moría pidiendo el número: **ninguna cita se creaba** |
+| El agente declaraba `codigo`, la tool leía `codigo_reserva` | Consultar, cancelar y cambiar cita **nunca funcionaron** desde chat ni WhatsApp. La llamada se perdía en silencio, sin error en ningún log |
+| Las notas se tiraban | *"soy alérgica"*, *"voy con mi hija"* no llegaban a la cita |
+| Barría el calendario | Con *"cualquier hueco me vale"* pedía ocho días de golpe, agotaba el turno y la dejaba sin respuesta |
+
+Por eso un caso ahora puede exigir un **efecto**: `agenda: crea | no_crea | cancela
+| cambia`. Y hay un test de contrato (`test_los_argumentos_que_declara_son_los_que_lee_el_despachador`)
+que compara lo que cada tool **anuncia** con lo que el despachador **consume**: ese
+desajuste no vuelve a pasar inadvertido.
+
+### Aislar la base de datos: comprobarlo, no suponerlo
+
+`settings.DB_PATH` se calcula al **importar** y no lee la variable de entorno, así
+que exportar `DB_PATH` no aislaba nada: una tirada metió siete citas de prueba en
+la agenda de un salón real. Ahora el runner reapunta el módulo, **verifica** que las
+conexiones abren la copia y se niega a arrancar si no. Y la copia se hace con
+`backup()` de SQLite, no con `copyfile`: en modo WAL los últimos cambios viven en un
+fichero aparte, así que la copia traía citas ya borradas y el dedup las daba por
+vivas.
+
 ## Cómo se comprueba que funciona
 
 **No basta con probarlo.** Los fallos que importan solo salen escribiendo como un

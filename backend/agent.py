@@ -132,7 +132,7 @@ def _herramientas() -> List[Dict[str, Any]]:
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "codigo": {"type": "string", "description": "R-XXXX si lo dice"},
+                        "codigo_reserva": {"type": "string", "description": "R-XXXX si lo dice"},
                     },
                 },
             },
@@ -148,10 +148,10 @@ def _herramientas() -> List[Dict[str, Any]]:
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "codigo": {"type": "string"},
+                        "codigo_reserva": {"type": "string"},
                         "motivo": {"type": "string"},
                     },
-                    "required": ["codigo"],
+                    "required": ["codigo_reserva"],
                 },
             },
         },
@@ -166,11 +166,11 @@ def _herramientas() -> List[Dict[str, Any]]:
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "codigo": {"type": "string"},
+                        "codigo_reserva": {"type": "string"},
                         "fecha": {"type": "string", "description": "AAAA-MM-DD"},
                         "hora": {"type": "string", "description": "HH:MM"},
                     },
-                    "required": ["codigo", "fecha", "hora"],
+                    "required": ["codigo_reserva", "fecha", "hora"],
                 },
             },
         },
@@ -279,11 +279,42 @@ def _cita_identica(cliente_id: str, telefono: str, argumentos: Dict[str, Any]) -
     return ""
 
 
+# El modelo escribe el nombre del argumento que le parece ("codigo" en vez de
+# "codigo_reserva", "nueva_fecha" en vez de "fecha"). El despachador solo lee el
+# suyo, asi que la llamada se perdia en silencio: consultar, cancelar y cambiar una
+# cita por su numero NO funcionaban desde el chat ni desde WhatsApp, y el asistente
+# contestaba "no encuentro ninguna cita con ese numero" con la cita delante.
+_ALIAS_DE_ARGUMENTO = {
+    "codigo": "codigo_reserva",
+    "codigo_de_reserva": "codigo_reserva",
+    "numero_reserva": "codigo_reserva",
+    "numero_de_reserva": "codigo_reserva",
+    "reserva": "codigo_reserva",
+    "booking_code": "codigo_reserva",
+    "nueva_fecha": "fecha",
+    "nueva_hora": "hora",
+    "telefono_contacto": "telefono",
+    "nombre_cliente": "nombre",
+}
+
+
+def _normalizar_argumentos(argumentos: Dict[str, Any]) -> Dict[str, Any]:
+    """Traduce los nombres de argumento que el modelo se inventa a los de verdad."""
+    salida = {}
+    for clave, valor in (argumentos or {}).items():
+        destino = _ALIAS_DE_ARGUMENTO.get(str(clave).strip().lower(), clave)
+        if destino not in salida or (salida.get(destino) in ("", None)):
+            salida[destino] = valor
+    return salida
+
+
 async def _ejecutar(
     cliente_id: str, nombre: str, argumentos: Dict[str, Any], *,
     telefono: str, location_id: str = "", ya_creadas: Optional[set] = None,
+    quien: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Ejecuta una tool. Nunca lanza: un fallo se devuelve como resultado."""
+    argumentos = _normalizar_argumentos(argumentos)
     if nombre == "buscar_servicio":
         return _tool_buscar_servicio(cliente_id, argumentos, location_id=location_id)
 
@@ -296,6 +327,10 @@ async def _ejecutar(
     if nombre == "crear_cita":
         # El modelo rellena "nombre" con cualquier cosa con tal de poder llamar a
         # la tool. Sin nombre de verdad, no hay cita.
+        # De una clienta conocida ya se sabe el nombre: lo pone el codigo antes de
+        # dar por incompleta la cita, en vez de hacersela repetir.
+        if not _nombre_de_verdad(argumentos.get("nombre")) and (quien or {}).get("nombre"):
+            argumentos["nombre"] = quien["nombre"]
         if not _nombre_de_verdad(argumentos.get("nombre")):
             return {
                 "ok": False,
@@ -562,7 +597,51 @@ def _calendario(cliente_id: str, config: Dict[str, Any], desde, dias: int = 14) 
     return "\n".join(lineas)
 
 
-def _instrucciones(cliente_id: str, config: Dict[str, Any], hoy) -> str:
+_PIDE_CONTACTO = (
+    "tu numero de telefono", "tu numero de movil", "tu telefono", "me lo puedes dar",
+    "necesito tu numero", "dame tu numero", "facilitame tu numero", "tu movil",
+    "tu correo", "tu email", "tu e-mail", "necesito tu correo",
+)
+
+
+def _pide_lo_que_ya_tiene(texto: str) -> bool:
+    """¿Le esta pidiendo el telefono o el email a quien escribe por WhatsApp?
+
+    Decirselo en las instrucciones no basta: el modelo lo pedia igual y la
+    conversacion moria ahi, con la clienta habiendo dado ya servicio, dia, hora y
+    nombre. Lo que el modelo puede hacer mal lo corta el codigo.
+    """
+    plano = catalog_pick._norm(texto or "")
+    return any(pista in plano for pista in _PIDE_CONTACTO)
+
+
+def _quien_escribe(cliente_id: str, telefono: str) -> Dict[str, str]:
+    """Lo que YA se sabe de quien escribe, sin preguntarle nada.
+
+    Por WhatsApp el numero viene verificado por el canal, y si ya ha reservado
+    antes tambien se sabe como se llama. Pedirselo otra vez es tratar como
+    desconocida a una clienta de siempre; y pedir el telefono POR WHATSAPP es
+    directamente absurdo: el asistente se quedaba en bucle pidiendolo y la cita no
+    llegaba a crearse nunca.
+    """
+    datos = {"telefono": str(telefono or "").strip(), "nombre": ""}
+    if not datos["telefono"]:
+        return datos
+    try:
+        from backend import crm
+
+        contacto = crm.contact_by_phone(cliente_id, datos["telefono"])
+    except Exception:  # noqa: BLE001
+        contacto = None
+    if contacto is not None:
+        nombre = str(contacto["name"] if "name" in contacto.keys() else "").strip()
+        if _nombre_de_verdad(nombre):
+            datos["nombre"] = nombre
+    return datos
+
+
+def _instrucciones(cliente_id: str, config: Dict[str, Any], hoy,
+                   quien: Optional[Dict[str, str]] = None) -> str:
     from backend import booking
 
     empresa = str(config.get("empresa") or config.get("nombre") or "el salon").strip()
@@ -586,6 +665,8 @@ def _instrucciones(cliente_id: str, config: Dict[str, Any], hoy) -> str:
         "COMO COGES UNA CITA:",
         "- Para crear la cita necesitas CUATRO cosas: servicio, fecha, hora y su nombre.",
         "  Ve consiguiendolas conversando, de una en una y sin agobiar.",
+        "- Su telefono YA lo tienes (te escribe por WhatsApp): no se lo pidas NUNCA.",
+        "  El email tampoco hace falta para reservar.",
         "- El servicio SIEMPRE lo confirmas con la tool `buscar_servicio`. Si te dice",
         "  que falta la tecnica o el largo, preguntaselo con tus palabras.",
         "- Las horas SIEMPRE salen de `consultar_disponibilidad`. Ofrece dos o tres,",
@@ -609,6 +690,12 @@ def _instrucciones(cliente_id: str, config: Dict[str, Any], hoy) -> str:
             "No lo ofrezcas a la primera de cambio, solo cuando la cita se pueda "
             "perder." % telefono
         )
+    if (quien or {}).get("nombre"):
+        partes += [
+            "",
+            "YA HA ESTADO AQUI: se llama %s. Saludala por su nombre y NO se lo "
+            "preguntes otra vez." % quien["nombre"],
+        ]
     if catalogo:
         partes += ["", "SU CATALOGO%s:" % ("" if completo else " (recortado)"), catalogo]
     if tono:
@@ -729,14 +816,16 @@ async def responder(
     except Exception:  # noqa: BLE001
         hoy = timeutils._utc_now().date()
 
+    quien = _quien_escribe(cliente_id, telefono)
     mensajes: List[Dict[str, Any]] = [
-        {"role": "system", "content": _instrucciones(cliente_id, cfg, hoy)},
+        {"role": "system", "content": _instrucciones(cliente_id, cfg, hoy, quien)},
     ]
     mensajes.extend(_historial(session_id, cliente_id))
     mensajes.append({"role": "user", "content": str(mensaje)[:1200]})
 
     cita_creada = False
     consultada = False  # ¿se ha mirado la agenda en este turno?
+    dias_mirados = 0
     ya_creadas: set = set()
     try:
         from openai import OpenAI as OpenAISdkClient
@@ -771,6 +860,22 @@ async def responder(
                                     "esta cerrado ni que no hay hueco sin haberlo mirado."),
                     })
                     continue
+                # Pedir el telefono POR WHATSAPP deja la cita sin coger: el
+                # canal ya lo trae verificado. Se le recuerda y se le obliga a
+                # rematar en vez de devolverle esa frase a la clienta.
+                if (_pide_lo_que_ya_tiene(texto_final) and quien.get("telefono")
+                        and not cita_creada and vuelta + 1 < MAX_VUELTAS):
+                    obligar = True
+                    recordatorio = (
+                        "Su telefono es %s y ya esta verificado: NO se lo pidas. "
+                        "El email no hace falta." % quien["telefono"]
+                    )
+                    if quien.get("nombre"):
+                        recordatorio += " Se llama %s." % quien["nombre"]
+                    recordatorio += (" Si ya tienes servicio, fecha, hora y nombre, "
+                                     "llama a `crear_cita` AHORA.")
+                    mensajes.append({"role": "system", "content": recordatorio})
+                    continue
                 return _con_el_telefono_si_hace_falta(
                     cliente_id, mensaje, texto_final, cita_creada,
                 ), cita_creada
@@ -792,12 +897,27 @@ async def responder(
                     argumentos = json.loads(llamada.function.arguments or "{}")
                 except (ValueError, TypeError):
                     argumentos = {}
-                resultado = await _ejecutar(
-                    cliente_id, llamada.function.name, argumentos,
-                    telefono=telefono, location_id=location_id, ya_creadas=ya_creadas,
-                )
+                # "cualquier hueco que tengas me vale" le hacia pedir el
+                # calendario dia a dia (ocho de una tacada) hasta agotar el turno:
+                # la clienta se quedaba sin respuesta y con la cita sin cambiar. A
+                # partir del tercer dia se le devuelve lo que ya tiene.
+                if (llamada.function.name == "consultar_disponibilidad"
+                        and dias_mirados >= 3):
+                    resultado = {
+                        "ok": True, "suficiente": True,
+                        "mensaje": ("Ya has mirado varios dias y tienes huecos de "
+                                    "sobra. Elige el primero que le encaje y remata "
+                                    "la gestion; no consultes mas dias."),
+                    }
+                else:
+                    resultado = await _ejecutar(
+                        cliente_id, llamada.function.name, argumentos,
+                        telefono=telefono, location_id=location_id, ya_creadas=ya_creadas,
+                        quien=quien,
+                    )
                 if llamada.function.name == "consultar_disponibilidad":
                     consultada = True
+                    dias_mirados += 1
                 if llamada.function.name == "crear_cita" and resultado.get("ok"):
                     cita_creada = True
                 mensajes.append({

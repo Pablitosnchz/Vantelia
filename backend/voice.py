@@ -2233,6 +2233,7 @@ async def _voice_perform_booking(
     email: str = "",
     location_id: str = "",
     fecha_texto: str = "",
+    notas: str = "",
 ) -> Dict[str, Any]:
     """Crea una cita real reutilizando el motor de booking del widget. source='voice'."""
     config = appstate.CONFIG_CLIENTES.get(cliente_id)
@@ -2312,7 +2313,9 @@ async def _voice_perform_booking(
             servicio=servicio,
             booking_date=booking_date,
             booking_time=booking_time,
-            notas="Cita creada por el asistente de voz.",
+            # Lo que cuenta el cliente al reservar ("soy alergica al amoniaco",
+            # "voy con mi hija") tiene que llegar al negocio: se perdia entero.
+            notas=textnorm._sanitize_text(notas)[:500] or "Cita creada por el asistente.",
             source="voice",
             send_confirmation=False,  # la voz confirma con su propio envio en segundo plano
         )
@@ -2866,16 +2869,21 @@ async def _voice_dispatch_tool_impl(
             reschedule=bool(str(args.get("codigo_reserva", "")).strip()),
         )
     if name == "crear_cita":
+        # El telefono del canal vale como el dictado: por WhatsApp y por el chat el
+        # numero viene VERIFICADO y el modelo no tiene por que pedirlo (pedirlo
+        # dejaba la cita sin coger). Por telefono sigue mandando lo que dicte el
+        # cliente, que puede reservar para otra persona.
         return await _voice_perform_booking(
             cliente_id,
             nombre=str(args.get("nombre", "")),
-            telefono=str(args.get("telefono", "")),
+            telefono=str(args.get("telefono", "") or from_number or ""),
             fecha=str(args.get("fecha", "")),
             hora=str(args.get("hora", "")),
             servicio=str(args.get("servicio", "")),
             email=str(args.get("email", "")),
             location_id=effective_location,
             fecha_texto=str(args.get("fecha_texto", "")),
+            notas=str(args.get("notas", "")),
         )
     if name == "consultar_cita":
         return await _voice_lookup_booking(

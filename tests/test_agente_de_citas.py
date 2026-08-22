@@ -218,3 +218,135 @@ def test_whatsapp_cae_a_las_listas_si_el_agente_no_puede(api_module):  # noqa: F
     assert "return False" in fuente, "tiene que poder decir que no ha podido"
     manejo = inspect.getsource(whatsapp._handle_whatsapp_message)
     assert "_wa_send_service_picker" in manejo
+
+
+def test_no_le_pide_el_telefono_a_quien_escribe_por_whatsapp(client, api_module):  # noqa: F811
+    """Por WhatsApp el numero viene verificado: pedirlo es absurdo y bloquea la cita.
+
+    Paso de verdad: pidio el telefono dos veces seguidas y la conversacion murio
+    ahi, sin cita, despues de que la clienta hubiera dado servicio, dia, hora y
+    nombre.
+    """
+    from backend import agent, clients
+
+    instrucciones = agent._instrucciones(
+        "demo", clients._get_client_config("demo"),
+        __import__("datetime").date(2026, 8, 22),
+    )
+    assert "no se lo pidas" in instrucciones.lower()
+    assert "telefono ya lo tienes" in instrucciones.lower()
+
+
+def test_a_la_clienta_conocida_no_le_pregunta_como_se_llama(client, api_module):  # noqa: F811
+    """Si ya reservo antes, el nombre lo pone el codigo: no se lo hace repetir."""
+    import asyncio
+
+    from backend import agent, crm
+
+    crm._crm_upsert_contact("demo", name="Marta Ruiz", phone="+34600111222", source="test")
+    quien = agent._quien_escribe("demo", "+34600111222")
+    assert quien["nombre"] == "Marta Ruiz"
+
+    # Y sin nombre en los argumentos, la tool NO rechaza la cita: la completa.
+    creadas = []
+
+    async def falso_dispatch(cliente_id, nombre, argumentos_json, **kwargs):
+        creadas.append(__import__("json").loads(argumentos_json))
+        return {"ok": True, "booking_code": "R-9999"}
+
+    from backend import voice
+
+    original = voice._voice_dispatch_tool
+    voice._voice_dispatch_tool = falso_dispatch
+    try:
+        resultado = asyncio.run(agent._ejecutar(
+            "demo", "crear_cita",
+            {"servicio": "Corte de señora", "fecha": "2026-08-25", "hora": "10:00"},
+            telefono="+34600111222", quien=quien,
+        ))
+    finally:
+        voice._voice_dispatch_tool = original
+
+    assert resultado.get("ok"), resultado
+    assert creadas and creadas[0]["nombre"] == "Marta Ruiz"
+
+
+def test_el_telefono_del_canal_basta_para_reservar(client, api_module):  # noqa: F811
+    """Por WhatsApp el numero llega verificado: la tool no puede exigir que lo dicte.
+
+    Paso de verdad: la clienta dio servicio, dia, hora y nombre, y la reserva
+    moria con "Faltan el nombre o el telefono del cliente" porque el despachador
+    solo miraba los argumentos del modelo, nunca el numero del canal.
+    """
+    import asyncio
+    import json
+
+    from backend import voice
+
+    recibido = {}
+
+    async def falso_booking(cliente_id, *, nombre, telefono, **kwargs):
+        recibido["telefono"] = telefono
+        return {"ok": True, "booking_code": "R-1234"}
+
+    original = voice._voice_perform_booking
+    voice._voice_perform_booking = falso_booking
+    try:
+        resultado = asyncio.run(voice._voice_dispatch_tool(
+            "demo", "crear_cita",
+            json.dumps({"servicio": "Corte", "fecha": "2026-09-01",
+                        "hora": "10:00", "nombre": "Marta Ruiz"}),
+            from_number="34600990000",
+        ))
+    finally:
+        voice._voice_perform_booking = original
+
+    assert resultado.get("ok"), resultado
+    assert recibido["telefono"] == "34600990000"
+
+
+def test_los_argumentos_que_declara_son_los_que_lee_el_despachador(api_module):  # noqa: F811
+    """Contrato entre lo que el agente ANUNCIA y lo que la tool CONSUME.
+
+    Estuvieron desalineados: el agente declaraba `codigo` y el despachador leia
+    `codigo_reserva`, asi que consultar, cancelar y cambiar una cita por su numero
+    no funcionaban desde el chat ni desde WhatsApp. El asistente respondia "no
+    encuentro ninguna cita con ese numero" teniendo la cita delante, y no habia
+    error en ningun log: la llamada se perdia en silencio.
+    """
+    import inspect
+    import re
+
+    from backend import agent, voice
+
+    # `_voice_dispatch_tool` solo envuelve; el reparto real esta en la _impl.
+    fuente = inspect.getsource(voice._voice_dispatch_tool_impl)
+    # Lo que el despachador lee para cada tool: args.get("...")
+    bloques = re.split(r'if name == "([a-z_]+)":', fuente)
+    leidos = {}
+    for i in range(1, len(bloques) - 1, 2):
+        leidos[bloques[i]] = set(re.findall(r'args\.get\("([a-z_]+)"', bloques[i + 1]))
+
+    # Si la extraccion no encuentra las tools, el test no prueba nada: mejor que
+    # falle a que pase en vacio.
+    for imprescindible in ("crear_cita", "cancelar_cita", "reprogramar_cita", "consultar_cita"):
+        assert imprescindible in leidos, (
+            "no se ha podido leer que argumentos consume %r" % imprescindible
+        )
+
+    propias = {"buscar_servicio", "consultar_horario", "politica_del_negocio"}
+    for herramienta in agent._herramientas():
+        funcion = herramienta["function"]
+        nombre = funcion["name"]
+        if nombre in propias or nombre not in leidos:
+            continue
+        declarados = set(funcion["parameters"]["properties"])
+        desconocidos = declarados - leidos[nombre] - {"fecha_texto"}
+        assert not desconocidos, (
+            "%s declara %s y la tool no lo lee: la llamada se perderia" % (
+                nombre, sorted(desconocidos))
+        )
+        for obligatorio in funcion["parameters"].get("required", []):
+            assert obligatorio in leidos[nombre], (
+                "%s exige %r pero la tool nunca lo mira" % (nombre, obligatorio)
+            )
