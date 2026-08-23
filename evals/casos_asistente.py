@@ -72,8 +72,11 @@ CASOS = [
             "el jueves a las 17:00",
             "ya esta reservada no?",
         ],
-        "debe": ["aun no", "aún no", "no esta reservada", "no está reservada",
-                 "necesito", "falta"],
+        # Sin `debe` de vocabulario: "todavia no esta reservada", "esa hora no la
+        # tienes cogida" y "me falta un dato" son igual de correctas. Lo que se
+        # exige es lo objetivo: que NO afirme que existe y que no haya cita.
+        "agenda": "no_crea",
+        "debe": [],
         # OJO al escribir un "no_debe": "esta reservada" tambien casa dentro de
         # "aun no esta reservada", que es justo la respuesta CORRECTA. Solo se
         # prohiben las formas que AFIRMAN que la cita existe.

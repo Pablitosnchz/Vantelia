@@ -178,13 +178,49 @@ Arreglar eso destapó dos más, encadenados:
   salón y no hay hueco. Ojo al detectarlo: *"aún no está reservada"* es la respuesta
   **correcta** y lleva la misma frase dentro.
 
+### Sugerirle no basta: hay que forzarle la herramienta
+
+Cuando la clienta aceptaba un hueco, se le decía *"llama a la herramienta que
+toque"* con `tool_choice="required"`. El modelo **cumplía**: volvía a consultar
+huecos. Técnicamente obedecía, y se escaqueaba de rematar turno tras turno, con la
+cita sin mover y la clienta creyendo que ya estaba cambiada.
+
+Ahora se le fuerza **la función concreta** (`tool_choice` con el nombre:
+`reprogramar_cita` o `crear_cita`). No hay escapatoria. Es la misma regla de
+siempre una vuelta más arriba: **pedírselo con más énfasis sigue siendo prompt.**
+
+### Un guardarraíl mal acotado hace daño
+
+Los primeros arreglaron fallos reales. Dos causaron otros:
+
+- El de *"primero qué, luego cuándo"* se disparaba **al reprogramar**, donde el
+  servicio ya lo trae la cita: le preguntaba el tratamiento a quien solo quería
+  mover la hora, y la gestión se perdía.
+- El de *"no ofrezcas horas sin saber el día"* no reconocía *"cualquier **otro**
+  hueco que tengas me vale"* — buscaba frases demasiado literales — y le
+  repreguntaba el día a quien acababa de contestarlo.
+
+Antes de añadir uno, hay que preguntarse en qué conversación **no** debe aplicar.
+
 ### Un caso mal escrito da por roto lo que funciona
 
-Ha pasado dos veces, las dos midiendo **vocabulario**:
+Ha pasado **tres** veces, las tres midiendo **vocabulario**:
 
 - *"¿qué día te viene bien?"* y *"¿te va bien el martes?"* son igual de correctas.
 - *"No ofrecemos manicura, pero tenemos variedad de servicios, ¿te cuento?"* es una
   buena respuesta, y el caso la daba por rota por no nombrar un servicio del pelo.
+- *"Todavía no está reservada"* es exactamente lo que tiene que decir, y el caso
+  exigía *"aún no"*.
+
+| Se mide | No se mide |
+| --- | --- |
+| ¿Quedó la cita en la agenda? | Qué palabras usó para confirmarla |
+| ¿Se movió, o hay dos? | Cómo lo dijo |
+| ¿Afirmó que está reservada sin estarlo? | Si dijo "aún no" o "todavía no" |
+| ¿Soltó horas sin saber el día? | Cómo preguntó el día |
+
+Los `no_debe` siguen valiendo: prohibir una **afirmación falsa** es objetivo. Lo
+que no vale es exigir una frase concreta.
 
 Un caso se escribe sobre lo **objetivo**: ¿soltó horas sin saber el día? ¿quedó la
 cita en la agenda? ¿lo negó claramente? No sobre las palabras que eligió.

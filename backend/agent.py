@@ -652,9 +652,11 @@ _CUANDO_LO_DICE_ELLA = (
     "hoy", "manana", "pasado manana", "esta semana", "semana que viene",
     "proxima semana", "cuanto antes", "lo antes posible", "cualquier dia",
     "el que sea", "me da igual", "urgente", "ya mismo", "fin de semana",
-    "primer hueco", "primera hora", "lo que tengas", "el que tengas",
-    "la que tengas", "lo primero que tengas", "cuando puedas", "cuando tengas",
-    "cualquier hueco", "el hueco que sea", "me vale cualquiera", "lo mas pronto",
+    "primer hueco", "primera hora", "lo primero que tengas", "cuando puedas",
+    "el hueco que sea", "me vale cualquiera", "lo mas pronto",
+    # Sin encerrarse en frases exactas: "cualquier OTRO hueco que tengas me vale"
+    # no casaba con "cualquier hueco" y volvia a preguntarle el dia.
+    "que tengas", "que tenga", "me vale", "cualquier",
 )
 _HORAS = re.compile(r"\d{1,2}[:.]\d{2}")
 
@@ -699,10 +701,38 @@ def _da_la_cita_por_hecha(texto: str) -> bool:
     return False
 
 
+_CODIGO = re.compile(r"R-?\s?\d{3,}", re.IGNORECASE)
+_GESTIONA = ("cancelar", "anular", "cambiar mi cita", "cambiar la cita", "mover",
+             "reprogramar", "aplazar", "mi cita", "la cita que tengo")
+
+
+def _gestiona_una_cita_ya_cogida(dicho: str) -> bool:
+    """¿Viene a tocar una cita que ya tiene, no a coger una nueva?
+
+    Importa porque los guardarraíles de "primero dime que te quieres hacer" no
+    valen aqui: el servicio ya lo trae la cita. Preguntarselo la mandaba a elegir
+    tratamiento otra vez y la reprogramacion se perdia por el camino.
+    """
+    plano = catalog_pick._norm(dicho or "")
+    return bool(_CODIGO.search(dicho or "")) or any(p in plano for p in _GESTIONA)
+
+
 _PREGUNTA_EL_DIA = (
     "que dia", "para que dia", "cuando te", "que fecha", "que dia te",
     "para cuando", "algun dia en concreto", "tienes algun dia",
 )
+# Preguntarle la HORA a quien ha dicho "el primer hueco que tengas" es repreguntar
+# lo que ya ha contestado. Se quedaba dando vueltas -"¿a las 10:00, 10:15 o
+# 10:30?"- turno tras turno, y la cita no se creaba nunca.
+_PREGUNTA_LA_HORA = (
+    "que hora", "a que hora", "cual prefieres", "cual te viene", "prefieres las",
+    "te gustaria la cita a las", "confirmar el horario",
+)
+
+
+def _pregunta_la_hora(texto: str) -> bool:
+    plano = catalog_pick._norm(texto or "")
+    return any(pista in plano for pista in _PREGUNTA_LA_HORA)
 
 
 def _pregunta_el_dia(texto: str) -> bool:
@@ -991,6 +1021,7 @@ async def responder(
     servicio_de_su_cita = ""
     gestion_hecha = False
     solo_hablar = False  # una vuelta en la que solo puede preguntar
+    forzar_tool = ""     # una vuelta en la que TIENE que llamar a esta tool
     ya_creadas: set = set()
     try:
         from openai import OpenAI as OpenAISdkClient
@@ -1005,8 +1036,13 @@ async def responder(
                 # `solo_hablar`: hay correcciones que se arreglan PREGUNTANDO, no
                 # consultando. Si se le deja la agenda a mano vuelve a ofrecer horas
                 # en vez de preguntar que dia le viene bien.
-                tool_choice=("none" if solo_hablar else
-                             ("required" if obligar else "auto")),
+                # `forzar_tool` no sugiere: obliga a llamar a ESA herramienta.
+                # Con "required" a secas volvia a consultar huecos y se escaqueaba
+                # de rematar la gestion turno tras turno.
+                tool_choice=(
+                    {"type": "function", "function": {"name": forzar_tool}} if forzar_tool
+                    else ("none" if solo_hablar else ("required" if obligar else "auto"))
+                ),
                 temperature=0.3,
                 max_tokens=400,
             )
@@ -1032,13 +1068,15 @@ async def responder(
                 # Ha dicho que si a un hueco y la gestion sigue sin hacerse:
                 # ofrecer y no rematar deja la cita donde estaba y a la clienta
                 # creyendo que ya esta cambiada.
-                if (servicio_de_su_cita and _esta_diciendo_que_si(mensaje)
-                        and not gestion_hecha and vuelta + 1 < MAX_VUELTAS):
-                    obligar = True
+                if (_esta_diciendo_que_si(mensaje) and not gestion_hecha
+                        and (servicio_de_su_cita or consultada)
+                        and not forzar_tool and vuelta + 1 < MAX_VUELTAS):
+                    forzar_tool = ("reprogramar_cita" if servicio_de_su_cita
+                                   else "crear_cita")
                     mensajes.append({
                         "role": "system",
-                        "content": ("Te ha dicho que si al hueco que le ofreciste. "
-                                    "Llama AHORA a la herramienta que toque para "
+                        "content": ("Te ha dicho que si. Llama AHORA a la herramienta "
+                                    "que toque (crear_cita o reprogramar_cita) para "
                                     "dejarlo hecho; no se lo vuelvas a preguntar."),
                     })
                     continue
@@ -1070,11 +1108,27 @@ async def responder(
                                     "una propuesta y pregunta si le viene bien."),
                     })
                     continue
+                # Y si ya le ha dicho que le da igual el dia, volver a
+                # preguntarselo es no escuchar: pregunto dos veces seguidas "¿que
+                # dia te vendria mejor?" a quien acababa de decir "cualquier hueco
+                # que tengas me vale", y la cita nunca se movio.
+                if ((_pregunta_el_dia(texto_final) or _pregunta_la_hora(texto_final))
+                        and _ha_dicho_cuando(dicho_hasta_ahora)
+                        and not gestion_hecha and vuelta + 1 < MAX_VUELTAS):
+                    obligar = True
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("Ya te ha dicho que le vale cualquiera. No se lo "
+                                    "vuelvas a preguntar: coge el PRIMER hueco libre "
+                                    "y remata con la herramienta que toque."),
+                    })
+                    continue
                 # El orden importa: primero QUE se quiere hacer, y despues cuando.
                 # Al pulsar "Agendar cita" preguntaba el dia sin saber siquiera si
                 # venia a cortarse el pelo o a unas mechas de tres horas, que ni
                 # duran ni cuestan lo mismo.
                 if (_pregunta_el_dia(texto_final) and not servicio_de_su_cita
+                        and not _gestiona_una_cita_ya_cogida(dicho_hasta_ahora)
                         and not _servicio_mencionado(cliente_id, dicho_hasta_ahora)
                         and not solo_hablar and vuelta + 1 < MAX_VUELTAS):
                     solo_hablar = True
@@ -1089,6 +1143,7 @@ async def responder(
                 # cogia el PRIMER servicio del catalogo del prompt y daba por hecho
                 # que venia a eso.
                 if (_elige_por_ella(cliente_id, dicho_hasta_ahora, texto_final)
+                        and not _gestiona_una_cita_ya_cogida(dicho_hasta_ahora)
                         and vuelta + 1 < MAX_VUELTAS):
                     obligar = True
                     mensajes.append({
@@ -1145,6 +1200,7 @@ async def responder(
                 ), cita_creada
             obligar = False
             solo_hablar = False
+            forzar_tool = ""
 
             mensajes.append({
                 "role": "assistant",
