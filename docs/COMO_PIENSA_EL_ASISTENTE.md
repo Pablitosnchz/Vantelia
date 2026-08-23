@@ -191,6 +191,22 @@ siempre una vuelta más arriba: **pedírselo con más énfasis sigue siendo prom
 
 ### Un guardarraíl mal acotado hace daño
 
+Los guardarraíles nuevos han causado tantos fallos como los que arreglaron. Dos de
+ellos, peores que el problema original:
+
+- Forzar `crear_cita` al aceptar un hueco creaba una **segunda cita** en plena
+  reprogramación, y la original se quedaba donde estaba. La causa: se miraba una
+  variable que solo se rellena en el turno en que se consulta la cita. Lo que manda
+  es si la **conversación** va de una cita ya cogida.
+- El empujón de "te ha dicho que sí, remata" se disparaba también cuando la gestión
+  ya estaba hecha: reprogramaba bien, la clienta decía *"vale"*, y la devolvía a su
+  hora original. Un "vale" a algo ya hecho es un **acuse de recibo, no una orden**.
+
+Con un modelo de por medio, una tirada en verde no distingue un arreglo de una
+casualidad: **tres veces seguidas** antes de dar nada por bueno.
+
+
+
 Los primeros arreglaron fallos reales. Dos causaron otros:
 
 - El de *"primero qué, luego cuándo"* se disparaba **al reprogramar**, donde el

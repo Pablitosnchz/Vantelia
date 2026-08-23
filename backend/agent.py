@@ -1009,6 +1009,14 @@ async def responder(
     dicho_hasta_ahora = " ".join(
         [str(mensaje)] + [m.get("content", "") for m in historial if m.get("role") == "user"]
     )
+    # ¿La gestion ya quedo hecha en el turno anterior? Si lo ultimo que dijo el
+    # asistente fue "he reprogramado tu cita", un "vale" de la clienta es un acuse
+    # de recibo, no una orden: forzando la tool otra vez la devolvia a su sitio.
+    ultima_del_asistente = next(
+        (m.get("content", "") for m in reversed(historial) if m.get("role") == "assistant"),
+        "",
+    )
+    ya_estaba_hecha = _da_la_cita_por_hecha(ultima_del_asistente)
     mensajes: List[Dict[str, Any]] = [
         {"role": "system", "content": _instrucciones(cliente_id, cfg, hoy, quien)},
     ]
@@ -1069,10 +1077,18 @@ async def responder(
                 # ofrecer y no rematar deja la cita donde estaba y a la clienta
                 # creyendo que ya esta cambiada.
                 if (_esta_diciendo_que_si(mensaje) and not gestion_hecha
+                        and not ya_estaba_hecha
                         and (servicio_de_su_cita or consultada)
                         and not forzar_tool and vuelta + 1 < MAX_VUELTAS):
-                    forzar_tool = ("reprogramar_cita" if servicio_de_su_cita
-                                   else "crear_cita")
+                    # OJO: `servicio_de_su_cita` solo se rellena en el turno en
+                    # que se consulta la cita. Mirando solo eso, al decir "vale" un
+                    # turno despues se forzaba `crear_cita` en plena reprogramacion:
+                    # nacia una SEGUNDA cita y la original se quedaba donde estaba.
+                    # Lo que manda es si la conversacion va de una cita ya cogida.
+                    gestionando = bool(servicio_de_su_cita) or _gestiona_una_cita_ya_cogida(
+                        dicho_hasta_ahora
+                    )
+                    forzar_tool = "reprogramar_cita" if gestionando else "crear_cita"
                     mensajes.append({
                         "role": "system",
                         "content": ("Te ha dicho que si. Llama AHORA a la herramienta "

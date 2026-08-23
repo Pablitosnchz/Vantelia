@@ -224,6 +224,14 @@ def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
         if exigido == "cancela" and vivas:
             return False, respuestas, "la cita sigue viva: %s" % vivas
         if exigido == "cambia":
+            # Mover no es duplicar: llego a crear una SEGUNDA cita y "reprogramar"
+            # la original a su propio sitio. Con solo mirar si habia alguna en otra
+            # fecha, eso pasaba por bueno.
+            if len(vivas) != 1:
+                return False, respuestas, (
+                    "tiene que quedar UNA cita viva y hay %d: %s" % (
+                        len(vivas), [(c["booking_date"], c["booking_time"]) for c in vivas])
+                )
             movidas = [c for c in vivas
                        if (c["booking_date"], c["booking_time"])
                        != ((previa or {}).get("booking_date"), (previa or {}).get("booking_time"))]
