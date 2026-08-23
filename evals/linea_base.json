@@ -1,0 +1,69 @@
+{
+  "total": 40,
+  "bien": 23,
+  "atascada": 5,
+  "fallo": 12,
+  "pct_bien": 57.5,
+  "pct_atascada": 12.5,
+  "pct_fallo": 30.0,
+  "patrones": [
+    [
+      "atascada: se fue sin cita",
+      4
+    ],
+    [
+      "repite_la_misma_pregunta",
+      3
+    ],
+    [
+      "cita_sin_pedirla",
+      3
+    ],
+    [
+      "da_un_precio_que_no_debe",
+      3
+    ],
+    [
+      "cita_del_tratamiento_en_vez_de_valoracion",
+      3
+    ],
+    [
+      "servicio_equivocado",
+      3
+    ],
+    [
+      "dice_que_hay_cita_y_no_la_hay",
+      2
+    ],
+    [
+      "atascada: la cita sigue viva",
+      1
+    ]
+  ],
+  "por_objetivo": {
+    "informacion": {
+      "total": 5,
+      "bien": 5
+    },
+    "reservar": {
+      "total": 18,
+      "bien": 11
+    },
+    "cancelar": {
+      "total": 4,
+      "bien": 3
+    },
+    "preguntar_precio": {
+      "total": 6,
+      "bien": 0
+    },
+    "reprogramar": {
+      "total": 4,
+      "bien": 4
+    },
+    "consejo": {
+      "total": 3,
+      "bien": 0
+    }
+  }
+}
