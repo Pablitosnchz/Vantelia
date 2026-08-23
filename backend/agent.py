@@ -641,10 +641,16 @@ _FECHAS = re.compile(
 )
 
 
+# Formas de decir "el dia me da igual". Faltando "el primer hueco que tengas", el
+# guardarraíl de abajo le impedia ofrecer horas a quien ya habia dicho que le
+# valia cualquiera, y la reserva no salia nunca.
 _CUANDO_LO_DICE_ELLA = (
     "hoy", "manana", "pasado manana", "esta semana", "semana que viene",
     "proxima semana", "cuanto antes", "lo antes posible", "cualquier dia",
     "el que sea", "me da igual", "urgente", "ya mismo", "fin de semana",
+    "primer hueco", "primera hora", "lo que tengas", "el que tengas",
+    "la que tengas", "lo primero que tengas", "cuando puedas", "cuando tengas",
+    "cualquier hueco", "el hueco que sea", "me vale cualquiera", "lo mas pronto",
 )
 _HORAS = re.compile(r"\d{1,2}[:.]\d{2}")
 
