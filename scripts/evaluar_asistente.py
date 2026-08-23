@@ -24,6 +24,7 @@ import asyncio
 import io
 import os
 import pathlib
+import re
 import sys
 import unicodedata
 
@@ -232,6 +233,14 @@ def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
     # esta en el cierre y otros donde vale que aparezca en cualquier momento.
     todo = _norm(" ".join(respuestas))
     ultimo = _norm(respuestas[-1]) if respuestas else ""
+
+    # Hay cosas que no se pueden medir por vocabulario: el modelo dice "¿que te
+    # parece el martes?" o "¿cuando te viene bien?" y las dos valen. Lo que si es
+    # objetivo es si le ha soltado un puñado de horas.
+    if caso.get("sin_horas"):
+        horas = set(re.findall(r"\d{1,2}[:.]\d{2}", " ".join(respuestas)))
+        if len(horas) >= 2:
+            return False, respuestas, "ofrece horas (%s) sin saber que dia quiere" % sorted(horas)[:4]
 
     debe = caso.get("debe") or []
     if debe and not any(_norm(p) in todo for p in debe):

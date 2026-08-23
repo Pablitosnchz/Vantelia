@@ -298,4 +298,33 @@ CASOS = [
         "debe": [],
         "no_debe": ["alisado", "keratina"],
     },
+    {
+        "id": "no-elige-el-servicio-por-ella",
+        "gravedad": "critico",
+        "por_que": (
+            "Al pulsar 'Agendar cita', sin que nadie dijera nada, contesto 'vamos a "
+            "agendar tu cita para el Acido Lactico Bio Premium - Muy Corto': el "
+            "PRIMER servicio del catalogo. Elegirle un tratamiento de 260 EUR no es "
+            "un detalle."
+        ),
+        "mensajes": ["quiero agendar una cita"],
+        "debe": [],
+        "no_debe": ["acido lactico", "ácido láctico", "vamos a agendar tu cita para el"],
+        "agenda": "no_crea",
+    },
+    {
+        "id": "pregunta-el-dia-en-vez-de-recitar",
+        "gravedad": "importante",
+        "por_que": (
+            "Soltaba diez fechas de golpe. Una persona pregunta cuando te viene bien "
+            "y mira ESE dia."
+        ),
+        # No se mide por vocabulario ("¿que dia te viene bien?" y "¿te va bien el
+        # martes?" valen las dos), sino por lo unico objetivo: que no le suelte un
+        # puñado de horas de un dia que ha elegido el.
+        "mensajes": ["hola, quiero pedir cita para un corte de señora"],
+        "sin_horas": True,
+        "debe": [],
+        "no_debe": [],
+    },
 ]

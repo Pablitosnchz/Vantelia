@@ -132,6 +132,30 @@ Por eso un caso ahora puede exigir un **efecto**: `agenda: crea | no_crea | canc
 que compara lo que cada tool **anuncia** con lo que el despachador **consume**: ese
 desajuste no vuelve a pasar inadvertido.
 
+### Lo que sale al probarlo como un cliente de verdad
+
+El dueño lo abrió por WhatsApp y en cuatro mensajes salieron dos fallos que ningún
+test veía:
+
+- Al pedir cita **sin decir qué quería**, contestó *"vamos a agendar tu cita para el
+  Ácido Láctico Bio Premium - Muy Corto"*. Es el **primer servicio del catálogo**
+  que lleva en el prompt: al no saber qué quería, cogió uno. Elegirle a alguien un
+  tratamiento de 260 € no es un detalle.
+- Y le **recitó diez fechas** en vez de preguntarle cuándo le venía bien.
+
+Los dos se cortan ahora en el código: si nombra un servicio que la clienta no ha
+nombrado, se le hace preguntar; y si ofrece horas sin saber el día, también. La
+vuelta correctora va **sin herramientas** (`tool_choice="none"`) — dejándoselas, el
+modelo volvía a consultar la agenda y a soltar horas en lugar de preguntar.
+
+De paso: al mover una cita llegó a decir que quedaba *"para un corte de señora"*
+cuando lo cogido era un alisado. Cambiar de hora no cambia el tratamiento.
+
+Un caso puede pasar solo y fallar en la tirada entera: el modelo no es consistente,
+y probando a mano solo ves una de las dos versiones. Por eso un caso se mide por lo
+OBJETIVO (¿ofreció horas?) y no por vocabulario ("¿qué día te viene bien?" y "¿te va
+bien el martes?" son igual de correctas).
+
 ### Aislar la base de datos: comprobarlo, no suponerlo
 
 `settings.DB_PATH` se calcula al **importar** y no lee la variable de entorno, así

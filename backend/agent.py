@@ -33,6 +33,7 @@ numero de reserva solo existe si `crear_cita` lo devuelve.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend import catalog_pick, clients, db, settings, textnorm
@@ -604,6 +605,90 @@ _PIDE_CONTACTO = (
 )
 
 
+def _servicio_mencionado(cliente_id: str, texto: str) -> str:
+    """El servicio del catalogo que aparece en el texto, si aparece alguno."""
+    plano = catalog_pick._norm(texto or "")
+    if not plano:
+        return ""
+    mejor = ""
+    for servicio in catalog_pick._servicios(cliente_id):
+        limpio = catalog_pick._norm(catalog_pick._nombre(servicio))
+        # Solo nombres con cuerpo: "corte" suelto casaria en cualquier frase.
+        if len(limpio) >= 12 and limpio in plano and len(limpio) > len(mejor):
+            mejor = limpio
+    return mejor
+
+
+def _elige_por_ella(cliente_id: str, dicho: str, respuesta: str) -> bool:
+    """¿Esta dando por elegido un servicio que la clienta no ha nombrado?
+
+    Paso de verdad: al pulsar "Agendar cita", sin que nadie dijera nada, contesto
+    "vamos a agendar tu cita para el Acido Lactico Bio Premium - Muy Corto". Es el
+    PRIMER servicio del catalogo que lleva en el prompt: al no saber que quiere,
+    cogio uno. Elegir por ella un tratamiento de 260 EUR no es un detalle.
+    """
+    propuesto = _servicio_mencionado(cliente_id, respuesta)
+    if not propuesto:
+        return False
+    return propuesto not in catalog_pick._norm(dicho or "")
+
+
+# Cuando la clienta aun no ha dicho que dia le viene bien, recitarle el calendario
+# entero es lo contrario de atender: se le pregunta.
+_FECHAS = re.compile(
+    r"\b(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b",
+    re.IGNORECASE,
+)
+
+
+_CUANDO_LO_DICE_ELLA = (
+    "hoy", "manana", "pasado manana", "esta semana", "semana que viene",
+    "proxima semana", "cuanto antes", "lo antes posible", "cualquier dia",
+    "el que sea", "me da igual", "urgente", "ya mismo", "fin de semana",
+)
+_HORAS = re.compile(r"\d{1,2}[:.]\d{2}")
+
+
+def _ha_dicho_cuando(texto: str) -> bool:
+    """¿Ha dicho ella algun dia, o que le da igual?"""
+    plano = catalog_pick._norm(texto or "")
+    if _FECHAS.search(plano) or re.search(r"\d{1,2}\s*(de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)", plano):
+        return True
+    return any(pista in plano for pista in _CUANDO_LO_DICE_ELLA)
+
+
+_ACEPTA = (
+    "vale", "si", "perfecto", "genial", "de acuerdo", "me viene bien", "esa misma",
+    "esa hora", "la primera", "la segunda", "la ultima", "confirmo", "adelante",
+    "esa me vale", "me vale", "ok", "okey", "venga",
+)
+
+
+def _esta_diciendo_que_si(texto: str) -> bool:
+    """¿Acaba de aceptar lo que le han ofrecido?"""
+    plano = catalog_pick._norm(texto or "")
+    if len(plano) > 60:  # una frase larga rara vez es solo un "vale"
+        return False
+    return any(plano == pista or plano.startswith(pista + " ") or (" " + pista) in plano
+               for pista in _ACEPTA)
+
+
+def _propone_horas_sin_saber_el_dia(dicho: str, respuesta: str) -> bool:
+    """Ofrece horas de un dia que ha elegido el, no ella.
+
+    Lo senyalo el duenyo probandolo: "es mejor que pregunte cuando me viene bien".
+    Soltarle los huecos del primer dia que abre es comodo para el sistema, no para
+    quien pide cita.
+    """
+    if _ha_dicho_cuando(dicho):
+        return False
+    return len(set(_HORAS.findall(respuesta or ""))) >= 2
+
+
+def _recita_el_calendario(texto: str) -> bool:
+    return len(set(_FECHAS.findall(catalog_pick._norm(texto or "")))) >= 4
+
+
 def _pide_lo_que_ya_tiene(texto: str) -> bool:
     """¿Le esta pidiendo el telefono o el email a quien escribe por WhatsApp?
 
@@ -817,15 +902,24 @@ async def responder(
         hoy = timeutils._utc_now().date()
 
     quien = _quien_escribe(cliente_id, telefono)
+    historial = _historial(session_id, cliente_id)
+    # Todo lo que ha dicho ELLA: sirve para saber si un servicio lo ha nombrado o
+    # se lo esta sacando de la manga el modelo.
+    dicho_hasta_ahora = " ".join(
+        [str(mensaje)] + [m.get("content", "") for m in historial if m.get("role") == "user"]
+    )
     mensajes: List[Dict[str, Any]] = [
         {"role": "system", "content": _instrucciones(cliente_id, cfg, hoy, quien)},
     ]
-    mensajes.extend(_historial(session_id, cliente_id))
+    mensajes.extend(historial)
     mensajes.append({"role": "user", "content": str(mensaje)[:1200]})
 
     cita_creada = False
     consultada = False  # ¿se ha mirado la agenda en este turno?
     dias_mirados = 0
+    servicio_de_su_cita = ""
+    gestion_hecha = False
+    solo_hablar = False  # una vuelta en la que solo puede preguntar
     ya_creadas: set = set()
     try:
         from openai import OpenAI as OpenAISdkClient
@@ -837,7 +931,11 @@ async def responder(
                 model=settings.DEFAULT_CHAT_MODEL,
                 messages=mensajes,
                 tools=_herramientas(),
-                tool_choice="required" if obligar else "auto",
+                # `solo_hablar`: hay correcciones que se arreglan PREGUNTANDO, no
+                # consultando. Si se le deja la agenda a mano vuelve a ofrecer horas
+                # en vez de preguntar que dia le viene bien.
+                tool_choice=("none" if solo_hablar else
+                             ("required" if obligar else "auto")),
                 temperature=0.3,
                 max_tokens=400,
             )
@@ -860,6 +958,68 @@ async def responder(
                                     "esta cerrado ni que no hay hueco sin haberlo mirado."),
                     })
                     continue
+                # Ha dicho que si a un hueco y la gestion sigue sin hacerse:
+                # ofrecer y no rematar deja la cita donde estaba y a la clienta
+                # creyendo que ya esta cambiada.
+                if (servicio_de_su_cita and _esta_diciendo_que_si(mensaje)
+                        and not gestion_hecha and vuelta + 1 < MAX_VUELTAS):
+                    obligar = True
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("Te ha dicho que si al hueco que le ofreciste. "
+                                    "Llama AHORA a la herramienta que toque para "
+                                    "dejarlo hecho; no se lo vuelvas a preguntar."),
+                    })
+                    continue
+                # Cambiar de hora no es cambiar de tratamiento: llego a decirle
+                # que su cita quedaba "para un corte de senyora" cuando lo que
+                # tenia cogido era un alisado de 260 EUR.
+                if servicio_de_su_cita and vuelta + 1 < MAX_VUELTAS:
+                    nombrado = _servicio_mencionado(cliente_id, texto_final)
+                    if nombrado and nombrado not in catalog_pick._norm(servicio_de_su_cita):
+                        obligar = True
+                        mensajes.append({
+                            "role": "system",
+                            "content": ("Su cita es de %s y el servicio NO cambia al "
+                                        "mover la hora. No nombres ningun otro."
+                                        % servicio_de_su_cita),
+                        })
+                        continue
+                # No puede elegir el tratamiento por ella. Sin saber que quiere,
+                # cogia el PRIMER servicio del catalogo del prompt y daba por hecho
+                # que venia a eso.
+                if (_elige_por_ella(cliente_id, dicho_hasta_ahora, texto_final)
+                        and vuelta + 1 < MAX_VUELTAS):
+                    obligar = True
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("Todavia no te ha dicho que se quiere hacer. No "
+                                    "elijas tu ningun servicio ni des ninguno por "
+                                    "hecho: preguntaselo con tus palabras."),
+                    })
+                    continue
+                # Ni ofrecerle las horas de un dia que ha elegido el.
+                if (_propone_horas_sin_saber_el_dia(dicho_hasta_ahora, texto_final)
+                        and not solo_hablar and vuelta + 1 < MAX_VUELTAS):
+                    solo_hablar = True
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("Aun no sabes que dia le viene bien. Preguntaselo "
+                                    "antes de ofrecer horas; cuando te lo diga, mira "
+                                    "los huecos de ESE dia."),
+                    })
+                    continue
+                # Y recitarle el calendario entero no es atender: se le pregunta.
+                if (_recita_el_calendario(texto_final) and not solo_hablar
+                        and vuelta + 1 < MAX_VUELTAS):
+                    solo_hablar = True
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("No le enumeres los dias que abris. Preguntale que "
+                                    "dia le viene bien y, cuando te lo diga, mira los "
+                                    "huecos de ESE dia y ofrecele dos o tres horas."),
+                    })
+                    continue
                 # Pedir el telefono POR WHATSAPP deja la cita sin coger: el
                 # canal ya lo trae verificado. Se le recuerda y se le obliga a
                 # rematar en vez de devolverle esa frase a la clienta.
@@ -880,6 +1040,7 @@ async def responder(
                     cliente_id, mensaje, texto_final, cita_creada,
                 ), cita_creada
             obligar = False
+            solo_hablar = False
 
             mensajes.append({
                 "role": "assistant",
@@ -918,6 +1079,12 @@ async def responder(
                 if llamada.function.name == "consultar_disponibilidad":
                     consultada = True
                     dias_mirados += 1
+                if (llamada.function.name in ("consultar_cita", "reprogramar_cita")
+                        and resultado.get("ok") and resultado.get("servicio")):
+                    servicio_de_su_cita = str(resultado["servicio"])
+                if (llamada.function.name in ("reprogramar_cita", "cancelar_cita",
+                                              "crear_cita") and resultado.get("ok")):
+                    gestion_hecha = True
                 if llamada.function.name == "crear_cita" and resultado.get("ok"):
                     cita_creada = True
                 mensajes.append({
