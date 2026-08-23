@@ -418,10 +418,13 @@ def test_pregunta_que_antes_que_cuando(api_module):  # noqa: F811
     """De lo que se quiere hacer dependen la duracion y el precio: va primero.
 
     Al pulsar "Agendar cita" preguntaba el dia sin saber si venia a cortarse el
-    pelo o a unas mechas de tres horas.
+    pelo o a unas mechas de tres horas. Antes se vigilaba leyendo su respuesta
+    ("¿esta preguntando el dia?"); ahora la decision es del codigo y se prueba sin
+    modelo: ver tests/test_estado_de_la_reserva.py.
     """
-    from backend import agent
+    from backend import reserva
 
-    assert agent._pregunta_el_dia("¿Para qué día te gustaría coger la cita?")
-    assert agent._pregunta_el_dia("¿Qué día te viene bien?")
-    assert not agent._pregunta_el_dia("¿Qué te quieres hacer?")
+    estado = reserva.Estado()
+    reserva.anotar_intencion(estado, "reservar")
+    assert reserva.que_falta(estado) == "servicio"
+    assert "No propongas dias ni horas" in reserva.instruccion(estado)

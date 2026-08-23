@@ -1497,6 +1497,7 @@ def _wa_esta_gestionando_una_cita(texto: str) -> bool:
 async def _wa_turno_del_agente(
     *, cliente_id: str, phone_number_id: str, from_number: str,
     incoming_text: str, flow: appstate.WAFlowState, config: Dict[str, Any], request,
+    intencion: str = "",
 ) -> bool:
     """Deja que el agente lleve la conversacion de la cita. False si no ha podido.
 
@@ -1513,9 +1514,12 @@ async def _wa_turno_del_agente(
         cliente_id=cliente_id, from_number=from_number, request=request,
         entrante=incoming_text,
     )
+    # El canal SI sabe a que viene (ha pulsado "Cancelar mi cita", o su texto ha
+    # disparado ese camino). Pasarselo evita que el agente lo adivine.
     texto, cita_creada = await agent.responder(
         cliente_id, incoming_text, session_id=session_id, telefono=from_number,
         config=config, location_id=flow.location_id or _wa_location_id(cliente_id, phone_number_id),
+        intencion=intencion,
     )
     if not texto:
         return False
@@ -1575,6 +1579,7 @@ async def _wa_start_booking_flow(
         if await _wa_turno_del_agente(
             cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
             incoming_text="Quiero coger cita.", flow=flow, config=config, request=None,
+            intencion="reservar",
         ):
             return
         # Sin agente, se pregunta a mano y luego se resuelve con el catalogo.
@@ -1897,6 +1902,7 @@ async def _handle_whatsapp_message(
         if await _wa_turno_del_agente(
             cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
             incoming_text=incoming_text, flow=flow, config=config, request=request,
+            intencion="cancelar" if trigger_cancel else "reprogramar",
         ):
             return
         # Si no ha podido, sigue el recorrido de siempre: nadie se queda colgado.

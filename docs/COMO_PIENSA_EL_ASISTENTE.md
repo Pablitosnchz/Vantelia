@@ -251,6 +251,50 @@ conexiones abren la copia y se niega a arrancar si no. Y la copia se hace con
 fichero aparte, así que la copia traía citas ya borradas y el dedup las daba por
 vivas.
 
+## Quién decide qué: el experimento que lo zanjó
+
+El agente llegó a tener **doce detectores** que leían el texto del modelo para
+corregirlo *después* ("¿está preguntando el día?", "¿está recitando el
+calendario?"). Eso son las seis capas de heurísticas otra vez, dentro del agente,
+un `if` cada vez — y hacían daño: uno forzaba `crear_cita` en plena reprogramación
+y creaba citas duplicadas.
+
+Se probaron tres repartos, midiendo cada uno con 40 conversaciones simuladas:
+
+| Quién lleva la conversación | Consigue lo que quiere | Repite la misma pregunta | Banco |
+| --- | --- | --- | --- |
+| 12 detectores leyendo su prosa | 57,5% | 3 | 28/28 |
+| El código **dirige todo** | 45% → 47,5% | **15 → 10** | 28/28 |
+| El código **solo informa** | 55,0% | 3 | **27/28** |
+| El código informa **y cierra** | **60,0%** | 4 | 28/28 |
+
+Las dos variantes intermedias fallaron por motivos **opuestos**, y ahí está la
+respuesta:
+
+- **Dirigiéndolo todo**, cuando el código no se enteraba de que ella ya había
+  contestado, el modelo repetía la frase palabra por palabra. Un muro.
+- **Sin dirigir nada**, la reserva **no se cerraba jamás**: ofrecía horas en bucle
+  aunque la clienta hubiera dicho "el primer hueco que tengas" y su nombre.
+
+> **La conversación la lleva el modelo, que para eso sabe adaptarse. El cierre lo
+> decide el código, que para eso no se despista.**
+
+`backend/reserva.py` lleva el estado (servicio, día, hora, nombre, cita en
+gestión), se llena **solo con lo que devuelven las tools** más lo que se extrae del
+mensaje de forma determinista, y **fuerza** la herramienta que cierra
+(`crear_cita`, `reprogramar_cita`, `cancelar_cita`) cuando no falta ningún dato.
+De los doce detectores quedan **tres**, y los tres contrastan con datos, no con
+redacción.
+
+Dos cosas que este experimento enseñó y conviene no olvidar:
+
+1. **Con 40 conversaciones, ±15 puntos es ruido.** Dos tiradas del mismo código
+   dieron "cancelar" 100% y 75%. Lo que sí es señal es un patrón que pasa de 3 a
+   15. Mirar los patrones antes que el porcentaje.
+2. **Cambiar la arquitectura sin medir es apostar.** El problema era real, pero la
+   primera solución salió peor que el problema. Sin el simulador se habría
+   desplegado creyendo que era una mejora.
+
 ## Cómo se comprueba que funciona
 
 **No basta con probarlo.** Los fallos que importan solo salen escribiendo como un
