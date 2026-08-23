@@ -211,10 +211,16 @@ CASOS = [
     {
         "id": "servicio-que-no-existe",
         "gravedad": "importante",
-        "por_que": "Ser honesta y ofrecer lo que si hay.",
+        "por_que": "Ser honesta: lo que no se hace, no se hace.",
+        # Lo que importa es que lo diga claro y no coja una cita de algo que no
+        # existe. Que ademas ofrezca alternativas es deseable, pero exigir que
+        # nombre un servicio concreto es medir vocabulario: "tenemos variedad de
+        # servicios, ¿te cuento?" tambien es una buena respuesta.
         "mensajes": ["hola, me quiero hacer la manicura"],
-        "debe": ["alisado", "color", "corte", "peinado", "capilar", "pelo", "cabello"],
+        "debe": ["no ofrecemos", "no hacemos", "no tenemos", "no realizamos",
+                 "no disponemos", "no contamos"],
         "no_debe": [],
+        "agenda": "no_crea",
     },
     {
         "id": "sinsentido-no-rompe",

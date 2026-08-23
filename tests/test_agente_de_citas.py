@@ -350,3 +350,78 @@ def test_los_argumentos_que_declara_son_los_que_lee_el_despachador(api_module): 
             assert obligatorio in leidos[nombre], (
                 "%s exige %r pero la tool nunca lo mira" % (nombre, obligatorio)
             )
+
+
+def test_lo_hablado_hace_dias_no_cuenta(client, api_module):  # noqa: F811
+    """En WhatsApp la conversacion es el telefono y no se cierra nunca.
+
+    Paso de verdad: dias despues de preguntar por un corte, la clienta saludo de
+    nuevo y pulso "Agendar cita", y el asistente contesto "para el corte, ¿que tipo
+    prefieres?" a alguien que en esa conversacion no habia dicho nada.
+    """
+    import datetime
+
+    from backend import agent, db, timeutils
+
+    sesion = "s_test_historial_viejo"
+    ahora = timeutils._utc_now()
+    viejo = ahora - datetime.timedelta(days=2)
+    with db._get_db_connection() as conexion:
+        conexion.execute("DELETE FROM chat_messages WHERE session_id=?", (sesion,))
+        for rol, texto, cuando in (
+            ("user", "quiero un corte", viejo),
+            ("assistant", "¿Que tipo de corte prefieres?", viejo),
+            ("user", "hola", ahora),
+        ):
+            conexion.execute(
+                "INSERT INTO chat_messages (session_id, cliente_id, role, content,"
+                " intent, created_at) VALUES (?,?,?,?,'',?)",
+                (sesion, "demo", rol, texto, timeutils._to_utc_iso(cuando)),
+            )
+        conexion.commit()
+
+    recordado = " ".join(m["content"] for m in agent._historial(sesion, "demo"))
+    assert "hola" in recordado
+    assert "corte" not in recordado, "se cuela la conversacion de hace dos dias"
+
+    # Pero lo dicho hace un minuto SI cuenta: "y el jueves?" tiene que entenderse.
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT INTO chat_messages (session_id, cliente_id, role, content,"
+            " intent, created_at) VALUES (?,?,?,?,'',?)",
+            (sesion, "demo", "user", "quiero mechas",
+             timeutils._to_utc_iso(ahora - datetime.timedelta(minutes=1))),
+        )
+        conexion.commit()
+    assert "mechas" in " ".join(m["content"] for m in agent._historial(sesion, "demo"))
+
+
+def test_no_puede_decir_que_esta_reservada_si_no_lo_esta(api_module):  # noqa: F811
+    """Es el fallo que mas caro sale: la clienta se planta en el salon y no hay hueco.
+
+    Paso ofreciendo dia: "el corte de señora esta reservado para el martes 25",
+    sin haber creado nada. Ojo con las negaciones: "aun no esta reservada" es la
+    respuesta CORRECTA y lleva la misma frase dentro.
+    """
+    from backend import agent
+
+    assert agent._da_la_cita_por_hecha("El corte de señora está reservado para el martes 25")
+    assert agent._da_la_cita_por_hecha("Te he apuntado el jueves a las 10")
+    assert agent._da_la_cita_por_hecha("Tu cita queda confirmada")
+
+    assert not agent._da_la_cita_por_hecha("Aún no está reservada: necesito tu nombre")
+    assert not agent._da_la_cita_por_hecha("Todavía no te he apuntado, me falta un dato")
+    assert not agent._da_la_cita_por_hecha("Te propongo el martes 25 a las 10:00, ¿te viene bien?")
+
+
+def test_pregunta_que_antes_que_cuando(api_module):  # noqa: F811
+    """De lo que se quiere hacer dependen la duracion y el precio: va primero.
+
+    Al pulsar "Agendar cita" preguntaba el dia sin saber si venia a cortarse el
+    pelo o a unas mechas de tres horas.
+    """
+    from backend import agent
+
+    assert agent._pregunta_el_dia("¿Para qué día te gustaría coger la cita?")
+    assert agent._pregunta_el_dia("¿Qué día te viene bien?")
+    assert not agent._pregunta_el_dia("¿Qué te quieres hacer?")

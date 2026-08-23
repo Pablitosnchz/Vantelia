@@ -156,6 +156,39 @@ y probando a mano solo ves una de las dos versiones. Por eso un caso se mide por
 OBJETIVO (¿ofreció horas?) y no por vocabulario ("¿qué día te viene bien?" y "¿te va
 bien el martes?" son igual de correctas).
 
+### La conversación de otro día no cuenta
+
+En WhatsApp la conversación **es el número de teléfono**: no se cierra nunca. El
+agente cogía las últimas frases sin mirar cuándo se dijeron, así que lo hablado
+hace días seguía contando. Pasó: dos días después de preguntar por un corte, la
+clienta saludó de nuevo, pulsó *"Agendar cita"* y le contestó *"para el corte, ¿qué
+tipo prefieres?"* — a alguien que en esa conversación no había dicho nada.
+
+El historial se corta ahora en el **primer silencio largo** hacia atrás
+(`SESSION_TTL_SECONDS`, media hora): una charla seguida se mantiene entera y "¿y el
+jueves?" sigue entendiéndose, pero la de otro día no se cuela.
+
+Arreglar eso destapó dos más, encadenados:
+
+- Al pulsar *"Agendar cita"* preguntaba **el día** sin saber qué quería hacerse. De
+  eso dependen la duración y el precio: un corte y unas mechas de tres horas no son
+  lo mismo. El orden es **qué → cuándo → horas**.
+- Y luego el peor: *"el corte de señora **está reservado** para el martes 25"*, sin
+  haber creado nada. Es la mentira que más caro sale — la clienta se planta en el
+  salón y no hay hueco. Ojo al detectarlo: *"aún no está reservada"* es la respuesta
+  **correcta** y lleva la misma frase dentro.
+
+### Un caso mal escrito da por roto lo que funciona
+
+Ha pasado dos veces, las dos midiendo **vocabulario**:
+
+- *"¿qué día te viene bien?"* y *"¿te va bien el martes?"* son igual de correctas.
+- *"No ofrecemos manicura, pero tenemos variedad de servicios, ¿te cuento?"* es una
+  buena respuesta, y el caso la daba por rota por no nombrar un servicio del pelo.
+
+Un caso se escribe sobre lo **objetivo**: ¿soltó horas sin saber el día? ¿quedó la
+cita en la agenda? ¿lo negó claramente? No sobre las palabras que eligió.
+
 ### Aislar la base de datos: comprobarlo, no suponerlo
 
 `settings.DB_PATH` se calcula al **importar** y no lee la variable de entorno, así

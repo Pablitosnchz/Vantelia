@@ -36,7 +36,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from backend import catalog_pick, clients, db, settings, textnorm
+from backend import catalog_pick, clients, db, settings, textnorm, timeutils
 
 # Cuantas vueltas de tool se le permiten en un turno. Con 4 le sobra para buscar
 # un servicio, mirar huecos y crear la cita; el tope existe para que un modelo
@@ -46,6 +46,10 @@ MAX_VUELTAS = 6
 # Cuanta conversacion se le recuerda. Suficiente para que "y el jueves?" tenga
 # sentido, sin pagar por la conversacion entera.
 MAX_HISTORIAL = 12
+
+# Cuanto silencio convierte lo hablado en "otra conversacion". Media hora es lo
+# que ya usa el resto del producto para dar una sesion por cerrada.
+SILENCIO_QUE_CIERRA = settings.SESSION_TTL_SECONDS
 
 
 def disponible(cliente_id: str) -> bool:
@@ -663,6 +667,49 @@ def _ha_dicho_cuando(texto: str) -> bool:
     return any(pista in plano for pista in _CUANDO_LO_DICE_ELLA)
 
 
+# Formas de decir que la cita YA existe. Si sale una y no se ha creado nada, es la
+# mentira que mas caro sale: la clienta se planta en el salon y no hay hueco.
+_LA_DA_POR_HECHA = (
+    "esta reservad", "queda reservad", "ya esta reservad", "esta confirmad",
+    "queda confirmad", "esta agendad", "queda agendad", "esta apuntad",
+    "queda apuntad", "te he apuntad", "te he reservad", "te la he reservad",
+    "te he agendad", "ya tienes la cita", "ya tienes cita", "cita confirmada",
+    "he reservado", "he agendado", "he apuntado",
+)
+_NIEGA = ("aun no", "todavia no", "no esta", "no queda", "no la he", "no te he")
+
+
+def _da_la_cita_por_hecha(texto: str) -> bool:
+    """¿Esta diciendo que la cita existe?
+
+    Ojo con las negaciones: "aun no esta reservada" es justo la respuesta
+    CORRECTA, y contiene la misma frase.
+    """
+    plano = catalog_pick._norm(texto or "")
+    for pista in _LA_DA_POR_HECHA:
+        desde = 0
+        while True:
+            donde = plano.find(pista, desde)
+            if donde < 0:
+                break
+            antes = plano[max(0, donde - 30):donde]
+            if not any(negacion in antes for negacion in _NIEGA):
+                return True
+            desde = donde + 1
+    return False
+
+
+_PREGUNTA_EL_DIA = (
+    "que dia", "para que dia", "cuando te", "que fecha", "que dia te",
+    "para cuando", "algun dia en concreto", "tienes algun dia",
+)
+
+
+def _pregunta_el_dia(texto: str) -> bool:
+    plano = catalog_pick._norm(texto or "")
+    return any(pista in plano for pista in _PREGUNTA_EL_DIA)
+
+
 _ACEPTA = (
     "vale", "si", "perfecto", "genial", "de acuerdo", "me viene bien", "esa misma",
     "esa hora", "la primera", "la segunda", "la ultima", "confirmo", "adelante",
@@ -795,24 +842,42 @@ def _instrucciones(cliente_id: str, config: Dict[str, Any], hoy,
 
 
 def _historial(session_id: str, cliente_id: str) -> List[Dict[str, str]]:
-    """Las ultimas frases de la conversacion, para que "y el jueves?" tenga sentido."""
+    """Las ultimas frases de ESTA conversacion, para que "y el jueves?" tenga sentido.
+
+    En WhatsApp la conversacion es el numero de telefono: no se cierra nunca. Sin
+    cortar por tiempo, lo hablado hace dias sigue contando, y paso: dias despues de
+    preguntar por un corte, al saludar de nuevo y pulsar "Agendar cita" contesto
+    "para el corte, ¿que tipo prefieres?" a alguien que no habia dicho nada.
+
+    Se corta en el primer silencio largo hacia atras: una charla seguida se
+    mantiene entera, y la de otro dia no se cuela.
+    """
     try:
         with db._get_db_connection() as conexion:
             filas = conexion.execute(
-                "SELECT role, content FROM chat_messages WHERE session_id = ? AND cliente_id = ?"
+                "SELECT role, content, created_at FROM chat_messages"
+                " WHERE session_id = ? AND cliente_id = ?"
                 " ORDER BY id DESC LIMIT ?",
                 (session_id, cliente_id, MAX_HISTORIAL),
             ).fetchall()
     except Exception as exc:  # noqa: BLE001
         settings.logger.warning("[agenda-agente] sin historial (%s): %s", cliente_id, exc)
         return []
+
     mensajes = []
-    for fila in reversed(filas):
-        rol = "assistant" if str(fila["role"]) == "assistant" else "user"
+    siguiente = None  # el mensaje posterior, yendo hacia atras
+    for fila in filas:  # de mas reciente a mas antiguo
+        momento = timeutils._from_utc_iso(str(fila["created_at"] or ""))
+        if siguiente is not None and momento is not None:
+            if (siguiente - momento).total_seconds() > SILENCIO_QUE_CIERRA:
+                break  # a partir de aqui ya es otra conversacion
+        if momento is not None:
+            siguiente = momento
         contenido = str(fila["content"] or "").strip()
         if contenido:
+            rol = "assistant" if str(fila["role"]) == "assistant" else "user"
             mensajes.append({"role": rol, "content": contenido[:1200]})
-    return mensajes
+    return list(reversed(mensajes))
 
 
 # ─── El turno ──────────────────────────────────────────────────────────────
@@ -991,6 +1056,35 @@ async def responder(
                                         % servicio_de_su_cita),
                         })
                         continue
+                # Decir que la cita esta cogida sin haberla cogido es el fallo mas
+                # caro: la clienta se planta en el salon y no hay hueco. Paso
+                # ofreciendo dia: "el corte de senyora esta reservado para el
+                # martes 25", sin haber creado nada.
+                if (_da_la_cita_por_hecha(texto_final) and not gestion_hecha
+                        and not solo_hablar and vuelta + 1 < MAX_VUELTAS):
+                    solo_hablar = True
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("NO hay ninguna cita creada todavia. No digas que "
+                                    "esta reservada, apuntada ni confirmada: dilo como "
+                                    "una propuesta y pregunta si le viene bien."),
+                    })
+                    continue
+                # El orden importa: primero QUE se quiere hacer, y despues cuando.
+                # Al pulsar "Agendar cita" preguntaba el dia sin saber siquiera si
+                # venia a cortarse el pelo o a unas mechas de tres horas, que ni
+                # duran ni cuestan lo mismo.
+                if (_pregunta_el_dia(texto_final) and not servicio_de_su_cita
+                        and not _servicio_mencionado(cliente_id, dicho_hasta_ahora)
+                        and not solo_hablar and vuelta + 1 < MAX_VUELTAS):
+                    solo_hablar = True
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("Aun no sabes que se quiere hacer, y de eso "
+                                    "dependen la duracion y el precio. Preguntaselo "
+                                    "primero; el dia, despues."),
+                    })
+                    continue
                 # No puede elegir el tratamiento por ella. Sin saber que quiere,
                 # cogia el PRIMER servicio del catalogo del prompt y daba por hecho
                 # que venia a eso.
@@ -1010,9 +1104,13 @@ async def responder(
                     solo_hablar = True
                     mensajes.append({
                         "role": "system",
-                        "content": ("Aun no sabes que dia le viene bien. Preguntaselo "
-                                    "antes de ofrecer horas; cuando te lo diga, mira "
-                                    "los huecos de ESE dia."),
+                        # Quitarle las tools no basta: los huecos ya estan en el
+                        # contexto y los volvia a recitar. Hay que decirle que no
+                        # los nombre.
+                        "content": ("Aun no sabes que dia le viene bien. En esta "
+                                    "respuesta NO menciones ninguna hora ni ningun "
+                                    "hueco: preguntale que dia le viene bien. Cuando "
+                                    "te lo diga, miras los huecos de ESE dia."),
                     })
                     continue
                 # Y recitarle el calendario entero no es atender: se le pregunta.
