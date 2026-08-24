@@ -51,6 +51,7 @@ class Estado:
     hora: str = ""               # HH:MM
     nombre: str = ""
     codigo: str = ""             # la cita que ya tiene, si gestiona una
+    profesional: str = ""        # si ha pedido a alguien en concreto
     huecos: List[str] = field(default_factory=list)   # los que se le han ofrecido
     dia_le_da_igual: bool = False
     hecho: bool = False          # la gestion se completo en esta conversacion
@@ -194,7 +195,7 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
         # boton), pero los datos que traia la llamada son buenos y son los unicos
         # que hay: el nombre no lo devuelve ninguna herramienta. Sin recogerlos, el
         # resumen no se podia montar y la conversacion se quedaba colgada.
-        for clave in ("servicio", "fecha", "hora", "nombre"):
+        for clave in ("servicio", "fecha", "hora", "nombre", "profesional"):
             valor = str(argumentos.get(clave) or "").strip()
             if valor and not getattr(estado, clave, ""):
                 setattr(estado, clave, valor)
@@ -341,6 +342,8 @@ def resumen(estado: Estado, nombre_conocido: str = "") -> str:
         lineas.append("- Hora: %s" % estado.hora)
     if estado.nombre or nombre_conocido:
         lineas.append("- Se llama: %s" % (estado.nombre or nombre_conocido))
+    if estado.profesional:
+        lineas.append("- Quiere que la atienda: %s" % estado.profesional)
     if estado.dia_le_da_igual:
         lineas.append("- Le da igual el dia: no se lo preguntes")
     if not lineas:

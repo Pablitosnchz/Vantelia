@@ -577,13 +577,43 @@ def _get_service_override(cliente_id: str, slug: str, location_id: str) -> Optio
 def _service_price_cents_resolved(
     cliente_id: str, service_row: Optional[sqlite3.Row], location_id: str = ""
 ) -> int:
-    """Precio efectivo de un servicio: override del centro si existe, si no el base."""
+    """Precio efectivo de un servicio: override del centro si existe, si no el base.
+
+    OJO: el recargo del profesional (`recargo_pct`) NO se aplica aqui. El asistente
+    lo AVISA al ofrecerlo ("con ella son un 25% mas"), pero el importe que se cobra
+    y la senyal no se tocan: cambiarlos descuadraria los pagos ya hechos y la
+    politica de pago del servicio. Lo que se cobre de mas se ajusta en el salon.
+    """
     if service_row is None:
         return 0
     override = _get_service_override(cliente_id, service_row["slug"], location_id)
     if override is not None and override["price_cents"] is not None:
         return int(override["price_cents"])
     return int(service_row["price_cents"] or 0)
+
+
+def recargo_pct(employee_row: Optional[sqlite3.Row]) -> int:
+    """Cuanto mas cuesta con ESTE profesional, en porcentaje. 0 = lo mismo."""
+    if employee_row is None:
+        return 0
+    try:
+        claves = employee_row.keys()
+    except AttributeError:
+        claves = employee_row
+    if "price_surcharge_pct" not in claves:
+        return 0
+    try:
+        return max(0, min(300, int(employee_row["price_surcharge_pct"] or 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def precio_con_recargo(base_cents: int, employee_row: Optional[sqlite3.Row]) -> int:
+    """Lo que costaria con ese profesional. Solo para DECIRLO, no para cobrarlo."""
+    pct = recargo_pct(employee_row)
+    if not pct or base_cents <= 0:
+        return int(base_cents)
+    return int(round(base_cents * (100 + pct) / 100.0))
 
 
 def _get_service_row(cliente_id: str, slug: str) -> Optional[sqlite3.Row]:

@@ -182,6 +182,24 @@ def _herramientas() -> List[Dict[str, Any]]:
         {
             "type": "function",
             "function": {
+                "name": "consultar_profesionales",
+                "description": (
+                    "Quien puede atenderla y si con alguien cuesta mas. Usala cuando "
+                    "pregunte por una profesional concreta, cuando pida elegir, o "
+                    "antes de cerrar la cita si el negocio tiene varias."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "servicio": {"type": "string", "description": "para filtrar quien lo hace"},
+                    },
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "consultar_disponibilidad",
                 "description": (
                     "Huecos REALES de la agenda para un dia. Usala antes de ofrecer "
@@ -216,6 +234,13 @@ def _herramientas() -> List[Dict[str, Any]]:
                         "nombre": {"type": "string"},
                         "email": {"type": "string"},
                         "notas": {"type": "string"},
+                        "profesional": {
+                            "type": "string",
+                            "description": (
+                                "Solo si ha pedido a alguien en concreto. Vacio = la "
+                                "que este libre."
+                            ),
+                        },
                     },
                     "required": ["servicio", "fecha", "hora", "nombre"],
                 },
@@ -231,6 +256,27 @@ _NOMBRES_QUE_NO_LO_SON = {
     "desconocido", "anonimo", "n/a", "na", "-", "usuario", "invitado", "señora",
     "senora", "sra", "sr", "chica",
 }
+
+
+def _es_una_profesional(cliente_id: str, valor: str) -> bool:
+    """¿Ese "nombre de la clienta" es en realidad el de quien la va a atender?
+
+    Paso de verdad: a "un corte de señora con Alicia" le cogio la cita a nombre de
+    "Alicia". El modelo toma el primer nombre propio que ve.
+    """
+    from backend import agenda
+
+    limpio = textnorm._strip_accents(str(valor or "").strip().lower())
+    if not limpio:
+        return False
+    try:
+        for fila in agenda._list_public_employee_rows(cliente_id):
+            nombre = textnorm._strip_accents(str(fila["name"] or "").strip().lower())
+            if nombre and (nombre == limpio or nombre.split()[0] == limpio):
+                return True
+    except Exception:  # noqa: BLE001
+        return False
+    return False
 
 
 def _nombre_de_verdad(valor: str) -> bool:
@@ -329,6 +375,15 @@ async def _ejecutar(
     if nombre == "politica_del_negocio":
         return _tool_politica_del_negocio(cliente_id, argumentos)
 
+    if nombre == "consultar_profesionales":
+        return _tool_consultar_profesionales(cliente_id, argumentos, location_id=location_id)
+
+    if nombre == "crear_cita" and remate_manual and _es_una_profesional(
+        cliente_id, argumentos.get("nombre")
+    ):
+        argumentos["profesional"] = argumentos.get("profesional") or argumentos["nombre"]
+        argumentos["nombre"] = ""
+
     if nombre == "crear_cita" and remate_manual and _nombre_de_verdad(
         argumentos.get("nombre") or (quien or {}).get("nombre", "")
     ):
@@ -358,6 +413,10 @@ async def _ejecutar(
         # la tool. Sin nombre de verdad, no hay cita.
         # De una clienta conocida ya se sabe el nombre: lo pone el codigo antes de
         # dar por incompleta la cita, en vez de hacersela repetir.
+        if _es_una_profesional(cliente_id, argumentos.get("nombre")):
+            # Se ha quedado con el nombre de la peluquera: eso no es la clienta.
+            argumentos["profesional"] = argumentos.get("profesional") or argumentos["nombre"]
+            argumentos["nombre"] = ""
         if not _nombre_de_verdad(argumentos.get("nombre")) and (quien or {}).get("nombre"):
             argumentos["nombre"] = quien["nombre"]
         if not _nombre_de_verdad(argumentos.get("nombre")):
@@ -395,6 +454,60 @@ async def _ejecutar(
         if firma:
             ya_creadas.add(firma)
     return resultado
+
+
+def _tool_consultar_profesionales(
+    cliente_id: str, argumentos: Dict[str, Any], *, location_id: str = "",
+) -> Dict[str, Any]:
+    """Quien atiende y con quien cuesta mas.
+
+    Existe porque el asistente cerraba todas las citas con "Asignacion automatica"
+    y nadie podia pedir a alguien en concreto. Y hay negocios donde elegir a la
+    duenya cuesta un porcentaje mas: eso hay que DECIRLO antes de coger la cita,
+    no en el mostrador.
+    """
+    from backend import agenda
+
+    servicio = str(argumentos.get("servicio") or "").strip()
+    try:
+        empleados = agenda._list_public_employee_rows(cliente_id)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("[agente] sin profesionales (%s): %s", cliente_id, exc)
+        return {"ok": False, "error": "No he podido mirar quien atiende."}
+
+    fila_servicio = agenda._find_service_by_name(cliente_id, servicio) if servicio else None
+    base = int(fila_servicio["price_cents"] or 0) if fila_servicio is not None else 0
+
+    gente = []
+    for empleado in empleados:
+        if location_id and (empleado["location_id"] or "") and empleado["location_id"] != location_id:
+            continue
+        if fila_servicio is not None:
+            suyos = agenda._employee_service_ids_from_row(empleado, cliente_id)
+            if suyos and fila_servicio["slug"] not in suyos:
+                continue
+        pct = agenda.recargo_pct(empleado)
+        ficha = {"nombre": empleado["name"], "recargo_pct": pct}
+        if pct and base > 0:
+            ficha["precio_con_ella"] = textnorm._format_price_cents(
+                agenda.precio_con_recargo(base, empleado)
+            )
+        gente.append(ficha)
+
+    con_recargo = [g for g in gente if g["recargo_pct"]]
+    return {
+        "ok": True,
+        "profesionales": gente,
+        "hay_recargo": bool(con_recargo),
+        "nota": (
+            ("Con %s cuesta un %d%% mas: DISELO antes de coger la cita, nunca "
+             "despues. Con el resto vale lo mismo, y si le da igual quien la atienda "
+             "no hace falta que elija."
+             % (con_recargo[0]["nombre"], con_recargo[0]["recargo_pct"]))
+            if con_recargo else
+            "Todas cobran lo mismo. Si le da igual quien la atienda, no le hagas elegir."
+        ),
+    }
 
 
 def _tool_consultar_horario(cliente_id: str, argumentos: Dict[str, Any]) -> Dict[str, Any]:

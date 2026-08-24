@@ -244,6 +244,13 @@ def _init_database() -> None:
         employee_columns = {
             row[1]: row for row in connection.execute("PRAGMA table_info(employees)").fetchall()
         }
+        # Recargo del profesional sobre el precio del servicio, en porcentaje. Hay
+        # negocios donde elegir a la duenya o a la especialista cuesta mas; con 0
+        # (el caso normal) no cambia nada.
+        if "price_surcharge_pct" not in employee_columns:
+            connection.execute(
+                "ALTER TABLE employees ADD COLUMN price_surcharge_pct INTEGER NOT NULL DEFAULT 0"
+            )
         if "service_ids_json" not in employee_columns:
             connection.execute("ALTER TABLE employees ADD COLUMN service_ids_json TEXT NOT NULL DEFAULT '[]'")
         if "break_start" not in employee_columns:

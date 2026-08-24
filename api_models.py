@@ -163,6 +163,12 @@ class BookingDetailPublic(BaseModel):
     manage_url: str = ""
     service_id: str = ""
     service_duration_minutes: int = 0
+    # Ratos en que la profesional esta OCUPADA dentro de la cita, en minutos desde
+    # medianoche: [[840, 860], [880, 970]]. Entre uno y otro el producto actua, la
+    # clienta espera y la profesional PUEDE atender a otra. La agenda ya lo respeta
+    # al dar hora; el panel lo pintaba como un bloque macizo de 220 minutos y el
+    # negocio creia que tenia la tarde ocupada.
+    work_intervals: List[List[int]] = []
     service_price_cents: int = 0
     service_price_label: str = ""
     contact_email: str = ""
@@ -1102,6 +1108,9 @@ class AppBusinessRulesConfigPayload(BaseModel):
 
 class AppChatMenuPayload(BaseModel):
     enabled: bool
+    # Opciones base que este negocio NO quiere en su menu ("Preguntas frecuentes").
+    # Son una sugerencia nuestra, no una imposicion.
+    ocultas: List[str] = []
 
 
 class AppKnowledgeItem(BaseModel):

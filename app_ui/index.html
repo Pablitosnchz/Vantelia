@@ -814,6 +814,11 @@
     }
     .cd-event:hover { filter:brightness(1.12); box-shadow:0 4px 14px rgba(0,0,0,0.3); z-index:5; }
     .cd-event.selected { box-shadow:0 0 0 2px var(--accent); z-index:6; }
+.cd-espera{position:absolute;z-index:3;border-radius:8px;cursor:pointer;
+  background:repeating-linear-gradient(135deg,rgba(0,245,212,.10) 0 6px,transparent 6px 12px);
+  border:1px dashed rgba(0,245,212,.45);display:flex;align-items:center;justify-content:center;}
+.cd-espera:hover{background:rgba(0,245,212,.18);}
+.cd-espera span{font-size:.62rem;letter-spacing:.03em;color:var(--success);text-transform:uppercase;}
     .cd-event.cancelled { opacity:.62; }
     .cd-event.cancelled .cd-ev-name { text-decoration:line-through; }
     .cd-ev-top { display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
@@ -2254,6 +2259,7 @@
         <input type="checkbox" id="tnMenuEnabled" />
         <span><b>Mostrar el menú de opciones al saludar</b> · si lo desactivas, cuando alguien escriba "hola" el asistente responde solo con tu mensaje de bienvenida, sin lista de opciones. Aplica al chat de la web y a WhatsApp.</span>
       </label>
+      <div id="tnMenuBase" style="margin-top:12px; padding-left:26px;"></div>
       <div id="tnStarterMount" style="margin-top:16px;"></div>
 
       <div style="margin-top:22px; padding-top:18px; border-top:1px solid rgba(255,255,255,0.09);" data-perm="catalog.manage">
@@ -5516,7 +5522,11 @@ document.getElementById('kwrEnabled')?.addEventListener('change', async (ev) => 
     await api('/auth/app/keyword-rules/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: ev.target.checked }),
+      body: JSON.stringify({
+        enabled: ev.target.checked,
+        ocultas: Array.from(document.querySelectorAll('[data-menu-base]'))
+          .filter(cb => !cb.checked).map(cb => cb.getAttribute('data-menu-base')),
+      }),
     });
     toast(ev.target.checked ? 'Respuestas por palabra clave activadas' : 'Respuestas por palabra clave desactivadas', 'success');
     loadKeywordRules();
@@ -5815,6 +5825,7 @@ async function loadTune() {
   try {
     const data = await api('/auth/app/chat-menu');
     document.getElementById('tnMenuEnabled').checked = !!data.enabled;
+    pintarOpcionesBase(data);
   } catch { /* si falla, el interruptor se queda como esta */ }
 }
 document.getElementById('tnMenuEnabled')?.addEventListener('change', async (ev) => {
@@ -5827,6 +5838,48 @@ document.getElementById('tnMenuEnabled')?.addEventListener('change', async (ev) 
     toast(ev.target.checked ? 'El asistente mostrará el menú al saludar' : 'Menú desactivado: al saludar responderá solo con la bienvenida', 'success');
   } catch (err) { toast(err.message, 'error'); ev.target.checked = !ev.target.checked; }
 });
+
+// Las tres opciones base ("Agendar cita", "Información servicios", "Preguntas
+// frecuentes") son una sugerencia nuestra, no una imposicion: un salon pidio
+// quitar la de preguntas frecuentes de su menu y hasta ahora habia que tocar el
+// codigo. Aqui las quita el negocio.
+function pintarOpcionesBase(data) {
+  const caja = document.getElementById('tnMenuBase');
+  if (!caja) return;
+  const base = data.opciones_base || [];
+  const ocultas = (data.ocultas || []).map(x => String(x).toLowerCase());
+  if (!base.length) { caja.innerHTML = ''; return; }
+  caja.innerHTML = '<div class="panel-sub" style="margin:0 0 8px;">Opciones fijas del menú. '
+    + 'Desmarca las que no quieras que vea tu cliente:</div>'
+    + base.map(texto => {
+        const marcado = ocultas.includes(String(texto).toLowerCase()) ? '' : ' checked';
+        return '<label style="display:flex; gap:8px; align-items:center; margin-bottom:6px; cursor:pointer;">'
+          + '<input type="checkbox" data-menu-base="' + escapeHtml(texto) + '"' + marcado + ' />'
+          + '<span>' + escapeHtml(texto) + '</span></label>';
+      }).join('');
+  caja.querySelectorAll('[data-menu-base]').forEach(cb => {
+    cb.addEventListener('change', guardarOpcionesBase);
+  });
+}
+
+async function guardarOpcionesBase() {
+  const caja = document.getElementById('tnMenuBase');
+  const ocultas = Array.from(caja.querySelectorAll('[data-menu-base]'))
+    .filter(cb => !cb.checked)
+    .map(cb => cb.getAttribute('data-menu-base'));
+  try {
+    const data = await api('/auth/app/chat-menu', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enabled: document.getElementById('tnMenuEnabled').checked,
+        ocultas,
+      }),
+    });
+    pintarOpcionesBase(data);
+    toast('Menú actualizado', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+}
 
 function moveStarterPanelToTune() {
   const panel = document.getElementById('starterPanel');
@@ -8290,6 +8343,18 @@ function cdBookingStartMin(b){
   if (b.start_at){ const d = new Date(b.start_at); if (!isNaN(d)) return d.getHours()*60 + d.getMinutes(); }
   return null;
 }
+// Los ratos en que la profesional esta OCUPADA dentro de una cita. Un pack de
+// 220 min con 20 y 90 de exposicion solo ocupa 110: entremedias la clienta espera
+// con el producto puesto y se puede atender a otra. El backend ya lo respeta al
+// dar hora; aqui se pintaba un bloque macizo de cuatro horas y el negocio creia
+// tener la tarde entera cogida.
+function cdTramos(b, emp){
+  const iv = Array.isArray(b.work_intervals) ? b.work_intervals : [];
+  if (iv.length > 1) return iv.map(x => [Number(x[0]), Number(x[1])]).filter(x => x[1] > x[0]);
+  const ini = cdBookingStartMin(b);
+  if (ini === null) return [];
+  return [[ini, ini + cdDur(b, emp)]];
+}
 function cdDur(b, emp){
   const svcDur = Number(b.service_duration_minutes || b.duration_minutes || 0);
   if (svcDur > 0 && svcDur <= 1440) return svcDur;
@@ -8564,11 +8629,9 @@ function renderCitasDay(){
         const ocupado = (desde, hasta) => {
           if (desde < info.dayStart || hasta > info.dayEnd) return true;
           if (esHoy && desde < minutosAhora) return true;   // hora ya pasada
-          return bookings.some((b) => {
-            const ini = cdBookingStartMin(b);
-            if (ini === null) return false;
-            return desde < ini + cdDur(b, c.emp) && ini < hasta;
-          });
+          return bookings.some((b) => (
+            cdTramos(b, c.emp).some(([a, z]) => desde < z && a < hasta)
+          ));
         };
         body.addEventListener('mousemove', (e) => {
           if (e.target !== body) { marca.style.display = 'none'; return; }
@@ -8623,6 +8686,31 @@ function renderCitasDay(){
       btn.innerHTML = `<div class="cd-ev-top"><span class="cd-ev-name">${escapeHtml(hora)} · ${escapeHtml(b.nombre || b.client_name || b.name || b.servicio || 'Cita')}</span><span class="cd-ev-tag" style="color:${base}" title="${escapeHtml(view.label)}">${escapeHtml(view.tag)}${cdPayMark(b)}</span></div><div class="cd-ev-svc">${escapeHtml(sub + cdServiceMeta(b))}</div>`;
       btn.addEventListener('click', () => openManageBookingModal(b));
       body.appendChild(btn);
+      // Los ratos de exposicion se pintan ENCIMA del bloque, en hueco: es la unica
+      // forma de que se vea que ahi se puede meter a otra clienta. Sin esto el pack
+      // parecia cuatro horas macizas y el negocio no las usaba.
+      const tramos = cdTramos(b, c.emp);
+      if (tramos.length > 1) {
+        for (let i = 0; i < tramos.length - 1; i++) {
+          const libreIni = tramos[i][1], libreFin = tramos[i + 1][0];
+          if (libreFin <= libreIni) continue;
+          const hueco = document.createElement('div');
+          hueco.className = 'cd-espera';
+          hueco.style.top = ((libreIni - startMin) * CD_PX_PER_MIN) + 'px';
+          hueco.style.height = ((libreFin - libreIni) * CD_PX_PER_MIN) + 'px';
+          hueco.style.left = `calc(${lPct}% + 3px)`;
+          hueco.style.width = `calc(${wPct}% - 6px)`;
+          hueco.title = `Exposición: libre para otra clienta (${cdFmtMin(libreIni)}–${cdFmtMin(libreFin)})`;
+          if (libreFin - libreIni >= 25) {
+            hueco.innerHTML = `<span>libre · ${libreFin - libreIni} min</span>`;
+          }
+          hueco.addEventListener('click', () => openNewBookingDrawer({
+            fecha: c.dateKey, hora: cdFmtMin(libreIni),
+            employee_id: b.employee_id || '',
+          }));
+          body.appendChild(hueco);
+        }
+      }
     });
 
     col.appendChild(head); col.appendChild(body); grid.appendChild(col);

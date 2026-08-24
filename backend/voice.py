@@ -2246,6 +2246,28 @@ def _servicio_tras_valoracion(cliente_id: str, servicio: str) -> Tuple[str, str]
         return servicio, ""
 
 
+def _empleado_por_nombre(cliente_id: str, dicho: str, location_id: str = "") -> str:
+    """El id de la profesional que ha nombrado la clienta. Vacio si no nombra a nadie.
+
+    Se casa contra el catalogo de personas del negocio, no contra lo que el modelo
+    escriba: si dice un nombre que no trabaja alli, no se fuerza nada y la cita la
+    coge quien este libre.
+    """
+    limpio = textnorm._strip_accents(str(dicho or "").strip().lower())
+    if not limpio:
+        return ""
+    try:
+        for fila in agenda._list_public_employee_rows(cliente_id, location_id=location_id):
+            nombre = textnorm._strip_accents(str(fila["name"] or "").strip().lower())
+            if not nombre:
+                continue
+            if nombre == limpio or limpio in nombre or nombre.split()[0] == limpio.split()[0]:
+                return str(fila["id"])
+    except Exception:  # noqa: BLE001 - nunca puede impedir una reserva
+        return ""
+    return ""
+
+
 async def _voice_perform_booking(
     cliente_id: str,
     *,
@@ -2258,6 +2280,7 @@ async def _voice_perform_booking(
     location_id: str = "",
     fecha_texto: str = "",
     notas: str = "",
+    profesional: str = "",
 ) -> Dict[str, Any]:
     """Crea una cita real reutilizando el motor de booking del widget. source='voice'."""
     config = appstate.CONFIG_CLIENTES.get(cliente_id)
@@ -2319,8 +2342,12 @@ async def _voice_perform_booking(
         return {"ok": False, "error": str(exc.detail), **date_meta}
 
     try:
+        # A quien pide una profesional concreta se le da esa, no "la que toque":
+        # todas las citas salian con "Asignacion automatica" y nadie podia elegir.
         employee_row = await agenda._resolve_public_booking_employee(
-            cliente_id, booking_date, booking_time, servicio=servicio, location_id=location_id
+            cliente_id, booking_date, booking_time, servicio=servicio,
+            location_id=location_id,
+            employee_id=_empleado_por_nombre(cliente_id, profesional, location_id),
         )
     except HTTPException as exc:
         detail = str(exc.detail or "")
@@ -2970,6 +2997,7 @@ async def _voice_dispatch_tool_impl(
             location_id=effective_location,
             fecha_texto=str(args.get("fecha_texto", "")),
             notas=str(args.get("notas", "")),
+            profesional=str(args.get("profesional", "")),
         )
     if name == "consultar_cita":
         return await _voice_lookup_booking(

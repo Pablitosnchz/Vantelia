@@ -2430,6 +2430,33 @@ def _portal_booking_summaries(
     return [_portal_booking_summary_from_row(row, request) for row in rows]
 
 
+def _work_intervals_of(row: sqlite3.Row, data: Dict[str, Any]) -> List[List[int]]:
+    """Los ratos OCUPADOS de una cita, para que el panel no la pinte maciza.
+
+    Un pack de 220 minutos con 20 y 90 de exposicion solo ocupa 110: entremedias la
+    clienta espera con el producto puesto y la profesional PUEDE atender a otra. La
+    agenda ya lo respetaba al dar hora, pero en la pantalla se veia un bloque de
+    cuatro horas y el negocio creia tener la tarde entera cogida.
+
+    Se devuelven en minutos desde medianoche. Vacio = la cita ocupa su duracion
+    entera y el panel la pinta como siempre.
+    """
+    try:
+        inicio = textnorm._time_to_min(data.get("hora") or row["booking_time"])
+        if inicio is None:
+            return []
+        duracion = int(data.get("service_duration_minutes", 0) or 0)
+        tramos = (row["gap_json"] if "gap_json" in row.keys() else "") or ""
+        if duracion <= 0 or not tramos:
+            return []
+        ocupados = agenda._tramos_de_trabajo(tramos, inicio, duracion)
+        if len(ocupados) <= 1:
+            return []
+        return [[int(a), int(b)] for a, b in ocupados]
+    except Exception:  # noqa: BLE001 - nunca puede tumbar el listado de citas
+        return []
+
+
 def _portal_booking_summary_from_row(
     row: sqlite3.Row,
     request: Optional[Request] = None,

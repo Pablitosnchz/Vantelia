@@ -259,7 +259,18 @@ def _resolve_widget_starters(config: Dict[str, Any], *, booking_enabled: Optiona
         booking_cfg = config.get("booking") if isinstance(config, dict) else None
         booking_enabled = bool(booking_cfg.get("enabled")) if isinstance(booking_cfg, dict) else False
 
-    base = [b["text"] for b in BASE_STARTERS if booking_enabled or not b["needs_booking"]]
+    # Las tres base son una sugerencia, no una imposicion: un negocio puede no
+    # querer "Preguntas frecuentes" en su menu. Se quitan desde su portal
+    # (`chat_menu.ocultas`), no tocando el codigo.
+    ocultas = set()
+    menu_cfg = config.get("chat_menu") if isinstance(config, dict) else None
+    if isinstance(menu_cfg, dict):
+        for texto in (menu_cfg.get("ocultas") or []):
+            ocultas.add(str(texto).strip().lower())
+    base = [
+        b["text"] for b in BASE_STARTERS
+        if (booking_enabled or not b["needs_booking"]) and b["text"].lower() not in ocultas
+    ]
     extras = _strip_base_from_extras(config.get("starter_questions"))
 
     seen = {t.lower() for t in base}

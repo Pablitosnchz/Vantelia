@@ -155,3 +155,29 @@ def test_whatsapp_chunks_translate_markdown(api_module):
     chunks = messaging._whatsapp_chunks("Le presento el **Spa Cap Rocat** y el **Sea Club**.")
     assert chunks == ["Le presento el *Spa Cap Rocat* y el *Sea Club*."]
     assert "**" not in chunks[0]
+
+
+def test_el_negocio_puede_quitar_opciones_del_menu(api_module, client):  # noqa: F811
+    """Las tres base son una sugerencia, no una imposicion.
+
+    Un salon pidio quitar "Preguntas frecuentes" de su menu: se hace desde su
+    portal (`chat_menu.ocultas`), no tocando el codigo, y sin afectar a los demas
+    negocios.
+    """
+    from backend import settings
+
+    base = {"booking": {"enabled": True}}
+    assert "Preguntas frecuentes" in settings._resolve_widget_starters(base)
+
+    suyo = dict(base, chat_menu={"ocultas": ["preguntas frecuentes"]})
+    opciones = settings._resolve_widget_starters(suyo)
+    assert "Preguntas frecuentes" not in opciones
+    assert "Agendar cita" in opciones, "no puede llevarse por delante el resto"
+
+
+def test_las_opciones_del_menu_no_llevan_coletilla(api_module, client):  # noqa: F811
+    """"Agendar cita / Reserva tu cita en pocos pasos" es decir dos veces lo mismo."""
+    from backend import whatsapp
+
+    for _accion, descripcion in whatsapp._WA_MENU_ACCIONES.values():
+        assert descripcion == "", "las filas del menu no llevan subtitulo"

@@ -605,14 +605,27 @@ async def app_chat_menu_get(
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
 ) -> Dict[str, bool]:
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
-    return {"enabled": chat._menu_enabled(cliente_id)}
+    return _menu_estado(cliente_id)
+
+
+def _menu_estado(cliente_id: str) -> Dict[str, Any]:
+    """Como esta el menu: encendido y que opciones base ha quitado el negocio."""
+    config = clients._get_client_config(cliente_id)
+    seccion = config.get(chat.MENU_CONFIG_SECTION) or {}
+    ocultas = [str(x) for x in (seccion.get("ocultas") or [])]
+    return {
+        "enabled": chat._menu_enabled(cliente_id),
+        "ocultas": ocultas,
+        # Las que puede quitar, para que el portal las pinte sin adivinarlas.
+        "opciones_base": [b["text"] for b in settings.BASE_STARTERS],
+    }
 
 
 @app.put("/auth/app/chat-menu")
 async def app_chat_menu_put(
     data: AppChatMenuPayload,
     user: sqlite3.Row = Depends(security._require_authenticated_portal_user),
-) -> Dict[str, bool]:
+) -> Dict[str, Any]:
     """Enciende/apaga el menu de opciones al saludar. manager+ (configuracion)."""
     security._require_portal_min_role(user, "manager")
     cliente_id = security._resolve_cliente_for_self_serve_user(user)
@@ -621,11 +634,18 @@ async def app_chat_menu_put(
         cfg = next_configs.get(cliente_id, {})
         section = dict(cfg.get(chat.MENU_CONFIG_SECTION, {}) or {})
         section["enabled"] = bool(data.enabled)
+        # Solo se admiten las base: aqui no se esconden las sugerencias propias del
+        # negocio, que esas se quitan borrandolas de "Preguntas sugeridas".
+        validas = {b["text"].strip().lower() for b in settings.BASE_STARTERS}
+        section["ocultas"] = [
+            str(x).strip() for x in (data.ocultas or [])
+            if str(x).strip().lower() in validas
+        ]
         cfg[chat.MENU_CONFIG_SECTION] = section
         next_configs[cliente_id] = cfg
         clients._update_runtime_configs(next_configs)
     clients._persist_configs_to_disk(next_configs)
-    return {"enabled": chat._menu_enabled(cliente_id)}
+    return _menu_estado(cliente_id)
 
 
 # --- Sem 4: Knowledge (text snippets + URLs) -----------------------------

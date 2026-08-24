@@ -42,7 +42,7 @@ except ImportError:  # pragma: no cover - Python 3.8 compatibility
     from backports.zoneinfo import ZoneInfo
 
 from api_models import AppWhatsAppResponse, WhatsAppWebhookStatus
-from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, inbox, intents, keywords, messaging, paystate, rag, settings, textnorm, timeutils, wa_demo, wa_flows, wa_onboarding
+from backend import agenda, appstate, booking, chat, clients, commerce, crm, db, inbox, intents, keywords, messaging, paystate, rag, settings, textnorm, timeutils, wa_audio, wa_demo, wa_flows, wa_onboarding
 
 def _app_whatsapp_response(cliente_id: str, request: Request) -> AppWhatsAppResponse:
     cfg = clients._get_client_config(cliente_id)
@@ -674,11 +674,14 @@ def _wa_starter_message(cliente_id: str, interactive_id: str, booking_enabled: b
 
 # Sugerencias que abren un flujo guiado propio en vez de pasar por la IA. La clave
 # va normalizada (sin emojis ni acentos) porque el negocio escribe el texto a mano.
+# La descripcion va vacia a proposito: "Agendar cita / Reserva tu cita en pocos
+# pasos" es decir dos veces lo mismo, y el negocio pidio quitarlo. El titulo ya
+# dice lo que hace.
 _WA_MENU_ACCIONES = {
-    "agendar cita": ("menu_agendar", "Reserva tu cita en pocos pasos"),
-    "ver disponibilidad": ("menu_disponibilidad", "Consulta huecos libres"),
-    "cancelar cita": ("menu_cancelar_cita", "Anula una reserva con tu código"),
-    "cambiar cita": ("menu_cambiar_cita", "Reprograma fecha u hora"),
+    "agendar cita": ("menu_agendar", ""),
+    "ver disponibilidad": ("menu_disponibilidad", ""),
+    "cancelar cita": ("menu_cancelar_cita", ""),
+    "cambiar cita": ("menu_cambiar_cita", ""),
 }
 
 
@@ -1534,6 +1537,18 @@ async def _wa_resumen_para_confirmar(
     flow.servicio = estado.servicio
     flow.fecha = estado.fecha
     flow.hora = estado.hora
+    # A quien pide una profesional concreta se le respeta: la cita la crea
+    # `_wa_create_booking` desde el flow, asi que si no viaja aqui se pierde y
+    # sale "Asignacion automatica" aunque la haya pedido por su nombre.
+    if estado.profesional:
+        from backend import voice
+
+        elegida = voice._empleado_por_nombre(cliente_id, estado.profesional, flow.location_id or "")
+        if elegida:
+            fila = agenda._get_employee_row(elegida, cliente_id=cliente_id)
+            if fila is not None:
+                flow.employee_id = elegida
+                flow.employee_name = str(fila["name"] or "")
     flow.nombre = estado.nombre or conocido
     flow.from_number = from_number
     if contacto is not None and not flow.email:
@@ -2921,6 +2936,7 @@ async def _handle_whatsapp_webhook(
 
                 message_type = str(message_payload.get("type", "")).strip()
                 interactive_id = ""
+                audio_media_id = ""
                 if message_type == "text":
                     incoming_text = str(message_payload.get("text", {}).get("body", "")).strip()
                 elif message_type == "interactive":
@@ -2956,10 +2972,26 @@ async def _handle_whatsapp_webhook(
                         continue
                     else:
                         incoming_text = ""
+                elif message_type == "audio":
+                    # Mucha gente manda notas de voz en vez de escribir. Aqui solo se
+                    # apunta cual es: para bajarlo hace falta el token DEL NEGOCIO, y
+                    # el negocio se resuelve unas lineas mas abajo.
+                    audio_media_id = str((message_payload.get("audio", {}) or {}).get("id") or "")
+                    incoming_text = ""
                 else:
                     incoming_text = (
                         "El usuario ha enviado un mensaje que no es texto. "
                         "Responde de forma breve indicando que puede ayudarte si escribe su consulta."
+                    )
+
+                if audio_media_id:
+                    # Ya se sabe de que negocio es: se puede bajar el audio con SU
+                    # token y transcribirlo. El texto sigue el mismo camino que si
+                    # lo hubiera escrito, asi que no hay que tocar nada mas.
+                    dicho = await wa_audio.escuchar(cliente_id, audio_media_id)
+                    incoming_text = dicho or (
+                        "El usuario ha enviado un audio que no se ha podido escuchar. "
+                        "Pidele con amabilidad que te lo escriba."
                     )
 
                 if demo_hub:
