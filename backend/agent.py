@@ -316,7 +316,7 @@ def _normalizar_argumentos(argumentos: Dict[str, Any]) -> Dict[str, Any]:
 async def _ejecutar(
     cliente_id: str, nombre: str, argumentos: Dict[str, Any], *,
     telefono: str, location_id: str = "", ya_creadas: Optional[set] = None,
-    quien: Optional[Dict[str, str]] = None,
+    quien: Optional[Dict[str, str]] = None, remate_manual: bool = False,
 ) -> Dict[str, Any]:
     """Ejecuta una tool. Nunca lanza: un fallo se devuelve como resultado."""
     argumentos = _normalizar_argumentos(argumentos)
@@ -328,6 +328,25 @@ async def _ejecutar(
 
     if nombre == "politica_del_negocio":
         return _tool_politica_del_negocio(cliente_id, argumentos)
+
+    if nombre == "crear_cita" and remate_manual and _nombre_de_verdad(
+        argumentos.get("nombre") or (quien or {}).get("nombre", "")
+    ):
+        # El canal quiere que la cita la confirme la clienta con un boton. No basta
+        # con no forzar la herramienta: el modelo la llamaba igual y la cita nacia
+        # antes de que ella confirmase nada. Aqui se le impide de verdad.
+        return {
+            "ok": False,
+            "pendiente_de_confirmacion": True,
+            "error": "Todavia no se puede crear: lo confirma la clienta.",
+            "que_hacer": ("Resume en UNA frase lo que teneis (servicio, dia y hora) y "
+                          "dile que ahora se lo pasas para confirmar. NO digas que ya "
+                          "esta reservada ni le des ningun numero de reserva."),
+        }
+
+    # OJO al orden: si el freno fuera lo PRIMERO, un nombre inventado se colaria
+    # sin pasar por la comprobacion de abajo y la cita saldria a nombre de
+    # "cliente". Paso: el resumen decia "👤 cliente".
 
     if nombre == "crear_cita":
         # El modelo rellena "nombre" con cualquier cosa con tal de poder llamar a
@@ -536,12 +555,12 @@ def _tool_buscar_servicio(
             return valoracion
         detalle = _detalle_servicio(cliente_id, eleccion.servicio)
         return {"ok": True, "servicio": eleccion.servicio, **detalle}
-    if eleccion.falta in ("tecnica", "talla"):
+    if eleccion.falta in ("tecnica", "talla", "para_quien"):
         # Con DURACION de cada candidato: a "¿cuanto tiempo tengo que estar ahi?"
         # se le puede contestar el abanico ("de 45 a 75 minutos segun el largo") sin
         # obligarla a concretar. Sin este dato el agente preguntaba dos veces.
         detalle = []
-        for nombre in eleccion.candidatos[:8]:
+        for nombre in eleccion.candidatos[:12]:
             datos_servicio = _detalle_servicio(cliente_id, nombre)
             minutos = datos_servicio.get("duracion_minutos") or 0
             detalle.append({"servicio": nombre, "duracion_minutos": minutos})
@@ -549,11 +568,24 @@ def _tool_buscar_servicio(
             "ok": True,
             "servicio": "",
             "falta": eleccion.falta,
+            "preguntale_por": catalog_pick.sobre_que_preguntar(eleccion),
             "opciones": eleccion.opciones,
             "candidatos": detalle,
+            "total_candidatos": len(eleccion.candidatos),
             "sugerencia": catalog_pick.pregunta_para(eleccion),
-            "nota": ("Si solo pregunta cuanto dura o cuanto cuesta, contesta con estos "
-                     "candidatos y sus datos; no la obligues a concretar."),
+            # Dos cosas que se hacian mal y le costaban la cita al negocio: recitarle
+            # media lista del catalogo en vez de preguntar lo que la separa, y
+            # rematar con "no hay mas opciones" teniendo nueve.
+            "nota": (
+                "PREGUNTALE POR %s con tus palabras, como lo haria una peluquera. NO "
+                "le recites nombres del catalogo ni le hagas elegir de una lista; si "
+                "acaso, sugiere una o dos y explica la diferencia. Hay %d servicios "
+                "que encajan, asi que NUNCA digas que no hay mas opciones. Y si solo "
+                "pregunta cuanto dura o cuanto cuesta, contestale con estos datos sin "
+                "obligarla a concretar."
+                % ((catalog_pick.sobre_que_preguntar(eleccion) or "lo que falta").upper(),
+                   len(eleccion.candidatos))
+            ),
         }
     return {
         "ok": False,
@@ -946,6 +978,7 @@ async def responder(
     config: Optional[Dict[str, Any]] = None,
     location_id: str = "",
     intencion: str = "",
+    remate_manual: bool = False,
 ) -> Tuple[str, bool]:
     """Contesta a la clienta llevando la conversacion de la cita.
 
@@ -1019,6 +1052,11 @@ async def responder(
             # no se sugiere: se obliga. Pedirselo "con enfasis" seguia siendo
             # prompt, y el modelo se escaqueaba volviendo a consultar huecos.
             remate = reserva.tool_que_remata(estado, conocido)
+            # El canal puede querer que la cita la confirme la clienta con un
+            # boton, no el modelo por su cuenta: un resumen con "¿Confirmamos?"
+            # antes de tocar la agenda. Cancelar y reprogramar siguen igual.
+            if remate == "crear_cita" and remate_manual:
+                remate = ""
             if remate and not obligar:
                 eleccion = {"type": "function", "function": {"name": remate}}
             elif obligar:
@@ -1116,7 +1154,7 @@ async def responder(
                     resultado = await _ejecutar(
                         cliente_id, llamada.function.name, argumentos,
                         telefono=telefono, location_id=location_id, ya_creadas=ya_creadas,
-                        quien=quien,
+                        quien=quien, remate_manual=remate_manual,
                     )
                 if llamada.function.name == "consultar_disponibilidad":
                     consultada = True

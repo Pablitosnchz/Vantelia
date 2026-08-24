@@ -428,3 +428,54 @@ def test_pregunta_que_antes_que_cuando(api_module):  # noqa: F811
     reserva.anotar_intencion(estado, "reservar")
     assert reserva.que_falta(estado) == "servicio"
     assert "No propongas dias ni horas" in reserva.instruccion(estado)
+
+
+def test_la_cita_la_confirma_la_clienta_no_el_modelo(client, api_module):  # noqa: F811
+    """Con `remate_manual`, `crear_cita` se BLOQUEA hasta que ella lo confirme.
+
+    No basta con dejar de forzar la herramienta: el modelo la llamaba igual y la
+    cita nacia antes de que nadie confirmase nada. Y el orden importa: frenando
+    ANTES de validar el nombre se colaba uno inventado y el resumen decia
+    "👤 cliente".
+    """
+    import asyncio
+
+    from backend import agent
+
+    frenada = asyncio.run(agent._ejecutar(
+        "demo", "crear_cita",
+        {"servicio": "Corte", "fecha": "2026-09-01", "hora": "10:00", "nombre": "Marta Ruiz"},
+        telefono="34600111000", remate_manual=True,
+    ))
+    assert frenada["pendiente_de_confirmacion"] is True
+    assert not frenada["ok"]
+
+    # Con un nombre que no lo es, se rechaza por el nombre ANTES de frenar.
+    sin_nombre = asyncio.run(agent._ejecutar(
+        "demo", "crear_cita",
+        {"servicio": "Corte", "fecha": "2026-09-01", "hora": "10:00", "nombre": "clienta"},
+        telefono="34600111000", remate_manual=True,
+    ))
+    assert "nombre" in (sin_nombre.get("error") or "").lower()
+
+
+def test_los_datos_de_la_llamada_frenada_no_se_pierden(api_module):  # noqa: F811
+    """El nombre no lo devuelve ninguna herramienta: viaja en esa llamada.
+
+    Sin recogerlo, el resumen para confirmar no se podia montar y la conversacion
+    se quedaba colgada esperando un dato que ya se habia dado.
+    """
+    from backend import reserva
+
+    estado = reserva.Estado()
+    reserva.anotar_intencion(estado, "reservar")
+    reserva.anotar_resultado(
+        estado, "crear_cita",
+        {"servicio": "Corte señora", "fecha": "2026-09-01", "hora": "10:00",
+         "nombre": "Pablo Sanchez"},
+        {"ok": False, "pendiente_de_confirmacion": True},
+    )
+    assert estado.nombre == "Pablo Sanchez"
+    assert estado.servicio == "Corte señora"
+    assert not estado.hecho, "una cita frenada NO esta hecha"
+    assert reserva.que_falta(estado) == ""

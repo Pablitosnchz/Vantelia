@@ -1494,6 +1494,92 @@ def _wa_esta_gestionando_una_cita(texto: str) -> bool:
     return any(frase in limpio for frase in _HABLANDO_DE_CITA)
 
 
+# Delante del resumen mucha gente CONTESTA en vez de pulsar: "si, confirmo",
+# "vale perfecto", "adelante". Comparar por igualdad exacta dejaba a esa clienta
+# con un "Pulsa Confirmar o Cancelar" y la cita sin coger.
+_ASIENTE = ("si", "sii", "claro", "vale", "ok", "okey", "confirmo", "confirmar",
+            "perfecto", "genial", "adelante", "venga", "de acuerdo", "correcto",
+            "eso es", "me vale", "esta bien", "asi es")
+
+
+def _wa_dice_que_si(texto: str) -> bool:
+    plano = " ".join(str(texto or "").split())
+    if not plano or len(plano) > 40:
+        return False
+    if plano.startswith("no") or " no " in (" " + plano + " "):
+        return False  # "no, mejor otro dia" no es un si
+    primera = plano.split(",")[0].split()[0] if plano.split() else ""
+    return primera in _ASIENTE or plano in _ASIENTE or "confirm" in plano
+
+
+async def _wa_resumen_para_confirmar(
+    *, cliente_id: str, phone_number_id: str, from_number: str,
+    flow: appstate.WAFlowState, texto_previo: str, request,
+) -> bool:
+    """Si ya no falta nada, el resumen con botones. False si aun falta algo."""
+    from backend import reserva
+
+    estado = reserva.cargar(cliente_id, from_number)
+    conocido = ""
+    contacto = crm.contact_by_phone(cliente_id, from_number)
+    if contacto is not None:
+        conocido = str(contacto["name"] or "").strip()
+    if estado.intencion != "reservar" or estado.hecho:
+        return False
+    if reserva.que_falta(estado, conocido):
+        return False
+    if not (estado.servicio and estado.fecha and estado.hora):
+        return False
+
+    flow.servicio = estado.servicio
+    flow.fecha = estado.fecha
+    flow.hora = estado.hora
+    flow.nombre = estado.nombre or conocido
+    flow.from_number = from_number
+    if contacto is not None and not flow.email:
+        flow.email = str(contacto["email"] or "").strip()
+    if texto_previo:
+        _wa_registrar(cliente_id=cliente_id, from_number=from_number, request=request,
+                      respuesta=texto_previo, intent="agenda_agente")
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+            text=texto_previo,
+        )
+    await _wa_send_booking_summary(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+        flow=flow, reconocido=contacto is not None,
+    )
+    return True
+
+
+async def _wa_enviar_resumen_de_la_cita(
+    *, cliente_id: str, phone_number_id: str, to_number: str,
+) -> bool:
+    """El resumen por escrito de la cita recien cogida. Nunca puede faltar."""
+    from backend import reserva
+
+    codigo = (reserva.cargar(cliente_id, to_number).codigo or "").strip()
+    if not codigo:
+        return False
+    try:
+        with db._get_db_connection() as conexion:
+            fila = conexion.execute(
+                "SELECT b.*, e.name AS employee_name FROM bookings b"
+                " LEFT JOIN employees e ON e.id = b.employee_id"
+                " WHERE b.cliente_id = ? AND b.booking_code = ?",
+                (cliente_id, codigo),
+            ).fetchone()
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("[wa] sin resumen de %s: %s", codigo, exc)
+        return False
+    if fila is None:
+        return False
+    return await messaging._send_whatsapp_text(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+        text=booking._whatsapp_notice_text(fila, "confirmed"),
+    )
+
+
 async def _wa_turno_del_agente(
     *, cliente_id: str, phone_number_id: str, from_number: str,
     incoming_text: str, flow: appstate.WAFlowState, config: Dict[str, Any], request,
@@ -1520,7 +1606,19 @@ async def _wa_turno_del_agente(
         cliente_id, incoming_text, session_id=session_id, telefono=from_number,
         config=config, location_id=flow.location_id or _wa_location_id(cliente_id, phone_number_id),
         intencion=intencion,
+        # La cita la confirma la clienta con un boton, no el modelo por su cuenta.
+        remate_manual=True,
     )
+    # Con todos los datos en la mano, la cita NO se crea sola: se le ensena el
+    # resumen y lo confirma ella. Es el mismo resumen con botones de siempre; al
+    # unificar en el agente se habia perdido, y con el la ultima oportunidad de
+    # corregir un dato antes de ocupar un hueco.
+    if not cita_creada and await _wa_resumen_para_confirmar(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, from_number=from_number,
+        flow=flow, texto_previo=texto, request=request,
+    ):
+        return True
+
     if not texto:
         return False
 
@@ -1538,6 +1636,14 @@ async def _wa_turno_del_agente(
         text=texto,
     )
     if cita_creada:
+        # El resumen de la cita NO puede quedarse en lo que el modelo redacte: el
+        # numero de reserva, la direccion y el aviso del negocio son datos que la
+        # clienta necesita tener por escrito. Al pasar al modo conversacional se
+        # dejaron de enviar, y con ellos se perdio el codigo R-XXXX y el "te
+        # esperamos en...". Es la MISMA pieza que usan los recordatorios.
+        await _wa_enviar_resumen_de_la_cita(
+            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
+        )
         _wa_clear_flow(cliente_id, from_number)
     elif _wa_esta_gestionando_una_cita(texto):
         # Solo se queda "en conversacion de cita" si de verdad la esta cogiendo:
@@ -2675,7 +2781,7 @@ async def _handle_whatsapp_message(
                 text="👤 Sin problema. ¿A nombre de quien hago la cita?",
             )
             return
-        if iid == "confirm_yes" or text_norm in ("si", "confirmar", "confirmo", "ok", "vale"):
+        if iid == "confirm_yes" or _wa_dice_que_si(text_norm):
             ok = await _wa_create_booking(
                 cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
                 flow=flow, config=config, request=request,

@@ -145,8 +145,11 @@ def _dejarle_una_cita(cliente_id: str, telefono: str):
         ).fetchall()
     if not empleados:
         return None
+    # Un servicio CORTO y neutro: cogiendo el primero del catalogo se llenaba la
+    # copia de alisados de 260 EUR y ensuciaba el analisis de lo que pasaba.
     servicios = booking._public_services_for_booking(cliente_id)
-    servicio = servicios[0]["nombre"] if servicios else ""
+    corto = [s for s in servicios if 0 < int(s.get("duration_minutes") or 0) <= 30]
+    servicio = (corto or servicios or [{}])[0].get("nombre", "")
     hoy = timeutils._utc_now().date()
     for salto in range(21):
         fecha = (hoy + datetime.timedelta(days=2 + salto)).isoformat()
@@ -238,7 +241,13 @@ def _juzgar(cliente_id, combinacion, telefono, conversacion, previa) -> Dict[str
             # es EL OBJETIVO del negocio: no doy precio, te cito para verlo. Pero
             # tiene que ser la cita de VALORACION de 15 minutos, no el tratamiento
             # de 260 EUR a alguien a quien no han visto el pelo.
-            if _es_diagnostico(vivas[0]):
+            # OJO: solo se exige la valoracion si el negocio la exige PARA ESA
+            # familia. Un alisado se reserva directo (su regla es "pedir foto", no
+            # "ofrecer cita"), asi que cogerle cita de alisado a quien preguntaba
+            # su precio es CORRECTO. Exigir diagnostico a todo el mundo daba por
+            # rotas 15 conversaciones de 100 que estaban bien.
+            exige = _tiene_regla_de_no_precio(cliente_id, persona.get("familia", ""))
+            if _es_diagnostico(vivas[0]) or not exige:
                 resultado["veredicto"] = "bien"
             else:
                 resultado["veredicto"] = "fallo"

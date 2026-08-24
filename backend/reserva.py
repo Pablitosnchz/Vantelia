@@ -149,7 +149,19 @@ def _codigo_en(texto: str) -> str:
 def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
                      resultado: Dict[str, Any]) -> None:
     """Actualiza el estado con lo que ha DEVUELTO una herramienta."""
-    if not isinstance(resultado, dict) or not resultado.get("ok"):
+    if not isinstance(resultado, dict):
+        return
+    if resultado.get("pendiente_de_confirmacion"):
+        # La creacion se ha frenado a proposito (la confirma la clienta con un
+        # boton), pero los datos que traia la llamada son buenos y son los unicos
+        # que hay: el nombre no lo devuelve ninguna herramienta. Sin recogerlos, el
+        # resumen no se podia montar y la conversacion se quedaba colgada.
+        for clave in ("servicio", "fecha", "hora", "nombre"):
+            valor = str(argumentos.get(clave) or "").strip()
+            if valor and not getattr(estado, clave, ""):
+                setattr(estado, clave, valor)
+        return
+    if not resultado.get("ok"):
         return
 
     if tool == "buscar_servicio" and resultado.get("servicio"):
@@ -363,6 +375,13 @@ def instruccion_de_cierre(estado: Estado, nombre_conocido: str = "") -> str:
         herramienta = "reprogramar_cita" if estado.intencion == "reprogramar" else "crear_cita"
         return ("Tienes todo lo que hace falta. Llama a `%s` AHORA; no vuelvas a "
                 "preguntarle lo que ya te ha dicho." % herramienta)
+    # El PRIMER dato si se dirige: sin saber que se quiere hacer, ofrecer horas es
+    # empezar la casa por el tejado (y de eso dependen la duracion y el precio).
+    # Solo la primera vez: repetir la peticion palabra por palabra era el muro que
+    # disparo "repite la misma pregunta" de 3 a 15 conversaciones de cada 40.
+    if falta == "servicio" and estado.ultimo_pedido != "servicio":
+        return ("Aun no sabes QUE se quiere hacer. Preguntaselo con tus palabras y "
+                "no le ofrezcas dias ni horas todavia.")
     if falta == "hora" and estado.dia_le_da_igual and estado.huecos:
         return ("Le da igual la hora: coge el primero (%s) y remata la gestion con "
                 "la herramienta que toque." % estado.huecos[0])

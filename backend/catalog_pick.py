@@ -254,7 +254,26 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
     if len(candidatos) == 1:
         return Eleccion(servicio=_nombre(candidatos[0]))
 
-    # 4. ¿Quedan TECNICAS distintas y no ha dicho cual? Se pregunta: son
+    # 4. ¿Los que quedan son para PERSONAS distintas y no ha dicho para quien?
+    #    Eso se pregunta antes que nada: entre "Corte señora", "Corte hombre" y
+    #    "Corte niño de 0 a 7" lo que decide no es una tecnica, es para quien es.
+    #    Recitandole los nombres del catalogo -y encima solo cuatro de nueve- se
+    #    le hacia elegir a ella lo que tiene que preguntar el asistente.
+    if not para_quien:
+        personas = []
+        for servicio in candidatos:
+            for clave, formas in _PARA_QUIEN.items():
+                if any(f in _norm(_nombre(servicio)) for f in formas):
+                    if clave not in personas:
+                        personas.append(clave)
+        if len(personas) > 1:
+            return Eleccion(
+                falta="para_quien",
+                opciones=personas,
+                candidatos=[_nombre(s) for s in candidatos],
+            )
+
+    # 5. ¿Quedan TECNICAS distintas y no ha dicho cual? Se pregunta: son
     #    tratamientos con precio y proceso propios, no variantes de tamaño.
     representantes: Dict[str, Dict[str, Any]] = {}
     for servicio in candidatos:
@@ -286,7 +305,7 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
             candidatos=[_nombre(s) for s in candidatos],
         )
 
-    # 5. Misma tecnica en varias tallas y no sabemos su largo: se le pregunta.
+    # 6. Misma tecnica en varias tallas y no sabemos su largo: se le pregunta.
     tallas = []
     for servicio in candidatos:
         clave = talla_de(_nombre(servicio))
@@ -306,8 +325,23 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
     return Eleccion(servicio=_nombre(candidatos[0]))
 
 
+_COMO_SE_PREGUNTA = {
+    "para_quien": "para quien es (hombre, señora o niño)",
+    "talla": "como tiene el pelo de largo",
+    "tecnica": "cual de estos tratamientos quiere",
+    "edad": "que edad tiene",
+}
+
+
+def sobre_que_preguntar(eleccion: Eleccion) -> str:
+    """QUE hay que preguntarle, en lenguaje humano. Lo redacta quien hable."""
+    return _COMO_SE_PREGUNTA.get(eleccion.falta, "")
+
+
 def pregunta_para(eleccion: Eleccion) -> str:
     """La pregunta que toca, escrita con los datos REALES del catalogo."""
+    if eleccion.falta == "para_quien":
+        return "¿Es para ti o para otra persona? ¿Corte de hombre, de señora o de niño? 😊"
     if eleccion.falta == "tecnica":
         opciones = list(eleccion.opciones)
         if len(opciones) == 2:

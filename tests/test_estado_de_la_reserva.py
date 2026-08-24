@@ -239,11 +239,30 @@ def test_solo_se_le_dirige_para_cerrar(estado, api_module):  # noqa: F811
     from backend import reserva
 
     reserva.anotar_intencion(estado, "reservar")
-    # Recogiendo datos: el modelo va libre.
-    assert reserva.instruccion_de_cierre(estado) == ""
+    # El PRIMER dato si se dirige (ver el test de abajo): sin saber que se quiere
+    # hacer, ofrecer horas es empezar por el tejado.
+    assert "no le ofrezcas dias ni horas" in reserva.instruccion_de_cierre(estado)
+    # A partir de ahi, recogiendo datos, el modelo va libre.
     estado.servicio = "Corte señora"
     assert reserva.instruccion_de_cierre(estado) == ""
 
     # Con todo en la mano: se le dice que remate, y con que herramienta.
     estado.fecha, estado.hora, estado.nombre = "2026-09-01", "10:00", "Marta"
     assert "crear_cita" in reserva.instruccion_de_cierre(estado)
+
+
+def test_el_servicio_se_pide_una_vez_y_no_se_repite(estado, api_module):  # noqa: F811
+    """Sin saber que se quiere hacer, ofrecer horas es empezar por el tejado.
+
+    Pero pedirlo con las mismas palabras turno tras turno era el muro que disparo
+    "repite la misma pregunta" de 3 a 15 conversaciones de cada 40. Se dirige la
+    primera vez; despues, el modelo busca otra forma.
+    """
+    from backend import reserva
+
+    reserva.anotar_intencion(estado, "reservar")
+    primera = reserva.instruccion_de_cierre(estado)
+    assert "no le ofrezcas dias ni horas" in primera
+
+    reserva.guardar("demo", "34600777111", estado, pedido="servicio")
+    assert reserva.instruccion_de_cierre(estado) == ""

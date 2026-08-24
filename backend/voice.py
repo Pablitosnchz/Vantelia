@@ -2222,6 +2222,30 @@ async def _voice_booking_unavailable_response(
     return {"ok": False, "no_disponible": True, "huecos": huecos[:20], "error": msg, "mensaje_voz": msg}
 
 
+def _servicio_tras_valoracion(cliente_id: str, servicio: str) -> Tuple[str, str]:
+    """Cambia el tratamiento por la cita de valoracion cuando el negocio lo exige.
+
+    Devuelve (servicio_a_reservar, servicio_original_si_se_cambio). Sale de las
+    reglas que el negocio activa en su portal, no de codigo: quien no lo configure
+    reserva lo que le pidan, como siempre.
+    """
+    if not servicio:
+        return servicio, ""
+    try:
+        from backend import booking
+
+        familias = booking._familias_que_exigen_valoracion(cliente_id)
+        if not familias or not booking._exige_valoracion(servicio, familias):
+            return servicio, ""
+        valoracion = booking._servicio_de_valoracion(cliente_id)
+        nombre = str((valoracion or {}).get("nombre") or "").strip()
+        if not nombre or nombre == servicio:
+            return servicio, ""
+        return nombre, servicio
+    except Exception:  # noqa: BLE001 - nunca puede impedir una reserva
+        return servicio, ""
+
+
 async def _voice_perform_booking(
     cliente_id: str,
     *,
@@ -2244,6 +2268,13 @@ async def _voice_perform_booking(
     telefono = textnorm._sanitize_text(telefono)
     servicio = textnorm._sanitize_text(servicio or "")
     email = textnorm._sanitize_text(email or "")
+
+    # Hay negocios que no cogen segun que cita sin ver antes al cliente: lo que se
+    # reserva entonces es la VALORACION, no el tratamiento. El guardarraíl estaba
+    # solo en `buscar_servicio` y el modelo se lo saltaba llamando aqui directo:
+    # 16 de cada 100 conversaciones acababan con 75 minutos de mechas cogidos a
+    # alguien a quien no le habian visto el pelo. Aqui pasan los tres canales.
+    servicio, sustituido = _servicio_tras_valoracion(cliente_id, servicio)
     if not nombre or not telefono:
         return {"ok": False, "error": "Faltan el nombre o el telefono del cliente."}
     if len(nombre) < 3 or nombre.strip().lower() in (
@@ -2405,6 +2436,14 @@ async def _voice_perform_booking(
         "fecha": booking_date,
         "hora": booking_time,
         "servicio": service_label,
+        # Para que se lo explique a la clienta: ha pedido una cosa y se le ha
+        # cogido la valoracion, y eso no puede sonar a error ni pasar en silencio.
+        "en_lugar_de": sustituido,
+        "aviso": (
+            ("Le has cogido la cita de valoracion, no %s: de eso no se da precio "
+             "ni se reserva sin verla antes. Diselo con naturalidad y sin cifras."
+             % sustituido) if sustituido else ""
+        ),
         "empleado": employee_row["name"],
         "manage_url": booking._build_booking_manage_url(stored_booking["manage_token"]),
         "estado": booking_status,

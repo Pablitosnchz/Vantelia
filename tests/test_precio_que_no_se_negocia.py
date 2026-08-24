@@ -149,3 +149,32 @@ def test_un_negocio_sin_esa_regla_puede_dar_precios(api_module, client):  # noqa
         conexion.execute("DELETE FROM business_rules WHERE cliente_id='demo'")
         conexion.commit()
     assert not agent._da_un_precio_prohibido("demo", "son 80 €", "quiero mechas")
+
+
+def test_la_valoracion_se_impone_al_crear_la_cita(salon_con_regla, api_module):  # noqa: F811
+    """El guardarraíl tiene que estar donde se CREA la cita, no donde se busca.
+
+    Estando solo en `buscar_servicio`, el modelo se lo saltaba llamando a
+    `crear_cita` directo con "Mechas medio": 16 de cada 100 conversaciones
+    acababan con 75 minutos de mechas cogidos a quien no le habian visto el pelo.
+    Aqui pasan los tres canales (chat, WhatsApp y telefono).
+    """
+    from backend import voice
+
+    reservar, sustituido = voice._servicio_tras_valoracion("demo", "Mechas medio largo")
+    assert reservar == "Diagnostico y presupuesto"
+    assert sustituido == "Mechas medio largo"
+
+    # Lo que no tiene regla se reserva tal cual.
+    assert voice._servicio_tras_valoracion("demo", "Corte señora") == ("Corte señora", "")
+    assert voice._servicio_tras_valoracion("demo", "") == ("", "")
+
+
+def test_un_negocio_sin_regla_reserva_lo_que_le_pidan(api_module, client):  # noqa: F811
+    from backend import db, voice
+
+    with db._get_db_connection() as conexion:
+        conexion.execute("DELETE FROM business_rules WHERE cliente_id='demo'")
+        conexion.commit()
+    assert voice._servicio_tras_valoracion("demo", "Mechas medio largo") == (
+        "Mechas medio largo", "")
