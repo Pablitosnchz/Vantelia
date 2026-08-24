@@ -295,6 +295,30 @@ Dos cosas que este experimento enseñó y conviene no olvidar:
    primera solución salió peor que el problema. Sin el simulador se habría
    desplegado creyendo que era una mejora.
 
+## Una condición del negocio no se pide: se hace imposible
+
+De seis clientas que preguntaban el precio de las mechas, **una** acababa bien. El
+salón no da esos precios sin ver el pelo, y el asistente cedía: cuatro negativas y
+a la quinta *"las mechas tienen un precio de 80 €"*. Tres capas, y las tres hacen
+falta:
+
+1. **El precio no entra en el prompt.** Para las familias que el negocio marcó, el
+   catálogo dice "precio SOLO tras la cita de valoración" en vez de la cifra. Lo
+   que no tiene, no lo lee.
+2. **La cita que ofrece es la de valoración**, no el tratamiento: `buscar_servicio`
+   devuelve "Diagnóstico y presupuesto" (15 min) en lugar de las mechas (75 min).
+   Cogerle el tratamiento a quien solo preguntaba el precio era el otro fallo.
+3. **Y no puede inventárselo.** Quitarle el dato no bastó: aguantaba seis
+   negativas y a la séptima fabricaba un rango. Si escribe una cifra de una
+   familia con regla, se le hace reescribir sin ella.
+
+Resultado medido: de 3 conversaciones con precio prohibido en 40, a **0**.
+
+Todo sale de `business_rules`, o sea de lo que cada negocio activa en su portal
+(familias con la acción "ofrecer cita" para la intención precio). Un negocio que
+no lo configure da todos los precios que quiera; y distingue de "pedir foto", que
+es lo que tiene el alisado y por eso ese sí se reserva directo.
+
 ## Cómo se comprueba que funciona
 
 **No basta con probarlo.** Los fallos que importan solo salen escribiendo como un

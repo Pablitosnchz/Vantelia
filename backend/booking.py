@@ -6109,11 +6109,62 @@ def _service_catalog_prompt_lines(cliente_id: str, location_id: str = "") -> Lis
     return [linea for linea in salida if linea != "" or salida.index(linea) > 0]
 
 
+def _familias_que_exigen_valoracion(cliente_id: str) -> List[str]:
+    """Familias de las que ESTE negocio no da precio: primero hay que ver al cliente.
+
+    Sale de sus propias reglas (`business_rules`), no de codigo: familias con una
+    regla activa para la intencion "precio" cuya accion es ofrecer cita. Otro
+    negocio pone las suyas y esto cambia solo.
+
+    Distingue de "pedir_foto": un alisado SI se puede presupuestar con una foto y
+    reservar directamente; unas mechas no.
+    """
+    try:
+        from backend import rules
+
+        familias = []
+        for regla in rules.listar(cliente_id, solo_activas=True):
+            if regla["accion"] != "ofrecer_cita":
+                continue
+            if "precio" not in regla["intenciones"] and "presupuesto" not in regla["intenciones"]:
+                continue
+            familias.extend(regla["familias"])
+        return sorted(set(f for f in familias if f))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _exige_valoracion(nombre_servicio: str, familias: List[str]) -> bool:
+    plano = textnorm._strip_accents(str(nombre_servicio or "").lower())
+    return any(familia and familia in plano for familia in familias)
+
+
+def _servicio_de_valoracion(cliente_id: str, location_id: str = "") -> Dict[str, Any]:
+    """La cita corta y gratuita con la que el negocio valora antes de presupuestar.
+
+    Se busca en SU catalogo (diagnostico / valoracion / presupuesto). Si no tiene
+    ninguna, no se fuerza nada: se sigue como siempre.
+    """
+    for servicio in _public_services_for_booking(cliente_id, location_id=location_id):
+        if not isinstance(servicio, dict):
+            continue
+        plano = textnorm._strip_accents(str(servicio.get("nombre") or "").lower())
+        if any(p in plano for p in ("diagnostico", "valoracion", "presupuesto")):
+            if "extension" not in plano:  # la generica, no la de un servicio suelto
+                return servicio
+    return {}
+
+
 def _service_catalog_lines(cliente_id: str, location_id: str = "") -> List[str]:
     """Lineas "- Nombre · N min · precio" del catalogo REAL (tabla services), para los
     prompts de chat y voz: enumerar y presupuestar sin inventar precios ni duraciones.
     Fuente unica compartida (voice._voice_service_catalog delega aqui)."""
     services = _public_services_for_booking(cliente_id, location_id=location_id)
+    # Si el negocio ha dicho que de estas familias no da precio, el precio NO se le
+    # ensena al modelo. Con la cifra delante acababa soltandola a la clienta que
+    # insistia cuatro veces ("las mechas tienen un precio de 80 EUR"), y ahi se
+    # rompe una condicion del negocio. Lo que no tiene, no lo puede decir.
+    sin_precio = _familias_que_exigen_valoracion(cliente_id)
     lines: List[str] = []
     seen: set = set()
     for service in services:
@@ -6135,7 +6186,9 @@ def _service_catalog_lines(cliente_id: str, location_id: str = "") -> List[str]:
         except (TypeError, ValueError):
             price_cents = 0
         price_label = textnorm._sanitize_text(str(service.get("price_label") or ""))
-        if price_cents > 0 and price_label:
+        if _exige_valoracion(name, sin_precio):
+            parts.append("precio SOLO tras la cita de valoracion")
+        elif price_cents > 0 and price_label:
             parts.append(price_label)
         elif price_cents <= 0:
             parts.append("a consultar")

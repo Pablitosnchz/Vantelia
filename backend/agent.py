@@ -482,6 +482,33 @@ def _tool_politica_del_negocio(cliente_id: str, argumentos: Dict[str, Any]) -> D
     return {"ok": True, "hay_politica": True, "politicas": respuestas[:4]}
 
 
+def _valoracion_en_lugar_del_tratamiento(
+    cliente_id: str, servicio: str, *, location_id: str = "",
+) -> Dict[str, Any]:
+    """Si el negocio exige verlo antes, la cita que se coge es la de valoracion."""
+    from backend import booking
+
+    familias = booking._familias_que_exigen_valoracion(cliente_id)
+    if not familias or not booking._exige_valoracion(servicio, familias):
+        return {}
+    valoracion = booking._servicio_de_valoracion(cliente_id, location_id=location_id)
+    nombre = str((valoracion or {}).get("nombre") or "").strip()
+    if not nombre:
+        return {}
+    detalle = _detalle_servicio(cliente_id, nombre)
+    return {
+        "ok": True,
+        "servicio": nombre,
+        "en_lugar_de": servicio,
+        "motivo": ("De %s no se da precio ni se coge cita sin ver antes a la "
+                   "clienta. La cita que se reserva es la de valoracion." % servicio),
+        "nota": ("Explicaselo con naturalidad: le vas a coger la cita de valoracion, "
+                 "que es corta y sin compromiso, y ahi le dicen el precio. NUNCA le "
+                 "des una cifra de %s." % servicio),
+        **detalle,
+    }
+
+
 def _tool_buscar_servicio(
     cliente_id: str, argumentos: Dict[str, Any], *, location_id: str = "",
 ) -> Dict[str, Any]:
@@ -498,6 +525,15 @@ def _tool_buscar_servicio(
     }
     eleccion = catalog_pick.elegir(cliente_id, datos, location_id=location_id)
     if eleccion.servicio:
+        # Hay negocios que no cogen segun que cita sin ver antes al cliente. La
+        # que se reserva entonces es la de VALORACION, no el tratamiento: cogerle
+        # 75 minutos de mechas a quien solo preguntaba el precio es justo lo que
+        # el salon pidio evitar. Sale de SUS reglas, no de codigo.
+        valoracion = _valoracion_en_lugar_del_tratamiento(
+            cliente_id, eleccion.servicio, location_id=location_id,
+        )
+        if valoracion:
+            return valoracion
         detalle = _detalle_servicio(cliente_id, eleccion.servicio)
         return {"ok": True, "servicio": eleccion.servicio, **detalle}
     if eleccion.falta in ("tecnica", "talla"):
@@ -684,6 +720,31 @@ _ACEPTA = (
     "esa hora", "la primera", "la segunda", "la ultima", "confirmo", "adelante",
     "esa me vale", "me vale", "ok", "okey", "venga",
 )
+
+
+_UNA_CIFRA_DE_DINERO = re.compile(
+    r"(\d{1,4}\s*(?:€|eur|euros)|(?:€|eur|euros)\s*\d{1,4}|entre\s+\d{1,4}\s+y\s+\d{1,4})",
+    re.IGNORECASE,
+)
+
+
+def _da_un_precio_prohibido(cliente_id: str, texto: str, contexto: str) -> bool:
+    """¿Ha soltado una cifra de algo cuyo precio este negocio no da por mensaje?
+
+    Quitarle el precio del prompt no basta: aguanta seis negativas y a la septima
+    se lo INVENTA ("el rango de precios generalmente..."). Y un precio inventado es
+    peor que uno real. Esto no juzga como redacta: comprueba un hecho -el negocio
+    tiene una regla para esa familia y el ha escrito una cifra-.
+    """
+    if not _UNA_CIFRA_DE_DINERO.search(texto or ""):
+        return False
+    from backend import booking
+
+    familias = booking._familias_que_exigen_valoracion(cliente_id)
+    if not familias:
+        return False
+    hablando_de = catalog_pick._norm((texto or "") + " " + (contexto or ""))
+    return any(familia and familia in hablando_de for familia in familias)
 
 
 def _quien_escribe(cliente_id: str, telefono: str) -> Dict[str, str]:
@@ -915,6 +976,9 @@ async def responder(
     quien = _quien_escribe(cliente_id, telefono)
     historial = _historial(session_id, cliente_id)
 
+    dicho_de_ella = " ".join(
+        [str(mensaje)] + [m.get("content", "") for m in historial if m.get("role") == "user"]
+    )
     estado = reserva.cargar(cliente_id, telefono)
     reserva.anotar_intencion(estado, intencion)
     reserva.anotar_lo_que_dice(
@@ -991,7 +1055,20 @@ async def responder(
                                     "esta cerrado ni que no hay hueco sin haberlo mirado."),
                     })
                     continue
-                # 3) Y decir que la cita existe cuando no existe es el fallo mas
+                # 3) Un precio que el negocio no da: da igual que lo haya leido o
+                #    se lo haya inventado, la condicion es que no sale de aqui.
+                if (_da_un_precio_prohibido(cliente_id, texto_final, dicho_de_ella)
+                        and vuelta + 1 < MAX_VUELTAS):
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("NO tienes ese precio y no puedes inventartelo ni "
+                                    "dar un rango aproximado: este negocio lo dice en "
+                                    "la cita de valoracion. Reescribe tu respuesta sin "
+                                    "ninguna cifra, explicandole por que y ofreciendole "
+                                    "esa cita."),
+                    })
+                    continue
+                # 4) Y decir que la cita existe cuando no existe es el fallo mas
                 #    caro: la clienta se planta en el salon y no hay hueco.
                 if (_da_la_cita_por_hecha(texto_final) and not estado.hecho
                         and vuelta + 1 < MAX_VUELTAS):

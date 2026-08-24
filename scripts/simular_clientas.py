@@ -233,11 +233,11 @@ def _juzgar(cliente_id, combinacion, telefono, conversacion, previa) -> Dict[str
         if not dichos:
             resultado["veredicto"] = "atascada"
             resultado["motivo"] = "no le contesto nada"
-        elif vivas and not previa and objetivo == "preguntar_precio":
-            # Que acabe cogiendo cita al preguntar el precio es EL OBJETIVO del
-            # negocio (no doy precio, te cito para verlo). Pero tiene que ser la
-            # cita de valoracion de 15 minutos, no el tratamiento de 260 EUR a
-            # alguien a quien no han visto el pelo.
+        elif vivas and not previa and objetivo in ("preguntar_precio", "consejo"):
+            # Que acabe cogiendo cita al preguntar el precio -o al pedir consejo-
+            # es EL OBJETIVO del negocio: no doy precio, te cito para verlo. Pero
+            # tiene que ser la cita de VALORACION de 15 minutos, no el tratamiento
+            # de 260 EUR a alguien a quien no han visto el pelo.
             if _es_diagnostico(vivas[0]):
                 resultado["veredicto"] = "bien"
             else:
