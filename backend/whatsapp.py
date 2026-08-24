@@ -1517,7 +1517,8 @@ def _wa_esta_gestionando_una_cita(texto: str) -> bool:
 # con un "Pulsa Confirmar o Cancelar" y la cita sin coger.
 _ASIENTE = ("si", "sii", "claro", "vale", "ok", "okey", "confirmo", "confirmar",
             "perfecto", "genial", "adelante", "venga", "de acuerdo", "correcto",
-            "eso es", "me vale", "esta bien", "asi es")
+            "eso es", "me vale", "esta bien", "asi es", "todo correcto", "todo bien",
+            "reservala", "resérvala", "cogela", "adelante con eso", "me parece bien")
 
 
 def _wa_dice_que_si(texto: str) -> bool:
@@ -1954,7 +1955,19 @@ async def _handle_whatsapp_message(
     intencion_entendida = ""
     if not flow.flow and not iid:
         decision = chat.decision_del_negocio(cliente_id, incoming_text, config=config)
+        # Una Q&A o una regla del negocio son respuestas FIJAS: cada vez que el
+        # mensaje casa, sueltan lo mismo. A una clienta que insistia se le repitio
+        # el horario SEIS veces identico mientras ella escribia "ya me diste el
+        # horario, solo quiero saber si hay hueco despues de las 12". La segunda
+        # vez ya no se repite: la lleva el agente, que SI puede mirar la agenda y
+        # contestar lo que de verdad esta preguntando.
+        if (decision and decision["texto"]
+                and decision["accion"] not in ("pasar_a_humano",)
+                and chat.ya_se_lo_hemos_dicho(
+                    "%s|%s" % (cliente_id, from_number), decision["texto"])):
+            decision = None
         if decision and decision["texto"]:
+            chat._marcar_como_dicho("%s|%s" % (cliente_id, from_number), decision["texto"])
             session_id = _wa_registrar(
                 cliente_id=cliente_id, from_number=from_number, request=request,
                 entrante=incoming_text, respuesta=decision["texto"],

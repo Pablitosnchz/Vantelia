@@ -181,3 +181,25 @@ def test_las_opciones_del_menu_no_llevan_coletilla(api_module, client):  # noqa:
 
     for _accion, descripcion in whatsapp._WA_MENU_ACCIONES.values():
         assert descripcion == "", "las filas del menu no llevan subtitulo"
+
+
+def test_no_se_repite_la_misma_respuesta_fija(api_module, client):  # noqa: F811
+    """Una Q&A o una regla sueltan lo MISMO cada vez que el mensaje casa.
+
+    Medido con clientas simuladas: a una que insistia se le solto el horario SEIS
+    veces identico mientras escribia "ya me diste el horario, solo quiero saber si
+    hay hueco despues de las 12". Repetir es peor que no contestar: es un muro.
+    La segunda vez la lleva el agente, que SI puede mirar la agenda.
+    """
+    from backend import chat
+
+    clave = "demo|34600000001"
+    assert not chat.ya_se_lo_hemos_dicho(clave, "Nuestro horario es: lunes cerrado")
+
+    chat._marcar_como_dicho(clave, "Nuestro horario es: lunes cerrado")
+    assert chat.ya_se_lo_hemos_dicho(clave, "Nuestro horario es: lunes cerrado")
+
+    # Otra conversacion (otro telefono) no se ve afectada.
+    assert not chat.ya_se_lo_hemos_dicho("demo|34600000002", "Nuestro horario es: lunes cerrado")
+    # Y otra respuesta distinta tampoco.
+    assert not chat.ya_se_lo_hemos_dicho(clave, "Los alisados llevan diagnostico")

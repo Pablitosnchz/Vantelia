@@ -583,6 +583,36 @@ def _depende_del_momento(message: str) -> bool:
     return bool(_DEPENDE_DEL_MOMENTO_RE.search(texto))
 
 
+# Lo que YA se le ha contestado palabra por palabra en esta conversacion. Una Q&A
+# o una regla del negocio son respuestas FIJAS: cada vez que el mensaje casa,
+# sueltan lo mismo. Medido con clientas simuladas: a una que insistia con el
+# horario se lo repitio SEIS veces seguidas, identico, mientras ella escribia "ya
+# me diste el horario, solo quiero saber si hay hueco despues de las 12". Repetir
+# es peor que no contestar: parece un muro.
+_YA_DICHO: Dict[str, float] = {}
+_YA_DICHO_TTL = 1800.0
+
+
+def _marcar_como_dicho(clave: str, texto: str) -> None:
+    import time
+
+    ahora = time.time()
+    for vieja in [k for k, v in _YA_DICHO.items() if ahora - v > _YA_DICHO_TTL]:
+        _YA_DICHO.pop(vieja, None)
+    _YA_DICHO["%s|%s" % (clave, textnorm._strip_accents(str(texto or "").lower())[:120])] = ahora
+
+
+def ya_se_lo_hemos_dicho(clave: str, texto: str) -> bool:
+    """¿Esta respuesta exacta ya se le solto en esta conversacion?"""
+    import time
+
+    if not (clave and texto):
+        return False
+    marca = "%s|%s" % (clave, textnorm._strip_accents(str(texto).lower())[:120])
+    cuando = _YA_DICHO.get(marca)
+    return bool(cuando and (time.time() - cuando) <= _YA_DICHO_TTL)
+
+
 def decision_del_negocio(
     cliente_id: str,
     message: str,
