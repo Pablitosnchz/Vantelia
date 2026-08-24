@@ -201,3 +201,40 @@ def test_la_misma_peticion_da_siempre_lo_mismo(catalogo, api_module):  # noqa: F
         for _ in range(5)
     }
     assert len(resultados) == 1, "la decision cambia entre ejecuciones: %r" % resultados
+
+
+def test_el_pack_es_el_pack(api_module, client):  # noqa: F811
+    """"el pack de keratina" no es "Keratina premium": el pack dura mas, cuesta
+    otra cosa y lleva senyal.
+
+    Paso de verdad: pidio "el pack de keratina premium, lo tengo corto" y se le
+    reservo "Keratina premium corto" -el servicio suelto-, saltandose la fianza
+    que el negocio cobra por el pack.
+    """
+    from backend import agenda, catalog_pick, db, timeutils
+
+    ahora = timeutils._utc_now_iso()
+    with db._get_db_connection() as conexion:
+        for nombre, minutos in (("Keratina premium corto", 90), ("Pack keratina premium corto", 180)):
+            conexion.execute(
+                "INSERT OR REPLACE INTO services (cliente_id, slug, name, category,"
+                " duration_minutes, price_cents, description, is_active, sort_order,"
+                " created_at, updated_at) VALUES ('demo', ?, ?, '', ?, 10000, '', 1, 0, ?, ?)",
+                (agenda._normalize_service_id(nombre), nombre, minutos, ahora, ahora),
+            )
+        conexion.commit()
+    try:
+        datos = {"familia": "keratina", "tecnica": "", "talla": "corto",
+                 "para_quien": "", "edad": None, "texto": "el pack de keratina premium"}
+        assert catalog_pick.elegir("demo", datos).servicio == "Pack keratina premium corto"
+
+        # Y al reves: quien dice "keratina" a secas no pide el pack.
+        datos["texto"] = "una keratina"
+        assert catalog_pick.elegir("demo", datos).servicio == "Keratina premium corto"
+    finally:
+        with db._get_db_connection() as conexion:
+            conexion.execute(
+                "DELETE FROM services WHERE cliente_id='demo' AND name IN"
+                " ('Keratina premium corto','Pack keratina premium corto')"
+            )
+            conexion.commit()

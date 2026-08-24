@@ -54,6 +54,12 @@ CONFIG_BOOKING_EXTRA_KEYS = (
 CONFIG_EXTRA_SECTIONS = (
     "empresa", "reminders", "reviews", "gift_cards_public", "shop_public", "negocio",
     "keyword_rules", "chat_menu", "ai_intents", "tono",
+    # Por que canales sale cada aviso de cita (confirmada, cambiada, cancelada,
+    # recordatorios). Sin registrarla, lo que el negocio marcaba en su portal se
+    # perdia en el siguiente arranque y los avisos volvian a salir SOLO por email:
+    # a un salon que trabaja por WhatsApp eso le deja al cliente sin enterarse de
+    # que le han cancelado la cita.
+    "message_template_channels", "message_templates",
 )
 
 

@@ -51,3 +51,29 @@ def test_el_modo_de_reserva_sobrevive_al_ciclo_completo(api_module):  # noqa: F8
         "allowed_origins": [], "booking": {"enabled": True, "estilo": "conversacional"},
     }))
     assert whatsapp._wa_modo_conversacional(config) is True
+
+
+def test_los_canales_de_aviso_sobreviven_al_arranque(api_module, client):  # noqa: F811
+    """Por que canales sale cada aviso de cita es CONFIGURACION del negocio.
+
+    Sin registrarla en la whitelist, lo que marcaba en su portal se perdia en el
+    siguiente arranque y los avisos volvian a salir solo por email: a un salon que
+    trabaja por WhatsApp eso le deja al cliente sin enterarse de que le han
+    cancelado la cita.
+    """
+    from backend import clients, textnorm
+
+    base = dict(clients._get_client_config("demo"))
+    base["message_template_channels"] = {
+        "cancelled": {"email": True, "whatsapp": True, "sms": False},
+        "rescheduled": {"email": True, "whatsapp": True, "sms": False},
+    }
+    guardado = clients._serialize_client_config(base)
+    assert "message_template_channels" in guardado, "se descarta al guardar"
+
+    recargado = clients._normalize_client_config("demo", guardado)
+    canales = textnorm._normalize_message_template_channels(
+        recargado.get("message_template_channels")
+    )
+    assert canales["cancelled"]["whatsapp"] is True
+    assert canales["rescheduled"]["whatsapp"] is True

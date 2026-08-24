@@ -2516,9 +2516,21 @@ async def _voice_lookup_booking(
     """Tool de voz: localiza una cita por numero de reserva y devuelve su resumen para que el
     asistente confirme DE QUE cita se trata. El numero de reserva actua de clave de busqueda;
     la titularidad para CAMBIAR/CANCELAR se exige aparte (telefono de la llamada o codigo OTP)."""
-    row = booking._get_booking_row_by_code(cliente_id, codigo_reserva)
+    row = booking._get_booking_row_by_code(cliente_id, codigo_reserva) if codigo_reserva else None
+    if row is None:
+        # Sin codigo (o con uno que no existe) se busca por el contacto. Por
+        # WhatsApp y por telefono el numero llega VERIFICADO por el canal, asi que
+        # pedirle el numero de reserva a quien acaba de coger la cita desde ese
+        # mismo movil es hacerle buscar un dato que ya tenemos. Paso de verdad:
+        # "quiero cancelar mi cita" -> "no puedo encontrar tu cita, dame el numero
+        # de reserva" -> y acababa mandandola a llamar al salon.
+        row = booking._latest_booking_for_contact(
+            cliente_id, phone=(telefono or from_number), email=email,
+        )
     if not row:
-        return {"ok": False, "error": "No encuentro ninguna cita con ese numero de reserva. Pide que lo repita."}
+        if codigo_reserva:
+            return {"ok": False, "error": "No encuentro ninguna cita con ese numero de reserva. Pide que lo repita."}
+        return {"ok": False, "error": "No encuentro ninguna cita a su nombre. Pide el numero de reserva."}
     return {
         "ok": True,
         "codigo_reserva": row["booking_code"] or "",

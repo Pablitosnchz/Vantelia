@@ -1552,34 +1552,6 @@ async def _wa_resumen_para_confirmar(
     return True
 
 
-async def _wa_enviar_resumen_de_la_cita(
-    *, cliente_id: str, phone_number_id: str, to_number: str,
-) -> bool:
-    """El resumen por escrito de la cita recien cogida. Nunca puede faltar."""
-    from backend import reserva
-
-    codigo = (reserva.cargar(cliente_id, to_number).codigo or "").strip()
-    if not codigo:
-        return False
-    try:
-        with db._get_db_connection() as conexion:
-            fila = conexion.execute(
-                "SELECT b.*, e.name AS employee_name FROM bookings b"
-                " LEFT JOIN employees e ON e.id = b.employee_id"
-                " WHERE b.cliente_id = ? AND b.booking_code = ?",
-                (cliente_id, codigo),
-            ).fetchone()
-    except Exception as exc:  # noqa: BLE001
-        settings.logger.warning("[wa] sin resumen de %s: %s", codigo, exc)
-        return False
-    if fila is None:
-        return False
-    return await messaging._send_whatsapp_text(
-        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
-        text=booking._whatsapp_notice_text(fila, "confirmed"),
-    )
-
-
 async def _wa_turno_del_agente(
     *, cliente_id: str, phone_number_id: str, from_number: str,
     incoming_text: str, flow: appstate.WAFlowState, config: Dict[str, Any], request,
@@ -1636,14 +1608,6 @@ async def _wa_turno_del_agente(
         text=texto,
     )
     if cita_creada:
-        # El resumen de la cita NO puede quedarse en lo que el modelo redacte: el
-        # numero de reserva, la direccion y el aviso del negocio son datos que la
-        # clienta necesita tener por escrito. Al pasar al modo conversacional se
-        # dejaron de enviar, y con ellos se perdio el codigo R-XXXX y el "te
-        # esperamos en...". Es la MISMA pieza que usan los recordatorios.
-        await _wa_enviar_resumen_de_la_cita(
-            cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
-        )
         _wa_clear_flow(cliente_id, from_number)
     elif _wa_esta_gestionando_una_cita(texto):
         # Solo se queda "en conversacion de cita" si de verdad la esta cogiendo:

@@ -243,6 +243,20 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
         if acotado:
             candidatos = acotado
 
+    # ...pero quien dice "el PACK de keratina" pide el pack, que dura mas, cuesta
+    # otra cosa y lleva senyal. Se le reservaba el servicio suelto.
+    dicho = _norm(str(datos.get("texto") or ""))
+    quiere_pack = "pack" in dicho.split() or dicho.startswith("pack")
+    packs = [s for s in candidatos if _norm(_nombre(s)).startswith("pack")]
+    if quiere_pack and packs:
+        candidatos = packs
+    elif not quiere_pack and packs and len(packs) < len(candidatos):
+        # Y al reves: quien dice "mechas" no pide un "Pack mechas y corte".
+        candidatos = [s for s in candidatos if s not in packs]
+
+    if len(candidatos) == 1:
+        return Eleccion(servicio=_nombre(candidatos[0]))
+
     # Quien dice "mechas" pide unas mechas, no un "Pack mechas y corte". Si hay
     # servicios cuyo nombre EMPIEZA por lo que ha dicho, esos van primero.
     cabeza = tecnica or familia
