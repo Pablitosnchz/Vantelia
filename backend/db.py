@@ -251,6 +251,22 @@ def _init_database() -> None:
             connection.execute(
                 "ALTER TABLE employees ADD COLUMN price_surcharge_pct INTEGER NOT NULL DEFAULT 0"
             )
+        # Quien solo entra en el reparto automatico cuando no queda hueco con
+        # nadie mas. Lo pidio la duenya de un salon: "a mi que me apunte las citas
+        # la ultima, solo cuando no hay huecos con ellas o cuando alguien pida
+        # expresamente la cita conmigo".
+        if "auto_assign_last" not in employee_columns:
+            connection.execute(
+                "ALTER TABLE employees ADD COLUMN auto_assign_last INTEGER NOT NULL DEFAULT 0"
+            )
+        # Lo que se le dice al cliente cuando pide a ESA persona y su servicio
+        # cuesta mas. Dos textos porque el negocio los quiere distintos: uno para
+        # los tecnicos (alisados, mechas) y otro para el resto.
+        for columna in ("surcharge_text", "surcharge_text_tecnico", "surcharge_familias"):
+            if columna not in employee_columns:
+                connection.execute(
+                    "ALTER TABLE employees ADD COLUMN %s TEXT NOT NULL DEFAULT ''" % columna
+                )
         if "service_ids_json" not in employee_columns:
             connection.execute("ALTER TABLE employees ADD COLUMN service_ids_json TEXT NOT NULL DEFAULT '[]'")
         if "break_start" not in employee_columns:

@@ -2292,12 +2292,12 @@ async def _voice_perform_booking(
     servicio = textnorm._sanitize_text(servicio or "")
     email = textnorm._sanitize_text(email or "")
 
-    # Hay negocios que no cogen segun que cita sin ver antes al cliente: lo que se
-    # reserva entonces es la VALORACION, no el tratamiento. El guardarraíl estaba
-    # solo en `buscar_servicio` y el modelo se lo saltaba llamando aqui directo:
-    # 16 de cada 100 conversaciones acababan con 75 minutos de mechas cogidos a
-    # alguien a quien no le habian visto el pelo. Aqui pasan los tres canales.
-    servicio, sustituido = _servicio_tras_valoracion(cliente_id, servicio)
+    # OJO: aqui NO se cambia el servicio por una cita de valoracion. Se hizo, y
+    # estaba mal leida la regla del salon: "para coger unas mechas la cita hay que
+    # cogersela directamente; lo del diagnostico es solo para quien pide
+    # PRESUPUESTO". La valoracion se ofrece cuando preguntan el precio -de eso ya
+    # se encargan sus reglas de negocio-, no cuando vienen a reservar.
+    sustituido = ""
     if not nombre or not telefono:
         return {"ok": False, "error": "Faltan el nombre o el telefono del cliente."}
     if len(nombre) < 3 or nombre.strip().lower() in (

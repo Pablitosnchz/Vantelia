@@ -608,6 +608,35 @@ def recargo_pct(employee_row: Optional[sqlite3.Row]) -> int:
         return 0
 
 
+def texto_del_recargo(employee_row: Optional[sqlite3.Row], servicio: str = "") -> str:
+    """Lo que el negocio quiere que se le diga a quien pide a ESA persona.
+
+    Dos textos porque el salon los quiere distintos: los tecnicos (alisados,
+    mechas) llevan una explicacion larga de que hace ella en cada paso, y el resto
+    de servicios una mas corta. `surcharge_familias` dice cuales son tecnicos.
+    """
+    if employee_row is None:
+        return ""
+    try:
+        claves = employee_row.keys()
+    except AttributeError:
+        return ""
+    def _campo(nombre: str) -> str:
+        return str(employee_row[nombre] or "").strip() if nombre in claves else ""
+
+    generico = _campo("surcharge_text")
+    tecnico = _campo("surcharge_text_tecnico")
+    if not tecnico:
+        return generico
+    familias = [
+        f.strip().lower() for f in _campo("surcharge_familias").split(",") if f.strip()
+    ]
+    plano = textnorm._strip_accents(str(servicio or "").lower())
+    if familias and any(f and textnorm._strip_accents(f) in plano for f in familias):
+        return tecnico
+    return generico or tecnico
+
+
 def precio_con_recargo(base_cents: int, employee_row: Optional[sqlite3.Row]) -> int:
     """Lo que costaria con ese profesional. Solo para DECIRLO, no para cobrarlo."""
     pct = recargo_pct(employee_row)
@@ -643,6 +672,12 @@ def _find_service_by_name(cliente_id: str, name: str) -> Optional[sqlite3.Row]:
     variants = [name_clean]
     if " · " in name_clean:
         variants.append(name_clean.split(" · ", 1)[0].strip())
+    # Al cliente se le dice "Mechas o balayage medio", sin la palabra "Pack" (ver
+    # `textnorm.nombre_de_servicio_publico`), asi que hay que saber volver: si lo
+    # que llega no existe tal cual, se prueba con el "Pack " delante.
+    for variante in list(variants):
+        if variante and not variante.lower().startswith("pack"):
+            variants.append("Pack " + variante[:1].lower() + variante[1:])
 
     rows = _list_service_rows(cliente_id, include_inactive=True)
     for variant in variants:
@@ -3329,7 +3364,21 @@ async def _resolve_public_booking_employee(
             detail="Ese horario ya no esta disponible. Elige otro tramo.",
         )
 
-    return secrets.choice(available_candidates)
+    # Quien esta marcado como ULTIMA OPCION solo entra si no queda nadie mas. Lo
+    # pidio la duenya de un salon: que su agenda se llene la ultima, y que a ella
+    # se le apunte solo cuando no hay hueco con el equipo o cuando la piden por su
+    # nombre (eso ultimo va por `employee_id`, que ni llega hasta aqui).
+    preferentes = [row for row in available_candidates if not _es_ultima_opcion(row)]
+    return secrets.choice(preferentes or available_candidates)
+
+
+def _es_ultima_opcion(employee_row: sqlite3.Row) -> bool:
+    try:
+        if "auto_assign_last" not in employee_row.keys():
+            return False
+        return bool(employee_row["auto_assign_last"])
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _agenda_block_reasons_for_day(cliente_id: str, fecha: str) -> List[str]:

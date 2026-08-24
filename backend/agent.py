@@ -488,10 +488,14 @@ def _tool_consultar_profesionales(
                 continue
         pct = agenda.recargo_pct(empleado)
         ficha = {"nombre": empleado["name"], "recargo_pct": pct}
-        if pct and base > 0:
-            ficha["precio_con_ella"] = textnorm._format_price_cents(
-                agenda.precio_con_recargo(base, empleado)
-            )
+        if pct:
+            # El texto lo escribe el negocio, no nosotros: es su explicacion de por
+            # que cuesta mas, y la quiere distinta segun el servicio.
+            ficha["que_decirle"] = agenda.texto_del_recargo(empleado, servicio)
+            if base > 0:
+                ficha["precio_con_ella"] = textnorm._format_price_cents(
+                    agenda.precio_con_recargo(base, empleado)
+                )
         gente.append(ficha)
 
     con_recargo = [g for g in gente if g["recargo_pct"]]
@@ -500,12 +504,12 @@ def _tool_consultar_profesionales(
         "profesionales": gente,
         "hay_recargo": bool(con_recargo),
         "nota": (
-            ("Con %s cuesta un %d%% mas: DISELO antes de coger la cita, nunca "
-             "despues. Con el resto vale lo mismo, y si le da igual quien la atienda "
-             "no hace falta que elija."
+            ("NO le preguntes con quien quiere: se le asigna sola. Solo si ELLA "
+             "nombra a %s, mandale su texto (`que_decirle`) tal cual, porque con "
+             "ella cuesta un %d%% mas. Con el resto del equipo vale lo mismo."
              % (con_recargo[0]["nombre"], con_recargo[0]["recargo_pct"]))
             if con_recargo else
-            "Todas cobran lo mismo. Si le da igual quien la atienda, no le hagas elegir."
+            "Todas cobran lo mismo. NO le preguntes con quien quiere: se asigna sola."
         ),
     }
 
@@ -622,7 +626,15 @@ def _tool_politica_del_negocio(cliente_id: str, argumentos: Dict[str, Any]) -> D
 def _valoracion_en_lugar_del_tratamiento(
     cliente_id: str, servicio: str, *, location_id: str = "",
 ) -> Dict[str, Any]:
-    """Si el negocio exige verlo antes, la cita que se coge es la de valoracion."""
+    """La cita de valoracion que se ofrece a quien pide PRESUPUESTO.
+
+    OJO: esto NO se aplica al reservar. Se hizo, y estaba mal leida la regla del
+    salon: "para coger unas mechas la cita hay que cogersela directamente
+    preguntandole como tiene el pelo de largo; lo del diagnostico es simplemente
+    para las clientas que pidan presupuesto". Quien viene a reservar se lleva su
+    cita de mechas; quien pregunta el precio se lleva la valoracion, y de eso se
+    encargan las reglas de negocio del propio salon.
+    """
     from backend import booking
 
     familias = booking._familias_que_exigen_valoracion(cliente_id)
@@ -662,17 +674,15 @@ def _tool_buscar_servicio(
     }
     eleccion = catalog_pick.elegir(cliente_id, datos, location_id=location_id)
     if eleccion.servicio:
-        # Hay negocios que no cogen segun que cita sin ver antes al cliente. La
-        # que se reserva entonces es la de VALORACION, no el tratamiento: cogerle
-        # 75 minutos de mechas a quien solo preguntaba el precio es justo lo que
-        # el salon pidio evitar. Sale de SUS reglas, no de codigo.
-        valoracion = _valoracion_en_lugar_del_tratamiento(
-            cliente_id, eleccion.servicio, location_id=location_id,
-        )
-        if valoracion:
-            return valoracion
         detalle = _detalle_servicio(cliente_id, eleccion.servicio)
-        return {"ok": True, "servicio": eleccion.servicio, **detalle}
+        return {
+            "ok": True,
+            # El nombre para HABLAR va sin "Pack": la clienta pide unas mechas, no
+            # un paquete. El de la agenda se mantiene aparte para crear la cita.
+            "servicio": textnorm.nombre_de_servicio_publico(eleccion.servicio),
+            "servicio_en_agenda": eleccion.servicio,
+            **detalle,
+        }
     if eleccion.falta in ("tecnica", "talla", "para_quien"):
         # Con DURACION de cada candidato: a "¿cuanto tiempo tengo que estar ahi?"
         # se le puede contestar el abanico ("de 45 a 75 minutos segun el largo") sin
@@ -681,7 +691,10 @@ def _tool_buscar_servicio(
         for nombre in eleccion.candidatos[:12]:
             datos_servicio = _detalle_servicio(cliente_id, nombre)
             minutos = datos_servicio.get("duracion_minutos") or 0
-            detalle.append({"servicio": nombre, "duracion_minutos": minutos})
+            detalle.append({
+                "servicio": textnorm.nombre_de_servicio_publico(nombre),
+                "duracion_minutos": minutos,
+            })
         return {
             "ok": True,
             "servicio": "",

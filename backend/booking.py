@@ -848,7 +848,7 @@ def _whatsapp_notice_text(booking_row: sqlite3.Row, kind: str = "confirmed") -> 
         return chr(10).join(lineas)
 
     lineas = [_WA_TITULOS.get(kind, _WA_TITULOS["confirmed"]), ""]
-    lineas.append("🛍️ %s" % servicio)
+    lineas.append("🛍️ %s" % textnorm.nombre_de_servicio_publico(servicio))
     if quien:
         lineas.append("👨‍⚕️ %s" % quien)
     lineas.append("📅 %s · 🕐 %s" % (cuando, hora))
@@ -6201,7 +6201,10 @@ def _service_catalog_lines(cliente_id: str, location_id: str = "") -> List[str]:
         if not name or name in seen:
             continue
         seen.add(name)
-        parts = [name]
+        # Sin la palabra "pack": para la clienta eso son sus mechas, no un
+        # producto empaquetado. El nombre interno no cambia (los enlaces de las
+        # citas ya cogidas dependen de el); solo lo que se le dice.
+        parts = [textnorm.nombre_de_servicio_publico(name)]
         try:
             dur = int(service.get("duration_minutes") or 0)
         except (TypeError, ValueError):

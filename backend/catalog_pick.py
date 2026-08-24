@@ -147,8 +147,11 @@ def _limpiar_para_ofrecer(nombre: str) -> str:
     "Keratina premium largo" -> "Keratina premium". Lo que se le ofrece es la
     TECNICA; el largo se pregunta despues si hace falta.
     """
+    from backend import textnorm
+
     limpio = tecnica_de(nombre)
-    return limpio[:1].upper() + limpio[1:] if limpio else nombre
+    limpio = limpio[:1].upper() + limpio[1:] if limpio else nombre
+    return textnorm.nombre_de_servicio_publico(limpio)
 
 
 def _entero(valor) -> Optional[int]:
@@ -168,6 +171,24 @@ def _tramo_incluye(nombre: str, edad: int) -> bool:
         return False
     desde, hasta = int(encontrado.group(1)), int(encontrado.group(2))
     return desde <= edad <= hasta
+
+
+def _packs_por_defecto(cliente_id: str) -> bool:
+    """¿Este negocio vende sus tecnicos SIEMPRE como pack?
+
+    Lo dijo la duenya de un salon: "cualquier servicio de mechas conlleva mas
+    trabajos -matices, volumenes, tratamientos- y cualquier alisado conlleva poner
+    el producto, dejarlo, secarlo y plancharlo". El pack es el que lleva la
+    duracion real y los tiempos de espera; el suelto se queda corto y descuadra la
+    agenda.
+    """
+    try:
+        from backend import clients
+
+        booking_cfg = clients._get_client_config(cliente_id).get("booking") or {}
+        return bool(booking_cfg.get("preferir_packs"))
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Eleccion:
@@ -243,12 +264,19 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
         if acotado:
             candidatos = acotado
 
-    # ...pero quien dice "el PACK de keratina" pide el pack, que dura mas, cuesta
-    # otra cosa y lleva senyal. Se le reservaba el servicio suelto.
+    # Los PACKS. Hay negocios donde un servicio tecnico NO se vende suelto: unas
+    # mechas llevan matiz, volumen y tratamiento, y un alisado lleva producto,
+    # espera, secado y plancha. El pack es el que tiene la duracion REAL y los
+    # tiempos de exposicion, asi que reservar el servicio suelto descuadra la
+    # agenda y se queda corto de tiempo.
+    #
+    # Con `booking.preferir_packs` (opt-in del negocio), si para lo que pide existe
+    # un pack, se coge el pack. Sin el flag manda lo de siempre: el pack solo si lo
+    # nombra.
     dicho = _norm(str(datos.get("texto") or ""))
     quiere_pack = "pack" in dicho.split() or dicho.startswith("pack")
     packs = [s for s in candidatos if _norm(_nombre(s)).startswith("pack")]
-    if quiere_pack and packs:
+    if packs and (quiere_pack or _packs_por_defecto(cliente_id)):
         candidatos = packs
     elif not quiere_pack and packs and len(packs) < len(candidatos):
         # Y al reves: quien dice "mechas" no pide un "Pack mechas y corte".

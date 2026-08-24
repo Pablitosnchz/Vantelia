@@ -2,8 +2,11 @@
 """Elegir con quien te atienden, y saber si con esa persona cuesta mas.
 
 Todas las citas salian con "Asignacion automatica" y nadie podia pedir a alguien
-en concreto. Y en este salon elegir a la duenya cuesta un 25% mas: eso hay que
-decirlo ANTES de coger la cita, no en el mostrador.
+en concreto. En este salon elegir a la duenya cuesta un 25% mas.
+
+OJO al matiz, que ella lo aclaro despues: NO se le pregunta al cliente con quien
+quiere -se asigna solo-. El aviso del recargo sale unicamente cuando la clienta
+nombra a esa persona por su cuenta.
 
 El recargo NO se cobra automaticamente: se AVISA. Tocar el importe descuadraria
 las senyales ya pagadas y la politica de pago del servicio; lo que se cobre de mas
@@ -54,7 +57,10 @@ def test_avisa_de_lo_que_cuesta_con_ella(equipo, api_module):  # noqa: F811
     ella = next(p for p in r["profesionales"] if p["nombre"] == "Alicia Rincon")
     assert ella["recargo_pct"] == 25
     assert "25" in ella["precio_con_ella"]
-    assert "antes de coger la cita" in r["nota"]
+    # No se le pregunta con quien quiere: se asigna sola. El texto solo sale si la
+    # clienta la nombra ("No quiero que se le pregunte, pero cuando la clienta de
+    # manera natural lo diga...", dijo la duenya).
+    assert "NO le preguntes" in r["nota"]
 
     otra = next(p for p in r["profesionales"] if p["nombre"] == "Conchi")
     assert otra["recargo_pct"] == 0
@@ -75,7 +81,7 @@ def test_sin_recargo_nadie_tiene_que_elegir(api_module, client):  # noqa: F811
 
     r = agent._tool_consultar_profesionales("demo", {})
     assert r["ok"] and not r["hay_recargo"]
-    assert "no le hagas elegir" in r["nota"]
+    assert "NO le preguntes" in r["nota"]
 
 
 def test_se_reserva_con_la_que_pide(equipo, api_module):  # noqa: F811

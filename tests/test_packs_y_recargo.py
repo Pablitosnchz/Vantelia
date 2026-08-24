@@ -1,0 +1,196 @@
+# -*- coding: utf-8 -*-
+"""Lo que aclaro la duenya del salon el 24 de agosto de 2026.
+
+Tres cosas que se estaban haciendo mal, dichas por ella:
+
+1. "Para coger unas mechas la cita hay que cogersela DIRECTAMENTE preguntandole
+   como tiene el pelo de largo. Lo del diagnostico es simplemente para las
+   clientas que pidan presupuesto." Se estaba mandando a valoracion a todo el
+   mundo, tambien a quien venia a reservar.
+2. "Cualquier servicio de mechas conlleva mas trabajos -matices, volumenes,
+   tratamientos- y cualquier alisado conlleva poner el producto, dejarlo,
+   secarlo y plancharlo": son PACKS. El pack es el que lleva la duracion real y
+   los tiempos de espera; reservar el suelto se queda corto y descuadra la agenda.
+3. "A mi que me apunte las citas la ultima, solo cuando no hay huecos con ellas o
+   cuando alguien pida expresamente la cita conmigo."
+"""
+from __future__ import annotations
+
+import pytest
+
+from test_booking_exhaustive import api_module, client  # noqa: F401
+
+
+@pytest.fixture
+def salon_con_packs(api_module, client):  # noqa: F811
+    from backend import agenda, appstate, clients, db, timeutils
+
+    ahora = timeutils._utc_now_iso()
+    with db._get_db_connection() as conexion:
+        for nombre, minutos in (("Mechas medio", 75), ("Pack mechas o balayage medio", 220)):
+            conexion.execute(
+                "INSERT OR REPLACE INTO services (cliente_id, slug, name, category,"
+                " duration_minutes, price_cents, description, is_active, sort_order,"
+                " created_at, updated_at) VALUES ('demo', ?, ?, '', ?, 8000, '', 1, 0, ?, ?)",
+                (agenda._normalize_service_id(nombre), nombre, minutos, ahora, ahora),
+            )
+        conexion.commit()
+    config = clients._get_client_config("demo")
+    previo = dict(config.get("booking") or {})
+    config["booking"] = dict(previo, preferir_packs=True)
+    yield
+    config["booking"] = previo
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "DELETE FROM services WHERE cliente_id='demo' AND name IN"
+            " ('Mechas medio','Pack mechas o balayage medio')"
+        )
+        conexion.commit()
+
+
+def test_pedir_mechas_lleva_al_pack(salon_con_packs, api_module):  # noqa: F811
+    """El pack tiene la duracion REAL y los tiempos de espera; el suelto no."""
+    from backend import catalog_pick
+
+    datos = {"familia": "mechas", "tecnica": "", "talla": "medio",
+             "para_quien": "", "edad": None, "texto": "quiero unas mechas"}
+    assert catalog_pick.elegir("demo", datos).servicio == "Pack mechas o balayage medio"
+
+
+def test_sin_activarlo_se_reserva_el_suelto(api_module, client):  # noqa: F811
+    """Es opt-in: un negocio que no venda por packs sigue como siempre."""
+    from backend import agenda, catalog_pick, db, timeutils
+
+    ahora = timeutils._utc_now_iso()
+    with db._get_db_connection() as conexion:
+        for nombre in ("Mechas medio", "Pack mechas o balayage medio"):
+            conexion.execute(
+                "INSERT OR REPLACE INTO services (cliente_id, slug, name, category,"
+                " duration_minutes, price_cents, description, is_active, sort_order,"
+                " created_at, updated_at) VALUES ('demo', ?, ?, '', 75, 8000, '', 1, 0, ?, ?)",
+                (agenda._normalize_service_id(nombre), nombre, ahora, ahora),
+            )
+        conexion.commit()
+    try:
+        datos = {"familia": "mechas", "tecnica": "", "talla": "medio",
+                 "para_quien": "", "edad": None, "texto": "quiero unas mechas"}
+        assert catalog_pick.elegir("demo", datos).servicio == "Mechas medio"
+    finally:
+        with db._get_db_connection() as conexion:
+            conexion.execute(
+                "DELETE FROM services WHERE cliente_id='demo' AND name IN"
+                " ('Mechas medio','Pack mechas o balayage medio')"
+            )
+            conexion.commit()
+
+
+def test_reservar_no_se_convierte_en_valoracion(api_module, client):  # noqa: F811
+    """Quien viene a RESERVAR se lleva su cita; la valoracion es para el presupuesto.
+
+    Se hizo al reves y la duenya lo corrigio: "la cita hay que cogersela
+    directamente; lo del diagnostico es simplemente para quien pida presupuesto".
+    """
+    import inspect
+
+    from backend import voice
+
+    fuente = inspect.getsource(voice._voice_perform_booking)
+    assert "_servicio_tras_valoracion" not in fuente, (
+        "la creacion de cita vuelve a cambiar el servicio por una valoracion"
+    )
+
+
+def test_la_ultima_opcion_se_deja_para_el_final(api_module, client):  # noqa: F811
+    """"A mi que me apunte las citas la ultima"."""
+    from backend import agenda, db, timeutils
+
+    ahora = timeutils._utc_now_iso()
+    with db._get_db_connection() as conexion:
+        for eid, nombre, ultima in (("emp_jefa", "Alicia", 1), ("emp_equipo", "Conchi", 0)):
+            conexion.execute(
+                "INSERT OR REPLACE INTO employees (id, cliente_id, name, is_active,"
+                " is_default, auto_assign_last, service_ids_json, created_at, updated_at)"
+                " VALUES (?, 'demo', ?, 1, 0, ?, '[]', ?, ?)",
+                (eid, nombre, ultima, ahora, ahora),
+            )
+        conexion.commit()
+    try:
+        jefa = agenda._get_employee_row("emp_jefa", cliente_id="demo")
+        equipo = agenda._get_employee_row("emp_equipo", cliente_id="demo")
+        assert agenda._es_ultima_opcion(jefa) is True
+        assert agenda._es_ultima_opcion(equipo) is False
+    finally:
+        with db._get_db_connection() as conexion:
+            conexion.execute("DELETE FROM employees WHERE id IN ('emp_jefa','emp_equipo')")
+            conexion.commit()
+
+
+def test_cada_servicio_lleva_su_texto_de_recargo(api_module, client):  # noqa: F811
+    """El salon quiere un texto para los tecnicos y otro para el resto."""
+    from backend import agenda, db, timeutils
+
+    ahora = timeutils._utc_now_iso()
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT OR REPLACE INTO employees (id, cliente_id, name, is_active, is_default,"
+            " price_surcharge_pct, surcharge_text, surcharge_text_tecnico, surcharge_familias,"
+            " service_ids_json, created_at, updated_at)"
+            " VALUES ('emp_jefa2', 'demo', 'Alicia', 1, 0, 25, 'texto corto',"
+            " 'texto largo del alisado', 'alisado,mechas', '[]', ?, ?)",
+            (ahora, ahora),
+        )
+        conexion.commit()
+    try:
+        fila = agenda._get_employee_row("emp_jefa2", cliente_id="demo")
+        assert agenda.texto_del_recargo(fila, "Pack mechas o balayage medio") == "texto largo del alisado"
+        assert agenda.texto_del_recargo(fila, "Corte señora") == "texto corto"
+        assert agenda.texto_del_recargo(None, "lo que sea") == ""
+    finally:
+        with db._get_db_connection() as conexion:
+            conexion.execute("DELETE FROM employees WHERE id='emp_jefa2'")
+            conexion.commit()
+
+
+def test_no_se_pregunta_con_quien_quiere(api_module, client):  # noqa: F811
+    """"No quiero que se le pregunte; solo cuando la clienta lo diga de forma natural"."""
+    from backend import agent
+
+    r = agent._tool_consultar_profesionales("demo", {})
+    assert "NO le preguntes con quien quiere" in r["nota"] or "NO le preguntes" in r["nota"]
+
+
+def test_la_clienta_no_ve_la_palabra_pack(api_module, client):  # noqa: F811
+    """"No digas que es un pack, es como si fuese el servicio".
+
+    Para quien pide unas mechas eso son sus mechas, no un producto empaquetado.
+    La palabra es del catalogo interno del salon -le dice que lleva matiz, volumen
+    y tratamiento-, no algo que la clienta tenga que entender.
+    """
+    from backend import textnorm
+
+    assert textnorm.nombre_de_servicio_publico("Pack mechas o balayage medio") == "Mechas o balayage medio"
+    assert textnorm.nombre_de_servicio_publico("Pack de keratina premium corto") == "Keratina premium corto"
+    # Lo que no es un pack se queda igual.
+    assert textnorm.nombre_de_servicio_publico("Corte señora") == "Corte señora"
+    assert textnorm.nombre_de_servicio_publico("") == ""
+
+
+def test_el_nombre_sin_pack_sigue_encontrando_el_servicio(salon_con_packs, api_module):  # noqa: F811
+    """Ocultar la palabra no puede romper la reserva.
+
+    Si al cliente se le dice "Mechas o balayage medio", eso es lo que acabara
+    diciendo el asistente al crear la cita: hay que saber volver al nombre real.
+    """
+    from backend import agenda
+
+    fila = agenda._find_service_by_name("demo", "Mechas o balayage medio")
+    assert fila is not None
+    assert fila["name"] == "Pack mechas o balayage medio"
+
+
+def test_el_catalogo_del_prompt_no_dice_pack(salon_con_packs, api_module):  # noqa: F811
+    from backend import booking
+
+    catalogo = "\n".join(booking._service_catalog_lines("demo"))
+    assert "Mechas o balayage medio" in catalogo
+    assert "Pack" not in catalogo

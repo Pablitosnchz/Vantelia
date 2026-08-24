@@ -530,6 +530,27 @@ def _public_image_url(value) -> str:
     return url
 
 
+def nombre_de_servicio_publico(nombre: str) -> str:
+    """El nombre del servicio tal y como se le dice al cliente.
+
+    Un "Pack mechas o balayage medio" no es un pack para quien lo pide: son sus
+    mechas. Lo dijo la duenya del salon: "no digas que es un pack, es como si fuese
+    el servicio; el servicio siempre requiere el pack". La palabra es de su
+    catalogo interno -le sirve para saber que lleva matiz, volumen y tratamiento-,
+    no algo que la clienta tenga que entender.
+
+    En la base de datos NO se cambia nada: renombrarlo romperia los enlaces de las
+    citas ya cogidas y el historico. Solo cambia la etiqueta.
+    """
+    limpio = _sanitize_text(nombre or "").strip()
+    for prefijo in ("pack de ", "pack "):
+        if limpio.lower().startswith(prefijo):
+            resto = limpio[len(prefijo):].strip()
+            if resto:
+                return resto[:1].upper() + resto[1:]
+    return limpio
+
+
 def _format_price_cents(cents: int) -> str:
     cents = int(cents or 0)
     if cents <= 0:

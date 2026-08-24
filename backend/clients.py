@@ -47,6 +47,7 @@ CONFIG_BOOKING_EXTRA_KEYS = (
     "estilo",            # "guiado" (listas) o "conversacional"
     "rescate_enabled",   # ofrecer llamar antes de perder una cita
     "rescate_texto",     # con {telefono}
+    "preferir_packs",    # los tecnicos se reservan como pack, no sueltos
     "form_intro",        # texto al abrir la reserva
 )
 
