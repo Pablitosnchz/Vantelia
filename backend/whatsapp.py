@@ -1530,6 +1530,30 @@ def _wa_dice_que_si(texto: str) -> bool:
     return primera in _ASIENTE or plano in _ASIENTE or "confirm" in plano
 
 
+def _wa_cambia_el_servicio(cliente_id: str, texto: str) -> bool:
+    """¿Lo que dice delante del resumen es "mejor otra cosa"?
+
+    Si cambia de servicio hay que soltar tambien el dia y la hora: un alisado no
+    dura lo que un corte y el hueco de antes puede no valer.
+    """
+    plano = textnorm._strip_accents(str(texto or "").lower())
+    if not plano:
+        return False
+    if any(p in plano for p in ("mejor ", "cambia", "en vez de", "prefiero", "otro ", "otra ")):
+        return True
+    try:
+        from backend import booking
+
+        for servicio in booking._public_services_for_booking(cliente_id):
+            nombre = textnorm._strip_accents(str(servicio.get("nombre") or "").lower())
+            palabras = [p for p in nombre.split() if len(p) >= 5]
+            if palabras and all(p in plano for p in palabras[:2]):
+                return True
+    except Exception:  # noqa: BLE001
+        return False
+    return False
+
+
 async def _wa_resumen_para_confirmar(
     *, cliente_id: str, phone_number_id: str, from_number: str,
     flow: appstate.WAFlowState, texto_previo: str, request,
@@ -2800,6 +2824,29 @@ async def _handle_whatsapp_message(
                 text="Cita descartada. Escribe *menu* para volver al menu principal.",
             )
             return
+        # Delante del resumen la clienta puede querer CAMBIAR algo -"mejor un
+        # alisado de acido lactico", "mejor a las 11"- y contestarle "Pulsa
+        # Confirmar o Cancelar" es un callejon sin salida: o acepta una cita que no
+        # quiere o se va. Se le pasa al agente, que entiende el cambio y vuelve a
+        # sacar el resumen ya corregido.
+        if incoming_text.strip() and not iid and _wa_modo_conversacional(config):
+            from backend import reserva
+
+            estado = reserva.cargar(cliente_id, from_number)
+            # Lo que pida cambiar se vuelve a preguntar: si dice otro servicio, el
+            # dia y la hora de antes ya no valen necesariamente.
+            if _wa_cambia_el_servicio(cliente_id, incoming_text):
+                estado.servicio = ""
+                estado.hora = ""
+                reserva.guardar(cliente_id, from_number, estado)
+            flow.flow = "agente"
+            if await _wa_turno_del_agente(
+                cliente_id=cliente_id, phone_number_id=phone_number_id,
+                from_number=from_number, incoming_text=incoming_text, flow=flow,
+                config=config, request=request,
+            ):
+                return
+            flow.flow = "booking_confirm"
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,
             text="Pulsa Confirmar o Cancelar.",

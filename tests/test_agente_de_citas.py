@@ -479,3 +479,32 @@ def test_los_datos_de_la_llamada_frenada_no_se_pierden(api_module):  # noqa: F81
     assert estado.servicio == "Corte señora"
     assert not estado.hecho, "una cita frenada NO esta hecha"
     assert reserva.que_falta(estado) == ""
+
+
+def test_no_se_inventa_donde_esta_el_negocio(client, api_module):  # noqa: F811
+    """A "¿donde estais ubicados?" contesto "en el centro de la ciudad".
+
+    Eso no lo dice ningun dato suyo: se lo invento. Un cliente que se fia de eso no
+    llega al salon.
+    """
+    import datetime
+
+    from backend import agent, clients
+
+    config = clients._get_client_config("demo")
+    previo = dict(config.get("contacto") or {})
+    try:
+        # Sin direccion: tiene que DECIR que no la tiene, no inventarla.
+        config["contacto"] = {"telefono": "600 000 000"}
+        sin = agent._instrucciones("demo", config, datetime.date(2026, 9, 1))
+        assert "NO tienes la direccion" in sin
+
+        # Con direccion: va en el prompt, tal cual.
+        config["contacto"] = dict(previo, direccion="Calle Mayor 1, Elche",
+                                  mapa="https://maps.example/abc")
+        con = agent._instrucciones("demo", config, datetime.date(2026, 9, 1))
+        assert "Calle Mayor 1, Elche" in con
+        assert "https://maps.example/abc" in con
+        assert "NO tienes la direccion" not in con
+    finally:
+        config["contacto"] = previo

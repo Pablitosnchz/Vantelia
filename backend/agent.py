@@ -985,6 +985,24 @@ def _instrucciones(cliente_id: str, config: Dict[str, Any], hoy,
             "No lo ofrezcas a la primera de cambio, solo cuando la cita se pueda "
             "perder." % telefono
         )
+    # DONDE ESTA EL NEGOCIO. Sin esto el modelo se lo inventaba: a "¿donde estais
+    # ubicados?" contesto "en el centro de la ciudad, en una zona muy accesible",
+    # que no lo dice ningun dato suyo. Un cliente que se fia de eso no llega.
+    contacto = config.get("contacto") or {}
+    direccion = textnorm._sanitize_text(str(contacto.get("direccion") or "")).strip()
+    mapa = textnorm._sanitize_text(str(contacto.get("mapa") or "")).strip()
+    if direccion or mapa:
+        donde = ["", "DONDE ESTAIS (dilo TAL CUAL, no lo adornes):"]
+        if direccion:
+            donde.append("- Direccion: %s" % direccion)
+        if mapa:
+            donde.append("- Como llegar: %s" % mapa)
+        partes += donde
+    else:
+        partes.append(
+            "- NO tienes la direccion del negocio: si te preguntan donde estais, "
+            "dilo y dales el telefono. No te inventes una zona ni una calle."
+        )
     if (quien or {}).get("nombre"):
         partes += [
             "",

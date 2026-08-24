@@ -324,3 +324,21 @@ def test_una_cita_cogida_no_se_vuelve_a_montar(estado, api_module):  # noqa: F81
     assert "YA ESTA COGIDA" in instruccion
     assert "R-1234" in instruccion
     assert reserva.tool_que_remata(despues) == "", "no puede rematar nada mas"
+
+
+def test_delante_del_resumen_se_puede_cambiar_de_idea(api_module, client):  # noqa: F811
+    """"Pulsa Confirmar o Cancelar" es un callejon sin salida.
+
+    Paso de verdad: con el resumen delante, el cliente escribio "quiero un alisado
+    de acido lactico" y la unica respuesta fue "Pulsa Confirmar o Cancelar". O
+    aceptaba una cita que no queria, o se iba.
+    """
+    from backend import whatsapp
+
+    # Nombrar otro servicio, o decir "mejor...", cuenta como cambio de idea.
+    assert whatsapp._wa_cambia_el_servicio("demo", "espera, mejor un alisado")
+    assert whatsapp._wa_cambia_el_servicio("demo", "prefiero otra cosa")
+    assert whatsapp._wa_cambia_el_servicio("demo", "en vez de eso, un corte")
+    # Un si o un gracias no lo son.
+    assert not whatsapp._wa_cambia_el_servicio("demo", "si, confirmo")
+    assert not whatsapp._wa_cambia_el_servicio("demo", "gracias")
