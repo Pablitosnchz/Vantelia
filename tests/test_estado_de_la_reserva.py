@@ -301,3 +301,26 @@ def test_las_cinco_de_la_tarde_son_las_17(estado, api_module):  # noqa: F811
 
     assert reserva._hora_coloquial("las 5 de la tarde", ["10:00", "17:00"]) == "17:00"
     assert reserva._hora_coloquial("sobre las 17", ["17:00", "17:30"]) == "17:00"
+
+
+def test_una_cita_cogida_no_se_vuelve_a_montar(estado, api_module):  # noqa: F811
+    """Olvidar el estado no basta: el modelo relee la conversacion y monta otra.
+
+    Medido con 100 clientas simuladas: cinco citas DUPLICADAS y "repite la misma
+    pregunta" disparado de 14 a 38. La clienta decia que si por educacion a un
+    resumen que no habia pedido, y nacia una segunda cita.
+    """
+    from backend import reserva
+
+    reserva.anotar_intencion(estado, "reservar")
+    estado.servicio, estado.fecha, estado.hora, estado.nombre = "Corte", "2026-09-01", "10:00", "Ana"
+    reserva.guardar("demo", "34600555111", estado)
+
+    reserva.marcar_hecha("demo", "34600555111", "R-1234")
+    despues = reserva.cargar("demo", "34600555111")
+    assert despues.hecho and despues.codigo == "R-1234"
+
+    instruccion = reserva.instruccion_de_cierre(despues)
+    assert "YA ESTA COGIDA" in instruccion
+    assert "R-1234" in instruccion
+    assert reserva.tool_que_remata(despues) == "", "no puede rematar nada mas"

@@ -319,6 +319,29 @@ Todo sale de `business_rules`, o sea de lo que cada negocio activa en su portal
 no lo configure da todos los precios que quiera; y distingue de "pedir foto", que
 es lo que tiene el alisado y por eso ese sí se reserva directo.
 
+## Una cita cogida no se vuelve a montar sola
+
+El fallo más caro que ha salido midiendo, y no se ve probando a mano: **después de
+confirmar, el asistente volvía a empezar**. El modelo relee la conversación, ve que
+ella quería un corte el martes a las diez, lo da por pendiente y manda el resumen
+otra vez. La clienta dice que sí por educación y **nace una segunda cita** — o
+revienta con *"ese horario ya no está disponible"* y la manda al menú.
+
+Solo aparece si sigues hablando **después** de confirmar, que es justo lo que hace
+cualquiera al despedirse. Medido en 100 conversaciones:
+
+| | Antes | Con el fallo | Arreglado |
+| --- | --- | --- | --- |
+| Consigue lo que quiere | 57% | 52% | **63%** |
+| Reservar | 58,5% | 36,6% | **61,0%** |
+| Repite la misma pregunta | 14 | 38 | 22 |
+| Citas duplicadas | 0 | 5 | 1 |
+
+Y no bastaba con **olvidar** el estado al cerrar el flujo: el historial sigue ahí.
+Hay que dejar **constancia** de que la cita existe (`reserva.marcar_hecha`), y
+decírselo sin rodeos — con un "confirmásela con naturalidad" seguía preguntando
+"¿me confirmas para proceder?" con la cita ya cogida.
+
 ## Cómo se comprueba que funciona
 
 **No basta con probarlo.** Los fallos que importan solo salen escribiendo como un

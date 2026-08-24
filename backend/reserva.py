@@ -92,6 +92,21 @@ def guardar(cliente_id: str, telefono: str, estado: Estado, pedido: str = "") ->
             guardados.pop(clave, None)
 
 
+def marcar_hecha(cliente_id: str, telefono: str, codigo: str = "") -> None:
+    """La cita ya esta cogida: que no se vuelva a montar sola.
+
+    Olvidar el estado NO basta: el modelo relee la conversacion, ve que ella
+    queria un corte el martes a las diez, lo vuelve a dar por pendiente y manda el
+    resumen otra vez. La clienta dice que si por educacion y nace una SEGUNDA
+    cita. Medido: cinco citas duplicadas y el "repite la misma pregunta" disparado
+    de 14 a 38 conversaciones de cada 100.
+    """
+    estado = cargar(cliente_id, telefono)
+    estado.hecho = True
+    estado.codigo = codigo or estado.codigo
+    guardar(cliente_id, telefono, estado)
+
+
 def olvidar(cliente_id: str, telefono: str) -> None:
     guardados = getattr(appstate, "ESTADOS_DE_RESERVA", None) or {}
     guardados.pop(_clave(cliente_id, telefono), None)
@@ -404,8 +419,15 @@ def instruccion_de_cierre(estado: Estado, nombre_conocido: str = "") -> str:
     adaptarse; el CIERRE lo decide el codigo, que para eso no se despista.
     """
     if estado.hecho:
-        return ("La gestion YA esta hecha. Confirmasela con naturalidad y no vuelvas "
-                "a tocarla: si te dice que si, es un acuse de recibo.")
+        # Muy explicito a proposito: con un "confirmasela con naturalidad" el
+        # modelo seguia preguntando "¿me confirmas para proceder?" con la cita ya
+        # cogida, y la clienta no sabia si tenia cita o no.
+        return (
+            "LA CITA YA ESTA COGIDA%s. No vuelvas a pedirle que confirme nada, no "
+            "propongas horas y no llames a ninguna herramienta de reserva: solo "
+            "despidete o contesta lo que te pregunte. Si te da las gracias o dice "
+            "que si, es un acuse de recibo." % ((" (%s)" % estado.codigo) if estado.codigo else "")
+        )
     if not estado.intencion:
         return ""
     falta = que_falta(estado, nombre_conocido)

@@ -478,7 +478,22 @@ def _wa_get_flow(cliente_id: str, from_number: str) -> appstate.WAFlowState:
 
 
 def _wa_clear_flow(cliente_id: str, from_number: str) -> None:
+    """Cerrar la gestion: se olvida el flujo Y lo que el agente sabia de la cita.
+
+    Sin olvidar el estado, al terminar una cita el codigo seguia creyendo que
+    quedaba una reserva a medio cerrar: en el siguiente mensaje volvia a mandar el
+    resumen, la clienta decia que si otra vez y nacia una SEGUNDA cita -o
+    reventaba con "ese horario ya no esta disponible"-. Medido: repetir la misma
+    pregunta se disparo de 14 a 38 conversaciones de cada 100, y aparecieron cinco
+    citas duplicadas.
+    """
     appstate.whatsapp_flows.pop(_wa_flow_key(cliente_id, from_number), None)
+    try:
+        from backend import reserva
+
+        reserva.olvidar(cliente_id, from_number)
+    except Exception:  # noqa: BLE001 - limpiar nunca puede romper el canal
+        pass
 
 
 # Palabras que siempre merecen respuesta aunque vayan solas: quien escribe
@@ -2766,6 +2781,12 @@ async def _handle_whatsapp_message(
                 flow=flow, config=config, request=request,
             )
             _wa_clear_flow(cliente_id, from_number)
+            if ok:
+                # Se deja constancia de que la cita YA esta: si no, el modelo relee
+                # la conversacion, la da por pendiente y monta otra.
+                from backend import reserva
+
+                reserva.marcar_hecha(cliente_id, from_number)
             if not ok:
                 await _wa_send_main_menu(
                     cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=from_number,

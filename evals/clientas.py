@@ -190,9 +190,12 @@ def guion(persona: Dict[str, Any], estilo: str) -> str:
         "- Si te piden algo que ya has dicho, hazlo notar en vez de repetirlo sin mas.",
     ]
     if persona.get("con_cita"):
+        # Con solo el codigo, la clienta de mentira no sabia QUE cita tenia y se
+        # ponia a discutir ("no era de acido lactico, era de pelo"), lo que daba
+        # por rotas cancelaciones que habian ido bien.
         partes.append(
-            "- Ya tienes una cita cogida. Si te piden el numero de reserva, es "
-            "{codigo}."
+            "- Ya tienes una cita cogida: {servicio}, el {cuando}. Si te piden el "
+            "numero de reserva, es {codigo}."
         )
     return "\n".join(partes)
 

@@ -99,7 +99,11 @@ def _conversar(cliente_id: str, combinacion: Dict[str, Any], telefono: str) -> D
 
     guion = clientas.guion(persona, combinacion["estilo"])
     if previa:
-        guion = guion.replace("{codigo}", previa["booking_code"])
+        guion = (guion
+                 .replace("{codigo}", previa["booking_code"])
+                 .replace("{servicio}", str(previa.get("servicio") or "una cita"))
+                 .replace("{cuando}", "%s a las %s" % (previa.get("booking_date", ""),
+                                                       previa.get("booking_time", ""))))
 
     dichos = arnes.capturar_envios()
     whatsapp._wa_clear_flow(cliente_id, telefono)
