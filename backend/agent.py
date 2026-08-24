@@ -339,9 +339,14 @@ async def _ejecutar(
             "ok": False,
             "pendiente_de_confirmacion": True,
             "error": "Todavia no se puede crear: lo confirma la clienta.",
-            "que_hacer": ("Resume en UNA frase lo que teneis (servicio, dia y hora) y "
-                          "dile que ahora se lo pasas para confirmar. NO digas que ya "
-                          "esta reservada ni le des ningun numero de reserva."),
+            # OJO a como se le pide: con "dile que se lo pasas para confirmar"
+            # contestaba "voy a pasar esto para que lo confirmen", que suena a que
+            # se lo manda a una persona y deja a la clienta esperando. Justo
+            # despues le llega el resumen con los botones: no hay que anunciar nada.
+            "que_hacer": ("Confirma en UNA frase corta lo que teneis (servicio, dia y "
+                          "hora) y di que le pasas el resumen para que lo confirme "
+                          "ella. NO digas que se lo pasas a nadie, ni que esta "
+                          "reservada, ni le des ningun numero de reserva."),
         }
 
     # OJO al orden: si el freno fuera lo PRIMERO, un nombre inventado se colaria

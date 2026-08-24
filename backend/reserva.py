@@ -105,6 +105,42 @@ _LE_DA_IGUAL = (
 )
 
 
+def _hora_coloquial(texto: str, huecos: List[str]) -> str:
+    """La hora que dice en cristiano ("a las 14", "sobre las 5 de la tarde").
+
+    El parser de siempre solo entiende "14:00", asi que "a las 14" se perdia: el
+    estado se quedaba sin hora, no se montaba el resumen y la clienta se quedaba
+    esperando despues de haber elegido.
+
+    Se contrasta SIEMPRE con los huecos reales: si lo que dice no es uno de ellos,
+    no se anota nada. Asi no se puede inventar una hora que no existe.
+    """
+    import re
+
+    if not huecos:
+        return ""
+    plano = str(texto or "").lower()
+    de_tarde = any(p in plano for p in ("tarde", "noche", "pm"))
+    candidatas = []
+    for cruda in re.findall(r"\b(\d{1,2})(?:[:.](\d{2}))?\b", plano):
+        hora, minutos = int(cruda[0]), int(cruda[1] or 0)
+        if hora > 23 or minutos > 59:
+            continue
+        candidatas.append("%02d:%02d" % (hora, minutos))
+        if de_tarde and hora <= 12:  # "las 5 de la tarde" = 17:00
+            candidatas.append("%02d:%02d" % (hora + 12, minutos))
+    for candidata in candidatas:
+        if candidata in huecos:
+            return candidata
+    # "a las 14" a secas: vale el primer hueco de esa hora.
+    for candidata in candidatas:
+        franja = candidata.split(":")[0] + ":"
+        iguales = [h for h in huecos if h.startswith(franja)]
+        if iguales:
+            return iguales[0]
+    return ""
+
+
 def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "") -> None:
     """Lo que se puede sacar de su mensaje SIN preguntarle al modelo.
 
@@ -129,6 +165,8 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "") ->
                 estado.fecha = fecha
         if not estado.hora:
             hora = textnorm._extract_time_from_text(mensaje or "")
+            if not hora:
+                hora = _hora_coloquial(mensaje or "", estado.huecos)
             if hora:
                 estado.hora = hora
         if not estado.codigo:

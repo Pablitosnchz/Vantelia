@@ -2192,10 +2192,10 @@ async def _voice_check_availability(
     return {
         "ok": True,
         "fecha": fecha,
-        "huecos": slots[:20],
         "hay_huecos": bool(slots),
         "motivo": voice_message if not slots else "",
         "mensaje_voz": voice_message,
+        **_huecos_por_franja(slots),
         **date_meta,
     }
 
@@ -2865,6 +2865,41 @@ async def _voice_send_payment_link(
         "importe": amount_label,
         "enviado": bool(result.get("sent")),
         "mensaje": f"Enviado un SMS con el enlace para pagar {amount_label}.",
+    }
+
+
+def _huecos_por_franja(slots: List[str]) -> Dict[str, Any]:
+    """Los huecos repartidos por franja, con el total.
+
+    Cortar por los 20 primeros dejaba fuera TODA la tarde: el salon abre hasta las
+    20:15 y el asistente contestaba "solo tengo por la manana" a quien pedia las
+    cinco. Una muestra de cada franja cabe en el contexto y no miente.
+    """
+    def _hora(valor: str) -> int:
+        try:
+            return int(str(valor).split(":")[0])
+        except (ValueError, IndexError):
+            return 0
+
+    manana = [s for s in slots if _hora(s) < 14]
+    tarde = [s for s in slots if 14 <= _hora(s) < 18]
+    noche = [s for s in slots if _hora(s) >= 18]
+    muestra = manana[:5] + tarde[:5] + noche[:4]
+    return {
+        "huecos": muestra or slots[:12],
+        "total_huecos": len(slots),
+        "por_franja": {
+            "manana": manana[:8],
+            "tarde": tarde[:8],
+            "noche": noche[:8],
+        },
+        "nota_huecos": (
+            "Hay %d huecos ese dia (manana: %d, tarde: %d, noche: %d). Los de "
+            "`huecos` son solo una MUESTRA: no digas que no hay por la tarde ni "
+            "por la noche si esas listas no estan vacias. Ofrecele dos o tres, y si "
+            "te pide una hora concreta, mirala en `por_franja`."
+            % (len(slots), len(manana), len(tarde), len(noche))
+        ),
     }
 
 

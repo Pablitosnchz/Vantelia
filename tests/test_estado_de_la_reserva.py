@@ -266,3 +266,38 @@ def test_el_servicio_se_pide_una_vez_y_no_se_repite(estado, api_module):  # noqa
 
     reserva.guardar("demo", "34600777111", estado, pedido="servicio")
     assert reserva.instruccion_de_cierre(estado) == ""
+
+
+def test_entiende_la_hora_dicha_en_cristiano(estado, api_module):  # noqa: F811
+    """"a las 14" no lo entendia el parser (solo "14:00") y se perdia.
+
+    Paso de verdad: la clienta eligio "a las 14", el estado se quedo sin hora, no
+    se monto el resumen para confirmar y se quedo esperando.
+    """
+    from backend import reserva
+
+    reserva.anotar_intencion(estado, "reservar")
+    estado.servicio = "Color raices"
+    reserva.anotar_resultado(estado, "consultar_disponibilidad", {"fecha": "2026-09-01"},
+                             {"ok": True, "huecos": ["10:00", "14:00", "17:00", "17:30"]})
+    reserva.anotar_lo_que_dice(estado, "a las 14", "Europe/Madrid")
+    assert estado.hora == "14:00"
+
+
+def test_una_hora_que_no_existe_no_se_anota(estado, api_module):  # noqa: F811
+    """Se contrasta con los huecos REALES: no se puede inventar una hora."""
+    from backend import reserva
+
+    reserva.anotar_intencion(estado, "reservar")
+    estado.servicio = "Color raices"
+    reserva.anotar_resultado(estado, "consultar_disponibilidad", {"fecha": "2026-09-01"},
+                             {"ok": True, "huecos": ["10:00", "10:15"]})
+    reserva.anotar_lo_que_dice(estado, "a las 23", "Europe/Madrid")
+    assert estado.hora == ""
+
+
+def test_las_cinco_de_la_tarde_son_las_17(estado, api_module):  # noqa: F811
+    from backend import reserva
+
+    assert reserva._hora_coloquial("las 5 de la tarde", ["10:00", "17:00"]) == "17:00"
+    assert reserva._hora_coloquial("sobre las 17", ["17:00", "17:30"]) == "17:00"
