@@ -2829,6 +2829,22 @@ async def _voice_reschedule_booking(
     # Fecha hablada blindada (igual que consultar_disponibilidad/crear_cita): si el cliente
     # dijo la fecha en lenguaje natural, la frase manda sobre el YYYY-MM-DD que derive el modelo.
     fecha = _voice_correct_date_from_text(cliente_id, fecha, fecha_texto)[0]
+
+    # Mover una cita al MISMO dia y la MISMA hora no es mover nada, y sale caro:
+    # a "quiero cancelar mi cita" el modelo llamo aqui con la fecha y la hora que
+    # ya tenia, dijo "listo, reprogramada" y la cita siguio en pie. Quien pedia
+    # cancelar se quedo con la cita puesta.
+    limpia_fecha = textnorm._sanitize_text(fecha)
+    limpia_hora = textnorm._sanitize_text(hora)
+    if (limpia_fecha == (row["booking_date"] or "")
+            and limpia_hora == (row["booking_time"] or "")):
+        return {
+            "ok": False,
+            "error": ("Esa cita YA es de ese dia y esa hora: asi no cambia nada. Si "
+                      "quiere otro momento, pregunta cual y mira si hay hueco; si lo "
+                      "que quiere es ANULARLA, usa cancelar_cita."),
+        }
+
     verified_by_code = _voice_booking_otp_verified(cliente_id, row["id"])
     payload = booking._booking_update_payload_from_reschedule(
         row, BookingReschedulePayload(fecha=textnorm._sanitize_text(fecha), hora=textnorm._sanitize_text(hora))

@@ -551,3 +551,52 @@ def test_el_guardarrail_no_se_apaga_por_una_gestion_anterior(api_module):  # noq
         "afirmar que se acaba de tocar la agenda ya no se contrasta con este turno"
     )
     assert "mutada = True" in fuente, "nadie marca que una tool haya cambiado la agenda"
+
+
+def test_pedir_cancelar_no_puede_acabar_en_una_reprogramacion(api_module):  # noqa: F811
+    """Paso de verdad y deja al cliente con la cita puesta.
+
+    A "quiero cancelar mi cita" el modelo llamo a `reprogramar_cita` con el MISMO
+    dia y la MISMA hora, contesto "listo, he reprogramado tu cita" y en la agenda
+    no habia cambiado nada: ni cancelada, ni movida. El cliente cree que la ha
+    anulado y el hueco sigue ocupado.
+    """
+    from backend import agent
+
+    assert agent._pide_anular_y_solo_eso("quiero cancelar mi cita")
+    assert agent._pide_anular_y_solo_eso("anula la cita del jueves porfa")
+    assert agent._pide_anular_y_solo_eso("al final no voy a poder ir")
+
+    # Si habla de cambiarla, NO se fuerza: ahi hay que preguntarle cual quiere.
+    assert not agent._pide_anular_y_solo_eso("quiero cancelar o cambiar mi cita")
+    assert not agent._pide_anular_y_solo_eso("puedo moverla a otro dia?")
+    assert not agent._pide_anular_y_solo_eso("quiero pedir cita para unas mechas")
+
+
+def test_el_freno_actua_antes_de_tocar_la_agenda(api_module):  # noqa: F811
+    """De poco sirve avisar despues de haber movido la cita."""
+    import inspect
+
+    from backend import agent
+
+    fuente = inspect.getsource(agent.responder)
+    freno = fuente.index("_pide_anular_y_solo_eso(mensaje)")
+    ejecuta = fuente.index("resultado = await _ejecutar(")
+    assert freno < ejecuta, "el freno se comprueba despues de ejecutar la herramienta"
+
+
+def test_mover_una_cita_al_mismo_hueco_no_es_moverla(api_module, client):  # noqa: F811
+    """La reprogramacion que no cambia nada se rechaza en el despachador.
+
+    Es la que dejo pasar el "listo, reprogramada" con la cita intacta. Vale para
+    todos los canales, tambien la voz.
+    """
+    import inspect
+
+    from backend import voice
+
+    fuente = inspect.getsource(voice._voice_reschedule_booking)
+    assert 'row["booking_date"]' in fuente and 'row["booking_time"]' in fuente, (
+        "no se compara con el dia y la hora que ya tenia"
+    )
+    assert "cancelar_cita" in fuente, "no se le dice que lo que quiere puede ser anularla"
