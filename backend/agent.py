@@ -787,6 +787,47 @@ def _tool_buscar_servicio(
     }
 
 
+_HORA_SUELTA = re.compile(r"\b(\d{1,2})(?:[:.h](\d{2}))?\b")
+
+
+def _horas_que_ha_dicho(dicho: str) -> set:
+    """Las horas que ha nombrado ella, en HH:MM. "a las 11" -> {"11:00"}."""
+    horas = set()
+    for cruda, minutos in _HORA_SUELTA.findall(catalog_pick._norm(dicho or "")):
+        try:
+            h = int(cruda)
+        except ValueError:
+            continue
+        if not 0 <= h <= 23:
+            continue
+        horas.add("%02d:%s" % (h, minutos or "00"))
+        if h <= 12:  # "a las 5" en una peluqueria son las cinco de la tarde
+            horas.add("%02d:%s" % (h + 12, minutos or "00"))
+    return horas
+
+
+def _hora_que_nadie_ha_pedido(estado: Any, dicho: str, hora: str) -> bool:
+    """¿Se esta moviendo la cita a una hora que ni ha pedido ni se le ha ofrecido?
+
+    Paso de verdad: con la cita intacta, a "vuelvela a abrir" el modelo movio la
+    cita de las 10:00 a las 11:00. Nadie hablo de las once. Mover la cita de
+    alguien a un hueco que se ha sacado de la manga es de las cosas que mas caras
+    salen, porque el cliente se presenta a su hora.
+    """
+    limpia = str(hora or "").strip()
+    if not limpia:
+        return False
+    if limpia in _horas_que_ha_dicho(dicho):
+        return False
+    ofrecidos = set()
+    for hueco in (getattr(estado, "huecos", None) or []):
+        if isinstance(hueco, str):
+            ofrecidos.add(hueco.strip())
+        elif isinstance(hueco, dict):
+            ofrecidos.add(str(hueco.get("hora") or hueco.get("time") or "").strip())
+    return limpia not in ofrecidos
+
+
 # Pedir que le quiten la cita. Sin ambiguedad: si ademas habla de cambiarla o
 # moverla, esto NO se aplica (ahi si hay que preguntarle cual de las dos quiere).
 # Por RAIZ, no por frase exacta: "anula la cita" no casaba con "anular" y el
@@ -1480,6 +1521,21 @@ async def responder(
                 # verdad -"quiero cancelar mi cita"- y el modelo llamo a
                 # reprogramar con el MISMO dia y la MISMA hora, dijo "listo,
                 # reprogramada" y la clienta se quedo con la cita puesta.
+                if (llamada.function.name == "reprogramar_cita"
+                        and _hora_que_nadie_ha_pedido(
+                            estado, dicho_de_ella, str(argumentos.get("hora") or ""))):
+                    resultado = {
+                        "ok": False,
+                        "error": ("Esa hora no la ha pedido ella ni se la has ofrecido: "
+                                  "no le muevas la cita a un hueco que te has sacado "
+                                  "tu. Mira que huecos hay de verdad, ofreceselos y "
+                                  "espera a que elija."),
+                    }
+                    mensajes.append({
+                        "role": "tool", "tool_call_id": llamada.id,
+                        "content": json.dumps(resultado, ensure_ascii=False),
+                    })
+                    continue
                 if (llamada.function.name in ("reprogramar_cita", "crear_cita")
                         and _pide_anular_y_solo_eso(mensaje)):
                     resultado = {

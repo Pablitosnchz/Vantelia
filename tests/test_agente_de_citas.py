@@ -600,3 +600,26 @@ def test_mover_una_cita_al_mismo_hueco_no_es_moverla(api_module, client):  # noq
         "no se compara con el dia y la hora que ya tenia"
     )
     assert "cancelar_cita" in fuente, "no se le dice que lo que quiere puede ser anularla"
+
+
+def test_no_mueve_la_cita_a_una_hora_que_nadie_ha_pedido(api_module):  # noqa: F811
+    """Paso de verdad: a "vuelvela a abrir" movio la cita de las 10:00 a las 11:00.
+
+    Nadie hablo de las once. Mover la cita de alguien a un hueco inventado sale
+    caro de verdad: el cliente se presenta a su hora y su hueco ya no existe.
+    """
+    from backend import agent, reserva
+
+    estado = reserva.Estado()
+    # Ni lo ha dicho ella ni se le ha ofrecido -> se frena.
+    assert agent._hora_que_nadie_ha_pedido(estado, "vuelvela a abrir", "11:00")
+
+    # Lo que ELLA dice vale, aunque lo escriba a su manera.
+    assert not agent._hora_que_nadie_ha_pedido(estado, "me viene mejor a las 11", "11:00")
+    assert not agent._hora_que_nadie_ha_pedido(estado, "a las 5 de la tarde", "17:00")
+    assert not agent._hora_que_nadie_ha_pedido(estado, "ponme a las 12:30", "12:30")
+
+    # Y lo que se le ha ofrecido, tambien: eso lo eligio de una lista real.
+    estado.huecos = ["10:00", "10:15", "10:30"]
+    assert not agent._hora_que_nadie_ha_pedido(estado, "la segunda", "10:15")
+    assert agent._hora_que_nadie_ha_pedido(estado, "la segunda", "13:45")
