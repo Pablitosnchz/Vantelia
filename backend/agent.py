@@ -1091,11 +1091,108 @@ def _da_un_precio_prohibido(cliente_id: str, texto: str, contexto: str) -> bool:
         return False
     from backend import booking
 
+    # El negocio que no da precios por mensaje no da NINGUNO: cualquier cifra que
+    # escriba esta de mas, hable de lo que hable.
+    if booking.precios_ocultos(cliente_id):
+        return True
     familias = booking._familias_que_exigen_valoracion(cliente_id)
     if not familias:
         return False
     hablando_de = catalog_pick._norm((texto or "") + " " + (contexto or ""))
     return any(familia and familia in hablando_de for familia in familias)
+
+
+PREGUNTA_EL_PRECIO = ("precio", "precios", "cuanto cuesta", "cuanto vale",
+                      "cuanto me costaria", "cuanto seria", "tarifa", "tarifas",
+                      "presupuesto", "cuanto sale", "que vale", "coste")
+# Como INSISTE quien ya se ha llevado una negativa. Sin esto el segundo aviso -el
+# que manda cerrar- no llegaba a saltar nunca: la clienta no repite la palabra
+# "precio", dice "ya pero dime un aproximado".
+INSISTE_CON_EL_PRECIO = ("aproximad", "mas o menos", "una idea", "un rango",
+                         "orientativ", "por encima", "dime algo", "aunque sea",
+                         "caro", "barato", "me sale por", "cuanto me va a")
+
+
+def _pregunta_el_precio(dicho: str, ya_negado: bool = False) -> bool:
+    plano = catalog_pick._norm(dicho or "")
+    if any(pista in plano for pista in PREGUNTA_EL_PRECIO):
+        return True
+    return ya_negado and any(pista in plano for pista in INSISTE_CON_EL_PRECIO)
+
+
+def _salida_para_quien_pregunta_el_precio(cliente_id: str, estado: Any, mensaje: str) -> str:
+    """Que hacer cuando pregunta el precio y este negocio no los da.
+
+    Negarse no basta: medido en 100 conversaciones, las de precio eran las PEORES
+    -6 de 17 acababan bien- y no por callarse la cifra, sino porque el asistente
+    repetia la negativa con otras palabras hasta que la clienta se cansaba y se
+    iba. La segunda vez hay que CERRAR: o le coge el diagnostico, o le da el
+    telefono. Lo que no puede es volver a explicarlo.
+    """
+    from backend import booking, clients
+
+    ya_negado = bool(getattr(estado, "veces_sin_precio", 0))
+    if (not _pregunta_el_precio(mensaje, ya_negado)
+            or not booking.precios_ocultos(cliente_id)):
+        return ""
+    estado.veces_sin_precio += 1
+    telefono = str((clients._get_client_config(cliente_id).get("contacto") or {})
+                   .get("telefono") or "").strip()
+    si_llama = (" Si prefiere saberlo antes de venir, que llame al %s." % telefono
+                if telefono else "")
+    if estado.veces_sin_precio == 1:
+        return (
+            "AQUI NO SE DAN PRECIOS. Diselo en UNA frase, sin rodeos y sin cifras, y "
+            "en el mismo mensaje ofrecele la salida: cogerle una cita de valoracion "
+            "(corta y sin compromiso, ahi le dan el presupuesto).%s No te quedes en "
+            "la explicacion: termina proponiendo algo concreto." % si_llama
+        )
+    return (
+        "YA se lo has explicado %d veces y sigue preguntando. NO se lo vuelvas a "
+        "explicar ni repitas la misma frase: CIERRA. Mira la agenda de verdad y "
+        "ofrecele dos o tres horas concretas para la valoracion, y si aun asi no le "
+        "vale, dale el telefono para que llamen.%s"
+        % (estado.veces_sin_precio - 1, si_llama)
+    )
+
+
+_ENTRECOMILLADO = re.compile(r'["\u201c\u201d\u00ab\u00bb]([^"\u201c\u201d\u00ab\u00bb]{3,60})["\u201c\u201d\u00ab\u00bb]')
+
+
+def _sin_comillas_en_los_servicios(cliente_id: str, texto: str) -> str:
+    """Los nombres de servicio se dicen, no se citan.
+
+    Lo dijo el duenyo del negocio: 'que no ponga los servicios entre comillas, es
+    muy poco natural'. Y tiene razon: una peluquera no dice te hago unas "Mechas o
+    balayage largo", dice te hago unas mechas.
+
+    Solo se quitan las comillas de lo que ES un servicio del catalogo: si estan
+    citando otra cosa -el nombre de un producto, algo que dijo la clienta- se
+    quedan.
+    """
+    if not texto or '"' not in texto and "\u201c" not in texto and "\u00ab" not in texto:
+        return texto
+    from backend import agenda
+
+    try:
+        catalogo = set()
+        for s in agenda._catalog_services(cliente_id):
+            if not isinstance(s, dict):
+                continue
+            crudo = str(s.get("nombre") or s.get("name") or "")
+            # Los dos nombres: el que se dice y el interno. Si se le escapa el
+            # interno, tampoco tiene que ir entre comillas.
+            catalogo.add(catalog_pick._norm(crudo))
+            catalogo.add(catalog_pick._norm(textnorm.nombre_de_servicio_publico(crudo)))
+    except Exception:  # noqa: BLE001 - nunca romper la respuesta por esto
+        return texto
+    catalogo.discard("")
+
+    def _quitar(encontrado):
+        dentro = encontrado.group(1)
+        return dentro if catalog_pick._norm(dentro) in catalogo else encontrado.group(0)
+
+    return _ENTRECOMILLADO.sub(_quitar, texto)
 
 
 def _quien_escribe(cliente_id: str, telefono: str) -> Dict[str, str]:
@@ -1378,6 +1475,7 @@ async def responder(
 
         cliente = OpenAISdkClient(api_key=settings.OPENAI_API_KEY, timeout=25.0)
         obligar = False
+        sin_precio = ""
         for vuelta in range(MAX_VUELTAS):
             # Lo que el codigo sabe y lo que toca hacer, delante del modelo en CADA
             # vuelta: asi no hay nada que corregirle despues.
@@ -1390,7 +1488,11 @@ async def responder(
             # tres horas y volvia a preguntarle que dia queria.
             aviso = ("" if estado.recargo_dicho
                      else _aviso_de_recargo(cliente_id, dicho_de_ella, estado.servicio))
-            guia = [t for t in (reserva.resumen(estado, conocido), aviso,
+            # Solo en la PRIMERA vuelta: si no, cada llamada a una tool contaria
+            # como una negativa mas y se saltaria directo al cierre.
+            sin_precio = (_salida_para_quien_pregunta_el_precio(cliente_id, estado, mensaje)
+                          if vuelta == 0 else sin_precio)
+            guia = [t for t in (reserva.resumen(estado, conocido), aviso, sin_precio,
                                 reserva.instruccion_de_cierre(estado, conocido)) if t]
             turno = list(mensajes)
             if guia:
@@ -1498,7 +1600,9 @@ async def responder(
                 reserva.guardar(cliente_id, telefono, estado,
                                 pedido=reserva.que_falta(estado, conocido))
                 return _con_el_telefono_si_hace_falta(
-                    cliente_id, mensaje, texto_final, cita_creada,
+                    cliente_id, mensaje,
+                    _sin_comillas_en_los_servicios(cliente_id, texto_final),
+                    cita_creada,
                 ), cita_creada
             obligar = False
 
@@ -1549,6 +1653,17 @@ async def responder(
                         "content": json.dumps(resultado, ensure_ascii=False),
                     })
                     continue
+                # Al buscar el servicio va TODO lo que ha dicho, no solo su
+                # ultimo mensaje: quien dijo "unas mechas" y luego "lo tengo por
+                # los hombros" ya ha dado los dos datos, y preguntarle otra vez
+                # que servicio quiere es el fallo que mas se repite.
+                if llamada.function.name == "buscar_servicio" and estado.servicio_texto:
+                    dicho = str(argumentos.get("descripcion") or "").strip()
+                    if catalog_pick._norm(dicho) not in catalog_pick._norm(estado.servicio_texto):
+                        dicho = (estado.servicio_texto + " " + dicho).strip()
+                    else:
+                        dicho = estado.servicio_texto
+                    argumentos["descripcion"] = dicho[-300:]
                 # "cualquier hueco que tengas me vale" le hacia pedir el calendario
                 # dia a dia (ocho de una tacada) hasta agotar el turno.
                 if (llamada.function.name == "consultar_disponibilidad"

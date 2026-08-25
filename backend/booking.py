@@ -6161,6 +6161,26 @@ def _familias_que_exigen_valoracion(cliente_id: str) -> List[str]:
         return []
 
 
+def precios_ocultos(cliente_id: str) -> bool:
+    """Este negocio no da precios por mensaje. De NADA, no solo de unas familias.
+
+    Lo pidio la duenya del salon: "es mas facil que no de precio de nada; quien
+    quiera precio que nos llame, y si es un cambio de imagen, mechas o extensiones
+    que coja cita para un diagnostico y le damos presupuesto". Su catalogo tiene
+    191 servicios y aun no ha decidido cuales quiere publicar.
+
+    Es opt-in por tenant (`booking.mostrar_precios`): quien no lo toque sigue
+    ensenyando sus precios como siempre.
+    """
+    from backend import clients
+
+    try:
+        booking_cfg = clients._get_client_config(cliente_id).get("booking") or {}
+    except Exception:  # noqa: BLE001 - nunca romper una respuesta por esto
+        return False
+    return booking_cfg.get("mostrar_precios") is False
+
+
 def _exige_valoracion(nombre_servicio: str, familias: List[str]) -> bool:
     plano = textnorm._strip_accents(str(nombre_servicio or "").lower())
     return any(familia and familia in plano for familia in familias)
@@ -6192,6 +6212,9 @@ def _service_catalog_lines(cliente_id: str, location_id: str = "") -> List[str]:
     # insistia cuatro veces ("las mechas tienen un precio de 80 EUR"), y ahi se
     # rompe una condicion del negocio. Lo que no tiene, no lo puede decir.
     sin_precio = _familias_que_exigen_valoracion(cliente_id)
+    # Si el negocio no da precios por mensaje, el modelo NO ve ni uno: lo que no
+    # tiene, no lo puede soltar.
+    ninguno = precios_ocultos(cliente_id)
     lines: List[str] = []
     seen: set = set()
     for service in services:
@@ -6216,7 +6239,9 @@ def _service_catalog_lines(cliente_id: str, location_id: str = "") -> List[str]:
         except (TypeError, ValueError):
             price_cents = 0
         price_label = textnorm._sanitize_text(str(service.get("price_label") or ""))
-        if _exige_valoracion(name, sin_precio):
+        if ninguno:
+            parts.append("precio: NO se da por mensaje")
+        elif _exige_valoracion(name, sin_precio):
             parts.append("precio SOLO tras la cita de valoracion")
         elif price_cents > 0 and price_label:
             parts.append(price_label)

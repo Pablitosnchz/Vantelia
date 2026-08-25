@@ -58,6 +58,8 @@ class Estado:
     hecho: bool = False          # la gestion se completo en esta conversacion
     recargo_dicho: bool = False  # ya se le explico lo que cuesta con esa profesional
     cancelada: bool = False      # su cita se anulo: ya no esta en pie
+    veces_sin_precio: int = 0    # cuantas veces se le ha dicho que no hay precio
+    servicio_texto: str = ""    # todo lo que ha dicho sobre QUE quiere hacerse
     ultimo_pedido: str = ""      # que se pidio en el turno anterior
     tocado: float = field(default_factory=time.time)
 
@@ -176,6 +178,15 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "") ->
     plano = catalog_pick._norm(mensaje or "")
     if any(pista in plano for pista in _LE_DA_IGUAL):
         estado.dia_le_da_igual = True
+
+    # Lo que dice del servicio se ACUMULA hasta que hay uno elegido. Sin esto, a
+    # "quiero unas mechas" seguido de "lo tengo por los hombros" el catalogo solo
+    # recibia lo ultimo -el largo- y volvia a preguntarle que servicio queria: la
+    # clienta ya lo habia dicho dos mensajes antes.
+    if not estado.servicio and not estado.hecho:
+        trozo = " ".join(str(mensaje or "").split())[:120]
+        if trozo and trozo.lower() not in estado.servicio_texto.lower():
+            estado.servicio_texto = (estado.servicio_texto + " " + trozo).strip()[-300:]
 
     # Lo que pide en su mensaje declara la intencion, y eso es lo que obliga
     # despues a llamar a la herramienta que remata. Sin esto, a "quiero cancelar mi

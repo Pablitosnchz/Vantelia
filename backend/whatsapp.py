@@ -281,6 +281,24 @@ def _wa_service_label(svc: Dict[str, Any]) -> str:
     return _wa_recortar_titulo(svc.get("nombre") or svc.get("name") or "Servicio")
 
 
+def _wa_servicios_sin_precio(cliente_id: str, servicios):
+    """Marca los servicios para que la lista no ensenye el precio.
+
+    El negocio puede decidir que por mensaje no da precios (`mostrar_precios`).
+    De poco sirve callarselo en la conversacion si la lista de servicios lleva la
+    cifra al lado del nombre.
+    """
+    if not booking.precios_ocultos(cliente_id):
+        return servicios
+    marcados = []
+    for svc in servicios:
+        if isinstance(svc, dict):
+            svc = dict(svc)
+            svc["ocultar_precio"] = True
+        marcados.append(svc)
+    return marcados
+
+
 def _wa_service_detail(svc: Dict[str, Any]) -> str:
     nombre = " ".join(str(svc.get("nombre") or svc.get("name") or "").split())
     partes = []
@@ -290,7 +308,7 @@ def _wa_service_detail(svc: Dict[str, Any]) -> str:
         partes.append(nombre)
     if svc.get("duration_minutes"):
         partes.append("%s min" % svc["duration_minutes"])
-    if svc.get("price_label"):
+    if svc.get("price_label") and not svc.get("ocultar_precio"):
         partes.append(str(svc["price_label"]))
     descripcion = str(svc.get("descripcion") or svc.get("description") or "")
     if descripcion:
@@ -307,7 +325,10 @@ async def _wa_send_service_picker(
     categoria: str = "",
     pagina: int = 0,
 ) -> bool:
-    services = booking._public_services_for_booking(cliente_id, location_id=location_id)
+    services = _wa_servicios_sin_precio(
+        cliente_id,
+        booking._public_services_for_booking(cliente_id, location_id=location_id),
+    )
     if not services:
         return False
 
@@ -1697,7 +1718,10 @@ async def _wa_start_booking_flow(
         ):
             return
         flow.flow = ""  # mono-centro: no hay nada que elegir
-    services = booking._public_services_for_booking(cliente_id, location_id=effective_location)
+    services = _wa_servicios_sin_precio(
+        cliente_id,
+        booking._public_services_for_booking(cliente_id, location_id=effective_location),
+    )
     if services and _wa_modo_conversacional(config):
         # Sin listas: lleva la conversacion el agente, que ademas recomienda.
         flow.location_id = effective_location

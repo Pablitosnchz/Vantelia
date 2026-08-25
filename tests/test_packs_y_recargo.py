@@ -366,3 +366,50 @@ def test_el_nombre_que_se_dice_sigue_encontrando_el_servicio(salon_con_packs, ap
     fila = agenda._find_service_by_name("demo", publico)
     assert fila is not None and fila["name"] == "Pack mechas o balayage medio"
     assert int(fila["duration_minutes"]) == 220
+
+
+def test_lo_que_ha_dicho_del_servicio_no_se_pierde_entre_mensajes(api_module):  # noqa: F811
+    """"unas mechas" + "lo tengo por los hombros" son DOS datos, no uno.
+
+    Paso de verdad (25-ago-2026): dijo que queria mechas, el asistente le pregunto
+    cual de las tres tecnicas, ella contesto el largo del pelo... y le pregunto
+    otra vez que servicio queria. Solo le llegaba su ULTIMO mensaje.
+    """
+    from backend import reserva
+
+    estado = reserva.Estado()
+    reserva.anotar_lo_que_dice(estado, "me gustaria hacerme unas mechas", "Europe/Madrid")
+    reserva.anotar_lo_que_dice(estado, "lo tengo por los hombros", "Europe/Madrid")
+
+    acumulado = estado.servicio_texto.lower()
+    assert "mechas" in acumulado and "hombros" in acumulado
+
+    # Con el servicio ya elegido deja de acumular: lo que diga despues es otra cosa.
+    estado.servicio = "Pack mechas o balayage medio"
+    reserva.anotar_lo_que_dice(estado, "el jueves por la tarde", "Europe/Madrid")
+    assert "jueves" not in estado.servicio_texto.lower()
+
+
+def test_la_busqueda_del_servicio_usa_todo_lo_dicho(api_module):  # noqa: F811
+    import inspect
+
+    from backend import agent
+
+    fuente = inspect.getsource(agent.responder)
+    assert 'llamada.function.name == "buscar_servicio" and estado.servicio_texto' in fuente, (
+        "la busqueda del servicio vuelve a mirar solo el ultimo mensaje"
+    )
+
+
+def test_los_servicios_no_se_dicen_entre_comillas(salon_con_packs, api_module):  # noqa: F811
+    """"que no ponga los servicios entre comillas, es muy poco natural" (el negocio)."""
+    from backend import agent
+
+    texto = agent._sin_comillas_en_los_servicios(
+        "demo", 'Perfecto, te hago unas "Pack mechas o balayage medio" el jueves.')
+    assert '"' not in texto
+    assert "mechas o balayage medio" in texto.lower()
+
+    # Lo que NO es un servicio se queda como esta: no se toca lo que cita a otro.
+    otro = agent._sin_comillas_en_los_servicios("demo", 'Me dijiste "el jueves por la tarde".')
+    assert otro == 'Me dijiste "el jueves por la tarde".'
