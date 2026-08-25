@@ -1365,6 +1365,44 @@ def _necesita_consultar(mensaje: str) -> bool:
     return any(palabra in limpio for palabra in _PIDE_DATOS)
 
 
+# Preguntas por una NORMA del negocio: como preparar el pelo, la fianza, que pasa
+# si cancela... Son cosas que el negocio ha escrito con sus palabras, y de memoria
+# se contestan mal. Paso de verdad: a "¿hay algun protocolo?" antes de un alisado
+# contesto "ven con el pelo limpio y seco y evita gel o spray", cuando el suyo dice
+# tres lavados con champu y NADA despues -ni mascarilla, ni acondicionador, ni
+# serum-. Una clienta que siga la version inventada se lleva un alisado peor.
+_PREGUNTA_POR_UNA_NORMA = (
+    "protocolo", "preparar", "preparacion", "como tengo que venir", "como vengo",
+    "como voy", "antes de la cita", "antes de venir", "el dia antes", "me lavo",
+    "lavarme", "lavado", "puedo venir con", "tengo que traer", "recomendacion previa",
+    "fianza", "senyal", "deposito", "anticipo", "politica", "cancelacion",
+    "cuidados", "despues del tratamiento", "mantenimiento", "retoque", "garantia",
+)
+
+
+def _nota_del_servicio(cliente_id: str, resultado: Dict[str, Any]) -> str:
+    """Las indicaciones que el negocio quiere dar al reservar ESE servicio."""
+    from backend import booking, db
+
+    codigo = str(resultado.get("codigo_reserva") or "").strip()
+    if not codigo:
+        return ""
+    try:
+        with db._get_db_connection() as conexion:
+            fila = conexion.execute(
+                "SELECT * FROM bookings WHERE cliente_id = ? AND booking_code = ? LIMIT 1",
+                (cliente_id, codigo),
+            ).fetchone()
+        return booking.service_booking_note(cliente_id, fila) if fila is not None else ""
+    except Exception:  # noqa: BLE001 - nunca romper una reserva por esto
+        return ""
+
+
+def _pregunta_por_una_norma(mensaje: str) -> bool:
+    limpio = catalog_pick._norm(mensaje)
+    return any(pista in limpio for pista in _PREGUNTA_POR_UNA_NORMA)
+
+
 # Lo que solo se puede decir habiendo mirado la agenda.
 _HABLA_DE_AGENDA = (
     "cerrado", "cerramos", "no abrimos", "no tengo hueco", "no hay hueco",
@@ -1483,6 +1521,7 @@ async def responder(
         obligar = False
         sin_precio = ""
         catalogo_mirado = False
+        norma_mirada = False
         for vuelta in range(MAX_VUELTAS):
             # Lo que el codigo sabe y lo que toca hacer, delante del modelo en CADA
             # vuelta: asi no hay nada que corregirle despues.
@@ -1516,6 +1555,10 @@ async def responder(
             if (not remate and not estado.servicio and estado.servicio_texto
                     and not catalogo_mirado):
                 remate = "buscar_servicio"
+            # Pregunta por una norma del negocio: se mira lo que ESTE negocio ha
+            # escrito, no lo que el modelo recuerde de otras peluquerias.
+            if not remate and not norma_mirada and _pregunta_por_una_norma(mensaje):
+                remate = "politica_del_negocio"
             # El canal puede querer que la cita la confirme la clienta con un
             # boton, no el modelo por su cuenta: un resumen con "¿Confirmamos?"
             # antes de tocar la agenda. Cancelar y reprogramar siguen igual.
@@ -1694,6 +1737,8 @@ async def responder(
                         telefono=telefono, location_id=location_id, ya_creadas=ya_creadas,
                         quien=quien, remate_manual=remate_manual,
                     )
+                if llamada.function.name == "politica_del_negocio":
+                    norma_mirada = True
                 if llamada.function.name == "buscar_servicio":
                     catalogo_mirado = True
                     falta = str(resultado.get("falta") or "")
@@ -1716,6 +1761,19 @@ async def responder(
                     dias_mirados += 1
                 if llamada.function.name == "crear_cita" and resultado.get("ok"):
                     cita_creada = True
+                    # Lo que hay que contarle SIN que pregunte: como venir
+                    # preparada. "Aunque no pregunte por el protocolo, si se hace
+                    # un alisado tenemos que decirselo" (el salon). Por WhatsApp
+                    # ya iba en la confirmacion; por chat se perdia.
+                    aviso_servicio = _nota_del_servicio(cliente_id, resultado)
+                    if aviso_servicio:
+                        resultado = dict(resultado)
+                        resultado["avisale_de"] = aviso_servicio
+                        resultado["nota"] = (
+                            "IMPORTANTE: copiale `avisale_de` tal cual al confirmarle "
+                            "la cita, aunque no haya preguntado. Son las indicaciones "
+                            "del negocio para venir preparada."
+                        )
                 if resultado.get("ok"):
                     if llamada.function.name in ("crear_cita", "cancelar_cita",
                                                  "reprogramar_cita"):

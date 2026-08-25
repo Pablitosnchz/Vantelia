@@ -656,3 +656,48 @@ def test_el_freno_de_la_cita_cancelada_esta_enchufado(api_module):  # noqa: F811
     assert "se puede reabrir" in fuente, (
         "no se le explica que lo que procede es cogerle una cita nueva"
     )
+
+
+def test_una_norma_del_negocio_se_consulta_no_se_recuerda(api_module):  # noqa: F811
+    """Se invento el protocolo del alisado, y era peor que el de verdad.
+
+    A "¿hay algun protocolo?" contesto "ven con el pelo limpio y seco y evita gel
+    o spray". El del salon dice TRES lavados con champu y nada despues: ni
+    mascarilla, ni acondicionador, ni serum. Quien siga la version inventada se
+    lleva un alisado peor, y encima cree que ha hecho lo que le dijeron.
+    """
+    import inspect
+
+    from backend import agent
+
+    assert agent._pregunta_por_una_norma("hay algun protocolo?")
+    assert agent._pregunta_por_una_norma("como tengo que venir para el alisado?")
+    assert agent._pregunta_por_una_norma("me lavo el pelo antes de venir?")
+    assert agent._pregunta_por_una_norma("como se paga la fianza?")
+    assert agent._pregunta_por_una_norma("y si cancelo? que politica teneis")
+    assert not agent._pregunta_por_una_norma("quiero cita para unas mechas")
+
+    fuente = inspect.getsource(agent.responder)
+    assert 'remate = "politica_del_negocio"' in fuente, (
+        "nada obliga a mirar lo que el negocio ha escrito"
+    )
+
+
+def test_al_reservar_un_alisado_se_manda_el_protocolo_sin_preguntar(api_module, client):  # noqa: F811
+    """"Aunque no pregunte por el protocolo, si se hace un alisado hay que decirselo".
+
+    El mecanismo ya existia -una nota por servicio que sale en la confirmacion de
+    WhatsApp-, pero por chat se perdia. Y en el catalogo del salon estaba puesta
+    en unos servicios si y en otros no: los PACKS, que son justo los que se
+    reservan cuando alguien pide un alisado, la tenian vacia.
+    """
+    import inspect
+
+    from backend import agent, booking
+
+    fuente = inspect.getsource(agent.responder)
+    assert "avisale_de" in fuente, "por chat no se le cuenta como venir preparada"
+    assert "_nota_del_servicio" in fuente
+
+    # Y la fuente es la nota del negocio, no un texto nuestro.
+    assert "booking_note" in inspect.getsource(booking.service_booking_note)
