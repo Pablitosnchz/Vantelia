@@ -172,6 +172,9 @@ PERSONAS: List[Dict[str, Any]] = [
 
 def guion(persona: Dict[str, Any], estilo: str) -> str:
     """Las instrucciones para el modelo que hace de clienta."""
+    import datetime
+
+    hoy = datetime.date.today()
     partes = [
         "Eres una clienta escribiendo por WhatsApp a una peluqueria. NO eres un "
         "asistente: eres la clienta, y escribes como una persona normal.",
@@ -188,6 +191,10 @@ def guion(persona: Dict[str, Any], estilo: str) -> str:
         "- Cuando ya tengas lo que querias (o veas que no vas a conseguirlo), "
         "responde EXACTAMENTE: LISTO",
         "- Si te piden algo que ya has dicho, hazlo notar en vez de repetirlo sin mas.",
+        # Sin saber en que dia vive, la clienta de mentira se inventaba fechas
+        # ("mañana es viernes 27 de octubre") y daba por rotas reservas correctas.
+        "- HOY es %s. Cuando hables de dias, cuenta desde ahi y no discutas la "
+        "fecha si te la dan bien." % hoy.isoformat(),
     ]
     if persona.get("con_cita"):
         # Con solo el codigo, la clienta de mentira no sabia QUE cita tenia y se

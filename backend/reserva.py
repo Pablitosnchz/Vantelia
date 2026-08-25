@@ -53,6 +53,7 @@ class Estado:
     codigo: str = ""             # la cita que ya tiene, si gestiona una
     profesional: str = ""        # si ha pedido a alguien en concreto
     huecos: List[str] = field(default_factory=list)   # los que se le han ofrecido
+    fecha_de_los_huecos: str = ""  # de que dia son esos huecos (no es "el dia elegido")
     dia_le_da_igual: bool = False
     hecho: bool = False          # la gestion se completo en esta conversacion
     ultimo_pedido: str = ""      # que se pidio en el turno anterior
@@ -175,10 +176,14 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "") ->
         estado.dia_le_da_igual = True
 
     if not estado.hecho:
-        if not estado.fecha:
-            fecha = textnorm._extract_date_from_text(mensaje or "", timezone_name or "Europe/Madrid")
-            if fecha:
-                estado.fecha = fecha
+        # La fecha que diga ELLA manda, aunque ya hubiera una: corregir un dato es
+        # lo primero que hace quien ve un resumen equivocado, y no hacerle caso la
+        # dejaba repitiendo "es el miercoles 26, no el jueves" hasta cansarse.
+        fecha = textnorm._extract_date_from_text(mensaje or "", timezone_name or "Europe/Madrid")
+        if fecha and fecha != estado.fecha:
+            estado.fecha = fecha
+            estado.hora = ""      # el hueco de otro dia no vale
+            estado.huecos = []
         if not estado.hora:
             hora = textnorm._extract_time_from_text(mensaje or "")
             if not hora:
@@ -223,11 +228,16 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
         estado.duracion = int(resultado.get("duracion_minutos") or 0)
 
     elif tool == "consultar_disponibilidad":
+        # OJO: mirar la agenda de un dia NO significa que ella lo haya elegido. El
+        # modelo consulta varios seguidos para poder ofrecer, y el estado se
+        # quedaba con el ULTIMO: decia "mañana miercoles 26" y el resumen ponia
+        # "jueves 27". La clienta lo corrigio CUATRO veces y el resumen no cambio,
+        # porque la fecha ya estaba puesta.
         fecha = str(argumentos.get("fecha") or resultado.get("fecha") or "")
         huecos = [str(h) for h in (resultado.get("huecos") or [])]
         if huecos:
-            estado.fecha = fecha
             estado.huecos = huecos[:8]
+            estado.fecha_de_los_huecos = fecha
 
     elif tool == "consultar_cita":
         estado.codigo = str(resultado.get("codigo_reserva") or estado.codigo)
@@ -276,7 +286,12 @@ def que_falta(estado: Estado, nombre_conocido: str = "") -> str:
     if not estado.servicio:
         return "servicio"
     if not estado.fecha:
-        return "dia"
+        # Si solo se ha mirado un dia y tiene huecos, ese es el dia del que se esta
+        # hablando: no hace falta volver a preguntarlo.
+        if estado.fecha_de_los_huecos and estado.huecos:
+            estado.fecha = estado.fecha_de_los_huecos
+        else:
+            return "dia"
     if not estado.hora:
         return "hora"
     if not (estado.nombre or nombre_conocido):

@@ -342,6 +342,28 @@ Hay que dejar **constancia** de que la cita existe (`reserva.marcar_hecha`), y
 decírselo sin rodeos — con un "confirmásela con naturalidad" seguía preguntando
 "¿me confirmas para proceder?" con la cita ya cogida.
 
+## Cuidado con perseguir ruido
+
+Cuatro mediciones seguidas del subgrupo "reservar": **61% → 41,5% → 43,9% →
+43,9%**. Parecen una caída y un intento fallido de arreglarla. No lo son: ese
+subgrupo tiene **n=41**, y su margen es **±15 puntos**. Los 61 y los 44 no se
+distinguen.
+
+Se tomaron tres decisiones sobre esa diferencia. Una de ellas —saltarse la
+respuesta del negocio cuando ya se había dicho— se revirtió después de comprobar
+que no movía su propio patrón (22 → 22 → 23) y que revertirla tampoco recuperaba
+nada.
+
+| Muestra | Margen (95%) | Sirve para |
+| --- | --- | --- |
+| Global, n=100 | ±10 | Ver si una tanda de cambios mejora o empeora |
+| Un objetivo, n≈10-40 | ±15 a ±30 | Nada, salvo diferencias enormes |
+| Un patrón que pasa de 3 a 15 | — | **Eso sí es señal** |
+
+Regla práctica: **mirar los patrones antes que los porcentajes**, y no iterar con
+el simulador. El banco (28 casos, ~6 min, céntimos) es la herramienta del día a
+día; el simulador es para decisiones grandes y espaciadas.
+
 ## Cómo se comprueba que funciona
 
 **No basta con probarlo.** Los fallos que importan solo salen escribiendo como un

@@ -342,3 +342,39 @@ def test_delante_del_resumen_se_puede_cambiar_de_idea(api_module, client):  # no
     # Un si o un gracias no lo son.
     assert not whatsapp._wa_cambia_el_servicio("demo", "si, confirmo")
     assert not whatsapp._wa_cambia_el_servicio("demo", "gracias")
+
+
+def test_mirar_la_agenda_no_es_elegir_dia(estado, api_module):  # noqa: F811
+    """El modelo consulta varios dias seguidos para poder ofrecer.
+
+    El estado se quedaba con el ULTIMO consultado: decia "mañana miercoles 26" y
+    el resumen ponia "jueves 27". La clienta lo corrigio CUATRO veces sin exito.
+    """
+    from backend import reserva
+
+    reserva.anotar_intencion(estado, "reservar")
+    estado.servicio = "Corte señora"
+    reserva.anotar_lo_que_dice(estado, "podria ir el miercoles 26 de agosto", "Europe/Madrid")
+    elegido = estado.fecha
+    assert elegido, "no ha cogido la fecha que dijo ella"
+
+    # Consultar otros dias NO cambia el elegido.
+    for otro in ("2026-08-27", "2026-08-28"):
+        reserva.anotar_resultado(estado, "consultar_disponibilidad", {"fecha": otro},
+                                 {"ok": True, "huecos": ["10:00", "10:15"]})
+    assert estado.fecha == elegido
+
+
+def test_si_corrige_la_fecha_se_le_hace_caso(estado, api_module):  # noqa: F811
+    """Corregir un dato es lo primero que hace quien ve un resumen equivocado."""
+    from backend import reserva
+
+    reserva.anotar_intencion(estado, "reservar")
+    estado.servicio = "Corte señora"
+    reserva.anotar_lo_que_dice(estado, "el 27 de agosto", "Europe/Madrid")
+    primera = estado.fecha
+    estado.hora = "10:00"
+
+    reserva.anotar_lo_que_dice(estado, "no, el 26 de agosto", "Europe/Madrid")
+    assert estado.fecha != primera, "no le hace caso al corregir"
+    assert estado.hora == "", "el hueco de otro dia no puede darse por bueno"
