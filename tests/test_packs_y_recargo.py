@@ -337,6 +337,7 @@ def test_ninguna_tool_le_pasa_la_palabra_pack_al_modelo(api_module, client):  # 
         "ok": True,
         "servicio": "Pack mechas o balayage largo",
         "servicio_en_agenda": "Pack mechas o balayage largo",
+        "categoria": "Packs",
         "candidatos": [{"servicio": "Pack alisado keratina medio", "duracion_minutos": 200}],
         "opciones": ["Pack mechas o balayage corto", "Corte senora"],
         "huecos": ["10:00", "10:15"],
@@ -348,8 +349,11 @@ def test_ninguna_tool_le_pasa_la_palabra_pack_al_modelo(api_module, client):  # 
     assert limpio["opciones"][0] == "Mechas o balayage corto"
     assert limpio["opciones"][1] == "Corte senora"
     assert limpio["huecos"] == ["10:00", "10:15"], "no debe tocar lo que no son nombres"
-    # El nombre EXACTO viaja aparte: con el se crea la cita.
-    assert limpio["servicio_en_agenda"] == "Pack mechas o balayage largo"
+    # Y lo de cocina ni se le ensenya: de ahi copiaba la palabra.
+    assert "servicio_en_agenda" not in limpio
+    assert "categoria" not in limpio
+    # El original NO se toca: con el nombre exacto se crea la cita.
+    assert crudo["servicio_en_agenda"] == "Pack mechas o balayage largo"
 
 
 def test_el_nombre_que_se_dice_sigue_encontrando_el_servicio(salon_con_packs, api_module):  # noqa: F811

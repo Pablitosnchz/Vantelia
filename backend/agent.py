@@ -793,6 +793,10 @@ def _tool_buscar_servicio(
 _CLAVES_DE_SERVICIO = ("servicio", "servicios", "nombre", "name", "opciones",
                        "candidatos", "servicios_parecidos", "en_lugar_de")
 
+# Datos internos que el modelo no necesita y de los que copiaba la palabra "pack".
+# El codigo SI los conserva: viajan en el resultado, solo se ocultan al hablar.
+_NO_SE_LE_ENSENYAN = ("servicio_en_agenda", "categoria", "slug", "service_slug")
+
 
 def _sin_la_palabra_pack(dato: Any) -> Any:
     """Lo que el modelo lee de una tool, con los nombres tal y como se dicen.
@@ -809,9 +813,12 @@ def _sin_la_palabra_pack(dato: Any) -> Any:
     if isinstance(dato, dict):
         salida = {}
         for clave, valor in dato.items():
-            if clave == "servicio_en_agenda":
-                salida[clave] = valor
-            elif clave in _CLAVES_DE_SERVICIO:
+            if clave in _NO_SE_LE_ENSENYAN:
+                # El nombre exacto del catalogo y su categoria son de cocina. Se lo
+                # estaba copiando literal: "vamos a reservarte el Pack mechas o
+                # balayage largo", con la palabra que el salon no quiere oir.
+                continue
+            if clave in _CLAVES_DE_SERVICIO:
                 salida[clave] = _sin_la_palabra_pack(valor)
             else:
                 salida[clave] = _sin_la_palabra_pack(valor) if isinstance(
