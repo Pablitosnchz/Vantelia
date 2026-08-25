@@ -623,3 +623,36 @@ def test_no_mueve_la_cita_a_una_hora_que_nadie_ha_pedido(api_module):  # noqa: F
     estado.huecos = ["10:00", "10:15", "10:30"]
     assert not agent._hora_que_nadie_ha_pedido(estado, "la segunda", "10:15")
     assert agent._hora_que_nadie_ha_pedido(estado, "la segunda", "13:45")
+
+
+def test_una_cita_cancelada_no_se_puede_dar_por_viva(api_module):  # noqa: F811
+    """Se canceló de verdad, y al pedir "vuelvela a abrir" contesto que seguia en pie.
+
+    Es la misma mentira de antes por otro lado: no afirmaba haber HECHO nada
+    (por eso el otro freno no saltaba), afirmaba que la cita EXISTE. Y el cliente
+    se planta en el salon a una hora que ya no es suya.
+    """
+    from backend import reserva
+
+    estado = reserva.Estado(codigo="R-1234")
+    reserva.anotar_resultado(estado, "cancelar_cita", {}, {"ok": True, "codigo_reserva": "R-1234"})
+    assert estado.cancelada is True
+
+    # Y al reves: crear o mover NO la marcan como anulada.
+    otra = reserva.Estado(codigo="R-9")
+    reserva.anotar_resultado(otra, "crear_cita", {}, {"ok": True, "codigo_reserva": "R-9"})
+    assert otra.cancelada is False
+
+
+def test_el_freno_de_la_cita_cancelada_esta_enchufado(api_module):  # noqa: F811
+    import inspect
+
+    from backend import agent
+
+    fuente = inspect.getsource(agent.responder)
+    assert "estado.cancelada and not mutada" in fuente, (
+        "nadie comprueba que no se de por viva una cita anulada"
+    )
+    assert "se puede reabrir" in fuente, (
+        "no se le explica que lo que procede es cogerle una cita nueva"
+    )

@@ -1469,6 +1469,19 @@ async def responder(
                                     "asi que compruebalo y diselo tal cual."),
                     })
                     continue
+                # Su cita esta anulada: decir que sigue en pie es mandarla al
+                # salon a una hora que ya no existe.
+                if (estado.cancelada and not mutada
+                        and _da_la_cita_por_hecha(texto_final)
+                        and vuelta + 1 < MAX_VUELTAS):
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("Su cita esta CANCELADA: no digas que sigue en "
+                                    "pie ni que esta confirmada. Una cita anulada no "
+                                    "se puede reabrir; si la quiere recuperar, mira "
+                                    "si ese hueco sigue libre y cogele una NUEVA."),
+                    })
+                    continue
                 if (_da_la_cita_por_hecha(texto_final)
                         and not (mutada or mirada_la_cita or estado.hecho)
                         and vuelta + 1 < MAX_VUELTAS):

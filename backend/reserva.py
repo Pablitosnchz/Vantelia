@@ -57,6 +57,7 @@ class Estado:
     dia_le_da_igual: bool = False
     hecho: bool = False          # la gestion se completo en esta conversacion
     recargo_dicho: bool = False  # ya se le explico lo que cuesta con esa profesional
+    cancelada: bool = False      # su cita se anulo: ya no esta en pie
     ultimo_pedido: str = ""      # que se pidio en el turno anterior
     tocado: float = field(default_factory=time.time)
 
@@ -258,6 +259,10 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
 
     elif tool in ("crear_cita", "reprogramar_cita", "cancelar_cita"):
         estado.hecho = True
+        # Que la cita esta ANULADA hay que recordarlo: al pedir "vuelvela a abrir"
+        # el asistente contestaba "tu cita esta confirmada para manyana a las
+        # 10:00" con la cita cancelada en la base de datos.
+        estado.cancelada = tool == "cancelar_cita"
         estado.codigo = str(resultado.get("codigo_reserva") or estado.codigo)
         if tool != "cancelar_cita":
             estado.fecha = str(resultado.get("fecha") or estado.fecha)
