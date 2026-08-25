@@ -64,7 +64,61 @@ CONFIG_EXTRA_SECTIONS = (
 )
 
 
+# Lo que NO se conserva aunque venga en el config: se recalcula en cada arranque o
+# no debe vivir en disco. Todo lo demas se guarda tal cual, aunque nadie lo haya
+# registrado en ningun sitio.
+CONFIG_CLAVES_QUE_NO_SE_GUARDAN = frozenset({
+    "cliente_id",       # es la clave del diccionario, no un campo
+    "_comentario",      # notas de los ficheros de perfil
+})
+
+# Dentro de que secciones tambien se conserva lo desconocido. Son las que el
+# negocio va ampliando desde su portal.
+CONFIG_SECCIONES_ABIERTAS = ("booking", "contacto", "branding", "whatsapp", "voice")
+
+
+def _conservar_lo_no_reconocido(origen: Dict[str, Any], destino: Dict[str, Any]) -> Dict[str, Any]:
+    """Copia lo que el serializador no conoce, en vez de tirarlo.
+
+    POR QUE: esto era una LISTA BLANCA -solo se guardaba lo que alguien hubiera
+    apuntado en `CONFIG_EXTRA_SECTIONS`- y ha mordido TRES veces, siempre igual: se
+    configura algo desde el portal, funciona, y el siguiente arranque se lo come sin
+    avisar. Paso con las secciones de Seguimiento y resenyas, con los canales por
+    los que sale cada aviso de cita, y con la direccion del negocio (el asistente
+    volvio a inventarse donde estaba el salon).
+
+    Ahora guardar es lo de serie y perder es la excepcion, que es como debe ser: un
+    dato que el negocio ha escrito no se tira porque el codigo no lo conozca.
+    """
+    for clave, valor in (origen or {}).items():
+        if clave in CONFIG_CLAVES_QUE_NO_SE_GUARDAN or valor is None:
+            continue
+        if clave not in destino:
+            try:
+                destino[clave] = json.loads(json.dumps(valor))  # copia profunda y serializable
+            except (TypeError, ValueError):
+                continue  # lo que no cabe en un JSON no puede ir al config
+            continue
+        # Seccion conocida: se conservan tambien las claves nuevas de dentro.
+        if (clave in CONFIG_SECCIONES_ABIERTAS
+                and isinstance(valor, dict) and isinstance(destino.get(clave), dict)):
+            for subclave, subvalor in valor.items():
+                if subclave in destino[clave] or subvalor is None:
+                    continue
+                try:
+                    destino[clave][subclave] = json.loads(json.dumps(subvalor))
+                except (TypeError, ValueError):
+                    continue
+    return destino
+
+
 def _copy_extra_sections(source: Dict[str, Any], target: Dict[str, Any]) -> Dict[str, Any]:
+    """Las secciones registradas, saneadas; y despues, TODO lo demas tal cual.
+
+    Las de `CONFIG_EXTRA_SECTIONS` siguen pasando por el saneado de siempre (se
+    recortan, se limpian). El resto se conserva sin tocar: mejor guardarlo crudo
+    que perderlo.
+    """
     for key in CONFIG_EXTRA_SECTIONS:
         if key in source and source.get(key) is not None:
             value = source[key]
@@ -72,7 +126,7 @@ def _copy_extra_sections(source: Dict[str, Any], target: Dict[str, Any]) -> Dict
                 target[key] = json.loads(json.dumps(value))
             elif isinstance(value, str):
                 target[key] = textnorm._sanitize_text(value)[:300]
-    return target
+    return _conservar_lo_no_reconocido(source, target)
 
 
 def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:

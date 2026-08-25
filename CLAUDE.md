@@ -158,7 +158,7 @@ Endpoints admin con token:
 
 ## Configuracion multi-tenant
 
-**OJO — secciones extra del config (fix jul 2026):** `clients._normalize_client_config` (carga) y `_serialize_client_config` (guardado) son WHITELIST. Cualquier seccion nueva de config por tenant DEBE registrarse en `clients.CONFIG_EXTRA_SECTIONS` (hoy: `empresa`, `reminders`, `reviews`, `gift_cards_public`) o se descarta silenciosamente en cada arranque/guardado (bug real: Seguimiento/resenas/identidad volvian a defaults en runtime tras cada deploy aunque el JSON las tuviera).
+**Config del tenant: guardar es lo de serie (fix ago 2026).** `clients._normalize_client_config` (carga) y `_serialize_client_config` (guardado) construyen un diccionario explicito, pero ambos terminan en `_conservar_lo_no_reconocido`: lo que no reconocen se copia tal cual en vez de tirarse, tanto secciones de primer nivel como claves nuevas dentro de `booking`/`contacto`/`branding`/`whatsapp`/`voice` (`CONFIG_SECCIONES_ABIERTAS`). NO hace falta registrar una seccion nueva para que sobreviva. `CONFIG_EXTRA_SECTIONS` y `CONFIG_BOOKING_EXTRA_KEYS` siguen existiendo solo para SANEAR lo conocido, y `CONFIG_CLAVES_QUE_NO_SE_GUARDAN` es la unica lista negra. Era una whitelist y mordio tres veces (Seguimiento/resenas, canales de aviso de cita, direccion del salon): se configuraba desde el portal, funcionaba, y el siguiente arranque lo devolvia a defaults sin avisar. Lo vigila `tests/test_ajustes_de_agenda_no_se_pierden.py`, que recorre TODAS las secciones.
 
 
 `config.json` es la fuente de verdad de clientes. Cada cliente debe tener:

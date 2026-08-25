@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
-"""Un ajuste nuevo de agenda no puede desaparecer al guardar.
+"""Lo que el negocio configura no puede desaparecer al guardar.
 
-`_serialize_client_config` y `_normalize_client_config` enumeran las claves de la
-seccion `booking` una a una, asi que cualquier ajuste nuevo se descarta EN
-SILENCIO: ni error, ni aviso, simplemente no esta.
+El mismo fallo ha mordido TRES veces: se activa algo desde el portal, funciona, y
+el siguiente arranque se lo come sin decir nada. Paso con el modo de reserva
+conversacional (22-ago-2026), con los canales por los que sale cada aviso de cita,
+y con la direccion del salon (el asistente volvio a inventarse donde estaba).
 
-Paso de verdad (22-ago-2026): se activo el modo de reserva conversacional en
-produccion, el script dijo que lo habia guardado, y `booking.estilo` seguia sin
-existir. Es el mismo fallo que ya obligo a crear `CONFIG_EXTRA_SECTIONS` para las
-secciones de primer nivel, pero una capa mas adentro.
+La causa era siempre la misma: `_serialize_client_config` y
+`_normalize_client_config` construian un diccionario EXPLICITO, asi que lo que no
+estuviera enumerado se caia en silencio -ni error, ni aviso, simplemente no esta-.
 
-Si anades un ajuste a `booking`, anadelo a `clients.CONFIG_BOOKING_EXTRA_KEYS` o
-este test te lo recordara.
+Ya no. `clients._conservar_lo_no_reconocido` invierte la regla: guardar es lo de
+serie y perder es la excepcion. Los primeros tests son los tres incidentes reales;
+los ultimos cierran la clase entera, para no ir tapando el cuarto.
 """
 from __future__ import annotations
 
@@ -99,3 +100,67 @@ def test_la_direccion_y_el_mapa_sobreviven_al_despliegue(api_module, client):  #
     recargado = clients._normalize_client_config("demo", guardado)
     assert recargado["contacto"]["direccion"] == "Calle Mayor 1, Elche"
     assert recargado["contacto"]["mapa"] == "https://maps.example/ficha"
+
+
+# ---------------------------------------------------------------------------
+# Y de raiz: guardar es lo de serie, perder es la excepcion.
+#
+# Los tres tests de arriba son el mismo fallo tres veces (el modo de reserva, los
+# canales de aviso, la direccion del salon): alguien configura algo, funciona, y
+# el siguiente arranque se lo come porque nadie lo apunto en una lista. Los de
+# abajo cierran la clase entera en vez de ir tapando casos: lo que el negocio
+# escribe se conserva AUNQUE el codigo no lo conozca.
+# ---------------------------------------------------------------------------
+
+
+def _ida_y_vuelta(config):
+    """Lo que le pasa a un config entre que se guarda y el siguiente arranque."""
+    from backend import clients
+
+    return clients._normalize_client_config("demo", clients._serialize_client_config(config))
+
+
+def test_una_seccion_nueva_sobrevive_sin_apuntarla_en_ninguna_lista(api_module, client):  # noqa: F811
+    from backend import clients
+
+    base = dict(clients._get_client_config("demo"))
+    base["seccion_que_nadie_registro"] = {"algo": "que el negocio configuro", "n": 3}
+
+    vuelta = _ida_y_vuelta(base)
+    assert vuelta.get("seccion_que_nadie_registro") == {"algo": "que el negocio configuro", "n": 3}
+
+
+@pytest.mark.parametrize("seccion", ["booking", "contacto", "branding", "whatsapp", "voice"])
+def test_una_clave_nueva_dentro_de_una_seccion_conocida_sobrevive(api_module, client, seccion):  # noqa: F811
+    """Las secciones conocidas se reconstruyen clave a clave: ahi es donde se perdia."""
+    from backend import clients
+
+    base = dict(clients._get_client_config("demo"))
+    base[seccion] = dict(base.get(seccion) or {}, ajuste_nuevo="valor del negocio")
+
+    vuelta = _ida_y_vuelta(base)
+    assert (vuelta.get(seccion) or {}).get("ajuste_nuevo") == "valor del negocio", (
+        "un ajuste nuevo de %r se pierde entre guardar y arrancar" % seccion
+    )
+
+
+def test_recorre_todas_las_secciones_del_config_real(api_module, client):  # noqa: F811
+    """El barrido: mete un dato en CADA seccion y comprueba que ninguna lo tira.
+
+    Este es el test que sustituye a ir apuntando claves en una whitelist: si
+    manyana alguien anyade una seccion, ya esta cubierta.
+    """
+    from backend import clients
+
+    base = dict(clients._get_client_config("demo"))
+    secciones = [k for k, v in base.items() if isinstance(v, dict)]
+    assert len(secciones) >= 5, "el config de demo deberia tener varias secciones"
+    for nombre in secciones:
+        base[nombre] = dict(base[nombre], marca_de_agua=nombre)
+    base["escalar_suelto"] = "no soy un diccionario"
+
+    vuelta = _ida_y_vuelta(base)
+
+    perdidas = [n for n in secciones if (vuelta.get(n) or {}).get("marca_de_agua") != n]
+    assert not perdidas, "estas secciones se comen lo que no conocen: %s" % ", ".join(perdidas)
+    assert vuelta.get("escalar_suelto") == "no soy un diccionario"
