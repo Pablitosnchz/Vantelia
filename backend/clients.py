@@ -132,6 +132,12 @@ def _normalize_client_config(cliente_id: str, payload: Dict[str, Any]) -> Dict[s
         "contacto": {
             "email": textnorm._sanitize_text(str(payload.get("contacto", {}).get("email", ""))),
             "telefono": textnorm._sanitize_text(str(payload.get("contacto", {}).get("telefono", ""))),
+            # DONDE esta el negocio. Sin guardarlo, el asistente no la tiene y se
+            # inventa la ubicacion ("estamos en el centro de la ciudad"), y encima
+            # se perdia en cada despliegue: es la misma whitelist que ya se comio
+            # los canales de aviso.
+            "direccion": textnorm._sanitize_text(str(payload.get("contacto", {}).get("direccion", ""))),
+            "mapa": textnorm._sanitize_text(str(payload.get("contacto", {}).get("mapa", ""))),
         },
         "branding": {
             "powered_by": textnorm._sanitize_text(
@@ -229,6 +235,8 @@ def _serialize_client_config(config: Dict[str, Any]) -> Dict[str, Any]:
         "contacto": {
             "email": config.get("contacto", {}).get("email", ""),
             "telefono": config.get("contacto", {}).get("telefono", ""),
+            "direccion": config.get("contacto", {}).get("direccion", ""),
+            "mapa": config.get("contacto", {}).get("mapa", ""),
         },
         "branding": {
             "powered_by": config.get("branding", {}).get("powered_by", "Powered by Vantelia"),

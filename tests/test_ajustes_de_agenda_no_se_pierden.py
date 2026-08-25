@@ -77,3 +77,25 @@ def test_los_canales_de_aviso_sobreviven_al_arranque(api_module, client):  # noq
     )
     assert canales["cancelled"]["whatsapp"] is True
     assert canales["rescheduled"]["whatsapp"] is True
+
+
+def test_la_direccion_y_el_mapa_sobreviven_al_despliegue(api_module, client):  # noqa: F811
+    """Sin la direccion, el asistente se inventa donde esta el salon.
+
+    Paso: a "¿donde estais ubicados?" contesto "en el centro de la ciudad, en una
+    zona muy accesible". Se le puso la direccion, y el siguiente despliegue se la
+    comio: `contacto` tambien es una whitelist y solo guardaba email y telefono.
+    """
+    from backend import clients
+
+    base = dict(clients._get_client_config("demo"))
+    base["contacto"] = dict(base.get("contacto") or {},
+                            direccion="Calle Mayor 1, Elche",
+                            mapa="https://maps.example/ficha")
+    guardado = clients._serialize_client_config(base)
+    assert guardado["contacto"]["direccion"] == "Calle Mayor 1, Elche"
+    assert guardado["contacto"]["mapa"] == "https://maps.example/ficha"
+
+    recargado = clients._normalize_client_config("demo", guardado)
+    assert recargado["contacto"]["direccion"] == "Calle Mayor 1, Elche"
+    assert recargado["contacto"]["mapa"] == "https://maps.example/ficha"
