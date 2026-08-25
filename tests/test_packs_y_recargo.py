@@ -322,3 +322,43 @@ def test_el_recargo_se_explica_una_vez_no_en_cada_mensaje(api_module, client):  
         "el aviso del recargo no mira si ya se le conto"
     )
     assert 'estado.recargo_dicho = True' in fuente, "nunca se marca como contado"
+
+
+def test_ninguna_tool_le_pasa_la_palabra_pack_al_modelo(api_module, client):  # noqa: F811
+    """Se tapo en `buscar_servicio` y siguio saliendo por otra tool.
+
+    En produccion, ya con el primer arreglo puesto: "vamos a reservarte el pack de
+    mechas o balayage largo" y 'el servicio que buscas es el "Pack mechas o
+    balayage largo"'. Por eso se limpia en el unico sitio por el que pasan TODAS.
+    """
+    from backend import agent
+
+    crudo = {
+        "ok": True,
+        "servicio": "Pack mechas o balayage largo",
+        "servicio_en_agenda": "Pack mechas o balayage largo",
+        "candidatos": [{"servicio": "Pack alisado keratina medio", "duracion_minutos": 200}],
+        "opciones": ["Pack mechas o balayage corto", "Corte senora"],
+        "huecos": ["10:00", "10:15"],
+    }
+    limpio = agent._sin_la_palabra_pack(crudo)
+
+    assert limpio["servicio"] == "Mechas o balayage largo"
+    assert limpio["candidatos"][0]["servicio"] == "Alisado keratina medio"
+    assert limpio["opciones"][0] == "Mechas o balayage corto"
+    assert limpio["opciones"][1] == "Corte senora"
+    assert limpio["huecos"] == ["10:00", "10:15"], "no debe tocar lo que no son nombres"
+    # El nombre EXACTO viaja aparte: con el se crea la cita.
+    assert limpio["servicio_en_agenda"] == "Pack mechas o balayage largo"
+
+
+def test_el_nombre_que_se_dice_sigue_encontrando_el_servicio(salon_con_packs, api_module):  # noqa: F811
+    """Si el catalogo no supiera volver del nombre publico al real, la cita se
+    cogeria con la duracion equivocada: 30 minutos en vez de las horas del pack."""
+    from backend import agenda, textnorm
+
+    publico = textnorm.nombre_de_servicio_publico("Pack mechas o balayage medio")
+    assert publico == "Mechas o balayage medio"
+    fila = agenda._find_service_by_name("demo", publico)
+    assert fila is not None and fila["name"] == "Pack mechas o balayage medio"
+    assert int(fila["duration_minutes"]) == 220

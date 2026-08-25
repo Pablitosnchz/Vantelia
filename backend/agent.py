@@ -787,6 +787,43 @@ def _tool_buscar_servicio(
     }
 
 
+# Claves cuyo valor es un NOMBRE DE SERVICIO y acaba en boca del asistente.
+# "servicio_en_agenda" queda fuera a proposito: ese es el nombre exacto con el que
+# se crea la cita.
+_CLAVES_DE_SERVICIO = ("servicio", "servicios", "nombre", "name", "opciones",
+                       "candidatos", "servicios_parecidos", "en_lugar_de")
+
+
+def _sin_la_palabra_pack(dato: Any) -> Any:
+    """Lo que el modelo lee de una tool, con los nombres tal y como se dicen.
+
+    Sanear tool por tool no funciono: se tapo en `buscar_servicio` y siguio
+    saliendo por `consultar_disponibilidad` ("vamos a reservarte el pack de mechas
+    o balayage largo"). El salon lo pidio expreso -"no digas que es un pack, es
+    como si fuese el servicio"-, asi que se limpia en el UNICO sitio por el que
+    pasa todo: justo antes de ponerselo delante.
+
+    La agenda no cambia: el nombre exacto viaja aparte y el catalogo sabe volver
+    de uno a otro (`_find_service_by_name`).
+    """
+    if isinstance(dato, dict):
+        salida = {}
+        for clave, valor in dato.items():
+            if clave == "servicio_en_agenda":
+                salida[clave] = valor
+            elif clave in _CLAVES_DE_SERVICIO:
+                salida[clave] = _sin_la_palabra_pack(valor)
+            else:
+                salida[clave] = _sin_la_palabra_pack(valor) if isinstance(
+                    valor, (dict, list)) else valor
+        return salida
+    if isinstance(dato, list):
+        return [_sin_la_palabra_pack(x) for x in dato]
+    if isinstance(dato, str):
+        return textnorm.nombre_de_servicio_publico(dato)
+    return dato
+
+
 def _detalle_servicio(cliente_id: str, nombre: str) -> Dict[str, Any]:
     from backend import agenda
 
@@ -1446,7 +1483,8 @@ async def responder(
                 reserva.anotar_intencion_por_tool(estado, llamada.function.name)
                 mensajes.append({
                     "role": "tool", "tool_call_id": llamada.id,
-                    "content": json.dumps(resultado, ensure_ascii=False)[:2000],
+                    "content": json.dumps(
+                        _sin_la_palabra_pack(resultado), ensure_ascii=False)[:2000],
                 })
         # Se le acabaron las vueltas. Antes se devolvia vacio y la conversacion se
         # caia al flujo de listas a media frase. Se le pide UNA respuesta final con
