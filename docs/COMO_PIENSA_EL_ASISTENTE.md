@@ -364,6 +364,42 @@ Regla práctica: **mirar los patrones antes que los porcentajes**, y no iterar c
 el simulador. El banco (28 casos, ~6 min, céntimos) es la herramienta del día a
 día; el simulador es para decisiones grandes y espaciadas.
 
+## Mentir sobre la agenda tiene dos formas, y hay que tapar las dos
+
+Un día de pruebas reales (25-ago-2026) salieron cuatro conversaciones distintas
+con el mismo desenlace: el cliente cuelga creyendo una cosa y en la agenda hay
+otra. Agrupadas por CAUSA son dos, no cuatro:
+
+**1. "Acabo de hacerlo"** — "te he agendado el Grey Blending para mañana a las
+10:00" sin haber llamado nunca a `crear_cita`. "Tu cita está de nuevo abierta"
+cuando reabrir no existe como operación.
+
+El guardarraíl ya existía, pero preguntaba por `estado.hecho`, que dura toda la
+conversación: en cuanto se completaba UNA gestión quedaba desactivado para el
+resto. Ahora se contrasta contra ESTE turno (`mutada`), no contra el recuerdo de
+que algo se hizo alguna vez.
+
+**2. "La cita existe"** — con la cita ya cancelada, "tu cita está confirmada para
+mañana a las 10:00". Aquí no afirma haber hecho nada, así que el freno de arriba
+ni se entera. Se comprueba aparte: si el estado sabe que se anuló, no se le deja
+decir que sigue en pie.
+
+Y dos que no son mentira sino ACCIÓN equivocada, igual de caras:
+
+- A "quiero cancelar mi cita" llamó a `reprogramar_cita` con el mismo día y la
+  misma hora: una reprogramación que no cambia nada, anunciada como hecha. El
+  cliente cree que ha anulado y el hueco sigue ocupado. Ahora la intención sale
+  de lo que pide (`reserva.pide_anular_y_solo_eso`), lo que obliga a llamar a
+  `cancelar_cita`; mover o coger otra se rechaza antes de tocar la agenda; y una
+  reprogramación al mismo hueco la rechaza el despachador, para todos los canales.
+- Movió una cita de las 10:00 a las 11:00 sin que nadie hablara de las once.
+  Reprogramar solo vale a una hora que ella haya dicho —entendiendo "a las 11" o
+  "a las 5 de la tarde"— o que se le haya ofrecido de la agenda real.
+
+REGLA: al arreglar uno de estos, preguntarse por la otra forma. Tapar "acabo de
+hacerlo" y dejar viva "la cita existe" es dejar el mismo fallo suelto con otra
+redacción, y en la conversación siguiente vuelve.
+
 ## Cómo se comprueba que funciona
 
 **No basta con probarlo.** Los fallos que importan solo salen escribiendo como un
