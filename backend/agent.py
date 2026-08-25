@@ -1189,8 +1189,14 @@ def _sin_comillas_en_los_servicios(cliente_id: str, texto: str) -> str:
     catalogo.discard("")
 
     def _quitar(encontrado):
-        dentro = encontrado.group(1)
-        return dentro if catalog_pick._norm(dentro) in catalogo else encontrado.group(0)
+        dentro = catalog_pick._norm(encontrado.group(1))
+        if not dentro:
+            return encontrado.group(0)
+        # Vale el nombre entero y tambien como se le ofrece sin la talla ("Mechas
+        # o balayage" de "Mechas o balayage largo"): es lo que mas cita.
+        if dentro in catalogo or any(n.startswith(dentro) for n in catalogo):
+            return encontrado.group(1)
+        return encontrado.group(0)
 
     return _ENTRECOMILLADO.sub(_quitar, texto)
 
@@ -1476,6 +1482,7 @@ async def responder(
         cliente = OpenAISdkClient(api_key=settings.OPENAI_API_KEY, timeout=25.0)
         obligar = False
         sin_precio = ""
+        catalogo_mirado = False
         for vuelta in range(MAX_VUELTAS):
             # Lo que el codigo sabe y lo que toca hacer, delante del modelo en CADA
             # vuelta: asi no hay nada que corregirle despues.
@@ -1502,6 +1509,13 @@ async def responder(
             # no se sugiere: se obliga. Pedirselo "con enfasis" seguia siendo
             # prompt, y el modelo se escaqueaba volviendo a consultar huecos.
             remate = reserva.tool_que_remata(estado, conocido)
+            # Ha dicho que se quiere hacer, pero aun no hay servicio elegido: lo
+            # primero es MIRAR EL CATALOGO con lo que ha dicho. Preguntarle de
+            # nuevo sin haberlo mirado es como se repetia la misma pregunta turno
+            # tras turno (26 conversaciones de 100).
+            if (not remate and not estado.servicio and estado.servicio_texto
+                    and not catalogo_mirado):
+                remate = "buscar_servicio"
             # El canal puede querer que la cita la confirme la clienta con un
             # boton, no el modelo por su cuenta: un resumen con "¿Confirmamos?"
             # antes de tocar la agenda. Cancelar y reprogramar siguen igual.
@@ -1680,6 +1694,8 @@ async def responder(
                         telefono=telefono, location_id=location_id, ya_creadas=ya_creadas,
                         quien=quien, remate_manual=remate_manual,
                     )
+                if llamada.function.name == "buscar_servicio":
+                    catalogo_mirado = True
                 if llamada.function.name == "consultar_disponibilidad":
                     consultada = True
                     dias_mirados += 1

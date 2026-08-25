@@ -420,6 +420,13 @@ def instruccion(estado: Estado, nombre_conocido: str = "") -> str:
 def resumen(estado: Estado, nombre_conocido: str = "") -> str:
     """Lo que ya se sabe, para que el modelo no lo vuelva a preguntar."""
     lineas = []
+    if not estado.servicio and estado.servicio_texto:
+        # Sin esto le preguntaba OTRA VEZ que servicio queria a quien ya habia
+        # dicho "unas mechas" y despues "lo tengo por los hombros": cada mensaje
+        # suyo llegaba suelto, sin lo anterior.
+        lineas.append("- Sobre el servicio ya te ha dicho: %s" % estado.servicio_texto)
+        lineas.append("  (con eso, busca en el catalogo; NO le preguntes otra vez "
+                      "que se quiere hacer, pregunta solo lo que FALTE)")
     if estado.servicio:
         detalle = estado.servicio
         if estado.duracion:

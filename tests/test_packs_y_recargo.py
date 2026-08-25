@@ -413,3 +413,45 @@ def test_los_servicios_no_se_dicen_entre_comillas(salon_con_packs, api_module): 
     # Lo que NO es un servicio se queda como esta: no se toca lo que cita a otro.
     otro = agent._sin_comillas_en_los_servicios("demo", 'Me dijiste "el jueves por la tarde".')
     assert otro == 'Me dijiste "el jueves por la tarde".'
+
+
+def test_antes_de_repreguntar_mira_el_catalogo(api_module):  # noqa: F811
+    """El fallo mas repetido de la medicion: 26 de 100 repiten la pregunta.
+
+    Con algo dicho sobre el servicio y ninguno elegido, lo que toca es mirar el
+    catalogo, no volver a preguntar. Se le OBLIGA, porque pedirselo por prompt es
+    lo que llevaba fallando.
+    """
+    import inspect
+
+    from backend import agent
+
+    fuente = inspect.getsource(agent.responder)
+    assert 'remate = "buscar_servicio"' in fuente, (
+        "nada obliga a mirar el catalogo antes de repreguntar"
+    )
+    assert "catalogo_mirado" in fuente, "no se lleva la cuenta de si ya se miro"
+
+
+def test_el_resumen_le_recuerda_lo_que_ella_dijo(api_module):  # noqa: F811
+    from backend import reserva
+
+    estado = reserva.Estado(servicio_texto="unas mechas lo tengo por los hombros")
+    resumen = reserva.resumen(estado)
+    assert "unas mechas" in resumen and "hombros" in resumen
+    assert "NO le preguntes otra vez" in resumen
+
+    # Con el servicio ya elegido, esa linea sobra.
+    elegido = reserva.Estado(servicio="Pack mechas o balayage medio",
+                             servicio_texto="unas mechas")
+    assert "ya te ha dicho" not in reserva.resumen(elegido).lower()
+
+
+def test_tampoco_cita_el_nombre_corto_que_le_ofrece(salon_con_packs, api_module):  # noqa: F811
+    """Lo que mas entrecomillaba era la tecnica sin la talla."""
+    from backend import agent
+
+    texto = agent._sin_comillas_en_los_servicios(
+        "demo", 'Puedes elegir "Mechas o balayage" o algo más suave.')
+    assert '"Mechas o balayage"' not in texto
+    assert "Mechas o balayage" in texto
