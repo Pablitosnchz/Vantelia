@@ -361,9 +361,31 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
             candidatos=[_nombre(s) for s in candidatos],
         )
 
-    # 6. Ya no falta ningun dato: se coge el mas sencillo (el mas corto) y se sigue.
-    #    Marear con una tercera pregunta es peor que empezar por lo basico.
-    candidatos.sort(key=lambda s: (int(s.get("duration_minutes") or 0), _nombre(s)))
+    # 6. Ya no falta ningun dato, pero puede quedar mas de uno. Se queda el que
+    #    MENOS anyade sobre lo que ella ha pedido.
+    #
+    #    Paso de verdad y es caro: se le ofrecio elegir entre "Mechas o balayage" y
+    #    "Cambio de color y mechas o balayage", ella repitio "mechas o balayage" y
+    #    se le asigno el segundo -otro servicio, mas largo y mas caro- sin
+    #    preguntarle. Quien pide unas mechas no esta pidiendo tambien un cambio de
+    #    color: subirle el servicio por su cuenta es justo lo que el salon no
+    #    quiere que pase.
+    dicho = set(_norm(str(datos.get("texto") or "")).split())
+    dicho |= set(_norm(tecnica).split()) | set(_norm(familia).split())
+
+    def _palabras_de_mas(servicio: Dict[str, Any]) -> int:
+        from backend import textnorm
+
+        propias = set(_norm(textnorm.nombre_de_servicio_publico(_nombre(servicio))).split())
+        for marca in _TALLAS_ORDEN:
+            propias -= set(marca.split())
+        propias -= _RESTOS_DE_TALLA
+        return len(propias - dicho)
+
+    #    Y a igualdad, el mas sencillo (el mas corto): marear con una tercera
+    #    pregunta es peor que empezar por lo basico.
+    candidatos.sort(key=lambda s: (_palabras_de_mas(s),
+                                   int(s.get("duration_minutes") or 0), _nombre(s)))
     return Eleccion(servicio=_nombre(candidatos[0]))
 
 

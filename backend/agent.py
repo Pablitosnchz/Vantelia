@@ -279,6 +279,62 @@ def _es_una_profesional(cliente_id: str, valor: str) -> bool:
     return False
 
 
+# Formas en que una clienta pide a alguien en concreto. Hace falta el CONTEXTO:
+# el salon se llama "Alicia Rincon Estilistas", asi que buscar solo el nombre
+# saltaria con "quiero cita en Alicia Rincon" -que no pide a nadie- y le soltaria
+# a todo el mundo el texto del 25 %.
+_PIDE_A_ALGUIEN = (
+    r"\bcon\s+(?:la\s+)?(?:propia\s+)?%s\b",
+    r"\b(?:atienda|atiende|me\s+lo\s+haga|me\s+la\s+haga|lo\s+haga|quiero\s+a|pido\s+a|"
+    r"prefiero\s+a|sea)\s+(?:la\s+)?(?:propia\s+)?%s\b",
+    r"\b%s\s+(?:personalmente|en\s+persona|misma)\b",
+)
+
+
+def _aviso_de_recargo(cliente_id: str, dicho: str, servicio: str = "") -> str:
+    """Si ha pedido a una profesional que cuesta mas, lo que el negocio quiere decirle.
+
+    NO se deja en manos del modelo. Antes dependia de que llamase a
+    `consultar_profesionales`, y en una prueba real la clienta pidio mechas "con
+    Alicia", pregunto el precio dos turnos despues, y el 25 % no salio ni una vez:
+    o el negocio se come la diferencia, o queda como que se lo callo hasta el final.
+
+    El texto lo escribe el salon, no nosotros: es su explicacion de por que cuesta
+    mas, y la quiere distinta segun el servicio.
+    """
+    from backend import agenda
+
+    plano = textnorm._strip_accents(str(dicho or "").lower())
+    if not plano:
+        return ""
+    try:
+        filas = agenda._list_public_employee_rows(cliente_id)
+    except Exception:  # noqa: BLE001
+        return ""
+    for fila in filas:
+        pct = agenda.recargo_pct(fila)
+        if not pct:
+            continue
+        nombre = str(fila["name"] or "").strip()
+        pila = textnorm._strip_accents(nombre.lower())
+        primero = re.escape(pila.split()[0]) if pila else ""
+        if not primero:
+            continue
+        if not any(re.search(patron % primero, plano) for patron in _PIDE_A_ALGUIEN):
+            continue
+        texto = agenda.texto_del_recargo(fila, servicio)
+        if not texto:
+            return ""
+        return (
+            "HA PEDIDO QUE LA ATIENDA %s, y con ella el servicio cuesta un %d%% mas. "
+            "Dile ESTO, tal cual, con sus mismas palabras (puedes saludar antes, pero "
+            "no lo resumas ni te lo inventes):\n\n%s\n\n"
+            "Si ya se lo has dicho antes en esta conversacion, no lo repitas: sigue "
+            "con la cita." % (nombre.upper(), pct, texto)
+        )
+    return ""
+
+
 def _nombre_de_verdad(valor: str) -> bool:
     """¿Esto es el nombre de una persona o un hueco relleno?"""
     limpio = " ".join(str(valor or "").split())
@@ -645,15 +701,21 @@ def _valoracion_en_lugar_del_tratamiento(
     if not nombre:
         return {}
     detalle = _detalle_servicio(cliente_id, nombre)
+    # Con el nombre CRUDO se le colaba la palabra "pack" a la clienta ("el servicio
+    # que mencionas es el Pack cambio de color y mechas..."). El salon lo pidio
+    # expreso: "no digas que es un pack, es como si fuese el servicio". La etiqueta
+    # es de su catalogo interno, no algo que la clienta tenga que entender.
+    hablado = textnorm.nombre_de_servicio_publico(servicio)
     return {
         "ok": True,
-        "servicio": nombre,
-        "en_lugar_de": servicio,
+        "servicio": textnorm.nombre_de_servicio_publico(nombre),
+        "servicio_en_agenda": nombre,
+        "en_lugar_de": hablado,
         "motivo": ("De %s no se da precio ni se coge cita sin ver antes a la "
-                   "clienta. La cita que se reserva es la de valoracion." % servicio),
+                   "clienta. La cita que se reserva es la de valoracion." % hablado),
         "nota": ("Explicaselo con naturalidad: le vas a coger la cita de valoracion, "
                  "que es corta y sin compromiso, y ahi le dicen el precio. NUNCA le "
-                 "des una cifra de %s." % servicio),
+                 "des una cifra de %s." % hablado),
         **detalle,
     }
 
@@ -750,7 +812,8 @@ def _parecidos(cliente_id: str, descripcion: str, limite: int = 4) -> List[str]:
             continue
         nombre = str(servicio.get("nombre") or servicio.get("name") or "")
         if palabras & set(catalog_pick._norm(nombre).split()):
-            salida.append(nombre)
+            # Se los va a leer a la clienta, asi que van sin "Pack".
+            salida.append(textnorm.nombre_de_servicio_publico(nombre))
         if len(salida) >= limite:
             break
     return salida
@@ -859,6 +922,39 @@ def _da_la_cita_por_hecha(texto: str) -> bool:
             desde = donde + 1
     return False
 
+
+# Decir que ACABAS de hacer algo en la agenda. Distinto de decir que la cita
+# existe: "tienes cita el martes" puede ser verdad porque se acaba de consultar;
+# "te la he reabierto" solo es verdad si una tool lo ha hecho EN ESTE TURNO.
+_ACABO_DE_HACERLO = (
+    "te he apuntad", "te he reservad", "te la he reservad", "te he agendad",
+    "he reservado", "he agendado", "he apuntado", "te la he cogid", "te he cogid",
+    "he cancelado", "la he cancelado", "he anulado", "la he anulado",
+    "he reprogramado", "la he reprogramado", "he movido", "la he movido",
+    "he cambiado tu cita", "he cambiado la cita",
+    # Reabrir una cita cancelada NO existe como operacion, asi que decirlo es
+    # SIEMPRE mentira. Paso de verdad: "vuelvela a abrir" -> "tu cita esta de
+    # nuevo abierta", y en la agenda no habia nada.
+    "he vuelto a abrir", "la he reabierto", "he reabierto", "he reactivado",
+    "la he reactivado", "de nuevo abierta", "de nuevo activa", "vuelve a estar activa",
+    "queda reabierta", "esta reabierta", "restaurad",
+)
+
+
+def _dice_que_acaba_de_hacerlo(texto: str) -> bool:
+    """¿Afirma haber tocado la agenda ahora mismo?"""
+    plano = catalog_pick._norm(texto or "")
+    for pista in _ACABO_DE_HACERLO:
+        desde = 0
+        while True:
+            donde = plano.find(pista, desde)
+            if donde < 0:
+                break
+            antes = plano[max(0, donde - 30):donde]
+            if not any(negacion in antes for negacion in _NIEGA):
+                return True
+            desde = donde + 1
+    return False
 
 _CODIGO = re.compile(r"R-?\s?\d{3,}", re.IGNORECASE)
 _GESTIONA = ("cancelar", "anular", "cambiar mi cita", "cambiar la cita", "mover",
@@ -1177,6 +1273,12 @@ async def responder(
 
     cita_creada = False
     consultada = False  # se ha mirado la agenda en este turno
+    # OJO: `estado.hecho` dura toda la conversacion, asi que NO sirve para saber si
+    # se acaba de tocar la agenda. Con el se colaron dos mentiras seguidas: cancelo
+    # una cita y al pedirle "vuelvela a abrir" dijo que la habia reabierto (no
+    # existe esa operacion), y en otra dijo "te he agendado" sin crear nada.
+    mutada = False      # una tool ha cambiado la agenda en este turno
+    mirada_la_cita = False  # se ha consultado su cita en este turno
     dias_mirados = 0
     ya_creadas: set = set()
     try:
@@ -1192,6 +1294,7 @@ async def responder(
             # -adaptarse- y cuando el codigo se equivocaba, se equivocaba en bucle.
             # Medido: repetir la misma pregunta paso de 3 a 15 conversaciones de 40.
             guia = [t for t in (reserva.resumen(estado, conocido),
+                                _aviso_de_recargo(cliente_id, dicho_de_ella, estado.servicio),
                                 reserva.instruccion_de_cierre(estado, conocido)) if t]
             turno = list(mensajes)
             if guia:
@@ -1257,7 +1360,21 @@ async def responder(
                     continue
                 # 4) Y decir que la cita existe cuando no existe es el fallo mas
                 #    caro: la clienta se planta en el salon y no hay hueco.
-                if (_da_la_cita_por_hecha(texto_final) and not estado.hecho
+                if (_dice_que_acaba_de_hacerlo(texto_final) and not mutada
+                        and vuelta + 1 < MAX_VUELTAS):
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("NO has tocado la agenda en este turno: no digas "
+                                    "que acabas de reservar, cancelar, cambiar ni "
+                                    "reabrir nada, porque no ha pasado. Si hace falta "
+                                    "hacerlo, LLAMA A LA HERRAMIENTA. Y una cita "
+                                    "cancelada NO se puede reabrir: lo que se hace es "
+                                    "cogerle una NUEVA a esa misma hora si sigue libre, "
+                                    "asi que compruebalo y diselo tal cual."),
+                    })
+                    continue
+                if (_da_la_cita_por_hecha(texto_final)
+                        and not (mutada or mirada_la_cita or estado.hecho)
                         and vuelta + 1 < MAX_VUELTAS):
                     mensajes.append({
                         "role": "system",
@@ -1310,6 +1427,12 @@ async def responder(
                     dias_mirados += 1
                 if llamada.function.name == "crear_cita" and resultado.get("ok"):
                     cita_creada = True
+                if resultado.get("ok"):
+                    if llamada.function.name in ("crear_cita", "cancelar_cita",
+                                                 "reprogramar_cita"):
+                        mutada = True
+                    elif llamada.function.name == "consultar_cita":
+                        mirada_la_cita = True
                 # El estado se llena SOLO con lo que DEVUELVEN las tools: es la
                 # verdad del servidor, no lo que el modelo crea haber entendido.
                 reserva.anotar_resultado(estado, llamada.function.name, argumentos, resultado)

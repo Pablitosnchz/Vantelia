@@ -194,3 +194,112 @@ def test_el_catalogo_del_prompt_no_dice_pack(salon_con_packs, api_module):  # no
     catalogo = "\n".join(booking._service_catalog_lines("demo"))
     assert "Mechas o balayage medio" in catalogo
     assert "Pack" not in catalogo
+
+
+# ---------------------------------------------------------------------------
+# Lo que salio al probarlo como una clienta de verdad (25-ago-2026): tres cosas
+# en UNA sola conversacion. Pidio "unas mechas con Alicia", se le ofrecio elegir
+# entre "Mechas o balayage" y "Cambio de color y mechas o balayage", contesto
+# "mechas o balayage, lo tengo largo" y el asistente:
+#   1. le asigno el CAMBIO DE COLOR -otro servicio, mas largo y mas caro-,
+#   2. le llamo "Pack cambio de color y mechas o balayage largo" a la cara, y
+#   3. no menciono el 25 % de Alicia ni cuando pregunto el precio.
+# ---------------------------------------------------------------------------
+
+
+def test_no_le_sube_el_servicio_por_su_cuenta(salon_con_packs, api_module):  # noqa: F811
+    """Quien pide mechas no esta pidiendo tambien un cambio de color."""
+    from backend import agenda, catalog_pick, db, timeutils
+
+    ahora = timeutils._utc_now_iso()
+    caro = "Pack cambio de color y mechas o balayage medio"
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT OR REPLACE INTO services (cliente_id, slug, name, category,"
+            " duration_minutes, price_cents, description, is_active, sort_order,"
+            " created_at, updated_at) VALUES ('demo', ?, ?, '', 200, 15000, '', 1, 0, ?, ?)",
+            (agenda._normalize_service_id(caro), caro, ahora, ahora),
+        )
+        conexion.commit()
+    try:
+        datos = {"familia": "mechas", "tecnica": "balayage", "talla": "medio",
+                 "para_quien": "", "edad": None,
+                 "texto": "mechas o balayage, lo tengo por los hombros"}
+        elegido = catalog_pick.elegir("demo", datos).servicio
+        assert elegido == "Pack mechas o balayage medio", (
+            "le ha subido el servicio sin preguntar: %r" % elegido
+        )
+    finally:
+        with db._get_db_connection() as conexion:
+            conexion.execute("DELETE FROM services WHERE cliente_id='demo' AND name = ?", (caro,))
+            conexion.commit()
+
+
+def test_a_la_clienta_no_se_le_dice_la_palabra_pack(api_module, client):  # noqa: F811
+    """"No digas que es un pack, es como si fuese el servicio" (la duenya).
+
+    El guardarrail de precios metia el nombre CRUDO en lo que lee el modelo, y de
+    ahi salia tal cual: "el servicio que mencionas es el Pack cambio de color...".
+    """
+    from backend import agent, db, rules, timeutils
+
+    ahora = timeutils._utc_now_iso()
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT OR REPLACE INTO services (cliente_id, slug, name, category,"
+            " duration_minutes, price_cents, description, is_active, sort_order,"
+            " created_at, updated_at) VALUES ('demo', 'valoracion', 'Valoracion',"
+            " '', 15, 0, '', 1, 0, ?, ?)", (ahora, ahora))
+        conexion.commit()
+    regla = rules.guardar("demo", nombre="Mechas: precio tras ver el pelo",
+                        intenciones=["precio"], familias=["mechas"],
+                        accion="ofrecer_cita", texto="")
+    try:
+        salida = agent._valoracion_en_lugar_del_tratamiento(
+            "demo", "Pack cambio de color y mechas o balayage largo",
+        )
+        assert salida, "la regla del negocio no llego a aplicarse"
+        for clave in ("servicio", "en_lugar_de", "motivo", "nota"):
+            assert "pack" not in str(salida.get(clave, "")).lower(), (
+                "la clienta acaba leyendo 'pack' en %r" % clave
+            )
+    finally:
+        rules.borrar("demo", regla["id"] if isinstance(regla, dict) else regla)
+        with db._get_db_connection() as conexion:
+            conexion.execute("DELETE FROM services WHERE cliente_id='demo' AND slug='valoracion'")
+            conexion.commit()
+    return
+    for clave in ("servicio", "en_lugar_de", "motivo", "nota"):
+        assert "pack" not in str(salida.get(clave, "")).lower(), (
+            "la clienta acaba leyendo 'pack' en %r" % clave
+        )
+
+
+def test_si_pide_a_la_jefa_se_le_cuenta_el_recargo(api_module, client):  # noqa: F811
+    """El 25 % no puede depender de que al modelo le apetezca consultarlo."""
+    from backend import agent, db, timeutils
+
+    ahora = timeutils._utc_now_iso()
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT OR REPLACE INTO employees (id, cliente_id, name, is_active,"
+            " is_default, price_surcharge_pct, surcharge_text, service_ids_json,"
+            " created_at, updated_at) VALUES ('emp_jefa_recargo', 'demo', 'Alicia Rincon',"
+            " 1, 0, 25, ?, '[]', ?, ?)",
+            ("Con Alicia el servicio sube un 25 % porque reserva su agenda.", ahora, ahora),
+        )
+        conexion.commit()
+    try:
+        aviso = agent._aviso_de_recargo("demo", "quiero unas mechas con alicia")
+        assert "25" in aviso and "reserva su agenda" in aviso, (
+            "pide a la jefa y no se le cuenta lo que cuesta: %r" % aviso
+        )
+        # Y el falso positivo que habria dado la vuelta: el salon SE LLAMA asi.
+        assert agent._aviso_de_recargo("demo", "hola, quiero cita en Alicia Rincon Estilistas") == "", (
+            "nombrar al salon no es pedir que te atienda ella"
+        )
+        assert agent._aviso_de_recargo("demo", "quiero unas mechas") == ""
+    finally:
+        with db._get_db_connection() as conexion:
+            conexion.execute("DELETE FROM employees WHERE id='emp_jefa_recargo'")
+            conexion.commit()

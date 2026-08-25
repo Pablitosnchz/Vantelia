@@ -508,3 +508,46 @@ def test_no_se_inventa_donde_esta_el_negocio(client, api_module):  # noqa: F811
         assert "NO tienes la direccion" not in con
     finally:
         config["contacto"] = previo
+
+
+def test_no_puede_decir_que_acaba_de_tocar_la_agenda_si_no_la_ha_tocado(api_module):  # noqa: F811
+    """Dos mentiras seguidas en pruebas reales (25-ago-2026), la misma causa.
+
+    El guardarrail miraba `estado.hecho`, que dura TODA la conversacion. Asi que
+    en cuanto se completaba una gestion quedaba desactivado para siempre:
+
+    * "cancelar mi cita" (se cancela de verdad) -> "vuelvela a abrir" -> "tu cita
+      esta de nuevo abierta". No existe reabrir una cita: en la agenda no habia
+      nada, y el cliente se presenta en el salon.
+    * Y en otra conversacion, "te he agendado el Grey Blending para mañana a las
+      10:00" sin haber llamado a `crear_cita` en ningun momento.
+
+    Lo que se afirma HABER HECHO se comprueba contra este turno, no contra el
+    recuerdo de que algo se hizo alguna vez.
+    """
+    from backend import agent
+
+    assert agent._dice_que_acaba_de_hacerlo("Tu cita está de nuevo abierta, cariño")
+    assert agent._dice_que_acaba_de_hacerlo("La he reabierto sin problema")
+    assert agent._dice_que_acaba_de_hacerlo("Te he agendado el Grey Blending para mañana")
+    assert agent._dice_que_acaba_de_hacerlo("He cancelado tu cita de las 12:00")
+    assert agent._dice_que_acaba_de_hacerlo("He reprogramado tu cita para hoy a las 12:00")
+
+    # Lo correcto sigue pasando: negar, proponer, o contar lo que YA existe
+    # (eso se comprueba aparte, contra `consultar_cita`).
+    assert not agent._dice_que_acaba_de_hacerlo("Aún no te he apuntado nada")
+    assert not agent._dice_que_acaba_de_hacerlo("Te propongo mañana a las 10:00, ¿te va bien?")
+    assert not agent._dice_que_acaba_de_hacerlo("Tienes una cita confirmada para hoy a las 14:00")
+
+
+def test_el_guardarrail_no_se_apaga_por_una_gestion_anterior(api_module):  # noqa: F811
+    """La comprobacion tiene que ser POR TURNO, no por conversacion."""
+    import inspect
+
+    from backend import agent
+
+    fuente = inspect.getsource(agent.responder)
+    assert "_dice_que_acaba_de_hacerlo(texto_final) and not mutada" in fuente, (
+        "afirmar que se acaba de tocar la agenda ya no se contrasta con este turno"
+    )
+    assert "mutada = True" in fuente, "nadie marca que una tool haya cambiado la agenda"
