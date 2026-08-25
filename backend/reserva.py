@@ -180,6 +180,11 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "") ->
     if any(pista in plano for pista in _LE_DA_IGUAL):
         estado.dia_le_da_igual = True
 
+    # ¿Pide OTRA cita habiendo terminado ya una? Entonces se empieza de cero con
+    # la nueva, en vez de quedarse describiendo la anterior una y otra vez.
+    if estado.hecho and pide_otra_cita(mensaje):
+        empezar_otra_gestion(estado)
+
     # Lo que dice del servicio se ACUMULA hasta que hay uno elegido. Sin esto, a
     # "quiero unas mechas" seguido de "lo tengo por los hombros" el catalogo solo
     # recibia lo ultimo -el largo- y volvia a preguntarle que servicio queria: la
@@ -214,6 +219,15 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "") ->
                 hora = _hora_coloquial(mensaje or "", estado.huecos)
             if hora:
                 estado.hora = hora
+        # "la primera que tengas", "me da igual la hora": ELIGE EL CODIGO. Estaba
+        # escrito como instruccion -"coge el primero"- y el modelo respondia
+        # volviendo a ofrecerle la lista de horas, otra vez, y otra. Es el fallo
+        # mas repetido de todas las mediciones, y en el caso mas simple que hay
+        # (venir a cortarse el pelo) se llevaba la cita por delante.
+        if not estado.hora and estado.dia_le_da_igual and estado.huecos:
+            estado.hora = estado.huecos[0]
+            if not estado.fecha and estado.fecha_de_los_huecos:
+                estado.fecha = estado.fecha_de_los_huecos
         if not estado.codigo:
             codigo = _codigo_en(mensaje or "")
             if codigo:
@@ -313,6 +327,53 @@ def pide_moverla_y_solo_eso(dicho: str) -> bool:
     if not any(pista in plano for pista in PIDE_MOVER):
         return False
     return not any(pista in plano for pista in PIDE_ANULAR)
+
+
+# Pedir OTRA cita cuando ya se acaba de coger una. Hace falta distinguirlo de
+# seguir hablando de la que ya tiene: al terminar una gestion el estado se queda
+# "hecho" A PROPOSITO -para que el modelo no vuelva a montar la misma y salgan
+# citas duplicadas-, pero eso dejaba a la clienta sin poder pedir una segunda.
+PIDE_OTRA_CITA = ("otra cita", "una cita", "cita para", "cita de", "tambien quiero",
+                  "tambien me gustaria", "ademas quiero", "aparte quiero",
+                  "quiero reservar", "quiero agendar", "me gustaria reservar",
+                  "quiero un ", "quiero una ", "me gustaria un ", "me gustaria una ",
+                  "y para el", "y para la", "anyade", "anade")
+
+
+def pide_otra_cita(dicho: str) -> bool:
+    from backend import catalog_pick
+
+    plano = catalog_pick._norm(dicho or "")
+    if any(pista in plano for pista in PIDE_ANULAR + PIDE_MOVER):
+        return False   # habla de la que ya tiene, no de una nueva
+    return any(pista in plano for pista in PIDE_OTRA_CITA)
+
+
+def empezar_otra_gestion(estado: Estado) -> None:
+    """Borra la cita terminada para poder montar la siguiente.
+
+    Lo que se sabe de ELLA se conserva (como se llama, si ya se le explico el
+    recargo): repreguntarselo es justo lo que molesta. Lo que se borra es lo de la
+    cita: servicio, dia, hora y el "ya esta hecha".
+
+    Paso de verdad: cogio una cita, pidio otra para un alisado y el asistente le
+    contesto tres veces seguidas describiendole la PRIMERA. La segunda no se
+    creo nunca.
+    """
+    estado.intencion = "reservar"
+    estado.servicio = ""
+    estado.servicio_texto = ""
+    estado.duracion = 0
+    estado.fecha = ""
+    estado.hora = ""
+    estado.codigo = ""
+    estado.huecos = []
+    estado.fecha_de_los_huecos = ""
+    estado.dia_le_da_igual = False
+    estado.hecho = False
+    estado.cancelada = False
+    estado.ultimo_falta = ""
+    estado.ultimo_pedido = ""
 
 
 def anotar_intencion(estado: Estado, intencion: str) -> None:

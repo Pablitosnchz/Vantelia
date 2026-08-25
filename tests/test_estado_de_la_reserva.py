@@ -416,3 +416,79 @@ def test_pedir_moverla_declara_reprogramar(api_module):  # noqa: F811
     otra = reserva.Estado()
     reserva.anotar_lo_que_dice(otra, "puedo moverla a otro dia?", "Europe/Madrid")
     assert otra.intencion == ""
+
+
+def test_se_puede_pedir_una_segunda_cita_en_la_misma_conversacion(api_module):  # noqa: F811
+    """Paso de verdad y la segunda cita no se creo NUNCA.
+
+    Cogio una cita, luego pidio otra para un alisado, y el asistente le contesto
+    tres veces seguidas describiendole la PRIMERA ("ya tienes tu cita de mechas
+    mañana a las 10:00"). El estado se queda en "hecho" a proposito -para que no
+    monte dos veces la misma y salgan duplicadas- pero eso la dejaba sin poder
+    pedir una segunda.
+    """
+    from backend import reserva
+
+    estado = reserva.Estado(intencion="reservar", servicio="Mechas o balayage medio",
+                            fecha="2026-08-26", hora="10:00", nombre="Pablo",
+                            codigo="R-1234", hecho=True, recargo_dicho=True)
+    reserva.anotar_lo_que_dice(estado, "quiero cita para el alisado", "Europe/Madrid")
+
+    assert estado.hecho is False, "sigue creyendo que ya termino"
+    assert estado.servicio == "" and estado.fecha == "" and estado.hora == ""
+    assert estado.codigo == "", "arrastraba el numero de la cita anterior"
+    assert estado.intencion == "reservar"
+    # Lo que se sabe de ELLA no se toca: repreguntarlo es lo que molesta.
+    assert estado.nombre == "Pablo"
+    assert estado.recargo_dicho is True
+
+
+def test_hablar_de_la_cita_que_ya_tiene_no_empieza_otra(api_module):  # noqa: F811
+    """Cancelar o mover la de siempre NO es pedir una nueva."""
+    from backend import reserva
+
+    for dicho in ("quiero cancelar mi cita", "puedes mover la cita a otro dia?",
+                  "a que hora era mi cita?"):
+        estado = reserva.Estado(servicio="Corte", fecha="2026-08-26", hora="10:00",
+                                codigo="R-1234", hecho=True)
+        reserva.anotar_lo_que_dice(estado, dicho, "Europe/Madrid")
+        assert estado.codigo == "R-1234", "se ha cargado la cita que tenia: %r" % dicho
+
+
+def test_la_segunda_cita_se_monta_de_verdad(api_module):  # noqa: F811
+    """Y con el estado limpio, el motor vuelve a pedir lo que falta."""
+    from backend import reserva
+
+    estado = reserva.Estado(hecho=True, nombre="Pablo")
+    reserva.anotar_lo_que_dice(estado, "tambien quiero una cita para un corte", "Europe/Madrid")
+    assert reserva.que_falta(estado, "Pablo") == "servicio"
+
+
+def test_la_primera_que_tengas_elige_hora_de_verdad(api_module):  # noqa: F811
+    """Estaba escrito como instruccion y el modelo volvia a ofrecer la lista.
+
+    Medido: es el fallo mas repetido de todas las tiradas, y se llevaba por
+    delante el caso mas simple que existe -venir a cortarse el pelo-. La clienta
+    decia "la primera que tengas", le ofrecian horas otra vez, decia "vale", y le
+    ofrecian horas OTRA VEZ. Se iba sin cita.
+    """
+    from backend import reserva
+
+    estado = reserva.Estado(intencion="reservar", servicio="Corte senora",
+                            huecos=["10:00", "10:15", "10:30"],
+                            fecha_de_los_huecos="2026-08-27")
+    reserva.anotar_lo_que_dice(estado, "la primera que tengas", "Europe/Madrid")
+
+    assert estado.hora == "10:00", "no ha elegido: seguira preguntando la hora"
+    assert estado.fecha == "2026-08-27"
+    assert reserva.que_falta(estado, "Ana") == "", "aun cree que falta algo"
+
+
+def test_si_dice_una_hora_concreta_manda_la_suya(api_module):  # noqa: F811
+    from backend import reserva
+
+    estado = reserva.Estado(intencion="reservar", servicio="Corte senora",
+                            huecos=["10:00", "10:15", "10:30"],
+                            fecha_de_los_huecos="2026-08-27")
+    reserva.anotar_lo_que_dice(estado, "mejor la de las 10:30", "Europe/Madrid")
+    assert estado.hora == "10:30"
