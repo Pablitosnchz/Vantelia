@@ -378,3 +378,41 @@ def test_si_corrige_la_fecha_se_le_hace_caso(estado, api_module):  # noqa: F811
     reserva.anotar_lo_que_dice(estado, "no, el 26 de agosto", "Europe/Madrid")
     assert estado.fecha != primera, "no le hace caso al corregir"
     assert estado.hora == "", "el hueco de otro dia no puede darse por bueno"
+
+
+def test_decir_cancelar_basta_para_que_se_cancele(api_module):  # noqa: F811
+    """Sin declarar la intencion, nadie obligaba a llamar a `cancelar_cita`.
+
+    A "quiero cancelar mi cita" el asistente contestaba preguntandole que servicio
+    queria y para que dia: la cita seguia en pie y el cliente creyendo lo
+    contrario. La intencion la fija el CODIGO leyendo lo que ella pide.
+    """
+    from backend import reserva
+
+    estado = reserva.Estado(codigo="R-1234", servicio="Corte", fecha="2026-09-01",
+                            hora="10:00", nombre="Ana")
+    reserva.anotar_lo_que_dice(estado, "quiero cancelar mi cita", "Europe/Madrid")
+    assert estado.intencion == "cancelar"
+    assert reserva.tool_que_remata(estado, "Ana") == "cancelar_cita"
+
+
+def test_si_duda_entre_cancelar_y_cambiar_no_se_decide_por_ella(api_module):  # noqa: F811
+    from backend import reserva
+
+    estado = reserva.Estado(codigo="R-1234")
+    reserva.anotar_lo_que_dice(estado, "quiero cancelar o cambiar mi cita", "Europe/Madrid")
+    assert estado.intencion == "", "se ha decidido por ella en vez de preguntarle"
+
+
+def test_pedir_moverla_declara_reprogramar(api_module):  # noqa: F811
+    from backend import reserva
+
+    estado = reserva.Estado(codigo="R-1234")
+    reserva.anotar_lo_que_dice(estado, "puedo moverla a otro dia?", "Europe/Madrid")
+    assert estado.intencion == "reprogramar"
+
+    # Sin cita que mover no se declara nada: quien pregunta si puede cambiar de
+    # dia antes de tener cita no esta reprogramando nada.
+    otra = reserva.Estado()
+    reserva.anotar_lo_que_dice(otra, "puedo moverla a otro dia?", "Europe/Madrid")
+    assert otra.intencion == ""

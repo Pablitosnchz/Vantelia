@@ -828,23 +828,11 @@ def _hora_que_nadie_ha_pedido(estado: Any, dicho: str, hora: str) -> bool:
     return limpia not in ofrecidos
 
 
-# Pedir que le quiten la cita. Sin ambiguedad: si ademas habla de cambiarla o
-# moverla, esto NO se aplica (ahi si hay que preguntarle cual de las dos quiere).
-# Por RAIZ, no por frase exacta: "anula la cita" no casaba con "anular" y el
-# freno no saltaba. Nadie escribe igual dos veces.
-_PIDE_ANULAR = ("cancel", "anul", "no voy a poder ir", "no podre ir",
-                "no puedo ir", "quitar la cita", "quitame la cita", "borrar la cita",
-                "eliminar la cita", "dar de baja la cita", "no la quiero")
-_PIDE_MOVER = ("cambiar", "mover", "reprogramar", "aplazar", "otro dia", "otra hora",
-               "mas tarde", "mas temprano", "adelantar", "retrasar", "pasar la cita")
-
-
 def _pide_anular_y_solo_eso(dicho: str) -> bool:
-    """¿Ha pedido cancelar, y no cambiar de dia?"""
-    plano = catalog_pick._norm(dicho or "")
-    if not any(pista in plano for pista in _PIDE_ANULAR):
-        return False
-    return not any(pista in plano for pista in _PIDE_MOVER)
+    """Delega en `reserva`: una sola forma de leer lo que pide."""
+    from backend import reserva
+
+    return reserva.pide_anular_y_solo_eso(dicho)
 
 
 # Claves cuyo valor es un NOMBRE DE SERVICIO y acaba en boca del asistente.

@@ -176,6 +176,16 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "") ->
     if any(pista in plano for pista in _LE_DA_IGUAL):
         estado.dia_le_da_igual = True
 
+    # Lo que pide en su mensaje declara la intencion, y eso es lo que obliga
+    # despues a llamar a la herramienta que remata. Sin esto, a "quiero cancelar mi
+    # cita" nadie forzaba nada: el modelo contestaba preguntandole que servicio
+    # queria y la cita se quedaba en pie.
+    if not estado.hecho and not estado.intencion:
+        if pide_anular_y_solo_eso(mensaje):
+            estado.intencion = "cancelar"
+        elif pide_moverla_y_solo_eso(mensaje) and estado.codigo:
+            estado.intencion = "reprogramar"
+
     if not estado.hecho:
         # La fecha que diga ELLA manda, aunque ya hubiera una: corregir un dato es
         # lo primero que hace quien ve un resumen equivocado, y no hacerle caso la
@@ -252,6 +262,40 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
         if tool != "cancelar_cita":
             estado.fecha = str(resultado.get("fecha") or estado.fecha)
             estado.hora = str(resultado.get("hora") or estado.hora)
+
+
+# Pedir que le quiten la cita, o que se la muevan. Por RAIZ, no por frase exacta:
+# "anula la cita" no casaba con "anular" y el freno no saltaba. Nadie escribe
+# igual dos veces.
+PIDE_ANULAR = ("cancel", "anul", "no voy a poder ir", "no podre ir",
+               "no puedo ir", "quitar la cita", "quitame la cita", "borrar la cita",
+               "eliminar la cita", "dar de baja la cita", "no la quiero")
+PIDE_MOVER = ("cambiar", "mover", "reprogramar", "aplazar", "otro dia", "otra hora",
+              "mas tarde", "mas temprano", "adelantar", "retrasar", "pasar la cita")
+
+
+def pide_anular_y_solo_eso(dicho: str) -> bool:
+    """Ha pedido cancelar, y no cambiar de dia.
+
+    Si dice las dos cosas ("cancelar o cambiar") NO se decide por ella: eso se le
+    pregunta.
+    """
+    from backend import catalog_pick
+
+    plano = catalog_pick._norm(dicho or "")
+    if not any(pista in plano for pista in PIDE_ANULAR):
+        return False
+    return not any(pista in plano for pista in PIDE_MOVER)
+
+
+def pide_moverla_y_solo_eso(dicho: str) -> bool:
+    """Ha pedido cambiarla de dia o de hora, y no anularla."""
+    from backend import catalog_pick
+
+    plano = catalog_pick._norm(dicho or "")
+    if not any(pista in plano for pista in PIDE_MOVER):
+        return False
+    return not any(pista in plano for pista in PIDE_ANULAR)
 
 
 def anotar_intencion(estado: Estado, intencion: str) -> None:
