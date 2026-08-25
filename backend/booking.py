@@ -2532,6 +2532,11 @@ def _portal_booking_summary_from_row(
         can_reschedule=can_edit,
         can_mark_attendance=can_mark_attendance,
         customer_confirmed=bool(customer_confirmed),
+        # Los ratos en que la profesional esta ocupada dentro de la cita. Sin esta
+        # linea el panel pintaba el pack macizo -cuatro horas seguidas- y el
+        # negocio creia tener la tarde entera cogida: la funcion estaba escrita, el
+        # campo declarado y la pantalla preparada, pero nadie los unia.
+        work_intervals=_work_intervals_of(row, data),
     )
 
 

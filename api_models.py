@@ -1793,6 +1793,12 @@ class PortalBookingSummary(BaseModel):
     can_reschedule: bool = True
     can_mark_attendance: bool = False
     customer_confirmed: bool = False
+    # Los ratos en que la profesional esta OCUPADA dentro de la cita, en minutos
+    # desde medianoche. Un pack de 150 min con esperas ocupa 90: entremedias la
+    # clienta espera con el producto y se puede atender a otra. Vacio = la cita
+    # ocupa su duracion entera. El campo se declaro por error solo en
+    # `BookingDetailPublic`, que NO es el que lee el calendario del panel.
+    work_intervals: List[List[int]] = []
 
 
 class PortalBookingsResponse(BaseModel):
