@@ -56,6 +56,7 @@ class Estado:
     fecha_de_los_huecos: str = ""  # de que dia son esos huecos (no es "el dia elegido")
     dia_le_da_igual: bool = False
     hecho: bool = False          # la gestion se completo en esta conversacion
+    recargo_dicho: bool = False  # ya se le explico lo que cuesta con esa profesional
     ultimo_pedido: str = ""      # que se pidio en el turno anterior
     tocado: float = field(default_factory=time.time)
 

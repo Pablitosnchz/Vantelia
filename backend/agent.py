@@ -1293,8 +1293,12 @@ async def responder(
             # no DIRIGE: dictarle la frase le quitaba lo unico que hace bien
             # -adaptarse- y cuando el codigo se equivocaba, se equivocaba en bucle.
             # Medido: repetir la misma pregunta paso de 3 a 15 conversaciones de 40.
-            guia = [t for t in (reserva.resumen(estado, conocido),
-                                _aviso_de_recargo(cliente_id, dicho_de_ella, estado.servicio),
+            # Se lo explica UNA vez. Repetirle parrafo y medio en cada mensaje
+            # es lo que hacia y ademas le hacia perder el hilo: venia de ofrecerle
+            # tres horas y volvia a preguntarle que dia queria.
+            aviso = ("" if estado.recargo_dicho
+                     else _aviso_de_recargo(cliente_id, dicho_de_ella, estado.servicio))
+            guia = [t for t in (reserva.resumen(estado, conocido), aviso,
                                 reserva.instruccion_de_cierre(estado, conocido)) if t]
             turno = list(mensajes)
             if guia:
@@ -1383,6 +1387,9 @@ async def responder(
                                     "una propuesta y pregunta si le viene bien."),
                     })
                     continue
+                # Solo cuenta como dicho si de verdad ha salido en su respuesta.
+                if aviso and "25" in texto_final:
+                    estado.recargo_dicho = True
                 reserva.guardar(cliente_id, telefono, estado,
                                 pedido=reserva.que_falta(estado, conocido))
                 return _con_el_telefono_si_hace_falta(

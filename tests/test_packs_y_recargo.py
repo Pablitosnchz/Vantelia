@@ -303,3 +303,22 @@ def test_si_pide_a_la_jefa_se_le_cuenta_el_recargo(api_module, client):  # noqa:
         with db._get_db_connection() as conexion:
             conexion.execute("DELETE FROM employees WHERE id='emp_jefa_recargo'")
             conexion.commit()
+
+
+def test_el_recargo_se_explica_una_vez_no_en_cada_mensaje(api_module, client):  # noqa: F811
+    """Parrafo y medio en cada respuesta cansa y ademas le hacia perder el hilo.
+
+    Visto en produccion: se lo solto entero al pedir la cita y OTRA VEZ dos turnos
+    despues; en medio se le habian ofrecido tres horas, y tras repetirlo volvio a
+    preguntarle que dia queria.
+    """
+    import inspect
+
+    from backend import agent, reserva
+
+    assert hasattr(reserva.Estado(), "recargo_dicho"), "no hay donde recordarlo"
+    fuente = inspect.getsource(agent.responder)
+    assert 'if estado.recargo_dicho' in fuente or 'estado.recargo_dicho\n' in fuente, (
+        "el aviso del recargo no mira si ya se le conto"
+    )
+    assert 'estado.recargo_dicho = True' in fuente, "nunca se marca como contado"
