@@ -455,3 +455,22 @@ def test_tampoco_cita_el_nombre_corto_que_le_ofrece(salon_con_packs, api_module)
         "demo", 'Puedes elegir "Mechas o balayage" o algo más suave.')
     assert '"Mechas o balayage"' not in texto
     assert "Mechas o balayage" in texto
+
+
+def test_no_le_repite_la_misma_lista_de_opciones(api_module):  # noqa: F811
+    """Preguntar esta bien; preguntar DOS VECES lo mismo es el muro.
+
+    Visto: "unas mechas" -> le ofrece las tres tecnicas -> "quiero unas mechas" ->
+    le ofrece las tres otra vez. Si ya se lo preguntaste y no se decide, o le
+    preguntas otra cosa (el largo) o te mojas y le recomiendas una.
+    """
+    import inspect
+
+    from backend import agent, reserva
+
+    assert hasattr(reserva.Estado(), "ultimo_falta"), "no hay donde recordar la pregunta"
+    fuente = inspect.getsource(agent.responder)
+    assert 'falta == estado.ultimo_falta' in fuente, (
+        "nada detecta que se le esta preguntando lo mismo otra vez"
+    )
+    assert "recomiendale UNA" in fuente, "no se le da salida cuando ella no se decide"

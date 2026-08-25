@@ -1696,6 +1696,21 @@ async def responder(
                     )
                 if llamada.function.name == "buscar_servicio":
                     catalogo_mirado = True
+                    falta = str(resultado.get("falta") or "")
+                    if falta and falta == estado.ultimo_falta:
+                        # Ya se lo preguntaste y no lo ha elegido. Repetirle la
+                        # misma lista es EL fallo mas repetido de la medicion:
+                        # se cansa y se va. Se le pide otra cosa, o se moja.
+                        resultado = dict(resultado)
+                        resultado["nota"] = (
+                            "OJO: esto ya se lo preguntaste en el mensaje anterior y "
+                            "no se ha decidido. NO le repitas la misma lista. Haz una "
+                            "de estas dos: preguntale otro dato que falte (por "
+                            "ejemplo como tiene el pelo de largo), o mojate y "
+                            "recomiendale UNA explicandole en una linea por que, y "
+                            "dile que en la cita se puede cambiar."
+                        )
+                    estado.ultimo_falta = falta
                 if llamada.function.name == "consultar_disponibilidad":
                     consultada = True
                     dias_mirados += 1

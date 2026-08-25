@@ -60,6 +60,7 @@ class Estado:
     cancelada: bool = False      # su cita se anulo: ya no esta en pie
     veces_sin_precio: int = 0    # cuantas veces se le ha dicho que no hay precio
     servicio_texto: str = ""    # todo lo que ha dicho sobre QUE quiere hacerse
+    ultimo_falta: str = ""      # que dato del servicio se le pregunto la ultima vez
     ultimo_pedido: str = ""      # que se pidio en el turno anterior
     tocado: float = field(default_factory=time.time)
 
