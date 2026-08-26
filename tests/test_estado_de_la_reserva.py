@@ -492,3 +492,44 @@ def test_si_dice_una_hora_concreta_manda_la_suya(api_module):  # noqa: F811
                             fecha_de_los_huecos="2026-08-27")
     reserva.anotar_lo_que_dice(estado, "mejor la de las 10:30", "Europe/Madrid")
     assert estado.hora == "10:30"
+
+
+def test_la_cita_se_crea_con_el_nombre_del_catalogo_no_con_el_que_se_dice(api_module):  # noqa: F811
+    """El nombre de hablar y el de la agenda no son el mismo, y confundirlos sale caro.
+
+    Paso de verdad (26-ago-2026): pidio un alisado de keratina, el catalogo eligio
+    bien el "Pack keratina premium medio" (220 min), pero al decirselo se quita la
+    palabra "Pack"... y "Keratina premium medio" ES OTRO SERVICIO del catalogo, de
+    30 minutos. La cita se creo por nombre y quedo de media hora para un
+    tratamiento de casi cuatro: tres horas y media de agenda que el salon creia
+    libres.
+    """
+    from backend import reserva
+
+    estado = reserva.Estado()
+    reserva.anotar_resultado(estado, "buscar_servicio", {}, {
+        "ok": True,
+        "servicio": "Keratina premium medio",
+        "servicio_en_agenda": "Pack keratina premium medio",
+    })
+    assert estado.servicio == "Keratina premium medio", "a la clienta se le dice sin Pack"
+    assert estado.servicio_exacto == "Pack keratina premium medio", "la cita va con el real"
+
+
+def test_sin_nombre_interno_se_usa_el_que_hay(api_module):  # noqa: F811
+    from backend import reserva
+
+    estado = reserva.Estado()
+    reserva.anotar_resultado(estado, "buscar_servicio", {}, {
+        "ok": True, "servicio": "Corte senora",
+    })
+    assert estado.servicio_exacto == "Corte senora"
+
+
+def test_al_pedir_otra_cita_no_se_arrastra_el_servicio_exacto(api_module):  # noqa: F811
+    from backend import reserva
+
+    estado = reserva.Estado(hecho=True, servicio="Keratina premium medio",
+                            servicio_exacto="Pack keratina premium medio")
+    reserva.anotar_lo_que_dice(estado, "tambien quiero una cita para un corte", "Europe/Madrid")
+    assert estado.servicio_exacto == ""

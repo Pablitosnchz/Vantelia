@@ -814,10 +814,13 @@
     }
     .cd-event:hover { filter:brightness(1.12); box-shadow:0 4px 14px rgba(0,0,0,0.3); z-index:5; }
     .cd-event.selected { box-shadow:0 0 0 2px var(--accent); z-index:6; }
-.cd-espera{position:absolute;z-index:3;border-radius:8px;cursor:pointer;
+/* Por ENCIMA de la cita, incluso cuando el raton la resalta: `.cd-event:hover`
+   sube a z-index 5 y se llevaba el clic del hueco, asi que pinchar en "libre"
+   abria a veces el panel de gestion de la cita en vez de agendar una nueva. */
+.cd-espera{position:absolute;z-index:7;border-radius:8px;cursor:pointer;
   background:repeating-linear-gradient(135deg,rgba(0,245,212,.10) 0 6px,transparent 6px 12px);
   border:1px dashed rgba(0,245,212,.45);display:flex;align-items:center;justify-content:center;}
-.cd-espera:hover{background:rgba(0,245,212,.18);}
+.cd-espera:hover{background:rgba(0,245,212,.18);z-index:8;}
 .cd-espera span{font-size:.62rem;letter-spacing:.03em;color:var(--success);text-transform:uppercase;}
     .cd-event.cancelled { opacity:.62; }
     .cd-event.cancelled .cd-ev-name { text-decoration:line-through; }
@@ -8704,10 +8707,13 @@ function renderCitasDay(){
           if (libreFin - libreIni >= 25) {
             hueco.innerHTML = `<span>libre · ${libreFin - libreIni} min</span>`;
           }
-          hueco.addEventListener('click', () => openNewBookingDrawer({
-            fecha: c.dateKey, hora: cdFmtMin(libreIni),
-            employee_id: b.employee_id || '',
-          }));
+          hueco.addEventListener('click', (ev) => {
+            ev.stopPropagation();   // el clic es del hueco, no de la cita de debajo
+            openNewBookingDrawer({
+              fecha: c.dateKey, hora: cdFmtMin(libreIni),
+              employee_id: b.employee_id || '',
+            });
+          });
           body.appendChild(hueco);
         }
       }

@@ -45,7 +45,8 @@ class Estado:
     """Lo que se sabe de la cita en curso. Lo llena el codigo, no el modelo."""
 
     intencion: str = ""          # reservar | cancelar | reprogramar
-    servicio: str = ""           # nombre EXACTO del catalogo
+    servicio: str = ""           # como se le dice a la clienta (sin "Pack")
+    servicio_exacto: str = ""    # el nombre del catalogo con el que se crea la cita
     duracion: int = 0
     fecha: str = ""              # AAAA-MM-DD
     hora: str = ""               # HH:MM
@@ -263,6 +264,12 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
 
     if tool == "buscar_servicio" and resultado.get("servicio"):
         estado.servicio = str(resultado["servicio"])
+        # El nombre de hablar y el de la agenda NO son el mismo, y confundirlos
+        # sale caro: "Pack keratina premium medio" se dice "Keratina premium
+        # medio"... que ES OTRO SERVICIO del catalogo, de 30 minutos. La cita se
+        # cogio de media hora para un tratamiento de casi cuatro.
+        estado.servicio_exacto = str(resultado.get("servicio_en_agenda")
+                                     or resultado["servicio"])
         estado.duracion = int(resultado.get("duracion_minutos") or 0)
 
     elif tool == "consultar_disponibilidad":
@@ -362,6 +369,7 @@ def empezar_otra_gestion(estado: Estado) -> None:
     """
     estado.intencion = "reservar"
     estado.servicio = ""
+    estado.servicio_exacto = ""
     estado.servicio_texto = ""
     estado.duracion = 0
     estado.fecha = ""

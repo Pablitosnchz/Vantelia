@@ -1595,7 +1595,10 @@ async def _wa_resumen_para_confirmar(
     if not (estado.servicio and estado.fecha and estado.hora):
         return False
 
-    flow.servicio = estado.servicio
+    # Con el nombre EXACTO del catalogo: el de hablar puede coincidir con otro
+    # servicio distinto (el "Pack keratina premium medio" se dice igual que la
+    # "Keratina premium medio" de 30 minutos, que es otra cosa).
+    flow.servicio = estado.servicio_exacto or estado.servicio
     flow.fecha = estado.fecha
     flow.hora = estado.hora
     # A quien pide una profesional concreta se le respeta: la cita la crea

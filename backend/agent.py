@@ -1679,6 +1679,16 @@ async def responder(
                     argumentos = json.loads(llamada.function.arguments or "{}")
                 except (ValueError, TypeError):
                     argumentos = {}
+                # La cita se crea con el nombre EXACTO del catalogo. El modelo
+                # habla con el nombre publico -sin "Pack"- y ese puede ser OTRO
+                # servicio: paso de verdad, cogio media hora para un tratamiento
+                # de 220 minutos porque existen los dos nombres.
+                if (llamada.function.name == "crear_cita" and estado.servicio_exacto
+                        and argumentos.get("servicio")):
+                    dicho = catalog_pick._norm(str(argumentos["servicio"]))
+                    publico = catalog_pick._norm(estado.servicio)
+                    if dicho == publico:
+                        argumentos["servicio"] = estado.servicio_exacto
                 # Ha pedido que le anulen la cita: moverla no es eso. Paso de
                 # verdad -"quiero cancelar mi cita"- y el modelo llamo a
                 # reprogramar con el MISMO dia y la MISMA hora, dijo "listo,
