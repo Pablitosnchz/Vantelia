@@ -737,3 +737,43 @@ def test_mechas_y_balayage_se_ofrecen_por_separado(api_module):  # noqa: F811
         "Cambio de color y mechas o balayage"]
     assert catalog_pick.separar_alternativas("Grey blending") == ["Grey blending"]
     assert catalog_pick.separar_alternativas("") == []
+
+
+def test_elegir_una_opcion_ofrecida_resuelve_y_no_repregunta(salon_con_packs, api_module):  # noqa: F811
+    """Lo rompi yo al separar "Mechas o balayage" en dos opciones.
+
+    Se le ofrecia "mechas", contestaba "mechas"... y como "mechas" es la FAMILIA y
+    no la tecnica del catalogo ("mechas o balayage"), se le volvia a preguntar lo
+    mismo. Bucle hasta que se cansaba. Lo pillo la traza: `buscar_servicio` cinco
+    turnos seguidos sin resolver nada.
+
+    Y ojo al orden: gana lo MAS ESPECIFICO que haya dicho, no lo mas corto.
+    """
+    from backend import agenda, catalog_pick, db, timeutils
+
+    ahora = timeutils._utc_now_iso()
+    compuesto = "Pack cambio de color y mechas o balayage medio"
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT OR REPLACE INTO services (cliente_id, slug, name, category,"
+            " duration_minutes, price_cents, description, is_active, sort_order,"
+            " created_at, updated_at) VALUES ('demo', ?, ?, '', 300, 0, '', 1, 0, ?, ?)",
+            (agenda._normalize_service_id(compuesto), compuesto, ahora, ahora))
+        conexion.commit()
+    try:
+        def elige(dicho, talla="medio"):
+            datos = {"familia": "mechas", "tecnica": "", "talla": talla,
+                     "para_quien": "", "edad": None, "texto": dicho}
+            return catalog_pick.elegir("demo", datos)
+
+        # Contestar una de las opciones RESUELVE.
+        assert elige("mechas").servicio == "Pack mechas o balayage medio"
+        assert elige("balayage").servicio == "Pack mechas o balayage medio"
+
+        # Y lo mas especifico gana: no puede llevar al simple solo porque tambien
+        # contiene la palabra "mechas".
+        assert elige("cambio de color y mechas").servicio == compuesto
+    finally:
+        with db._get_db_connection() as conexion:
+            conexion.execute("DELETE FROM services WHERE cliente_id='demo' AND name = ?", (compuesto,))
+            conexion.commit()

@@ -388,6 +388,36 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
         if acotado:
             candidatos = acotado
 
+    # Lo que ELLA ha dicho puede identificar ya una de las tecnicas aunque no sea
+    # su nombre entero. Paso al separar "Mechas o balayage" en dos opciones: se le
+    # ofrecia "mechas", contestaba "mechas"... y como "mechas" es la FAMILIA y no
+    # la tecnica, se le volvia a preguntar lo mismo. Bucle hasta que se cansaba.
+    if len(representantes) > 1 and not tecnica:
+        dicho = _norm(str(datos.get("texto") or ""))
+
+        def _partes(clave: str) -> List[str]:
+            # Sin el "pack" -que es de cocina- y separando las alternativas: de
+            # "pack mechas o balayage" salen "mechas" y "balayage".
+            limpio = clave[5:] if clave.startswith("pack ") else clave
+            return [p.strip() for p in limpio.split(" o ") if p.strip()]
+
+        def _cuanto_encaja(clave: str) -> int:
+            """El trozo mas largo de esa tecnica que ella ha dicho. 0 si ninguno."""
+            return max([len(p) for p in _partes(clave) if p in dicho] or [0])
+
+        casan = [clave for clave in representantes if clave and _cuanto_encaja(clave)]
+        # Gana lo MAS ESPECIFICO que haya dicho: "cambio de color y mechas" tiene
+        # que llevar a su servicio, no al de mechas a secas solo porque tambien
+        # contiene la palabra. Y a igualdad -"balayage" vale para dos- gana el
+        # sencillo: quien contesta "balayage" a una lista quiere el balayage.
+        if casan:
+            casan.sort(key=lambda c: (-_cuanto_encaja(c), len(c.split())))
+            elegida_clave = casan[0]
+            elegida = representantes[elegida_clave]
+            acotado = [s for s in candidatos if tecnica_de(_nombre(s)) == elegida_clave]
+            candidatos = acotado or [elegida]
+            representantes = {elegida_clave: elegida}
+
     if len(representantes) > 1 and not tecnica:
         # Se le ofrece el nombre REAL de un servicio de cada tecnica, no mi clave
         # interna: "Keratina premium" se entiende, "mechas balayage 1 1" no.
