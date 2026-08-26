@@ -1763,6 +1763,35 @@ async def responder(
                     argumentos = json.loads(llamada.function.arguments or "{}")
                 except (ValueError, TypeError):
                     argumentos = {}
+                # Vino preguntando el PRECIO de algo que aqui no se presupuesta
+                # por mensaje: lo que se le coge es la cita de valoracion, no el
+                # tratamiento de cuatro horas. Es la regla del propio salon
+                # ("primero te vemos el pelo") y estaba escrita en una funcion que
+                # no llamaba nadie. Ojo al matiz que corrigio la duenya: quien
+                # viene a RESERVAR unas mechas se lleva sus mechas; esto solo vale
+                # para quien ha venido a preguntar cuanto cuesta.
+                if (llamada.function.name == "crear_cita" and estado.veces_sin_precio
+                        and argumentos.get("servicio")):
+                    cambio = _valoracion_en_lugar_del_tratamiento(
+                        cliente_id, str(argumentos["servicio"]), location_id=location_id)
+                    if cambio.get("servicio"):
+                        resultado = {
+                            "ok": False,
+                            "error": ("De %s no se coge cita sin ver antes el pelo: lo "
+                                      "que se reserva es %s."
+                                      % (cambio.get("en_lugar_de") or "eso",
+                                         cambio["servicio"])),
+                            "reserva_esto_en_su_lugar": cambio["servicio"],
+                            "que_hacer": ("Explicaselo en una linea -es corta, sin "
+                                          "compromiso, y ahi le dan el presupuesto- y "
+                                          "vuelve a llamar a crear_cita con ese "
+                                          "servicio."),
+                        }
+                        mensajes.append({
+                            "role": "tool", "tool_call_id": llamada.id,
+                            "content": json.dumps(resultado, ensure_ascii=False),
+                        })
+                        continue
                 # La cita se crea con el nombre EXACTO del catalogo. El modelo
                 # habla con el nombre publico -sin "Pack"- y ese puede ser OTRO
                 # servicio: paso de verdad, cogio media hora para un tratamiento

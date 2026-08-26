@@ -474,3 +474,30 @@ def test_no_le_repite_la_misma_lista_de_opciones(api_module):  # noqa: F811
         "nada detecta que se le esta preguntando lo mismo otra vez"
     )
     assert "recomiendale UNA" in fuente, "no se le da salida cuando ella no se decide"
+
+
+def test_quien_pregunta_el_precio_se_lleva_la_valoracion_no_el_tratamiento(api_module, client):  # noqa: F811
+    """La regla del salon, aplicada donde se crea la cita y no solo al buscar.
+
+    Medido con 100 conversaciones: 6 veces le cogio el tratamiento entero -"Pack
+    keratina premium largo", cuatro horas- a alguien que solo habia preguntado
+    cuanto costaba. La funcion que lo evitaba existia... y no la llamaba nadie.
+
+    Ojo al matiz que corrigio la duenya: quien viene a RESERVAR unas mechas se
+    lleva sus mechas. Esto es solo para quien viene a preguntar el precio.
+    """
+    import inspect
+
+    from backend import agent
+
+    fuente = inspect.getsource(agent.responder)
+    assert "_valoracion_en_lugar_del_tratamiento(" in fuente, (
+        "el guardarrail sigue siendo codigo muerto"
+    )
+    assert "estado.veces_sin_precio" in fuente, (
+        "se aplicaria tambien a quien viene a reservar, que NO es la regla"
+    )
+    # Y se comprueba ANTES de crear nada.
+    freno = fuente.index("_valoracion_en_lugar_del_tratamiento(")
+    ejecuta = fuente.index("resultado = await _ejecutar(")
+    assert freno < ejecuta, "se cambia el servicio despues de haber cogido la cita"
