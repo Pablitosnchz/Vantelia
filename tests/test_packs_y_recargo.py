@@ -565,24 +565,29 @@ def test_el_texto_del_25_por_ciento_sale_si_o_si_antes_del_resumen(api_module, c
     assert "recargo_dicho" in explicar, "se lo soltaria en cada resumen"
 
 
-def test_al_ofrecer_opciones_dice_que_es_cada_una(api_module, client):  # noqa: F811
-    """"No se ve bien la diferencia entre ellas" (el negocio, probandolo).
+def test_la_explicacion_de_cada_opcion_se_guarda_para_si_preguntan(api_module, client):  # noqa: F811
+    """El negocio cambio de idea, y manda el negocio.
 
-    Recitar "Mechas o balayage / Cambio de color mechas o balayage / Cambio de
-    color y mechas o balayage" no ayuda a elegir: suenan igual. El negocio ya tiene
-    escrito que es cada servicio (167 de 175 lo tienen), asi que se explica con SUS
-    palabras en vez de inventarlas.
+    Por la manyana se pidio que explicara la diferencia entre opciones, y se monto:
+    la descripcion de cada servicio, con las palabras del salon. Por la tarde, la
+    duenya vio el mensaje de verdad y dijo lo contrario -dos veces-: "repite
+    practicamente dos veces lo mismo" y "no quiero que especifique lo que conlleva
+    cada servicio". Tenia razon: cuatro opciones con su contenido cada una no se
+    leen.
+
+    Asi que la explicacion no desaparece, cambia de sitio: se ofrece con los
+    nombres a secas y el detalle queda en `si_pregunta_la_diferencia`, para cuando
+    la clienta pregunte que diferencia hay.
     """
     import inspect
 
     from backend import agent
 
     fuente = inspect.getsource(agent._tool_buscar_servicio)
-    assert "opciones_explicadas" in fuente
+    assert "si_pregunta_la_diferencia" in fuente
     assert "que_es" in inspect.getsource(agent._detalle_servicio), (
-        "el detalle del servicio no trae lo que el negocio escribio"
+        "el detalle del servicio ya no trae lo que el negocio escribio"
     )
-
 
 def test_la_regla_del_precio_vale_aunque_no_sea_coger_cita(api_module, client):  # noqa: F811
     """Media condicion del salon se quedaba fuera.
@@ -747,3 +752,38 @@ def test_pregunto_el_precio_aunque_contestara_otra_capa(api_module, client):  # 
             conexion.execute("DELETE FROM chat_messages WHERE session_id='s_precio'")
             conexion.execute("DELETE FROM chat_sessions WHERE id='s_precio'")
             conexion.commit()
+
+
+def test_mechas_y_balayage_se_ofrecen_por_separado(api_module):  # noqa: F811
+    """"Si quieres separa el servicio de mechas o balayage en mechas y balayage".
+
+    Para el catalogo es un servicio; para quien elige son dos cosas distintas. Pero
+    solo se parte cuando el nombre es corto: "Cambio de color y mechas o balayage"
+    partido deja opciones que nadie sabria distinguir, y de cuatro se pasa a siete.
+    """
+    from backend import catalog_pick
+
+    assert catalog_pick.separar_alternativas("Mechas o balayage") == ["Mechas", "Balayage"]
+    assert catalog_pick.separar_alternativas("Cambio de color y mechas o balayage") == [
+        "Cambio de color y mechas o balayage"]
+    assert catalog_pick.separar_alternativas("Grey blending") == ["Grey blending"]
+    assert catalog_pick.separar_alternativas("") == []
+
+
+def test_al_ofrecer_van_los_nombres_solos(api_module):  # noqa: F811
+    """La duenya lo pidio dos veces: nada de listar lo que incluye cada opcion.
+
+    Una lista de cuatro opciones con su contenido cada una no se lee: "repite
+    practicamente dos veces lo mismo". La explicacion sigue disponible, pero solo
+    para cuando ELLA pregunte la diferencia.
+    """
+    import inspect
+
+    from backend import agent
+
+    fuente = inspect.getsource(agent._tool_buscar_servicio)
+    assert '"si_pregunta_la_diferencia"' in fuente, (
+        "la explicacion sigue saliendo como si fuera parte de la oferta"
+    )
+    assert '"opciones": nombres' in fuente, "no se ofrecen los nombres separados"
+    assert "UNA FRASE natural" in fuente

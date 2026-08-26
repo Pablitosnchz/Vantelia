@@ -774,13 +774,25 @@ def _tool_buscar_servicio(
         if not _explican_algo([e["que_es"] for e in explicadas]):
             # Dicen casi lo mismo: se ofrecen los nombres a secas y punto.
             explicadas = [{"servicio": e["servicio"], "que_es": ""} for e in explicadas]
+
+        # "Mechas o balayage" son dos cosas para quien elige. Y los nombres que se
+        # le ofrecen van SOLOS: la duenya lo pidio dos veces -"no quiero que
+        # especifique lo que conlleva cada servicio"-, porque una lista de cuatro
+        # opciones con su contenido cada una no se lee.
+        nombres = []
+        for opcion in eleccion.opciones[:4]:
+            for parte in catalog_pick.separar_alternativas(opcion):
+                if parte not in nombres:
+                    nombres.append(parte)
         return {
             "ok": True,
             "servicio": "",
             "falta": eleccion.falta,
             "preguntale_por": catalog_pick.sobre_que_preguntar(eleccion),
-            "opciones": eleccion.opciones,
-            "opciones_explicadas": explicadas,
+            "opciones": nombres,
+            # OJO: esto NO se cuenta al ofrecer. Solo si ELLA pregunta que
+            # diferencia hay entre una y otra.
+            "si_pregunta_la_diferencia": explicadas,
             "candidatos": detalle,
             "total_candidatos": len(eleccion.candidatos),
             "sugerencia": catalog_pick.pregunta_para(eleccion),
@@ -789,11 +801,12 @@ def _tool_buscar_servicio(
             # rematar con "no hay mas opciones" teniendo nueve.
             "nota": (
                 "PREGUNTALE POR %s con tus palabras, como lo haria una peluquera. NO "
-                "le recites nombres del catalogo a secas: si `opciones_explicadas` "
-                "trae `que_es`, di en UNA LINEA que es cada una con esas palabras "
-                "del negocio (no te las inventes ni las adornes). Si viene VACIO, "
-                "ofrece los nombres y NADA MAS: no te inventes que incluye cada "
-                "uno ni repitas lo mismo por cada opcion. Hay %d servicios "
+                "le sueltes una lista con lo que incluye cada opcion: nombralas "
+                "en UNA FRASE natural ('¿te gustaria hacerte mechas, balayage, grey "
+                "blending o un cambio de color con mechas?') y ya esta. Lo que "
+                "incluye cada una NO se cuenta salvo que ella pregunte la "
+                "diferencia; entonces lo tienes en `si_pregunta_la_diferencia`, con "
+                "las palabras del negocio. Hay %d servicios "
                 "que encajan, asi que NUNCA digas que no hay mas opciones. Y si solo "
                 "pregunta cuanto dura o cuanto cuesta, contestale con estos datos sin "
                 "obligarla a concretar."

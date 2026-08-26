@@ -142,6 +142,24 @@ def _nombre(servicio: Dict[str, Any]) -> str:
     return str(servicio.get("nombre") or servicio.get("name") or "").strip()
 
 
+def separar_alternativas(opcion: str) -> List[str]:
+    """"Mechas o balayage" son DOS cosas para quien elige, aunque el catalogo las
+    tenga en un servicio.
+
+    Lo pidio la duenya: "si quieres separa el servicio de mechas o balayage en
+    mechas y balayage". Solo se parte cuando el nombre es corto: "Cambio de color y
+    mechas o balayage" partido en dos deja opciones que nadie sabria distinguir, y
+    de cuatro se pasaria a siete.
+    """
+    limpio = " ".join(str(opcion or "").split())
+    partes = [p.strip() for p in re.split(r"\s+o\s+", limpio) if p.strip()]
+    if len(partes) != 2 or len(limpio.split()) > 3:
+        return [limpio] if limpio else []
+    if any(len(p.split()) > 1 for p in partes):
+        return [limpio]
+    return [p[:1].upper() + p[1:] for p in partes]
+
+
 def _limpiar_para_ofrecer(nombre: str) -> str:
     """El nombre sin la talla, para ofrecerlo como opcion legible.
 
