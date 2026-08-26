@@ -766,7 +766,8 @@ def _tool_buscar_servicio(
             for nombre in eleccion.candidatos:
                 publico = textnorm.nombre_de_servicio_publico(nombre)
                 if catalog_pick._norm(publico).startswith(catalog_pick._norm(opcion)):
-                    suya = _detalle_servicio(cliente_id, nombre).get("que_es", "")
+                    suya = _sin_el_largo(
+                        _detalle_servicio(cliente_id, nombre).get("que_es", ""))
                     if suya:
                         break
             explicadas.append({"servicio": opcion, "que_es": suya})
@@ -893,6 +894,21 @@ def _sin_la_palabra_pack(dato: Any) -> Any:
     if isinstance(dato, str):
         return textnorm.nombre_de_servicio_publico(dato)
     return dato
+
+
+def _sin_el_largo(texto: str) -> str:
+    """La descripcion del servicio, sin las marcas de largo del pelo.
+
+    Se coge de UN servicio concreto -el corto, el medio- y ese largo se colaba en
+    la explicacion: "incluye mechas CORTO, matiz, elumen" a alguien a quien aun no
+    se le ha preguntado como tiene el pelo. Sonaba a que le ofrecian mechas cortas.
+    """
+    limpio = str(texto or "")
+    for talla in ("extra extra largo", "extra largo", "medio largo", "corto medio",
+                  "muy corto", "extralargo", "largo", "medio", "corto", "xxl", "xl"):
+        limpio = re.sub(r"(?i)(?<=\w)\s+%s(?=\W|$)" % re.escape(talla), "", limpio)
+    limpio = re.sub(r"\s{2,}", " ", limpio)
+    return re.sub(r"\s+([,.])", r"\1", limpio).strip(" ,;")
 
 
 def _detalle_servicio(cliente_id: str, nombre: str) -> Dict[str, Any]:
@@ -1108,6 +1124,22 @@ _DICE_QUE_CIERRAN = ("estamos cerrados", "estamos cerrado", "cerramos ese dia",
 def _dice_que_cierran(texto: str) -> bool:
     plano = catalog_pick._norm(texto or "")
     return any(pista in plano for pista in _DICE_QUE_CIERRAN)
+
+
+# Anunciar en vez de hacer. Paso de verdad: "vamos a ver las horas disponibles
+# para el viernes. Un momento, por favor" -y ahi se quedaba-. La clienta espera un
+# mensaje que no llega nunca y se va.
+_LO_ANUNCIA = (
+    "un momento", "un segundo", "dame un minuto", "enseguida te", "ahora te digo",
+    "ahora mismo lo miro", "voy a mirar", "voy a comprobar", "voy a consultar",
+    "voy a revisar", "dejame ver", "permiteme", "te confirmo en", "ya te digo",
+    "espera un", "en breve te",
+)
+
+
+def _lo_anuncia_en_vez_de_hacerlo(texto: str) -> bool:
+    plano = catalog_pick._norm(texto or "")
+    return any(pista in plano for pista in _LO_ANUNCIA)
 
 
 def _da_un_precio_prohibido(cliente_id: str, texto: str, contexto: str) -> bool:
@@ -1483,6 +1515,12 @@ _HABLA_DE_AGENDA = (
     "cerrado", "cerramos", "no abrimos", "no tengo hueco", "no hay hueco",
     "no tengo disponib", "no hay disponib", "tengo libre", "puedo ofrecerte",
     "estas horas", "estos horarios",
+    # Decir que una hora concreta esta pillada tambien es hablar de la agenda, y
+    # se colaba: a "¿puede ser a las 10:30?" contesto "lo siento, a esa hora ya
+    # tengo una cita" SIN mirar. Estaba libre para las cinco profesionales.
+    "ya tengo una cita", "tengo una cita a esa", "esa hora esta ocupada",
+    "esta ocupada", "esta cogida", "ya esta cogida", "no me queda",
+    "no tengo ese hueco", "esa hora no la tengo", "no puedo a esa hora",
 )
 
 
@@ -1674,6 +1712,19 @@ async def responder(
                         "content": ("Antes de decir nada sobre dias u horas, consulta "
                                     "`consultar_disponibilidad`. No afirmes que un dia "
                                     "esta cerrado ni que no hay hueco sin haberlo mirado."),
+                    })
+                    continue
+                # 2ter) Lo anuncia y no lo hace: si va a mirar la agenda, que la
+                #       mire en este mismo turno.
+                if (_lo_anuncia_en_vez_de_hacerlo(texto_final) and not consultada
+                        and vuelta + 1 < MAX_VUELTAS):
+                    obligar = True
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("No anuncies que vas a mirarlo: MIRALO AHORA y "
+                                    "contesta con el resultado. Nada de 'un momento' "
+                                    "ni 'enseguida te digo': ella no recibe nada "
+                                    "despues, se queda esperando y se va."),
                     })
                     continue
                 # 2bis) "Estamos cerrados" cuando el negocio SI abre. Quedarse

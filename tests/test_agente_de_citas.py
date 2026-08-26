@@ -799,3 +799,56 @@ def test_las_dos_llamadas_del_agente_usan_ese_modelo(api_module):  # noqa: F811
         "alguna llamada sigue ignorando lo que el negocio eligio"
     )
     assert fuente.count("_modelo_del_negocio(cfg)") >= 2
+
+
+def test_decir_que_una_hora_esta_cogida_exige_haber_mirado(api_module):  # noqa: F811
+    """Dijo "a las 10:30 ya tengo una cita" sin mirar. Estaba libre para las CINCO.
+
+    La clienta se va con una hora que le venia bien y que existia. Y venia de
+    haberle ofrecido "10:00, 14:00 y 18:00": de ahi dedujo que el resto estaba
+    cogido, en vez de consultarlo.
+    """
+    from backend import agent
+
+    assert agent._afirma_sobre_la_agenda("Lo siento, a las 10:30 ya tengo una cita")
+    assert agent._afirma_sobre_la_agenda("Esa hora está ocupada, cariño")
+    assert agent._afirma_sobre_la_agenda("Esa hora ya está cogida")
+    assert not agent._afirma_sobre_la_agenda("Te espero el jueves, cariño")
+
+
+def test_anunciar_no_es_hacer(api_module):  # noqa: F811
+    """"Vamos a ver las horas disponibles. Un momento, por favor" -y ahi se quedo-.
+
+    La clienta espera un mensaje que no llega nunca.
+    """
+    import inspect
+
+    from backend import agent
+
+    assert agent._lo_anuncia_en_vez_de_hacerlo("Un momento, por favor 😉")
+    assert agent._lo_anuncia_en_vez_de_hacerlo("Ahora te digo las horas")
+    assert agent._lo_anuncia_en_vez_de_hacerlo("Voy a mirar la agenda")
+    assert not agent._lo_anuncia_en_vez_de_hacerlo("Tengo estas horas: 10:00 o 10:15")
+
+    fuente = inspect.getsource(agent.responder)
+    assert "_lo_anuncia_en_vez_de_hacerlo(texto_final) and not consultada" in fuente
+
+
+def test_los_huecos_seguidos_se_ofrecen_como_rango(api_module):  # noqa: F811
+    """Tres horas sueltas de una lista de veinte hacen creer que el resto no hay."""
+    from backend import voice
+
+    seguidos = ["10:00", "10:15", "10:30", "10:45", "11:00"]
+    assert voice._rango_de_huecos(seguidos) == "de 10:00 a 11:00, cada 15 minutos"
+
+    # Si no son seguidos NO se resume: seria mentir por otro lado.
+    assert voice._rango_de_huecos(["10:00", "10:15", "18:00"]) == ""
+    assert voice._rango_de_huecos(["10:00"]) == ""
+
+
+def test_con_el_servicio_elegido_no_lo_vuelve_a_recomendar(api_module):  # noqa: F811
+    from backend import reserva
+
+    estado = reserva.Estado(servicio="Mechas o balayage medio", duracion=360)
+    resumen = reserva.resumen(estado)
+    assert "YA esta elegido" in resumen

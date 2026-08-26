@@ -2194,6 +2194,14 @@ async def _voice_check_availability(
         "ok": True,
         "fecha": fecha,
         "hay_huecos": bool(slots),
+        # Todos los huecos y, si son seguidos, dichos como un rango: asi no se
+        # deduce que lo que no se nombra esta cogido.
+        "todos_los_huecos": sorted(slots),
+        "rango": _rango_de_huecos(sorted(slots)),
+        "como_ofrecerlos": ("Si hay `rango`, diselo asi ('%s') y deja que elija; no le "
+                            "sueltes tres horas sueltas, porque entonces cree que el "
+                            "resto esta ocupado." % (_rango_de_huecos(sorted(slots)) or "")
+                            ) if slots else "",
         # Quedarse sin hueco NO es cerrar. El asistente contestaba "manyana
         # estamos cerrados" un jueves que se abre de 10:00 a 20:30, solo porque no
         # cabia un alisado de casi cuatro horas. Al cliente eso le suena a que no
@@ -2209,6 +2217,25 @@ async def _voice_check_availability(
         **_huecos_por_franja(slots),
         **date_meta,
     }
+
+
+def _rango_de_huecos(slots: List[str]) -> str:
+    """"De 10:00 a 14:30, cada 15 minutos" cuando los huecos son seguidos.
+
+    Ofrecerle tres horas sueltas (10:00, 14:00, 18:00) de una lista de veinte le
+    hace creer que el resto esta cogido: paso de verdad, pidio las 10:30 -libre- y
+    se le contesto que ya habia una cita a esa hora. Con el rango delante, eso no
+    se deduce.
+    """
+    limpios = sorted(s for s in slots if isinstance(s, str) and ":" in s)
+    if len(limpios) < 3:
+        return ""
+    minutos = [int(s[:2]) * 60 + int(s[3:5]) for s in limpios]
+    pasos = {b - a for a, b in zip(minutos, minutos[1:])}
+    if len(pasos) != 1:
+        return ""   # no son seguidos: mejor no resumir
+    paso = pasos.pop()
+    return "de %s a %s, cada %d minutos" % (limpios[0], limpios[-1], paso)
 
 
 def _dia_cerrado(cliente_id: str, fecha: str, config: Optional[Dict[str, Any]] = None) -> bool:

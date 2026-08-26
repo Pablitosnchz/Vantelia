@@ -661,35 +661,6 @@ def _wa_row_key(titulo: str) -> str:
     """Clave para comparar filas del menu ignorando emojis, acentos y mayusculas."""
     limpio = textnorm._strip_accents(str(titulo or "").lower())
     return re.sub(r"[^a-z0-9 ]+", "", limpio).strip()
-
-
-def _wa_starter_rows(cliente_id: str, booking_enabled: bool) -> List[Dict[str, Any]]:
-    """Filas del menu tomadas de las preguntas sugeridas que configura el negocio.
-
-    El menu de WhatsApp estaba escrito a fuego con nueve opciones genericas
-    (recomendar, comparar, estimar precio...) mientras el negocio configuraba las
-    suyas en Tune AI y solo se aplicaban al widget web. Lo que se configura en el
-    panel es lo que debe ver el cliente final, en cualquier canal.
-    """
-    try:
-        config = clients._get_client_config(cliente_id)
-        starters = settings._resolve_widget_starters(config, booking_enabled=booking_enabled)
-    except Exception as exc:  # noqa: BLE001 - el menu nunca debe romper el canal
-        settings.logger.warning("No se pudieron leer las sugerencias de %s: %s", cliente_id, exc)
-        return []
-    rows: List[Dict[str, Any]] = []
-    for index, texto in enumerate(starters):
-        limpio = textnorm._sanitize_text(texto).strip()
-        if not limpio:
-            continue
-        rows.append({
-            "id": f"menu_starter_{index}",
-            "title": _wa_recortar_titulo(limpio),
-            "description": limpio[:_WA_ROW_DESC_MAX] if len(limpio) > _WA_ROW_TITLE_MAX else "",
-        })
-    return rows
-
-
 def _wa_starter_message(cliente_id: str, interactive_id: str, booking_enabled: bool) -> str:
     """Texto real detras de una fila `menu_starter_N` (lo que el cliente 'escribe').
 

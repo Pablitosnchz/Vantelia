@@ -29,15 +29,16 @@ El resultado es un `Eleccion`: o el servicio, o exactamente que falta por pregun
 from __future__ import annotations
 
 import re
-import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend import agenda, settings
 
 
 def _norm(texto: str) -> str:
-    limpio = unicodedata.normalize("NFKD", str(texto or "").lower())
-    return " ".join("".join(c for c in limpio if not unicodedata.combining(c)).split())
+    """Delega en `textnorm.normalizar`: una sola forma de normalizar en todo el codigo."""
+    from backend import textnorm
+
+    return textnorm.normalizar(texto)
 
 
 # Tallas ordenadas de menos a mas. Cada una con las formas en que aparece en el

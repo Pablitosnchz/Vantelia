@@ -502,6 +502,12 @@ def resumen(estado: Estado, nombre_conocido: str = "") -> str:
         if estado.duracion:
             detalle += " (%d min)" % estado.duracion
         lineas.append("- Servicio: %s" % detalle)
+        # Ya lo ha elegido: describirselo otra vez en cada mensaje cansa. Visto en
+        # una conversacion real, tres veces seguidas "te recomendaria las Mechas o
+        # balayage, incluye matiz, elumen y un tratamiento..." cuando ya habia
+        # dicho que si.
+        lineas.append("  (YA esta elegido: no se lo vuelvas a recomendar ni a "
+                      "describir, ve a lo que falta)")
     if estado.codigo:
         lineas.append("- Su cita: %s" % estado.codigo)
     if estado.fecha:

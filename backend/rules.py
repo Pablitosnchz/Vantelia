@@ -39,7 +39,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import unicodedata
 from typing import Any, Dict, List, Optional
 
 from backend import db, timeutils
@@ -48,8 +47,10 @@ ACCIONES = ("responder", "formulario", "ofrecer_cita", "pedir_foto", "pasar_a_hu
 
 
 def _norm(texto: str) -> str:
-    limpio = unicodedata.normalize("NFKD", str(texto or "").lower())
-    return " ".join("".join(c for c in limpio if not unicodedata.combining(c)).split())
+    """Delega en `textnorm.normalizar`: una sola forma de normalizar en todo el codigo."""
+    from backend import textnorm
+
+    return textnorm.normalizar(texto)
 
 
 def _fila_a_dict(row: sqlite3.Row) -> Dict[str, Any]:

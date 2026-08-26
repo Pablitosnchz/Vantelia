@@ -624,6 +624,18 @@ def _parse_duration_minutes_text(text: str) -> int:
 
 
 
+def normalizar(texto: str) -> str:
+    """Minusculas, sin tildes y con los espacios colapsados.
+
+    Es la forma de comparar lo que escribe un cliente con lo que hay en el
+    catalogo. Estaba COPIADA identica en `catalog_pick`, `intents` y `rules`: tres
+    sitios donde arreglar el mismo caso raro, y de ahi salen los "aqui si funciona
+    y alli no". Los tres delegan aqui.
+    """
+    limpio = unicodedata.normalize("NFKD", str(texto or "").lower())
+    return " ".join("".join(c for c in limpio if not unicodedata.combining(c)).split())
+
+
 def _strip_accents(text: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFD", text or "") if unicodedata.category(c) != "Mn")
 

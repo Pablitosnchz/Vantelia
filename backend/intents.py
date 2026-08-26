@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import json
 import time
-import unicodedata
 from typing import Any, Dict, List, Optional
 
 from backend import agenda, appstate, clients, rag, settings
@@ -69,8 +68,10 @@ CONFIANZA_MINIMA = 0.55
 
 
 def _norm(texto: str) -> str:
-    limpio = unicodedata.normalize("NFKD", str(texto or "").lower())
-    return " ".join("".join(c for c in limpio if not unicodedata.combining(c)).split())
+    """Delega en `textnorm.normalizar`: una sola forma de normalizar en todo el codigo."""
+    from backend import textnorm
+
+    return textnorm.normalizar(texto)
 
 
 def config_enabled(cliente_id: str, config: Optional[Dict[str, Any]] = None) -> bool:
