@@ -1108,6 +1108,39 @@ def _wa_linea_de_recargo(cliente_id: str, flow: appstate.WAFlowState) -> str:
         return ""
 
 
+async def _wa_explicar_el_recargo(
+    *, cliente_id: str, phone_number_id: str, to_number: str, flow: appstate.WAFlowState,
+) -> None:
+    """El texto del negocio sobre por que con esa profesional cuesta mas.
+
+    Una sola vez por conversacion: se recuerda en el estado de la reserva, que es
+    donde vive lo que ya se le ha contado.
+    """
+    if not flow.employee_id:
+        return
+    try:
+        from backend import agenda, reserva
+
+        fila = agenda._get_employee_row(flow.employee_id, cliente_id=cliente_id)
+        if not agenda.recargo_pct(fila):
+            return
+        estado = reserva.cargar(cliente_id, flow.from_number)
+        if estado.recargo_dicho:
+            return
+        texto = agenda.texto_del_recargo(fila, flow.servicio or "")
+        if not texto:
+            return
+        await messaging._send_whatsapp_text(
+            cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=to_number, text=texto,
+        )
+        estado.recargo_dicho = True
+        reserva.guardar(cliente_id, flow.from_number, estado)
+    except Exception as exc:  # noqa: BLE001 - nunca frenar la reserva por esto
+        settings.logger.warning("[whatsapp] no se pudo explicar el recargo (%s): %s",
+                                cliente_id, exc)
+
+
 async def _wa_send_booking_summary(
     *, cliente_id: str, phone_number_id: str, to_number: str,
     flow: appstate.WAFlowState, reconocido: bool = False,
@@ -1120,6 +1153,14 @@ async def _wa_send_booking_summary(
     usaba.
     """
     flow.flow = "booking_confirm"
+    # Si ha pedido a alguien que cuesta mas y todavia no se le ha explicado POR QUE,
+    # se le explica ANTES del resumen, con el texto que ha escrito el negocio. El
+    # aviso se le pasaba al modelo y este lo ignoraba justo al ir a cerrar: paso
+    # de verdad, la clienta confirmo sin saber que llevaba un 25 % encima.
+    await _wa_explicar_el_recargo(
+        cliente_id=cliente_id, phone_number_id=phone_number_id,
+        to_number=to_number, flow=flow,
+    )
     fecha_humana = textnorm._format_date_es(textnorm._parse_date(flow.fecha).date())
     nombre_corto = flow.nombre.split()[0] if flow.nombre else ""
     lineas: List[str] = []

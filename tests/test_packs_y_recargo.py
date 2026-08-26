@@ -543,3 +543,42 @@ def test_el_recargo_va_en_el_resumen_que_firma_la_clienta(api_module, client):  
             conexion.execute("DELETE FROM employees WHERE id IN"
                              " ('emp_jefa_resumen','emp_equipo_resumen')")
             conexion.commit()
+
+
+def test_el_texto_del_25_por_ciento_sale_si_o_si_antes_del_resumen(api_module, client):  # noqa: F811
+    """No puede depender de que al modelo le apetezca decirlo.
+
+    Se le paso el aviso -el detector salta con "¿puede ser con Alicia?"- y lo
+    ignoro porque estaba cerrando la cita: la clienta confirmo sin saber que
+    llevaba un 25 % encima.
+    """
+    import inspect
+
+    from backend import whatsapp
+
+    fuente = inspect.getsource(whatsapp._wa_send_booking_summary)
+    assert "_wa_explicar_el_recargo" in fuente, (
+        "el texto del negocio sigue dependiendo del modelo"
+    )
+    explicar = inspect.getsource(whatsapp._wa_explicar_el_recargo)
+    assert "texto_del_recargo" in explicar, "no usa el texto que ha escrito el negocio"
+    assert "recargo_dicho" in explicar, "se lo soltaria en cada resumen"
+
+
+def test_al_ofrecer_opciones_dice_que_es_cada_una(api_module, client):  # noqa: F811
+    """"No se ve bien la diferencia entre ellas" (el negocio, probandolo).
+
+    Recitar "Mechas o balayage / Cambio de color mechas o balayage / Cambio de
+    color y mechas o balayage" no ayuda a elegir: suenan igual. El negocio ya tiene
+    escrito que es cada servicio (167 de 175 lo tienen), asi que se explica con SUS
+    palabras en vez de inventarlas.
+    """
+    import inspect
+
+    from backend import agent
+
+    fuente = inspect.getsource(agent._tool_buscar_servicio)
+    assert "opciones_explicadas" in fuente
+    assert "que_es" in inspect.getsource(agent._detalle_servicio), (
+        "el detalle del servicio no trae lo que el negocio escribio"
+    )

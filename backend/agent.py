@@ -757,12 +757,26 @@ def _tool_buscar_servicio(
                 "servicio": textnorm.nombre_de_servicio_publico(nombre),
                 "duracion_minutos": minutos,
             })
+        # Cada opcion, con lo que el negocio dice que ES. Recitar tres nombres de
+        # catalogo no ayuda a elegir: "Mechas o balayage" y "Cambio de color y
+        # mechas o balayage" suenan igual si no te explican la diferencia.
+        explicadas = []
+        for opcion in eleccion.opciones[:4]:
+            suya = ""
+            for nombre in eleccion.candidatos:
+                publico = textnorm.nombre_de_servicio_publico(nombre)
+                if catalog_pick._norm(publico).startswith(catalog_pick._norm(opcion)):
+                    suya = _detalle_servicio(cliente_id, nombre).get("que_es", "")
+                    if suya:
+                        break
+            explicadas.append({"servicio": opcion, "que_es": suya})
         return {
             "ok": True,
             "servicio": "",
             "falta": eleccion.falta,
             "preguntale_por": catalog_pick.sobre_que_preguntar(eleccion),
             "opciones": eleccion.opciones,
+            "opciones_explicadas": explicadas,
             "candidatos": detalle,
             "total_candidatos": len(eleccion.candidatos),
             "sugerencia": catalog_pick.pregunta_para(eleccion),
@@ -771,8 +785,10 @@ def _tool_buscar_servicio(
             # rematar con "no hay mas opciones" teniendo nueve.
             "nota": (
                 "PREGUNTALE POR %s con tus palabras, como lo haria una peluquera. NO "
-                "le recites nombres del catalogo ni le hagas elegir de una lista; si "
-                "acaso, sugiere una o dos y explica la diferencia. Hay %d servicios "
+                "le recites nombres del catalogo a secas: si tienes que ofrecerle "
+                "opciones, di en UNA LINEA que es cada una usando `que_es` de "
+                "`opciones_explicadas` (son las palabras del negocio; no te las "
+                "inventes ni las adornes), y despues pregunta. Hay %d servicios "
                 "que encajan, asi que NUNCA digas que no hay mas opciones. Y si solo "
                 "pregunta cuanto dura o cuanto cuesta, contestale con estos datos sin "
                 "obligarla a concretar."
@@ -889,6 +905,11 @@ def _detalle_servicio(cliente_id: str, nombre: str) -> Dict[str, Any]:
             return {
                 "duracion_minutos": int(servicio.get("duration_minutes") or 0),
                 "categoria": str(servicio.get("category") or ""),
+                # Lo que el NEGOCIO escribio de ese servicio. Es lo que permite
+                # explicar la diferencia sin inventarsela.
+                "que_es": textnorm._sanitize_text(
+                    str(servicio.get("descripcion") or servicio.get("description") or "")
+                )[:200],
             }
     return {}
 
