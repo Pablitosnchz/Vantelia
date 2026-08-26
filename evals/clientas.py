@@ -188,6 +188,12 @@ def guion(persona: Dict[str, Any], estilo: str) -> str:
         "- No digas que eres una prueba ni menciones que esto es un test.",
         "- Si te preguntan tu nombre, invéntate uno normal y dilo.",
         "- Si te ofrecen una hora que te vale, aceptala; no alargues por alargar.",
+        # Sin esto daba la cita por hecha al ver el RESUMEN -que todavia no es una
+        # cita- y contestaba LISTO. Medido: se contaban como "se fue sin cita"
+        # conversaciones en las que el asistente lo habia hecho todo bien y solo
+        # faltaba que ella pulsara "Confirmar".
+        "- Si te mandan un resumen y te preguntan si confirmas, la cita AUN NO "
+        "existe: responde 'confirmo'. Solo esta hecha cuando te lo digan.",
         "- Cuando ya tengas lo que querias (o veas que no vas a conseguirlo), "
         "responde EXACTAMENTE: LISTO",
         "- Si te piden algo que ya has dicho, hazlo notar en vez de repetirlo sin mas.",

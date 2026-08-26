@@ -84,6 +84,21 @@ def _hablar_como_clienta(guion: str, conversacion: List[Dict[str, str]]) -> str:
 
 # ─── Una conversacion entera ───────────────────────────────────────────────
 
+def _le_han_pedido_confirmar(conversacion: List[Dict[str, str]]) -> bool:
+    """¿Lo ultimo que le mandaron fue el resumen con el boton de confirmar?"""
+    for linea in reversed(conversacion):
+        if linea["quien"] != "asistente":
+            continue
+        return "confirmamos la cita" in _norm(linea["texto"])
+    return False
+
+
+def _dice_que_si(texto: str) -> bool:
+    plano = _norm(texto).strip(" .!¡")
+    return plano.startswith(("si", "confirmo", "confirmar", "vale", "perfecto",
+                             "de acuerdo", "adelante", "correcto", "ok", "venga"))
+
+
 def _conversar(cliente_id: str, combinacion: Dict[str, Any], telefono: str) -> Dict[str, Any]:
     from evals import arnes, clientas
     from backend import whatsapp
@@ -118,11 +133,18 @@ def _conversar(cliente_id: str, combinacion: Dict[str, Any], telefono: str) -> D
         conversacion.append({"quien": "clienta", "texto": suyo})
 
         marca = len(dichos)
+        # Por WhatsApp la cita se cierra pulsando "Confirmar", y aqui no hay dedo
+        # que pulse: su "confirmo" se entrega como el boton. Sin esto, TODA
+        # conversacion bien llevada acababa contando como "se fue sin cita",
+        # porque el asistente mandaba el resumen y ahi se quedaba.
+        boton = ""
+        if _le_han_pedido_confirmar(conversacion) and _dice_que_si(suyo):
+            boton = "confirm_yes"
         try:
             asyncio.run(whatsapp._handle_whatsapp_message(
                 cliente_id=cliente_id, phone_number_id="phone_sim",
                 from_number=telefono, incoming_text=suyo,
-                interactive_id="", request=None,
+                interactive_id=boton, request=None,
             ))
         except Exception as exc:  # noqa: BLE001
             conversacion.append({"quien": "asistente", "texto": "[REVENTO] %r" % exc})
