@@ -76,6 +76,10 @@ class Conversacion:
     hubo_cita: bool = False                              # se creo, movio o cancelo
     dias_mencionados: List[str] = field(default_factory=list)
     precios_ocultos: bool = False
+    # Las herramientas que se llamaron en cada turno (de `trazas`). Vacio cuando la
+    # conversacion es anterior a que existieran las trazas: entonces las senyales
+    # que dependen de esto se callan, en vez de inventarse un veredicto.
+    herramientas_por_turno: List[List[str]] = field(default_factory=list)
 
     @property
     def suyos(self) -> List[str]:
@@ -179,6 +183,29 @@ def _larga_y_sin_nada(conv: Conversacion) -> str:
     return ""
 
 
+def _afirmo_sin_mirar(conv: Conversacion) -> str:
+    """Dijo algo de la agenda sin haberla consultado. Con hechos, no con palabras.
+
+    Es la version exacta de lo que antes se adivinaba leyendo la frase: aqui se
+    sabe que herramientas se llamaron en ese turno. El caso real: "a las 10:30 ya
+    tengo una cita" cuando estaba libre para las cinco profesionales -y el turno no
+    llamo a `consultar_disponibilidad` ni una vez-.
+    """
+    if not conv.herramientas_por_turno:
+        return ""          # conversacion sin traza: no se afirma nada
+    from backend import agent
+
+    respuestas = conv.del_asistente
+    for indice, texto in enumerate(respuestas):
+        if not agent._afirma_sobre_la_agenda(texto):
+            continue
+        if indice >= len(conv.herramientas_por_turno):
+            continue
+        if "consultar_disponibilidad" not in conv.herramientas_por_turno[indice]:
+            return "afirmo algo de la agenda sin haberla consultado en ese turno"
+    return ""
+
+
 @dataclass
 class Senyal:
     """Una cosa que mirar, con su nombre y su gravedad."""
@@ -189,6 +216,7 @@ class Senyal:
 
 
 SENYALES: List[Senyal] = [
+    Senyal("afirmo_sin_mirar", "alta", _afirmo_sin_mirar),
     Senyal("dijo_que_cerramos", "alta", _dijo_que_cerramos),
     Senyal("resumen_sin_cita", "alta", _resumen_sin_cita),
     Senyal("dio_un_precio", "alta", _dio_un_precio),
@@ -252,6 +280,17 @@ def _hubo_gestion(cliente_id: str, origen: str) -> bool:
     return fila is not None
 
 
+def _herramientas_por_turno(cliente_id: str, session_id: str) -> List[List[str]]:
+    """Lo que hizo el asistente en cada turno. Vacio si no hay traza."""
+    try:
+        from backend import trazas
+
+        return trazas.uso_por_turno(cliente_id, session_id)
+    except Exception as exc:  # noqa: BLE001 - sin traza se revisa igual, con menos
+        settings.logger.warning("[calidad] sin trazas de %s: %s", session_id, exc)
+        return []
+
+
 def cargar_conversaciones(cliente_id: str, desde: str, hasta: str = "") -> List[Conversacion]:
     """Las conversaciones guardadas de ese negocio entre dos fechas (ISO)."""
     from backend import booking
@@ -296,6 +335,7 @@ def cargar_conversaciones(cliente_id: str, desde: str, hasta: str = "") -> List[
             precios_ocultos=ocultos,
             dias_mencionados=_dias_mencionados(mensajes),
             hubo_cita=_hubo_gestion(cliente_id, origen),
+            herramientas_por_turno=_herramientas_por_turno(cliente_id, session_id),
         ))
     return salida
 

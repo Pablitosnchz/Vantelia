@@ -118,6 +118,17 @@ def _repasar_calidad_si_toca() -> int:
             settings.logger.warning("[calidad] %s no se ha podido repasar: %s", cliente_id, exc)
             continue
         marcadas += int(resumen.get("marcadas") or 0)
+
+    # Las trazas son para depurar y medir, no un archivo historico: se limpian
+    # solas en la misma pasada.
+    try:
+        from backend import trazas
+
+        borradas = trazas.limpiar_viejas()
+        if borradas:
+            settings.logger.info("Trazas antiguas borradas: %s", borradas)
+    except Exception as exc:  # noqa: BLE001
+        settings.logger.warning("[trazas] no se pudieron limpiar: %s", exc)
     return marcadas
 
 

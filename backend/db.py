@@ -1560,6 +1560,37 @@ def _init_database() -> None:
             )
             """
         )
+        # Que hizo el asistente en cada turno: herramientas, frenos, tiempo y
+        # coste. Es un cuaderno de bitacora para depurar y medir, no un archivo:
+        # se limpia solo a los 30 dias.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_turns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                canal TEXT NOT NULL DEFAULT '',
+                mensaje TEXT NOT NULL DEFAULT '',
+                respuesta TEXT NOT NULL DEFAULT '',
+                tools_json TEXT NOT NULL DEFAULT '[]',
+                frenos_json TEXT NOT NULL DEFAULT '[]',
+                vueltas INTEGER NOT NULL DEFAULT 0,
+                ms INTEGER NOT NULL DEFAULT 0,
+                modelo TEXT NOT NULL DEFAULT '',
+                tokens_entrada INTEGER NOT NULL DEFAULT 0,
+                tokens_salida INTEGER NOT NULL DEFAULT 0,
+                coste_euros REAL NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agent_turns_conversacion"
+            " ON agent_turns(cliente_id, session_id, id)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agent_turns_fecha ON agent_turns(created_at)"
+        )
         # Conversaciones que la vigilancia de calidad ha marcado para que alguien
         # las mire. Una fila por conversacion: si se vuelve a repasar, se
         # actualizan las senyales pero NO se pierde que el negocio ya la atendio.

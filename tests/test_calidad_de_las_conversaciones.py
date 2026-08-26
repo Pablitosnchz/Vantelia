@@ -142,7 +142,10 @@ def test_una_senyal_rota_no_tumba_el_repaso(api_module, monkeypatch):  # noqa: F
         raise RuntimeError("boom")
 
     rota = calidad.Senyal("rota", "alta", _revienta)
-    monkeypatch.setattr(calidad, "SENYALES", [rota] + calidad.SENYALES[:2])
+    # Por NOMBRE, no por posicion: anyadir una senyal nueva no puede romper esto.
+    sana = [s for s in calidad.SENYALES if s.id == "resumen_sin_cita"]
+    assert sana, "ha desaparecido la senyal con la que se comprueba"
+    monkeypatch.setattr(calidad, "SENYALES", [rota] + sana)
     conv = _conv([("ella", "hola"), ("ia", "Resumen\\n¿Confirmamos la cita?")])
     assert "resumen_sin_cita" in [h.senyal for h in calidad.revisar(conv)]
 

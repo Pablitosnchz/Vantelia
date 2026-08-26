@@ -33,6 +33,7 @@ from backend import (
     outreach,
     security,
     settings,
+    rag,
     textnorm,
     timeutils,
 )
@@ -652,6 +653,45 @@ def admin_ia_health(fresh: int = 0):
         "ia": salud,
         "modelo": settings.DEFAULT_CHAT_MODEL,
         "clave_configurada": bool(settings.OPENAI_API_KEY),
+    }
+
+
+@app.get("/admin/informe", dependencies=[Depends(security._require_admin_token)])
+def admin_informe(cliente_id: str = "", horas: int = 24):
+    """El dia en una pantalla: cuanto se hablo, que costo y que fallo.
+
+    Sin `cliente_id` sale el total de la casa, que es lo que dice si el saldo de
+    OpenAI aguanta el mes. Nos enteramos de que se acababa porque se cayo
+    produccion; esto es para no repetirlo.
+    """
+    from backend import calidad, trazas
+
+    cliente_id = textnorm._sanitize_text(cliente_id or "")
+    resumen = trazas.resumen_del_dia(cliente_id, horas=horas)
+    return {
+        "ok": True,
+        "uso": resumen,
+        "a_revisar": calidad.pendientes(cliente_id) if cliente_id else [],
+        "ia": rag._ia_health_cached(),
+    }
+
+
+@app.get("/admin/traza", dependencies=[Depends(security._require_admin_token)])
+def admin_traza(cliente_id: str, session_id: str, limite: int = 20):
+    """Que hizo el asistente, turno a turno, en UNA conversacion.
+
+    Es lo que antes costaba tres scripts: se ve que herramientas llamo, que le
+    devolvieron, que frenos saltaron y cuanto tardo.
+    """
+    from backend import trazas
+
+    return {
+        "ok": True,
+        "turnos": trazas.del_turno(
+            textnorm._sanitize_text(cliente_id or ""),
+            textnorm._sanitize_text(session_id or ""),
+            limite=limite,
+        ),
     }
 
 

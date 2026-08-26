@@ -1612,6 +1612,12 @@ async def responder(
     except Exception:  # noqa: BLE001
         hoy = timeutils._utc_now().date()
 
+    from backend import trazas
+
+    # El cuaderno de bitacora del turno. Nunca puede tumbar la conversacion: todo
+    # lo suyo esta envuelto, y si falla se registra y se sigue.
+    traza = trazas.Traza(cliente_id, session_id, canal="whatsapp" if telefono else "chat")
+
     quien = _quien_escribe(cliente_id, telefono)
     historial = _historial(session_id, cliente_id)
     # Las que ya se le han ofrecido cuentan como pedidas: elegir de la lista que
@@ -1734,6 +1740,15 @@ async def responder(
                 temperature=_temperatura_del_negocio(cfg),
                 max_tokens=400,
             )
+            traza.vuelta()
+            try:
+                uso = getattr(respuesta, "usage", None)
+                if uso is not None:
+                    traza.modelo(_modelo_del_negocio(cfg),
+                                 prompt=getattr(uso, "prompt_tokens", 0) or 0,
+                                 salida=getattr(uso, "completion_tokens", 0) or 0)
+            except Exception:  # noqa: BLE001 - una metrica no frena nada
+                pass
             elegido = respuesta.choices[0].message
             if not getattr(elegido, "tool_calls", None):
                 texto_final = (elegido.content or "").strip()
@@ -1748,6 +1763,7 @@ async def responder(
                 if (_afirma_sobre_la_agenda(texto_final) and not consultada
                         and vuelta + 1 < MAX_VUELTAS):
                     obligar = True
+                    traza.freno("afirmo_sin_mirar_la_agenda")
                     mensajes.append({
                         "role": "system",
                         "content": ("Antes de decir nada sobre dias u horas, consulta "
@@ -1760,6 +1776,7 @@ async def responder(
                 if (_lo_anuncia_en_vez_de_hacerlo(texto_final) and not consultada
                         and vuelta + 1 < MAX_VUELTAS):
                     obligar = True
+                    traza.freno("lo_anuncio_sin_hacerlo")
                     mensajes.append({
                         "role": "system",
                         "content": ("No anuncies que vas a mirarlo: MIRALO AHORA y "
@@ -1773,6 +1790,7 @@ async def responder(
                 #       uno se va a otro sitio y el otro pregunta por otro dia.
                 if (_dice_que_cierran(texto_final) and dias_abiertos_vistos
                         and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("dijo_cerrado_estando_abierto")
                     mensajes.append({
                         "role": "system",
                         "content": ("Ese dia el negocio SI ABRE: lo has consultado y "
@@ -1787,6 +1805,7 @@ async def responder(
                 #    se lo haya inventado, la condicion es que no sale de aqui.
                 if (_da_un_precio_prohibido(cliente_id, texto_final, dicho_de_ella)
                         and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("precio_que_no_se_da")
                     mensajes.append({
                         "role": "system",
                         "content": ("NO tienes ese precio y no puedes inventartelo ni "
@@ -1801,6 +1820,7 @@ async def responder(
                 # 0) Lo mismo que ya le dijiste, otra vez, no.
                 if (_ya_dijo_esto(historial, texto_final)
                         and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("se_repetia")
                     mensajes.append({
                         "role": "system",
                         "content": ("ESO YA SE LO HAS DICHO con esas mismas palabras y "
@@ -1814,6 +1834,7 @@ async def responder(
                     continue
                 if (_dice_que_acaba_de_hacerlo(texto_final) and not mutada
                         and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("dijo_haberlo_hecho_sin_hacerlo")
                     mensajes.append({
                         "role": "system",
                         "content": ("NO has tocado la agenda en este turno: no digas "
@@ -1830,6 +1851,8 @@ async def responder(
                 if (estado.cancelada and not mutada
                         and _da_la_cita_por_hecha(texto_final)
                         and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("daba_por_viva_una_cita_cancelada")
+                    traza.freno("daba_la_cita_por_hecha")
                     mensajes.append({
                         "role": "system",
                         "content": ("Su cita esta CANCELADA: no digas que sigue en "
@@ -1853,11 +1876,13 @@ async def responder(
                     estado.recargo_dicho = True
                 reserva.guardar(cliente_id, telefono, estado,
                                 pedido=reserva.que_falta(estado, conocido))
-                return _con_el_telefono_si_hace_falta(
+                final = _con_el_telefono_si_hace_falta(
                     cliente_id, mensaje,
                     _sin_comillas_en_los_servicios(cliente_id, texto_final),
                     cita_creada,
-                ), cita_creada
+                )
+                traza.guardar(mensaje=mensaje, respuesta=final)
+                return final, cita_creada
             obligar = False
 
             # Lo que acaba de ofrecerle en ESTE turno tambien cuenta como ofrecido:
@@ -1999,6 +2024,9 @@ async def responder(
                         telefono=telefono, location_id=location_id, ya_creadas=ya_creadas,
                         quien=quien, remate_manual=remate_manual,
                     )
+                traza.tool(llamada.function.name, argumentos,
+                           ok=bool(resultado.get("ok", True)),
+                           nota=str(resultado.get("error") or "")[:120])
                 if llamada.function.name == "politica_del_negocio":
                     norma_mirada = True
                 if llamada.function.name == "buscar_servicio":
@@ -2068,7 +2096,10 @@ async def responder(
         )
         reserva.guardar(cliente_id, telefono, estado,
                         pedido=reserva.que_falta(estado, conocido))
-        return (cierre.choices[0].message.content or "").strip(), cita_creada
+        remate_final = (cierre.choices[0].message.content or "").strip()
+        traza.freno("se_acabaron_las_vueltas")
+        traza.guardar(mensaje=mensaje, respuesta=remate_final)
+        return remate_final, cita_creada
     except Exception as exc:  # noqa: BLE001 - nunca puede dejar a nadie sin respuesta
         settings.logger.warning("[agenda-agente] fallo con %s: %s", cliente_id, exc)
         # Si el modelo no contesta por saldo o credenciales, que se SEPA: se
@@ -2078,4 +2109,6 @@ async def responder(
 
         if rag._es_fallo_de_cuenta(exc):
             rag._ia_marcar(False, str(exc))
+        traza.freno("revento")
+        traza.guardar(mensaje=mensaje, respuesta="[fallo] %s" % str(exc)[:200])
         return "", cita_creada
