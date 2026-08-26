@@ -823,6 +823,21 @@ def _horas_que_ha_dicho(dicho: str) -> set:
     return horas
 
 
+def _horas_ya_ofrecidas(historial: List[Dict[str, str]]) -> set:
+    """Las horas que el ASISTENTE le ha ofrecido en esta conversacion.
+
+    Elegir una de las que le acaban de ofrecer es lo mas normal del mundo -"vale,
+    la primera que me has dicho"- y el freno de las horas inventadas la rechazaba
+    porque no estaba en el estado: la cita no se movia y el asistente contestaba
+    "no puedo moverla a la hora que te he ofrecido", que no hay por donde cogerlo.
+    """
+    horas = set()
+    for mensaje in (historial or [])[-6:]:
+        if mensaje.get("role") == "assistant":
+            horas |= _horas_que_ha_dicho(str(mensaje.get("content") or ""))
+    return horas
+
+
 def _hora_que_nadie_ha_pedido(estado: Any, dicho: str, hora: str) -> bool:
     """¿Se esta moviendo la cita a una hora que ni ha pedido ni se le ha ofrecido?
 
@@ -1599,6 +1614,9 @@ async def responder(
 
     quien = _quien_escribe(cliente_id, telefono)
     historial = _historial(session_id, cliente_id)
+    # Las que ya se le han ofrecido cuentan como pedidas: elegir de la lista que
+    # acaba de darle el asistente es lo mas normal del mundo.
+    ofrecidas = _horas_ya_ofrecidas(historial)
 
     dicho_de_ella = " ".join(
         [str(mensaje)] + [m.get("content", "") for m in historial if m.get("role") == "user"]
@@ -1842,6 +1860,9 @@ async def responder(
                 ), cita_creada
             obligar = False
 
+            # Lo que acaba de ofrecerle en ESTE turno tambien cuenta como ofrecido:
+            # suele listar las horas y reprogramar justo despues.
+            ofrecidas |= _horas_que_ha_dicho(elegido.content or "")
             mensajes.append({
                 "role": "assistant",
                 "content": elegido.content or "",
@@ -1924,6 +1945,7 @@ async def responder(
                 # reprogramar con el MISMO dia y la MISMA hora, dijo "listo,
                 # reprogramada" y la clienta se quedo con la cita puesta.
                 if (llamada.function.name == "reprogramar_cita"
+                        and str(argumentos.get("hora") or "") not in ofrecidas
                         and _hora_que_nadie_ha_pedido(
                             estado, dicho_de_ella, str(argumentos.get("hora") or ""))):
                     resultado = {

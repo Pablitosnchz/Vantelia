@@ -852,3 +852,24 @@ def test_con_el_servicio_elegido_no_lo_vuelve_a_recomendar(api_module):  # noqa:
     estado = reserva.Estado(servicio="Mechas o balayage medio", duracion=360)
     resumen = reserva.resumen(estado)
     assert "YA esta elegido" in resumen
+
+
+def test_elegir_una_hora_que_le_han_ofrecido_no_es_inventarsela(api_module):  # noqa: F811
+    """Mi propio freno bloqueaba lo mas normal del mundo.
+
+    "Vale, la primera opcion que me has dicho" -> el asistente contestaba "no puedo
+    mover tu cita a la hora que te he ofrecido", que no hay por donde cogerlo. La
+    hora venia de su propia lista, pero no estaba en el estado.
+    """
+    from backend import agent
+
+    historial = [
+        {"role": "user", "content": "cualquier hueco me vale"},
+        {"role": "assistant",
+         "content": "Tengo el martes 1 a las 18:00 o el miércoles 2 a las 19:00"},
+    ]
+    ofrecidas = agent._horas_ya_ofrecidas(historial)
+    assert "18:00" in ofrecidas and "19:00" in ofrecidas
+
+    # Lo que dijo ELLA no cuenta como ofrecido por el asistente.
+    assert agent._horas_ya_ofrecidas([{"role": "user", "content": "a las 11"}]) == set()
