@@ -369,3 +369,38 @@ Y una que sí conviene mirar: **una variable asignada y nunca usada suele ser el
 rastro de una cadena muerta**. `extra_message` (el motivo de cancelación) viajaba
 por siete funciones hasta una que lo saneaba y lo tiraba, mientras la auditoría
 seguía apuntando que se le había enviado al cliente.
+
+## Nada construido y sin enchufar (26-ago-2026)
+
+Cuatro veces en dos dias aparecio lo mismo: codigo escrito, probado a mano y
+**desconectado**. No daba error -compilaba y los tests pasaban- y las cuatro se
+encontraron por casualidad:
+
+| Estaba escrito | Lo llamaba | Que costo |
+| --- | --- | --- |
+| `_work_intervals_of` (huecos de exposicion) | nadie | el panel pintaba los packs macizos: la tarde parecia ocupada |
+| el campo `work_intervals` | declarado en el modelo equivocado | lo mismo |
+| `_valoracion_en_lugar_del_tratamiento` | nadie | citas de 4 h a quien solo preguntaba el precio |
+| `chat_model` / `temperature` del panel | nadie | quien pagaba un modelo mejor no lo tenia |
+
+Lo vigila **`tests/test_nada_sin_enchufar.py`**: falla si una funcion del backend
+no la llama nadie. No cuenta lo que llama el framework (endpoints, middlewares,
+fixtures). Si te falla: o la enchufas donde iba, o la borras.
+
+Ese mismo test comprueba que **solo hay UNA forma de normalizar texto**
+(`textnorm.normalizar`); estaba copiada identica en `catalog_pick`, `intents` y
+`rules`, que son tres sitios donde arreglar el mismo caso raro.
+
+### Donde se decide cada cosa (una sola por fila)
+
+| Decision | Quien la toma | Quien la llama |
+| --- | --- | --- |
+| Crear una cita | `booking._create_booking_core` | voz, WhatsApp, portal, widget |
+| Cancelar | `booking._cancel_booking_core` | voz, admin, portal, publico |
+| Que huecos hay | `agenda._public_slot_sets_for_day` | todos los canales |
+| Que servicio es | `catalog_pick.elegir` | el agente |
+| Que se contesta | `agent.responder` | chat y WhatsApp |
+
+DEUDA CONOCIDA: los guardarrailes de conversacion (no repetirse, no dar por hecha
+una cita, no inventarse una hora, el recargo, la valoracion) viven SOLO en
+`agent.py`. La voz (`voice_engine.py`) no tiene ninguno.
