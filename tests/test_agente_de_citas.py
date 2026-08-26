@@ -736,3 +736,35 @@ def test_el_freno_de_repetirse_esta_enchufado(api_module):  # noqa: F811
     assert "_ya_dijo_esto(historial, texto_final)" in fuente, (
         "nada impide que suelte la misma frase dos veces"
     )
+
+
+def test_quedarse_sin_hueco_no_es_estar_cerrado(api_module, client):  # noqa: F811
+    """Dijo "manyana estamos cerrados" un jueves que se abre de 10:00 a 20:30.
+
+    Lo unico que pasaba es que no cabia un alisado de casi cuatro horas. Para el
+    cliente no es lo mismo: si le dices que cierras, se va a otro sitio; si le
+    dices que ese dia lo tienes completo, pregunta por otro.
+    """
+    import inspect
+
+    from backend import agent, voice
+
+    assert agent._dice_que_cierran("Cariño, mañana estamos cerrados 😔")
+    assert agent._dice_que_cierran("Ese día no abrimos")
+    assert not agent._dice_que_cierran("Ese día lo tengo completo, ¿te miro el viernes?")
+
+    fuente = inspect.getsource(agent.responder)
+    assert "_dice_que_cierran(texto_final)" in fuente, "nada lo impide"
+    assert "dias_abiertos_vistos" in fuente, "no se sabe si el dia abria o no"
+
+    # Y la herramienta lo dice claro, para todos los canales.
+    disponibilidad = inspect.getsource(voice._voice_check_availability)
+    assert "dia_cerrado" in disponibilidad and "nota_del_dia" in disponibilidad
+
+
+def test_sabe_si_un_dia_el_negocio_abre(api_module, client):  # noqa: F811
+    from backend import voice
+
+    # El tenant de pruebas cierra los domingos (closed_weekdays por defecto).
+    assert voice._dia_cerrado("demo", "2026-08-30") is True    # domingo
+    assert voice._dia_cerrado("demo", "2026-08-27") is False   # jueves

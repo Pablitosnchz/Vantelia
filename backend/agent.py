@@ -1079,6 +1079,16 @@ _UNA_CIFRA_DE_DINERO = re.compile(
 )
 
 
+_DICE_QUE_CIERRAN = ("estamos cerrados", "estamos cerrado", "cerramos ese dia",
+                     "ese dia cerramos", "no abrimos", "no abrimos ese dia",
+                     "manana estamos cerrados", "ese dia esta cerrado")
+
+
+def _dice_que_cierran(texto: str) -> bool:
+    plano = catalog_pick._norm(texto or "")
+    return any(pista in plano for pista in _DICE_QUE_CIERRAN)
+
+
 def _da_un_precio_prohibido(cliente_id: str, texto: str, contexto: str) -> bool:
     """¿Ha soltado una cifra de algo cuyo precio este negocio no da por mensaje?
 
@@ -1544,6 +1554,7 @@ async def responder(
         sin_precio = ""
         catalogo_mirado = False
         norma_mirada = False
+        dias_abiertos_vistos = False   # se ha consultado un dia que SI abre
         for vuelta in range(MAX_VUELTAS):
             # Lo que el codigo sabe y lo que toca hacer, delante del modelo en CADA
             # vuelta: asi no hay nada que corregirle despues.
@@ -1620,6 +1631,21 @@ async def responder(
                         "content": ("Antes de decir nada sobre dias u horas, consulta "
                                     "`consultar_disponibilidad`. No afirmes que un dia "
                                     "esta cerrado ni que no hay hueco sin haberlo mirado."),
+                    })
+                    continue
+                # 2bis) "Estamos cerrados" cuando el negocio SI abre. Quedarse
+                #       sin hueco no es cerrar, y para el cliente no es lo mismo:
+                #       uno se va a otro sitio y el otro pregunta por otro dia.
+                if (_dice_que_cierran(texto_final) and dias_abiertos_vistos
+                        and vuelta + 1 < MAX_VUELTAS):
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("Ese dia el negocio SI ABRE: lo has consultado y "
+                                    "lo que pasa es que no queda hueco para ese "
+                                    "servicio. No digas que estamos cerrados -es "
+                                    "falso y suena a que no hay nada que hacer-: "
+                                    "dile que ese dia lo tienes completo y ofrecele "
+                                    "el siguiente con hueco."),
                     })
                     continue
                 # 3) Un precio que el negocio no da: da igual que lo haya leido o
@@ -1805,6 +1831,8 @@ async def responder(
                 if llamada.function.name == "consultar_disponibilidad":
                     consultada = True
                     dias_mirados += 1
+                    if resultado.get("ok") and not resultado.get("dia_cerrado", False):
+                        dias_abiertos_vistos = True
                 if llamada.function.name == "crear_cita" and resultado.get("ok"):
                     cita_creada = True
                     # Lo que hay que contarle SIN que pregunte: como venir

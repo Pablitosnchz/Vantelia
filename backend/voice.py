@@ -2189,15 +2189,41 @@ async def _voice_check_availability(
             servicio=servicio,
             location_id=location_id,
         )
+    cerrado = _dia_cerrado(cliente_id, fecha, config)
     return {
         "ok": True,
         "fecha": fecha,
         "hay_huecos": bool(slots),
+        # Quedarse sin hueco NO es cerrar. El asistente contestaba "manyana
+        # estamos cerrados" un jueves que se abre de 10:00 a 20:30, solo porque no
+        # cabia un alisado de casi cuatro horas. Al cliente eso le suena a que no
+        # hay nada que hacer, y se va.
+        "dia_cerrado": cerrado,
+        "nota_del_dia": ("" if slots else (
+            "Ese dia el negocio NO abre." if cerrado else
+            "Ese dia SI se abre: lo que no hay es un hueco lo bastante largo para "
+            "ese servicio. NO digas que estamos cerrados; dile que ese dia lo tienes "
+            "completo y ofrecele otro.")),
         "motivo": voice_message if not slots else "",
         "mensaje_voz": voice_message,
         **_huecos_por_franja(slots),
         **date_meta,
     }
+
+
+def _dia_cerrado(cliente_id: str, fecha: str, config: Optional[Dict[str, Any]] = None) -> bool:
+    """¿Ese dia el negocio NO abre? (distinto de "abre pero no le queda hueco")."""
+    try:
+        from backend import agenda, clients
+
+        dia = textnorm._parse_date(fecha).date()
+        cfg = config if config is not None else clients._get_client_config(cliente_id)
+        for fila in agenda._weekly_schedule_matrix(cliente_id, cfg) or []:
+            if isinstance(fila, dict) and int(fila.get("weekday", -1)) == dia.weekday():
+                return bool(fila.get("closed"))
+    except Exception:  # noqa: BLE001
+        return False
+    return False
 
 
 async def _voice_booking_unavailable_response(
