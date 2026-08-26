@@ -315,7 +315,14 @@ def _mentiras(cliente_id: str, dichos: List[str], vivas: List[Dict[str, Any]]) -
 
     fallos = []
     texto = " ".join(dichos)
-    if agent._da_la_cita_por_hecha(texto) and not vivas:
+    # Solo cuenta como mentira lo que le queda en la cabeza AL IRSE, y por eso se
+    # miran los ultimos mensajes y no todos.
+    #
+    # Juntandolos todos, una CANCELACION salia siempre marcada: el asistente decia
+    # "tu cita esta confirmada para el jueves" -verdad en ese momento-, despues la
+    # cancelaba, y al final no habia ninguna cita viva. Se daba por mentira algo
+    # que era cierto al decirlo, y encima en el flujo que mejor funciona.
+    if agent._da_la_cita_por_hecha(" ".join(dichos[-2:])) and not vivas:
         fallos.append("dice_que_hay_cita_y_no_la_hay")
 
     # Un precio para algo que este negocio NO presupuesta por mensaje.

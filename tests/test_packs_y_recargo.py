@@ -618,3 +618,45 @@ def test_la_regla_del_precio_vale_aunque_no_sea_coger_cita(api_module, client): 
         with db._get_db_connection() as conexion:
             conexion.execute("DELETE FROM services WHERE cliente_id='demo' AND slug='keratina_larga'")
             conexion.commit()
+
+
+def test_la_regla_del_precio_frena_tambien_el_resumen_de_whatsapp(api_module, client):  # noqa: F811
+    """Por WhatsApp la cita NO la crea el modelo: la crea el boton del resumen.
+
+    El guardarrail estaba solo en el camino del agente, asi que por el canal que
+    usa el salon seguia colandose: 4 de cada 100 conversaciones acababan con "Pack
+    keratina premium extra largo" -horas de tratamiento- en la agenda de alguien
+    que solo habia preguntado el precio.
+    """
+    import inspect
+
+    from backend import booking, db, rules, timeutils, whatsapp
+
+    ahora = timeutils._utc_now_iso()
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT OR REPLACE INTO services (cliente_id, slug, name, category,"
+            " duration_minutes, price_cents, description, is_active, sort_order,"
+            " created_at, updated_at) VALUES ('demo', 'kera_xl', 'Keratina premium xl',"
+            " '', 240, 0, '', 1, 0, ?, ?)", (ahora, ahora))
+        conexion.commit()
+    regla = rules.guardar("demo", nombre="Alisado: pedir foto", intenciones=["precio"],
+                          familias=["keratina"], accion="pedir_foto",
+                          texto="Mandanos una foto y te decimos el precio.")
+    try:
+        # Vino preguntando el precio -> no se le coge el tratamiento.
+        freno = booking.bloquea_por_regla_de_precio("demo", "Keratina premium xl", True)
+        assert freno and freno["accion"] == "pedir_foto"
+        assert "foto" in freno["texto_del_negocio"].lower()
+
+        # Vino a RESERVAR -> se le coge su cita, que es la otra mitad de la regla.
+        assert booking.bloquea_por_regla_de_precio("demo", "Keratina premium xl", False) == {}
+
+        # Y el resumen de WhatsApp lo comprueba antes de ensenyar nada.
+        fuente = inspect.getsource(whatsapp._wa_resumen_para_confirmar)
+        assert "bloquea_por_regla_de_precio" in fuente
+    finally:
+        rules.borrar("demo", regla["id"])
+        with db._get_db_connection() as conexion:
+            conexion.execute("DELETE FROM services WHERE cliente_id='demo' AND slug='kera_xl'")
+            conexion.commit()

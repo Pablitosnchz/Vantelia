@@ -1112,6 +1112,45 @@ async def _wa_explicar_el_recargo(
                                 cliente_id, exc)
 
 
+async def _wa_explicar_la_regla_del_precio(
+    *, cliente_id: str, phone_number_id: str, to_number: str,
+    freno: Dict[str, Any], estado, from_number: str,
+) -> None:
+    """Le cuenta lo que hace el negocio en vez de cogerle el tratamiento.
+
+    El texto es del negocio (su regla), no nuestro. Si su regla es ofrecer la cita
+    de valoracion, se le dice cual es; si es pedir una foto, se le pide.
+    """
+    from backend import reserva
+
+    lineas = []
+    if freno.get("texto_del_negocio"):
+        lineas.append(freno["texto_del_negocio"])
+    elif freno.get("reserva_esto_en_su_lugar"):
+        lineas.append(
+            "De %s no te puedo dar precio sin verte el pelo, cariño. Lo que te cojo "
+            "es una cita de %s: es corta, sin compromiso, y ahí te damos el "
+            "presupuesto exacto." % (freno.get("en_lugar_de") or "eso",
+                                     freno["reserva_esto_en_su_lugar"]))
+    else:
+        lineas.append("De eso no te puedo dar precio por aquí sin verte antes, cariño.")
+
+    # Se cambia el servicio del estado para que, si dice que si, se le coja la cita
+    # CORRECTA sin volver a empezar.
+    if freno.get("reserva_esto_en_su_lugar"):
+        estado.servicio = freno["reserva_esto_en_su_lugar"]
+        estado.servicio_exacto = freno["reserva_esto_en_su_lugar"]
+        estado.hora = ""
+        estado.huecos = []
+        reserva.guardar(cliente_id, from_number, estado)
+        lineas.append("¿Te la cojo?")
+
+    await messaging._send_whatsapp_text(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+        text=chr(10).join(lineas),
+    )
+
+
 async def _wa_send_booking_summary(
     *, cliente_id: str, phone_number_id: str, to_number: str,
     flow: appstate.WAFlowState, reconocido: bool = False,
@@ -1631,6 +1670,19 @@ async def _wa_resumen_para_confirmar(
         return False
     if not (estado.servicio and estado.fecha and estado.hora):
         return False
+
+    # Vino preguntando el precio de algo que este negocio no presupuesta por
+    # mensaje: NO se le ensena el resumen del tratamiento. Por aqui es por donde se
+    # colaba, porque la cita la crea el boton, no el modelo.
+    freno = booking.bloquea_por_regla_de_precio(
+        cliente_id, estado.servicio_exacto or estado.servicio,
+        bool(getattr(estado, "veces_sin_precio", 0)))
+    if freno:
+        await _wa_explicar_la_regla_del_precio(
+            cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=from_number, freno=freno, estado=estado, from_number=from_number,
+        )
+        return True
 
     # Con el nombre EXACTO del catalogo: el de hablar puede coincidir con otro
     # servicio distinto (el "Pack keratina premium medio" se dice igual que la

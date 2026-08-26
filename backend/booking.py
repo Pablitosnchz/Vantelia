@@ -6231,6 +6231,41 @@ def precios_ocultos(cliente_id: str) -> bool:
     return booking_cfg.get("mostrar_precios") is False
 
 
+def bloquea_por_regla_de_precio(cliente_id: str, servicio: str, pidio_precio: bool) -> Dict[str, Any]:
+    """Lo que hay que hacer ANTES de coger esa cita a quien pregunto el precio.
+
+    Devuelve {} si no hay nada que hacer. Si no, dice la accion del negocio y, en
+    su caso, el servicio que SI se reserva (la valoracion).
+
+    POR QUE ESTA AQUI Y NO EN EL AGENTE: por WhatsApp la cita NO la crea el
+    modelo; la crea el resumen con botones despues de que la clienta pulse
+    "Confirmar". El guardarrail estaba solo en el camino del agente, asi que por el
+    canal que usa el salon seguia colandose: cuatro de cada cien conversaciones
+    acababan con "Pack keratina premium extra largo" -horas de tratamiento- en la
+    agenda de alguien que solo habia preguntado el precio.
+
+    Ojo al matiz que corrigio la duenya: quien viene a RESERVAR se lleva su cita.
+    Esto solo se aplica si vino preguntando cuanto cuesta.
+    """
+    if not pidio_precio or not servicio:
+        return {}
+    regla = regla_de_precio_para(cliente_id, servicio)
+    if not regla:
+        return {}
+    valoracion = {}
+    if regla.get("accion") == "ofrecer_cita":
+        fila = _servicio_de_valoracion(cliente_id)
+        nombre = str((fila or {}).get("nombre") or "").strip()
+        if nombre:
+            valoracion = {"servicio": nombre}
+    return {
+        "accion": regla.get("accion", ""),
+        "texto_del_negocio": regla.get("texto") or "",
+        "reserva_esto_en_su_lugar": valoracion.get("servicio", ""),
+        "en_lugar_de": textnorm.nombre_de_servicio_publico(servicio),
+    }
+
+
 def regla_de_precio_para(cliente_id: str, servicio: str) -> Dict[str, Any]:
     """La regla que el negocio tiene para el PRECIO de ese servicio, si la hay.
 
