@@ -100,6 +100,11 @@ CASOS = [
         "id": "precio-cerrado-si-se-dice",
         "gravedad": "critico",
         "por_que": "Su catalogo SI tiene precio para corte: taparlo seria un paso atras.",
+        # Solo aplica si el negocio publica precios. El salon decidio despues que
+        # NO se dan por mensaje ("es mas facil que no de precio de nada"), y con
+        # eso puesto este caso pedia justo lo contrario que su dueña. Un banco de
+        # casos no puede contradecir lo que el negocio ha decidido.
+        "solo_si": "precios_visibles",
         "mensajes": ["cuanto vale un corte de señora?"],
         "debe": ["20"],
         "no_debe": [],

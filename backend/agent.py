@@ -1646,6 +1646,29 @@ async def responder(
             # Se lo explica UNA vez. Repetirle parrafo y medio en cada mensaje
             # es lo que hacia y ademas le hacia perder el hilo: venia de ofrecerle
             # tres horas y volvia a preguntarle que dia queria.
+            # Le da igual el dia y no hay huecos sobre la mesa: se BUSCA el
+            # primero que tenga, en vez de contestar "no tengo huecos" habiendo
+            # mirado uno solo. Se hace una vez por turno.
+            if (estado.dia_le_da_igual and not estado.huecos and not estado.hora
+                    and vuelta == 0 and estado.intencion in ("reservar", "reprogramar")):
+                from backend import agenda
+
+                try:
+                    dia, libres = await agenda.primer_dia_con_hueco(
+                        cliente_id, servicio=estado.servicio_exacto or estado.servicio,
+                        location_id=location_id)
+                except Exception as exc:  # noqa: BLE001
+                    settings.logger.warning("[agente] sin primer hueco (%s): %s", cliente_id, exc)
+                    dia, libres = "", []
+                if dia:
+                    estado.fecha_de_los_huecos = dia
+                    estado.huecos = libres[:8]
+                    consultada = True
+                    if not estado.fecha:
+                        estado.fecha = dia
+                    if not estado.hora:
+                        estado.hora = libres[0]
+
             aviso = ("" if estado.recargo_dicho
                      else _aviso_de_recargo(cliente_id, dicho_de_ella, estado.servicio))
             # Solo en la PRIMERA vuelta: si no, cada llamada a una tool contaria

@@ -3316,6 +3316,37 @@ async def _public_slot_sets_for_day(
     return all_slots, available_slots
 
 
+async def primer_dia_con_hueco(
+    cliente_id: str, *, servicio: str = "", desde: str = "", dias: int = 21,
+    location_id: str = "",
+):
+    """El primer dia con hueco de verdad, mirando dia a dia. (fecha, huecos).
+
+    Quien dice "cualquier hueco que tengas me vale" no esta pidiendo que le
+    consulten UN dia: esta diciendo que el negocio elija. El asistente miraba uno,
+    no encontraba, contestaba "no tengo huecos disponibles" -falso, los habia dos
+    dias despues- y se quedaba anunciando que iba a buscar. La clienta se iba.
+
+    Devuelve ("", []) si no hay nada en el plazo mirado.
+    """
+    from datetime import timedelta
+
+    try:
+        arranque = textnorm._parse_date(desde).date() if desde else timeutils._utc_now().date()
+    except Exception:  # noqa: BLE001
+        arranque = timeutils._utc_now().date()
+    for salto in range(max(1, int(dias))):
+        dia = (arranque + timedelta(days=salto)).isoformat()
+        try:
+            _todos, libres = await _public_slot_sets_for_day(
+                cliente_id, dia, servicio=servicio, location_id=location_id)
+        except Exception:  # noqa: BLE001 - un dia fuera de ventana no corta la busqueda
+            continue
+        if libres:
+            return dia, sorted(libres)
+    return "", []
+
+
 async def _resolve_public_booking_employee(
     cliente_id: str,
     fecha: str,

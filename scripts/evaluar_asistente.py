@@ -179,6 +179,23 @@ def _preparar_cita(cliente_id: str, telefono: str, indice: int = 0):
     return None
 
 
+def _aplica_a_este_negocio(cliente_id: str, caso: dict) -> bool:
+    """Hay casos que dependen de lo que el negocio haya decidido.
+
+    "Si tienes precio publicado, dilo" no vale para quien ha decidido no dar
+    precios por mensaje: ahi lo correcto es justo lo contrario, y el caso daba por
+    roto un comportamiento CORRECTO.
+    """
+    condicion = caso.get("solo_si", "")
+    if not condicion:
+        return True
+    if condicion == "precios_visibles":
+        from backend import booking
+
+        return not booking.precios_ocultos(cliente_id)
+    return True
+
+
 def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
     """Devuelve (paso, respuestas, motivo)."""
     from backend import whatsapp
@@ -287,7 +304,13 @@ def main() -> int:
     fallos = {"critico": [], "importante": [], "deseable": []}
     aciertos = 0
 
+    saltados = 0
     for indice, caso in enumerate(casos):
+        if not _aplica_a_este_negocio(args.cliente, caso):
+            print("  --   [%-11s] %-34s (no aplica a este negocio)"
+                  % (caso["gravedad"], caso["id"]))
+            saltados += 1
+            continue
         paso, respuestas, motivo = _ejecutar_caso(args.cliente, caso, dichos, indice)
         marca = "  OK  " if paso else "FALLA "
         print("%s [%-11s] %-34s" % (marca, caso["gravedad"], caso["id"]))
@@ -302,7 +325,8 @@ def main() -> int:
                 print("           > %s" % r.replace("\n", " ")[:160])
 
     print("\n" + "=" * 68)
-    print("  %d de %d" % (aciertos, len(casos)))
+    print("  %d de %d%s" % (aciertos, len(casos) - saltados,
+                            ("  (%d no aplican a este negocio)" % saltados) if saltados else ""))
     for gravedad in ("critico", "importante", "deseable"):
         if fallos[gravedad]:
             print("  %s: %s" % (
