@@ -757,42 +757,20 @@ def _tool_buscar_servicio(
                 "servicio": textnorm.nombre_de_servicio_publico(nombre),
                 "duracion_minutos": minutos,
             })
-        # Cada opcion, con lo que el negocio dice que ES. Recitar tres nombres de
-        # catalogo no ayuda a elegir: "Mechas o balayage" y "Cambio de color y
-        # mechas o balayage" suenan igual si no te explican la diferencia.
-        explicadas = []
-        for opcion in eleccion.opciones[:4]:
-            suya = ""
-            for nombre in eleccion.candidatos:
-                publico = textnorm.nombre_de_servicio_publico(nombre)
-                if catalog_pick._norm(publico).startswith(catalog_pick._norm(opcion)):
-                    suya = _sin_el_largo(
-                        _detalle_servicio(cliente_id, nombre).get("que_es", ""))
-                    if suya:
-                        break
-            explicadas.append({"servicio": opcion, "que_es": suya})
-        if not _explican_algo([e["que_es"] for e in explicadas]):
-            # Dicen casi lo mismo: se ofrecen los nombres a secas y punto.
-            explicadas = [{"servicio": e["servicio"], "que_es": ""} for e in explicadas]
-
-        # "Mechas o balayage" son dos cosas para quien elige. Y los nombres que se
-        # le ofrecen van SOLOS: la duenya lo pidio dos veces -"no quiero que
-        # especifique lo que conlleva cada servicio"-, porque una lista de cuatro
-        # opciones con su contenido cada una no se lee.
+        # Los nombres que se le ofrecen, y nada mas. "Mechas o balayage" son dos
+        # cosas para quien elige, aunque el catalogo las tenga en un servicio.
         nombres = []
         for opcion in eleccion.opciones[:4]:
             for parte in catalog_pick.separar_alternativas(opcion):
                 if parte not in nombres:
                     nombres.append(parte)
+
         return {
             "ok": True,
             "servicio": "",
             "falta": eleccion.falta,
             "preguntale_por": catalog_pick.sobre_que_preguntar(eleccion),
             "opciones": nombres,
-            # OJO: esto NO se cuenta al ofrecer. Solo si ELLA pregunta que
-            # diferencia hay entre una y otra.
-            "si_pregunta_la_diferencia": explicadas,
             "candidatos": detalle,
             "total_candidatos": len(eleccion.candidatos),
             "sugerencia": catalog_pick.pregunta_para(eleccion),
@@ -803,10 +781,8 @@ def _tool_buscar_servicio(
                 "PREGUNTALE POR %s con tus palabras, como lo haria una peluquera. NO "
                 "le sueltes una lista con lo que incluye cada opcion: nombralas "
                 "en UNA FRASE natural ('¿te gustaria hacerte mechas, balayage, grey "
-                "blending o un cambio de color con mechas?') y ya esta. Lo que "
-                "incluye cada una NO se cuenta salvo que ella pregunte la "
-                "diferencia; entonces lo tienes en `si_pregunta_la_diferencia`, con "
-                "las palabras del negocio. Hay %d servicios "
+                "blending o un cambio de color con mechas?') y ya esta. NO cuentes "
+                "que lleva cada una: el negocio no lo quiere. Hay %d servicios "
                 "que encajan, asi que NUNCA digas que no hay mas opciones. Y si solo "
                 "pregunta cuanto dura o cuanto cuesta, contestale con estos datos sin "
                 "obligarla a concretar."
@@ -926,47 +902,6 @@ def _sin_la_palabra_pack(dato: Any) -> Any:
     if isinstance(dato, str):
         return textnorm.nombre_de_servicio_publico(dato)
     return dato
-
-
-def _explican_algo(explicaciones: List[str]) -> bool:
-    """Estas descripciones DISTINGUEN una opcion de otra, o dicen casi lo mismo.
-
-    Lo dijo la duenya viendo el mensaje: "repite practicamente dos veces lo mismo
-    y no quiero que especifique lo que conlleva cada servicio". Y tenia razon: sus
-    tres opciones de mechas describen "matiz, elumen, flash repair y brusing" las
-    tres, asi que leerlas seguidas es leer lo mismo tres veces.
-
-    Explicar ayuda cuando las opciones se parecen en el nombre y se diferencian en
-    el contenido. Cuando tambien se parecen en el contenido, estorba.
-    """
-    limpias = [catalog_pick._norm(e) for e in explicaciones if e and e.strip()]
-    if len(limpias) < 2:
-        return bool(limpias)
-    palabras = [set(l.split()) for l in limpias]
-    comunes = set.intersection(*palabras)
-    todas = set.union(*palabras)
-    if not todas:
-        return False
-    # Si comparten 6 de cada 10 palabras, lo que las diferencia se pierde entre
-    # lo que repiten.
-    return (len(comunes) / len(todas)) < 0.6
-
-
-def _sin_el_largo(texto: str) -> str:
-    """La descripcion del servicio, sin las marcas de largo del pelo.
-
-    Se coge de UN servicio concreto -el corto, el medio- y ese largo se colaba en
-    la explicacion: "incluye mechas CORTO, matiz, elumen" a alguien a quien aun no
-    se le ha preguntado como tiene el pelo. Sonaba a que le ofrecian mechas cortas.
-    """
-    limpio = str(texto or "")
-    for talla in ("extra extra largo", "extra largo", "medio largo", "corto medio",
-                  "muy corto", "extralargo", "largo", "medio", "corto", "xxl", "xl"):
-        limpio = re.sub(r"(?i)(?<=\w)\s+%s(?=\W|$)" % re.escape(talla), "", limpio)
-    limpio = re.sub(r"\s{2,}", " ", limpio)
-    return re.sub(r"\s+([,.])", r"\1", limpio).strip(" ,;")
-
-
 def _detalle_servicio(cliente_id: str, nombre: str) -> Dict[str, Any]:
     from backend import agenda
 
@@ -977,11 +912,6 @@ def _detalle_servicio(cliente_id: str, nombre: str) -> Dict[str, Any]:
             return {
                 "duracion_minutos": int(servicio.get("duration_minutes") or 0),
                 "categoria": str(servicio.get("category") or ""),
-                # Lo que el NEGOCIO escribio de ese servicio. Es lo que permite
-                # explicar la diferencia sin inventarsela.
-                "que_es": textnorm._sanitize_text(
-                    str(servicio.get("descripcion") or servicio.get("description") or "")
-                )[:200],
             }
     return {}
 

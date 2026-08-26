@@ -565,29 +565,28 @@ def test_el_texto_del_25_por_ciento_sale_si_o_si_antes_del_resumen(api_module, c
     assert "recargo_dicho" in explicar, "se lo soltaria en cada resumen"
 
 
-def test_la_explicacion_de_cada_opcion_se_guarda_para_si_preguntan(api_module, client):  # noqa: F811
+def test_al_ofrecer_no_se_dice_lo_que_incluye_cada_opcion(api_module, client):  # noqa: F811
     """El negocio cambio de idea, y manda el negocio.
 
     Por la manyana se pidio que explicara la diferencia entre opciones, y se monto:
-    la descripcion de cada servicio, con las palabras del salon. Por la tarde, la
-    duenya vio el mensaje de verdad y dijo lo contrario -dos veces-: "repite
+    la descripcion de cada servicio con las palabras del salon. Por la tarde, la
+    duenya vio el mensaje de verdad y dijo lo contrario, dos veces: "repite
     practicamente dos veces lo mismo" y "no quiero que especifique lo que conlleva
     cada servicio". Tenia razon: cuatro opciones con su contenido cada una no se
     leen.
 
-    Asi que la explicacion no desaparece, cambia de sitio: se ofrece con los
-    nombres a secas y el detalle queda en `si_pregunta_la_diferencia`, para cuando
-    la clienta pregunte que diferencia hay.
+    Se quito ENTERO, no se dejo apagado: el codigo que no se usa es el que despues
+    nadie sabe si enchufar o borrar.
     """
     import inspect
 
     from backend import agent
 
     fuente = inspect.getsource(agent._tool_buscar_servicio)
-    assert "si_pregunta_la_diferencia" in fuente
-    assert "que_es" in inspect.getsource(agent._detalle_servicio), (
-        "el detalle del servicio ya no trae lo que el negocio escribio"
-    )
+    assert "que_es" not in fuente, "sigue armando la explicacion de cada opcion"
+    assert "si_pregunta_la_diferencia" not in fuente
+    assert "UNA FRASE natural" in fuente, "no se le pide que las nombre en una frase"
+    assert '"opciones": nombres' in fuente, "no se ofrecen los nombres separados"
 
 def test_la_regla_del_precio_vale_aunque_no_sea_coger_cita(api_module, client):  # noqa: F811
     """Media condicion del salon se quedaba fuera.
@@ -665,36 +664,6 @@ def test_la_regla_del_precio_frena_tambien_el_resumen_de_whatsapp(api_module, cl
         with db._get_db_connection() as conexion:
             conexion.execute("DELETE FROM services WHERE cliente_id='demo' AND slug='kera_xl'")
             conexion.commit()
-
-
-def test_no_repite_lo_que_incluye_cada_opcion_si_es_lo_mismo(api_module):  # noqa: F811
-    """"Repite practicamente dos veces lo mismo" (la duenya, viendo el mensaje).
-
-    Sus tres opciones de mechas describen "matiz, elumen, flash repair y brusing"
-    LAS TRES: leerlas seguidas es leer lo mismo tres veces. Explicar ayuda cuando
-    las opciones se parecen en el nombre y se diferencian en el contenido; cuando
-    tambien se parecen en el contenido, estorba.
-    """
-    from backend import agent
-
-    como_las_suyas = [
-        "Incluye mechas, matiz, elumen, flash repair y brusing",
-        "Incluye color por todo, mechas, matiz, elumen, flash repair y brusing",
-        "Incluye color por todo, mechas, matiz, elumen, flash repair y brusing",
-    ]
-    assert agent._explican_algo(como_las_suyas) is False
-
-    de_verdad_distintas = [
-        "alisado con keratina que dura varios meses",
-        "mechas con papel de plata y tecnica cardada",
-    ]
-    assert agent._explican_algo(de_verdad_distintas) is True
-
-    # Una sola explicacion siempre vale: no hay con que compararla.
-    assert agent._explican_algo(["lo que sea"]) is True
-    assert agent._explican_algo([]) is False
-
-
 def test_lo_que_el_negocio_agrupa_se_ofrece_junto(api_module, client):  # noqa: F811
     """Sus packs de Grey Blending existian, estaban activos y no se ofrecian.
 
@@ -768,22 +737,3 @@ def test_mechas_y_balayage_se_ofrecen_por_separado(api_module):  # noqa: F811
         "Cambio de color y mechas o balayage"]
     assert catalog_pick.separar_alternativas("Grey blending") == ["Grey blending"]
     assert catalog_pick.separar_alternativas("") == []
-
-
-def test_al_ofrecer_van_los_nombres_solos(api_module):  # noqa: F811
-    """La duenya lo pidio dos veces: nada de listar lo que incluye cada opcion.
-
-    Una lista de cuatro opciones con su contenido cada una no se lee: "repite
-    practicamente dos veces lo mismo". La explicacion sigue disponible, pero solo
-    para cuando ELLA pregunte la diferencia.
-    """
-    import inspect
-
-    from backend import agent
-
-    fuente = inspect.getsource(agent._tool_buscar_servicio)
-    assert '"si_pregunta_la_diferencia"' in fuente, (
-        "la explicacion sigue saliendo como si fuera parte de la oferta"
-    )
-    assert '"opciones": nombres' in fuente, "no se ofrecen los nombres separados"
-    assert "UNA FRASE natural" in fuente
