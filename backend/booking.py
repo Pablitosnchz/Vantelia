@@ -87,6 +87,40 @@ def _booking_has_reminder_contact(email: str, telefono: str) -> bool:
     return bool(messaging._normalize_sms_recipient(telefono))
 
 
+# Cada cuanto se repasa la calidad de las conversaciones. Una vez al dia: el
+# worker corre cada pocos minutos y esto no tiene por que ir en cada vuelta.
+CALIDAD_CADA_HORAS = 24
+
+
+def _repasar_calidad_si_toca() -> int:
+    """Repasa las conversaciones de las ultimas 24 h de TODOS los negocios.
+
+    Devuelve cuantas se han marcado. Se salta solo si ya se hizo hoy: el estado
+    vive en memoria del proceso, asi que un reinicio como mucho repasa de mas, que
+    es inofensivo (la marca es idempotente por conversacion).
+    """
+    from datetime import timedelta
+
+    from backend import appstate, calidad
+
+    ultima = getattr(appstate, "CALIDAD_ULTIMO_REPASO", None)
+    ahora = timeutils._utc_now()
+    if ultima and (ahora - ultima).total_seconds() < CALIDAD_CADA_HORAS * 3600:
+        return 0
+    appstate.CALIDAD_ULTIMO_REPASO = ahora
+
+    desde = (ahora - timedelta(hours=CALIDAD_CADA_HORAS)).isoformat()
+    marcadas = 0
+    for cliente_id in list(appstate.CONFIG_CLIENTES):
+        try:
+            resumen = calidad.revisar_dia(cliente_id, desde=desde)
+        except Exception as exc:  # noqa: BLE001 - un tenant roto no para al resto
+            settings.logger.warning("[calidad] %s no se ha podido repasar: %s", cliente_id, exc)
+            continue
+        marcadas += int(resumen.get("marcadas") or 0)
+    return marcadas
+
+
 def _booking_reminder_worker() -> None:
     interval_seconds = max(300, settings.REMINDER_RUN_INTERVAL_MINUTES * 60)
     if settings.REMINDER_RUN_INTERVAL_MINUTES <= 0:
@@ -127,6 +161,17 @@ def _booking_reminder_worker() -> None:
                     result.sent_2h,
                     result.failed,
                 )
+            # Repaso de calidad de las conversaciones del dia. No habla con nadie
+            # ni llama al modelo: solo marca las sospechosas para que alguien las
+            # mire. Una vez al dia basta; el resto de vueltas sale gratis.
+            try:
+                marcadas = _repasar_calidad_si_toca()
+                if marcadas:
+                    settings.logger.info(
+                        "Conversaciones marcadas para revisar: %s", marcadas)
+            except Exception as exc:  # noqa: BLE001 - nunca tumba el worker
+                settings.logger.error("Error repasando calidad: %s", exc)
+
             # Seguimiento post-cita: peticiones de resena (opt-in por negocio).
             try:
                 review_sent = asyncio.run(_run_review_requests())

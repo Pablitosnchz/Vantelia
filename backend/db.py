@@ -1560,6 +1560,27 @@ def _init_database() -> None:
             )
             """
         )
+        # Conversaciones que la vigilancia de calidad ha marcado para que alguien
+        # las mire. Una fila por conversacion: si se vuelve a repasar, se
+        # actualizan las senyales pero NO se pierde que el negocio ya la atendio.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversation_reviews (
+                cliente_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                canal TEXT NOT NULL DEFAULT '',
+                senyales_json TEXT NOT NULL DEFAULT '[]',
+                gravedad TEXT NOT NULL DEFAULT 'media',
+                atendida INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (cliente_id, session_id)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversation_reviews_pendientes"
+            " ON conversation_reviews(cliente_id, atendida, created_at)"
+        )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS client_channel_audit (

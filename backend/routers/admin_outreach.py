@@ -33,6 +33,7 @@ from backend import (
     outreach,
     security,
     settings,
+    textnorm,
     timeutils,
 )
 from backend.outreach import (  # noqa: F401
@@ -652,6 +653,49 @@ def admin_ia_health(fresh: int = 0):
         "modelo": settings.DEFAULT_CHAT_MODEL,
         "clave_configurada": bool(settings.OPENAI_API_KEY),
     }
+
+
+@app.get("/admin/calidad", dependencies=[Depends(security._require_admin_token)])
+def admin_calidad(cliente_id: str = "", horas: int = 24, repasar: int = 0):
+    """Conversaciones que conviene mirar, y por que.
+
+    Existe porque los fallos del asistente se descubrian de una sola forma: el
+    duenyo del negocio pegando capturas. Los silenciosos -la clienta a la que se le
+    dijo que no habia hueco cuando lo habia- no los contaba nadie.
+
+    `repasar=1` fuerza el repaso ahora en vez de esperar al del worker. No llama al
+    modelo: todas las senyales son deterministas, asi que no cuesta dinero.
+    """
+    from datetime import timedelta
+
+    from backend import calidad
+
+    cliente_id = textnorm._sanitize_text(cliente_id or "")
+    if not cliente_id:
+        raise HTTPException(status_code=400, detail="Falta cliente_id.")
+    horas = max(1, min(720, int(horas or 24)))
+
+    resumen = {}
+    if repasar:
+        desde = (timeutils._utc_now() - timedelta(hours=horas)).isoformat()
+        resumen = calidad.revisar_dia(cliente_id, desde=desde)
+    return {
+        "ok": True,
+        "cliente_id": cliente_id,
+        "repaso": resumen,
+        "pendientes": calidad.pendientes(cliente_id),
+        "senyales": [{"id": s.id, "gravedad": s.gravedad} for s in calidad.SENYALES],
+    }
+
+
+@app.post("/admin/calidad/atendida", dependencies=[Depends(security._require_admin_token)])
+def admin_calidad_atendida(cliente_id: str, session_id: str):
+    """Ya la han mirado: deja de salir en la lista."""
+    from backend import calidad
+
+    hecho = calidad.marcar_atendida(
+        textnorm._sanitize_text(cliente_id or ""), textnorm._sanitize_text(session_id or ""))
+    return {"ok": bool(hecho)}
 
 
 @app.get("/admin/consulta-leads", dependencies=[Depends(security._require_admin_token)])
