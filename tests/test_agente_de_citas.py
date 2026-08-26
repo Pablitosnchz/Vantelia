@@ -701,3 +701,38 @@ def test_al_reservar_un_alisado_se_manda_el_protocolo_sin_preguntar(api_module, 
 
     # Y la fuente es la nota del negocio, no un texto nuestro.
     assert "booking_note" in inspect.getsource(booking.service_booking_note)
+
+
+def test_no_le_suelta_dos_veces_la_misma_frase(api_module):  # noqa: F811
+    """El fallo mas frecuente de las tres mediciones: 33-35 de cada 100.
+
+    Tres de cada cuatro veces pasa cuando el negocio tiene que decir que NO -no
+    damos precios, no puedo aconsejarte sin verte, eso no lo hacemos-: la clienta
+    insiste y recibe el mismo parrafo copiado. Para quien escribe eso es un muro,
+    y se va.
+    """
+    from backend import agent
+
+    frase = ("Sin ver tu cabello no puedo decirte cual te recomendariamos. "
+             "Si coges cita te asesoramos en persona.")
+    historial = [{"role": "user", "content": "hola"},
+                 {"role": "assistant", "content": frase}]
+
+    assert agent._ya_dijo_esto(historial, frase)
+    assert agent._ya_dijo_esto(historial, frase.upper()), "no depende de mayusculas"
+
+    # Otra respuesta distinta pasa.
+    assert not agent._ya_dijo_esto(historial, "Te cojo la cita el jueves a las 10, ¿te va bien?")
+    # Y los acuses cortos no cuentan: repetir "perfecto" no molesta a nadie.
+    assert not agent._ya_dijo_esto([{"role": "assistant", "content": "Perfecto 😊"}], "Perfecto 😊")
+
+
+def test_el_freno_de_repetirse_esta_enchufado(api_module):  # noqa: F811
+    import inspect
+
+    from backend import agent
+
+    fuente = inspect.getsource(agent.responder)
+    assert "_ya_dijo_esto(historial, texto_final)" in fuente, (
+        "nada impide que suelte la misma frase dos veces"
+    )

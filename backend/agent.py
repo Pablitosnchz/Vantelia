@@ -1307,6 +1307,28 @@ def _instrucciones(cliente_id: str, config: Dict[str, Any], hoy,
     return "\n".join(partes)
 
 
+def _ya_dijo_esto(historial: List[Dict[str, str]], texto: str) -> bool:
+    """¿Es esta respuesta la MISMA que la anterior, palabra por palabra?
+
+    Medido en tres tiradas de 100 conversaciones: repetir la misma frase es el
+    fallo mas frecuente con diferencia (33-35 de cada 100), y tres de cada cuatro
+    veces pasa cuando el negocio tiene que decir que NO -no damos precios, no
+    puedo aconsejarte sin verte, eso no lo hacemos-. La clienta insiste, y recibe
+    el mismo parrafo copiado. Para quien escribe, eso es un muro.
+
+    Se compara el principio de la frase, sin tildes ni mayusculas: lo que nota
+    quien lee es que empieza igual.
+    """
+    limpio = catalog_pick._norm(texto or "")[:90]
+    if len(limpio) < 25:
+        return False   # "vale", "perfecto": repetirlos no molesta a nadie
+    for mensaje in reversed(historial or []):
+        if mensaje.get("role") != "assistant":
+            continue
+        return catalog_pick._norm(str(mensaje.get("content") or ""))[:90] == limpio
+    return False
+
+
 def _historial(session_id: str, cliente_id: str) -> List[Dict[str, str]]:
     """Las ultimas frases de ESTA conversacion, para que "y el jueves?" tenga sentido.
 
@@ -1615,6 +1637,20 @@ async def responder(
                     continue
                 # 4) Y decir que la cita existe cuando no existe es el fallo mas
                 #    caro: la clienta se planta en el salon y no hay hueco.
+                # 0) Lo mismo que ya le dijiste, otra vez, no.
+                if (_ya_dijo_esto(historial, texto_final)
+                        and vuelta + 1 < MAX_VUELTAS):
+                    mensajes.append({
+                        "role": "system",
+                        "content": ("ESO YA SE LO HAS DICHO con esas mismas palabras y "
+                                    "ella ha vuelto a escribir: repetirlo es un muro. "
+                                    "Da un paso ADELANTE: si es algo que aqui no se "
+                                    "hace o no se dice por mensaje, reconocele que "
+                                    "insiste, dilo en una linea y ofrecele la salida "
+                                    "concreta (una cita, o que llame). Y no empieces "
+                                    "igual que antes."),
+                    })
+                    continue
                 if (_dice_que_acaba_de_hacerlo(texto_final) and not mutada
                         and vuelta + 1 < MAX_VUELTAS):
                     mensajes.append({
