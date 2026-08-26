@@ -5,7 +5,10 @@ param(
     [string]$ArchiveName = "vantelia-deploy.tar.gz",
     [string]$SshKeyPath = "",
     [string]$DemoClient = "clinica_saga",
-    [switch]$SkipLocalChecks
+    [switch]$SkipLocalChecks,
+    # El humo habla con el modelo: cuesta unos centimos y un par de minutos. Se
+    # puede saltar cuando el cambio no toca al asistente (la web, un texto legal).
+    [switch]$SinHumo
 )
 
 Set-StrictMode -Version Latest
@@ -325,6 +328,24 @@ if (-not $publicHealth -or $publicHealth.status -ne "ok") {
     throw "El healthcheck publico no devolvio status=ok."
 }
 Write-Host "Produccion publica: OK" -ForegroundColor Green
+
+# Cinco conversaciones enteras contra una COPIA de la base de datos. Existe porque
+# el 26-ago-2026 se colaron dos regresiones que pasaron los 1.373 tests: los tests
+# comprueban que un detector salta; esto comprueba que la clienta acaba con su
+# cita. Se salta con -SinHumo cuando el cambio no toca al asistente.
+if (-not $SinHumo) {
+    Write-Step "Humo: cinco conversaciones de principio a fin"
+    $humo = & ssh.exe @sshArgsBase $ServerHost "docker exec vantelia-app sh -c 'cd /app && timeout 900 python scripts/humo.py 2>/dev/null'"
+    $humoExit = $LASTEXITCODE
+    $humo | ForEach-Object { Write-Host $_ }
+    if ($humoExit -ne 0) {
+        Write-Host ""
+        Write-Host "!! HAY CAMINOS ROTOS EN LO QUE ACABAS DE DESPLEGAR" -ForegroundColor Red
+        Write-Host "   Mira arriba cual y por que. Para volver atras:" -ForegroundColor Yellow
+        Write-Host "   git revert HEAD; .\deploy\deploy.ps1" -ForegroundColor Yellow
+        throw "El humo ha fallado: la conversacion no llega al final."
+    }
+}
 
 Write-Step "Despliegue completado"
 Write-Host "Panel:   https://app.vantelia.es/dashboard" -ForegroundColor Green

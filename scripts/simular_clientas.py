@@ -85,18 +85,16 @@ def _hablar_como_clienta(guion: str, conversacion: List[Dict[str, str]]) -> str:
 # ─── Una conversacion entera ───────────────────────────────────────────────
 
 def _le_han_pedido_confirmar(conversacion: List[Dict[str, str]]) -> bool:
-    """¿Lo ultimo que le mandaron fue el resumen con el boton de confirmar?"""
-    for linea in reversed(conversacion):
-        if linea["quien"] != "asistente":
-            continue
-        return "confirmamos la cita" in _norm(linea["texto"])
-    return False
+    """En el arnes: una sola forma de saberlo para todos los guiones."""
+    from evals import arnes
+
+    return arnes.le_han_pedido_confirmar(conversacion)
 
 
 def _dice_que_si(texto: str) -> bool:
-    plano = _norm(texto).strip(" .!¡")
-    return plano.startswith(("si", "confirmo", "confirmar", "vale", "perfecto",
-                             "de acuerdo", "adelante", "correcto", "ok", "venga"))
+    from evals import arnes
+
+    return arnes.dice_que_si(texto)
 
 
 def _conversar(cliente_id: str, combinacion: Dict[str, Any], telefono: str) -> Dict[str, Any]:

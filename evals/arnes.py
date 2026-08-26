@@ -118,6 +118,34 @@ def cortar_el_mundo_exterior() -> None:
     messaging._send_client_sms = sms_mudo
 
 
+def _sin_tildes(texto: str) -> str:
+    import unicodedata
+
+    limpio = unicodedata.normalize("NFKD", str(texto or "").lower())
+    return "".join(c for c in limpio if not unicodedata.combining(c))
+
+
+def le_han_pedido_confirmar(conversacion: List[Dict[str, str]]) -> bool:
+    """Lo ultimo que le mandaron fue el resumen con el boton de confirmar.
+
+    Por WhatsApp la cita se cierra PULSANDO, y en una prueba no hay dedo que pulse:
+    hay que entregar el "confirmo" como el boton. Sin esto, toda conversacion bien
+    llevada acaba contando como "se fue sin cita", porque el asistente manda el
+    resumen y ahi se queda.
+    """
+    for linea in reversed(conversacion):
+        if linea["quien"] != "asistente":
+            continue
+        return "confirmamos la cita" in _sin_tildes(linea["texto"])
+    return False
+
+
+def dice_que_si(texto: str) -> bool:
+    plano = _sin_tildes(texto).strip(" .!¡")
+    return plano.startswith(("si", "confirmo", "confirmar", "vale", "perfecto",
+                             "de acuerdo", "adelante", "correcto", "ok", "venga"))
+
+
 def citas_de(cliente_id: str, telefono: str) -> List[Dict[str, Any]]:
     """Las citas de ese telefono. La agenda es la verdad, no lo que diga el chat."""
     from backend import db

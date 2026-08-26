@@ -218,6 +218,30 @@ def uso_por_turno(cliente_id: str, session_id: str) -> List[List[str]]:
     return salida
 
 
+def llamadas_por_turno(cliente_id: str, session_id: str) -> List[List[Dict[str, str]]]:
+    """Las llamadas de cada turno CON sus argumentos, en orden.
+
+    Con solo el nombre no se distingue avanzar de dar vueltas: preguntar tres veces
+    al catalogo mientras la clienta va dando datos es lo normal; preguntarle tres
+    veces LO MISMO es un bucle.
+    """
+    with db._get_db_connection() as conexion:
+        filas = conexion.execute(
+            "SELECT tools_json FROM agent_turns WHERE cliente_id = ? AND session_id = ?"
+            " ORDER BY id",
+            (cliente_id, session_id),
+        ).fetchall()
+    salida: List[List[Dict[str, str]]] = []
+    for fila in filas:
+        try:
+            tools = json.loads(fila["tools_json"] or "[]")
+        except (ValueError, TypeError):
+            tools = []
+        salida.append([{"nombre": str(t.get("nombre") or ""), "args": str(t.get("args") or "")}
+                       for t in tools])
+    return salida
+
+
 def resumen_del_dia(cliente_id: str = "", horas: int = 24) -> Dict[str, Any]:
     """Cuanto se ha hablado, cuanto ha costado y que frenos han saltado.
 
