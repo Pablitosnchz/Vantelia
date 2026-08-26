@@ -1853,4 +1853,11 @@ async def responder(
         return (cierre.choices[0].message.content or "").strip(), cita_creada
     except Exception as exc:  # noqa: BLE001 - nunca puede dejar a nadie sin respuesta
         settings.logger.warning("[agenda-agente] fallo con %s: %s", cliente_id, exc)
+        # Si el modelo no contesta por saldo o credenciales, que se SEPA: se
+        # quedaron sin creditos y el asistente dejo de responder a todo el mundo
+        # mientras `/health` seguia diciendo que todo iba bien.
+        from backend import rag
+
+        if rag._es_fallo_de_cuenta(exc):
+            rag._ia_marcar(False, str(exc))
         return "", cita_creada

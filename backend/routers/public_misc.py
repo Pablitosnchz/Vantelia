@@ -24,6 +24,7 @@ from backend import (
     emailing,
     outreach,
     portal,
+    rag,
     security,
     settings,
     textnorm,
@@ -224,6 +225,16 @@ async def healthcheck() -> Dict[str, Any]:
         checks["smtp"] = "fail"
     else:
         checks["smtp"] = "unknown"
+
+    # El modelo: lo ultimo que se sabe por las llamadas reales o por el check de
+    # admin. No se pregunta aqui (costaria dinero en cada healthcheck).
+    ia_cache = rag._ia_health_cached()
+    if ia_cache.get("ok") is True:
+        checks["ia"] = "ok"
+    elif ia_cache.get("ok") is False:
+        checks["ia"] = "fail"
+    else:
+        checks["ia"] = "unknown"
 
     critical_checks = ["config", "data_dir", "storage_dir", "database"]
     overall_status = "ok" if all(checks.get(name) == "ok" for name in critical_checks) else "degraded"

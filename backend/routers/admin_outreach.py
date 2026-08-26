@@ -631,6 +631,29 @@ def admin_email_health(fresh: int = 0):
     }
 
 
+@app.get("/admin/ia-health", dependencies=[Depends(security._require_admin_token)])
+def admin_ia_health(fresh: int = 0):
+    """Salud REAL del modelo: le pregunta lo minimo (1 token) y cachea 10 min.
+
+    Existe por un incidente: se agotaron los creditos de OpenAI, el asistente
+    dejo de contestar a TODO el mundo y `/health` seguia diciendo
+    "openai_configured: true" -solo miraba que la clave estuviera puesta-. Se
+    descubrio probando el chat a mano.
+
+    fresh=1 fuerza el check. Igual que email-health, lo puede vigilar el workflow
+    de uptime: ok=false -> falla -> aviso al duenyo.
+    """
+    from backend import rag
+
+    salud = rag._ia_health_check(force=bool(fresh))
+    return {
+        "ok": salud.get("ok") is True,
+        "ia": salud,
+        "modelo": settings.DEFAULT_CHAT_MODEL,
+        "clave_configurada": bool(settings.OPENAI_API_KEY),
+    }
+
+
 @app.get("/admin/consulta-leads", dependencies=[Depends(security._require_admin_token)])
 def admin_consulta_leads(status: str = "", limit: int = 100):
     """Leads del formulario /consultas/ de la web comercial (siempre persistidos)."""

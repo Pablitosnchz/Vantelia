@@ -70,3 +70,27 @@ jobs:
           done
           echo "::error::El SMTP de produccion no acepta login (los emails del SaaS no salen): $err"
           exit 1
+
+      # Salud REAL del modelo. Se agotaron los creditos de OpenAI y el asistente
+      # dejo de contestar a TODOS los clientes; /health seguia en verde porque
+      # solo miraba que la clave estuviera puesta, y se descubrio probando el
+      # chat a mano. Requiere el secret ADMIN_API_TOKEN; si no existe, se omite.
+      - name: IA (pregunta real al modelo)
+        env:
+          ADMIN_API_TOKEN: ${{ secrets.ADMIN_API_TOKEN }}
+        run: |
+          if [ -z "$ADMIN_API_TOKEN" ]; then
+            echo "Secret ADMIN_API_TOKEN no configurado; check de IA omitido."
+            exit 0
+          fi
+          for i in 1 2 3; do
+            body=$(curl -sS --max-time 25 -H "Authorization: Bearer $ADMIN_API_TOKEN" "https://app.vantelia.es/admin/ia-health?fresh=1" || true)
+            ok=$(echo "$body" | jq -r '.ok' 2>/dev/null || echo "")
+            if [ "$ok" = "true" ]; then
+              echo "IA OK"; exit 0
+            fi
+            err=$(echo "$body" | jq -r '.ia.error // empty' 2>/dev/null || echo "")
+            echo "intento $i: ia ok=$ok error=$err"; sleep 20
+          done
+          echo "::error::El modelo no responde: el asistente no contesta a NADIE (¿saldo de OpenAI?): $err"
+          exit 1

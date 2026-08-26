@@ -11,6 +11,7 @@ import re
 import secrets
 import shutil
 import sqlite3
+import threading
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -449,6 +450,79 @@ def _normalize_for_qa_match(text: str) -> str:
     t = _QA_MATCH_PUNCT_RE.sub(" ", t)
     t = re.sub(r"\s+", " ", t).strip()
     return t
+
+
+# ─── Salud del modelo: que una caida se vea ────────────────────────────────
+#
+# El 26-ago-2026 se agotaron los creditos de OpenAI y el asistente dejo de
+# contestar a TODO el mundo. `/health` seguia diciendo "openai_configured: true"
+# porque solo miraba que la clave existiera, asi que la caida se descubrio
+# probando el chat a mano. Un negocio que vende por WhatsApp no puede enterarse
+# de eso por un cliente enfadado.
+#
+# Mismo patron que el de SMTP: cache con TTL, `/health` lee lo cacheado (no
+# bloquea) y el endpoint de admin puede forzar una comprobacion real.
+
+IA_HEALTH_CACHE_TTL_SECONDS = 600
+
+_ia_health_lock = threading.Lock()
+_ia_health_cache: Dict[str, Any] = {"ok": None, "error": "", "checked_at": ""}
+
+
+def _ia_health_cached() -> Dict[str, Any]:
+    with _ia_health_lock:
+        return dict(_ia_health_cache)
+
+
+def _ia_marcar(ok: bool, error: str = "") -> None:
+    """Lo que sabemos por las llamadas REALES, que es la mejor senyal que hay.
+
+    No hace falta preguntar aparte: si una conversacion de verdad fallo por falta
+    de saldo, eso ya es el check.
+    """
+    with _ia_health_lock:
+        _ia_health_cache.update(
+            {"ok": bool(ok), "error": str(error or "")[:300],
+             "checked_at": timeutils._utc_now_iso()}
+        )
+
+
+# Fallos que significan "esto no se arregla reintentando": sin saldo, clave mala,
+# cuenta bloqueada. Un timeout suelto no cuenta.
+_IA_FALLO_DE_CUENTA = ("insufficient_quota", "credit balance", "no credits",
+                       "billing", "invalid_api_key", "incorrect api key",
+                       "account_deactivated", "401", "403")
+
+
+def _es_fallo_de_cuenta(error: Any) -> bool:
+    plano = str(error or "").lower()
+    return any(pista in plano for pista in _IA_FALLO_DE_CUENTA)
+
+
+def _ia_health_check(force: bool = False) -> Dict[str, Any]:
+    """Pregunta al modelo lo minimo para saber si responde. Cacheado."""
+    cacheado = _ia_health_cached()
+    frescura = timeutils._from_utc_iso(cacheado.get("checked_at") or "")
+    if (not force and frescura
+            and (timeutils._utc_now() - frescura).total_seconds() < IA_HEALTH_CACHE_TTL_SECONDS):
+        return cacheado
+    if not settings.OPENAI_API_KEY:
+        _ia_marcar(False, "sin OPENAI_API_KEY")
+        return _ia_health_cached()
+    try:
+        from openai import OpenAI as OpenAISdkClient
+
+        cliente = OpenAISdkClient(api_key=settings.OPENAI_API_KEY, timeout=15.0)
+        cliente.chat.completions.create(
+            model=settings.DEFAULT_CHAT_MODEL,
+            messages=[{"role": "user", "content": "ok"}],
+            max_tokens=1,
+        )
+        _ia_marcar(True)
+    except Exception as exc:  # noqa: BLE001
+        _ia_marcar(False, str(exc))
+        settings.logger.error("Check de salud del modelo fallido: %s", exc)
+    return _ia_health_cached()
 
 
 def _list_qa_rows(cliente_id: str) -> List[sqlite3.Row]:
