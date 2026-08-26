@@ -1793,8 +1793,30 @@ async def responder(
                 # para quien ha venido a preguntar cuanto cuesta.
                 if (llamada.function.name == "crear_cita" and estado.veces_sin_precio
                         and argumentos.get("servicio")):
+                    from backend import booking as _bk
+
+                    regla = _bk.regla_de_precio_para(cliente_id, str(argumentos["servicio"]))
                     cambio = _valoracion_en_lugar_del_tratamiento(
                         cliente_id, str(argumentos["servicio"]), location_id=location_id)
+                    if not cambio.get("servicio") and regla:
+                        # La regla no es "coger cita de valoracion" sino otra cosa
+                        # (para los alisados, pedirle una foto). Se sigue LA SUYA,
+                        # pero lo que no se hace es cogerle el tratamiento entero a
+                        # quien solo ha preguntado el precio.
+                        resultado = {
+                            "ok": False,
+                            "error": ("Ha preguntado el precio: aqui no se coge esa cita "
+                                      "sin verlo antes."),
+                            "lo_que_hace_el_negocio": regla.get("texto") or "",
+                            "que_hacer": ("Haz lo que dice `lo_que_hace_el_negocio` (por "
+                                          "ejemplo pedirle una foto) y espera. NO le "
+                                          "cojas la cita del tratamiento todavia."),
+                        }
+                        mensajes.append({
+                            "role": "tool", "tool_call_id": llamada.id,
+                            "content": json.dumps(resultado, ensure_ascii=False),
+                        })
+                        continue
                     if cambio.get("servicio"):
                         resultado = {
                             "ok": False,

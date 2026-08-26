@@ -582,3 +582,39 @@ def test_al_ofrecer_opciones_dice_que_es_cada_una(api_module, client):  # noqa: 
     assert "que_es" in inspect.getsource(agent._detalle_servicio), (
         "el detalle del servicio no trae lo que el negocio escribio"
     )
+
+
+def test_la_regla_del_precio_vale_aunque_no_sea_coger_cita(api_module, client):  # noqa: F811
+    """Media condicion del salon se quedaba fuera.
+
+    Para mechas y color su regla es "cita de valoracion"; para los alisados es
+    PEDIR FOTO. El guardarrail solo miraba las del primer tipo, asi que a quien
+    preguntaba el precio de una keratina se le cogia el tratamiento entero -cuatro
+    horas- en vez de seguir la regla.
+    """
+    from backend import booking, db, rules, timeutils
+
+    ahora = timeutils._utc_now_iso()
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT OR REPLACE INTO services (cliente_id, slug, name, category,"
+            " duration_minutes, price_cents, description, is_active, sort_order,"
+            " created_at, updated_at) VALUES ('demo', 'keratina_larga',"
+            " 'Keratina premium largo', '', 240, 0, '', 1, 0, ?, ?)", (ahora, ahora))
+        conexion.commit()
+    regla = rules.guardar("demo", nombre="Alisado: pedir foto", intenciones=["precio"],
+                          familias=["keratina"], accion="pedir_foto",
+                          texto="Mandanos una foto del pelo y te decimos el precio.")
+    try:
+        encontrada = booking.regla_de_precio_para("demo", "Keratina premium largo")
+        assert encontrada, "no encuentra la regla del negocio para ese servicio"
+        assert encontrada["accion"] == "pedir_foto"
+        assert "foto" in (encontrada.get("texto") or "").lower()
+
+        # Un servicio sin regla de precio no se frena.
+        assert booking.regla_de_precio_para("demo", "Corte senora") == {}
+    finally:
+        rules.borrar("demo", regla["id"])
+        with db._get_db_connection() as conexion:
+            conexion.execute("DELETE FROM services WHERE cliente_id='demo' AND slug='keratina_larga'")
+            conexion.commit()

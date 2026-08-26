@@ -6186,6 +6186,31 @@ def precios_ocultos(cliente_id: str) -> bool:
     return booking_cfg.get("mostrar_precios") is False
 
 
+def regla_de_precio_para(cliente_id: str, servicio: str) -> Dict[str, Any]:
+    """La regla que el negocio tiene para el PRECIO de ese servicio, si la hay.
+
+    `_familias_que_exigen_valoracion` solo mira las reglas cuya accion es "ofrecer
+    cita", y eso deja fuera media condicion del salon: para los alisados su regla
+    es PEDIR FOTO. El resultado era que a quien preguntaba el precio de una
+    keratina se le cogia el tratamiento entero -cuatro horas- en vez de seguir la
+    regla. Aqui se devuelve la regla tal cual, y quien llama decide.
+    """
+    try:
+        from backend import rules
+
+        plano = textnorm._strip_accents(str(servicio or "").lower())
+        for regla in rules.listar(cliente_id, solo_activas=True):
+            intenciones = regla.get("intenciones") or []
+            if "precio" not in intenciones and "presupuesto" not in intenciones:
+                continue
+            for familia in (regla.get("familias") or []):
+                if familia and textnorm._strip_accents(familia.lower()) in plano:
+                    return dict(regla)
+    except Exception:  # noqa: BLE001
+        return {}
+    return {}
+
+
 def _exige_valoracion(nombre_servicio: str, familias: List[str]) -> bool:
     plano = textnorm._strip_accents(str(nombre_servicio or "").lower())
     return any(familia and familia in plano for familia in familias)
