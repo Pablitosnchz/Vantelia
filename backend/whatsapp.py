@@ -1091,6 +1091,23 @@ async def _wa_send_availability_overview(
     )
 
 
+def _wa_linea_de_recargo(cliente_id: str, flow: appstate.WAFlowState) -> str:
+    """"Con X el servicio cuesta un N% mas", si es el caso. Vacio si no lo es."""
+    if not flow.employee_id:
+        return ""
+    try:
+        from backend import agenda
+
+        fila = agenda._get_employee_row(flow.employee_id, cliente_id=cliente_id)
+        pct = agenda.recargo_pct(fila)
+        if not pct:
+            return ""
+        nombre = str(fila["name"] or "").split()[0]
+        return "💛 Con %s, el servicio tiene un %d%% mas sobre la tarifa" % (nombre, pct)
+    except Exception:  # noqa: BLE001 - el resumen nunca puede romperse por esto
+        return ""
+
+
 async def _wa_send_booking_summary(
     *, cliente_id: str, phone_number_id: str, to_number: str,
     flow: appstate.WAFlowState, reconocido: bool = False,
@@ -1115,8 +1132,16 @@ async def _wa_send_booking_summary(
     if flow.email:
         lineas.append(f"📧 {flow.email}")
     lineas.append(f"📞 {flow.from_number}")
-    lineas.append(f"🛍️ {flow.servicio or 'Servicio general'}")
+    lineas.append("🛍️ %s" % textnorm.nombre_de_servicio_publico(
+        flow.servicio or "Servicio general"))
     lineas.append(f"👨‍⚕️ {flow.employee_name or 'Asignacion automatica'}")
+    # Si ha pedido a alguien que cuesta mas, el recargo va AQUI, en el resumen que
+    # firma. Fiarlo al modelo no basta: se le paso el aviso, contesto "claro, con
+    # Alicia" y no dijo ni una palabra del 25 %. El cliente confirmaria un precio
+    # que no sabe.
+    recargo = _wa_linea_de_recargo(cliente_id, flow)
+    if recargo:
+        lineas.append(recargo)
     lineas.append(f"📅 {fecha_humana}")
     lineas.append(f"🕐 {flow.hora}")
     if flow.notas:

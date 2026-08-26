@@ -415,12 +415,26 @@ def main() -> int:
     parser.add_argument("--guardar", default="", help="escribe el informe en un JSON")
     parser.add_argument("--comparar", default="", help="compara contra un informe guardado")
     parser.add_argument("--detalle", action="store_true", help="imprime las conversaciones que fallan")
+    parser.add_argument("--modelo", default="",
+                        help="prueba con otro modelo (gpt-4o, gpt-4.1-mini...). Solo "
+                             "en ESTE proceso: no cambia lo que ven los clientes")
     parser.add_argument("--persona", default="", help="solo esta clienta (para mirar un patron)")
     args = parser.parse_args()
 
     from evals import arnes, clientas
 
     arnes.preparar_copia(args.db_origen, args.db_copia)
+
+    if args.modelo:
+        # El agente usa el modelo que el negocio tiene en su config. Se cambia
+        # SOLO en la memoria de este proceso -que es el de la medicion, no el que
+        # atiende a los clientes- para poder comparar modelos sin arriesgar nada.
+        from backend import appstate, clients
+
+        actual = dict(clients._get_client_config(args.cliente))
+        actual["chat_model"] = args.modelo
+        appstate.CONFIG_CLIENTES[args.cliente] = actual
+        print("  (midiendo con el modelo %s)" % args.modelo)
     arnes.comprobar_aislamiento(args.db_copia)
     arnes.cortar_el_mundo_exterior()
 
