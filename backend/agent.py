@@ -771,6 +771,9 @@ def _tool_buscar_servicio(
                     if suya:
                         break
             explicadas.append({"servicio": opcion, "que_es": suya})
+        if not _explican_algo([e["que_es"] for e in explicadas]):
+            # Dicen casi lo mismo: se ofrecen los nombres a secas y punto.
+            explicadas = [{"servicio": e["servicio"], "que_es": ""} for e in explicadas]
         return {
             "ok": True,
             "servicio": "",
@@ -786,10 +789,11 @@ def _tool_buscar_servicio(
             # rematar con "no hay mas opciones" teniendo nueve.
             "nota": (
                 "PREGUNTALE POR %s con tus palabras, como lo haria una peluquera. NO "
-                "le recites nombres del catalogo a secas: si tienes que ofrecerle "
-                "opciones, di en UNA LINEA que es cada una usando `que_es` de "
-                "`opciones_explicadas` (son las palabras del negocio; no te las "
-                "inventes ni las adornes), y despues pregunta. Hay %d servicios "
+                "le recites nombres del catalogo a secas: si `opciones_explicadas` "
+                "trae `que_es`, di en UNA LINEA que es cada una con esas palabras "
+                "del negocio (no te las inventes ni las adornes). Si viene VACIO, "
+                "ofrece los nombres y NADA MAS: no te inventes que incluye cada "
+                "uno ni repitas lo mismo por cada opcion. Hay %d servicios "
                 "que encajan, asi que NUNCA digas que no hay mas opciones. Y si solo "
                 "pregunta cuanto dura o cuanto cuesta, contestale con estos datos sin "
                 "obligarla a concretar."
@@ -909,6 +913,30 @@ def _sin_la_palabra_pack(dato: Any) -> Any:
     if isinstance(dato, str):
         return textnorm.nombre_de_servicio_publico(dato)
     return dato
+
+
+def _explican_algo(explicaciones: List[str]) -> bool:
+    """Estas descripciones DISTINGUEN una opcion de otra, o dicen casi lo mismo.
+
+    Lo dijo la duenya viendo el mensaje: "repite practicamente dos veces lo mismo
+    y no quiero que especifique lo que conlleva cada servicio". Y tenia razon: sus
+    tres opciones de mechas describen "matiz, elumen, flash repair y brusing" las
+    tres, asi que leerlas seguidas es leer lo mismo tres veces.
+
+    Explicar ayuda cuando las opciones se parecen en el nombre y se diferencian en
+    el contenido. Cuando tambien se parecen en el contenido, estorba.
+    """
+    limpias = [catalog_pick._norm(e) for e in explicaciones if e and e.strip()]
+    if len(limpias) < 2:
+        return bool(limpias)
+    palabras = [set(l.split()) for l in limpias]
+    comunes = set.intersection(*palabras)
+    todas = set.union(*palabras)
+    if not todas:
+        return False
+    # Si comparten 6 de cada 10 palabras, lo que las diferencia se pierde entre
+    # lo que repiten.
+    return (len(comunes) / len(todas)) < 0.6
 
 
 def _sin_el_largo(texto: str) -> str:

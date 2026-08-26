@@ -660,3 +660,52 @@ def test_la_regla_del_precio_frena_tambien_el_resumen_de_whatsapp(api_module, cl
         with db._get_db_connection() as conexion:
             conexion.execute("DELETE FROM services WHERE cliente_id='demo' AND slug='kera_xl'")
             conexion.commit()
+
+
+def test_no_repite_lo_que_incluye_cada_opcion_si_es_lo_mismo(api_module):  # noqa: F811
+    """"Repite practicamente dos veces lo mismo" (la duenya, viendo el mensaje).
+
+    Sus tres opciones de mechas describen "matiz, elumen, flash repair y brusing"
+    LAS TRES: leerlas seguidas es leer lo mismo tres veces. Explicar ayuda cuando
+    las opciones se parecen en el nombre y se diferencian en el contenido; cuando
+    tambien se parecen en el contenido, estorba.
+    """
+    from backend import agent
+
+    como_las_suyas = [
+        "Incluye mechas, matiz, elumen, flash repair y brusing",
+        "Incluye color por todo, mechas, matiz, elumen, flash repair y brusing",
+        "Incluye color por todo, mechas, matiz, elumen, flash repair y brusing",
+    ]
+    assert agent._explican_algo(como_las_suyas) is False
+
+    de_verdad_distintas = [
+        "alisado con keratina que dura varios meses",
+        "mechas con papel de plata y tecnica cardada",
+    ]
+    assert agent._explican_algo(de_verdad_distintas) is True
+
+    # Una sola explicacion siempre vale: no hay con que compararla.
+    assert agent._explican_algo(["lo que sea"]) is True
+    assert agent._explican_algo([]) is False
+
+
+def test_lo_que_el_negocio_agrupa_se_ofrece_junto(api_module, client):  # noqa: F811
+    """Sus packs de Grey Blending existian, estaban activos y no se ofrecian.
+
+    Quien pedia "unas mechas" veia tres opciones y ninguna era el Grey Blending,
+    porque el nombre no lleva la palabra "mechas". Lo que va junto lo dice el
+    NEGOCIO en sus reglas, no nosotros.
+    """
+    from backend import catalog_pick, rules
+
+    regla = rules.guardar("demo", nombre="Color y mechas", intenciones=["precio"],
+                          familias=["mechas", "balayage", "grey blending"],
+                          accion="ofrecer_cita", texto="")
+    try:
+        hermanas = catalog_pick._familias_hermanas("demo", "mechas")
+        assert "grey blending" in hermanas
+        # Y una familia que no esta en ninguna regla no arrastra nada.
+        assert catalog_pick._familias_hermanas("demo", "depilacion") == []
+    finally:
+        rules.borrar("demo", regla["id"])

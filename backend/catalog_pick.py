@@ -192,6 +192,31 @@ def _packs_por_defecto(cliente_id: str) -> bool:
         return False
 
 
+def _familias_hermanas(cliente_id: str, familia: str) -> List[str]:
+    """Las familias que ESTE negocio trata como la misma cosa.
+
+    Sale de sus propias reglas: si tiene una que agrupa "mechas, balayage, grey
+    blending, cambio de color...", entonces quien pide mechas tiene que ver
+    tambien el grey blending. Sin esto, sus packs de Grey Blending existian,
+    estaban activos y NO se le ofrecian a nadie que pidiera unas mechas, porque el
+    nombre no lleva la palabra "mechas".
+
+    Es del negocio, no nuestro: otro salon agrupa lo suyo y esto cambia solo.
+    """
+    if not familia:
+        return []
+    try:
+        from backend import rules
+
+        for regla in rules.listar(cliente_id, solo_activas=True):
+            familias = [_norm(f) for f in (regla.get("familias") or [])]
+            if _norm(familia) in familias:
+                return [f for f in familias if f]
+    except Exception:  # noqa: BLE001 - sin reglas se sigue como siempre
+        return []
+    return []
+
+
 def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Eleccion:
     """Decide con el catalogo real y los datos que la clienta ya ha dado.
 
@@ -212,6 +237,11 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
     para_quien = _norm(datos.get("para_quien"))
 
     # 1. Candidatos: los que encajan con la familia o la tecnica que ha dicho.
+    #    Y con lo que el NEGOCIO considera la misma familia: sus packs de Grey
+    #    Blending no llevan la palabra "mechas" en el nombre, asi que a quien
+    #    pedia mechas no se le ofrecian nunca.
+    hermanas = _familias_hermanas(cliente_id, familia) if familia else []
+
     def _encaja(servicio: Dict[str, Any]) -> bool:
         nombre = _norm(_nombre(servicio))
         categoria = _norm(servicio.get("category"))
@@ -221,7 +251,9 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
             return True
         if familia and categoria.startswith(familia[:6]):
             return True
-        return False
+        # Las hermanas solo valen a nombre COMPLETO ("grey blending"), no por
+        # trozos: "color" casaria con medio catalogo.
+        return any(h in nombre for h in hermanas if len(h) > 6)
 
     candidatos = [s for s in servicios if _encaja(s)] if (familia or tecnica) else []
     if not candidatos:
