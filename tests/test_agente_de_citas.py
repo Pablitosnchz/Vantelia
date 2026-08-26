@@ -768,3 +768,34 @@ def test_sabe_si_un_dia_el_negocio_abre(api_module, client):  # noqa: F811
     # El tenant de pruebas cierra los domingos (closed_weekdays por defecto).
     assert voice._dia_cerrado("demo", "2026-08-30") is True    # domingo
     assert voice._dia_cerrado("demo", "2026-08-27") is False   # jueves
+
+
+def test_usa_el_modelo_que_el_negocio_ha_elegido(api_module):  # noqa: F811
+    """Estaba en su panel, validado y guardado... y no lo leia nadie.
+
+    El agente -que hoy es el cerebro del chat y de WhatsApp- llamaba siempre al
+    modelo de la casa, asi que quien pagaba por uno mejor no lo tenia.
+    """
+    from backend import agent, settings
+
+    assert agent._modelo_del_negocio({"chat_model": "gpt-4o"}) == "gpt-4o"
+    # Lo que no este en la lista no se usa: un valor raro tumbaria la conversacion.
+    assert agent._modelo_del_negocio({"chat_model": "modelo-inventado"}) == settings.DEFAULT_CHAT_MODEL
+    assert agent._modelo_del_negocio({}) == settings.DEFAULT_CHAT_MODEL
+
+    assert agent._temperatura_del_negocio({"temperature": 0.1}) == 0.1
+    assert agent._temperatura_del_negocio({}) == 0.3
+    assert agent._temperatura_del_negocio({"temperature": "no"}) == 0.3
+    assert agent._temperatura_del_negocio({"temperature": 99}) == 1.5
+
+
+def test_las_dos_llamadas_del_agente_usan_ese_modelo(api_module):  # noqa: F811
+    import inspect
+
+    from backend import agent
+
+    fuente = inspect.getsource(agent.responder)
+    assert "settings.DEFAULT_CHAT_MODEL" not in fuente, (
+        "alguna llamada sigue ignorando lo que el negocio eligio"
+    )
+    assert fuente.count("_modelo_del_negocio(cfg)") >= 2

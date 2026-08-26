@@ -1211,6 +1211,28 @@ def _sin_comillas_en_los_servicios(cliente_id: str, texto: str) -> str:
     return _ENTRECOMILLADO.sub(_quitar, texto)
 
 
+def _modelo_del_negocio(config: Dict[str, Any]) -> str:
+    """El modelo que el negocio ha elegido en su panel, o el de la casa.
+
+    Estaba en su config, validado y guardado desde la pestanya del asistente...
+    y no lo leia NADIE: el agente -que hoy es el cerebro del chat y de WhatsApp-
+    llamaba siempre al modelo por defecto. Quien pagaba por uno mejor no lo tenia.
+    """
+    elegido = str((config or {}).get("chat_model") or "").strip()
+    if elegido and elegido in settings.AVAILABLE_CHAT_MODELS_BOOT:
+        return elegido
+    return settings.DEFAULT_CHAT_MODEL
+
+
+def _temperatura_del_negocio(config: Dict[str, Any]) -> float:
+    """Lo mismo con la temperatura: si la ha tocado, se respeta."""
+    try:
+        valor = float((config or {}).get("temperature", 0.3))
+    except (TypeError, ValueError):
+        return 0.3
+    return max(0.0, min(1.5, valor))
+
+
 def _quien_escribe(cliente_id: str, telefono: str) -> Dict[str, str]:
     """Lo que YA se sabe de quien escribe, sin preguntarle nada.
 
@@ -1605,11 +1627,11 @@ async def responder(
                 eleccion = "auto"
 
             respuesta = cliente.chat.completions.create(
-                model=settings.DEFAULT_CHAT_MODEL,
+                model=_modelo_del_negocio(cfg),
                 messages=turno,
                 tools=_herramientas(),
                 tool_choice=eleccion,
-                temperature=0.3,
+                temperature=_temperatura_del_negocio(cfg),
                 max_tokens=400,
             )
             elegido = respuesta.choices[0].message
@@ -1867,13 +1889,13 @@ async def responder(
         # caia al flujo de listas a media frase. Se le pide UNA respuesta final con
         # todo lo que ya ha averiguado, sin mas herramientas.
         cierre = cliente.chat.completions.create(
-            model=settings.DEFAULT_CHAT_MODEL,
+            model=_modelo_del_negocio(cfg),
             messages=mensajes + [{
                 "role": "system",
                 "content": ("Contesta ya con lo que sabes, en una o dos frases, y dile "
                             "que te falta para seguir. No inventes datos que no tengas."),
             }],
-            temperature=0.3,
+            temperature=_temperatura_del_negocio(cfg),
             max_tokens=300,
         )
         reserva.guardar(cliente_id, telefono, estado,
