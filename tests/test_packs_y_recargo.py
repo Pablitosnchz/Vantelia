@@ -777,3 +777,32 @@ def test_elegir_una_opcion_ofrecida_resuelve_y_no_repregunta(salon_con_packs, ap
         with db._get_db_connection() as conexion:
             conexion.execute("DELETE FROM services WHERE cliente_id='demo' AND name = ?", (compuesto,))
             conexion.commit()
+
+
+def test_cuando_insiste_no_se_repite_la_frase_a_secas(api_module, client):  # noqa: F811
+    """El patron mas frecuente de TODAS las mediciones: repetirse.
+
+    Medido en una conversacion real: la clienta pregunta el precio, recibe la
+    respuesta del negocio -correcta-, insiste, y recibe LA MISMA otra vez, palabra
+    por palabra. A la tercera se va, y el salon pierde justo lo que queria sacar de
+    ahi: la cita de diagnostico.
+
+    OJO CON LA ALTERNATIVA FACIL: saltarse la respuesta del negocio cuando se
+    repite YA SE PROBO y MEDIDO salio peor (el patron no se movio, 22 -> 22, y las
+    reservas cayeron del 61% al 41%). Por eso se manda IGUAL y solo se anyade el
+    remate con horas de verdad. Si alguien lo vuelve a intentar, que mida antes.
+    """
+    import inspect
+
+    from backend import booking, whatsapp
+
+    fuente = inspect.getsource(whatsapp._respuesta_del_negocio_con_remate)
+    assert "return texto" in fuente, (
+        "sin remate hay que mandar la respuesta del negocio igual, no saltarsela"
+    )
+    assert "cierre_para_quien_insiste" in fuente
+
+    # Y el remate solo se ofrece con huecos REALES: sin ellos, callarse.
+    cierre = inspect.getsource(booking.cierre_para_quien_insiste)
+    assert "primer_dia_con_hueco" in cierre
+    assert 'return ""' in cierre, "prometeria una cita sin comprobar que hay hueco"

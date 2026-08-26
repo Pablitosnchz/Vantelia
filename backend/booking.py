@@ -6302,6 +6302,43 @@ def bloquea_por_regla_de_precio(cliente_id: str, servicio: str, pidio_precio: bo
     }
 
 
+async def cierre_para_quien_insiste(cliente_id: str, servicio: str = "") -> str:
+    """Dos horas REALES de la cita de valoracion, para cerrar en vez de repetirse.
+
+    Medido en 100 conversaciones: quien pregunta el precio recibe la respuesta del
+    negocio -correcta- y al insistir recibe LA MISMA otra vez. A la tercera se va,
+    y el salon pierde justo lo que queria sacar de ahi: la cita de diagnostico.
+
+    OJO CON LA ALTERNATIVA FACIL: saltarse la respuesta del negocio cuando se
+    repite YA SE PROBO y salio peor (el patron no se movio y las reservas cayeron
+    del 61% al 41%). Asi que la respuesta del negocio se manda IGUAL; esto solo
+    anyade el remate, con huecos de verdad.
+
+    Devuelve "" si no hay cita de valoracion configurada o no hay huecos: sin
+    hueco de verdad, mejor callarse que prometer.
+    """
+    from backend import agenda
+
+    valoracion = _servicio_de_valoracion(cliente_id)
+    nombre = str((valoracion or {}).get("nombre") or "").strip()
+    if not nombre:
+        return ""
+    try:
+        dia, huecos = await agenda.primer_dia_con_hueco(cliente_id, servicio=nombre)
+    except Exception:  # noqa: BLE001 - sin agenda no se promete nada
+        return ""
+    if not dia or not huecos:
+        return ""
+    cuando = textnorm._format_date_es(textnorm._parse_date(dia).date())
+    if len(huecos) >= 2:
+        horas = "a las %s o a las %s" % (huecos[0], huecos[1])
+    else:
+        horas = "a las %s" % huecos[0]
+    return ("Lo que sí puedo hacer es cogerte la cita de %s: es corta, sin compromiso, "
+            "y ahí te damos el precio exacto. Tengo %s %s. ¿Te cuadra alguna? 😊"
+            % (nombre.lower(), cuando, horas))
+
+
 def regla_de_precio_para(cliente_id: str, servicio: str) -> Dict[str, Any]:
     """La regla que el negocio tiene para el PRECIO de ese servicio, si la hay.
 

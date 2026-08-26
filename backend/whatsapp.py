@@ -1112,6 +1112,48 @@ async def _wa_explicar_el_recargo(
                                 cliente_id, exc)
 
 
+def _ya_se_le_dijo(cliente_id: str, from_number: str, texto: str) -> bool:
+    """Esa misma respuesta ya se le mando en esta conversacion."""
+    from backend import catalog_pick, db
+
+    limpio = catalog_pick._norm(texto or "")[:120]
+    if len(limpio) < 25:
+        return False
+    try:
+        with db._get_db_connection() as conexion:
+            filas = conexion.execute(
+                "SELECT content FROM chat_messages WHERE cliente_id = ? AND session_id = ?"
+                " AND role = 'assistant' ORDER BY id DESC LIMIT 8",
+                (cliente_id, _whatsapp_session_id(cliente_id, from_number)),
+            ).fetchall()
+    except Exception:  # noqa: BLE001
+        return False
+    return any(catalog_pick._norm(str(f["content"] or ""))[:120] == limpio for f in filas)
+
+
+async def _respuesta_del_negocio_con_remate(
+    cliente_id: str, from_number: str, decision: dict, config: dict,
+) -> str:
+    """La respuesta del negocio, y si ya se la dijimos, ademas el remate.
+
+    Repetir la misma frase es lo que mas cansa (medido: el patron mas frecuente de
+    todas las tiradas). Pero SALTARSE la respuesta del negocio ya se probo y fue
+    peor -las reservas cayeron del 61% al 41%-, asi que se manda igual: se
+    reconoce que insiste y se le ofrecen horas de verdad para la valoracion.
+    """
+    texto = str(decision.get("texto") or "")
+    if not texto or not _ya_se_le_dijo(cliente_id, from_number, texto):
+        return texto
+    remate = ""
+    try:
+        remate = await booking.cierre_para_quien_insiste(cliente_id)
+    except Exception as exc:  # noqa: BLE001 - sin remate se manda la respuesta tal cual
+        settings.logger.warning("[whatsapp] sin remate para %s: %s", cliente_id, exc)
+    if not remate:
+        return texto
+    return "Ya sé que te lo he dicho, cariño, y te entiendo. %s" % texto + chr(10) * 2 + remate
+
+
 async def _wa_explicar_la_regla_del_precio(
     *, cliente_id: str, phone_number_id: str, to_number: str,
     freno: Dict[str, Any], estado, from_number: str,
@@ -2084,16 +2126,21 @@ async def _handle_whatsapp_message(
         if False:
             decision = None
         if decision and decision["texto"]:
+            # Si ya se la dijimos, va igual pero reconociendo que insiste y con
+            # horas reales para cerrar. Repetir la misma frase a secas es lo que
+            # mas cansa de todo lo medido.
+            texto_final = await _respuesta_del_negocio_con_remate(
+                cliente_id, from_number, decision, config)
             session_id = _wa_registrar(
                 cliente_id=cliente_id, from_number=from_number, request=request,
-                entrante=incoming_text, respuesta=decision["texto"],
+                entrante=incoming_text, respuesta=texto_final,
                 intent=decision["intent"],
             )
             if decision["accion"] == "pasar_a_humano":
                 inbox.claim(session_id, cliente_id, agent_user_id="", agent_name="Equipo")
             await messaging._send_whatsapp_text(
                 cliente_id=cliente_id, phone_number_id=phone_number_id,
-                to_number=from_number, text=decision["texto"],
+                to_number=from_number, text=texto_final,
             )
             # Su regla puede ademas llevarla a reservar.
             if decision["accion"] == "formulario" and booking_enabled:
