@@ -1674,9 +1674,12 @@ async def _wa_resumen_para_confirmar(
     # Vino preguntando el precio de algo que este negocio no presupuesta por
     # mensaje: NO se le ensena el resumen del tratamiento. Por aqui es por donde se
     # colaba, porque la cita la crea el boton, no el modelo.
+    # Pidio precio si lo ESCRIBIO, aunque quien le contestara fuera otra capa.
+    pidio_precio = (bool(getattr(estado, "veces_sin_precio", 0))
+                    or booking.pidio_precio_en_la_conversacion(
+                        cliente_id, _whatsapp_session_id(cliente_id, from_number)))
     freno = booking.bloquea_por_regla_de_precio(
-        cliente_id, estado.servicio_exacto or estado.servicio,
-        bool(getattr(estado, "veces_sin_precio", 0)))
+        cliente_id, estado.servicio_exacto or estado.servicio, pidio_precio)
     if freno:
         await _wa_explicar_la_regla_del_precio(
             cliente_id=cliente_id, phone_number_id=phone_number_id,

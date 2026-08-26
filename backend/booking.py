@@ -6242,6 +6242,31 @@ def precios_ocultos(cliente_id: str) -> bool:
     return booking_cfg.get("mostrar_precios") is False
 
 
+def pidio_precio_en_la_conversacion(cliente_id: str, session_id: str) -> bool:
+    """Ha preguntado el precio en algun momento de ESTA conversacion.
+
+    Se mira lo que ESCRIBIO ella, no un contador interno. El contador lo llevaba el
+    agente, y resulta que a "¿cuanto cuesta un alisado?" contesta antes la capa de
+    REGLAS del negocio -"mandanos una foto"-, asi que el agente no se enteraba: el
+    contador se quedaba a cero y el freno del precio no saltaba nunca justo en las
+    conversaciones para las que se hizo.
+
+    Lo vi con la traza puesta: `veces_sin_precio: 0` despues de preguntar el precio.
+    """
+    try:
+        from backend import agent, db
+
+        with db._get_db_connection() as conexion:
+            filas = conexion.execute(
+                "SELECT content FROM chat_messages WHERE cliente_id = ? AND session_id = ?"
+                " AND role = 'user' ORDER BY id DESC LIMIT 30",
+                (cliente_id, session_id),
+            ).fetchall()
+        return any(agent._pregunta_el_precio(str(f["content"] or "")) for f in filas)
+    except Exception:  # noqa: BLE001 - ante la duda, no se frena nada
+        return False
+
+
 def bloquea_por_regla_de_precio(cliente_id: str, servicio: str, pidio_precio: bool) -> Dict[str, Any]:
     """Lo que hay que hacer ANTES de coger esa cita a quien pregunto el precio.
 

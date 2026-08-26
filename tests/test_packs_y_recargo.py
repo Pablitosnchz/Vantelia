@@ -709,3 +709,41 @@ def test_lo_que_el_negocio_agrupa_se_ofrece_junto(api_module, client):  # noqa: 
         assert catalog_pick._familias_hermanas("demo", "depilacion") == []
     finally:
         rules.borrar("demo", regla["id"])
+
+
+def test_pregunto_el_precio_aunque_contestara_otra_capa(api_module, client):  # noqa: F811
+    """El contador lo llevaba el agente... y el agente no siempre contesta.
+
+    A "¿cuanto cuesta un alisado?" responde antes la capa de REGLAS del negocio
+    ("mandanos una foto"), asi que el agente no se enteraba: el contador se quedaba
+    a cero y el freno del precio no saltaba NUNCA en las conversaciones para las
+    que se hizo. Lo canto la traza: `veces_sin_precio: 0` despues de preguntar el
+    precio.
+
+    Ahora se mira lo que ESCRIBIO ella, que es un hecho y no depende de quien
+    contestara.
+    """
+    from backend import booking, db, timeutils
+
+    ahora = timeutils._utc_now_iso()
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT OR REPLACE INTO chat_sessions (id, cliente_id, origin, started_at,"
+            " last_message_at, message_count) VALUES ('s_precio', 'demo', 'whatsapp:34600',"
+            " ?, ?, 2)", (ahora, ahora))
+        conexion.execute(
+            "INSERT INTO chat_messages (session_id, cliente_id, role, content, created_at)"
+            " VALUES ('s_precio', 'demo', 'user', '¿cuanto cuesta un alisado?', ?)", (ahora,))
+        conexion.execute(
+            "INSERT INTO chat_messages (session_id, cliente_id, role, content, created_at)"
+            " VALUES ('s_precio', 'demo', 'assistant', 'Mandanos una foto', ?)", (ahora,))
+        conexion.commit()
+    try:
+        assert booking.pidio_precio_en_la_conversacion("demo", "s_precio") is True
+        # Una conversacion donde nadie hablo de precios no arrastra el freno.
+        assert booking.pidio_precio_en_la_conversacion("demo", "s_inexistente") is False
+    finally:
+        with db._get_db_connection() as conexion:
+            conexion.execute("DELETE FROM chat_messages WHERE session_id='s_precio'")
+            conexion.execute("DELETE FROM chat_sessions WHERE id='s_precio'")
+            conexion.commit()
