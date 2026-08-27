@@ -581,3 +581,103 @@ def test_preguntar_el_horario_no_es_pedir_cita(api_module):  # noqa: F811
     assert reserva.ha_pedido_cita("a que hora abris los sabados?") is False
     assert reserva.ha_pedido_cita("donde estais?") is False
     assert reserva.ha_pedido_cita("cerrais en agosto?") is False
+
+
+LE_DA_IGUAL_EL_CUANDO = [
+    "me da igual el dia",
+    "cuando sea",
+    "lo primero que tengas",
+    "la primera que tengas",
+    "como veas, tu decides",
+    "sin preferencia de dia",
+    "el hueco mas cercano que tengas",
+    "da igual la hora",
+    "cuando mejor te venga",
+    "me es indiferente",
+]
+
+TIENE_PREFERENCIA = [
+    "quiero el jueves",
+    "el viernes por la tarde",
+    "a las 10 de la manana",
+    "prefiero por la manana temprano",
+]
+
+
+@pytest.mark.parametrize("texto", LE_DA_IGUAL_EL_CUANDO)
+def test_cuando_le_da_igual_se_le_busca_el_primer_hueco(api_module, texto):  # noqa: F811
+    """Volver a preguntarle que dia a quien acaba de decir que le da igual es
+    justo lo que hace que abandone: el agente busca el primer dia con hueco."""
+    from backend import reserva
+
+    estado = reserva.Estado()
+    reserva.anotar_lo_que_dice(estado, texto)
+    assert estado.dia_le_da_igual is True, repr(texto)
+
+
+@pytest.mark.parametrize("texto", TIENE_PREFERENCIA)
+def test_a_quien_dice_un_dia_no_se_le_adelanta_otro(api_module, texto):  # noqa: F811
+    """Si ha dicho cuando quiere, buscarle "el primero que haya" es ignorarla."""
+    from backend import reserva
+
+    estado = reserva.Estado()
+    reserva.anotar_lo_que_dice(estado, texto)
+    assert estado.dia_le_da_igual is False, repr(texto)
+
+
+# ─── Cambiar de idea: las dos mitades ───────────────────────────────────────
+#
+# Que se le coja lo que pidio AL FINAL, sin que describirse el pelo cuente como
+# cambiar de idea. La segunda mitad estuvo a punto de salir cara: entre las
+# familias del catalogo de este salon hay palabras como "medio" y "color", asi
+# que "lo tengo medio" -la respuesta normal a "¿como tienes el pelo?"- habria
+# borrado el servicio que la clienta acababa de elegir.
+
+FAMILIAS_DE_UN_SALON = [
+    "acido", "alisados", "brusing", "color", "corte", "cortes", "decoloracion",
+    "diagnostico", "extensiones", "flash", "grey", "keratina", "lavado", "mechas",
+    "medio", "moldeados", "pack", "packs", "peinado", "peinados", "permanente",
+    "recogido", "secado", "tratamientos", "trenza",
+]
+
+CAMBIA_DE_IDEA = [
+    ("Mechas californianas corto", "mejor solo cortarme las puntas"),
+    ("Mechas", "al final prefiero un corte"),
+    ("Corte senora", "pues mira, mejor unas mechas"),
+    ("Mechas", "en vez de las mechas quiero color"),
+    ("Mechas", "perdona, queria decir un corte"),
+    ("Corte senora", "mejor me hago unas mechitas"),
+    ("Mechas", "mejor un alisado"),
+]
+
+NO_CAMBIA_DE_IDEA = [
+    ("Mechas californianas corto", "lo tengo medio"),
+    ("Mechas", "es que tengo el pelo con color"),
+    ("Corte senora", "vale, el jueves a las 10"),
+    ("Mechas", "si, confirmo"),
+    ("Corte senora", "mejor a las 5 de la tarde"),
+    ("Mechas", "solo dime el precio"),
+    ("Corte senora", "mejor con Alicia si puede ser"),
+    ("Mechas californianas medio", "mejor por la manana"),
+]
+
+
+def _cambia(monkeypatch, servicio, mensaje):
+    from backend import intents, reserva
+
+    monkeypatch.setattr(intents, "familias_del_tenant", lambda _c: FAMILIAS_DE_UN_SALON)
+    estado = reserva.Estado()
+    estado.servicio = servicio
+    return reserva.cambia_de_servicio("un_salon", estado, mensaje)
+
+
+@pytest.mark.parametrize("servicio,mensaje", CAMBIA_DE_IDEA)
+def test_se_le_coge_lo_que_pidio_al_final(api_module, monkeypatch, servicio, mensaje):  # noqa: F811
+    """Nadie vuelve a un salon al que le ha dicho dos veces lo que quiere."""
+    assert _cambia(monkeypatch, servicio, mensaje) is True, repr(mensaje)
+
+
+@pytest.mark.parametrize("servicio,mensaje", NO_CAMBIA_DE_IDEA)
+def test_describirse_el_pelo_no_es_cambiar_de_idea(api_module, monkeypatch, servicio, mensaje):  # noqa: F811
+    """Borrarle el servicio a mitad la deja repitiendolo todo: peor que no tocarlo."""
+    assert _cambia(monkeypatch, servicio, mensaje) is False, repr(mensaje)

@@ -126,3 +126,52 @@ def test_al_segundo_intento_fallido_se_le_ofrece_llamar(con_telefono, api_module
     finally:
         messaging._send_whatsapp_text = original
         whatsapp._wa_clear_flow("demo", "34600999888")
+
+
+def test_sin_huecos_para_la_valoracion_se_ofrece_el_telefono_y_no_la_misma_frase(
+        api_module, client, monkeypatch):  # noqa: F811
+    """El remate vacio devolvia la respuesta TAL CUAL: el muro que venia a quitar.
+
+    Quien insiste con el precio recibe la respuesta del negocio y, al repetirsela,
+    dos horas reales de la cita de valoracion. Pero si ese dia no hay ni una hora
+    libre, el remate sale vacio y se le mandaba la misma frase por segunda vez.
+    Sin huecos, la salida es humana: que llame.
+    """
+    import asyncio
+
+    from backend import booking, whatsapp
+
+    async def _sin_huecos(*_args, **_kwargs):
+        return ""
+
+    monkeypatch.setattr(booking, "cierre_para_quien_insiste", _sin_huecos)
+    monkeypatch.setattr(whatsapp, "_ya_se_le_dijo", lambda *_a, **_k: True)
+
+    muro = "De mechas no doy precio por mensaje sin ver el pelo, cariño."
+    salida = asyncio.run(whatsapp._respuesta_del_negocio_con_remate(
+        "demo", "34600111222", {"texto": muro}, {}))
+
+    assert muro in salida, "la respuesta del negocio se manda igual, eso ya se midio"
+    assert salida.strip() != muro.strip(), (
+        "le ha llegado la misma frase por segunda vez: eso es el muro"
+    )
+
+
+def test_si_el_negocio_no_publica_telefono_no_se_inventa_una_salida(
+        api_module, client, monkeypatch):  # noqa: F811
+    """Sin telefono publicado no hay nada que ofrecer, y no se inventa nada."""
+    import asyncio
+
+    from backend import booking, rag, whatsapp
+
+    async def _sin_huecos(*_args, **_kwargs):
+        return ""
+
+    monkeypatch.setattr(booking, "cierre_para_quien_insiste", _sin_huecos)
+    monkeypatch.setattr(whatsapp, "_ya_se_le_dijo", lambda *_a, **_k: True)
+    monkeypatch.setattr(rag, "_call_us_line", lambda *_a, **_k: "")
+
+    muro = "De mechas no doy precio por mensaje sin ver el pelo, cariño."
+    salida = asyncio.run(whatsapp._respuesta_del_negocio_con_remate(
+        "demo", "34600111222", {"texto": muro}, {}))
+    assert salida == muro

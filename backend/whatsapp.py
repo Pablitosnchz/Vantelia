@@ -1147,8 +1147,15 @@ async def _respuesta_del_negocio_con_remate(
     remate = ""
     try:
         remate = await booking.cierre_para_quien_insiste(cliente_id)
-    except Exception as exc:  # noqa: BLE001 - sin remate se manda la respuesta tal cual
+    except Exception as exc:  # noqa: BLE001 - hay otra salida mas abajo
         settings.logger.warning("[whatsapp] sin remate para %s: %s", cliente_id, exc)
+    if not remate:
+        # Sin huecos que ofrecer, el remate sale vacio y se le mandaba la MISMA
+        # frase otra vez: exactamente el muro que esto venia a quitar. La salida
+        # que queda es humana -que llame y el salon cuadra lo que el sistema no
+        # sabe cuadrar-. Si el negocio no publica telefono no se inventa nada, y
+        # entonces si se manda la respuesta tal cual.
+        remate = rag._call_us_line(cliente_id).strip()
     if not remate:
         return texto
     return "Ya sé que te lo he dicho, cariño, y te entiendo. %s" % texto + chr(10) * 2 + remate

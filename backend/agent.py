@@ -831,6 +831,35 @@ def _horas_ya_ofrecidas(historial: List[Dict[str, str]]) -> set:
     return horas
 
 
+# Como suena un ofrecimiento de cita salido del asistente. Sirve para no bloquear
+# la reserva de quien nunca escribio la palabra "cita" porque no le hizo falta:
+# se la ofrecieron y dijo que si.
+_OFRECE_CITA = ("te la cojo", "te cojo cita", "quieres que te", "te reservo",
+                "te apunto", "te la reservo", "te la aparto", "te la guardo",
+                "confirmamos la cita", "te lo agendo", "te la agendo",
+                "quieres cita", "te vendria bien", "te la dejo cogida")
+
+
+def _le_ofrecieron_cita_y_dijo_que_si(historial: List[Dict[str, str]], mensaje: str) -> bool:
+    """¿Viene de un "¿te la cojo?" contestado que si?
+
+    El freno de "nadie acaba con una cita que no ha pedido" mira las palabras de
+    ELLA, y ahi hay un camino legitimo que no lleva ninguna: pregunta el horario,
+    el asistente le ofrece cogerle cita, y ella contesta "si, porfa". Bloquearla
+    ahi es perder una reserva de verdad por evitar una falsa.
+    """
+    from backend import whatsapp
+
+    if not whatsapp._wa_dice_que_si(catalog_pick._norm(mensaje or "")):
+        return False
+    for anterior in reversed(historial or []):
+        if anterior.get("role") != "assistant":
+            continue
+        dicho = catalog_pick._norm(str(anterior.get("content") or ""))
+        return any(pista in dicho for pista in _OFRECE_CITA)
+    return False
+
+
 def _hora_que_nadie_ha_pedido(estado: Any, dicho: str, hora: str) -> bool:
     """¿Se esta moviendo la cita a una hora que ni ha pedido ni se le ha ofrecido?
 
@@ -1895,7 +1924,8 @@ async def responder(
                 # tenia, y el negocio con un hueco ocupado por nadie.
                 if (llamada.function.name == "crear_cita"
                         and estado.intencion != "reservar"
-                        and not reserva.ha_pedido_cita(dicho_de_ella)):
+                        and not reserva.ha_pedido_cita(dicho_de_ella)
+                        and not _le_ofrecieron_cita_y_dijo_que_si(historial, mensaje)):
                     resultado = {
                         "ok": False,
                         "error": ("No te ha pedido ninguna cita: solo esta preguntando. "

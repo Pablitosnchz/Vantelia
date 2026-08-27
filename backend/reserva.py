@@ -121,10 +121,21 @@ def olvidar(cliente_id: str, telefono: str) -> None:
 
 # ─── Lo que dice la clienta ────────────────────────────────────────────────
 
+# Las formas de decir "el dia me da igual, dame lo primero que tengas". Con
+# cualquiera de estas se BUSCA el primer dia con hueco en vez de preguntarle otra
+# vez que dia quiere: preguntarselo a quien acaba de decir que le da igual es
+# justo lo que le hace abandonar.
+#
+# OJO: solo frases que hablen del CUANDO. "Me da igual" a secas tambien vale para
+# el precio o para el profesional, y adelantarse ahi es meterle prisa.
 _LE_DA_IGUAL = (
     "me da igual", "cualquier", "el que sea", "lo que tengas", "que tengas",
     "primer hueco", "primera hora", "cuando puedas", "lo antes posible",
     "cuanto antes", "me vale", "lo mas pronto", "ya mismo", "urgente",
+    "da igual el dia", "da igual la hora", "da igual cuando", "cuando sea",
+    "cuando te venga", "cuando mejor", "lo primero que", "la primera que",
+    "sin preferencia", "como veas", "tu decides", "lo que mejor te venga",
+    "me es igual", "me es indiferente", "lo primero libre", "el hueco mas cercano",
 )
 
 
@@ -416,6 +427,16 @@ def ha_pedido_cita(dicho: str) -> bool:
     return any(pista in plano for pista in PIDE_CITA)
 
 
+# Como se anuncia un cambio de idea. Sin una de estas, nombrar otra familia es
+# describirse o preguntar, no cambiar: "lo tengo medio", "es que tengo color".
+_SUENA_A_CAMBIO = (
+    " mejor ", " al final ", " en vez ", " en lugar ", " prefiero ", " pues ",
+    " cambio ", " cambia ", " mira ", " realmente ", " en realidad ", " ahora que ",
+    " pensandolo ", " perdona ", " perdon ", " me he equivocado ", " queria decir ",
+    " no, ", " mas bien ", " solo ", " solamente ", " unicamente ",
+)
+
+
 def cambia_de_servicio(cliente_id: str, estado: Estado, mensaje: str) -> bool:
     """Esta pidiendo OTRA cosa distinta de la que ya habia elegido.
 
@@ -426,6 +447,13 @@ def cambia_de_servicio(cliente_id: str, estado: Estado, mensaje: str) -> bool:
 
     Se compara con las familias que tiene ESTE negocio en su catalogo, no con una
     lista escrita a mano.
+
+    Y ADEMAS tiene que sonar a cambio ("mejor", "al final", "en vez de"). Nombrar
+    otra familia no basta, y esto es lo que separa un arreglo de un desastre: entre
+    las familias de este salon hay palabras como "medio" o "color", asi que "lo
+    tengo medio" -la respuesta normal a "¿como tienes el pelo?"- le habria borrado
+    el servicio que acababa de elegir. Cambiar de idea se ANUNCIA; describirse el
+    pelo, no.
     """
     from backend import catalog_pick, intents
 
@@ -434,6 +462,8 @@ def cambia_de_servicio(cliente_id: str, estado: Estado, mensaje: str) -> bool:
     dicho = catalog_pick._norm(mensaje or "")
     if not dicho:
         return False
+    if not any(senyal in " %s " % dicho for senyal in _SUENA_A_CAMBIO):
+        return False
     actual = catalog_pick._norm(estado.servicio)
     try:
         familias = intents.familias_del_tenant(cliente_id)
@@ -441,11 +471,30 @@ def cambia_de_servicio(cliente_id: str, estado: Estado, mensaje: str) -> bool:
         return False
     for familia in familias:
         limpia = catalog_pick._norm(familia)
+        if len(limpia) < 4:
+            continue   # trozos de dos o tres letras casan con cualquier cosa
         # Una familia que ella nombra y que NO es la del servicio elegido: ha
-        # cambiado de idea. Se piden 4 letras para no confundirse con trozos.
-        if len(limpia) >= 4 and limpia in dicho and limpia not in actual:
+        # cambiado de idea.
+        # Lo que ELLA dice se busca por la raiz -"cortarme", "mechitas"-; lo que
+        # ya tiene elegido, ENTERO. Los nombres del catalogo llevan el largo
+        # dentro ("Mechas californianas corto"), asi que buscar ahi por la raiz
+        # daba "corte" por elegido y el cambio no se veia.
+        if _nombra_por_la_raiz(dicho, limpia) and limpia not in actual:
             return True
     return False
+
+
+def _nombra_por_la_raiz(texto: str, familia: str) -> bool:
+    """¿Aparece esa familia en el texto, aunque venga conjugada o en diminutivo?
+
+    "mejor solo CORTARME las puntas" y "mejor unas MECHITAS" son cambios de idea
+    de manual y no casaban con "corte" ni con "mechas".
+    """
+    if familia in texto:
+        return True
+    if len(familia) < 5:
+        return False
+    return familia[:max(4, len(familia) - 2)] in texto
 
 
 def anotar_intencion(estado: Estado, intencion: str) -> None:

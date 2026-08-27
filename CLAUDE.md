@@ -754,6 +754,11 @@ Si cambias contratos de respuesta, auth, cookies, booking o WhatsApp, actualiza 
 
 ## Documentacion util
 
+- `docs/COMO_SE_MIDE.md`: **los cinco instrumentos** (tests, humo, banco de casos,
+  simulador de 100 clientas, vigilancia en vivo): que contesta cada uno, que cuesta,
+  como se lee, el historial de mediciones y las trampas que ya han costado tiempo
+  (poner el freno en la capa equivocada, medir con el instrumento roto, desplegar en
+  mitad de una tirada).
 - `tests/README.md`: que cubre cada uno de los 48 ficheros de test, que correr segun lo que toques, y los tests que vigilan REGLAS (si uno de esos falla, leelo antes de "arreglarlo").
 - `docs/MAPA_DEL_CODIGO.md`: **empieza por aqui si no sabes que fichero abrir.** Por flujo: entrada de cada canal, nucleo comun, donde vive cada texto que lee el cliente, y las trampas que ya han costado un incidente.
 - `README.md`: instalacion, endpoints y operacion general.

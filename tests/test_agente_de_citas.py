@@ -908,3 +908,39 @@ def test_algo_dicho_hace_mucho_ya_no_cuenta_como_repetirse(api_module):  # noqa:
         historial.append({"role": "user", "content": "vale %d" % i})
         historial.append({"role": "assistant", "content": "respuesta distinta numero %d con su texto propio" % i})
     assert agent._ya_dijo_esto(historial, frase) is False
+
+
+def test_un_si_a_te_la_cojo_cuenta_como_pedir_cita(api_module):  # noqa: F811
+    """El freno de "nadie acaba con una cita que no ha pedido" mira SUS palabras,
+    y hay un camino legitimo que no lleva ninguna: pregunta el horario, se le
+    ofrece cogerle cita y contesta "si, porfa". Bloquearla ahi es perder una
+    reserva de verdad por evitar una falsa.
+    """
+    from backend import agent
+
+    historial = [
+        {"role": "user", "content": "hola, a que hora abris manana?"},
+        {"role": "assistant", "content": "Abrimos de 10:00 a 20:30, cariño. ¿Te cojo cita?"},
+    ]
+    assert agent._le_ofrecieron_cita_y_dijo_que_si(historial, "si, porfa") is True
+
+
+def test_un_si_a_otra_cosa_no_cuenta_como_pedir_cita(api_module):  # noqa: F811
+    """Si lo ultimo que le preguntaron no era una cita, su "si" no es una cita."""
+    from backend import agent
+
+    historial = [
+        {"role": "user", "content": "hacéis mechas?"},
+        {"role": "assistant", "content": "Si, cariño, hacemos mechas de varios tipos. ¿Las conoces?"},
+    ]
+    assert agent._le_ofrecieron_cita_y_dijo_que_si(historial, "si") is False
+
+
+def test_sin_ofrecimiento_ni_si_el_freno_sigue_puesto(api_module):  # noqa: F811
+    """La mitad que protege: quien solo pregunta el horario no se va con cita."""
+    from backend import agent, reserva
+
+    assert reserva.ha_pedido_cita("a que hora abris manana?") is False
+    assert agent._le_ofrecieron_cita_y_dijo_que_si(
+        [{"role": "assistant", "content": "Abrimos de 10:00 a 20:30, cariño."}],
+        "vale, gracias") is False
