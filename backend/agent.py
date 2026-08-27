@@ -1063,8 +1063,12 @@ def _da_la_cita_por_hecha(texto: str) -> bool:
             donde = plano.find(pista, desde)
             if donde < 0:
                 break
-            antes = plano[max(0, donde - 30):donde]
-            if not any(negacion in antes for negacion in _NIEGA):
+            # La ventana incluye el propio trozo: si no, "no la he cambiado" se
+            # daba por afirmacion, porque la negacion "no la he" se solapa con lo
+            # que se busca ("la he cambiad") y mirando solo lo de ANTES nunca
+            # aparecia entera.
+            contexto = plano[max(0, donde - 16):donde + len(pista)]
+            if not any(negacion in contexto for negacion in _NIEGA):
                 return True
             desde = donde + 1
     return False
@@ -1078,13 +1082,21 @@ _ACABO_DE_HACERLO = (
     "he reservado", "he agendado", "he apuntado", "te la he cogid", "te he cogid",
     "he cancelado", "la he cancelado", "he anulado", "la he anulado",
     "he reprogramado", "la he reprogramado", "he movido", "la he movido",
-    "he cambiado tu cita", "he cambiado la cita",
+    "he cambiado tu cita", "he cambiado la cita", "te la he cambiad", "la he cambiad",
     # Reabrir una cita cancelada NO existe como operacion, asi que decirlo es
     # SIEMPRE mentira. Paso de verdad: "vuelvela a abrir" -> "tu cita esta de
     # nuevo abierta", y en la agenda no habia nada.
     "he vuelto a abrir", "la he reabierto", "he reabierto", "he reactivado",
     "la he reactivado", "de nuevo abierta", "de nuevo activa", "vuelve a estar activa",
     "queda reabierta", "esta reabierta", "restaurad",
+    # Dicho sin el "he": es la forma mas comun de colarlo. Visto de verdad -la
+    # clienta cambia de idea al final, quiere corte en vez de mechas-: "tu cita
+    # QUEDA para el corte de puntas el jueves a las 10:30". En la agenda seguian
+    # las mechas. Nadie toco nada.
+    "tu cita queda", "la cita queda", "queda cambiada", "queda modificada",
+    "queda actualizada", "queda reservada", "queda anulada", "queda cancelada",
+    "ya esta cambiada", "ya esta modificada", "ya esta actualizada",
+    "cambiada a ", "modificada a ", "actualizada a ",
 )
 
 
@@ -1097,8 +1109,12 @@ def _dice_que_acaba_de_hacerlo(texto: str) -> bool:
             donde = plano.find(pista, desde)
             if donde < 0:
                 break
-            antes = plano[max(0, donde - 30):donde]
-            if not any(negacion in antes for negacion in _NIEGA):
+            # La ventana incluye el propio trozo: si no, "no la he cambiado" se
+            # daba por afirmacion, porque la negacion "no la he" se solapa con lo
+            # que se busca ("la he cambiad") y mirando solo lo de ANTES no
+            # aparecia nunca entera.
+            contexto = plano[max(0, donde - 16):donde + len(pista)]
+            if not any(negacion in contexto for negacion in _NIEGA):
                 return True
             desde = donde + 1
     return False
@@ -1152,6 +1168,12 @@ _LO_ANUNCIA = (
     "ahora mismo lo miro", "voy a mirar", "voy a comprobar", "voy a consultar",
     "voy a revisar", "dejame ver", "permiteme", "te confirmo en", "ya te digo",
     "espera un", "en breve te",
+    # "Dejame consultar la agenda" repetido CUATRO veces seguidas a la misma
+    # clienta, medido en una tirada de 100. Anunciar que vas a mirar y no mirar es
+    # el muro mas absurdo de todos: la herramienta esta ahi, en el mismo turno.
+    "dejame consultar", "dejame mirar", "dejame comprobar", "dejame revisar",
+    "voy a echar un vistazo", "lo consulto y", "lo miro y te",
+    "no tengo la disponibilidad aun", "dame un momento", "dame unos",
 )
 
 

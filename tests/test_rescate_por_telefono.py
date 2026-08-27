@@ -175,3 +175,47 @@ def test_si_el_negocio_no_publica_telefono_no_se_inventa_una_salida(
     salida = asyncio.run(whatsapp._respuesta_del_negocio_con_remate(
         "demo", "34600111222", {"texto": muro}, {}))
     assert salida == muro
+
+
+def test_el_hueco_ocupado_al_confirmar_ofrece_horas_reales(api_module, client):  # noqa: F811
+    """El peor momento para un callejon sin salida: justo al pulsar Confirmar.
+
+    Visto en una tirada de 100: la clienta elige servicio, dia y hora, lee el
+    resumen, pulsa Confirmar y recibe "⚠️ Ese horario ya no esta disponible. Elige
+    otro tramo." + el menu principal. Empezar de cero es donde se va la gente.
+
+    Se le dan huecos de verdad del mismo dia, igual que a quien falla al
+    reprogramar: es el MISMO texto, no otro escrito aparte.
+    """
+    import asyncio
+    import datetime
+
+    from backend import appstate, timeutils, whatsapp
+
+    manana = (timeutils._utc_now().date() + datetime.timedelta(days=3)).isoformat()
+    flow = appstate.WAFlowState(cliente_id="demo", from_number="34600992222")
+    flow.fecha = manana
+    flow.hora = "10:30"
+
+    texto = asyncio.run(whatsapp._wa_ese_hueco_ya_no_esta("demo", flow))
+    assert texto.strip(), "no puede quedarse sin respuesta"
+    assert "escribe *agendar*" not in texto.lower() or ":" in texto, (
+        "sigue siendo un callejon sin salida: ni horas ni telefono"
+    )
+
+
+def test_si_no_hay_alternativas_al_menos_no_revienta(api_module, client, monkeypatch):  # noqa: F811
+    """Un fallo buscando alternativas no puede dejar a la clienta sin nada."""
+    import asyncio
+
+    from backend import appstate, booking, whatsapp
+
+    async def _revienta(*_a, **_k):
+        raise RuntimeError("la agenda no responde")
+
+    monkeypatch.setattr(booking, "_reschedule_failure_text", _revienta)
+    flow = appstate.WAFlowState(cliente_id="demo", from_number="34600992223")
+    flow.fecha = "2026-09-10"
+    flow.hora = "10:30"
+    texto = asyncio.run(whatsapp._wa_ese_hueco_ya_no_esta("demo", flow))
+    assert "ocupar" in texto.lower()

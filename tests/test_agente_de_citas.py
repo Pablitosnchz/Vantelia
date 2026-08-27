@@ -972,3 +972,62 @@ def test_cancelar_no_deja_dar_por_hecha_una_cita_que_no_existe(api_module):  # n
         "el freno ha vuelto a colgarse de `mutada`: una cancelacion deja pasar "
         "que se invente la cita siguiente"
     )
+
+
+DICE_QUE_LO_HA_HECHO = [
+    # Sin el "he": la forma mas comun de colarlo. Visto de verdad: la clienta
+    # cambia de idea al final -corte en vez de mechas- y recibe "tu cita queda
+    # para el corte de puntas el jueves a las 10:30". En la agenda seguian las
+    # mechas. Nadie toco nada, y ella se presenta el jueves.
+    "tu cita queda para el corte de puntas el jueves a las 10:30",
+    "Perfecto, la cita queda cambiada a las 11:00",
+    "ya esta modificada",
+    "te la he cambiado",
+    "la he cancelado",
+    "te la he cogido para el jueves",
+]
+
+NO_LO_DA_POR_HECHO = [
+    # Todas llevan dentro la misma frase, negada. Marcarlas seria regañar al
+    # asistente por contestar BIEN, y a base de eso se estropea lo que va bien.
+    "no la he cambiado",
+    "aun no esta reservada",
+    "todavia no te he apuntado",
+    "no queda cancelada",
+    "no te he cogido nada",
+    "no la he cancelado",
+    "¿quieres que te la cambie?",
+    "te paso el resumen para que lo confirmes",
+]
+
+
+@pytest.mark.parametrize("texto", DICE_QUE_LO_HA_HECHO)
+def test_afirmar_que_lo_ha_hecho_se_detecta(api_module, texto):  # noqa: F811
+    from backend import agent
+
+    assert agent._dice_que_acaba_de_hacerlo(texto) is True, repr(texto)
+
+
+@pytest.mark.parametrize("texto", NO_LO_DA_POR_HECHO)
+def test_lo_negado_no_cuenta_como_afirmarlo(api_module, texto):  # noqa: F811
+    """La negacion se solapa con lo que se busca ("no LA HE CAMBIADO"), asi que
+    mirando solo lo de ANTES del trozo no aparecia nunca entera."""
+    from backend import agent
+
+    assert agent._dice_que_acaba_de_hacerlo(texto) is False, repr(texto)
+
+
+def test_anunciar_que_va_a_mirar_la_agenda_cuenta_como_no_mirarla(api_module):  # noqa: F811
+    """"Dejame consultar la agenda" CUATRO veces seguidas a la misma clienta.
+
+    Medido en una tirada de 100. Anunciar que vas a mirar y no mirar es el muro
+    mas absurdo que hay: la herramienta esta ahi, en el mismo turno.
+    """
+    from backend import agent
+
+    assert agent._lo_anuncia_en_vez_de_hacerlo(
+        "Lo siento, cariño, no tengo la disponibilidad aún. Déjame consultar la agenda")
+    assert agent._lo_anuncia_en_vez_de_hacerlo("dame un momento y te digo")
+    # Y dar las horas NO es anunciar: eso es haberlo hecho.
+    assert not agent._lo_anuncia_en_vez_de_hacerlo(
+        "Tengo disponibilidad el jueves de 10:00 a 19:15, cada 15 minutos")

@@ -1305,6 +1305,28 @@ async def _wa_send_booking_summary(
     )
 
 
+async def _wa_ese_hueco_ya_no_esta(cliente_id: str, flow: appstate.WAFlowState) -> str:
+    """El hueco se ha ocupado entre el resumen y el boton: se ofrecen otros REALES.
+
+    Pasa de verdad y es el peor momento posible: la clienta ha elegido servicio,
+    dia y hora, ha leido el resumen y ha pulsado Confirmar. Contestarle "escribe
+    *agendar* para elegir otro tramo" la manda a empezar de cero, y ahi se va.
+
+    Se reusa el mismo texto que ya se le da a quien falla al REPROGRAMAR: el error,
+    hasta tres huecos libres de ese mismo dia, y la salida por telefono.
+    """
+    try:
+        return await booking._reschedule_failure_text(
+            cliente_id,
+            {"error": "Ese hueco se acaba de ocupar, cariño."},
+            flow.fecha, flow.hora,
+        )
+    except Exception as exc:  # noqa: BLE001 - nunca sin respuesta
+        settings.logger.warning("[whatsapp] sin alternativas para %s: %s", cliente_id, exc)
+        return ("⚠️ Ese hueco se acaba de ocupar. Escribe *agendar* para elegir otro."
+                + rag._call_us_line(cliente_id))
+
+
 async def _wa_create_booking(
     *, cliente_id: str, phone_number_id: str, to_number: str, flow: appstate.WAFlowState, config: Dict[str, Any],
     request: Request,
@@ -1359,7 +1381,7 @@ async def _wa_create_booking(
             if exc.status_code == 409:
                 await messaging._send_whatsapp_text(
                     cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
-                    text="⚠️ Ese horario acaba de ser reservado por otra persona. Escribe *agendar* para elegir otro tramo.",
+                    text=await _wa_ese_hueco_ya_no_esta(cliente_id, flow),
                 )
             else:
                 await messaging._send_whatsapp_text(
@@ -1370,9 +1392,14 @@ async def _wa_create_booking(
         booking_id = stored_booking["id"]
 
     except HTTPException as exc:
+        # El 409 de aqui es "no queda nadie libre a esa hora", y llega justo cuando
+        # la clienta acaba de pulsar Confirmar. Mandarla al menu con un "elige otro
+        # tramo" es perder la cita en el ultimo paso: se le dan horas de verdad.
+        texto = ("⚠️ %s" % exc.detail) if exc.status_code != 409 else (
+            await _wa_ese_hueco_ya_no_esta(cliente_id, flow))
         await messaging._send_whatsapp_text(
             cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
-            text=f"⚠️ {exc.detail}",
+            text=texto,
         )
         return False
     except Exception as exc:  # noqa: BLE001
