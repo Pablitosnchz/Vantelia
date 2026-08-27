@@ -138,3 +138,20 @@ def test_las_tools_de_gestion_ya_no_exigen_el_codigo(api_module, client):  # noq
         assert "codigo_reserva" not in requeridos, nombre
     # Y las de verificacion SI lo siguen exigiendo: ahi el codigo es la prueba.
     assert "codigo_reserva" in tools["enviar_codigo_verificacion"]["parameters"]["required"]
+
+
+def test_las_tools_del_agente_tampoco_exigen_el_codigo(api_module, client):  # noqa: F811
+    """El agente tiene su PROPIO esquema de tools, y ese es el que usa WhatsApp.
+
+    Arreglarlo solo en el de la voz habria dejado el fallo intacto por el canal
+    que usa el salon: la misma leccion de siempre, el arreglo en la capa que no
+    era.
+    """
+    from backend import agent
+
+    tools = {t["function"]["name"]: t["function"] for t in agent._herramientas()}
+    for nombre in ("cancelar_cita", "reprogramar_cita"):
+        requeridos = tools[nombre]["parameters"].get("required") or []
+        assert "codigo_reserva" not in requeridos, nombre
+    # Y reprogramar sigue exigiendo a donde se mueve: sin eso no se puede mover.
+    assert set(tools["reprogramar_cita"]["parameters"]["required"]) == {"fecha", "hora"}

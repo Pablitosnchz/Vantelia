@@ -147,16 +147,17 @@ def _herramientas() -> List[Dict[str, Any]]:
             "function": {
                 "name": "cancelar_cita",
                 "description": (
-                    "Cancela una cita. Necesita el numero de reserva. La cita solo "
-                    "queda cancelada si esta tool lo confirma."
+                    "Cancela una cita. Si no te ha dado el numero de reserva NO se lo "
+                    "pidas: llamala sin el y se busca por su telefono, que ya esta "
+                    "verificado. La cita solo queda cancelada si esta tool lo confirma."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "codigo_reserva": {"type": "string"},
+                        "codigo_reserva": {"type": "string", "description": "R-XXXX solo si lo dice ella"},
                         "motivo": {"type": "string"},
                     },
-                    "required": ["codigo_reserva"],
+                    "required": [],
                 },
             },
         },
@@ -165,17 +166,19 @@ def _herramientas() -> List[Dict[str, Any]]:
             "function": {
                 "name": "reprogramar_cita",
                 "description": (
-                    "Mueve una cita a otro dia u hora. Comprueba que el hueco nuevo "
-                    "este libre; si no lo esta, te lo dice y no cambia nada."
+                    "Mueve una cita a otro dia u hora. Si no te ha dado el numero de "
+                    "reserva NO se lo pidas: llamala sin el y se busca por su telefono. "
+                    "Comprueba que el hueco nuevo este libre; si no lo esta, te lo dice "
+                    "y no cambia nada."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "codigo_reserva": {"type": "string"},
+                        "codigo_reserva": {"type": "string", "description": "R-XXXX solo si lo dice ella"},
                         "fecha": {"type": "string", "description": "AAAA-MM-DD"},
                         "hora": {"type": "string", "description": "HH:MM"},
                     },
-                    "required": ["codigo_reserva", "fecha", "hora"],
+                    "required": ["fecha", "hora"],
                 },
             },
         },
