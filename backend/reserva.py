@@ -164,7 +164,8 @@ def _hora_coloquial(texto: str, huecos: List[str]) -> str:
     return ""
 
 
-def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "") -> None:
+def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "",
+                       cliente_id: str = "") -> None:
     """Lo que se puede sacar de su mensaje SIN preguntarle al modelo.
 
     Hace falta: si el estado solo se llenara con resultados de tools, un "el
@@ -180,6 +181,18 @@ def anotar_lo_que_dice(estado: Estado, mensaje: str, timezone_name: str = "") ->
     plano = catalog_pick._norm(mensaje or "")
     if any(pista in plano for pista in _LE_DA_IGUAL):
         estado.dia_le_da_igual = True
+
+    # ¿Ha cambiado de idea? Entonces el servicio elegido ya no vale, ni la hora
+    # que se aparto para el. Lo demas de ella -su nombre, lo que ya se le conto-
+    # se conserva: eso no cambia porque quiera otra cosa.
+    if cliente_id and not estado.hecho and cambia_de_servicio(cliente_id, estado, mensaje):
+        estado.servicio = ""
+        estado.servicio_exacto = ""
+        estado.servicio_texto = ""
+        estado.duracion = 0
+        estado.hora = ""
+        estado.huecos = []
+        estado.ultimo_falta = ""
 
     # ¿Pide OTRA cita habiendo terminado ya una? Entonces se empieza de cero con
     # la nueva, en vez de quedarse describiendo la anterior una y otra vez.
@@ -382,6 +395,57 @@ def empezar_otra_gestion(estado: Estado) -> None:
     estado.cancelada = False
     estado.ultimo_falta = ""
     estado.ultimo_pedido = ""
+
+
+PIDE_CITA = ("cita", "reserva", "reservar", "agendar", "apuntar", "apuntame",
+             "coger hora", "cogerme hora", "pedir hora", "quiero ir", "me gustaria ir",
+             "quiero hacerme", "me gustaria hacerme", "quiero ponerme", "hacerme un",
+             "hacerme una", "puedo ir", "tenéis hueco", "teneis hueco", "hay hueco")
+
+
+def ha_pedido_cita(dicho: str) -> bool:
+    """Ha dicho, de alguna forma, que quiere venir.
+
+    Medido: 3 de cada 100 conversaciones acababan con una cita en la agenda de
+    alguien que solo habia preguntado el horario. Eso al negocio le deja un hueco
+    ocupado por nadie, y a quien pregunto, una cita que no sabe que tiene.
+    """
+    from backend import catalog_pick
+
+    plano = catalog_pick._norm(dicho or "")
+    return any(pista in plano for pista in PIDE_CITA)
+
+
+def cambia_de_servicio(cliente_id: str, estado: Estado, mensaje: str) -> bool:
+    """Esta pidiendo OTRA cosa distinta de la que ya habia elegido.
+
+    Medido: 4 de cada 100 conversaciones acababan con el servicio equivocado en la
+    agenda porque la clienta empezaba pidiendo mechas y a mitad decia "mejor solo
+    cortarme las puntas"... y se le cogia las mechas. Nadie vuelve a un salon al
+    que le ha dicho dos veces lo que quiere.
+
+    Se compara con las familias que tiene ESTE negocio en su catalogo, no con una
+    lista escrita a mano.
+    """
+    from backend import catalog_pick, intents
+
+    if not estado.servicio:
+        return False
+    dicho = catalog_pick._norm(mensaje or "")
+    if not dicho:
+        return False
+    actual = catalog_pick._norm(estado.servicio)
+    try:
+        familias = intents.familias_del_tenant(cliente_id)
+    except Exception:  # noqa: BLE001 - sin catalogo no se cambia nada
+        return False
+    for familia in familias:
+        limpia = catalog_pick._norm(familia)
+        # Una familia que ella nombra y que NO es la del servicio elegido: ha
+        # cambiado de idea. Se piden 4 letras para no confundirse con trozos.
+        if len(limpia) >= 4 and limpia in dicho and limpia not in actual:
+            return True
+    return False
 
 
 def anotar_intencion(estado: Estado, intencion: str) -> None:

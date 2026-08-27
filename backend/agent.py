@@ -1603,6 +1603,7 @@ async def responder(
     reserva.anotar_lo_que_dice(
         estado, mensaje,
         str((cfg.get("booking") or {}).get("timezone") or settings.DEFAULT_TIMEZONE),
+        cliente_id=cliente_id,
     )
     conocido = quien.get("nombre", "")
 
@@ -1875,6 +1876,24 @@ async def responder(
                     argumentos = json.loads(llamada.function.arguments or "{}")
                 except (ValueError, TypeError):
                     argumentos = {}
+                # Nadie acaba con una cita que no ha pedido. Paso con quien solo
+                # preguntaba el horario: se iba con una cita que no sabia que
+                # tenia, y el negocio con un hueco ocupado por nadie.
+                if (llamada.function.name == "crear_cita"
+                        and estado.intencion != "reservar"
+                        and not reserva.ha_pedido_cita(dicho_de_ella)):
+                    resultado = {
+                        "ok": False,
+                        "error": ("No te ha pedido ninguna cita: solo esta preguntando. "
+                                  "No le cojas nada. Contesta lo que pregunta y, si "
+                                  "acaso, ofrecele coger cita y ESPERA a que lo diga."),
+                    }
+                    mensajes.append({
+                        "role": "tool", "tool_call_id": llamada.id,
+                        "content": json.dumps(resultado, ensure_ascii=False),
+                    })
+                    traza.freno("cita_sin_pedirla")
+                    continue
                 # Vino preguntando el PRECIO de algo que aqui no se presupuesta
                 # por mensaje: lo que se le coge es la cita de valoracion, no el
                 # tratamiento de cuatro horas. Es la regla del propio salon

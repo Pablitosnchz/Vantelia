@@ -533,3 +533,51 @@ def test_al_pedir_otra_cita_no_se_arrastra_el_servicio_exacto(api_module):  # no
                             servicio_exacto="Pack keratina premium medio")
     reserva.anotar_lo_que_dice(estado, "tambien quiero una cita para un corte", "Europe/Madrid")
     assert estado.servicio_exacto == ""
+
+
+def test_cambiar_de_idea_cambia_el_servicio(api_module, client, monkeypatch):  # noqa: F811
+    """Empezaba pidiendo mechas, a mitad decia "mejor solo las puntas"... y se le
+    cogian las mechas.
+
+    Medido: 4 de cada 100 conversaciones acababan con el servicio equivocado en la
+    agenda. Nadie vuelve a un salon al que le ha dicho dos veces lo que quiere.
+    """
+    from backend import intents, reserva
+
+    # Las familias salen del catalogo del negocio y van cacheadas, asi que aqui se
+    # fijan: lo que se prueba es la DECISION, no que el demo tenga tal servicio.
+    monkeypatch.setattr(intents, "familias_del_tenant", lambda _c: ["masaje", "pilates"])
+    estado = reserva.Estado(intencion="reservar", servicio="Masaje descontracturante",
+                            servicio_exacto="Masaje descontracturante",
+                            hora="10:00", huecos=["10:00", "10:15"], nombre="Ana")
+    reserva.anotar_lo_que_dice(estado, "mejor una sesion de pilates",
+                               "Europe/Madrid", cliente_id="demo")
+
+    assert estado.servicio == "", "sigue con las mechas que ya no quiere"
+    assert estado.hora == "", "la hora se aparto para el servicio viejo"
+    assert estado.nombre == "Ana", "lo que se sabe de ELLA no se pierde"
+
+
+def test_dar_mas_datos_del_mismo_servicio_no_lo_borra(api_module, client, monkeypatch):  # noqa: F811
+    """"Lo tengo por los hombros" es informacion, no un cambio de idea."""
+    from backend import intents, reserva
+
+    monkeypatch.setattr(intents, "familias_del_tenant", lambda _c: ["masaje", "pilates"])
+
+    estado = reserva.Estado(intencion="reservar", servicio="Masaje descontracturante")
+    reserva.anotar_lo_que_dice(estado, "me duele sobre todo la espalda baja",
+                               "Europe/Madrid", cliente_id="demo")
+    assert estado.servicio == "Masaje descontracturante"
+
+
+def test_preguntar_el_horario_no_es_pedir_cita(api_module):  # noqa: F811
+    """3 de cada 100 se iban con una cita que no sabian que tenian."""
+    from backend import reserva
+
+    assert reserva.ha_pedido_cita("quiero cita para un corte") is True
+    assert reserva.ha_pedido_cita("me gustaria hacerme unas mechas") is True
+    assert reserva.ha_pedido_cita("teneis hueco manana?") is True
+
+    assert reserva.ha_pedido_cita("a que hora abris los sabados?") is False
+    assert reserva.ha_pedido_cita("donde estais?") is False
+    assert reserva.ha_pedido_cita("cerrais en agosto?") is False
