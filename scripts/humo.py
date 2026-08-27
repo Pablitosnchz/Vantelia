@@ -234,22 +234,34 @@ def main() -> int:
     print("humo: %d conversaciones enteras sobre una copia de la base de datos" % len(casos))
     print()
     for indice, caso in enumerate(casos):
-        telefono = _telefono(indice)
-        previa = _dejarle_una_cita(args.cliente, telefono) if caso.get("con_cita") else None
-        if caso.get("con_cita") and previa is None:
-            print("  ??   %-38s (no se le ha podido dejar una cita)" % caso["id"])
-            continue
-        try:
-            _hablar(args.cliente, telefono, caso["mensajes"])
-            motivo = _juzgar(args.cliente, telefono, caso, previa)
-        except Exception as exc:  # noqa: BLE001 - un caso roto es un fallo, no un crash
-            motivo = "ha reventado: %s" % str(exc)[:160]
+        # Al otro lado hay un modelo, no una funcion: la misma conversacion puede
+        # salir distinta dos veces. Un fallo DE VERDAD falla las dos; un tropiezo,
+        # no. Sin esto, el humo bloquea despliegues por azar, se le pierde la fe y
+        # acaba ignorandose, que es como si no existiera.
+        motivo = ""
+        for intento in (0, 1):
+            telefono = _telefono(indice * 10 + intento)
+            previa = _dejarle_una_cita(args.cliente, telefono) if caso.get("con_cita") else None
+            if caso.get("con_cita") and previa is None:
+                motivo = "(no se le ha podido dejar una cita)"
+                break
+            try:
+                _hablar(args.cliente, telefono, caso["mensajes"])
+                motivo = _juzgar(args.cliente, telefono, caso, previa)
+            except Exception as exc:  # noqa: BLE001 - un caso roto es un fallo, no un crash
+                motivo = "ha reventado: %s" % str(exc)[:160]
+            if not motivo:
+                if intento:
+                    print("  ok   %-38s (al segundo intento)" % caso["id"])
+                else:
+                    print("  ok   %-38s" % caso["id"])
+                break
+            if not intento:
+                print("  ..   %-38s %s -- se reintenta" % (caso["id"], motivo))
         if motivo:
             fallos.append((caso, motivo))
-            print("  MAL  %-38s %s" % (caso["id"], motivo))
+            print("  MAL  %-38s %s (las DOS veces)" % (caso["id"], motivo))
             print("       por que importa: %s" % caso["por_que"])
-        else:
-            print("  ok   %-38s" % caso["id"])
 
     print()
     if fallos:
