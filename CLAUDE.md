@@ -802,5 +802,6 @@ No asumir actividad no registrada. La operacion diaria se hace desde la seccion
 - `PORTAL_COOKIE_DOMAIN=.vantelia.es` permite compartir sesion entre subdominios cuando aplica.
 - `EXTRA_CORS_ORIGINS` debe incluir `https://vantelia.es`, `https://www.vantelia.es` y `https://app.vantelia.es`. Critico para el formulario de `/consultas/` que hace POST cross-origin a `app.vantelia.es`.
 - Para escalar a varias instancias, el siguiente paso natural es mover SQLite a Postgres y externalizar indices/storage.
+- El despliegue se protege solo: foto `.backup` de la BD antes de tocar nada (`/srv/vantelia-backups/pre-deploy-*.db`), imagen anterior etiquetada `vantelia:prev`, y **vuelta atras automatica** si falla la construccion, el healthcheck o el humo. Manual: `.\deploy\deploy.ps1 -Rollback`. El rollback revierte el CODIGO y NUNCA los datos (el estado vivo viaja al arbol restaurado; sin BD en su sitio no arranca). Script en `deploy/hostinger/rollback.sh`, vigilado por `tests/test_rollback_conserva_los_datos.py`. Detalle en `deploy/hostinger/DEPLOY.md`.
 - `deploy/deploy.ps1` usa `%TEMP%` para generar el `.tar.gz` (no el directorio padre del proyecto, que puede ser `C:\` sin permisos de escritura).
 - `site_exports/` esta excluido del empaquetado VPS — contiene rutas muy largas que rompen el cleanup en Windows. Solo sirve para snapshots manuales del sitio publico.

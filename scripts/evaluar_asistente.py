@@ -193,7 +193,58 @@ def _aplica_a_este_negocio(cliente_id: str, caso: dict) -> bool:
         from backend import booking
 
         return not booking.precios_ocultos(cliente_id)
+    if condicion.startswith("sin_precio:"):
+        # El caso comprueba que NO se da el precio de algo. Si este negocio si lo
+        # da, el caso no aplica -y sobre todo: no puede contarse como FALLO-.
+        # Paso el 27-ago-2026 y costo una tarde: la copia local no tenia
+        # `mostrar_precios` puesto, el asistente daba precios porque asi estaba
+        # configurado, y dos casos criticos salian rojos sin haber nada roto.
+        from backend import booking
+
+        return bool(booking.no_se_da_precio_de(cliente_id, condicion.split(":", 1)[1]))
     return True
+
+
+def _ficha_del_negocio(cliente_id: str) -> str:
+    """Los ajustes del tenant que CAMBIAN lo que contesta, dichos en voz alta.
+
+    La copia local se desvia de produccion sin que nadie lo note, y entonces la
+    tirada mide otro producto. Ya ha pasado dos veces el mismo dia -primero
+    `booking.estilo`, luego `mostrar_precios`-, las dos con horas perdidas
+    persiguiendo fallos que no existian. Aqui se ven de un vistazo y se pueden
+    comparar con los del servidor.
+    """
+    from backend import booking, clients
+
+    try:
+        cfg = (clients._get_client_config(cliente_id) or {}).get("booking") or {}
+    except Exception:  # noqa: BLE001
+        return "no se ha podido leer"
+    reglas = booking.familias_sin_precio(cliente_id)
+    return "estilo=%s  mostrar_precios=%r  preferir_packs=%r  familias_sin_precio=%s" % (
+        cfg.get("estilo") or "guiado", cfg.get("mostrar_precios"),
+        cfg.get("preferir_packs"), ",".join(reglas) or "ninguna")
+
+
+def _quien_contesta(cliente_id: str) -> str:
+    """Que cerebro va a atender la tirada: el agente o las listas de siempre.
+
+    Se imprime SIEMPRE porque medir con el cerebro que no es da falsos aprobados
+    y no se nota. Paso el 27-ago-2026: en produccion este salon tiene
+    `booking.estilo = conversacional` (manda el agente) y la copia local no, asi
+    que la tirada contestaba con el RAG generico -"llama al salon"- y el caso
+    salia OK sin haber ejercitado ni una linea de lo que se estaba probando.
+    """
+    from backend import clients, whatsapp
+
+    try:
+        config = clients._get_client_config(cliente_id) or {}
+    except Exception:  # noqa: BLE001
+        return "desconocido"
+    if whatsapp._wa_modo_conversacional(config):
+        return "el agente (modo conversacional)"
+    return ("las listas guiadas (booking.estilo != conversacional): el agente NO "
+            "entra, asi que lo que dependa de el NO se esta midiendo")
 
 
 def _ejecutar_caso(cliente_id: str, caso, dichos, indice: int):
@@ -299,6 +350,12 @@ def main() -> int:
     if not casos:
         print("no hay ningun caso con ese id")
         return 2
+
+    # Quien va a contestar, dicho en voz alta antes de empezar: una tirada
+    # medida contra el cerebro que no es aprueba sin probar nada.
+    print("Contesta: %s" % _quien_contesta(args.cliente))
+    print("Config:   %s" % _ficha_del_negocio(args.cliente))
+    print()
 
     dichos = _instalar_captura()
     fallos = {"critico": [], "importante": [], "deseable": []}

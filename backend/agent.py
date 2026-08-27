@@ -723,6 +723,318 @@ def _valoracion_en_lugar_del_tratamiento(
     }
 
 
+# "¿cuanto tarda?", "¿que se tarda?", "¿cuanto tiempo lleva?"... Va sin tildes
+# porque se compara contra el texto ya normalizado: acentuarlo lo romperia en
+# silencio (lo vigila tests/test_patrones_sin_tilde.py).
+_PREGUNTA_DURACION = re.compile(
+    # Entre el interrogativo y el verbo caben rellenos ("que SUELE tardar",
+    # "cuanto ME lleva"). Sin admitirlos no casaba "que suele tardar?", que es
+    # literalmente lo que escribio la duenya del salon al probarlo.
+    r"\b(cuanto|cuanta|que)\s+(tiempo\s+|rato\s+)?"
+    r"(?:(?:se|me|te|le|suele|sueles|suelen|puede|podria)\s+)*"
+    r"(tarda|tardan|tardo|tardas|tardar|dura|duran|duro|duras|durar|lleva|llevan|llevo|llevar)\b"
+    r"|\bcuanto\s+(tiempo|rato)\b"
+    r"|\btiempo\s+(que\s+)?(tarda|dura|lleva)\b"
+    r"|\bdura(cion)?\s+(del|de la|de)\b"
+)
+
+
+def _pregunta_cuanto_dura(mensaje: str) -> bool:
+    return bool(_PREGUNTA_DURACION.search(catalog_pick._norm(mensaje or "")))
+
+
+def _duracion_del_catalogo(cliente_id: str, servicio: str) -> int:
+    """Los minutos que la agenda aparta de verdad para ese servicio.
+
+    Se pregunta al MISMO resolutor que usa la agenda al reservar
+    (`agenda._service_duration_minutes`), no a una copia: asi el numero que se le
+    dice a la clienta y el hueco que se le guarda no pueden discrepar. Y si el
+    negocio trabaja por packs, el servicio en agenda ES el pack, de modo que la
+    duracion que sale es la del pack entero y no la del trozo suelto.
+    """
+    from backend import agenda
+
+    if not servicio:
+        return 0
+    try:
+        fila = agenda._find_service_by_name(cliente_id, servicio)
+        if fila is None:
+            return 0
+        # OJO: `_service_duration_minutes` nunca devuelve 0. Cuando el negocio no
+        # ha puesto duracion cae al hueco por defecto (30 min), y ese numero es un
+        # RELLENO del sistema, no un dato del salon. Recitarlo es exactamente como
+        # se dijo "el alisado son 30 minutos" de tres tratamientos distintos.
+        override = agenda._get_service_override(cliente_id, fila["slug"], "")
+        puesta_en_el_centro = (
+            override is not None
+            and override["duration_minutes"] is not None
+            and int(override["duration_minutes"]) > 0
+        )
+        if not puesta_en_el_centro and int(fila["duration_minutes"] or 0) <= 0:
+            return 0
+        return int(agenda._service_duration_minutes(cliente_id, servicio) or 0)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+# Como se dice para quien es, sin gastar una llamada al modelo. Solo se usa si
+# esta escrito con todas las letras: adivinarlo mal elige el servicio equivocado.
+_PARA_QUIEN = (
+    # OJO: nada de "para mi". "Un corte para mi HIJO" salia como mujer, y con eso
+    # se elige el servicio equivocado. Si no lo dice claro, mejor preguntarselo.
+    ("mujer", ("senora", "señora", "mujer", "chica", "femenino")),
+    ("hombre", ("hombre", "caballero", "chico", "masculino")),
+    ("nino", ("nino", "niño", "nina", "niña", "peque", "mi hijo", "mi hija")),
+)
+
+
+def _para_quien_dice(texto: str) -> str:
+    plano = catalog_pick._norm(texto or "")
+    for quien, pistas in _PARA_QUIEN:
+        if any(catalog_pick._norm(p) in plano for p in pistas):
+            return quien
+    return ""
+
+
+def _cuanto_duran_juntos(cliente_id: str, pedido: str, location_id: str = "") -> str:
+    """Cuanto tarda TODO lo que ha pedido, sumado desde el catalogo.
+
+    La duenya del salon, palabra por palabra: *"le pregunte que queria corte y
+    secado y le dije que que suele tardar... un corte 15 minutos y un secador
+    aproximadamente 30, entonces tendria que haberme dicho que tarda unos 45
+    minutos; en todo caso tendria que preguntar cual es tu largo para que la
+    informacion que le hemos metido le sirva, pero que ponga que hagamos un
+    diagnostico para un corte y un secador no tiene sentido"*.
+
+    Asi que: se resuelve CADA familia que ha nombrado con el mismo resolutor que
+    elige el servicio al reservar -no una copia-, y se suman las duraciones del
+    catalogo. Si a alguna le falta un dato (el largo, para quien es), se dice cual
+    y se pide: preguntarlo es lo que hace util la informacion que el negocio
+    metio. Lo que nunca es respuesta a "¿cuanto tarda?" es una cita de valoracion.
+    """
+    familias = catalog_pick.familias_pedidas(cliente_id, pedido)
+    if len(familias) < 2:
+        return ""
+    talla = catalog_pick.talla_de(pedido)
+    para_quien = _para_quien_dice(pedido)
+
+    resueltos, pendientes = [], []
+    for familia in familias:
+        datos = {"familia": familia, "texto": pedido}
+        if talla:
+            datos["talla"] = talla
+        if para_quien:
+            datos["para_quien"] = para_quien
+        eleccion = catalog_pick.elegir(cliente_id, datos, location_id)
+        nombre = str(getattr(eleccion, "servicio", "") or "")
+        minutos = _duracion_del_catalogo(cliente_id, nombre) if nombre else 0
+        if nombre and minutos:
+            resueltos.append((textnorm.nombre_de_servicio_publico(nombre), minutos))
+            continue
+        # La pregunta que toca la escribe el catalogo, no yo: es LA MISMA que usa
+        # el flujo de reserva cuando le falta ese dato ("¿Corte de hombre, de
+        # señora o de niño?"). Asi la clienta oye la misma pregunta venga por
+        # donde venga, y hay un solo sitio donde cambiarla.
+        pendientes.append((familia,
+                           catalog_pick.pregunta_para(eleccion)
+                           or catalog_pick.sobre_que_preguntar(eleccion)
+                           or "cual quiere"))
+
+    if not resueltos and not pendientes:
+        return ""
+
+    detalle = ", ".join("%s %d min" % (n, m) for n, m in resueltos)
+    total = sum(m for _n, m in resueltos)
+
+    if pendientes:
+        que_falta = "; ".join(
+            "de %s tienes que preguntarle: %s" % (fam, pregunta)
+            for fam, pregunta in pendientes)
+        return (
+            "TE HA PREGUNTADO CUANTO TARDA y ha pedido VARIAS cosas (%s). Lo que ya "
+            "sale del catalogo suma %d minutos (%s), pero %s. Preguntaselo en UNA "
+            "frase y luego dale el total sumado. NO le des una cifra a ojo, NO "
+            "contestes solo por una de las cosas, y NO la mandes a una cita de "
+            "valoracion: para esto no hace falta verle el pelo."
+            % (", ".join(familias), total, detalle or "nada aun", que_falta)
+        )
+
+    return (
+        "TE HA PREGUNTADO CUANTO TARDA y ha pedido VARIAS cosas. Son EXACTAMENTE "
+        "%d minutos en total: %s. Es lo que dice el catalogo y lo que la agenda le "
+        "va a apartar. Dile el total y, si quieres, el desglose. No lo redondees, "
+        "no digas 'aproximadamente' otra cifra, y NO la mandes a una valoracion."
+        % (total, detalle)
+    )
+
+
+def _pregunta_por_otra_cosa(cliente_id: str, servicio: str, mensaje: str) -> bool:
+    """¿La pregunta va de una familia que el servicio elegido NO cubre?"""
+    familias = catalog_pick.familias_pedidas(cliente_id, mensaje)
+    if not familias:
+        return False
+    cubre = catalog_pick.familias_que_cubre(cliente_id, servicio)
+    return all(not (set(catalog_pick._raices(f)) & cubre) for f in familias)
+
+
+def _duracion_si_la_pregunta(cliente_id: str, mensaje: str, estado: Any,
+                             pedido: str = "", location_id: str = "") -> str:
+    """Cuando pregunta cuanto tarda, la cifra sale del catalogo o no sale.
+
+    Paso de verdad (26-ago-2026): a "que suele tardar?" contesto que el tiempo
+    "puede variar" y que mejor hacer una cita de valoracion; y a las siguientes,
+    "unos 30 minutos" tres veces seguidas para tres tratamientos distintos. El
+    dato estaba en el catalogo del salon todo el rato.
+
+    La duenya lo dijo asi: "tendria que haberme dicho que tarda unos 45 minutos,
+    y en todo caso preguntar cual es tu largo para que la informacion que le
+    hemos metido le sirva".
+    """
+    if not _pregunta_cuanto_dura(mensaje):
+        return ""
+
+    # Si ha pedido VARIAS cosas, la respuesta es la SUMA. Va antes que nada: con
+    # un servicio ya elegido se contestaba solo por ese, y a quien pedia "corte y
+    # secado" se le daba el tiempo del corte.
+    juntos = _cuanto_duran_juntos(cliente_id, pedido or mensaje, location_id)
+    if juntos:
+        return juntos
+
+    servicio = getattr(estado, "servicio_exacto", "") or getattr(estado, "servicio", "")
+    # ¿Esta preguntando por OTRA cosa distinta de la que hay elegida? Entonces la
+    # duracion guardada no vale. Es un fallo que se hace peor al arreglarlo a
+    # medias: con "Corte senora" pegado en el estado desde hace veinte mensajes, a
+    # "quiero una queratina, ¿que tarda?" se contestaria "son EXACTAMENTE 20
+    # minutos", y una cifra falsa dicha con esa seguridad es peor que uma inventada.
+    if servicio and _pregunta_por_otra_cosa(cliente_id, servicio, mensaje):
+        servicio = ""
+    if not servicio:
+        return (
+            "TE HA PREGUNTADO CUANTO DURA y todavia no hay un servicio elegido. "
+            "Usa `buscar_servicio` con lo que ha dicho ANTES de contestar: la "
+            "duracion sale del catalogo de este negocio, nunca de tu criterio. Si "
+            "la herramienta te dice que varia segun el largo, dile el abanico "
+            "completo o preguntale como tiene el pelo. NUNCA una cifra a ojo."
+        )
+
+    minutos = _duracion_del_catalogo(cliente_id, servicio)
+    publico = textnorm.nombre_de_servicio_publico(servicio)
+    if not minutos:
+        return (
+            "TE HA PREGUNTADO CUANTO DURA y '%s' no tiene duracion configurada en "
+            "el catalogo. NO te inventes una cifra ni la aproximes: dile que se lo "
+            "confirman en el salon." % publico
+        )
+    return (
+        "TE HA PREGUNTADO CUANTO DURA. Son EXACTAMENTE %d minutos: es lo que el "
+        "catalogo dice de '%s' y lo que la agenda le va a apartar. Dile ese "
+        "numero. No lo redondees, no lo estimes, no digas 'aproximadamente' otra "
+        "cifra, y no la mandes a una valoracion para saber cuanto tarda."
+        % (minutos, publico)
+    )
+
+
+def _lo_que_ha_escrito(mensajes: List[Dict[str, Any]]) -> str:
+    """Todo lo que ha escrito la clienta en esta conversacion.
+
+    Se mira lo ESCRITO y no el estado del flujo porque `estado.servicio_texto`
+    deja de acumular en cuanto hay un servicio elegido: lo que pidio despues no
+    llegaba a ninguna parte.
+    """
+    trozos = []
+    for mensaje in mensajes:
+        if str(mensaje.get("role") or "") != "user":
+            continue
+        contenido = mensaje.get("content")
+        if isinstance(contenido, str) and contenido.strip():
+            trozos.append(contenido.strip())
+    return " ".join(trozos)[-1500:]
+
+
+def _freno_de_varios_servicios(
+    cliente_id: str,
+    mensajes: List[Dict[str, Any]],
+    argumentos: Dict[str, Any],
+    *,
+    location_id: str = "",
+) -> Optional[Dict[str, Any]]:
+    """Impide reservar UN servicio cuando ha pedido VARIOS.
+
+    Incidente real (26-ago-2026, salon piloto). Fue sumando por WhatsApp: corte
+    de senora, "cortarme y secarme tambien", el elumen, y "he pensado que quiero
+    un alisado". La cita creada fue `corte_senora` de 14:00 a 14:20. VEINTE
+    MINUTOS para cuatro servicios: los otros tres desaparecieron sin que nadie
+    se enterara, y el negocio se habria encontrado a una clienta que viene a
+    estar tres horas en un hueco de veinte minutos.
+
+    El modelo no puede arreglar esto solo -para el la cita se creo bien-, asi
+    que lo impide el codigo: o se reserva algo que cubra TODO lo que ha pedido,
+    o no se reserva. Se prefiere pasarse frenando: molestar preguntando es
+    barato, romperle la agenda al negocio no.
+    """
+    pedido = _lo_que_ha_escrito(mensajes)
+    familias = catalog_pick.familias_pedidas(cliente_id, pedido)
+    if len(familias) < 2:
+        return None
+
+    cubre = catalog_pick.familias_que_cubre(
+        cliente_id, str(argumentos.get("servicio") or ""), location_id=location_id
+    )
+    faltan = [f for f in familias
+              if not (set(catalog_pick._raices(f)) & cubre)]
+    if not faltan:
+        return None
+
+    packs = catalog_pick.servicios_que_cubren(
+        cliente_id, pedido, location_id=location_id
+    )
+    if packs:
+        return {
+            "ok": False,
+            "error": ("Ha pedido varias cosas (%s) y el servicio que ibas a reservar "
+                      "solo cubre una parte. Esa cita apartaria menos tiempo del que "
+                      "hace falta." % ", ".join(familias)),
+            "opciones_que_lo_cubren": packs,
+            "que_hacer": ("Ofrecele estas opciones del catalogo, que si cubren todo lo "
+                          "que ha pedido, con su duracion real. Si varian por largo, "
+                          "preguntale como tiene el pelo. Cuando elija, crea la cita "
+                          "CON ESE servicio, no con el anterior."),
+        }
+
+    telefono = clients.call_us_line(cliente_id)
+    return {
+        "ok": False,
+        "error": ("Ha pedido varias cosas (%s) y en el catalogo no hay un servicio "
+                  "que las cubra juntas. Reservar solo una apartaria muchisimo menos "
+                  "tiempo del que hace falta." % ", ".join(familias)),
+        "que_hacer": (
+            ("NO reserves. Dile con naturalidad que para juntar todo eso en una misma "
+             "cita hay que cuadrarlo bien, y que la llamen o llame al %s para dejarlo "
+             "cerrado." % telefono) if telefono else
+            "NO reserves. Dile que para juntar todo eso en una misma cita hay que "
+            "cuadrarlo con el salon, y que os escriba para confirmarlo. "
+        ) + " Si lo que quiere es SOLO uno de esos servicios, preguntaselo y "
+            "reserva ese: pero que lo diga ella, no lo supongas.",
+    }
+
+
+def _alguien_la_hace(cliente_id: str, tecnica: str, location_id: str = "") -> bool:
+    """¿Algun servicio del catalogo lleva esa tecnica en el nombre?
+
+    Se compara por palabras y no por la frase entera: el extractor devuelve "acido
+    lactico bio premium" y el servicio se llama "Acido lactico bio premium largo".
+    Basta con que TODAS las palabras con contenido esten en algun nombre.
+    """
+    palabras = [p for p in tecnica.split() if len(p) > 3]
+    if not palabras:
+        return True   # nada que comprobar: no se bloquea nada
+    for fila in catalog_pick._servicios(cliente_id, location_id):
+        nombre = catalog_pick._norm(catalog_pick._nombre(fila))
+        if all(p in nombre for p in palabras):
+            return True
+    return False
+
+
 def _tool_buscar_servicio(
     cliente_id: str, argumentos: Dict[str, Any], *, location_id: str = "",
 ) -> Dict[str, Any]:
@@ -733,14 +1045,52 @@ def _tool_buscar_servicio(
     if not descripcion:
         return {"ok": False, "error": "Dime que te quieres hacer."}
 
-    datos = intents.extraer_datos_servicio(cliente_id, descripcion) or {
+    extraido = intents.extraer_datos_servicio(cliente_id, descripcion)
+    datos = extraido or {
         "familia": "", "tecnica": "", "talla": catalog_pick.talla_de(descripcion),
         "para_quien": "", "edad": None, "texto": descripcion,
     }
     eleccion = catalog_pick.elegir(cliente_id, datos, location_id=location_id)
+    # OJO: solo si el extractor NO ha contestado. Si ha contestado y no ha visto
+    # familia, es que de verdad no la hay -"un tratamiento de plasma capilar con
+    # laser"- y buscarla a mano por raices acaba enganchando cualquier cosa que
+    # comparta cuatro letras. Es mejor decir que eso no se hace y ofrecer parecidos.
+    if not extraido and not eleccion.servicio and eleccion.falta in ("", "nada"):
+        # El extractor no ha sacado familia -falla, va lento o no llega al umbral- y
+        # sin familia `elegir` no encuentra candidatos: la tool contestaba "en este
+        # catalogo no hay nada que encaje" a un "quiero un corte". Negar un servicio
+        # que SI existe es de los fallos criticos, y pasaba justo cuando el modelo
+        # iba mal, que es cuando menos se puede permitir.
+        #
+        # La familia tambien se puede sacar SIN modelo, con las mismas raices que
+        # usa el freno de varios servicios. Entender no puede depender de que el
+        # extractor conteste.
+        familias = catalog_pick.familias_pedidas(cliente_id, descripcion)
+        if familias:
+            a_mano = {"familia": familias[0], "texto": descripcion,
+                      "talla": datos.get("talla") or catalog_pick.talla_de(descripcion),
+                      "para_quien": datos.get("para_quien") or _para_quien_dice(descripcion),
+                      "tecnica": datos.get("tecnica") or ""}
+            eleccion = catalog_pick.elegir(cliente_id, a_mano, location_id=location_id)
+    # Ha nombrado una TECNICA concreta que no aparece en ningun servicio del
+    # catalogo ("plasma capilar con laser"): dar por buena la que comparte
+    # categoria es la misma bajada de gama que le colaba el acido lactico de 15
+    # minutos a quien pedia el bio premium. Se dice que eso no se hace y se le
+    # ensenyan los parecidos -que no es lo mismo que negarle un servicio real-.
+    tecnica_dicha = catalog_pick._norm(str(datos.get("tecnica") or ""))
+    if tecnica_dicha and len(tecnica_dicha) >= 8 and not _alguien_la_hace(
+            cliente_id, tecnica_dicha, location_id=location_id):
+        return {
+            "ok": False,
+            "error": "En este catalogo no hay ningun servicio de %s." % tecnica_dicha,
+            "no_inventes": ("NO le ofrezcas otro servicio como si fuera ese ni le des "
+                            "una duracion: eso aqui no se hace. Dile lo que si hay."),
+            "servicios_parecidos": _parecidos(cliente_id, descripcion),
+        }
+
     if eleccion.servicio:
         detalle = _detalle_servicio(cliente_id, eleccion.servicio)
-        return {
+        respuesta = {
             "ok": True,
             # El nombre para HABLAR va sin "Pack": la clienta pide unas mechas, no
             # un paquete. El de la agenda se mantiene aparte para crear la cita.
@@ -748,6 +1098,17 @@ def _tool_buscar_servicio(
             "servicio_en_agenda": eleccion.servicio,
             **detalle,
         }
+        # Sin duracion en el catalogo, la agenda aparta el hueco por defecto. Ese
+        # numero es un relleno del sistema, no un dato del negocio: recitarlo
+        # como si lo fuera es como se dijo "el alisado son 30 minutos".
+        if not respuesta.get("duracion_minutos"):
+            respuesta["duracion_configurada"] = False
+            respuesta["no_inventes"] = (
+                "Este servicio no tiene duracion configurada. NO te inventes cuanto "
+                "dura ni des una cifra aproximada: si te lo pregunta, dile que se lo "
+                "confirman en el salon."
+            )
+        return respuesta
     if eleccion.falta in ("tecnica", "talla", "para_quien"):
         # Con DURACION de cada candidato: a "¿cuanto tiempo tengo que estar ahi?"
         # se le puede contestar el abanico ("de 45 a 75 minutos segun el largo") sin
@@ -768,6 +1129,31 @@ def _tool_buscar_servicio(
                 if parte not in nombres:
                     nombres.append(parte)
 
+        # Cuanto varia la duracion entre los candidatos. Paso de verdad: le
+        # preguntaron por el acido lactico bio premium y contesto "unos 30
+        # minutos" sin preguntar el largo; en ese catalogo ese mismo servicio va
+        # de 30 a 180 minutos segun el pelo. Dar una cifra suelta cuando el
+        # abanico es asi de ancho es mentirle a la clienta y romperle el hueco
+        # al negocio.
+        minutos_todos = sorted({d["duracion_minutos"] for d in detalle if d["duracion_minutos"]})
+        duracion_min = minutos_todos[0] if minutos_todos else 0
+        duracion_max = minutos_todos[-1] if minutos_todos else 0
+        varia = bool(duracion_max and duracion_max != duracion_min)
+        if varia:
+            aviso_duracion = (
+                " Si pregunta cuanto dura: NO le des una cifra sola, porque va de %d a "
+                "%d minutos segun %s. Dile el abanico, o preguntale %s y entonces le "
+                "das la suya."
+                % (duracion_min, duracion_max,
+                   catalog_pick.sobre_que_preguntar(eleccion) or "la opcion",
+                   catalog_pick.sobre_que_preguntar(eleccion) or "lo que falta")
+            )
+        else:
+            aviso_duracion = (
+                " Y si solo pregunta cuanto dura o cuanto cuesta, contestale con estos "
+                "datos sin obligarla a concretar."
+            )
+
         return {
             "ok": True,
             "servicio": "",
@@ -776,6 +1162,9 @@ def _tool_buscar_servicio(
             "opciones": nombres,
             "candidatos": detalle,
             "total_candidatos": len(eleccion.candidatos),
+            "duracion_minutos_min": duracion_min,
+            "duracion_minutos_max": duracion_max,
+            "duracion_varia_segun_la_opcion": varia,
             "sugerencia": catalog_pick.pregunta_para(eleccion),
             # Dos cosas que se hacian mal y le costaban la cita al negocio: recitarle
             # media lista del catalogo en vez de preguntar lo que la separa, y
@@ -786,17 +1175,25 @@ def _tool_buscar_servicio(
                 "en UNA FRASE natural ('¿te gustaria hacerte mechas, balayage, grey "
                 "blending o un cambio de color con mechas?') y ya esta. NO cuentes "
                 "que lleva cada una: el negocio no lo quiere. Hay %d servicios "
-                "que encajan, asi que NUNCA digas que no hay mas opciones. Y si solo "
-                "pregunta cuanto dura o cuanto cuesta, contestale con estos datos sin "
-                "obligarla a concretar."
+                "que encajan, asi que NUNCA digas que no hay mas opciones.%s"
                 % ((catalog_pick.sobre_que_preguntar(eleccion) or "lo que falta").upper(),
-                   len(eleccion.candidatos))
+                   len(eleccion.candidatos), aviso_duracion)
             ),
         }
     return {
         "ok": False,
         "error": "En este catalogo no hay nada que encaje con eso.",
         "servicios_parecidos": _parecidos(cliente_id, descripcion),
+        # Paso de verdad: a "que tarda un alisado" y "que tarda una queratina"
+        # contesto "unos 30 minutos" las dos veces. Este negocio no tiene ningun
+        # servicio con esos nombres: los 30 minutos eran el valor por defecto del
+        # codigo recitado como si fuera dato del salon. Un alisado son horas.
+        "no_inventes": (
+            "NO digas cuanto dura ni cuanto cuesta eso: no esta en el catalogo de "
+            "este negocio y cualquier cifra que se te ocurra seria inventada. Di "
+            "que con ese nombre no lo tienes y preguntale a cual de los parecidos "
+            "se refiere."
+        ),
     }
 
 
@@ -941,10 +1338,26 @@ def _detalle_servicio(cliente_id: str, nombre: str) -> Dict[str, Any]:
         if not isinstance(servicio, dict):
             continue
         if str(servicio.get("nombre") or servicio.get("name") or "") == nombre:
-            return {
+            detalle = {
                 "duracion_minutos": int(servicio.get("duration_minutes") or 0),
                 "categoria": str(servicio.get("category") or ""),
             }
+            # La fianza es una condicion para reservar, asi que el asistente tiene
+            # que saberla mientras habla y no enterarse solo el resumen. Una clienta
+            # reservo un alisado de 50 EUR de senyal, se le confirmo tan tranquilo,
+            # y tuvo que preguntar ella si habia que dar fianza.
+            from backend import booking
+
+            fianza = booking.fianza_del_servicio(cliente_id, nombre)
+            if fianza:
+                detalle["fianza"] = fianza["importe"]
+                detalle["fianza_obligatoria"] = bool(fianza["obligatoria"])
+                detalle["avisale_de_la_fianza"] = (
+                    "Este servicio lleva una fianza de %s para reservar, que se "
+                    "descuenta del total. Diselo ANTES de cerrar la cita, aunque no "
+                    "lo pregunte." % fianza["importe"]
+                )
+            return detalle
     return {}
 
 
@@ -1207,13 +1620,25 @@ def _da_un_precio_prohibido(cliente_id: str, texto: str, contexto: str) -> bool:
 
 PREGUNTA_EL_PRECIO = ("precio", "precios", "cuanto cuesta", "cuanto vale",
                       "cuanto me costaria", "cuanto seria", "tarifa", "tarifas",
-                      "presupuesto", "cuanto sale", "que vale", "coste")
+                      "presupuesto", "cuanto sale", "que vale", "coste",
+                      # Preguntar el precio sin decir la palabra "precio" es lo
+                      # normal, y estas formas hablan de dinero y de nada mas:
+                      # "mas o menos en cuanto SE ME QUEDA un balayage". Estaban
+                      # solo en la lista de insistir, que no se mira hasta despues
+                      # de la primera negativa, asi que quien ABRIA preguntando asi
+                      # se colaba entero y el asistente iba derecho a dar una cifra.
+                      "se me queda", "se queda en", "me sale por", "me saldria",
+                      "cuanto me va a", "cuanto me cobrai", "que me cobrai",
+                      "cuanto cobrai", "que cobrai", "cuanto pagaria", "cuanto pago",
+                      "cuanto me llevo gastad", "sale por", "me sale un", "sale un ")
 # Como INSISTE quien ya se ha llevado una negativa. Sin esto el segundo aviso -el
 # que manda cerrar- no llegaba a saltar nunca: la clienta no repite la palabra
-# "precio", dice "ya pero dime un aproximado".
+# "precio", dice "ya pero dime un aproximado". Aqui solo quedan las formas que por
+# si solas NO hablan de dinero ("mas o menos" tambien vale para el tiempo): tienen
+# sentido cuando ya se sabe de que se estaba hablando.
 INSISTE_CON_EL_PRECIO = ("aproximad", "mas o menos", "una idea", "un rango",
                          "orientativ", "por encima", "dime algo", "aunque sea",
-                         "caro", "barato", "me sale por", "cuanto me va a")
+                         "caro", "barato")
 
 
 def _pregunta_el_precio(dicho: str, ya_negado: bool = False) -> bool:
@@ -1235,10 +1660,22 @@ def _salida_para_quien_pregunta_el_precio(cliente_id: str, estado: Any, mensaje:
     from backend import booking, clients
 
     ya_negado = bool(getattr(estado, "veces_sin_precio", 0))
-    if (not _pregunta_el_precio(mensaje, ya_negado)
-            or not booking.precios_ocultos(cliente_id)):
+    if not _pregunta_el_precio(mensaje, ya_negado):
+        return ""
+    # No solo el interruptor global: tambien las reglas por familia que el negocio
+    # configura en su panel. Se mira lo que ella acaba de escribir Y el servicio
+    # que ya se estaba hablando -"¿y ese cuanto vale?" no nombra la familia-.
+    regla = booking.no_se_da_precio_de(
+        cliente_id, "%s %s %s" % (mensaje, getattr(estado, "servicio_texto", ""),
+                                  getattr(estado, "servicio", "")))
+    if not regla:
         return ""
     estado.veces_sin_precio += 1
+    # Si el negocio ha escrito su propia respuesta para esa familia, manda la suya.
+    if regla.get("texto") and estado.veces_sin_precio == 1:
+        return ("AQUI NO SE DA PRECIO DE ESO por mensaje. Dile ESTO, con tus "
+                "palabras pero sin cambiar el fondo ni anyadir cifras: %s"
+                % regla["texto"])
     telefono = str((clients._get_client_config(cliente_id).get("contacto") or {})
                    .get("telefono") or "").strip()
     si_llama = (" Si prefiere saberlo antes de venir, que llame al %s." % telefono
@@ -1744,7 +2181,11 @@ async def responder(
             # como una negativa mas y se saltaria directo al cierre.
             sin_precio = (_salida_para_quien_pregunta_el_precio(cliente_id, estado, mensaje)
                           if vuelta == 0 else sin_precio)
+            cuanto_dura = _duracion_si_la_pregunta(
+                cliente_id, mensaje, estado,
+                pedido=_lo_que_ha_escrito(mensajes), location_id=location_id)
             guia = [t for t in (reserva.resumen(estado, conocido), aviso, sin_precio,
+                                cuanto_dura,
                                 reserva.instruccion_de_cierre(estado, conocido)) if t]
             turno = list(mensajes)
             if guia:
@@ -2098,6 +2539,14 @@ async def responder(
                     argumentos["descripcion"] = dicho[-300:]
                 # "cualquier hueco que tengas me vale" le hacia pedir el calendario
                 # dia a dia (ocho de una tacada) hasta agotar el turno.
+                # Ha pedido varias cosas y la cita solo cubriria una: eso se para
+                # aqui, no en el prompt. Una cita de 20 min para cuatro servicios
+                # le rompe el dia al negocio y el modelo no lo ve como un fallo.
+                freno_servicios = None
+                if llamada.function.name == "crear_cita":
+                    freno_servicios = _freno_de_varios_servicios(
+                        cliente_id, mensajes, argumentos, location_id=location_id
+                    )
                 if (llamada.function.name == "consultar_disponibilidad"
                         and dias_mirados >= 3):
                     resultado = {
@@ -2106,6 +2555,8 @@ async def responder(
                                     "sobra. Elige el primero que le encaje y remata "
                                     "la gestion; no consultes mas dias."),
                     }
+                elif freno_servicios is not None:
+                    resultado = freno_servicios
                 else:
                     resultado = await _ejecutar(
                         cliente_id, llamada.function.name, argumentos,

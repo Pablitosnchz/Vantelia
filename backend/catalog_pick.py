@@ -373,11 +373,25 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
         clave = tecnica_de(_nombre(servicio))
         if clave and clave not in representantes:
             representantes[clave] = servicio
-    # "acido lactico" y "acido lactico bio premium" no son dos tecnicas: una es el
-    # nombre corto de la otra. Se queda la mas completa.
+    # "acido lactico" y "acido lactico bio premium" suelen ser la misma tecnica
+    # con el nombre largo y el corto, asi que se colapsan en una.
+    #
+    # PERO no cuando ella ha nombrado lo que las diferencia. Paso de verdad y es
+    # caro: a quien pidio "acido lactico bio premium" -de 30 a 180 minutos segun
+    # el largo- se le asignaba "Acido lactico chico o corto", de QUINCE, sin
+    # preguntarle nada. El mismo desastre de agenda que reservar un servicio
+    # cuando ha pedido cuatro.
+    dicho_ahora = _norm(str(datos.get("texto") or ""))
     for clave in sorted(representantes, key=len, reverse=True):
-        if any(otra != clave and clave.startswith(otra) for otra in representantes):
+        for otra in list(representantes):
+            if otra == clave or not clave.startswith(otra):
+                continue
+            # Lo que anyade la clave larga sobre la corta ("bio premium").
+            distingue = [p for p in clave[len(otra):].split() if len(p) > 3]
+            if distingue and all(p in dicho_ahora for p in distingue):
+                continue    # lo ha pedido ella: son tratamientos distintos
             representantes.pop(clave, None)
+            break
 
     if representantes:
         # Si no, el paso final elegiria de entre TODOS los candidatos y se colaba
@@ -498,3 +512,156 @@ def pregunta_para(eleccion: Eleccion) -> str:
     if eleccion.falta == "talla":
         return "¿Cómo tienes el pelo de largo? 😊"
     return ""
+
+
+# ─── Cuantos servicios DISTINTOS ha pedido ────────────────────────────────
+#
+# Existe por un incidente real (26-ago-2026, salon piloto). La clienta fue
+# sumando cosas por WhatsApp: "corte de senora", "pero quiero cortarme y
+# secarme tambien", "tambien quisiera el elumen", "he pensado que quiero un
+# alisado". La cita que se creo fue `corte_senora`, de 14:00 a 14:20: VEINTE
+# MINUTOS para cuatro servicios. Los otros tres se perdieron por el camino sin
+# que nadie se enterara, y el negocio se habria encontrado a una clienta que
+# viene a estar tres horas en un hueco de veinte minutos.
+#
+# La causa: `estado.servicio_texto` DEJA de acumular en cuanto hay un servicio
+# elegido (reserva.py), asi que todo lo que pidio despues no llego al catalogo.
+# Por eso esto no mira el estado del flujo: mira lo que ella ha ESCRITO.
+
+def _palabras_de_talla() -> set:
+    """Palabras que describen el LARGO del pelo, no un servicio.
+
+    Sin esto, "lo tengo corto" contaba como pedir un corte y el freno saltaba
+    cada vez que una clienta describia su pelo.
+    """
+    palabras = set()
+    for _nombre_talla, formas in _TALLAS:
+        for forma in formas:
+            for palabra in _norm(forma).split():
+                palabras.add(palabra)
+    return palabras
+
+
+def _raices(texto: str) -> set:
+    """Raices de 4 letras de las palabras con contenido.
+
+    Cuatro y no cinco porque la clienta conjuga: "cortarme" y "secarme" tienen
+    que casar con las familias "Cortes" y "Secado" de su catalogo.
+    """
+    tallas = _palabras_de_talla()
+    raices = set()
+    # Se parte por lo que NO es letra: "corto," con la coma pegada no casaba con
+    # la palabra de talla "corto", y describir el pelo contaba como pedir un
+    # corte. Una coma disparaba el freno.
+    for palabra in re.split(r"[^0-9a-z]+", _mismo_sonido(_norm(texto))):
+        if len(palabra) < 4 or palabra in tallas:
+            continue
+        raices.add(palabra[:4])
+    return raices
+
+
+def _mismo_sonido(texto: str) -> str:
+    """Iguala las formas de escribir que suenan igual, para poder comparar.
+
+    La clienta escribe "QUERATINA" y el catalogo del salon dice "KERATINA": las
+    raices salian distintas ("quer" y "kera") y el sistema no veia que estuviera
+    hablando de eso. Con "Corte senyora" pegado en el estado, a "quiero una
+    queratina, ¿que tarda?" se le contestaba la duracion del CORTE.
+
+    Se aplica a los DOS lados de la comparacion -al catalogo y a lo que ella
+    escribe-, asi que igualar de mas no descoloca nada: solo hace que dos formas
+    de escribir lo mismo caigan en la misma raiz.
+    """
+    return (texto or "").replace("qu", "k").replace("sh", "s").replace("ph", "f")
+
+
+def _raices_pedidas(cliente_id: str, texto: str) -> List[str]:
+    """Las raices de familia del catalogo que la clienta ha nombrado de verdad.
+
+    Se queda con la raiz que CASO, no con todas las del nombre de la familia:
+    la categoria "Trabajos de color" casa por "colo", y exigir tambien "trab"
+    dejaba fuera al "Pack color raiz y elumen medio", que es justo el que cubre
+    lo que pedia.
+    """
+    from backend import intents
+
+    try:
+        familias = intents.familias_del_tenant(cliente_id)
+    except Exception:  # noqa: BLE001  (sin catalogo no se frena nada)
+        return []
+    dichas = _raices(texto)
+    salida: List[str] = []
+    for familia in familias:
+        for raiz in _raices(familia):
+            if raiz in dichas and raiz not in salida:
+                salida.append(raiz)
+    return salida
+
+
+def familias_pedidas(cliente_id: str, texto: str) -> List[str]:
+    """Familias de servicio DISTINTAS que ha nombrado la clienta.
+
+    Devuelve nombres del catalogo del negocio ("cortes", "alisados"), uno por
+    raiz: "Cortes" (categoria) y "Corte" (primera palabra) son la misma cosa.
+    """
+    from backend import intents
+
+    try:
+        familias = intents.familias_del_tenant(cliente_id)
+    except Exception:  # noqa: BLE001
+        return []
+    pedidas = _raices_pedidas(cliente_id, texto)
+    salida: List[str] = []
+    for raiz in pedidas:
+        for familia in familias:
+            if raiz in _raices(familia):
+                salida.append(familia)
+                break
+    return salida
+
+
+def familias_que_cubre(cliente_id: str, servicio: str, location_id: str = "") -> set:
+    """Las raices que cubre un servicio concreto, por su NOMBRE.
+
+    Un pack cubre varias ("Pack color raiz y elumen medio" cubre color y elumen),
+    que es justo como este negocio modela las combinaciones.
+
+    La CATEGORIA no cuenta a proposito: "Elumen corto" esta catalogado en
+    "Trabajos de color", asi que contandola parecia cubrir un color de raiz que
+    no hace. Un servicio cubre lo que dice su nombre, no el cajon donde esta.
+    """
+    if not servicio:
+        return set()
+    objetivo = _norm(servicio)
+    for fila in _servicios(cliente_id, location_id):
+        nombre = _nombre(fila)
+        if _norm(nombre) == objetivo:
+            return _raices(nombre)
+    return _raices(servicio)
+
+
+def servicios_que_cubren(
+    cliente_id: str, texto: str, location_id: str = "", limite: int = 4,
+) -> List[Dict[str, Any]]:
+    """Servicios del catalogo -normalmente packs- que cubren TODO lo que ha pedido.
+
+    Es la salida BUENA cuando pide varias cosas: en vez de negarse, se le ofrecen
+    los packs reales del negocio con su duracion real.
+
+    Se devuelven VARIOS y no el mas corto: los packs suelen venir por largo
+    ("Pack elumen corto" 65 min, "Pack elumen largo" 140 min) y quedarse con el
+    mas corto volveria a apartar menos tiempo del que hace falta, que es
+    exactamente el fallo que esto viene a impedir.
+    """
+    hacen_falta = set(_raices_pedidas(cliente_id, texto))
+    if len(hacen_falta) < 2:
+        return []
+    candidatos: List[Tuple[int, Dict[str, Any]]] = []
+    for fila in _servicios(cliente_id, location_id):
+        nombre = _nombre(fila)
+        if not hacen_falta.issubset(_raices(nombre)):
+            continue
+        minutos = _entero(fila.get("duration_minutes")) or 0
+        candidatos.append((minutos, {"servicio": nombre, "duracion_minutos": minutos}))
+    candidatos.sort(key=lambda par: par[0])
+    return [datos for _minutos, datos in candidatos[:limite]]

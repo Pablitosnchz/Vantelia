@@ -697,7 +697,10 @@
           "whatsapp": false,
           "sms": false
         }
-      }
+      },
+      "estilo": "conversacional",
+      "preferir_packs": true,
+      "mostrar_precios": false
     },
     "empresa": "Alicia Rincón Estilistas",
     "shop_public": {

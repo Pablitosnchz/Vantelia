@@ -5405,6 +5405,96 @@ def resolve_payment_requirement(
     }
 
 
+def fianza_del_servicio(cliente_id: str, servicio: str) -> Dict[str, Any]:
+    """¿Este servicio pide fianza para reservar? Cuanta, y como se paga.
+
+    SEPARADO A PROPOSITO de `_service_payment_policy`: aquella responde "¿podemos
+    COBRARLA online?" y para eso necesita Stripe conectado. Esta responde "¿la
+    EXIGE el negocio?", que es politica suya y no depende de ninguna pasarela.
+
+    Confundir las dos costo una cita real (26-ago-2026): el salon tiene 59
+    servicios con 50 EUR de fianza obligatoria, pero como su Stripe aun no esta
+    activo, `available` salia False y la fianza desaparecia entera -ni se cobraba
+    NI SE MENCIONABA-. La clienta reservo un alisado, se le confirmo tan tranquilo,
+    y tuvo que preguntar ella: "¿tengo que dar alguna fianza?". La duenya lo dijo
+    claro: para alisados, permanentes y demas, la fianza la tiene que pedir la IA.
+
+    Devuelve {} si ese servicio no la lleva.
+    """
+    fila = agenda._find_service_by_name(cliente_id, servicio) if servicio else None
+    if fila is None:
+        return {}
+    try:
+        tipo = str(fila["payment_type"] or "full")
+        modo = str(fila["payment_mode"] or "payment_disabled")
+        importe = int(fila["deposit_amount_cents"] or 0)
+    except Exception:  # noqa: BLE001 - catalogo viejo sin esas columnas
+        return {}
+    if tipo not in ("deposit", "preauth") or importe <= 0:
+        return {}
+    if modo == "payment_disabled":
+        return {}
+    # Una fianza nunca puede pasar del precio del servicio: seria cobrarle mas de
+    # lo que vale y devolverle la diferencia. Pasa al aplicar una fianza plana a un
+    # catalogo con servicios baratos -50 EUR de senyal para unas mechas de gorro de
+    # 18-. Se recorta al precio y se avisa en el log para que el negocio lo corrija.
+    try:
+        precio = int(fila["price_cents"] or 0)
+    except Exception:  # noqa: BLE001
+        precio = 0
+    if 0 < precio < importe:
+        settings.logger.warning(
+            "[fianza] %s (%s): la fianza (%d) pasa del precio (%d); se recorta",
+            fila["name"], cliente_id, importe, precio)
+        importe = precio
+    return {
+        "importe_cents": importe,
+        "importe": textnorm._format_price_cents(importe),
+        "obligatoria": modo == "payment_required",
+        "servicio": textnorm.nombre_de_servicio_publico(str(fila["name"] or servicio)),
+    }
+
+
+def aviso_de_fianza(cliente_id: str, servicio: str) -> str:
+    """La linea que hay que ensenyarle ANTES de que confirme. Vacia si no lleva.
+
+    El texto lo puede escribir el negocio (`booking.fianza_aviso`, con {importe}
+    dentro). Si no lo escribe, se dice lo imprescindible y ya: que hay fianza,
+    cuanto es, y que se descuenta del total.
+    """
+    fianza = fianza_del_servicio(cliente_id, servicio)
+    if not fianza:
+        return ""
+    try:
+        booking_cfg = clients._get_client_config(cliente_id).get("booking") or {}
+    except Exception:  # noqa: BLE001
+        booking_cfg = {}
+    plantilla = str(booking_cfg.get("fianza_aviso") or "").strip()
+    if plantilla:
+        return plantilla.replace("{importe}", fianza["importe"])
+    return (
+        "💫 Para reservar este servicio se abona una fianza de %s, que se descuenta "
+        "del importe total el día de tu cita." % fianza["importe"]
+    )
+
+
+def como_se_paga_la_fianza(cliente_id: str) -> str:
+    """Las instrucciones de pago que el negocio tenga escritas (`booking.fianza_como_pagar`).
+
+    El salon ya las tiene redactadas -enlace de tarjeta, Bizum, transferencia y que
+    manden el justificante por el mismo chat-, solo que vivian en una Q&A: la
+    clienta las recibia si preguntaba, y no si no preguntaba. Aqui se pueden pegar
+    tal cual para que salgan solas al reservar.
+    """
+    try:
+        booking_cfg = clients._get_client_config(cliente_id).get("booking") or {}
+    except Exception:  # noqa: BLE001
+        return ""
+    return textnorm._sanitize_text(
+        str(booking_cfg.get("fianza_como_pagar") or ""), allow_multiline=True
+    ).strip()
+
+
 def service_booking_note(cliente_id: str, booking_row: sqlite3.Row) -> str:
     """Lo que el negocio quiere contarle al cliente al confirmar ESTE servicio.
 
@@ -6272,6 +6362,56 @@ def _familias_que_exigen_valoracion(cliente_id: str) -> List[str]:
         return sorted(set(f for f in familias if f))
     except Exception:  # noqa: BLE001
         return []
+
+
+def familias_sin_precio(cliente_id: str) -> List[str]:
+    """Familias de las que este negocio NO da precio por mensaje, diga lo que diga
+    despues.
+
+    A diferencia de `_familias_que_exigen_valoracion`, aqui entra CUALQUIER regla
+    de precio activa, sea "ofrecer cita" o "pedir foto": las dos significan lo
+    mismo para la pregunta "¿cuanto cuesta?" -por mensaje no se dice-. Lo que
+    cambia entre ellas es la SALIDA que se ofrece, no si se da la cifra.
+    """
+    try:
+        from backend import rules
+
+        familias: List[str] = []
+        for regla in rules.listar(cliente_id, solo_activas=True):
+            intenciones = regla.get("intenciones") or []
+            if "precio" not in intenciones and "presupuesto" not in intenciones:
+                continue
+            familias.extend(regla.get("familias") or [])
+        return sorted({textnorm._strip_accents(str(f).lower()) for f in familias if f})
+    except Exception:  # noqa: BLE001 - nunca romper una respuesta por esto
+        return []
+
+
+def no_se_da_precio_de(cliente_id: str, texto: str) -> Dict[str, Any]:
+    """¿Hay que negarse a dar el precio de lo que esta preguntando? Y con que texto.
+
+    Devuelve {} si el negocio da precios de eso. Si no, la regla que lo impide -con
+    el texto que ha escrito el negocio, si lo tiene-.
+
+    POR QUE NO BASTA EL INTERRUPTOR GLOBAL: `precios_ocultos` es "este negocio no
+    da NINGUN precio", y es opt-in. Un negocio que si publica sus precios pero
+    tiene configurada la regla "mechas y color: precio tras valoracion" no estaba
+    cubierto por ninguna parte: el agente solo habria visto esa regla si al modelo
+    le daba por llamar a `politica_del_negocio`, y no le daba. Lo que el negocio
+    configura lo aplica el CODIGO, no la buena voluntad del modelo.
+    """
+    if precios_ocultos(cliente_id):
+        return {"global": True, "texto": ""}
+    familias = familias_sin_precio(cliente_id)
+    if not familias:
+        return {}
+    plano = textnorm._strip_accents(str(texto or "").lower())
+    for familia in familias:
+        if familia and familia in plano:
+            regla = regla_de_precio_para(cliente_id, familia)
+            return {"global": False, "familia": familia,
+                    "texto": str((regla or {}).get("texto") or "")}
+    return {}
 
 
 def precios_ocultos(cliente_id: str) -> bool:

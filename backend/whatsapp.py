@@ -1291,6 +1291,16 @@ async def _wa_send_booking_summary(
     lineas.append(f"🕐 {flow.hora}")
     if flow.notas:
         lineas.append(f"📝 Notas: {flow.notas}")
+    # La fianza va DENTRO del resumen, justo encima del boton: es una condicion
+    # para reservar, no una curiosidad. Paso de verdad (26-ago) que una clienta
+    # reservo un alisado de 50 EUR de fianza, se le confirmo tan tranquilo, y tuvo
+    # que preguntar ella "¿tengo que dar alguna fianza?". La respuesta que recibio
+    # entonces era perfecta -el negocio la tiene escrita-: el fallo era que nadie
+    # se la ensenyaba antes.
+    fianza = booking.aviso_de_fianza(cliente_id, flow.servicio)
+    if fianza:
+        lineas.append("")
+        lineas.append(fianza)
     lineas.append("")
     lineas.append("¿Confirmamos la cita?")
     botones = [("confirm_yes", "✅ Confirmar"), ("confirm_no", "❌ Cancelar")]
@@ -1425,6 +1435,17 @@ async def _wa_create_booking(
     )
     if flow.notas:
         confirmacion += f"📝 Notas: {flow.notas}\n"
+    # La fianza, otra vez, en la confirmacion. Sin Stripe conectado la cita NUNCA
+    # nace como "pendiente de pago" -esa rama depende de la pasarela-, asi que sin
+    # esto la clienta se va con la cita cerrada y sin enterarse de que debe una
+    # senyal. Si el negocio tiene escritas sus instrucciones de pago, van detras.
+    if not is_pending_payment:
+        aviso_fianza = booking.aviso_de_fianza(cliente_id, flow.servicio)
+        if aviso_fianza:
+            confirmacion += chr(10) + aviso_fianza + chr(10)
+            como_pagar = booking.como_se_paga_la_fianza(cliente_id)
+            if como_pagar:
+                confirmacion += como_pagar + chr(10)
     # Número de reserva: es lo que el asistente le pedira si luego quiere pagar,
     # cancelar o cambiar la cita. Con la señal sin pagar todavia no se le da: la
     # cita puede caerse y el hueco liberarse, asi que seria un codigo para nada.

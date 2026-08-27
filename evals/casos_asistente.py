@@ -42,6 +42,9 @@ CASOS = [
     {
         "id": "precio-mechas-sin-cifra",
         "gravedad": "critico",
+        # Solo tiene sentido donde el negocio NO da ese precio por
+        # mensaje. Sin esto, una copia mal configurada lo daba por roto.
+        "solo_si": "sin_precio:mechas balayage color",
         "por_que": "El salon NO da precios de trabajos tecnicos sin ver el pelo.",
         "mensajes": ["cuanto cuestan unas mechas?"],
         "debe": ["diagnostico", "diagnóstico", "en persona", "valoracion", "valoración"],
@@ -50,6 +53,9 @@ CASOS = [
     {
         "id": "precio-balayage-indirecto",
         "gravedad": "critico",
+        # Solo tiene sentido donde el negocio NO da ese precio por
+        # mensaje. Sin esto, una copia mal configurada lo daba por roto.
+        "solo_si": "sin_precio:mechas balayage color",
         "por_que": "Preguntado de otra forma tiene que dar igual.",
         "mensajes": ["mas o menos en cuanto se me queda un balayage?"],
         "debe": ["diagnostico", "diagnóstico", "en persona", "valoracion", "valoración"],
@@ -340,5 +346,59 @@ CASOS = [
         "sin_horas": True,
         "debe": [],
         "no_debe": [],
+    },
+    {
+        "id": "varios-servicios-no-reserva-uno-corto",
+        "gravedad": "critico",
+        "por_que": (
+            "26-ago-2026, salon piloto. Fue sumando por WhatsApp: corte de senora, "
+            "'cortarme y secarme tambien', el elumen y 'he pensado que quiero un "
+            "alisado'. La cita creada fue 'Corte senora' de 14:00 a 14:20: VEINTE "
+            "MINUTOS para cuatro servicios. Los otros tres desaparecieron sin aviso "
+            "y el salon se habria encontrado a una clienta que viene a estar tres "
+            "horas en un hueco de veinte minutos."
+        ),
+        "mensajes": [
+            "hola quiero un corte de señora",
+            "pero quiero cortarme y secarme tambien",
+            "tambien quisiera hacer el elumen",
+            "he pensado que quiero un alisado",
+            "el jueves por la tarde me viene bien",
+            "me llamo Ana Ruiz",
+        ],
+        # No hay ningun servicio de su catalogo que cubra las cuatro cosas, asi
+        # que lo correcto es NO reservar y decirle que lo cuadren por telefono.
+        # Reservar una de las cuatro es el fallo que trae este caso.
+        "agenda": "no_crea",
+        "debe": [],
+        "no_debe": [],
+    },
+    {
+        "id": "duracion-depende-del-largo",
+        "gravedad": "importante",
+        "por_que": (
+            "Queja literal de la duenya: 'tendria que preguntar cual es tu largo "
+            "para que la informacion que le hemos metido le sirva'. Ese tratamiento "
+            "va de 30 a 180 minutos segun el pelo, y contestaba una cifra suelta."
+        ),
+        "mensajes": ["cuanto tarda el acido lactico bio premium?"],
+        # Vale preguntarle el largo o darle el abanico: lo que no vale es una
+        # cifra a secas como si fuera igual para todo el mundo.
+        "debe": ["largo", "depende", "segun", "según", "pelo"],
+        "no_debe": [],
+    },
+    {
+        "id": "cuanto-tarda-lo-que-ya-ha-elegido",
+        "gravedad": "critico",
+        "por_que": (
+            "La captura que mando la duenya: habia pedido corte y secado, pregunto "
+            "'que suele tardar?' y el asistente contesto que el tiempo puede variar "
+            "y que mejor hacer una CITA DE VALORACION. La duracion estaba en su "
+            "catalogo todo el rato. Sus palabras: 'que ponga que hagamos un "
+            "diagnostico para un corte y un secador no tiene sentido'."
+        ),
+        "mensajes": ["hola quiero un corte de señora", "que suele tardar?"],
+        "debe": ["minuto"],
+        "no_debe": ["valoracion", "valoración", "diagnostico", "diagnóstico"],
     },
 ]

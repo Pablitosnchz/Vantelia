@@ -275,6 +275,24 @@ def _codigo_en(texto: str) -> str:
 
 # ─── Lo que dicen las tools (la verdad del servidor) ───────────────────────
 
+def _es_otro_servicio(guardado: str, pedido: str) -> bool:
+    """¿Son dos servicios DISTINTOS, o el mismo dicho de otra forma?
+
+    Uno dentro del otro es el mismo: el catalogo guarda "Pack keratina premium
+    medio" y al hablar se dice "keratina premium medio". Confundirlos sale caro en
+    la otra direccion -esos dos SI son servicios distintos en el catalogo, de 30
+    minutos y de casi cuatro horas-, por eso aqui solo se decide "es otro" cuando
+    ninguno contiene al otro.
+    """
+    from backend import catalog_pick
+
+    a = catalog_pick._norm(guardado or "")
+    b = catalog_pick._norm(pedido or "")
+    if not a or not b:
+        return bool(b) and not a
+    return a not in b and b not in a
+
+
 def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
                      resultado: Dict[str, Any]) -> None:
     """Actualiza el estado con lo que ha DEVUELTO una herramienta."""
@@ -285,6 +303,23 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
         # boton), pero los datos que traia la llamada son buenos y son los unicos
         # que hay: el nombre no lo devuelve ninguna herramienta. Sin recogerlos, el
         # resumen no se podia montar y la conversacion se quedaba colgada.
+        # El SERVICIO que trae la llamada MANDA sobre el que hubiera guardado: es lo
+        # que la clienta va a ver en el resumen y confirmar, y el estado no puede
+        # contradecirlo.
+        #
+        # Paso de verdad: la clienta empezo diciendo "unas mechas y cortarme... el
+        # corte es para mi, de senyora", y ahi se guardo "Corte senora". Veinte
+        # mensajes despues estaba eligiendo un alisado -pregunto por la queratina,
+        # por el acido lactico bio premium, pidio hora con Alicia-, y el resumen
+        # final decia "Servicio: Corte senora". Rellenar solo los huecos hacia que
+        # ganase siempre lo primero que se dijo.
+        pedido = str(argumentos.get("servicio") or "").strip()
+        if pedido and _es_otro_servicio(estado.servicio_exacto or estado.servicio, pedido):
+            estado.servicio = pedido
+            # El nombre exacto del catalogo era el del servicio ANTERIOR: se suelta
+            # para que se vuelva a resolver con el nuevo.
+            estado.servicio_exacto = ""
+            estado.duracion = 0
         for clave in ("servicio", "fecha", "hora", "nombre", "profesional"):
             valor = str(argumentos.get(clave) or "").strip()
             if valor and not getattr(estado, clave, ""):

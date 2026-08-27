@@ -8,7 +8,11 @@ param(
     [switch]$SkipLocalChecks,
     # El humo habla con el modelo: cuesta unos centimos y un par de minutos. Se
     # puede saltar cuando el cambio no toca al asistente (la web, un texto legal).
-    [switch]$SinHumo
+    [switch]$SinHumo,
+    # Vuelve a la version anterior del VPS sin desplegar nada. La imagen anterior
+    # queda etiquetada en cada despliegue, asi que volver son segundos y no una
+    # reconstruccion entera con la app caida.
+    [switch]$Rollback
 )
 
 Set-StrictMode -Version Latest
@@ -146,6 +150,44 @@ Assert-Command "tar.exe"
 Assert-Command "scp.exe"
 Assert-Command "ssh.exe"
 
+function Invoke-RemoteRollback {
+    param([string]$Motivo = "")
+
+    $rollbackScriptPath = Join-Path $ProjectRoot "deploy\hostinger
+ollback.sh"
+    if (-not (Test-Path -LiteralPath $rollbackScriptPath)) {
+        throw "No se encuentra deploy/hostinger/rollback.sh: no hay vuelta atras automatica."
+    }
+    if ($Motivo) {
+        Write-Host ""
+        Write-Host "!! $Motivo" -ForegroundColor Red
+    }
+    Write-Step "Volviendo a la version anterior del VPS"
+
+    # El script se sube desde el repo en lugar de usar el del VPS: si el arbol
+    # remoto quedo a medias, el suyo puede faltar o ser justo el que esta roto.
+    $rollbackSource = (Get-Content -LiteralPath $rollbackScriptPath -Raw) -replace "`r`n", "`n"
+    $rollbackB64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($rollbackSource))
+    $rollbackCommand = "echo $rollbackB64 | base64 -d | bash -s -- '$RemoteProject'"
+
+    $ErrorActionPreference = "Continue"
+    & ssh.exe @sshArgsBase $ServerHost $rollbackCommand
+    $rollbackExit = $LASTEXITCODE
+    $ErrorActionPreference = "Stop"
+    return $rollbackExit
+}
+
+if ($Rollback) {
+    $rollbackOnlyExit = Invoke-RemoteRollback
+    if ($rollbackOnlyExit -ne 0) {
+        throw "El rollback ha fallado (exit $rollbackOnlyExit). Mira los logs de arriba."
+    }
+    Write-Host ""
+    Write-Host "Rollback completado: produccion vuelve a la version anterior." -ForegroundColor Green
+    Write-Host "Health: https://app.vantelia.es/health" -ForegroundColor Green
+    exit 0
+}
+
 $PythonCommand = "python"
 $Python311Venv = Join-Path $ProjectRoot ".venv311\Scripts\python.exe"
 $DefaultVenv = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
@@ -219,10 +261,52 @@ ARCHIVE_NAME="$3"
 ARCHIVE_PATH="${REMOTE_BASE}/${ARCHIVE_NAME}"
 NEW_DIR="${REMOTE_PROJECT}_new"
 PREV_DIR="${REMOTE_PROJECT}_prev"
+BACKUP_DIR="/srv/vantelia-backups"
+IMAGE_CURRENT="vantelia:current"
+IMAGE_PREV="vantelia:prev"
 
 if [ ! -f "$ARCHIVE_PATH" ]; then
   echo "No se encuentra el paquete de despliegue: $ARCHIVE_PATH" >&2
   exit 1
+fi
+
+# --- Red de seguridad 1: foto de la base de datos ANTES de tocar nada ---------
+# El backup nocturno ya existe, pero puede llevar hasta 24 h encima: si una
+# migracion sale mal a las 18:00, restaurar la copia de las 04:00 pierde el dia
+# entero de citas, chats y pagos.
+DB_PATH="${REMOTE_PROJECT}/storage/vantelia.db"
+if [ -f "$DB_PATH" ]; then
+  mkdir -p "$BACKUP_DIR"
+  SNAPSHOT="${BACKUP_DIR}/pre-deploy-$(date +%Y%m%d-%H%M%S).db"
+  # .backup de SQLite, nunca cp: copiar el fichero a pelo deja el WAL fuera y la
+  # copia puede no abrir siquiera.
+  if command -v sqlite3 >/dev/null 2>&1; then
+    sqlite3 "$DB_PATH" ".backup '$SNAPSHOT'"
+  elif docker exec vantelia-app python3 -c "import sqlite3; o=sqlite3.connect('/app/storage/vantelia.db'); d=sqlite3.connect('/tmp/pre-deploy.db'); o.backup(d); d.close(); o.close()" >/dev/null 2>&1; then
+    docker cp vantelia-app:/tmp/pre-deploy.db "$SNAPSHOT" >/dev/null
+    docker exec vantelia-app rm -f /tmp/pre-deploy.db >/dev/null 2>&1 || true
+  else
+    echo "No se pudo hacer la foto de la base de datos: se aborta el despliegue." >&2
+    echo "Sin copia previa, un fallo de migracion no tendria vuelta atras." >&2
+    exit 1
+  fi
+  echo "Foto previa de la base de datos: $SNAPSHOT"
+  # Se guardan las 10 ultimas: son la red para el mismo dia, no el archivo.
+  ls -1t "${BACKUP_DIR}"/pre-deploy-*.db 2>/dev/null | tail -n +11 | xargs -r rm -f
+fi
+
+# --- Red de seguridad 2: la imagen que funciona hoy queda con nombre ----------
+# Sin esto, volver atras obliga a reconstruir (minutos con la app caida). Con
+# esto, el rollback es un docker tag y levantar el contenedor.
+if docker image inspect "$IMAGE_CURRENT" >/dev/null 2>&1; then
+  docker tag "$IMAGE_CURRENT" "$IMAGE_PREV"
+  echo "Imagen actual etiquetada como $IMAGE_PREV"
+elif running_image="$(docker inspect -f '{{.Image}}' vantelia-app 2>/dev/null)"; then
+  # Primer despliegue con este esquema: la imagen viva aun no tiene nombre fijo.
+  docker tag "$running_image" "$IMAGE_PREV"
+  echo "Imagen en ejecucion etiquetada como $IMAGE_PREV"
+else
+  echo "Aviso: no hay imagen previa que etiquetar (primer despliegue)."
 fi
 
 mkdir -p "$REMOTE_BASE"
@@ -263,9 +347,27 @@ fi
 mv "$NEW_DIR" "$REMOTE_PROJECT"
 
 cd "$REMOTE_PROJECT"
+
+# El script de rollback se aparta a /tmp porque vive dentro del arbol que el
+# propio rollback va a mover: leerlo desde su sitio a mitad de faena no es fiable.
+cp deploy/hostinger/rollback.sh /tmp/vantelia-rollback.sh 2>/dev/null || true
+
+volver_atras() {
+  echo "" >&2
+  echo "!! $1" >&2
+  if [ -f /tmp/vantelia-rollback.sh ]; then
+    bash /tmp/vantelia-rollback.sh "$REMOTE_PROJECT" >&2 ||       echo "!! El rollback automatico tambien ha fallado: entra por SSH." >&2
+  else
+    echo "!! Sin script de rollback. La version anterior sigue en ${PREV_DIR}." >&2
+  fi
+  exit 1
+}
+
 # Compose escribe el progreso por stderr; lo unificamos con stdout para que
 # PowerShell conserve el orden y no muestre mensajes atrasados tras el exito.
-docker compose -f deploy/hostinger/docker-compose.yml up -d --build 2>&1
+if ! docker compose -f deploy/hostinger/docker-compose.yml up -d --build 2>&1; then
+  volver_atras "La construccion o el arranque han fallado."
+fi
 docker ps
 
 # La app tarda en levantar (llama-index, nltk, indices). Con 12 intentos (36 s) el
@@ -281,7 +383,7 @@ while true; do
     echo ""
     echo "Healthcheck fallido tras varios intentos. Ultimos logs de vantelia-app:" >&2
     docker logs vantelia-app --tail 120 >&2 || true
-    exit 1
+    volver_atras "La version desplegada no responde al healthcheck."
   fi
   echo "Esperando a que la app responda... intento $attempt/40"
   attempt=$((attempt + 1))
@@ -341,9 +443,16 @@ if (-not $SinHumo) {
     if ($humoExit -ne 0) {
         Write-Host ""
         Write-Host "!! HAY CAMINOS ROTOS EN LO QUE ACABAS DE DESPLEGAR" -ForegroundColor Red
-        Write-Host "   Mira arriba cual y por que. Para volver atras:" -ForegroundColor Yellow
-        Write-Host "   git revert HEAD; .\deploy\deploy.ps1" -ForegroundColor Yellow
-        throw "El humo ha fallado: la conversacion no llega al final."
+        Write-Host "   Mira arriba cual y por que." -ForegroundColor Yellow
+        # El health decia que si y la conversacion se rompe igual: es justo el
+        # fallo que no se ve hasta que lo sufre un cliente. Se vuelve atras solo.
+        $humoRollbackExit = Invoke-RemoteRollback -Motivo "El humo ha fallado: la conversacion no llega al final."
+        if ($humoRollbackExit -ne 0) {
+            throw "El humo ha fallado Y el rollback tambien (exit $humoRollbackExit). Entra por SSH: produccion esta rota."
+        }
+        Write-Host ""
+        Write-Host "Produccion restaurada a la version anterior." -ForegroundColor Green
+        throw "El humo ha fallado: se ha vuelto atras. Arregla el camino roto antes de volver a desplegar."
     }
 }
 

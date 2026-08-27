@@ -3,6 +3,11 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
+    # Nombre FIJO de la imagen: sin el, cada reconstruccion deja una imagen con
+    # nombre generado por compose y no hay forma de decir "vuelve a la anterior".
+    # Con el, el deploy etiqueta la viva como vantelia:prev antes de reconstruir
+    # y el rollback es un docker tag + up -d (segundos, sin reconstruir).
+    image: vantelia:current
     container_name: vantelia-app
     restart: unless-stopped
     env_file:
