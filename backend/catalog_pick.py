@@ -235,6 +235,33 @@ def _familias_hermanas(cliente_id: str, familia: str) -> List[str]:
     return []
 
 
+def _tecnicas_de_la_familia(cliente_id: str, familia: str, location_id: str = "") -> List[str]:
+    """Como se llaman las tecnicas de esa familia EN ESTE catalogo.
+
+    Se sacan de los servicios que ya estan en la familia: de "Acido lactico bio
+    premium-medio" y "Keratina premium xl" salen "acido lactico" y "keratina". Con
+    eso, un "Pack acido lactico bio premium largo" -que vive en la categoria
+    "Packs" y no lleva la palabra alisado por ninguna parte- se reconoce como lo
+    que es: un alisado.
+
+    Sin esto, preguntar por la familia solo veia media verdad. Se piden DOS
+    palabras para no coger cualquier cosa que empiece igual.
+    """
+    limpia = _norm(familia)
+    if not limpia:
+        return []
+    tecnicas = set()
+    for servicio in _servicios(cliente_id, location_id):
+        nombre = _norm(_nombre(servicio))
+        categoria = _norm(servicio.get("category"))
+        if not (limpia in categoria or categoria.startswith(limpia[:6])):
+            continue
+        palabras = [p for p in re.split(r"[^0-9a-z]+", nombre) if len(p) > 3]
+        if len(palabras) >= 2:
+            tecnicas.add(" ".join(palabras[:2]))
+    return sorted(tecnicas)
+
+
 def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Eleccion:
     """Decide con el catalogo real y los datos que la clienta ya ha dado.
 
@@ -268,6 +295,14 @@ def elegir(cliente_id: str, datos: Dict[str, Any], location_id: str = "") -> Ele
         if familia and (familia in nombre or familia in categoria):
             return True
         if familia and categoria.startswith(familia[:6]):
+            return True
+        # Un PACK de esa familia tambien cuenta, aunque este en la categoria
+        # "Packs" y su nombre no lleve la palabra. Sin esto, a "¿cuanto tarda un
+        # alisado?" se contestaba "de 15 a 30 minutos" -las aplicaciones sueltas-
+        # sin ver los packs de 150 a 335, que es el servicio de verdad. Las
+        # tecnicas de cada familia salen del CATALOGO del negocio, no de una lista
+        # escrita a mano.
+        if familia and any(tec in nombre for tec in _tecnicas_de_la_familia(cliente_id, familia, location_id)):
             return True
         # Las hermanas solo valen a nombre COMPLETO ("grey blending"), no por
         # trozos: "color" casaria con medio catalogo.
