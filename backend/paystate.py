@@ -123,17 +123,25 @@ def summary_for_booking(
     )
 
 
-def customer_line(resumen: Dict[str, Any]) -> str:
+def customer_line(resumen: Dict[str, Any], ocultar_precio: bool = False) -> str:
     """Como se le cuenta el cobro al CLIENTE final. Una frase, sin jerga.
 
     Fuente unica para el email de confirmacion, el resumen de WhatsApp y la
     linea del checkout: si la senal se dice de tres formas distintas, el cliente
     llama al salon preguntando cuanto debe.
+
+    `ocultar_precio`: hay negocios que NO dan precios por mensaje -es su norma, y
+    el asistente la respeta en todo lo demas-. Decirles "quedan 210 EUR por abonar"
+    les cuenta el precio por la puerta de atras, justo a quien se le acaba de
+    explicar que el presupuesto se da en persona. Con esto puesto se dice lo que
+    ha pagado y nada mas.
     """
     kind = resumen.get("kind")
     pagado = _euros(resumen.get("paid_cents") or 0)
     falta = _euros(resumen.get("pending_cents") or 0)
     if kind == SENAL:
+        if ocultar_precio:
+            return "Señal de %s pagada. El resto se abona en el centro." % pagado
         return "Señal de %s pagada. Quedan %s por abonar en el centro." % (pagado, falta)
     if kind == PAGADO:
         return "Pagado %s. No tienes que abonar nada más." % pagado
@@ -145,19 +153,28 @@ def customer_line(resumen: Dict[str, Any]) -> str:
     return ""
 
 
-def checkout_line(servicio: str, amount_cents: int, full_cents: int, payment_type: str) -> Dict[str, str]:
+def checkout_line(servicio: str, amount_cents: int, full_cents: int, payment_type: str,
+                  ocultar_precio: bool = False) -> Dict[str, str]:
     """Nombre y descripcion de la linea de Stripe Checkout.
 
     Sin esto, quien paga una senal de 50 EUR de un servicio de 120 EUR ve
     "Corte de pelo — 50,00 EUR" y cree que ese es el precio.
+
+    `ocultar_precio` para los negocios que no dan precios por mensaje: decir "los
+    210 EUR restantes se abonan en el centro" es contarle el precio de todas
+    formas. Se le dice que es una senal -que es lo que necesita saber para pagar-
+    y el resto se ve en el centro.
     """
     nombre = servicio or "Reserva"
     resto = max(0, int(full_cents or 0) - int(amount_cents or 0))
     if payment_type == "preauth":
         return {"name": nombre, "description": "Retención de %s en tu tarjeta como garantía. No es un cobro." % _euros(amount_cents)}
-    if payment_type == "deposit" and resto > 0:
-        return {
-            "name": "%s · señal" % nombre,
-            "description": "Señal de %s para reservar. Los %s restantes se abonan en el centro." % (_euros(amount_cents), _euros(resto)),
-        }
+    if payment_type == "deposit" and (resto > 0 or ocultar_precio):
+        if ocultar_precio:
+            descripcion = ("Señal de %s para reservar. El resto se abona en el centro."
+                           % _euros(amount_cents))
+        else:
+            descripcion = ("Señal de %s para reservar. Los %s restantes se abonan en el centro."
+                           % (_euros(amount_cents), _euros(resto)))
+        return {"name": "%s · señal" % nombre, "description": descripcion}
     return {"name": nombre, "description": ""}

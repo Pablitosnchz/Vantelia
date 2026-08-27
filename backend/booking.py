@@ -601,7 +601,8 @@ def _booking_email_bodies(
     if status_key in ("confirmed", "received", "reminder_24h", "reminder_2h"):
         try:
             _cobro_texto = paystate.customer_line(
-                paystate.summary_for_booking(booking_row["cliente_id"], booking_row)
+                paystate.summary_for_booking(booking_row["cliente_id"], booking_row),
+                ocultar_precio=precios_ocultos(booking_row["cliente_id"]),
             )
         except Exception as exc:  # noqa: BLE001 - el email vale mas que la linea de cobro
             settings.logger.debug("No se pudo calcular el cobro para el email: %s", exc)
@@ -5533,6 +5534,7 @@ def payment_prompt_note(cliente_id: str, booking_row: sqlite3.Row, payment_row: 
         int(payment_row["amount_cents"] or 0),
         int(booking_row["service_price_cents"] or 0),
         str(service["payment_type"] or "full") if service else "full",
+        ocultar_precio=precios_ocultos(cliente_id),
     )
     return linea["description"]
 
@@ -5552,6 +5554,9 @@ def _checkout_product_data(booking: sqlite3.Row, decision: Dict[str, Any]) -> Di
         int(decision.get("amount_cents") or 0),
         int(booking["service_price_cents"] or 0),
         str(decision.get("payment_type") or "full"),
+        # La pagina de Stripe es donde MAS se mira: si ahi pone "los 210 EUR
+        # restantes", da igual lo que se calle el chat.
+        ocultar_precio=precios_ocultos(str(booking["cliente_id"] or "")),
     )
     datos = {"name": linea["name"]}
     if linea["description"]:
