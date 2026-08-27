@@ -944,3 +944,31 @@ def test_sin_ofrecimiento_ni_si_el_freno_sigue_puesto(api_module):  # noqa: F811
     assert agent._le_ofrecieron_cita_y_dijo_que_si(
         [{"role": "assistant", "content": "Abrimos de 10:00 a 20:30, cariño."}],
         "vale, gracias") is False
+
+
+def test_cancelar_no_deja_dar_por_hecha_una_cita_que_no_existe(api_module):  # noqa: F811
+    """Lo peor que puede decir el asistente, visto en una tirada de 100.
+
+    Transcripcion real: la clienta cambia de idea, el asistente cancela sus mechas
+    y remata con "tengo tu nueva cita para cortarte las puntas el martes a las
+    11:00". Nunca la creo. Ella se va convencida de que tiene cita; el salon, con
+    un hueco libre que nadie ocupara y una clienta que se presentara.
+
+    El freno miraba `mutada` -"¿ha cambiado algo en la agenda?"- y cancelar cambia
+    algo, asi que lo daba por bueno. Lo que hay que mirar es si ha nacido una cita.
+    """
+    import inspect
+
+    from backend import agent
+
+    fuente = inspect.getsource(agent.responder)
+    assert "creada = False" in fuente, "ya no se distingue crear de cancelar"
+    assert 'if llamada.function.name != "cancelar_cita":' in fuente
+    # Y el freno de "la da por hecha" cuelga de eso, no de `mutada`.
+    # El SEGUNDO: el primero es el de la cita ya cancelada, que si mira `mutada`.
+    trozo = fuente[fuente.index('traza.freno("daba_la_cita_por_hecha")') - 400:]
+    trozo = trozo[:trozo.index('traza.freno("daba_la_cita_por_hecha")')]
+    assert "creada" in trozo and "mutada" not in trozo, (
+        "el freno ha vuelto a colgarse de `mutada`: una cancelacion deja pasar "
+        "que se invente la cita siguiente"
+    )

@@ -1717,7 +1717,7 @@ _ASIENTE = ("si", "sii", "claro", "vale", "ok", "okey", "confirmo", "confirmar",
 _PERO = (" pero ", " aunque ", " mejor ", " en vez ", " en lugar ", " cambia",
          " prefiero ", " podria ser ", " puede ser ", " seria posible ", " otra hora",
          " otro dia", " otro día", " mas tarde", " más tarde", " mas temprano",
-         " más temprano", "?")
+         " más temprano")
 
 
 def _wa_dice_que_si(texto: str) -> bool:
@@ -1738,8 +1738,14 @@ def _wa_dice_que_si(texto: str) -> bool:
         return False  # "no, mejor otro dia" no es un si
     if any(pega in rodeado for pega in _PERO):
         return False  # "vale, pero mejor a las 5" es una peticion, no un si
+    confirma = "confirm" in plano
+    # Una pregunta suele ser un "si, ¿pero...?" ("vale, ¿y podria ser el viernes?").
+    # Salvo que ademas CONFIRME con todas las letras: "si, confirmo. ¿me recuerdas
+    # la direccion?" es una cita cerrada y una duda, no una duda.
+    if "?" in plano and not confirma:
+        return False
     primera = plano.split(",")[0].split()[0] if plano.split() else ""
-    return primera in _ASIENTE or plano in _ASIENTE or "confirm" in plano
+    return primera in _ASIENTE or plano in _ASIENTE or confirma
 
 
 def _wa_cambia_el_servicio(cliente_id: str, texto: str) -> bool:
@@ -1778,7 +1784,15 @@ async def _wa_resumen_para_confirmar(
     contacto = crm.contact_by_phone(cliente_id, from_number)
     if contacto is not None:
         conocido = str(contacto["name"] or "").strip()
-    if estado.intencion != "reservar" or estado.hecho:
+    # Se abre para quien viene a reservar Y para quien tiene una cita frenada
+    # esperando su boton. Sin lo segundo habia dos callejones sin salida medidos:
+    # la clienta que escribe en su idioma -nadie declara la intencion- y la que
+    # viene a REPROGRAMAR y acaba necesitando una cita nueva. En los dos casos el
+    # agente juntaba todos los datos, frenaba la creacion esperando el resumen, y
+    # el resumen se negaba a salir: "parece que no puedo reservar la cita".
+    if estado.hecho:
+        return False
+    if estado.intencion != "reservar" and not estado.esperando_confirmacion:
         return False
     if reserva.que_falta(estado, conocido):
         return False

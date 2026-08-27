@@ -60,6 +60,11 @@ class Estado:
     recargo_dicho: bool = False  # ya se le explico lo que cuesta con esa profesional
     cancelada: bool = False      # su cita se anulo: ya no esta en pie
     ya_creada: bool = False      # ya se le cogio UNA cita en esta conversacion
+    # Hay una cita lista y frenada esperando que ella pulse "Confirmar". Es la
+    # senyal exacta que abre el resumen con botones: mas fiable que la intencion,
+    # que a veces es "reprogramar" -cancelo la vieja y hay que crear la nueva- y
+    # a veces no la ha declarado nadie porque la clienta escribio en su idioma.
+    esperando_confirmacion: bool = False
     veces_sin_precio: int = 0    # cuantas veces se le ha dicho que no hay precio
     servicio_texto: str = ""    # todo lo que ha dicho sobre QUE quiere hacerse
     ultimo_falta: str = ""      # que dato del servicio se le pregunto la ultima vez
@@ -111,6 +116,7 @@ def marcar_hecha(cliente_id: str, telefono: str, codigo: str = "") -> None:
     """
     estado = cargar(cliente_id, telefono)
     estado.hecho = True
+    estado.esperando_confirmacion = False
     estado.codigo = codigo or estado.codigo
     guardar(cliente_id, telefono, estado)
 
@@ -283,6 +289,14 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
             valor = str(argumentos.get(clave) or "").strip()
             if valor and not getattr(estado, clave, ""):
                 setattr(estado, clave, valor)
+        # Y esto es RESERVAR, aunque nadie lo haya declarado. Sin ponerlo, la
+        # conversacion no tenia salida: el agente juntaba servicio, dia, hora y
+        # nombre, frenaba la creacion esperando el resumen con el boton... y el
+        # resumen se negaba a salir porque `intencion` estaba vacia. La clienta
+        # recibia "parece que no puedo reservar la cita" con todos sus datos sobre
+        # la mesa. Pedir cita ES declarar la intencion.
+        estado.intencion = estado.intencion or "reservar"
+        estado.esperando_confirmacion = True
         return
     if not resultado.get("ok"):
         return
@@ -411,6 +425,7 @@ def empezar_otra_gestion(estado: Estado) -> None:
     estado.hecho = False
     estado.cancelada = False
     estado.ya_creada = False
+    estado.esperando_confirmacion = False
     estado.ultimo_falta = ""
     estado.ultimo_pedido = ""
 

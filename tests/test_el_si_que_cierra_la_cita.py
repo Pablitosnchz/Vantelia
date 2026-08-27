@@ -33,6 +33,10 @@ SIES = [
     "perfecto, adelante con eso",
     "claro que si, reservala",
     "vale confirmo la cita del jueves a las 10 de la manana gracias",
+    # Cerrar la cita y preguntar otra cosa a la vez es lo normal. Rechazarlo por
+    # el signo de interrogacion le costaba la cita a quien ya habia dicho que si.
+    "si, confirmo. me recuerdas la direccion?",
+    "perfecto, confirmo, donde estais exactamente?",
 ]
 
 NO_SON_SI = [
@@ -44,6 +48,9 @@ NO_SON_SI = [
     "perfecto aunque prefiero por la tarde",
     "me lo pienso y te digo",
     "si, aunque mejor otro dia",
+    "vale, y podria ser el viernes?",
+    "y si mejor el sabado?",
+    "a que hora dices?",
 ]
 
 

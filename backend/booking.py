@@ -6373,7 +6373,13 @@ def regla_de_precio_para(cliente_id: str, servicio: str) -> Dict[str, Any]:
     try:
         from backend import rules
 
+        # La familia se busca en el nombre Y EN SU CATEGORIA del catalogo. Solo con
+        # el nombre, la regla "alisado: pedir foto" no casaba con "Acido lactico
+        # bio premium largo" -que esta en la categoria Alisados- y a quien preguntaba
+        # el precio se le cogia el tratamiento entero: horas de sillon a alguien a
+        # quien nadie le habia visto el pelo. Lo mismo con las keratinas.
         plano = textnorm._strip_accents(str(servicio or "").lower())
+        plano = "%s | %s" % (plano, _categoria_del_servicio(cliente_id, servicio))
         for regla in rules.listar(cliente_id, solo_activas=True):
             intenciones = regla.get("intenciones") or []
             if "precio" not in intenciones and "presupuesto" not in intenciones:
@@ -6384,6 +6390,35 @@ def regla_de_precio_para(cliente_id: str, servicio: str) -> Dict[str, Any]:
     except Exception:  # noqa: BLE001
         return {}
     return {}
+
+
+def _categoria_del_servicio(cliente_id: str, servicio: str) -> str:
+    """La categoria que el negocio le puso a ese servicio, sin tildes ni mayusculas.
+
+    Es la que dice a que FAMILIA pertenece de verdad: el nombre no tiene por que
+    llevarla ("Acido lactico bio premium largo" esta en "Alisados").
+    """
+    nombre = textnorm._strip_accents(str(servicio or "").lower()).strip()
+    if not nombre:
+        return ""
+    try:
+        with db._get_db_connection() as conexion:
+            filas = conexion.execute(
+                "SELECT name, category FROM services WHERE cliente_id=? AND is_active=1",
+                (cliente_id,),
+            ).fetchall()
+    except Exception:  # noqa: BLE001 - sin catalogo se sigue solo con el nombre
+        return ""
+    for fila in filas:
+        suyo = textnorm._strip_accents(str(fila["name"] or "").lower()).strip()
+        # `nombre` puede venir con el "Pack " delante o sin el: vale que uno
+        # contenga al otro, que es como se dicen estos servicios al hablar.
+        if suyo and (suyo == nombre or suyo in nombre or nombre in suyo):
+            categoria = textnorm._strip_accents(str(fila["category"] or "").lower())
+            if categoria:
+                # Singular tambien: la regla dice "alisado" y la categoria "Alisados".
+                return "%s %s" % (categoria, categoria.rstrip("s"))
+    return ""
 
 
 def _exige_valoracion(nombre_servicio: str, familias: List[str]) -> bool:

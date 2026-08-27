@@ -162,3 +162,54 @@ def test_el_freno_del_precio_tapa_tambien_el_camino_de_las_listas(api_module, cl
         with db._get_db_connection() as conexion:
             conexion.execute("DELETE FROM services WHERE cliente_id='demo' AND slug='kera_listas'")
             conexion.commit()
+
+
+def test_la_regla_del_precio_casa_por_la_categoria_y_no_solo_por_el_nombre(
+        api_module, client):  # noqa: F811
+    """El fallo que se llevo el tratamiento de horas, visto en una tirada de 100.
+
+    El salon tiene la regla "presupuesto de ALISADO: pedir foto". Su servicio se
+    llama "Acido lactico bio premium largo" y esta en la categoria "Alisados": la
+    palabra "alisado" no sale por ninguna parte del nombre. La regla se buscaba
+    SOLO en el nombre, asi que no casaba, y a quien preguntaba el precio se le
+    cogia el tratamiento entero -horas de sillon a alguien a quien nadie le habia
+    visto el pelo-.
+
+    La familia de un servicio la dice el CATALOGO, no como se llame.
+    """
+    from backend import booking, db, rules, timeutils
+
+    ahora = timeutils._utc_now().isoformat()
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT OR REPLACE INTO services (cliente_id, slug, name, category,"
+            " duration_minutes, price_cents, description, is_active, sort_order,"
+            " created_at, updated_at) VALUES ('demo', 'acido_cat',"
+            " 'Acido lactico bio premium largo', 'Alisados', 240, 0, '', 1, 0, ?, ?)",
+            (ahora, ahora))
+        conexion.commit()
+    regla = rules.guardar("demo", nombre="Presupuesto de alisado: pedir foto",
+                          intenciones=["precio", "presupuesto"], familias=["alisado"],
+                          accion="pedir_foto", texto="Mandanos una foto del pelo por detras.")
+    try:
+        encontrada = booking.regla_de_precio_para("demo", "Acido lactico bio premium largo")
+        assert encontrada, (
+            "la regla del negocio no casa con su propio servicio: se le cogera el "
+            "tratamiento a quien solo preguntaba el precio"
+        )
+        assert encontrada["accion"] == "pedir_foto"
+
+        # Y el freno se apoya en ella.
+        assert booking.bloquea_por_regla_de_precio(
+            "demo", "Acido lactico bio premium largo", True)
+        # Quien viene a RESERVAR se lleva su cita: esa mitad no cambia.
+        assert booking.bloquea_por_regla_de_precio(
+            "demo", "Acido lactico bio premium largo", False) == {}
+
+        # Un servicio de otra categoria no se ve arrastrado.
+        assert booking.regla_de_precio_para("demo", "Corte senora") == {}
+    finally:
+        rules.borrar("demo", regla["id"])
+        with db._get_db_connection() as conexion:
+            conexion.execute("DELETE FROM services WHERE cliente_id='demo' AND slug='acido_cat'")
+            conexion.commit()

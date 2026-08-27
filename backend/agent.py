@@ -1666,6 +1666,11 @@ async def responder(
     # una cita y al pedirle "vuelvela a abrir" dijo que la habia reabierto (no
     # existe esa operacion), y en otra dijo "te he agendado" sin crear nada.
     mutada = False      # una tool ha cambiado la agenda en este turno
+    # Y aparte: ¿ha nacido una cita NUEVA? Cancelar tambien es cambiar la
+    # agenda, y con `mutada` a secas se colaba lo peor que puede decir: canceló
+    # la cita vieja y remató con "tengo tu nueva cita el martes a las 11:00"
+    # sin haberla creado. La clienta se va sin cita y creyendo que la tiene.
+    creada = False      # una tool ha CREADO o movido una cita en este turno
     mirada_la_cita = False  # se ha consultado su cita en este turno
     dias_mirados = 0
     ya_creadas: set = set()
@@ -1870,7 +1875,6 @@ async def responder(
                         and _da_la_cita_por_hecha(texto_final)
                         and vuelta + 1 < MAX_VUELTAS):
                     traza.freno("daba_por_viva_una_cita_cancelada")
-                    traza.freno("daba_la_cita_por_hecha")
                     mensajes.append({
                         "role": "system",
                         "content": ("Su cita esta CANCELADA: no digas que sigue en "
@@ -1880,8 +1884,10 @@ async def responder(
                     })
                     continue
                 if (_da_la_cita_por_hecha(texto_final)
-                        and not (mutada or mirada_la_cita or estado.hecho)
+                        and not (creada or mirada_la_cita
+                                 or (estado.hecho and not estado.cancelada))
                         and vuelta + 1 < MAX_VUELTAS):
+                    traza.freno("daba_la_cita_por_hecha")
                     mensajes.append({
                         "role": "system",
                         "content": ("NO hay ninguna cita creada todavia. No digas que "
@@ -2123,6 +2129,8 @@ async def responder(
                     if llamada.function.name in ("crear_cita", "cancelar_cita",
                                                  "reprogramar_cita"):
                         mutada = True
+                        if llamada.function.name != "cancelar_cita":
+                            creada = True
                     elif llamada.function.name == "consultar_cita":
                         mirada_la_cita = True
                 # El estado se llena SOLO con lo que DEVUELVEN las tools: es la
