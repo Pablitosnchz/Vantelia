@@ -109,6 +109,28 @@ Cuatro veces se puso un guardarrail en el agente cuando por WhatsApp la cita la
 crea el boton del resumen. El guardarrail era correcto y no servia de nada. Los
 frenos van en el **cuello de botella**, no en uno de los caminos que pasan por el.
 
+**Antes de medir, comprueba que mides SU producto.**
+
+```powershell
+# en el servidor (dentro del contenedor)
+python scripts/comparar_con_produccion.py --exportar --cliente CLIENTE > prod.json
+# en local
+python scripts/comparar_con_produccion.py --cliente CLIENTE --contra prod.json
+```
+
+Dos veces en el mismo dia se perdieron horas persiguiendo fallos que no existian,
+las dos porque la copia local no era como produccion: `booking.estilo` sin poner
+-la tirada contestaba con el RAG generico y los casos aprobaban sin ejercitar
+nada- y `mostrar_precios` sin poner -dos casos CRITICOS en rojo sin haber nada
+roto-. A la tercera se busco con la herramienta y aparecio `ai_intents.enabled`
+apagado en local y encendido en produccion.
+
+El script compara solo lo que cambia el COMPORTAMIENTO y sale con codigo 1 si hay
+diferencias. Los AJUSTES se alinean en `config.json`; los DATOS (catalogo,
+empleados) casi nunca conviene copiarlos, pero hay que saber que no son los
+mismos: un test que dependa del catalogo real de un cliente esta midiendo una
+copia vieja.
+
 **Cuando el numero BAJA, sospecha del instrumento.** El simulador daba por rotas
 conversaciones bien llevadas porque no podia pulsar "Confirmar". Y tenia su propia
 lista de "sies", mas permisiva que la del producto: pulsaba el boton en frases que

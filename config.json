@@ -711,6 +711,9 @@
       "accent_color": "#c9737d",
       "hero_image_url": "https://aliciarinconestilistas.com/media/mslzvpu7-img-9396.jpg",
       "hero_tagline": "Peluquería colorista en Elche · Más de 36 años creando cambios de imagen"
+    },
+    "ai_intents": {
+      "enabled": true
     }
   },
   "caprocat": {

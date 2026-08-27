@@ -368,14 +368,27 @@ def main() -> int:
                   % (caso["gravedad"], caso["id"]))
             saltados += 1
             continue
+        # Al otro lado hay un modelo: la misma pregunta puede salir distinta dos
+        # veces. Un fallo DE VERDAD falla las dos; un tropiezo, no. Sin esto, una
+        # tirada entera se daba por mala por un traspies -paso con
+        # `no-inventar-duraciones`, que al repetirlo contestaba "de 195 a 440
+        # minutos"- y una medicion que acusa de mas se deja de mirar igual que una
+        # que no acusa nunca.
         paso, respuestas, motivo = _ejecutar_caso(args.cliente, caso, dichos, indice)
+        segundo_intento = False
+        if not paso:
+            segundo_intento = True
+            paso, respuestas, motivo = _ejecutar_caso(
+                args.cliente, caso, dichos, indice + 1000)
         marca = "  OK  " if paso else "FALLA "
-        print("%s [%-11s] %-34s" % (marca, caso["gravedad"], caso["id"]))
+        print("%s [%-11s] %-34s%s" % (
+            marca, caso["gravedad"], caso["id"],
+            "  (al segundo intento)" if paso and segundo_intento else ""))
         if paso:
             aciertos += 1
         else:
             fallos[caso["gravedad"]].append((caso, motivo, respuestas))
-            print("           %s" % motivo)
+            print("           %s (las DOS veces)" % motivo)
             print("           por que importa: %s" % caso.get("por_que", ""))
         if args.detalle and respuestas:
             for r in respuestas:
