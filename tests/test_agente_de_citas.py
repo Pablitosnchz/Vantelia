@@ -1031,3 +1031,35 @@ def test_anunciar_que_va_a_mirar_la_agenda_cuenta_como_no_mirarla(api_module):  
     # Y dar las horas NO es anunciar: eso es haberlo hecho.
     assert not agent._lo_anuncia_en_vez_de_hacerlo(
         "Tengo disponibilidad el jueves de 10:00 a 19:15, cada 15 minutos")
+
+
+def test_elegir_servicio_y_hora_ya_es_pedir_cita(api_module):  # noqa: F811
+    """El freno de "nadie acaba con una cita que no ha pedido" mira SUS palabras, y
+    "quiero unas mechas" no lleva ninguna de las formas de pedir cita.
+
+    Resultado, cazado por el humo y no por los 1.475 tests: rechazo la reserva de
+    una clienta que habia elegido servicio, largo del pelo, dia y hora, y habia
+    dado su nombre. A tener servicio Y hora en el estado solo se llega recorriendo
+    la reserva entera: eso ES pedir cita, lo diga como lo diga.
+    """
+    import inspect
+
+    from backend import agent, reserva
+
+    assert reserva.ha_pedido_cita("quiero unas mechas") is False, (
+        "si algun dia esto cambia, este test deja de probar lo que cree"
+    )
+    fuente = inspect.getsource(agent.responder)
+    trozo = fuente[fuente.index('llamada.function.name == "crear_cita"\n'
+                                '                        and not (estado.servicio'):]
+    assert "estado.servicio and estado.hora" in trozo[:200]
+
+
+def test_quien_solo_pregunta_el_horario_sigue_sin_llevarse_una_cita(api_module):  # noqa: F811
+    """La mitad que protege, que es por lo que existe el freno: al negocio le deja
+    un hueco ocupado por nadie, y a quien pregunto, una cita que no sabe que tiene."""
+    from backend import reserva
+
+    estado = reserva.Estado()
+    assert not (estado.servicio and estado.hora)
+    assert reserva.ha_pedido_cita("a que hora abris manana?") is False

@@ -1969,7 +1969,14 @@ async def responder(
                     })
                     traza.freno("cita_duplicada")
                     continue
+                # Y no se aplica a quien ya tiene servicio Y hora elegidos: a eso
+                # solo se llega recorriendo la reserva entera. El freno miraba SUS
+                # palabras y "quiero unas mechas" no lleva ninguna de las formas de
+                # pedir cita, asi que rechazo la reserva de una clienta que habia
+                # elegido servicio, largo, dia y hora, y habia dado su nombre. Lo
+                # cazo el humo; los 1.475 tests no.
                 if (llamada.function.name == "crear_cita"
+                        and not (estado.servicio and estado.hora)
                         and estado.intencion != "reservar"
                         and not reserva.ha_pedido_cita(dicho_de_ella)
                         and not _le_ofrecieron_cita_y_dijo_que_si(historial, mensaje)):
