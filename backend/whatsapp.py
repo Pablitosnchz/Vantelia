@@ -1193,6 +1193,47 @@ async def _wa_explicar_la_regla_del_precio(
     )
 
 
+async def _wa_freno_del_precio(
+    *, cliente_id: str, phone_number_id: str, to_number: str,
+    flow: appstate.WAFlowState,
+) -> bool:
+    """¿Hay que parar esta cita porque vino preguntando el precio?
+
+    Va PEGADO al resumen, no a un camino concreto. El freno vivia solo en el
+    recorrido conversacional, asi que la clienta que preguntaba el precio y luego
+    elegia el servicio de la LISTA llegaba al resumen del tratamiento con el freno
+    intacto: es la misma leccion de siempre -el guardarrail tiene que estar en el
+    cuello de botella, no en uno de los caminos que pasan por el-.
+    """
+    from backend import reserva
+
+    servicio = flow.servicio or ""
+    if not servicio:
+        return False
+    numero = flow.from_number or to_number
+    estado = reserva.cargar(cliente_id, numero)
+    pidio_precio = (bool(getattr(estado, "veces_sin_precio", 0))
+                    or booking.pidio_precio_en_la_conversacion(
+                        cliente_id, _whatsapp_session_id(cliente_id, numero)))
+    parada = booking.bloquea_por_regla_de_precio(cliente_id, servicio, pidio_precio)
+    if not parada:
+        return False
+    await _wa_explicar_la_regla_del_precio(
+        cliente_id=cliente_id, phone_number_id=phone_number_id, to_number=to_number,
+        freno=parada, estado=estado, from_number=numero,
+    )
+    # El flujo de listas se suelta -no `_wa_clear_flow`, que tambien borraria lo
+    # que el agente acaba de apuntar: la valoracion-. Si no, la clienta se queda
+    # dentro del paso en el que estaba y su "si, cogemela" se lee como su nombre.
+    # El dia y la hora se van con el: la valoracion no dura lo que el tratamiento y
+    # ese hueco puede no valer.
+    flow.flow = ""
+    flow.servicio = ""
+    flow.fecha = ""
+    flow.hora = ""
+    return True
+
+
 async def _wa_send_booking_summary(
     *, cliente_id: str, phone_number_id: str, to_number: str,
     flow: appstate.WAFlowState, reconocido: bool = False,
@@ -1204,6 +1245,10 @@ async def _wa_send_booking_summary(
     obligatorios: costaban una interaccion a todo el mundo para algo que casi nadie
     usaba.
     """
+    if await _wa_freno_del_precio(
+            cliente_id=cliente_id, phone_number_id=phone_number_id,
+            to_number=to_number, flow=flow):
+        return
     flow.flow = "booking_confirm"
     # Si ha pedido a alguien que cuesta mas y todavia no se le ha explicado POR QUE,
     # se le explica ANTES del resumen, con el texto que ha escrito el negocio. El
@@ -1660,12 +1705,32 @@ _ASIENTE = ("si", "sii", "claro", "vale", "ok", "okey", "confirmo", "confirmar",
             "reservala", "resérvala", "cogela", "adelante con eso", "me parece bien")
 
 
+# Lo que convierte un "si" en un "si, PERO". Con cualquiera de estas, la frase deja
+# de ser una confirmacion aunque empiece por "vale": esta pidiendo otra cosa.
+_PERO = (" pero ", " aunque ", " mejor ", " en vez ", " en lugar ", " cambia",
+         " prefiero ", " podria ser ", " puede ser ", " seria posible ", " otra hora",
+         " otro dia", " otro día", " mas tarde", " más tarde", " mas temprano",
+         " más temprano", "?")
+
+
 def _wa_dice_que_si(texto: str) -> bool:
+    """¿Esto es un si a lo que se le acaba de proponer?
+
+    El corte estaba en 40 caracteres, y ahi se perdian citas de verdad: "si,
+    perfecto, me viene genial esa hora, confirmo" son 47 y se caia. Cuanto mas
+    contenta contestaba, menos probable era que se le cogiera la cita.
+
+    El largo no era lo que separaba un si de un "si, pero": lo que lo separa es que
+    detras venga una pega. Asi que se mira la pega, no la regla.
+    """
     plano = " ".join(str(texto or "").split())
-    if not plano or len(plano) > 40:
-        return False
-    if plano.startswith("no") or " no " in (" " + plano + " "):
+    if not plano or len(plano) > 160:
+        return False   # un parrafo no es una confirmacion
+    rodeado = " " + plano + " "
+    if plano.startswith("no") or " no " in rodeado:
         return False  # "no, mejor otro dia" no es un si
+    if any(pega in rodeado for pega in _PERO):
+        return False  # "vale, pero mejor a las 5" es una peticion, no un si
     primera = plano.split(",")[0].split()[0] if plano.split() else ""
     return primera in _ASIENTE or plano in _ASIENTE or "confirm" in plano
 
@@ -1713,21 +1778,10 @@ async def _wa_resumen_para_confirmar(
     if not (estado.servicio and estado.fecha and estado.hora):
         return False
 
-    # Vino preguntando el precio de algo que este negocio no presupuesta por
-    # mensaje: NO se le ensena el resumen del tratamiento. Por aqui es por donde se
-    # colaba, porque la cita la crea el boton, no el modelo.
-    # Pidio precio si lo ESCRIBIO, aunque quien le contestara fuera otra capa.
-    pidio_precio = (bool(getattr(estado, "veces_sin_precio", 0))
-                    or booking.pidio_precio_en_la_conversacion(
-                        cliente_id, _whatsapp_session_id(cliente_id, from_number)))
-    freno = booking.bloquea_por_regla_de_precio(
-        cliente_id, estado.servicio_exacto or estado.servicio, pidio_precio)
-    if freno:
-        await _wa_explicar_la_regla_del_precio(
-            cliente_id=cliente_id, phone_number_id=phone_number_id,
-            to_number=from_number, freno=freno, estado=estado, from_number=from_number,
-        )
-        return True
+    # El freno de "aqui no se dan precios" ya no esta aqui: vive pegado al resumen
+    # (`_wa_freno_del_precio`), que es por donde pasan TODOS los caminos. Tenerlo
+    # solo en este dejaba pasar a quien preguntaba el precio y luego elegia el
+    # servicio de la lista.
 
     # Con el nombre EXACTO del catalogo: el de hablar puede coincidir con otro
     # servicio distinto (el "Pack keratina premium medio" se dice igual que la

@@ -656,9 +656,17 @@ def test_la_regla_del_precio_frena_tambien_el_resumen_de_whatsapp(api_module, cl
         # Vino a RESERVAR -> se le coge su cita, que es la otra mitad de la regla.
         assert booking.bloquea_por_regla_de_precio("demo", "Keratina premium xl", False) == {}
 
-        # Y el resumen de WhatsApp lo comprueba antes de ensenyar nada.
-        fuente = inspect.getsource(whatsapp._wa_resumen_para_confirmar)
-        assert "bloquea_por_regla_de_precio" in fuente
+        # Y esta enchufado en el CUELLO DE BOTELLA, no en un camino.
+        #
+        # Estuvo colgado de `_wa_resumen_para_confirmar`, que es solo uno de los
+        # cuatro caminos que llegan al resumen: quien preguntaba el precio y luego
+        # elegia el servicio de la LISTA pasaba por otro y se le colaba el
+        # tratamiento entero. Por el resumen pasan todos.
+        assert "_wa_freno_del_precio" in inspect.getsource(whatsapp._wa_send_booking_summary), (
+            "el freno del precio se ha salido del resumen: vuelve a haber caminos "
+            "que llegan a la cita sin pasar por el"
+        )
+        assert "bloquea_por_regla_de_precio" in inspect.getsource(whatsapp._wa_freno_del_precio)
     finally:
         rules.borrar("demo", regla["id"])
         with db._get_db_connection() as conexion:

@@ -478,6 +478,18 @@ def main() -> int:
         with open(args.guardar, "w", encoding="utf-8") as fichero:
             json.dump(informe, fichero, ensure_ascii=False, indent=2)
         print("\n  guardado en %s" % args.guardar)
+        # Y las conversaciones que salieron mal, ENTERAS. Sin esto, el informe
+        # dice "14 x repite_la_misma_pregunta" y averiguar QUE pregunta repite
+        # obliga a pagar otra tirada de 100 conversaciones. Asi es gratis.
+        rotas = [r for r in resultados if r["veredicto"] != "bien"]
+        camino = args.guardar.rsplit(".", 1)[0] + ".fallos.json"
+        with open(camino, "w", encoding="utf-8") as fichero:
+            json.dump([{
+                "id": r["id"], "objetivo": r["objetivo"], "veredicto": r["veredicto"],
+                "motivo": r.get("motivo", ""), "fallos": r["fallos"],
+                "conversacion": r["conversacion"],
+            } for r in rotas], fichero, ensure_ascii=False, indent=2)
+        print("  las %d rotas, enteras, en %s" % (len(rotas), camino))
     return 0
 
 

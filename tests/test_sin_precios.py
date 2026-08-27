@@ -91,3 +91,74 @@ def test_a_quien_no_pregunta_el_precio_no_se_le_dice_nada(salon_sin_precios, api
     estado = reserva.Estado()
     assert agent._salida_para_quien_pregunta_el_precio("demo", estado, "quiero cita el jueves") == ""
     assert estado.veces_sin_precio == 0
+
+
+def test_el_freno_del_precio_tapa_tambien_el_camino_de_las_listas(api_module, client):  # noqa: F811
+    """Preguntar el precio y luego elegir de la LISTA se colaba entero.
+
+    El freno colgaba de `_wa_resumen_para_confirmar`, que es UNO de los cuatro
+    caminos que llegan al resumen. Quien preguntaba el precio, recibia la respuesta
+    del negocio y luego pulsaba el servicio en la lista, entraba por otro camino y
+    acababa con el tratamiento de horas en la agenda.
+
+    Aqui se llama al resumen DIRECTO, como hace el flujo de listas, y se exige que
+    pare igual.
+    """
+    import asyncio
+
+    from backend import appstate, db, messaging, rules, timeutils, whatsapp
+
+    ahora = timeutils._utc_now().isoformat()
+    telefono = "34600991234"
+    with db._get_db_connection() as conexion:
+        conexion.execute(
+            "INSERT OR REPLACE INTO services (cliente_id, slug, name, category,"
+            " duration_minutes, price_cents, description, is_active, sort_order,"
+            " created_at, updated_at) VALUES ('demo', 'kera_listas', 'Keratina listas xl',"
+            " 'keratina', 240, 0, '', 1, 0, ?, ?)", (ahora, ahora))
+        conexion.commit()
+    regla = rules.guardar("demo", nombre="Keratina: pedir foto", intenciones=["precio"],
+                          familias=["keratina"], accion="pedir_foto",
+                          texto="Mandanos una foto y te decimos el precio.")
+
+    enviados = []
+
+    async def _capturar(**kwargs):
+        enviados.append(kwargs.get("text") or "")
+
+    original = messaging._send_whatsapp_text
+    messaging._send_whatsapp_text = _capturar
+    try:
+        from backend import reserva
+
+        estado = reserva.cargar("demo", telefono)
+        estado.veces_sin_precio = 1        # pregunto el precio antes
+        reserva.guardar("demo", telefono, estado)
+
+        flow = appstate.WAFlowState(cliente_id="demo", from_number=telefono)
+        flow.flow = "booking_name"          # venia del camino de las listas
+        flow.servicio = "Keratina listas xl"
+        flow.fecha = "2026-09-10"
+        flow.hora = "10:00"
+        flow.nombre = "Ana"
+
+        asyncio.run(whatsapp._wa_send_booking_summary(
+            cliente_id="demo", phone_number_id="phone_test",
+            to_number=telefono, flow=flow))
+
+        junto = " ".join(enviados).lower()
+        assert "resumen de tu cita" not in junto, (
+            "le ha ensenyado el resumen del tratamiento a quien pregunto el precio"
+        )
+        assert "foto" in junto, "no le ha dicho lo que el negocio manda decir"
+        assert flow.flow != "booking_confirm"
+        assert not flow.flow, (
+            "se queda dentro del paso de las listas: su 'si' se leera como su nombre"
+        )
+    finally:
+        messaging._send_whatsapp_text = original
+        rules.borrar("demo", regla["id"])
+        whatsapp._wa_clear_flow("demo", telefono)
+        with db._get_db_connection() as conexion:
+            conexion.execute("DELETE FROM services WHERE cliente_id='demo' AND slug='kera_listas'")
+            conexion.commit()

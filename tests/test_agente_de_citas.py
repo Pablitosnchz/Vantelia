@@ -873,3 +873,38 @@ def test_elegir_una_hora_que_le_han_ofrecido_no_es_inventarsela(api_module):  # 
 
     # Lo que dijo ELLA no cuenta como ofrecido por el asistente.
     assert agent._horas_ya_ofrecidas([{"role": "user", "content": "a las 11"}]) == set()
+
+
+def test_no_vale_alternar_dos_parrafos_para_repetir(api_module):  # noqa: F811
+    """A-B-A es el mismo muro que A-A: ya se lo habian contestado.
+
+    El freno miraba SOLO la respuesta anterior, asi que alternando dos parrafos se
+    colaba. Quien escribe no nota la diferencia: recibe otra vez lo mismo.
+    """
+    from backend import agent
+
+    muro = ("Sin ver tu cabello no puedo decirte un precio, cada cabeza es un mundo "
+            "y depende del largo y del punto de color que tengas ahora.")
+    otra = "Claro que si, dime que dia te viene mejor y miro la agenda."
+    historial = [
+        {"role": "assistant", "content": muro},
+        {"role": "user", "content": "pero dime algo aproximado"},
+        {"role": "assistant", "content": otra},
+        {"role": "user", "content": "es que necesito saber el precio"},
+    ]
+    assert agent._ya_dijo_esto(historial, muro) is True, (
+        "alternar dos parrafos no puede saltarse el freno de repeticion"
+    )
+
+
+def test_algo_dicho_hace_mucho_ya_no_cuenta_como_repetirse(api_module):  # noqa: F811
+    """Si contara TODA la conversacion, decir dos veces "¿que dia te viene bien?"
+    en una charla larga saltaria el freno, y eso es normal y correcto."""
+    from backend import agent
+
+    frase = "Perfecto, entonces dime que dia te viene mejor y te miro los huecos que hay."
+    historial = [{"role": "assistant", "content": frase}]
+    for i in range(agent.ULTIMAS_QUE_CUENTAN + 1):
+        historial.append({"role": "user", "content": "vale %d" % i})
+        historial.append({"role": "assistant", "content": "respuesta distinta numero %d con su texto propio" % i})
+    assert agent._ya_dijo_esto(historial, frase) is False

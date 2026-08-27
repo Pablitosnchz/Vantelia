@@ -1378,6 +1378,11 @@ def _instrucciones(cliente_id: str, config: Dict[str, Any], hoy,
     return "\n".join(partes)
 
 
+# Cuantas respuestas atras cuenta como "esto ya lo has dicho". Con 1 -solo la
+# anterior- alternar dos parrafos se colaba.
+ULTIMAS_QUE_CUENTAN = 3
+
+
 def _ya_dijo_esto(historial: List[Dict[str, str]], texto: str) -> bool:
     """¿Es esta respuesta la MISMA que la anterior, palabra por palabra?
 
@@ -1389,14 +1394,23 @@ def _ya_dijo_esto(historial: List[Dict[str, str]], texto: str) -> bool:
 
     Se compara el principio de la frase, sin tildes ni mayusculas: lo que nota
     quien lee es que empieza igual.
+
+    Y se miran las TRES ultimas, no solo la anterior. Mirando solo la anterior,
+    alternar A-B-A-B pasaba limpio, y para quien lee eso es exactamente el mismo
+    muro: ya le habian contestado eso hace dos mensajes.
     """
     limpio = catalog_pick._norm(texto or "")[:90]
     if len(limpio) < 25:
         return False   # "vale", "perfecto": repetirlos no molesta a nadie
+    vistas = 0
     for mensaje in reversed(historial or []):
         if mensaje.get("role") != "assistant":
             continue
-        return catalog_pick._norm(str(mensaje.get("content") or ""))[:90] == limpio
+        if catalog_pick._norm(str(mensaje.get("content") or ""))[:90] == limpio:
+            return True
+        vistas += 1
+        if vistas >= ULTIMAS_QUE_CUENTAN:
+            break
     return False
 
 

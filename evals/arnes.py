@@ -141,9 +141,19 @@ def le_han_pedido_confirmar(conversacion: List[Dict[str, str]]) -> bool:
 
 
 def dice_que_si(texto: str) -> bool:
-    plano = _sin_tildes(texto).strip(" .!¡")
-    return plano.startswith(("si", "confirmo", "confirmar", "vale", "perfecto",
-                             "de acuerdo", "adelante", "correcto", "ok", "venga"))
+    """El MISMO si que reconoce el producto, no uno propio del arnes.
+
+    Tenia su lista aparte, y eso escondia el fallo que venia a medir: el arnes
+    daba por dicho que si -y pulsaba el boton- en frases que el producto de verdad
+    rechazaba, asi que la cita salia en la agenda y la conversacion contaba como
+    buena. La clienta real no habria tenido cita.
+
+    Delegando, cuando el producto no entiende un si, aqui tampoco se pulsa y la
+    conversacion cuenta como lo que es: se fue sin cita.
+    """
+    from backend import whatsapp
+
+    return whatsapp._wa_dice_que_si(_sin_tildes(texto).strip(" .!¡"))
 
 
 def citas_de(cliente_id: str, telefono: str) -> List[Dict[str, Any]]:
