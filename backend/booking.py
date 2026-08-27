@@ -2752,6 +2752,29 @@ def _booking_update_payload_from_reschedule(row: sqlite3.Row, data: BookingResch
     )
 
 
+def _minutos_que_ocupa_ahora(booking_row: sqlite3.Row) -> int:
+    """Cuanto ocupa la cita tal y como esta guardada, en minutos.
+
+    Se saca de sus propias marcas de inicio y fin; si no las tuviera -citas
+    antiguas-, del catalogo. Y si no hay forma de saberlo se devuelve 0, que hace
+    que cualquier cambio de servicio se compruebe: mejor comprobar de mas.
+    """
+    try:
+        inicio = timeutils._from_utc_iso(booking_row["start_at"])
+        fin = timeutils._from_utc_iso(booking_row["end_at"])
+        if inicio and fin:
+            minutos = int((fin - inicio).total_seconds() // 60)
+            if minutos > 0:
+                return minutos
+    except Exception:  # noqa: BLE001 - se sigue por el catalogo
+        pass
+    try:
+        return int(agenda._service_duration_minutes(
+            booking_row["cliente_id"], booking_row["servicio"] or "", None))
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 async def _update_booking_details(
     booking_row: sqlite3.Row,
     data: BookingUpdatePayload,
@@ -2786,10 +2809,17 @@ async def _update_booking_details(
     service_id = service_row["slug"] if service_row else ""
     service_price = int(service_row["price_cents"]) if service_row else 0
     employee_changed = (target_employee["id"] or "") != (booking_row["employee_id"] or "")
+    # Cambiar el SERVICIO tambien puede necesitar mas sitio: pasar de un corte de
+    # 30 minutos a una keratina de cuatro horas, a la misma hora y con la misma
+    # profesional, no cambiaba "el hueco" y por eso no se comprobaba nada. La cita
+    # se estiraba por encima de las tres siguientes sin que saltara ni un aviso.
+    # Solo se comprueba si CRECE: acortarla nunca pisa a nadie.
+    dura_mas = service_duration > _minutos_que_ocupa_ahora(booking_row)
     slot_changed = (
         booking_date != booking_row["booking_date"]
         or booking_time != booking_row["booking_time"]
         or employee_changed
+        or dura_mas
     )
 
     if slot_changed and not await agenda._booking_slot_available_for_reschedule(
