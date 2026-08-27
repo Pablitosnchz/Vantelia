@@ -681,3 +681,31 @@ def test_se_le_coge_lo_que_pidio_al_final(api_module, monkeypatch, servicio, men
 def test_describirse_el_pelo_no_es_cambiar_de_idea(api_module, monkeypatch, servicio, mensaje):  # noqa: F811
     """Borrarle el servicio a mitad la deja repitiendolo todo: peor que no tocarlo."""
     assert _cambia(monkeypatch, servicio, mensaje) is False, repr(mensaje)
+
+
+def test_cancelar_y_poner_otra_no_cuenta_como_cita_duplicada(api_module):  # noqa: F811
+    """"Cancelame la del jueves y ponme el viernes" es UN mensaje y dos acciones.
+
+    El freno de la cita duplicada no puede colgarse de `hecho`, porque cancelar y
+    reprogramar tambien lo ponen: se colgaria de ahi y esa clienta se quedaria sin
+    la cita nueva despues de perder la vieja. Se cuelga de `ya_creada`.
+    """
+    from backend import reserva
+
+    estado = reserva.Estado()
+    reserva.anotar_resultado(estado, "cancelar_cita", {}, {"ok": True, "codigo_reserva": "R-1"})
+    assert estado.hecho is True
+    assert estado.ya_creada is False, "cancelar no puede bloquear la cita siguiente"
+
+    reserva.anotar_resultado(estado, "crear_cita", {}, {"ok": True, "codigo_reserva": "R-2"})
+    assert estado.ya_creada is True
+
+
+def test_pedir_otra_cita_suelta_la_anterior(api_module):  # noqa: F811
+    """Si quiere una segunda cita lo dice ella, y entonces se le puede coger."""
+    from backend import reserva
+
+    estado = reserva.Estado()
+    reserva.anotar_resultado(estado, "crear_cita", {}, {"ok": True, "codigo_reserva": "R-2"})
+    reserva.anotar_lo_que_dice(estado, "vale, y quiero otra cita para mi hija")
+    assert estado.ya_creada is False

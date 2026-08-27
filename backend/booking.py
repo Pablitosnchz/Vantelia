@@ -6098,6 +6098,28 @@ def apply_cancellation_policy(
     return outcome
 
 
+def citas_activas_de_ese_telefono(cliente_id: str, phone: str) -> List[sqlite3.Row]:
+    """Todas las citas vivas de ese telefono, de la mas proxima a la mas lejana.
+
+    Hace falta para dejar de pedirle a la clienta un numero de reserva que no
+    tiene. El telefono de WhatsApp -o el de la llamada- ya esta verificado por el
+    canal: si solo tiene una cita, es esa; si tiene dos, se le pregunta CUAL, que
+    es una pregunta que si sabe contestar ("la del jueves").
+    """
+    norm = crm._normalize_phone_for_match(phone or "")
+    if not norm:
+        return []
+    with db._get_db_connection() as connection:
+        filas = connection.execute(
+            "SELECT * FROM bookings WHERE cliente_id=? "
+            "AND status IN ('confirmed','pending_review','pending_payment') "
+            "ORDER BY booking_date ASC, booking_time ASC LIMIT 50",
+            (cliente_id,),
+        ).fetchall()
+    return [f for f in filas
+            if crm._normalize_phone_for_match(f["telefono"] or "") == norm]
+
+
 def _latest_booking_for_contact(
     cliente_id: str, *, phone: str = "", email: str = ""
 ) -> Optional[sqlite3.Row]:

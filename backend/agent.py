@@ -1922,6 +1922,22 @@ async def responder(
                 # Nadie acaba con una cita que no ha pedido. Paso con quien solo
                 # preguntaba el horario: se iba con una cita que no sabia que
                 # tenia, y el negocio con un hueco ocupado por nadie.
+                # Una cita ya cogida no se coge dos veces. Si quiere otra lo
+                # dice ella, y entonces `anotar_lo_que_dice` suelta la anterior.
+                # Cancelar y poner otra en el mismo mensaje SI vale: por eso se
+                # mira `ya_creada` y no `hecho`, que tambien lo pone cancelar.
+                if llamada.function.name == "crear_cita" and estado.ya_creada:
+                    mensajes.append({
+                        "role": "tool", "tool_call_id": llamada.id,
+                        "content": json.dumps({
+                            "ok": True, "duplicada": True,
+                            "error": ("Su cita ya esta cogida en esta conversacion. NO la "
+                                      "vuelvas a crear. Confirmasela y preguntale si "
+                                      "necesita algo mas."),
+                        }, ensure_ascii=False),
+                    })
+                    traza.freno("cita_duplicada")
+                    continue
                 if (llamada.function.name == "crear_cita"
                         and estado.intencion != "reservar"
                         and not reserva.ha_pedido_cita(dicho_de_ella)

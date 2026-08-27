@@ -1522,7 +1522,7 @@ def _voice_booking_tools(
             "type": "function",
             "name": "consultar_cita",
             "description": (
-                "Busca una cita por su numero de reserva (formato R-XXXX) y devuelve sus datos: "
+                "Busca su cita y devuelve sus datos. Si no te ha dado el numero de reserva, llama sin el: se busca por su telefono, que ya esta verificado. Devuelve: "
                 "servicio, fecha, hora, profesional y estado. USALA SIEMPRE LA PRIMERA cuando el "
                 "cliente quiera cancelar o cambiar una cita: sirve para confirmar que la reserva EXISTE "
                 "y es suya ANTES de pedir cualquier otro dato. Si el telefono de la llamada no coincide "
@@ -1532,37 +1532,37 @@ def _voice_booking_tools(
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "codigo_reserva": {"type": "string", "description": "Numero de reserva, formato R-XXXX"},
+                    "codigo_reserva": {"type": "string", "description": "Numero de reserva (R-XXXX). Dejalo VACIO si no te lo ha dado: su telefono ya esta verificado y la cita se busca por el."},
                     "telefono": {"type": "string", "description": "Telefono de la reserva, si el cliente lo facilita (opcional)"},
                     "email": {"type": "string", "description": "Email de la reserva, si el cliente lo facilita (opcional)"},
                 },
-                "required": ["codigo_reserva"],
+                "required": [],
             },
         },
         {
             "type": "function",
             "name": "cancelar_cita",
             "description": (
-                "Cancela una cita existente a partir de su numero de reserva (formato R-XXXX). "
+                "Cancela una cita existente. Si no te ha dado el numero de reserva, NO se lo pidas: llama sin el y la cita se busca por su telefono, que ya esta verificado. "
                 "Por seguridad solo se cancela si el telefono desde el que llama coincide con el de la reserva; "
                 "si no coincide, pide al cliente el telefono o el email con el que reservo y pasalo en 'telefono' o 'email'."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "codigo_reserva": {"type": "string", "description": "Numero de reserva, formato R-XXXX"},
+                    "codigo_reserva": {"type": "string", "description": "Numero de reserva (R-XXXX). Dejalo VACIO si no te lo ha dado: su telefono ya esta verificado y la cita se busca por el."},
                     "telefono": {"type": "string", "description": "Telefono de la reserva, si el cliente lo facilita (opcional)"},
                     "email": {"type": "string", "description": "Email de la reserva, si el cliente lo facilita (opcional)"},
                     "motivo": {"type": "string", "description": "Motivo de cancelacion (opcional)"},
                 },
-                "required": ["codigo_reserva"],
+                "required": [],
             },
         },
         {
             "type": "function",
             "name": "reprogramar_cita",
             "description": (
-                "Reprograma una cita existente a una nueva fecha y hora, a partir de su numero de reserva (R-XXXX). "
+                "Reprograma una cita existente a una nueva fecha y hora. Si no te ha dado el numero de reserva, NO se lo pidas: llama sin el y la cita se busca por su telefono. "
                 "OBLIGATORIO: antes de llamarla, comprueba la nueva hora con consultar_disponibilidad (pasando el "
                 "codigo_reserva) en esta misma conversacion; nunca reprogames a una hora sin verificar. "
                 "Por seguridad solo se reprograma si el telefono desde el que llama coincide con el de la reserva; "
@@ -1571,7 +1571,7 @@ def _voice_booking_tools(
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "codigo_reserva": {"type": "string", "description": "Numero de reserva, formato R-XXXX"},
+                    "codigo_reserva": {"type": "string", "description": "Numero de reserva (R-XXXX). Dejalo VACIO si no te lo ha dado: su telefono ya esta verificado y la cita se busca por el."},
                     "fecha": {"type": "string", "description": "Nueva fecha YYYY-MM-DD"},
                     "fecha_texto": {
                         "type": "string",
@@ -1584,7 +1584,7 @@ def _voice_booking_tools(
                     "telefono": {"type": "string", "description": "Telefono de la reserva, si el cliente lo facilita (opcional)"},
                     "email": {"type": "string", "description": "Email de la reserva, si el cliente lo facilita (opcional)"},
                 },
-                "required": ["codigo_reserva", "fecha", "hora"],
+                "required": ["fecha", "hora"],
             },
         },
         {
@@ -2542,6 +2542,32 @@ async def _voice_perform_booking(
     }
 
 
+def _cita_del_telefono_del_canal(
+    cliente_id: str, from_number: str,
+) -> Tuple[Optional[sqlite3.Row], Optional[Dict[str, Any]]]:
+    """La cita de quien escribe, sin pedirle el numero de reserva."""
+    if not from_number:
+        return None, {"ok": False, "error": "Pide al cliente su numero de reserva (formato R-XXXX)."}
+    suyas = booking.citas_activas_de_ese_telefono(cliente_id, from_number)
+    if not suyas:
+        return None, {
+            "ok": False,
+            "error": ("No encuentro ninguna cita a su nombre con este telefono. "
+                      "Preguntale si la reservo con otro telefono o con otro numero de "
+                      "reserva, sin darla por cancelada."),
+        }
+    if len(suyas) == 1:
+        return suyas[0], None
+    return None, {
+        "ok": False,
+        "varias": True,
+        "citas": [{"codigo_reserva": f["booking_code"], "fecha": f["booking_date"],
+                   "hora": f["booking_time"], "servicio": f["servicio"]} for f in suyas[:5]],
+        "error": ("Tiene mas de una cita. Preguntale CUAL de estas quiere, por el dia y "
+                  "la hora. No le pidas el numero de reserva."),
+    }
+
+
 async def _voice_lookup_and_verify_booking(
     cliente_id: str,
     codigo_reserva: str,
@@ -2556,7 +2582,15 @@ async def _voice_lookup_and_verify_booking(
     """
     codigo = textnorm._sanitize_text(codigo_reserva)
     if not codigo:
-        return None, {"ok": False, "error": "Pide al cliente su numero de reserva (formato R-XXXX)."}
+        # Sin codigo, pero el canal ya ha verificado su telefono (su WhatsApp, su
+        # llamada). Pedirle el numero de reserva a quien no lo tiene a mano es un
+        # callejon sin salida: la cita se queda viva y ella se va creyendo que la
+        # ha cancelado. Si solo tiene una, es esa; si tiene varias, se le pregunta
+        # CUAL -pregunta que si sabe contestar-, no el codigo.
+        #
+        # OJO: solo vale el telefono que trae el CANAL. Un telefono que escriba
+        # ella no puede servir para encontrar citas ajenas.
+        return _cita_del_telefono_del_canal(cliente_id, from_number)
     row = booking._get_booking_row_by_code(cliente_id, codigo)
     if not row:
         return None, {"ok": False, "error": "No encuentro ninguna cita con ese numero de reserva. Pide que lo repita."}

@@ -59,6 +59,7 @@ class Estado:
     hecho: bool = False          # la gestion se completo en esta conversacion
     recargo_dicho: bool = False  # ya se le explico lo que cuesta con esa profesional
     cancelada: bool = False      # su cita se anulo: ya no esta en pie
+    ya_creada: bool = False      # ya se le cogio UNA cita en esta conversacion
     veces_sin_precio: int = 0    # cuantas veces se le ha dicho que no hay precio
     servicio_texto: str = ""    # todo lo que ha dicho sobre QUE quiere hacerse
     ultimo_falta: str = ""      # que dato del servicio se le pregunto la ultima vez
@@ -316,6 +317,11 @@ def anotar_resultado(estado: Estado, tool: str, argumentos: Dict[str, Any],
 
     elif tool in ("crear_cita", "reprogramar_cita", "cancelar_cita"):
         estado.hecho = True
+        # Aparte de `hecho`, que tambien lo pone cancelar y reprogramar: esto dice
+        # que ya se COGIO una cita. Cancelar y poner otra en el mismo mensaje es
+        # normal; coger dos seguidas sin que nadie lo pida, no.
+        if tool == "crear_cita":
+            estado.ya_creada = True
         # Que la cita esta ANULADA hay que recordarlo: al pedir "vuelvela a abrir"
         # el asistente contestaba "tu cita esta confirmada para manyana a las
         # 10:00" con la cita cancelada en la base de datos.
@@ -404,6 +410,7 @@ def empezar_otra_gestion(estado: Estado) -> None:
     estado.dia_le_da_igual = False
     estado.hecho = False
     estado.cancelada = False
+    estado.ya_creada = False
     estado.ultimo_falta = ""
     estado.ultimo_pedido = ""
 
