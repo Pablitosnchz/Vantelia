@@ -167,6 +167,23 @@ def test_la_confirmacion_tambien_la_recuerda(catalogo):
     assert "como_se_paga_la_fianza" in fuente
 
 
+def test_con_pasarela_activa_no_se_repite_el_aviso(catalogo):
+    """Cuando Stripe esta conectado la cita nace "pendiente de pago" y se le manda
+    un boton "Pagar 50 €". Ahi el aviso de texto sobra: repetir lo mismo dos veces
+    en el mismo mensaje es ruido, y ademas las instrucciones de Bizum contradicen
+    al boton. Por eso cuelga de `not is_pending_payment`."""
+    import inspect
+
+    from backend import whatsapp
+
+    fuente = inspect.getsource(whatsapp._wa_create_booking)
+    esperado = ("if not is_pending_payment:" + chr(10)
+                + " " * 8 + "aviso_fianza = booking.aviso_de_fianza(")
+    assert esperado in fuente, (
+        "el aviso de texto tiene que quedarse fuera cuando ya va el boton de pago"
+    )
+
+
 def test_la_fianza_nunca_pasa_del_precio_del_servicio(api_module, client):  # noqa: F811
     """Cobrarle 50 € de senyal por unas mechas de 18 € es devolverle 32.
 
